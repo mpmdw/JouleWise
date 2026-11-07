@@ -41,16 +41,22 @@ SYN_PHASES = {'G0': 60.0, 'G1': 30.0, 'H': 30.0, 'decode': 200.0, 'prefill': 60.
 SYN_R1_SLOTS = {'schema': kit.R1_SLOTS_SCHEMA, 'source': kit.R1_SYNTHETIC_SOURCE,
                 'ac_powermode': 0, 'slots_ac_powermode': 0,
                 'thermometry': {'bar': 'pass', 'D': {'die_candidates': [syn.FAST], 'heatsink_candidates': [syn.SLOW],
+                                                     'classification_sha256': hashlib.sha256(b'synthetic-r1-classification').hexdigest(),
                                                      'sensor_pick_changed': False}},
                 'max_r1_tail_s': 30.0,
                 # Lead ruling R5-4: B_D, N_chunk, S5/S6 and S7 bind the inputs below.
                 'slots': {'I_D': I_D, 'B_D': 6144, 'N_chunk': 2048, 'S5': 1.0, 'S6': 1.0, 'S7': 120.0},
                 'high_power': {'verdict': 'not_adopted'}, 'u5': {'verdict': 'pass', 'c': 1.0},
-                'deadman_budget': [{'run': name, 'phases_s': dict(SYN_PHASES, tail=tail)}
+                # R6-3: 8,000 tokens in 200 s of decode = step-d's 40 tok/s.
+                'deadman_budget': [{'run': name, 'phases_s': dict(SYN_PHASES, tail=tail), 'decode_tokens': 8000}
                                    for name, tail in zip(kit.GATED_D_RUN_NAMES, (30.0, 12.0, 12.0))],
-                'budget_fit_inputs': {'r_decode_tok_per_s': 40.0, 'turn_cap_tokens': 4096},
+                'budget_fit_inputs': {'r_decode_tok_per_s': 40.0, 'r_decode_step_d_tok_per_s': 40.0,
+                                      'turn_cap_tokens': 4096},
                 'external_volumes': [{'point': 't0', 'verdict': 'PASS'}],
-                'duty_bar': {'pass': True}, 'status_note': 'SYNTHETIC_WP22_DRY_RUN'}
+                # R6-1: the duty bar ran under W1's inter-member schedule.
+                'duty_bar': {'pass': True, 'schedule': {'authority': 'LEAD-RULINGS-2 R6-1',
+                                                        'inter_member_idle_s': {'D': 300.0, 'X-G': 300.0}}},
+                'status_note': 'SYNTHETIC_WP22_DRY_RUN'}
 SYN_INPUTS = {
     'schema_version': 'joulewise.align_v4_inputs.v1',
     'status': 'SYNTHETIC_WP22_DRY_RUN',
@@ -66,7 +72,8 @@ SYN_INPUTS = {
              'Y': {'max_turns': 5, 'token_fixture_sha256': hashlib.sha256(b'Y').hexdigest()}},
     'R0': {'reasoning_effort': 'xhigh'},
     'R1': {'B_D': 6144, 'I_D': I_D, 'T_dead': kit.l1_t_dead(I_D, SYN_R1_SLOTS['max_r1_tail_s']),
-           'thermal_policy': {'sensors': {'s_fast': syn.FAST, 's_slow': syn.SLOW, 'fan_keys': [syn.FAN],
+           'thermal_policy': {'classification_sha256': SYN_R1_SLOTS['thermometry']['D']['classification_sha256'],
+                              'sensors': {'s_fast': syn.FAST, 's_slow': syn.SLOW, 'fan_keys': [syn.FAN],
                                           'r0_sha256': R0_SHA},
                               'delta_fast_c': 1.5, 'delta_slow_c': 1.0, 'turn_cap_s': 120,
                               'chunk_tokens': 2048, 'heavy': True, 'per_turn': True}},

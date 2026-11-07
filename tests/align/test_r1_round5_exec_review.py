@@ -43,9 +43,10 @@ def _run_world(td, world, expected=0):
 
 class DutyBarTests(unittest.TestCase):
     def test_an_inconclusive_run_never_masks_a_failing_judged_run(self):
-        # R5-1: run a's precool times out (INCONCLUSIVE); the bank run is cut
-        # by the deadman (X7). The bar must read FAIL, not INCONCLUSIVE.
-        world = FakeWorld(precool_timeout={"D_spam_benign_s1_gated_held_a.precool"})
+        # R5-1 (R6-1 since round 6): run a's G0 times out (INCONCLUSIVE, and run
+        # b then follows no D turn); the bank run is cut by the deadman (X7).
+        # The bar must read FAIL, not INCONCLUSIVE.
+        world = FakeWorld(g0_timeout={"D_spam_benign_s1_gated_held_a"})
 
         def runner(argv):
             out = world(argv)
@@ -59,16 +60,18 @@ class DutyBarTests(unittest.TestCase):
             self.assertEqual(code, 0, result.get("error"))
             rows = {row["run"]: row["duty_bar"]["verdict"] for row in registration["deadman_budget"]}
             self.assertEqual(rows, {"D_spam_benign_s1_gated_held_a": "inconclusive",
-                                    "D_spam_benign_s1_gated_held_b": "pass",
+                                    "D_spam_benign_s1_gated_held_b": "inconclusive",
                                     "D_bank_benign_s1_gated_held": "fail"})
             self.assertEqual(registration["duty_bar"]["verdict"], "fail")
             self.assertIs(registration["duty_bar"]["pass"], False)
-            self.assertEqual(registration["duty_bar"]["inconclusive_runs"], ["D_spam_benign_s1_gated_held_a"])
+            self.assertEqual(registration["duty_bar"]["inconclusive_runs"],
+                             ["D_spam_benign_s1_gated_held_a", "D_spam_benign_s1_gated_held_b"])
 
-    def test_a_bank_run_precool_timeout_leaves_u5_to_the_replay_pair(self):
-        # R5-1 scope: only a replay-pair run makes U5 INCONCLUSIVE; the bank
-        # run's precool timeout makes the duty bar INCONCLUSIVE and nothing else.
-        world = FakeWorld(precool_timeout={"D_bank_benign_s1_gated_held.precool"})
+    def test_a_bank_run_g0_timeout_leaves_u5_to_the_replay_pair(self):
+        # R5-1 scope (R6-1 since round 6): only a replay-pair run makes U5
+        # INCONCLUSIVE; the bank run's G0 timeout makes the duty bar
+        # INCONCLUSIVE and nothing else.
+        world = FakeWorld(g0_timeout={"D_bank_benign_s1_gated_held"})
         with tempfile.TemporaryDirectory() as td:
             code, result, registration = _run_world(td, world)
             self.assertEqual(code, 0, result.get("error"))
@@ -102,8 +105,9 @@ class BudgetTests(unittest.TestCase):
     def _slots(self, rows, rate=11.0, cap=None):
         names = kit.GATED_D_RUN_NAMES
         base = {k: 0.0 for k in kit.GATED_PHASES}
-        return {"deadman_budget": [{"run": n, "phases_s": {**base, **row}} for n, row in zip(names, rows)],
-                "budget_fit_inputs": {"r_decode_tok_per_s": rate,
+        return {"deadman_budget": [{"run": n, "phases_s": {**base, **row}, "decode_tokens": 0}
+                                   for n, row in zip(names, rows)],
+                "budget_fit_inputs": {"r_decode_tok_per_s": rate, "r_decode_step_d_tok_per_s": rate,
                                       "turn_cap_tokens": kit.d_turn_cap_tokens() if cap is None else cap},
                 "slots": {"B_D": 40960}}
 
@@ -149,8 +153,13 @@ class BudgetTests(unittest.TestCase):
 
 
 CHILD = r'''
-import json, sys, time
+import json, signal, sys, time
 from pathlib import Path
+# The caller's own handlers, which r1.run restores on return: a late signal of
+# the burst then cannot kill the child between the restore and the print below
+# (a test race, seen under taskpolicy -b; the driver's teardown is what is tested).
+for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+    signal.signal(sig, signal.SIG_IGN)
 sys.path.insert(0, sys.argv[3])
 from unittest.mock import patch
 from scripts import align_r1_rehearsal as r1
@@ -178,7 +187,7 @@ class RealSignalSeriesHighPowerTests(unittest.TestCase):
         # or HUP there (a burst for TERM) must leave the host Automatic, remove
         # the marker and still write r1_result.json.
         for park, signals in (("step_D_prefill_10k_decode_4096", (signal.SIGTERM, signal.SIGTERM)),
-                              ("D_spam_benign_s1_gated_held_a.precool", (signal.SIGINT,)),
+                              ("planning_turn_R_plus_2C.precool", (signal.SIGINT,)),
                               ("planning_turn_R_plus_0C", (signal.SIGHUP, signal.SIGTERM))):
             with self.subTest(park=park), tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR")) as td:
                 td = Path(td)

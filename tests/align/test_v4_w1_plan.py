@@ -23,6 +23,7 @@ def filled_template():
     align.update(status="SYNTHETIC_TEST_ONLY", B_D=8192, I_D=300, max_r1_tail_s=TAIL,
                  T_dead=(1750 - 300) / 1.13544, effort="xhigh")
     align["thermal_policy"] = {
+        "classification_sha256": "b" * 64,
         "sensors": {"s_fast": "TC0P", "s_slow": "TG0P", "fan_keys": [],
                     "r0_sha256": "a" * 64},
         "delta_fast_c": 8.0, "delta_slow_c": 5.0,
@@ -52,6 +53,14 @@ def check(value, inputs=None, slots=None):
 
 
 class W1PlanTests(unittest.TestCase):
+    def test_classification_digest_is_preserved_and_bound_to_inputs(self):
+        good = filled_template()
+        self.assertEqual(check(good)["members"], 18)
+        inputs = matching_inputs(good)
+        good["align_v4"]["thermal_policy"]["classification_sha256"] = "c" * 64
+        with self.assertRaisesRegex(ValueError, "disagrees with registration/inputs.json on: thermal_policy"):
+            check(good, inputs)
+
     def test_amendment_table_arithmetic_and_synthetic_plan_validate(self):
         good = filled_template()
         result = check(good)
@@ -65,6 +74,7 @@ class W1PlanTests(unittest.TestCase):
         good = filled_template()
         for path in (("align_v4", "B_D"), ("align_v4", "I_D"),
                      ("align_v4", "T_dead"), ("align_v4", "effort"),
+                     ("align_v4", "thermal_policy", "classification_sha256"),
                      ("align_v4", "thermal_policy", "sensors", "s_fast")):
             candidate = copy.deepcopy(good)
             target = candidate

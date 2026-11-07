@@ -88,7 +88,8 @@ def build_template(collection_plan: dict | None = None) -> dict:
             "members": [{**{key: member[key] for key in MEMBER_BINDINGS}, "member_s": pending}
                         for member in plan["members"]],
             "status": pending,
-            "thermal_policy": {"chunk_tokens": pending, "delta_fast_c": pending, "delta_slow_c": pending,
+            "thermal_policy": {"classification_sha256": pending,
+                               "chunk_tokens": pending, "delta_fast_c": pending, "delta_slow_c": pending,
                                "heavy": True, "per_turn": True,
                                "sensors": {"fan_keys": pending, "r0_sha256": pending,
                                            "s_fast": pending, "s_slow": pending},
@@ -150,7 +151,7 @@ def validate(value: dict, inputs: dict | None = None, r1_slots: dict | None = No
     if "window_reference" in policy:
         _fail("thermal_policy.window_reference is installed per member by the kit, not templated")
     from joulewise.align.apple.thermal_gates import validate_gate_policy
-    checked = validate_gate_policy({**policy, "window_reference": {"role": "capture"}})
+    checked = validate_gate_policy({**kit.gate_policy_fields(policy), "window_reference": {"role": "capture"}})
     if checked["heavy"] is not True or checked["per_turn"] is not True:
         _fail("D thermal_policy must be heavy with per-turn gates and holds")
 

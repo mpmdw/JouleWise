@@ -39,7 +39,8 @@ class ContractTests(unittest.TestCase):
     def test_missing_fields_reports_nested_and_quiet_fields(self):
         result = {"energy_j": 1.0, "admitted_turns": 3, "x7": False, "battery_drain_pct_per_h": 3.0,
                   "reference_c": 38.0, "reference_source": "r1_soak_reference",
-                  "gate_waits_s": {"G0": [1.0], "G1": [], "H": []},
+                  "gate_waits_s": {"G0": [1.0], "G1": [], "H": []}, "g0_outcome": "released",
+                  "inter_member_idle_s": 300.0, "decode_tokens": 0,
                   "deadman": {"T_dead_s": 1.0, "phases_s": {p: 0.0 for p in contract.DEADMAN_PHASES[:-1]}}}
         self.assertEqual(contract.missing_fields("d-spam-benign-s1-a", result, quiet=False),
                          ["deadman.phases_s.tail"])
@@ -63,6 +64,29 @@ class ContractTests(unittest.TestCase):
             self.assertIn("thermometry.classification_sha256", contract.required_fields(kind, quiet=True))
         self.assertIn("released", contract.required_fields("idle-until-soak", quiet=False))
         self.assertNotIn("calibration-pre", contract.NEEDS_SOAK_REFERENCE)
+
+
+class Round6ContractTests(unittest.TestCase):
+    def test_gated_runs_and_x_g_report_w1_s_schedule_g0_and_decode_tokens(self):
+        # R6-1: the schedule and the G0 outcome; R6-3: the decode tokens.
+        for kind in (*contract.GATED_D_KINDS, "x-g"):
+            fields = contract.required_fields(kind, quiet=False)
+            self.assertIn("inter_member_idle_s", fields)
+            self.assertIn("g0_outcome", fields)
+        for kind in contract.GATED_D_KINDS:
+            self.assertIn("decode_tokens", contract.required_fields(kind, quiet=False))
+
+    def test_an_inconclusive_step_d_or_designed_state_needs_only_its_g0_and_the_quiet_fields(self):
+        # R6-2: a G0 timeout there is INCONCLUSIVE, not a contract failure.
+        quiet = {"cpu_busy_cores": [0.1], "cpu_busy_t_s": [0.0], "census": [{}]}
+        result = {**quiet, "segment_status": "inconclusive", "g0_released": False, "g0_outcome": "timeout"}
+        for kind in ("step-d", *contract.PLANNING_KINDS):
+            self.assertEqual(contract.missing_fields(kind, result, quiet=True), [], kind)
+            # Without segment_status the measured fields are required.
+            self.assertIn("energy_j" if kind != "step-d" else "slots", contract.missing_fields(kind, quiet, quiet=True))
+        # Other kinds have no INCONCLUSIVE result: their full fields stay required.
+        self.assertIn("thermometry.status", contract.missing_fields("step-30b", result, quiet=True))
+        self.assertIn("energy_j", contract.missing_fields("d-bank-benign-s1", result, quiet=False))
 
 
 class LoadJournalTests(unittest.TestCase):
@@ -100,7 +124,9 @@ class LoadJournalTests(unittest.TestCase):
         for field in contract.QUIET_FIELDS:
             self.assertIn(f"`{field}`", doc)
         self.assertIn("--soak-reference", doc)
-        for field in ("`battery_drain_pct_per_h`", "`charge_resume_soc_pct`", "runtime_custody.json"):
+        for field in ("`battery_drain_pct_per_h`", "`charge_resume_soc_pct`", "runtime_custody.json",
+                      "`inter_member_idle_s`", "`decode_tokens`", "`segment_status`", "`calibration_precool_cap_s`",
+                      "`r_decode_step_d_tok_per_s`", "`inputs.R1.thermal_policy.classification_sha256`"):
             self.assertIn(field, doc)
 
     def test_ruling_4b_battery_fields_are_required_where_the_driver_reads_them(self):

@@ -54,9 +54,15 @@ class FakeWorld:
                  t_decline=None, busy_once=(), sudo_listing=None, unsettled_soak_once=False,
                  release_c=None, released=True, mount_after=None, journal_gap_kind=None, tail=20.0,
                  precool_timeout=(), leg_g0_unreleased=(), thermometry_status="pass",
-                 b_d=8192, slot_changes=None, failed_soak_reads=0):
+                 b_d=8192, slot_changes=None, failed_soak_reads=0, g0_timeout=(), calibration_g0_timeouts=None,
+                 gated_decode_tokens=12600):
         self.tail = tail
         self.precool_timeout = set(precool_timeout)
+        # R6-1: gated runs / X-G (by output name) whose G0 times out.
+        self.g0_timeout = set(g0_timeout)
+        # R6-2: kind -> how many times step-d / a designed state reports INCONCLUSIVE.
+        self.calibration_g0_timeouts = dict(calibration_g0_timeouts or {})
+        self.gated_decode_tokens = gated_decode_tokens
         self.leg_g0_unreleased = set(leg_g0_unreleased)
         self.thermometry_status = thermometry_status
         self.invocations = []     # (kind, output name, AC powermode at the call)
@@ -120,6 +126,14 @@ class FakeWorld:
         offset = int(kind.rsplit("-", 1)[-1][:-1]) if kind.startswith("d-planning-turn") else 0
         busy = kind in self.busy_once
         self.busy_once.discard(kind)
+        if self.calibration_g0_timeouts.get(kind, 0) > 0 and not busy:
+            # R6-2: the runtime's INCONCLUSIVE result for a G0 timeout.
+            self.calibration_g0_timeouts[kind] -= 1
+            return completed(argv, out=json.dumps({
+                "kind": kind, "segment_status": "inconclusive", "g0_released": False, "g0_outcome": "timeout",
+                "cpu_busy_cores": [0.1] * 61, "cpu_busy_t_s": [float(i) for i in range(61)],
+                "census": [{"pid": 1, "name": "launchd"}],
+                "ac_powermode": {"value": self.mode, "source": "pmset -g custom", "observed_at": "episode_start"}}))
         payload = {"kind": kind, "fake_smc_journal": True,
                    "reference_c": 40.0, "g0_release_c": self.release_c.get(offset, 40.0 + offset),
                    "delta_slow_c": 0.5,
@@ -158,14 +172,25 @@ class FakeWorld:
                                       "classification_sha256": "c" * 64}
         if kind == "x-g" or kind.startswith(("d-spam", "d-bank")):
             payload.update(reference_source="r1_soak_reference",
-                           gate_waits_s={"G0": [120.0], "G1": [40.0, 50.0, 60.0], "H": [30.0, 30.0, 30.0]})
+                           gate_waits_s={"G0": [120.0], "G1": [40.0, 50.0, 60.0], "H": [30.0, 30.0, 30.0]},
+                           # R6-1: W1's inter-member schedule (the kit configs' idle).
+                           inter_member_idle_s=300.0,
+                           g0_outcome="timeout" if out.name in self.g0_timeout else "released")
         if kind.startswith("d-") and "planning" not in kind and kind != "d-4bit":
             payload.update(energy_j={"d-spam-benign-s1-a": 30000.0, "d-spam-benign-s1-b": 30036.0,
                                      "d-bank-benign-s1": 32000.0}[kind],
                            admitted_turns=3, x7=False, turn_cap_tokens=4096,
+                           # R6-3: 12,600 tokens in 700 s = 18 tok/s (step-d: 20).
+                           decode_tokens=self.gated_decode_tokens,
                            deadman={"T_dead_s": 1451.018, "phases_s": {
                                "G0": 120.0, "G1": 150.0, "H": 90.0, "decode": 700.0,
                                "prefill": 120.0, "tool": 6.0, "tail": self.tail}})
+            if out.name in self.g0_timeout:
+                # R6-1: a G0 timeout admits no turn and decodes nothing.
+                payload.update(admitted_turns=0, decode_tokens=0, gate_waits_s={"G0": [600.0], "G1": [], "H": []},
+                               deadman={"T_dead_s": 1451.018, "phases_s": {
+                                   "G0": 600.0, "G1": 0.0, "H": 0.0, "decode": 0.0,
+                                   "prefill": 0.0, "tool": 0.0, "tail": 0.0}})
         if kind == "g0-release-soak":
             payload["released"] = self.released
         if kind in ("step-30b", "step-d", "x-g", "d-4bit") or kind.startswith(("d-", "high-power-aba-")):
@@ -205,8 +230,10 @@ class R1Tests(unittest.TestCase):
             names = [phase["name"] for phase in result["phases"]]
             self.assertEqual(names, [row[0] for row in r1.phase_plan(True)] + ["harvest"])
             self.assertIn("D_4bit_optional", names)
-            self.assertEqual(names[4:7], ["high_power_A1", "high_power_B", "high_power_A2"])
-            self.assertEqual([p["name"] for p in result["phases"] if p["name"].startswith("planning_turn")],
+            # R6-6: no cooldown_after_30b; the A-B-A legs follow the 30B step.
+            self.assertEqual(names[2:6], ["step_30b", "high_power_A1", "high_power_B", "high_power_A2"])
+            self.assertEqual([p["name"] for p in result["phases"]
+                              if p["name"].startswith("planning_turn") and "." not in p["name"]],
                              ["planning_turn_R_plus_4C", "planning_turn_R_plus_2C", "planning_turn_R_plus_0C"])
             self.assertLess(names.index("planning_turn_R_plus_0C"), names.index("post_calibration_bracket"))
             self.assertEqual(registration["planning_temperature"]["designed_release_range_c"], [40.0, 44.0])
@@ -219,7 +246,7 @@ class R1Tests(unittest.TestCase):
             self.assertEqual(registration["max_r1_tail_s"], 20.0)
             self.assertAlmostEqual(registration["projected_mde"]["replay_pair_abs_diff_j"], 36.0)
             self.assertAlmostEqual(registration["projected_mde"]["replay_pair_floor_tokens"], 10.0)
-            self.assertEqual([p["powermode"] for p in result["phases"][4:7]], [0, 2, 0])
+            self.assertEqual([p["powermode"] for p in result["phases"][3:6]], [0, 2, 0])
             self.assertEqual(world.mode, 0)
             self.assertGreaterEqual(world.calls.count(r1.PowerModeGuard.AUTO), 4)
             self.assertTrue(any("fake_smc_journal" in json.dumps(p) for p in result["phases"]))
@@ -960,7 +987,8 @@ class R1Tests(unittest.TestCase):
             self.assertEqual(kinds[-1], "step-30b")
             result = json.loads((Path(td) / "run/r1_result.json").read_text())
             self.assertEqual(result["status"], "refused")
-            self.assertIn("external_volume.before:idle:cooldown_after_30b", result["error"])
+            # R6-6: the next segment is A1's release (no cooldown_after_30b).
+            self.assertIn("external_volume.before:g0-release-soak:high_power_A1.g0_release0", result["error"])
             self.assertEqual(world.mode, 0)
             self.assertFalse((Path(td) / "registration/r1_slots.json").exists())
 
@@ -1026,7 +1054,12 @@ class R1Tests(unittest.TestCase):
                                                       delta_slow_c=slots["slots"]["S6"],
                                                       turn_cap_s=slots["slots"]["S7"])
                 self.assertEqual(slots["budget_fit_inputs"]["turn_cap_tokens"], 4096)
-                self.assertEqual(slots["budget_fit_inputs"]["r_decode_tok_per_s"], 20.0)
+                # R6-3: min(step-d 20 tok/s, the gated runs' 18 tok/s).
+                self.assertEqual(slots["budget_fit_inputs"]["r_decode_tok_per_s"], 18.0)
+                self.assertEqual(slots["budget_fit_inputs"]["r_decode_step_d_tok_per_s"], 20.0)
+                # R6-5: the policy carries R1's classification digest.
+                inputs["R1"]["thermal_policy"]["classification_sha256"] = \
+                    slots["thermometry"]["D"]["classification_sha256"]
                 if synthetic:
                     with self.assertRaisesRegex(ValueError, "source must be"):
                         kit.require_ready(inputs, slots)
@@ -1039,7 +1072,9 @@ class R1Tests(unittest.TestCase):
         self.assertEqual(rows[0], ("pre_calibration_bracket", "calibration-pre", None, "light"))
         self.assertEqual(rows[1], ("idle_soak", "idle", 1800, "light"))
         self.assertEqual(rows[-1], ("post_calibration_bracket", "calibration-post", None, "light"))
-        self.assertEqual([row[2] for row in rows if row[0].startswith("cooldown")], [600, 1500])
+        # R6-6: cooldown_after_30b is gone; ruling 1(c)'s post-D cooldown stays.
+        self.assertEqual([row[2] for row in rows if row[0].startswith("cooldown")], [1500])
+        self.assertNotIn("cooldown_after_30b", [row[0] for row in rows])
         self.assertIn(("step_D_prefill_10k_decode_4096", "step-d", None, "heavy"), rows)
         self.assertIn(("D_spam_benign_s1_gated_held_a", "d-spam-benign-s1-a", None, "heavy"), rows)
         self.assertIn(("D_spam_benign_s1_gated_held_b", "d-spam-benign-s1-b", None, "heavy"), rows)
@@ -1159,65 +1194,86 @@ class Round5RulingTests(unittest.TestCase):
             self.assertIn("thermometry", result["error"])
 
     def test_designed_start_states_run_warmest_first(self):
-        # R5-2: after D_bank the host is warm and the heater duty is clamped at
-        # 0, so R + 4 C (least cooling) runs first, then R + 2 C, then R + 0 C.
+        # R5-2: R + 4 C runs first, then R + 2 C, then R + 0 C. R6-2: each
+        # starts from the G0 band of R (the post-D cooldown, then precools).
         names = [row[0] for row in r1.phase_plan(False)]
-        planning = [n for n in names if n.startswith("planning_turn")]
+        planning = [n for n in names if n.startswith("planning_turn") and "." not in n]
         self.assertEqual(planning, ["planning_turn_R_plus_4C", "planning_turn_R_plus_2C", "planning_turn_R_plus_0C"])
-        self.assertEqual(names.index(planning[0]), names.index("D_bank_benign_s1_gated_held") + 1)
+        self.assertEqual(names.index(planning[0]), names.index("cooldown_after_D") + 1)
         with tempfile.TemporaryDirectory() as td:
             _, registration = self.run_world(td, FakeWorld())
             # beta_T still fits on the offsets, whatever the run order.
             self.assertAlmostEqual(registration["planning_temperature"]["beta_T_j_per_c"], 3.0)
             self.assertEqual(registration["planning_temperature"]["run_order_offsets_c"], [4.0, 2.0, 0.0])
 
-    def test_each_gated_d_run_is_precooled_against_the_soak_and_consumes_it(self):
-        # R5-1: before every gated D run an idle-until-soak (bounded by the
-        # ruling 1(c) cap) brings S_slow to the G0 band of the soak R.
+    def test_each_gated_d_run_follows_a_d_turn_with_w1_s_schedule_and_consumes_the_soak(self):
+        # R6-1 (supersedes R5-1's cool-to-band): nothing but the member's own
+        # W1 idle stands between the preceding D turn and each gated run or X-G.
         rows = r1.phase_plan(False)
         names = [row[0] for row in rows]
-        for name, _ in r1.GATED_D_RUNS:
-            pre = rows[names.index(name) - 1]
-            self.assertEqual(pre, (name + ".precool", "idle-until-soak", 1500, "light"))
-        self.assertEqual(names[names.index("X_G_contrast") - 1], "cooldown_after_D")
+        d_turns = ("step-d", "d-spam-benign-s1-a", "d-spam-benign-s1-b", "d-bank-benign-s1",
+                   *(f"d-planning-turn-r-plus-{o}c" for o in (0, 2, 4)))
+        for name in [n for n, _ in r1.GATED_D_RUNS] + ["X_G_contrast"]:
+            before = rows[names.index(name) - 1]
+            self.assertIn(before[1], d_turns, name)
+            self.assertNotIn(name + ".precool", names)
+        self.assertEqual(names[names.index("X_G_contrast") - 1], "D_bank_benign_s1_gated_held")   # W1's D -> X
         with tempfile.TemporaryDirectory() as td:
             world = FakeWorld()
-            _, registration = self.run_world(td, world)
+            result, registration = self.run_world(td, world)
             soak = str((Path(td) / "run/soak_reference.json").resolve())
             for call in world.calls:
                 if "--r1-kind" in call and call[call.index("--r1-kind") + 1].startswith(("d-spam", "d-bank", "x-g")):
                     self.assertEqual(call[call.index("--soak-reference") + 1], soak)
+            # Run order on the host: no segment between a D turn and the next gated member.
+            ran = [name for _, name, _ in world.invocations]
+            for name in [n for n, _ in r1.GATED_D_RUNS] + ["X_G_contrast"]:
+                self.assertNotIn(ran[ran.index(name) - 1].rsplit(".", 1)[-1], ("precool", "precool_retry"))
             self.assertEqual(registration["duty_bar"]["verdict"], "pass")
             self.assertEqual(registration["duty_bar"]["inconclusive_runs"], [])
+            schedule = registration["duty_bar"]["schedule"]
+            self.assertEqual(schedule["inter_member_idle_s"], {"D": 300.0, "X-G": 300.0})
+            self.assertEqual(schedule["authority"], "LEAD-RULINGS-2 R6-1")
+            self.assertEqual(registration["x_g"]["status"], "measured")
+            self.assertEqual(registration["x_g"]["follows_d_turn"], "D_bank_benign_s1_gated_held")
 
-    def test_a_precool_timeout_makes_that_gated_run_inconclusive_not_a_refusal(self):
+    def test_a_gated_g0_timeout_makes_that_run_inconclusive_not_a_refusal(self):
         with tempfile.TemporaryDirectory() as td:
-            world = FakeWorld(precool_timeout={"D_spam_benign_s1_gated_held_b.precool"})
+            world = FakeWorld(g0_timeout={"D_spam_benign_s1_gated_held_b"})
             result, registration = self.run_world(td, world)
             self.assertEqual(result["status"], "complete")
             rows = {row["run"]: row for row in registration["deadman_budget"]}
+            # Without R6-1 this row read FAIL (no admitted turn).
             self.assertEqual(rows["D_spam_benign_s1_gated_held_b"]["duty_bar"]["verdict"], "inconclusive")
-            self.assertFalse(rows["D_spam_benign_s1_gated_held_b"]["precool_released"])
-            self.assertEqual(rows["D_bank_benign_s1_gated_held"]["duty_bar"]["verdict"], "pass")
+            self.assertIn("G0 did not release", rows["D_spam_benign_s1_gated_held_b"]["inconclusive_reason"])
+            # The bank run then followed a member that dispatched no D turn:
+            # it did not test W1's D-after-D G0 either.
+            self.assertIsNone(rows["D_bank_benign_s1_gated_held"]["follows_d_turn"])
+            self.assertEqual(rows["D_bank_benign_s1_gated_held"]["duty_bar"]["verdict"], "inconclusive")
+            self.assertEqual(rows["D_spam_benign_s1_gated_held_a"]["follows_d_turn"], "planning_turn_R_plus_0C")
+            self.assertEqual(rows["D_spam_benign_s1_gated_held_a"]["duty_bar"]["verdict"], "pass")
             self.assertEqual(registration["duty_bar"]["verdict"], "inconclusive")
             self.assertFalse(registration["duty_bar"]["pass"])
-            self.assertEqual(registration["duty_bar"]["inconclusive_runs"], ["D_spam_benign_s1_gated_held_b"])
+            self.assertEqual(registration["duty_bar"]["inconclusive_runs"],
+                             ["D_bank_benign_s1_gated_held", "D_spam_benign_s1_gated_held_b"])
             # The replay pair cannot decide U5 either.
             self.assertEqual(registration["u5"]["verdict"], "inconclusive")
             self.assertFalse(registration["u5"]["sigma_pair_valid"])
-            # The kit then needs a recorded lead fallback, exactly as for a fail.
+            # The kit stays conservative: the timed-out run's G0 (its 600 s cap)
+            # is still in ruling 1(f)'s worst-case G0 term, so W1 is refused.
             from scripts import align_v4_kit as kit
             from tests.align.test_v4_kit import ready_inputs
             inputs, _ = ready_inputs(101.5, registration["max_r1_tail_s"])
-            # R5-4: the thermal policy is the one R1 measured (so only the duty bar refuses).
             inputs["R1"]["thermal_policy"].update(chunk_tokens=registration["slots"]["N_chunk"],
                                                   delta_slow_c=registration["slots"]["S6"],
-                                                  turn_cap_s=registration["slots"]["S7"])
-            with self.assertRaisesRegex(ValueError, "lead fallback"):
-                kit.require_ready(inputs, registration, synthetic=True)
+                                                  turn_cap_s=registration["slots"]["S7"],
+                                                  classification_sha256="c" * 64)
+            with self.assertRaisesRegex(ValueError, r"ruling 1\(f\).*G0_s 600\.0"):
+                kit.check_r1_evidence(inputs, registration, synthetic=True)
         with tempfile.TemporaryDirectory() as td:
-            _, registration = self.run_world(td, FakeWorld(precool_timeout={"cooldown_after_D"}))
+            _, registration = self.run_world(td, FakeWorld(g0_timeout={"X_G_contrast"}))
             self.assertEqual(registration["x_g"]["status"], "inconclusive")
+            self.assertEqual(registration["x_g"]["g0_outcome"], "timeout")
 
     def test_a_gated_run_without_the_soak_reference_refuses(self):
         for field, value in (("reference_source", "self_capture"), ("reference_c", 47.5)):
@@ -1273,6 +1329,194 @@ class Round5RulingTests(unittest.TestCase):
             self.assertEqual(s6["G1_median_s"], 50.0)    # three runs x [40, 50, 60]
             self.assertEqual(s6["H_median_s"], 30.0)
             self.assertEqual(s6["G1_waits"], 9)
+
+
+
+class Round6RulingTests(unittest.TestCase):
+    """LEAD-RULINGS-2 R6-1, R6-2, R6-3 and R6-6 in the driver."""
+
+    setUp = Round5RulingTests.setUp
+    run_world = Round5RulingTests.run_world
+
+    def test_w1_schedule_comes_from_the_w1_plan_and_is_checked_before_any_work(self):
+        # R6-1: the value is W1's (night_plan.template.json member configs), not hard-coded.
+        self.assertEqual(r1.w1_inter_member_idle_s(), {"D": 300.0, "X-G": 300.0})
+        with tempfile.TemporaryDirectory() as td:
+            world = FakeWorld()
+            with patch.object(r1, "w1_inter_member_idle_s", lambda root=r1.ROOT: {"D": 450.0, "X-G": 300.0}):
+                result, registration = self.run_world(td, world, expected=3)
+            self.assertIsNone(registration)
+            self.assertIn("R6-1", result["error"])
+            self.assertFalse([c for c in world.calls if "--r1-kind" in c])
+            self.assertNotIn(r1.PowerModeGuard.HIGH, world.calls)
+
+    def test_a_gated_member_that_idled_another_schedule_refuses(self):
+        for kind in ("d-bank-benign-s1", "x-g"):
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as td:
+                world = FakeWorld()
+
+                def runner(argv):
+                    result = world(argv)
+                    if "--r1-kind" in argv and argv[argv.index("--r1-kind") + 1] == kind:
+                        payload = json.loads(result.stdout)
+                        payload["inter_member_idle_s"] = 0.0
+                        result = completed(argv, out=json.dumps(payload))
+                    return result
+                result, registration = self.run_world(td, runner, expected=3)
+                self.assertIsNone(registration)
+                self.assertIn("W1's", result["error"])
+                self.assertEqual(world.mode, 0)
+
+    def test_step_d_and_each_later_designed_state_get_a_bounded_precool_from_config(self):
+        rows = r1.phase_plan(False, precool_cap_s=777.0)
+        names = [row[0] for row in rows]
+        for name in (r1.STEP_D_NAME, "planning_turn_R_plus_2C", "planning_turn_R_plus_0C"):
+            self.assertEqual(rows[names.index(name) - 1], (name + ".precool", "idle-until-soak", 777.0, "light"))
+        # The first designed state follows ruling 1(c)'s post-D cooldown (same band, recorded curve).
+        self.assertEqual(names[names.index("planning_turn_R_plus_4C") - 1], "cooldown_after_D")
+        self.assertEqual(r1.runtime_precool_cap_s(None), 1500)
+        with tempfile.TemporaryDirectory() as td:
+            world = FakeWorld(precool_timeout={"planning_turn_R_plus_2C.precool"})
+            with patch.object(r1, "runtime_precool_cap_s", lambda argv: 777.0):
+                result, registration = self.run_world(td, world)
+            durations = {c[c.index("--output") + 1].rsplit("/", 1)[-1]: c[c.index("--duration-s") + 1]
+                         for c in world.calls if "--duration-s" in c}
+            self.assertEqual(durations[r1.STEP_D_NAME + ".precool"], "777.0")
+            self.assertEqual(durations["planning_turn_R_plus_0C.precool"], "777.0")
+            # A precool that did not reach the band is recorded, never a refusal.
+            self.assertIs(registration["calibration_precools"]["planning_turn_R_plus_2C.precool"], False)
+            self.assertEqual(result["status"], "complete")
+
+    def test_a_step_d_g0_timeout_is_retried_once_after_another_precool(self):
+        with tempfile.TemporaryDirectory() as td:
+            world = FakeWorld(calibration_g0_timeouts={"step-d": 1})
+            result, registration = self.run_world(td, world)
+            self.assertEqual(result["status"], "complete")
+            ran = [name for _, name, _ in world.invocations]
+            i = ran.index(r1.STEP_D_NAME)
+            self.assertEqual(ran[i - 1:i + 3], [r1.STEP_D_NAME + ".precool", r1.STEP_D_NAME,
+                                                 r1.STEP_D_NAME + ".precool_retry", r1.STEP_D_NAME])
+            run = Path(td) / "run"
+            self.assertTrue((run / (r1.STEP_D_NAME + ".g0_timeout1") / "attempt.txt").exists())
+            self.assertEqual((run / r1.STEP_D_NAME / "attempt.txt").read_text(), "step-d 2\n")
+            self.assertEqual(registration["inconclusive_segments"], {})
+            self.assertEqual(set(registration["slots"]), set(r1.SLOT_NAMES))
+            step = [p for p in result["phases"] if p["name"] == r1.STEP_D_NAME]
+            self.assertEqual([p.get("segment_status") for p in step], ["inconclusive", None])
+
+    def test_a_twice_timed_out_step_d_is_inconclusive_and_the_kit_refuses_w1(self):
+        from scripts import align_v4_kit as kit
+        from tests.align.test_v4_kit import ready_inputs
+        with tempfile.TemporaryDirectory() as td:
+            world = FakeWorld(calibration_g0_timeouts={"step-d": 2})
+            result, registration = self.run_world(td, world)
+            # Not a night refusal: the rest of R1 ran and r1_slots is written.
+            self.assertEqual(result["status"], "complete")
+            self.assertIn(r1.STEP_D_NAME, registration["inconclusive_segments"])
+            ran = [name for _, name, _ in world.invocations]
+            for name in [n for n, _ in r1.GATED_D_RUNS] + ["X_G_contrast"]:
+                self.assertNotIn(name, ran)        # unbudgeted without step-d (R5-4)
+                self.assertIn(name, registration["skipped_segments"])
+            self.assertIn("planning_turn_R_plus_0C", ran)
+            self.assertIsNone(registration["slots"])
+            self.assertEqual(registration["thermometry"]["bar"], "inconclusive")
+            self.assertEqual(registration["u5"]["verdict"], "inconclusive")
+            self.assertEqual(registration["x_g"]["status"], "not_run")
+            self.assertEqual(world.mode, 0)
+            inputs, _ = ready_inputs()
+            with self.assertRaises(ValueError):
+                kit.check_r1_evidence(inputs, registration, synthetic=True)
+
+    def test_a_twice_timed_out_designed_state_is_inconclusive_and_u5_too(self):
+        with tempfile.TemporaryDirectory() as td:
+            world = FakeWorld(calibration_g0_timeouts={"d-planning-turn-r-plus-0c": 2})
+            result, registration = self.run_world(td, world)
+            self.assertEqual(result["status"], "complete")
+            self.assertEqual(list(registration["inconclusive_segments"]), ["planning_turn_R_plus_0C"])
+            self.assertEqual(registration["planning_temperature"]["status"], "inconclusive")
+            self.assertEqual(registration["u5"]["verdict"], "inconclusive")
+            # R6-1: the first gated run then followed no D turn (R + 0 C
+            # dispatched none), so it is INCONCLUSIVE; the later ones follow it.
+            rows = {row["run"]: row for row in registration["deadman_budget"]}
+            self.assertIsNone(rows["D_spam_benign_s1_gated_held_a"]["follows_d_turn"])
+            self.assertEqual(rows["D_spam_benign_s1_gated_held_a"]["duty_bar"]["verdict"], "inconclusive")
+            self.assertEqual(rows["D_spam_benign_s1_gated_held_b"]["duty_bar"]["verdict"], "pass")
+            self.assertEqual(registration["duty_bar"]["verdict"], "inconclusive")
+        with tempfile.TemporaryDirectory() as td:
+            # Once only: the retry measures it and beta_T is fitted as usual.
+            _, registration = self.run_world(td, FakeWorld(calibration_g0_timeouts={"d-planning-turn-r-plus-2c": 1}))
+            self.assertAlmostEqual(registration["planning_temperature"]["beta_T_j_per_c"], 3.0)
+
+    def test_an_inconclusive_result_must_say_its_g0_did_not_release(self):
+        with tempfile.TemporaryDirectory() as td:
+            world = FakeWorld(calibration_g0_timeouts={"step-d": 1})
+
+            def runner(argv):
+                result = world(argv)
+                payload = json.loads(result.stdout) if result.stdout.startswith("{") else None
+                if payload and payload.get("segment_status") == "inconclusive":
+                    payload["g0_released"] = True
+                    result = completed(argv, out=json.dumps(payload))
+                return result
+            result, _ = self.run_world(td, runner, expected=3)
+            self.assertIn("g0_released false", result["error"])
+
+    def test_ruling_1f_decode_rate_is_the_minimum_over_step_d_and_the_gated_runs(self):
+        with tempfile.TemporaryDirectory() as td:
+            _, registration = self.run_world(td, FakeWorld(gated_decode_tokens=7000))   # 10 tok/s
+            fit = registration["budget_fit_inputs"]
+            self.assertEqual(fit["r_decode_step_d_tok_per_s"], 20.0)
+            self.assertEqual(fit["r_decode_gated_tok_per_s"],
+                             {name: 10.0 for name, _ in r1.GATED_D_RUNS})
+            self.assertEqual(fit["r_decode_tok_per_s"], 10.0)
+            rows = {row["run"]: row for row in registration["deadman_budget"]}
+            self.assertEqual(rows["D_bank_benign_s1_gated_held"]["decode_tokens"], 7000)
+        with tempfile.TemporaryDirectory() as td:
+            # A run that decoded nothing (G0 timeout) has no rate; step-d's is kept.
+            _, registration = self.run_world(td, FakeWorld(gated_decode_tokens=28000,
+                                                           g0_timeout={"D_bank_benign_s1_gated_held"}))
+            fit = registration["budget_fit_inputs"]
+            self.assertIsNone(fit["r_decode_gated_tok_per_s"]["D_bank_benign_s1_gated_held"])
+            self.assertEqual(fit["r_decode_tok_per_s"], 20.0)
+        with tempfile.TemporaryDirectory() as td:
+            world = FakeWorld()
+
+            def runner(argv):
+                result = world(argv)
+                if "--r1-kind" in argv and "d-spam-benign-s1-a" in argv:
+                    payload = json.loads(result.stdout)
+                    payload["deadman"]["phases_s"]["decode"] = 0.0
+                    result = completed(argv, out=json.dumps(payload))
+                return result
+            result, _ = self.run_world(td, runner, expected=3)
+            self.assertIn("decode tokens in 0.0 s", result["error"])
+
+    def test_changed_pick_s7_records_the_accepted_quiet_window_reference(self):
+        # R6-4: the lead ACCEPTED the quiet-window median as R for the R1 picks.
+        with tempfile.TemporaryDirectory() as td:
+            world = FakeWorld()
+
+            def runner(argv):
+                result = world(argv)
+                if "--r1-kind" in argv and argv[argv.index("--r1-kind") + 1] == "step-d":
+                    payload = json.loads(result.stdout)
+                    payload["thermometry"].update(sensor_pick_changed=True, s7_for_r1_picks={
+                        "keys": {"s_fast": "TC1P", "s_slow": "TG1P"}, "S7": 60.0,
+                        "band_c": {"s_fast": 1.0, "s_slow": 1.25}})
+                    result = completed(argv, out=json.dumps(payload))
+                return result
+            _, registration = self.run_world(td, runner)
+            picks = registration["thermometry"]["D"]["s7_for_r1_picks"]
+            self.assertEqual(picks["S7"], 60.0)
+            self.assertEqual(picks["reference_rule_status"], "ACCEPTED")
+            self.assertIn("quiet window", picks["reference_rule"])
+
+    def test_cooldown_after_30b_is_dropped_and_nothing_reads_it(self):
+        # R6-6: step-30b's own 600 s recovery observation is the idle.
+        names = [row[0] for row in r1.phase_plan(True)]
+        self.assertNotIn("cooldown_after_30b", names)
+        self.assertEqual(names[names.index("step_30b") + 1], "high_power_A1")
+        self.assertEqual(r1.ABA_LEG_I_D_BOUND_S, 1750)    # the accepted A-B-A batch-window bound
 
 
 if __name__ == "__main__":

@@ -43,11 +43,15 @@ KIND_FIELDS = {
     # released: S_slow reached the G0 band of R (<= R + delta_slow) before the cap.
     "idle-until-soak": ("recovery_curve", "released"),
     # R5-1: X-G and the gated D runs gate against the soak R (reference_source
-    # r1_soak_reference), never a self-captured warm reference.
-    "x-g": ("reference_c", "reference_source"),
+    # r1_soak_reference), never a self-captured warm reference. R6-1: each
+    # follows a D turn with only W1's inter-member schedule (the member's own
+    # configured idle, inter_member_idle_s); its G0 outcome decides whether
+    # the run is judged or INCONCLUSIVE. R6-3: decode_tokens gives the run's
+    # observed decode rate (with deadman.phases_s.decode) for ruling 1(f).
+    "x-g": ("reference_c", "reference_source", "g0_outcome", "inter_member_idle_s"),
     **{kind: ("energy_j", "admitted_turns", "x7", "deadman.T_dead_s", "deadman.phases_s",
               "battery_drain_pct_per_h", "reference_c", "reference_source", "gate_waits_s.G1",
-              "gate_waits_s.H")
+              "gate_waits_s.H", "g0_outcome", "inter_member_idle_s", "decode_tokens")
        for kind in GATED_D_KINDS},
     **{kind: ("reference_c", "g0_release_c", "delta_slow_c", "energy_j") for kind in PLANNING_KINDS},
     "d-4bit": (),
@@ -58,15 +62,32 @@ KIND_FIELDS = {
     # Ruling 4(b): the SoC at which charging resumed during R1 (null if never).
     "harvest": ("charge_resume_soc_pct",),
 }
+# LEAD-RULINGS-2 R6-2: step-d and the designed start states are calibration
+# segments; a G0 that does not release there is INCONCLUSIVE for that segment
+# (the driver precools and retries it once), not a refusal of the R1 night.
+# Such a result carries segment_status "inconclusive" and g0_released false,
+# and only these fields beside the quiet ones.
+G0_INCONCLUSIVE_KINDS = ("step-d", *PLANNING_KINDS)
+INCONCLUSIVE_FIELDS = ("segment_status", "g0_released", "g0_outcome")
 NEEDS_SOAK_REFERENCE = frozenset(("idle-until-soak", "g0-release-soak", "x-g", *GATED_D_KINDS, *PLANNING_KINDS,
                                   *HIGH_POWER_KINDS))
 
 
-def required_fields(kind, *, quiet, contract_key=None):
+def is_g0_inconclusive(kind, result):
+    """R6-2: an INCONCLUSIVE step-d or designed start state (its G0 did not release)."""
+    return (kind in G0_INCONCLUSIVE_KINDS and isinstance(result, dict)
+            and result.get("segment_status") == "inconclusive")
+
+
+def required_fields(kind, *, quiet, contract_key=None, inconclusive=False):
     """Return the field names the runtime must return for ``kind``."""
     key = contract_key or kind
     if key not in KIND_FIELDS:
         raise ValueError(f"r1 runtime contract has no kind {key!r}")
+    if inconclusive:
+        if key not in G0_INCONCLUSIVE_KINDS:
+            raise ValueError(f"r1 runtime contract: {key!r} has no INCONCLUSIVE result")
+        return tuple(QUIET_FIELDS) + INCONCLUSIVE_FIELDS
     fields = list(KIND_FIELDS[key])
     if quiet:
         fields = list(QUIET_FIELDS) + fields
@@ -78,7 +99,8 @@ def required_fields(kind, *, quiet, contract_key=None):
 def missing_fields(kind, result, *, quiet, contract_key=None):
     """Names from ``required_fields`` absent in ``result`` (presence only)."""
     missing = []
-    for name in required_fields(kind, quiet=quiet, contract_key=contract_key):
+    inconclusive = is_g0_inconclusive(contract_key or kind, result)
+    for name in required_fields(kind, quiet=quiet, contract_key=contract_key, inconclusive=inconclusive):
         value = result
         for part in name.split("."):
             if not isinstance(value, dict) or part not in value:

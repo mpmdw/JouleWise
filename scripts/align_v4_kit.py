@@ -190,6 +190,11 @@ def check_r1_evidence(inputs, r1_slots, *, synthetic=False):
     allowed = (R1_HARDWARE_SOURCE, R1_SYNTHETIC_SOURCE) if synthetic else (R1_HARDWARE_SOURCE,)
     if r1_slots.get('source') not in allowed:
         raise ValueError(f'R1 r1_slots source must be {R1_HARDWARE_SOURCE!r}, not {r1_slots.get("source")!r}')
+    inconclusive = r1_slots.get('inconclusive_segments') or {}
+    if STEP_D_SEGMENT in inconclusive:
+        # LEAD-RULINGS-2 R6-2: recorded by the driver, refused here (fail closed at the kit).
+        raise ValueError(f'R1 step-d was INCONCLUSIVE ({inconclusive[STEP_D_SEGMENT]}): no slots, no thermometry '
+                         'bar and no gated runs; W1 cannot be sized from this R1 record')
     slots = r1_slots.get('slots')
     if not isinstance(slots, dict) or not finite(slots.get('I_D')):
         raise ValueError('R1 r1_slots must carry the step-d slots with a finite I_D')
@@ -216,6 +221,10 @@ def check_r1_evidence(inputs, r1_slots, *, synthetic=False):
     # and a pick R1 changed (S6/S7 recomputed for the R1 picks) needs the
     # lead's recorded verification before the W1 freeze (Sol critique HIGH).
     policy = inputs['R1'].get('thermal_policy')
+    digest = policy.get('classification_sha256') if isinstance(policy, dict) else None
+    if not valid_digest(digest) or digest != classified.get('classification_sha256'):
+        raise ValueError('inputs.R1.thermal_policy.classification_sha256 must be a 64-hex digest matching '
+                         'r1_slots.thermometry.D.classification_sha256')
     sensors = policy.get('sensors') if isinstance(policy, dict) else None
     if isinstance(sensors, dict):
         if sensors.get('s_fast') not in (classified.get('die_candidates') or ()):
@@ -243,11 +252,44 @@ def check_r1_evidence(inputs, r1_slots, *, synthetic=False):
     duty = r1_slots.get('duty_bar')
     if not isinstance(duty, dict) or type(duty.get('pass')) is not bool:
         raise ValueError('R1 r1_slots must carry the ruling 1(d) duty bar verdict')
+    # LEAD-RULINGS-2 R6-1: the bar was measured under W1's inter-member schedule.
+    schedule = duty.get('schedule')
+    expected = w1_inter_member_idle_s()
+    if (not isinstance(schedule, dict) or schedule.get('authority') != 'LEAD-RULINGS-2 R6-1'
+            or schedule.get('inter_member_idle_s') != expected):
+        raise ValueError('R1 duty bar must record the R6-1 schedule: each gated D run and X-G after a D turn with '
+                         f'only W1\'s configured idle {expected} (duty_bar.schedule)')
     if not duty['pass']:
         fallback = duty.get('lead_fallback')
         if (not isinstance(fallback, dict) or fallback.get('step') not in DUTY_FALLBACK_STEPS
                 or not isinstance(fallback.get('authority'), str) or not fallback['authority'].strip()):
             raise ValueError('R1 duty bar failed and no lead fallback step (ruling 1(e)) is recorded')
+
+
+STEP_D_SEGMENT = 'step_D_prefill_10k_decode_4096'
+W1_PLAN_TEMPLATE = KIT / 'night_plan.template.json'
+W1_SCHEDULE_ROLES = ('D', 'X-G')
+
+
+def w1_inter_member_idle_s(root=ROOT):
+    """LEAD-RULINGS-2 R6-1: W1's inter-member schedule per roster role (D and
+    X-G): the configured idle (``sampling.idle_seconds``) of the member
+    configs the W1 plan template lists. One value per role, or ValueError."""
+    plan = json.loads((Path(root) / W1_PLAN_TEMPLATE).read_bytes())
+    by_role = {}
+    for member in plan['align_v4']['members']:
+        config = json.loads((Path(root) / member['config_path']).read_bytes())
+        idle = config['sampling']['idle_seconds']
+        if not finite(idle) or idle < 0:
+            raise ValueError(f'{member["config_path"]}: sampling.idle_seconds must be finite and >= 0')
+        by_role.setdefault(member['role'], set()).add(float(idle))
+    out = {}
+    for role in W1_SCHEDULE_ROLES:
+        values = by_role.get(role, set())
+        if len(values) != 1:
+            raise ValueError(f'W1 plan: the {role} members do not share one configured idle ({sorted(values)})')
+        out[role] = values.pop()
+    return out
 
 
 def _close(a, b):
@@ -278,7 +320,11 @@ def ruling_1f_fit(r1_slots, b_d, t_dead):
 
     A turn is admitted while fewer than B_D decode tokens are spent and then
     keeps its full per-turn cap (FD:263), so B_D + cap bounds the episode
-    decode; r_decode is step-d's measured rate. Returns the arithmetic.
+    decode. LEAD-RULINGS-2 R6-3: r_decode = min(step-d's measured rate, every
+    gated run's observed rate), re-derived here from
+    ``budget_fit_inputs.r_decode_step_d_tok_per_s`` and each deadman_budget
+    row's ``decode_tokens`` / ``phases_s.decode`` (a run that decoded nothing
+    has no rate). Returns the arithmetic.
     """
     budget = r1_slots.get('deadman_budget')
     rows = budget if isinstance(budget, list) else []
@@ -291,11 +337,24 @@ def ruling_1f_fit(r1_slots, b_d, t_dead):
         raise ValueError('R1 r1_slots deadman_budget must give finite, non-negative '
                          + ', '.join(GATED_PHASES) + ' seconds per gated run (ruling 1(f))')
     fit = r1_slots.get('budget_fit_inputs')
-    rate = (fit or {}).get('r_decode_tok_per_s') if isinstance(fit, dict) else None
+    step_rate = (fit or {}).get('r_decode_step_d_tok_per_s') if isinstance(fit, dict) else None
     cap = (fit or {}).get('turn_cap_tokens') if isinstance(fit, dict) else None
-    if not finite(rate) or rate <= 0 or type(cap) is not int or cap <= 0:
-        raise ValueError('R1 r1_slots must carry budget_fit_inputs (r_decode_tok_per_s, turn_cap_tokens) '
+    if not finite(step_rate) or step_rate <= 0 or type(cap) is not int or cap <= 0:
+        raise ValueError('R1 r1_slots must carry budget_fit_inputs (r_decode_step_d_tok_per_s, turn_cap_tokens) '
                          'for ruling 1(f)')
+    rates = [step_rate]
+    for row, p in zip(rows, phases):
+        tokens = row.get('decode_tokens')
+        if type(tokens) is not int or tokens < 0 or (tokens and p['decode'] <= 0):
+            raise ValueError(f'ruling 1(f): {row.get("run")} must record its decode_tokens (an int >= 0, with '
+                             'positive decode seconds when > 0) for the observed decode rate (R6-3)')
+        if tokens:
+            rates.append(tokens / p['decode'])
+    rate = min(rates)
+    recorded = fit.get('r_decode_tok_per_s')
+    if not finite(recorded) or not math.isclose(recorded, rate, rel_tol=1e-9, abs_tol=1e-12):
+        raise ValueError(f'ruling 1(f): budget_fit_inputs.r_decode_tok_per_s {recorded!r} is not min(step-d, '
+                         f'every gated run\'s observed decode rate) = {rate!r} (R6-3)')
     if cap != d_turn_cap_tokens():
         raise ValueError(f'ruling 1(f): the gated runs armed a {cap}-token turn cap, but W1 D members carry '
                          f'{d_turn_cap_tokens()}')
@@ -303,7 +362,8 @@ def ruling_1f_fit(r1_slots, b_d, t_dead):
              'prefill_tool_s': max(p['prefill'] + p['tool'] for p in phases),
              'decode_s': (b_d + cap) / rate}
     worst = math.fsum(terms.values())
-    return {'B_D': b_d, 'T_dead_s': t_dead, 'terms_s': terms, 'worst_s': worst, 'fits': worst <= t_dead + 1e-6}
+    return {'B_D': b_d, 'T_dead_s': t_dead, 'terms_s': terms, 'r_decode_tok_per_s': rate, 'worst_s': worst,
+            'fits': worst <= t_dead + 1e-6}
 
 
 def max_fitting_b_d(r1_slots, t_dead):
@@ -325,7 +385,8 @@ def check_r1_budget_and_policy(r1_inputs, r1_slots):
     the thermal policy must be the one R1 measured (chunk_tokens = N_chunk,
     delta_slow_c = S6, which is S5 until the lead's FD 2.6 S6 tuning,
     turn_cap_s = S7), and the frozen B_D must satisfy ruling 1(f) against the
-    frozen T_dead.
+    frozen T_dead. When R1 changes the picks, R6-4 binds S6/S7 to
+    thermometry.D.s7_for_r1_picks instead; S6 tuning starts from its slow band.
     """
     slots = r1_slots.get('slots') or {}
     if not finite(r1_inputs.get('T_dead')) or r1_inputs['T_dead'] <= 0:
@@ -340,11 +401,41 @@ def check_r1_budget_and_policy(r1_inputs, r1_slots):
     policy = r1_inputs.get('thermal_policy')
     if not isinstance(policy, dict):
         raise ValueError('inputs.R1.thermal_policy must be an object')
-    for name, slot in (('chunk_tokens', 'N_chunk'), ('delta_slow_c', 'S6'), ('turn_cap_s', 'S7')):
-        if not _close(policy.get(name), slots.get(slot)):
+    classified = (r1_slots.get('thermometry') or {}).get('D') or {}
+    changed = classified.get('sensor_pick_changed') is True
+    bindings = [('chunk_tokens', slots.get('N_chunk'), 'r1_slots.slots.N_chunk')]
+    if changed:
+        # R6-4: R0's soak slots describe the old keys. Bind the new keys to
+        # the recovery and quiet-window band computed from R1's inventory.
+        source = 'r1_slots.thermometry.D.s7_for_r1_picks'
+        computed = classified.get('s7_for_r1_picks')
+        computed = computed if isinstance(computed, dict) else {}
+        band = computed.get('band_c')
+        s6 = band.get('s_slow') if isinstance(band, dict) else None
+        s7 = computed.get('S7')
+        if not finite(s6) or s6 <= 0 or not finite(s7) or s7 <= 0:
+            raise ValueError(f'{source}: R1-pick S6/S7 were not computed (finite, positive '
+                             'band_c.s_slow and S7 required)')
+        bindings.append(('turn_cap_s', s7, source + '.S7'))
+        if not _close(policy.get('delta_slow_c'), s6):
+            tuning = r1_slots.get('s6_tuning')
+            if (not isinstance(tuning, dict) or not isinstance(tuning.get('authority'), str)
+                    or not tuning['authority'].strip() or not _close(tuning.get('from_c'), s6)
+                    or not _close(tuning.get('to_c'), policy.get('delta_slow_c'))):
+                raise ValueError(f'inputs.R1.thermal_policy.delta_slow_c differs from {source}.band_c.s_slow '
+                                 'without a recorded lead s6_tuning {authority, from_c = R1-pick S6, '
+                                 'to_c = delta_slow_c}')
+            if policy['delta_slow_c'] > S6_TUNING_CAP_C + 1e-9:
+                raise ValueError(f'{source}: a tuned S6 must stay within the {S6_TUNING_CAP_C} C cap '
+                                 '(council ruling 1(e))')
+    else:
+        bindings.extend((name, slots.get(slot), f'r1_slots.slots.{slot}')
+                        for name, slot in (('delta_slow_c', 'S6'), ('turn_cap_s', 'S7')))
+    for name, target, source in bindings:
+        if not _close(policy.get(name), target):
             raise ValueError(f'inputs.R1.thermal_policy.{name} {policy.get(name)!r} differs from '
-                             f'r1_slots.slots.{slot} {slots.get(slot)!r}')
-    if not _close(slots.get('S6'), slots.get('S5')):
+                             f'{source} {target!r}')
+    if not changed and not _close(slots.get('S6'), slots.get('S5')):
         tuning = r1_slots.get('s6_tuning')
         if (not isinstance(tuning, dict) or not isinstance(tuning.get('authority'), str)
                 or not tuning['authority'].strip() or not _close(tuning.get('from_c'), slots.get('S5'))
@@ -397,7 +488,7 @@ def require_ready(inputs, r1_slots=None, *, synthetic=False):
                          '(1800 - I_D - max_r1_tail_s - 10) / 1.13544) (lead ruling L1)')
     check_l1_member_fit(slots['I_D'], slots['T_dead'], tail)
     from joulewise.align.apple.thermal_gates import validate_gate_policy
-    policy_input = deepcopy(slots['thermal_policy'])
+    policy_input = gate_policy_fields(slots['thermal_policy'])
     # R1 supplies the numeric/sensor template.  Custody roles and the source
     # bundle digest are deterministically installed per member below.
     policy_input['window_reference'] = {'role': 'capture'}
@@ -667,11 +758,18 @@ def _rewrite(value):
     return value
 
 
+def gate_policy_fields(policy):
+    """Copy runtime gate controls, excluding the inputs-only R1 digest (R6-5)."""
+    return {key: deepcopy(value) for key, value in policy.items() if key != 'classification_sha256'}
+
+
 def thermal_policy(inputs, *, heavy, per_turn, window_reference):
-    value = deepcopy(inputs['R1']['thermal_policy'])
+    value = inputs['R1']['thermal_policy']
     if value is None:
         value = dict(sensors=None, delta_fast_c=None, delta_slow_c=None,
                      turn_cap_s=None, chunk_tokens=None)
+    else:
+        value = gate_policy_fields(value)
     value.update(heavy=heavy, per_turn=per_turn)
     value['window_reference'] = window_reference
     return value
