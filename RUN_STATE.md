@@ -1154,6 +1154,24 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
     launch R0 in a clean gap long enough for about 4.5 h (06:15-11:05, 13:15-17:05 or 17:15-23:05 PST).
   - (3) WP18 and items 188 (3)-(4) are unchanged.
 
+- **Final state of the fix lane (06:20 PST):** #692 head `172399c58`.
+  - Commits: Erratum 5 flags (`1c43bdd8f`, with the lead's ruling that the censoring pool drops the class-tau gate) and a hazards test fix. Two step-mechanics tests in `tests/hazards/test_smc_enumeration.py` assumed the pre-D3 fixed idle; `idle_max_s=idle_s` pins it.
+  - Every review round is ADMIT_WITH_FIXES and dispositioned (DECISION.md Errata 2-5; PR comments).
+  - Lead verification: every tests/align smc/r0/thermal module and every tests/hazards module OK, each in its own process. Real journal: Tf18 / TaLP; D1(d) reference Tf18, rise 45.68, TVH3 only excluded; receipt pass. Shifted-onset replay: 0-20 s no flag; 23 s wide_exclusion; >= 25 s both flags.
+  - CI: this lane's shards take 1-2 h. Heavy BYTES production-archive tests make shard 5 slow; it is not hung.
+  - The 06:15-11:05 gap was missed. R0 now targets 17:15-23:05 PST: about 4.5 h with the adaptive idle; 13:15-17:05 is too short.
+- **Next activation (replaces the pointer above):**
+  - (1) If #692 CI on its final head is green and #692 is not merged: mark it ready and merge into `lane/2026-11-05-align-pilot10-benign` (merge commit). Then fast-forward `$M=/Users/edr/night-custody/measurement/JouleWise-measurement-20261102-align-pilot2` to the lane tip (clean tree first).
+  - (2) R0 re-run 8, from 17:15 PST, after the 17:09 scan:
+    - item 194's launch checks: Spotlight STOP/CONT, preflight, battery float;
+    - stop the Codex MCP adapter;
+    - launcher `/opt/homebrew/opt/python@3.14/bin/python3.14 scripts/launch_align_r0.py launch` per `docs/process/R0_HEADLESS_LAUNCH.md`, with `--config $M/configs/align/v4/r0_desk.json` (now carries `idle_max_seconds` 1200), `--output /Users/edr/night-align/r0-v4-<UTC>`, `--deadline` 23:05 PST, `--disk-path /Users/edr`;
+    - mail Ed on thread `1a198fafa8fc12ba`, then exit.
+  - (3) After R0: item 185 (1). The SMC result now carries per-key `baseline_unsettled`, the settle record, D1(d) reference and exclusions, `heat_ordering_indeterminate` and `wide_exclusion`, and the alternative slow picks.
+    - D5's slow rule is chosen on this settled capture: print the alternatives and decide with the R1 lead.
+    - R1-lane deferrals are in DECISION.md Erratum 5.
+  - (4) WP18 and items 188 (3)-(4) are unchanged.
+
 194. **Magistrate activation 62c121f8 (Opus 5.5, headless, 2026-11-07 from 00:02 PST): R0 re-run 6 was refused in `smc` at 00:00 PST by macOS's daily `/tmp` cleaner. That is the third `smc` refusal in a row, so it went to Ed under item 181, and R0 waits for his answer. The WP18 fixture tool (item 191) refused on a tool defect; nothing was committed from it.** No pending notices, no unread mail from Ed, no new directive.
 - **Run** `/Users/edr/night-align/r0-v4-20261107T0720Z` (07:18:54Z-08:00:04Z, 2,470 s): status `fail`, `complete_r0` false.
   - host, host-identity, model-load, generated (0 off-spec turns) and memory (peak 37,025,283,164 bytes against 45e9; swap flat): pass.
