@@ -320,8 +320,14 @@ def main(argv=None, *, backend_factory=None, guard_factory=QuietGuard, lock_path
         except BlockingIOError:
             parser.exit(2, "Another R0 runner owns the machine lock\n")
         if args.inventory:
-            guard.check(force=True)
-            rows = inventory(_path(str(args.inventory)), guard.check)
+            try:
+                guard.check(force=True)
+                rows = inventory(_path(str(args.inventory)), guard.check)
+            finally:
+                # The one caller outside execute(): stop the guard's daemon.
+                close_guard = getattr(guard, "close", None)
+                if close_guard is not None:
+                    close_guard()
             with args.output.open("x") as handle:
                 json.dump(rows, handle, indent=2, sort_keys=True)
                 handle.write("\n")
