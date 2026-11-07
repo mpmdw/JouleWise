@@ -309,7 +309,16 @@ def rebuild(s, runner, runner_factory, checkpoint, *, deadline, caches):
             if operation is None:
                 continue
             before = set(s.outputs)
-            builder_runner.run(s.guarded(getattr(s, operation)), [], step=step)
+            result = builder_runner.run(s.guarded(getattr(s, operation)), [], step=step)
+            if deadline is None or deadline.firings != firings or caches.worker_observer_unavailable:
+                raise ResumeError('rebuild_deadline_fired')
+            rows = [row for row in checkpoint['step_records'] if row['step'] == step]
+            if any(row['status'] == 'ok' for row in rows) and (result.exit_status or result.exception):
+                raise ResumeError('rebuilt_builder_refused')
+            produced = [item for role, item in s.outputs.items() if role not in before]
+            if sorted((item['name'], item['sha256']) for item in produced) != sorted(
+                    (item['name'], item['sha256']) for row in rows for item in row['outputs']):
+                raise ResumeError('rebuilt_output_differs')
             for role, item in s.outputs.items():
                 if role not in before and expected.get(role) != (item['name'], item['sha256']):
                     raise ResumeError('rebuilt_output_differs')

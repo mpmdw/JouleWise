@@ -1958,7 +1958,7 @@ def _record_exit(record):
     return 3 if any(row['status']=='outcome_class' for row in record['steps']) else 0
 
 
-def _resumed_record(output, restricted):
+def _resumed_record(output, restricted, binding):
     """A complete record of an interrupted run (crash after its write), else None (moved aside)."""
     from . import resume as _resume
     if not output.exists():
@@ -1970,6 +1970,17 @@ def _resumed_record(output, restricted):
                 or [row.get('step') for row in record['steps']][-1:]!=['11']
                 or type(record.get('completed_without_tooling_refusal')) is not bool):
             raise ValueError('not a complete record')
+        for key in ('mode','analysis_commit','window_index_sha256'):
+            if record.get(key)!=binding[key]:
+                raise _resume.ResumeError(key+'_differs')
+        outputs=[item for row in record['steps'] for item in row['outputs']]
+        modes=[item['name'] for item in outputs if item['name'].startswith(VDL_MODE_PREFIX)]
+        if modes and modes!=[vdl_mode_name(binding['vdl_mode'])]:
+            raise _resume.ResumeError('vdl_mode_differs')
+        try:
+            require_step_inputs(restricted,outputs)
+        except AnalysisRefusal:
+            raise _resume.ResumeError('completed_record_output_differs') from None
         return record
     except (OSError,ValueError,TypeError,KeyError,AttributeError):
         root=restricted/_resume.RESUME_DIR/_resume.ABANDONED
@@ -2036,14 +2047,20 @@ def run(mode,index,custody,*,workers=None,resume=False,_test_pack_table=None,_te
     try:
         if resume:
             restricted=directory/'restricted'
-            checkpoint=_resume.load(restricted,binding)
-            complete=_resumed_record(output,restricted)
+            try:
+                checkpoint=_resume.load(restricted,binding)
+            except _resume.ResumeError as exc:
+                if exc.reason!='checkpoint_missing' or not output.exists():raise
+            if checkpoint is not None:
+                _resume.rollback(restricted,checkpoint,move_live=True,verify_only=True)
+            complete=_resumed_record(output,restricted,binding)
             if complete is not None:
                 # Interrupted after the record write: the run is complete.
                 _resume.Checkpoints(restricted,binding).finish()
                 print('resume: run already complete',file=sys.stderr)
                 print(str(output)+' '+_sha(output))
                 return _record_exit(complete)
+            if checkpoint is None:raise _resume.ResumeError('checkpoint_missing')
             _resume.rollback(restricted,checkpoint,move_live=True)
         else:
             directory.mkdir(parents=True)
@@ -2139,6 +2156,11 @@ def run(mode,index,custody,*,workers=None,resume=False,_test_pack_table=None,_te
                     difference={'path':'binding/window_index'}
             except (AnalysisRefusal,OSError,ValueError,TypeError,KeyError):
                 previous=None
+            if (checkpoint is not None and (previous is None or difference is not None)
+                    and any(row['step']=='0' and row['status']=='ok' for row in checkpoint['step_records'])):
+                print('resume refused: release_preflight_differs',file=sys.stderr)
+                print('step 0 - tooling_refusal',file=sys.stderr)
+                return 2
         start=0;ran=[];index_value=s.index
         if checkpoint is not None:
             # Resume: rebuild the in-process state of the completed steps and
@@ -2211,6 +2233,8 @@ def run(mode,index,custody,*,workers=None,resume=False,_test_pack_table=None,_te
                 # Lane b5-robust: a host tooling refusal reruns the step serially from
                 # the checkpoint before it (budgets unchanged; at most MAX_RETRIES).
                 document=checkpoints.last
+                # The decision reads only the host signal: whatever the attempt's own
+                # result was (an outcome included) stays hidden behind the firing.
                 reason=(_resume.retry_reason(s,records,deadline) if retries<_resume.MAX_RETRIES and document is not None
                         and document['position']==position else None)
                 if reason is None:break
