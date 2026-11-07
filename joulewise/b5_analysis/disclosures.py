@@ -693,7 +693,7 @@ def _machine_lines(result, windows, archives, kept, projections, flags):
             result["window_lines"][pack].append(_item("machine_member", True, text, model=model,
                 run_id=run, rho=rho, rail_j=rail, machine_j=machine, removed=removed,
                 plausible=plausible, meter_flags=sorted(set(own_flags+window_flags)),
-                battery_term_available=(row.get("machine") or {}).get("battery_available")))
+                battery_term_available=(row.get("machine") or {}).get("battery_term_available")))
             grouped.setdefault(model, []).append((rho, plausible, own_flags))
         for model, rows in sorted(grouped.items()):
             all_rhos = [r for r,_,_ in rows if _finite(r)]
