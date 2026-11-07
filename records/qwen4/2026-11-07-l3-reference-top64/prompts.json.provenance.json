@@ -1,0 +1,207 @@
+{
+  "schema": "qwen4exp-quality-ref-prompts/v1",
+  "prompts_json": "/private/tmp/jwgold-run-l3/prompts.json",
+  "prompts_json_sha256": "a3645cd6f11113e0070907966db2bca8ae1b3c6797931dbd5d1001f762a6cd05",
+  "ruling": "L3 (docs/align/council-2026-11-06-v4-review/LEAD-RULINGS-1.md)",
+  "tokenizer": {
+    "repo": "Qwen/Qwen3.8-Flash-Next",
+    "revision": "de4b8e4d43b917e7706784d8bb445c9af86a3540",
+    "files": {
+      "chat_template.jinja": {
+        "git_blob_id": "c0c686f9c38d70d179fb7b5f5aa7530bc913dda3",
+        "sha256": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+        "size": 8952
+      },
+      "config.json": {
+        "git_blob_id": "491017e9980e44ef01afa2c4782f5c7e169b9b26",
+        "sha256": "889658f2508e8c61d409b02e70e0d78d8d4452ec65aaafbe129805d213d2e74b",
+        "size": 4745
+      },
+      "merges.txt": {
+        "git_blob_id": "a494e019ca1502219fd0128658b979e5f05ae8e8",
+        "sha256": "a9d356d7bdf1ef4949e3e748e95b8e10ad9d4e2e838eddc38a0a7b6b94d1db8d",
+        "size": 3353259
+      },
+      "tokenizer.json": {
+        "lfs_sha256": "0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3",
+        "sha256": "0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3",
+        "size": 12809320
+      },
+      "tokenizer_config.json": {
+        "git_blob_id": "5de744b3fca2129d7186979ae47c06be33903243",
+        "sha256": "b11349aafa7cdc6a320767cf7ceb29ed82f7eda5d65e8e0819e76f0ce947bf27",
+        "size": 17928
+      },
+      "vocab.json": {
+        "git_blob_id": "0aa0ce0658d60ac4a5d609f4eadb0e8e43514176",
+        "sha256": "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003",
+        "size": 6722759
+      }
+    },
+    "transformers": "5.22.1",
+    "preflight": {
+      "ok": true,
+      "mismatches": {},
+      "checked": 9
+    }
+  },
+  "template_sha256": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+  "hosted_prompts_sha256": "ef5de2922cc36f3e0ee8fa61c2e8abc594ff06fed48f1ad0ebe3070614e0b688",
+  "items_sha256": "b9dfdab714d4c2fe70517f6152e06c2f7270a3ebd016b927883a51b5c8f6d0ae",
+  "max_tokens": 512,
+  "continuation_tokens": 128,
+  "total_tokens": 2521,
+  "prompts": [
+    {
+      "name": "hosted-photosynthesis",
+      "prompt_tokens": 20,
+      "continuation_tokens": 128,
+      "total_tokens": 148,
+      "rendered_sha256": "537bd9ee2ad4f931259852584c7ece61c5a616c9dc212fc3e1ac624bd7607fc9",
+      "continuation": {
+        "source": "origin_intro",
+        "source_sha256": "e6a6498a3fefe408e9f0771553cf4b8b1e40b7d84ef64a72fec9ae51346bf8be",
+        "anchor": "When on board H.M.S."
+      }
+    },
+    {
+      "name": "hosted-primes",
+      "prompt_tokens": 23,
+      "continuation_tokens": 128,
+      "total_tokens": 151,
+      "rendered_sha256": "da3c3c12270c9c79b27702214c7a8a66c79251fab29aff682aa4a32f1ace5ff6",
+      "continuation": {
+        "source": "us_constitution",
+        "source_sha256": "0426b3e1db0b90f22dda24540c872820cd7a654a4727461b303489c74cc89238",
+        "anchor": "We the people of the United States"
+      }
+    },
+    {
+      "name": "hosted-haiku",
+      "prompt_tokens": 20,
+      "continuation_tokens": 128,
+      "total_tokens": 148,
+      "rendered_sha256": "86e1b12c8c2bd3cc415343e6878d0f8ecf5752dec3a8398a5d922540eeb99ae7",
+      "continuation": {
+        "source": "pp_ch1",
+        "source_sha256": "a28d11d0a51026a9377f51bf90887a028b24ef686379ce80ff4d8cd4170a768b",
+        "anchor": "It is a truth universally acknowledged"
+      }
+    },
+    {
+      "name": "hosted-derivative",
+      "prompt_tokens": 30,
+      "continuation_tokens": 128,
+      "total_tokens": 158,
+      "rendered_sha256": "1c1b48602b5cb989fe8a129995eb77b9732d48c08fd621496c79ec956a87ef78",
+      "continuation": {
+        "source": "origin_intro",
+        "source_sha256": "e6a6498a3fefe408e9f0771553cf4b8b1e40b7d84ef64a72fec9ae51346bf8be",
+        "anchor": "My work is now nearly finished"
+      }
+    },
+    {
+      "name": "hosted-german",
+      "prompt_tokens": 31,
+      "continuation_tokens": 128,
+      "total_tokens": 159,
+      "rendered_sha256": "1b750963a920eca6412f5e03483bb200d420ed2479dcc2f0eb0fe089b4a6c769",
+      "continuation": {
+        "source": "pp_ch1_3_long",
+        "source_sha256": "0857a0b8ffe317c71ecb31a95b136719b41673584b9b1b7bbcf6f6dad7ca6850",
+        "anchor": "Mr. Bennet was among the earliest"
+      }
+    },
+    {
+      "name": "hosted-zh_great_wall",
+      "prompt_tokens": 18,
+      "continuation_tokens": 128,
+      "total_tokens": 146,
+      "rendered_sha256": "3857ff4ee3447873400e4fc9ca57b51d8fa8a0234c27aec8381d4c5bbb2b80a5",
+      "continuation": {
+        "source": "lunyu_xueer",
+        "source_sha256": "c40c29564624af861e79f1f5ec6de1218ba7aa304fb9e8b91cd03d4e80757b82",
+        "anchor": "1. 子曰：「學而時習之"
+      }
+    },
+    {
+      "name": "hosted-palindrome_code",
+      "prompt_tokens": 30,
+      "continuation_tokens": 128,
+      "total_tokens": 158,
+      "rendered_sha256": "b44ac2b3e106794328916b6da30c5b504611cdc1571870891a7b253f84f6531f",
+      "continuation": {
+        "source": "pep20_zen",
+        "source_sha256": "cdc3cae2df46f562201b6506addd45921454d73d7b873ca4169dca8e55f9cb51",
+        "anchor": "Beautiful is better than ugly."
+      }
+    },
+    {
+      "name": "hosted-ww1_bullets",
+      "prompt_tokens": 27,
+      "continuation_tokens": 128,
+      "total_tokens": 155,
+      "rendered_sha256": "0211cf66232e6245f53f78bb94962f30a5ee7b2f78c3e870923f83adbfcd1848",
+      "continuation": {
+        "source": "us_constitution",
+        "source_sha256": "0426b3e1db0b90f22dda24540c872820cd7a654a4727461b303489c74cc89238",
+        "anchor": "Article 1"
+      }
+    },
+    {
+      "name": "hosted-json_output",
+      "prompt_tokens": 33,
+      "continuation_tokens": 128,
+      "total_tokens": 161,
+      "rendered_sha256": "d132800128b74f67e221abb4b28a11deed75365c3bde10a1414de5d5aaa30a60",
+      "continuation": {
+        "source": "pp_ch1_3_long",
+        "source_sha256": "0857a0b8ffe317c71ecb31a95b136719b41673584b9b1b7bbcf6f6dad7ca6850",
+        "anchor": "Not all that Mrs. Bennet"
+      }
+    },
+    {
+      "name": "hosted-multi_turn",
+      "prompt_tokens": 63,
+      "continuation_tokens": 128,
+      "total_tokens": 191,
+      "rendered_sha256": "b1fa7b634d02cb589406804cb364026e15480bb1db6b901c1d69daca372cf757",
+      "continuation": {
+        "source": "pp_ch1",
+        "source_sha256": "a28d11d0a51026a9377f51bf90887a028b24ef686379ce80ff4d8cd4170a768b",
+        "anchor": "“My dear Mr. Bennet,” replied his wife"
+      }
+    },
+    {
+      "name": "hosted-tool_weather",
+      "prompt_tokens": 311,
+      "continuation_tokens": 128,
+      "total_tokens": 439,
+      "rendered_sha256": "5491b37ed5b9e49a603b4f57813a7d05d4616948bf61ba3bcf28bc1a55564699",
+      "continuation": {
+        "source": "pp_ch1_3_long",
+        "source_sha256": "0857a0b8ffe317c71ecb31a95b136719b41673584b9b1b7bbcf6f6dad7ca6850",
+        "anchor": "In a few days Mr. Bingley"
+      }
+    },
+    {
+      "name": "hosted-long_context_qsa",
+      "prompt_tokens": 379,
+      "continuation_tokens": 128,
+      "total_tokens": 507,
+      "rendered_sha256": "1ad45aefb28fe48c1f533d9c51b862d7e10c481c9e9bcb1e883159841dbee764",
+      "continuation": {
+        "source": "pp_ch1_3_long",
+        "source_sha256": "0857a0b8ffe317c71ecb31a95b136719b41673584b9b1b7bbcf6f6dad7ca6850",
+        "anchor": "Mr. Darcy soon drew the attention"
+      },
+      "context": {
+        "context_from": "pp_ch1_3_long",
+        "context_sha256": "0857a0b8ffe317c71ecb31a95b136719b41673584b9b1b7bbcf6f6dad7ca6850",
+        "context_chars": 1332,
+        "context_paragraphs": 15,
+        "context_truncated": true
+      }
+    }
+  ]
+}
