@@ -593,3 +593,93 @@ No deviation.
 > R8-8 (confirmations, record only): the builder reading of 'R6-2 precool/retry segments' is confirmed (step-d and the designed states arm 1,200 s; idle-until-soak precools keep 1,500 s). Round-7 exec LOW-2 (G0 waits inside the member deadman) is accepted, because it is conservative. Ruling 1(f) likely refusing W1 at about 20 tok/s is expected: the 1(e) fallback is ruled by the lead after the R1 night, on its numbers.
 
 Recorded. No code change.
+
+## Round 8 review dispositions (2026-11-07)
+
+These dispositions settle the round-8 executing review of `lane/2026-11-06-v4-r1-integrated@a13d6fc99`, `docs/align/reviews/2026-11-07-r1-round8-executing-review.md` ("exec", committed as `f2f723734`, verdict ADMIT_WITH_FIXES, with its tests `tests/align/test_r1_round8_exec_review.py`). Each disposition is quoted verbatim as the lead gave it. One builder applied them on `lane/2026-11-06-v4-r1-integrated`, from `f2f723734`:
+
+- `48938e64d`: the code and tests (D8-1 to D8-3);
+- the doc commit that adds this section: the contract text for D8-2 to D8-5, with `test_r1_round8.DocTests` extended;
+- a report commit: the round-8 dispositions part of the Round 8 section of `docs/run_reports/2026-11-06-align-v4-r1-integration.md` (kit check and exact test tails).
+
+### D8-1. `_qualification_observe` re-raises interrupts
+
+> D8-1 (MEDIUM-1): `_qualification_observe` must re-raise KeyboardInterrupt and SystemExit after recording its fault, so the R8-1 latch sees the first signal. This is shared code; keep the change minimal and covered by the pinned test (remove its expectedFailure).
+
+**Implemented by** `48938e64d`. `_qualification_observe` still records the producer fault (`producer-faults.jsonl`, `status: REFUSED`) for any exception, then re-raises `KeyboardInterrupt` and `SystemExit`; every other exception is still swallowed and returns `None`. The re-raise site is allowlisted in `configs/gates/hazard_refusals.json` (category INTERNAL: it adds no refusal). Tests: `test_r1_round8_exec_review.SwallowedSignalLatchTests`, `expectedFailure` removed. Both tests fail on `f2f723734` ("KeyboardInterrupt not raised", "SystemExit not raised").
+
+**Deviation (test body).** The pinned test's body called the observation outside `assertRaises`, because it expected the swallow, and then asserted that a second signal still interrupts. With the fix the first signal itself escapes the observation, and the latch then rightly swallows any later signal. So the body now asserts that the first signal raises `KeyboardInterrupt` out of `_qualification_observe` and that its fault is still recorded. A second test, `test_system_exit_is_not_an_observation_failure`, covers `SystemExit` and checks that an ordinary failure is still swallowed.
+
+### D8-2. Every unproven chain termination defers the close
+
+> D8-2 (MEDIUM-2): set the termination-unproven flag from `_run_night` whenever the chain's termination is unproven on ANY path (census abort, supervision stop, window deadline, interrupt), rename it `_CHAIN_TERMINATION_UNPROVEN`, and have the close refuse to restore in all those cases (leaving the marker for the dead-man / next session start). Remove the pinned test's expectedFailure.
+
+**Implemented by** `48938e64d`.
+- `_run_chain_once` no longer sets the flag. On an interrupt it attaches the outcome of `_stop_chain_on_interrupt` to the `KeyboardInterrupt` (`chain_termination`) and re-raises.
+- `_run_night` sets `_CHAIN_TERMINATION_UNPROVEN` in three cases:
+  - on a `KeyboardInterrupt` whose termination outcome is unproven (`path: interrupt`);
+  - on any other exception escaping `_run_chain_once` (`path: exception`), because that chain was never terminated, so "any path" includes it;
+  - when `_run_chain_once` returns `termination_proven` false (`path: return`, with the abort reason). This covers a census abort, a supervision stop and a fired window deadline.
+- `run_night` clears the flag at the start and the end of every night.
+- `_close_ac_powermode` checks the flag before the retake. It restores nothing, logs `ac powermode close deferred: … not proven gone after the <interrupt | chain stop (abort reason …) | exception escaping the chain wait (…)>`, frees the lock and leaves the marker.
+- The `_run_night` re-raise is allowlisted (INTERNAL).
+- Tests:
+  - `test_r1_round8_exec_review.NightUnprovenNonInterruptCloseTests.test_an_unproven_census_abort_restores_nothing`: `expectedFailure` removed. It now also checks the marker, the log line, the freed lock and the cleared flag.
+  - `test_an_exception_escaping_the_chain_wait_restores_nothing` (new).
+  - Both fail on `f2f723734` (`'restore' unexpectedly found in ['read', 'restore', 'read']`).
+  - `test_r1_round8.NightUnprovenCloseTests` checks the renamed flag.
+
+### D8-3. Step-30b takes R8-4's bound construction
+
+> D8-3 (LOW-2): apply R8-4's bound construction to step-30b too (member start-up/close at the largest admitted I_D, the deadman factor, the margin, its pre-deadman phases). Recompute and record the worst-case table.
+
+**Implemented by** `48938e64d`. `segment_bounds` now bounds step-30b like step-d: `rearmed_member_bound_s(step.deadman_s)` (1,750 + 1.13544 × 1,580 + 120 = 3,663.9952 s; step-30b re-arms the same `step.deadman_s`), plus its pre-deadman phases (the 600 s G0 cap, which step-30b keeps under R7-2, and the 300 s quiet) and the 600 s recovery. That gives **5,163.9952 s** (was 3,300 s).
+
+`night_worst_case_s(None)` on this head:
+
+| Case | Round 8, R8-4 (s) | Round 8 + D8-3 (s) |
+|---|---|---|
+| No redo, no retry | 54,342.97 | **56,206.96** |
+| With one 11:45-13:15 batch-window wait (+5,400) | 59,742.97 | **61,606.96** |
+| R6-2 retry allowance: 4 × (1,500 s precool + segment) | 29,055.98 | **29,055.98** (step-30b takes no R6-2 retry) |
+| Every R6-2 retry plus one batch-window wait | 88,798.95 | **90,662.94** |
+
+The per-segment bounds behind the table:
+- the soak: 1,800 s;
+- step-30b: **5,163.9952 s**;
+- each A-B-A leg: 4,328.9952 s;
+- each precool and the post-D cooldown: 1,500 s;
+- step-d and each designed state: 5,763.9952 s;
+- the gated runs and X-G: 1,800 s.
+
+If the gated runs' and X-G's 300 s W1 idle falls outside their member bound, add 1,200 s (57,406.96 / 62,806.96 s). A heavy redo of step-30b adds its 665 s release and 5,163.9952 s. W1's `window_cap_s` (44,640 s) is now 11,566.96 s below the no-redo case.
+
+Tests: `test_r1_round7_science.G0TimeoutTests` (step-30b = member + 600 + 300 + 600, independent of the R1 G0 timeout; the D8-3 table), `test_r1_rehearsal` (the admitted step-30b wait is 5,163.9952 s, and the bound covers the runtime's 600 s G0 cap + quiet + re-armed deadman + recovery cap).
+
+### D8-4. The R1 chain traps restore after the driver: recorded
+
+> D8-4 (LOW-1): record next to R7-14 that the R1 chain zsh EXIT/signal traps run pmset 0 after the driver exits, without lock or proof, overriding an R8-1 deferral. Accepted for R1 (no W1 night can be measuring under the single launchd night label); must be revisited before any W1 arm under High Power. Doc only.
+
+**Implemented by** the doc commit: `docs/align/r1_runtime_contract.md`, the R1 chain EXIT trap item (beside R7-14). No code change.
+
+### D8-5. Contract wording: the group proof and the driver's teardown bound
+
+> D8-5 (LOW-4, LOW-5): contract wording. The termination proof covers the chain's process group, not every process of the night; state the driver's worst-case teardown bound relative to run_night's 30 + 5 s and note that exceeding it fails safe (markers stay). Doc only.
+
+**Implemented by** the doc commit: `docs/align/r1_runtime_contract.md`.
+- **LOW-4.** The host-lock paragraph now says that R8-1 proves the chain's process group gone, which contains every `run_campaign` member. A member-tree process that starts its own session is outside the proof: with the lock, the close defers; without it, it is the R8-2 class.
+- **LOW-5.** The driver's TERM bullet now states the whole teardown bound, measured from the first signal:
+  - 20 s of grace, plus at most one 5 s `ps` read;
+  - a 5 s `ps` read before the KILL;
+  - a reap of at most 30 s;
+  - `_stop_tree`: 5 s + 2 × (5 s wait + 5 s `ps` + 0.1 s);
+  - a 5 s drain;
+  - then the retake and the sudo restore.
+
+  That is about 60 s with a reaped runtime and about 90 s with an unreaped one, against run_night's 30 + 5 s. Exceeding it lets run_night's group KILL cut the driver's restore and `r1_result.json`, which fails safe: the markers stay. No code change.
+
+### D8-6. LOW-3 accepted
+
+> D8-6 (LOW-3): accepted, no change; record.
+
+Recorded. The normal (no-signal) `_run` path keeps its unbounded `communicate()`. It is pre-existing, and it fails safe: a signal breaks the block, the held pipes fail the proof, and the restore defers.

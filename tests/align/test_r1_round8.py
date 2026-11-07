@@ -601,7 +601,7 @@ class DocTests(unittest.TestCase):
     def test_contract_records_r8_1_and_r8_2(self):
         text = " ".join((ROOT / "docs/align/r1_runtime_contract.md").read_text().split())
         for needle in ("lead ruling R8-1", "lead ruling R8-2", "R8-3", "R8-4", "R8-5", "R8-6", "5,763.9952 s",
-                       "54,342.97 s"):
+                       "54,342.97 s", "5,163.9952 s", "56,206.96 s", "D8-1", "D8-2", "D8-3", "D8-4", "D8-5"):
             self.assertIn(needle, text)
 
 
