@@ -231,7 +231,12 @@ class RealSignalSeriesHighPowerTests(unittest.TestCase):
                 self.assertFalse((td / ".align-r1-high-power").exists())
                 result = json.loads((td / "run/r1_result.json").read_text())
                 self.assertEqual(result["status"], "aborted")
-                self.assertEqual(result["powermode"][-1]["point"], "restore_automatic")
+                # Lead ruling R7-7: the restore is followed by its read-back,
+                # and the markers go only on AC powermode 0.
+                self.assertEqual(result["powermode"][-2]["point"], "restore_automatic")
+                self.assertEqual(result["powermode"][-2]["exit_code"], 0)
+                self.assertEqual(result["powermode"][-1]["point"], "after_restore_automatic")
+                self.assertEqual(result["powermode"][-1]["observed"], 0)
                 self.assertFalse((td / "registration/r1_slots.json").exists())
 
 
