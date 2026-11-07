@@ -164,3 +164,14 @@ Both cold passes returned ADMIT_WITH_FIXES (Fable 5.1 and Opus 5.5, blind and ex
 - **Deferred to the R1 lane:** aliased and virtual keys (TCMb = TVD0, Tf24 = Tf2D = Tf2E, TVV0). D1 (d)
   does not remove an exact copy. The R0 picks print their aliases, and R1 must not count aliases as
   independent thermometers.
+
+## Erratum 3 (03:40 PST, lead ruling on the fix seat's NEEDS_RULING)
+
+**D1 (d), the reference key.** The reference is the key with the shortest cooling tau among keys that qualify
+for the fast role under D4: selectable under D1 (a)-(c), resolving, tau <= 60 s, noise <= 1/3 degC, and not
+clamp-flagged. Lexical ties.
+
+Derivation: the ordering argument needs the reference to be a real thermometer near the source. A key too noisy
+for the fast role, such as the flicker key Tp0M, cannot anchor it. With every resolving key allowed as the
+reference, Tp0M became the reference and the fast pick moved to Tf48. With role-qualified references the replay
+keeps Tf18 / TaLP.
