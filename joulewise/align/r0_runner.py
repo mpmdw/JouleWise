@@ -13,14 +13,17 @@ import sys
 import time
 
 from joulewise.align import r0
-from joulewise.align.r0_step import ProfileRefused, profile_config, step_budget
 from joulewise.align.r0_host import (
     QuietGuard, Refused, command, disk_census, host_snapshot, host_identity, inventory, smc_enumeration,
+    ProfileRefused, profile_config, step_budget,
 )
 
 CHECKS = ("host", "disk", "load", "template", "generated", "memory", "smc", "ladder", "long-decode")
 ACCEPTED_OUTCOMES = {"checkpoint": {"required", "not_required"}, "ladder": {"pass", "fallback"},
-                     "template": {"diagnostic"}, "disk": {"diagnostic"}}
+                     "template": {"diagnostic"}, "disk": {"diagnostic"},
+                     # Erratum 2: SMC selection is independent of host,
+                     # disk and model checks. Record inconclusive and proceed.
+                     "smc": {"pass", "inconclusive"}}
 REPO = Path(__file__).resolve().parents[2]
 LOAD_REFERENCE_NOTE = "docs/align/v4/R0-LOAD-REFERENCE-NOTE.md"
 LOAD_REFERENCE_BASIS = ("lead ruling 2026-11-06 under RUN_STATE items 181/183 (Ed: approve changes "
@@ -106,7 +109,7 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
             keep_going=False, long_decode_attempts=2):
     started_run = time.monotonic()
     # --checks selects a subset, never overrides the fail-fast phase order.
-    checks = [name for name in CHECKS if name in checks]
+    checks = (["smc"] if "smc" in checks else []) + [name for name in CHECKS if name in checks and name != "smc"]
     report = {"schema": "joulewise.align.r0.report.v1", "status": "running",
               "created_utc": datetime.now(timezone.utc).isoformat(),
               "config": config, "pins": r0.PINS, "checks": [], "complete_r0": False,
@@ -177,6 +180,8 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
             row.update(status="fail", error=f"{type(exc).__name__}: {exc}")
         finally:
             progress({})
+        if name == "smc":
+            report["smc_selection_missing"] = row["status"] != "pass"
         if not keep_going and row["status"] not in ACCEPTED_OUTCOMES.get(name, {"pass"}):
             report["stopped_after"] = {"check": name, "model": model, "outcome": row["status"]}
             raise _StopChecks
@@ -198,6 +203,10 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
         report["authority_load_reference_blob"] = git_blob_sha1(REPO / LOAD_REFERENCE_NOTE)
         report["config_sha256"] = hashlib.sha256(json.dumps(config, sort_keys=True).encode()).hexdigest()
         report["checkout_head"] = command(("git", "-C", str(REPO), "rev-parse", "HEAD")).strip()
+        # D3: SMC needs no model and must precede disk's weights hash as
+        # well as every model import/load, independently of CHECKS ordering.
+        if "smc" in checks:
+            receipt("smc", None, lambda: smc_enumeration(REPO, output / "smc", config["smc_step"]))
         for name, fn in (("host", host_snapshot), ("disk", lambda: disk_census(config, r0.PINS, guard.check))):
             if name in checks:
                 receipt(name, None, fn)
@@ -219,16 +228,7 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
                              "long-decode": lambda: r0.long_decode(backend, max_attempts=long_decode_attempts),
                              "memory": lambda: r0.memory_peak(backend, tag)}
                 loaded = None
-                for name in (c for c in checks if c not in {"host", "disk"}):
-                    if name == "smc":
-                        # Preserve the original unloaded SMC baseline. Reload
-                        # lazily if ladder/long-decode were also selected.
-                        if backend is not None:
-                            backend.close()
-                            backend = None
-                        loaded = None
-                        receipt("smc", None, lambda: smc_enumeration(REPO, output / "smc", config["smc_step"]))
-                        continue
+                for name in (c for c in checks if c not in {"host", "disk", "smc"}):
                     if not host_ok:
                         receipt(name, tag, lambda: {"status": "blocked", "reason": "measurement host identity/capacity gate failed"})
                         continue
@@ -257,7 +257,9 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
         bad = [r for r in report["checks"] if r["status"] not in ACCEPTED_OUTCOMES.get(r["check"], {"pass"})]
         report["status"] = "fail" if bad else "pass"
         report["complete_r0"] = (set(checks) == set(CHECKS) and set(models) == {"D"}
-                                  and not bad and report["evidence_kind"] == "live_desk")
+                                  and not bad and report["evidence_kind"] == "live_desk"
+                                  and any(r["check"] == "smc" and r["status"] == "pass"
+                                          for r in report["checks"]))
     except _StopChecks:
         report["status"] = "fail"
     except ProfileRefused as exc:

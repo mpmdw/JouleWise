@@ -192,15 +192,20 @@ class CaptureTests(unittest.TestCase):
             if calls == 5:
                 raise r0.NotQuiet("new agent")
         with self.assertRaises(r0.NotQuiet):
+            # idle_max_s=idle_s pins the pre-adaptive fixed idle: this test is about load
+            # start/stop on a census failure, not the D3 adaptive idle (tested elsewhere).
             r0.collect(self.reader, seconds=5, idle_s=5, load_s=10, recovery_s=5, gpu_step=True,
-                       quiet_check=quiet, ctx=self.ctx, sink=lambda _: None, load_factory=lambda _: load)
+                       quiet_check=quiet, ctx=self.ctx, sink=lambda _: None, load_factory=lambda _: load,
+                       idle_max_s=5)
         load.start.assert_called_once()
         load.stop.assert_called_once()
 
     def test_fake_step_has_all_phases_and_cleans_worker_on_normal_exit(self):
         load = mock.Mock()
+        # idle_max_s=idle_s pins a fixed 5 s idle so 5+5+5 one-Hz phases give 15 samples.
         result = r0.collect(self.reader, seconds=5, idle_s=5, load_s=5, recovery_s=5, gpu_step=True,
-                            quiet_check=lambda: {}, ctx=self.ctx, sink=lambda _: None, load_factory=lambda _: load)
+                            quiet_check=lambda: {}, ctx=self.ctx, sink=lambda _: None, load_factory=lambda _: load,
+                            idle_max_s=5)
         self.assertEqual([p["phase"] for p in result["phases"]], ["idle", "load", "recovery"])
         self.assertEqual(len(result["samples"]), 15)
         load.stop.assert_called_once()
