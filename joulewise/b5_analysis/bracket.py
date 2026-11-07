@@ -337,9 +337,21 @@ def _prefetch_candidate_physics(ledger_snapshot: Any, mode: Any) -> None:
         if caches is None or caches.workers < 2 or calibration.CANDIDATE_PHYSICS_MEMO is None:
             return
         calls = []
+        # Exactly the rows calibration_bracketing.discover_calibration_candidates
+        # authenticates (its predicates, in its order). Any other valid ledger row
+        # (open-session, derivation-kind or superseded-capture) is never refitted
+        # by the frozen evaluator, so prefetching it is pure waste: on the
+        # synthetic S10 chain 51 rows per pack against 4 discovered, step 3b
+        # 84 s -> 409 s at ten workers (lane 2026-11-07-b5-r3-speed-fix).
+        finalized = {session.session_id for session in ledger_snapshot.bracket_sessions
+                     if session.state == "finalized"}
         for observation in ledger_snapshot.observations:
             if (observation.disposition != "valid" or observation.content_id is None
-                    or observation.is_historical_import or not observation.custody_locator):
+                    or observation.is_historical_import or not observation.custody_locator
+                    or observation.bracket_session_id is not None
+                    and observation.bracket_session_id not in finalized
+                    or calibration._is_derivation_kind_observation(observation, ledger_snapshot)
+                    or calibration._capture_pipeline_refusal_for_observation(observation) is not None):
                 continue
             custody = Path(observation.custody_locator)
             calls.append(((str(custody), str(custody.parent.parent), mode), {}))

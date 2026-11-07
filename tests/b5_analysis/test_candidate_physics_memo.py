@@ -52,13 +52,29 @@ class MemoTests(unittest.TestCase):
             self.assertEqual(caches.memos.get(cb.CANDIDATE_PHYSICS_MEMO, {}), {})
 
 
+def _row(i, **fields):
+    row = dict(disposition='valid', content_id=f'c{i}', is_historical_import=False,
+               custody_locator=f'/runs/root/cal-{i}', bracket_session_id=None, kind='claim', era='active')
+    row.update(fields)
+    return SimpleNamespace(**row)
+
+
 class PrefetchTests(unittest.TestCase):
-    def snapshot(self, count=3):
-        return SimpleNamespace(observations=[
-            SimpleNamespace(disposition='valid', content_id=f'c{i}', is_historical_import=False,
-                            custody_locator=f'/runs/root/cal-{i}') for i in range(count)]
-            + [SimpleNamespace(disposition='invalid', content_id='x', is_historical_import=False,
-                               custody_locator='/runs/root/bad')])
+    def setUp(self):
+        # The two frozen row predicates, driven by synthetic row fields.
+        for name, fake in (('_is_derivation_kind_observation', lambda o, _s: o.kind != 'claim'),
+                           ('_capture_pipeline_refusal_for_observation',
+                            lambda o: None if o.era == 'active' else 'capture_pipeline_superseded')):
+            patcher = mock.patch.object(cb, name, side_effect=fake)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def snapshot(self, count=3, extra=()):
+        return SimpleNamespace(
+            valid=True, bracket_sessions=[SimpleNamespace(session_id='s-done', state='finalized'),
+                                          SimpleNamespace(session_id='s-open', state='open')],
+            observations=[_row(i) for i in range(count)] + list(extra)
+            + [_row(99, disposition='invalid', custody_locator='/runs/root/bad')])
 
     def test_only_clean_successful_float_values_merge(self):
         outcomes = [SimpleNamespace(ok=True, firings=0, vdl_new={'memos': {cb.CANDIDATE_PHYSICS_MEMO: {'a': 0.5}}}),
@@ -74,12 +90,37 @@ class PrefetchTests(unittest.TestCase):
                                                                  '/runs/root/cal-2'])
         self.assertEqual(args.kwargs, {'account': False})
 
+    def test_prefetch_refits_exactly_the_rows_discovery_authenticates(self):
+        """b5-r3-speed-fix: the prefetch set is discover_calibration_candidates' set, in its order.
+
+        On the synthetic S10 chain the old filter prefetched 51 rows per pack while
+        discovery authenticates 4 (step 3b 84 s -> 409 s at ten workers).
+        """
+        extra = [_row(10, bracket_session_id='s-done'), _row(11, bracket_session_id='s-open'),
+                 _row(12, kind='derivation'), _row(13, era='superseded'), _row(14, is_historical_import=True),
+                 _row(15, bracket_session_id='s-gone'), _row(16, kind='derivation', bracket_session_id='s-done')]
+        snapshot = self.snapshot(extra=extra)
+        discovered = []
+        with mock.patch.object(cb, 'CalibrationLedgerSnapshot', SimpleNamespace), \
+                mock.patch.object(cb, '_candidate_from_observation',
+                                  side_effect=lambda o, mode: discovered.append(o.custody_locator) or object()):
+            self.assertEqual(len(cb.discover_calibration_candidates(snapshot)), 4)
+        with arc.analysis_run_caches({}, workers=3):
+            with mock.patch('joulewise.analysis_member_pool.member_map', return_value=[]) as mapped:
+                bracket._prefetch_candidate_physics(snapshot, 'issuing')
+        prefetched = [call[0][0] for call in mapped.call_args.args[1]]
+        self.assertEqual(prefetched, discovered)
+        self.assertEqual(prefetched, ['/runs/root/cal-0', '/runs/root/cal-1', '/runs/root/cal-2',
+                                      '/runs/root/cal-10'])
+
     def test_no_pool_or_one_candidate_does_nothing_and_errors_are_swallowed(self):
         with mock.patch('joulewise.analysis_member_pool.member_map') as mapped:
             with arc.analysis_run_caches({}, workers=1):
                 bracket._prefetch_candidate_physics(self.snapshot(), 'issuing')
             with arc.analysis_run_caches({}, workers=3):
                 bracket._prefetch_candidate_physics(self.snapshot(1), 'issuing')
+                bracket._prefetch_candidate_physics(self.snapshot(1, extra=[_row(5, kind='derivation')]),
+                                                    'issuing')
                 mapped.side_effect = RuntimeError('pool')
                 bracket._prefetch_candidate_physics(self.snapshot(), 'issuing')
         self.assertEqual(mapped.call_count, 1)
