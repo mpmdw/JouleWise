@@ -9,14 +9,13 @@ Sol's detail critique rated this leaf unsafe as planned (#4 relocation, #5
 negative and timed custody probes, #6 the claim runs root). The custody-probe
 tests run the real calibration_ledger.probe_custody (its daemon thread, its
 exists/is_dir probe and its two-second timeout) in front of the S2 fixture's
-synthetic capture decoder. Today the store never stores a fill that started a
-thread, so those fills are unstorable; the tests that relax that rule (as a
-later store revision might) show that a refusal resting on a negative or
-timed-out probe is still never served. Under that relaxed rule such a refusal
-IS stored and exported (only never served): the store has no per-leaf value
-predicate yet (review of PR #634, finding 1, deferred to AUTH-IO-2). The
-tolerance must not land without one; ``test_tolerated_probe_thread_needs_a_value_predicate``
-shows why and flips once the L4 spec carries ``storable_value``.
+synthetic capture decoder. Until b5 under-90 round 2 the store never stored a
+fill that started a thread, so every L4 fill was unstorable. The lead's round-2
+ruling exempts exactly the probe thread (tests/b5_analysis/test_l4_custody_probe.py
+pins its code); probe_custody marks a fill resting on a negative or timed-out
+probe unstorable itself, and the L4 spec now carries the value predicate
+``storable_value`` (review of PR #634, finding 1), so such a refusal is never
+stored, exported, merged or served, while a passed bracket is stored and served.
 """
 from __future__ import annotations
 
@@ -296,7 +295,7 @@ class LeafBracketTests(_Base):
         self.assertTrue(observed["relative_counters_unchanged"], "a relative runs root never reaches the store")
 
     def test_snapshot_ledger_path_is_never_read(self):
-        """The keyed snapshot carries only the temporary ledger file's final name."""
+        """Key projection never changes the snapshot a bypass receives."""
         self.assertNotIn("ledger_path", inspect.getsource(calibration))
         self.assertEqual(inspect.getsource(cl.CalibrationLedgerSnapshot).count("ledger_path"), 1)
         seen = []
@@ -307,11 +306,12 @@ class LeafBracketTests(_Base):
             return real(*args, **kwargs)
 
         expected = self.serial(self.gamma)
-        # The stand-in is not the registered leaf, so the store is bypassed;
-        # the wrapper still hands it the snapshot it would key.
+        # The stand-in is not the registered leaf, so the store is bypassed.
         with run(), mock.patch.object(calibration, "calibration_bracket_for_bundles", capture):
             self.assertEqual(outcome(self.gamma), expected)
-        self.assertEqual(seen, [Path("ledger.jsonl")])
+        self.assertEqual(len(seen), 1)
+        self.assertTrue(seen[0].is_absolute())
+        self.assertEqual(seen[0].name, "ledger.jsonl")
 
     def test_changed_candidate_byte_recomputes_with_the_serial_outcome(self):
         with run() as caches, frozen_calls() as calls:
@@ -403,16 +403,18 @@ class StorableValueTests(unittest.TestCase):
 class CustodyProbeTests(_Base):
     """Sol #5: candidate custody probes (real probe_custody) and their timeout."""
 
-    def test_probe_thread_makes_every_fill_unstorable_today(self):
+    def test_probe_thread_no_longer_makes_a_passed_fill_unstorable(self):
+        # Round 2: the real probe thread is exempt; the passed bracket is stored once and served.
         with probing():
             expected = self.serial(self.gamma)
             self.assertEqual(expected[0][0], "bracket")
             with run() as caches, frozen_calls() as calls:
                 self.assertEqual(outcome(self.gamma), expected)
                 self.assertEqual(outcome(self.gamma), expected)
-        self.assertEqual(calls.call_count, 2)
-        self.assertEqual(counters(caches).get("unstorable"), 2)
-        self.assertNotIn("hit", counters(caches))
+        self.assertEqual(calls.call_count, 1)
+        self.assertEqual(counters(caches).get("fill"), 1)
+        self.assertEqual(counters(caches).get("hit"), 1)
+        self.assertNotIn("unstorable", counters(caches))
 
     def test_negative_probe_refusal_is_never_served(self):
         missing = bound_captures(self.gamma)[1]
@@ -429,16 +431,12 @@ class CustodyProbeTests(_Base):
                         stack.enter_context(mock.patch.object(br, "_servable", return_value=True))
                     with moved_aside(missing):
                         self.assertEqual(outcome(self.gamma), refused)
-                    # Stored and exportable, only never served: no store value
-                    # predicate yet (finding 1, deferred to AUTH-IO-2).
-                    self.assertEqual(counters(caches)["fill"], 1, "a stored fill on a negative probe")
-                    if guard:
-                        self.assertEqual(outcome(self.gamma), restored)
-                        self.assertEqual(calls.call_count, 2)
-                    else:
-                        # Mutation check: without the guard the stale refusal
-                        # is served after the capture is back.
-                        self.assertEqual(outcome(self.gamma), refused)
+                    # Round 2: the negative probe and the value predicate each keep
+                    # the refusal out of the store, so even without the serving
+                    # guard nothing stale can be served.
+                    self.assertNotIn("fill", counters(caches), "a stored fill on a negative probe")
+                    self.assertEqual(outcome(self.gamma), restored)
+                    self.assertEqual(calls.call_count, 2)
 
     def test_timed_out_probe_is_never_served(self):
         with probing(), threads_tolerated():
@@ -448,9 +446,8 @@ class CustodyProbeTests(_Base):
                     timed = outcome(self.gamma)
                 self.assertIn("custody_locator_unreachable reason=timeout", stderr.getvalue())
                 self.assertEqual(timed[0], ("refused", "window_bracket_not_passed"))
-                # Stored and exportable, only never served: no store value
-                # predicate yet (finding 1, deferred to AUTH-IO-2).
-                self.assertEqual(counters(caches)["fill"], 1)
+                # Round 2: never stored (timed-out probe, and the value predicate).
+                self.assertNotIn("fill", counters(caches))
                 self.assertEqual(outcome(self.gamma), expected)
         self.assertEqual(calls.call_count, 2, "the timed-out outcome was recomputed, not served")
 

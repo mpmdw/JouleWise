@@ -34,6 +34,7 @@ import plistlib
 import re
 import statistics
 import struct
+import types
 import sys
 import weakref
 from xml.parsers.expat import ExpatError
@@ -491,6 +492,9 @@ class Member:
                 self.comparison = {"status": "compared", "reason": None}
             else:
                 self.comparison = {"status": "not_compared", "reason": "phase_events_ambiguous"}
+        # The bundle's own recorded trace placement (power_trace.csv, absolute epoch seconds), kept for the
+        # descriptive whole-machine line only (unanchored_machine_member); never a claim input.
+        self.trace_records = csv_data
         self.tokens = self.token_surfaces()
 
     def token_surfaces(self):
@@ -1184,6 +1188,11 @@ class Window:
             bracket = {}
         recorded = get(bracket, "drift_allowances", "gross_energy", "allowance_j")
         result["allowance_recorded_j"] = recorded
+        # Structure only: the record's gross-family endpoint protocol word. The bracket writer records the two
+        # survivor bound terms only under replicated_endpoints (whole_window.py survivor_fields), so the
+        # comparator compares them only when the record can carry them (2026-11-07 release trace, D6).
+        protocol = get(bracket, "claim_families", "gross_energy", "endpoint_protocol")
+        result["recorded_endpoint_protocol"] = protocol if isinstance(protocol, str) else None
         if not finite(recorded):
             r.flag("neg8_allowance_unrecorded", "window", "no recorded gross allowance")
         # Agreement policy, unrounded joules; no printed cell half-width on the allowance.
@@ -1938,10 +1947,27 @@ def controller_request_spans(member):
     return request, baseline
 
 
+def idle_attempt_telemetry_name(member):
+    """The rich idle telemetry file of the idle-baseline attempt the bundle's baseline is.
+
+    The controller re-measures the idle baseline when its first admission attempt is not admitted,
+    and the baseline it keeps (metadata idle_baseline: the reducer's idle term, REG 5.8's
+    idle_subtracted_energy_j) is the LAST attempt measured (controller._measure_idle_admission_attempt).
+    The adapter writes attempt 1's rich rows to rich_telemetry_idle.jsonl and attempt N's to
+    rich_telemetry_idle_attempt_N.jsonl; promotion replaces only the canonical raw plist, never the
+    rich file (adapters/powermetrics.py measure_idle, promote_idle_admission_attempt). So the file
+    is the one of the metadata's last recorded environment_admission attempt.
+    """
+    attempts = get(getattr(member, "metadata", None), "environment_admission", "attempts")
+    last = attempts[-1].get("attempt") if isinstance(attempts, list) and attempts and isinstance(attempts[-1], dict) else 1
+    return "rich_telemetry_idle_attempt_%d.jsonl" % last if positive_int(last) and last > 1 else "rich_telemetry_idle.jsonl"
+
+
 def rail_idle_power(member):
-    """REG 5.8: elapsed_ns-weighted rich idle telemetry, never the trace's idle overlap."""
+    """REG 5.8: elapsed_ns-weighted rich idle telemetry of the kept idle attempt, never the trace's idle overlap."""
     if not hasattr(member, "_rail_idle_power"):
-        rows = member.reader.lines(member.path / "rich_telemetry_idle.jsonl", member.run_id + "/rich_telemetry_idle.jsonl")
+        name = idle_attempt_telemetry_name(member)
+        rows = member.reader.lines(member.path / name, member.run_id + "/" + name)
         valid = [row for row in rows if positive_int(row.get("elapsed_ns"))
                  and finite(row.get("rail_sum_power_w")) and row["rail_sum_power_w"] >= 0]
         member._rail_idle_power = (math.fsum(row["rail_sum_power_w"] * row["elapsed_ns"] for row in valid)
@@ -1974,6 +2000,42 @@ def request_battery_activity(member, stream, wall, offset, flag):
     return {"available": lo != hi, "active": active, "n": hi - lo}
 
 
+def measured_request_edges(member):
+    """The measured run's sampling_started/sampling_stopped event times (absolute epoch seconds), or None."""
+    starts = [e.get("timestamp_s") for e in member.events
+              if e.get("phase") == "measured_run" and e.get("event_type") == "sampling_started"]
+    ends = [e.get("timestamp_s") for e in member.events
+            if e.get("phase") == "measured_run" and e.get("event_type") == "sampling_stopped"]
+    if len(starts) != 1 or len(ends) != 1 or not all(finite(x) for x in starts + ends) or ends[0] <= starts[0]:
+        return None
+    return starts[0], ends[0]
+
+
+def unanchored_machine_member(member, streams, journal, bop, flag=True):
+    """PLAN 8.2 describes every collected member, kept or removed; the harvest's record gives a member whose clock
+    anchor did not resolve its meter terms and REG 5.8's rail delta (the bundle's idle_subtracted_energy_j, which
+    the reducer integrates over the bundle's recorded trace when the anchor is unresolved: reduce.py
+    _unresolved_anchor_context). The recompute re-derives them for such a succeeded member from the controller
+    clock stamps (meter) and the bundle's recorded power_trace.csv placement (rail) instead of leaving the member
+    null (2026-11-07 release trace, D3). Descriptive whole-machine request only; never a claim input."""
+    edges = measured_request_edges(member)
+    if (member.summary.get("status") != "succeeded" or not getattr(member, "trace_records", None) or edges is None
+            or controller_request_spans(member) is None):
+        return None
+    proxy = types.SimpleNamespace(
+        run_id=member.run_id, reader=member.reader, path=member.path, metadata=member.metadata, events=member.events,
+        origin=0.0, records=member.trace_records, edges={"request": edges},
+        comparison={"status": "compared", "reason": None})
+    row = machine_member(proxy, "request", streams, journal, bop, flag=flag)
+    if hasattr(proxy, "_rail_idle_power"):
+        member._rail_idle_power = proxy._rail_idle_power
+    if not finite(row.get("delta_J")):
+        return None
+    row.update(status="descriptive_unanchored", reason=member.comparison.get("reason"),
+               rail_basis="bundle_power_trace_csv")
+    return row
+
+
 def machine_member(member, phase, streams, journal, bop, shifts=(0.0, 0.0), flag=True):
     """Request: REG 5.8 delta. Phases: 03:26 amendment, gross meter only."""
     scope = member.run_id + "/" + phase
@@ -1986,6 +2048,11 @@ def machine_member(member, phase, streams, journal, bop, shifts=(0.0, 0.0), flag
         "boundary": PHASE_MACHINE_BOUNDARY}
     comparison = getattr(member, "comparison", {})
     if comparison.get("status") == "not_compared":
+        if (request and shifts == (0.0, 0.0) and comparison.get("reason") == "anchor_unbounded"
+                and isinstance(member, Member)):
+            described = unanchored_machine_member(member, streams, journal, bop, flag=flag)
+            if described is not None:
+                return described
         return {**unavailable, "status": "not_compared", "reason": comparison["reason"]}
     controller = controller_request_spans(member) if request else None
     if (request and (controller[1] if controller else baseline) is None) or phase not in member.edges or (
@@ -2367,6 +2434,15 @@ def add_machine(output, selections, windows, meter_dir=None):
             if not (root / rid / "metadata.json").is_file():
                 continue
             member = w.member(rid, which)
+            if (rid not in mapping(recorded.get("members")) and "request" not in member.edges
+                    and controller_request_spans(member) is None):
+                # PLAN 8.2 describes each member over its measured request (the harvest's request span,
+                # sampling_started to sampling_stopped; harvest.member_spans). A collected member that never
+                # measured one has no meter row on either side; it is listed here, never as a null member. A
+                # member with a measured request that the record lacks still gets its row (a dropped row stays
+                # visible to the comparator).
+                line.setdefault("no_measured_request", []).append(rid)
+                continue
             if which != "corpus" and "request" in member.edges:
                 start = member.origin + member.edges["request"][0]
                 old = line["first_request_epoch_s"]

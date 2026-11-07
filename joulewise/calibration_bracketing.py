@@ -1672,6 +1672,46 @@ def load_calibration_candidate(
     return probe_custody(original, inspect, lambda: None, mode=mode)
 
 
+# Cited in-place rebind (b5 under-90 round 2, lead ruling under D-188 and the
+# 2026-10-30 frozen-components rule): inside a block-5 analysis run, a candidate's
+# physics refit is remembered by the SHA-256 of its three authenticated inputs.
+# ``verify_stored_evidence_physics`` is a pure function of those bytes (the
+# evidence mapping is ``json.loads`` of ``evidence_raw``); only a value returned
+# while the run's wall-deadline observer saw no firing is kept, a raised
+# refusal never is, and outside an analysis run nothing is remembered. The
+# value is identical, so every candidate, bracket and refusal is unchanged.
+CANDIDATE_PHYSICS_MEMO = "calibration_bracketing.candidate_physics"
+
+
+def _verified_candidate_bound(
+    evidence_raw: bytes, evidence: Mapping[str, Any], powermetrics_raw: bytes, events_raw: bytes
+) -> float:
+    from joulewise import analysis_run_cache
+
+    table = analysis_run_cache.memo(CANDIDATE_PHYSICS_MEMO)
+    if table is None:
+        return verify_stored_evidence_physics(evidence, powermetrics_raw, events_raw)
+    key = "\0".join(
+        hashlib.sha256(raw).hexdigest() for raw in (evidence_raw, powermetrics_raw, events_raw)
+    )
+    if key in table:
+        analysis_run_cache.note(CANDIDATE_PHYSICS_MEMO, True)
+        return table[key]
+    caches = analysis_run_cache.current()
+    deadline = getattr(caches, "deadline", None)
+    firings = getattr(deadline, "firings", None)
+    value = verify_stored_evidence_physics(evidence, powermetrics_raw, events_raw)
+    if (
+        isinstance(firings, int)
+        and getattr(deadline, "firings", None) == firings
+        and not getattr(caches, "worker_observer_unavailable", False)
+        and type(value) is float
+    ):
+        table[key] = value
+    analysis_run_cache.note(CANDIDATE_PHYSICS_MEMO, False)
+    return value
+
+
 def _load_calibration_candidate_unbounded(
     directory: Path, *, runs_root: Path
 ) -> CalibrationCandidate | None:
@@ -1762,8 +1802,8 @@ def _load_calibration_candidate_unbounded(
         return None
     try:
         authenticated_capture = capture_wall_time_from_events(events_raw)
-        effective_bound = verify_stored_evidence_physics(
-            evidence, powermetrics_raw, events_raw
+        effective_bound = _verified_candidate_bound(
+            evidence_raw, evidence, powermetrics_raw, events_raw
         )
     except (KeyError, TypeError, ValueError):
         return None

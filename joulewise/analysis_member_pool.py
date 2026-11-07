@@ -120,7 +120,8 @@ class MemberOutcome:
 
 # The two run memos shipped to and merged back from worker tasks when the run
 # has a verified store (content-keyed, deterministic, never a firing's value).
-SHIPPED_MEMOS = ('environment_admission.window_thermal_pressure', 'cli.strict_clock_evidence')
+SHIPPED_MEMOS = ('environment_admission.window_thermal_pressure', 'cli.strict_clock_evidence',
+                 'calibration_bracketing.candidate_physics')
 
 
 def _floor_strict_leaf(path, strict):

@@ -1,0 +1,1048 @@
+
+===== step 0 driver (1 processes) by tottime =====
+Fri Nov  6 18:45:52 2026    /tmp/jwprof/prof/driver-5401-step0.prof
+
+         11276757 function calls (10261227 primitive calls) in 24.861 seconds
+
+   Ordered by: internal time
+   List reduced from 380 to 40 due to restriction <40>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+332239/53829    6.820    0.000    9.713    0.000 {built-in method posix.lstat}
+18575/10029    1.281    0.000    6.427    0.001 {built-in method _io.open}
+33941/143    1.057    0.000    0.321    0.002 {method 'acquire' of '_thread.lock' objects}
+18565/10548    0.882    0.000    0.526    0.000 {method 'read' of '_io.BufferedReader' objects}
+37033/6537    0.834    0.000    5.763    0.001 <frozen posixpath>:388(realpath)
+105012/105011    0.813    0.000    1.489    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:257(_parse_path)
+18562/13557    0.768    0.000    0.592    0.000 {built-in method _hashlib.openssl_sha256}
+242593/242590    0.572    0.000    0.932    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:117(__init__)
+28741/27883    0.563    0.000    4.339    0.000 {built-in method posix.stat}
+18575/15544    0.510    0.000   11.040    0.001 {method '__exit__' of '_io._IOBase' objects}
+275463/275460    0.487    0.000    2.448    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:227(__str__)
+   266784    0.482    0.000    1.469    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:174(_str_normcase)
+1422610/1419566    0.458    0.000    0.626    0.000 {built-in method builtins.isinstance}
+201360/201338    0.415    0.000    2.065    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_abc.py:130(with_segments)
+152506/152505    0.404    0.000    2.302    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:289(drive)
+   858240    0.385    0.000    0.385    0.000 {built-in method sys.intern}
+16813/10531    0.374    0.000   46.447    0.004 /root/.pyenv/versions/3.13.13/lib/python3.13/threading.py:327(wait)
+201450/201447    0.334    0.000    1.139    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:498(__init__)
+18415/210    0.294    0.000    9.747    0.046 /workspace/JouleWise/joulewise/b5_analysis/archive.py:85(_read_ahead_digest)
+18565/3956    0.262    0.000   20.939    0.005 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_abc.py:621(read_bytes)
+718922/505680    0.246    0.000    0.324    0.000 {built-in method builtins.len}
+26717/26715    0.234    0.000    2.690    0.000 <frozen _collections_abc>:1037(__contains__)
+106616/106604    0.233    0.000    1.666    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:44(__getitem__)
+37033/6536    0.221    0.000   13.614    0.002 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:664(resolve)
+147900/11    0.212    0.000    0.359    0.033 /workspace/JouleWise/joulewise/b5_analysis/dry_run.py:325(_plain)
+18575/10029    0.211    0.000   12.203    0.001 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:529(open)
+   201502    0.204    0.000    0.379    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:237(_format_parsed_parts)
+10243/114    0.201    0.000   18.388    0.161 /workspace/JouleWise/joulewise/b5_analysis/archive.py:453(<lambda>)
+   201450    0.194    0.000    0.289    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:505(__new__)
+   361160    0.182    0.000    0.182    0.000 {method 'pop' of 'list' objects}
+   133392    0.182    0.000    1.680    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:193(__eq__)
+   142093    0.176    0.000    0.176    0.000 {method 'split' of 'str' objects}
+    16837    0.172    0.000    0.172    0.000 {method 'release' of '_thread.lock' objects}
+147900/11    0.148    0.000    0.314    0.029 /workspace/JouleWise/joulewise/calibration_ledger.py:215(_jsonable)
+   105015    0.143    0.000    0.403    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:277(_raw_path)
+114908/114896    0.143    0.000    1.228    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:245(_from_parsed_parts)
+   201513    0.140    0.000    0.140    0.000 {method 'join' of 'str' objects}
+376646/339590    0.137    0.000    1.048    0.000 {built-in method posix.fspath}
+    18421    0.134    0.000   77.134    0.004 /workspace/JouleWise/joulewise/b5_analysis/archive.py:104(_ordered_results)
+   105012    0.133    0.000    0.133    0.000 {built-in method posix._path_splitroot_ex}
+
+
+
+===== step 0 driver (1 processes) by cumulative =====
+Fri Nov  6 18:45:52 2026    /tmp/jwprof/prof/driver-5401-step0.prof
+
+         11276757 function calls (10261227 primitive calls) in 24.861 seconds
+
+   Ordered by: cumulative time
+   List reduced from 380 to 40 due to restriction <40>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+18549/18437    0.076    0.000  100.596    0.005 {built-in method builtins.next}
+    18421    0.134    0.000   77.134    0.004 /workspace/JouleWise/joulewise/b5_analysis/archive.py:104(_ordered_results)
+16813/10531    0.374    0.000   46.447    0.004 /root/.pyenv/versions/3.13.13/lib/python3.13/threading.py:327(wait)
+      2/1    0.000    0.000   24.911   24.911 /workspace/JouleWise/joulewise/b5_analysis/dry_run.py:849(step_0)
+        1    0.000    0.000   24.911   24.911 /workspace/JouleWise/joulewise/b5_analysis/dry_run.py:841(_internal_step)
+        1    0.000    0.000   24.910   24.910 /workspace/JouleWise/joulewise/b5_analysis/dry_run.py:120(run)
+     24/6    0.000    0.000   22.102    3.684 /root/.pyenv/versions/3.13.13/lib/python3.13/threading.py:1001(_bootstrap)
+     24/6    0.001    0.000   22.102    3.684 /root/.pyenv/versions/3.13.13/lib/python3.13/threading.py:1028(_bootstrap_inner)
+     24/6    0.006    0.000   22.101    3.684 /root/.pyenv/versions/3.13.13/lib/python3.13/threading.py:984(run)
+18565/3956    0.262    0.000   20.939    0.005 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_abc.py:621(read_bytes)
+     24/6    0.003    0.000   19.120    3.187 /workspace/JouleWise/joulewise/b5_analysis/archive.py:124(run)
+10243/114    0.201    0.000   18.388    0.161 /workspace/JouleWise/joulewise/b5_analysis/archive.py:453(<lambda>)
+        3    0.007    0.002   14.364    4.788 /workspace/JouleWise/joulewise/b5_analysis/archive.py:417(census_sources)
+37033/6536    0.221    0.000   13.614    0.002 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:664(resolve)
+18575/10029    0.211    0.000   12.203    0.001 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:529(open)
+18575/15544    0.510    0.000   11.040    0.001 {method '__exit__' of '_io._IOBase' objects}
+18415/210    0.294    0.000    9.747    0.046 /workspace/JouleWise/joulewise/b5_analysis/archive.py:85(_read_ahead_digest)
+332239/53829    6.820    0.000    9.713    0.000 {built-in method posix.lstat}
+        3    0.005    0.002    9.292    3.097 /workspace/JouleWise/joulewise/b5_analysis/archive.py:480(compare_runs_root)
+  8172/96    0.107    0.000    7.119    0.074 /workspace/JouleWise/joulewise/b5_analysis/archive.py:493(<lambda>)
+        1    0.001    0.001    6.858    6.858 /workspace/JouleWise/joulewise/b5_analysis/dry_run.py:674(main)
+        1    0.006    0.006    6.857    6.857 /workspace/JouleWise/joulewise/b5_analysis/dry_run.py:693(prepare_initial)
+18575/10029    1.281    0.000    6.427    0.001 {built-in method _io.open}
+37033/6537    0.834    0.000    5.763    0.001 <frozen posixpath>:388(realpath)
+28741/27883    0.563    0.000    4.339    0.000 {built-in method posix.stat}
+18531/18529    0.087    0.000    3.618    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:393(is_relative_to)
+    10252    0.105    0.000    3.569    0.000 /workspace/JouleWise/joulewise/b5_analysis/archive.py:375(_sources)
+26717/26715    0.234    0.000    2.690    0.000 <frozen _collections_abc>:1037(__contains__)
+275463/275460    0.487    0.000    2.448    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:227(__str__)
+152506/152505    0.404    0.000    2.302    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:289(drive)
+201360/201338    0.415    0.000    2.065    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_abc.py:130(with_segments)
+133333/133319    0.130    0.000    1.852    0.000 <frozen _collections_abc>:1027(__iter__)
+   133392    0.182    0.000    1.680    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:193(__eq__)
+106616/106604    0.233    0.000    1.666    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:44(__getitem__)
+105012/105011    0.813    0.000    1.489    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:257(_parse_path)
+   266784    0.482    0.000    1.469    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:174(_str_normcase)
+94629/94627    0.097    0.000    1.392    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:166(__fspath__)
+114908/114896    0.143    0.000    1.228    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:245(_from_parsed_parts)
+201450/201447    0.334    0.000    1.139    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:498(__init__)
+       19    0.003    0.000    1.074    0.057 {built-in method builtins.sum}
+
+
+
+===== step 1 driver (1 processes) by tottime =====
+Fri Nov  6 18:45:52 2026    /tmp/jwprof/prof/driver-5401-step1.prof
+
+         846625 function calls (813141 primitive calls) in 1091.417 seconds
+
+   Ordered by: internal time
+   List reduced from 897 to 40 due to restriction <40>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+ 23803/39 1047.239    0.044    0.059    0.002 {method 'acquire' of '_thread.lock' objects}
+      795   25.184    0.032   25.184    0.032 {method 'poll' of 'select.poll' objects}
+    93918    5.530    0.000    5.530    0.000 {method 'get' of 'dict' objects}
+   5750/9    2.758    0.000    0.070    0.008 /root/.pyenv/versions/3.13.13/lib/python3.13/threading.py:327(wait)
+     5259    1.295    0.000    1.295    0.000 {built-in method sys._current_frames}
+     5259    0.984    0.000   12.707    0.002 /workspace/JouleWise/joulewise/b5_analysis/phase_timing.py:603(sample)
+     2125    0.925    0.000    0.925    0.000 {built-in method _hashlib.openssl_sha256}
+     5259    0.872    0.000    0.889    0.000 /workspace/JouleWise/joulewise/b5_analysis/phase_timing.py:584(_resolve)
+     5259    0.814    0.000    2.395    0.000 /workspace/JouleWise/joulewise/b5_analysis/phase_timing.py:374(frames)
+     5259    0.752    0.000    0.752    0.000 {built-in method posix.getloadavg}
+      266    0.575    0.002 1085.204    4.080 /root/.pyenv/versions/3.13.13/lib/python3.13/concurrent/futures/process.py:405(wait_result_broken_or_wakeup)
+     5259    0.439    0.000    0.515    0.000 <frozen posixpath>:166(basename)
+     5277    0.401    0.000    0.432    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/re/__init__.py:330(_compile)
+     5259    0.299    0.000    0.804    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/re/__init__.py:183(sub)
+    62271    0.282    0.000    0.282    0.000 {method 'append' of 'list' objects}
+5287/5283    0.259    0.000    0.264    0.000 {built-in method builtins.next}
+     5259    0.256    0.000    1.732    0.000 /workspace/JouleWise/joulewise/b5_analysis/phase_timing.py:387(_qualname_key)
+       12    0.165    0.014    0.165    0.014 {built-in method builtins.compile}
+     5784    0.155    0.000    0.155    0.000 {built-in method posix.read}
+      262    0.135    0.001    0.135    0.001 {built-in method _pickle.loads}
+    10521    0.109    0.000    0.109    0.000 {method 'search' of 're.Pattern' objects}
+     2104    0.105    0.000    0.105    0.000 {method 'join' of 'bytes' objects}
+      280    0.090    0.000    0.092    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/json/decoder.py:351(raw_decode)
+5260/5258    0.090    0.000 2097.046    0.399 /root/.pyenv/versions/3.13.13/lib/python3.13/threading.py:641(wait)
+     6238    0.089    0.000    0.089    0.000 {method 'release' of '_thread.lock' objects}
+      262    0.083    0.000    0.250    0.001 /root/.pyenv/versions/3.13.13/lib/python3.13/multiprocessing/connection.py:247(recv)
+        7    0.077    0.011    0.077    0.011 {built-in method posix.waitpid}
+     5259    0.076    0.000    0.076    0.000 {method 'sub' of 're.Pattern' objects}
+49227/45887    0.072    0.000    0.084    0.000 {built-in method builtins.isinstance}
+     5503    0.053    0.000    0.075    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/threading.py:315(_acquire_restore)
+     5259    0.051    0.000    0.051    0.000 {built-in method builtins.round}
+      795    0.040    0.000   25.228    0.032 /root/.pyenv/versions/3.13.13/lib/python3.13/selectors.py:385(select)
+     2104    0.037    0.000    0.462    0.000 /workspace/JouleWise/joulewise/authentication_io.py:990(_read_nofollow_bytes)
+     5259    0.036    0.000    0.849    0.000 /workspace/JouleWise/joulewise/b5_analysis/phase_timing.py:431(_load_x100)
+     5751    0.035    0.000    0.035    0.000 {method 'remove' of 'collections.deque' objects}
+    10515    0.034    0.000    0.034    0.000 /workspace/JouleWise/joulewise/b5_analysis/phase_timing.py:612(<genexpr>)
+      268    0.030    0.000    0.030    0.000 {method 'dump' of '_pickle.Pickler' objects}
+    12361    0.030    0.000    0.040    0.000 /workspace/JouleWise/joulewise/b5_analysis/phase_timing.py:459(_add_phase)
+     6312    0.029    0.000    0.103    0.000 {built-in method posix.open}
+     5835    0.026    0.000    0.054    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:257(_parse_path)
+
+
+
+===== step 1 driver (1 processes) by cumulative =====
+Fri Nov  6 18:45:52 2026    /tmp/jwprof/prof/driver-5401-step1.prof
+
+         846625 function calls (813141 primitive calls) in 1091.417 seconds
+
+   Ordered by: cumulative time
+   List reduced from 897 to 40 due to restriction <40>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+5260/5258    0.090    0.000 2097.046    0.399 /root/.pyenv/versions/3.13.13/lib/python3.13/threading.py:641(wait)
+        1    0.005    0.005 1091.411 1091.411 /workspace/JouleWise/joulewise/b5_analysis/dry_run.py:1006(step_1)
+        1    0.003    0.003 1091.155 1091.155 /workspace/JouleWise/joulewise/b5_analysis/dry_run.py:979(_step_1_parallel)
+        1    0.002    0.002 1089.658 1089.658 /workspace/JouleWise/joulewise/b5_analysis/dry_run.py:915(_dispatch)
+        1    0.012    0.012 1089.656 1089.656 /workspace/JouleWise/joulewise/b5_analysis/parallel.py:223(dispatch)
+        1    0.000    0.000 1089.467 1089.467 /root/.pyenv/versions/3.13.13/lib/python3.13/concurrent/futures/process.py:842(shutdown)
+      2/1    0.001    0.000 1089.461 1089.461 /root/.pyenv/versions/3.13.13/lib/python3.13/threading.py:1059(join)
+      2/1    0.000    0.000 1089.461 1089.461 {method 'join' of '_thread._ThreadHandle' objects}
+      2/1    0.000    0.000 1089.461 1089.461 /root/.pyenv/versions/3.13.13/lib/python3.13/threading.py:1001(_bootstrap)
+      2/1    0.000    0.000 1089.461 1089.461 /root/.pyenv/versions/3.13.13/lib/python3.13/threading.py:1028(_bootstrap_inner)
+        1    0.001    0.001 1089.461 1089.461 /root/.pyenv/versions/3.13.13/lib/python3.13/concurrent/futures/process.py:330(run)
+        1    0.000    0.000 1089.460 1089.460 /root/.pyenv/versions/3.13.13/lib/python3.13/concurrent/futures/process.py:549(join_executor_internals)
+        1    0.000    0.000 1089.460 1089.460 /root/.pyenv/versions/3.13.13/lib/python3.13/concurrent/futures/process.py:553(_join_executor_internals)
+        9    0.000    0.000 1089.326  121.036 /root/.pyenv/versions/3.13.13/lib/python3.13/multiprocessing/util.py:276(__call__)
+        1    0.000    0.000 1089.325 1089.325 /root/.pyenv/versions/3.13.13/lib/python3.13/multiprocessing/queues.py:145(join_thread)
+      266    0.575    0.002 1085.204    4.080 /root/.pyenv/versions/3.13.13/lib/python3.13/concurrent/futures/process.py:405(wait_result_broken_or_wakeup)
+        1    0.000    0.000   42.460   42.460 /root/.pyenv/versions/3.13.13/lib/python3.13/multiprocessing/queues.py:212(_finalize_join)
+      795    0.023    0.000   25.277    0.032 /root/.pyenv/versions/3.13.13/lib/python3.13/multiprocessing/connection.py:1156(wait)
+      795    0.040    0.000   25.228    0.032 /root/.pyenv/versions/3.13.13/lib/python3.13/selectors.py:385(select)
+      795   25.184    0.032   25.184    0.032 {method 'poll' of 'select.poll' objects}
+     5259    0.984    0.000   12.707    0.002 /workspace/JouleWise/joulewise/b5_analysis/phase_timing.py:603(sample)
+    93918    5.530    0.000    5.530    0.000 {method 'get' of 'dict' objects}
+     5259    0.814    0.000    2.395    0.000 /workspace/JouleWise/joulewise/b5_analysis/phase_timing.py:374(frames)
+     5259    0.256    0.000    1.732    0.000 /workspace/JouleWise/joulewise/b5_analysis/phase_timing.py:387(_qualname_key)
+      263    0.002    0.000    1.434    0.005 /workspace/JouleWise/joulewise/b5_analysis/dry_run.py:639(rehash)
+      263    0.019    0.000    1.430    0.005 /workspace/JouleWise/joulewise/b5_analysis/dry_run.py:162(require_step_inputs)
+     5259    1.295    0.000    1.295    0.000 {built-in method sys._current_frames}
+     2125    0.925    0.000    0.925    0.000 {built-in method _hashlib.openssl_sha256}
+     5259    0.872    0.000    0.889    0.000 /workspace/JouleWise/joulewise/b5_analysis/phase_timing.py:584(_resolve)
+     5259    0.036    0.000    0.849    0.000 /workspace/JouleWise/joulewise/b5_analysis/phase_timing.py:431(_load_x100)
+     5259    0.299    0.000    0.804    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/re/__init__.py:183(sub)
+     5259    0.752    0.000    0.752    0.000 {built-in method posix.getloadavg}
+     5259    0.439    0.000    0.515    0.000 <frozen posixpath>:166(basename)
+     2104    0.010    0.000    0.475    0.000 /workspace/JouleWise/joulewise/authentication_io.py:1505(read_authentication_input_nofollow)
+     2104    0.037    0.000    0.462    0.000 /workspace/JouleWise/joulewise/authentication_io.py:990(_read_nofollow_bytes)
+     5277    0.401    0.000    0.432    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/re/__init__.py:330(_compile)
+    62271    0.282    0.000    0.282    0.000 {method 'append' of 'list' objects}
+5287/5283    0.259    0.000    0.264    0.000 {built-in method builtins.next}
+      262    0.083    0.000    0.250    0.001 /root/.pyenv/versions/3.13.13/lib/python3.13/multiprocessing/connection.py:247(recv)
+     23/5    0.000    0.000    0.217    0.043 <frozen importlib._bootstrap>:1349(_find_and_load)
+
+
+
+===== step 1 worker (2 processes) by tottime =====
+Fri Nov  6 18:11:47 2026    /tmp/jwprof/prof/worker-5488-step1.prof
+Fri Nov  6 18:11:47 2026    /tmp/jwprof/prof/worker-5491-step1.prof
+
+         2553394129 function calls (2492171940 primitive calls) in 2054.843 seconds
+
+   Ordered by: internal time
+   List reduced from 1525 to 40 due to restriction <40>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+   251112  182.232    0.001  591.263    0.002 {method 'ParseFile' of 'pyexpat.xmlparser' objects}
+124008132  117.931    0.000  634.505    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/fractions.py:666(forward)
+126623113  112.253    0.000  157.064    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/fractions.py:334(_from_coprime_ints)
+ 62353110  112.185    0.000  230.960    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/fractions.py:795(_mul)
+ 60719816  103.332    0.000  172.224    0.000 /workspace/JouleWise/joulewise/powermetrics_fiducial.py:562(_overlap_fraction)
+210743771   90.655    0.000   90.655    0.000 {built-in method math.gcd}
+229332811/228996260   73.239    0.000  109.804    0.000 {built-in method builtins.isinstance}
+145268280   73.025    0.000  119.380    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/plistlib.py:214(handle_data)
+   206316   71.097    0.000  682.810    0.003 /workspace/JouleWise/joulewise/uncertainty_evidence.py:607(_lp2_line_optimum)
+ 62057259   70.369    0.000  284.589    0.000 /workspace/JouleWise/joulewise/powermetrics_fiducial.py:579(<genexpr>)
+ 37261669   63.619    0.000  147.126    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/fractions.py:986(_richcmp)
+168011392   55.821    0.000   55.821    0.000 {method 'append' of 'list' objects}
+ 46997652   51.207    0.000  215.689    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/plistlib.py:209(handle_end_element)
+ 25827987   51.130    0.000   99.120    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/fractions.py:779(_sub)
+ 94340724   47.650    0.000   47.650    0.000 {built-in method builtins.getattr}
+ 24364807   47.436    0.000   93.124    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/fractions.py:763(_add)
+134579291/134574594   36.220    0.000   67.231    0.000 {built-in method builtins.max}
+ 46997652   36.068    0.000   79.187    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/plistlib.py:203(handle_begin_element)
+ 60239568   31.767    0.000   46.359    0.000 /workspace/JouleWise/joulewise/powermetrics_fiducial.py:555(_huber)
+ 11464057   31.251    0.000   64.469    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/fractions.py:811(_div)
+ 41204004   26.595    0.000   40.508    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/plistlib.py:233(get_data)
+    28116   26.568    0.001  852.038    0.030 /workspace/JouleWise/joulewise/uncertainty_evidence.py:666(_lp2)
+ 25534236   24.446    0.000   32.365    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/plistlib.py:217(add_object)
+ 68044628   24.194    0.000   24.194    0.000 {built-in method __new__ of type object at 0x7efdc65f2f80}
+ 68889596   24.010    0.000   24.010    0.000 {built-in method __new__ of type object at 0x7feeb1645f80}
+121439632   23.679    0.000   23.679    0.000 /workspace/JouleWise/joulewise/powermetrics_fiducial.py:454(duration_s)
+69990651/10245083   23.168    0.000  342.668    0.000 {built-in method builtins.min}
+2458716/2458464   22.403    0.000  313.285    0.000 {built-in method math.fsum}
+ 21212304   20.361    0.000   45.662    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/plistlib.py:251(end_key)
+ 13684176   20.116    0.000   47.532    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/plistlib.py:278(end_real)
+93072/56452   19.674    0.000  139.018    0.002 {method 'acquire' of '_thread.lock' objects}
+ 37475846   18.082    0.000   35.938    0.000 <frozen abc>:117(__instancecheck__)
+ 37475846   17.907    0.000   17.907    0.000 {built-in method _abc._abc_instancecheck}
+ 63739089   15.343    0.000   15.343    0.000 {built-in method builtins.abs}
+41331920/41302576   14.107    0.000   16.487    0.000 {method 'join' of 'str' objects}
+    19525   13.123    0.001   60.811    0.003 /workspace/JouleWise/joulewise/uncertainty_evidence.py:785(_native_v3_constraints)
+  5075268   12.752    0.000   28.072    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/plistlib.py:271(end_integer)
+ 17839616   11.685    0.000   80.133    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/fractions.py:1012(__gt__)
+ 10196851   11.100    0.000   14.939    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/fractions.py:203(__new__)
+ 15724000    9.135    0.000    9.135    0.000 {method 'get' of 'dict' objects}
+
+
+
+===== step 1 worker (2 processes) by cumulative =====
+Fri Nov  6 18:11:47 2026    /tmp/jwprof/prof/worker-5488-step1.prof
+Fri Nov  6 18:11:47 2026    /tmp/jwprof/prof/worker-5491-step1.prof
+
+         2553394129 function calls (2492171940 primitive calls) in 2054.843 seconds
+
+   Ordered by: cumulative time
+   List reduced from 1525 to 40 due to restriction <40>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+      262    0.003    0.000 2055.599    7.846 /workspace/JouleWise/joulewise/b5_analysis/phase_timing.py:1138(__exit__)
+      262    0.012    0.000 2055.596    7.846 /workspace/JouleWise/joulewise/b5_analysis/phase_timing.py:794(close)
+      262    0.005    0.000 2055.536    7.846 /workspace/JouleWise/joulewise/b5_analysis/phase_timing.py:577(stop)
+      262    0.002    0.000 2055.483    7.845 /root/.pyenv/versions/3.13.13/lib/python3.13/threading.py:1059(join)
+      262    0.043    0.000 2055.481    7.845 {method 'join' of '_thread._ThreadHandle' objects}
+  524/262    0.418    0.001 2044.447    7.803 /workspace/JouleWise/joulewise/analysis_verified_store.py:2049(_fill)
+  526/262    0.039    0.000 2032.217    7.757 /workspace/JouleWise/joulewise/cli.py:550(validate_bundle)
+      262    0.248    0.001 2010.150    7.672 /workspace/JouleWise/joulewise/cli.py:618(_strict_problems)
+      262    0.003    0.000 1365.259    5.211 /workspace/JouleWise/joulewise/cli.py:463(_strict_reduce_dict)
+  526/262    0.016    0.000 1358.206    5.184 /workspace/JouleWise/joulewise/analysis_verified_store.py:1692(call)
+      262    0.211    0.001 1220.318    4.658 /workspace/JouleWise/joulewise/analysis_verified_store.py:1171(reduce_bundle_dict)
+      262    0.022    0.000 1217.777    4.648 /workspace/JouleWise/joulewise/reduce.py:2627(reduce_bundle)
+      262    0.106    0.000 1180.649    4.506 /workspace/JouleWise/joulewise/reduce.py:3467(_reduce)
+    28116   26.568    0.001  852.038    0.030 /workspace/JouleWise/joulewise/uncertainty_evidence.py:666(_lp2)
+   206316   71.097    0.000  682.810    0.003 /workspace/JouleWise/joulewise/uncertainty_evidence.py:607(_lp2_line_optimum)
+      262    0.223    0.001  663.805    2.534 /workspace/JouleWise/joulewise/reduce.py:1735(_derive_anchor_context)
+124008132  117.931    0.000  634.505    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/fractions.py:666(forward)
+   251112    0.925    0.000  622.019    0.002 /root/.pyenv/versions/3.13.13/lib/python3.13/plistlib.py:915(loads)
+   251112    2.019    0.000  609.135    0.002 /root/.pyenv/versions/3.13.13/lib/python3.13/plistlib.py:893(load)
+     3134    0.990    0.000  600.429    0.192 /workspace/JouleWise/joulewise/adapters/powermetrics.py:2056(_powermetrics_documents)
+   251112    1.127    0.000  596.764    0.002 /root/.pyenv/versions/3.13.13/lib/python3.13/plistlib.py:188(parse)
+   251112  182.232    0.001  591.263    0.002 {method 'ParseFile' of 'pyexpat.xmlparser' objects}
+      262    0.010    0.000  522.487    1.994 /workspace/JouleWise/joulewise/reduce.py:575(_window_evidence_precheck)
+      262    0.002    0.000  521.017    1.989 /workspace/JouleWise/joulewise/reduce.py:739(_apply_environment_claim_barrier)
+      262    0.006    0.000  519.630    1.983 /workspace/JouleWise/joulewise/reduce.py:694(_environment_claim_reasons)
+      262    0.100    0.000  511.229    1.951 /workspace/JouleWise/joulewise/environment_admission.py:175(current_environment_refusals)
+     2348    1.283    0.001  498.323    0.212 /workspace/JouleWise/joulewise/adapters/powermetrics.py:1703(parse_powermetrics_records)
+     2348    3.564    0.002  487.871    0.208 /workspace/JouleWise/joulewise/adapters/powermetrics.py:1753(_parse_powermetrics_records)
+      781    1.098    0.001  457.288    0.586 /workspace/JouleWise/joulewise/uncertainty_evidence.py:878(derive_powermetrics_anchor_v3)
+      262    0.313    0.001  456.601    1.743 /workspace/JouleWise/joulewise/cli.py:1474(_strict_uncertainty_evidence_problems)
+10031/1220    2.911    0.000  419.683    0.344 /root/.pyenv/versions/3.13.13/lib/python3.13/threading.py:641(wait)
+      262    0.099    0.000  410.743    1.568 /workspace/JouleWise/joulewise/environment_admission.py:336(_window_thermal_pressure_refusals)
+      262    0.391    0.001  365.273    1.394 /workspace/JouleWise/joulewise/reduce.py:1171(_verify_instrument_calibration)
+69990651/10245083   23.168    0.000  342.668    0.000 {built-in method builtins.min}
+        3    0.019    0.006  331.702  110.567 /workspace/JouleWise/joulewise/powermetrics_fiducial.py:1097(rederive_detection_from_artifacts)
+  2307107    3.688    0.000  319.537    0.000 /workspace/JouleWise/joulewise/powermetrics_fiducial.py:798(loss)
+2458716/2458464   22.403    0.000  313.285    0.000 {built-in method math.fsum}
+  2307107    3.607    0.000  311.712    0.000 /workspace/JouleWise/joulewise/powermetrics_fiducial.py:571(_pulse_loss)
+      180    0.016    0.000  308.947    1.716 /workspace/JouleWise/joulewise/powermetrics_fiducial.py:983(<genexpr>)
+23664/15030    6.808    0.000  292.836    0.019 /root/.pyenv/versions/3.13.13/lib/python3.13/threading.py:327(wait)
+
+
+
+===== step 2 driver (1 processes) by tottime =====
+Fri Nov  6 18:45:52 2026    /tmp/jwprof/prof/driver-5401-step2.prof
+
+         19304384 function calls (18129101 primitive calls) in 23.689 seconds
+
+   Ordered by: internal time
+   List reduced from 463 to 40 due to restriction <40>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+      793    5.034    0.006    5.042    0.006 {method 'poll' of 'select.poll' objects}
+ 2012/263    2.942    0.001    0.195    0.001 {method 'acquire' of '_thread.lock' objects}
+  1242930    1.241    0.000    2.528    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:174(_str_normcase)
+      268    1.233    0.005    1.234    0.005 {method 'dump' of '_pickle.Pickler' objects}
+     2366    0.892    0.000    0.892    0.000 {built-in method _hashlib.openssl_sha256}
+   618582    0.887    0.000    5.909    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:44(__getitem__)
+   633280    0.848    0.000    1.386    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:117(__init__)
+  801/541    0.689    0.001    0.693    0.001 {built-in method posix.write}
+2499416/1330631    0.659    0.000    0.985    0.000 {built-in method builtins.len}
+   553870    0.631    0.000    2.696    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_abc.py:130(with_segments)
+   633280    0.561    0.000    1.947    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:498(__init__)
+   621465    0.538    0.000    3.176    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:193(__eq__)
+2591224/2589652    0.505    0.000    0.511    0.000 {built-in method builtins.isinstance}
+    69692    0.475    0.000    8.503    0.000 <frozen _collections_abc>:1037(__contains__)
+   551512    0.464    0.000    3.940    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:245(_from_parsed_parts)
+    77830    0.382    0.000    0.733    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:257(_parse_path)
+   626714    0.373    0.000    0.613    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:237(_format_parsed_parts)
+   619892    0.371    0.000    6.283    0.000 <frozen _collections_abc>:1027(__iter__)
+  1168782    0.326    0.000    0.488    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:41(__len__)
+   628547    0.301    0.000    1.423    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:227(__str__)
+   551512    0.271    0.000    2.951    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:252(_from_parsed_string)
+   633280    0.271    0.000    0.447    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:505(__new__)
+   605546    0.249    0.000    0.249    0.000 {built-in method sys.intern}
+   626723    0.239    0.000    0.239    0.000 {method 'join' of 'str' objects}
+   137288    0.222    0.000   11.069    0.000 /workspace/JouleWise/joulewise/b5_analysis/dry_run.py:903(selected)
+   137288    0.202    0.000   10.646    0.000 /workspace/JouleWise/joulewise/b5_analysis/dry_run.py:909(<genexpr>)
+   148310    0.190    0.000    1.052    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:289(drive)
+   632596    0.183    0.000    0.183    0.000 {method 'append' of 'list' objects}
+   634872    0.178    0.000    0.178    0.000 {built-in method __new__ of type object at 0x7fc0547c6f80}
+      786    0.135    0.000    0.135    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/json/decoder.py:351(raw_decode)
+    69692    0.133    0.000   10.188    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:393(is_relative_to)
+        7    0.122    0.017    0.122    0.017 {built-in method posix.waitpid}
+     5784    0.120    0.000    0.120    0.000 {built-in method posix.read}
+650706/648872    0.118    0.000    0.134    0.000 {built-in method posix.fspath}
+      264    0.109    0.000    1.313    0.005 /root/.pyenv/versions/3.13.13/lib/python3.13/multiprocessing/reduction.py:48(dumps)
+      262    0.106    0.000   11.005    0.042 /workspace/JouleWise/joulewise/analysis_verified_store.py:2465(export_entries)
+   137288    0.100    0.000   10.811    0.000 /workspace/JouleWise/joulewise/b5_analysis/dry_run.py:908(<genexpr>)
+     2104    0.087    0.000    0.087    0.000 {method 'join' of 'bytes' objects}
+    69954    0.068    0.000    0.100    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:35(__init__)
+    71273    0.066    0.000   10.720    0.000 {built-in method builtins.any}
+
+
+
+===== step 2 driver (1 processes) by cumulative =====
+Fri Nov  6 18:45:52 2026    /tmp/jwprof/prof/driver-5401-step2.prof
+
+         19304384 function calls (18129101 primitive calls) in 23.689 seconds
+
+   Ordered by: cumulative time
+   List reduced from 463 to 40 due to restriction <40>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.002    0.002   23.682   23.682 /workspace/JouleWise/joulewise/b5_analysis/dry_run.py:1100(step_2)
+  117/115    0.009    0.000   15.398    0.134 /root/.pyenv/versions/3.13.13/lib/python3.13/threading.py:641(wait)
+        1    0.016    0.016   14.006   14.006 /workspace/JouleWise/joulewise/b5_analysis/dry_run.py:1044(_step_2_parallel)
+      262    0.009    0.000   11.076    0.042 /workspace/JouleWise/joulewise/b5_analysis/dry_run.py:871(_store_for)
+   137288    0.222    0.000   11.069    0.000 /workspace/JouleWise/joulewise/b5_analysis/dry_run.py:903(selected)
+      262    0.106    0.000   11.005    0.042 /workspace/JouleWise/joulewise/analysis_verified_store.py:2465(export_entries)
+    68644    0.035    0.000   10.819    0.000 {built-in method builtins.all}
+   137288    0.100    0.000   10.811    0.000 /workspace/JouleWise/joulewise/b5_analysis/dry_run.py:908(<genexpr>)
+    71273    0.066    0.000   10.720    0.000 {built-in method builtins.any}
+   137288    0.202    0.000   10.646    0.000 /workspace/JouleWise/joulewise/b5_analysis/dry_run.py:909(<genexpr>)
+        1    0.009    0.009   10.503   10.503 /workspace/JouleWise/joulewise/b5_analysis/dry_run.py:915(_dispatch)
+        1    0.010    0.010   10.494   10.494 /workspace/JouleWise/joulewise/b5_analysis/parallel.py:223(dispatch)
+        1    0.002    0.002   10.306   10.306 /root/.pyenv/versions/3.13.13/lib/python3.13/concurrent/futures/process.py:842(shutdown)
+      2/1    0.000    0.000   10.300   10.300 /root/.pyenv/versions/3.13.13/lib/python3.13/threading.py:1059(join)
+      2/1    0.000    0.000   10.300   10.300 {method 'join' of '_thread._ThreadHandle' objects}
+      2/1    0.000    0.000   10.299   10.299 /root/.pyenv/versions/3.13.13/lib/python3.13/threading.py:1001(_bootstrap)
+      2/1    0.000    0.000   10.299   10.299 /root/.pyenv/versions/3.13.13/lib/python3.13/threading.py:1028(_bootstrap_inner)
+        1    0.000    0.000   10.299   10.299 /root/.pyenv/versions/3.13.13/lib/python3.13/concurrent/futures/process.py:330(run)
+        1    0.000    0.000   10.299   10.299 /root/.pyenv/versions/3.13.13/lib/python3.13/concurrent/futures/process.py:549(join_executor_internals)
+        1    0.000    0.000   10.299   10.299 /root/.pyenv/versions/3.13.13/lib/python3.13/concurrent/futures/process.py:553(_join_executor_internals)
+    69692    0.133    0.000   10.188    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:393(is_relative_to)
+      263    0.001    0.000   10.184    0.039 /root/.pyenv/versions/3.13.13/lib/python3.13/concurrent/futures/process.py:86(wakeup)
+        9    0.000    0.000   10.178    1.131 /root/.pyenv/versions/3.13.13/lib/python3.13/multiprocessing/util.py:276(__call__)
+        1    0.000    0.000   10.177   10.177 /root/.pyenv/versions/3.13.13/lib/python3.13/multiprocessing/queues.py:145(join_thread)
+        1    0.000    0.000   10.177   10.177 /root/.pyenv/versions/3.13.13/lib/python3.13/multiprocessing/queues.py:212(_finalize_join)
+      265    0.012    0.000    8.974    0.034 /root/.pyenv/versions/3.13.13/lib/python3.13/concurrent/futures/process.py:405(wait_result_broken_or_wakeup)
+    69692    0.475    0.000    8.503    0.000 <frozen _collections_abc>:1037(__contains__)
+      793    0.008    0.000    6.299    0.008 /root/.pyenv/versions/3.13.13/lib/python3.13/multiprocessing/connection.py:1156(wait)
+   619892    0.371    0.000    6.283    0.000 <frozen _collections_abc>:1027(__iter__)
+      793    0.010    0.000    6.257    0.008 /root/.pyenv/versions/3.13.13/lib/python3.13/selectors.py:385(select)
+   618582    0.887    0.000    5.909    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:44(__getitem__)
+      262    0.004    0.000    5.839    0.022 /root/.pyenv/versions/3.13.13/lib/python3.13/concurrent/futures/_base.py:428(result)
+      793    5.034    0.006    5.042    0.006 {method 'poll' of 'select.poll' objects}
+   551512    0.464    0.000    3.940    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:245(_from_parsed_parts)
+   621465    0.538    0.000    3.176    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:193(__eq__)
+   551512    0.271    0.000    2.951    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:252(_from_parsed_string)
+   553870    0.631    0.000    2.696    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_abc.py:130(with_segments)
+  1242930    1.241    0.000    2.528    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:174(_str_normcase)
+  527/267    0.008    0.000    2.122    0.008 /root/.pyenv/versions/3.13.13/lib/python3.13/multiprocessing/connection.py:183(send_bytes)
+   633280    0.561    0.000    1.947    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:498(__init__)
+
+
+
+===== step 2 worker (2 processes) by tottime =====
+Fri Nov  6 18:12:10 2026    /tmp/jwprof/prof/worker-5838-step2.prof
+Fri Nov  6 18:12:10 2026    /tmp/jwprof/prof/worker-5841-step2.prof
+
+         5740616 function calls (5462679 primitive calls) in 14.250 seconds
+
+   Ordered by: internal time
+   List reduced from 941 to 40 due to restriction <40>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+15982/4302    1.644    0.000    0.275    0.000 {built-in method posix.read}
+       68    1.296    0.019    1.296    0.019 {built-in method builtins.compile}
+34764/32427    0.591    0.000    0.417    0.000 {method 'update' of '_hashlib.HASH' objects}
+     1310    0.415    0.000    0.501    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/json/decoder.py:351(raw_decode)
+28802/26454    0.351    0.000    0.202    0.000 {method 'acquire' of '_thread.lock' objects}
+     1584    0.296    0.000    0.411    0.000 <frozen posixpath>:388(realpath)
+    43808    0.247    0.000    0.247    0.000 {built-in method posix.lstat}
+     2448    0.239    0.000    0.307    0.000 {built-in method _io.open}
+     5508    0.220    0.000    0.220    0.000 {built-in method posix.listdir}
+ 1054/248    0.212    0.000    0.041    0.000 {method 'get' of '_queue.SimpleQueue' objects}
+   139826    0.208    0.000    0.308    0.000 /workspace/JouleWise/joulewise/analysis_verified_store.py:281(_frame)
+7862/5840    0.195    0.000    0.138    0.000 {built-in method posix.open}
+429486/387566    0.194    0.000    0.313    0.000 {built-in method builtins.isinstance}
+    50960    0.186    0.000    0.344    0.000 <frozen posixpath>:72(join)
+      786    0.182    0.000    0.869    0.001 /workspace/JouleWise/joulewise/analysis_verified_store.py:421(_walk)
+    15196    0.169    0.000    1.159    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/argparse.py:1468(add_argument)
+   317562    0.169    0.000    0.169    0.000 {method 'encode' of 'str' objects}
+70216/1310    0.155    0.000    0.838    0.001 /workspace/JouleWise/joulewise/analysis_verified_store.py:285(canonical_bytes)
+    22008    0.148    0.000    0.529    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/gettext.py:231(_expand_lang)
+    11004    0.131    0.000    1.025    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/gettext.py:488(find)
+     1048    0.128    0.000    0.128    0.000 {built-in method time.process_time_ns}
+    11004    0.125    0.000    0.337    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/argparse.py:1383(__init__)
+   283572    0.125    0.000    0.125    0.000 {method 'get' of 'dict' objects}
+7860/1498    0.125    0.000    2.469    0.002 /workspace/JouleWise/joulewise/analysis_verified_store.py:393(_hash_file_nofollow)
+     1214    0.125    0.000    0.125    0.000 {method 'read' of '_io.BufferedReader' objects}
+    15458    0.117    0.000    0.260    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/shutil.py:1439(get_terminal_size)
+    81488    0.116    0.000    0.303    0.000 <frozen os>:712(__getitem__)
+7860/6823    0.115    0.000    0.102    0.000 {built-in method posix.fstat}
+    264/0    0.114    0.000    0.000          /root/.pyenv/versions/3.13.13/lib/python3.13/threading.py:1001(_bootstrap)
+   135716    0.114    0.000    0.156    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/argparse.py:1437(register)
+    13370    0.110    0.000    0.144    0.000 {built-in method posix.stat}
+    164/4    0.104    0.001    1.450    0.363 {built-in method builtins.exec}
+   293440    0.104    0.000    0.104    0.000 {method 'setdefault' of 'dict' objects}
+   263310    0.099    0.000    0.099    0.000 {method 'append' of 'list' objects}
+    31056    0.090    0.000    0.090    0.000 {built-in method builtins.repr}
+      264    0.088    0.000    0.088    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/json/encoder.py:207(iterencode)
+    15458    0.084    0.000    0.472    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/argparse.py:162(__init__)
+    11004    0.084    0.000    0.161    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/encodings/__init__.py:44(normalize_encoding)
+    12838    0.083    0.000    0.144    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/argparse.py:1614(_get_optional_kwargs)
+    22008    0.082    0.000    0.335    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/locale.py:381(normalize)
+
+
+
+===== step 2 worker (2 processes) by cumulative =====
+Fri Nov  6 18:12:10 2026    /tmp/jwprof/prof/worker-5838-step2.prof
+Fri Nov  6 18:12:10 2026    /tmp/jwprof/prof/worker-5841-step2.prof
+
+         5740616 function calls (5462679 primitive calls) in 14.250 seconds
+
+   Ordered by: cumulative time
+   List reduced from 941 to 40 due to restriction <40>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+      262    0.003    0.000   12.176    0.046 /workspace/JouleWise/joulewise/b5_analysis/phase_timing.py:1138(__exit__)
+      262    0.016    0.000   12.172    0.046 /workspace/JouleWise/joulewise/b5_analysis/phase_timing.py:794(close)
+      262    0.003    0.000   12.099    0.046 /workspace/JouleWise/joulewise/b5_analysis/phase_timing.py:577(stop)
+      262    0.002    0.000   12.078    0.046 /root/.pyenv/versions/3.13.13/lib/python3.13/threading.py:1059(join)
+      262    0.033    0.000   12.075    0.046 {method 'join' of '_thread._ThreadHandle' objects}
+     6812    0.020    0.000    5.705    0.001 /root/.pyenv/versions/3.13.13/lib/python3.13/concurrent/futures/_base.py:428(result)
+7312/6986    0.050    0.000    5.283    0.001 /root/.pyenv/versions/3.13.13/lib/python3.13/threading.py:327(wait)
+      262    0.029    0.000    2.857    0.011 /workspace/JouleWise/joulewise/cli.py:2479(build_parser)
+7860/1498    0.125    0.000    2.469    0.002 /workspace/JouleWise/joulewise/analysis_verified_store.py:393(_hash_file_nofollow)
+ 6812/450    0.037    0.000    2.440    0.005 /root/.pyenv/versions/3.13.13/lib/python3.13/concurrent/futures/thread.py:54(run)
+     3668    0.044    0.000    1.947    0.001 /root/.pyenv/versions/3.13.13/lib/python3.13/argparse.py:1793(__init__)
+     3406    0.028    0.000    1.828    0.001 /root/.pyenv/versions/3.13.13/lib/python3.13/argparse.py:1221(add_parser)
+  598/526    0.012    0.000    1.622    0.003 <frozen importlib._bootstrap>:1349(_find_and_load)
+     76/4    0.001    0.000    1.610    0.402 <frozen importlib._bootstrap>:1304(_find_and_load_unlocked)
+     76/4    0.001    0.000    1.609    0.402 <frozen importlib._bootstrap>:911(_load_unlocked)
+     76/4    0.000    0.000    1.608    0.402 <frozen importlib._bootstrap_external>:1017(exec_module)
+   226/12    0.001    0.000    1.607    0.134 <frozen importlib._bootstrap>:480(_call_with_frames_removed)
+    164/4    0.104    0.001    1.450    0.363 {built-in method builtins.exec}
+      524    0.002    0.000    1.427    0.003 /root/.pyenv/versions/3.13.13/lib/python3.13/importlib/__init__.py:71(import_module)
+      524    0.002    0.000    1.425    0.003 <frozen importlib._bootstrap>:1383(_gcd_import)
+      262    0.001    0.000    1.416    0.005 /workspace/JouleWise/joulewise/b5_analysis/parallel.py:119(_program)
+       76    0.002    0.000    1.346    0.018 <frozen importlib._bootstrap_external>:1090(get_code)
+        2    0.002    0.001    1.345    0.672 /workspace/JouleWise/joulewise/cli.py:1(<module>)
+       68    0.000    0.000    1.297    0.019 <frozen importlib._bootstrap_external>:1082(source_to_code)
+       68    1.296    0.019    1.296    0.019 {built-in method builtins.compile}
+    15196    0.169    0.000    1.159    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/argparse.py:1468(add_argument)
+    11004    0.010    0.000    1.110    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/gettext.py:627(gettext)
+    11004    0.031    0.000    1.099    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/gettext.py:587(dgettext)
+    11004    0.040    0.000    1.065    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/gettext.py:528(translation)
+        2    0.001    0.000    1.049    0.524 /workspace/JouleWise/joulewise/controller.py:1(<module>)
+    11004    0.131    0.000    1.025    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/gettext.py:488(find)
+        6    0.000    0.000    0.986    0.164 {built-in method builtins.__import__}
+      786    0.182    0.000    0.869    0.001 /workspace/JouleWise/joulewise/analysis_verified_store.py:421(_walk)
+        2    0.000    0.000    0.846    0.423 /workspace/JouleWise/joulewise/analysis_engine/__init__.py:1(<module>)
+     1048    0.004    0.000    0.844    0.001 /workspace/JouleWise/joulewise/analysis_verified_store.py:339(canonical_digest)
+70216/1310    0.155    0.000    0.838    0.001 /workspace/JouleWise/joulewise/analysis_verified_store.py:285(canonical_bytes)
+15196/1310    0.070    0.000    0.796    0.001 {method 'join' of 'bytes' objects}
+84102/5764    0.065    0.000    0.792    0.000 /workspace/JouleWise/joulewise/analysis_verified_store.py:324(<genexpr>)
+      262    0.006    0.000    0.634    0.002 /workspace/JouleWise/joulewise/analysis_verified_store.py:456(_tree_digest_from)
+     1310    0.008    0.000    0.534    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/json/__init__.py:304(loads)
+
+
+
+===== step 3 driver (1 processes) by tottime =====
+Fri Nov  6 18:45:52 2026    /tmp/jwprof/prof/driver-5401-step3.prof
+
+         905805 function calls (826766 primitive calls) in 1.076 seconds
+
+   Ordered by: internal time
+   List reduced from 353 to 40 due to restriction <40>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+     2719    0.163    0.000    0.163    0.000 {method 'read' of '_io.BufferedReader' objects}
+     3235    0.061    0.000    0.120    0.000 {built-in method _io.open}
+    19709    0.054    0.000    0.070    0.000 {built-in method posix.lstat}
+     8386    0.046    0.000    0.081    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:257(_parse_path)
+     2376    0.046    0.000    0.046    0.000 {built-in method _hashlib.openssl_sha256}
+     2297    0.042    0.000    0.137    0.000 <frozen posixpath>:388(realpath)
+153514/111634    0.037    0.000    0.079    0.000 {built-in method builtins.isinstance}
+    16491    0.031    0.000    0.049    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:117(__init__)
+    11836    0.028    0.000    0.146    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:289(drive)
+    14797    0.028    0.000    0.147    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:227(__str__)
+    66995    0.021    0.000    0.021    0.000 {built-in method sys.intern}
+      417    0.019    0.000    0.023    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/json/decoder.py:351(raw_decode)
+    12017    0.017    0.000    0.082    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_abc.py:130(with_segments)
+     3235    0.016    0.000    0.016    0.000 {method '__exit__' of '_io._IOBase' objects}
+    14793    0.016    0.000    0.059    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:498(__init__)
+       27    0.014    0.001    0.014    0.001 /root/.pyenv/versions/3.13.13/lib/python3.13/json/encoder.py:207(iterencode)
+     4986    0.014    0.000    0.023    0.000 <frozen posixpath>:72(join)
+    10846    0.014    0.000    0.054    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:174(_str_normcase)
+        6    0.013    0.002    0.316    0.053 /workspace/JouleWise/joulewise/whole_window.py:7281(_validated_evaluation_basis)
+     8386    0.012    0.000    0.036    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:277(_raw_path)
+    20940    0.012    0.000    0.036    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/typing.py:1680(__subclasscheck__)
+      556    0.012    0.000    0.367    0.001 /workspace/JouleWise/joulewise/b5_analysis/archive.py:37(_read)
+      561    0.011    0.000    0.012    0.000 {built-in method posix.mkdir}
+ 10242/15    0.010    0.000    0.038    0.003 /workspace/JouleWise/joulewise/b5_analysis/windows.py:33(freeze)
+      517    0.010    0.000    0.010    0.000 {method 'write' of '_io.BufferedWriter' objects}
+    14793    0.010    0.000    0.016    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:505(__new__)
+        3    0.010    0.003    0.814    0.271 /workspace/JouleWise/joulewise/b5_analysis/context.py:96(rebuilt_roster)
+    12615    0.010    0.000    0.018    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:237(_format_parsed_parts)
+40477/32019    0.009    0.000    0.012    0.000 {built-in method builtins.len}
+    11064    0.009    0.000    0.009    0.000 {method 'split' of 'str' objects}
+   9111/3    0.008    0.000    0.031    0.010 /workspace/JouleWise/joulewise/analysis_engine/inputs.py:476(walk)
+     1158    0.008    0.000    0.081    0.000 <frozen _collections_abc>:1037(__contains__)
+    20940    0.008    0.000    0.018    0.000 {built-in method builtins.issubclass}
+     4229    0.008    0.000    0.055    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:44(__getitem__)
+    20940    0.008    0.000    0.044    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/typing.py:1389(__instancecheck__)
+     1758    0.008    0.000    0.115    0.000 /workspace/JouleWise/joulewise/authentication_io.py:1379(read_authentication_input)
+    12645    0.007    0.000    0.007    0.000 {method 'join' of 'str' objects}
+     2713    0.007    0.000    0.262    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_abc.py:621(read_bytes)
+    24819    0.007    0.000    0.007    0.000 {method 'startswith' of 'str' objects}
+     5423    0.007    0.000    0.062    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:193(__eq__)
+
+
+
+===== step 3 driver (1 processes) by cumulative =====
+Fri Nov  6 18:45:52 2026    /tmp/jwprof/prof/driver-5401-step3.prof
+
+         905805 function calls (826766 primitive calls) in 1.076 seconds
+
+   Ordered by: cumulative time
+   List reduced from 353 to 40 due to restriction <40>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.000    0.000    1.071    1.071 /workspace/JouleWise/joulewise/b5_analysis/dry_run.py:1128(step_3)
+        1    0.000    0.000    1.071    1.071 /workspace/JouleWise/joulewise/b5_analysis/dry_run.py:841(_internal_step)
+        1    0.000    0.000    1.071    1.071 /workspace/JouleWise/joulewise/b5_analysis/dry_run.py:120(run)
+        1    0.000    0.000    1.069    1.069 /workspace/JouleWise/joulewise/b5_analysis/dry_run.py:674(main)
+        1    0.000    0.000    1.069    1.069 /workspace/JouleWise/joulewise/b5_analysis/dry_run.py:762(prepare_tripwires)
+        3    0.000    0.000    1.011    0.337 /workspace/JouleWise/joulewise/b5_analysis/dry_run.py:213(primary_contexts)
+        3    0.002    0.001    1.011    0.337 /workspace/JouleWise/joulewise/b5_analysis/context.py:330(build_context)
+        3    0.010    0.003    0.814    0.271 /workspace/JouleWise/joulewise/b5_analysis/context.py:96(rebuilt_roster)
+      523    0.004    0.000    0.406    0.001 /workspace/JouleWise/joulewise/b5_analysis/archive.py:406(source_bytes)
+      556    0.012    0.000    0.367    0.001 /workspace/JouleWise/joulewise/b5_analysis/archive.py:37(_read)
+        6    0.013    0.002    0.316    0.053 /workspace/JouleWise/joulewise/whole_window.py:7281(_validated_evaluation_basis)
+     2713    0.007    0.000    0.262    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_abc.py:621(read_bytes)
+        3    0.000    0.000    0.171    0.057 /workspace/JouleWise/joulewise/b5_analysis/context.py:179(survivor_set)
+     2719    0.163    0.000    0.163    0.000 {method 'read' of '_io.BufferedReader' objects}
+     2297    0.004    0.000    0.156    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:664(resolve)
+    14797    0.028    0.000    0.147    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:227(__str__)
+    11836    0.028    0.000    0.146    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:289(drive)
+     2297    0.042    0.000    0.137    0.000 <frozen posixpath>:388(realpath)
+      586    0.006    0.000    0.131    0.000 /workspace/JouleWise/joulewise/whole_window.py:4059(_safe_source_path)
+     3235    0.002    0.000    0.122    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:529(open)
+     3235    0.061    0.000    0.120    0.000 {built-in method _io.open}
+     1758    0.008    0.000    0.115    0.000 /workspace/JouleWise/joulewise/authentication_io.py:1379(read_authentication_input)
+     7085    0.006    0.000    0.106    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:166(__fspath__)
+      566    0.002    0.000    0.094    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:393(is_relative_to)
+    12017    0.017    0.000    0.082    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_abc.py:130(with_segments)
+     8386    0.046    0.000    0.081    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:257(_parse_path)
+     1158    0.008    0.000    0.081    0.000 <frozen _collections_abc>:1037(__contains__)
+153514/111634    0.037    0.000    0.079    0.000 {built-in method builtins.isinstance}
+    19709    0.054    0.000    0.070    0.000 {built-in method posix.lstat}
+     5423    0.007    0.000    0.062    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:193(__eq__)
+        3    0.006    0.002    0.060    0.020 /workspace/JouleWise/joulewise/b5/harvest.py:1900(build_roster)
+     5387    0.004    0.000    0.059    0.000 <frozen _collections_abc>:1027(__iter__)
+    14793    0.016    0.000    0.059    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:498(__init__)
+      514    0.002    0.000    0.057    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_abc.py:635(write_bytes)
+     4229    0.008    0.000    0.055    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:44(__getitem__)
+    10846    0.014    0.000    0.054    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:174(_str_normcase)
+    16491    0.031    0.000    0.049    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:117(__init__)
+     2376    0.046    0.000    0.046    0.000 {built-in method _hashlib.openssl_sha256}
+    20940    0.008    0.000    0.044    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/typing.py:1389(__instancecheck__)
+        3    0.000    0.000    0.043    0.014 /workspace/JouleWise/joulewise/analysis_engine/inputs.py:323(archived_verdict_row)
+
+
+
+===== step 3b driver (1 processes) by tottime =====
+Fri Nov  6 18:45:52 2026    /tmp/jwprof/prof/driver-5401-step3b.prof
+
+         11948698 function calls (11673786 primitive calls) in 1533.904 seconds
+
+   Ordered by: internal time
+   List reduced from 977 to 40 due to restriction <40>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+28216/203 1461.161    0.052    0.293    0.001 {method 'acquire' of '_thread.lock' objects}
+  3732345   23.969    0.000   23.969    0.000 {method 'get' of 'dict' objects}
+     7045   12.628    0.002   50.558    0.007 /workspace/JouleWise/joulewise/b5_analysis/phase_timing.py:603(sample)
+  7050/50    7.292    0.001    0.342    0.007 /root/.pyenv/versions/3.13.13/lib/python3.13/threading.py:327(wait)
+     7045    3.585    0.001    5.156    0.001 /workspace/JouleWise/joulewise/b5_analysis/phase_timing.py:374(frames)
+        6    2.959    0.493 2231.927  371.988 /root/.pyenv/versions/3.13.13/lib/python3.13/concurrent/futures/process.py:405(wait_result_broken_or_wakeup)
+     7045    2.357    0.000    2.357    0.000 {built-in method posix.getloadavg}
+     7045    1.479    0.000    5.001    0.001 /workspace/JouleWise/joulewise/b5_analysis/phase_timing.py:387(_qualname_key)
+     7045    1.151    0.000    1.151    0.000 {built-in method sys._current_frames}
+    29/26    0.922    0.032    0.258    0.010 {built-in method posix.write}
+     1348    0.812    0.001    5.420    0.004 /workspace/JouleWise/joulewise/calibration_ledger.py:1837(_attempts_and_observations)
+1020652/996652    0.807    0.000    1.064    0.000 {built-in method builtins.isinstance}
+    14095    0.787    0.000    0.787    0.000 {method 'search' of 're.Pattern' objects}
+   105038    0.741    0.000    1.526    0.000 /workspace/JouleWise/joulewise/calibration_ledger.py:1641(_observation_from_receipt)
+     1348    0.739    0.001    2.963    0.002 /workspace/JouleWise/joulewise/calibration_ledger.py:1679(_bracket_sessions_and_observations)
+7046/7044    0.697    0.000 3707.580    0.526 /root/.pyenv/versions/3.13.13/lib/python3.13/threading.py:641(wait)
+     7048    0.692    0.000    0.827    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/threading.py:315(_acquire_restore)
+      902    0.656    0.001    0.726    0.001 /workspace/JouleWise/scripts/issue_calibration_acceptance_generation.py:641(_beta_continued_fraction)
+     7045    0.587    0.000    1.346    0.000 <frozen posixpath>:166(basename)
+     7045    0.584    0.000    0.630    0.000 /workspace/JouleWise/joulewise/b5_analysis/phase_timing.py:584(_resolve)
+    12066    0.551    0.000    0.720    0.000 <frozen posixpath>:42(_get_sep)
+     7045    0.432    0.000    0.432    0.000 {method 'sub' of 're.Pattern' objects}
+     7080    0.415    0.000    0.709    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/re/__init__.py:330(_compile)
+     2734    0.413    0.000    0.413    0.000 {method 'read' of '_io.BufferedReader' objects}
+   757554    0.400    0.000    0.675    0.000 /workspace/JouleWise/joulewise/calibration_ledger.py:1676(<genexpr>)
+       16    0.367    0.023    0.367    0.023 {method 'poll' of 'select.poll' objects}
+     7045    0.353    0.000    2.840    0.000 /workspace/JouleWise/joulewise/b5_analysis/phase_timing.py:431(_load_x100)
+7089/7085    0.337    0.000    0.346    0.000 {built-in method builtins.next}
+   735266    0.251    0.000    0.423    0.000 /workspace/JouleWise/joulewise/calibration_ledger.py:1932(<genexpr>)
+   249124    0.227    0.000    0.384    0.000 /workspace/JouleWise/joulewise/b5_analysis/pack_parallel.py:31(persistent_id)
+       12    0.222    0.018    0.405    0.034 {method 'dump' of '_pickle.Pickler' objects}
+   162686    0.201    0.000    0.201    0.000 {method 'append' of 'list' objects}
+     1804    0.200    0.000    0.200    0.000 {method 'ln' of 'decimal.Decimal' objects}
+190201/5846    0.184    0.000    0.425    0.000 /workspace/JouleWise/joulewise/calibration_ledger.py:215(_jsonable)
+        7    0.181    0.026    0.181    0.026 {built-in method posix.waitpid}
+115424/113516    0.175    0.000    0.903    0.000 {built-in method builtins.all}
+   633721    0.173    0.000    0.173    0.000 {method 'get' of 'mappingproxy' objects}
+     5884    0.148    0.000    0.148    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/json/encoder.py:207(iterencode)
+    22406    0.138    0.000    0.138    0.000 {method 'fullmatch' of 're.Pattern' objects}
+    14090    0.134    0.000    0.302    0.000 /workspace/JouleWise/joulewise/b5_analysis/phase_timing.py:459(_add_phase)
+
+
+
+===== step 3b driver (1 processes) by cumulative =====
+Fri Nov  6 18:45:52 2026    /tmp/jwprof/prof/driver-5401-step3b.prof
+
+         11948698 function calls (11673786 primitive calls) in 1533.904 seconds
+
+   Ordered by: cumulative time
+   List reduced from 977 to 40 due to restriction <40>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+7046/7044    0.697    0.000 3707.580    0.526 /root/.pyenv/versions/3.13.13/lib/python3.13/threading.py:641(wait)
+        6    2.959    0.493 2231.927  371.988 /root/.pyenv/versions/3.13.13/lib/python3.13/concurrent/futures/process.py:405(wait_result_broken_or_wakeup)
+        1    0.000    0.000 1534.548 1534.548 /workspace/JouleWise/joulewise/b5_analysis/dry_run.py:1131(step_3b)
+        1    0.000    0.000 1534.548 1534.548 /workspace/JouleWise/joulewise/b5_analysis/dry_run.py:841(_internal_step)
+        1    0.000    0.000 1534.547 1534.547 /workspace/JouleWise/joulewise/b5_analysis/dry_run.py:120(run)
+        1    0.001    0.001 1534.546 1534.546 /workspace/JouleWise/joulewise/b5_analysis/dry_run.py:674(main)
+        1    0.001    0.001 1524.450 1524.450 /workspace/JouleWise/joulewise/b5_analysis/pack_parallel.py:102(pack_map)
+        1    0.001    0.001 1524.415 1524.415 /root/.pyenv/versions/3.13.13/lib/python3.13/concurrent/futures/process.py:842(shutdown)
+      2/1    0.000    0.000 1524.412 1524.412 /root/.pyenv/versions/3.13.13/lib/python3.13/threading.py:1059(join)
+      2/1    0.000    0.000 1524.412 1524.412 {method 'join' of '_thread._ThreadHandle' objects}
+      2/1    0.000    0.000 1524.412 1524.412 /root/.pyenv/versions/3.13.13/lib/python3.13/threading.py:1001(_bootstrap)
+      2/1    0.000    0.000 1524.412 1524.412 /root/.pyenv/versions/3.13.13/lib/python3.13/threading.py:1028(_bootstrap_inner)
+        1    0.000    0.000 1524.412 1524.412 /root/.pyenv/versions/3.13.13/lib/python3.13/concurrent/futures/process.py:330(run)
+        1    0.000    0.000 1524.412 1524.412 /root/.pyenv/versions/3.13.13/lib/python3.13/concurrent/futures/process.py:549(join_executor_internals)
+        1    0.000    0.000 1524.412 1524.412 /root/.pyenv/versions/3.13.13/lib/python3.13/concurrent/futures/process.py:553(_join_executor_internals)
+        9    0.000    0.000 1524.107  169.345 /root/.pyenv/versions/3.13.13/lib/python3.13/multiprocessing/util.py:276(__call__)
+        1    0.000    0.000 1524.106 1524.106 /root/.pyenv/versions/3.13.13/lib/python3.13/multiprocessing/queues.py:145(join_thread)
+        1    0.000    0.000 1524.106 1524.106 /root/.pyenv/versions/3.13.13/lib/python3.13/multiprocessing/queues.py:212(_finalize_join)
+     7045   12.628    0.002   50.558    0.007 /workspace/JouleWise/joulewise/b5_analysis/phase_timing.py:603(sample)
+  3732345   23.969    0.000   23.969    0.000 {method 'get' of 'dict' objects}
+        1    0.001    0.001    9.562    9.562 /workspace/JouleWise/joulewise/b5_analysis/dry_run.py:786(prepare_brackets)
+        1    0.002    0.002    8.115    8.115 /workspace/JouleWise/joulewise/b5_analysis/bracket.py:575(block_b_max_for_archives)
+        4    0.000    0.000    6.734    1.683 /workspace/JouleWise/joulewise/calibration_ledger.py:1636(_parse_ledger)
+        4    0.017    0.004    6.733    1.683 /workspace/JouleWise/joulewise/calibration_ledger.py:1546(_scan_physical_ledger)
+     1648    0.031    0.000    6.060    0.004 /workspace/JouleWise/joulewise/calibration_ledger.py:1417(_control_state_admits)
+      672    0.067    0.000    5.453    0.008 /workspace/JouleWise/joulewise/calibration_ledger.py:1945(_target_state_transition_is_valid)
+     1348    0.812    0.001    5.420    0.004 /workspace/JouleWise/joulewise/calibration_ledger.py:1837(_attempts_and_observations)
+        3    0.008    0.003    5.178    1.726 /workspace/JouleWise/joulewise/b5_analysis/bracket.py:133(_copy)
+     7045    3.585    0.001    5.156    0.001 /workspace/JouleWise/joulewise/b5_analysis/phase_timing.py:374(frames)
+        3    0.003    0.001    5.155    1.718 /workspace/JouleWise/joulewise/b5_analysis/bracket.py:109(ledger_prefix)
+        3    0.002    0.001    5.114    1.705 /workspace/JouleWise/joulewise/b5_analysis/bracket.py:91(_snapshot)
+        3    0.001    0.000    5.103    1.701 /workspace/JouleWise/joulewise/calibration_ledger.py:2586(load_calibration_ledger_snapshot)
+     7045    1.479    0.000    5.001    0.001 /workspace/JouleWise/joulewise/b5_analysis/phase_timing.py:387(_qualname_key)
+     1348    0.739    0.001    2.963    0.002 /workspace/JouleWise/joulewise/calibration_ledger.py:1679(_bracket_sessions_and_observations)
+     7045    0.353    0.000    2.840    0.000 /workspace/JouleWise/joulewise/b5_analysis/phase_timing.py:431(_load_x100)
+     7045    2.357    0.000    2.357    0.000 {built-in method posix.getloadavg}
+        9    0.000    0.000    1.914    0.213 /root/.pyenv/versions/3.13.13/lib/python3.13/multiprocessing/connection.py:183(send_bytes)
+        1    0.000    0.000    1.777    1.777 /workspace/JouleWise/joulewise/b5_analysis/bracket.py:541(block_b_max)
+   105038    0.741    0.000    1.526    0.000 /workspace/JouleWise/joulewise/calibration_ledger.py:1641(_observation_from_receipt)
+     7045    0.587    0.000    1.346    0.000 <frozen posixpath>:166(basename)
+
+
+
+===== step 3b worker (2 processes) by tottime =====
+Fri Nov  6 18:37:38 2026    /tmp/jwprof/prof/worker-6112-step3b.prof
+Fri Nov  6 18:37:38 2026    /tmp/jwprof/prof/worker-6115-step3b.prof
+
+         3590384084 function calls (3348974773 primitive calls) in 2463.406 seconds
+
+   Ordered by: internal time
+   List reduced from 2210 to 40 due to restriction <40>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+242876284  318.828    0.000  531.672    0.000 /workspace/JouleWise/joulewise/powermetrics_fiducial.py:562(_overlap_fraction)
+248106048  214.302    0.000  885.382    0.000 /workspace/JouleWise/joulewise/powermetrics_fiducial.py:579(<genexpr>)
+   227604  150.502    0.001  502.067    0.002 {method 'ParseFile' of 'pyexpat.xmlparser' objects}
+240897574   98.281    0.000  146.163    0.000 /workspace/JouleWise/joulewise/powermetrics_fiducial.py:555(_huber)
+498558972/498556692   94.133    0.000  112.873    0.000 {built-in method builtins.max}
+485752568   72.834    0.000   72.834    0.000 /workspace/JouleWise/joulewise/powermetrics_fiducial.py:454(duration_s)
+ 68826344   70.851    0.000  422.258    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/fractions.py:666(forward)
+ 70512266   69.173    0.000   98.934    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/fractions.py:334(_from_coprime_ints)
+9352052/9351782   68.244    0.000  963.069    0.000 {built-in method math.fsum}
+ 34544028   67.902    0.000  143.462    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/fractions.py:795(_mul)
+112636188   59.977    0.000   99.360    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/plistlib.py:214(handle_data)
+251768949/12905093   59.114    0.000  922.186    0.000 {built-in method builtins.min}
+150977612/150532144   53.303    0.000   81.150    0.000 {built-in method builtins.isinstance}
+116144943   52.867    0.000   52.867    0.000 {built-in method math.gcd}
+71722/42302   52.578    0.001 1823.998    0.043 {method 'acquire' of '_thread.lock' objects}
+ 22615732   50.372    0.000   50.372    0.000 {method 'get' of 'dict' objects}
+253950713   49.365    0.000   49.365    0.000 {built-in method builtins.abs}
+131097660   49.177    0.000   49.177    0.000 {method 'append' of 'list' objects}
+ 73382460   43.394    0.000   43.394    0.000 {built-in method builtins.getattr}
+ 36506028   40.959    0.000  186.544    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/plistlib.py:209(handle_end_element)
+    95040   40.018    0.000  405.446    0.004 /workspace/JouleWise/joulewise/uncertainty_evidence.py:607(_lp2_line_optimum)
+ 20458102   38.357    0.000   94.827    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/fractions.py:986(_richcmp)
+ 13900998   31.224    0.000   65.528    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/fractions.py:779(_sub)
+ 36506028   31.091    0.000   70.610    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/plistlib.py:203(handle_begin_element)
+ 14335146   28.429    0.000   58.599    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/fractions.py:763(_add)
+ 31975692   21.990    0.000   34.241    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/plistlib.py:233(get_data)
+ 19791480   21.046    0.000   27.310    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/plistlib.py:217(add_object)
+    12888   19.772    0.002  482.731    0.037 /workspace/JouleWise/joulewise/uncertainty_evidence.py:666(_lp2)
+51339349/51339321   18.945    0.000   18.946    0.000 {built-in method __new__ of type object at 0x7f0051b73f80}
+  6047706   18.435    0.000   39.507    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/fractions.py:811(_div)
+ 16486944   16.750    0.000   39.224    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/plistlib.py:251(end_key)
+18177/9068   15.998    0.001 2327.128    0.257 /root/.pyenv/versions/3.13.13/lib/python3.13/threading.py:327(wait)
+ 10456596   15.810    0.000   38.160    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/plistlib.py:278(end_real)
+ 21154886   13.352    0.000   13.353    0.000 {built-in method _abc._abc_instancecheck}
+  9223856   13.100    0.000  981.863    0.000 /workspace/JouleWise/joulewise/powermetrics_fiducial.py:571(_pulse_loss)
+32290866/32257940   12.297    0.000   15.781    0.000 {method 'join' of 'str' objects}
+  9223856   11.836    0.000 1042.034    0.000 /workspace/JouleWise/joulewise/powermetrics_fiducial.py:798(loss)
+ 21154886   11.531    0.000   25.382    0.000 <frozen abc>:117(__instancecheck__)
+    10590   11.282    0.001  136.781    0.013 /workspace/JouleWise/joulewise/b5_analysis/phase_timing.py:603(sample)
+  3987348   11.164    0.000   24.235    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/plistlib.py:271(end_integer)
+
+
+
+===== step 3b worker (2 processes) by cumulative =====
+Fri Nov  6 18:37:38 2026    /tmp/jwprof/prof/worker-6112-step3b.prof
+Fri Nov  6 18:37:38 2026    /tmp/jwprof/prof/worker-6115-step3b.prof
+
+         3590384084 function calls (3348974773 primitive calls) in 2463.406 seconds
+
+   Ordered by: cumulative time
+   List reduced from 2210 to 40 due to restriction <40>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+10616/6823   10.821    0.001 5056.546    0.741 /root/.pyenv/versions/3.13.13/lib/python3.13/threading.py:641(wait)
+18177/9068   15.998    0.001 2327.128    0.257 /root/.pyenv/versions/3.13.13/lib/python3.13/threading.py:327(wait)
+71722/42302   52.578    0.001 1823.998    0.043 {method 'acquire' of '_thread.lock' objects}
+  593/296    0.424    0.001 1797.351    6.072 /workspace/JouleWise/joulewise/analysis_verified_store.py:2049(_fill)
+      6/2    0.001    0.000 1615.120  807.560 /workspace/JouleWise/scripts/b5_e2e_synthetic.py:334(run)
+      5/2    0.040    0.008 1614.414  807.207 /workspace/JouleWise/joulewise/b5_analysis/pack_parallel.py:160(bracket_pack)
+  595/210    0.018    0.000 1611.939    7.676 /workspace/JouleWise/joulewise/analysis_verified_store.py:1692(call)
+      5/2    0.009    0.002 1276.036  638.018 /workspace/JouleWise/joulewise/b5_analysis/bracket.py:428(evaluate_window_bracket)
+        3    0.002    0.001 1224.571  408.190 /workspace/JouleWise/joulewise/b5_analysis/bracket.py:253(_calibration_assessment)
+        3    0.001    0.000 1214.437  404.812 /workspace/JouleWise/joulewise/calibration_bracketing.py:1944(discover_calibration_candidates)
+       12    0.002    0.000 1214.433  101.203 /workspace/JouleWise/joulewise/calibration_bracketing.py:1807(_candidate_from_observation)
+       12    0.002    0.000 1214.422  101.202 /workspace/JouleWise/joulewise/calibration_bracketing.py:1651(load_calibration_candidate)
+       12    0.001    0.000 1214.420  101.202 /workspace/JouleWise/joulewise/calibration_ledger.py:5476(probe_custody)
+       12    0.004    0.000 1214.397  101.200 /workspace/JouleWise/joulewise/calibration_bracketing.py:1659(inspect)
+       12    0.015    0.001 1213.225  101.102 /workspace/JouleWise/joulewise/calibration_bracketing.py:1675(_load_calibration_candidate_unbounded)
+       12    0.117    0.010 1165.358   97.113 /workspace/JouleWise/joulewise/powermetrics_fiducial.py:1279(verify_stored_evidence_physics)
+  9223856   11.836    0.000 1042.034    0.000 /workspace/JouleWise/joulewise/powermetrics_fiducial.py:798(loss)
+      262    0.023    0.000 1007.546    3.846 /workspace/JouleWise/joulewise/analysis_verified_store.py:1952(_shadow)
+  9223856   13.100    0.000  981.863    0.000 /workspace/JouleWise/joulewise/powermetrics_fiducial.py:571(_pulse_loss)
+      720    0.113    0.000  980.858    1.362 /workspace/JouleWise/joulewise/powermetrics_fiducial.py:983(<genexpr>)
+        3    0.050    0.017  973.297  324.432 /workspace/JouleWise/joulewise/calibration_bracketing.py:2842(calibration_bracket_for_bundles)
+9352052/9351782   68.244    0.000  963.069    0.000 {built-in method math.fsum}
+       12    0.086    0.007  951.651   79.304 /workspace/JouleWise/joulewise/powermetrics_fiducial.py:1097(rederive_detection_from_artifacts)
+251768949/12905093   59.114    0.000  922.186    0.000 {built-in method builtins.min}
+248106048  214.302    0.000  885.382    0.000 /workspace/JouleWise/joulewise/powermetrics_fiducial.py:579(<genexpr>)
+  296/208    0.002    0.000  870.638    4.186 /workspace/JouleWise/joulewise/analysis_member_pool.py:566(consume)
+  296/208    0.001    0.000  870.634    4.186 /workspace/JouleWise/joulewise/b5_analysis/bracket.py:408(<lambda>)
+  592/208    0.102    0.000  870.632    4.186 /workspace/JouleWise/joulewise/cli.py:550(validate_bundle)
+        3    0.085    0.028  847.673  282.558 /workspace/JouleWise/joulewise/b5_analysis/bracket.py:312(_window_inputs)
+  296/208    0.323    0.001  842.209    4.049 /workspace/JouleWise/joulewise/cli.py:618(_strict_problems)
+      708    2.746    0.004  814.553    1.150 /workspace/JouleWise/joulewise/powermetrics_fiducial.py:739(_fit_pulse)
+      294    0.380    0.001  743.510    2.529 /workspace/JouleWise/joulewise/analysis_verified_store.py:1171(reduce_bundle_dict)
+      294    0.021    0.000  702.024    2.388 /workspace/JouleWise/joulewise/reduce.py:2627(reduce_bundle)
+      294    0.156    0.001  625.299    2.127 /workspace/JouleWise/joulewise/reduce.py:3467(_reduce)
+   227604    1.367    0.000  588.459    0.003 /root/.pyenv/versions/3.13.13/lib/python3.13/plistlib.py:915(loads)
+  4611574    4.502    0.000  584.451    0.000 /workspace/JouleWise/joulewise/powermetrics_fiducial.py:828(<lambda>)
+  296/208    0.077    0.000  581.221    2.794 /workspace/JouleWise/joulewise/cli.py:463(_strict_reduce_dict)
+  4611574    3.220    0.000  566.224    0.000 /workspace/JouleWise/joulewise/powermetrics_fiducial.py:820(<lambda>)
+   227604    2.702    0.000  557.638    0.002 /root/.pyenv/versions/3.13.13/lib/python3.13/plistlib.py:893(load)
+242876284  318.828    0.000  531.672    0.000 /workspace/JouleWise/joulewise/powermetrics_fiducial.py:562(_overlap_fraction)
+
+
+
+===== step 4 driver (1 processes) by tottime =====
+Fri Nov  6 18:45:52 2026    /tmp/jwprof/prof/driver-5401-step4.prof
+
+         375609 function calls (352392 primitive calls) in 477.904 seconds
+
+   Ordered by: internal time
+   List reduced from 550 to 40 due to restriction <40>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+  9168/11  468.544    0.051    0.208    0.019 {method 'acquire' of '_thread.lock' objects}
+    32237    2.493    0.000    2.493    0.000 {method 'get' of 'dict' objects}
+     2285    1.195    0.001    6.727    0.003 /workspace/JouleWise/joulewise/b5_analysis/phase_timing.py:603(sample)
+     2285    1.139    0.000    1.297    0.001 /workspace/JouleWise/joulewise/b5_analysis/phase_timing.py:374(frames)
+   2288/2    0.717    0.000    0.208    0.104 /root/.pyenv/versions/3.13.13/lib/python3.13/threading.py:327(wait)
+2286/2284    0.669    0.000  471.153    0.206 /root/.pyenv/versions/3.13.13/lib/python3.13/threading.py:641(wait)
+     4567    0.373    0.000    0.373    0.000 /workspace/JouleWise/joulewise/b5_analysis/phase_timing.py:612(<genexpr>)
+        4    0.367    0.092  477.373  119.343 /root/.pyenv/versions/3.13.13/lib/python3.13/concurrent/futures/process.py:405(wait_result_broken_or_wakeup)
+     2285    0.262    0.000    0.262    0.000 {built-in method posix.getloadavg}
+31390/31382    0.253    0.000    0.254    0.000 {built-in method builtins.isinstance}
+       11    0.249    0.023    0.249    0.023 {method 'poll' of 'select.poll' objects}
+     2289    0.204    0.000    0.204    0.000 {built-in method time.perf_counter_ns}
+    23/21    0.153    0.007    0.153    0.007 {built-in method posix.write}
+     2285    0.118    0.000    0.118    0.000 {built-in method sys._current_frames}
+     2285    0.110    0.000    0.690    0.000 /workspace/JouleWise/joulewise/b5_analysis/phase_timing.py:387(_qualname_key)
+     2285    0.110    0.000    0.353    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/re/__init__.py:330(_compile)
+        7    0.104    0.015    0.104    0.015 {built-in method posix.waitpid}
+     2285    0.075    0.000    0.075    0.000 {method 'sub' of 're.Pattern' objects}
+        8    0.074    0.009    0.075    0.009 {method 'dump' of '_pickle.Pickler' objects}
+     2285    0.072    0.000    0.395    0.000 /workspace/JouleWise/joulewise/b5_analysis/phase_timing.py:431(_load_x100)
+     4572    0.060    0.000    0.060    0.000 {method 'search' of 're.Pattern' objects}
+     2285    0.059    0.000    0.059    0.000 {built-in method builtins.round}
+     2285    0.039    0.000    0.056    0.000 <frozen posixpath>:166(basename)
+    29398    0.038    0.000    0.038    0.000 {method 'append' of 'list' objects}
+       73    0.025    0.000    0.025    0.000 {built-in method posix.read}
+     2285    0.021    0.000    0.030    0.000 /workspace/JouleWise/joulewise/b5_analysis/phase_timing.py:584(_resolve)
+     2285    0.019    0.000    0.447    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/re/__init__.py:183(sub)
+     2335    0.016    0.000    0.016    0.000 {method '__exit__' of '_thread.RLock' objects}
+        1    0.015    0.015  477.863  477.863 /workspace/JouleWise/joulewise/b5_analysis/dry_run.py:1145(_step_4_parallel)
+     2289    0.015    0.000    0.015    0.000 {method 'remove' of 'collections.deque' objects}
+27773/16027    0.014    0.000    0.017    0.000 {built-in method builtins.len}
+    12800    0.012    0.000    0.028    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:174(_str_normcase)
+     2313    0.012    0.000    0.014    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/threading.py:306(__exit__)
+     4599    0.012    0.000    0.020    0.000 /workspace/JouleWise/joulewise/b5_analysis/phase_timing.py:459(_add_phase)
+     2288    0.011    0.000    0.018    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/threading.py:315(_acquire_restore)
+     2307    0.010    0.000    0.368    0.000 {built-in method builtins.next}
+     6535    0.009    0.000    0.015    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:117(__init__)
+       30    0.008    0.000    0.008    0.000 {built-in method _hashlib.openssl_sha256}
+     6207    0.008    0.000    0.058    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/pathlib/_local.py:44(__getitem__)
+     9165    0.008    0.000    0.008    0.000 {built-in method builtins.max}
+
+
+
+===== step 4 driver (1 processes) by cumulative =====
+Fri Nov  6 18:45:52 2026    /tmp/jwprof/prof/driver-5401-step4.prof
+
+         375609 function calls (352392 primitive calls) in 477.904 seconds
+
+   Ordered by: cumulative time
+   List reduced from 550 to 40 due to restriction <40>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.000    0.000  477.869  477.869 /workspace/JouleWise/joulewise/b5_analysis/dry_run.py:1183(step_4)
+        1    0.015    0.015  477.863  477.863 /workspace/JouleWise/joulewise/b5_analysis/dry_run.py:1145(_step_4_parallel)
+        1    0.000    0.000  477.714  477.714 /workspace/JouleWise/joulewise/b5_analysis/dry_run.py:915(_dispatch)
+        1    0.000    0.000  477.714  477.714 /workspace/JouleWise/joulewise/b5_analysis/parallel.py:223(dispatch)
+        1    0.001    0.001  477.710  477.710 /root/.pyenv/versions/3.13.13/lib/python3.13/concurrent/futures/process.py:842(shutdown)
+      2/1    0.003    0.001  477.705  477.705 /root/.pyenv/versions/3.13.13/lib/python3.13/threading.py:1059(join)
+      2/1    0.005    0.003  477.704  477.704 {method 'join' of '_thread._ThreadHandle' objects}
+      2/1    0.000    0.000  477.704  477.704 /root/.pyenv/versions/3.13.13/lib/python3.13/threading.py:1001(_bootstrap)
+      2/1    0.000    0.000  477.704  477.704 /root/.pyenv/versions/3.13.13/lib/python3.13/threading.py:1028(_bootstrap_inner)
+        1    0.000    0.000  477.704  477.704 /root/.pyenv/versions/3.13.13/lib/python3.13/concurrent/futures/process.py:330(run)
+        1    0.000    0.000  477.704  477.704 /root/.pyenv/versions/3.13.13/lib/python3.13/concurrent/futures/process.py:549(join_executor_internals)
+        1    0.000    0.000  477.704  477.704 /root/.pyenv/versions/3.13.13/lib/python3.13/concurrent/futures/process.py:553(_join_executor_internals)
+        9    0.000    0.000  477.391   53.043 /root/.pyenv/versions/3.13.13/lib/python3.13/multiprocessing/util.py:276(__call__)
+        1    0.000    0.000  477.389  477.389 /root/.pyenv/versions/3.13.13/lib/python3.13/multiprocessing/queues.py:145(join_thread)
+        1    0.000    0.000  477.389  477.389 /root/.pyenv/versions/3.13.13/lib/python3.13/multiprocessing/queues.py:212(_finalize_join)
+        4    0.367    0.092  477.373  119.343 /root/.pyenv/versions/3.13.13/lib/python3.13/concurrent/futures/process.py:405(wait_result_broken_or_wakeup)
+2286/2284    0.669    0.000  471.153    0.206 /root/.pyenv/versions/3.13.13/lib/python3.13/threading.py:641(wait)
+     2285    1.195    0.001    6.727    0.003 /workspace/JouleWise/joulewise/b5_analysis/phase_timing.py:603(sample)
+    32237    2.493    0.000    2.493    0.000 {method 'get' of 'dict' objects}
+     2285    1.139    0.000    1.297    0.001 /workspace/JouleWise/joulewise/b5_analysis/phase_timing.py:374(frames)
+        7    0.000    0.000    1.135    0.162 /root/.pyenv/versions/3.13.13/lib/python3.13/multiprocessing/connection.py:183(send_bytes)
+     2285    0.110    0.000    0.690    0.000 /workspace/JouleWise/joulewise/b5_analysis/phase_timing.py:387(_qualname_key)
+     2285    0.019    0.000    0.447    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/re/__init__.py:183(sub)
+     2285    0.072    0.000    0.395    0.000 /workspace/JouleWise/joulewise/b5_analysis/phase_timing.py:431(_load_x100)
+     4567    0.373    0.000    0.373    0.000 /workspace/JouleWise/joulewise/b5_analysis/phase_timing.py:612(<genexpr>)
+     2307    0.010    0.000    0.368    0.000 {built-in method builtins.next}
+     2285    0.110    0.000    0.353    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/re/__init__.py:330(_compile)
+        2    0.000    0.000    0.315    0.158 /root/.pyenv/versions/3.13.13/lib/python3.13/multiprocessing/process.py:142(join)
+     2285    0.262    0.000    0.262    0.000 {built-in method posix.getloadavg}
+31390/31382    0.253    0.000    0.254    0.000 {built-in method builtins.isinstance}
+       11    0.001    0.000    0.251    0.023 /root/.pyenv/versions/3.13.13/lib/python3.13/multiprocessing/connection.py:1156(wait)
+       11    0.000    0.000    0.250    0.023 /root/.pyenv/versions/3.13.13/lib/python3.13/selectors.py:385(select)
+       11    0.249    0.023    0.249    0.023 {method 'poll' of 'select.poll' objects}
+   2288/2    0.717    0.000    0.208    0.104 /root/.pyenv/versions/3.13.13/lib/python3.13/threading.py:327(wait)
+  9168/11  468.544    0.051    0.208    0.019 {method 'acquire' of '_thread.lock' objects}
+     2289    0.204    0.000    0.204    0.000 {built-in method time.perf_counter_ns}
+    23/21    0.153    0.007    0.153    0.007 {built-in method posix.write}
+        7    0.000    0.000    0.153    0.022 /root/.pyenv/versions/3.13.13/lib/python3.13/multiprocessing/connection.py:407(_send_bytes)
+        9    0.000    0.000    0.152    0.017 /root/.pyenv/versions/3.13.13/lib/python3.13/multiprocessing/connection.py:382(_send)
+        2    0.000    0.000    0.119    0.060 /workspace/JouleWise/joulewise/b5_analysis/dry_run.py:871(_store_for)
+
+
+
+===== step 4 worker (2 processes) by tottime =====
+Fri Nov  6 18:45:46 2026    /tmp/jwprof/prof/worker-6255-step4.prof
+Fri Nov  6 18:45:46 2026    /tmp/jwprof/prof/worker-6258-step4.prof
+
+         1085333266 function calls (1051565465 primitive calls) in 946.391 seconds
+
+   Ordered by: internal time
+   List reduced from 1914 to 40 due to restriction <40>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+   129021   91.491    0.001  296.247    0.002 {method 'ParseFile' of 'pyexpat.xmlparser' objects}
+ 32568554   74.125    0.000  124.449    0.000 /workspace/JouleWise/joulewise/powermetrics_fiducial.py:562(_overlap_fraction)
+ 33278355   50.428    0.000  208.624    0.000 /workspace/JouleWise/joulewise/powermetrics_fiducial.py:579(<genexpr>)
+ 73698159   36.140    0.000   59.032    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/plistlib.py:214(handle_data)
+ 34535928   31.893    0.000  175.999    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/fractions.py:666(forward)
+ 35291087   31.654    0.000   43.958    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/fractions.py:334(_from_coprime_ints)
+ 17357850   31.317    0.000   64.408    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/fractions.py:795(_mul)
+ 84764954   26.966    0.000   26.966    0.000 {method 'append' of 'list' objects}
+86040269/85743411   24.883    0.000   35.454    0.000 {built-in method builtins.isinstance}
+ 23846303   24.460    0.000  106.520    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/plistlib.py:209(handle_end_element)
+ 58598962   24.316    0.000   24.316    0.000 {built-in method math.gcd}
+ 47947277   24.183    0.000   24.183    0.000 {built-in method builtins.getattr}
+72416123/72414881   23.690    0.000   32.661    0.000 {built-in method builtins.max}
+ 32306750   22.646    0.000   33.292    0.000 /workspace/JouleWise/joulewise/powermetrics_fiducial.py:555(_huber)
+    55264   18.823    0.000  188.864    0.003 /workspace/JouleWise/joulewise/uncertainty_evidence.py:607(_lp2_line_optimum)
+1311463/1311271   17.972    0.000  233.378    0.000 {built-in method math.fsum}
+ 10352041   17.495    0.000   40.057    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/fractions.py:986(_richcmp)
+ 23846303   17.443    0.000   39.986    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/plistlib.py:203(handle_begin_element)
+ 65137108   16.620    0.000   16.620    0.000 /workspace/JouleWise/joulewise/powermetrics_fiducial.py:454(duration_s)
+37104049/5066477   14.534    0.000  183.813    0.000 {built-in method builtins.min}
+  7144033   14.003    0.000   26.984    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/fractions.py:779(_sub)
+ 15424908   13.614    0.000   13.614    0.000 {method 'get' of 'dict' objects}
+ 20905159   13.384    0.000   20.790    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/plistlib.py:233(get_data)
+  6877443   12.672    0.000   25.890    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/fractions.py:763(_add)
+ 12953802   11.863    0.000   15.508    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/plistlib.py:217(add_object)
+ 35945424   11.599    0.000   11.599    0.000 {built-in method builtins.abs}
+37970/17268   10.870    0.000  497.043    0.029 {method 'acquire' of '_thread.lock' objects}
+ 10763480   10.206    0.000   23.389    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/plistlib.py:251(end_key)
+  6934725    9.901    0.000   23.283    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/plistlib.py:278(end_real)
+  3157643    8.608    0.000   16.853    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/fractions.py:811(_div)
+21124043/21100748    7.569    0.000    9.641    0.000 {method 'join' of 'str' objects}
+     7524    7.429    0.001  236.311    0.031 /workspace/JouleWise/joulewise/uncertainty_evidence.py:666(_lp2)
+ 19320520    6.922    0.000    6.923    0.000 {built-in method __new__ of type object at 0x7f6d546baf80}
+ 19150559    6.406    0.000    6.406    0.000 {built-in method __new__ of type object at 0x7f8bf19c5f80}
+  2577385    6.274    0.000   14.005    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/plistlib.py:271(end_integer)
+ 10800048    5.072    0.000    5.072    0.000 {built-in method _abc._abc_instancecheck}
+ 10800048    4.940    0.000   10.022    0.000 <frozen abc>:117(__instancecheck__)
+     5412    4.926    0.001    5.431    0.001 /workspace/JouleWise/scripts/issue_calibration_acceptance_generation.py:641(_beta_continued_fraction)
+    16725    4.656    0.000    4.656    0.000 {method 'read' of '_io.BufferedReader' objects}
+   593121    4.608    0.000    4.613    0.000 /root/.pyenv/versions/3.13.13/lib/python3.13/json/decoder.py:351(raw_decode)
+
+
+
+===== step 4 worker (2 processes) by cumulative =====
+Fri Nov  6 18:45:46 2026    /tmp/jwprof/prof/worker-6255-step4.prof
+Fri Nov  6 18:45:46 2026    /tmp/jwprof/prof/worker-6258-step4.prof
+
+         1085333266 function calls (1051565465 primitive calls) in 946.391 seconds
+
+   Ordered by: cumulative time
+   List reduced from 1914 to 40 due to restriction <40>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+      4/2    0.002    0.001  914.209  457.104 /workspace/JouleWise/joulewise/b5_analysis/parallel.py:139(run_child)
+        4    0.000    0.000  911.944  227.986 /root/.pyenv/versions/3.13.13/lib/python3.13/threading.py:1059(join)
+        2    0.000    0.000  911.944  455.972 /workspace/JouleWise/joulewise/b5_analysis/phase_timing.py:1138(__exit__)
+        2    0.000    0.000  911.944  455.972 /workspace/JouleWise/joulewise/b5_analysis/phase_timing.py:794(close)
+        4    0.001    0.000  911.944  227.986 {method 'join' of '_thread._ThreadHandle' objects}
+        2    0.000    0.000  911.944  455.972 /workspace/JouleWise/joulewise/b5_analysis/phase_timing.py:577(stop)
+      4/2    0.019    0.005  911.932  455.966 /workspace/JouleWise/scripts/extract_detection_floors.py:120(main)
+      4/2    0.001    0.000  911.913  455.957 /workspace/JouleWise/scripts/extract_detection_floors.py:52(extract_indexed_pack)
+      4/2    0.008    0.002  911.913  455.957 /workspace/JouleWise/joulewise/b5_analysis/bracket.py:428(evaluate_window_bracket)
+  420/210    0.018    0.000  909.524    4.331 /workspace/JouleWise/joulewise/analysis_verified_store.py:1692(call)
+  420/210    0.226    0.001  907.190    4.320 /workspace/JouleWise/joulewise/analysis_verified_store.py:2049(_fill)
+4341/4325    1.733    0.000  871.012    0.201 /root/.pyenv/versions/3.13.13/lib/python3.13/threading.py:641(wait)
+        2    0.044    0.022  629.839  314.920 /workspace/JouleWise/joulewise/b5_analysis/bracket.py:312(_window_inputs)
+  210/208    0.002    0.000  629.473    3.026 /workspace/JouleWise/joulewise/analysis_member_pool.py:566(consume)
+  210/208    0.001    0.000  629.468    3.026 /workspace/JouleWise/joulewise/b5_analysis/bracket.py:408(<lambda>)
+  420/208    0.036    0.000  629.467    3.026 /workspace/JouleWise/joulewise/cli.py:550(validate_bundle)
+  210/208    0.019    0.000  628.550    3.022 /workspace/JouleWise/joulewise/analysis_verified_store.py:1952(_shadow)
+      208    0.151    0.001  606.474    2.916 /workspace/JouleWise/joulewise/cli.py:618(_strict_problems)
+9642/4317    3.265    0.000  585.979    0.136 /root/.pyenv/versions/3.13.13/lib/python3.13/threading.py:327(wait)
+37970/17268   10.870    0.000  497.043    0.029 {method 'acquire' of '_thread.lock' objects}
+      4/2    0.001    0.000  457.631  228.815 /workspace/JouleWise/joulewise/b5_analysis/dry_run.py:120(run)
+      208    0.005    0.000  403.763    1.941 /workspace/JouleWise/joulewise/cli.py:463(_strict_reduce_dict)
+      208    0.167    0.001  398.836    1.917 /workspace/JouleWise/joulewise/analysis_verified_store.py:1171(reduce_bundle_dict)
+      208    0.016    0.000  387.299    1.862 /workspace/JouleWise/joulewise/reduce.py:2627(reduce_bundle)
+      208    0.108    0.001  353.394    1.699 /workspace/JouleWise/joulewise/reduce.py:3467(_reduce)
+   129021    0.610    0.000  319.062    0.002 /root/.pyenv/versions/3.13.13/lib/python3.13/plistlib.py:915(loads)
+   129021    1.259    0.000  315.026    0.002 /root/.pyenv/versions/3.13.13/lib/python3.13/plistlib.py:893(load)
+   129021    0.575    0.000  299.302    0.002 /root/.pyenv/versions/3.13.13/lib/python3.13/plistlib.py:188(parse)
+   129021   91.491    0.001  296.247    0.002 {method 'ParseFile' of 'pyexpat.xmlparser' objects}
+     1876    0.541    0.000  290.017    0.155 /workspace/JouleWise/joulewise/adapters/powermetrics.py:2056(_powermetrics_documents)
+        2    0.002    0.001  281.134  140.567 /workspace/JouleWise/joulewise/b5_analysis/bracket.py:253(_calibration_assessment)
+        2    0.048    0.024  278.709  139.355 /workspace/JouleWise/joulewise/calibration_bracketing.py:2842(calibration_bracket_for_bundles)
+        2    0.000    0.000  274.275  137.138 /workspace/JouleWise/joulewise/calibration_bracketing.py:1944(discover_calibration_candidates)
+        2    0.000    0.000  274.274  137.137 /workspace/JouleWise/joulewise/calibration_bracketing.py:1807(_candidate_from_observation)
+        2    0.000    0.000  274.274  137.137 /workspace/JouleWise/joulewise/calibration_bracketing.py:1651(load_calibration_candidate)
+        2    0.000    0.000  274.274  137.137 /workspace/JouleWise/joulewise/calibration_ledger.py:5476(probe_custody)
+        2    0.000    0.000  274.258  137.129 /workspace/JouleWise/joulewise/calibration_bracketing.py:1659(inspect)
+        2    0.001    0.000  274.258  137.129 /workspace/JouleWise/joulewise/calibration_bracketing.py:1675(_load_calibration_candidate_unbounded)
+        2    0.015    0.008  272.640  136.320 /workspace/JouleWise/joulewise/powermetrics_fiducial.py:1279(verify_stored_evidence_physics)
+  1238325    2.364    0.000  267.576    0.000 /workspace/JouleWise/joulewise/powermetrics_fiducial.py:798(loss)
+
+

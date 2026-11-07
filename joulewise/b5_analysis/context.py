@@ -82,6 +82,17 @@ class RebuiltRoster(Mapping):
         return len(self._document)
 
 
+@dataclass(frozen=True)
+class _SourcesReplay:
+    """The builder's replay capability, also transportable to a spawned pack."""
+    archive: ArchiveHandle
+    roster: RebuiltRoster
+
+    def __call__(self, candidate, runs_root):
+        from .sources_replay import replay_claim_sources
+        return replay_claim_sources(candidate, runs_root, archive=self.archive, roster=self.roster).problem
+
+
 def rebuilt_roster(archive: ArchiveHandle, row: Mapping, roster: Mapping | None = None) -> RebuiltRoster:
     """ROSTER-RULING X1.6(a–e): replay sealed, authenticated pack bytes.
 
@@ -358,8 +369,7 @@ def build_context(archive: ArchiveHandle, kept_units: KeptUnits,
         if result.problem is not None:
             raise AnalysisRefusal(result.problem)
         manifests = result.catalog_manifests
-        def replay(candidate, runs_root):
-            return replay_claim_sources(candidate, runs_root, archive=archive, roster=actual).problem
+        replay = _SourcesReplay(archive, actual)
     corpus = None
     corpus_path = 'repo/configs/campaigns/neg8_reference_corpus_v5/derivation/settled_corpus.json'
     if corpus_path in archive.source_names():
