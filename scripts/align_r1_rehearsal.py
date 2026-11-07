@@ -1213,7 +1213,13 @@ def run(args):
         # A second idempotent attempt covers setup failures before __enter__ and
         # exceptions raised by context teardown itself.
         try:
-            guard.restore()
+            if host_lock.held:
+                guard.restore()
+            else:
+                # R6-7 (round-6 Sol critique): without the host night lock this
+                # run never changed the mode, and another night may be
+                # measuring under High Power; never restore under it.
+                record["restore_skipped"] = "host night lock not held: this run never changed the AC powermode"
         except BaseException as error:  # noqa: BLE001 - the terminal record must still be written
             record.setdefault("teardown_errors", []).append(f"restore: {type(error).__name__}: {error}")
         record["powermode"] = guard.records

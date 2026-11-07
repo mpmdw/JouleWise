@@ -287,6 +287,23 @@ class R1DriverHostLevelTests(HostStateCase):
         self.assertEqual(seen, [(2, True)])
         self.assertFalse(self.marker.exists())          # cleared by the verified restore
 
+    def test_r1_never_restores_under_another_nights_high_power(self):
+        # Round-6 Sol critique: the refused run's teardown restored Automatic
+        # (and dropped the other night's marker) without holding the lock.
+        self.hold_lock_elsewhere()
+        powermode.write_host_marker(self.marker, tag=powermode.W1_MARKER_TAG,
+                                    owner={'custody_root': self.tmp / 'measuring/custody'})
+        world = rehearsal_tests.FakeWorld()
+        world.mode = 2
+        code, args, result = self.run_driver(world)
+        self.assertEqual((code, world.mode), (3, 2))
+        self.assertTrue(self.marker.exists())
+        self.assertNotIn('restore_automatic', [r['point'] for r in result['powermode']])
+        # A rerun into the existing output (refused before the lock) neither.
+        with patch.object(r1, '_run', world), patch.object(r1, '_now_local', lambda: rehearsal_tests.NOON_SAFE):
+            self.assertEqual(r1.run(args), 3)
+        self.assertEqual(world.mode, 2)
+
     def test_r1_refuses_before_any_work_while_another_night_holds_the_lock(self):
         self.hold_lock_elsewhere()
         world = rehearsal_tests.FakeWorld()

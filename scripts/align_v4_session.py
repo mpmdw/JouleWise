@@ -116,7 +116,7 @@ def desk(session_root, **kwargs):
 ARM_RECORD_SCHEMA = 'joulewise.align_v4_arm.v1'
 
 
-def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=None):
+def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=None, owner=None):
     """W1/D arm evidence: ruling 7 AC powermode and ruling 20 volumes.
 
     Ruling 7: the AC-profile powermode must equal the plan's frozen series
@@ -131,7 +131,7 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
     expected = (plan.get('runtime_requirements') or {}).get('ac_powermode')
     marker = Path(measurement_root) / powermode.R1_HIGH_POWER_MARKER
     power = powermode.admit_ac_powermode(expected, marker=marker, markers=(powermode.host_marker_path(),),
-                                         runner=runner, lock=lock)
+                                         runner=runner, lock=lock, owner=owner)
     reasons = [] if power['admitted'] else ['ac_powermode: ' + str(power['reason'])]
     run = volume_runner or external_volume.run_command
     try:
@@ -219,7 +219,8 @@ def install(session_root, *, runner=None, volume_runner=None, now=None, w1_disk_
                 high = powermode.enter_high_power(marker, runner=runner, owner=owner)
             result = _arm_and_install(session, state, measurement_root, plan, high, runner=runner,
                                       volume_runner=volume_runner, now=now, w1_disk_config=w1_disk_config,
-                                      disk_gate=disk_gate, lock=lock, **kwargs)
+                                      disk_gate=disk_gate, lock=lock,
+                                      owner=owner if any(owner.values()) else None, **kwargs)
             if entering and not (isinstance(result, dict) and result.get('exit_code') == 0):
                 # Round-5 cold pass MEDIUM-1 (R6-7): the shared installer
                 # returned without installing (launchd already holds a night
@@ -243,8 +244,9 @@ def install(session_root, *, runner=None, volume_runner=None, now=None, w1_disk_
 
 
 def _arm_and_install(session, state, measurement_root, plan, high, *, runner, volume_runner, now,
-                     w1_disk_config, disk_gate, lock=None, **kwargs):
-    record = arm_checks(measurement_root, plan, runner=runner, volume_runner=volume_runner, lock=lock)
+                     w1_disk_config, disk_gate, lock=None, owner=None, **kwargs):
+    record = arm_checks(measurement_root, plan, runner=runner, volume_runner=volume_runner, lock=lock,
+                        owner=owner)
     if high is not None:
         record['high_power_enter'] = high
         if not high['ok']:

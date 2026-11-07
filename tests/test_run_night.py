@@ -787,6 +787,12 @@ runpy.run_path(script, run_name='__main__')
         self.source.results = host
         return host
 
+    def _own_w1_marker(self, marker: Path) -> None:
+        # R6-7 (round-6 Sol critique): under a plan of 2 only a W1 marker this
+        # night's session owns is kept at admission.
+        from joulewise.align.apple import powermode
+        powermode.write_host_marker(marker, tag=powermode.W1_MARKER_TAG, owner={"custody_root": self.custody})
+
     def test_host_left_in_high_power_is_refused_before_any_gate_or_chain(self) -> None:
         host = self._power_host(2)
         exit_code, calls = self._run_night()
@@ -841,7 +847,7 @@ runpy.run_path(script, run_name='__main__')
         self.plan_path.write_text(json.dumps(mapping))
         host = self._power_host(2)
         marker = self.root / ".align-r1-high-power"
-        marker.write_text("ALIGN v4 W1 high-power restoration required\n")
+        self._own_w1_marker(marker)
         exit_code, calls = self._run_night()
         self.assertEqual(calls, [["/bin/zsh", str(self.chain)]])
         self.assertEqual(host.calls[0], "read")
@@ -856,7 +862,7 @@ runpy.run_path(script, run_name='__main__')
         self.plan_path.write_text(json.dumps(mapping))
         host = self._power_host(2, restore_code=1)
         marker = self.root / ".align-r1-high-power"
-        marker.write_text("ALIGN v4 W1 high-power restoration required\n")
+        self._own_w1_marker(marker)
         exit_code, calls = self._run_night()
         # Admitted and launched (no restore at admission); only the close fails.
         self.assertEqual((exit_code, calls), (0, [["/bin/zsh", str(self.chain)]]))
@@ -871,7 +877,7 @@ runpy.run_path(script, run_name='__main__')
         mapping["ac_powermode"] = 2
         self.plan_path.write_text(json.dumps(mapping))
         host = self._power_host(2)
-        (self.root / ".align-r1-high-power").write_text("ALIGN v4 W1 high-power restoration required\n")
+        self._own_w1_marker(self.root / ".align-r1-high-power")
         original = host.__getitem__
 
         def interrupted(argv):
@@ -1045,6 +1051,53 @@ runpy.run_path(script, run_name='__main__')
         self.assertNotIn("restore", host.calls)
         refusal = json.loads((self.custody / "night/refusal.json").read_text())["refusal"]
         self.assertIn("host night lock", refusal["detail"])
+
+    def test_declared_high_power_restores_another_sessions_marker_and_refuses(self) -> None:
+        # Round-6 Sol critique: an abandoned session's W1 marker is a restore
+        # owed, not this night's own obligation.
+        self._declare_high_power()
+        host = self._power_host(2)
+        marker = self._w1_host_marker(custody_root=self.root / "an-abandoned-session" / "custody")
+        exit_code, calls = self._run_night()
+        self.assertEqual((exit_code, calls), (3, []))
+        self.assertEqual(host.calls[:3], ["read", "restore", "read"])
+        self.assertEqual(host.mode, 0)
+        self.assertFalse(marker.exists())
+
+    def test_declared_high_power_without_a_marker_writes_one_for_the_night(self) -> None:
+        # Round-6 Sol critique: a High Power night always leaves a host-level
+        # obligation while it measures (a SIGKILL is then restored later).
+        from joulewise.align.apple import powermode
+        self._declare_high_power()
+        host = self._power_host(2)
+        marker = Path(powermode.host_marker_path())
+        during = []
+        calls, spawn = self._popen_recorder()
+
+        def spawn_and_look(argv, *args, **kwargs):
+            during.append(powermode.owned_by(marker, custody_root=self.custody))
+            return spawn(argv, *args, **kwargs)
+        with mock.patch.object(self.driver.subprocess, "Popen", spawn_and_look):
+            exit_code = self.driver.run_night(self.plan_path)
+        self.assertEqual((exit_code, during), (0, [True]))
+        self.assertEqual(host.mode, 0)
+        self.assertFalse(marker.exists())
+
+    def test_a_restore_that_does_not_read_back_zero_keeps_the_marker(self) -> None:
+        # Round-6 Sol critique: the markers were removed before the read-back.
+        host = self._power_host(2)
+        marker = self._w1_host_marker(custody_root=self.root / "earlier" / "custody")
+        original = host.__getitem__
+
+        def stuck(argv):
+            result = original(argv)
+            if argv == RESTORE_AUTOMATIC_ARGV:
+                host.mode = 2              # exit 0, but the mode stays 2
+            return result
+        with mock.patch.object(type(host), "__getitem__", lambda self, argv: stuck(argv)):
+            exit_code, calls = self._run_night()
+        self.assertEqual((exit_code, calls), (3, []))
+        self.assertTrue(marker.exists())
 
     def test_automatic_plan_never_runs_the_close_restore(self) -> None:
         host = self._power_host(0)

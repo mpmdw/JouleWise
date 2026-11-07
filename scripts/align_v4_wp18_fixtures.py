@@ -92,8 +92,13 @@ def build_fixture(arm, turns_bytes, pilot_bytes):
         raise ValueError(f'{arm} {run_id}: member must have a summary')
     if summary.get('excluded', False) is not False:
         raise ValueError(f'{arm} {run_id}: summary is excluded')
-    if type(summary.get('seed')) is not int or summary['seed'] != seed:
-        raise ValueError(f'{arm} {run_id}: summary seed must equal {seed}')
+    # Round-6 Sol critique: the pilot desk's summary seed is the episode's seed
+    # index (Episode.seed, scripts/align_pilot_session.py), from which the seed
+    # law derives the sampled episode seed; accept either pinned identity of
+    # this member. The rows' per-turn seeds below bind the derived seed.
+    if type(summary.get('seed')) is not int or summary['seed'] not in (seed_index, seed):
+        raise ValueError(f'{arm} {run_id}: summary seed must equal its seed index {seed_index} '
+                         f'(or the derived episode seed {seed})')
     for field, expected in (('task_pair', PAIR), ('condition', condition)):
         values = [record[field] for record in (summary, member) if field in record]
         if not values or any(v not in (expected, 'shade/' + expected) for v in values):

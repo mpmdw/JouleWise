@@ -277,7 +277,7 @@ def read_ac_powermode(runner=None, *, retries=READ_RETRIES):
             "error": attempts[-1].get("error") or f"exit {attempts[-1].get('exit_code')}"}
 
 
-def admit_ac_powermode(expected, *, marker=None, runner=None, markers=(), lock=None):
+def admit_ac_powermode(expected, *, marker=None, runner=None, markers=(), lock=None, owner=None):
     """Admit only if the AC-profile powermode equals ``expected`` (0 or 2).
 
     A High Power marker (``marker`` and ``markers``: the host-level marker of
@@ -292,7 +292,11 @@ def admit_ac_powermode(expected, *, marker=None, runner=None, markers=(), lock=N
     restores first, and the night then refuses on the mode. A restore never
     runs while another process holds the host night lock (``lock`` is the
     caller's HostLock; if it does not hold it, it is taken without waiting
-    for the restore and released after): that refuses instead. Returns the
+    for the restore and released after): that refuses instead. With
+    ``owner`` (the admitted night's ``custody_root``/``plan_path``), only W1
+    markers that night owns are kept under 2; another session's W1 marker is
+    a restore owed first (round-6 Sol critique). Markers are removed only
+    after the restore reads back 0. Returns the
     record a caller stores in its arm or admission evidence; ``admitted`` is
     False with a ``reason`` otherwise.
     """
@@ -312,7 +316,8 @@ def admit_ac_powermode(expected, *, marker=None, runner=None, markers=(), lock=N
     record["observations"].append({"point": "admission", **first})
     present = [m for m in candidates if os.path.lexists(m)]
     record["markers_present"] = present
-    if present and expected == 2 and all(w1_marker(m) for m in present):
+    if present and expected == 2 and all(w1_marker(m) and (owner is None or owned_by(m, **owner))
+                                         for m in present):
         record["marker_present"] = True
         record["marker_kept"] = "expected 2: the restore is owed at this night's close"
         final = first
@@ -341,10 +346,13 @@ def admit_ac_powermode(expected, *, marker=None, runner=None, markers=(), lock=N
                 record["observed"] = first["value"]
                 return refuse("R1 High Power marker present and the Automatic restore failed "
                               f"(exit {code}): {stderr.strip()}")
-            for path in present:
-                if os.path.lexists(path):
-                    os.unlink(path)
             second = read_ac_powermode(runner)
+            if second["value"] == 0:
+                # Round-6 Sol critique: the obligation is cleared only once the
+                # restore reads back Automatic.
+                for path in present:
+                    if os.path.lexists(path):
+                        os.unlink(path)
         finally:
             if taken:
                 lock.release()

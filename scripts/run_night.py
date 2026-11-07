@@ -3992,7 +3992,8 @@ def _power_markers(plan: NightPlan) -> list[str]:
             str(Path(plan.measurement_root) / powermode.R1_HIGH_POWER_MARKER)]
 
 
-def _admit_ac_powermode(plan: NightPlan, probes: Probes, lock: Any = None) -> dict[str, Any]:
+def _admit_ac_powermode(plan: NightPlan, probes: Probes, lock: Any = None,
+                        plan_path: Path | None = None) -> dict[str, Any]:
     """HIGH-3 host-level admission through the probe seam (tests fake ``run``).
 
     Reads the AC-profile ``powermode`` (exact key in the ``AC Power:`` block),
@@ -4010,7 +4011,8 @@ def _admit_ac_powermode(plan: NightPlan, probes: Probes, lock: Any = None) -> di
     expected = night_gate.DEFAULT_AC_POWERMODE if plan.ac_powermode is None else plan.ac_powermode
     markers = _power_markers(plan)
     try:
-        record = powermode.admit_ac_powermode(expected, markers=markers, runner=runner, lock=lock)
+        record = powermode.admit_ac_powermode(expected, markers=markers, runner=runner, lock=lock,
+                                              owner={"custody_root": plan.custody_root, "plan_path": plan_path})
     except Exception as error:  # noqa: BLE001 - admission evidence, never a crash
         record = {"expected": expected, "observed": None, "marker": markers[0], "marker_present": None,
                   "admitted": False, "reason": f"admission failed: {type(error).__name__}: {error}"}
@@ -4092,6 +4094,22 @@ def _close_ac_powermode(plan: NightPlan, probes: Probes, admission: Mapping[str,
             except BaseException:  # noqa: BLE001
                 pass
     return record
+
+
+def _own_high_power_marker(plan: NightPlan, plan_path: Path, admission: dict[str, Any]) -> None:
+    """R6-7 (round-6 Sol critique): a night measuring under High Power always
+    leaves a host-level obligation, so a SIGKILL of it is restored by the
+    next session start or admission even if no marker was present."""
+    from joulewise.align.apple import powermode
+    if any(os.path.lexists(m) for m in _power_markers(plan)):
+        return
+    try:
+        powermode.write_host_marker(powermode.host_marker_path(), tag=powermode.W1_MARKER_TAG,
+                                    owner={"custody_root": plan.custody_root, "plan_path": plan_path,
+                                           "writer": "run_night admission"})
+        admission["marker_written_at_admission"] = True
+    except OSError as error:
+        admission["marker_written_at_admission"] = f"failed: {type(error).__name__}: {error}"
 
 
 def _take_host_lock(plan: NightPlan) -> Any:
@@ -4199,7 +4217,7 @@ def _run_night(
                                "plan_declared": plan.ac_powermode, "admitted": False,
                                "reason": "another night holds the host night lock (lead ruling R6-7)"}
     else:
-        powermode_admission = _admit_ac_powermode(plan, probes, lock=host_lock)
+        powermode_admission = _admit_ac_powermode(plan, probes, lock=host_lock, plan_path=plan_path)
     if not powermode_admission["admitted"]:
         if host_lock is not None and host_lock.held:
             # Lead ruling R6-7: a W1 High Power night refused at admission
@@ -4219,6 +4237,7 @@ def _run_night(
         # restored when this night closes, whatever its outcome. R6-7: the
         # night holds the host night lock until then.
         closers.append(lambda: _close_ac_powermode(plan, probes, powermode_admission, host_lock))
+        _own_high_power_marker(plan, plan_path, powermode_admission)
     _append_log(custody_root, "ac powermode admitted: expected {expected} observed {observed}{restored}".format(
         expected=powermode_admission["expected"], observed=powermode_admission["observed"],
         restored=" (R1 High Power marker restored to Automatic)" if powermode_admission["marker_present"] else ""))

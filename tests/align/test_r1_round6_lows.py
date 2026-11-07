@@ -276,6 +276,25 @@ class FixtureLowTests(unittest.TestCase):
                     fixtures.build_fixture(arm, b''.join(fixture_tests.json_bytes(row) for row in rows),
                                            self.case.pilot_path.read_bytes())
 
+    def test_summary_seed_is_the_members_seed_index(self):
+        # Round-6 Sol critique: the pilot desk records Episode.seed, the seed
+        # index (16 / 14), not the derived 64-bit episode seed.
+        for arm, other in (('X', 'Y'), ('Y', 'X')):
+            for value, ok in ((fixtures.ARMS[arm][2], True), (fixtures.ARMS[arm][3], True),
+                              (fixtures.ARMS[other][2], False), (fixtures.ARMS[other][3], False)):
+                pilot = json.loads(self.case.pilot_path.read_bytes())
+                for member in pilot['members']:
+                    if member['run_id'] == fixtures.ARMS[arm][0]:
+                        member['summary']['seed'] = value
+                args = (arm, b''.join(fixture_tests.json_bytes(row) for row in self.case.rows[arm]),
+                        fixture_tests.json_bytes(pilot))
+                with self.subTest(arm=arm, value=value):
+                    if ok:
+                        fixtures.build_fixture(*args)
+                    else:
+                        with self.assertRaisesRegex(ValueError, 'summary seed'):
+                            fixtures.build_fixture(*args)
+
     def test_extractor_and_kit_round_trip(self):
         self.case.run_tool()
         inputs = json.loads(self.case.inputs_path.read_bytes())

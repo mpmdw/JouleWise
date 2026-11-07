@@ -45,7 +45,7 @@ class WP18FixtureTests(unittest.TestCase):
                   {'generation': {'prompt_token_ids': [6, 7, 8, 9], 'output_token_ids': [10]}}],
         }
         self.members = []
-        for arm, (run_id, condition, _, seed) in IDENTITIES.items():
+        for arm, (run_id, condition, seed_index, seed) in IDENTITIES.items():
             for index, row in enumerate(self.rows[arm]):
                 # The endpoint's row shape: turn index, and the sampler's per-turn
                 # seed from the member's episode seed (cold pass LOW-5, R6-8).
@@ -57,7 +57,7 @@ class WP18FixtureTests(unittest.TestCase):
                 'run_id': run_id, 'task_pair': 'spam_filter_update', 'condition': condition,
                 'excluded': False, 'exclusion_codes': [],
                 'summary': {
-                    'episode_id': f'synthetic-{arm}', 'seed': seed,
+                    'episode_id': f'synthetic-{arm}', 'seed': seed_index,   # the desk's Episode.seed
                     'task_pair': 'shade/spam_filter_update', 'condition': condition,
                     'per_turn_decode_tokens': [len(g['output_token_ids']) for g in generations],
                     'per_turn_output_token_ids': [g['output_token_ids'][:] for g in generations],
