@@ -126,6 +126,29 @@ class UnmeasuredMemberTests(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertEqual(out["windows"]["ALPHA"]["neg8"]["recorded_endpoint_protocol"], "replicated_endpoints_with_midpoint")
 
+    def test_stored_verdict_path_reads_the_verdict_protocol_word(self):
+        """PR #693 review (Fable L2): the stored-verdict path reads the protocol from the verdict's NEG-8 bracket.
+
+        L9 prints the allowance from that same bracket; without the word the survivor terms stayed expected
+        (a false hold). Only the word is read: the recorded allowance stays unread outside diagnostic mode, so
+        neg8_allowance_unrecorded and the stopping neg8_source_not_rescreen flag are unchanged.
+        """
+        a = full_pack(self.root, "ALPHA", 5)
+        dump(a / "derived/neg8-allowance.json", {"source": "stored_verdict"})
+        p = a / "sources/claim-runs/whole-window-verdict.json"
+        verdict = json.loads(p.read_text())
+        verdict.setdefault("idle_admission_core", {})["neg8_bracket"] = {
+            "claim_families": {"gross_energy": {"endpoint_protocol": "legacy_single_member_endpoints"}}}
+        dump(p, verdict)
+        rc, out, _ = run_cli({"ALPHA": a}, self.root / "stored.json")
+        self.assertEqual(rc, 0)
+        neg8 = out["windows"]["ALPHA"]["neg8"]
+        self.assertEqual(neg8["recorded_endpoint_protocol"], "legacy_single_member_endpoints")
+        self.assertIsNone(neg8["allowance_recorded_j"])
+        codes = {f["code"] for f in out["flags"]}
+        self.assertTrue({"neg8_source_not_rescreen", "neg8_allowance_unrecorded"} <= codes)
+        self.assertTrue(out["comparison_stopped"])
+
 
 class UnanchoredMemberTests(unittest.TestCase):
     def setUp(self):

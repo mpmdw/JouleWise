@@ -1191,7 +1191,11 @@ class Window:
         # Structure only: the record's gross-family endpoint protocol word. The bracket writer records the two
         # survivor bound terms only under replicated_endpoints (whole_window.py survivor_fields), so the
         # comparator compares them only when the record can carry them (2026-11-07 release trace, D6).
-        protocol = get(bracket, "claim_families", "gross_energy", "endpoint_protocol")
+        # On the stored-verdict path the word is read from the verdict's NEG-8 bracket, the one L9 prints from,
+        # in every mode; the recorded allowance above stays diagnostic-only (PR #693 review, Fable L2).
+        protocol_source = bracket if bracket or source.get("source") != "stored_verdict" else get(
+            self.verdict, "idle_admission_core", "neg8_bracket", default={})
+        protocol = get(protocol_source, "claim_families", "gross_energy", "endpoint_protocol")
         result["recorded_endpoint_protocol"] = protocol if isinstance(protocol, str) else None
         if not finite(recorded):
             r.flag("neg8_allowance_unrecorded", "window", "no recorded gross allowance")
