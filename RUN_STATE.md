@@ -1137,6 +1137,23 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
   - (2) Stop the Codex MCP adapter, then launch R0 per `docs/process/R0_HEADLESS_LAUNCH.md` in a clean gap long enough for 4-4.5 h (the adaptive idle adds up to 15 min).
   - (3) WP18 and items 188 (3)-(4) are unchanged.
 
+- **Build and review rounds, 02:45-04:10 PST, on #692:**
+  - `c0c460fd9`: D1-D6 build. Cold passes from Fable and Opus: ADMIT_WITH_FIXES, giving Erratum 2.
+  - `695574428` + `eb6e8e493`: Erratum 2 and 3 fixes. Delta reviews from Fable and Opus: ADMIT_WITH_FIXES. The
+    D1 (d) reference was fragile (one late recovery read moved it and excluded the Tf family), giving
+    Erratum 4.
+  - Erratum 4 fix round: Sol 6.1 xhigh, brief `/Users/edr/night-archive/r0-smc-cov/build5/BRIEF.md`.
+  - Errata 1-4 and all reviews: `records/2026-11-07-align-r0-v4-rerun7`, `docs/align/r0/2026-11-07-rerun7/fresh/`.
+  - The real journal gives Tf18 / TaLP at every head so far.
+- **Next activation (replaces the pointer above):**
+  - (1) If the Erratum 4 round is committed, the lead verifies:
+    - the Metal thermal tests and the real replay, run outside the seat sandbox;
+    - one delta executing review (Opus, or Fable) of Erratum 4 only;
+    - CI green.
+  - (2) Then merge into `lane/2026-11-05-align-pilot10-benign`, fast-forward `$M`, stop the Codex MCP adapter, and
+    launch R0 in a clean gap long enough for about 4.5 h (06:15-11:05, 13:15-17:05 or 17:15-23:05 PST).
+  - (3) WP18 and items 188 (3)-(4) are unchanged.
+
 194. **Magistrate activation 62c121f8 (Opus 5.5, headless, 2026-11-07 from 00:02 PST): R0 re-run 6 was refused in `smc` at 00:00 PST by macOS's daily `/tmp` cleaner. That is the third `smc` refusal in a row, so it went to Ed under item 181, and R0 waits for his answer. The WP18 fixture tool (item 191) refused on a tool defect; nothing was committed from it.** No pending notices, no unread mail from Ed, no new directive.
 - **Run** `/Users/edr/night-align/r0-v4-20261107T0720Z` (07:18:54Z-08:00:04Z, 2,470 s): status `fail`, `complete_r0` false.
   - host, host-identity, model-load, generated (0 off-spec turns) and memory (peak 37,025,283,164 bytes against 45e9; swap flat): pass.
