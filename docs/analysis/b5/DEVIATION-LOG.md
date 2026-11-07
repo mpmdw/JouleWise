@@ -307,6 +307,17 @@ other outcome-bearing content was seen by the tracer, the assembler or the lead.
      compares them only when the record's protocol carries them (condition `neg8_survivor_terms`).
    - **Effect on estimands.** None. The bars (`configs/analysis/b5/recompute_bars.json`) are unchanged.
 
+- **Cited rebinds under this entry.**
+  - `joulewise/calibration_bracketing.py` (frozen, seal pin4): edited in place by the under-90 round 2 memo
+    (`13af1baa8`). `tests/b5_analysis/test_frozen_files.py` keeps the freeze on the accepted analysis commit's bytes
+    (`EVOLVED_ON_MAIN`, with the citation). `tests/test_whole_window_inverted_corner_clamp.py`
+    `FROZEN_FILES_TEST_SHA256` is rebound to the edited `test_frozen_files.py`, and
+    `tests/b5_analysis/test_vdl_sol_w2.py` lists `CANDIDATE_PHYSICS_MEMO` as a reviewed memo. Both cite DLE-3.
+  - `configs/gates/hazard_refusals.json` lists `calibration_ledger.custody_probe_code`'s raise (`ae558a914`) as
+    INTERNAL: its only caller catches it, and the effect is that an L4 fill is not stored.
+  - `joulewise/b5_analysis/disclosures.py` and `joulewise/analysis_engine/__init__.py` carry no hash pin in the
+    tree. Their pin is the analysis commit (the tag above). Two integration tests that pinned the old D5b label
+    now expect `not_estimable` and `floor_artifact_invalid`.
 - **What follows.** The block-5 dry run re-runs at `b5/analysis-r3` (D1 changes the step-11 disclosure, D5b the
   step-9 claim verdicts), then DLE-1's release stages run against that dry run. The r2 dry run is not released.
 
