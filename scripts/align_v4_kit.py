@@ -200,6 +200,23 @@ def check_r1_evidence(inputs, r1_slots, *, synthetic=False):
     if not isinstance(thermometry, dict) or thermometry.get('bar') != 'pass':
         raise ValueError('R1 thermometry bar did not pass: the full-inventory classification of the D step '
                          'must give both a die and a heatsink pick (protocol v4 WP14(a))')
+    classified = thermometry.get('D') if isinstance(thermometry.get('D'), dict) else {}
+    # Protocol v4 :249-253: W1's gate keys must be in R1's die/heatsink lists,
+    # and a pick R1 changed (S6/S7 recomputed for the R1 picks) needs the
+    # lead's recorded verification before the W1 freeze (Sol critique HIGH).
+    policy = inputs['R1'].get('thermal_policy')
+    sensors = policy.get('sensors') if isinstance(policy, dict) else None
+    if isinstance(sensors, dict):
+        if sensors.get('s_fast') not in (classified.get('die_candidates') or ()):
+            raise ValueError(f'R1.thermal_policy s_fast {sensors.get("s_fast")!r} is not in the R1 die list')
+        if sensors.get('s_slow') not in (classified.get('heatsink_candidates') or ()):
+            raise ValueError(f'R1.thermal_policy s_slow {sensors.get("s_slow")!r} is not in the R1 heatsink list')
+    if classified.get('sensor_pick_changed') is not False:
+        verification = thermometry.get('lead_verification')
+        if (not isinstance(verification, dict) or not isinstance(verification.get('authority'), str)
+                or not verification['authority'].strip()):
+            raise ValueError('R1 changed (or did not report) the R0 sensor picks (r1.sensor_pick_changed); '
+                             'the lead must record thermometry.lead_verification of S6/S7 for the R1 picks')
     u5 = r1_slots.get('u5')
     if not isinstance(u5, dict) or u5.get('verdict') not in U5_VERDICTS or u5.get('c') != 1.0:
         raise ValueError('R1 r1_slots must carry the U5 verdict with c = 1.0 (lead ruling L2)')

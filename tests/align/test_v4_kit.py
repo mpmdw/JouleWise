@@ -400,7 +400,9 @@ def ready_inputs(i_d=300.0, tail=20.0):
 def r1_record(i_d, tail, *, source=kit.R1_HARDWARE_SOURCE, ac_powermode=0):
     """The fields require_ready binds from an R1 driver r1_slots record."""
     return {'schema': kit.R1_SLOTS_SCHEMA, 'source': source, 'ac_powermode': ac_powermode,
-            'slots_ac_powermode': ac_powermode, 'thermometry': {'bar': 'pass'},
+            'slots_ac_powermode': ac_powermode,
+            'thermometry': {'bar': 'pass', 'D': {'die_candidates': ['TC0P'], 'heatsink_candidates': ['TG0P'],
+                                                 'sensor_pick_changed': False}},
             'max_r1_tail_s': tail, 'slots': {'I_D': i_d, 'T_dead': 1451.0},
             'high_power': {'verdict': 'adopt' if ac_powermode == 2 else 'not_adopted'},
             'u5': {'verdict': 'pass', 'c': 1.0},
@@ -481,6 +483,18 @@ class R1EvidenceBindingTests(unittest.TestCase):
         for value in (None, {'bar': 'fail'}, {}):
             with self.subTest(thermometry=value), self.assertRaisesRegex(ValueError, 'thermometry bar'):
                 kit.require_ready(inputs, dict(slots, thermometry=value))
+        # W1's gate keys must be in R1's lists; a changed pick needs the lead.
+        for role, listing in (('s_fast', 'die'), ('s_slow', 'heatsink')):
+            bad = deepcopy(inputs)
+            bad['R1']['thermal_policy']['sensors'][role] = 'TX9Z'
+            with self.subTest(role=role), self.assertRaisesRegex(ValueError, f'not in the R1 {listing} list'):
+                kit.require_ready(bad, slots)
+        changed = deepcopy(slots)
+        changed['thermometry']['D']['sensor_pick_changed'] = True
+        with self.assertRaisesRegex(ValueError, 'lead_verification'):
+            kit.require_ready(inputs, changed)
+        changed['thermometry']['lead_verification'] = {'authority': 'LEAD-RULINGS-3 S7 verified'}
+        kit.require_ready(inputs, changed)
 
     def test_plan_names_member_5_as_capture_and_no_r1_launcher(self):
         # Fable cold pass LOW-7 (LEAD-RULINGS-2 R5-7).

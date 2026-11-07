@@ -81,6 +81,17 @@ CPU_JOURNAL_MIN_RATE = 0.9
 CPU_JOURNAL_SLACK_S = 5
 CPU_JOURNAL_MAX_GAP_S = 5.0
 QUIET_SEGMENT_BOUND_S = 1800           # planning bound for an unscheduled step segment
+# Sol critique of round 5: segments that run past the member cap need their
+# full bound for the ruling 8 batch-window admission. The 30B/D steps add the
+# fixed 600 s recovery after the member (the 300 s quiet is inside it); the
+# designed start states add the 900 s preheat cap (R5-2: the deadman no longer
+# bounds preheat + G0 + turn).
+STEP_RECOVERY_S = 600
+PLANNING_PREHEAT_CAP_S = 900
+SEGMENT_BOUND_S = {"step-30b": QUIET_SEGMENT_BOUND_S + STEP_RECOVERY_S,
+                   "step-d": QUIET_SEGMENT_BOUND_S + STEP_RECOVERY_S,
+                   **{f"d-planning-turn-r-plus-{int(o)}c": QUIET_SEGMENT_BOUND_S + PLANNING_PREHEAT_CAP_S
+                      for o in PLANNING_START_OFFSETS_C}}
 CPU_BUSY_CORES_LIMIT = 0.5
 CPU_BUSY_SUSTAINED_S = 60
 MAX_SEGMENT_REDOS = 2
@@ -528,7 +539,8 @@ def thermometry_record(name, result):
     if not isinstance(digest, str) or len(digest) != 64:
         raise Refusal(f"{name}: thermometry.classification_sha256 must be a sha256 hex digest")
     keep = ("status", "s_fast", "s_slow", "r0_sensors", "sensor_pick_changed", "flags", "reasons",
-            "die_candidates", "heatsink_candidates", "classification_sha256", "classification_file")
+            "die_candidates", "heatsink_candidates", "classification_sha256", "classification_file",
+            "s7_for_r1_picks")
     return {key: block.get(key) for key in keep}
 
 
@@ -689,7 +701,8 @@ def _segment(args, output, name, kind, duration, workload_class, record, *, quie
     target = output / name
     for attempt in range(MAX_SEGMENT_REDOS + 1):
         release_now = release_first or (attempt > 0 and workload_class == "heavy")
-        bound = (duration or QUIET_SEGMENT_BOUND_S) + (G0_RELEASE_BOUND_S if release_now else 0)
+        bound = ((duration or SEGMENT_BOUND_S.get(kind, QUIET_SEGMENT_BOUND_S))
+                 + (G0_RELEASE_BOUND_S if release_now else 0))
         waited = wait_outside_os_batch(bound) if quiet else 0.0
         release = (_release_against_soak(args, output, f"{name}.g0_release{attempt}", soak_reference)
                    if release_now else None)
@@ -819,12 +832,13 @@ def _set_powermode(guard, mode, label, refusal):
 
 
 def _check_member_powermode(name, result, mode):
-    """R5-5: a D member after the A-B-A decision must have run in the series mode
-    (ruling 7 record), when the runtime reports it."""
+    """R5-5: a model member after the A-B-A decision (and each A-B-A leg) must
+    have recorded, at episode start, the AC powermode it was meant to run in
+    (ruling 7). An unobserved value is not evidence (Sol critique HIGH)."""
     record = result.get("ac_powermode")
     value = record.get("value") if isinstance(record, dict) else None
-    if value is not None and value != mode:
-        raise Refusal(f"{name}: member recorded AC powermode {value}, series mode is {mode}")
+    if type(value) is not int or value != mode:
+        raise Refusal(f"{name}: member recorded AC powermode {value!r}, series mode is {mode}")
 
 
 def _check_soak_reference_consumed(name, result, soak_reference):
@@ -898,6 +912,7 @@ def run(args):
                     results[name], row = _segment(args, output, name, kind, None, "heavy", record, quiet=True,
                                                   soak_reference=soak_reference, release_first=True,
                                                   extra={"powermode": mode})
+                    _check_member_powermode(name, results[name], mode)
                     releases[label] = row["g0_release"]["released"]
                     leg_g0[label] = results[name].get("g0_released")
                     if not isinstance(leg_g0[label], bool):
@@ -914,6 +929,7 @@ def run(args):
                     _set_powermode(guard, 0, "series.restored", "series_restore")
                 quiet = kind in QUIET_KINDS and not (kind == "idle" and name != "idle_soak")
                 model = kind not in ("calibration-pre", "calibration-post", "idle", "idle-until-soak")
+                # (step_30b runs before the decision, in Automatic, unchecked as before.)
                 results[name], row = _segment(
                     args, output, name, kind, duration, workload_class, record, quiet=quiet,
                     soak_reference=soak_reference,

@@ -10,7 +10,9 @@ No model, SHADE cache, sensor or host setting is touched.
 Selected by an R1 runtime config with ``"backend": "synthetic"``; its
 ``synthetic`` block may set ``battery`` {start_pct, drain_pct_per_h,
 resume_at_pct}, ``background_pcpu``, ``decline_after_s`` (a synthetic
-GPU clock decline that far into decode) and ``slow_gain``.
+GPU clock decline that far into decode), ``slow_gain`` and ``powermode_file``
+(a file holding the host's AC powermode, kept by a test's fake sudo, so the
+ruling 7 record follows the driver's A-B-A and series settings).
 """
 from __future__ import annotations
 
@@ -109,7 +111,7 @@ class SyntheticBackend:
         if argv == rt.PMSET_BATT:
             return completed(argv, self.battery_line())
         if argv[:3] == ("/usr/bin/pmset", "-g", "custom"):
-            return completed(argv, PMSET_CUSTOM.format(mode=self.powermode))
+            return completed(argv, PMSET_CUSTOM.format(mode=self.current_powermode()))
         if argv[:3] == ("/usr/bin/pmset", "-g", "therm"):
             return completed(argv, "No thermal warning level has been recorded\n")
         if argv[:2] == ("/usr/sbin/sysctl", "iogpu.wired_limit_mb"):
@@ -192,11 +194,15 @@ class SyntheticBackend:
             return session
         registry = ThermalRegistry(delegate=Delegate(self.world), thermal_factory=factory,
                                    status_factory=lambda telemetry, clock: self.world.status,
-                                   powermode_reader=lambda: self.powermode)
+                                   powermode_reader=self.current_powermode)
         self.world.family, self.world.run_id, self.world.turn = family, config_map["run_id"], 0
         bundle, summary = run_benchmark(BenchmarkConfig.from_mapping(config_map), Path(runs_root), self.clock,
                                         registry=registry)
         return Path(bundle), summary
+
+    def current_powermode(self):
+        path = self.options.get("powermode_file")
+        return int(Path(path).read_text()) if path else self.powermode
 
     def heater(self, workdir):
         heater = SyntheticHeater(self.world)

@@ -138,8 +138,10 @@ class FakeWorld:
             payload["recovery_curve"] = [[0, 55.0], [600, 45.0], [900, 41.0]]
             payload["released"] = out.name not in self.precool_timeout
         if kind in ("step-30b", "step-d"):
-            payload["thermometry"] = {"status": self.thermometry_status, "s_fast": "s_fast", "s_slow": "s_slow",
-                                      "r0_sensors": {"s_fast": "s_fast", "s_slow": "s_slow"},
+            # Keys as the kit's ready_inputs policy names them (TC0P die, TG0P heatsink).
+            payload["thermometry"] = {"status": self.thermometry_status, "s_fast": "TC0P", "s_slow": "TG0P",
+                                      "r0_sensors": {"s_fast": "TC0P", "s_slow": "TG0P"},
+                                      "die_candidates": ["TC0P"], "heatsink_candidates": ["TG0P"],
                                       "sensor_pick_changed": False, "flags": [], "reasons": [],
                                       "classification_sha256": "c" * 64}
         if kind == "x-g" or kind.startswith(("d-spam", "d-bank")):
@@ -154,6 +156,9 @@ class FakeWorld:
                                "prefill": 120.0, "tool": 6.0, "tail": self.tail}})
         if kind == "g0-release-soak":
             payload["released"] = self.released
+        if kind in ("step-30b", "step-d", "x-g", "d-4bit") or kind.startswith(("d-", "high-power-aba-")):
+            # Ruling 7: the episode-start AC powermode the member observed.
+            payload["ac_powermode"] = {"value": self.mode, "source": "pmset -g custom", "observed_at": "episode_start"}
         if kind.startswith("high-power-aba-"):
             leg = kind.rsplit("-", 1)[-1]
             payload["g0_released"] = leg not in self.leg_g0_unreleased
@@ -963,20 +968,43 @@ class Round5RulingTests(unittest.TestCase):
             self.assertEqual({mode for kind, _, mode in world.invocations if kind == "step-d"}, {0})
 
     def test_a_member_that_ran_outside_the_series_mode_refuses(self):
-        with tempfile.TemporaryDirectory() as td:
-            world = FakeWorld(t_decline={"a1": 20.0, "b": 30.0, "a2": 21.0})
+        # An unobserved mode (both episode-start pmset reads failed) is not
+        # evidence either (Sol critique of round 5).
+        for kind, value, expected in (("step-d", 0, "series mode is 2"), ("step-d", None, "series mode is 2"),
+                                      ("d-planning-turn-r-plus-0c", None, "series mode is 2"),
+                                      ("high-power-aba-b", None, "series mode is 2")):
+            with self.subTest(kind=kind, value=value), tempfile.TemporaryDirectory() as td:
+                world = FakeWorld(t_decline={"a1": 20.0, "b": 30.0, "a2": 21.0})
 
-            def runner(argv):
-                result = world(argv)
-                if "--r1-kind" in argv and "step-d" in argv:
-                    payload = json.loads(result.stdout)
-                    payload["ac_powermode"] = {"value": 0, "source": "pmset", "observed_at": "episode_start"}
-                    result = completed(argv, out=json.dumps(payload))
-                return result
-            result, registration = self.run_world(td, runner, expected=3)
-            self.assertIsNone(registration)
-            self.assertIn("series mode is 2", result["error"])
-            self.assertEqual(world.mode, 0)
+                def runner(argv):
+                    result = world(argv)
+                    if "--r1-kind" in argv and argv[argv.index("--r1-kind") + 1] == kind:
+                        payload = json.loads(result.stdout)
+                        payload["ac_powermode"] = {"value": value, "source": "pmset", "observed_at": "episode_start"}
+                        result = completed(argv, out=json.dumps(payload))
+                    return result
+                result, registration = self.run_world(td, runner, expected=3)
+                self.assertIsNone(registration)
+                self.assertIn(expected, result["error"])
+                self.assertEqual(world.mode, 0)
+
+    def test_batch_window_admission_uses_each_segment_s_full_bound(self):
+        # Sol critique of round 5: the steps now run 600 s past the member and
+        # the designed states have a 900 s preheat outside the deadman.
+        with tempfile.TemporaryDirectory() as td:
+            world = FakeWorld()
+            waits = []
+
+            def wait(expected_s, **_):
+                waits.append((world.invocations[-1][0] if world.invocations else None, expected_s))
+                return 0.0
+            with patch.object(r1, "wait_outside_os_batch", wait):
+                self.run_world(td, world)
+            bounds = [w for _, w in waits]
+            self.assertIn(2400, bounds)      # 30B and D steps: 1,800 + 600 s recovery
+            self.assertIn(2700, bounds)      # designed start states: 1,800 + 900 s preheat
+            self.assertEqual(r1.SEGMENT_BOUND_S["step-d"], 2400)
+            self.assertEqual(r1.SEGMENT_BOUND_S["d-planning-turn-r-plus-4c"], 2700)
 
     def test_full_inventory_thermometry_is_registered_and_a_null_pick_fails_the_bar(self):
         with tempfile.TemporaryDirectory() as td:

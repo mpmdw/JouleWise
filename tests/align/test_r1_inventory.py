@@ -14,7 +14,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from joulewise.align.apple.r1_runtime import (
-    InventoryJournal, NS, ProductionBackend, RuntimeFailure, classify_step,
+    InventoryJournal, NS, ProductionBackend, RuntimeFailure, classify_step, s7_for_picks,
 )
 from tests.align.r1_synthetic import SyntheticBackend
 from tests.align.w1_synthetic import AMBIENT_C, FAST, SLOW, FAN
@@ -131,6 +131,26 @@ class ClassificationTests(unittest.TestCase):
         result = self.classify(inventory, rows)
         self.assertEqual(result["status"], "fail")
         self.assertIsNone(result["s_slow"])
+
+
+class ChangedPickRecoveryTests(unittest.TestCase):
+    """Protocol v4 :249-251 (Sol critique of round 5): when R1 changes R0's
+    picks, S7 is recomputed for the R1 picks from the full-inventory journal."""
+
+    def test_s7_for_the_r1_picks_from_the_inventory_journal(self):
+        _, rows = step_capture()
+        result = s7_for_picks(rows, {"s_fast": FAST, "s_slow": SLOW}, prefill_ns=PREFILL_NS, quiet_s=300)
+        self.assertAlmostEqual(result["reference_c"]["s_slow"], 40.0, places=6)
+        self.assertEqual(result["band_c"]["s_slow"], 1.0)
+        # Slow peak 6 (1 - e^-2) = 5.19 C decays (tau 60 s) to 1.0 C after ~99 s.
+        self.assertAlmostEqual(result["recovery_s"], 60 * math.log(6 * (1 - math.exp(-2))), delta=1.5)
+        self.assertFalse(result["recovery_censored"])
+        self.assertAlmostEqual(result["S7"], min(300.0, 3 * result["recovery_s"]))
+        short = [r for r in rows if r["started"]["monotonic_ns"] <= 1450 * NS]
+        censored = s7_for_picks(short, {"s_fast": FAST, "s_slow": SLOW}, prefill_ns=PREFILL_NS, quiet_s=300)
+        self.assertTrue(censored["recovery_censored"])
+        quiet_missing = s7_for_picks(rows, {"s_fast": FAST, "s_slow": "TZ9Z"}, prefill_ns=PREFILL_NS, quiet_s=300)
+        self.assertIsNone(quiet_missing["S7"])
 
 
 class JournalTests(unittest.TestCase):

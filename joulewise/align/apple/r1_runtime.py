@@ -655,6 +655,39 @@ def derive_step_d_slots(*, ep, turn, wall_s, responses, recovery_s, recovery_cen
     return slots, detail
 
 
+def s7_for_picks(rows, picks, *, prefill_ns, quiet_s):
+    """Protocol v4 :249-251: when R1 changes R0's picks, S7 recovery is computed
+    for the R1 picks from the full-inventory journal (the lead verifies it
+    before the W1 freeze). The soak journal holds only R0's keys, so each new
+    key's reference is the median of the quiet window before prefill and its
+    band max(1.0 C, 3 x that window's SD) (FD 2.6's form). S7 = min(300 s,
+    3 x the time from the slow pick's peak to both picks within band)."""
+    from statistics import pstdev
+    out = {"keys": dict(picks), "rule": "reference = quiet-window median; band = max(1.0, 3 SD); "
+                                        "S7 = min(300, 3 x peak-to-band recovery)"}
+    reference, band = {}, {}
+    for role, key in picks.items():
+        quiet = [r["values"]["sensors"].get(key) for r in rows
+                 if prefill_ns - round(quiet_s * NS) <= r["started"]["monotonic_ns"] < prefill_ns]
+        quiet = [v for v in quiet if _finite(v)]
+        if len(quiet) < 5:
+            return {**out, "S7": None, "reason": f"{key}: fewer than five quiet samples"}
+        reference[role], band[role] = median(quiet), max(BAND_FLOOR_C, 3.0 * pstdev(quiet))
+    after = [(r["started"]["monotonic_ns"], r["values"]["sensors"]) for r in rows
+             if r["started"]["monotonic_ns"] >= prefill_ns]
+    slow = [(t, v[picks["s_slow"]]) for t, v in after if _finite(v.get(picks["s_slow"]))]
+    if not slow:
+        return {**out, "S7": None, "reason": "no slow-pick samples after prefill"}
+    peak_ns = max(slow, key=lambda tv: (tv[1], -tv[0]))[0]
+    recovered = next((t for t, v in after if t >= peak_ns and all(
+        _finite(v.get(key)) and v[key] <= reference[role] + band[role] for role, key in picks.items())), None)
+    censored = recovered is None
+    end = recovered if not censored else after[-1][0]
+    recovery_s = max(1.0, (end - peak_ns) / NS)
+    return {**out, "reference_c": reference, "band_c": band, "recovery_s": recovery_s,
+            "recovery_censored": censored, "S7": min(300.0, 3.0 * recovery_s)}
+
+
 def decode_energy(ep):
     from joulewise.align.attribution import attribute_episode
     attributed = attribute_episode(ep, source="powermetrics", channel="gpu_power")
@@ -1287,7 +1320,12 @@ class Segment:
                 role for role in ("s_fast", "s_slow") if result[role] is None)])
         keep = ("status", "s_fast", "s_slow", "r0_sensors", "sensor_pick_changed", "flags", "die_candidates",
                 "heatsink_candidates", "record_only", "phases", "journal_rows", "classification_sha256")
-        return {**{key: result.get(key) for key in keep}, "reasons": reasons,
+        extra = {}
+        if not record_only and result["sensor_pick_changed"] and result["s_fast"] and result["s_slow"]:
+            extra["s7_for_r1_picks"] = s7_for_picks(
+                self.inventory.rows, {"s_fast": result["s_fast"], "s_slow": result["s_slow"]},
+                prefill_ns=turn.start_ns, quiet_s=STEP_QUIET_S)
+        return {**{key: result.get(key) for key in keep}, **extra, "reasons": reasons,
                 "classification_file": path.relative_to(self.out).as_posix(),
                 "keys_inventoried": len(self.inventory.keys), "for_record_only": record_only}
 
@@ -1410,7 +1448,7 @@ class Segment:
                 "delta_slow_c": bands["delta_slow_c"], "energy_j": record["turn_owned_j"],
                 "designed_offset_c": offset, "designed_release_c": target, "g0_outcome": g0["outcome"],
                 "bundle": str(member.bundle.relative_to(self.out)), "member_status": member.status,
-                "episode_flags": list(member.ep.flags)}
+                "episode_flags": list(member.ep.flags), "ac_powermode": member.ep.hardware.get("ac_powermode")}
 
     def k_x_g(self):
         template, tspec = self.template("x_g")
@@ -1426,7 +1464,8 @@ class Segment:
         record = read_bundle_record(member.bundle)
         return {**self.reference_fields(reference, member.ep), "energy_j": record["turn_owned_j"], "admitted_turns": len(member.ep.turns),
                 "bundle": str(member.bundle.relative_to(self.out)), "member_status": member.status,
-                "episode_flags": list(member.ep.flags), "phases_s": episode_phases(member.ep)}
+                "episode_flags": list(member.ep.flags), "phases_s": episode_phases(member.ep),
+                "ac_powermode": member.ep.hardware.get("ac_powermode")}
 
     def k_harvest(self):
         parent = self.out.parent
