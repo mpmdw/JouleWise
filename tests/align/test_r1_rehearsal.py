@@ -628,7 +628,10 @@ class R1Tests(unittest.TestCase):
             self.assertEqual(world.mode, 0)
             result = json.loads((Path(td) / "b/run/r1_result.json").read_text())
             self.assertEqual(result["status"], "complete")
-            self.assertEqual(result["powermode"][-1]["point"], "restore_automatic")
+            # The signal neither interrupted the last restore nor became a teardown error.
+            self.assertNotIn("teardown_errors", result)
+            # Restore records: proof at entry, the context exit, and the one in ``finally``.
+            self.assertEqual([r["point"] for r in result["powermode"]].count("restore_automatic"), 3)
             self.assertEqual({sig: signal.getsignal(sig) for sig in previous}, previous)
 
     def test_signal_burst_cannot_interrupt_the_automatic_restore(self):
