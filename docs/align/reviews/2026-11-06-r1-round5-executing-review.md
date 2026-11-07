@@ -1,6 +1,6 @@
 # Executing review: ALIGN v4 R1 round 5 (2026-11-06)
 
-**Verdict: ADMIT_WITH_FIXES.** No BLOCKER and no HIGH. Each ruling R5-1 to R5-10 is implemented as written in `LEAD-RULINGS-2.md`. The one integration deviation (the A-B-A leg bound uses I_D = 1,750 s) is recorded there and only waits longer. I fixed two MEDIUM findings and one LOW in `ad9288196`, each with a test that fails on `d1639a0b3`:
+**Verdict: ADMIT_WITH_FIXES.** No BLOCKER and no HIGH. Each ruling R5-1 to R5-10 is implemented as written in `LEAD-RULINGS-2.md`. The one integration deviation (the A-B-A leg bound uses I_D = 1,750 s) is recorded there and only waits longer. I fixed two MEDIUM findings and one LOW in `969677052`, each with a test that fails on `d1639a0b3`:
 
 - a first signal inside the W1 High Power entry left the host at 2 (found by the Sol critic);
 - the ruling 8 batch-window bound for the steps and the designed start states left out the G0 and quiet time that R5-2 moved outside the deadman (found by me and by Sol);
@@ -174,7 +174,7 @@ Each follows from a ruling, and the contract doc states each.
 - If the bar should reproduce W1, a fixed 300 s idle before each gated run (with the soak R kept) is the exact W1 case. A G0 timeout would then count against the run, as it would in W1.
 - Otherwise, record in protocol v4 that the W1 D-after-D G0 is predicted from the ruling 1(c) recovery curve (`cooldown_after_D`), not from the bar.
 
-**MEDIUM-3 (fixed in `ad9288196`; Sol critic F4): a first signal inside the W1 High Power entry left the host at 2.**
+**MEDIUM-3 (fixed in `969677052`; Sol critic F4): a first signal inside the W1 High Power entry left the host at 2.**
 - `install` called `powermode.enter_high_power` before the `try` whose `except BaseException` restores Automatic, and `high` was still `None` there.
 - A SIGINT after `sudo pmset -c powermode 2` returned (for example, during the read-back) escaped with the host at 2 and the W1 marker in place.
 - The fix moves the entry inside the `try` and restores whenever the entry was attempted.
@@ -197,7 +197,7 @@ Each follows from a ruling, and the contract doc states each.
 
 ### LOW
 
-1. **(Fixed in `ad9288196`.)** `gated_budget` accepted `T_dead: "1200"`, because `float("1200")` succeeds and only bools were excluded. It now requires a JSON number. Covered by `BudgetTests.test_no_non_evidence_b_d_reaches_a_gated_run`. The step-d slots are always floats, so this was not reachable from a real step-d.
+1. **(Fixed in `969677052`.)** `gated_budget` accepted `T_dead: "1200"`, because `float("1200")` succeeds and only bools were excluded. It now requires a JSON number. Covered by `BudgetTests.test_no_non_evidence_b_d_reaches_a_gated_run`. The step-d slots are always floats, so this was not reachable from a real step-d.
 2. **(Sol F2.)** In `k_step(leg=True)` the INCONCLUSIVE return for an unreleased G0 comes before `incomplete_member_reasons`. A leg that also failed (for example `telemetry_failed`, `thermal.custody_invalid`) becomes INCONCLUSIVE instead of refusing. The outcome is the conservative one (no adoption, Automatic), and the reasons are kept in `incomplete_reasons`. But it is wider than the builder's stated scope ("any other incomplete leg still exits 3"). Fix: return INCONCLUSIVE only when the incomplete reasons are a subset of the unreleased-G0 flags.
 3. **(Sol F1, rated HIGH by Sol; I rate it LOW.)** This is older code, from `f1864e314`, not round 5. `Segment.close_session` removes the session from `open_sessions` before it closes it. A first TERM that lands inside the powermetrics adapter's stop, after it clears its process reference and before it terminates the process, leaves no handle for `Segment.close` to retry. The runtime then exits 143 and cancels its watchdog, and powermetrics may keep running. The window is a few bytecodes inside one stop call on a night that is already aborting. Fix: block TERM/INT/HUP (`pthread_sigmask`) around each session close, or close before removing and make the adapter's stop idempotent.
 4. **(Sol F6.)** `validate_wp18_fixtures` checks the schema, arm, run id, `max_turns`, the list length and the sha256 against `inputs.json`, but not the turn contents. A fixture of `[{}] * max_turns` whose digest is also written into the inputs passes. The fixtures come from the authenticating script, so this needs a wrong commit, not a bad measurement. Fix: re-check that each turn has `turn` = its index and non-empty int `prompt_token_ids`/`output_token_ids`, and that `sources` holds two digests.
@@ -206,11 +206,18 @@ Each follows from a ruling, and the contract doc states each.
 
 ### Sol critic F5
 
-F5 is the planning batch-window bound. It is the same finding as my ruling 8 bound fix: the bound was 2,700 s against caps of 900 + 600 + 1,580 = 3,080 s, and Sol's fake-clock admission at 10:59 ended at 11:47. It is fixed in `ad9288196`.
+F5 is the planning batch-window bound. It is the same finding as my ruling 8 bound fix: the bound was 2,700 s against caps of 900 + 600 + 1,580 = 3,080 s, and Sol's fake-clock admission at 10:59 ended at 11:47. It is fixed in `969677052`.
 - Steps: 1,800 + 600 G0 + 300 quiet + 600 recovery = 3,300 s.
 - Designed states: 1,800 + 900 + 600 = 3,300 s.
 - The amended test asserts that each bound covers the runtime's own caps around the re-armed deadman (600 + 300 + 1.13544 × 1,580 + 600 for the steps; 900 + 600 + 1.13544 × 1,580 for the states).
 - The 1,800 s base predates round 5 and does not itself include I_D; a larger bound only waits longer.
+
+## Relation to the round-5 cold pass (`d5f1b6606`)
+
+The Fable cold pass over the same head landed on the lane while this review ran. I read it after finishing, and the fixes were rebased onto it.
+- Its MEDIUM-2 (a W1 High Power night that never reaches post-admission is never restored) contains my MEDIUM-4. The J4 abandoned launch is one of its exits; it also lists an unparsable plan, a rerun record and an admission refusal. I agree with it, and with its suggestion to set High Power in `run_night` after admission instead of at `install`, which would close both and also my MEDIUM-3 class of paths.
+- Its MEDIUM-1 (`install` returns success-shaped output without installing when launchd already holds the night job, leaving the host at 2) is a path I did not find. It is separate from the signal path fixed here: `969677052` restores only when the entry or the arm raises.
+- Its LOW-4 (the soak-reference check accepts any sensor's mean) is the same weakness I noted while reading `_check_soak_reference_consumed`. Its MEDIUM-3 (changed picks force W1's turn cap to the R0-pick S7) is outside what I checked.
 
 ## For the lead
 
