@@ -1095,6 +1095,23 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
   - (2) R0 stays held until then.
   - (3) WP18 (item 191) and items 188 (3)-(4) are unchanged.
 
+- **Fresh designs reconciled (02:23 PST); build launched (02:45 PST).**
+  - Three blind fresh designs (Sol 6.1 xhigh, Opus 5.5, Fable 5.1) and the lead's reconciled decision D1-D6 are on branch `records/2026-11-07-align-r0-v4-rerun7` (`9fc7f06cc`, `docs/align/r0/2026-11-07-rerun7/fresh/DECISION.md`).
+  - Agreed by all three:
+    - D1: placeholder rejection (any reading below 10 degC; a one-second jump larger than half the step).
+    - D2: baseline from the last 60 s of idle.
+    - D3: SMC first in R0, with an adaptive idle to G0's 0.2 degC/min, capped at 1,200 s; an unsettled key is flagged, not refused.
+    - D4: a fast role of tau <= 60 s; pick on this capture Tf18.
+    - D6: the receipt reads per-phase coverage.
+  - D5 (the slow pick) is provisional: Fable's band-hold rule (TaLP), printed beside the Opus pick (TSXR) and the Sol pick (TVS0). It is chosen on the first settled R0.
+  - Ed was mailed the decision with a NO-window to 02:45 (message `1a1b588e66e248f9`). No reply came.
+  - Build: Sol 6.1 xhigh onto #692, brief `/Users/edr/night-archive/r0-smc-cov/build2/BRIEF.md`, report `build2/build-report.md`.
+  - R1-lane findings for the laptop lead are in DECISION.md "Not built here" (G0 600 s cap vs 840-1,040 s settle; G1 279 s; R1 cooldowns).
+- **Next activation (replaces the pointer above):**
+  - (1) If the build report exists, commit it if uncommitted and run blind Fable and Opus executing cold passes (Agent tool; `python -B -P`), then CI. Disposition, merge into `lane/2026-11-05-align-pilot10-benign`, and fast-forward `$M`.
+  - (2) Stop the Codex MCP adapter, then launch R0 per `docs/process/R0_HEADLESS_LAUNCH.md` in a clean gap long enough for 4-4.5 h (the adaptive idle adds up to 15 min).
+  - (3) WP18 and items 188 (3)-(4) are unchanged.
+
 194. **Magistrate activation 62c121f8 (Opus 5.5, headless, 2026-11-07 from 00:02 PST): R0 re-run 6 was refused in `smc` at 00:00 PST by macOS's daily `/tmp` cleaner. That is the third `smc` refusal in a row, so it went to Ed under item 181, and R0 waits for his answer. The WP18 fixture tool (item 191) refused on a tool defect; nothing was committed from it.** No pending notices, no unread mail from Ed, no new directive.
 - **Run** `/Users/edr/night-align/r0-v4-20261107T0720Z` (07:18:54Z-08:00:04Z, 2,470 s): status `fail`, `complete_r0` false.
   - host, host-identity, model-load, generated (0 off-spec turns) and memory (peak 37,025,283,164 bytes against 45e9; swap flat): pass.
