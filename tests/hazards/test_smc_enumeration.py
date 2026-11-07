@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import signal
 import struct
 import subprocess
@@ -13,7 +14,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from joulewise.hazards import base
+from joulewise import prewindow
+from joulewise.hazards import base, contention
 from joulewise.align.apple import smc_reader as smc, smc_enumeration as r0
 from joulewise.measurement_liveness import Census
 from joulewise.night_gate import ProbeResult
@@ -96,6 +98,37 @@ class QuietTests(unittest.TestCase):
 
     def test_clean_fake_census_passes(self):
         self.assertEqual(r0.require_quiet(**self.inputs())["agent_exit_code"], 1)
+
+    def test_real_cpu_probe_admission_journals_aggregate_and_refuses_process_contention(self):
+        # Five outside jobs at .05 - .01 = .04 total .2 CPU-s/s over
+        # 30 s: this aggregate passes. A single .05 + .01 = .06 job
+        # must refuse through the same admission wrapper.
+        for rate, count, refuses in ((.04, 5, False), (.06, 1, True)):
+            with self.subTest(rate=rate):
+                clock = FakeClocks(read_cost_ns=0)
+                ctx = base.Context(clocks=clock)
+                start = clock.monotonic_ns()
+                def snapshot():
+                    stamp = ctx.stamp()
+                    elapsed = (stamp.monotonic_ns - start) / 1e9
+                    rows = {(pid, "start"): {"pid": pid, "ppid": 1,
+                            "start_identity": "start", "start_epoch_s": 0,
+                            "command": "outside", "cumulative_cpu_seconds": rate * elapsed}
+                            for pid in range(42, 42 + count)}
+                    hz = os.sysconf("SC_CLK_TCK")
+                    # One core idle plus the measured outside busy ticks.
+                    host = [[round(rate * count * elapsed * hz), 0, round(elapsed * hz), 0]]
+                    return contention.Snapshot(stamp, stamp, rows, None, host=host)
+                inputs = {**self.inputs(), "contention_probe": r0.CpuQuietProbe(ctx=ctx, snapshot=snapshot)}
+                if refuses:
+                    with self.assertRaisesRegex(r0.NotQuiet, "outside-tree CPU contention"):
+                        r0.require_quiet(**inputs)
+                else:
+                    result = r0.require_quiet(**inputs)["contention"]
+                    self.assertTrue(result["aggregate_above_0_05"])
+                    self.assertIsNone(result["aggregate_cpu_limit_s_per_s"])
+                    self.assertIsNone(result["error"])
+                self.assertEqual(clock.sleeps, [prewindow.INTERVAL_S])
 
     def test_agent_or_live_chain_or_direct_meter_refuses(self):
         cases = [{"agent_probe": lambda: (None, SimpleNamespace(detail="Codex present"))},
