@@ -31,17 +31,17 @@ class SchedulingTest(unittest.TestCase):
                 backends.append(self)
 
         def smc(*args):
-            self.assertEqual(len(backends), 1)
-            self.assertTrue(backends[0].closed)
+            self.assertEqual(backends, [])
             return {"status": "pass"}
 
         with tempfile.TemporaryDirectory() as tmp, patch.object(r0_runner, "smc_enumeration", side_effect=smc):
             report = self.run_fake(Path(tmp), list(reversed(r0_runner.CHECKS)), backend_factory=Backend)
         self.assertEqual(report["status"], "pass")
         self.assertEqual([r["check"] for r in report["checks"]], [
-            "host", "disk", "host-identity", "model-load", "load", "template", "generated",
-            "checkpoint", "memory", "smc", "model-load", "ladder", "long-decode", "tool-envelopes"])
-        self.assertEqual(len(backends), 2)
+            "smc", "host", "disk", "host-identity", "model-load", "load", "template", "generated",
+            "checkpoint", "memory", "ladder", "long-decode", "tool-envelopes"])
+        # SMC now precedes every load; the model needs exactly one lifetime.
+        self.assertEqual(len(backends), 1)
         self.assertTrue(all(backend.closed for backend in backends))
 
     def test_each_early_failure_saves_report_and_stops_remaining_phases(self):
@@ -92,7 +92,7 @@ class SchedulingTest(unittest.TestCase):
         load.assert_not_called()
         self.assertEqual(report["status"], "fail")
         names = [row["check"] for row in report["checks"]]
-        self.assertLess(names.index("memory"), names.index("smc"))
+        self.assertLess(names.index("smc"), names.index("memory"))
         self.assertLess(names.index("smc"), names.index("ladder"))
         self.assertTrue(all(row["status"] == "blocked" for row in report["checks"] if row["check"] in {
             "load", "template", "generated", "memory", "ladder", "long-decode"}))

@@ -29,21 +29,30 @@ def markdown(report, digest):
              "Authority: `docs/align/council-2026-11-05/FINAL-DESIGN.md` §2.6 and V8 "
              "on `origin/lane/2026-11-05-align-window-council` (with Amendment 1).",
              "", result["rule"], "",
-             "| Key | Unit | Type | Idle median | Load median | Idle noise | Result |",
-             "|---|---|---|---:|---:|---:|---|"]
+             "| Key | Unit | Type | Baseline | Load median | Residual noise | Phase coverage (receipt) | Read errors (receipt) | Max interval s | Idle slope C/min | Unsettled | Result |",
+             "|---|---|---|---:|---:|---:|---|---|---:|---:|---|---|"]
     def number(v):
         return "—" if v is None else f"{v:.5g}"
     for row in result["ranking"]:
         medians = row.get("phase_medians", {})
         cells = [row["key"], row["unit"], row.get("data_type", "unknown"),
-                 number(medians.get("idle")), number(medians.get("load")),
-                 number(row["noise"]), row["reason"]]
+                 number(row.get("baseline")), number(medians.get("load")), number(row["noise"]),
+                 ", ".join(f"{p}: {v:.5g}" for p, v in row["phase_coverage"].items()),
+                 ", ".join(f"{p}: {v:.5g}" for p, v in row["phase_read_error_fraction"].items()),
+                 number(row["max_interval_ns"]/1e9 if row["max_interval_ns"] is not None else None),
+                 number(row["baseline_slope_c_min"]), str(row["baseline_unsettled"]), row["reason"]]
         lines.append("| " + " | ".join(cells) + " |")
+    lines += ["", f"Picks: fast `{result['s_fast']}`, slow `{result['s_slow']}`.",
+              f"Alternative slow picks (diagnostic): `{json.dumps(result['alternative_slow_picks'], sort_keys=True)}`.",
+              f"Baseline-unsettled keys: {sum(r['baseline_unsettled'] for r in result['ranking'])}."]
+    for phase in report.get("phases", []):
+        lines.append(f"{phase['phase']}: {phase['end_s']-phase['start_s']:.3f} s; settled: {phase.get('settled', 'n/a')}.")
     lines += ["", "Unsupported sensor types (retained, not silently dropped):"]
     for key, evidence in sorted(report["inventory"].get("unsupported_types", {}).items()):
         lines.append(f"- `{key}`: `{evidence.get('data_type')}`; {evidence['error']}")
     lines += ["", f"R0 JSON SHA-256: `{digest}`.",
-              f"Complete-sensor sample fraction: {report['coverage']['all_keys']['sample_fraction']}",
+              f"Capture-wide sample fraction (diagnostic only): {report['coverage']['all_keys']['sample_fraction']}",
+              "Receipt reads the per-key phase coverage/errors above, total phase time >=600 s, and max interval <=2 s.",
               "", "Review per-key errors/coverage and raw step data in the JSON/journal. "
               "Thermometry and sensor identity remain pending R1; no thermal-control claim is authorized."]
     return "\n".join(lines) + "\n"
@@ -96,11 +105,14 @@ def main(argv=None, *, reader_factory=smc.Reader, quiet_check=r0.require_quiet,
     parser.add_argument("--seconds", type=int, default=60, help="inventory-only idle sample duration")
     parser.add_argument("--gpu-step", action="store_true", help="opt in to fixed 2048x2048 MLX matmul; no model")
     parser.add_argument("--idle-seconds", type=int, default=300)
+    parser.add_argument("--idle-max-seconds", type=int, default=r0.IDLE_MAX_S)
     parser.add_argument("--load-seconds", type=int, default=60)
     parser.add_argument("--recovery-seconds", type=int, default=600)
     args = parser.parse_args(argv)
-    if min(args.seconds, args.idle_seconds, args.load_seconds, args.recovery_seconds) <= 0:
+    if min(args.seconds, args.idle_seconds, args.idle_max_seconds, args.load_seconds, args.recovery_seconds) <= 0:
         parser.error("durations must be positive")
+    if args.idle_max_seconds < args.idle_seconds:
+        parser.error("idle-max-seconds must be >= idle-seconds")
     reader, journal = None, None
     old_handlers = {}
     def interrupted(signum, _frame):
@@ -114,6 +126,7 @@ def main(argv=None, *, reader_factory=smc.Reader, quiet_check=r0.require_quiet,
         hardware = metadata()  # baseline state before SMC enumeration or load
         reader = reader_factory()
         capture = r0.collect(reader, seconds=args.seconds, idle_s=args.idle_seconds,
+                             idle_max_s=args.idle_max_seconds,
                              load_s=args.load_seconds, recovery_s=args.recovery_seconds,
                              gpu_step=args.gpu_step, quiet_check=quiet_check, ctx=ctx_factory(),
                              sink=journal.write, load_factory=load_factory)

@@ -14,8 +14,11 @@ def jittered_capture():
     rng = random.Random(195)
     phases = [("idle", 0, 300), ("load", 300, 1200), ("recovery", 1200, 1800)]
     # Heating/cooling constants in seconds, rise in degC: die t63 ~3 s;
-    # heatsink full-rise t63 ~50 s and cooling tau ~120 s, with 8 >= 4 degC.
+    # heatsink full-rise t63 ~50 s and cooling tau ~120 s, with 8 >= 3.0 degC (three 1 degC bands).
     specs = {"TDIE": (3, 3, 18), "THEA": (50, 120, 8)}
+    # 403 channels match the real census: two responders plus 401 quiet
+    # non-stale channels with no load response. All reads share the jitter.
+    specs.update({f'T{i:03X}': (20, 20, 0) for i in range(401)})
     samples = []
     for phase, begin, end in phases:
         for tick in range(begin, end):
@@ -42,6 +45,126 @@ def jittered_capture():
 
 
 class SmcClassifierV4Tests(unittest.TestCase):
+    def test_derived_137_degree_key_is_record_only_in_both_stages(self):
+        data = capture({'TDIE': (3, 25, 18, .05), 'THEA': (60, 90, 8, .02),
+                        'TDRV': (10, 25, 107, .02)})
+        # A firmware-derived channel rises from 30 to 137 degC (107 degC
+        # excursion), as TVH3 did. Its rise would beat the physical fast key;
+        # its 25 s tau also fits 25*ln(107) < the 300 s band-return cap.
+        for row in data['samples']:
+            row['values']['sensors']['TDRV'] = min(137.0, row['values']['sensors']['TDRV'])
+        self.assertEqual(max(row['values']['sensors']['TDRV'] for row in data['samples']), 137.0)
+        for stage in ('r0', 'r1'):
+            with self.subTest(stage=stage):
+                result = rank(data, stage=stage)
+                derived = next(r for r in result['ranking'] if r['key'] == 'TDRV')
+                self.assertTrue(derived['above_junction'])
+                self.assertFalse(derived['eligible'])
+                self.assertEqual(derived['class'], 'record-only')
+                self.assertIn('D1(c)', derived['reason'])
+                self.assertEqual(result['selection'], {'s_fast': 'TDIE', 's_slow': 'THEA'})
+
+    def test_junction_ceiling_is_strict_and_ignores_failed_readings(self):
+        data = capture({'TDRV': (10, 25, 95, .02)})
+        # 30 degC baseline +95 degC excursion reaches exactly the 125 degC
+        # ceiling. D1(c) rejects only values above it, not equality.
+        for row in data['samples']:
+            row['values']['sensors']['TDRV'] = min(125.0, row['values']['sensors']['TDRV'])
+        result = rank(data)
+        self.assertEqual(result['s_fast'], 'TDRV')
+        self.assertFalse(result['ranking'][0]['above_junction'])
+        # One failed load read out of 600 is <1%; a reported error cannot
+        # make its synthetic 137 degC payload a valid D1(c) reading.
+        data['samples'][800]['values']['sensors']['TDRV'] = 137.0
+        data['samples'][800]['values']['errors']['TDRV'] = 'failed read'
+        result = rank(data)
+        self.assertEqual(result['s_fast'], 'TDRV')
+        self.assertFalse(result['ranking'][0]['above_junction'])
+
+    def test_power_gated_negative_zero_and_positive_placeholders_cannot_win(self):
+        for placeholder in (-2.75, 0.0, 20.0):
+            data = capture({'TDIE': (3, 25, 18, .05), 'THEA': (60, 90, 8, .02),
+                            'TGAT': (2, 2, 60, .01)})
+            for row in data['samples']:
+                if row['phase'] != 'load':
+                    # A parked key wakes for one of every 20 idle/recovery
+                    # readings: 95% placeholders, matching the real Tg pattern.
+                    # Positive sentinel: 65-20 =45 > half the 60 degC
+                    # load rise, so D1(b) catches it independently of D1(a).
+                    row['values']['sensors']['TGAT'] = (65 + .01*math.sin(row['elapsed_s'])
+                        if int(row['elapsed_s']) % 20 == 0 else placeholder)
+                else:
+                    row['values']['sensors']['TGAT'] = 80 + .01*math.sin(row['elapsed_s'])
+            result = rank(data)
+            gated = next(r for r in result['ranking'] if r['key'] == 'TGAT')
+            with self.subTest(placeholder=placeholder):
+                self.assertFalse(gated['eligible'])
+                self.assertIn('D1(a)' if placeholder < 10 else 'D1(b)', gated['reason'])
+                self.assertEqual(result['s_fast'], 'TDIE')
+
+    def test_clamp_keeps_class_but_is_excluded_from_picks(self):
+        data = capture({'TDIE': (3, 25, 18, .05), 'THEA': (60, 90, 8, .02),
+                        'TCLM': (3, 25, 30, .02)})
+        for row in data['samples']:
+            if row['phase'] == 'idle':
+                t = row['elapsed_s']
+                row['values']['sensors']['TCLM'] = 30 if int(t) % 2 == 0 else 30+.02*abs(math.sin(t))
+        result = rank(data)
+        clamp = next(r for r in result['ranking'] if r['key'] == 'TCLM')
+        # Half the 300 idle samples occupy the exact floor, above the
+        # derived 40% bar; the other half provide >=10 distinct values.
+        self.assertGreaterEqual(clamp['idle_mode_fraction'], .4)
+        self.assertTrue(clamp['clamped'])
+        self.assertTrue(clamp['eligible'])
+        self.assertEqual(clamp['class'], 'die')
+        self.assertEqual(result['s_fast'], 'TDIE')
+
+    def test_unsettled_baseline_uses_last_minute_and_residual_noise(self):
+        data = capture({'TDIE': (3, 25, 18, .02), 'THEA': (60, 90, 8, .02)})
+        for row in data['samples']:
+            if row['phase'] == 'idle':
+                for key in row['values']['sensors']:
+                    row['values']['sensors'][key] += (300-row['elapsed_s'])/60
+        result = rank(data)
+        for r in result['ranking']:
+            self.assertTrue(r['baseline_unsettled'])
+            # Added drift is -1 degC/min; 0.02 degC sine perturbs the
+            # 60-point OLS slope by <0.01 degC/min.
+            self.assertAlmostEqual(r['baseline_slope_c_min'], -1, delta=.01)
+            # Detrending leaves at most the 0.02 degC sine amplitude.
+            self.assertLess(r['noise'], .02)
+            # Last-minute median samples t=240..299: drift median=30.5/60.
+            self.assertAlmostEqual(r['baseline'], 30+30.5/60, delta=.02)
+        self.assertEqual(result['s_fast'], 'TDIE')
+
+    def test_airflow_dip_cannot_supply_either_role(self):
+        for tau in (25, 90):
+            data = capture({'TDIP': (20, tau, 18, .02)})
+            for row in data['samples']:
+                if row['phase'] == 'load':
+                    t = row['elapsed_s']-300
+                    row['values']['sensors']['TDIP'] = (30-min(t/50, 1) if t <= 60 else
+                                                        29+19*(1-math.exp(-(t-60)/20)))
+            result = rank(data)
+            row = result['ranking'][0]
+            # Baseline ~30 degC, early dip to 29 gives -1 degC; both
+            # tau=25 (fast) and tau=90 (slow) require positive >3 floors.
+            self.assertLess(row['delta_t60'], 0)
+            # A smooth dip has no unresolved half-rise jump; R4 alone must refuse.
+            self.assertLessEqual(row['max_one_second_change'], row['observed_rise']/2)
+            self.assertFalse(row['eligible'])
+
+    def test_role_specific_residual_noise_bars(self):
+        # Sinusoid SD = amplitude/sqrt(2): .42/.50 bracket D4's 1/3;
+        # .18/.24 bracket D5's .15. Rises and cooling times otherwise resolve.
+        result = rank(capture({'TFOK': (3, 25, 18, .42), 'TFNO': (3, 25, 18, .50),
+                               'TSOK': (60, 90, 8, .18), 'TSNO': (60, 90, 8, .24)}))
+        rows = {r['key']: r for r in result['ranking']}
+        self.assertEqual(rows['TFOK']['class'], 'die')
+        self.assertEqual(rows['TSOK']['class'], 'heatsink')
+        self.assertFalse(rows['TFNO']['eligible'])
+        self.assertFalse(rows['TSNO']['eligible'])
+
     def test_production_jitter_resolves_both_picks_only_with_cell_tolerance(self):
         data = jittered_capture()
         coverage_type = thermal.Coverage
@@ -80,8 +203,8 @@ class SmcClassifierV4Tests(unittest.TestCase):
                 # Cooling tau is 120 s; one period plus noise/slope
                 # (0.1 / (8 / (120*e)) ~= 4.1 s) fits within six seconds.
                 self.assertAlmostEqual(sensors["THEA"]["tau_s"], 120, delta=6)
-                # The synthetic 8 degC rise exceeds the brief's 4 degC floor.
-                self.assertGreaterEqual(sensors["THEA"]["observed_rise"], 4)
+                # D4/D5: 3.0 degC = three times the 1 degC band floor.
+                self.assertGreaterEqual(sensors["THEA"]["observed_rise"], 3.0)
 
     def test_two_percent_missing_load_cells_still_refuse_selection(self):
         data = jittered_capture()
@@ -100,7 +223,7 @@ class SmcClassifierV4Tests(unittest.TestCase):
         self.assertEqual(result["status"], "inconclusive")
 
     def test_two_pole_die_uses_sixty_second_rise(self):
-        data = capture({'TDIE': (1.5, 200, 40, .1)})
+        data = capture({'TDIE': (1.5, 30, 40, .1)})
         for row in data['samples']:
             if row['phase'] == 'load':
                 t = row['elapsed_s'] - 300
@@ -114,7 +237,8 @@ class SmcClassifierV4Tests(unittest.TestCase):
     def test_heatsink_longest_cooling_wins_and_null_never_falls_back(self):
         result = rank(capture({'TDIE': (2, 2, 18, .1), 'TH90': (60, 90, 8, .1),
                                'T250': (60, 250, 8, .1), 'T600': (60, 600, 8, .1)}), stage='r1')
-        self.assertEqual(result['s_slow'], 'T250')
+        # 250*ln(8) >300 s, while 90*ln(8) <300 s: only TH90 is releasable.
+        self.assertEqual(result['s_slow'], 'TH90')
         self.assertEqual(next(r for r in result['ranking'] if r['key'] == 'T600')['class'], 'record-only')
         only_die = rank(capture({'TDIE': (2, 2, 18, .1)}), stage='r0')
         self.assertIsNone(only_die['s_slow'])
@@ -123,10 +247,10 @@ class SmcClassifierV4Tests(unittest.TestCase):
     def test_classes_are_disjoint_property(self):
         random.seed(14)
         for _ in range(200):
-            t63 = random.uniform(.1, 20)
             tau = random.uniform(1, 500)
-            cls = 'die' if t63 <= 5 and tau <= 300 else 'heatsink' if t63 > 5 and 30 < tau <= 300 else 'record-only'
-            rows = [{'key': 'TKEY', 'class': cls, 'observed_rise': 10, 'tau_s': tau}]
+            # 60 s is one slope window; 300 s is the G1/H cap.
+            cls = 'die' if tau <= 60 else 'heatsink' if tau <= 300 else 'record-only'
+            rows = [{'key': 'TKEY', 'class': cls, 'observed_rise': 10, 'tau_s': tau, 't_band_s': tau*math.log(10)}]
             picks = select_keys(rows)
             self.assertFalse(picks['s_fast'] and picks['s_slow'])
 

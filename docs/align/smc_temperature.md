@@ -27,7 +27,7 @@ python3.13 -B scripts/align_smc_enumerate.py \
 # R0's 60-second diagnostic load; this does not classify or pin sensors.
 python3.13 -B scripts/align_smc_enumerate.py \
   --output desk-custody/align-r0-step-UNIQUE --gpu-step \
-  --idle-seconds 300 --load-seconds 60 --recovery-seconds 600
+  --idle-seconds 300 --idle-max-seconds 1200 --load-seconds 900 --recovery-seconds 600
 ```
 
 R0 uses command 8 to inventory every readable T* and F* key. Fan RPM keys
@@ -65,30 +65,55 @@ There is no direct GPU-utilization measurement or GPU exclusivity lease.
 
 ## R1: planning-turn classification
 
-R1's actual planning-turn step, rather than the fixed R0 matmul, supplies the
-input to `smc_enumeration.rank(capture, stage="r1")`. The default
-`rank(capture)` is R0 inventory only and always returns null selections.
+R0 and R1 use `smc_enumeration.rank` with the D1–D6 selection rule
+(2026-11-07 reconciled SMC decision). R0's fixed matmul provides provisional
+picks; R1 re-selects using the actual planning-turn step.
 
-- ΔT is the final 10% load median minus the idle median.
-- Heating t63 is the first 63.2% rise crossing. Cooling τ is the first
-  1/e crossing measured relative to the first observed recovery value/time,
-  including when a few initial reads fail. Crossings interpolate
-  timestamps between adjacent valid readings; no exponential model is fitted.
-- S_fast has the largest ΔT with t63 ≤ 5 s. S_slow has the longest τ among
-  keys with ΔT ≥ 3 °C and τ ≤ 300 s. Lexical keys break ties. Keys with
-  τ > 300 s are recorded and excluded from gating. RPM/raw F* values never
-  enter temperature selection.
-- Each phase needs at least five valid samples, ≥99% coverage and **<1%**
-  failed reads. Unresolved recovery is not assigned a τ. An idle series with
-  fewer than three distinct values is rejected as stale. Noise is a quality
-  gate: ΔT must exceed three times max(idle SD, sensor quantum, 0.05 °C).
-  The quantum includes the type's resolution and minimum observed idle step.
-  Noise ratios never order candidates.
+- D1: any idle/recovery value below 10 °C or any consecutive one-second
+  change greater than half the full step rise makes the key non-selectable.
+  D1(c), Erratum 1, also rejects any valid reading above 125 °C over the
+  whole capture. The floor is Apple's minimum operating ambient; the jump
+  implies an unresolved first-order tau below 1/ln(2) = 1.44 s at 1 Hz.
+  The ceiling is silicon's standard absolute-maximum junction rating;
+  readings above it are not component temperatures on a running machine.
+  It excludes the firmware-derived TVH3 channel, which reached 137 °C. A pinned floor
+  or ceiling (at least ten distinct idle values, at least 40% on one exact value)
+  is flagged and excluded from picks only. All channels remain recorded.
+- D2: baseline is the median of the last 60 s of idle; noise is the SD of
+  OLS residuals over that same window. At least three distinct values over
+  the whole idle are still required. The noise floor remains
+  max(residual SD, sensor quantum, 0.05 °C).
+- D3: the SMC step runs first, before the disk weights hash or model load.
+  Idle lasts at least 300 s and extends until every temperature key passing
+  D1(a) and the stale rule has absolute trailing-60 s OLS slope ≤0.2 °C/min
+  for ten consecutive one-second evaluations. The default cap is 1,200 s
+  (measured settle median about 930 s, maximum 1,038 s). At the cap capture
+  proceeds. Each key carries `baseline_unsettled` and `baseline_slope_c_min`;
+  these are flags, never a refusal. Phase records contain actual duration
+  and whether idle settled. Load/recovery remain 900/600 s; the 5 s quiet
+  census continues throughout.
+- D4/D5: both roles need rise ≥3.0 °C (three 1 °C bands), full rise and
+  positive 50–60 s rise greater than three noise floors, and band return
+  tau × ln(rise / 1 °C) ≤300 s (G1/H's turn cap). Cooling tau is the first
+  1/e crossing relative to the first observed recovery reading/time;
+  heating t63 remains diagnostic. Crossings interpolate timestamps between
+  valid readings, without fitting an exponential.
+- Fast: cooling tau ≤60 s (one slope window), residual noise ≤1/3 °C
+  (three SD inside a 1 °C band), largest rise. Slow: 60 < tau ≤300 s,
+  noise ≤0.15 °C (three slope SD ≤0.2 °C/min since SD(slope)=0.447×noise),
+  longest band hold time. Lexical ties. Legacy schema names `die` and
+  `heatsink` mean fast and slow roles, not verified physical locations.
+  Alternative slow picks (longest tau, Opus late stored heat, Sol recovery
+  bracket) are diagnostics with reasons, never fallback selections.
+- D6: the receipt reads each selected classifier row: each phase ≥99%
+  coverage at one-second cells (`NS // 2`, 500 ms nearest-cell tolerance),
+  each phase <1% read errors, total phase time ≥600 s, longest actual
+  interval between valid readings ≤2 s. It retains the 1 Hz period,
+  distinct-key and journal SHA-256 checks. The capture-wide 100 ms coverage
+  block is diagnostic only. `summary.md` prints the per-key quantities
+  the receipt reads, baseline flags, slopes and actual idle duration.
 
-The additional data-quality choices are conservative implementation filters,
-not newly registered measurement admission constants. Inspect their retained
-reasons and raw traces in R1. A null pick or identical fast/slow pick does
-not supply the required distinct die/heatsink pair; do not invent a pin.
+Missing roles remain null; do not invent a pin.
 Sensor locations, refresh behavior and thermometry acceptance require lead
 verification on the Mac15,9. If the design's thermometry bar fails, follow its
 IOHID/X4 ruling; this tool does not authorize thermal-control claims.
@@ -137,9 +162,11 @@ rows contain sensors, units, per-key type/raw hex/value/error, and aggregate
 error text. Writes flush each row and fsync every five seconds and on stop.
 Thread/journal failures surface on teardown and remain recorded when writable.
 
-Coverage uses the sampling grid with 100 ms tolerance, unique nominal ticks
-and excluded partial edge cells; near-grid boundaries snap within that
-same tolerance. Reads crossing a caller's slot boundary remain valid; reads
+Capture-wide/sidecar diagnostic coverage uses the default 100 ms tolerance,
+unique nominal ticks and excluded partial edge cells; near-grid boundaries
+snap within that tolerance. D6 classifier/receipt coverage instead uses a
+separate grid per phase with 500 ms tolerance: every edge snaps to the
+nearest cell and half-period ties round forward, counting each stamp once. Reads crossing a caller's slot boundary remain valid; reads
 lasting over one second do not. `max_interval_ns` reports actual consecutive
 valid sample intervals including both span edges. `gaps_ns` now contains
 actual sample-free intervals exceeding 1.1 s, rather than merged missing
@@ -165,8 +192,7 @@ importability; it never attempts a CPU fallback.
 
 ## WP14(a) v4 supersession
 
-Both R0 and R1 use the single model-free classifier in `smc_enumeration.py`.
-It measures t63 against the 50–60 s rise, retains `t63_end_s` only as a
-diagnostic, assigns disjoint `die`, `heatsink`, and `record-only` classes, and
-never substitutes for a null pick. R0's picks are provisional; R1 selects from
-its production D step.
+Both stages use the D1–D6 rule above. The legacy `die`, `heatsink`, and
+`record-only` labels remain compatible with existing readers. R0's picks
+are provisional; the first settled R0 capture informs the slow-rule choice,
+and R1 owns production D selection and thermal qualification.

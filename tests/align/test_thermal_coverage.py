@@ -23,8 +23,10 @@ class CoverageTests(unittest.TestCase):
                 self.assertEqual(thermal.Coverage(0, ["TDIE"], tolerance_ns=tolerance)
                                  .report(NS)["tolerance_ns"], tolerance)
         for invalid in (0, -1, NS // 2 + 1, .1, "100000000", None, True):
-            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+            with self.subTest(invalid=invalid), self.assertRaisesRegex(ValueError, '500000000 ns'):
                 thermal.Coverage(0, ["TDIE"], tolerance_ns=invalid)
+        self.assertIn('all edges snapped', thermal.Coverage(0, ['TDIE'], tolerance_ns=NS//2)
+                      .report(NS)['edge_policy'])
 
     def test_half_period_duplicates_and_ties_count_once(self):
         counter = thermal.Coverage(0, ["TDIE"], tolerance_ns=NS // 2)

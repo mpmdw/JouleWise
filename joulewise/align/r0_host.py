@@ -19,8 +19,31 @@ from joulewise.prewindow import PS_ARGV, busy_contaminants
 from joulewise import prewindow
 from joulewise.hazards import contention
 from joulewise.hazards.base import Stamp
-from joulewise.align.r0_step import ProfileRefused, profile_config, rank_response, step_budget
+from joulewise.align.r0_step import (ProfileRefused, profile_config as fixed_profile,
+                                     rank_response, step_budget as fixed_budget)
 from joulewise.align.apple.smc_enumeration import rank as classify_smc
+
+
+def profile_config(value=None):
+    """D3 adaptive profile; keep the retired fixed-profile fit diagnostic intact."""
+    if value is not None and not isinstance(value, dict):
+        return fixed_profile(value)  # existing typed refusal
+    supplied = dict(value or {})
+    # D3: measured post-step settle median ~930 s, maximum 1,038 s => 1,200 s cap.
+    maximum = supplied.pop("idle_max_seconds", 1200)
+    profile = fixed_profile(supplied)
+    if type(maximum) is not int or maximum < profile["idle_seconds"]:
+        raise ProfileRefused("smc_step.invalid_duration", "idle_max_seconds must be an integer >= idle_seconds")
+    return {**profile, "idle_max_seconds": maximum}
+
+
+def step_budget(value=None):
+    profile = profile_config(value)
+    # Budget the maximum capture; fixed_budget retains the existing +600 s
+    # execution margin and 16 KiB per one-Hz slot journal planning estimate.
+    maximum = {k: v for k, v in profile.items() if k != "idle_max_seconds"}
+    maximum["idle_seconds"] = profile["idle_max_seconds"]
+    return {**fixed_budget(maximum), "profile": profile}
 
 
 class Refused(RuntimeError):
@@ -451,7 +474,8 @@ def smc_enumeration(repo, output, step=None):
         return {"status": "unavailable", "reason": "SMC lane not integrated"}
     import sys
     argv = [sys.executable, "-B", str(script), "--output", str(output), "--gpu-step",
-            "--idle-seconds", str(profile["idle_seconds"]), "--load-seconds", str(profile["load_seconds"]),
+            "--idle-seconds", str(profile["idle_seconds"]), "--idle-max-seconds", str(profile["idle_max_seconds"]),
+            "--load-seconds", str(profile["load_seconds"]),
             "--recovery-seconds", str(profile["recovery_seconds"])]
     result = subprocess.run(argv, capture_output=True, text=True, timeout=budget["timeout_seconds"])
     receipt = {"status": "fail" if result.returncode else "inconclusive",
@@ -474,26 +498,64 @@ def smc_enumeration(repo, output, step=None):
         if hashlib.sha256(raw).hexdigest() != payload["samples_sha256"]:
             raise ValueError("SMC journal SHA-256 mismatch")
         samples = [json.loads(line) for line in raw.splitlines() if line.strip()]
-        diagnostic = rank_response(payload, samples, profile)
+        # Authenticate observed adaptive phase lengths before either analysis.
+        phases = payload["phases"]
+        if [p["phase"] for p in phases] != ["idle", "load", "recovery"]:
+            raise ValueError("SMC step phases must be idle, load, recovery")
+        previous = 0
+        for phase in phases:
+            begin, end = phase["start_s"], phase["end_s"]
+            if (type(begin) not in (int, float) or type(end) not in (int, float)
+                    or not math.isfinite(begin) or not math.isfinite(end) or begin < previous or end <= begin):
+                raise ValueError("invalid SMC phase bounds")
+            duration = end-begin
+            # Actual stamps can cross a deadline by a read/clock quantum;
+            # one sampling period is the capture's maximum read bracket.
+            if phase["phase"] == "idle":
+                valid_duration = profile["idle_seconds"] <= duration <= profile["idle_max_seconds"]+1
+            else:
+                valid_duration = abs(duration-profile[phase["phase"]+"_seconds"]) <= 1
+            if not valid_duration:
+                raise ValueError("SMC observed phase durations do not match configured adaptive profile")
+            previous = end
+        # The old load-fit block is diagnostic only. It expects exact fixed
+        # lengths; use this capture's actual phase lengths, never the idle cap.
+        diagnostic_profile = {p["phase"]+"_seconds": p["end_s"]-p["start_s"] for p in phases}
+        try:
+            diagnostic = rank_response(payload, samples, {
+                k: round(v) for k, v in diagnostic_profile.items()})
+        except ValueError as exc:
+            diagnostic = {"status": "unavailable", "reason": str(exc)}
         classification = classify_smc({**payload, "samples": samples}, stage="r0")
         selection = {name: classification[name] for name in ("s_fast", "s_slow")}
         resolved = all(isinstance(v, str) and re.fullmatch(r"T[!-~]{3}", v) for v in selection.values())
         resolved = resolved and selection["s_fast"] != selection["s_slow"]
         receipt.update(selection=selection, response=classification,
                        exponential_fit_diagnostic=diagnostic, source_response=payload["response"])
-        coverage = payload["coverage"]
-        readable = resolved and classification["readability_bar_met"] and coverage["period_ns"] == 1_000_000_000
-        if readable:
-            for key in selection.values():
-                stats = coverage["per_key"][key]
-                expected, valid = stats["expected_samples"], stats["valid_samples"]
-                readable = readable and (type(expected) is int and type(valid) is int
-                                        and expected >= 600 and 0 <= valid <= expected and valid / expected > .99)
+        receipt["capture_coverage_diagnostic"] = payload["coverage"]
+        by_key = {row["key"]: row for row in classification["ranking"]}
+        selected_rows = {key: by_key[key] for key in selection.values() if key in by_key}
+        receipt["selected_key_readability"] = {key: {field: row[field] for field in (
+            "phase_coverage", "phase_read_error_fraction", "phase_seconds", "phase_valid_samples",
+            "period_ns", "max_interval_ns", "baseline_unsettled", "baseline_slope_c_min")}
+            for key, row in selected_rows.items()}
+        # Keep the capture's nominal one-Hz period assertion; the capture-wide
+        # occupancy fraction itself is diagnostic and never refuses a pick.
+        readable = (resolved and classification["readability_bar_met"]
+                    and payload["coverage"]["period_ns"] == 1_000_000_000)
+        for row in selected_rows.values():
+            # D6: per-phase one-second-cell occupancy >=99%, <1% read errors;
+            # >=600 s is §2.6's ten-minute readability interval, <=2 s is U1(c).
+            readable = (readable and row["period_ns"] == 1_000_000_000
+                        and all(v >= .99 for v in row["phase_coverage"].values())
+                        and all(v < .01 for v in row["phase_read_error_fraction"].values())
+                        and sum(row["phase_seconds"].values()) >= 600
+                        and row["max_interval_ns"] is not None and row["max_interval_ns"] <= 2_000_000_000)
         receipt["readability_bar_met"] = bool(readable)
         if not resolved:
             receipt["reason"] = "SMC die/heatsink selection unresolved"
         elif not readable:
-            receipt["reason"] = "SMC selected-key coverage does not meet 1 Hz / <1% errors / 10 min"
+            receipt["reason"] = "SMC selected-key coverage does not meet 1 Hz / >=99% per phase / <1% errors / 10 min / <=2 s intervals"
         else:
             receipt["status"] = "pass"
             receipt["reason"] = "WP14(a) model-free classifier and readability bars met; picks PROVISIONAL"

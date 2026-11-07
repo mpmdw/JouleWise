@@ -195,8 +195,11 @@ class Sidecar:
 class Coverage:
     """Successful nominal ticks on the sampling grid, not the caller's span.
 
-    The default 100 ms tolerance admits scheduler/read jitter. Partial edge
-    cells are excluded (boundaries within that tolerance snap to the grid). Duplicates
+    The default 100 ms tolerance admits scheduler/read jitter. At the explicit
+    500 ms (half-period) tolerance, every boundary snaps to its nearest grid
+    point and each stamp belongs to exactly one cell (ties round forward).
+    At narrower tolerances partial edge cells are excluded unless their
+    boundaries snap within that tolerance. Duplicates
     count once; calls lasting over one period never fill ticks. Separately,
     actual sample midpoints, including both span edges, bound the longest
     interval. No temperature value is interpolated or carried across a gap.
@@ -205,7 +208,7 @@ class Coverage:
 
     def __init__(self, start_ns: int, selected: Sequence[str], *, tolerance_ns: int = tolerance_ns):
         if type(tolerance_ns) is not int or not 0 < tolerance_ns <= NS // 2:
-            raise ValueError("coverage tolerance must be an integer in (0, NS // 2]")
+            raise ValueError("coverage tolerance_ns must be an integer from 1 to 500000000 ns (half the 1 s period)")
         self.tolerance_ns = tolerance_ns
         self.start_ns = start_ns
         self.grid_ns = None
@@ -250,7 +253,10 @@ class Coverage:
                     "sample_fraction": len(ticks)/expected if expected else None,
                     "gaps_ns": gaps, "max_interval_ns": max((b-a for a, b in intervals), default=0)}
         return {"clock": "monotonic_ns", "period_ns": NS, "tolerance_ns": self.tolerance_ns,
-                "sampling_grid_ns": grid, "edge_policy": "partial cells excluded; near-grid edges snapped",
+                "sampling_grid_ns": grid,
+                "edge_policy": ("half-period cells; all edges snapped to nearest grid; ties round forward"
+                                if self.tolerance_ns == NS // 2 else
+                                "partial cells excluded; near-grid edges snapped"),
                 "span_ns": [self.start_ns, end_ns], "all_keys": stats(self.common),
                 "per_key": {key: stats(times) for key, times in self.times.items()}}
 
