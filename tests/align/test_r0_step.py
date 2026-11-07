@@ -7,9 +7,10 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from joulewise.align.r0_host import smc_enumeration
+from joulewise.align.r0_host import smc_enumeration, profile_config, step_budget
 from joulewise.align.r0_runner import execute, main, validate_config
-from joulewise.align.r0_step import DEFAULT_PROFILE, ProfileRefused, profile_config, rank_response, step_budget
+from joulewise.align.r0_step import (DEFAULT_PROFILE, ProfileRefused, rank_response,
+                                     profile_config as fixed_profile_config)
 from tests.align.test_r0_checks import FakeBackend, FakeGuard, config_at
 
 
@@ -19,7 +20,7 @@ def synthetic_capture(taus, profile=None, idle_jitter=0.0):
     ``idle_jitter`` cycles idle readings through 0, 1 and 2 jitter steps so the
     WP14(a) classifier's stale-idle gate (>=3 distinct idle values) can pass.
     """
-    profile = profile_config(profile)
+    profile = fixed_profile_config(profile)
     idle, load, recovery = (profile[k] for k in ("idle_seconds", "load_seconds", "recovery_seconds"))
     total = idle + load + recovery
     origin = 10_000_000_000
@@ -61,12 +62,17 @@ def write_capture(output, taus=None, profile=None, idle_jitter=0.0):
 
 
 class StepTest(unittest.TestCase):
-    def test_defaults_and_budget_include_full_thirty_minutes(self):
+    def test_adaptive_defaults_and_budget_cover_maximum_profile(self):
         config = validate_config(config_at(Path("/tmp/synthetic-r0")))
-        self.assertEqual(config["smc_step"], DEFAULT_PROFILE)
-        self.assertEqual(step_budget()["capture_seconds"], 1800)
-        self.assertEqual(step_budget()["timeout_seconds"], 2400)
-        self.assertEqual(step_budget()["journal_bytes_estimate"], 1800 * 16_384)
+        # D3's cap is 1200 s (measured settle median ~930, maximum 1038).
+        self.assertEqual(config["smc_step"], {**DEFAULT_PROFILE, "idle_max_seconds": 1200})
+        # Maximum idle 1200 +load 900 +recovery 600 =2700 s; the existing
+        # timeout adds 600 s. Measured journal 95,467,641 /1,800 slots
+        # gives 53,037.58 bytes/slot, rounded up to 53,038 for planning.
+        self.assertEqual(step_budget()["capture_seconds"], 2700)
+        self.assertEqual(step_budget()["timeout_seconds"], 3300)
+        self.assertEqual(step_budget()["journal_bytes_per_slot_estimate"], 53_038)
+        self.assertEqual(step_budget()["journal_bytes_estimate"], 2700 * 53_038)
 
     def test_short_configured_load_refuses_with_code_before_any_capture(self):
         for load in (60, 120, 600, 899):
@@ -85,7 +91,10 @@ class StepTest(unittest.TestCase):
 
     def test_invalid_duration_types_and_unknown_fields_refuse(self):
         for value in ({"load_seconds": True}, {"idle_seconds": 0}, {"recovery_seconds": -1},
-                      {"idle_seconds": 300.5}, {"load_seconds": float("nan")}, {"load": 900}, []):
+                      {"idle_seconds": 300.5}, {"load_seconds": float("nan")}, {"load": 900}, [],
+                      # 299 is one second below the 300 s default minimum;
+                      # boolean/fractional caps also violate integer seconds.
+                      {"idle_max_seconds": 299}, {"idle_max_seconds": True}, {"idle_max_seconds": 1200.5}):
             with self.subTest(value=value), self.assertRaises(ProfileRefused):
                 profile_config(value)
 
@@ -107,15 +116,22 @@ class StepTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             config = config_at(root)
-            profile = {"idle_seconds": 400, "load_seconds": 1200, "recovery_seconds": 700}
+            # A custom cap adds one 300 s minimum to D3's 1200 s default;
+            # it must reach the hook and maximum-profile budget unchanged.
+            profile = {"idle_seconds": 400, "idle_max_seconds": 1500,
+                       "load_seconds": 1200, "recovery_seconds": 700}
             config["smc_step"] = profile
             with patch("joulewise.align.r0_runner.smc_enumeration", return_value={"status": "pass"}) as smc:
                 result = execute(config, root, ["smc"], ["D"], guard=FakeGuard(), backend_factory=FakeBackend)
             self.assertEqual(result["status"], "pass")
             self.assertEqual(smc.call_args.args[2], profile)
             saved = json.loads((root / "report.json").read_text())
-            self.assertEqual(saved["smc_step_budget"]["capture_seconds"], 2300)
-            self.assertEqual(saved["smc_step_budget"]["journal_bytes_estimate"], 2300 * 16_384)
+            # 1500 maximum idle +1200 load +700 recovery =3400 s,
+            # plus the existing 600 s timeout margin; measured bytes/slot
+            # ceil(95,467,641 /1,800) =53,038.
+            self.assertEqual(saved["smc_step_budget"]["capture_seconds"], 3400)
+            self.assertEqual(saved["smc_step_budget"]["timeout_seconds"], 4000)
+            self.assertEqual(saved["smc_step_budget"]["journal_bytes_estimate"], 3400 * 53_038)
 
     def test_cli_short_profile_refuses_before_guard_construction(self):
         with tempfile.TemporaryDirectory() as tmp:

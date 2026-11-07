@@ -195,15 +195,21 @@ class Sidecar:
 class Coverage:
     """Successful nominal ticks on the sampling grid, not the caller's span.
 
-    A 100 ms tolerance admits scheduler/read jitter. Partial edge cells are
-    excluded (boundaries within that tolerance snap to the grid). Duplicates
+    The default 100 ms tolerance admits scheduler/read jitter. At the explicit
+    500 ms (half-period) tolerance, every boundary snaps to its nearest grid
+    point and each stamp belongs to exactly one cell (ties round forward).
+    At narrower tolerances partial edge cells are excluded unless their
+    boundaries snap within that tolerance. Duplicates
     count once; calls lasting over one period never fill ticks. Separately,
     actual sample midpoints, including both span edges, bound the longest
     interval. No temperature value is interpolated or carried across a gap.
     """
     tolerance_ns = NS // 10
 
-    def __init__(self, start_ns: int, selected: Sequence[str]):
+    def __init__(self, start_ns: int, selected: Sequence[str], *, tolerance_ns: int = tolerance_ns):
+        if type(tolerance_ns) is not int or not 0 < tolerance_ns <= NS // 2:
+            raise ValueError("coverage tolerance_ns must be an integer from 1 to 500000000 ns (half the 1 s period)")
+        self.tolerance_ns = tolerance_ns
         self.start_ns = start_ns
         self.grid_ns = None
         self.times: dict[str, set[int]] = {k: set() for k in selected}
@@ -243,11 +249,20 @@ class Coverage:
             points = sorted({self.start_ns, end_ns, *(t for t in times if self.start_ns <= t <= end_ns)})
             intervals = list(zip(points, points[1:]))
             gaps = [[a, b] for a, b in intervals if b-a > NS+self.tolerance_ns]
+            # Erratum 2 D6: one empty 1 s cell is admitted by the 99% bar;
+            # two consecutive empty cells lose U1(c)'s 2 s reader window.
+            # Include leading/trailing cells, but never another phase's grid.
+            occupied = [first-1, *sorted(ticks), last]
+            empty_run = max(0, max((b-a-1 for a, b in zip(occupied, occupied[1:])), default=0))
             return {"expected_samples": expected, "valid_samples": len(ticks),
                     "sample_fraction": len(ticks)/expected if expected else None,
+                    "max_consecutive_empty_cells": empty_run,
                     "gaps_ns": gaps, "max_interval_ns": max((b-a for a, b in intervals), default=0)}
         return {"clock": "monotonic_ns", "period_ns": NS, "tolerance_ns": self.tolerance_ns,
-                "sampling_grid_ns": grid, "edge_policy": "partial cells excluded; near-grid edges snapped",
+                "sampling_grid_ns": grid,
+                "edge_policy": ("half-period cells; all edges snapped to nearest grid; ties round forward"
+                                if self.tolerance_ns == NS // 2 else
+                                "partial cells excluded; near-grid edges snapped"),
                 "span_ns": [self.start_ns, end_ns], "all_keys": stats(self.common),
                 "per_key": {key: stats(times) for key, times in self.times.items()}}
 

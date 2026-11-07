@@ -1,6 +1,7 @@
 from pathlib import Path
 from types import SimpleNamespace
 import json
+import hashlib
 import subprocess
 import tempfile
 import unittest
@@ -13,11 +14,10 @@ from joulewise.align.r0_host import QuietGuard, Refused, disk_census, w1_disk_ga
 from joulewise.measurement_liveness import Census
 from tests.align.test_r0_checks import config_at
 from tests.align.test_r0_step import write_capture
+from tests.align.test_smc_classifier_v4 import jittered_capture
 
-# WP14(a) classifier fixture (docs/align/council-2026-11-05/WP14-RULINGS.md):
-# a die key (t63 <= 5 s, tau <= 300 s) and a heatsink key (t63 > 5 s,
-# 30 s < tau <= 300 s, dT >= 3 degC), with a non-stale idle series. The
-# superseded fitted rule's taus (20 s / 400 s) are record-only under WP14(a).
+# D4/D5 fixture: fast tau 2 <=60 s; slow tau 100 >60 s, with
+# 100*ln(10) <300 s band hold and residual noise below 0.15 degC.
 WP14A_STEP = {"taus": {"TC0P": 2, "TH0P": 100}, "idle_jitter": 0.02}
 
 
@@ -245,7 +245,7 @@ class R0HostTest(unittest.TestCase):
             self.assertEqual(result["offloads"], [])
             self.assertTrue(result["anchor"]["files"])
             self.assertEqual(result["design"]["W1_two_copies_bytes"], 37_400_000_000)
-            self.assertEqual(result["smc_step_budget"]["capture_seconds"], 1800)
+            self.assertEqual(result["smc_step_budget"]["capture_seconds"], 2700)  # 1200 idle cap +900 load +600 recovery.
 
     def test_w1_requires_configured_verified_offloads_and_80_decimal_gb(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -313,8 +313,10 @@ class R0HostTest(unittest.TestCase):
                 argv = call.call_args.args[0]
                 self.assertEqual(argv[argv.index("--load-seconds") + 1], "900")
                 self.assertEqual(argv[argv.index("--idle-seconds") + 1], "300")
+                # D3 cap covers the measured ~930 s median /1,038 s maximum settle.
+                self.assertEqual(argv[argv.index("--idle-max-seconds") + 1], "1200")
                 self.assertEqual(argv[argv.index("--recovery-seconds") + 1], "600")
-                self.assertEqual(call.call_args.kwargs["timeout"], 2400)
+                self.assertEqual(call.call_args.kwargs["timeout"], 3300)  # Maximum 2700 s capture +600 s margin.
                 output = root / "output"
                 output.mkdir()
                 payload = write_capture(output, **WP14A_STEP)
@@ -330,7 +332,8 @@ class R0HostTest(unittest.TestCase):
                 self.assertEqual(result["exponential_fit_diagnostic"]["selection_status"], "PROVISIONAL")
                 payload["coverage"]["per_key"]["TH0P"]["valid_samples"] = 0
                 (output / "r0.json").write_text(json.dumps(payload))
-                self.assertEqual(smc_enumeration(root, output)["status"], "inconclusive")
+                # The capture-wide block is diagnostic; D6 reads the classifier rows.
+                self.assertEqual(smc_enumeration(root, output)["status"], "pass")
 
     def test_smc_configured_durations_and_timeout_reach_capture(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -347,7 +350,84 @@ class R0HostTest(unittest.TestCase):
             argv = call.call_args.args[0]
             for phase, duration in profile.items():
                 self.assertEqual(argv[argv.index("--" + phase.replace("_", "-")) + 1], str(duration))
-            self.assertEqual(call.call_args.kwargs["timeout"], 2900)
+            # Maximum idle 1200 +load 1200 +recovery 700 +existing margin 600.
+            self.assertEqual(call.call_args.kwargs["timeout"], 3700)
+
+    def replay_capture(self, payload, samples):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp)
+            raw = ('\n'.join(json.dumps(r) for r in samples)+'\n').encode()
+            payload.update(samples_journal='samples.jsonl', samples_sha256=hashlib.sha256(raw).hexdigest())
+            (output/'samples.jsonl').write_bytes(raw)
+            (output/'r0.json').write_text(json.dumps(payload))
+            with patch('subprocess.run', return_value=subprocess.CompletedProcess([], 0, '', '')):
+                return smc_enumeration(Path(__file__).resolve().parents[2], output)
+
+    def test_fable_f3_handshake_shift_is_not_a_sampling_hole(self):
+        from tests.align.test_r0_step import synthetic_capture
+        payload, samples = synthetic_capture(**WP14A_STEP)
+        # receipt_variants.py: +0.75 s MLX handshake makes the cross-phase
+        # interval >2 s with the last idle midpoint shifted 0.3 s earlier.
+        shift = 750_000_000
+        for stamp in ('started', 'finished'):
+            samples[299][stamp]['monotonic_ns'] -= 300_000_000
+        for phase in payload['phases'][1:]:
+            phase['start_s'] += shift/1e9
+            phase['end_s'] += shift/1e9
+        for sample in samples:
+            if sample['phase'] != 'idle':
+                for stamp in ('started', 'finished'):
+                    sample[stamp]['monotonic_ns'] += shift
+        self.assertEqual(self.replay_capture(payload, samples)['status'], 'pass')
+
+    def test_opus_f2_single_missed_tf18_read_with_unlucky_jitter_passes(self):
+        from tests.align.test_r0_step import synthetic_capture
+        payload, samples = synthetic_capture({'Tf18': 20, 'TaLP': 100}, idle_jitter=.02)
+        # holes.py B: one failed read out of 900 (<1%) with predecessor
+        # early and successor 150 ms late gives a 2.15 s midpoint interval.
+        samples[700]['values']['errors']['Tf18'] = 'synthetic missed read'
+        for stamp in ('started', 'finished'):
+            samples[701][stamp]['monotonic_ns'] += 150_000_000
+        result = self.replay_capture(payload, samples)
+        self.assertEqual(result['status'], 'pass')
+        self.assertEqual(result['selection']['s_fast'], 'Tf18')
+
+    def test_fable_f4_load_end_overrun_is_a_flag(self):
+        from tests.align.test_r0_step import synthetic_capture
+        payload, samples = synthetic_capture(**WP14A_STEP)
+        # receipt_variants.py: +1.3 s quiet-probe latency at load end;
+        # one trailing empty cell still clears 99% coverage (900/901).
+        payload['phases'][1]['end_s'] += 1.3
+        for field in ('start_s', 'end_s'):
+            payload['phases'][2][field] += 1.3
+        for sample in samples:
+            if sample['phase'] == 'recovery':
+                for stamp in ('started', 'finished'):
+                    sample[stamp]['monotonic_ns'] += 1_300_000_000
+        result = self.replay_capture(payload, samples)
+        self.assertEqual(result['status'], 'pass')
+        self.assertEqual(result['phase_duration_flags'][0]['phase'], 'load')
+        self.assertAlmostEqual(result['phase_duration_flags'][0]['deviation_seconds'], 1.3)
+
+    def test_receipt_prints_exact_aliases_of_each_selected_key(self):
+        from tests.align.test_r0_step import synthetic_capture
+        payload, samples = synthetic_capture({'TC0P': 20, 'TCOP': 20, 'TH0P': 100}, idle_jitter=.02)
+        result = self.replay_capture(payload, samples)
+        self.assertEqual(result['status'], 'pass')
+        self.assertEqual(result['selected_key_aliases'], {'TC0P': ['TCOP'], 'TH0P': []})
+
+    def test_receipt_rechecks_consecutive_empty_cells(self):
+        from joulewise.align.apple.smc_enumeration import rank
+        from tests.align.test_r0_step import synthetic_capture
+        payload, samples = synthetic_capture(**WP14A_STEP)
+        classification = rank({**payload, 'samples': samples})
+        # Keep the classifier's selection/pass result but forge two empty
+        # load cells: the independent receipt must still refuse that pick.
+        next(r for r in classification['ranking'] if r['key'] == 'TC0P')['phase_max_empty_cells']['load'] = 2
+        with patch('joulewise.align.r0_host.classify_smc', return_value=classification):
+            result = self.replay_capture(payload, samples)
+        self.assertEqual(result['status'], 'inconclusive')
+        self.assertFalse(result['readability_bar_met'])
 
     def test_smc_journal_mismatch_never_passes(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -363,6 +443,39 @@ class R0HostTest(unittest.TestCase):
                 result = smc_enumeration(root, output)
             self.assertEqual(result["status"], "inconclusive")
             self.assertIn("SHA-256 mismatch", result["reason"])
+
+    def test_smc_receipt_reads_per_phase_jitter_and_refuses_actual_hole(self):
+        for hole in (False, True):
+            with self.subTest(hole=hole), tempfile.TemporaryDirectory() as tmp:
+                output = Path(tmp)
+                data = jittered_capture()
+                if hole:
+                    # Drop t=500 and move its successor midpoint to 501.55;
+                    # predecessor midpoint 499.05 => genuine 2.5 s hole.
+                    data['samples'] = [r for r in data['samples'] if int(r['elapsed_s']) != 500]
+                    for r in data['samples']:
+                        t = int(r['elapsed_s'])
+                        if t in (499, 501):
+                            start = t + (0.5 if t == 501 else 0)
+                            r['started']['monotonic_ns'] = round(start*1e9)
+                            r['finished']['monotonic_ns'] = round((start+.1)*1e9)
+                raw = ('\n'.join(json.dumps(r) for r in data.pop('samples'))+'\n').encode()
+                (output/'samples.jsonl').write_bytes(raw)
+                data.update(schema='joulewise.align_smc_r0.v1', gpu_step=True,
+                            samples_journal='samples.jsonl', samples_sha256=hashlib.sha256(raw).hexdigest(),
+                            response={}, coverage={'period_ns': 1_000_000_000,
+                            'all_keys': {'sample_fraction': .02}})
+                (output/'r0.json').write_text(json.dumps(data))
+                with patch('subprocess.run', return_value=subprocess.CompletedProcess([], 0, '', '')):
+                    result = smc_enumeration(Path(__file__).resolve().parents[2], output)
+                self.assertEqual(result['selection'], {'s_fast': None, 's_slow': None} if hole else
+                                 {'s_fast': 'TDIE', 's_slow': 'THEA'})
+                self.assertEqual(result['status'], 'inconclusive' if hole else 'pass')
+                for row in result['response']['ranking']:
+                    # Midpoint shifted across the half-cell boundary leaves
+                    # two adjacent empty cells, while coverage remains >99%.
+                    self.assertGreaterEqual(min(row['phase_coverage'].values()), .99)
+                    self.assertEqual(row['phase_max_empty_cells']['load'], 2 if hole else 0)
 
 
 class R0QuietIntervalTest(unittest.TestCase):

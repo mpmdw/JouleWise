@@ -11,7 +11,8 @@ production endpoint and is included in its hashed template policy. Review the
 integration before live R0. Do not run these commands from an
 agent session. Full Amendment 1 was verified at `6eb1ff5be` in local Git objects.
 The [2026-11-05 laptop-lead ruling](r0_step_test_ruling.md) replaces Amendment 1's
-60 s SMC load with **300 s idle, 900 s load, 600 s recovery** (30 min).
+60 s SMC load with **300–1,200 s adaptive idle, 900 s load, 600 s recovery** (30–45 min),
+as updated by the 2026-11-07 D1–D6 reconciled sensor decision.
 The integrated #658 capture source is `58525031a`.
 The v4 headless LaunchAgent and watchdog fence are WP10/WP11 integration work;
 the Terminal launch example below does not satisfy that headless gate.
@@ -32,8 +33,16 @@ the Terminal launch example below does not satisfy that headless gate.
    `sysctl -n hw.model` value. The placeholder refuses model work. Every model
    subset requires this identity plus at least 128 GiB physical RAM before load.
 
-   `smc_step` configures `idle_seconds`, `load_seconds`, `recovery_seconds`;
-   omitted fields default to 300/900/600. A load below 900 s refuses before
+   `smc_step` configures `idle_seconds`, `idle_max_seconds`, `load_seconds`,
+   `recovery_seconds`; omitted fields default to 300/1200/900/600. Idle extends
+   until every temperature key passing D1(a), the stale rule and D1(b) on idle
+   so far (half the observed idle range), with trailing residual SD ≤0.15 °C, has absolute
+   trailing-60 s OLS slope ≤0.2 °C/min for ten consecutive one-second
+   evaluations. At the cap, capture proceeds with per-key baseline flags.
+   The noise limit follows 3×0.447×0.15 ≈0.2 °C/min over 60 one-Hz samples.
+   The idle phase records its actual length, `settle_keys` and whether it settled.
+   No qualifying keys means `settle_keys: 0`, `settled: null`, and idle ends at
+   its minimum. A load below 900 s refuses before
    host/model/capture work with `smc_step.load_below_tau_upper_bound`. The fixed
    slow tau upper bound is 900 s; equality is allowed for load duration only.
 
@@ -92,15 +101,16 @@ the Terminal launch example below does not satisfy that headless gate.
 
    Every check can run separately with the same command plus, for example,
    `--checks template --models D`. Available checks, in execution order:
-   `host,disk,load,template,generated,memory,smc,ladder,long-decode`.
+   `smc,host,disk,load,template,generated,memory,ladder,long-decode`.
    The host identity and model-load gates precede model checks. A comma-separated
-   subset always follows this order. The model is unloaded before SMC and
-   reloaded afterward for any remaining generations, preserving SMC's unloaded
-   baseline. A failed check stops the run after saving its report; use
+   subset always follows this order. SMC runs before the disk weights hash and before any model load,
+   independently of the `CHECKS` declaration or requested subset order.
+   It needs no model. A failed check stops the run after saving its report; use
    `--keep-going` for diagnostic continuation. Prerequisite failures still block
    dependent checks, and census refusals always stop. Diagnostic template/disk
    results, checkpoint `required` and ladder `fallback` do not trigger a stop;
-   inconclusive checks do.
+   an SMC `inconclusive` is recorded and host, disk and model checks continue.
+   Other inconclusive checks and SMC `fail` still stop the run.
    A subset does not complete R0. The timeout is 7,200 s per long-decode
    **attempt**, ladder **episode**, generated **turn**, or other check. D's
    38,912-token decode at 10 tok/s takes about 3,891 s per attempt; two attempts
@@ -127,22 +137,38 @@ the Terminal launch example below does not satisfy that headless gate.
    Local model SHA-256 lists authenticate the observed bytes only, not an HF
    revision. The default SMC hook calls
    `scripts/align_smc_enumerate.py --output DIR --gpu-step --idle-seconds 300
-   --load-seconds 900 --recovery-seconds 600`, with a 2,400 s timeout (configured
-   phase total plus 600 s). Raise `--timeout` too if a longer configured profile
-   would exceed the per-check deadline.
-   #658 (`58525031a`) emits schema `joulewise.align_smc_r0.v1` with keys under
-   `response.s_fast`/`response.s_slow`. Exit 0 alone is insufficient. R0 verifies
-   its `samples.jsonl` SHA-256 and phase durations, then re-ranks from that
-   journal: **S_fast tau <30 s from the first 120 s of load; S_slow tau in
-   (120 s, 900 s), fitted on load and confirmed on recovery**. Recovery does
-   not refit tau or require tau <600 s. #658's amplitude/noise, >=90% per-phase
-   slot coverage and R2 >=0.8 diagnostic bars remain; recovery confirmation
-   uses that same R2 bar against the fixed load-fit prediction.
-   The adapter also checks selected keys and 1 Hz / >99% successful slots over
-   at least 600 s. Missing roles or failed confirmation remain inconclusive;
-   R0's own role selections and sensor locations remain PROVISIONAL pending the
-   v4 sensor-policy ruling. The source #658 response is retained
-   alongside the R0 ruling's response for review.
+   --idle-max-seconds 1200 --load-seconds 900 --recovery-seconds 600`, with a
+   3,300 s timeout (maximum phase total 2,700 s plus the existing 600 s margin).
+   Raise `--timeout` too if a longer maximum profile exceeds the per-check
+   deadline. #658 (`58525031a`) emits `joulewise.align_smc_r0.v1` with keys
+   under `response.s_fast`/`response.s_slow`. Exit 0 alone is insufficient.
+   R0 verifies the journal SHA-256 and finite, ordered phase bounds, then applies
+   the [D1–D6 rule](smc_temperature.md#r1-planning-turn-classification).
+   Fast is largest rise with cooling tau ≤60 s and noise ≤1/3 °C. Slow has
+   60 < tau ≤300 s, noise ≤0.15 °C, and the longest band hold ≤300 s.
+   Both require ≥3.0 °C rise, a positive resolved early rise, and band return
+   within 300 s. Below-ambient placeholders, unresolved jumps, and any key
+   with a valid reading above 125 °C cannot count (D1(c), Erratum 1: silicon's
+   absolute-maximum junction rating; the derived TVH3 reached 137 °C).
+   Erratum 2 D1(d) also excludes rise exceeding the fastest resolving D1(a)–(c)
+   key's rise by more than three of that source's noise floors: a conduction
+   path cannot heat more than its source, and D4 already uses three floors
+   for resolution. D1(b)'s half-rise test applies only to positive rises.
+   Clamp keys are flagged and excluded from picks only.
+   The receipt reads selected classifier rows: per-phase coverage ≥99% at
+   500 ms one-cell tolerance, per-phase read errors <1%, and no two consecutive
+   empty one-second cells within a phase (`phase_max_empty_cells < 2`). One
+   missed cell is admitted by the 99% bar; two lose U1(c)'s two-second reader
+   window. Rank excludes unreadable keys before picking a replacement.
+   Handshake time between phases is outside those grids. Phase-duration
+   deviations >1 s (one sampling period) outside the configured length or
+   adaptive idle range are flags, not refusals. Capture-wide coverage and the old
+   exponential fit are diagnostics. `summary.md` prints these receipt inputs,
+   baseline flags/slopes, actual idle duration, each pick's exact-duplicate
+   aliases (report only), and alternative slow picks. `design_literal` means
+   longest tau with band hold ≤300 s (G1/H's cap).
+   R0's role selections and sensor locations remain PROVISIONAL; the first
+   settled R0 informs the slow-rule choice and R1 owns thermal qualification.
 
 Interpretation: the `load` bar has two parts (protocol change 2026-11-06,
 `docs/align/v4/R0-LOAD-REFERENCE-NOTE.md`; it replaces the absolute ≤3.0 nats/token bar).
@@ -195,8 +221,10 @@ growth. The R0 disk check is **report-only**: 66 decimal GB free and no offloads
 do not block completion. It still hashes the present D and anchor files, and
 does not read configured W1 offload receipts or destinations. W1 separately
 requires ≥80 decimal GB free **after R0** and all configured offload hash matches.
-At the default 1 Hz / 1,800 s profile, the R0 journal planning estimate is
-1,800 × 16 KiB = 29,491,200 bytes. This is not a measured bound or an R0 gate:
+At the default maximum 1 Hz / 2,700 s profile, the R0 journal planning estimate is
+2,700 × 53,038 = 143,202,600 bytes (about 143 MB). The per-slot estimate is
+ceil(95,467,641 measured journal bytes /1,800 one-Hz samples) =53,038 bytes.
+This is a planning estimate, not a bound or an R0 gate:
 check actual journal size after enumeration. Configured durations scale the
 estimate and capture time in the R0 disk receipt and the runner's `smc_step_budget`.
 Amendment 1 estimates 37.4 GB for two W1 copies and 52.9 GB for D windows.
