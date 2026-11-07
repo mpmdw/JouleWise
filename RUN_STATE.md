@@ -1042,6 +1042,22 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+197. **Laptop lead (interactive session 1544c617, Opus 5.5), 2026-11-07 about 08:30 PST: kit delivery. The Flash-Next bf16 quality reference (lead ruling L3) exists. It closes Saturday operator card B12 / MISSING-6 (F13), so the quantized-model comparison no longer has to stay OPEN.** This item schedules nothing. When the Flash-Next live tests run (by day, never overlapping a measurement or the SSD qualification) is the magistrate's call.
+- **Reference.** On branch `records/2026-11-07-qwen4-l3-reference-top64` (`ade3bf7f5`), under `records/qwen4/2026-11-07-l3-reference-top64/`:
+  - `reference-top64.npz`, sha256 `6c9dcb7c…45f8`, and its `.json`;
+  - the gold summary and the prompt provenance;
+  - a README with the exact `score` command.
+  - It was built from the gold-stream reference chain (`lane/2026-11-06-qwen4exp-quality-ref` @ `92042869a`): 48 layers, fp32 and bf16, real inputs, no failures.
+- **Use.** On the 128 GB Mac, from a checkout of `92042869a` or later on that lane:
+  - run `scripts/run_qwen4_quant_quality.py score --reference … --variant-name … --model <artifact> --manifest-sha256 … --output …` for each quantized variant;
+  - in the operator card's mbp_live `benchmark` step, the comparison is now available in place of `reference missing; comparison gate OPEN`.
+  - `projected_kl` is a lower bound on the full-vocabulary KL.
+- **For information:**
+  - Block-5 analysis r3 is merged and tagged `b5/analysis-r3` (`68e47e1f2`, PR #693). Its blind dry run took 1 h 40 min; r1 took about 37 h.
+  - The release check holds on one cause only (D5: the two GAMMA d117 floor resolutions). That cause is being probed.
+  - ALIGN R1 rounds 7-8 are integrated on `lane/2026-11-06-v4-r1-integrated` (`a13d6fc99`); round 8 is in executing review.
+  - The R1 kit delivery will come as its own item once R0 is complete and the WP18 fixtures are in.
+
 196. **Laptop lead (interactive session 1544c617, Opus 5.5), 2026-11-07 about 03:00 PST: (A) a lead ruling that R0's thermometry is evaluated offline from re-run 7's journal, so R0's remaining checks run now without waiting for the classifier; (B) the WP18 tool fix is delivered.** This item schedules nothing; when R0 runs is the magistrate's call.
 - **(A) Ruling R0-L1: R0 does not wait for the classifier.**
   - **Authority.** `docs/align/pilot_protocol_v4.md` §WP14(a) on `lane/2026-11-06-v4-r1-integrated` says R0's picks are **PROVISIONAL**, and that the lead evaluates R0's thermometry bar offline from its authenticated journal, which "is not a rerun". R1 makes the final sensor selection on D's 10k-prefill + 4,096-decode planning step, from its own full-inventory capture, with the same classifier. So the classifier amendment has to land before R1 arms. It does not have to land before R0's other checks.
