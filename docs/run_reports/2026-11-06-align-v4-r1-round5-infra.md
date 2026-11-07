@@ -79,6 +79,28 @@ Finding IDs:
 
 `docs/align/r1_runtime_contract.md` states every one of these.
 
+## Local Sol critique (`99a90e9c6`) and what changed
+
+Local Sol 6.1 xhigh reviewed the first commit adversarially. It ran six modules (206 tests, OK). Its events were audited: no restricted path was accessed; the only hits were `rg` searches for those strings in repo test files. Its findings and their dispositions, fixed in `367bc0b42`:
+
+| Sol finding | Disposition |
+|---|---|
+| HIGH: install can leave High Power (a failure before the protected span; a re-install of a terminal session) | Fixed. The whole span from the mode change to the handoff restores on any failure. A terminal session is refused before any mode change, and an installed one is not set again. |
+| HIGH: ruling 1(f) accepts a subset of gated runs or negative phases | Fixed. Exactly the three named gated runs are required, with finite, non-negative phases. |
+| HIGH: the fit's turn cap is unbound | Fixed. It must equal the W1 D members' cap (anchor 1's `max_tokens`, 4,096). |
+| HIGH: a soak whose sensor stops reading early passes on an earlier window | Fixed. The window ends at the soak's own end (`sensor_series_end_t_s`, a new contract field). |
+| HIGH: watchdog and normal custody writes race | Fixed. The terminal record has one owner. |
+| MEDIUM: the watchdog's hashing is not bounded inside a file | Fixed. The deadline is checked per 1 MiB block, and an independent 4 s hard exit backs it up. |
+| MEDIUM: an R1 crash marker is taken as the W1 marker | Fixed. W1 markers carry their own text. Admission and install restore any other marker first. |
+| MEDIUM: an interrupt in the close masks the night's exit | Fixed. The close catches BaseException, and the night's own result stands. |
+| MEDIUM: stale pid identity | Fixed. A second snapshot must show the same parent and command before TERM. |
+| MEDIUM: `s6_tuning: {}` authorizes any S6 | Fixed. A receipt {authority, from_c = S5, to_c = S6} is required, with S6 ≤ 2.0 °C. |
+| LOW: three tests not discriminating | The close-failure test now asserts the launch and the exit code. The finally-signal test was already tightened in `002ee41ba`. A per-block deadline test was added. |
+
+Every one of these fixes was neutralized on its own as above, and its test fails without it. A full rerun of the round-5 harness at `367bc0b42` again fails every original case without its fix, with two exceptions:
+- three anchors that `367bc0b42` rewrote (the S6 receipt, the marker ownership, the install span), which the Sol-fix cases above cover;
+- the 1(f) input-validity check, whose test now also feeds a zero and a NaN decode rate. It fails without the check.
+
 ## LOWs left, with reasons
 
 | LOW | Reason left |

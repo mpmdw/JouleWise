@@ -588,7 +588,9 @@ class R1BudgetBindingTests(unittest.TestCase):
                        dict(deadman_budget=three[:2]),                       # the bank run left out
                        dict(deadman_budget=three[:2] + three[:1]),           # a run counted twice
                        dict(deadman_budget=negative),
-                       dict(budget_fit_inputs={'r_decode_tok_per_s': 20.0, 'turn_cap_tokens': 1})):
+                       dict(budget_fit_inputs={'r_decode_tok_per_s': 20.0, 'turn_cap_tokens': 1}),
+                       dict(budget_fit_inputs={'r_decode_tok_per_s': 0.0, 'turn_cap_tokens': 4096}),
+                       dict(budget_fit_inputs={'r_decode_tok_per_s': float('nan'), 'turn_cap_tokens': 4096})):
             inputs, slots = ready_inputs()
             slots.update(change)
             with self.subTest(change=change), self.assertRaisesRegex(ValueError, r'ruling 1\(f\)'):
