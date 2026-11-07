@@ -2343,7 +2343,10 @@ class AnalysisIntegrationTests(unittest.TestCase):
         for contrast in first["contrasts"]:
             with self.subTest(contrast=contrast["contrast_id"]):
                 evaluation = contrast["claim_evaluation"]
-                self.assertEqual(evaluation["outcome"], "not_resolvable")
+                # D5b (DLE-3): the production-identity floor binding refusal
+                # (artifact_schema_invalid) is floor_artifact_invalid, not_estimable.
+                self.assertEqual(evaluation["outcome"], "not_estimable")
+                self.assertIn("floor_artifact_invalid", evaluation["reason_codes"])
                 self.assertFalse(evaluation["claim_ready_for_l2_l3"])
                 self.assertNotIn(
                     "window_evidence_precheck_missing", evaluation["reason_codes"]
@@ -4889,9 +4892,11 @@ class AnalysisIntegrationTests(unittest.TestCase):
                     "fixed_n_plan_incomplete",
                     contrast["claim_evaluation"]["reason_codes"],
                 )
+                # D5b (DLE-3): the floor binding refusal under the production
+                # identity is floor_artifact_invalid, which precedes not_resolvable.
                 self.assertEqual(
                     contrast["claim_evaluation"]["outcome"],
-                    "not_resolvable",
+                    "not_estimable",
                 )
 
     def test_bundle_config_byte_mutation_is_excluded_even_when_identity_and_metadata_hash_match(self):
