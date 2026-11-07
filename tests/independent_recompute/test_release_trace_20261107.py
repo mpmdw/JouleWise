@@ -4,6 +4,8 @@ D2: the recompute's rail idle power read attempt 1's rich idle telemetry while t
 REG 5.8's idle_subtracted_energy_j) is the last idle attempt the controller measured.
 D4: the recompute listed a collected member that never measured a request as a whole-machine member with null
 values, where the harvest's meter record (and so L9's disclosure) has no row for it.
+D3: the recompute left a succeeded member whose clock anchor did not resolve as a null whole-machine row, where the
+harvest's record (PLAN 8.2: every collected member, kept or removed) has its meter terms and rail delta.
 D6: the comparator required BETA's two survivor bound terms although the record's endpoint protocol never carries
 them.
 """
@@ -123,6 +125,55 @@ class UnmeasuredMemberTests(unittest.TestCase):
         rc, out, _ = run_cli({"ALPHA": a}, self.root / "neg8.json")
         self.assertEqual(rc, 0)
         self.assertEqual(out["windows"]["ALPHA"]["neg8"]["recorded_endpoint_protocol"], "replicated_endpoints_with_midpoint")
+
+
+class UnanchoredMemberTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+
+    def member(self, anchor_status="unknown", status="succeeded"):
+        rid = "unanchored-a1"
+        bundle(self.root / "runs", rid, 10., status=status)
+        path = self.root / "runs" / rid
+        metadata = json.loads((path / "metadata.json").read_text())
+        # An unresolved v3 anchor (uncertainty_evidence._unresolved_anchor_v3): status unknown, no placement endpoint,
+        # the controller's clock stamps kept. Request wall 1-3 s maps to monotonic 1020-1022 s.
+        metadata["uncertainty_evidence"]["clock_anchor"] = {
+            "status": anchor_status, "reason": "clock_anchor_unresolved",
+            "clock_stamps": {"sampling_started": {"monotonic_before_s": 1020., "epoch_s": 1.},
+                             "sampling_stopped": {"monotonic_after_s": 1022.}}}
+        dump(path / "metadata.json", metadata)
+        events = path / "events.jsonl"
+        idle = [{"event_type": "stage_started", "phase": "idle_baseline", "timestamp_s": -18.5},
+                {"event_type": "stage_completed", "phase": "idle_baseline", "timestamp_s": -16.5}]
+        events.write_text("".join(json.dumps(x) + "\n" for x in idle) + events.read_text())
+        rich(path / "rich_telemetry_idle.jsonl", [(1_000_000_000, 1.), (1_000_000_000, 1.)])
+        stream = self.root / "meter" / "stream-001.jsonl"
+        stream_file(stream, lambda t: 50. if t >= 15. else 10.)
+        flags = []
+        reader = r.Reader("ALPHA", flags)
+        return r.Member(path, rid, reader, .045), r.MeterStream(stream, reader), flags
+
+    def test_unresolved_anchor_member_is_described_from_stamps_and_its_trace(self):
+        m, stream, _ = self.member()
+        self.assertFalse(m.usable)
+        self.assertEqual(m.comparison, {"status": "not_compared", "reason": "anchor_unbounded"})
+        row = r.machine_member(m, "request", [stream], [], .045)
+        self.assertEqual((row["status"], row["reason"], row["rail_basis"]),
+                         ("descriptive_unanchored", "anchor_unbounded", "bundle_power_trace_csv"))
+        self.assertEqual(row["window_basis"], "controller_stamps")
+        # Meter: (50 - 10) W x 2 s; rail: the recorded trace's 10 W over the 2 s request less 1 W idle x 2 s.
+        assert_values_agree(self, row["delta_J"], 80.)
+        assert_values_agree(self, row["rail_delta_J"], 18.)
+        assert_values_agree(self, row["rho"], 18. / 80.)
+
+    def test_failed_member_stays_null(self):
+        m, stream, _ = self.member(status="failed")
+        row = r.machine_member(m, "request", [stream], [], .045)
+        self.assertIsNone(row["delta_J"])
+        self.assertEqual(row["status"], "not_compared")
 
 
 SURVIVOR = ("disclosure/beta/neg8_allowance/bound_envelope_j", "disclosure/beta/neg8_allowance/bound_prediction_j")

@@ -34,6 +34,7 @@ import plistlib
 import re
 import statistics
 import struct
+import types
 import sys
 import weakref
 from xml.parsers.expat import ExpatError
@@ -491,6 +492,9 @@ class Member:
                 self.comparison = {"status": "compared", "reason": None}
             else:
                 self.comparison = {"status": "not_compared", "reason": "phase_events_ambiguous"}
+        # The bundle's own recorded trace placement (power_trace.csv, absolute epoch seconds), kept for the
+        # descriptive whole-machine line only (unanchored_machine_member); never a claim input.
+        self.trace_records = csv_data
         self.tokens = self.token_surfaces()
 
     def token_surfaces(self):
@@ -1996,6 +2000,42 @@ def request_battery_activity(member, stream, wall, offset, flag):
     return {"available": lo != hi, "active": active, "n": hi - lo}
 
 
+def measured_request_edges(member):
+    """The measured run's sampling_started/sampling_stopped event times (absolute epoch seconds), or None."""
+    starts = [e.get("timestamp_s") for e in member.events
+              if e.get("phase") == "measured_run" and e.get("event_type") == "sampling_started"]
+    ends = [e.get("timestamp_s") for e in member.events
+            if e.get("phase") == "measured_run" and e.get("event_type") == "sampling_stopped"]
+    if len(starts) != 1 or len(ends) != 1 or not all(finite(x) for x in starts + ends) or ends[0] <= starts[0]:
+        return None
+    return starts[0], ends[0]
+
+
+def unanchored_machine_member(member, streams, journal, bop, flag=True):
+    """PLAN 8.2 describes every collected member, kept or removed; the harvest's record gives a member whose clock
+    anchor did not resolve its meter terms and REG 5.8's rail delta (the bundle's idle_subtracted_energy_j, which
+    the reducer integrates over the bundle's recorded trace when the anchor is unresolved: reduce.py
+    _unresolved_anchor_context). The recompute re-derives them for such a succeeded member from the controller
+    clock stamps (meter) and the bundle's recorded power_trace.csv placement (rail) instead of leaving the member
+    null (2026-11-07 release trace, D3). Descriptive whole-machine request only; never a claim input."""
+    edges = measured_request_edges(member)
+    if (member.summary.get("status") != "succeeded" or not getattr(member, "trace_records", None) or edges is None
+            or controller_request_spans(member) is None):
+        return None
+    proxy = types.SimpleNamespace(
+        run_id=member.run_id, reader=member.reader, path=member.path, metadata=member.metadata, events=member.events,
+        origin=0.0, records=member.trace_records, edges={"request": edges},
+        comparison={"status": "compared", "reason": None})
+    row = machine_member(proxy, "request", streams, journal, bop, flag=flag)
+    if hasattr(proxy, "_rail_idle_power"):
+        member._rail_idle_power = proxy._rail_idle_power
+    if not finite(row.get("delta_J")):
+        return None
+    row.update(status="descriptive_unanchored", reason=member.comparison.get("reason"),
+               rail_basis="bundle_power_trace_csv")
+    return row
+
+
 def machine_member(member, phase, streams, journal, bop, shifts=(0.0, 0.0), flag=True):
     """Request: REG 5.8 delta. Phases: 03:26 amendment, gross meter only."""
     scope = member.run_id + "/" + phase
@@ -2008,6 +2048,11 @@ def machine_member(member, phase, streams, journal, bop, shifts=(0.0, 0.0), flag
         "boundary": PHASE_MACHINE_BOUNDARY}
     comparison = getattr(member, "comparison", {})
     if comparison.get("status") == "not_compared":
+        if (request and shifts == (0.0, 0.0) and comparison.get("reason") == "anchor_unbounded"
+                and isinstance(member, Member)):
+            described = unanchored_machine_member(member, streams, journal, bop, flag=flag)
+            if described is not None:
+                return described
         return {**unavailable, "status": "not_compared", "reason": comparison["reason"]}
     controller = controller_request_spans(member) if request else None
     if (request and (controller[1] if controller else baseline) is None) or phase not in member.edges or (
