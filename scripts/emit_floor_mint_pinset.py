@@ -511,7 +511,7 @@ def emit_indexed_pinset(*, window_index: Path, alpha_report: Path, beta_report: 
         raise mint.MintError("block5_producer_registry_already_active")
     from joulewise.cli import validate_bundle
     try:
-        entries = mint.compose_indexed_producers(window_index, include_consumer=True)
+        entries = mint.compose_indexed_producers(window_index, include_consumer=True, parallel_prepare=True)
         producers = {pack: entries[pack] for pack in ("alpha", "beta")}
         from joulewise.b5_analysis.steps import require_primary_context
         require_primary_context([entry.archive_context for entry in producers.values()])
@@ -519,37 +519,21 @@ def emit_indexed_pinset(*, window_index: Path, alpha_report: Path, beta_report: 
         with V2AuthenticationReadSession():
             bindings = _consumer_bindings(entries["gamma"].pack_path)
             triples, manifest_rows, snapshots, plans, orders = [], [], {}, {}, {}
-            for pack, report in (("alpha", alpha_report), ("beta", beta_report)):
+            from joulewise.b5_analysis import pack_parallel as pp
+            from joulewise.b5_analysis.producer_parallel import prepare_producer, consume_prepared
+            calls = [((producers[pack], report, out_dir, bindings, pack), {})
+                     for pack, report in (("alpha", alpha_report), ("beta", beta_report))]
+            outcomes = pp.pack_map(prepare_producer, calls)
+            for pack, (args, kwargs), outcome in zip(("alpha", "beta"), calls, outcomes or [None, None]):
                 entry = producers[pack]
-                acceptance_path = entry.window.archive_root / "sources/inputs/acceptance.json"
-                acceptance_raw = mint._read_block5_archive_input(entry, "sources/inputs/acceptance.json", "block5 acceptance")
-                acceptance_hash = hashlib.sha256(acceptance_raw).hexdigest()
-                mint._read_block5_archive_input(entry, "derived/bracket-binding.json", "block5 bracket binding")
-                core = mint._fresh_original_core()
-                acceptance = core.load_calibration_acceptance_bound(acceptance_path)
-                if acceptance is None:
-                    raise mint.MintError("issued calibration acceptance failed authentication")
-                contract, producer, row = _bootstrap_producer(entry.pack_path, entry.window.claim_runs_root,
-                    report, entry.window.archive_root / "derived/bracket-binding.json", bindings,
-                    acceptance, acceptance_hash, entry.ledger_snapshot, f"{pack}/calibration_plan.json",
-                    "prefill_p2048", kept_units=entry.kept_units)
+                contract, producer, row, plan, order, census = consume_prepared(
+                    outcome, lambda: prepare_producer(*args, **kwargs), entry.pack_path)
+                if census is not None:
+                    pp.merge_census(entry.archive, census)
                 triples.append((contract, producer))
-                try:
-                    report_relative = report.resolve().relative_to(out_dir.resolve()).as_posix()
-                except ValueError:
-                    raise mint.MintError("floor_mint_input_path_not_relative") from None
-                manifest_rows.append({"plan_id": entry.producer_plan_id, "pack": pack,
-                    "exclusions_sha256": entry.kept_units.exclusions_sha256, "report": report_relative,
-                    "cells": [{"role": cell["role"], "allowed_consumer_condition_families": cell["allowed_consumer_condition_families"]}
-                              for cell in row["cells"]]})
+                manifest_rows.append(row)
                 snapshots[entry.producer_plan_id] = entry.ledger_snapshot
-                plans[pack] = read_authentication_input(entry.pack_path / "calibration_plan.json",
-                    grammar="json", label="sealed producer plan copy")
-                # compose_indexed_producers authenticated these sealed bytes against the archive.
-                if json.loads(plans[pack]).get("order_manifest") != "order_manifest.json":
-                    raise mint.MintError("producer order manifest must sit beside its plan")
-                orders[pack] = read_authentication_input(entry.pack_path / "order_manifest.json",
-                    grammar="json", label="sealed producer order manifest copy")
+                plans[pack], orders[pack] = plan, order
             manifest = {"schema_version": mint.BLOCK5_INPUT_SCHEMA, "producer_plans": manifest_rows}
             contracts, rows = map(list, zip(*triples, strict=True))
             provisional = _document(contracts, rows)

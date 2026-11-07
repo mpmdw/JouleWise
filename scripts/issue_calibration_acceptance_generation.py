@@ -603,6 +603,76 @@ QUANTILE_PROOF_MAXIMUM_FORWARD_RESIDUAL = Decimal(1).scaleb(-30)
 QUANTILE_PROOF_PROBABILITIES = ("0.975", "0.995")
 
 
+# Result memo for the two quantile routes (speed only; b5 under-90 lane).
+# `build_quantile_proof(df)` and `student_t_quantile(p, df)` are pure functions
+# of their arguments, of the module bindings they read and of the CALLER's
+# Decimal context (each copies it through `localcontext`, and the proof
+# quantizes, rounds and formats in it).  Validating an issued revision-6
+# acceptance artifact recomputes both for its realized df, about two seconds
+# per validation, and the block-5 analysis validates the same artifact many
+# times per process.  A memo entry is keyed by the exact typed arguments, the
+# caller's complete Decimal context (precision, rounding, exponent limits,
+# capitals, clamp and enabled traps) and the current objects of every module
+# binding either route reads, so a patched helper or bound is a different key.
+# Only returned values are kept (a refusal or error is recomputed every time),
+# a hit returns a deep copy, and a hit raises in the caller's context exactly
+# the flags the computation raised there.  Like `_machin_pi`'s per-precision
+# cache it changes no value.
+_DECIMAL_MEMO_BINDINGS = (
+    "DECIMAL_WORK_PRECISION", "QUANTILE_PROOF_MINIMUM_AGREEMENT_DIGITS",
+    "QUANTILE_PROOF_MAXIMUM_FORWARD_RESIDUAL", "QUANTILE_PROOF_PROBABILITIES", "_PI",
+    "_half_integer_gamma", "_half_integer_beta", "_beta_continued_fraction",
+    "regularized_incomplete_beta", "student_t_survival", "student_t_quantile",
+    "_decimal_arctan", "_machin_pi", "student_t_absolute_cdf_closed_form",
+    "student_t_quantile_closed_form", "_agreement_digits",
+)
+
+
+def _decimal_context_key(context: Any) -> tuple:
+    return (
+        context.prec, context.rounding, context.Emin, context.Emax, context.capitals, context.clamp,
+        tuple(sorted(signal.__name__ for signal, enabled in context.traps.items() if enabled)),
+    )
+
+
+def _decimal_memo(function: Any) -> Any:
+    import copy
+    import functools
+
+    entries: dict[tuple, tuple[Any, frozenset]] = {}
+
+    @functools.wraps(function)
+    def memoized(*args: Any) -> Any:
+        context = getcontext()
+        namespace = globals()
+        key = (
+            tuple((type(argument), argument) for argument in args),
+            _decimal_context_key(context),
+            tuple(namespace.get(name) for name in _DECIMAL_MEMO_BINDINGS),
+        )
+        try:
+            entry = entries.get(key)
+        except TypeError:  # an unhashable argument: never memoized
+            return function(*args)
+        if entry is None:
+            before = [signal for signal, raised in context.flags.items() if raised]
+            context.clear_flags()
+            try:
+                value = function(*args)
+            finally:
+                raised = frozenset(signal for signal, flag in context.flags.items() if flag)
+                for signal in before:
+                    context.flags[signal] = True
+            entry = entries[key] = (value, raised)
+        else:
+            for signal in entry[1]:
+                context.flags[signal] = True
+        return copy.deepcopy(entry[0])
+
+    memoized.cache_entries = entries
+    return memoized
+
+
 def _half_integer_gamma(twice_argument: int) -> tuple[Decimal, int]:
     """Gamma(twice_argument / 2) as (rational factor, power of sqrt(pi)).
 
@@ -699,6 +769,7 @@ def student_t_survival(t: Decimal, degrees_of_freedom: int) -> Decimal:
     return regularized_incomplete_beta(df / (df + t * t), degrees_of_freedom, 1) / 2
 
 
+@_decimal_memo
 def student_t_quantile(probability: str, degrees_of_freedom: int) -> Decimal:
     """The two-sided upper quantile t(p, df), bisected to full precision.
 
@@ -843,6 +914,7 @@ def _agreement_digits(left: Decimal, right: Decimal) -> int:
         return int(-relative.log10())
 
 
+@_decimal_memo
 def build_quantile_proof(degrees_of_freedom: int) -> dict[str, Any]:
     """Prove the REALIZED df's quantiles two ways, or refuse (pre-registration).
 

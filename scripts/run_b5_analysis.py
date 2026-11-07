@@ -30,6 +30,15 @@ The arguments, each the only thing of its kind the run takes:
                        steps 1, 2 and 4 (spawned; every record decision stays serial in this
                        process). Default: JOULEWISE_B5_ANALYSIS_WORKERS, else min(8, CPU count - 2);
                        1 is the serial path. The record and every output are the same for every N.
+--resume               Optional (lane b5-robust). Continue the interrupted run in the existing mode
+                       directory from its last step checkpoint (restricted/resume/checkpoint.json).
+                       The checkpoint must match this invocation (mode, analysis commit and checkout
+                       state, window-index digest, store mode); every checkpointed file is re-hashed,
+                       anything a crashed step left behind is moved to restricted/resume/abandoned/,
+                       and the in-process state of the completed steps is rebuilt and verified
+                       against the checkpoint. The record is the one an uninterrupted run writes. A
+                       resume after the record was written only reports it. Anything else refuses at
+                       step 0 with a "resume refused: <reason>" line. A --phase-log PATH must be new.
 --phase-log PATH       Optional (D-188 TIMERS). A structure-only timing log for the operator: one JSON
                        line per event (run start, step begin, heartbeat, step end, run end) carrying only
                        step ids and integer wall seconds; no label, phase, count, status word or value.
@@ -53,6 +62,10 @@ shadow_<permille>) that names restricted/logs/run-vdl-mode-<token>.json, which t
 beside restricted/decisions/step-codes.jsonl (one row per record step with its raw refusal code,
 for the D-188 result-equivalence comparator, then one random whitespace-only salt line so the
 record's digest of it reveals no redacted code) in the outputs of the last step that ran.
+JOULEWISE_B5_PACK_PARALLEL (speed only, never an output change): unset or "on" lets the independent
+per-pack computations of steps 3b, 5, 10 and 11 run ahead in a bounded pool and be consumed in pack
+order; "off" keeps the serial r2 path; a comma-separated list of pack function names (bracket_pack,
+prepare_producer, reported_pack, derive_pack) enables only those.
 
 What the run prints: on standard error one line per step as it ends, "step <id> <pack or -> <status>",
 where the status is one of ok, tooling_refusal, outcome_class, unclassified_refusal, not_run; on
@@ -89,6 +102,7 @@ def main(argv=None):
     parser.add_argument('--custody',type=Path,required=True)
     parser.add_argument('--workers',type=_positive_int,default=None)
     parser.add_argument('--phase-log',type=Path,default=None)
+    parser.add_argument('--resume',action='store_true')
     try:
         args=parser.parse_args(argv)
     except AnalysisRefusal:
@@ -112,9 +126,10 @@ _REPO=Path(__file__).resolve().parents[1]
 
 
 def _run(args):
-    if args.workers is None:
-        return run(args.mode,args.index,args.custody)
-    return run(args.mode,args.index,args.custody,workers=args.workers)
+    options={}
+    if args.workers is not None:options['workers']=args.workers
+    if args.resume:options['resume']=True
+    return run(args.mode,args.index,args.custody,**options)
 
 
 def _positive_int(text):

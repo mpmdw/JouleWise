@@ -15,7 +15,11 @@ SEAL = ROOT / "docs/process_traces/2026-10-07-block5-seal/SEAL_RECORD.md"
 # there. Main may evolve a collection file after L9's acceptance; for such a file the freeze binds the
 # analysis commit's bytes, not main's working tree.
 B5_ANALYSIS_COMMIT = "b13a510dc15b5e280309f7dd6b280426bf44afc6"
-EVOLVED_ON_MAIN = frozenset({"joulewise/b5/harvest.py"})
+# Cited in-place rebinds keep the freeze on the accepted analysis commit's bytes:
+# joulewise/calibration_bracketing.py -- b5 under-90 round 2 (lead ruling under D-188
+# and the 2026-10-30 frozen-components rule): the run-scoped candidate-physics memo
+# (_verified_candidate_bound); every value it returns is the frozen refit's own.
+EVOLVED_ON_MAIN = frozenset({"joulewise/b5/harvest.py", "joulewise/calibration_bracketing.py"})
 PACK_PREFIXES = ("configs/campaigns/d117_floor_qwen3-1p7b_v5/", "configs/campaigns/d117_floor_qwen3-8b_v5/",
                  "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/")
 

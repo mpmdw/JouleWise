@@ -5552,11 +5552,20 @@ def probe_custody(
             return
 
     worker = threading.Thread(
-        target=probe, daemon=True, name="custody-locator-probe"
+        target=probe, daemon=True, name=CUSTODY_PROBE_THREAD_NAME
     )
     worker.start()
     worker.join(CUSTODY_PROBE_TIMEOUT_S)
     reason = "timeout" if worker.is_alive() else "exception" if failed else None
+    # D-188 L4 (b5 under-90 round 2): the verified store may keep a computation
+    # that ran this probe only when the probe selected the single locator as an
+    # existing directory; the inspection's own reads then bind the entry and are
+    # re-verified on every hit. A timed-out, failed or negative probe, or one
+    # over backup locators (an earlier locator could appear later), is an
+    # observation no hit can re-check, so its enclosing fill is not stored.
+    if reason is not None or not result or not result[0][1] or len(paths) != 1:
+        _note_custody_probe_unstorable(reason or ("absent" if not result else
+                                                  "not_directory" if not result[0][1] else "backup_locators"))
     if reason is not None:
         print(
             f"custody_locator_unreachable reason={reason} locator={path} "
@@ -5570,6 +5579,24 @@ def probe_custody(
     if not is_directory and not_directory is not None:
         return not_directory()
     return inspect(selected)
+
+
+CUSTODY_PROBE_THREAD_NAME = "custody-locator-probe"
+
+
+def _note_custody_probe_unstorable(reason: str) -> None:
+    store = sys.modules.get("joulewise.analysis_verified_store")
+    if store is not None:
+        store.note_unstorable("custody_probe_" + reason)
+
+
+def custody_probe_code() -> Any:
+    """The code object of the probe thread's target (the verified store exempts exactly it)."""
+
+    for constant in probe_custody.__code__.co_consts:
+        if getattr(constant, "co_qualname", None) == "probe_custody.<locals>.probe":
+            return constant
+    raise RuntimeError("custody probe code object not found")
 
 
 def _missing_custody(path: Path) -> Any:

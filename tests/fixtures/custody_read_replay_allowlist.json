@@ -243,10 +243,10 @@
   },
   {
     "file": "joulewise/b5_analysis/sensitivity.py",
-    "function": "sensitivity_pass",
+    "function": "derive_pack",
     "ordinal": 1,
-    "line": 305,
-    "reason": "The pass recomputes floor cells under a sensitivity bound from already-issued primary outputs; it issues nothing and writes no file."
+    "line": 270,
+    "reason": "The pass recomputes floor cells under a sensitivity bound from already-issued primary outputs; it issues nothing and writes no file (per-pack derivation, consumed in pack order by sensitivity_pass)."
   },
   {
     "file": "scripts/produce_b5_disclosures.py",

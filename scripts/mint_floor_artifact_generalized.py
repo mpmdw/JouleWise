@@ -133,19 +133,21 @@ def compose_indexed_producers(window_index: Path, *, seal_pins=None, pack_table=
                               test_only_allow_synthetic_binding: bool = False,
                               repo_root: Path = REPO_ROOT,
                               packs: Sequence[str] = ("alpha", "beta"),
-                              include_consumer: bool = False) -> Mapping[str, Any]:
+                              include_consumer: bool = False,
+                              parallel_prepare: bool = False) -> Mapping[str, Any]:
     """Open sealed windows through the same stage S0/S1/S2/S3 readers as extraction."""
     if active_v2_authentication_session() is None:
         with V2AuthenticationReadSession():
             return compose_indexed_producers(window_index, seal_pins=seal_pins, pack_table=pack_table,
                 test_only_allow_synthetic_binding=test_only_allow_synthetic_binding,
-                repo_root=repo_root, packs=packs, include_consumer=include_consumer)
+                repo_root=repo_root, packs=packs, include_consumer=include_consumer,
+                parallel_prepare=parallel_prepare)
+    # Caller-owned sessions with earlier reads keep the original serial
+    # capability/first-read behavior. The emitter opens a fresh composition.
+    if active_v2_authentication_session().records:
+        parallel_prepare = False
     from joulewise.b5_analysis.windows import AnalysisRefusal, SealPins, load_window_index, select_analysed_attempts, sealed_pack_table
     from joulewise.b5_analysis.archive import open_attempt_record, open_archive
-    from joulewise.b5_analysis.kept_units import load_kept_units, _strict_json
-    from joulewise.b5_analysis import bracket as wb
-    from joulewise.b5_analysis.context import build_context
-    from joulewise.whole_window import canonical_sha256, NEG8_HARVEST_ALLOWANCE_RECORD
 
     pins = seal_pins or SealPins.load()
     table = sealed_pack_table(seal_pins=pins) if pack_table is None else pack_table
@@ -153,46 +155,20 @@ def compose_indexed_producers(window_index: Path, *, seal_pins=None, pack_table=
     records = tuple(open_attempt_record(entry, seal_pins=pins, pack_table=table) for entry in index.entries)
     windows = select_analysed_attempts(index, records, seal_pins=pins)
     result = {}
-    for pack in packs:
-        window = windows[pack]
-        prefix = f"sources/repo/configs/campaigns/{window.pack_id}/"
-        synthetic_digest = (hashlib.sha256(read_authentication_input(window.archive_root / (prefix + "plan_tree.json"),
-                            grammar="json", label="synthetic archived plan tree")).hexdigest()
-                            if test_only_allow_synthetic_binding is True else None)
-        archive = open_archive(window, seal_pins=pins, pack_table=table, synthetic_plan_tree_sha256=synthetic_digest)
-        local_pack = Path(repo_root) / "configs/campaigns" / window.pack_id
-        _allow_governed_extraction_spec(local_pack / "extraction_spec.json")
-        # These paths are sealed inputs, never manifest-controlled paths.
-        for name in ("calibration_plan.json", "calibration_plan.sha256", "extraction_spec.json", "order_manifest.json"):
-            if read_authentication_input(local_pack / name, grammar="raw", label="sealed mint pack input") != archive.source_bytes(prefix + name):
-                raise AnalysisRefusal(name.replace(".", "_") + "_differs_from_archive")
-        spec = _strict_json(read_authentication_input(local_pack / "extraction_spec.json", grammar="json", label="sealed extraction spec"), "extraction_spec_invalid")
-        planned = {}
-        for cell in spec["cells"]:
-            stratum = "repeat" if cell["kind"] == "absolute" else "quad"
-            planned.setdefault(cell["condition_family_id"], {})[stratum] = (
-                {m["bundle_id"]: (m["bundle_id"],) for m in cell["members"]} if stratum == "repeat" else
-                {b["block_id"]: tuple(b["members"][p] for p in ("A1", "B1", "B2", "A2")) for b in cell["blocks"]})
-        producer_plan_id = _producer_plan_identity(local_pack, archive, prefix)
-        kept = load_kept_units(archive, sealed_catalog_sha256=pins.sealed["catalog_sha256"], planned_units=planned)
-        bracket = wb.evaluate_window_bracket(archive, repo_root=Path(repo_root))
-        allowance = _strict_json(archive.output_bytes(NEG8_HARVEST_ALLOWANCE_RECORD), "neg8_allowance_record_invalid")
-        claim_prefix = ("night-custody/" + window.claim_runs_root.relative_to(window.custody_root).as_posix() + "/"
-                        if window.claim_runs_root.is_relative_to(window.custody_root) else "claim-runs/")
-        row = _strict_json(archive.source_bytes("sources/" + claim_prefix + allowance["verdict"]["path"]),
-                           "whole_window_verdict_provenance_invalid")
-        if (canonical_sha256(row) != allowance["verdict"]["row_sha256"]
-                or row["evaluation_basis"]["sha256"] != allowance["verdict"]["evaluation_basis_sha256"]):
-            raise AnalysisRefusal("whole_window_verdict_provenance_invalid")
-        context = build_context(archive, kept, bracket, row, test_only_allow_synthetic_binding=test_only_allow_synthetic_binding)
-        from joulewise.b5_analysis.steps import require_primary_context
-        require_primary_context(context)
-        # Reuse the bracket reader's authenticated archived copy and prefix loader.
-        ledger_inputs = wb._Inputs(archive)
-        _raw, ledger_prefix, terminal_pin = wb._copy(ledger_inputs)
-        acceptance = _strict_json(ledger_inputs.source("sources/inputs/acceptance.json"), "window_bracket_not_passed")
-        snapshot = wb._snapshot(ledger_prefix, terminal_pin, repo_root=Path(repo_root), cutoff=acceptance["ledger_cutoff"])
-        result[pack] = Block5Producer(window, archive, context, kept, snapshot, local_pack, row, producer_plan_id, bracket)
+    from joulewise.b5_analysis import pack_parallel as pp
+    from joulewise.b5_analysis.producer_parallel import consume_prepared
+    if parallel_prepare:
+        packs = tuple(packs)
+        calls = [((windows[pack], pins, table, test_only_allow_synthetic_binding, repo_root), {})
+                 for pack in packs]
+        outcomes = pp.pack_map(_compose_indexed_producer, calls)
+    else:
+        outcomes = None
+    for i, pack in enumerate(packs):
+        outcome = None if outcomes is None else outcomes[i]
+        result[pack] = consume_prepared(outcome, lambda: _compose_indexed_producer(
+            windows[pack], pins, table, test_only_allow_synthetic_binding, repo_root),
+            Path(repo_root) / "configs/campaigns" / windows[pack].pack_id)
     if include_consumer:
         from types import SimpleNamespace
         window = windows["gamma"]
@@ -207,6 +183,54 @@ def compose_indexed_producers(window_index: Path, *, seal_pins=None, pack_table=
                 raise AnalysisRefusal("consumer_pack_differs_from_archive")
         result["gamma"] = SimpleNamespace(window=window, archive=archive, pack_path=local_pack)
     return result
+
+
+def _compose_indexed_producer(window, pins, table, test_only_allow_synthetic_binding, repo_root):
+    from joulewise.b5_analysis.windows import AnalysisRefusal
+    from joulewise.b5_analysis.archive import open_archive
+    from joulewise.b5_analysis.kept_units import load_kept_units, _strict_json
+    from joulewise.b5_analysis import bracket as wb
+    from joulewise.b5_analysis.context import build_context
+    from joulewise.whole_window import canonical_sha256, NEG8_HARVEST_ALLOWANCE_RECORD
+
+    prefix = f"sources/repo/configs/campaigns/{window.pack_id}/"
+    synthetic_digest = (hashlib.sha256(read_authentication_input(window.archive_root / (prefix + "plan_tree.json"),
+                        grammar="json", label="synthetic archived plan tree")).hexdigest()
+                        if test_only_allow_synthetic_binding is True else None)
+    archive = open_archive(window, seal_pins=pins, pack_table=table, synthetic_plan_tree_sha256=synthetic_digest)
+    local_pack = Path(repo_root) / "configs/campaigns" / window.pack_id
+    _allow_governed_extraction_spec(local_pack / "extraction_spec.json")
+    # These paths are sealed inputs, never manifest-controlled paths.
+    for name in ("calibration_plan.json", "calibration_plan.sha256", "extraction_spec.json", "order_manifest.json"):
+        if read_authentication_input(local_pack / name, grammar="raw", label="sealed mint pack input") != archive.source_bytes(prefix + name):
+            raise AnalysisRefusal(name.replace(".", "_") + "_differs_from_archive")
+    spec = _strict_json(read_authentication_input(local_pack / "extraction_spec.json", grammar="json", label="sealed extraction spec"), "extraction_spec_invalid")
+    planned = {}
+    for cell in spec["cells"]:
+        stratum = "repeat" if cell["kind"] == "absolute" else "quad"
+        planned.setdefault(cell["condition_family_id"], {})[stratum] = (
+            {m["bundle_id"]: (m["bundle_id"],) for m in cell["members"]} if stratum == "repeat" else
+            {b["block_id"]: tuple(b["members"][p] for p in ("A1", "B1", "B2", "A2")) for b in cell["blocks"]})
+    producer_plan_id = _producer_plan_identity(local_pack, archive, prefix)
+    kept = load_kept_units(archive, sealed_catalog_sha256=pins.sealed["catalog_sha256"], planned_units=planned)
+    bracket = wb.evaluate_window_bracket(archive, repo_root=Path(repo_root))
+    allowance = _strict_json(archive.output_bytes(NEG8_HARVEST_ALLOWANCE_RECORD), "neg8_allowance_record_invalid")
+    claim_prefix = ("night-custody/" + window.claim_runs_root.relative_to(window.custody_root).as_posix() + "/"
+                    if window.claim_runs_root.is_relative_to(window.custody_root) else "claim-runs/")
+    row = _strict_json(archive.source_bytes("sources/" + claim_prefix + allowance["verdict"]["path"]),
+                       "whole_window_verdict_provenance_invalid")
+    if (canonical_sha256(row) != allowance["verdict"]["row_sha256"]
+            or row["evaluation_basis"]["sha256"] != allowance["verdict"]["evaluation_basis_sha256"]):
+        raise AnalysisRefusal("whole_window_verdict_provenance_invalid")
+    context = build_context(archive, kept, bracket, row, test_only_allow_synthetic_binding=test_only_allow_synthetic_binding)
+    from joulewise.b5_analysis.steps import require_primary_context
+    require_primary_context(context)
+    # Reuse the bracket reader's authenticated archived copy and prefix loader.
+    ledger_inputs = wb._Inputs(archive)
+    _raw, ledger_prefix, terminal_pin = wb._copy(ledger_inputs)
+    acceptance = _strict_json(ledger_inputs.source("sources/inputs/acceptance.json"), "window_bracket_not_passed")
+    snapshot = wb._snapshot(ledger_prefix, terminal_pin, repo_root=Path(repo_root), cutoff=acceptance["ledger_cutoff"])
+    return Block5Producer(window, archive, context, kept, snapshot, local_pack, row, producer_plan_id, bracket)
 
 
 def _producer_plan_identity(pack: Path, archive: Any, prefix: str) -> str:
@@ -4432,7 +4456,9 @@ def mint_multi_cell_floor_artifact(
         if BLOCK5_PRODUCERS:
             raise MintError("block5_producer_registry_already_active")
         try:
-            entries = compose_indexed_producers(window_index)
+            # As the emitter (f4d000128): the two producer compositions are
+            # independent and consumed in pack order (b5 under-90 round 2).
+            entries = compose_indexed_producers(window_index, parallel_prepare=True)
             BLOCK5_PRODUCERS.update({str(entry.window.claim_runs_root.resolve()): entry for entry in entries.values()})
             manifest = _load_v2_input_manifest(input_manifest_path)
             if manifest.get("schema_version") != BLOCK5_INPUT_SCHEMA:
