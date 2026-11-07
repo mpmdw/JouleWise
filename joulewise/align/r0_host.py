@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import asdict
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -15,6 +16,9 @@ from types import SimpleNamespace
 from joulewise.measurement_liveness import census, custody_parent, ADDITIONAL_PARENTS_ENV
 from joulewise.night_gate import ProbeResult, agent_census
 from joulewise.prewindow import PS_ARGV, busy_contaminants
+from joulewise import prewindow
+from joulewise.hazards import contention
+from joulewise.hazards.base import Stamp
 from joulewise.align.r0_step import ProfileRefused, profile_config, rank_response, step_budget
 from joulewise.align.apple.smc_enumeration import rank as classify_smc
 
@@ -37,24 +41,115 @@ class QuietGuard:
     Additional argv matching covers hand-run measurement chains. Custody parents
     include shared defaults and configured extras; missing roots fail closed.
     A refusal is latched even if an endpoint catches the raised exception.
+    Contaminant CPU uses cumulative TIME over at least prewindow.INTERVAL_S;
+    the first clean admission waits for that baseline before returning.
     """
 
     def __init__(self, parents, *, run=subprocess.run, inspect_custody=census,
-                 clock=time.monotonic):
+                 clock=time.monotonic, sleep=time.sleep):
         self.parents = [Path(p) for p in parents]
         self.run, self.inspect_custody, self.clock = run, inspect_custody, clock
+        self.sleep = sleep
         self.last = float("-inf")
+        self._clock_last = float("-inf")
+        self._snapshots = []
+        self._previous_over = {}
         self.failure = None
         self.receipts = []
+
+    def _now(self):
+        now = self.clock()
+        if not math.isfinite(now) or now < self._clock_last:
+            raise Refused("census indeterminate: monotonic clock went backwards or is invalid")
+        self._clock_last = now
+        return now
+
+    def _cpu_snapshot(self, table):
+        started = self._now()
+        wall = time.time_ns()
+        try:
+            result = self.run(contention.PS_ARGV, capture_output=True, text=True,
+                              timeout=15, env={**os.environ, "LC_ALL": "C"})
+        except Exception as exc:
+            raise Refused(f"census indeterminate: cumulative CPU snapshot: {exc}") from exc
+        finished = self._now()
+        if result.returncode:
+            raise Refused(f"census indeterminate: cumulative CPU snapshot exit {result.returncode}")
+        try:
+            rows = contention.parse(result.stdout.encode("utf-8"))
+        except (ValueError, OverflowError) as exc:
+            raise Refused(f"census indeterminate: cumulative CPU snapshot: {exc}") from exc
+        args = {int(line.split(None, 2)[0]): line.split(None, 2)[2]
+                for line in table.splitlines() if line.strip()}
+        for row in rows.values():
+            row["contaminant"] = bool(re.search(prewindow.CONTAMINANTS, row["command"], re.I)
+                                      or re.search(prewindow.CONTAMINANTS,
+                                                   args.get(row["pid"], ""), re.I))
+        snapshot = contention.Snapshot(
+            Stamp(wall, int(started * 1e9), int(started * 1e9)),
+            Stamp(time.time_ns(), int(finished * 1e9), int(finished * 1e9)), rows, None)
+        if snapshot.finished.wall_ns < wall:
+            raise Refused("census indeterminate: wall clock went backwards")
+        if self._snapshots:
+            previous = self._snapshots[-1]
+            if snapshot.started.wall_ns < previous.finished.wall_ns:
+                raise Refused("census indeterminate: wall clock went backwards")
+            for identity in previous.rows.keys() & rows.keys():
+                if rows[identity]["cumulative_cpu_seconds"] < previous.rows[identity]["cumulative_cpu_seconds"]:
+                    raise Refused(f"census indeterminate: CPU counter regressed for {identity}")
+        self._snapshots.append(snapshot)
+        return snapshot
+
+    def _cpu_interval(self, table, receipt):
+        current = self._cpu_snapshot(table)
+        dwell_ns = prewindow.INTERVAL_S * 1_000_000_000
+        while current.midpoint_ns - self._snapshots[0].midpoint_ns < dwell_ns:
+            remaining = (dwell_ns - (current.midpoint_ns - self._snapshots[0].midpoint_ns)) / 1e9
+            self.sleep(remaining)
+            current = self._cpu_snapshot(table)
+        opening_index = max(i for i, snapshot in enumerate(self._snapshots)
+                            if current.midpoint_ns - snapshot.midpoint_ns >= dwell_ns)
+        opening = self._snapshots[opening_index]
+        # Retain the newest eligible opening and every more recent snapshot.
+        del self._snapshots[:opening_index]
+        limit = prewindow.CPU_LIMIT_PERCENT / 100
+        measured = contention.interval(opening, current, tree_roots=(),
+                                       include_kernel_task=True, limit=limit,
+                                       previous_over=self._previous_over)
+        receipt["cpu_interval"] = {
+            "start_monotonic_s": opening.midpoint_ns / 1e9,
+            "end_monotonic_s": current.midpoint_ns / 1e9,
+            "elapsed_s": measured["elapsed_s"], "contaminants": [],
+            "unaccounted": measured["unaccounted"]}
+        if measured["error"]:
+            raise Refused(f"census indeterminate: {measured['error']}")
+        identities = {identity for snapshot in (opening, current)
+                      for identity, row in snapshot.rows.items() if row["contaminant"]}
+        def contaminant(row):
+            return (row["pid"], row["start"]) in identities
+        busy = [row for row in measured["outside_over_limit"] if contaminant(row)]
+        self._previous_over = {identity: rate for identity, rate in contention.over_limit(measured).items()
+                               if identity in identities}
+        for row in measured["outside_listed"]:
+            if contaminant(row) and row["cpu_s_per_s"] > contention.REPORT_FLOOR_CPU_S_PER_S:
+                receipt["cpu_interval"]["contaminants"].append({
+                    "pid": row["pid"], "lstart": row["start"], "name": row["command"],
+                    "cpu_s": row["cpu_s_per_s"] * measured["elapsed_s"],
+                    "cpu_s_per_s": row["cpu_s_per_s"]})
+        receipt["cpu_interval"]["exited_over_limit"] = [
+            row for row in measured["exited_over_limit"] if contaminant(row)]
+        return busy
 
     def check(self, *, force=False):
         if self.failure:
             raise Refused(self.failure)
-        if not force and self.clock() - self.last < 15:
-            return
-        receipt = {"monotonic_s": self.clock(), "resolved_custody_parents": []}
-        self.receipts.append(receipt)
+        receipt = {"resolved_custody_parents": []}
         try:
+            now = self._now()
+            if not force and now - self.last < 15:
+                return
+            receipt["monotonic_s"] = now
+            self.receipts.append(receipt)
             extra = json.loads(os.environ.get(ADDITIONAL_PARENTS_ENV, "[]"))
             if not isinstance(extra, list) or any(not isinstance(p, str) or not p for p in extra):
                 raise Refused("additional custody parents must be a JSON array of paths")
@@ -87,7 +182,7 @@ class QuietGuard:
             table = probe(PS_ARGV)
             if table.exit_code != 0:
                 raise Refused("process table unavailable")
-            busy = busy_contaminants(table.stdout)  # also validates every row
+            diagnostic = busy_contaminants(table.stdout)  # also validates every row
             chains = []
             pattern = re.compile(
                 r"(?:^|[/\s])(?:run_campaign|run_night|window[-_]chain|"
@@ -97,11 +192,20 @@ class QuietGuard:
                 pid, _, argv = line.split(None, 2)
                 if int(pid) != os.getpid() and pattern.search(argv):
                     chains.append(line)
-            receipt.update(agent=asdict(agent), custody=asdict(custody), busy=busy, chains=chains)
-            if refusal or not custody.clear or busy or chains:
+            receipt.update(agent=asdict(agent), custody=asdict(custody),
+                           pcpu_diagnostic=diagnostic, chains=chains)
+            if refusal or not custody.clear or chains:
                 raise Refused(f"machine occupied or census indeterminate: {receipt}")
-            self.last = self.clock()
+            busy = self._cpu_interval(table.stdout, receipt)
+            receipt["busy"] = busy
+            if busy:
+                names = ", ".join(f"{row['pid']} {row['command']} {row['cpu_s_per_s']:.6g} CPU-s/s"
+                                  for row in busy)
+                raise Refused(f"contaminating CPU contention: {names}")
+            self.last = self._now()
         except Exception as exc:
+            if not any(item is receipt for item in self.receipts):
+                self.receipts.append(receipt)
             self.failure = str(exc)
             receipt["refusal"] = self.failure
             raise Refused(self.failure) from exc
