@@ -141,3 +141,167 @@ Not taken: Sol F1 (the `ManagedSession` rewrite, which the triage rated overstat
 | cold LOW-3 | Harmless. |
 | cold LOW-6 | Printed beside the energies in the R1 report. |
 | round-3 exec LOW-2, second half (`recovery_curve` row shape) | Left to the science lane's run-loop rewrite. That lane checks `released` (bool) and a non-empty curve but not the row shape, so it is still open. |
+
+## Round 6 (2026-11-07)
+
+These rulings settle the findings of the two reviews of the R1 round-5 integrated head (`998ee2ab0`):
+
+- "exec" is `docs/align/reviews/2026-11-06-r1-round5-executing-review.md`;
+- "cold" is `docs/align/reviews/2026-11-06-r1-round5-cold-pass.md` (`d5f1b6606`).
+
+Each ruling's text is quoted verbatim as the lead gave it, with the reason it carries. Under each one are the commits that implemented it and any deviation or open point the builders reported.
+
+Two builder lanes implemented them, both branched from `lane/2026-11-06-v4-r1-integrated@998ee2ab0`:
+
+- **science** (R6-1 to R6-6): `lane/2026-11-07-v4-r1-round6-science@0633a9c21`.
+  - `9900f4cd0`: the rulings.
+  - `0633a9c21`: fixes from a local Sol 6.1 xhigh critique of that diff (Sol audit: clean).
+- **infra** (R6-7, R6-8): `lane/2026-11-07-v4-r1-round6-infra@5086e147a`.
+  - `ae26b7c40`: the rulings.
+  - `200ca2555`: fixes from a local Sol 6.1 xhigh critique.
+  - `5086e147a`: the hazard-refusal allowlist guards.
+
+They were integrated on `lane/2026-11-06-v4-r1-integrated` by two merges: `c42c39a5f` (science) and `c6f178f0f` (infra). The integration record is the "Round 6 integration" section of `docs/run_reports/2026-11-06-align-v4-r1-integration.md`.
+
+### R6-1. The duty bar reproduces W1's D-after-D G0
+
+> R6-1 (exec MEDIUM-2, supersedes the cool-to-band part of R5-1): the duty bar must reproduce W1's D-after-D G0. Each gated D run (and X-G) is preceded by exactly W1's inter-member schedule after a D turn — the fixed 300 s idle (take the value from the W1 plan/protocol, do not hard-code a different one) — and is gated against the soak-captured R (R5-1's consume role stays). No cool-to-band before gated runs. A G0 timeout makes that gated run INCONCLUSIVE (recorded), not a night refusal. Reason: W1 members get only the fixed idle, so cooling to band understates the G0 share the bar exists to measure.
+
+**Implemented by** `9900f4cd0` and `0633a9c21` (science).
+- The idle is read from the W1 plan template (`align_v4_kit.w1_inter_member_idle_s`: each member config's `sampling.idle_seconds`, 300 s). The driver checks the runtime templates against it at t0 and checks each run's reported `inter_member_idle_s`.
+- `r1_slots.duty_bar.schedule` records the schedule, and the kit requires it.
+- The soak-R consume check stays.
+- A G0 timeout makes the run INCONCLUSIVE. So does following a member that did no D work. `r1_slots.x_g` records its own status.
+
+**Builder decisions, for the lead to confirm:**
+- **Order.** For every gated run and X-G to follow a D turn, the gated block (D_spam a, D_spam b, D_bank, then X-G) now runs *after* the three designed start states. Before, it ran after X-G and the post-D cooldown. The R + 0 °C planning turn is the D turn before D_spam a.
+- **Inter-member schedule.** W1's schedule is taken to be the member's own configured idle (300 s), which runs inside `run_benchmark`'s idle_baseline stage. R1 inserts no idle segment of its own between members.
+- **No D work.** A gated run or X-G that follows a member which did no D work is INCONCLUSIVE, because it did not test the D-after-D G0. "No D work" means a timed-out G0, or a released G0 with zero decode tokens.
+- **Ruling 1(f), conservative.** A gated run whose G0 timed out is INCONCLUSIVE in the duty bar, but its G0 seconds (the 600 s cap) stay in ruling 1(f)'s max-G0 term. So a single gated G0 timeout makes the kit refuse W1 on 1(f). Leaving inconclusive runs out of the 1(f) maxima would need a ruling.
+
+### R6-2. Calibration precools; a G0 timeout is retried, then INCONCLUSIVE
+
+> R6-2 (exec MEDIUM-1): add a bounded precool (cool S_slow to the G0 band of R, cap from config) before step-d and between consecutive planning states. These are calibration measurements, not W1 replicas, so they should start from a defined state. A G0 timeout at step-d or at a planning state must not refuse the whole night after hours of work. Retry that segment once after another precool; if it still times out, record INCONCLUSIVE for that segment and let the kit decide downstream (fail closed at the kit, not mid-night).
+
+**Implemented by** `9900f4cd0` and `0633a9c21` (science).
+- **Precool.** An `idle-until-soak` precool runs before step-d and before the second and third designed start states. Its cap is the runtime config's `calibration_precool_cap_s` (1,500 s). The ruling 1(c) post-D cooldown precedes the first designed state.
+- **Retry.** A pure G0 timeout is an INCONCLUSIVE runtime result: exit 0, recognised by `r1_runtime.g0_timeout_only`. The driver retries the segment once after another precool. If it times out again, the driver records it in `r1_slots.inconclusive_segments` and continues.
+- **An INCONCLUSIVE step-d** skips the gated runs and X-G, so no gated D runs unbudgeted. `r1_slots` is then written with `slots` null.
+- **An INCONCLUSIVE designed state** makes beta_T and U5 INCONCLUSIVE.
+
+**Builder decision (Sol critique HIGH), for the lead.** The kit refuses W1 for any entry in `inconclusive_segments`, a designed start state included. Before R6-2 such a case refused the whole night. So after such an R1, W1 needs a lead ruling.
+
+**Schedule cost, reported by the builder.**
+- Removed: the three gated precools (up to 1,500 s each) and `cooldown_after_30b` (600 s).
+- Added: three calibration precools (up to 1,500 s each), plus up to one retry (precool + segment) per calibration segment.
+- The nominal night is about 600 s shorter. Each retry adds up to 1,500 s plus the segment to the worst case. The integrated numbers are under R6-8, cold LOW-6.
+
+### R6-3. Ruling 1(f) uses the slowest observed decode rate
+
+> R6-3 (exec MEDIUM-5): the ruling 1(f) worst-case decode term uses min(step-d decode rate, every gated run's observed decode rate). Keep the 'last admitted turn' term at the full turn cap (conservative). When 1(f) does not fit, the kit keeps refusing W1 and naming the largest fitting B_D; the lead rules on ruling 1(e)'s fallback after the R1 night. No code fallback.
+
+**Implemented by** `9900f4cd0` (science).
+- Gated runs report `decode_tokens`.
+- `budget_fit_inputs` records step-d's rate, each gated run's observed rate and their minimum.
+- The kit re-derives the minimum from the `deadman_budget` rows and refuses a stale recorded rate.
+- The last-turn term keeps the full turn cap. There is no code fallback.
+
+No deviation reported.
+
+### R6-4. Changed picks bind S6/S7 to the R1-pick values
+
+> R6-4 (cold MEDIUM-3, protocol fidelity): when R1 changes the picks, S6/S7 bind to the values computed for the R1 picks (s7_for_r1_picks etc.), per protocol v4 :247-251. The kit admits the R1-pick values and refuses the R0-pick ones in that case. Changed-pick S7 uses the median of the 300 s quiet window before prefill as R, because the soak journal lacks those keys: ACCEPTED, record it.
+
+**Implemented by** `9900f4cd0` (drafted by local Sol and reviewed by the builder) and `0633a9c21` (science).
+- With changed picks, `turn_cap_s` and `delta_slow_c` bind to `thermometry.D.s7_for_r1_picks` (`S7` and `band_c.s_slow`). The R0-pick slots are refused. An S6 tuning receipt starts from the R1-pick slow band.
+- The driver records the accepted quiet-window reference rule.
+- Sol critique: `thermal_policy.sensors` must equal `s7_for_r1_picks.keys`.
+
+**Integration (`c6f178f0f`).** The infra lane's cold LOW-1 binding (below) tied `delta_fast_c` to `slots.S5_fast`, the soak fast band of R0's fast key, even when the picks changed. `s7_for_picks` computes a band for both roles, so with changed picks the kit now binds `delta_fast_c` to `s7_for_r1_picks.band_c.s_fast`, and it refuses that band when it is missing or not finite. (The infra report said only the slow band was computed; that was mistaken.) The test is `R1ChangedPickBindingTests.test_changed_picks_bind_delta_fast_to_the_r1_pick_fast_band`, and it fails without the change. The contract doc is updated.
+
+### R6-5. The classification digest is bound
+
+> R6-5 (protocol WP16): inputs.R1.thermal_policy carries thermometry.D.classification_sha256, and the kit binds it to the R1 record.
+
+**Implemented by** `9900f4cd0` (science). `inputs.R1.thermal_policy.classification_sha256` must be a 64-hex digest equal to `r1_slots.thermometry.D.classification_sha256`. The digest is removed before gate-policy validation and member install. The template and kit were regenerated.
+
+No deviation reported.
+
+### R6-6. `cooldown_after_30b` dropped; A-B-A bound accepted
+
+> R6-6 (engineering): drop cooldown_after_30b, because step-30b's 600 s recovery observation already provides the idle. Confirm nothing reads the cooldown as a measurement. ACCEPT the integration's A-B-A batch-window bound using I_D = 1,750 s.
+
+**Implemented by** `9900f4cd0` (science). The phase is gone. The builder confirmed that nothing read it as a measurement: the only references were the phase table and one external-volume test's segment name. The A-B-A bound (`ABA_LEG_I_D_BOUND_S = 1750`, about 4,329 s per leg) is kept.
+
+### R6-7. No exit path leaves the host at mode 2
+
+> R6-7 (exec MEDIUM-4, cold MEDIUM-1/2, SIGKILL case; required before any W1 under High Power): no exit path may leave the host at mode 2 unrestored. Put the High Power marker in a HOST-level location every session can see (outside the per-session measurement view; root-owned under the existing sudo rule if needed). Restore Automatic and clear the marker on every non-measuring exit: install no-op return, malformed plan, rerun or launch_abandoned, admission refusal, failed pmset read, and never-launched. Add the watchdog J4-release restore. At every session start and every run_night admission, a host marker means restore first, then re-check. Make that restore safe against a late launchd fire that overlaps a retried night: never restore while a measuring night holds the night lock. Tests cover every path with fake sudo/pmset. Fix the r1_runtime_contract wording to match.
+
+**Implemented by** `ae26b7c40`, `200ca2555` and `5086e147a` (infra).
+- **Location.** The marker is host-level at `$JOULEWISE_HOST_STATE_DIR`. The default is `/Users/Shared/JouleWise/host-power/high-power.marker`, created on first use with mode 0700 and with its owner recorded as JSON. Beside it is a host night lock (flock), which the kernel drops when its holder dies. No new sudo rule is needed.
+- **Restore rule.** `restore_owed` restores only a marker this night owns, or any marker at a session start, and never while another process holds the lock. Admission refuses rather than restore under a measuring night.
+- **Session (`install`).** It holds the lock and restores a foreign marker first. It then writes a host-level W1 marker naming its session. If the shared installer installs nothing, it restores and refuses.
+- **Session (`prepare`).** It restores an owed marker first, and refuses if the restore fails.
+- **`run_night`.** A night that declares 2 holds the lock from before its admission read to the end of its close. An admission refusal restores, including a failed pmset read. The malformed-plan, rerun and J4 launch_abandoned exits restore the marker this plan owns.
+- **Watchdog.** The J4 release restores its plan's marker.
+- **R1 driver.** Its guard also writes and clears the host marker. R1 runs holding the night lock.
+- **Contract doc.** The "owed to the next night" wording is replaced.
+- **Sol critique fixes (`200ca2555`):**
+  - F1: the R1 teardown restores only while it holds the lock.
+  - F5: under plan 2, only a marker this night owns is kept.
+  - F6: markers are removed only after the read-back is 0.
+  - F8: the night-path test modules point `JOULEWISE_HOST_STATE_DIR` at a temp dir.
+
+**Open, for the lead (Sol critique, each rated HIGH by Sol, not changed):**
+- **F2.** The lock lives as long as the `run_night` process. If `run_night` alone is SIGKILLed while its chain keeps measuring, the lock is released, and a session start could restore under the surviving chain. The same holds for the R1 driver and its runtime child.
+  - The option is to pass the lock fd to the chain (`pass_fds`), so the lock lasts as long as the night's process tree.
+  - The cost is that an orphaned descendant would keep it held: later restores defer, and W1 refuses on the lock (fails closed).
+- **F3.** The W1 close restores Automatic in `run_night`'s `finally` without proving that the hazard chain has stopped. This is R5-6 behaviour. The night is already aborted, so no data is admitted.
+- **F4.** Nights with plan 0 do not hold the lock. A v4 install during a running plan-0 night could therefore set mode 2 for the seconds before that night's no-op restore. The options are that every admitted night holds the lock, or that install checks launchctl before it enters High Power.
+
+**Consequence the builder reported.** Preparing or installing a new session while another W1 High Power session is armed but not yet measuring restores that session's High Power. That night then refuses at admission (expected 2, observed 0). This fails closed, as the ruling text requires.
+
+**R1 chain.** The zsh is unchanged, so no plan pin changes. An R1 night cannot be admitted while a W1 High Power night holds the lock, so the chain's unconditional `pmset 0` cannot run under it.
+
+### R6-8. LOWs to fix
+
+> R6-8 (LOWs to fix): exec LOW-2 (completeness check before an unreleased-G0 leg returns INCONCLUSIVE); exec LOW-3 (block signals around each session close so powermetrics is always stopped); exec LOW-5 (the kit re-derives duty_bar.pass from per-run verdicts); exec LOW-6 (r1_result.status is the authority for committing r1_slots); cold LOW-1 (bind delta_fast_c to an r1_slots fast band, recording it); cold LOW-2 (policy sensors must equal R1's picks); cold LOW-4 (the soak reference check uses the s_slow sensor specifically); cold LOW-5 (WP18 fixture tool checks the rows' run id and seed against p7-PILOT.json); exec LOW-4 (Sol F6, validate turn contents where the fixture format allows); the round-3 recovery_curve row-shape check; cold LOW-6 (compute and write the all-caps R1 night worst case vs the R1 plan's window and record the numbers in LEAD-RULINGS-2; if no plan window_max_s exists, add one from the night plan template). Document any LOW you leave, with a reason.
+
+**Implemented by** `ae26b7c40` and `200ca2555` (infra). The builder mutation-checked each fix's test.
+
+| LOW | What implements it |
+|---|---|
+| exec LOW-2 | `r1_runtime.only_g0_unreleased`. An A-B-A leg is INCONCLUSIVE only for G0-only reasons; any other incompleteness exits 3. At integration, both this and science's `g0_timeout_only` (step-d and designed states) are kept. |
+| exec LOW-3 | `r1_runtime.close_managed_session`. TERM, INT and HUP are held back around each session close, and a failed close stays retryable. CPython runs signal handlers on the main thread, so a close off the main thread runs as before, without deferral. |
+| exec LOW-4 (Sol F6) | `align_v4_kit.check_wp18_turn_contents`. It checks each turn's index, its non-empty integer prompt and output token ids, and exactly two source digests. |
+| exec LOW-5 | `align_v4_kit.check_duty_bar_consistency`. It re-derives FAIL > INCONCLUSIVE > PASS from the per-run `duty_bar.verdict`. |
+| exec LOW-6 | `r1_slots` is committed atomically, only after a complete `r1_result.json`, which carries `registration_sha256`. |
+| cold LOW-1 | `slots.S5_fast` (in `SLOT_NAMES`), with `delta_fast_c` bound to it. With changed picks it binds the R1-pick fast band instead (integration, see R6-4). |
+| cold LOW-2 | `thermal_policy.sensors` must equal `thermometry.D.s_fast` and `s_slow`. |
+| cold LOW-4 | The soak-reference check reads the soak's `sensor_roles.s_slow`. The runtime idle segment now emits `sensor_roles`. |
+| cold LOW-5 | `align_v4_wp18_fixtures.py` binds each row to its turn index and to the seed-law per-turn seed. Sol F7 (a round-5 bug) is fixed: the summary seed is the member's seed index (16/14), not the derived 64-bit seed. This could not be checked against the real `p7-PILOT.json` off the Mac. |
+| round-3 `recovery_curve` row shape | `_check_recovery_curve`: finite `[t_s, S_slow]` pairs with non-decreasing `t_s`. At integration it runs inside `_check_precool`, so the R6-2 retry precools are checked too. |
+| cold LOW-6 | `align_r1_rehearsal.night_worst_case_s`. At integration it uses the round-6 table with the runtime's precool cap, and it reports the R6-2 retry allowance. |
+
+**Cold LOW-6 numbers (integrated head `c6f178f0f`, `night_worst_case_s(None)`).** Bounds: timed segments at their duration or cap; quiet model segments at their ruling 8 bound; A-B-A legs at 4,329.0 s each; other model segments at the 1,800 s member bound. The calibration brackets and the harvest are not bounded.
+
+| Case | Seconds |
+|---|---|
+| No redo, no retry | **44,487** |
+| With one 11:45-13:15 batch-window wait (+5,400) | 49,887 |
+| R6-2 retry allowance: 4 × (1,500 s precool + 3,300 s segment) | 19,200 |
+| Every R6-2 retry plus one batch-window wait | 69,087 |
+
+Each quiet-segment redo (`MAX_SEGMENT_REDOS` = 2) adds its release and the segment again on top of these.
+
+The infra lane's 45,087 / 50,487 s are for the round-5 table, which still had `cooldown_after_30b`. Its projection of 45,387 s for the round-6 table is superseded by the 44,487 s above.
+
+The gated runs and X-G are bounded at the 1,800 s member bound, with no separate allowance for the R6-1 300 s idle. If the idle falls outside that bound, add 4 × 300 = 1,200 s (45,687 / 51,087 s).
+
+**Deviation (cold LOW-6, second half).** No R1 night plan and no `window_max_s` exists in the repo. The builder added no R1 plan template, because the R1 plan is a Mac-side artifact (`MEASUREMENT_ROOT`, `NIGHT_DIR`, the sudo rules). The W1 night plan template is the only plan in the repo. Its own `window_max_s` is a `PENDING_R1` placeholder, and its only numeric window is W1's `window_cap_s` of 44,640 s, which is below even the no-redo R1 worst case. So the template gives no R1 value to copy. The lead must set the R1 plan's `window_max_s` from the numbers above, or accept a wall-clock cut in the all-caps case. The magistrate was asked to do this (kit-delivery note, item 3).
+
+**LOWs left.** None of the listed LOWs, apart from that second half of cold LOW-6.
+
+**Integration notes on R6-8.**
+- The science lane's own open items are now closed by the infra lane: exec LOW-2 for the A-B-A leg path, cold LOW-1 (`delta_fast_c`) and cold LOW-2 for unchanged picks.
+- The policy sensors must equal the R1 picks in every case (infra). With changed picks they must also equal `s7_for_r1_picks.keys` (science).

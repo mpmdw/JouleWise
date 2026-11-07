@@ -814,3 +814,148 @@ Every run used `/private/tmp/jwsol/venv-both/bin/python -B` under `nice -n 19 ta
 - **Inconclusive scope.** Only an A-B-A leg whose own G0 did not release is INCONCLUSIVE. Other incomplete legs still refuse R1.
 - **LOWs left, with reasons.** These are listed in `LEAD-RULINGS-2.md` under R5-10. The round-3 `recovery_curve` row-shape check is still open: neither lane added it.
 - **Integration slip.** On this run the first suite launcher's concurrency cap did not work: `jobs` inside a command substitution sees no jobs. About 115 test modules started at once for roughly two minutes, and the load average reached about 48. I stopped them by process tree and by cwd; neither protected process (61827, 89849) was touched. I then reran the whole suite under `xargs -P 3`. Every tail below comes from that rerun.
+
+## Round 6 integration (two lanes onto `998ee2ab0`)
+
+This round is code and kit integration only:
+
+- no measurement ran;
+- no model weights were loaded;
+- no v3 kit bytes changed.
+
+The rulings R6-1 to R6-8 are recorded verbatim, with the commits that implemented each one, in the "Round 6" section of `docs/align/council-2026-11-06-v4-review/LEAD-RULINGS-2.md`. Two `--no-ff` merges landed, in this order:
+
+| Merge | Lane @ head | What landed |
+|---|---|---|
+| `c42c39a5f` (1/2) | `lane/2026-11-07-v4-r1-round6-science@0633a9c21` | **R6-1:** the gated D runs and X-G follow a D turn with W1's 300 s idle, read from the W1 plan; the gated block moves after the designed start states; a G0 timeout makes the run INCONCLUSIVE. **R6-2:** calibration precools before step-d and between the states, one retry, then `inconclusive_segments`. **R6-3:** the 1(f) rate is min(step-d, gated runs). **R6-4:** changed picks bind S6/S7 to `s7_for_r1_picks`. **R6-5:** the classification digest. **R6-6:** `cooldown_after_30b` dropped. No conflicts: the lane descends from the integrated tip. |
+| `c6f178f0f` (2/2) | `lane/2026-11-07-v4-r1-round6-infra@5086e147a` | **R6-7:** host-level High Power marker and night lock; restore on every non-measuring exit; the watchdog J4 restore; restore-first at session start and admission, never under a held lock. **R6-8:** the LOW set. Also the Sol critique fixes F1, F5-F8 and the allowlist guards. Conflicts in the runtime, the driver, the WP22 synthetic stand-in, `test_v4_kit.py` and the two generated files. |
+
+Conflict resolutions (the full list is in the `c6f178f0f` message):
+
+- **Runtime.** Both G0 helpers are kept:
+  - science's `g0_timeout_only`, for an INCONCLUSIVE step-d or designed state (R6-2);
+  - infra's `only_g0_unreleased`, the exec LOW-2 completeness check on the A-B-A leg path.
+
+  In `Segment.k_step`, the science return comes first, then the leg path with infra's check. Infra's `close_managed_session` (exec LOW-3) is kept.
+- **Driver.**
+  - Infra's `night_worst_case_s` is kept beside science's `budget_fit_inputs(step_d, gated, deadman_rows)` (R6-3).
+  - The idle-until-soak check is science's `_check_precool`, which now calls infra's `_check_recovery_curve` (the round-3 row shape). The R6-2 retry precools are therefore row-checked too.
+  - The host lock acquisition (infra) sits before science's t0 schedule and precool-cap reads.
+- **Fixtures.** The WP22 `SYN_R1_SLOTS`, `test_v4_kit.r1_record` and the failed-duty-bar test take the union of both lanes' fields:
+  - from science: `classification_sha256`, `decode_tokens`, `inconclusive_segments`, `duty_bar.schedule`;
+  - from infra: `thermometry.D.s_fast/s_slow`, the per-run `duty_bar.verdict`, `duty_bar.verdict`, `S5_fast`.
+- **Generated files.** `plan_tree.json` and `identity_pins.json` were regenerated with `scripts/align_v4_kit.py`. A second generator run changes nothing, and `validate_align_v4_w1_plan.py --regenerate-template` leaves the template unchanged.
+
+Integration changes. Each has a test that fails without it, mutation-checked here:
+
+1. **cold LOW-1 × R6-4.** With changed picks, `slots.S5_fast` is the soak band of R0's fast key. The kit now binds `delta_fast_c` to `thermometry.D.s7_for_r1_picks.band_c.s_fast` and refuses a missing or non-finite band. `s7_for_picks` already computes both roles' bands; the infra report's "slow band only" was mistaken. The contract doc is updated.
+   - Test: `R1ChangedPickBindingTests.test_changed_picks_bind_delta_fast_to_the_r1_pick_fast_band`.
+2. **cold LOW-6 × R6-1/2/6.** `night_worst_case_s` now builds the phase table with the runtime config's `calibration_precool_cap_s`, as `run()` does. It also reports `r6_2_retry_max_s` and `with_retries_and_one_batch_wait_s`.
+   - Test: `R1NightWorstCaseTests.test_worst_case_uses_the_round6_table_and_counts_the_r6_2_retries`.
+3. **Fixture consistency (test-only).**
+   - `R1ChangedPickBindingTests.setUp` records the R1 picks as `thermometry.D.s_fast/s_slow` (what the runtime writes) and adds the R1-pick fast band.
+   - The R6-4 keys test now expects infra's cold LOW-2 refusal first. Science's keys refusal is tested on a record whose picks and keys disagree.
+   - Infra's duty-aggregate test keeps the R6-1 schedule on the bar it replaces.
+
+### Kit check on the round-6 head (`c6f178f0f`)
+
+- `git diff origin/lane/2026-11-05-align-pilot10-benign -- configs/campaigns/align_pilot_v3` is empty, both against HEAD and against the worktree.
+- `scripts/align_v4_kit.py --check` reports no drift and exits **1**. It is blocked on exactly nine leaves, the same set as in rounds 4 and 5:
+  - `WP18.X.max_turns`, `WP18.X.token_fixture_sha256`, `WP18.Y.max_turns`, `WP18.Y.token_fixture_sha256`. These come from the Mac: the magistrate runs `scripts/align_v4_wp18_fixtures.py`.
+  - `R0.reasoning_effort`.
+  - `R1.B_D`, `R1.I_D`, `R1.T_dead`, `R1.thermal_policy`.
+- Beyond the leaves, `require_ready` now also needs the following from the R1 record:
+  - an empty `inconclusive_segments` (R6-2);
+  - a duty bar carrying the R6-1 schedule, with `pass` and `verdict` consistent with the per-run verdicts (exec LOW-5);
+  - `thermal_policy.classification_sha256` equal to `thermometry.D.classification_sha256` (R6-5);
+  - policy sensors equal to the R1 picks (cold LOW-2), and with changed picks equal to `s7_for_r1_picks.keys`;
+  - `delta_fast_c` equal to `S5_fast`, or with changed picks to `s7_for_r1_picks.band_c.s_fast`;
+  - S6/S7 from `s7_for_r1_picks` when the picks changed (R6-4);
+  - ruling 1(f) at min(step-d rate, gated rates) (R6-3).
+- `require_w1_ready` also re-checks the WP18 turn contents (exec LOW-4).
+- `validate_align_v4_w1_plan.py` on the committed template still refuses its `PENDING_R1` placeholders, `window_max_s` among them.
+
+### Suite tail (round 6 integration, code head `c6f178f0f`)
+
+How the suite ran:
+
+- Every run used `/private/tmp/jwsol/venv-both/bin/python -B -m unittest <module>` under `nice -n 19 taskpolicy -b`, one module per process.
+- `xargs -P 3 -n 1` ran at most three at a time, slowest modules first, each with its own `TMPDIR` under `/private/tmp/jwr6-tmp/suite`.
+- Before launch, a `ps` check confirmed exactly three unittest children.
+- The commits after `c6f178f0f` are docs only.
+
+**Whole `tests/align` (118 modules, one per process).** Every module rc=0, OK. In total, **Ran 1612 tests, skipped=35**.
+
+The slowest walls:
+
+| Module | Wall |
+|---|---|
+| test_moe_calibration | 2,135 s |
+| test_moe_review | 628 s |
+| test_analysis_metadata_baseline | 488 s |
+| test_r0_mlx_native | 454 s |
+| test_analysis_budget_pilot | 433 s |
+
+Selected module tails:
+
+```
+test_r1_rehearsal           Ran 73 tests in 7.359s     OK
+test_r1_runtime             Ran 33 tests in 44.677s    OK
+test_r1_runtime_e2e         Ran 2 tests in 39.847s     OK
+test_r1_runtime_contract    Ran 11 tests in 0.003s     OK
+test_r1_inventory           Ran 11 tests in 0.427s     OK
+test_r1_round5_exec_review  Ran 6 tests in 4.223s      OK
+test_r1_round6_lows         Ran 18 tests in 2.888s     OK
+test_r1_round6_power        Ran 25 tests in 0.431s     OK
+test_v4_kit                 Ran 100 tests in 11.161s   OK
+test_v4_wp18_fixtures       Ran 11 tests in 0.173s     OK
+test_v4_w1_plan             Ran 11 tests in 0.791s     OK
+test_v4_prequal             Ran 33 tests in 5.373s     OK (skipped=3)
+test_v4_powermode_record    Ran 9 tests in 0.298s      OK
+test_external_volume        Ran 23 tests in 0.016s     OK
+test_protocol_v4_doc        Ran 5 tests in 0.277s      OK
+test_r0_mlx_native          Ran 1 test in 452.086s     OK
+test_v4_w1_synthetic        Ran 18 tests in 3.022s     OK (skipped=14)   # full windows gated by JW_WP22_FULL
+```
+
+**WP22 synthetic W1 dry run** (`JW_WP22_FULL=1 tests.align.test_v4_w1_synthetic`): Ran 18 tests in 169.476s, OK (expected failures=1). As in rounds 4 and 5, only F3 is expected to fail.
+
+**`tests.test_align_pilot_session`:** Ran 16 tests in 335.965s, OK.
+
+**Non-align modules the infra lane touched (for the record):**
+
+- `tests.test_magistrate_watchdog`: Ran 158 tests in 3.674s, OK.
+- `tests.test_run_night`: Ran 318 tests in 218.943s, FAILED (failures=15). These are the environment-only classes the infra builder reported:
+  - `BindSupervisionProcessTests` (6): wall-clock budgets under `taskpolicy -b`;
+  - `NightDriverTests` installer tests (8): "test interpreter must load the battery fixture in child Pythons", which this venv does not do;
+  - `QuietDriverIntegrationTests.test_supervised_worker_is_reaped_on_cancellation` (1).
+
+  For comparison, the same module on the round-5 base `998ee2ab0`, run the same way, gives Ran 318 tests, FAILED (failures=18), in the same classes.
+  - The only test that fails here and not on the base is `BindSupervisionProcessTests.test_journal_failure_and_saturation_are_terminal (mode='journal_saturation')`: it got "journal acknowledgement unavailable at cleanup deadline", a timing outcome. Rerun alone on the head, it passes: Ran 1 test in 4.574s, OK.
+  - Four timing tests that fail on the base pass here.
+
+### Open after round 6 (for the lead)
+
+- **R6-1 builder decisions to confirm.**
+  - The gated block moves after the designed start states, and the R + 0 °C planning turn is the D turn before D_spam a.
+  - The W1 schedule is the member's own configured idle; R1 inserts no idle segment of its own.
+  - A run that follows a member with no D work is INCONCLUSIVE.
+  - A gated G0 timeout keeps its 600 s cap in 1(f)'s max-G0 term, so one gated timeout refuses W1 on 1(f). Leaving inconclusive runs out of the 1(f) maxima needs a ruling.
+- **R6-2.** The kit refuses W1 on any `inconclusive_segments` entry, a designed start state included. After such an R1 night, W1 needs a lead ruling.
+- **R6-7, Sol F2/F3/F4** (each rated HIGH by Sol, unchanged):
+  - **F2:** the night-lock lifetime when only `run_night` is SIGKILLed while its chain survives. The option is `pass_fds`.
+  - **F3:** the W1 close restores before the chain is proven stopped (R5-6 behaviour; no data is admitted).
+  - **F4:** plan-0 nights do not hold the lock.
+- **R6-7 consequence.** Preparing or installing a session while another W1 High Power session is armed but not yet measuring restores that session's High Power. Its night then refuses at admission. This fails closed.
+- **Cold LOW-6: R1 plan window.** There is no R1 plan and no `window_max_s` in the repo, and none was added: the R1 plan is a Mac-side artifact. All-caps worst case on the integrated table:
+
+  | Case | Seconds |
+  |---|---|
+  | No redo, no retry | 44,487 |
+  | With one batch-window wait | 49,887 |
+  | Plus the R6-2 retry allowance (19,200) | 69,087 |
+
+  This assumes the 300 s idle of the gated runs and X-G sits inside their 1,800 s member bound. If it does not, add 1,200 s. The W1 `window_cap_s` of 44,640 s is below even the no-redo R1 case. The lead must set the R1 plan's `window_max_s`. The infra builder's 45,087 / 50,487 s in the kit-delivery note are for the round-5 table and are superseded by these numbers.
+- **WP18 (Sol F7).** The fix to the WP18 seed index could not be checked against the real `p7-PILOT.json` off the Mac. If the tool refuses on the real files, the magistrate sends its exact message.
+- **Exec LOW-3 scope.** Signal deferral applies only to a session close on the main thread.
+- **Hardware checks carried over from round 5:** the inventory sweep duration, the second SMC reader, and the heater start-state loop on the first R1 night.
