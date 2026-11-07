@@ -1042,6 +1042,18 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+198. **Magistrate activation 2115b21f (Opus 5.5, headless, 2026-11-07 from 08:47 PST): the WP18 fixtures are committed (items 191, 196 (B)); R0 re-run 8 stays at 17:15 PST; Flash-Next live tests (item 197) cannot run headless today.** No pending notices, no unread mail from Ed, no new directive.
+- **WP18.** `scripts/align_v4_wp18_fixtures.py` at `97714c644`, write and then `--check`, both exit 0. It was run on `/Users/edr/night-archive/wp18-extract-20261107/` (b-e25 `b71f393e…f364`, b-e18 `f657ddd7…b01e`, re-hashed) and `--pilot /Users/edr/night-archive/seats-cf1baad2/pilots/p7-PILOT.json`.
+  - X `align-pilot-v3-episodes-b-e25`: max_turns 12, sha256 `9dac183dc113275c799f339f827be3ab1e332f4685b2e4b6b0da9466d6dc658f`.
+  - Y `align-pilot-v3-episodes-b-e18`: max_turns 12, sha256 `f17a5a0f52921b52d67216e6b0bfa86cb3f96ebd143d6e39a4c210ba81420dac`.
+  - Both match item 194's in-memory values. Branch `lane/2026-11-07-wp18-fixtures` at `aaee4b2d2` (from `97714c644`) carries only the two registration files. The tool's own edit to `inputs.json` was not committed; it is saved as `/Users/edr/night-archive/wp18-extract-20261107/inputs-json-tool-diff.patch` for the lead's kit regeneration.
+- **Flash-Next (item 197).** Not run today. The card (`docs/align/qwen4_exp_port/mbp_live.md` on `lane/2026-11-06-qwen4exp-quality-ref`) needs `/Volumes/JW-EXT` attached (no external disk is attached; `/Volumes` has only `Macintosh HD`). It also needs offload run A's bus baseline taken before the SSD is plugged in, and every agent session and the watchdog stopped. It takes 7-20 h after the download starts. That is an operator run with Ed at the Mac, so it is not something this headless session can start. If Ed starts it, R0 re-run 8 waits for it: the SSD is never attached into R0 or a window.
+- **Housekeeping.** Five orphaned fake-meter test processes (`b5-fake-km003c-meter`, parent 1, temp dir gone, 0 % CPU, from a 05:00 PST test run) were killed. The watchdog's fixture-orphan census had counted them.
+- **Next activation (replaces item 195's last pointer; everything else in it holds):**
+  - (1) At or after 17:15 PST, launch R0 re-run 8 exactly as item 195's last "Next activation" (1) says. Add one check: `/Volumes` holds no `JW-EXT` and no other external disk.
+  - (2) After R0: item 195's (2). WP18 is done; the laptop lead integrates `aaee4b2d2`.
+  - (3) Flash-Next and the SSD qualification (item 188 (4)) wait for Ed at the Mac, and neither may overlap R0.
+
 197. **Laptop lead (interactive session 1544c617, Opus 5.5), 2026-11-07 about 08:30 PST: kit delivery. The Flash-Next bf16 quality reference (lead ruling L3) exists. It closes Saturday operator card B12 / MISSING-6 (F13), so the quantized-model comparison no longer has to stay OPEN.** This item schedules nothing. When the Flash-Next live tests run (by day, never overlapping a measurement or the SSD qualification) is the magistrate's call.
 - **Reference.** On branch `records/2026-11-07-qwen4-l3-reference-top64` (`ade3bf7f5`), under `records/qwen4/2026-11-07-l3-reference-top64/`:
   - `reference-top64.npz`, sha256 `6c9dcb7c…45f8`, and its `.json`;
