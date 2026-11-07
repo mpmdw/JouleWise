@@ -404,6 +404,21 @@ class Round3ArithmeticTests(unittest.TestCase):
             self.assertNotIn(code, r.STOP_FLAG_CODES)
 
 
+def _unanchored_describable(path):
+    """D3's preconditions, read from the bundle's own files (not the recompute's helpers): a succeeded member
+    with one measured-run sampling start and stop event, controller clock stamps for both, and a recorded
+    power_trace.csv."""
+    summary = json.loads((path / 'summary_metrics.json').read_text())
+    events = [json.loads(line) for line in (path / 'events.jsonl').read_text().splitlines() if line.strip()]
+    metadata = json.loads((path / 'metadata.json').read_text())
+    sampling = [e.get('event_type') for e in events if e.get('phase') == 'measured_run'
+                and e.get('event_type') in ('sampling_started', 'sampling_stopped')]
+    stamps = ((metadata.get('uncertainty_evidence') or {}).get('clock_anchor') or {}).get('clock_stamps') or {}
+    return (summary.get('status') == 'succeeded' and sorted(sampling) == ['sampling_started', 'sampling_stopped']
+            and {'sampling_started', 'sampling_stopped'} <= set(stamps)
+            and (path / 'power_trace.csv').is_file() and (path / 'power_trace.csv').stat().st_size > 0)
+
+
 @unittest.skipUnless(archive_available(R18) and archive_available((R2 / 'r18-registered.json')), 'R18 / round-2 baseline unavailable')
 class Round3RehearsalTests(unittest.TestCase):
     @classmethod
@@ -432,6 +447,9 @@ class Round3RehearsalTests(unittest.TestCase):
         # with the record; without them it stays not_compared and null.
         request = line['members'][unbounded]['phases']['request']
         described = request.get('status') == 'descriptive_unanchored'
+        # The fixture decides which branch holds, read structurally from the bundle (PR #693 review L2), so a
+        # revert of D3's unanchored path fails here instead of passing through the null branch.
+        self.assertEqual(described, _unanchored_describable(R18 / 'sources/claim-runs' / unbounded))
         if not described:
             self.assertEqual(request['recorded_comparison'], {
                 'status': 'not_compared', 'matches': None, 'reason': 'anchor_unbounded'})
