@@ -591,6 +591,32 @@ class ArmRebuildTests(Base):
         self.assertEqual(triage['meter_live_evidence']['live'], True)
         self.assertEqual(triage['packet_sha256'], cad._canonical_sha256(triage['packet']))
 
+    def test_the_meter_probe_ends_before_the_quiet_dwell_starts_and_never_during_it(self):
+        # Lead ruling 2026-11-08: the 3 s monitor launch is USB and process activity; it runs before the
+        # quiet/display dwell starts. The arm stamps both on one monotonic clock and records the order.
+        s = self.scenario().finish()
+        record = self.arm(s, s.build())
+        self.assertTrue(record['admitted'], record['reasons'])
+        dwell = record['quiet_dwell']
+        self.assertTrue(dwell['meter_probe_before_dwell'])
+        evidence = record['next_arm_triage']['meter_live_evidence']
+        self.assertLess(evidence['probe_started_ns'], evidence['probe_ended_ns'])
+        self.assertLess(evidence['probe_ended_ns'], dwell['start_ns'])
+        self.assertEqual(dwell['meter_probe_ended_ns'], evidence['probe_ended_ns'])
+        # a dwell that started at or before the probe's end refuses the arm, whatever the meter says
+        for label, start in (('dwell already running', lambda: 1), ('dwell starts as the probe ends', None)):
+            with self.subTest(label=label):
+                kwargs = {'dwell_start': start} if start else {
+                    'meter_probe': lambda root: {'live': True, 'probe_ended_ns': 10**15},
+                    'dwell_start': lambda: 10**15}
+                refused = self.arm(s, s.build(), **kwargs)
+                self.assertFalse(refused['admitted'])
+                self.assertFalse(refused['quiet_dwell']['meter_probe_before_dwell'])
+                self.assertTrue(any('meter probe did not end before the quiet dwell' in r for r in refused['reasons']))
+        # a probe that reports a non-integer end (or none that the arm can order) cannot satisfy the ordering
+        bad = self.arm(s, s.build(), meter_probe=lambda root: {'live': True, 'probe_ended_ns': 'later'})
+        self.assertFalse(bad['admitted'])
+
     def test_edited_status_swapped_commit_forged_rows_and_planted_desk_digest_all_refuse(self):
         # Opus packet review HIGH-1: each of these armed on the v4 head before the arm rebuilt the packet.
         s = self.scenario()

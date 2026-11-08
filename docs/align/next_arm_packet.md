@@ -37,7 +37,7 @@ live-meter evidence. `packet_preflight.ready` is only desk readiness. The builde
 and part of the executed closure.
 
 The arm itself computes `series_powermode`, `external_volume`, `charging_battery` and
-`meter_reader_live` (a short live KM003C probe) from current hardware; the packet cannot assert
+`meter_reader_live` (a short live KM003C probe, which must end before the quiet/display dwell starts: the arm records `quiet_dwell` with both timestamps and refuses otherwise) from current hardware; the packet cannot assert
 them. The complete 16-entry source map (15 gating; `meter_coverage` is recorded, non-gating) is
 retained in `entry_sources`, and the consumer computes `calibration_stop` from the authenticated
 counts. `prepared_at`, the live meter check and the battery evidence are never lead-entered.

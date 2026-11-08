@@ -380,7 +380,7 @@ def _record_bound(root, packet):
 def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=None, owner=None,
                obc_off_attested_by=None, battery_runner=None, battery_log=None, window_battery_journal=None,
                now=None, next_arm_triage=None, commit_check=None, record_check=None,
-               packet_builder=None, meter_probe=None):
+               packet_builder=None, meter_probe=None, dwell_start=None):
     """W1/D arm evidence: ruling 7 AC powermode and ruling 20 volumes.
 
     Ruling 7: the AC-profile powermode must equal the plan's frozen series
@@ -459,10 +459,25 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
                                                          current_artifact_set_sha256=current_digest)
     except (ValueError, KeyError, TypeError, AttributeError, OSError) as exc:
         rebuild_error = f'{type(exc).__name__}: {exc}'
+    # The 3 s monitor launch is USB and process activity: it runs BEFORE the quiet/display dwell
+    # starts, never during it (lead ruling 2026-11-08). The arm stamps the probe's end and the dwell
+    # start on one monotonic clock and refuses unless the probe ended strictly earlier.
+    probe_started_ns = time.monotonic_ns()
     try:
-        meter = (meter_probe or _probe_meter_live)(measurement_root)
+        meter = dict((meter_probe or _probe_meter_live)(measurement_root))
     except Exception as exc:  # noqa: BLE001 - an unverifiable meter refuses; it never raises out of the arm
         meter = {'live': False, 'reason': f'{type(exc).__name__}: {exc}'}
+    meter.setdefault('probe_started_ns', probe_started_ns)
+    meter.setdefault('probe_ended_ns', time.monotonic_ns())
+    meter.setdefault('probe_ended_epoch_s', now_s)
+    dwell_start_ns = (dwell_start or time.monotonic_ns)()
+    dwell_ordered = (type(meter['probe_ended_ns']) is int and type(dwell_start_ns) is int
+                     and meter['probe_ended_ns'] < dwell_start_ns)
+    quiet_dwell = {'start_ns': dwell_start_ns, 'start_epoch_s': now_s, 'meter_probe_ended_ns': meter['probe_ended_ns'],
+                   'meter_probe_before_dwell': dwell_ordered}
+    if not dwell_ordered:
+        reasons.append('quiet_dwell: the meter probe did not end before the quiet dwell started '
+                       '(it must run before the dwell, never during it)')
     internal = {'series_powermode': bool(power['admitted']),
                 'external_volume': volumes['verdict'] == external_volume.PASS,
                 'charging_battery': bool(battery['admitted']),
@@ -490,7 +505,7 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
     reasons += ([] if internal['meter_reader_live'] else
                 ['next_arm_triage: triage meter_reader_live failed'])
     return {'schema': ARM_RECORD_SCHEMA, 'admitted': not reasons, 'reasons': reasons,
-            'next_arm_triage': triage,
+            'next_arm_triage': triage, 'quiet_dwell': quiet_dwell,
             'ac_powermode': power, 'external_volumes': volumes, 'battery': battery,
             # Lead ruling R7-10: the host state directory this arm used.
             'host_state_dir': powermode.host_state_dir()}
@@ -720,12 +735,13 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
                      w1_disk_config, disk_gate, lock=None, owner=None,
                      obc_off_attested_by=None, battery_runner=None, battery_log=None,
                      window_battery_journal=None, next_arm_triage=None, commit_check=None, record_check=None,
-                     packet_builder=None, meter_probe=None, **kwargs):
+                     packet_builder=None, meter_probe=None, dwell_start=None, **kwargs):
     record = arm_checks(measurement_root, plan, runner=runner, volume_runner=volume_runner, lock=lock,
                         owner=owner, obc_off_attested_by=obc_off_attested_by, battery_runner=battery_runner,
                         battery_log=battery_log, window_battery_journal=window_battery_journal, now=now,
                         next_arm_triage=next_arm_triage, commit_check=commit_check,
-                        record_check=record_check, packet_builder=packet_builder, meter_probe=meter_probe)
+                        record_check=record_check, packet_builder=packet_builder, meter_probe=meter_probe,
+                        dwell_start=dwell_start)
     if high is not None:
         record['high_power_enter'] = high
         if not high['ok']:

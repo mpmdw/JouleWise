@@ -907,7 +907,7 @@ refuses, and so does an arm clock past it. The window records are hash-chained
 back to R1/W1, so an omitted attempt (including a zero-capture one, id `C3#1`) is detected, and a
 packet bound to anything but the ledger's latest window refuses (delta3 G1). The arm computes
 `series_powermode`, `external_volume`, `charging_battery` and `meter_reader_live` (a short live
-KM003C probe: aligned stream, trailer and a consistent offset) itself; `prepared_at`, the live meter
+KM003C probe: aligned stream, trailer and a consistent offset) itself, **before** the quiet/display dwell starts and never during it (the arm stamps the probe's end and the dwell start on one monotonic clock, records both under `quiet_dwell` and refuses unless the probe ended strictly earlier); `prepared_at`, the live meter
 check and the battery evidence are never entered by the lead. A lead ruling's `text_sha256` is
 computed by the builder from a committed ruling text file. The arm retains the packet it rebuilt
 (`rebuilt_packet`), the packet file's digest, whether the supplied packet matched, the live-meter
