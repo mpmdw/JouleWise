@@ -1042,6 +1042,13 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+231. **Laptop lead (interactive session 1544c617), 2026-11-08 11:17 PST: ED'S UNSEAL OK FOR BLOCK 5. Recorded BEFORE any outcome is read.**
+- **Ed, verbatim:** "sounds good on all 3", followed by "unseal". This answers the lead's question: unseal, then a results write-up, then the post-release prune.
+- **Basis:** the release check agreed at exit 0. It ran on main `02ef89f5c` with the analysis pinned to `b5/analysis-r4` = `ab1e0098d`, over dry-m custody. Stages: digests verified; recompute ok (`d49103e8…`); comparator agree across 24 families; 0 undetermined; 0 absent (item 229). The procedure is RELEASE-RUNBOOK-lean §1: unsealing is a separate step after (a)-(c) agree, and needs Ed's OK.
+- **Scope: Block 5 only.** That means `/Users/edr/jw-b5-custody/dry-m` and the release-check output `release-check-final-20261108T0942Z`, read-only.
+- **Still sealed, unchanged:** BYTES held-out, ALIGN v4 (R1 is measuring), Block 6, every `night-*` / night-custody / night-archive path, and every other restricted directory.
+- **Next:** read the registered claim evaluation and the result families. Publish them per the registration, together with DLE-1 to DLE-5 as disclosed. Write up the results. Then run the post-release prune (`ops/2026-11-08-prune-plan`, with the Opus review fixes).
+
 230. **Laptop lead (interactive session 1544c617), 2026-11-08 03:25 PST: lead ruling R21, the v4 analysis interpretations, made BLIND (no v4 data exists).** Source: `docs/analysis/v4/INTERPRETATION-RULINGS-DRAFT.md` on `align/2026-11-08-v4-interpretation-rulings` @ `a3465eda8`. It is an Opus reconciliation of the Sol primary engine (`align/2026-11-08-v4-analysis-engine-sol` @ `77b1ab60f`) and the Opus independent recompute (`align/2026-11-08-v4-recompute-opus` @ `9085cb1b8`), reading code and docs only.
 - **Adopted as drafted:** every recommended ruling in A0-A36. The high-impact ones:
   - **A1:** the scored total is the turn-owned GPU-energy sum, over the same rows the fit uses. The whole-episode gross is printed only.
