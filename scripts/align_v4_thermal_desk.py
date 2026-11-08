@@ -41,12 +41,12 @@ def r1_soak_c(directory):
                        inputs['R1']['thermal_policy']['sensors'])
 
 
-def enrich_record(record, bundle):
+def enrich_record(record, bundle, *, episode=None):
     """V4-only metadata from immutable bundle bytes, never manifest overrides."""
     from joulewise.align.apple.workload import read_episode_bundle, EpisodeSpec
     from joulewise.align.apple.diagnostics import cache_statistics
     from joulewise.desk_compress import read_bytes
-    ep = read_episode_bundle(bundle)
+    ep = read_episode_bundle(bundle) if episode is None else episode
     config = json.loads(read_bytes(Path(bundle)/'config.json'))
     spec = EpisodeSpec.from_text(config['workload_profile']['prompt_text'])
     turns = [json.loads(line) for line in read_bytes(Path(bundle)/'outputs/align_turns.jsonl').splitlines() if line.strip()]
@@ -63,6 +63,33 @@ def enrich_record(record, bundle):
     return record
 
 
+def enriched_bundle_record(bundle, **kwargs):
+    """Share one immutable decode within this read only; no cross-run cache."""
+    from joulewise.align.apple.workload import read_episode_bundle
+    episode = read_episode_bundle(bundle)
+    return enrich_record(read_bundle_record(bundle, episode=episode, **kwargs), bundle, episode=episode)
+
+
+def _manifest_member(task):
+    root, item = task
+    def journal(name):
+        return [json.loads(line) for line in (root/name).read_text().splitlines() if line.strip()]
+    kwargs = {k: journal(item[k]) for k in ('os_journal', 'temperature_journal') if k in item}
+    if 'registered_span_ns' in item:
+        kwargs['registered_span_ns'] = item['registered_span_ns']
+    try:
+        record = enriched_bundle_record(root/item['bundle'], **kwargs)
+    except FileNotFoundError as exc:
+        record = {'id': item.get('id', Path(item['bundle']).name),
+                  'model': item.get('model'), 'gated': item.get('gated', False),
+                  'flags': ['member.artifact_missing', f'member.runtime_failure:{exc.filename}'],
+                  'calibration_exclusions': ['member.runtime_failure'],
+                  'intervals': [], 'tokens': None}
+    record.update({k: item[k] for k in ('window', 'identical_work_group', 'compare_reference_id', 'template', 'arm',
+                                      'ordinal', 'role', 'stage') if k in item})
+    return record
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--manifest', type=Path, required=True)
@@ -70,34 +97,21 @@ def main(argv=None):
     parser.add_argument('--registration-dir', type=Path, default=ROOT/registration.REGISTRATION)
     parser.add_argument('--compare-session', type=Path, action='append', default=[],
                         metavar='PILOT.json', help='repeat for the K-session desk read')
+    parser.add_argument('--workers', type=int, default=1, help='1 (serial reference) through 8 read workers')
+    parser.add_argument('--profile', type=Path, help='separate stage timing receipt')
     args = parser.parse_args(argv)
+    from joulewise.align.apple.desk_execution import DeskExecution
+    with DeskExecution(args.workers, args.profile) as execution:
+        return _main(args, execution)
+
+
+def _main(args, execution):
     bar, wp19 = registration_evidence(args.registration_dir)
     policy = json.loads((args.registration_dir/'inputs.json').read_bytes())['R1']['thermal_policy']
     manifest = json.loads(args.manifest.read_text())
     root = args.manifest.resolve().parent
-    members = []
-    def journal(name):
-        return [json.loads(line) for line in (root/name).read_text().splitlines() if line.strip()]
-    for item in manifest['members']:
-        kwargs = {k: journal(item[k]) for k in ('os_journal', 'temperature_journal') if k in item}
-        if 'registered_span_ns' in item:
-            kwargs['registered_span_ns'] = item['registered_span_ns']
-        try:
-            record = read_bundle_record(root/item['bundle'], **kwargs)
-            enrich_record(record, root/item['bundle'])
-        except FileNotFoundError as exc:
-            # A refused/failed member may legally have no episode artifact.
-            # Keep the registered roster row visible instead of losing the
-            # entire window desk.
-            record = {'id': item.get('id', Path(item['bundle']).name),
-                      'model': item.get('model'), 'gated': item.get('gated', False),
-                      'flags': ['member.artifact_missing', f'member.runtime_failure:{exc.filename}'],
-                      'calibration_exclusions': ['member.runtime_failure'],
-                      'intervals': [], 'tokens': None}
-        # Scientific measurements and verdicts cannot be overridden by roster tags.
-        record.update({k: item[k] for k in ('window', 'identical_work_group', 'compare_reference_id', 'template', 'arm',
-                                          'ordinal', 'role', 'stage') if k in item})
-        members.append(record)
+    members = execution.map('thermal.members', _manifest_member,
+                            ((root, item) for item in manifest['members']))
     by_id = {m['id']: m for m in members}
     for item, record in zip(manifest['members'], members):
         reference_id = item.get('pilot7_reference_id')

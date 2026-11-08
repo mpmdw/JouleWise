@@ -138,6 +138,36 @@ def d_member_x2_report(plan_members, runs_root):
             'x2_rate': count / len(rows) if rows else None, 'members': rows}
 
 
+def _thermal_desk_member(task):
+    """Read one closed member; never publish or alter its custody bytes."""
+    row, runs_root, measurement_root, pilot_member = task
+    from scripts.align_v4_thermal_desk import enriched_bundle_record
+    path = Path(runs_root)/row['run_id']
+    try:
+        r = enriched_bundle_record(path)
+    except (OSError, ValueError) as exc:
+        r = {'id': row['run_id'], 'gated': row['ordinal'] >= 5, 'model': row.get('model_id'),
+             'flags': ['member.runtime_failure'], 'tokens': None, 'intervals': [],
+             'turn_observation': [], 'coverage': [], 'releases': [], 'turn_admissions': 0,
+             'pm_period_s': .1, 'calibration_exclusions': ['member.runtime_failure'], 'error': str(exc)}
+    r.update({k: row[k] for k in ('ordinal', 'role') if k in row},
+             window='W1', stage=row.get('stage_id'))
+    if row.get('replay_of'):
+        r['identical_work_group'] = row['replay_of']
+    elif row.get('ordinal') == 5 or row.get('role', '').startswith(('X-', 'Y-')):
+        r['identical_work_group'] = row['run_id']
+    if row.get('role', '').startswith(('X-', 'Y-')):
+        r.update(template=row['role'][0], arm=row['role'][-1])
+        fixture = json.loads((Path(measurement_root)/kit.WP18_FIXTURES[r['template']]).read_bytes())
+        expected = [{k: t[k] for k in ('prompt_token_ids', 'output_token_ids')} for t in fixture['turns']]
+        r['pilot7_token_identical'] = r.get('tokens') == expected
+    codes = pilot_member.get('exclusion_codes', [])
+    if any(str(c).startswith('battery.member_span') for c in codes):
+        r['flags'].append('battery.member_span')
+    r['excluded'] = bool(codes) or bool(r.get('calibration_exclusions'))
+    return r
+
+
 def powermode_desk_check(*, state, members, runs_root, kit_path):
     """Council ruling 7: any member whose bundle-recorded AC powermode differs
     from the frozen series value sets ``instrument_ok`` false. The report also
@@ -161,8 +191,8 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
               ('status', 'dc_in_energy_j', 'dc_in_delta_j', 'dc_in_residual_j', 'flags')}, sort_keys=True))
     report['km003c'] = dc
     # Keep the common v3 desk unchanged. V4 adds its registered thermal desk.
-    from scripts.align_v4_thermal_desk import registration_evidence, enrich_record, r1_soak_c, contrast_predeclaration
-    from joulewise.align.apple.thermal_desk import read_bundle_record, window_report
+    from scripts.align_v4_thermal_desk import registration_evidence, r1_soak_c, contrast_predeclaration
+    from joulewise.align.apple.thermal_desk import window_report
     from joulewise.align.apple import v4_registration
     registration_dir = Path(state.get('registration_dir', Path(state['measurement_root'])/kit.KIT/'registration'))
     try:
@@ -171,34 +201,13 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
         checks['v4_registration_evidence'] = False
         report['registration_error'] = str(exc)
         return checks, report
-    records = []
+    from joulewise.align.apple.desk_execution import current_execution
     pilot_members = {m['run_id']: m for m in members}
-    for row in plan['members']:
-        path = Path(runs_root)/row['run_id']
-        try:
-            r = enrich_record(read_bundle_record(path), path)
-        except (OSError, ValueError) as exc:
-            r = {'id': row['run_id'], 'gated': row['ordinal'] >= 5, 'model': row.get('model_id'),
-                 'flags': ['member.runtime_failure'], 'tokens': None, 'intervals': [],
-                 'turn_observation': [], 'coverage': [], 'releases': [], 'turn_admissions': 0,
-                 'pm_period_s': .1, 'calibration_exclusions': ['member.runtime_failure'], 'error': str(exc)}
-        r.update({k: row[k] for k in ('ordinal', 'role') if k in row},
-                 window='W1', stage=row.get('stage_id'))
-        if row.get('replay_of'):
-            r['identical_work_group'] = row['replay_of']
-        elif row.get('ordinal') == 5 or row.get('role', '').startswith(('X-', 'Y-')):
-            r['identical_work_group'] = row['run_id']
-        if row.get('role', '').startswith(('X-', 'Y-')):
-            r.update(template=row['role'][0], arm=row['role'][-1])
-            fixture = json.loads((Path(state['measurement_root'])/kit.WP18_FIXTURES[r['template']]).read_bytes())
-            expected = [{k: t[k] for k in ('prompt_token_ids', 'output_token_ids')} for t in fixture['turns']]
-            r['pilot7_token_identical'] = r.get('tokens') == expected
-        p = pilot_members.get(row['run_id'], {})
-        codes = p.get('exclusion_codes', [])
-        if any(str(c).startswith('battery.member_span') for c in codes):
-            r['flags'].append('battery.member_span')
-        r['excluded'] = bool(codes) or bool(r.get('calibration_exclusions'))
-        records.append(r)
+    tasks = ((row, runs_root, state['measurement_root'], pilot_members.get(row['run_id'], {}))
+             for row in plan['members'])
+    execution = current_execution()
+    records = (execution.map('v4.thermal_members', _thermal_desk_member, tasks)
+               if execution is not None else list(map(_thermal_desk_member, tasks)))
     policy = (kit.read_inputs(state['measurement_root']).get('R1') or {}).get('thermal_policy') or {}
     report['thermal'] = window_report(records, v4=True, u3_bar=bar,
         delta_slow_c=policy.get('delta_slow_c'), contrast_predeclared=contrast_predeclaration(wp19, policy))

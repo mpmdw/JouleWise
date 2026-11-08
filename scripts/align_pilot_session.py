@@ -266,46 +266,77 @@ def cross_pilot_identity(members, compare_session):
     return dict(result)
 
 
-def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None,
-         kit=KIT, desk_schema=SCHEMA, extra_checks=None):
+def _desk_member(task):
+    row, runs_root, targets, thermal = task
+    from joulewise.align.apple.diagnostics import thermal_onset
+    entry = {k: row[k] for k in ('run_id', 'task_pair', 'condition', 'repeat', 'ordinal')}
+    for key in ('model_id', 'block'):
+        if key in row:
+            entry[key] = row[key]
+    try:
+        entry['summary'] = episode_summary(Path(runs_root)/row['run_id'],
+            target_precheck_paths=targets, expected_episode_seed=row.get('expected_episode_seed'))
+        summary = entry['summary']
+        summary['os_thermal'] = thermal_onset(summary['episode_start_ns'], summary['episode_end_ns'],
+                                            summary['turn_starts_ns'], thermal)
+    except Exception as exc:
+        entry['summary'] = None
+        entry['unreadable'] = f'{type(exc).__name__}: {exc}'
+    return entry
+
+
+def _desk_analysis(task):
+    name, members = task
+    if name == 'instrument':
+        return instrument_checks(members)
+    from joulewise.align.apple.pilot_analysis import sampling_checks, residual_analysis
+    if name == 'sampling':
+        return sampling_checks(members)
+    if name == 'residuals':
+        return residual_analysis(members)
+    raise ValueError(f'unknown desk analysis stage: {name}')
+
+
+def desk(session_root, *, workers=1, profile=None, **kwargs):
+    from joulewise.align.apple.desk_execution import DeskExecution
+    with DeskExecution(workers, profile) as execution:
+        with execution.stage('pilot.total'):
+            return _desk(session_root, execution=execution, **kwargs)
+
+
+def _desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None,
+          kit=KIT, desk_schema=SCHEMA, extra_checks=None, execution,
+          output=None, state=None, plan=None, targets=None, report_root=None):
     session = Path(session_root).resolve()
-    state = h.read(session / 'session.json')
-    plan = h.read(state['plan_path'])
+    state = h.read(session / 'session.json') if state is None else state
+    plan = h.read(state['plan_path']) if plan is None else plan
     custody = Path(plan['custody_root'])
     if not (custody / 'night/result.json').is_file():
         raise ValueError('terminal record is required before desk')
+    if output is not None:
+        if harvest:
+            raise ValueError('explicit desk output requires harvest=False')
+        output = Path(output)
+        output.mkdir(parents=True, exist_ok=False)
     claim_root = state.get('runs_roots', {}).get('claim')
     if not claim_root:
         registration = Path(state.get('registration_dir', Path(state['measurement_root']) / kit / 'registration'))
         tree = h.read(registration.parent / 'plan_tree.json')
         claim_root = Path(state['inputs']['runs_parent']) / tree['roots']['claim_root_leaf']
     runs_root = Path(claim_root)
-    from joulewise.align.apple.diagnostics import member_thermal_readings, thermal_onset
-    thermal = member_thermal_readings(custody)
-    targets = {}
+    from joulewise.align.apple.diagnostics import member_thermal_readings
+    thermal = execution.call('pilot.os_thermal', member_thermal_readings, custody)
+    supplied_targets = targets is not None
+    targets = {} if targets is None else targets
     pack_root = state.get('inputs', {}).get('pack_root')
-    if pack_root:
+    if pack_root and not supplied_targets:
         from joulewise.b5.harvest import build_roster
         for member in build_roster(Path(pack_root), Path(state['measurement_root']))['members']:
             targets[member['run_id']] = [c['target_precheck_path'] for c in member.get('cells', [])
                 if c.get('target') is not False and isinstance(c.get('target_precheck_path'), list) and c['target_precheck_path']]
-    members = []
-    for row in _member_rows(state, kit=kit):
-        bundle = runs_root / row['run_id']
-        entry = {k: row[k] for k in ('run_id', 'task_pair', 'condition', 'repeat', 'ordinal')}
-        for key in ('model_id', 'block'):
-            if key in row:
-                entry[key] = row[key]
-        try:
-            entry['summary'] = episode_summary(bundle, target_precheck_paths=targets.get(row['run_id']),
-                                               expected_episode_seed=row.get('expected_episode_seed'))
-            summary = entry['summary']
-            summary['os_thermal'] = thermal_onset(summary['episode_start_ns'], summary['episode_end_ns'],
-                summary['turn_starts_ns'], thermal.get(row['run_id'], {}))
-        except Exception as exc:
-            entry['summary'] = None
-            entry['unreadable'] = f'{type(exc).__name__}: {exc}'
-        members.append(entry)
+    members = execution.map('pilot.members', _desk_member,
+        ((row, runs_root, targets.get(row['run_id']), thermal.get(row['run_id'], {}))
+         for row in _member_rows(state, kit=kit)))
     # Read-only extraction first; the harvest may compress the runs afterwards.
     measurement = Path(state['measurement_root'])
     argv = [str(measurement / '.venv/bin/python'), str(measurement / 'scripts/harvest_b6_session.py'),
@@ -313,17 +344,19 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
             '--registration-dir', state['registration_dir'], '--pack-records-root', str(session / 'private'),
             '--export-dir', str(session / 'export'), '--non-claim']
     if harvest:
-        result = run(argv, check=False, capture_output=True, text=True, timeout=h.HARVEST_TIMEOUT_S)
+        with execution.stage('pilot.harvest'):
+            result = run(argv, check=False, capture_output=True, text=True, timeout=h.HARVEST_TIMEOUT_S)
         (session / 'staging/harvest.stdout').write_text(result.stdout or '')
         (session / 'staging/harvest.stderr').write_text(result.stderr or '')
         output = session
     else:
         from types import SimpleNamespace
         result = SimpleNamespace(returncode=None, stdout='', stderr='')
-        inspection = session / 'inspection'
-        inspection.mkdir(exist_ok=True)
-        output = Path(tempfile.mkdtemp(prefix=datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S.%fZ-'),
-                                       dir=inspection))
+        if output is None:
+            inspection = session / 'inspection'
+            inspection.mkdir(exist_ok=True)
+            output = Path(tempfile.mkdtemp(prefix=datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S.%fZ-'),
+                                           dir=inspection))
     exclusion_path = session / 'archive/derived/exclusions.json'
     exclusions = h.read(exclusion_path) if exclusion_path.is_file() else None
     excluded = {m['run_id']: m.get('codes', []) for m in (exclusions or {}).get('members_excluded', [])}
@@ -348,11 +381,15 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
     for member in members:
         member['harvest_flags'] = harvest_flags.get(member['run_id'], [])
         member['battery_discharge'] = battery.get(member['run_id'])
-    comparison = cross_pilot_identity(members, compare_session) if compare_session else None
-    checks, deterministic, _legacy_spreads = instrument_checks(members)
-    from joulewise.align.apple.pilot_analysis import sampling_checks, residual_analysis, episode_eligible, episode_ineligibility_reasons
-    i4, spreads, raw_spread = sampling_checks(members)
-    residuals = residual_analysis(members)
+    comparison = (execution.call('pilot.comparison', cross_pilot_identity, members, compare_session)
+                  if compare_session else None)
+    from joulewise.align.apple.pilot_analysis import episode_eligible, episode_ineligibility_reasons
+    # Independent, read-only reductions over the joined members. Consume in
+    # the original stage order so the first refusal and report order agree.
+    instrument, sampling, residuals = execution.map('pilot.analysis', _desk_analysis,
+        ((name, members) for name in ('instrument', 'sampling', 'residuals')))
+    checks, deterministic, _legacy_spreads = instrument
+    i4, spreads, raw_spread = sampling
     # I4' replaces the greedy check for sampled cohorts. Collisions are
     # observations; they never alter instrument pass/fail.
     checks.pop('I4_greedy_repeats_identical_tokens')
@@ -366,7 +403,8 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
     # Pack-specific instrument checks (v4: ruling 7 powermode); v3 passes none.
     extra_report = None
     if extra_checks is not None:
-        added, extra_report = extra_checks(state=state, members=members, runs_root=runs_root, kit_path=kit)
+        with execution.stage('pilot.extra_checks'):
+            added, extra_report = extra_checks(state=state, members=members, runs_root=runs_root, kit_path=kit)
         checks.update(added)
     pilot = {'schema_version': desk_schema, 'non_claim': True, 'session_id': state['session_id'],
              'plan_id': state['session_id'], 'runs_root': str(runs_root), 'members': members,
@@ -386,7 +424,7 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
     pilot = finite_json(pilot)
     h.write(output / 'PILOT.json', pilot)
     status = {'schema_version': desk_schema, 'non_claim': True, 'plan_id': state['session_id'],
-              'pilot': str(output / 'PILOT.json'), 'pilot_status': pilot['status'], 'checks': checks,
+              'pilot': str(Path(report_root or output) / 'PILOT.json'), 'pilot_status': pilot['status'], 'checks': checks,
               'harvest_argv': argv, 'harvest_exit': result.returncode,
               'members_excluded': pilot['members_excluded'],
               'harvest_status': ('not_run' if not harvest else 'program_fault' if result.returncode not in (0, 6)
@@ -447,6 +485,10 @@ def main(argv=None, *, kit=KIT, pack_id=PACK_ID, desk_schema=SCHEMA,
         commands.add_parser(name).add_argument('--session-root', type=Path, required=True)
     commands.choices['desk'].add_argument('--no-harvest', action='store_true', help='Extract to session/inspection/<utc>-<unique>/; preserve harvest files and skip archive/compression.')
     commands.choices['desk'].add_argument('--compare-session', type=Path)
+    commands.choices['desk'].add_argument('--workers', type=int, default=1,
+        help='1 (serial reference) through 8 read workers; only after the window is terminal')
+    commands.choices['desk'].add_argument('--profile', type=Path, help='separate stage timing receipt')
+    commands.choices['desk'].add_argument('--output', type=Path, help='new report directory with --no-harvest')
     # Kit-specific install arguments (flag, argparse options), forwarded as keywords.
     for flag, options in install_options:
         commands.choices['install'].add_argument(flag, **options)
@@ -461,6 +503,7 @@ def main(argv=None, *, kit=KIT, pack_id=PACK_ID, desk_schema=SCHEMA,
             install_fn(args.session_root, **extra)
         else:
             status = desk(args.session_root, harvest=not args.no_harvest, compare_session=args.compare_session,
+                          workers=args.workers, profile=args.profile, output=args.output,
                           kit=kit, desk_schema=desk_schema,
                           **({'extra_checks': desk_extra_checks} if desk_extra_checks is not None else {}))
             return 0 if status['harvest_status'] in ('ok', 'not_run') and status['pilot_status'] == 'instrument_ok' else 2

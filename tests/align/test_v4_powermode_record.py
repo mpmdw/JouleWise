@@ -113,14 +113,16 @@ class DeskPowermodeTests(unittest.TestCase):
             state, runs = self.fixture(Path(td), [0, 0, 0])
             added, report = session.powermode_desk_check(state=state, members=[], runs_root=runs,
                                                          kit_path=kit.KIT)
-            self.assertEqual(added, {"ac_powermode_members": True})
+            # This minimal fixture has no registration artifacts. Keep the
+            # existing v4 fail-closed registration check alongside powermode.
+            self.assertEqual(added, {"ac_powermode_members": True, "v4_registration_evidence": False})
             self.assertEqual(report["powermode_mismatches"], [])
         for observed in ([0, 2, 0], [0, "absent", 0]):
             with self.subTest(observed=observed), tempfile.TemporaryDirectory() as td:
                 state, runs = self.fixture(Path(td), observed)
                 added, report = session.powermode_desk_check(state=state, members=[], runs_root=runs,
                                                              kit_path=kit.KIT)
-                self.assertEqual(added, {"ac_powermode_members": False})
+                self.assertEqual(added, {"ac_powermode_members": False, "v4_registration_evidence": False})
                 self.assertEqual([m["run_id"] for m in report["powermode_mismatches"]], ["m1"])
 
     def test_v4_desk_wires_the_powermode_check(self):

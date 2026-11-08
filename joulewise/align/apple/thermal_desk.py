@@ -774,7 +774,7 @@ def native_pm_samples(bundle, ep):
     return pm
 
 
-def read_bundle_record(bundle, *, os_journal=(), temperature_journal=None, registered_span_ns=None):
+def read_bundle_record(bundle, *, os_journal=(), temperature_journal=None, registered_span_ns=None, episode=None):
     """Read existing immutable bundle artifacts and anchored native PM records.
 
     Accept hazard-journal rows from the desk caller, or use the member-local
@@ -785,7 +785,7 @@ def read_bundle_record(bundle, *, os_journal=(), temperature_journal=None, regis
     from joulewise.align.apple.workload import read_episode_bundle
     from joulewise.desk_compress import read_bytes
     bundle = Path(bundle)
-    ep = read_episode_bundle(bundle)
+    ep = read_episode_bundle(bundle) if episode is None else episode
     def jsonl(path):
         try:
             return [json.loads(line) for line in read_bytes(path).splitlines() if line.strip()]
