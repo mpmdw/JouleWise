@@ -549,3 +549,99 @@ class CpuQuietProbeTests(unittest.TestCase):
         result = probe()
         self.assertIsNone(result["clean"])
         self.assertIn("logical CPU count changed", result["error"])
+
+
+def r0l3_interval(start_s, end_s, cores, *, over=()):
+    """One CpuQuietProbe-shaped interval: outside aggregate cores, 0.05 bar rows."""
+    return {"contention": {"interval": {"monotonic_ns": [round(start_s * 1e9), round(end_s * 1e9)]},
+                           "elapsed_s": end_s - start_s, "outside_aggregate_cpu_s_per_s": cores,
+                           "clean": not over, "error": None,
+                           "outside_over_limit": [{"pid": pid, "command": name, "cpu_s_per_s": rate}
+                                                  for pid, name, rate in over]}}
+
+
+def r0l3_census(intervals):
+    results = iter(intervals)
+    return lambda: next(results)
+
+
+class R0L3ContentionTests(unittest.TestCase):
+    # Ruling 8 (R1): 0.5 cores sustained 60 s. CpuQuietProbe judges >= 30 s
+    # windows at the capture's 5 s census cadence, so ends step by 5 s.
+    def windows(self, first_end, last_end, cores, **kwargs):
+        return [r0l3_interval(end - 30, end, cores, **kwargs) for end in range(first_end, last_end + 1, 5)]
+
+    def test_sustained_half_core_for_60_s_redoes_once_then_flags(self):
+        # Windows ending 30..60 s cover [0, 60]: 60 s at >= 0.5 cores.
+        sustained = self.windows(30, 60, 0.5)
+        quiet = r0.Ruling8Quiet("redo", census=r0l3_census(sustained))
+        for _ in sustained[:-1]:
+            quiet()
+        with self.assertRaises(r0.ContentionRedo) as caught:
+            quiet()
+        self.assertEqual(caught.exception.summary["episodes"][0]["seconds"], 60)
+        self.assertFalse(caught.exception.summary["contended"])
+        # The redo capture: an episode extended to 90 s, a light window,
+        # then a second episode over [40, 100]. Neither aborts; both are kept.
+        redo = (self.windows(30, 90, 0.7) + [r0l3_interval(35, 65, 0.0)]
+                + self.windows(70, 100, 0.6))
+        flagged = r0.Ruling8Quiet("flag", census=r0l3_census(redo))
+        for _ in redo:
+            flagged()
+        summary = flagged.summary()
+        self.assertTrue(summary["contended"])
+        self.assertEqual([e["seconds"] for e in summary["episodes"]], [90, 60])
+        self.assertEqual(len(summary["flags"]), len(redo) - 1)  # the 0.0 window is clean
+
+    def test_shorter_or_lower_contention_is_flagged_never_redone(self):
+        cases = {
+            # 55 s at 0.5 cores: one 5 s cadence short of ruling 8.
+            "55 s at 0.5": self.windows(30, 55, 0.5),
+            # Re-run 8: frauddefensed 0.092 CPU-s/s for 30-60 s, aggregate well below 0.5.
+            "frauddefensed": self.windows(30, 60, 0.15, over=[(61967, "frauddefensed", 0.092)]),
+            # 0.49 cores for 10 min, no process over 0.05.
+            "0.49 for 600 s": self.windows(30, 600, 0.49),
+        }
+        for name, intervals in cases.items():
+            with self.subTest(name):
+                quiet = r0.Ruling8Quiet("redo", census=r0l3_census(intervals))
+                for _ in intervals:
+                    quiet()
+                summary = quiet.summary()
+                self.assertEqual(summary["episodes"], [])
+                self.assertFalse(summary["contended"])
+        frauddefensed = r0.Ruling8Quiet("redo", census=r0l3_census(cases["frauddefensed"]))
+        for _ in cases["frauddefensed"]:
+            frauddefensed()
+        flags = frauddefensed.summary()["flags"]
+        self.assertEqual(len(flags), len(cases["frauddefensed"]))
+        self.assertEqual(flags[0]["over_0_05"][0]["command"], "frauddefensed")
+        self.assertFalse(flags[0]["heavy"])
+
+    def test_a_light_interval_breaks_the_sustained_run(self):
+        intervals = (self.windows(30, 50, 0.6) + [r0l3_interval(25, 55, 0.1)]
+                     + self.windows(60, 85, 0.6))  # second run covers [30, 85]: 55 s
+        quiet = r0.Ruling8Quiet("redo", census=r0l3_census(intervals))
+        for _ in intervals:
+            quiet()
+        self.assertEqual(quiet.summary()["episodes"], [])
+
+    def test_census_refusals_still_refuse_under_r0l3(self):
+        def refused():
+            raise r0.NotQuiet("measurement process active: 99 run_night.py")
+        for policy in ("redo", "flag"):
+            with self.subTest(policy), self.assertRaisesRegex(r0.NotQuiet, "run_night"):
+                r0.Ruling8Quiet(policy, census=refused)()
+        with self.assertRaises(ValueError):
+            r0.Ruling8Quiet("refuse")
+
+    def test_require_quiet_records_contention_but_refuses_unmeasured_cpu(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            dirty = {"clean": False, "error": None, "max_outside": {"cpu_s_per_s": .06}}
+            inputs = QuietTests().inputs(Path(tmp), dirty)
+            self.assertIs(r0.require_quiet(**inputs, record_contention=True)["contention"], dirty)
+            with self.assertRaises(r0.NotQuiet):
+                r0.require_quiet(**inputs)  # the default (non-R0) census is unchanged
+            unread = QuietTests().inputs(Path(tmp), {"clean": None, "error": "host CPU unread"})
+            with self.assertRaisesRegex(r0.NotQuiet, "host CPU unread"):
+                r0.require_quiet(**unread, record_contention=True)

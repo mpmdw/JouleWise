@@ -401,6 +401,43 @@ class R0ChecksTest(unittest.TestCase):
             self.assertEqual(result["status"], "refused")
             self.assertEqual(json.loads((root / "report.json").read_text())["status"], "refused")
 
+    def test_r0l3_guard_and_smc_contention_are_recorded_flagged_and_not_fatal(self):
+        class Contended(FakeGuard):
+            # Once armed, every census records a flag (QuietGuard under R0-L3).
+            armed = False
+            contention_flags = []
+            def check(self, *, force=False):
+                super().check(force=force)
+                if self.armed:
+                    self.contention_flags.append({"flag": "contaminating CPU contention: 61967 frauddefensed"})
+        guard = Contended()
+        guard.contention_flags = []
+        def template(backend):
+            guard.armed = True
+            return {"status": "diagnostic"}
+        smc = {"status": "pass", "contended": True, "contention_redo": [{"exit_code": 4}],
+               "contention": {"flags": [{"heavy": True}, {"heavy": False}], "episodes": [{}], "contended": True}}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with patch("joulewise.align.r0_runner.smc_enumeration", return_value=smc), \
+                    patch.object(r0, "template_rewrites", side_effect=template):
+                report = execute(config_at(root), root, ["smc", "template"], ["D"],
+                                 guard=guard, backend_factory=FakeBackend)
+            self.assertEqual(report["status"], "pass")
+            template_row = next(r for r in report["checks"] if r["check"] == "template")
+            self.assertEqual(len(guard.contention_flags), 1)  # the census after the armed unit
+            self.assertEqual(template_row["contention_flags"], guard.contention_flags)
+            self.assertEqual(report["contention"]["smc_contended"], True)
+            self.assertEqual(report["contention"]["smc_redo"], 1)
+            self.assertEqual(report["contention"]["smc_flagged_intervals"], 2)
+            self.assertEqual(report["contention"]["flagged_checks"],
+                             [{"check": "template", "model": "D", "flags": 1}])
+            self.assertEqual(json.loads((root / "report.json").read_text())["contention"], report["contention"])
+            markdown = (root / "report.md").read_text()
+            self.assertIn("## Contention (R0-L3: recorded, not fatal)", markdown)
+            self.assertIn("SMC capture contended: **True**", markdown)
+            self.assertIn("- template (D): 1 guard flag(s)", markdown)
+
     def test_unattended_fake_cli_writes_both_outputs_and_never_claims_live(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

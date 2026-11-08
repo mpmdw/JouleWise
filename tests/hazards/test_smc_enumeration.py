@@ -227,6 +227,47 @@ class CaptureTests(unittest.TestCase):
             readings = [json.loads(line) for line in (output / "samples.jsonl").read_text().splitlines()]
             self.assertEqual(len(readings), 5)
 
+    def r0l3_quiet(self, cores):
+        """Census whose CPU window is the last 30 s on the capture's own clock."""
+        def quiet():
+            end = self.clock.monotonic_ns()
+            return {"contention": {"interval": {"monotonic_ns": [end - 30 * 10**9, end]}, "elapsed_s": 30.0,
+                                   "outside_aggregate_cpu_s_per_s": cores, "clean": True, "error": None,
+                                   "outside_over_limit": []}}
+        return quiet
+
+    def test_cli_r0l3_redo_policy_abandons_capture_with_exit_4_and_receipt(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "r0"
+            # 0.5 cores outside the tree for the whole 70 s capture.
+            result = cli.main(["--output", str(output), "--seconds", "70", "--contention-policy", "redo"],
+                              reader_factory=lambda: self.reader, quiet_check=self.r0l3_quiet(0.5),
+                              ctx_factory=lambda: self.ctx, metadata=lambda: {})
+            self.assertEqual(result, r0.CONTENTION_REDO_EXIT)
+            self.assertFalse((output / "r0.json").exists())
+            receipt = json.loads((output / "contention.json").read_text())
+            self.assertGreaterEqual(receipt["episodes"][0]["seconds"], 60)
+            self.assertIn("capture_abandoned_sustained_contention", (output / "samples.jsonl").read_text())
+
+    def test_cli_r0l3_flag_policy_completes_contended_capture_with_flags_beside_picks(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "r0"
+            result = cli.main(["--output", str(output), "--seconds", "70", "--contention-policy", "flag"],
+                              reader_factory=lambda: self.reader, quiet_check=self.r0l3_quiet(0.5),
+                              ctx_factory=lambda: self.ctx, metadata=lambda: {})
+            self.assertEqual(result, 0)
+            report = json.loads((output / "r0.json").read_text())
+            self.assertTrue(report["contention"]["contended"])
+            self.assertEqual(report["response"]["contention"], report["contention"])
+            self.assertGreater(report["response"]["contention_by_phase"]["idle"]["sustained_episodes"], 0)
+
+    def test_cli_default_policy_still_refuses_contention(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "r0"
+            self.assertEqual(cli.main(["--output", str(output), "--seconds", "5"], reader_factory=lambda: self.reader,
+                                      quiet_check=mock.Mock(side_effect=r0.NotQuiet("outside-tree CPU contention")),
+                                      ctx_factory=lambda: self.ctx, metadata=lambda: {}), 3)
+
     def test_cli_refuses_before_output_creation_or_backend_construction(self):
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary) / "r0"

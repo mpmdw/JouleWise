@@ -129,14 +129,32 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
               "limitations": ["Selection data, not R1 thermal or arm validation.",
                               "R1 must freeze token budgets, intercepts and thermal slots.",
                               "Local inventories do not independently authenticate the remote revision."]}
+    def contention_summary():
+        # R0-L3: contention is recorded, never fatal. Guard flags (every check)
+        # and the SMC capture's ruling-8 flag are collected for report.md.
+        flags = getattr(guard, "contention_flags", [])
+        smc = [r for r in report["checks"] if r["check"] == "smc"]
+        report["contention"] = {
+            "rule": "docs/align/r0/R0-L3-contention-rule.md",
+            "guard_flags": len(flags),
+            "flagged_checks": [{"check": r["check"], "model": r.get("model"), "flags": len(r["contention_flags"])}
+                               for r in report["checks"] if r.get("contention_flags")],
+            "smc_contended": any(r.get("contended") for r in smc),
+            "smc_redo": sum(len(r.get("contention_redo") or ()) for r in smc),
+            "smc_flagged_intervals": sum(len((r.get("contention") or {}).get("flags", ())) for r in smc)}
     def receipt(name, model, fn, *, incremental=False):
         started = time.monotonic()
         row = {"check": name, **({"model": model} if model else {}), "status": "running"}
         report["checks"].append(row)
         unserializable = []
+        flags_before = len(getattr(guard, "contention_flags", []))
         def progress(data):
             row.update(data)
             row["check_seconds"] = time.monotonic() - started
+            flags = getattr(guard, "contention_flags", [])[flags_before:]
+            if flags:
+                row["contention_flags"] = list(flags)
+            contention_summary()
             report["total_seconds"] = time.monotonic() - started_run
             report["census"] = guard.receipts
             if not unserializable:
@@ -273,6 +291,7 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
             {"check": row["check"], "model": row.get("model"), "outcome": row["status"]}
             for row in report["checks"] if row["status"] in {"required", "fallback"}]
         report["census"] = guard.receipts
+        contention_summary()
         report["total_seconds"] = time.monotonic() - started_run
         report["finished_utc"] = datetime.now(timezone.utc).isoformat()
         save_report(output, report)

@@ -159,12 +159,15 @@ _cpu_quiet = None
 
 
 def require_quiet(*, agent_probe=None, measurement_probe=None, process_probe=None,
-                  contention_probe=None, custody_parents=None) -> dict[str, Any]:
+                  contention_probe=None, custody_parents=None,
+                  record_contention=False) -> dict[str, Any]:
     """Reuse the acquisition-owner and agent-identity censuses, fail closed.
 
     The additional process snapshot catches direct collectors and unregistered
     chains that the custody census explicitly cannot cover. This is snapshot
     admission plus periodic supervision, not an atomic measurement lease.
+    ``record_contention`` (R0-L3) returns measured CPU contention instead of
+    refusing on it; an unmeasured interval and every other census still refuse.
     """
     from joulewise.measurement_liveness import census, custody_parent, ADDITIONAL_PARENTS_ENV
     from joulewise.night_gate import ProbeResult, agent_census
@@ -209,7 +212,7 @@ def require_quiet(*, agent_probe=None, measurement_probe=None, process_probe=Non
                 _cpu_quiet = CpuQuietProbe()
             contention_probe = _cpu_quiet
         cpu = contention_probe()
-        if cpu.get("error") or cpu.get("clean") is not True:
+        if cpu.get("error") or (cpu.get("clean") is not True and not record_contention):
             raise NotQuiet("outside-tree CPU contention or unmeasured host CPU: " + str(cpu))
         return {"agent_exit_code": observed.exit_code, "measurement_warnings": owners.warnings,
                 "contention": cpu, "custody_parents": [str(p) for p in custody_parents],
@@ -218,6 +221,85 @@ def require_quiet(*, agent_probe=None, measurement_probe=None, process_probe=Non
         raise
     except Exception as exc:
         raise NotQuiet(f"quiet census indeterminate: {type(exc).__name__}: {exc}") from exc
+
+
+# R0-L3 (docs/align/r0/R0-L3-contention-rule.md): R0's SMC capture uses R1's
+# ruling 8 bar (scripts/align_r1_rehearsal.py CPU_BUSY_CORES_LIMIT and
+# CPU_BUSY_SUSTAINED_S on lane/2026-11-06-v4-r1-integrated): background CPU
+# outside this process tree at >= 0.5 cores, sustained for 60 s.
+SUSTAINED_CORES = 0.5
+SUSTAINED_S = 60
+CONTENTION_REDO_EXIT = 4
+
+
+class ContentionRedo(RuntimeError):
+    """A sustained episode under the redo policy: abandon this capture once."""
+
+    def __init__(self, summary):
+        super().__init__(f"sustained background CPU >= {SUSTAINED_CORES} cores for >= {SUSTAINED_S} s; "
+                         f"redo the capture once (R0-L3): {summary['episodes'][-1]}")
+        self.summary = summary
+
+
+class Ruling8Quiet:
+    """R0-L3: record CPU contention; apply ruling 8 to sustained episodes.
+
+    Each census returns one CPU interval of at least 30 s (CpuQuietProbe).
+    An interval is heavy when the host's busy CPU outside this tree is
+    >= SUSTAINED_CORES. Consecutive heavy intervals that touch or overlap form
+    a run; a run whose union spans >= SUSTAINED_S is a sustained episode.
+    Under ``redo`` the first episode raises ContentionRedo; under ``flag``
+    episodes are recorded and the capture is ``contended``. Intervals over
+    the 0.05 CPU-s/s per-process bar, or heavy, are flags. The agent, custody,
+    measurement-process and unmeasured-CPU refusals of require_quiet stand.
+    """
+
+    def __init__(self, policy, *, census=None):
+        if policy not in ("redo", "flag"):
+            raise ValueError("contention policy must be redo or flag")
+        self.policy = policy
+        self.census = census or (lambda: require_quiet(record_contention=True))
+        self.flags = []
+        self.episodes = []
+        self._run = None
+
+    def __call__(self):
+        result = self.census()
+        cpu = result["contention"]
+        start_ns, end_ns = cpu["interval"]["monotonic_ns"]
+        cores = cpu.get("outside_aggregate_cpu_s_per_s")
+        if cores is None:
+            cores = cpu.get("outside_total_cpu_s_per_s") or 0.0
+        heavy = cores >= SUSTAINED_CORES
+        if heavy or cpu.get("clean") is not True:
+            self.flags.append({
+                "interval_monotonic_ns": [start_ns, end_ns], "elapsed_s": cpu.get("elapsed_s"),
+                "outside_cpu_cores": cores, "heavy": heavy,
+                "over_0_05": [{k: row.get(k) for k in ("pid", "command", "cpu_s_per_s")}
+                              for row in cpu.get("outside_over_limit") or ()]})
+        if not heavy:
+            self._run = None
+        elif self._run is not None and start_ns <= self._run["end_ns"]:
+            self._run["end_ns"] = max(self._run["end_ns"], end_ns)
+            self._run["intervals"] += 1
+            self._run["max_cores"] = max(self._run["max_cores"], cores)
+        else:
+            self._run = {"start_ns": start_ns, "end_ns": end_ns, "intervals": 1, "max_cores": cores}
+        run = self._run
+        if run is not None:
+            run["seconds"] = (run["end_ns"] - run["start_ns"]) / 1e9
+            if run["seconds"] >= SUSTAINED_S and not any(e is run for e in self.episodes):
+                self.episodes.append(run)
+                if self.policy == "redo":
+                    raise ContentionRedo(self.summary())
+        return result
+
+    def summary(self):
+        return {"rule": "R0-L3 / ruling 8: >= 0.5 cores outside this tree sustained >= 60 s; "
+                        "one redo, then contended (a flag)",
+                "policy": self.policy, "sustained_cores": SUSTAINED_CORES, "sustained_s": SUSTAINED_S,
+                "flags": list(self.flags), "episodes": [dict(e) for e in self.episodes],
+                "contended": self.policy == "flag" and bool(self.episodes)}
 
 
 def collect(reader: Any, *, seconds: int, idle_s: int, load_s: int, recovery_s: int,
@@ -633,7 +715,30 @@ def rank(capture: Mapping[str, Any], *, stage: str = "r0") -> dict[str, Any]:
             "alternative_slow_picks": _alternative_picks(ordered, series, phases, proposed, capture),
             "die_candidates": die_candidates, "heatsink_candidates": heatsink_candidates,
             "record_only": record_only, "readability_bar_met": bar, "stage": stage,
-            "status": "pass" if bar else "inconclusive", "picks_provisional": stage == "r0"}
+            "status": "pass" if bar else "inconclusive", "picks_provisional": stage == "r0",
+            **_contention_by_phase(capture, phases, origin)}
+
+
+def _contention_by_phase(capture, phases, origin):
+    """R0-L3 item 4: carry the capture's contention flags beside the picks.
+
+    Read-only: maps each flagged CPU interval to the phases it overlaps so a
+    pick can be read with them. No classifier rule reads these fields.
+    """
+    contention = capture.get("contention")
+    if contention is None:
+        return {"contention": None, "contention_by_phase": None}
+    by_phase = {}
+    for name, bounds in phases.items():
+        begin = origin + round(bounds["start_s"] * 1e9)
+        end = origin + round(bounds["end_s"] * 1e9)
+        hits = [f for f in contention.get("flags", ())
+                if f["interval_monotonic_ns"][0] < end and f["interval_monotonic_ns"][1] > begin]
+        episodes = [e for e in contention.get("episodes", ()) if e["start_ns"] < end and e["end_ns"] > begin]
+        by_phase[name] = {"flagged_intervals": len(hits), "heavy_intervals": sum(f["heavy"] for f in hits),
+                          "max_outside_cpu_cores": max((f["outside_cpu_cores"] for f in hits), default=None),
+                          "sustained_episodes": len(episodes)}
+    return {"contention": contention, "contention_by_phase": by_phase}
 
 
 def _alternative_picks(rows, series, phases, proposed, capture):
