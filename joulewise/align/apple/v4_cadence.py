@@ -1,9 +1,10 @@
-"""R12 window cadence (RUN_STATE 214/215): next-arm triage list and calibration stop.
+"""R12 window cadence (RUN_STATE 214/215/217): next-arm triage list and fixed-8 calibration.
 
-Pure stdlib. No probes, no scores, no outcome fields: the stop predicate sees
-only window status and eligible benign counts per pair, so blinding holds.
-Neither function qualifies exchangeability or satisfies R13/R14; those are
-separate (a simulation is running) and counts alone do not settle them.
+Pure stdlib. No probes, no scores, no outcome fields: the calibration predicate
+sees only window status and eligible benign counts per pair, so blinding holds.
+Neither function qualifies exchangeability or satisfies R13/R14; counts alone do
+not settle them (RUN_STATE 217: a count stop raised FPR under window drift, so
+calibration is exactly 8 windows).
 """
 from __future__ import annotations
 
@@ -55,8 +56,9 @@ NEXT_ARM_TRIAGE = (
          text='final eligibility adjudication of the previous window (identity X5, U3 pairs, '
               'exclusions); counts are provisional until this check passes'),
     dict(id='calibration_stop', source=DERIVED, first_window_na=True,
-         text='B3 stop predicate over the packet counts: continue for a calibration arm, '
-              'stop_complete for a test arm; pending_final_eligibility, '
+         text='B3 fixed-8 predicate over the packet counts: continue for a calibration arm '
+              'until 8 counted windows, '
+              'calibration_complete for a test arm; pending_final_eligibility, '
               'insufficient_calibration and escalate_to_lead refuse'),
     dict(id='full_desk_gate', source=PACKET, first_window_na=False,
          text='full desk completed and passing before arm when the previous window is W1 or '
@@ -120,7 +122,7 @@ def next_arm_triage(packet, internal):
                 results[name] = {'status': 'not_applicable', 'source': DERIVED}
                 continue
             allowed = stop is not None and ((stop['decision'] == 'continue' and role == 'calibration')
-                                            or (stop['decision'] == 'stop_complete' and role == 'test'))
+                                            or (stop['decision'] == 'calibration_complete' and role == 'test'))
             results[name] = {'status': 'pass' if allowed else 'fail', 'source': DERIVED,
                              'decision': stop['decision'] if stop else stop_error, 'next_window_role': role}
             if not allowed:
@@ -150,41 +152,39 @@ def next_arm_triage(packet, internal):
             'list': list(TRIAGE_IDS)}
 
 
-# B3: count-based calibration stop (RUN_STATE 214 B3, amended by 215).
+# B3: FIXED 8 calibration windows (RUN_STATE 214/215; reverted from a count stop by 217).
+# Two synthetic simulations found that stopping on counts raises benign FPR under
+# window-level drift; the counts never read scores, so blinding was not the issue.
 CAL_PAIRS = ('spam', 'bank')
-CAL_MIN_WINDOWS = 6
-CAL_CAP_WINDOWS = 8
+CAL_WINDOWS = 8
 CAL_TARGET_PER_PAIR = 39
 BENIGN_PER_PAIR_PER_WINDOW = 7    # protocol default roster: 14 benign (7/pair) per window
 
 
 def calibration_stop(windows):
-    """Prospective count-only stop. ``windows`` lists the window attempts in the frozen order.
+    """Fixed-8 calibration predicate. ``windows`` lists the window attempts in the frozen order.
 
     Each entry: ``{'window': unique id, 'status': 'final'|'provisional',
     'captured_members': int >= 0, 'eligible_benign': {'spam': n, 'bank': n}}``.
-    Cap accounting (lead ruling, RUN_STATE 216): a window that captured **zero**
-    members is a zero-capture refusal and does not count toward the cap of 8 (its
-    eligible counts must be zero); a window with at least one captured member
-    counts, whether lost, failed or in flight, and carries its final counts
-    (zero when nothing is eligible). Two consecutive zero-capture refusals
-    escalate to the lead. The predicate reads no score, alarm, residual or
-    energy field. Returns ``decision``:
+    Calibration is exactly 8 counted windows; there is no early stop. A window
+    that captured **zero** members is a zero-capture refusal and does not count
+    (its eligible counts must be zero); a window with at least one captured
+    member counts, whether lost, failed or in flight, and carries its final
+    counts (zero when nothing is eligible). Two consecutive zero-capture
+    refusals escalate to the lead (RUN_STATE 216). The predicate reads no score,
+    alarm, residual or energy field. Returns ``decision``:
 
     * ``escalate_to_lead`` - the last two attempts are both zero-capture refusals;
       nothing is armed until the lead rules;
-    * ``continue`` - fewer than 6 counted windows, or 6..7 final windows with
-      some pair below the target; arm the next frozen window;
-    * ``pending_final_eligibility`` - 6 or more counted windows and any of them
-      is provisional: no stop/continue decision, and no further arm;
-    * ``stop_complete`` - at the first n in 6..8 whose first n counted windows are
-      all final and where BOTH pairs have >=39 eligible benign summed over all n;
-    * ``insufficient_calibration`` - 8 final counted windows and a pair below 39.
-      No ninth counted attempt exists.
+    * ``continue`` - fewer than 8 counted windows: arm the next frozen window;
+    * ``pending_final_eligibility`` - 8 counted windows and any is provisional;
+    * ``calibration_complete`` - 8 final counted windows and BOTH pairs have >=39
+      eligible benign summed over all 8 (every eligible calibrator counts: no
+      quietest-39 selection, no reordering);
+    * ``insufficient_calibration`` - 8 final counted windows and either pair below
+      39. No ninth counted attempt exists.
 
-    Every eligible benign member of the retained prefix counts; there is no
-    quietest-39 selection and no reordering. This is not an exchangeability or
-    R13/R14 result.
+    This is not an exchangeability or R13/R14 result.
     """
     if not isinstance(windows, (list, tuple)):
         raise ValueError('windows must be a sequence in frozen order')
@@ -209,32 +209,22 @@ def calibration_stop(windows):
             continue
         trailing_zero = 0
         counted.append(row)
-    if len(counted) > CAL_CAP_WINDOWS:
-        raise ValueError(f'more than the cap of {CAL_CAP_WINDOWS} counted calibration windows')
+    if len(counted) > CAL_WINDOWS:
+        raise ValueError(f'more than the fixed {CAL_WINDOWS} counted calibration windows')
     totals = dict.fromkeys(CAL_PAIRS, 0)
     for row in counted:
         for pair in CAL_PAIRS:
             totals[pair] += row['eligible_benign'][pair]
     attempted = len(counted)
     final = all(row['status'] == 'final' for row in counted)
-    base = {'attempted': attempted, 'cap': CAL_CAP_WINDOWS, 'minimum': CAL_MIN_WINDOWS,
-            'target_per_pair': CAL_TARGET_PER_PAIR, 'eligible_by_pair': totals,
-            'counts_are_final': final, 'zero_capture_refusals': refusals}
+    base = {'attempted': attempted, 'windows': CAL_WINDOWS, 'target_per_pair': CAL_TARGET_PER_PAIR,
+            'eligible_by_pair': totals, 'counts_are_final': final, 'zero_capture_refusals': refusals}
     if trailing_zero >= 2:
         return {**base, 'decision': 'escalate_to_lead'}
-    if attempted < CAL_MIN_WINDOWS:
+    if attempted < CAL_WINDOWS:
         return {**base, 'decision': 'continue'}
     if not final:
         return {**base, 'decision': 'pending_final_eligibility'}
-    for n in range(CAL_MIN_WINDOWS, attempted+1):
-        prefix = dict.fromkeys(CAL_PAIRS, 0)
-        for row in counted[:n]:
-            for pair in CAL_PAIRS:
-                prefix[pair] += row['eligible_benign'][pair]
-        if all(prefix[pair] >= CAL_TARGET_PER_PAIR for pair in CAL_PAIRS):
-            if n < attempted:
-                raise ValueError('a window was attempted after the stop condition was already met')
-            return {**base, 'decision': 'stop_complete', 'stopped_at': n}
-    if attempted == CAL_CAP_WINDOWS:
-        return {**base, 'decision': 'insufficient_calibration'}
-    return {**base, 'decision': 'continue'}
+    if all(totals[pair] >= CAL_TARGET_PER_PAIR for pair in CAL_PAIRS):
+        return {**base, 'decision': 'calibration_complete'}
+    return {**base, 'decision': 'insufficient_calibration'}

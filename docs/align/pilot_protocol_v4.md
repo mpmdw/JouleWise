@@ -556,7 +556,7 @@ F:430,654–659`
 
 Ed's registration-grade ruling requires m≥39 eligible benign per pair plus a
 separately locked test cohort (about seven calibration windows, then T1–T3;
-count-based stop, cap 8: R12 B3 below; the exact C/T manifest remains lead-owned). Thresholds are the
+fixed 8 calibration windows: R12 B3 below; the exact C/T manifest remains lead-owned). Thresholds are the
 per-channel sample maximum at that rank. Under exchangeability the marginal
 FPR is ≤1/(m+1), at most 2.5% at m=39; this is not a conditional realized 2.5%
 guarantee. Under iid continuous scores the 90% upper tolerance bound is
@@ -568,7 +568,7 @@ v5 add-ons to v4's frozen model/settings/thermal policy, not v4 changes.
 
 **R11/R13 series-plan hold (RUN_STATE 212).** Seven benign/pair/window give
 42 after six intact windows; losing a whole window leaves 35<39, before
-member attrition. R12 B3 (below) rules the margin: the eighth calibration window is the cap;
+member attrition. R12 B3 (below) rules the margin: calibration is a fixed eight windows;
 no D7/D8 is admitted. Enumerate
 fit, calibration and locked-test units separately and size **both pairs and
 every stopping condition**. Seven calibration windows is a planning count,
@@ -798,7 +798,7 @@ from the committed record before the arm; the arm waits for them.
 | `cohort_pool_rules` | U1-U3 failure bars pool entry; one frozen cohort; no pooling across a changed configuration |
 | `sentinel_roster` | U4/U5 inconclusive adds two sentinels to the remaining windows |
 | `member_eligibility` | final eligibility adjudication (identity X5, U3 pairs, exclusions); counts are provisional until it passes |
-| `calibration_stop` | the B3 predicate over the packet counts (derived, not asserted) |
+| `calibration_stop` | the B3 fixed-8 predicate over the packet counts (derived, not asserted): continue until 8 counted windows, `calibration_complete` before a test arm |
 | `full_desk_gate` | the full desk |
 
 The full desk **must have completed and passed before the arm** when the previous
@@ -814,50 +814,52 @@ previous-window checks before W1 (previous window R1). The triage packet is
 triage fits in five minutes, and the 30-45 minute turnaround, are targets, not
 measurements.
 
-**B3 - count-based calibration stop (prospective).** Calibration windows C1-C8
-run in one frozen order (the series manifest's order; held-out seed indices are
-consumed in kit order by window order) and the same default D shape: 4 anchors,
-2 sentinels, 14 fresh benign (7 per pair) and 2 sabotage (1 per pair). Test
-windows are a separate frozen roster that never draws on calibration; no unused
-calibration window is repurposed as test or fit. The stop reads window status and
-eligible benign counts per pair only, never a score, alarm, residual or energy
-field (`v4_cadence.calibration_stop`):
+**B3 - fixed 8 calibration windows (RUN_STATE 217; supersedes the count stop of
+214/215).** Calibration is exactly 8 counted windows, C1-C8, run in one frozen order
+(the series manifest's order; held-out seed indices are consumed in kit order by
+window order) with the default D shape: 4 anchors, 2 sentinels, 14 fresh benign (7
+per pair) and 2 sabotage (1 per pair). There is no early stop and no minimum below 8:
+two independent synthetic simulations (`align/2026-11-08-b3-sim-sol1`, `-sol2`) found
+that stopping on counts lowers the threshold and raises future benign FPR under
+window-level drift (for example 2.84 % vs 2.14 % at the maximum rule), even though
+counts never read scores. Test windows are a separate frozen roster that never draws
+on calibration; no calibration window is repurposed as test or fit. The predicate
+reads window status and eligible benign counts per pair only, never a score, alarm,
+residual or energy field (`v4_cadence.calibration_stop`):
 
-1. Check only after each complete window's final eligibility adjudication.
-   Counts are provisional until `member_eligibility` passes; provisional counts may
-   schedule windows 1-5 only. From six attempted windows on, a provisional prefix
-   gives `pending_final_eligibility` and nothing is armed.
-2. At the first n in {6, 7, 8} whose first n windows are all final and in which
-   **both** pairs (spam and bank) have at least 39 eligible benign summed over all
-   n windows, stop (`stop_complete`). Every eligible calibrator in the retained
-   prefix counts; there is no best-39, no reordering and no skipping.
+1. Eligibility is final before the decision. Counts are provisional until
+   `member_eligibility` passes; provisional counts schedule windows 1-7, and with 8
+   counted windows any provisional one gives `pending_final_eligibility`.
+2. After 8 final counted windows: if **both** pairs (spam and bank) have at least 39
+   eligible benign summed over the 8, calibration is complete (`calibration_complete`)
+   and test windows may follow. Every eligible calibrator counts; there is no
+   best-39, no reordering and no skipping.
 3. Cap accounting (lead ruling, RUN_STATE 216): a window that captured **zero**
-   members (a zero-capture refusal) does not count toward the cap of 8 and carries
-   no eligible members; a window with at least one captured member counts, whether
-   lost, failed or in flight. Two consecutive zero-capture refusals escalate to the
-   lead (`escalate_to_lead`; nothing is armed until the lead rules). One lost counted
-   window leaves 35 after six (7 x 6 = 42, less 7). There is no ninth counted
-   attempt, and no refusal path reorders, adds or drops a window.
-4. Failure outcome: at eight final windows with either pair below 39 the result is
+   members (a zero-capture refusal) does not count toward the 8 and carries no
+   eligible members; a window with at least one captured member counts, whether lost,
+   failed or in flight. Two consecutive zero-capture refusals escalate to the lead
+   (`escalate_to_lead`; nothing is armed until the lead rules). There is no ninth
+   counted attempt, and no refusal path reorders, adds or drops a window.
+4. Failure outcome: after 8 final windows with either pair below 39 the result is
    `insufficient_calibration`; no extension, no D7/D8, no relaxed target.
-5. A window launched as calibration stays calibration; from window 6 the next window
-   is not armed until the decision is final, so no in-flight window straddles the
-   stop.
+5. A window launched as calibration stays calibration.
 6. This counts 7 benign per pair per window as calibration. Any fit-support
    deduction (a Q6 fit/C/T split) changes the arithmetic (40 before and 35 after a
-   whole-window loss, so a ninth window would be needed) and needs its own ruling;
-   the cap is not silently expanded. The >=6 sabotage-per-pair target is **not** a
-   stop condition (R12 does not adopt it).
+   whole-window loss) and needs its own ruling. The >=6 sabotage-per-pair target is
+   **not** a requirement here (R12 does not adopt it).
 
-Exchangeability, R13 and R14 are not satisfied by counts alone. Eligibility
-(thermal timeouts, identity, missingness, whole-window loss) can share causes
-with scores, and windows are clustered; a count-only rule can therefore still
-select the score population (the Sol reviews give constructed examples). Selection
-and exchangeability under this rule are qualified by a separate simulation (a Sol
-seat is running it) before W1, and the scorer, rank and LOTO/full-fit
-asymmetry above stay open. The stop is frozen before any window is run: it may not
-be changed after looking at early yield, and a different rule needs prospective
-authority and an access-history disposition.
+Cost: about 13 MBP hours against a count stop, accepted for a cleaner FPR claim.
+Exchangeability, R13 and R14 are not satisfied by counts alone: eligibility (thermal
+timeouts, identity, missingness, whole-window loss) can share causes with scores and
+windows are clustered. Both the fixed-8 and the count designs exceed nominal FPR
+under a forward drift trend, so the FPR statement stays conditional on exchangeability
+and the held-out test cohort is the empirical FPR evidence; public text must say so.
+**Open statistics item (not adopted):** a candidate of a minimum of 7 windows plus a
+frozen 0.5 s_r threshold margin (sol1). It is model-dependent and needs a scale/scorer
+qualification and a power assessment before W1 registration; until then calibration is
+the fixed 8. The rule is frozen before any window runs and may not be changed after
+looking at early yield; a different rule needs prospective authority and an
+access-history disposition.
 
 **R1 sizing correction.** Do not size an R1 deadline from 61,607 s. A step-D batch
 encounter can wait up to 11,164 s; the corrected one-encounter, no-redo phase

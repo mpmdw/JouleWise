@@ -48,7 +48,7 @@ Cross-checks: `perf/2026-11-08-r12-review-sol1`, `-sol2`. Protocol section
 |---|---|---|
 | B1 | A window ends at authenticated terminal completion; 59,520 s is a ceiling, not a reservation; custody, quiet admission and ceiling kept | protocol R12 B1 and the Sizing line; kit README text |
 | B2 | Frozen 14-entry next-arm triage list, all gating; arm evaluates it (`--next-arm-triage`); full desk gating after W1 and after code/config change | `v4_cadence.NEXT_ARM_TRIAGE`, `next_arm_triage`; `align_v4_session.arm_checks` |
-| B3 | Count-only stop, minimum 6, cap 8, both pairs >=39, cap accounting, insufficient-calibration outcome; exchangeability left to a separate simulation | `v4_cadence.calibration_stop`; protocol R12 B3 |
+| B3 | Fixed 8 counted calibration windows (RUN_STATE 217 reverted the count stop), both pairs >=39 after 8, cap accounting, insufficient-calibration outcome | `v4_cadence.calibration_stop`; protocol R12 B3 |
 | R1 sizing | 61,607 s marked stale; 67,371 s one-encounter no-redo subtotal plus bracket/close/harvest; 96,427 s redo floor (RUN_STATE 216 corrected 215's 90,663 s) | `docs/align/r1_runtime_contract.md`, `LEAD-RULINGS-2.md` correction note |
 
 Resolved by RUN_STATE 216: a zero-capture window does not count toward the cap of 8, one with >=1 captured member counts, two consecutive zero-capture refusals escalate to the lead (`calibration_stop`, protocol B3 item 3). `night_worst_case_s` and its tests corrected to the per-encounter rule.
@@ -56,3 +56,23 @@ Resolved by RUN_STATE 216: a zero-capture window does not count toward the cap o
 Open (lead): the >=6 sabotage target (not
 adopted); fit/C/T roles and any fit-support deduction; the C1-C8/T manifest
 contents.
+
+## RUN_STATE 217: R12 B3 reverted to a fixed 8 calibration windows
+
+Two synthetic simulations (`align/2026-11-08-b3-sim-sol1` @ `09d7b3c7f`, `-sol2` @ `95d43c054`)
+agree that a count stop saves about one window but lowers the threshold and raises
+future benign FPR under window-level drift (sol1 clustered/hot: maximum rule 2.84 % vs
+2.14 %, 5 % rank 5.38 % vs 4.13 %; sol2 hot10, tau .5: 2.73 % vs 2.22 %). Counts never
+read scores, so blinding was not at risk. Cost of fixed 8: about 13 MBP hours.
+
+- `calibration_stop` is now a fixed-8 predicate: exactly 8 counted windows in the frozen
+  order, no early stop; `calibration_complete` if both pairs >= 39 eligible after 8,
+  else `insufficient_calibration`. The zero-capture rule and two-in-a-row escalation
+  (item 216) stay. Decision `stop_complete` is renamed `calibration_complete`.
+- Protocol R12 B3 text, the `calibration_stop` triage entry, kit README text and tests
+  updated. The FPR statement stays conditional on exchangeability; both designs exceed
+  nominal FPR under a forward drift trend and the held-out test cohort is the empirical
+  evidence, which public text must say.
+- **Open statistics item (before W1 registration, not adopted):** sol1's candidate of a
+  minimum of 7 windows plus a frozen 0.5 s_r threshold margin. It is model-dependent and
+  needs a scale/scorer qualification and a power assessment.

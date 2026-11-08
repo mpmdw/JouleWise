@@ -1,4 +1,4 @@
-"""R12 (RUN_STATE 214/215): next-arm triage list (B2) and count-based stop (B3).
+"""R12 (RUN_STATE 214/215): next-arm triage list (B2) and the fixed-8 calibration predicate (B3).
 
 Synthetic only. The stop tests check the predicate, not exchangeability.
 """
@@ -113,50 +113,56 @@ class TriageListTests(unittest.TestCase):
 
 
 class CalibrationStopTests(unittest.TestCase):
-    def test_constants_are_the_ruled_min_6_cap_8_and_39_per_pair(self):
-        self.assertEqual((cad.CAL_MIN_WINDOWS, cad.CAL_CAP_WINDOWS, cad.CAL_TARGET_PER_PAIR), (6, 8, 39))
+    def test_constants_are_the_ruled_fixed_8_and_39_per_pair(self):
+        self.assertEqual((cad.CAL_WINDOWS, cad.CAL_TARGET_PER_PAIR), (8, 39))
+        for gone in ('CAL_MIN_WINDOWS', 'CAL_CAP_WINDOWS'):
+            self.assertFalse(hasattr(cad, gone))        # no minimum, no early stop (RUN_STATE 217)
 
-    def test_continues_before_six_windows_even_if_counts_are_provisional(self):
+    def test_no_early_stop_even_when_six_or_seven_windows_already_meet_the_target(self):
+        for n in (6, 7):
+            rows = [window(f'C{i}', 7, 7) for i in range(1, n+1)]       # 42/42 or 49/49 >= 39
+            result = cad.calibration_stop(rows)
+            self.assertEqual((result['decision'], result['attempted']), ('continue', n))
         self.assertEqual(cad.calibration_stop([])['decision'], 'continue')
-        rows = [window(f'C{i}', 7, 7, 'provisional') for i in range(1, 6)]
-        self.assertEqual(cad.calibration_stop(rows)['decision'], 'continue')
+        rows = [window(f'C{i}', 7, 7, 'provisional') for i in range(1, 8)]
+        self.assertEqual(cad.calibration_stop(rows)['decision'], 'continue')     # provisional is fine before 8
 
-    def test_stops_at_the_first_window_count_at_or_after_six_meeting_both_pairs(self):
-        rows = [window(f'C{i}', 7, 7) for i in range(1, 7)]               # 42/42
+    def test_exactly_eight_final_windows_decide(self):
+        done = [window(f'C{i}', 7, 7) for i in range(1, 9)]
+        self.assertEqual(cad.calibration_stop(done)['decision'], 'calibration_complete')
+        pending = done[:7] + [window('C8', 7, 7, 'provisional')]
+        self.assertEqual(cad.calibration_stop(pending)['decision'], 'pending_final_eligibility')
+        with self.assertRaises(ValueError):
+            cad.calibration_stop(done + [window('C9', 7, 7)])             # no ninth counted window
+
+    def test_both_pairs_must_reach_39_after_eight(self):
+        rows = [window(f'C{i}', 7, 4) for i in range(1, 9)]               # spam 56, bank 32
         result = cad.calibration_stop(rows)
-        self.assertEqual((result['decision'], result['stopped_at']), ('stop_complete', 6))
-        seven = [window(f'C{i}', 6, 7) for i in range(1, 7)] + [window('C7', 3, 0)]   # 39 spam only at 7
-        self.assertEqual(cad.calibration_stop(seven[:6])['decision'], 'continue')    # 36/42
-        self.assertEqual(cad.calibration_stop(seven)['decision'], 'stop_complete')   # spam 39, bank 42
-        self.assertEqual(cad.calibration_stop(seven)['stopped_at'], 7)
+        self.assertEqual((result['decision'], result['eligible_by_pair']['bank']), ('insufficient_calibration', 32))
+        edge = [window(f'C{i}', 7, 5) for i in range(1, 8)] + [window('C8', 7, 4)]        # bank 39 exactly
+        self.assertEqual(cad.calibration_stop(edge)['decision'], 'calibration_complete')
+        short = [window(f'C{i}', 7, 5) for i in range(1, 8)] + [window('C8', 7, 3)]       # bank 38
+        self.assertEqual(cad.calibration_stop(short)['decision'], 'insufficient_calibration')
 
-    def test_both_pairs_must_meet_the_target(self):
-        rows = [window(f'C{i}', 7, 6) for i in range(1, 7)]               # spam 42, bank 36
-        self.assertEqual(cad.calibration_stop(rows)['decision'], 'continue')
-        rows.append(window('C7', 7, 2))                                   # bank 38
-        self.assertEqual(cad.calibration_stop(rows)['decision'], 'continue')
-        rows.append(window('C8', 7, 1))                                   # bank 39
-        self.assertEqual(cad.calibration_stop(rows)['decision'], 'stop_complete')
+    def test_lost_whole_window_still_counts_and_can_leave_the_target_unmet(self):
+        # One whole-window loss: 7 x 7 = 49 >= 39 still completes; losing 2 of 8 leaves 42 and completes;
+        # five losses leave 21 and fail closed.
+        lost = lambda n: [window(f'C{i}', 7, 7) for i in range(1, 9-n)] + [window(f'L{i}', 0, 0) for i in range(n)]
+        self.assertEqual(cad.calibration_stop(lost(1))['decision'], 'calibration_complete')
+        self.assertEqual(cad.calibration_stop(lost(2))['decision'], 'calibration_complete')
+        self.assertEqual(cad.calibration_stop(lost(5))['decision'], 'insufficient_calibration')
 
-    def test_one_lost_window_at_six_leaves_35_and_continues(self):
-        rows = [window(f'C{i}', 7, 7) for i in range(1, 6)] + [window('C6', 0, 0)]
-        result = cad.calibration_stop(rows)
-        self.assertEqual((result['decision'], result['eligible_by_pair']['spam']), ('continue', 35))
-
-    def test_zero_capture_windows_do_not_count_toward_the_cap_and_two_in_a_row_escalate(self):
+    def test_zero_capture_windows_do_not_count_and_two_in_a_row_escalate(self):
         refused = lambda name: window(name, 0, 0, captured=0)
         rows = [window('C1', 7, 7), refused('C2-refusal-1'), window('C2', 7, 7)]
         result = cad.calibration_stop(rows)
         self.assertEqual((result['decision'], result['attempted'], result['zero_capture_refusals']),
                          ('continue', 2, 1))
-        # one captured member counts, even when lost
-        self.assertEqual(cad.calibration_stop([window('C1', 0, 0, captured=1)])['attempted'], 1)
-        # eight counted windows plus refusals: still no ninth counted attempt
-        eight = [window(f'C{i}', 0, 0) for i in range(1, 9)]
-        self.assertEqual(cad.calibration_stop(eight + [refused('R1')])['decision'], 'insufficient_calibration')
+        self.assertEqual(cad.calibration_stop([window('C1', 0, 0, captured=1)])['attempted'], 1)   # one member counts
+        eight = [window(f'C{i}', 7, 7) for i in range(1, 9)]
+        self.assertEqual(cad.calibration_stop(eight + [refused('R1')])['decision'], 'calibration_complete')
         with self.assertRaises(ValueError):
             cad.calibration_stop(eight + [window('C9', 7, 7)])
-        # two consecutive zero-capture refusals escalate; a captured window between them does not
         two = [window('C1', 7, 7), refused('R1'), refused('R2')]
         self.assertEqual(cad.calibration_stop(two)['decision'], 'escalate_to_lead')
         self.assertEqual(cad.calibration_stop([refused('R1'), window('C1', 7, 7), refused('R2')])['decision'], 'continue')
@@ -164,53 +170,35 @@ class CalibrationStopTests(unittest.TestCase):
             self.assertFalse(cad.next_arm_triage(passing_packet(calibration_windows=two, next_window_role=role),
                                                  INTERNAL)['admitted'])
         with self.assertRaises(ValueError):
-            cad.calibration_stop([window('C1', 3, 0, captured=0)])     # zero-capture cannot carry eligible members
+            cad.calibration_stop([window('C1', 3, 0, captured=0)])         # zero-capture cannot carry eligible members
         with self.assertRaises(ValueError):
             cad.calibration_stop([{'window': 'C1', 'status': 'final', 'eligible_benign': {'spam': 0, 'bank': 0}}])
 
-    def test_cap_accounting_counts_lost_windows_and_fails_closed_at_eight(self):
-        rows = [window(f'C{i}', 7, 7) for i in range(1, 4)] + [window(f'C{i}', 0, 0) for i in range(4, 9)]
-        result = cad.calibration_stop(rows)
-        self.assertEqual((result['decision'], result['attempted']), ('insufficient_calibration', 8))
-        with self.assertRaises(ValueError):
-            cad.calibration_stop(rows + [window('C9', 7, 7)])             # no ninth attempt
-
-    def test_provisional_counts_from_six_windows_never_decide(self):
-        rows = [window(f'C{i}', 7, 7) for i in range(1, 6)] + [window('C6', 7, 7, 'provisional')]
-        self.assertEqual(cad.calibration_stop(rows)['decision'], 'pending_final_eligibility')
-        self.assertFalse(cad.next_arm_triage(passing_packet(calibration_windows=rows), INTERNAL)['admitted'])
-
     def test_decision_uses_only_counts_and_status(self):
-        rows = [dict(window('C1', 7, 7), score=9.9, alarm=True)] + [window(f'C{i}', 7, 7) for i in range(2, 7)]
-        self.assertEqual(cad.calibration_stop(rows), cad.calibration_stop([window(f'C{i}', 7, 7) for i in range(1, 7)]))
+        rows = [dict(window('C1', 7, 7), score=9.9, alarm=True)] + [window(f'C{i}', 7, 7) for i in range(2, 9)]
+        self.assertEqual(cad.calibration_stop(rows), cad.calibration_stop([window(f'C{i}', 7, 7) for i in range(1, 9)]))
 
-    def test_invalid_rows_and_extra_attempts_after_the_stop_are_refused(self):
-        good = [window(f'C{i}', 7, 7) for i in range(1, 7)]
-        for bad in (good[:5] + [window('C6', 8, 7)], good[:5] + [window('C6', -1, 7)],
-                    good[:5] + [window('C6', True, 7)], good[:5] + [window('C1', 7, 7)],
-                    good[:5] + [window('C6', 7, 7, 'done')], good[:5] + [{'window': 'C6'}]):
+    def test_invalid_rows_are_refused(self):
+        good = [window(f'C{i}', 7, 7) for i in range(1, 8)]
+        for bad in (good + [window('C8', 8, 7)], good + [window('C8', -1, 7)], good + [window('C8', True, 7)],
+                    good + [window('C1', 7, 7)], good + [window('C8', 7, 7, 'done')], good + [{'window': 'C8'}]):
             with self.subTest(bad=bad[-1]), self.assertRaises(ValueError):
                 cad.calibration_stop(bad)
-        with self.assertRaises(ValueError):
-            cad.calibration_stop(good + [window('C7', 7, 7)])
 
-    def test_triage_role_follows_the_stop_decision(self):
-        done = [window(f'C{i}', 7, 7) for i in range(1, 7)]
-        calibration = cad.next_arm_triage(passing_packet(calibration_windows=done), INTERNAL)
-        self.assertFalse(calibration['admitted'])        # stop_complete refuses another calibration arm
+    def test_triage_role_follows_the_fixed_8_decision(self):
+        done = [window(f'C{i}', 7, 7) for i in range(1, 9)]
+        self.assertFalse(cad.next_arm_triage(passing_packet(calibration_windows=done), INTERNAL)['admitted'])
         test = cad.next_arm_triage(passing_packet(calibration_windows=done, next_window_role='test'), INTERNAL)
         self.assertTrue(test['admitted'], test['reasons'])
+        # Seven windows: a test arm is refused (no early stop), a calibration arm is allowed.
+        seven = done[:7]
+        self.assertTrue(cad.next_arm_triage(passing_packet(calibration_windows=seven), INTERNAL)['admitted'])
+        self.assertFalse(cad.next_arm_triage(passing_packet(calibration_windows=seven, next_window_role='test'),
+                                             INTERNAL)['admitted'])
         failed = [window(f'C{i}', 0, 0) for i in range(1, 9)]
         for role in ('calibration', 'test'):
             self.assertFalse(cad.next_arm_triage(passing_packet(calibration_windows=failed,
                                                                 next_window_role=role), INTERNAL)['admitted'])
-
-    def test_eligibility_grid_is_consistent_with_prefix_sums(self):
-        for counts in itertools.product(range(0, 8), repeat=3):
-            rows = [window(f'C{i}', 7, 7) for i in range(1, 6)] + [window('C6', counts[0], counts[1])]
-            total = 35 + counts[0]
-            expected = 'stop_complete' if total >= 39 and 35 + counts[1] >= 39 else 'continue'
-            self.assertEqual(cad.calibration_stop(rows)['decision'], expected)
 
 
 class RegistrationTextTests(unittest.TestCase):
@@ -225,9 +213,9 @@ class RegistrationTextTests(unittest.TestCase):
     def test_protocol_states_b1_b2_b3_and_lists_every_triage_check(self):
         for name in cad.TRIAGE_IDS:
             self.assertIn(f'`{name}`', self.section)
-        for phrase in ('ceiling, not a reservation', 'authenticated terminal completion', 'minimum 6'.replace('minimum 6', '{6, 7, 8}'),
-                       'insufficient_calibration', 'separate simulation', 'not satisfied by counts alone',
-                       'zero-capture', 'escalate to the lead', '67,371 s', '96,427 s', '--next-arm-triage'):
+        for phrase in ('ceiling, not a reservation', 'authenticated terminal completion', 'RUN_STATE 217',
+                       'insufficient_calibration', 'calibration_complete', 'fixed 8', 'not satisfied by counts alone',
+                       'Open statistics item', 'minimum of 7', '0.5 s_r', 'zero-capture', 'escalate to the lead', '67,371 s', '96,427 s', '--next-arm-triage'):
             self.assertIn(phrase, self.section)
 
     def test_stale_r1_sizing_is_marked_and_corrected(self):
