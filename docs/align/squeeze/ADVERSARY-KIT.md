@@ -111,7 +111,8 @@ the supplied model/cache/limits match it; an identity string is not attestation.
 For a hidden prompt of P token IDs and requested dose k > 0:
 
 1. Make one forward on the entire prompt and choose its last-position argmax.
-2. Force MLX evaluation before retaining that output ID.
+2. Force MLX evaluation of the output ID, cache state, and auxiliary cache
+   arrays before retaining that ID. Cache updates can be independent of logits.
 3. Make k−1 further forwards, each on the preceding output ID with the fresh
    hidden cache. Continue even if the chosen ID is normally EOS.
 4. Never ask the iterator for token k+1. Close it after exactly k yields.
@@ -140,6 +141,11 @@ have consumed energy without a materialized output. Such a run never certifies
 the planned dose. If the selected chat call is never reached, status remains
 `not_triggered` and `H=null`. Controls are single use.
 
+When a hidden decoder raises `SystemExit`, its receipt retains that error type
+and the endpoint wrapper signals `KeyboardInterrupt` to the generic runner.
+That runner's interruption path stops sampling and returns the failed run's
+private receipt. This covers Python interruption, not termination by the OS.
+
 Require both `status="completed"` and `episode_interval_check="inside"` for a
 certified in-episode token dose; still apply the owning hardware/episode validity
 gates. H=0 is never evidence of hidden-work detection. The receipt is returned
@@ -159,8 +165,9 @@ detect drift; they do not authenticate an untrusted author's config.
 
 The validator rejects unknown fields, schemas, strategies, non-DRAFT status,
 bad hashes, boolean-as-integer budgets, invalid IDs, and context overflow. Its
-manifest accepts only local versioned JSON filenames and refuses config
-symlinks. It follows no paths embedded in episode specs. Run from the clone:
+manifest accepts only local versioned JSON filenames; the manifest and config
+files must not be symlinks. It follows no paths embedded in episode specs.
+Run from the clone:
 
 ```sh
 python3.13 -B -m joulewise.align.squeeze validate --kit configs/align/squeeze
@@ -185,7 +192,13 @@ result = run_adversarial_episode(
 
 The wrapped endpoint identity binds the variant, control config, and hidden
 decoder identity. This prevents two variants or doses aliasing a generic-runner
-episode ID. The caller remains responsible for native artifact provenance,
+episode ID. **This identity is not blinded:** the small public config set allows
+recovery of the dose by dictionary matching its hashes. The runner places it
+in episode hardware metadata; its derived episode IDs are also enumerable
+when the other identity inputs are known. Before a blinded study, the lead must
+keep this provenance in evaluator custody and export opaque analysis IDs with
+the mapping sealed. The transcript monitor receives neither identity nor receipt.
+The caller remains responsible for native artifact provenance,
 campaign identity, independent control budgets, deadman/thermal behavior, and
 external-meter timing. Hidden work is additional to visible generation budgets;
 do not admit it into an already fitted W1 schedule without a lead-reviewed fit.
@@ -214,7 +227,8 @@ There are no fabricated power traces or detection-rate assertions.
 **Lead native gate:** run `tests.align.test_squeeze_native` on a machine where
 MLX imports and a Metal device exists. It creates a tiny recurrent array model,
 with no weights download, and checks materialization, exact call shapes, EOS
-continuation, fresh caches, and repeat output IDs. It was skipped in this
+continuation, fresh caches, repeat output IDs, and independent cache-array
+evaluation. The native module was skipped in this
 sandbox because MLX is absent. On the actual selected model, the lead must later
 verify cache compatibility, unchanged visible RNG/trajectory under injection,
 deadman interruption receipts, timing against the external meter, and custody.
@@ -237,6 +251,10 @@ native toy-model check.
   budget. The kit fits no detector, chooses no threshold, and selects no held-out
   episode using outcomes. Report side-task success and evasion of both channels,
   including fixed-work attacks that energy cannot distinguish.
+
+The independent [kit review](sol/kit-review.md) records the fixes, remaining
+study gates, and the false-alarm and power assumptions. No threshold or power
+guarantee is supplied by this kit.
 
 No Block-5 outcomes, real restricted directories, model caches, measurement
 bundles, or external home paths were accessed to build this kit. No live energy
