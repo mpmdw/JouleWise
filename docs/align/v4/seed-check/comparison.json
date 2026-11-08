@@ -1,0 +1,118 @@
+{
+  "actual_canonical_sha256": "01e2363d1d45e3593def99e538761bd8424fdd962faa12576559733a11964672",
+  "actual_file_sha256": "eba6fb0732ec26996a0c63bb679a899b71dc2009474502e59048dd67d764f0c7",
+  "checks": {
+    "all_slots_match": true,
+    "byte_identical_manifest": true,
+    "canonical_hash_matches_brief": true,
+    "every_manifest_leaf_matches": true,
+    "file_hash_matches_brief": true,
+    "original_anchor_bytes_match": true,
+    "precomparison_snapshot_unchanged": true,
+    "rederived_canonical_hash_matches_brief": true,
+    "rederived_file_hash_matches_brief": true,
+    "rederived_slots_equal_precomparison_snapshot": true
+  },
+  "expected_canonical_sha256": "01e2363d1d45e3593def99e538761bd8424fdd962faa12576559733a11964672",
+  "expected_file_sha256": "eba6fb0732ec26996a0c63bb679a899b71dc2009474502e59048dd67d764f0c7",
+  "fields_compared_per_slot": [
+    "task_pair",
+    "condition",
+    "seed_index",
+    "expected_episode_seed",
+    "model_id",
+    "role",
+    "ordinal"
+  ],
+  "independent_slots_sha256": "58365e68525d521740534fd9fb3f8ef8fd05629b7ab28f392bf17e454b91ad53",
+  "manifest_differences": [],
+  "original_anchors": [
+    {
+      "byte_identical": true,
+      "kit_sha256": "6d2c4ecda2022b25ccb68bc455bf783851f5d77b7b09c89737cdd0a50df4bb58",
+      "ordinal": 1,
+      "original_sha256": "6d2c4ecda2022b25ccb68bc455bf783851f5d77b7b09c89737cdd0a50df4bb58",
+      "source": "83e2dac59:configs/campaigns/align_pilot_v3/stages/episodes-a/align-pilot-v3-episodes-a-e01.json"
+    },
+    {
+      "byte_identical": true,
+      "kit_sha256": "6a5c0daaa019e66440e8860ef82163312dea84fd9aaaa28f6fd0f3b6464712a8",
+      "ordinal": 2,
+      "original_sha256": "6a5c0daaa019e66440e8860ef82163312dea84fd9aaaa28f6fd0f3b6464712a8",
+      "source": "83e2dac59:configs/campaigns/align_pilot_v3/stages/episodes-a/align-pilot-v3-episodes-a-e02.json"
+    },
+    {
+      "byte_identical": true,
+      "kit_sha256": "56105368782182d14e5dbd125854de1dff888cad4c1c25d21aa6820fcf2062d2",
+      "ordinal": 3,
+      "original_sha256": "56105368782182d14e5dbd125854de1dff888cad4c1c25d21aa6820fcf2062d2",
+      "source": "83e2dac59:configs/campaigns/align_pilot_v3/stages/episodes-a/align-pilot-v3-episodes-a-e03.json"
+    },
+    {
+      "byte_identical": true,
+      "kit_sha256": "5b893b05211f36450bb60c7c01b39ec1721415022c65797d0c2fb3831d1a7bfa",
+      "ordinal": 4,
+      "original_sha256": "5b893b05211f36450bb60c7c01b39ec1721415022c65797d0c2fb3831d1a7bfa",
+      "source": "83e2dac59:configs/campaigns/align_pilot_v3/stages/episodes-a/align-pilot-v3-episodes-a-e04.json"
+    }
+  ],
+  "provenance": {
+    "allocation": "derive_slots.py and independent_slots.json committed before target inspection",
+    "series_builder": "never read or imported by this checker",
+    "wrapper": "literal schema/metadata spelling inspected from target JSON after allocation freeze"
+  },
+  "role_encoding": "W1: role; C/T: pool plus sentinel ordinal and held-out condition",
+  "slot_count": 260,
+  "slot_differences": [],
+  "verdict": "MATCH",
+  "windows": [
+    {
+      "id": "W1",
+      "members": 18
+    },
+    {
+      "id": "C1",
+      "members": 22
+    },
+    {
+      "id": "C2",
+      "members": 22
+    },
+    {
+      "id": "C3",
+      "members": 22
+    },
+    {
+      "id": "C4",
+      "members": 22
+    },
+    {
+      "id": "C5",
+      "members": 22
+    },
+    {
+      "id": "C6",
+      "members": 22
+    },
+    {
+      "id": "C7",
+      "members": 22
+    },
+    {
+      "id": "C8",
+      "members": 22
+    },
+    {
+      "id": "T1",
+      "members": 22
+    },
+    {
+      "id": "T2",
+      "members": 22
+    },
+    {
+      "id": "T3",
+      "members": 22
+    }
+  ]
+}
