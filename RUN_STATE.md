@@ -1042,6 +1042,24 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+236. **Laptop lead (interactive session 1544c617), 2026-11-08 ~14:30 PST: lead ruling R24 (blind; synthetic simulation only), the reserve cap for the R22-2 structural replacements.**
+- **Evidence:** Sol R22-2 sim (`align/2026-11-08-r22-sim-sol` @ `8f81bf7bd`) and cap sweep (`align/2026-11-08-r22-cap-sweep-sol` @ `53556a3d6`).
+  - Bars that correlate with a hot state bias thresholds relative to an all-states oracle: maximum-rule FPR 4.04% vs 2.32% against the unscorable all-future-states population. On the population that passes the same frozen structural gate, R22 is at oracle level (2.245%).
+  - R22 still beats both no-replacement (4.44%) and the old count stop (4.64%) on that counterfactual.
+  - At b = 0, the gate-admitted FPR is invariant to the cap. Under b = .05 drift, a larger cap lowers it slightly (C12 vs C10: −0.05 to −0.26 pp).
+  - Qualification at bar rate 1/4 and e = .10: C10 52.6%, C11 71.3%, C12 84.2%, C14 96.2%.
+- **Ruling:**
+  - The registered FPR population is benign windows that pass the frozen structural gate. Barred T windows are unavailable and never credited as no-alarm.
+  - The reserve cap is **C14**, pre-registered: C9-C14 are armed in order, only to replace a structural bar, never to repair low m. Calibration is still exactly 8 admitted windows.
+  - Seeds: one contiguous reserve pool from 100 per pair (C9 100-107 … C14 140-147). T1-T3 stay byte-identical to R15. 91-99 stay the development reserve.
+  - A Sol C13/C14 confirmation sim is running (`r24-c14-confirm`), and the paired Sol seed check runs on the R24 manifest.
+- **Disclosed:** the sims say nominal (exact conformal) FPR control under window-shared state is not established, because clustering at τ/s_r = .5 is a model assumption. This feeds the v4 claim's disclosure, not a gate.
+- **Also from the v4 fixer at `align/2026-11-08-v4-r11` @ `f25654e97`:**
+  - R22 is implemented: contention is disclosure-only, there is a balance check, and C9/C10 bars are derived from committed records.
+  - A U1-U3 FAIL is now a bar (DEVIATIONS `R22-2-bar`, superseding R15).
+  - A barred window contributes nothing to calibration.
+  - The time-of-day dependency in the R1 chain test is removed.
+
 235. **Laptop lead (interactive session 1544c617), 2026-11-08 13:05 PST: lead ruling R23 (blind; synthetic evidence only, no v4 data exists) on the first v4 release-tool rehearsal.** The Opus comparator plus `release_v4.py` (`align/2026-11-08-v4-release-tools` @ `698a3f490`) covers all 282,691 engine leaves with 0 unmapped. On the synthetic series it HOLDS (exit 1): 56 of 61 recomputed families agree exactly. The planted mutations each move their intended family.
 - **R23-E1, engine bug:** a zero-capture window crashes `thermal_desk.acceptance` (`KeyError pm_period_s`). Not-captured members never enter acceptance, fits, U-units or claims. The zero-capture attempt is a final, not-counted record, and its retry takes the slot.
 - **R23-1, anchor σ_w (print-only):** it uses the same anchor set as U4, so W1 is included (K = 12). Both the raw method-of-moments σ_w² and max(0, raw) are printed, with K ≥ 3.
