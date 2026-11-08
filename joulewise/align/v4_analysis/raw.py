@@ -95,11 +95,13 @@ def _job(args):
 
 
 def window(root, document, slots, *, window_id, cache_dir=None, workers=1):
-    from .engine import allocation_run_id
+    from .engine import allocation_run_id, slot_run_id
     # Validate before opening any member's raw references. A prefix is a
     # window binding, not merely a way to make repeated anchor IDs unique.
     for record in [*slots, *document['members']]:
         allocation_run_id(record['run_id'], window_id)
+    for slot in slots:
+        slot_run_id(slot, window_id, strict=True)
     sources = {m['run_id']: m for m in document['members']}
     if len(sources) != len(document['members']) or set(sources) != {s['run_id'] for s in slots}:
         raise ValueError('raw export roster differs')

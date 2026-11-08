@@ -103,8 +103,20 @@ def allocation_run_id(run_id, window):
     return local if sep else run_id
 
 
-def _slot_matches(actual, expected, window):
-    local = allocation_run_id(actual.get('run_id'), window)
+def slot_run_id(slot, window, *, strict=False):
+    """Release anchors are series-unique; other R15 IDs remain local."""
+    run = slot.get('run_id')
+    local = allocation_run_id(run, window)
+    if slot.get('series_role') == 'anchor':
+        if strict and run == local:
+            raise ValueError('anchor run_id requires window prefix')
+    elif run != local:
+        raise ValueError('non-anchor run_id must not have window prefix')
+    return local
+
+
+def _slot_matches(actual, expected, window, *, strict=False):
+    local = slot_run_id({**actual, 'series_role': expected['series_role']}, window, strict=strict)
     return all((local if k == 'run_id' and expected['series_role'] == 'anchor'
                 else actual.get(k)) == v for k, v in expected.items())
 
@@ -377,6 +389,10 @@ def analyze(payload, *, workers=1, frozen_thresholds=None):
     workers = worker_count(workers)
     if payload.get('schema') != SCHEMA:
         raise ValueError('analysis input schema differs')
+    w1 = next((w for w in payload['windows'] if w['window'] == 'W1'), None)
+    if w1 is None and any(k in payload for k in ('selection_desk', 'selection_source')):
+        raise ValueError('selection-only W1 refused; W1 must be a window record')
+    strict_ids = not payload.get('synthetic')
     # All source records are immutable for this invocation. Only member-level
     # eligibility annotations are ours; copying full token arrays took most of
     # the 130 MB rehearsal's analysis time. Own the containers we annotate and
@@ -388,27 +404,25 @@ def analyze(payload, *, workers=1, frozen_thresholds=None):
         raise ValueError('native analysis requires digest-bound R15 series manifest')
     if native_manifest is not None:
         planned = native_manifest['windows']
+        for w in planned:
+            for slot in w['members']:
+                slot_run_id(slot, w.get('window', w.get('id')), strict=strict_ids)
         later = [w for w in planned if w.get('window', w.get('id')) != 'W1']
         if [w.get('window', w.get('id')) for w in later] != list(ORDER):
             raise ValueError('series manifest order differs from R15')
         for w in later:
             expected_rows = roster(w.get('window', w.get('id')), escalated=len(w['members']) == 24)
-            if len(w['members']) not in (22, 24) or any(not _slot_matches(actual, expected, w.get('window', w.get('id')))
+            if len(w['members']) not in (22, 24) or any(not _slot_matches(actual, expected, w.get('window', w.get('id')), strict=strict_ids)
                 for expected, actual in zip(expected_rows, w['members'], strict=True)):
                 raise ValueError('series manifest roster differs from R15')
     cohort = payload.get('cohort', {})
     if set(cohort.get('configuration', {})) != {'max_episode_decode_tokens', 'deadman_s', 'max_tokens', 'max_turns'}:
         raise ValueError('cohort needs frozen four-slot configuration')
-    selection = payload.get('selection_desk')
-    w1 = next((w for w in payload['windows'] if w['window'] == 'W1'), None)
-    # A thermal-only snapshot lacks the seed/turn evidence used by the member
-    # screen. It still supplies W1 checks/contrast, but cannot qualify anchors.
-    w1_members = w1['members'] if w1 is not None else (selection or {}).get('anchor_members')
-    anchor_selection = None
-    if w1_members is not None:
-        members = [{**m, 'thermal': dict(m['thermal'])} for m in w1_members]
+    selection = anchor_selection = None
+    if w1 is not None:
+        members = [{**m, 'thermal': dict(m['thermal'])} for m in w1['members']]
         for m in members:
-            allocation_run_id(m['slot']['run_id'], 'W1')
+            slot_run_id(m['slot'], 'W1', strict=strict_ids)
             if m['thermal'].get('id') != m['slot']['run_id']:
                 raise ValueError('W1 desk member identity differs from roster')
             if type(m.get('captured')) is not bool:
@@ -416,8 +430,7 @@ def analyze(payload, *, workers=1, frozen_thresholds=None):
             _screen_member(m, cohort)
         anchor_selection = dict(members=[{**m['thermal'], 'ordinal': m['slot']['ordinal'],
                                          'anchor_eligible': m['eligible']} for m in members])
-        if w1 is not None:
-            selection = anchor_selection
+        selection = anchor_selection
     for release in payload.get('lead_releases', []):
         if (not isinstance(release.get('after_attempt'),str) or not isinstance(release.get('release_id'),str)
             or not isinstance(release.get('lead_signature'),str) or not release['lead_signature'].startswith('lead: ')
@@ -454,7 +467,7 @@ def analyze(payload, *, workers=1, frozen_thresholds=None):
                      replay[0]['thermal']['identity_sha256'] != replay[1]['thermal']['identity_sha256'])
         divergent = divergent or len(replay_counts) == 2 and replay_counts[0] != replay_counts[1]
         for m, slot in zip(w['members'], expected, strict=True):
-            if not _slot_matches(m['slot'], slot, name):
+            if not _slot_matches(m['slot'], slot, name, strict=strict_ids):
                 raise ValueError('roster differs from R15 allocation')
             if type(m.get('captured')) is not bool:
                 raise ValueError('captured must be explicit bool')

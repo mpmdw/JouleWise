@@ -28,6 +28,9 @@ def write_fixture(root, *, full_ids=True):
         records = []
         slots = []
         for m in w.pop('members'):
+            if m['slot']['series_role'] == 'anchor':
+                run = w['window']+':'+m['slot']['run_id']
+                m['slot']['run_id'] = m['thermal']['id'] = run
             slots.append(m['slot'])
             records.append({**m['thermal'], 'run_id': m['slot']['run_id'],
                 'summary': m['summary'], 'captured': m['captured'], 'dc_secondary': m['dc']})

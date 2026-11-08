@@ -151,16 +151,31 @@ def battery(members):
 
 def anchor_diagnostic(windows, selection=None):
     sessions = {}
-    # W1 arrives after the engine's full member screen, via its own window or
-    # selection_desk.anchor_members. A thermal-only snapshot cannot check seeds.
-    if selection:
+    w1_block = 'unavailable:W1 window unavailable'
+    # W1 arrives only from its window, after the engine's full member screen.
+    if selection is not None:
         anchors = [r for r in selection['members'] if r.get('ordinal') in (1, 2, 3, 4)]
-        if (len(anchors) == 4 and all(r.get('captured', True) and r.get('anchor_eligible') is True
-                and r.get('status') == 'completed'
-                and not ex.classes([*td.calibration_exclusions(r), *r.get('calibration_exclusions', [])])
-                and isinstance(r.get('turn_owned_j'), (int, float)) and math.isfinite(r['turn_owned_j'])
-                for r in anchors)):
-            sessions['W1'] = {str(r['ordinal']): r['turn_owned_j'] for r in anchors}
+        if len(anchors) != 4 or {r['ordinal'] for r in anchors} != {1, 2, 3, 4}:
+            w1_block = 'unavailable:four W1 anchors required'
+        else:
+            reasons = set()
+            for r in anchors:
+                reasons.update(ex.classes([*td.calibration_exclusions(r),
+                    *r.get('calibration_exclusions', []), *r.get('analysis_classes', [])]))
+                if not r.get('captured', True):
+                    reasons.add('not_captured')
+                if r.get('status') != 'completed':
+                    reasons.add('incomplete')
+                if r.get('anchor_eligible') is not True and not reasons:
+                    reasons.add('anchor_ineligible')
+            if reasons:
+                w1_block = 'excluded:'+','.join(sorted(reasons))
+            elif any(type(r.get('turn_owned_j')) not in (int, float)
+                     or not math.isfinite(r['turn_owned_j']) for r in anchors):
+                w1_block = 'unavailable:W1 anchor energy unavailable'
+            else:
+                sessions['W1'] = {str(r['ordinal']): r['turn_owned_j'] for r in anchors}
+                w1_block = 'included'
     for w in windows:
         anchors = [m for m in w['members'] if m['slot']['series_role'] == 'anchor']
         if len(anchors) == 4 and all(m['captured'] and m['eligible'] for m in anchors):
@@ -171,7 +186,7 @@ def anchor_diagnostic(windows, selection=None):
         result.update(sigma_w2_raw_j2=raw, sigma_w2_reported_j2=max(0., raw))
     # The historical helper has a 6J veto; v4 expressly demotes it to print-only.
     result.pop('status')
-    return dict(status='print_only', **result)
+    return dict(status='print_only', W1_anchor_block=w1_block, **result)
 
 
 def u4(reference, windows):

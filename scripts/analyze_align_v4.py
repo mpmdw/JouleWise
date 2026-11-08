@@ -36,6 +36,10 @@ def run(args):
             # C records are already verified/materialized in this invocation.
             # Open only T now; do not rehash or reduce C a second time.
             test_document = {**document, 'windows': [w for w in document['windows'] if w['window'].startswith('T')]}
+            # W1 was loaded with C above. Do not create a selection-only
+            # internal document while loading the remaining T sources.
+            for key in ('selection_source', 'selection_desk'):
+                test_document.pop(key, None)
             payload = load(args.input, through_window=args.through_window, cache_dir=args.cache,
                            workers=args.workers, document=test_document, source_session=sources)
             payload['windows'] = [*calibration['windows'], *payload['windows']]

@@ -200,16 +200,9 @@ class CaptureAndAnchorTests(unittest.TestCase):
                     m['thermal']['battery']['flags'].append(fault)
                 else:
                     m['thermal']['flags'].append(fault)
-                for route in ('window', 'selection'):
-                    with self.subTest(route=route):
-                        q = copy.deepcopy(p)
-                        if route == 'window':
-                            q['windows'].insert(0, w1)
-                        else:
-                            q['selection_desk'] = dict(members=[m['thermal'] for m in w1['members']],
-                                                       anchor_members=w1['members'][:4])
-                        fill, _ = analyze(q)
-                        self.assertEqual(fill['anchor_sigma_w']['K'], 11)
+                p['windows'].insert(0, w1)
+                fill, _ = analyze(p)
+                self.assertEqual(fill['anchor_sigma_w']['K'], 11)
 
     def test_c3_zero_capture_then_retry_runs_full_series_with_eight_counted(self):
         p = series(turns=4)
@@ -246,7 +239,7 @@ class CaptureAndAnchorTests(unittest.TestCase):
         self.assertEqual(b['U4']['per_window']['C1']['skipped'], True)
         self.assertEqual(td.acceptance([m['thermal']], v4=True)['U1']['turn_admissions'], 0)
 
-    def test_w1_is_twelfth_anchor_window_and_selection_export_also_works(self):
+    def test_w1_is_twelfth_anchor_window_and_selection_only_refuses(self):
         p = series(turns=4)
         w1 = w1_window(p); p['windows'].insert(0, w1)
         fill, _ = analyze(p)
@@ -255,12 +248,11 @@ class CaptureAndAnchorTests(unittest.TestCase):
         self.assertEqual(fill['anchor_sigma_w']['status'], 'print_only')
         p['windows'].pop(0)
         p['selection_desk'] = dict(members=[m['thermal'] for m in w1['members']])
-        fill, _ = analyze(p)
-        self.assertEqual(fill['anchor_sigma_w']['K'], 11)  # no seed evidence
-        self.assertEqual(fill['W1']['status'], 'computed')
+        with self.assertRaisesRegex(ValueError, 'selection-only W1'):
+            analyze(p)
         p['selection_desk']['anchor_members'] = w1['members'][:4]
-        fill, _ = analyze(p)
-        self.assertEqual(fill['anchor_sigma_w']['K'], 12)
+        with self.assertRaisesRegex(ValueError, 'selection-only W1'):
+            analyze(p)
 
     def test_negative_moment_and_clamped_variance_both_print_and_k_minimum(self):
         windows = []

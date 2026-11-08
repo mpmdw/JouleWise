@@ -87,6 +87,9 @@ def load(path, *, calibration_only=False, through_window=None, cache_dir=None, w
     """
     path = input_path(path)
     payload = deepcopy(document) if document is not None else strict_json(path.read_bytes())
+    if (any(k in payload for k in ('selection_desk', 'selection_source'))
+            and not any(w['window'] == 'W1' for w in payload['windows'])):
+        raise ValueError('selection-only W1 refused; W1 must be a window record')
     if through_window is not None:
         order = ['W1', *('C'+str(i) for i in range(1,9)), *('T'+str(i) for i in range(1,4))]
         if through_window not in order:
@@ -107,11 +110,17 @@ def load(path, *, calibration_only=False, through_window=None, cache_dir=None, w
             sources[identity] = read_source(root, ref)
         payload['selection_desk'] = sources[identity]
         census.append(dict(path=ref['path'], sha256=ref['sha256']))
+    from .engine import slot_run_id
+    for window in (payload.get('series_manifest') or {}).get('windows', []):
+        for slot in window['members']:
+            slot_run_id(slot, window.get('window', window.get('id')), strict=True)
     for window in payload['windows']:
         if calibration_only and window['window'].startswith('T'):
             continue
         if 'members' in window:
             raise ValueError('file input requires source-bound desk exports')
+        for slot in window['roster']:
+            slot_run_id(slot, window['window'], strict=True)
         if 'raw_source' in window:
             from . import raw as adapter
             ref = window['raw_source']
