@@ -25,7 +25,7 @@ retry), never on scores or counts; calibration stays exactly 8 counted windows.
 - The midpoint follows ordinal 11.
 
 **Seeds.** Held-out seeds are distinct and consumed per pair in kit order: C1–C8
-use 2–65, C9–C10 use 66–81, T1–T3 use 82–90 and 100–114, never 1 or 91–99. A zero-capture re-arm reuses the
+use 2–65, T1–T3 use 66–89 (exactly R15), and the contiguous reserve pool for C9–C12 is 100–131 (C11 and C12 hold seeds only; the cap is C10), never 1 or 91–99. A zero-capture re-arm reuses the
 same seeds.
 
 **Ceiling.** An ordinary window may run to 59,520 s. A window carrying the two

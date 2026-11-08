@@ -110,8 +110,8 @@ class Delta5Witnesses(unittest.TestCase):
             return record, error, installer.call_count
 
     def test_seed_checked_manifest_bytes_and_dynamic_closure_are_preserved(self):
-        # R22-2 changed the manifest bytes by design (C9/C10 appended, T seeds shifted behind them): the
-        # R15 seed-checked windows W1 and C1-C8 must be preserved exactly; the paired seed check of the new
+        # R22-2 changed the manifest bytes by design (reserve windows appended at seeds 100-131): every R15
+        # seed-checked window (W1, C1-C8, T1-T3) must be preserved exactly; the paired seed check of the new
         # bytes follows. The committed file is still exactly the generator's output.
         result = subprocess.run(['git', 'show', '79777d261:' + series.MANIFEST.as_posix()],
                                 cwd=ROOT, capture_output=True, check=True)
@@ -119,9 +119,8 @@ class Delta5Witnesses(unittest.TestCase):
         current = json.loads((ROOT / series.MANIFEST).read_bytes())
         self.assertEqual((ROOT / series.MANIFEST).read_bytes(), series.raw_json(self.manifest))
         by_id = {w['id']: w for w in current['windows']}
-        for window in checked['windows']:
-            if window['id'] == 'W1' or window['id'].startswith('C'):
-                self.assertEqual(by_id[window['id']], window, window['id'])
+        for window in checked['windows']:                  # W1, C1-C8 AND T1-T3: all exactly as seed-checked (R15)
+            self.assertEqual(by_id[window['id']], window, window['id'])
         trace = json.loads((ROOT / 'docs/align/v4/dynamic_closure_trace.json').read_bytes())
         # the committed trace grows with each merged module (timing_receipts joined at integration item 6)
         self.assertGreaterEqual(len(trace['executed']), 180)

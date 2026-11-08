@@ -16,6 +16,7 @@ history; this statement cannot establish other sessions' blindness.
 | E-ref-17 | Stale “5 and 18” after chair 1(g)'s roster swap | Use W1 5/17 in four-run E_ref. Alternate 18 is a separate bank trajectory; its matched reference/recovery and final-policy comparison remain unresolved |
 | D8-1-scope | Observer faults re-raise “KeyboardInterrupt, SystemExit” | Re-raise KeyboardInterrupt only. Signal latch raises that type; SystemExit is an observer fault under Ruling 76. No change to R1's lane/pin |
 | D-20 | Arm re-hashes mounted SSD offloads; empty list vacuously passes | By-day receipt binds validated config/verified inventories and an explicit lead-signed freshness policy; no default duration; arm checks current free disk. Empty needs explicit offloads_owed:none. SSD remains unplugged |
+| R22-2-bar | R15: a U1-U3-failed C window is barred from the pool but still counts toward the eight | R22-2 (RUN_STATE 234) supersedes it: a window barred for a STRUCTURAL reason (U1-U3 FAIL, whole-window capture failure, zero-capture refusal beyond the retry) is not counted and contributes nothing, including the members it captured; two pre-declared blind replacement windows (C9, C10; cap C10, reserve seeds 100-131) replace barred windows, calibration stays exactly 8 counted windows. Never armed on scores or counts |
 
 **D-C1 — INSTALLED under RUN_STATE 212 R11-2.** Contrast proof/cap on every
 path; failed/incomplete proof or identity is predeclared non-veto INCONCLUSIVE.
