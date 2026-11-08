@@ -111,3 +111,11 @@ Written by the laptop lead (Opus 5.5, session 1544c617) before Ed retired this C
   - The dispositions were sent to the builder, which applies them on the same branch. **Verify that the fixes landed** (LEAD-RULINGS-2 "Cold review dispositions 2026-11-07") before merging the branch into the R1 lane, which happens after R1 runs.
 - **dry-m** was still running at 20:40 (at step 3b). Release-check command: see the 19:50 update.
 - **Interp desk:** wave 1 is pushed and wave 2 is chained (see `docs/research/interp-energy-desk-work.md`).
+
+## Update, about 21:00 PST 11-07
+- **R10-4 is complete** on `lane/2026-11-07-w1-kit-r10` @ `d600baba0`, with all cold-review dispositions applied and verified against the reviewer's own adversarial tests.
+- **Lead confirms:**
+  - LOW-5 as built: never recommend a B_D above `r1_slots.slots.B_D`. The lead's wording had the direction wrong.
+  - The new "lead" derivation branch: G0* ≥ 600 while the e901 rule misses because of a long X-G wait. The kit refuses the receipt and returns to the lead.
+- **Still open:** the duty-bar fallback step under R10-2(a), ruled after R1.
+- **Merge timing:** merge `w1-kit-r10` into the R1 lane after the R1 night (so it never changes code under R1), then run R1's numbers through `scripts/align_w1_budget_procedure.py decide`.
