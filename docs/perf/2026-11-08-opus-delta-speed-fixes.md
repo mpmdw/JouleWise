@@ -236,9 +236,21 @@ Every file on this branch is new relative to the target, so the merge is indepen
 
 ### Tests (fix head, one module per process; `TMPDIR` through the `/tmp` symlink unless noted)
 
-WAKE_TESTS_TABLE
+| Module | Result |
+|---|---|
+| `tests.test_terminal_wake_witness` (W-M1 review witness) | 2 OK |
+| `tests.test_terminal_wake` | 18 OK |
+| `tests.test_magistrate_watchdog` | 155 OK |
+| `tests.test_magistrate_watchdog_cli` | 8 OK |
+| `tests.test_night_agent_install` (whole module) | 90 OK (819 s; another session was running the same module concurrently) |
+| `tests.test_install_magistrate_watchdog` | 10 OK |
+| `tests.test_install_night_agent` | 67 OK |
+| `tests.test_run_night` NightDriver, CourierDeliveryBoundary, NightProbe, EvidenceProbe and ProbeSupervisorDetail classes | 192 OK, **0 skipped**. This includes the 3 `NightProbeTests` process-census cases that Sol's sandbox could not run. |
+| `tests.test_prearm_packet` (parked half; unsymlinked `TMPDIR`) | 12 OK |
 
-The packet half was run separately with an unsymlinked `TMPDIR`, because its T-L1 fix is parked with P-H1.
+The packet half ran with an unsymlinked `TMPDIR` because its T-L1 fix is parked with P-H1.
+
+I ran `scripts/fixture_orphan_census.py --fail-on-orphans` at 09:03 UTC. It listed 4 `b5-fake-km003c-meter` orphans that started at 05:44 and 08:01 UTC. Those start times are hours before these runs, and the orphans carry no wake signature, so they are not from this branch. They belong to whoever ran the B5 fixtures; I did not kill them. No `joulewise.terminal_wake` observer was left running.
 
 ---
 
