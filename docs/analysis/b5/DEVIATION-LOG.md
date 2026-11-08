@@ -581,6 +581,13 @@ Decided from the code and the registration (structure only). No bar is widened a
   passes. The floor's and the resolutions' own `floor_source` and `floor_limit_class` words stay uncovered (RC-CMP-8 2).
   Every number a printed diagnostic carries is compared. A cell that is not one of the contrast's registered floor
   cells, or a form other than absolute or comparative, is DISAGREE, and so is every number under it.
+- **Fill copies, both directions (Sol R704-2).** Comparison rows come from the verdict and coverage walks the fill's
+  leaves, so a fill that omitted a verdict leaf was silently uncovered. The fill's copies of the attribution-floor
+  metadata (the floor's, each resolution's and the claim evaluation's point diagnostics, and the claim evaluation's
+  class word, source word and published floor) are now in `COPIED_LISTS`: every leaf of the verdict's group must be
+  present in the fill (else `copy_shortened`), with type-preserving equality (`value_differs`), and a fill leaf the
+  verdict does not carry has no row (unmapped). The presence row and the cell and form routing rows are not leaves of
+  either document and are excluded.
 - **Pruned.** The flat-shape rules and the `FLOOR_DIAGNOSTICS` exemption are deleted: a diagnostic printed directly
   under `point_floor_diagnostics` now refuses (`test_input_gate.py`
   `test_numbers_under_floor_diagnostics_refuse_sol` updated to say so).

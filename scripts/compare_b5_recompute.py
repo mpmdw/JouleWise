@@ -4088,7 +4088,17 @@ COPIED_LISTS = ((r"fill:gamma/contrasts/\*/kept_block_ids/\*", r"contrast/ctr-[^
                 (r"fill:gamma/contrasts/\*/sampling/removed_block_ids/\*",
                  r"contrast/ctr-[^/]+/sampling_removed_block_ids/[0-9]+"),
                 (r"fill:gamma/contrasts/\*/loo/rows/\*/influence_triggers/\*",
-                 r"ctr-[^/]+/loo/b[0-9]+/influence_triggers/[0-9]+"))
+                 r"ctr-[^/]+/loo/b[0-9]+/influence_triggers/[0-9]+"),
+                # DLE-5 (Sol R704-2): the fill's copies of the verdict's attribution-floor metadata, leaf by leaf: the
+                # floor's, each resolution's and the claim evaluation's point diagnostics (their cell/form/field
+                # rows, never the routing rows of the cells and forms) and its class and source words and published
+                # floor (not the presence row). A fill that omits a leaf the verdict prints is copy_shortened; a fill
+                # leaf the verdict lacks has no row (unmapped); a changed value is value_differs: both directions.
+                (r"fill:gamma/contrasts/\*/(floor(/resolutions/\*)?/point_floor_diagnostics|claim_evaluation/floor_limit)/.*",
+                 r"ctr-[^/]+/(floor/point_floor_diagnostics/(?!cells/|forms/)[^/]+/[^/]+/[^/]+"
+                 r"|resolution/[0-9]+/point_floor_diagnostics/(?!cells/|forms/)[^/]+(/[^/]+)?/[^/]+"
+                 r"|claim_evaluation/floor_limit/(point_floor_diagnostics/(?!cells/|forms/)[^/]+/[^/]+/[^/]+"
+                 r"|floor_limit_class|floor_source|published_floor_j))"))
 
 
 def coverage(custody, comparison, rules=None):

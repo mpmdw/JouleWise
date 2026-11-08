@@ -318,6 +318,58 @@ class FloorLimitRuleTests(GateCase):
         self.exit_nonzero()
 
 
+class FillCopyTests(GateCase):
+    """Sol R704-2: the fill must carry every leaf of the verdict's attribution-floor metadata, in both directions,
+    at the floor, on each resolution and in the claim evaluation (rows come from the verdict; coverage walks the
+    fill, so an omitted fill leaf was silently uncovered)."""
+    def assert_refused_or_failed(self):
+        code = self.exit_code(CODED)[0]
+        self.assertNotEqual(code, 0)
+
+    def test_floor_level_form_omitted_from_the_fill(self):
+        _, fill = with_floor_limit(self)
+        del fill["floor"]["point_floor_diagnostics"][CELL_B]["comparative"]
+        self.assert_refused_or_failed()
+
+    def test_floor_level_cell_omitted_from_the_fill(self):
+        _, fill = with_floor_limit(self)
+        del fill["floor"]["point_floor_diagnostics"][CELL_A]
+        self.assert_refused_or_failed()
+
+    def test_exact_resolution_form_omitted_from_the_fill(self):
+        _, fill = with_floor_limit(self)
+        del fill["floor"]["resolutions"][0]["point_floor_diagnostics"]["absolute"]
+        self.assert_refused_or_failed()
+
+    def test_transported_resolution_cell_omitted_from_the_fill(self):
+        _, fill = with_floor_limit(self, transported=True)
+        del fill["floor"]["resolutions"][1]["point_floor_diagnostics"]
+        self.assert_refused_or_failed()
+
+    def test_claim_evaluation_leaves_omitted_from_the_fill(self):
+        for leaf in ("published_floor_j", "floor_limit_class", "floor_source"):
+            with self.subTest(leaf):
+                self.setUp()
+                _, fill = with_floor_limit(self)
+                del fill["claim_evaluation"]["floor_limit"][leaf]
+                self.assert_refused_or_failed()
+
+    def test_one_word_of_a_fill_diagnostic_omitted(self):
+        _, fill = with_floor_limit(self)
+        del fill["claim_evaluation"]["floor_limit"]["point_floor_diagnostics"][CELL_B]["comparative"]["label"]
+        self.assert_refused_or_failed()
+
+    def test_fill_copy_of_another_type_is_not_a_copy(self):
+        _, fill = with_floor_limit(self)
+        fill["claim_evaluation"]["floor_limit"]["published_floor_j"] = str(fill["claim_evaluation"]["floor_limit"]["published_floor_j"])
+        self.assert_refused_or_failed()
+
+    def test_fill_carrying_floor_limit_the_verdict_lacks(self):
+        verdict, _ = with_floor_limit(self)
+        del verdict["claim_evaluation"]["floor_limit"]
+        self.assert_refused_or_failed()
+
+
 class ResolutionCellBindingTests(GateCase):
     """L1: a transported resolution's diagnostic cells are its own source cells."""
     def test_resolutions_carrying_each_others_cells_exit_nonzero(self):
