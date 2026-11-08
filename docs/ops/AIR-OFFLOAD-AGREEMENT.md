@@ -2,6 +2,9 @@
 
 Author: Opus 5.5 (laptop lead's delegate), 2026-11-08. This is the agreement step required by RUN_STATE item 220.
 
+**Implemented:** the merged build of items 1-9 is `docs/ops/AIR-OFFLOAD.md` on `ops/2026-11-08-air-offload-merged`.
+The Opus-only doc `AIR-OFFLOAD-opus.md` named below was deleted there (retrievable at `44c264f69`).
+
 | Build | Branch and sha | Files |
 |---|---|---|
 | **Opus** | `ops/2026-11-08-air-offload-opus` @ `44c264f69`, committed and pushed before Sol's branch was fetched | `scripts/offload_window.py`, `docs/ops/AIR-OFFLOAD-opus.md`, `scripts/offload_bench.py` |

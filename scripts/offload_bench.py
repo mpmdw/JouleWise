@@ -6,13 +6,12 @@ tests/fixtures (10 Hz, samplers cpu_power,gpu_power,ane_power,thermal): it keeps
 XML skeleton and re-draws every field that varies between real samples. `--validate` compares
 the synthetic and real compression ratios at equal sample counts. A synthetic member bundle
 follows the pilot-v3 inventory (configs/campaigns/align_pilot_v3/registration/sizing_evidence.json):
-three plists 89.4 %, rich telemetry 9.3 %, small files the rest. Docs: docs/ops/AIR-OFFLOAD-opus.md.
+three plists 89.4 %, rich telemetry 9.3 %, small files the rest. Docs: docs/ops/AIR-OFFLOAD.md.
 """
 from __future__ import annotations
 
 import argparse
 import hashlib
-import io
 import json
 import os
 from pathlib import Path
@@ -207,54 +206,110 @@ def bench_stdlib(tar: Path) -> list[dict]:
     return rows
 
 
-def bench_pipeline(member: Path, work: Path) -> dict:
-    """The real code path: Offload.pack on the MBP side, Gate.verify (decompress, sha256, extract) on the Air."""
+class _LocalProbe:
+    """For runs without a bound SSD: any directory counts as its own mounted volume."""
+
+    def mounted(self, path):
+        return True
+
+    def identity(self, path):
+        return {"volume_uuid": "BENCH-LOCAL", "internal": False, "owners_enabled": True, "physical_stores": ["local"]}
+
+
+def bench_pipeline(member: Path, work: Path, *, members: int = 1, store_root: Path | None = None) -> dict:
+    """The real code path, timed stage by stage: Offload.pack on the MBP side; on the Air, Gate.verify
+    (re-hash parts, decompress, sha256 every raw file, write the raw tree) and Gate.receipts (the fresh
+    recheck at release: re-hash the compressed parts with F_NOCACHE). With --store-root the store is
+    bound to the real volume (diskutil) and every write lands on that SSD."""
     sys.path.insert(0, str(ROOT / "scripts"))
     import offload_window as ow
+    record = work / "record"
+    if not record.exists():
+        for i in range(members):  # distinct files (hard links would be refused by the envelope check)
+            for path in sorted(p for p in member.rglob("*") if p.is_file()):
+                dest = record / f"m{i:02d}" / path.relative_to(member)
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(path, dest)
     sums = work / "SHA256SUMS"
     lines = []
-    for path in sorted(p for p in member.rglob("*") if p.is_file()):
-        lines.append(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.relative_to(member).as_posix()}\n")
+    for path in sorted(p for p in record.rglob("*") if p.is_file()):
+        lines.append(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.relative_to(record).as_posix()}\n")
     sums.write_text("".join(lines))
-    raw = sum(p.stat().st_size for p in member.rglob("*") if p.is_file())
-    out = {}
+    sums_sha = hashlib.sha256(sums.read_bytes()).hexdigest()
+    raw = sum(p.stat().st_size for p in record.rglob("*") if p.is_file())
+    if store_root is not None:
+        probe = ow.VolumeProbe()
+        binding = work / "store-binding.json"
+        start = time.perf_counter()
+        ow.init_store(store_root, binding, probe=probe, min_free_gib=20, allow_noowners=True)
+        init_s = time.perf_counter() - start
+    else:
+        probe = _LocalProbe()
+        store_root, binding = work / "store", work / "store-binding.json"
+        ow.init_store(store_root, binding, probe=probe, mount_point=work, min_free_gib=0)
+        init_s = None
+    out = {"raw_bytes": raw, "members": members, "store_root": str(store_root), "init_store_s": init_s}
+    start = time.perf_counter()
+    ow.Store(binding, probe).check(full=True, write=True)
+    out["store_check_full_s"] = time.perf_counter() - start
     for threads in (1, 4):
-        state, air = work / f"state{threads}", work / f"air{threads}"
-        air.mkdir()
-        off = ow.Offload(state, "bench")
+        window = f"bench-t{threads}"
+        state = work / f"state{threads}"
+        off = ow.Offload(state, window)
         cpu0, start = os.times(), time.perf_counter()
-        manifest = off.pack(member, sums, hashlib.sha256(sums.read_bytes()).hexdigest(),
-                            codec=ow.choose_codec("zstd-cli", 3, threads))
+        manifest = off.pack(record, sums, sums_sha, codec=ow.choose_codec("zstd-cli", 3, threads))
         pack_s = time.perf_counter() - start
         cpu1 = os.times()
-        inbox = air / "inbox/bench"
-        inbox.mkdir(parents=True)
-        for name in [p["name"] for p in manifest["parts"]] + ["offload-manifest.json", "record-manifest.bin"]:
-            src = state / "bench" / ("parts/" + name if name.startswith("part-") else name)
+        gate = ow.Gate(binding, probe=probe)
+        gate._ready("verify")
+        inbox = store_root / "inbox" / window
+        inbox.mkdir(parents=True, exist_ok=True)
+        for name in [p["name"] for p in manifest["parts"]] + [ow.MANIFEST_NAME, ow.RECORD_MANIFEST_NAME]:
+            src = state / window / ("parts/" + name if name.startswith("part-") else name)
             shutil.copyfile(src, inbox / name)
         start = time.perf_counter()
-        ow.Gate(air).verify("bench")
+        gate.verify(window)
         verify_s = time.perf_counter() - start
+        start = time.perf_counter()
+        reply = gate.receipts(window, "0" * 32)
+        recheck_s = time.perf_counter() - start
+        rechecked = sum(r["bytes"] for r in reply["fresh"]["rechecked"])
+        # Cold variant: the parts written with F_NOCACHE (as on the Air hours after the verify, when the
+        # page cache has long dropped them), then re-hashed with F_NOCACHE: SSD-bound, not cache-bound.
+        cold = work / f"cold{threads}"
+        cold.mkdir()
+        for name in [p["name"] for p in manifest["parts"]]:
+            ow._copy_nocache(inbox / name, cold / name)
+        start = time.perf_counter()
+        cold_bytes = sum(ow.hash_file(cold / name, nocache=True)[1] for name in sorted(os.listdir(cold)))
+        cold_s = time.perf_counter() - start
+        shutil.rmtree(cold)
         out[f"T{threads}"] = {
-            "raw_bytes": raw, "compressed_bytes": manifest["compressed_bytes"], "pack_s": pack_s,
-            "pack_raw_mb_s": raw / 1e6 / pack_s,
+            "compressed_bytes": manifest["compressed_bytes"], "ratio": raw / manifest["compressed_bytes"],
+            "pack_s": pack_s, "pack_raw_mb_s": raw / 1e6 / pack_s,
             "pack_cpu_s": (cpu1.user + cpu1.system + cpu1.children_user + cpu1.children_system)
                           - (cpu0.user + cpu0.system + cpu0.children_user + cpu0.children_system),
-            "air_verify_s": verify_s, "air_verify_raw_mb_s": raw / 1e6 / verify_s}
+            "air_verify_s": verify_s, "air_verify_raw_mb_s": raw / 1e6 / verify_s,
+            "recheck_s": recheck_s, "recheck_bytes": rechecked, "recheck_mb_s": rechecked / 1e6 / recheck_s,
+            "recheck_cold_s": cold_s, "recheck_cold_mb_s": cold_bytes / 1e6 / cold_s}
+        out[f"T{threads}"]["pack_cpu_s_per_gb"] = out[f"T{threads}"]["pack_cpu_s"] / (raw / 1e9)
         shutil.rmtree(state)
-        shutil.rmtree(air)
+        for sub in ("inbox", "windows"):
+            shutil.rmtree(store_root / sub / window)
+        (store_root / "queue" / f"{window}.json").unlink()
     return out
 
 
-def window_model(ratio: float, pack_mb_s: float, verify_mb_s: float) -> list[dict]:
+def window_model(ratio: float, pack_mb_s: float, verify_mb_s: float, recheck_mb_s: float) -> list[dict]:
     rows = []
     for name, gb in (("W1", 18.6), ("D", 26.4)):
         for net in (50, 100, 300):
             pack = gb * 1e3 / pack_mb_s
             push = gb * 1e3 / ratio / net
             verify = gb * 1e3 / verify_mb_s
+            recheck = gb * 1e3 / ratio / recheck_mb_s  # the previous window's fresh receipt at release
             rows.append({"window": name, "raw_gb": gb, "net_mb_s": net, "pack_s": pack, "push_s": push,
-                         "verify_s": verify, "total_s": pack + push + verify + 10})
+                         "verify_s": verify, "recheck_s": recheck, "total_s": pack + push + verify + recheck + 10})
     return rows
 
 
@@ -263,6 +318,9 @@ def main(argv=None):
     parser.add_argument("--work", type=Path, required=True, help="scratch directory (about 1.2 GB free needed)")
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--skip-pipeline", action="store_true")
+    parser.add_argument("--skip-codecs", action="store_true", help="only the real code path")
+    parser.add_argument("--members", type=int, default=1, help="synthetic members in the pipeline record")
+    parser.add_argument("--store-root", type=Path, help="bind the Air store here (a directory on the real SSD)")
     args = parser.parse_args(argv)
     args.work.mkdir(parents=True, exist_ok=True)
     gen = Generator()
@@ -273,18 +331,19 @@ def main(argv=None):
     member = args.work / "member"
     if not member.exists():
         gen.member(member)
-    tar = args.work / "member.tar"
-    with tarfile.open(tar, "w", format=tarfile.PAX_FORMAT) as handle:
-        handle.add(member, arcname="member")
-    result["member_bytes"] = tar.stat().st_size
-    result["cli"] = bench_cli(tar, args.work, (1, 3, 6, 9), (1, 4), args.repeats)
-    result["stdlib"] = bench_stdlib(tar)
-    tar.unlink()
+    if not args.skip_codecs:
+        tar = args.work / "member.tar"
+        with tarfile.open(tar, "w", format=tarfile.PAX_FORMAT) as handle:
+            handle.add(member, arcname="member")
+        result["member_bytes"] = tar.stat().st_size
+        result["cli"] = bench_cli(tar, args.work, (1, 3, 6, 9), (1, 4), args.repeats)
+        result["stdlib"] = bench_stdlib(tar)
+        tar.unlink()
     if not args.skip_pipeline:
-        result["pipeline"] = bench_pipeline(member, args.work)
+        result["pipeline"] = bench_pipeline(member, args.work, members=args.members, store_root=args.store_root)
         p = result["pipeline"]["T4"]
-        result["window_model"] = window_model(p["raw_bytes"] / p["compressed_bytes"], p["pack_raw_mb_s"],
-                                              p["air_verify_raw_mb_s"])
+        result["window_model"] = window_model(p["ratio"], p["pack_raw_mb_s"], p["air_verify_raw_mb_s"],
+                                              p["recheck_mb_s"])
     print(json.dumps(result, indent=2))
     return 0
 
