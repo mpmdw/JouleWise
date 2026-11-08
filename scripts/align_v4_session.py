@@ -101,13 +101,51 @@ def bundle_ac_powermode(bundle):
     return record.get('value') if isinstance(record, dict) else None
 
 
+X2_GATE_FLAGS = ('thermal.gate_timeout:', 'thermal.hold_timeout:')
+
+
+def d_member_x2_report(plan_members, runs_root):
+    """Print-only (LEAD-RULINGS-2 R10, lead ruling on open point (c)): W1's D
+    members' X2 count and rate. X2 is a G0 that timed out (the member ends
+    before turn 1; under R10-2(a) at the receipt's G0*) or a G1/hold timeout.
+    A bundle that cannot be read is listed under ``unread`` and left out of
+    the rate. Never an instrument check."""
+    from joulewise.desk_compress import read_bytes
+    rows, unread = [], []
+    for member in plan_members:
+        if member.get('role') != 'D':
+            continue
+        try:
+            episode = json.loads(read_bytes(Path(runs_root) / member['run_id'] / 'outputs/align_episode.json'))
+        except (OSError, ValueError):
+            unread.append(member['run_id'])
+            continue
+        thermal = (episode.get('hardware') or {}).get('thermal') or {}
+        g0 = next((r for r in thermal.get('intervals') or () if isinstance(r, dict) and r.get('kind') == 'G0'), None)
+        flags = [str(f) for f in episode.get('flags') or ()]
+        g0_timeout = bool(g0) and g0.get('outcome') == 'timeout'
+        gate_timeout = any(f.startswith(X2_GATE_FLAGS) for f in flags)
+        rows.append({'run_id': member['run_id'], 'ordinal': member.get('ordinal'),
+                     'g0_outcome': g0.get('outcome') if g0 else None,
+                     'g0_wait_s': g0.get('duration_s') if g0 else None,
+                     'g0_timeout_x2': g0_timeout, 'gate_timeout_x2': gate_timeout,
+                     'x2': g0_timeout or gate_timeout})
+    count = sum(row['x2'] for row in rows)
+    return {'print_only': True, 'authority': 'LEAD-RULINGS-2 R10, lead ruling on open point (c)',
+            'd_members': len(rows) + len(unread), 'read': len(rows), 'unread': unread,
+            'x2_count': count, 'g0_timeout_x2_count': sum(row['g0_timeout_x2'] for row in rows),
+            'x2_rate': count / len(rows) if rows else None, 'members': rows}
+
+
 def powermode_desk_check(*, state, members, runs_root, kit_path):
     """Council ruling 7: any member whose bundle-recorded AC powermode differs
-    from the frozen series value sets ``instrument_ok`` false."""
+    from the frozen series value sets ``instrument_ok`` false. The report also
+    carries the D members' X2 count and rate (print-only, LEAD-RULINGS-2 R10)."""
     plan = {'members': pilot._member_rows(state, kit=kit_path)}
     observed = {m['run_id']: bundle_ac_powermode(Path(runs_root) / m['run_id']) for m in plan['members']}
     verdict = kit.validate_powermode_members(plan, observed)
-    return {'ac_powermode_members': verdict['instrument_ok']}, verdict
+    return {'ac_powermode_members': verdict['instrument_ok']}, {
+        **verdict, 'd_member_x2': d_member_x2_report(plan['members'], runs_root)}
 
 
 def desk(session_root, **kwargs):

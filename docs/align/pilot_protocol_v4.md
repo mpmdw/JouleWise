@@ -375,8 +375,9 @@ Under the three WP14 rulings above, retain these council rules:
   receipt `registration/ruling_1f_receipt.json`):** D arms G0* = T_dead −
   holds − prefill/tool − 10,240/r, below 600 s, with r the minimum of
   step-d's and the gated runs' decode rates and the holds projected per
-  decoded token to 10,240 tokens. It applies only when 1.25 × the longest
-  gated D G0 wait ≤ G0* (an unreleased wait counts at 1,200 s) and the
+  decoded token to 10,240 tokens. It applies only when no gated D G0 is
+  censored (timeout, deadman or unobserved; lead ruling on R10 builder
+  decision (i)), 1.25 × the longest released gated D G0 wait ≤ G0*, and the
   600 s rule does not fit. A D G0 that has not released by G0* ends X2
   before turn 1, never X7, so 1(f)'s worst case holds with G0* as its G0
   term. `scripts/align_w1_budget_procedure.py` computes the branch from R1

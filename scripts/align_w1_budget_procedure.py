@@ -18,7 +18,8 @@ Steps of ``decide`` (R10-2, recorded before any R1 number exists):
   0. any inconclusive segment: R1-RERUN (R7-3, the magistrate's call); stop.
   1. the current rule fits at some B_D >= 6,144: CURRENT-RULE, no receipt.
   2. G0* = T_dead - holds (projected to 10,240 tokens) - prefill/tool
-     - 10,240/r. If ceil(1.25 x the longest released gated D G0 wait) <= G0*:
+     - 10,240/r. If no gated D G0 is censored and ceil(1.25 x the longest
+     released gated D G0 wait) <= G0*:
      R10-2(a), D arms G0 at floor(G0*) (below 600 s), B_D = 6,144.
   3. otherwise R10-2(b): 4-bit D next, after its own R1-4bit gated night; the
      lead rules on it with Ed. (c) (window council) follows if (a) also fails
@@ -88,7 +89,8 @@ def _draft(branch, derived, view):
                      'that armed cap as its G0 term.')
     else:
         exposure = None
-        deviation = ('No deviation applied: R10-2(a) does not fit (ceil(1.25 x longest released gated D G0 wait) = '
+        deviation = (f'No deviation applied: R10-2(a) does not fit (censored gated D G0: {d["censored_D"]}; '
+                     'ceil(1.25 x longest released gated D G0 wait) = '
                      f'{d["admit_bound_s"]} s against G0* = {d["G0_star_s"]:.1f} s). R10-2(b): 4-bit D next, '
                      'after its own R1-4bit gated night; the lead rules on it with Ed.')
     return {'schema': kit.RULING_1F_RECEIPT_SCHEMA, 'authority': kit.R10_AUTHORITY, 'branch': branch,
@@ -103,8 +105,8 @@ def _draft(branch, derived, view):
                       'holds_term_rule': ('holds_proj = max over the gated D runs of max(G1 + H, '
                                           '(G1 + H) / decode_tokens x 10,240) (R10-4, the audit\'s corrected D-f)'),
                       'overshoot_rule': 'the last admitted turn keeps its full 4,096-token cap (R6-3)',
-                      'admit_rule': ('ceil(1.25 x the longest released gated D G0 wait) <= G0*; a censored '
-                                     'D G0 sets no bound and is recorded in censored_D (R10-2(a) text)'),
+                      'admit_rule': ('no gated D G0 censored (lead ruling on R10 decision (i)) and '
+                                     'ceil(1.25 x the longest released gated D G0 wait) <= G0*'),
                       'contrast_rule': derived['contrast']['rule']},
             'x2_exposure': exposure, 'deviation_log': deviation,
             'lead_signature': kit.UNSIGNED + ': the lead replaces this with a signature line '
@@ -173,7 +175,10 @@ def backfill_x_g(r1_slots, r1_result, r1_result_sha256):
 
     Only the X_G_contrast phase result's whitelisted fields are read; its
     G0 outcome and wait must equal the r1_slots record, and fields already
-    recorded are never overwritten."""
+    recorded are never overwritten. A recorded lead step (lead ruling on R10
+    open point (b), like s6_tuning): it records the source file's sha256."""
+    if not kit.valid_digest(r1_result_sha256):
+        raise ValueError('backfill-x-g must record the r1_result.json sha256 (64 lowercase hex)')
     phases = r1_result.get('phases') if isinstance(r1_result, dict) else None
     matches = [p for p in phases if isinstance(p, dict) and p.get('name') == 'X_G_contrast'] \
         if isinstance(phases, list) else []
@@ -191,7 +196,8 @@ def backfill_x_g(r1_slots, r1_result, r1_result_sha256):
     from scripts.align_r1_rehearsal import x_g_evidence
     out = deepcopy(r1_slots)
     out['x_g'].update(x_g_evidence(result), backfill={
-        'authority': 'LEAD-RULINGS-2 R10-4', 'source': 'r1_result.json phases[X_G_contrast].result',
+        'authority': 'LEAD-RULINGS-2 R10-4; R10 builder decisions, lead ruling (b)',
+        'lead_step': True, 'source': 'r1_result.json phases[X_G_contrast].result',
         'r1_result_sha256': r1_result_sha256, 'fields': list(kit.X_G_EVIDENCE_FIELDS)})
     return out
 

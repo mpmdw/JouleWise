@@ -655,10 +655,10 @@ def r10_2_derivation(r1_slots, t_dead, x_max_turns, root=ROOT):
     """LEAD-RULINGS-2 R10-2(a), mechanical: G0* = T_dead - holds - prefill/tool
     - 10,240/r with r = min(step-d and gated decode rates) and holds projected
     per decoded token to the same 10,240 tokens (R10-4). Branch (a) when
-    ceil(1.25 x the longest *released* gated D G0 wait) <= G0* (R10-2(a)'s
-    text: a censored D G0 is recorded in censored_D but sets no bound; with
-    no released D wait (a) cannot be shown) and the armed cap floor(G0*) is
-    below 600 s
+    no gated D G0 is censored (timeout, deadman or unobserved: the lead's
+    ruling on R10 builder decision (i), the audit's section 6), ceil(1.25 x
+    the longest released gated D G0 wait) <= G0*, and the armed cap
+    floor(G0*) is below 600 s
     ('current' when it is not: the 600 s rule already fits at the floor);
     otherwise (b), 4-bit next. Reads only R1 timing and count fields."""
     rows, phases, rate, cap = gated_fit_inputs(r1_slots)
@@ -672,7 +672,7 @@ def r10_2_derivation(r1_slots, t_dead, x_max_turns, root=ROOT):
     w_d = max(released) if released else None
     bound = math.ceil(G0_CAP_FACTOR * w_d) if released else None
     armed = math.floor(g0_star) if g0_star >= 1 else None
-    if armed is not None and bound is not None and bound <= g0_star:
+    if armed is not None and bound is not None and bound <= g0_star and not d_cap['censored']:
         # G0* >= 600 s: the current rule (600 s floor) already fits at the
         # floor, so no R10-2 deviation applies.
         branch = 'a' if armed < thermal_gates.G0_CAP_DEFAULT_S else 'current'
@@ -754,8 +754,9 @@ def verify_ruling_1f_receipt(receipt, r1_slots, t_dead, x_max_turns, root=ROOT):
                          + ', '.join(wrong) + ' (LEAD-RULINGS-2 R10-4)')
     d = derived['derivation']
     if derived['branch'] != 'a':
-        raise ValueError(f'ruling 1(f) receipt (R10-2(a)) refused: ceil(1.25 x the longest released gated D G0 wait) = '
-                         f'{d["admit_bound_s"]} s against G0* = {d["G0_star_s"]:.1f} s, or G0* is not below '
+        raise ValueError(f'ruling 1(f) receipt (R10-2(a)) refused: ceil(1.25 x the longest released gated D G0 '
+                         f'wait) = {d["admit_bound_s"]} s against G0* = {d["G0_star_s"]:.1f} s, censored gated D G0 '
+                         f'{d["censored_D"]} (any one blocks (a)), or G0* is not below '
                          f'{thermal_gates.G0_CAP_DEFAULT_S} s (then the current rule applies and no receipt is '
                          'needed)')
     return derived
