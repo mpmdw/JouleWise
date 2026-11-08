@@ -116,7 +116,7 @@ class Harness:
 class WatchdogTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
-        self.temp = Path(self.temporary.name)
+        self.temp = Path(self.temporary.name).resolve()
         home_patch = mock.patch.object(wd.Path, "home", return_value=self.temp / "home")
         home_patch.start()
         self.addCleanup(home_patch.stop)

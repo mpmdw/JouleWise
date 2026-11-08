@@ -5,12 +5,54 @@ import math
 import os
 from pathlib import Path
 import stat
+import subprocess
+import sys
 import time
 import uuid
 
 MARKER = "terminal-wake.json"
 SCHEMA = "joulewise.terminal_wake.v1"
 DESTINATION_ENV = "JOULEWISE_TERMINAL_WAKE_ROOT"
+
+
+def notify_after_exit(root, plan_id, receipt_class):
+    """Start a short-lived exit observer only after terminal reporting.
+
+    It inherits no driver locks or input. It cannot publish while the
+    driver PID exists (including a zombie or a reused PID). No window work or
+    arm authority is delegated to this helper.
+    """
+    return subprocess.Popen(
+        [sys.executable, "-B", "-m", "joulewise.terminal_wake",
+         "--wait-pid", str(os.getpid()), "--root", str(root),
+         "--plan-id", plan_id, "--receipt-class", receipt_class],
+        cwd=Path(__file__).resolve().parents[1], stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL, close_fds=True, start_new_session=True,
+    )
+
+
+def publish_after_exit(root, plan_id, receipt_class, pid, *, timeout_s=60):
+    """Publish only after ESRCH proves driver absence; uncertainty falls back.
+
+    The timeout bounds the helper, not a release rule. A timeout, permission
+    error, helper loss or failed publication retains the 300 s watchdog tick.
+    """
+    if type(pid) is not int or pid <= 1 or pid == os.getpid():
+        raise ValueError("invalid terminal driver PID")
+    if not math.isfinite(timeout_s) or timeout_s <= 0:
+        raise ValueError("invalid terminal exit timeout")
+    deadline = time.monotonic() + timeout_s
+    while True:
+        try:
+            os.kill(pid, 0)  # observation only; never signal the driver
+        except ProcessLookupError:
+            return publish(root, plan_id, receipt_class)
+        except OSError:
+            return None
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return None
+        time.sleep(min(0.1, remaining))
 
 
 def publish(root, plan_id, receipt_class, *, now=None):
@@ -59,3 +101,24 @@ def read_event(path):
         return raw, event
     except (OSError, ValueError):
         return None
+
+
+def main(argv=None):
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--wait-pid", type=int, required=True)
+    parser.add_argument("--root", type=Path, required=True)
+    parser.add_argument("--plan-id", required=True)
+    parser.add_argument("--receipt-class", required=True)
+    args = parser.parse_args(argv)
+    try:
+        if publish_after_exit(args.root, args.plan_id, args.receipt_class, args.wait_pid):
+            return 0
+    except (OSError, ValueError) as exc:
+        print("terminal wake: {}".format(exc), file=sys.stderr)
+    print("terminal wake unavailable; retaining 300 s watchdog fallback", file=sys.stderr)
+    return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

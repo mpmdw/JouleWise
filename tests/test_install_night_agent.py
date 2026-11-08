@@ -234,7 +234,11 @@ class InstallNightAgentTests(unittest.TestCase):
             os.environ["TZ"] = tz
             time.tzset()
         try:
-            write_matching_probe_receipt(plan, python, now=now)
+            with mock.patch.dict(os.environ, {
+                    "HOME": self.environment["HOME"],
+                    "MAGISTRATE_WATCHDOG_CUSTODY_ROOT": self.environment.get(
+                        "MAGISTRATE_WATCHDOG_CUSTODY_ROOT", "")}):
+                write_matching_probe_receipt(plan, python, now=now)
         finally:
             if tz is not None:
                 if saved is None:

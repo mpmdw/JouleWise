@@ -393,7 +393,7 @@ class NightDriverTests(unittest.TestCase):
         self.off_admission_mock = off_admission.start()
         self.addCleanup(off_admission.stop)
         self.temporary = tempfile.TemporaryDirectory()
-        self.root = Path(self.temporary.name)
+        self.root = Path(self.temporary.name).resolve()
         identity_patch = mock.patch.object(
             self.driver, "observe_identity", return_value=Identity("LIVE", "Tue Sep 8 01:02:03 2026")
         )
@@ -1682,7 +1682,8 @@ runpy.run_path(script, run_name='__main__')
         completion_epoch_s = plan.t0_epoch_s + plan.window_max_s + self.driver.COURIER_DEADLINE_S
         with mock.patch.object(
             self.driver.time, "time", return_value=completion_epoch_s
-        ), mock.patch.object(self.driver.os, "killpg") as kill_group:
+        ), mock.patch.object(self.driver.os, "killpg") as kill_group, \
+                mock.patch.object(self.driver, "_notify_terminal") as notify:
             exit_code = self.driver.dead_man(self.plan_path)
         self.assertEqual(exit_code, self.driver.EXIT_GO)
         exited = json.loads((night / "chain.exited").read_text())
@@ -1690,6 +1691,8 @@ runpy.run_path(script, run_name='__main__')
         self.assertEqual(exited["reaped_by"], "dead-man")
         kill_group.assert_not_called()
         self.driver.run_courier.assert_called_once()
+        # Dead-man completion intentionally keeps the 300 s watchdog fallback.
+        notify.assert_not_called()
 
     def test_dead_man_couriers_after_a_null_pgid_marker_without_killpg(self) -> None:
         night = self.custody / "night"
@@ -2993,7 +2996,10 @@ runpy.run_path(script, run_name='__main__')
         path.parent.mkdir()
         path.write_text(json.dumps(plan), encoding="utf-8")
         make_probe_fixture(root, path)
-        write_matching_probe_receipt(path, sys.executable)
+        # Wake routing is HOME-dependent and part of the rendered plist pin.
+        # Match the synthetic HOME used by the installer subprocess.
+        with mock.patch.dict(os.environ, {"HOME": str(root / "home")}):
+            write_matching_probe_receipt(path, sys.executable)
         return path
 
     def _installer_environment(self, root: Path) -> tuple[dict[str, str], Path]:
@@ -3825,7 +3831,7 @@ raise SystemExit(run_night.main(sys.argv[3:]))
         driver = _load_driver()
         repo = Path(__file__).resolve().parents[1]
         expected_environment = {
-            "com.joulewise.night.plist.template": {"PATH"},
+            "com.joulewise.night.plist.template": {"PATH", "JOULEWISE_TERMINAL_WAKE_ROOT"},
             "com.joulewise.night-probe.plist.template": {"PATH", "JOULEWISE_LAUNCHD_LABEL"},
             "com.joulewise.magistrate.plist.template": {
                 "PATH", "MAGISTRATE_SESSION_BIN", "MAGISTRATE_WATCHDOG_CUSTODY_ROOT"}}

@@ -2311,6 +2311,72 @@ class EvidenceProbeReceiptTests(unittest.TestCase):
 
 
 
+class TerminalWakeRoutingTests(unittest.TestCase):
+    def setUp(self):
+        import plistlib
+        from unittest import mock
+        from joulewise import night_agent_install as installer
+        self.installer = installer
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name).resolve()
+        self.launch_dir = self.root / "home/Library/LaunchAgents"
+        self.launch_dir.mkdir(parents=True)
+        self.wake_root = self.root / "magistrate"
+        self.wake_root.mkdir()
+        self.plist = self.launch_dir / "com.joulewise.magistrate.plist"
+        self.installed = {"Label": "com.joulewise.magistrate",
+                          "WatchPaths": [str(self.wake_root / "terminal-wake.json")],
+                          "EnvironmentVariables": {
+                              "MAGISTRATE_WATCHDOG_CUSTODY_ROOT": str(self.wake_root)}}
+        self.plist.write_bytes(plistlib.dumps(self.installed))
+        patch = mock.patch.dict(os.environ, {"MAGISTRATE_WATCHDOG_CUSTODY_ROOT": str(self.wake_root)})
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def test_matching_watch_and_runtime_roots_pass(self):
+        self.installer.validate_terminal_wake_destination(self.launch_dir)
+
+    def test_watchpath_or_runtime_root_mismatch_refuses(self):
+        import plistlib
+        for field in ("WatchPaths", "EnvironmentVariables"):
+            with self.subTest(field=field):
+                changed = dict(self.installed)
+                changed[field] = ([str(self.root / "stale/terminal-wake.json")] if field == "WatchPaths"
+                                  else {"MAGISTRATE_WATCHDOG_CUSTODY_ROOT": str(self.root / "stale")})
+                self.plist.write_bytes(plistlib.dumps(changed))
+                with self.assertRaisesRegex(self.installer.Refused, "custody-root mismatch"):
+                    self.installer.validate_terminal_wake_destination(self.launch_dir)
+
+    def test_missing_watchdog_warns_about_explicit_fallback(self):
+        import io
+        self.plist.unlink()
+        output = io.StringIO()
+        with contextlib.redirect_stderr(output):
+            self.installer.validate_terminal_wake_destination(self.launch_dir)
+        self.assertIn("300 s fallback requires the watchdog to be installed", output.getvalue())
+
+    def test_malformed_watchdog_refuses(self):
+        self.plist.write_bytes(b"broken plist")
+        with self.assertRaisesRegex(self.installer.Refused, "cannot read installed"):
+            self.installer.validate_terminal_wake_destination(self.launch_dir)
+
+    def test_real_install_entrypoint_refuses_mismatch_before_admission(self):
+        plan = self.root / "night_plan.json"
+        plan.write_text("{}")  # routing refuses before plan/machine probes
+        environment = dict(os.environ, HOME=str(self.root / "home"),
+                           MAGISTRATE_WATCHDOG_CUSTODY_ROOT=str(self.root / "wrong"))
+        before = self.plist.read_bytes()
+        result = subprocess.run([
+            sys.executable, "-B", "-m", "joulewise.night_agent_install", "--plan", str(plan),
+            "--launchctl-bin", "/usr/bin/true"], cwd=Path(__file__).resolve().parents[1],
+            env=environment, capture_output=True, text=True, timeout=10)
+        self.assertEqual(2, result.returncode, result.stderr)
+        self.assertIn("terminal wake custody-root mismatch", result.stderr)
+        self.assertEqual(before, self.plist.read_bytes())
+        self.assertEqual([self.plist], list(self.launch_dir.iterdir()))
+
+
 class RenderedProcessTypeTests(unittest.TestCase):
     def test_install_context_binds_both_labels_and_changed_template_bytes(self):
         from types import SimpleNamespace

@@ -3161,11 +3161,12 @@ def tick(storage: Storage, deps: Dependencies, *, dry_run: bool = False) -> Deci
 
 
 def tick_on_terminal_event(storage: Storage, deps: Dependencies) -> Decision:
-    """Use the same gates with at most 30 one-second writer-exit retries.
+    """Coalesce legacy driver-exit races before one ordinary gated tick.
 
-    WatchPaths can fire before the writer exits. Dedupe under service_lock and
-    retry only ordinary process/span holds; backoff, stop and clock/network
-    uncertainty are never overridden. A lost edge retains StartInterval.
+    New publishers wait for driver exit. For old/racing markers, probe only
+    the driver for at most 30 seconds before changing state or queuing a
+    notice. One ordinary tick records the final censuses, including a genuine
+    hold if the driver persists. A lost edge retains StartInterval.
     """
     from joulewise.terminal_wake import MARKER, read_event
     observed = read_event(storage.root / MARKER)
@@ -3187,14 +3188,12 @@ def tick_on_terminal_event(storage: Storage, deps: Dependencies) -> Decision:
                 return tick(storage, deps)
             age = deps.wall_now().timestamp() - event["issued_epoch_s"]
             retry = 0 <= age <= 60
-    for attempt in range(31 if retry else 1):
-        decision = tick(storage, deps)
-        if (decision.launch or decision.adopt
-                or decision.state not in {"FENCED", "HOLD_CENSUS"}
-                or attempt == 30 or not retry):
-            return decision
-        deps.sleep(1)
-    return decision
+    if retry and deps.driver_probe is not None:
+        for attempt in range(31):
+            if deps.driver_probe().empty or attempt == 30:
+                break
+            deps.sleep(1)
+    return tick(storage, deps)
 
 
 def build_parser() -> argparse.ArgumentParser:

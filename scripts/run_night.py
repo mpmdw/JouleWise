@@ -2260,10 +2260,10 @@ def _write_courier_outcome(night_dir: Path, outcome: Mapping[str, Any]) -> None:
 
 
 def _notify_terminal(plan):
-    from joulewise.terminal_wake import DESTINATION_ENV, publish
+    from joulewise.terminal_wake import DESTINATION_ENV, notify_after_exit
     destination = os.environ.get(DESTINATION_ENV)
     if destination:
-        return publish(Path(destination), plan.plan_id, plan.receipt_class)
+        return notify_after_exit(Path(destination), plan.plan_id, plan.receipt_class)
 
 
 def _finish_reporting(
@@ -2313,8 +2313,9 @@ def _finish_reporting(
     late = report["diagnostics"][issued:]
     if late:  # re-audit 81 R2: a post-delivery failure must survive somewhere durable
         optional("night log after courier", lambda: _append_log(custody_root, "\n".join(late)))
-    # Notification is advisory. The watchdog re-reads the ordinary terminal
-    # records, courier proof and all live censuses before it can release.
+    # The helper publishes only once this driver has actually exited, after
+    # run_night's finally/close tail. Notification remains advisory; all
+    # ordinary terminal proofs and live censuses still govern release.
     optional("terminal wake", lambda: _notify_terminal(plan))
     return report["base_exit_code"] if outcome["sent"] else EXIT_COURIER_FAILED
 
@@ -3403,7 +3404,7 @@ def smoke_observation_round(interval_s):
     quiet_admission.top_argv(interval_s)
     cpu_start = _bind_cpu()
     with tempfile.TemporaryDirectory(prefix='jw-observer-round-') as directory:
-        writer, launcher = _BindJournal(Path(directory)), _BindLauncher()
+        writer, launcher = _BindJournal(Path(directory).resolve()), _BindLauncher()
         jobs = {}
         sequence, phase = 0, 0
         foreground = None
@@ -4807,7 +4808,8 @@ def probe_night(plan_path: Path, receipt_path: Path, timeout_s: float = 600) -> 
         launchd_label=os.environ.get("JOULEWISE_LAUNCHD_LABEL"))
     receipt_path.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="night-probe-supervisor-", dir=receipt_path.parent) as directory:
-        output, progress = Path(directory) / "worker.json", Path(directory) / "progress.json"
+        temporary_root = Path(directory).resolve()
+        output, progress = temporary_root / "worker.json", temporary_root / "progress.json"
         process = subprocess.Popen([sys.executable, "-B", str(Path(__file__).absolute()),
             "_probe-worker", "--plan", str(plan_path), "--receipt", str(output),
             "--progress", str(progress), "--deadline", str(deadline)],
@@ -4882,7 +4884,7 @@ def _evidence_probe_worker(plan, plan_path, receipt_path, deadline, phase):
         record.update(evidence_probe_bindings(plan, plan_path, sys.executable))
         phase("evidence-chain", record)
         with tempfile.TemporaryDirectory(prefix="evidence-probe-", dir=receipt_path.parent) as directory:
-            env = _chain_environment(plan, Path(directory))
+            env = _chain_environment(plan, Path(directory).resolve())
             env["NIGHT_VERIFY_ONLY"] = "1"
             result = t0_rehearsal.observed_run(["/bin/zsh", plan.chain_path], env=env,
                 stdin=subprocess.DEVNULL, capture_output=True, text=True,
@@ -5007,7 +5009,7 @@ def _probe_worker(plan_path: Path, receipt_path: Path, progress_path: Path, dead
     receipt_path.parent.mkdir(parents=True, exist_ok=True)
     # Keep probe refusals away from write-once production night records.
     with tempfile.TemporaryDirectory(prefix="night-probe-", dir=receipt_path.parent) as directory:
-        night_dir = Path(directory)
+        night_dir = Path(directory).resolve()
         environment = _chain_environment(plan, night_dir)
         environment["NIGHT_VERIFY_ONLY"] = "1"
         process = subprocess.Popen(["/bin/zsh", plan.chain_path], env=environment,

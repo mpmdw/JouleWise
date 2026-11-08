@@ -152,7 +152,7 @@ class HandoffCliDefectTests(unittest.TestCase):
 class MagistrateWatchdogCliTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
-        self.root = Path(self.temporary.name)
+        self.root = Path(self.temporary.name).resolve()
         self.measurement_root = self.root / "measurement"
         self.measurement_head = _init_repo(self.measurement_root)
         self.bin_dir = self.root / "bin"
@@ -357,6 +357,37 @@ class MagistrateWatchdogCliTests(unittest.TestCase):
         events = [json.loads(line) for line in
                   (watchdog_root / "events.jsonl").read_text().splitlines()]
         self.assertTrue(any(row["kind"] == "census" for row in events))
+
+    def test_real_cli_terminal_edge_coalesces_driver_exit_before_one_tick(self) -> None:
+        from joulewise.terminal_wake import publish
+        custody_parent = self.root / "terminal-edge-custody"
+        self._write_valid(custody_parent, "active-plan")
+        watchdog_root = custody_parent / "magistrate"
+        watchdog_root.mkdir()
+        publish(watchdog_root, "active-plan", "TRANSACTION_PACK")
+        source = (
+            "import sys\n"
+            "from unittest import mock\n"
+            "from scripts import magistrate_watchdog as wd\n"
+            "gone = wd.CensusObservation(True, 1, '', '')\n"
+            "alive = wd.CensusObservation(False, 0, 'synthetic driver', '')\n"
+            "with mock.patch.object(wd, 'remote_stop_probe', side_effect=AssertionError('network')), "
+            "mock.patch.object(wd, 'production_census', return_value=gone) as census, "
+            "mock.patch.object(wd, 'production_driver_probe', side_effect=[alive, gone]) as driver:\n"
+            " result = wd.main(sys.argv[1:])\n"
+            " census.assert_called_once_with()\n"
+            " assert driver.call_count == 2, driver.call_count\n"
+            " raise SystemExit(result)\n"
+        )
+        completed = subprocess.run([
+            sys.executable, "-B", "-c", source, "tick", "--custody-root", str(watchdog_root)],
+            cwd=REPO_ROOT, env=self.environment, capture_output=True, text=True, timeout=10)
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        state = json.loads((watchdog_root / "state.json").read_text())
+        self.assertEqual("FENCED", state["state"])
+        self.assertEqual([], state["notice_pending"])
+        events = [json.loads(line) for line in (watchdog_root / "events.jsonl").read_text().splitlines()]
+        self.assertEqual(1, sum(row["kind"] == "census" for row in events))
 
     def test_real_cli_resident_records_drain_after_plan_is_truncated(self) -> None:
         custody_parent = self.root / "resident-drain-custody"

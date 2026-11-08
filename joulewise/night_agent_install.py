@@ -41,6 +41,42 @@ LABELS = ("com.joulewise.night", "com.joulewise.night.deadman")
 SIGNALS = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
 
 
+def terminal_wake_root():
+    return os.environ.get("MAGISTRATE_WATCHDOG_CUSTODY_ROOT") or str(
+        Path.home() / "night-custody" / "magistrate")
+
+
+def validate_terminal_wake_destination(launch_dir):
+    """Check installed routing before admitting an actual night install.
+
+    Render/probe on an off-host checkout needs no installed watchdog. Legacy
+    hosts with no watchdog plist get an explicit fallback warning; a present
+    but incompatible plist always refuses, including a stale WatchPaths pin.
+    """
+    path = Path(launch_dir) / "com.joulewise.magistrate.plist"
+    try:
+        installed = plistlib.loads(path.read_bytes())
+    except FileNotFoundError:
+        print("terminal wake unavailable: magistrate plist is not installed; "
+              "300 s fallback requires the watchdog to be installed", file=sys.stderr)
+        return
+    except (OSError, ValueError) as exc:
+        raise Refused(2, "terminal wake: cannot read installed magistrate plist: " + str(exc))
+    root = terminal_wake_root()
+    destination = Path(root)
+    if (not destination.is_absolute()
+            or any(p.is_symlink() for p in (destination, *destination.parents))):
+        raise Refused(2, "terminal wake destination must be absolute and unsymlinked")
+    if (not isinstance(installed, dict)
+            or installed.get("WatchPaths") != [str(destination / "terminal-wake.json")]
+            or not isinstance(installed.get("EnvironmentVariables"), dict)
+            or installed["EnvironmentVariables"].get("MAGISTRATE_WATCHDOG_CUSTODY_ROOT") != root):
+        raise Refused(2, "terminal wake custody-root mismatch with installed magistrate plist; "
+                      "re-render/reinstall the watchdog and night jobs with the same root")
+    if not destination.is_dir():
+        raise Refused(2, "terminal wake destination is not installed")
+
+
 class Kind(Enum):
     SUCCEEDED = auto()
     FAILED = auto()
@@ -660,8 +696,7 @@ class Prepared:
             values = {"com.joulewise.night": label, "@@PYTHON@@": self.python,
                       "@@MODE@@": mode, "@@REPO@@": str(self.repo), "@@PLAN@@": str(plan_path),
                       "@@CUSTODY_ROOT@@": self.plan.custody_root, "@@COURIER_BIN@@": self.courier,
-                      "@@MAGISTRATE_CUSTODY_ROOT@@": (os.environ.get("MAGISTRATE_WATCHDOG_CUSTODY_ROOT")
-                          or str(Path.home() / "night-custody" / "magistrate")),
+                      "@@MAGISTRATE_CUSTODY_ROOT@@": terminal_wake_root(),
                       "@@PATH@@": self.courier_path,
                       "@@LOG_STEM@@": "launchd.deadman" if index else "launchd.night"}
             values.update({"@@{}@@".format(key.upper()): str(value) for key, value in calendar.items()})
@@ -1466,6 +1501,8 @@ def main(argv=None):
             launchd_probe(prepared, adapter.executable, shield, args.probe_timeout_s, args.probe_max_age_s)
             return 0
         def validate():
+            if not isinstance(target, RenderTarget):
+                validate_terminal_wake_destination(target.directory)
             prepared = validate_install(args, repo)
             if isinstance(target, RenderTarget):
                 target.labels += (probe_label(prepared.plan.plan_id),)

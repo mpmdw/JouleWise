@@ -117,20 +117,44 @@ also checks the current time/window and measurement checkout state.
 The night installer includes `JOULEWISE_TERMINAL_WAKE_ROOT` in authenticated
 rendered plist bytes. It defaults to the watchdog's usual magistrate root;
 `MAGISTRATE_WATCHDOG_CUSTODY_ROOT` must be identical when rendering both jobs
-if a nondefault root is used. No destination means no notification for direct
-or historical driver invocations.
+if a nondefault root is used. At actual night installation, the installer
+checks the installed magistrate plist's WatchPaths and runtime custody-root
+environment against that destination. A mismatch, malformed plist, or missing
+destination directory refuses before admission. Render-only and probe runs
+can happen off-host. A host with no installed magistrate plist receives an
+explicit warning: event wake is unavailable, and 300 s recovery requires the
+watchdog to be installed. No destination means no notification for direct or
+historical driver invocations. Production destinations remain absolute and
+unsymlinked; only internally created temporary roots are canonicalized.
 
-After terminal reporting, the driver atomically publishes `terminal-wake.json`
-there. The marker contains structural identifiers and a nonce; it contains no
-measurements. `WatchPaths` requests an ordinary watchdog tick. The installer
-seeds an inert file before bootstrap so the watch target exists.
+After terminal reporting and the durable courier outcome, the driver starts
+a bounded exit observer (`python -m joulewise.terminal_wake`). It inherits no
+driver locks or input descriptors and starts in its own process session.
+Only ESRCH from a signal-0 PID probe permits it to atomically publish
+`terminal-wake.json`: the driver has exited, including its close/finally tail.
+An existing/zombie/reused PID never establishes absence. Observation failure,
+60 s timeout, helper loss or publication failure uses the 300 s fallback and
+preserves the reporting exit code. The helper starts only during terminal
+reporting, performs no window work, and cannot arm anything. The marker
+contains structural identifiers and a nonce, with no measurements.
+`WatchPaths` requests an ordinary watchdog tick. The installer seeds an inert
+file before bootstrap so the watch target exists.
 
-Under the existing service lock, a new event no older than 60 s allows at most
-30 additional one-second retries of `FENCED`/`HOLD_CENSUS`, covering a driver
-that has not quite exited. Probe execution can add to this nominal interval.
+Under the existing service lock, a new event no older than 60 s coalesces
+legacy driver-exit races using at most 31 driver-only probes separated by at
+most 30 one-second sleeps. These probes neither transition state nor append
+census events or queue notices. Then exactly one ordinary tick records its
+usual censuses. A persistent driver still produces the normal hold and notice;
+a transient driver exit does not. Probe execution adds to the nominal interval.
 All terminal release proofs, stop checks, plan fences, backoff, clock checks
 and process censuses still apply. An event for an open chain cannot release
 it. Replays dedupe; malformed, stale or lost notifications retain normal
 watchdog behaviour. A failure to persist the event acknowledgement also falls
 back to the ordinary tick. `StartInterval=300` and `RunAtLoad` remain enabled.
 No continuous agent or event listener is introduced.
+
+The no-courier/safety-suppressed branch of `_finish_reporting` and every
+dead-man branch deliberately publish no marker. They retain the same 300 s
+polling recovery, including when dead-man delivery succeeds. A marker would
+not establish delivery or termination on these paths; all ordinary release
+proofs remain mandatory. Tests pin both fallback paths and the 300 s interval.
