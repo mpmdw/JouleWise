@@ -46,18 +46,20 @@ def clone_git_fixture(source: Path, destination: Path, *clone_arguments: str) ->
     (job 127154452928) failed that way in
     tests/test_receipt_histsem.py with ``[Errno 39] Directory not empty``
     on the clone's root after a commit.
+
+    Install the controls with clone's --config option: Git writes these before
+    fetching/checking out, so the clone itself (including checkout hooks) is
+    fenced too. Configuring the repository after clone returns is too late.
     """
 
+    controls = tuple(
+        argument
+        for key, value in GIT_MAINTENANCE_CONTROLS
+        for argument in ("--config", f"{key}={value}")
+    )
     subprocess.run(
-        ("git", "clone", *clone_arguments, str(source), str(destination)),
+        ("git", "clone", *controls, *clone_arguments, str(source), str(destination)),
         check=True,
         capture_output=True,
         text=True,
     )
-    for key, value in GIT_MAINTENANCE_CONTROLS:
-        subprocess.run(
-            ("git", "-C", str(destination), "config", "--local", key, value),
-            check=True,
-            capture_output=True,
-            text=True,
-        )
