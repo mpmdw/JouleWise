@@ -138,6 +138,55 @@ def d_member_x2_report(plan_members, runs_root):
             'x2_rate': count / len(rows) if rows else None, 'members': rows}
 
 
+def battery_windows_pass(windows):
+    return bool(windows) and all(w.get('bar_pass') is True for w in windows.values())
+
+
+# Lead ruling 9 (R14; W1-BLOCKERS-AGREEMENT): B is an operational stop with automatic
+# resume. A false v4_B_bar is recorded but does not block the full-desk gate, and a
+# member excluded ONLY for charging (v4_battery.EXCLUDE) is removed from the window
+# without failing the common desk's exclusion-derived checks (Sol2 review S2-01).
+# v4_cadence ``battery_window`` governs the resume.
+FULL_DESK_GATE_EXEMPT = ('v4_B_bar',)
+EXCLUSION_DERIVED = ('no_member_exclusions', 'chain_eligibility')
+
+
+def _exclusion_codes(member):
+    codes = [*(member.get('exclusion_codes') or []), *(member.get('calibration_exclusions') or [])]
+    summary = member.get('summary') or {}
+    codes += list(summary.get('exclusion_codes') or [])
+    return {str(c).split(':')[0] for c in codes}
+
+
+def charging_only_exclusion(member):
+    """True iff the member is excluded and every exclusion code is a charging B code."""
+    from joulewise.align.apple.v4_battery import EXCLUDE
+    codes = _exclusion_codes(member)
+    return bool(member.get('excluded')) and bool(codes) and codes <= set(EXCLUDE)
+
+
+def full_desk_gate_pass(checks, members=None):
+    """The ``full_desk_gate`` verdict.
+
+    Every desk check must be true except ``v4_B_bar``. With the desk's
+    ``members`` (evidence-aware), the exclusion-derived checks are re-derived
+    with charging-only exclusions not counted, so B alone never fails the gate;
+    any other exclusion still does. Without members the checks stand as recorded.
+    """
+    gated = {k: v for k, v in (checks or {}).items() if k not in FULL_DESK_GATE_EXEMPT}
+    if members is not None and any(k in gated for k in EXCLUSION_DERIVED):
+        # Charging-only members stay in the window evidence (readability, prechecks);
+        # only their B exclusion stops counting against the desk.
+        neutral = [{**m, 'excluded': False} if charging_only_exclusion(m) else m for m in members]
+        recomputed, _, _ = pilot.instrument_checks(neutral)
+        others = any(m.get('excluded') for m in neutral)
+        if 'no_member_exclusions' in gated:
+            gated['no_member_exclusions'] = not others
+        if 'chain_eligibility' in gated:
+            gated['chain_eligibility'] = recomputed['chain_eligibility'] is True and not others
+    return bool(gated) and all(v is True for v in gated.values())
+
+
 def powermode_desk_check(*, state, members, runs_root, kit_path):
     """Council ruling 7: any member whose bundle-recorded AC powermode differs
     from the frozen series value sets ``instrument_ok`` false. The report also
@@ -178,6 +227,12 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
         checks['v4_registration_evidence'] = False
         report['registration_error'] = str(exc)
         return checks, report
+    from joulewise.align.apple import v4_battery
+    try:
+        battery_policy = json.loads((registration_dir/'battery_window_policy.json').read_bytes())
+    except (OSError, ValueError):
+        battery_policy = None
+    journal = v4_battery.load_journal(Path(custody)/'hazards/monitor/battery.jsonl') if custody else ([], None, 1)
     records = []
     pilot_members = {m['run_id']: m for m in members}
     for row in plan['members']:
@@ -191,6 +246,7 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
                  'pm_period_s': .1, 'calibration_exclusions': ['member.runtime_failure'], 'error': str(exc)}
         r.update({k: row[k] for k in ('ordinal', 'role') if k in row},
                  window=state.get('window_id', 'W1'), stage=row.get('stage_id'))
+        v4_battery.attach(r, path, journal)
         if row.get('replay_of'):
             r['identical_work_group'] = row['replay_of']
         elif row.get('ordinal') == 5 or row.get('role', '').startswith(('X-', 'Y-')):
@@ -210,11 +266,14 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
     report['thermal'] = window_report(records, v4=True, u3_bar=bar,
         delta_slow_c=policy.get('delta_slow_c'), contrast_predeclared=contrast_predeclaration(wp19, policy))
     report['registration_diagnostics'] = v4_registration.desk_diagnostics(records,
-        r1_soak=r1_soak_c(registration_dir))
+        r1_soak=r1_soak_c(registration_dir), battery_policy=battery_policy)
     for model, result in report['thermal']['model_windows'].items():
         for n in (1, 2, 3):
             checks[f'v4_{model}_U{n}'] = result[f'U{n}']['status'] == 'pass'
-    checks['v4_B_bar'] = all(w['bar_pass'] for w in report['registration_diagnostics']['battery_windows'].values())
+    checks['v4_B_bar'] = battery_windows_pass(report['registration_diagnostics']['battery_windows'])
+    for name, row in report['registration_diagnostics']['battery_windows'].items():
+        print(f'{name} battery: '+json.dumps({k: row[k] for k in
+              ('B_count', 'unobserved_count', 'assist_count', 'bar_pass', 'consequence')}, sort_keys=True))
     checks['v4_D_cohort'] = report['registration_diagnostics']['d_cohort']['instrument_ok']
     return checks, report
 
@@ -223,7 +282,20 @@ def desk(session_root, **kwargs):
     kwargs.setdefault('kit', kit.KIT)
     kwargs.setdefault('desk_schema', kit.DESK_SCHEMA)
     kwargs.setdefault('extra_checks', powermode_desk_check)
-    return pilot.desk(session_root, **kwargs)
+    status = pilot.desk(session_root, **kwargs)
+    # Evidence-aware full-desk verdict (ruling 9) beside the common desk status.
+    try:
+        members = pilot.h.read(status['pilot']).get('members', [])
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        members = None
+    removed = [m.get('run_id') for m in members or () if charging_only_exclusion(m)]
+    status['full_desk_gate'] = {'pass': members is not None and full_desk_gate_pass(status.get('checks'), members),
+                                'charging_only_members_removed': removed,
+                                'rule': 'all desk checks except v4_B_bar; charging-only exclusions removed (ruling 9)'}
+    if status.get('pilot'):
+        pilot.h.write(Path(status['pilot']).parent/'desk.json', status)
+    print('full_desk_gate: ' + ('pass' if status['full_desk_gate']['pass'] else 'fail'))
+    return status
 
 
 ARM_RECORD_SCHEMA = 'joulewise.align_v4_arm.v1'

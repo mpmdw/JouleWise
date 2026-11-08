@@ -15,13 +15,15 @@ WP19_SCHEMA = 'joulewise.align_v4.wp19_identity.v1'
 RULINGS = (4, 5, 6, 9, 11, 15, 17, 18, 20)
 _NAMED_ARTIFACTS = (
     'docs/align/pilot_protocol_v4.md', 'docs/align/v4/DEVIATIONS.md',
+    'docs/align/v4/W1-BLOCKERS-sol.md',
     'docs/align/council-2026-11-06-v4-review/LEAD-RULINGS-2.md',
     'scripts/align_w1_budget_procedure.py', 'joulewise/align/apple/km003c.py',
     'scripts/validate_align_v4_w1_plan.py', 'joulewise/align/apple/pilot_analysis.py',
     'joulewise/align/energy_residual.py',
     'scripts/align_v4_kit.py', 'scripts/align_v4_session.py',
     'scripts/align_v4_thermal_desk.py', 'scripts/align_pilot_session.py',
-    'scripts/align_v4_u3_bar.py', 'scripts/align_v4_wp19.py', 'scripts/align_v4_offloads.py',
+    'scripts/align_v4_u3_bar.py', 'scripts/align_v4_u3_export.py', 'scripts/align_v4_wp19.py', 'scripts/align_v4_offloads.py',
+    'joulewise/align/apple/v4_u3.py', 'joulewise/align/apple/v4_battery.py',
     'scripts/align_v4_battery_log.py',
     'joulewise/align/apple/v4_registration.py', 'joulewise/align/apple/v4_estimands.py',
     'joulewise/align/apple/thermal_desk.py', 'joulewise/align/apple/thermal_gates.py',
@@ -30,6 +32,7 @@ _NAMED_ARTIFACTS = (
     REGISTRATION+'identity_pins.json', REGISTRATION+'model_artifact_inventory.json',
     REGISTRATION+'local_file_verification.json',
     REGISTRATION+'w1_plan.json', REGISTRATION+'u3_bar.json', REGISTRATION+'wp19_receipt.json',
+    REGISTRATION+'battery_window_policy.json',
     REGISTRATION+'r1_soak_reference.json',
     'configs/campaigns/align_v4/plan_tree.json', 'configs/campaigns/align_v4/collection_plan.json',
     # Configured and launched entry points the static walk cannot be trusted to find (delta2):
@@ -59,6 +62,8 @@ _NAMED_ARTIFACTS = (
 # subset of ARTIFACTS. Not seen by a static walk: importlib string imports, computed
 # paths and third-party modules (declared separately).
 EXECUTED_CLOSURE = (
+    'joulewise/align/apple/v4_u3.py',
+    'joulewise/align/apple/v4_battery.py',
     'joulewise/__init__.py',
     'joulewise/adapters/__init__.py',
     'joulewise/adapters/local_transport.py',
@@ -518,32 +523,25 @@ def require_registration(root):
         raise ValueError('registration_receipt.json missing or unreadable; W1 is not registered') from exc
     validate_receipt(receipt, root)
     bar = json.loads(_local(root, REGISTRATION+'u3_bar.json').read_bytes())
-    validate_u3(bar)
+    validate_u3(bar, root=root, commit=receipt['commit'])
+    from joulewise.align.apple.v4_battery import validate_policy
+    validate_policy(json.loads(_local(root, REGISTRATION+'battery_window_policy.json').read_bytes()))
     wp19 = json.loads(_local(root, REGISTRATION+'wp19_receipt.json').read_bytes())
     validate_wp19(wp19)
     return receipt
 
 
-def derive_u3(pairs, source_sha256):
+def derive_u3(pairs, source_sha256, *, policy=None):
     if not isinstance(source_sha256, dict) or not source_sha256 or not all(is_digest(v) for v in source_sha256.values()):
         raise ValueError('U3 requires input sha256 digests')
-    relative = []
-    seen = set()
-    for pair in pairs:
-        ordinals = pair.get('ordinals', [])
-        values = pair.get('energies_j', [])
-        if (pair.get('token_identical') is not True or len(ordinals) != 2
-                or any(type(v) is not int for v in ordinals) or ordinals[1]-ordinals[0] < 3
-                or len(values) != 2 or any(type(v) not in (int, float) or not math.isfinite(v) or v <= 0 for v in values)
-                or not pair.get('session')):
-            raise ValueError('U3 requires separated-ordinal, within-session token-identical positive-energy pairs')
-        key = (pair['session'], *ordinals)
-        if key in seen:
-            raise ValueError('duplicate U3 replay pair')
-        seen.add(key)
-        relative.append((values[1]-values[0])/statistics.fmean(values))
-    if len(relative) < 2:
-        raise ValueError('U3 requires at least two eligible replay pairs')
+    from joulewise.align.apple import v4_u3
+    relative = v4_u3.relative_pairs(pairs)
+    if policy is not None:
+        if not isinstance(policy, dict):
+            raise ValueError('U3 predictive policy must be an object')
+        if policy.get('transfer_justification_sha256') not in source_sha256.values():
+            raise ValueError('U3 requires digest-bound D transfer justification source')
+        return json.loads(v4_u3.canonical(v4_u3.derive(pairs, source_sha256, policy)))
     return {'schema': U3_SCHEMA, 'status': 'PENDING', 'n': len(relative),
             's_rel_sample': statistics.stdev(relative), 'signed_relative_differences': relative,
             'source_sha256': source_sha256, 'pairs': pairs,
@@ -554,15 +552,56 @@ def derive_u3(pairs, source_sha256):
             'limitations': 'Descriptive pilot summary only; no multiplier, margin or false-fail guarantee.'}
 
 
-def validate_u3(bar):
-    # RUN_STATE 212 R11-2/R03: neither k=3 nor 2.576 is an installed rule.
-    # A later scientific derivation and scoped implementation/gate must replace
-    # this stop. A historical v1 k=3 artifact cannot bypass it.
-    raise ValueError('U3 PENDING frozen predictive derivation and operating-characteristic sensitivity (R11/R03)')
+def validate_u3(bar, *, root=None, commit=None):
+    from joulewise.align.apple import v4_u3
+    try:
+        if (not isinstance(bar, dict) or not isinstance(bar.get('source_sha256'), dict)
+                or not bar['source_sha256'] or not all(is_digest(v) for v in bar['source_sha256'].values())):
+            raise ValueError('U3 PENDING source digests')
+        v4_u3.validate_cached(v4_u3.canonical(bar))
+        for path in (*bar['source_sha256'], bar['independent_gate']['path']):
+            # Lexical path policy also applies to a detached desk artifact.
+            if not isinstance(path, str) or any(c in path for c in ('\n', '\r', '\0')):
+                raise ValueError('U3 source/gate path refused')
+            _local(Path('.'), path)
+        # Validate source and gate bytes at registration, including Git custody.
+        if root is not None:
+            bindings = {**bar['source_sha256'], bar['independent_gate']['path']: bar['independent_gate']['sha256']}
+            pinned = _committed_bytes(root, commit, list(bindings)) if commit else {}
+            found_export = False
+            for path, expected in bindings.items():
+                raw = _local(root, path).read_bytes()
+                if digest(raw) != expected or (commit and (pinned.get(path) is None or digest(pinned[path]) != expected)):
+                    raise ValueError('U3 source/gate custody drift')
+                if path == bar['independent_gate']['path']:
+                    gate = json.loads(raw)
+                    if (not isinstance(gate, dict) or gate.get('verdict') != 'ADMIT'
+                            or gate.get('derivation_sha256') != bar['derivation_sha256']):
+                        raise ValueError('U3 independent gate bytes do not admit this derivation')
+                if path in bar['source_sha256']:
+                    try:
+                        source = json.loads(raw)
+                    except ValueError:
+                        continue  # A supporting report can be Markdown.
+                    found_export |= (isinstance(source, dict) and source.get('pairs') == bar['pairs']
+                                     and source.get('policy') == bar['policy'])
+            if not found_export:
+                raise ValueError('U3 source export does not reproduce pairs and policy')
+    except (TypeError, KeyError, AttributeError, OverflowError, OSError) as exc:
+        raise ValueError('U3 malformed or missing derivation evidence') from exc
+    return bar
 
 
-def u3_margin(mean_energy_j, bar):
+def u3_margin(mean_energy_j, bar, *, population='30B', configuration_sha256=None):
     validate_u3(bar)
+    if (type(mean_energy_j) not in (int, float) or not math.isfinite(mean_energy_j) or mean_energy_j <= 0
+            or population not in ('30B', 'D')):
+        raise ValueError('U3 requires positive finite energy and a qualified population')
+    if population == 'D' and bar['prediction'].get('d_screen') != 'not_refuted':
+        raise ValueError(f"U3 D transfer screen {bar['prediction'].get('d_screen')}: D U3 inconclusive (ruling 6)")
+    if population == 'D' and configuration_sha256 is not None and configuration_sha256 != bar['policy']['d_configuration_sha256']:
+        raise ValueError('U3 D configuration changed; new prospective qualification required')
+    return mean_energy_j*bar['prediction']['relative_bar_'+population]
 
 
 # Protocol section 4 / AGREEMENT-FINAL R02: arm within about 30 minutes of a
@@ -670,7 +709,7 @@ def cohort_identity(config, spec, runtime):
             'execution_policy_sha256': canonical(policy)}
 
 
-def desk_diagnostics(members, *, r1_soak=None):
+def desk_diagnostics(members, *, r1_soak=None, battery_policy=None):
     """Rulings 11/15/17/18 and B printouts; missing evidence stays unavailable."""
     from joulewise.align.apple import v4_estimands as v4
     d = [r for r in members if r.get('role') == 'D']
@@ -688,13 +727,8 @@ def desk_diagnostics(members, *, r1_soak=None):
               'G0_wait_s': sum(i.get('duration_s', 0) for i in r.get('intervals', []) if i['kind'] == 'G0'),
               'G1_wait_s': sum(i.get('duration_s', 0) for i in r.get('intervals', []) if i['kind'] == 'G1')}
              for r in members if r.get('ordinal') is not None]
-    windows = {}
-    for model in {r.get('model') for r in members}:
-        selected = [r for r in members if r.get('model') == model]
-        count = sum(any(str(f).startswith('battery.member_span') for f in r.get('flags', [])) for r in selected)
-        windows[model] = {'B_count': count, 'bar_pass': None, 'status': 'PENDING lead window consequence',
-                          'members': [{'id': r['id'], **r.get('battery', {'soc_pct': None, 'charger_w': None})}
-                                      for r in selected]}
+    from joulewise.align.apple.v4_battery import window_consequences
+    windows = window_consequences(members, battery_policy)
     return {'sentinel': sentinel, 'battery_windows': windows,
             'warm_reference': v4.warm_reference_diagnostic(reference, r1_soak or {}, waits),
             'd_cohort': v4.d_configuration_assertion(d),

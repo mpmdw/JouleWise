@@ -79,11 +79,11 @@ early stop, 39 eligible benign per pair after 8, else insufficient_calibration.
 require_w1_ready also requires registration_receipt.json, bound to current and
 committed protocol/kit/desk/estimand/deviation/U3/WP19 bytes, two admitted gate
 reports and the lead signature. The committed pending template never admits.
-U3 is PENDING frozen predictive derivation/OC sensitivity: explicit replay
-summaries install no k or energy bar. Historical k=3 receipts cannot admit W1.
+U3 needs a lead-signed u3_bar.json (session_zero_rms_series_exact_v1, N=16) with an
+independent gate; no k or fixed energy bar exists. Historical k=3 receipts cannot admit W1.
 Generate wp19_receipt.json from all-turn X/Y rendering plus complete native X-G.
-The numeric B window consequence and qualified full-span mount audit remain
-lead-owned pending gates. R0.record_sha256 must bind sensor provenance.
+The B window rule needs a lead-signed battery_window_policy.json (zero_B_auto_resume_v1);
+the qualified full-span mount audit remains a lead-owned pending gate. R0.record_sha256 must bind sensor provenance.
 R16 checks actual per-turn opportunity at the chosen B_D, never a capability guarantee.
 The additive align_v4_session.py refuses prepare/install while inputs are pending.
 Its desk is the parameterized pilot instrument desk; WP21 owns full U4–U6,

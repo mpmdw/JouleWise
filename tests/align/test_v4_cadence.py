@@ -83,7 +83,7 @@ class TriageListTests(unittest.TestCase):
             'record_committed', 'terminal_completion', 'quiet_start_state', 'series_powermode',
             'external_volume', 'charging_battery', 'meter_reader_live', 'meter_coverage', 'capture_faults',
             'thermal_escalation', 'cohort_pool_rules', 'sentinel_roster', 'member_eligibility',
-            'calibration_stop', 'full_desk_gate'})
+            'calibration_stop', 'battery_window', 'full_desk_gate'})
         self.assertEqual(len(cad.TRIAGE_IDS), len(set(cad.TRIAGE_IDS)))
         ok = cad.next_arm_triage(passing_packet(), INTERNAL, IDENTITY, now_epoch_s=NOW_EPOCH)
         self.assertTrue(ok['admitted'], ok['reasons'])
@@ -110,6 +110,31 @@ class TriageListTests(unittest.TestCase):
                     internal = dict(INTERNAL)
                     del internal[name]
                     self.assertFalse(cad.next_arm_triage(passing_packet(), internal, IDENTITY, now_epoch_s=NOW_EPOCH)['admitted'])
+
+    def test_battery_window_resumes_automatically_once_then_needs_the_lead(self):
+        # Lead ruling 9 (W1-BLOCKERS-AGREEMENT): anti-idle automatic resume after one
+        # non-passing B window; two in a row need a signed battery disposition.
+        packet = passing_packet()
+        packet['checks']['battery_window'] = {'status': 'fail', 'basis': 'C2 B=1', 'consecutive_non_pass': 1}
+        result = cad.next_arm_triage(packet, INTERNAL, IDENTITY)
+        self.assertTrue(result['admitted'], result['reasons'])
+        self.assertEqual(result['checks']['battery_window']['status'], 'automatic_resume')
+        # The resume still needs the arm-computed top-up/OBC check.
+        self.assertFalse(cad.next_arm_triage(packet, {**INTERNAL, 'charging_battery': False}, IDENTITY)['admitted'])
+        packet['checks']['battery_window']['consecutive_non_pass'] = 2
+        refused = cad.next_arm_triage(packet, INTERNAL, IDENTITY)
+        self.assertFalse(refused['admitted'])
+        ruling = {'ruling_id': 'RUN_STATE-B', 'text_sha256': 'd'*64, 'after_window': 'C2',
+                  'lead_signature': 'lead: synthetic 2026-11-08'}
+        for bad in ({**ruling, 'after_window': 'C1'}, {**ruling, 'lead_signature': ''}, {**ruling, 'extra': 1}):
+            with self.subTest(bad=bad):
+                self.assertFalse(cad.next_arm_triage({**packet, 'battery_rulings': [bad]}, INTERNAL, IDENTITY)['admitted'])
+        resumed = cad.next_arm_triage({**packet, 'battery_rulings': [ruling]}, INTERNAL, IDENTITY)
+        self.assertTrue(resumed['admitted'], resumed['reasons'])
+        self.assertEqual(resumed['checks']['battery_window']['status'], 'resumed_by_lead')
+        for streak in (None, 0, True):
+            packet['checks']['battery_window']['consecutive_non_pass'] = streak
+            self.assertFalse(cad.next_arm_triage(packet, INTERNAL, IDENTITY)['admitted'])
 
     def test_packet_cannot_supply_or_override_arm_computed_checks(self):
         packet = passing_packet()

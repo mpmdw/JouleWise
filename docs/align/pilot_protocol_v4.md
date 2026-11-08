@@ -450,7 +450,7 @@ counts W1 when later sentinel windows make it evaluable. `F:364–409; A:94–99
 |---|---|
 | U1 | Included turns: OS level 0 / Nominal PM; ≤1 X1–X4 member per model-window; ≥99% sidecar coverage through episodes/gates, no gap >2 s; PM gaps ≤max(1 s, 5 periods); G1/H timeouts ≤2% of admissions, G0 ≤1/model-window |
 | U2 | G0 slow-temperature range ≤3 °C; every G1/H release verified within δ of its own episode's E |
-| U3 | **PENDING derivation, R11/R03.** No k=3, 2.576, fixed floor or numerical energy bar installed. Exact-token and active-clock ≤0.5% checks remain; a missing energy bar is INCONCLUSIVE, never a v3 fallback |
+| U3 | **Derived bar, R11/R03** (ruling 5 below): \|ΔE\| ≤ q·s₀·Ē (30B) or 1.5·q·s₀·Ē (D, only if R1's screen does not refute), s₀ the zero-centred RMS of one prespecified 30B pilot pair per session, q the exact series quantile at β=.05, N=16. No k=3, 2.576 or fixed floor. Exact-token and active-clock ≤0.5% checks remain; an unsigned or missing bar is INCONCLUSIVE, never a v3 fallback |
 | U4 | Sentinel window-mean relative shift ≤0.25% in magnitude and its 90% t interval within ±0.5%, df W−1; count W1 (W=4 at D3). E_ref = mean of R1 replay pair and W1 ordinals 5 and 17. Four-anchor 30B σ_w is print-only |
 | U5 | R1 three designed start states estimate D β_T; \|β_T\|₉₀·δ_slow ≤c·σ_pair, c=1.0; σ_pair=max(R1 replay-pair SD, 2.97 J). Point inside/upper bound outside means INCONCLUSIVE. Consequence amendment remains PENDING LEAD RULING below |
 | U6 | Early/late margins ±0.5·s_r with trajectory-clustered SEs; imprecise intervals say “calibration unresolved: imprecise”. D prints per-turn-position means, judging a position only if ≥6 trajectories reach it; no turn-index slope gate |
@@ -635,26 +635,39 @@ next completed charge. Initial charge acquisition: before the series, run the sa
 battery drops below 99 % once and charges to float. `pmset -g batt` is retained
 evidence only. UpdateTime dates the observation, not the end of charging. R1 drain remains a required print; Ed's charge hold gates D1.
 Charging is named exclusion **B** (`battery.member_span`). Print B counts, SoC
-and charger watts per member. **PENDING lead:** the separate numeric B window
-bar/consequence (R02 U); `bar_pass` stays unavailable. Arm float does not prove
+and charger watts per member. **B window rule (lead rulings 8-10 on
+[W1-BLOCKERS-AGREEMENT](v4/W1-BLOCKERS-AGREEMENT.md), rule `zero_B_auto_resume_v1`):**
+both desks replay the frozen `battery_join` on the closed battery journal over each
+member span. Any member with charging/AC loss or a charge-accumulator excursion fails
+the model-window B bar; missing evidence is unavailable, never a pass; discharge on AC
+(assist) is disclosed and retained. Consequence (ruling 9): B members are excluded and
+every other member is kept; `v4_B_bar` is false but does not fail the full-desk gate.
+The next arm waits only for fresh admissible top-up evidence and the OBC attestation
+(`charging_battery`); a second consecutive non-passing B window needs a signed
+`battery_rulings` row (triage `battery_window`). The rule binds once the lead signs
+`battery_window_policy.json`; unsigned, it stays unavailable. Arm float does not prove
 zero battery flow through the member. Missing observations remain unavailable.
 
-**5 — U3: PENDING derivation (R11/R03; RUN_STATE 212 R11-2).**
-`scripts/align_v4_u3_bar.py` accepts explicit separated-ordinal, within-session,
-token-identical pilot pairs and emits descriptive signed relative differences,
-sample SD, source digests and a **PENDING** block. It emits no multiplier,
-margin or fitted-normal false-fail guarantee. Historical k=3 receipts are refused;
-the v4 desk never falls back to v3's bar. The lead/statistics owner must freeze:
+**5 — U3: frozen derivation (R11/R03; lead rulings 1-11 on
+[W1-BLOCKERS-AGREEMENT](v4/W1-BLOCKERS-AGREEMENT.md), procedure
+`session_zero_rms_series_exact_v1`).** The lead exports one prespecified,
+separated-ordinal, token-identical 30B pilot 4-10 replay pair per session (at least 5
+sessions, chosen by design position before energies are read, never substituted) and
+R1's adjacent D_spam a/b pair as a transfer screen (`scripts/align_v4_u3_export.py`).
+s₀ is the RMS of the relative differences about zero (df = n); q solves the series
+false-fail E_U[1−(1−P(|Z|>qU))^N] = β, integrating the shared scale uncertainty once,
+with β = .05 (halved if any pilot difference exceeds 3× the leave-one-out RMS) and
+N = 16 (W1 30B:4 + D:1, C1-C8 and T1-T3 D:1 each; RUN_STATE 226 R15). A pair fails if
+|ΔE| > q·s₀·Ē for 30B and f·q·s₀·Ē for D, f = 1.5 with a digest-bound written
+justification. A refuted or missing R1 screen leaves D U3 inconclusive. There is
+no multiplier outside this recomputed derivation: no k=3, 2.576 or floor. `validate_u3`
+admits only a lead-signed bar with an independent ADMIT gate naming its derivation
+digest, recomputing prediction and OC, with sources bound to the registration commit.
+One bar serves the whole series; it is never re-derived from windows it judges.
+Historical k=3 receipts are refused; the v4 desk never falls back to v3's bar.
 
-- the predictive distribution for a new replay, including mean drift, scale
-  estimation and small-sample uncertainty;
-- operating characteristics at the final window/stop-rule size, with predictive,
-  dependence and series false-failure sensitivities;
-- the limits of transferring 30B pilot variation to D, and D-specific qualification;
-- the chosen energy bar, derivation/source bytes and independent gate receipt.
-
-No pilot or R1 record is read here. U3 remains unresolved and registration
-cannot pass until this scientific derivation and its scoped implementation are admitted.
+No pilot or R1 record is read here. Live registration needs the lead's export,
+the signed bar and its independent gate.
 Failed U3 windows stay retained; no smaller m or unauthorized replacement is allowed.
 
 **6 — acceptance.** The U table above supersedes the old U4–U6 bars. U4 counts
@@ -858,7 +871,8 @@ from the committed record before the arm; the arm waits for them.
 | `sentinel_roster` | U4/U5 inconclusive adds two sentinels to the remaining windows |
 | `member_eligibility` | final eligibility adjudication (identity X5, U3 pairs, exclusions); counts are provisional until it passes |
 | `calibration_stop` | the B3 fixed-8 predicate over the packet counts (derived, not asserted): continue until 8 counted windows, `calibration_complete` before a test arm |
-| `full_desk_gate` | the full desk |
+| `battery_window` | previous window's B bar (rule `zero_B_auto_resume_v1`, W1-BLOCKERS lead ruling 9): pass, or the first non-passing window in a row resumes automatically on fresh admissible top-up + OBC attestation (`charging_battery`); a second consecutive non-passing window needs a signed `battery_rulings` row |
+| `full_desk_gate` | the full desk; a false `v4_B_bar` alone does not fail it (`battery_window` governs) |
 
 The full desk **must have completed and passed before the arm** when the previous
 window is W1 or any code or configuration changed since the last desk-passed

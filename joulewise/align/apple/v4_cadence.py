@@ -70,10 +70,16 @@ NEXT_ARM_TRIAGE = (
               'until 8 counted windows, '
               'calibration_complete for a test arm; pending_final_eligibility, '
               'insufficient_calibration and escalate_to_lead refuse'),
+    dict(id='battery_window', source=PACKET, first_window_na=True,
+         text='previous window B bar (rule zero_B_auto_resume_v1, lead ruling 9): pass; or the '
+              'first non-passing window in a row resumes automatically (B members excluded, '
+              'others kept; fresh admissible top-up + OBC attestation are charging_battery); '
+              'a second consecutive non-passing window needs a signed battery_rulings row'),
     dict(id='full_desk_gate', source=PACKET, first_window_na=False,
          text='full desk completed and passing before arm when the previous window is W1 or '
               'code/config changed since the last desk-passed state; otherwise it may run '
-              'off the MBP while the next window measures'),
+              'off the MBP while the next window measures. A false v4_B_bar alone does not '
+              'fail this gate: battery_window governs it (align_v4_session.full_desk_gate_pass)'),
 )
 TRIAGE_IDS = tuple(row['id'] for row in NEXT_ARM_TRIAGE)
 GATING_IDS = tuple(row['id'] for row in NEXT_ARM_TRIAGE if row.get('gating', True))
@@ -212,6 +218,17 @@ def next_arm_triage(packet, internal, identity=None, *, now_epoch_s=None):
         if status == 'not_applicable' and not (first and row['first_window_na']):
             status = 'fail'
             basis = 'not_applicable is allowed only for a previous-window check before W1: ' + basis
+        if name == 'battery_window' and status == 'fail':
+            streak = entry.get('consecutive_non_pass')
+            ruled = _battery_ruled(packet.get('battery_rulings'), previous)
+            if type(streak) is not int or streak < 1:
+                basis = 'a failed B window needs consecutive_non_pass >= 1: ' + basis
+            elif streak == 1:
+                status, basis = 'automatic_resume', 'first non-passing B window resumes automatically: ' + basis
+            elif ruled:
+                status, basis = 'resumed_by_lead', f'lead disposition {ruled}: ' + basis
+            else:
+                basis = f'{streak} consecutive non-passing B windows need a lead disposition: ' + basis
         if name == 'record_committed' and status == 'pass' and not record_ok:
             status = 'fail'
             basis = ('record_commit/record_path/record_sha256 is missing, malformed, not found, or not the last committed '
@@ -246,6 +263,18 @@ BENIGN_PER_PAIR_PER_WINDOW = 7    # protocol default roster: 14 benign (7/pair) 
 WINDOW_MEMBERS = 22               # 4 anchors + 2 sentinels + 14 benign + 2 sabotage
 ADDED_SENTINELS_MAX = 2           # protocol U4/U5 inconclusive: two sentinels added to remaining windows
 CAPTURED_MAX = WINDOW_MEMBERS + ADDED_SENTINELS_MAX    # the real captured maximum (24); sentinels are not calibrators
+
+
+def _battery_ruled(rulings, previous):
+    """The ruling_id of a signed battery disposition after ``previous``, else None."""
+    from scripts.align_v4_kit import valid_lead_signature
+    for row in rulings if isinstance(rulings, (list, tuple)) else ():
+        if (isinstance(row, dict) and set(row) == {'ruling_id', 'text_sha256', 'after_window', 'lead_signature'}
+                and isinstance(row['ruling_id'], str) and row['ruling_id'].strip()
+                and _is_digest(row['text_sha256']) and row['after_window'] == previous
+                and valid_lead_signature(row['lead_signature'])):
+            return row['ruling_id']
+    return None
 
 
 def _validated_rulings(rulings, window_ids):
