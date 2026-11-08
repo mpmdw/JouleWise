@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<array>
+	<dict>
+		<key>IOObjectClass</key>
+		<string>IOService</string>
+		<key>IORegistryEntryChildren</key>
+		<array>
+			<dict>
+				<key>IOObjectClass</key>
+				<string>IOUSBHostDevice</string>
+				<key>IORegistryEntryChildren</key>
+				<array>
+					<dict>
+						<key>IOObjectClass</key>
+						<string>IOBlockStorageDevice</string>
+						<key>IORegistryEntryChildren</key>
+						<array>
+							<dict>
+								<key>IOObjectClass</key>
+								<string>IOBlockStorageDriver</string>
+								<key>IORegistryEntryChildren</key>
+								<array>
+									<dict>
+										<key>BSD Name</key>
+										<string>disk4</string>
+										<key>IOObjectClass</key>
+										<string>IOMedia</string>
+										<key>IORegistryEntryID</key>
+										<integer>9002</integer>
+										<key>IORegistryEntryName</key>
+										<string>Synthetic Media</string>
+										<key>Whole</key>
+										<true/>
+									</dict>
+								</array>
+								<key>IORegistryEntryID</key>
+								<integer>9001</integer>
+								<key>IORegistryEntryName</key>
+								<string>IOBlockStorageDriver</string>
+								<key>Protocol Characteristics</key>
+								<dict>
+									<key>Physical Interconnect</key>
+									<string>USB</string>
+									<key>Physical Interconnect Location</key>
+									<string>External</string>
+								</dict>
+								<key>Statistics</key>
+								<dict>
+									<key>Bytes (Read)</key>
+									<integer>4096</integer>
+									<key>Bytes (Write)</key>
+									<integer>8192</integer>
+									<key>Operations (Read)</key>
+									<integer>4</integer>
+									<key>Operations (Write)</key>
+									<integer>8</integer>
+								</dict>
+							</dict>
+						</array>
+						<key>IORegistryEntryName</key>
+						<string>SSD@2</string>
+					</dict>
+				</array>
+				<key>IORegistryEntryName</key>
+				<string>SyntheticUSB@1</string>
+				<key>USB Serial Number</key>
+				<string>SYNTHETIC-SERIAL-001</string>
+			</dict>
+		</array>
+		<key>IORegistryEntryName</key>
+		<string>Root</string>
+	</dict>
+</array>
+</plist>

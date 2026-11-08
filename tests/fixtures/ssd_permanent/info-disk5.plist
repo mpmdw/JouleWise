@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>APFSContainerUUID</key>
+	<string>22222222-2222-4222-8222-222222222222</string>
+	<key>APFSPhysicalStores</key>
+	<array>
+		<dict>
+			<key>DeviceIdentifier</key>
+			<string>disk4s2</string>
+		</dict>
+	</array>
+	<key>Content</key>
+	<string>Apple_APFS</string>
+	<key>DeviceIdentifier</key>
+	<string>disk5</string>
+	<key>Internal</key>
+	<false/>
+	<key>VirtualOrPhysical</key>
+	<string>Virtual</string>
+	<key>Whole</key>
+	<true/>
+</dict>
+</plist>

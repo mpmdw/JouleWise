@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Content</key>
+	<string>EFI</string>
+	<key>DeviceIdentifier</key>
+	<string>disk4s1</string>
+	<key>DiskUUID</key>
+	<string>55555555-5555-4555-8555-555555555555</string>
+	<key>Internal</key>
+	<false/>
+	<key>MountPoint</key>
+	<string></string>
+	<key>Mounted</key>
+	<false/>
+	<key>ParentWholeDisk</key>
+	<string>disk4</string>
+	<key>Whole</key>
+	<false/>
+</dict>
+</plist>

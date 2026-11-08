@@ -1,0 +1,2 @@
+{"timestamp":"2026-11-08 12:00:01.000000+0000","processImagePath":"/usr/libexec/diskarbitrationd","subsystem":"com.apple.DiskArbitration","eventMessage":"disk4 appeared"}
+{"timestamp":"2026-11-08 12:00:02.000000+0000","processImagePath":"/System/Library/Kernels/kernel","subsystem":"com.apple.iokit.IOStorageFamily","eventMessage":"disk4: media is not present"}

@@ -1,0 +1,15 @@
+{
+  "schema": "joulewise.ssd_permanent.v1",
+  "mode": "B-unmount",
+  "policy": {
+    "q_seconds": 1800,
+    "quiescence_sample_seconds": 5,
+    "command_timeout_seconds": 30,
+    "log_timeout_seconds": 120,
+    "copy_timeout_seconds": 600,
+    "unmount_retries": 1,
+    "retry_delay_seconds": 1
+  },
+  "offload_directory": "joulewise-offload",
+  "identity": null
+}

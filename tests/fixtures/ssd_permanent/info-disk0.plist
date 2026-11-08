@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>BusProtocol</key>
+	<string>Apple Fabric</string>
+	<key>Content</key>
+	<string>GUID_partition_scheme</string>
+	<key>DeviceIdentifier</key>
+	<string>disk0</string>
+	<key>Internal</key>
+	<true/>
+	<key>VirtualOrPhysical</key>
+	<string>Physical</string>
+	<key>Whole</key>
+	<true/>
+</dict>
+</plist>

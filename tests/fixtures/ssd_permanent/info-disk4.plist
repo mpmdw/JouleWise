@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>BusProtocol</key>
+	<string>USB</string>
+	<key>Content</key>
+	<string>GUID_partition_scheme</string>
+	<key>DeviceIdentifier</key>
+	<string>disk4</string>
+	<key>DeviceNode</key>
+	<string>/dev/disk4</string>
+	<key>DeviceTreePath</key>
+	<string>IOService:/SyntheticUSB@1/SSD@2</string>
+	<key>Internal</key>
+	<false/>
+	<key>VirtualOrPhysical</key>
+	<string>Physical</string>
+	<key>Whole</key>
+	<true/>
+</dict>
+</plist>
