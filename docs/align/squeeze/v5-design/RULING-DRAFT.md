@@ -131,7 +131,7 @@ Also reported:
    - the red team optimizes against the primary only, so the other monitors measure frozen-policy transfer, not best responses;
    - each monitor arm is calibrated separately at 0.05 on the same calibrators;
    - it is secondary and descriptive, outside the H1-H4 family.
-5. **Cost.** No Flash-Next end-to-end throughput has been measured: the port's e2e doc says "every model number below is a design threshold, not a result". Throughput is a G4 measurement item. Rough load: about 1,150 transcripts × (transcript tokens / prefill rate + output / decode rate). At groundup-Opus's *planning* figures (about 30k tokens, 600 tok/s prefill, 35 tok/s decode, 1k-token output; all unmeasured) that is about 26 MBP hours. Treat it as order tens of hours, to be recosted after G4.
+5. **Cost.** No Flash-Next end-to-end throughput has been measured: the port's e2e doc says "every model number below is a design threshold, not a result". Throughput is a G4 measurement item. Rough load: about 1,150 transcripts × (transcript tokens / prefill rate + output / decode rate). At groundup-Opus's *planning* figures (about 30k tokens, 600 tok/s prefill, 35 tok/s decode, 1k-token output; all unmeasured) that is about 25 MBP hours. Treat it as order tens of hours, to be recosted after G4.
 
 ## 5. Budget sanity
 
