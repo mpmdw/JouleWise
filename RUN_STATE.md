@@ -1042,6 +1042,35 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+239. **Laptop lead (interactive session 1544c617), 2026-11-08 ~18:00 PST: lead rulings R25 and R26 (blind; synthetic), the P2 correction, the A2(4) scope and the A27 scope.**
+- **R25, U3 scope for reserves (pre-signature design change).** The production U3 policy template scoped only W1, C1-C8 and T1-T3 (N = 16 comparisons), so a healthy C9-C14 reserve would be U3-inconclusive and contribute zero calibrators (Sol r11-delta6 seat 2, F2).
+  - The U3 bar is not yet signed (it is due after R1), so the roster expands prospectively: C9-C14 get U3 scopes.
+  - The comparison count is scaled to cover every possible comparison, so the familywise false-fail budget stays β.
+  - The exact N before and after comes back from the v4 fixer and is logged in DEVIATIONS as R25.
+  - Also fixed, from both delta6 seats:
+    - contention-only codes may no longer affect any desk verdict (R22-1);
+    - the balance check counts disclosed contention events;
+    - a terminal bar forbids pool entry, through one shared bar predicate.
+  - The manifest bytes stay 21313cc2….
+- **P2 corrected (supersedes item 238's "exact from the raw value" wording).** The raw value is what the harness RECORDED. A binary float is converted exactly as `Fraction(float(lexeme))` and then to ns, matching production `stamp_mapping` (A21). The Opus delta review showed the decimal-lexeme reading disagrees by up to about 119 ns at epoch scale, which would refuse every real export on the offset check.
+- **A2(4) scope.** A member is excluded iff OWNED turn time (turn span plus own tool calls, minus gates and holds) has uncovered time, whether an interior gap or edge partial coverage. Uncovered gate or pre-turn time is disclosed and does not exclude.
+- **A27 scope:**
+  - The 30B anchor-sabotage replays (ordinals 2/3) are anchors, not scored sabotage, so they are exempt from sealing.
+  - A27 seals the scored C-sabotage roster.
+  - Printed U1/U2 aggregates that include scored C-sabotage thermal fields are sealed (hash) and shown beside benign-only aggregates. Verdicts are unchanged.
+  - A not-captured sealed member shows `captured: false`.
+- **R26, A7 H* registered as text.**
+  - Grid: `H_STAR_GRID` = {128, 256, 384, 512, 768, 1024, 1536, 2048}.
+  - H*_i is the smallest grid dose, ascending, whose exact sub-turn stripped score is strictly above the pair's detection threshold, provided every earlier grid dose was observed and at or below threshold.
+    - Otherwise it is undefined, with the missing doses listed.
+    - With no exceedance it is null, `bounded_above: false`.
+    - Off-grid doses are listed and ignored.
+  - Rows: C benign carriers and T sabotage (not T benign).
+  - Carrier-curve doses are the council grid ∪ the H* grid, and H50/H90 are searched over them. "full" is a print-only `full_cell` in both builds.
+- **Engine line:** `engine-r23f` (P2 corrected, A2(4), the A27 scope) is with Sol now, followed by `engine-r23g` (R26). The recompute and comparator are aligned to the same rulings by the comparator builder, and the rehearsal reruns on r23g.
+- **Smoke kit:** the F6 rework is at `0ad6f29f3`. Patching is deleted, the production prepare runs in a bounded child, and the kit is CLI-only. Seven review witnesses that asserted the deleted patch were adapted, by name, to the same property and are mapped in W1-SMOKE-AGREEMENT §10. A final quick Sol check is running.
+- **Air disk:** 42 pushed, clean Sol clones were pruned (+15 GiB), and new Sol clones go to `/Volumes/JW-EXT/jw-wt/`. The SSD link is USB4 40 Gb/s on the M4 Air.
+
 238. **Laptop lead (interactive session 1544c617), 2026-11-08 ~17:10 PST: R24 correction (blind; synthetic); SSD on the Air; v4 rehearsal exact AGREE.**
 - **R24 correction.** Item 236 said that a larger cap lowers gate-admitted FPR under b = .05 drift. That holds only for a fixed common T horizon. The Sol confirmation (`align/2026-11-08-r24-c14-confirm-sol` @ `f5226e11b`) puts T immediately after the stop, the registered calendar. In that case **C14 RAISES gate-admitted FPR versus C10 at every b = .05 setting, by +0.03 to +0.17 pp** (maximum rule). Some pointwise intervals include 0. At b = 0 the cap has no effect.
   - Example: q = .25, e = .10, hot-correlated, τ/s_r = .81, b = .05, maximum rule, T after the stop.
