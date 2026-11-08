@@ -1042,6 +1042,19 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+233. **Laptop lead (interactive session 1544c617), 2026-11-08 12:45 PST: the v5 DESIGN RULING IS SIGNED; A37 ruled; post-move resume.**
+- **v5:** `docs/align/squeeze/v5-design/RULING-DRAFT.md` revision 7 is adopted as the v5 design ruling, at `align/2026-11-08-v5design-ruling` @ `4078c0850`. It went through seven rounds, each with two independent Sol reviews. Round 7 got SIGN from both seats (`-delta7-sol1` @ `d8344de4e`, `-delta7-sol2` @ `66f698303`). Opus wrote it, and the lead has the final say on design.
+  - **Design:** the hybrid. Native attacks run on Sol2's ground-up backbone, reusing v4's engineering and fresh calibration.
+  - **Primary endpoint:** R11 D09. For H1-H4, an attempt-level betting test (predictable conditional-mean null, Holm across the four hypotheses).
+  - **Sizing:** prospective. G12 measures regression and unknown rates. 28 windows at baseline; under stress, the ladder H4 reallocation → +8 → +16 → +24 → +32. If capacity falls short, the claim narrows.
+  - **Other rules:** the honest gate is a gross-inflation check (≤22/280 per rule). Batching is allowed only for unmeasured work.
+  - **Still open for Ed (§7):** the monitor spend cap, the model ladder, the cloud pre-screen, a 4 TB custody drive, the desktop meter, MBP time Dec-Feb, and a possible March extension.
+- **A37 (blind):** consecutive power samples with an interior gap or overlap of 1 µs or less are treated as contiguous. The later sample's start snaps to the previous sample's end. Edge gaps always count. Both v4 analysis builds apply this.
+- **The laptop moved about 12:00-12:35.** Four agents stopped on network loss. Their state is in `docs/handoff/2026-11-08-laptop-move/RESUME.md`, and all were resumed at 12:40. R1 was unaffected.
+- **Needs Ed:**
+  - the prune's tag-protection ruleset and the off-machine bundle copy. The auto-mode classifier refused both for the agent; commands are in `ops/2026-11-08-prune-execution`.
+  - the SSD choice.
+
 232. **Laptop lead (interactive session 1544c617), 2026-11-08 12:15 PST: Block 5 results and Ed's paper ruling.**
 - **Results** are in `docs/analysis/b5/RESULTS.md` on `analysis/2026-11-08-b5-results` @ `0b0658a20`. Both primary contrasts in the Holm family (m=2) are `direction_supported`, with claim ceiling L2.
   - **Decode, 8B − 1.7B:** +146.63 J. Decision interval 141.36-151.90 J, which includes the timing bound. 6 of 10 quads.
