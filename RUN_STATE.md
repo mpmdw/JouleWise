@@ -1042,6 +1042,28 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+223. **Magistrate activation b17edfbb (Opus 5.5, headless, 2026-11-08 from 00:38 PST): the agreement report's three fixes to Sol's R1 route are built and verified, so a ruling for that route can arm right away. R1 is not armed; it still waits for the lead's ruling (item 220).** No pending notices, no unread mail from Ed, no new directives.
+- **Agreement read:** `docs/align/R1-ARM-AGREEMENT.md` on `lane/2026-11-08-r1-arm-opus` @ `fa7b8bae1` recommends Sol's HAZARD_PACK route (`0b54827da`) with fixes D2, D3 and D5 plus runbook lines D6 and D13.
+- **Fix branch** `lane/2026-11-08-r1-arm-fixes` @ `20e9edbc4`, from `5c0b79d31`. Built by a Sol 6.1 high seat, R1-ARM-FIX-1 (brief and log in `~/night-archive/seats-b17edfbb/`). Only `r1_arm.py`, `arm_align_r1.py`, `test_r1_arm.py` and the runbook changed. Nothing changed in R1 measurement code, run_night, night_gate, the watchdog or b5.
+  - **D2:** `window_max_s` = 105,427 s base + 11,164 s for each local 11:45 crossing after the first, iterated to a fixed point. The base is 96,427 + 3,300 + 2×1,800 + 2×600 + 600 + 300 (display dwell).
+    - t0 13:30 PST → 105,427 s
+    - t0 08:00 PST → 116,591 s
+    - Run `arm_align_r1.py size --t0 <epoch>` to size any other t0.
+  - **D3:** `pmset displaysleepnow` plus a recorded 300 s dwell before the pre bookend. A failed pmset is recorded as a flag and does not stop the night.
+  - **D5:** the SHA-256 of `scripts/night_chains/align_r1_rehearsal.zsh` is written into the wrapper as a literal. On a mismatch the wrapper exits 65 before any work (tested by changing one byte).
+  - **Runbook additions:** t0 ≥ now + 15 min; `df -g` recorded at arm; no git operation in `$M` between install and t0; the next activation turns network time back on.
+  - **Seat's decisions:** the dwell adds 300 s to the base; Opus's 30 s meter allowance is left out; crossings counted on a half-open window `[t0, end)`.
+- **Magistrate re-execution:**
+  - `tests.align.test_r1_arm` 9 OK, including the normal and interrupt-restore synthetic runs end to end through the real run_night.
+  - `test_v4_kit` 116 OK; `test_r1_runtime` 33 OK.
+  - The `size` CLI checked at three t0 values.
+- **Still owed by the agreement:** an independent Opus executing review of `20e9edbc4` (item 219). This is the laptop lead's.
+
+**Next activation (replaces item 222's pointer; items 202-204, 207, 209, 210, 212-221 hold):**
+(1) Wait for the lead's ruling item naming the R1 route and sha. If it names Sol's route, expect `20e9edbc4` or a descendant. Arm nothing before the ruling.
+(2) On the ruling, follow item 222 (2)-(3), using the fix branch's runbook. Size the window with `size --t0`. Item 216 prefers a t0 of 13:20-14:00 PT.
+(3) Item 205 (4) holds.
+
 222. **Magistrate activation 17ca7bed (Opus 5.5, headless, 2026-11-08 about 00:50 PST): R1-ARM-1 (Sol) delivered and passed an executing review on the Mac. Under item 220, R1 is not armed. It waits for the agreement report and a lead ruling.**
 - **R1-ARM-1** (`lane/2026-11-08-r1-arm`):
   - **Build:** `0b54827da`, plus review commit `5c0b79d31`. Route (a): a HAZARD_PACK window around the unchanged R1 chain, with diagnostic D-109 bookends; KM003C starts through the shared driver.
