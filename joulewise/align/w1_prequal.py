@@ -31,6 +31,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import traceback
 
@@ -418,12 +419,14 @@ def check_arm_cli(ctx):
                   'before the installer)', cases=rows)
 
 
-def _arm_on_records(ctx, measurement, packet_or_path, *, now):
+def _arm_on_records(ctx, measurement, packet_or_path, *, now, quiet=True):
     """The production ``arm_checks`` against a git measurement root, every host command faked."""
     from scripts import align_v4_session as session_mod
     log = battery_log(ctx.work / f'battery-{time.monotonic_ns()}.jsonl', now)
     host = FakeHost(now=now)
-    with contextlib.redirect_stdout(io.StringIO()):
+    # redirect_stdout swaps the process-wide sys.stdout: callers running arms in threads pass quiet=False
+    # and redirect once around the whole pool (_arms).
+    with contextlib.redirect_stdout(io.StringIO()) if quiet else contextlib.nullcontext():
         return session_mod.arm_checks(measurement, {'runtime_requirements': {'ac_powermode': 0}}, runner=host,
                                       volume_runner=host, obc_off_attested_by='w1-prequal synthetic',
                                       battery_log=log, now=lambda: now, next_arm_triage=packet_or_path,
@@ -483,10 +486,10 @@ def _find_rebuilt(value, depth=0):
     return None
 
 
-def _arm_file(ctx, measurement, packet, *, now):
-    path = ctx.work / f'packet-{time.monotonic_ns()}.json'
+def _arm_file(ctx, measurement, packet, *, now, quiet=True):
+    path = ctx.work / f'packet-{time.monotonic_ns()}-{threading.get_ident()}.json'
     path.write_text(json.dumps(packet, indent=2, sort_keys=True) + '\n')
-    return _arm_on_records(ctx, measurement, path, now=now)
+    return _arm_on_records(ctx, measurement, path, now=now, quiet=quiet)
 
 
 def _rebuild(ctx, name):
@@ -558,8 +561,8 @@ def _refused_for(arm, needles):
 
 def _arms(ctx, root, packets, now):
     from concurrent.futures import ThreadPoolExecutor
-    with ThreadPoolExecutor(max_workers=6) as pool:
-        return list(pool.map(lambda packet: _arm_file(ctx, root, packet, now=now), packets))
+    with contextlib.redirect_stdout(io.StringIO()), ThreadPoolExecutor(max_workers=6) as pool:
+        return list(pool.map(lambda packet: _arm_file(ctx, root, packet, now=now, quiet=False), packets))
 
 
 def _zero_capture_attempt(packet):
