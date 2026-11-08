@@ -125,3 +125,4 @@ Written by the laptop lead (Opus 5.5, session 1544c617) before Ed retired this C
 - the Sol drafts `align/2026-11-07-{squeeze-prereg,squeeze-analysis,adversary-kit,reviewer2}`;
 - the workflow outputs `align/2026-11-07-v4-{v4-registration,squeeze-design,reviewer2}`;
 - part 5, `research/2026-11-07-tripwire-directions`.
+- **Cross-family soundness rule (Ed):** every v4/squeeze step gets at least two independent Sol 6.1 xhigh seats next to the Claude seats, plus an agreement report. For tonight's run, see the agenda's MAIN GOAL section. Start from `align/2026-11-07-squeeze-agreement` (`docs/align/squeeze/AGREEMENT.md`) once it lands. It is the merged, agreement-weighted v4 action list.

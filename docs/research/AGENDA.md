@@ -10,6 +10,12 @@ Started 2026-11-07 by the laptop lead from Ed's decisions. Update it in place; k
   - **Sol, detached** (pushes on completion when the audit is clean): `align/2026-11-07-squeeze-prereg` (preregistration addendum draft), `align/2026-11-07-squeeze-analysis` (joint detection curves, adaptive-adversary simulator, power analysis), `align/2026-11-07-adversary-kit` (meter-aware adversary variants and a positive-control compute injector), `align/2026-11-07-reviewer2` (hostile-reviewer audit). Status files: `/private/tmp/jwsol/squeeze/<name>/pushed`.
   - **Claude workflow `v4-squeeze-readiness`** (Fable + Opus seats; each track pushes itself): `align/2026-11-07-v4-v4-registration` (closing the pre-W1 registration blockers, plus the blind gate checklist), `align/2026-11-07-v4-squeeze-design`, `align/2026-11-07-v4-reviewer2`.
   - Also `research/2026-11-07-tripwire-directions` (part 5: what the tool enables if it works).
+- **Cross-family seats (Ed: "every step should have multiple supporting sol 6.1 xhigh seats ... v4 must be as sound as possible"):**
+  - Two independent Sol seats per workflow track: `align/2026-11-07-sol-{v4-registration,squeeze-design,reviewer2}-seat{1,2}`.
+  - A second Sol preregistration draft: `align/2026-11-07-squeeze-prereg-seat2`.
+  - Independent Sol reviewers that run the tests: `align/2026-11-07-squeeze-analysis-review` and `align/2026-11-07-adversary-kit-review`.
+  - **Agreement report** `align/2026-11-07-squeeze-agreement` (`docs/align/squeeze/AGREEMENT.md`): findings by which seats raised them (Fable, Opus, Sol-1, Sol-2), agreement k of n, adjudicated conflicts, and one merged v4 action list weighted by cross-family agreement. Its orchestrator is `/private/tmp/jwsol/squeeze/seats.zsh`.
+
 - **Critical path:** R0-L3 merge (#699/#700) → R0 → R1 (RUN_STATE 202) → R10 procedure → W1 kit (`lane/2026-11-07-w1-kit-r10`) → close the pre-W1 registration blockers → the blind registration gate → W1 → D windows (Q4) → registration-grade calibration (Q6) → adaptive red team and positive controls, preregistered before data.
 
 ## Ed's direction (2026-11-07)
