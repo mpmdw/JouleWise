@@ -24,7 +24,7 @@ registration, threshold, estimator, capture code, or analysis pipeline changed.
 | Existing record | Interpretation |
 |---|---|
 | `chain-stages.jsonl` | Native stage start/end, kind, rc; calibration/derivation scaffold, verdict finalize, backup offload. Collection stays unattributed until member detail is supplied. |
-| `r1_result.json` | Native epoch-ns attempt envelopes, including superseded attempts; bracket/soak contexts; aggregate `os_batch_wait_s` and `result.phases_s` printed separately. |
+| `r1_result.json` | Native epoch-ns attempt envelopes, including superseded attempts; bracket/soak contexts; chronological pre-attempt gaps, measured wait/release boundaries and separately labelled requested `os_batch_wait_s` and overlapping `result.phases_s`. |
 | `night/result.json`, `chain.started`, `chain.exited` | Observed driver and supervised chain boundaries; wall/monotonic elapsed cross-check. Last stage end never substitutes for missing chain exit. |
 | `night.log` | ISO-stamped driver-start → gate-verdict admission aggregate; more specific timed receipts refine it. Other windows' log rows are rejected when driver bounds are supplied. |
 | Each bundle's `metadata.json`, `events.jsonl`, `outputs/align_episode.json` | Member identity; prepare/idle/warmup/measured/cleanup/reduce spans; prefill/decode/tools and G0/G1/H intervals. No power values, energies, correctness outcomes or detector scores enter the calculation. |
@@ -42,17 +42,39 @@ Unrecorded inter-member gaps remain unknown, never assumed cooling or idle.
 Stage/attempt envelopes and raw gate receipts are inclusive diagnostic tables;
 do not add them to the disjoint totals. Deadline tail is an overlay only.
 
-R1's batch wait precedes an optional release and `started_ns`. Subtracting the
-wait from model start would fabricate its placement. Therefore all such waits
-are **unplaced aggregates**, including waits exceeding 5,400 s; they never
-inflate wall totals. Missing first-token stamps do not become decode or
-prefill. Missing clock mappings prevent episode placement; native paired
-stamps provide a labelled fallback. Clock uncertainty is retained. A wall vs
-monotonic disagreement above 1 ms is a diagnostic warning only, never a
-measurement acceptance threshold; inconsistent paired episode elapsed clocks
-prevent its placement. Episode intervals outside the member envelope are
-unplaced. Nanosecond bookkeeping is not nanosecond acquisition precision:
-chain stage timestamps have whole-second resolution.
+After the Opus review, R1's native `g0_release.g0.entry_epoch_s` /
+`exit_epoch_s` place the G0 wait as a labelled gates activity. An explicit
+outer release envelope additionally places its startup/pre-roll/teardown
+context; the inner gate refines it without double counting. Explicit timed
+`os_batch_wait` objects are also placed. Bare gate monotonic stamps cannot be
+treated as epoch. Each wait must fit the recorded pre-attempt gap, when both
+attempts exist. The table includes the gap and recorded G0 wait duration.
+
+`os_batch_wait_s` sums **requested, unmeasured** sleep delays. With no release,
+the table shows `[started - requested_wait, started)` as an inferred request
+position only; it never enters the measured ledger or extends its envelope.
+With an intervening release it remains unplaced. A configured 65 s pre-roll
+is never backfilled as a measured interval. Native R1 `phases_s.decode`
+subtracts holds but includes tools; the reader's disjoint `decode` excludes
+tools and gates/holds. Worksheet labels state the difference explicitly.
+
+Missing first-token stamps do not become decode or prefill. Missing clock
+mappings prevent episode placement unless native paired stamps provide a
+labelled fallback. A valid explicit mapping is retained across paired-stamp
+drift, with its recorded uncertainty preserved separately and absolute drift
+added conservatively to the reader's placement uncertainty. Driver/chain
+warnings use `max(1 ms, 20 ppm * duration)` and report signed ppm. The 20 ppm
+diagnostic allowance accommodates the review's observed ~9.2 ppm ordinary
+drift; it is not a measurement acceptance threshold. Paired-only fallback
+refuses drift exceeding its bracket uncertainty plus that allowance.
+Episode intervals outside member bounds remain unplaced. Without a complete
+run start/finalize pair, the member uses its first/last valid event envelope,
+labels that basis `event_envelope_incomplete_run` and keeps full `member_wall`
+unavailable. No event bounds means no episode placement. A lone chain exit
+still extends the observed envelope to include its unknown tail.
+Nanosecond bookkeeping is not nanosecond acquisition precision: chain stage
+timestamps have whole-second resolution. Future boundary receipts and exact
+producer insertion points are proposed in [TIMING-RECEIPTS.md](TIMING-RECEIPTS.md).
 
 The worksheet prints phase seconds/fractions, per-member phase/activity
 shares, recorded turns/tokens, raw released/censored gate waits, attempt waits,
@@ -64,6 +86,11 @@ Only explicitly supplied members are covered; roster completeness is not
 established. Full closure and next-arm turnaround need corresponding records.
 
 ## Synthetic timings and verification
+
+The benchmark figures and hash below describe the original reader at
+`44fb124cc`, before the review fixes and additional diagnostic fields/labels.
+Current regression results are in
+[the fix-timing report](../run_reports/2026-11-08-fix-timing.md).
 
 Command: `python3.13 -B -m tests.align.benchmark_window_timing --members 22 --repeats 5`.
 Python 3.13.18; 74 invented files, 60,616 input bytes, 338 disjoint window rows.
