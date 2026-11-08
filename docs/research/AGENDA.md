@@ -9,7 +9,7 @@ Started 2026-11-07 by the laptop lead from Ed's decisions. Update it in place; k
 - **Work in flight on it** (started 2026-11-07 about 21:00 PST):
   - **Sol, detached** (pushes on completion when the audit is clean): `align/2026-11-07-squeeze-prereg` (preregistration addendum draft), `align/2026-11-07-squeeze-analysis` (joint detection curves, adaptive-adversary simulator, power analysis), `align/2026-11-07-adversary-kit` (meter-aware adversary variants and a positive-control compute injector), `align/2026-11-07-reviewer2` (hostile-reviewer audit). Status files: `/private/tmp/jwsol/squeeze/<name>/pushed`.
   - **Claude workflow `v4-squeeze-readiness`** (Fable + Opus seats; each track pushes itself): `align/2026-11-07-v4-v4-registration` (closing the pre-W1 registration blockers, plus the blind gate checklist), `align/2026-11-07-v4-squeeze-design`, `align/2026-11-07-v4-reviewer2`.
-  - Also `research/2026-11-07-tripwire-directions` (part 5: what the tool enables if it works).
+  - Also `research/2026-11-07-tripwire-directions` (part 5: what the tool enables if it works; see "If the tripwire works" below).
 - **Cross-family seats (Ed: "every step should have multiple supporting sol 6.1 xhigh seats ... v4 must be as sound as possible"):**
   - Two independent Sol seats per workflow track: `align/2026-11-07-sol-{v4-registration,squeeze-design,reviewer2}-seat{1,2}`.
   - A second Sol preregistration draft: `align/2026-11-07-squeeze-prereg-seat2`.
@@ -36,6 +36,14 @@ Started 2026-11-07 by the laptop lead from Ed's decisions. Update it in place; k
 
 ## ALIGN / SHADE-Arena (critical path)
 R0 → R1 (RUN_STATE 202) → W1 under ruling R10 (RUN_STATE 203) → D windows (Q4: 3 windows of 59,520 s) → registration-grade calibration (Q6). Pre-W1 blockers are in `docs/research-audits/2026-11-07/w1-prearm-gate.md`.
+
+## If the tripwire works: research directions (part 5)
+Design study [`docs/research/tripwire-directions.md`](tripwire-directions.md) (draft PR; its 22 checks are in [`tripwire-directions-checks.md`](tripwire-directions-checks.md)) answers Ed's question of what more the tool enables, and whether any of it would be noteworthy. One Fable 5.1 seat delivered 11 directions (the Opus seat was stopped by a safety classifier), and each direction got a Fable 5.1 and an Opus 5.5 check. None is refuted on prior work, and all are incremental *as designed*, because arithmetic settles most of their claims. "Better than SHADE-Arena's monitor alone" is trivially true against hidden reasoning, so it is the wrong bar. Three directions have a real path to a noteworthy result. They largely reduce to one paper, the NeurIPS 2027 squeeze, and the most likely noteworthy outcome is a measured limit. The lead estimates, conditional on v4 clearing W1 and the D windows, about two in three for a solid workshop paper and about one in four for a main-track paper. One open decision governs every adversarial claim: whether runtime token counts are authenticated. On a seeded local stack, software catches stripped reasoning for free, so energy's case is compute the runtime does not mediate.
+
+**Top three directions:**
+1. **Squeeze against a selective hider, with a replay verifier.** Per trajectory, compare H_blind (incriminating tokens a hider must delete to blind the monitor) with H_det (hidden tokens the meter catches). Score each audited episode against an in-window replay of its own declared log. Replays repeat to about 2 J, against 19-58 J for the regression residual. Desk now; measurement rides the squeeze cohorts.
+2. **Where the tripwire dies: batching and the attacker's cheapest compute.** Measure the marginal joules of a hidden batched row on this Mac, dense D against MoE 30B, and the device-level H50(B). Run it on the Mac first (1-2 nights); rent a GPU only if resolution survives B ≥ 4.
+3. **Energy counts bytes, not thoughts: a visibility map.** Measure the exchange rate of each hiding mechanism (sequential, batched, latent and recurrent-depth, energy-blind in-place and suppressed reasoning) and which channel sees it: monitor, runtime counter, fit, replay or time. Run it as riders, about one night in total.
 
 ## Interp × energy (Ed's main interest)
 Design study: `docs/research-audits/2026-11-07/interp-weight-edit-energy.md` (draft PR #702; 18 ideas, 36 adversarial checks).
