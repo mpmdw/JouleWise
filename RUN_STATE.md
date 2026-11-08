@@ -1042,6 +1042,52 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+226. **Laptop lead (interactive session 1544c617), 2026-11-08 01:05 PST: lead rulings R14-R16 for the post-R1 critical path.** Each rests on paired Sol and Opus builds plus an agreement report (item 220). All are made blind. v4 is unregistered, so these go into the registration text.
+- **R14, W1 blockers** (`align/2026-11-08-w1-blockers-{sol,opus}`; agreement `docs/align/v4/W1-BLOCKERS-AGREEMENT.md`):
+  - **U3:** β = .05 series false-fail.
+    - **N = 16** (W1: 4×30B + 1×D; one D pair in each of C1-C8 and T1-T3, with 3 test windows per R15).
+    - One prespecified pilot pair per session, at least 5 sessions, no substitution.
+    - Zero-centred RMS with the exact series quantile. Relative-only.
+    - D transfer f = 1.5. A missing or failed R1 screen makes D U3 inconclusive, so the W1 desk fails and the lead disposes.
+    - If any pilot |r|/s₀ > 3, halve β before signing.
+    - One bar for the whole series, never re-derived.
+  - **B:** zero charging members (accumulator excursions count).
+    - A fail is an operational stop with **automatic resume**: charging members are excluded, the rest kept, and the next arm needs fresh admissible top-up evidence and OBC attestation.
+    - A lead disposition is needed only after two consecutive B fails.
+    - Assist is disclosed only.
+- **R15, D/C/T series** (`align/2026-11-08-dct-series-{sol,opus}`; agreement `docs/align/v4/DCT-SERIES-AGREEMENT.md`):
+  - **Code base and allocation:** Sol's code base with Opus's allocation.
+    - D_k = C_k, so there are no separate fit windows.
+    - Distinct held-out seeds in kit order: C uses 2-65, T uses 66-89, skipping 1 and 91-99. A zero-capture re-arm reuses its seeds.
+    - Sabotage sits at ordinals 9 and 18, under the Amendment 1 order.
+  - **Test cohort: 3 windows** (T1-T3), D shape, no v5 content. This settles the open item from 214/215. Neither 3 nor 6 windows can verify a 2.5 % FPR, so v4's FPR statement stays conditional (item 217).
+  - **Window rules:**
+    - Keep the C6 fence.
+    - A U1-U3 fail bars that window from the pool, but it still counts toward the 8.
+    - Final adjudication may lower counts, never raise them.
+    - Sabotage members in C windows count toward nothing. Their DC rows stay sealed for v5.
+    - A sentinel-alternate regeneration happens before C1 if W1 rejects ordinal 5.
+    - D members are sized at the largest W1 D member time.
+    - The series binding is required on the W1 arm too.
+    - Resume after escalation is via a `lead_release` ledger entry.
+  - **Escalated-window ceiling:** a window carrying the +2 sentinels may run to **62,400 s**. Ordinary windows keep 59,520 s.
+  - **Bug to fix before W1:** `bytes_h_session.measurement_view` labels D models `neg8_reference`, which affects W1 too. It gets fixed and reviewed on the W1 side.
+  - **Seed check:** the merged manifest changes bytes, so it needs one more paired seed check before signing.
+- **R16, condition-based waits** (`align/2026-11-08-condition-waits-{sol,opus}`; agreement `docs/align/v4/CONDITION-WAITS-AGREEMENT.md`):
+  - **P1 cool-down, in Sol's form:** release on a measured start state, not elapsed time.
+    - A two-sided ±δ temperature band around a reference Q, tied to R1's final power mode and sensors.
+    - The G0 slope rule.
+    - Fan, idle-power, display, OS/PM and battery checks.
+    - 180 s of stability, shared with the arm guard's clean run.
+    - Floor: 300 s after the last disruptive work (finalize, harvest and offload count as disruptive). Ceiling: 1,800 s per attempt.
+    - **Never arm at the ceiling.** Retry once after an ambient check, then the lead decides.
+    - The `quiet_start_state` triage entry binds the receipt digest.
+  - **P2:** one shared interval. The display stays asleep for at least 300 s, overlapping the cool-down. Guard READY, and nothing extra after READY.
+  - **Unchanged:** member idle stays 300 s; G0/G1/H, chain settles and countdowns stay.
+  - **CW-1:** one characterization run of at most 2 h on the MBP, after R1.
+  - **Fallback:** if Q or CW-1 is missing at registration, W1 keeps today's cool-down, with the band recorded as print-only.
+  - **Planning credit:** 0 minutes until a before/after measurement exists.
+
 225. **Laptop lead (interactive session 1544c617), 2026-11-08 01:00 PST: R1 ARM GO. Arm exactly `20e9edbc446a9f89a68badc1bd32bb0934cbb86d`, at the earliest t0 (item 224).** The lead's Opus executing review returned ADMIT_WITH_FIXES with no BLOCKER and no HIGH. The record is `docs/align/reviews/2026-11-08-r1-arm-fixes-lead-opus-review.md` on `lane/2026-11-08-r1-arm-fixes-review` @ `1a94ffb69`.
 - **REQUIRED (N1): do NOT follow the runbook's fetch line.** Runbook §1 fetches `refs/heads/lane/2026-11-08-r1-arm`, which is `5c0b79d31` and has none of D2/D3/D5. Instead:
   1. `git -C "$M" fetch origin 20e9edbc446a9f89a68badc1bd32bb0934cbb86d` (or `lane/2026-11-08-r1-arm-fixes`), then `git -C "$M" switch --detach 20e9edbc446a9f89a68badc1bd32bb0934cbb86d`.
