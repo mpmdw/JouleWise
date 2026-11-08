@@ -32,6 +32,13 @@ _NAMED_ARTIFACTS = (
     REGISTRATION+'w1_plan.json', REGISTRATION+'u3_bar.json', REGISTRATION+'wp19_receipt.json',
     REGISTRATION+'r1_soak_reference.json',
     'configs/campaigns/align_v4/plan_tree.json', 'configs/campaigns/align_v4/collection_plan.json',
+    # Configured and launched entry points the static walk cannot be trusted to find (delta2):
+    # WP15.runtime_entrypoint of registration/inputs.json and the R1 runtime config w1_g0_cap reads,
+    # the module-launched package entry (`python -m joulewise`), the registration helpers, and the
+    # committed dynamic trace that proves the synthetic W1/D/R1 chain stays inside this set.
+    'scripts/align_r1_runtime.py', 'configs/align/v4/r1_runtime.json', 'joulewise/__main__.py',
+    'scripts/align_r1_to_w1_chain.py', 'scripts/align_v4_w1_synthetic.py', 'scripts/align_v4_wp18_fixtures.py',
+    'scripts/align_v4_dynamic_trace.py', 'docs/align/v4/dynamic_closure_trace.json',
 )
 
 
@@ -306,32 +313,51 @@ EXECUTED_CLOSURE = (
 )
 ARTIFACTS = _NAMED_ARTIFACTS + tuple(p for p in EXECUTED_CLOSURE if p not in _NAMED_ARTIFACTS)
 
-# Two tiers (Opus cold review MED-1, lead disposition). STRICT: any change is a
-# re-registration (new receipt, signature, both gates): the protocol, deviations,
-# rulings, estimands, desk, kit, registration inputs, the whole episode/execution path
-# joulewise/align/**, the generation adapter, the KM003C reader and the W1/D/R1 script
-# spine (scripts launched by the night runner, subprocess-launched scripts included).
-# AMENDMENT: every other bound path (b5/b6 modules, hazards, flags, other scripts):
-# a change is admitted only through a lead-signed ``amendments`` row in the receipt.
+# Two tiers (Opus cold review MED-1; delta2 inverted the default). STRICT is the default:
+# every bound path is strict, and a change is a re-registration (new receipt, signature, both
+# gates). AMENDMENT is a short explicit allowlist of modules proven NOT executed on the
+# W1/D/R1 path: each is classified retired, analysis, mock, other-hardware, acceptance or desk
+# in the reviewed refusal census (configs/gates/hazard_refusals.json scan.not_scanned) and none
+# is executed by the committed dynamic trace (docs/align/v4/dynamic_closure_trace.json). A
+# change to one is admitted only through a lead-signed ``amendments`` row in the receipt.
+AMENDMENT_ALLOWLIST = (
+    # other_hardware: another platform's adapter; never selected on the Mac
+    'joulewise/adapters/node_client.py', 'joulewise/adapters/nvidia_smi.py',
+    # retired: the ARM/T0 and v5 qualification path; block 5 does not run it
+    'joulewise/arm_readiness_evidence.py', 'joulewise/arm_readiness_evidence_t0.py',
+    'joulewise/night_agent_install.py', 'joulewise/quiet_predicate_campaign.py',
+    'joulewise/t0_rehearsal.py', 'joulewise/v5_qualification.py', 'joulewise/zero_capture_facts.py',
+    'scripts/capture_t0_step.py', 'scripts/check_v5_arm_abort.py',
+    'scripts/produce_t0_rehearsal_bundle.py', 'scripts/write_v5_qualification_plan.py',
+    # analysis: desk analysis after the harvest; decides no collection and no window exclusion
+    'joulewise/envelope_gate.py', 'joulewise/floor_extraction.py', 'joulewise/kv_size.py', 'joulewise/report.py',
+    # desk: tooling run before the arm or after the harvest; never inside a window
+    'joulewise/b6/precheck.py', 'joulewise/b6/smoke.py', 'joulewise/session_structure.py',
+    'scripts/advance_b5_ledger_pin.py', 'scripts/bytes_gates.py', 'scripts/install_night_agent.sh',
+    # mock / acceptance: test doubles; desk issuing of instrument acceptances before any window
+    'scripts/fixture_orphan_census.py', 'scripts/issue_calibration_acceptance_generation.py',
+)
+# A small independent inventory of the actual W1/D/R1 launch spine (delta2 S2): launched,
+# configured or chain-named programs that must be bound and strict. The tests derive more of
+# them from plan_tree.json, the chain tool table, inputs.json (WP15) and the dynamic trace.
 STRICT_SCRIPTS = (
     'scripts/run_night.py', 'scripts/align_pilot_kit.py', 'scripts/align_pilot_session.py',
-    'scripts/align_r1_rehearsal.py', 'scripts/align_r1_turn_counts_export.py', 'scripts/align_v4_kit.py',
-    'scripts/align_v4_offloads.py', 'scripts/align_v4_session.py', 'scripts/align_v4_thermal_desk.py',
-    'scripts/align_v4_u3_bar.py', 'scripts/align_v4_wp19.py', 'scripts/align_w1_budget_procedure.py',
-    'scripts/align_v4_battery_log.py', 'scripts/validate_align_v4_w1_plan.py', 'scripts/bytes_h_session.py', 'scripts/launch_window.py',
+    'scripts/align_r1_rehearsal.py', 'scripts/align_r1_runtime.py', 'scripts/align_r1_turn_counts_export.py',
+    'scripts/align_v4_kit.py', 'scripts/align_v4_offloads.py', 'scripts/align_v4_session.py',
+    'scripts/align_v4_thermal_desk.py', 'scripts/align_v4_u3_bar.py', 'scripts/align_v4_wp19.py',
+    'scripts/align_w1_budget_procedure.py', 'scripts/align_v4_battery_log.py',
+    'scripts/validate_align_v4_w1_plan.py', 'scripts/bytes_h_session.py', 'scripts/launch_window.py',
     'scripts/hazard_monitor.py', 'scripts/km003c_monitor.py', 'scripts/collect_window_flags.py',
     'scripts/collect_clock_reference.py', 'scripts/g10_clock_step_control.py', 'scripts/run_campaign.py',
-    'scripts/magistrate_watchdog.py', 'scripts/install_night_agent.sh', 'scripts/prewindow_check.sh',
-    'scripts/quiet_mac_prep.sh', 'scripts/backup_runs.sh', 'scripts/b6_courier.sh',
+    'scripts/magistrate_watchdog.py', 'scripts/prewindow_check.sh', 'scripts/quiet_mac_prep.sh',
+    'scripts/backup_runs.sh', 'scripts/b6_courier.sh', 'scripts/reserve_calibration_window_bracket.py',
+    'scripts/validate_powermetrics_fiducial.py', 'scripts/b5_window_calibration_verdict.py',
+    'joulewise/__main__.py', 'configs/align/v4/r1_runtime.json',
 )
-STRICT_PREFIXES = ('joulewise/align/', 'scripts/night_chains/')
-STRICT_FILES = ('joulewise/adapters/mlx_runtime.py', 'joulewise/external/km003c_usb.py',
-                'joulewise/external/km003c_parse.py')
 
 
 def is_strict(path):
-    return (path in _NAMED_ARTIFACTS or path in STRICT_SCRIPTS or path in STRICT_FILES
-            or path.startswith(STRICT_PREFIXES))
+    return path not in AMENDMENT_ALLOWLIST
 
 
 AMENDMENT_FIELDS = ('path', 'old_sha256', 'new_sha256', 'reason', 'lead_signature')

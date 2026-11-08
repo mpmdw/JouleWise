@@ -37,7 +37,8 @@ def topup():
         _LOG_DIR.append(tempfile.TemporaryDirectory(prefix='v4-kit-battery-'))
     path = Path(_LOG_DIR[0].name) / f'battery-{time.time_ns()}.jsonl'
     write_battery_log(path, time.time())
-    return dict(battery_log=path, next_arm_triage=passing_packet(), commit_check=lambda root, commit: True)
+    return dict(battery_log=path, next_arm_triage=passing_packet(), commit_check=lambda root, commit: True,
+                record_check=lambda root, packet: True)
 
 
 def independent_seed(value):
@@ -1808,9 +1809,11 @@ class W1DiskGateTests(unittest.TestCase):
         with patch.object(session, 'install', fake):
             self.assertEqual(session.main(['install', '--session-root', 's', '--w1-disk-config', '/c.json',
                                            '--obc-off-attested-by', 'synthetic', '--battery-log', '/b.jsonl',
+                                           '--battery-log', '/c.jsonl', '--window-battery-journal', '/w.jsonl',
                                            '--next-arm-triage', '/t.json']), 0)
         self.assertEqual(seen, {'session_root': Path('s'), 'w1_disk_config': Path('/c.json'),
-                                'obc_off_attested_by': 'synthetic', 'battery_log': Path('/b.jsonl'),
+                                'obc_off_attested_by': 'synthetic', 'battery_log': [Path('/b.jsonl'), Path('/c.jsonl')],
+                                'window_battery_journal': [Path('/w.jsonl')],
                                 'next_arm_triage': Path('/t.json')})
 
 

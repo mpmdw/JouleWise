@@ -171,6 +171,7 @@ class RegistrationTests(unittest.TestCase):
         from tests.align.test_v4_cadence import passing_packet, write_battery_log
         packet = passing_packet()
         yes = lambda root, commit: True
+        bound = lambda root, packet: True
         good = dict(passed=True, probe_error=False, external_connected=True, is_charging=False,
                     current_capacity_pct=100, instant_amperage_ma=0, update_age_s=1)
         with tempfile.TemporaryDirectory() as tmp, \
@@ -183,7 +184,7 @@ class RegistrationTests(unittest.TestCase):
             floated = write_battery_log(Path(tmp) / 'float.jsonl', 5000., completion_age=2400)     # (b) continuous float
             stale = write_battery_log(Path(tmp) / 'stale.jsonl', 5000., completion_age=2400, end_age=900)
             arm = lambda **kw: session.arm_checks('.', {}, obc_off_attested_by=kw.pop('obc', 'synthetic'), runner=run,
-                                                  now=lambda: 5000., commit_check=yes, **kw)
+                                                  now=lambda: 5000., commit_check=yes, record_check=bound, **kw)
             self.assertFalse(session.arm_checks('.', {}, runner=run)['admitted'])
             self.assertFalse(arm(obc='', battery_log=log, next_arm_triage=packet)['admitted'])     # no attestation
             self.assertFalse(arm(next_arm_triage=packet)['admitted'])                              # no battery evidence
@@ -201,7 +202,7 @@ class RegistrationTests(unittest.TestCase):
             # L8: a failing pmset is evidence only
             bad_pmset = lambda argv: subprocess.CompletedProcess(argv, 1, '', 'pmset failed')
             with_bad = session.arm_checks('.', {}, obc_off_attested_by='synthetic', runner=bad_pmset, now=lambda: 5000.,
-                                          commit_check=yes, battery_log=log, next_arm_triage=packet)
+                                          commit_check=yes, record_check=bound, battery_log=log, next_arm_triage=packet)
             self.assertTrue(with_bad['admitted'], with_bad['reasons'])
             self.assertTrue(with_bad['battery']['pmset_batt']['evidence_only'])
             self.assertEqual(set(record['next_arm_triage']['checks']), set(__import__(
@@ -215,6 +216,47 @@ class RegistrationTests(unittest.TestCase):
             self.assertIn('next_arm_triage: triage meter_reader_live failed', refused['reasons'])
             self.assertEqual(record['battery']['raw_ioreg'], 'synthetic raw')
             self.assertEqual(observe.call_args.kwargs['phase'], 'arm_check')
+
+    def test_arm_derives_float_across_a_window_from_its_own_smc_journal(self):
+        # Lead ruling: no sampler during a window; the window's 1 Hz SMC capture carries the float.
+        import json as _json
+        from scripts import align_v4_session as session
+        from tests.align.test_v4_cadence import passing_packet
+        from tests.align.test_v4_topup import window_journal
+        good = dict(passed=True, probe_error=False, external_connected=True, is_charging=False,
+                    current_capacity_pct=100, instant_amperage_ma=0, update_age_s=1)
+        now = 50000.
+        with tempfile.TemporaryDirectory() as tmp, \
+             patch('joulewise.align.apple.powermode.admit_ac_powermode', return_value={'admitted': True}), \
+             patch('joulewise.align.apple.external_volume.census', return_value={}), \
+             patch('joulewise.align.apple.external_volume.arm_check', return_value={'verdict': 'PASS', 'reasons': []}), \
+             patch('joulewise.battery_float.observe', return_value=(good, b'raw')):
+            run = lambda argv: subprocess.CompletedProcess(argv, 0, 'pmset', '')
+            rows = lambda start, end, charge_until=None: [
+                {'schema': 'joulewise.battery_float.v1', 'probe_error': False, 'wall_time_s': float(t),
+                 'external_connected': True, 'is_charging': charge_until is not None and t < charge_until,
+                 'current_capacity_pct': 97 if charge_until is not None and t < charge_until else 100}
+                for t in range(start, end+1, 100)]
+            first = Path(tmp) / 'first.jsonl'
+            first.write_text(''.join(_json.dumps(r) + '\n' for r in rows(1000, 1900, charge_until=1200)))
+            second = Path(tmp) / 'second.jsonl'
+            second.write_text(''.join(_json.dumps(r) + '\n' for r in rows(46000, 50000)))
+            journal = Path(tmp) / 'window-battery.jsonl'
+            journal.write_text(''.join(_json.dumps(r) + '\n' for r in window_journal(2000, 45900)))
+            arm = lambda **kw: session.arm_checks(
+                '.', {}, obc_off_attested_by='synthetic', runner=run, now=lambda: now,
+                commit_check=lambda root, commit: True, record_check=lambda root, packet: True,
+                next_arm_triage=passing_packet(), **kw)
+            record = arm(battery_log=[first, second], window_battery_journal=[journal])
+            self.assertTrue(record['admitted'], record['reasons'])
+            evidence = record['battery']['topup_evidence']
+            self.assertEqual(evidence['basis'], 'continuous_float')
+            self.assertEqual(evidence['sources'], {'between_window_logs': 2, 'window_journals': 1,
+                                                   'source_sha256': evidence['sources']['source_sha256']})
+            self.assertEqual(len(evidence['sources']['source_sha256']), 3)
+            missing = arm(battery_log=[first, second])                      # the window journal is missing
+            self.assertFalse(missing['admitted'])
+            self.assertIn('gap above', missing['battery']['topup_evidence']['reasons'][0])
 
     def test_hand_entered_topup_time_is_not_an_arm_input(self):
         from scripts import align_v4_session as session

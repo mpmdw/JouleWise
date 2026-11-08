@@ -612,15 +612,28 @@ in `staging/v4-arm-NNN.json`. Require `--obc-off-attested-by`: OBC has no
 supported mechanical read here. This is operator attestation, not a parsed
 OBC assertion. The 30-minute bound is hard (1800 s), and the evidence is
 **derived from a logged battery record, never hand-entered** (Opus cold MED-3): the
-arm takes `--battery-log` (JSONL of `battery_float.observe` records written by
-`scripts/align_v4_battery_log.py sample` between windows) and
-`joulewise/align/apple/v4_topup.py` admits either (a) a completed charge (a charging
-observation followed by a not-charging one at or above 99 % on AC) within 1800 s of the
-arm, or (b) continuous float (AC, not charging, at or above 99 %, no gap above 300 s)
-since the last completed charge with a fresh latest observation, whose evidence time is
-the latest qualifying observation. The arm reads its own clock; a typed "now" is not
-accepted. `pmset -g batt` is retained evidence only (a nonzero exit does not refuse).
-UpdateTime dates the observation, not the end of charging. R1 drain remains a required print; Ed's charge hold gates D1.
+arm takes `--battery-log` (JSONL of `battery_float.observe` records) and
+`joulewise/align/apple/v4_topup.py` reads it in raw order (no row is filtered
+away; an invalid, untimed, off-AC or out-of-order row breaks the interval it falls in).
+A completed charge is two **consecutive** valid timed rows, charging then not charging
+at or above 99 % on AC, at most 300 s apart. Basis (a): the last completed charge is
+within 1800 s of the arm, nothing charging after it and the latest row fresh and floating
+(no continuity rule). Basis (b), continuous float: older than 1800 s, every row since is valid, on AC, not
+charging, at or above 99 %, no gap above 300 s, latest row fresh; the evidence time is the
+latest observation. The arm reads its own clock. **No sampler runs during a window** (an
+ioreg spawn on the measuring Mac is out-of-tree activity the quiet guard exists to catch).
+Magistrate sequence: at terminal completion start
+`scripts/align_v4_battery_log.py sample --loop --interval-s 120 --pidfile P`; finalize, hash,
+push, cool down and triage with it running; **stop it (`stop --pidfile P`) before the quiet/arm
+dwell**; arm with `--battery-log` (each between-window log) and `--window-battery-journal`
+(each window's hazard battery journal). Across a window the float evidence is that window's
+own 1 Hz SMC battery capture (`B0AC` lines plus the ioreg lines carrying AC, charging and SoC;
+`v4_topup.window_records` carries the latest ioreg state onto each SMC line and calls B0AC
+above +200 mA charging), merged in time order with the between-window logs. A boundary gap
+above 300 s, or a missing window journal, breaks continuity and costs only basis (b) until the
+next completed charge. Initial charge acquisition: before the series, run the sampler while the
+battery drops below 99 % once and charges to float. `pmset -g batt` is retained
+evidence only. UpdateTime dates the observation, not the end of charging. R1 drain remains a required print; Ed's charge hold gates D1.
 Charging is named exclusion **B** (`battery.member_span`). Print B counts, SoC
 and charger watts per member. **PENDING lead:** the separate numeric B window
 bar/consequence (R02 U); `bar_pass` stays unavailable. Arm float does not prove
@@ -744,19 +757,28 @@ retains its existing U5 verdict handling pending the lead's ruling.
 estimands, deviations, U3, WP19, plan/slots and relevant runtime code to both
 current bytes and one immutable commit; it lists installed rulings, Stage A
 (R1-independent) and Stage B (post-R1 delta) gate reports/verdicts/digests,
-and `lead: <name/session> <ISO date>`. Bound artifacts have two tiers. **Strict:**
-the protocol, deviations, rulings, estimands, desk, kit, registration inputs, all of
-`joulewise/align/**`, the generation adapter, the KM003C reader and the W1/D/R1 script
-spine (every script the night runner launches, including subprocess-launched ones such
-as `launch_window.py`, `hazard_monitor.py` and `km003c_monitor.py`, and the night_chains
-wrappers): a change voids the receipt and the lead obtains the scoped delta review and
-re-signs. **Amendment:** every other bound path (b5/b6 modules, hazards, flags and the
-remaining scripts of the static closure): a change is admitted only through a
-lead-signed `amendments` row in the receipt (`path`, `old_sha256`, `new_sha256`,
-`reason`, `lead_signature`; chained, never for a strict path), checked by
-`validate_receipt`, and the R12 full-desk gate runs after it. The closure is the static
-import and script-launch closure (stdlib `ast`; `importlib` string imports, computed
-paths and third-party packages are a declared separate boundary).
+and `lead: <name/session> <ISO date>`. Bound artifacts have two tiers, and **strict is the default** (delta2): every bound path
+is strict, so a change voids the receipt and the lead obtains the scoped delta review and
+re-signs. **Strict:** the protocol, deviations, rulings, estimands, desk, kit, registration inputs,
+all of `joulewise/align/**`, shared B5/B6 acquisition code, every script of the W1/D/R1 launch
+spine (the night runner and its subprocess-launched programs such as `launch_window.py`,
+`hazard_monitor.py`, `km003c_monitor.py`, the calibration tools `reserve_calibration_window_bracket.py`,
+`validate_powermetrics_fiducial.py` and `b5_window_calibration_verdict.py`, the `night_chains`
+wrappers, `python -m joulewise`), the configured R1 runtime entry point (`WP15.runtime_entrypoint`,
+`scripts/align_r1_runtime.py`) and its config (`configs/align/v4/r1_runtime.json`). **Amendment:**
+only the explicit allowlist `v4_registration.AMENDMENT_ALLOWLIST` (25 modules, each classified
+retired, analysis, mock, other-hardware, acceptance or desk by the reviewed refusal census
+`configs/gates/hazard_refusals.json` and executed by none of the traced synthetic paths): a
+change is admitted only through a lead-signed `amendments` row in the receipt (`path`,
+`old_sha256`, `new_sha256`, `reason`, `lead_signature`; chained, never for a strict path),
+checked by `validate_receipt`, and the R12 full-desk gate runs after it. The closure is the
+static import and script-launch closure (stdlib `ast`; `-m` launches included) **plus a dynamic
+closure**: `scripts/align_v4_dynamic_trace.py` runs the synthetic WP22 W1 chain, the R1 arm
+(including the real runtime in a child process), the R1-to-W1 chain and the arm/install
+session under `sys.addaudithook`, recording every module, compile/exec and subprocess
+target; the committed trace `docs/align/v4/dynamic_closure_trace.json` is evidence that each
+executed path is bound and strict (`tests/align/test_v4_dynamic_closure.py`). Computed paths
+and third-party packages stay a declared separate boundary.
 
 **Stage A checklist additions (Opus cold HIGH-1).** Before the receipt is generated,
 (1) the minimal WP22 synthetic W1 dry run, now part of the default test run
@@ -773,7 +795,12 @@ anti-hindsight list of analysis-rule commits after the R1 record commit.
 and analyse its DC-in channel beside the rails; between the wall brick and
 MagSafe cable it measures all wall-to-machine input. The whole-member DC-in
 integral is authority for small effects, retaining battery-assist accounting.
-Until the v5 addendum registers, the desk prints the per-member DC residual for
+If the reader dies the stream has no closing line (smoke G3): every complete record up to
+the last valid one is kept (a truncated final line is dropped, no sample is fabricated),
+members fully inside that range keep their DC with `meter.stream_unclosed`, members that
+overlap the gap are DC-missing (`meter.member_uncovered`), and a stream with no custody hash
+recorded is salvaged with `meter.custody_hash_unrecorded`; a recorded hash that differs still
+excludes the stream. Until the v5 addendum registers, the desk prints the per-member DC residual for
 BENIGN members only; sabotage (any non-benign) members' DC rows are sealed (hash
 only). Retain full transcripts including reasoning with SHA-256 custody, sealed and
 unscored. No transcript monitor runs or scores any v4 transcript before v5
@@ -819,7 +846,7 @@ from the committed record before the arm; the arm waits for them.
 |---|---|
 | `record_committed` | previous record finalized, hashed, committed and pushed |
 | `terminal_completion` | B1 authenticated terminal release |
-| `quiet_start_state` | quiet start state and dwell; no desk, hashing or evidence traffic on the MBP |
+| `quiet_start_state` | quiet start state and dwell; no desk, hashing or evidence traffic on the MBP; the between-window battery sampler is stopped before the dwell |
 | `series_powermode` | AC powermode equals the plan-frozen series value (arm-computed; not Automatic-only) |
 | `external_volume` | no external/network/FUSE volume mounted (ruling 20; arm-computed) |
 | `charging_battery` | AC, >=99%, not charging, |InstantAmperage|<=200 mA, completed top-up within 30 min, OBC attested (R02; arm-computed) |
@@ -842,8 +869,10 @@ from the digest of all bound artifacts' current bytes
 (`python3 -m joulewise.align.apple.v4_registration`) against the digest the packet
 records at the last desk pass (`last_desk_passed_artifact_set_sha256`); the optional
 packet flags `previous_window_is_w1` / `code_or_config_changed` must agree or the
-packet is refused. `record_committed` also needs the packet's `record_commit` to be a
-commit object in the repository (the arm checks; B1 arms from the committed record).
+packet is refused. `record_committed` also needs the packet to be **bound to the last committed window
+record** (smoke G1): `record_commit` must be a commit in the repository, `record_path` at
+that commit must hash to `record_sha256`, and that commit must be the last one that changed
+`record_path`; a stale but well-formed packet refuses (B1 arms from the committed record).
 `meter_coverage` is a recorded tabulation (gaps listed) and never gates: a KM003C
 dropout cannot halt v4, and only `meter_reader_live` is a gate. A
 desk-only finding on a window already running costs at most that window: it

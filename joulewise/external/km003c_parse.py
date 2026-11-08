@@ -356,7 +356,7 @@ def parse(path: str | Path) -> Stream:
                   [b["rx"] for b in polls], [dict(b.get("smc") or {}) for b in polls], fit_error)
 
 
-def raw_offset_ns(stream: Stream) -> int | None:
+def raw_offset_ns(stream: Stream, *, allow_unclosed: bool = False) -> int | None:
     """CLOCK_MONOTONIC_RAW minus ``time.monotonic_ns`` for this stream, or None.
 
     Member spans are stamped in the controller's ``time.monotonic_ns``; the
@@ -365,12 +365,21 @@ def raw_offset_ns(stream: Stream) -> int | None:
     the stream's start must equal the one at its end (within 1 ms); otherwise
     (a sleep, or a stream without the pairs) None, and the caller takes the
     offset from the hazard monitor's journal lines, which carry both clocks.
-    raw_ns = monotonic_ns + offset.
+    raw_ns = monotonic_ns + offset. With ``allow_unclosed`` a stream without a closing line
+    (the reader died) returns the start offset instead of None.
     """
 
     header, trailer = stream.header or {}, stream.trailer or {}
     try:
         start = header["start_raw_ns"] - header["start_mono_ns"]
+    except (KeyError, TypeError):
+        return None
+    if allow_unclosed and stream.trailer is None:
+        # A reader that died leaves no closing line (crash-radius salvage, smoke G3): every
+        # complete record before the last valid one is kept. The end offset cannot be
+        # compared, so the caller must disclose ``meter.stream_unclosed``; no sample is invented.
+        return start
+    try:
         end = trailer["end_raw_ns"] - trailer["end_mono_ns"]
     except (KeyError, TypeError):
         return None

@@ -246,9 +246,35 @@ def _commit_exists(root, commit):
         return False
 
 
+def _record_bound(root, packet):
+    """Whether the packet is bound to the last committed window record (smoke G1).
+
+    ``record_path`` at ``record_commit`` must hash to ``record_sha256``, and that commit must be
+    the last one that changed the path, so a stale but well-formed packet (built before the
+    record was re-committed) refuses.
+    """
+    import re
+    if not isinstance(packet, dict):
+        return False
+    commit, path, digest = packet.get('record_commit'), packet.get('record_path'), packet.get('record_sha256')
+    if (not isinstance(commit, str) or not re.fullmatch(r'[0-9a-f]{40}', commit) or not isinstance(path, str)
+            or not path or Path(path).is_absolute() or '..' in Path(path).parts
+            or not isinstance(digest, str) or not re.fullmatch(r'[0-9a-f]{64}', digest)):
+        return False
+    try:
+        blob = subprocess.run(['git', 'show', f'{commit}:{path}'], cwd=root, capture_output=True,
+                              timeout=30, check=False)
+        latest = subprocess.run(['git', 'log', '-1', '--format=%H', '--', path], cwd=root,
+                                capture_output=True, text=True, timeout=30, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return (blob.returncode == 0 and _sha256(blob.stdout) == digest
+            and latest.returncode == 0 and latest.stdout.strip() == commit)
+
+
 def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=None, owner=None,
-               obc_off_attested_by=None, battery_runner=None, battery_log=None,
-               now=None, next_arm_triage=None, commit_check=None):
+               obc_off_attested_by=None, battery_runner=None, battery_log=None, window_battery_journal=None,
+               now=None, next_arm_triage=None, commit_check=None, record_check=None):
     """W1/D arm evidence: ruling 7 AC powermode and ruling 20 volumes.
 
     Ruling 7: the AC-profile powermode must equal the plan's frozen series
@@ -282,7 +308,9 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
     # within 1800 s, or continuous float since it); a hand-entered time is not admissible.
     from joulewise.align.apple import v4_topup
     now_s = (now or time.time)()
-    evidence = v4_topup.derive_from_file(battery_log, now_s) if battery_log is not None else None
+    as_list = lambda value: [] if value is None else [value] if isinstance(value, (str, Path)) else list(value)
+    logs, journals = as_list(battery_log), as_list(window_battery_journal)
+    evidence = v4_topup.derive_from_sources(logs, journals, now_s) if logs or journals else None
     topup = ({'completed_at_epoch_s': evidence['completed_at_epoch_s'], 'source': evidence['source']}
              if evidence and evidence['admissible'] else None)
     battery = battery_arm(observed, obc_off_attested_by, topup, now_epoch_s=now_s)
@@ -313,7 +341,8 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
             packet = None
     commit = packet.get('record_commit') if isinstance(packet, dict) else None
     identity = {'artifact_set_sha256': v4_registration.artifact_set_digest(measurement_root),
-                'record_commit_exists': (commit_check or _commit_exists)(measurement_root, commit)}
+                'record_commit_exists': (commit_check or _commit_exists)(measurement_root, commit),
+                'record_bound': bool((record_check or _record_bound)(measurement_root, packet))}
     triage = v4_cadence.next_arm_triage(packet, {
         'series_powermode': bool(power['admitted']),
         'external_volume': volumes['verdict'] == external_volume.PASS,
@@ -552,11 +581,12 @@ def _termination_handlers():
 def _arm_and_install(session, state, measurement_root, plan, high, *, runner, volume_runner, now,
                      w1_disk_config, disk_gate, lock=None, owner=None,
                      obc_off_attested_by=None, battery_runner=None, battery_log=None,
-                     next_arm_triage=None, commit_check=None, **kwargs):
+                     window_battery_journal=None, next_arm_triage=None, commit_check=None, record_check=None, **kwargs):
     record = arm_checks(measurement_root, plan, runner=runner, volume_runner=volume_runner, lock=lock,
                         owner=owner, obc_off_attested_by=obc_off_attested_by, battery_runner=battery_runner,
-                        battery_log=battery_log, now=now,
-                        next_arm_triage=next_arm_triage, commit_check=commit_check)
+                        battery_log=battery_log, window_battery_journal=window_battery_journal, now=now,
+                        next_arm_triage=next_arm_triage, commit_check=commit_check,
+                        record_check=record_check)
     if high is not None:
         record['high_power_enter'] = high
         if not high['ok']:
@@ -593,9 +623,12 @@ def main(argv=None):
                           help='validated R0 desk config (disk_path, W1 offloads) for the W1 disk gate')),
                                        ('--obc-off-attested-by', dict(required=True,
                           help='operator attesting Optimized Battery Charging is off')),
-                                       ('--battery-log', dict(type=Path, required=True,
-                          help='JSONL battery log (scripts/align_v4_battery_log.py sample); the arm derives '
-                               'top-up evidence from it: a completed charge within 30 min, or continuous float since')),
+                                       ('--battery-log', dict(type=Path, required=True, action='append',
+                          help='JSONL between-window battery log (scripts/align_v4_battery_log.py sample --loop, '
+                               'run only between windows); repeatable; the arm derives top-up evidence from it')),
+                                       ('--window-battery-journal', dict(type=Path, action='append',
+                          help='a window hazard battery journal (the 1 Hz SMC B0AC lines and ioreg lines) merged '
+                               'in time order with the between-window log; repeatable')),
                                        ('--next-arm-triage', dict(type=Path, required=True,
                           help='R12 B2 next-arm triage packet (JSON) built off the MBP from the committed record'))))
 

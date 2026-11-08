@@ -10,12 +10,17 @@ from joulewise.align.apple import v4_registration as registration
 from tests.align import test_r11_delta_sol1 as delta
 
 SIGNATURE = 'lead: synthetic-amendment 2026-11-08'
-AMENDABLE = 'joulewise/b6/idle_wait.py'
+AMENDABLE = 'joulewise/kv_size.py'          # analysis-only (census category), on the amendment allowlist
 STRICT_EXAMPLES = ('docs/align/pilot_protocol_v4.md', 'scripts/align_v4_kit.py', 'joulewise/align/apple/endpoint.py',
                    'joulewise/align/apple/prompt_cache.py', 'scripts/run_night.py', 'scripts/launch_window.py',
                    'scripts/km003c_monitor.py', 'joulewise/external/km003c_usb.py', 'scripts/hazard_monitor.py',
                    'scripts/bytes_h_session.py', 'scripts/run_campaign.py', 'joulewise/adapters/mlx_runtime.py',
-                   'scripts/night_chains/align_r1_rehearsal.zsh', 'joulewise/align/apple/v4_topup.py')
+                   'scripts/night_chains/align_r1_rehearsal.zsh', 'joulewise/align/apple/v4_topup.py',
+                   # strict by default (delta2): shared B5/B6 code and the calibration spine are strict too
+                   'joulewise/b6/idle_wait.py', 'joulewise/b5/driver.py', 'joulewise/b6/courier.py',
+                   'scripts/reserve_calibration_window_bracket.py', 'scripts/validate_powermetrics_fiducial.py',
+                   'scripts/b5_window_calibration_verdict.py', 'scripts/align_r1_runtime.py',
+                   'configs/align/v4/r1_runtime.json', 'joulewise/__main__.py')
 
 
 def amendment(candidate, path, new_text, *, reason='infrastructure fix', signature=SIGNATURE, old=None):
@@ -35,9 +40,13 @@ class TierClassificationTests(unittest.TestCase):
         self.assertIn(AMENDABLE, registration.ARTIFACTS)
         self.assertFalse(registration.is_strict(AMENDABLE))
         amendable = [p for p in registration.ARTIFACTS if not registration.is_strict(p)]
-        self.assertTrue(amendable)
-        self.assertTrue(all(p.startswith(('joulewise/', 'scripts/')) for p in amendable))
+        self.assertEqual(sorted(amendable), sorted(registration.AMENDMENT_ALLOWLIST))
+        self.assertLessEqual(len(amendable), 30)            # short and lead-reviewable
         self.assertFalse([p for p in registration.STRICT_SCRIPTS if p not in registration.ARTIFACTS])
+        self.assertTrue(all(registration.is_strict(p) for p in registration.STRICT_SCRIPTS))
+        # strict is the default: an unlisted bound path is strict
+        unlisted = [p for p in registration.ARTIFACTS if p not in registration.AMENDMENT_ALLOWLIST]
+        self.assertTrue(all(registration.is_strict(p) for p in unlisted))
 
 
 class ReceiptTierTests(unittest.TestCase):
@@ -47,7 +56,8 @@ class ReceiptTierTests(unittest.TestCase):
         return delta.TemporaryCandidate(Path(self._tmp.name))
 
     def test_strict_tier_change_needs_a_new_receipt_even_with_an_amendment_row(self):
-        for path in ('joulewise/align/apple/endpoint.py', 'scripts/launch_window.py', 'docs/align/pilot_protocol_v4.md'):
+        for path in ('joulewise/align/apple/endpoint.py', 'scripts/launch_window.py', 'docs/align/pilot_protocol_v4.md',
+                     'joulewise/b6/idle_wait.py', 'scripts/b5_window_calibration_verdict.py'):
             with self.subTest(path=path):
                 candidate = self.candidate()
                 row = amendment(candidate, path, 'changed strict-tier bytes\n')
