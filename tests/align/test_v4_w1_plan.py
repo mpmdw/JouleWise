@@ -27,8 +27,7 @@ def filled_template():
         "sensors": {"s_fast": "TC0P", "s_slow": "TG0P", "fan_keys": [],
                     "r0_sha256": "a" * 64},
         "delta_fast_c": 8.0, "delta_slow_c": 5.0,
-        "turn_cap_s": 120, "g0_cap_s": 600, "contrast_g0_cap_s": 600, "chunk_tokens": 512,
-        "heavy": True, "per_turn": True,
+        "turn_cap_s": 120, "g0_cap_s": 600, "chunk_tokens": 512, "heavy": True, "per_turn": True,
     }
     costs = {"anchor": 3131.27 / 4, "D": 1800, "X-G": 1150, "Y-G": 1150,
              "X-S": 850, "Y-S": 850}

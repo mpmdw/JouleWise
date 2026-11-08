@@ -21,12 +21,13 @@ from tests.align.test_v4_kit import ready_inputs, set_decode_rate
 
 ROOT = Path(__file__).resolve().parents[2]
 X_G_PHASES = {'G0': 120.0, 'G1': 60.0, 'H': 0.0, 'decode': 300.0, 'prefill': 60.0, 'tool': 6.0, 'tail': 0.0}
-SIGNATURE = 'Laptop lead (synthetic test signature), 2026-11-07'
+SIGNATURE = 'lead: Laptop lead, session 1544c617 2026-11-07'
 
 
-def with_role_fields(inputs, slots, *, contrast_cap=600):
-    """The R10-4 fields a post-R10 record and inputs carry (12 = WP18 X turns)."""
-    inputs['R1']['thermal_policy']['contrast_g0_cap_s'] = contrast_cap
+def with_role_fields(inputs, slots):
+    """X-G's evidence a post-R10 R1 record carries (12 = WP18 X turns). The
+    contrast cap is a receipt-only input (cold-review disposition MEDIUM-2):
+    arm_receipt sets it."""
     slots['x_g'].update(admitted_turns=12, x7=False, phases_s=dict(X_G_PHASES))
     return inputs, slots
 
@@ -57,6 +58,7 @@ def signed_receipt(slots):
 def arm_receipt(inputs, receipt):
     policy = inputs['R1']['thermal_policy']
     policy['g0_cap_s'] = receipt['derivation']['d_g0_cap_s']
+    policy['contrast_g0_cap_s'] = receipt['contrast']['value_s']
     policy['g0_cap_receipt'] = {'authority': thermal_gates.R10_G0_CAP_AUTHORITY,
                                 'receipt_sha256': kit.receipt_sha256(receipt)}
     return inputs
@@ -157,14 +159,49 @@ class ReceiptTests(unittest.TestCase):
         derived = kit.r10_2_derivation(slots, inputs['R1']['T_dead'], 12)
         self.assertEqual(derived['branch'], 'current')
         forged = proc.sign(proc._draft('a', derived, proc.timing_view(slots)), SIGNATURE)
-        with self.assertRaisesRegex(ValueError, r'not below 600 s'):
+        with self.assertRaisesRegex(ValueError, r'the current 600 s rule fits'):
             kit.require_ready(inputs, slots, receipt=forged)
+
+    def test_current_rule_fitting_at_some_b_d_takes_precedence_over_branch_a(self):
+        # Cold review MEDIUM-1 (the reviewer's reproduction): I_D 400 s, 22 tok/s,
+        # 2,200 tokens per gated run. The 600 s rule fits at 6,144 (1,131.5 s)
+        # while G0* (holds projected to 10,240 tokens) is 547.9 s < 600 s.
+        inputs, slots = ready_inputs(i_d=400.0, tail=20.0)
+        with_role_fields(inputs, slots)
+        for row in slots['deadman_budget']:
+            row['phases_s'].update(G0=120.0, G1=20.0, H=10.0, prefill=30.0, tool=6.0, decode=100.0)
+        set_decode_rate(slots, 22.0)
+        slots['g0_cap_w1'] = kit.w1_g0_cap(slots)
+        inputs['R1']['B_D'] = 6144
+        t_dead = inputs['R1']['T_dead']
+        self.assertGreaterEqual(kit.max_fitting_b_d(slots, t_dead), 6144)
+        derived = kit.r10_2_derivation(slots, t_dead, 12)
+        self.assertLess(derived['derivation']['G0_star_s'], 600)
+        self.assertEqual((derived['branch'], derived['derivation']['d_g0_cap_s']), ('current', None))
+        self.assertEqual(proc.decide(slots, 12)['step'], 'CURRENT-RULE')
+        forged = proc.sign(proc._draft('a', derived, proc.timing_view(slots)), SIGNATURE)
+        forged['derivation'] = dict(forged['derivation'], d_g0_cap_s=547)
+        arm_receipt(inputs, forged)
+        with self.assertRaisesRegex(ValueError, r'refused|does not match'):
+            kit.require_ready(inputs, slots, receipt=forged)
+        honest = proc.sign(proc._draft('a', derived, proc.timing_view(slots)), SIGNATURE)
+        with self.assertRaisesRegex(ValueError, r'the current 600 s rule fits'):
+            kit.require_ready(inputs, slots, receipt=honest)
+        kit.require_ready(dict(inputs, R1=dict(inputs['R1'], thermal_policy=ready_inputs()[0]['R1']['thermal_policy'])),
+                          slots)    # and with no receipt the 600 s rule admits at 6,144
 
     def test_unsigned_and_non_a_receipts_refuse(self):
         inputs, slots = eight_bit_case()
         draft = proc.decide(slots, 12)['receipt_draft']
         self.assertTrue(draft['lead_signature'].startswith(kit.UNSIGNED))
-        for bad in (draft, dict(draft, lead_signature=' '), dict(draft, lead_signature=None)):
+        for bad in (draft, dict(draft, lead_signature=' '), dict(draft, lead_signature=None),
+                    # Cold review LOW-1: whitespace, case, and anything not 'lead: <who> <ISO date>'.
+                    dict(draft, lead_signature=' ' + draft['lead_signature']),
+                    dict(draft, lead_signature='pending_lead_signature: x 2026-11-07'),
+                    dict(draft, lead_signature='x'), dict(draft, lead_signature='lead: 2026-11-07'),
+                    dict(draft, lead_signature='lead: Laptop lead 07/11/2026'),
+                    dict(draft, lead_signature='lead: Laptop lead 2026-13-40'),
+                    dict(draft, lead_signature='LEAD: PENDING_LEAD_SIGNATURE 2026-11-07')):
             with self.subTest(signature=bad['lead_signature']), self.assertRaisesRegex(ValueError, 'not signed'):
                 kit.require_ready(arm_receipt(deepcopy(inputs), bad), slots, receipt=bad)
         for branch, text in (('b', '4-bit'), ('c', 'window council')):
@@ -175,6 +212,23 @@ class ReceiptTests(unittest.TestCase):
                     proc.sign(dict(draft, branch='d'), SIGNATURE)):
             with self.subTest(bad=bad.get('schema'), branch=bad['branch']), self.assertRaises(ValueError):
                 kit.require_ready(inputs, slots, receipt=bad)
+
+    def test_receipt_text_fields_are_bound(self):
+        # Cold review LOW-2: the deviation line, the procedure digest and the R1 record.
+        inputs, slots = eight_bit_case()
+        draft = proc.decide(slots, 12)['receipt_draft']
+        self.assertTrue(draft['deviation_log'].startswith('DEVIATION R10-2(a)'))
+        for change, pattern in (({'deviation_log': None}, 'deviation_log'),
+                                ({'deviation_log': 'lowered the cap'}, 'deviation_log'),
+                                ({'procedure': {'path': 'scripts/align_w1_budget_procedure.py',
+                                                'sha256': '0' * 64}}, 'procedure'),
+                                ({'procedure': {'path': 'x', 'sha256': draft['procedure']['sha256']}}, 'procedure'),
+                                ({'r1_record': dict(draft['r1_record'], source='forged')}, 'r1_record'),
+                                ({'r1_record': dict(draft['r1_record'], I_D=401.0)}, 'r1_record')):
+            receipt = proc.sign(dict(draft, **change), SIGNATURE)
+            case = arm_receipt(deepcopy(inputs), receipt)
+            with self.subTest(change=change), self.assertRaisesRegex(ValueError, pattern):
+                kit.require_ready(case, slots, receipt=receipt)
 
     def test_policy_binds_the_receipt_cap_and_digest(self):
         inputs, slots = eight_bit_case()
@@ -233,56 +287,101 @@ class ReceiptTests(unittest.TestCase):
                 self.assertNotIn('contrast_g0_cap_s', thermal)
                 thermal_gates.validate_gate_policy(thermal)
 
+    def test_without_a_receipt_every_member_arms_r7_2s_one_cap_as_at_e901(self):
+        # Cold review MEDIUM-2: no receipt means the e901eb2a4 kit exactly.
+        inputs, slots = ready_inputs()
+        slots['x_g']['g0_wait_s'] = 500.0
+        slots['g0_cap_w1'] = kit.w1_g0_cap(slots)
+        inputs['R1']['thermal_policy']['g0_cap_s'] = 625
+        with patch.object(kit, 'read_inputs', lambda root=kit.ROOT: deepcopy(inputs)), \
+                patch.object(kit, 'read_r1_slots', lambda root=kit.ROOT: deepcopy(slots)):
+            files = kit.build_files(kit.ROOT)
+        plan = json.loads(files[kit.KIT / 'collection_plan.json'])
+        caps = {m['role']: m['spec']['thermal']['g0_cap_s'] for m in plan['members'] if m['role'] != 'anchor'}
+        self.assertEqual(set(caps.values()), {625})
+
 
 class RoleCapTests(unittest.TestCase):
-    """R10-4 item 2: separate W1 G0 caps for D and contrast members."""
+    """R10-4 item 2, as the cold-review disposition MEDIUM-2 scopes it: separate
+    D and contrast caps and the contrast proof apply only under an R10-2(a)
+    receipt; with no receipt the kit is e901eb2a4's (R7-2's one G0_cap_W1,
+    X-G included; R7-12's INCONCLUSIVE X-G does not refuse on that alone)."""
 
-    def test_d_cap_comes_from_the_gated_d_waits_only(self):
-        inputs, slots = ready_inputs()
-        with_role_fields(inputs, slots, contrast_cap=625)
-        slots['x_g']['g0_wait_s'] = 500.0      # X-G (D-to-X) 500 s; D waits 120 s
+    def reviewer_case(self):
+        inputs, slots = ready_inputs(i_d=400.0, tail=20.0)
+        with_role_fields(inputs, slots)
+        slots['x_g'].update(g0_wait_s=560.0)
+        slots['x_g']['phases_s'].update(G0=560.0, decode=200.0)
+        for row in slots['deadman_budget']:
+            row['phases_s'].update(G0=120.0, G1=20.0, H=10.0, prefill=30.0, tool=6.0)
+        set_decode_rate(slots, 20.0)
         slots['g0_cap_w1'] = kit.w1_g0_cap(slots)
-        self.assertEqual(slots['g0_cap_w1']['value_s'], 625)     # R7-2's combined record, still bound
-        self.assertEqual(kit.w1_d_g0_cap(slots)['value_s'], 600)
-        fit = kit.ruling_1f_fit(slots, 8192, inputs['R1']['T_dead'])
-        self.assertEqual(fit['terms_s']['G0_s'], 600)
-        contrast = kit.w1_contrast_g0_cap(slots, 12)
-        self.assertEqual(contrast['value_s'], 625)
-        self.assertTrue(contrast['fits'])
-        self.assertAlmostEqual(contrast['worst_s'], 625 + 426.0)
-        kit.require_ready(inputs, slots)
-        inputs['R1']['thermal_policy']['g0_cap_s'] = 625      # the old single cap on D
-        with self.assertRaisesRegex(ValueError, 'D-role G0 cap'):
+        inputs['R1']['B_D'] = 6144
+        return inputs, slots
+
+    def test_without_a_receipt_d_term_and_cap_include_x_g_as_at_e901(self):
+        # The reviewer's D-waits-120 / X-G-560 case: the e901 rule refuses (G0 term 700).
+        inputs, slots = self.reviewer_case()
+        self.assertEqual(slots['g0_cap_w1']['value_s'], 700)
+        fit = kit.ruling_1f_fit(slots, 6144, inputs['R1']['T_dead'])
+        self.assertEqual(fit['terms_s']['G0_s'], 700)
+        self.assertFalse(fit['fits'])
+        inputs['R1']['thermal_policy']['g0_cap_s'] = 700
+        with self.assertRaisesRegex(ValueError, r'ruling 1\(f\): B_D 6144 does not fit.*G0_s 700'):
             kit.require_ready(inputs, slots)
-        inputs['R1']['thermal_policy'].update(g0_cap_s=600, contrast_g0_cap_s=600)
-        with self.assertRaisesRegex(ValueError, 'contrast_g0_cap_s must equal the W1 contrast-role G0 cap 625'):
+        inputs['R1']['thermal_policy']['g0_cap_s'] = 600
+        with self.assertRaisesRegex(ValueError, r'r1_slots\.g0_cap_w1\.value_s.*LEAD-RULINGS-2 R7-2'):
+            kit.require_ready(inputs, slots)
+        # The contrast cap is a receipt-only slot.
+        inputs['R1']['thermal_policy'].update(g0_cap_s=700, contrast_g0_cap_s=700)
+        with self.assertRaisesRegex(ValueError, r'contrast_g0_cap_s.*only under an R10-2\(a\) receipt'):
             kit.require_ready(inputs, slots)
 
-    def test_contrast_cap_must_fit_the_contrast_deadman_on_x_g_s_record(self):
+    def test_under_a_receipt_d_is_sized_on_d_waits_and_contrast_arms_its_own_cap(self):
+        inputs, slots = eight_bit_case()
+        slots['x_g']['g0_wait_s'] = 500.0          # contrast cap 625; 625 + 426 <= 1,086.3
+        slots['x_g']['phases_s']['G0'] = 500.0
+        slots['g0_cap_w1'] = kit.w1_g0_cap(slots)
+        receipt = signed_receipt(slots)
+        self.assertEqual((receipt['derivation']['W_D_s'], receipt['derivation']['d_g0_cap_s']), (120.0, 200))
+        self.assertEqual(receipt['contrast']['value_s'], 625)
+        arm_receipt(inputs, receipt)
+        kit.require_ready(inputs, slots, receipt=receipt)
+        inputs['R1']['thermal_policy']['contrast_g0_cap_s'] = 600
+        with self.assertRaisesRegex(ValueError, 'contrast_g0_cap_s must equal the W1 contrast-role G0 cap 625'):
+            kit.require_ready(inputs, slots, receipt=receipt)
+
+    def test_under_a_receipt_the_contrast_cap_must_fit_the_contrast_deadman(self):
         def refused(change, pattern):
-            inputs, slots = ready_inputs()
-            with_role_fields(inputs, slots)
+            inputs, slots = eight_bit_case()
             change(slots)
             slots['g0_cap_w1'] = kit.w1_g0_cap(slots)
-            inputs['R1']['thermal_policy']['contrast_g0_cap_s'] = kit.w1_contrast_g0_cap(slots, 12)['value_s']
-            self.assertFalse(kit.w1_contrast_g0_cap(slots, 12)['fits'])
+            derived = kit.r10_2_derivation(slots, inputs['R1']['T_dead'], 12)
+            self.assertEqual(derived['branch'], 'a')
+            self.assertFalse(derived['contrast']['fits'])
+            receipt = proc.sign(proc._draft('a', derived, proc.timing_view(slots)), SIGNATURE)
+            arm_receipt(inputs, receipt)
             with self.assertRaisesRegex(ValueError, r'R10-2\(a\): the contrast members.*' + pattern):
-                kit.require_ready(inputs, slots)
+                kit.require_ready(inputs, slots, receipt=receipt)
         self.assertAlmostEqual(kit.CONTRAST_DEADMAN_S, 1086.3, places=1)
         # 1.25 x 560 = 700; 700 + 426 = 1,126 > 1,086.3.
         refused(lambda s: s['x_g'].update(g0_wait_s=560.0), 'exceeds the contrast deadman')
         refused(lambda s: s['x_g'].update(admitted_turns=11), 'not the complete WP18 X count 12')
         refused(lambda s: s['x_g'].update(x7=True), 'no deadman')
+        # Lead ruling (iv): under R10-2(a) an INCONCLUSIVE X-G refuses W1.
         refused(lambda s: s['x_g'].update(status='inconclusive', g0_outcome='timeout', g0_wait_s=1200.0), 'R7-12')
         for field in kit.X_G_EVIDENCE_FIELDS:
             refused(lambda s, f=field: s['x_g'].pop(f), {'admitted_turns': 'admitted None turns',
                                                           'x7': 'x7 false', 'phases_s': 'phases_s'}[field])
         refused(lambda s: s['x_g']['phases_s'].update(decode=-1.0), 'phases_s')
 
-    def test_contrast_validator_and_template_carry_their_own_cap(self):
+    def test_template_carries_the_receipt_only_slots(self):
         from scripts import validate_align_v4_w1_plan as validator
         template = validator.build_template()
-        self.assertEqual(template['align_v4']['thermal_policy']['contrast_g0_cap_s'], validator.PLACEHOLDER)
+        policy = template['align_v4']['thermal_policy']
+        for key in ('contrast_g0_cap_s', 'g0_cap_receipt'):      # cold review LOW-5 adds g0_cap_receipt
+            self.assertIn(validator.PLACEHOLDER, policy[key])
+            self.assertIn('delete', policy[key])
         self.assertEqual(json.loads((ROOT / validator.DEFAULT_PLAN.relative_to(ROOT)).read_text()), template)
 
 
@@ -325,8 +424,9 @@ class GatePolicyTests(unittest.TestCase):
             with self.subTest(cap=cap), self.assertRaisesRegex(ValueError, "ruling 1\\(f\\) receipt"):
                 validate(self.policy(g0_cap_s=cap))
             self.assertEqual(validate(self.policy(g0_cap_s=cap, g0_cap_receipt=dict(self.RECEIPT)))['g0_cap_s'], cap)
-        for cap in (0, -1, float('nan'), True):
-            with self.subTest(cap=cap), self.assertRaisesRegex(ValueError, 'g0_cap_s'):
+        for cap in (0, -1, float('nan'), True, 1300):
+            # Cold review LOW-5: the message names the receipt range.
+            with self.subTest(cap=cap), self.assertRaisesRegex(ValueError, r'g0_cap_s.*\(0, 1200\] with'):
                 validate(self.policy(g0_cap_s=cap, g0_cap_receipt=dict(self.RECEIPT)))
         for cap in (600, 1200, None):
             updates = {'g0_cap_receipt': dict(self.RECEIPT)}
@@ -369,6 +469,30 @@ class TrackingDict(dict):
         self._log.add(f'{self._path}.{key}')
         return super().__contains__(key)
 
+    # Cold review LOW-3: bulk reads expose every key, so they are logged too.
+    def _bulk(self, kind):
+        self._log.update(f'{self._path}.{k}<{kind}>' for k in dict.keys(self))
+
+    def __iter__(self):
+        self._bulk('iter')
+        return super().__iter__()
+
+    def items(self):
+        self._bulk('items')
+        return super().items()
+
+    def keys(self):
+        self._bulk('keys')
+        return super().keys()
+
+    def values(self):
+        self._bulk('values')
+        return super().values()
+
+    def __deepcopy__(self, memo):
+        self._bulk('deepcopy')
+        return {k: deepcopy(dict.__getitem__(self, k), memo) for k in dict.keys(self)}
+
 
 def _track(value, log, path):
     if isinstance(value, dict):
@@ -396,6 +520,9 @@ class ProcedureTests(unittest.TestCase):
         self.assertEqual(decision['step'], 'CURRENT-RULE')
         self.assertIsNone(decision['receipt_draft'])
         self.assertEqual(decision['set_inputs']['R1.B_D'], 8192)
+        # No receipt: the e901 rule's one cap, X-G included, and no contrast slot (MEDIUM-2).
+        self.assertEqual(decision['set_inputs']['R1.thermal_policy.g0_cap_s'], 600)
+        self.assertNotIn('R1.thermal_policy.contrast_g0_cap_s', decision['set_inputs'])
         rerun = deepcopy(slots)
         rerun['inconclusive_segments'] = {'planning_turn_R_plus_2C': 'G0 did not release, twice'}
         self.assertEqual(proc.decide(rerun, 12)['step'], 'R1-RERUN')
@@ -412,20 +539,47 @@ class ProcedureTests(unittest.TestCase):
         self.assertIn('CONTRAST', notes)
 
     def test_reads_only_timing_and_count_fields(self):
+        # Cold review LOW-3: poison every level, nested phases_s included, and
+        # log bulk reads (iteration, items, keys, values, deepcopy).
         _, slots = eight_bit_case()
-        slots.update(u5={'verdict': 'pass', 'c': 1.0, 'beta_T_j_per_c': 99.0},
+        poison = {'energy_j': 1.0, 'u5_value': 2.0, 'beta_T': 3.0, 'mde_tokens': 4.0, 'temperature_c': 5.0}
+        slots.update(poison, u5={'verdict': 'pass', 'c': 1.0, 'beta_T_j_per_c': 99.0},
                      projected_mde={'tokens': 1.0}, planning_temperature={'beta': 1.0})
         for row in slots['deadman_budget']:
-            row.update(energy_j=31000.0, gross_episode_j=40000.0)
-        slots['x_g']['energy_j'] = 9000.0
+            row.update(poison, gross_episode_j=40000.0)
+            row['phases_s'].update(poison)
+        for block in ('x_g', 'budget_fit_inputs', 'duty_bar', 'slots'):
+            slots[block].update(poison)
+        slots['x_g']['phases_s'].update(poison)
         log = set()
         decision = proc.decide(TrackingDict(slots, log), 12)
         self.assertEqual(decision['branch'], 'a')
-        forbidden = ('energy', 'u5', 'mde', 'beta', 'planning_temperature', 'thermometry', 'high_power')
+        forbidden = ('energy', 'u5', 'mde', 'beta', 'temperature', 'planning_temperature', 'thermometry',
+                     'high_power')
         self.assertFalse([p for p in log if any(f in p for f in forbidden)], sorted(log))
-        top = {p.split('.')[1].split('[')[0] for p in log}
+        top = {p.split('.')[1].split('[')[0].split('<')[0] for p in log}
         self.assertLessEqual(top, {'schema', 'source', 'slots', 'max_r1_tail_s', 'inconclusive_segments',
                                    'budget_fit_inputs', 'duty_bar', 'deadman_budget', 'x_g'})
+
+    def test_no_gated_decode_evidence_is_an_r1_rerun(self):
+        # Cold review LOW-4: branch (a) needs at least one gated D run with decoded tokens.
+        _, slots = eight_bit_case()
+        for row in slots['deadman_budget']:
+            row['phases_s'].update(G1=0.0, H=0.0, decode=0.0)
+            row['decode_tokens'] = 0
+        slots['budget_fit_inputs']['r_decode_tok_per_s'] = 11.9
+        slots['g0_cap_w1'] = kit.w1_g0_cap(slots)
+        derived = kit.r10_2_derivation(slots, kit.l1_t_dead(400.0, 20.0), 12)
+        self.assertEqual((derived['branch'], derived['derivation']['d_g0_cap_s']), ('rerun', None))
+        decision = proc.decide(slots, 12)
+        self.assertEqual((decision['step'], decision['receipt_draft']), ('R1-RERUN', None))
+
+    def test_never_recommends_a_b_d_the_step_d_budget_does_not_allow(self):
+        # Cold review LOW-5: the fit rule only lowers B_D, so (a)'s 6,144 needs slots.B_D >= 6,144.
+        _, slots = eight_bit_case()
+        slots['slots']['B_D'] = 5120
+        with self.assertRaisesRegex(ValueError, r'slots\.B_D 5120 is below'):
+            proc.decide(slots, 12)
 
     def test_cli_drafts_signs_and_the_kit_reads_the_receipt(self):
         inputs, slots = eight_bit_case()

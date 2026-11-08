@@ -395,7 +395,7 @@ def ready_inputs(i_d=300.0, tail=20.0):
     """Synthetic, fully supplied inputs (no model, no study data); WP11 is the committed one."""
     t_dead = kit.l1_t_dead(i_d, tail)
     policy = {'sensors': {'s_fast': 'TC0P', 's_slow': 'TG0P', 'fan_keys': [], 'r0_sha256': 'a' * 64},
-              'classification_sha256': 'b' * 64, 'g0_cap_s': 600, 'contrast_g0_cap_s': 600,
+              'classification_sha256': 'b' * 64, 'g0_cap_s': 600,
               'delta_fast_c': 8.0, 'delta_slow_c': 1.5, 'turn_cap_s': 120, 'chunk_tokens': 512,
               'heavy': True, 'per_turn': True}
     inputs = {
@@ -410,7 +410,6 @@ def ready_inputs(i_d=300.0, tail=20.0):
 
 
 GATED_PHASES = {'G0': 120.0, 'G1': 150.0, 'H': 90.0, 'decode': 280.0, 'prefill': 120.0, 'tool': 6.0}
-X_G_PHASES = {'G0': 120.0, 'G1': 60.0, 'H': 0.0, 'decode': 300.0, 'prefill': 60.0, 'tool': 6.0, 'tail': 0.0}
 
 
 def r1_record(i_d, tail, *, source=kit.R1_HARDWARE_SOURCE, ac_powermode=0):
@@ -434,9 +433,7 @@ def r1_record(i_d, tail, *, source=kit.R1_HARDWARE_SOURCE, ac_powermode=0):
             'budget_fit_inputs': {'r_decode_tok_per_s': 50.0, 'r_decode_step_d_tok_per_s': 50.0,
                                   'turn_cap_tokens': 4096},
             'external_volumes': [{'point': 't0', 'verdict': 'PASS'}], 'inconclusive_segments': {},
-            # R10-4: X-G ran the complete WP18 X turns (12) with no deadman; 600 + 426 <= 1,086.3 s.
-            'x_g': {'status': 'measured', 'g0_outcome': 'released', 'g0_wait_s': 120.0,
-                    'admitted_turns': 12, 'x7': False, 'phases_s': dict(X_G_PHASES)},
+            'x_g': {'status': 'measured', 'g0_outcome': 'released', 'g0_wait_s': 120.0},
             'g0_cap_w1': {'authority': 'LEAD-RULINGS-2 R7-2, R7-12', 'r1_g0_timeout_s': 1200.0,
                           'floor_s': 600.0, 'factor': 1.25,
                           'waits_s': {**dict.fromkeys(kit.GATED_D_RUN_NAMES, 120.0), 'X_G_contrast': 120.0},
@@ -975,8 +972,7 @@ class Round7KitTests(unittest.TestCase):
     def test_policy_g0_cap_must_bind_the_derived_slot(self):
         inputs, slots = ready_inputs()
         inputs['R1']['thermal_policy']['g0_cap_s'] = 625
-        # R10-4: the D members' cap is the D-role derivation of R7-2's rule.
-        with self.assertRaisesRegex(ValueError, r'g0_cap_s must equal the W1 D-role G0 cap.*R7-2, R10-4'):
+        with self.assertRaisesRegex(ValueError, r'r1_slots\.g0_cap_w1\.value_s.*LEAD-RULINGS-2 R7-2'):
             kit.require_ready(inputs, slots)
 
     def test_ruling_1f_uses_w1_cap_instead_of_measured_d_max(self):
@@ -991,27 +987,20 @@ class Round7KitTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, r'ruling 1\(f\).*g0_cap_w1'):
             kit.require_ready(inputs, slots)
 
-    def test_inconclusive_x_g_falls_back_and_is_refused_by_the_contrast_fit(self):
-        # R7-12's fallback still sets the X-G (D-to-X) term to the R1 timeout,
-        # but since LEAD-RULINGS-2 R10-4 that term is the contrast members'
-        # own cap, not D's: 1(f) keeps D's 600 s cap, and the contrast cap of
-        # 1,200 s cannot fit the 1,086.3 s contrast deadman, so W1 is refused
-        # (R10-2(a)), where before R10 it was admitted.
+    def test_inconclusive_x_g_falls_back_and_is_admitted_when_1f_fits(self):
         inputs, slots = ready_inputs(i_d=0)
         for row in slots['deadman_budget']:
             row['phases_s'].update(G1=0, H=0)
         set_decode_rate(slots, 80.0)
-        slots['x_g'].update(status='inconclusive', g0_outcome='timeout', g0_wait_s=1200)
+        slots['x_g'] = {'status': 'inconclusive', 'g0_outcome': 'timeout', 'g0_wait_s': 1200}
         cap = slots['g0_cap_w1'] = kit.w1_g0_cap(slots)
+        inputs['R1']['thermal_policy']['g0_cap_s'] = cap['value_s']
         self.assertIs(cap['x_g_fallback'], True)
         self.assertEqual(cap['waits_s']['X_G_contrast'], 1200)
         self.assertIn('X_G_contrast', cap['censored'])
         fit = kit.ruling_1f_fit(slots, 8192, inputs['R1']['T_dead'])
-        self.assertEqual(fit['terms_s']['G0_s'], 600)
-        self.assertTrue(fit['fits'])
-        self.assertEqual(kit.w1_contrast_g0_cap(slots, 12)['value_s'], 1200)
-        with self.assertRaisesRegex(ValueError, r'R10-2\(a\): the contrast members.*R7-12'):
-            kit.require_ready(inputs, slots)
+        self.assertEqual(fit['terms_s']['G0_s'], 1200)
+        kit.require_ready(inputs, slots)
         # No G0 interval after a predecessor did no D work: still censored.
         slots['x_g']['g0_wait_s'] = None
         self.assertEqual(kit.w1_g0_cap(slots), cap)
