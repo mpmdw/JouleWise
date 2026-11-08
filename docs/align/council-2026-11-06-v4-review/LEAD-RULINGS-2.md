@@ -903,3 +903,109 @@ What each disposition changed:
   - **Contract doc.** In `r1_runtime_contract.md`, the scope note now opens the G0_cap_W1 bullet.
   - **Template.** The W1 template carries `g0_cap_receipt` and `contrast_g0_cap_s` as receipt-only slots, to be filled from the receipt or deleted.
 - **Builder addition, for the lead to confirm.** Because the no-receipt term now includes X-G again, a record can have G0\* ≥ 600 s while the e901 rule still misses (a long X-G wait). R10-2(a) was ruled for a D cap below 600 s, so the derivation calls this `lead`. The kit refuses such a receipt, and `decide` returns to the lead.
+
+
+## Round 11 — R11 Track 1 (2026-11-08)
+
+Authority: **RUN_STATE item 212**, read at local `origin/main`
+`bfaf119f2c912921d37a12712fa6cb7338bb1b70`, R11-1 through R11-4.
+The adopted agreement is `4526de7d587a412073cf792c959090401e8d4797:
+docs/align/squeeze/AGREEMENT-FINAL.md`, **Track 1 R01–R16 only** in this lane.
+Retrieve these immutable texts with `git show`. This section records the
+lead's ruling; it is not a new builder ruling, registration or arm authority.
+The [single clause/disposition map](../squeeze/fanout/apply-r11.md) binds each
+R-item to protocol, kit/desk behavior, tests, native inputs and remaining gates.
+
+- **R07 / D-C1, explicit supersession.** R11-2 supersedes **R10 builder
+  ruling (iv)** and the cold-review **MEDIUM-2 contrast-only restriction**.
+  The contrast proof and its own cap now apply on receipt and no-receipt
+  paths. Failed proof/identity is **predeclared non-veto INCONCLUSIVE**.
+  D's no-receipt G0 term and signed-receipt 1(f) semantics are unchanged.
+  Nominal contrast cap is the old wait rule; cap_c is its minimum with
+  floor(T_contrast − X-G episode − 10), lower-bounded at zero. Missing timing
+  or nonpositive remaining span yields immediate G0 timeout, with retained
+  custody. A lower cap/incomplete X-G cannot certify T. Changed predecessor
+  heat is disclosed for downstream W1 D, which stays development data.
+  The plan/runtime carry the rederived `contrast_fit`; both desks combine it
+  with WP19's identity predeclaration. Partial X cannot pass WP19; all X/Y
+  renders and native evidence are still required. A seeded render is no
+  attestation of original execution.
+- **R10 / D-25a.** R11-2 confirms `qwen3.8-27b` as the seed string.
+  `qwen3.8-27b-8bit` is an explicit quantization/configuration label and public
+  deviation. No cross-quantization pooling or CRN inference. Bind R0 record
+  digest to sensor provenance; cohort checks include model source/revision,
+  actual runtime/artifact identity and effective execution/thermal controls,
+  in addition to the four fixed slots. Missing identity cannot pass.
+- **R03.** R11-2 installs **no k=3 or 2.576**. The previous builder's
+  k=3 choice was unsupported and is withdrawn. Explicit pilot exports can
+  produce descriptive replay summaries, but `u3_bar.json` is **PENDING**
+  frozen predictive derivation, operating-characteristic/series/dependence
+  sensitivity, D transfer limitations and independent gate. Historical k=3
+  receipts are refused; v4 cannot fall back to v3's U3 margin.
+- **R14.** R11-2: m=39 rank 38 → ≤5%; maximum rank 39 → ≤2.5%, conditional
+  on exchangeable scores from the same frozen scorer, using strict `>`.
+  Generic alpha=.025 has maximum rank only at 39≤m≤78. V4's prospective
+  maximum and the frozen legacy diagnostics are explicitly distinguished in
+  protocol/residual/public text. LOTO/full-fit asymmetry and window dependence
+  are separate unresolved qualifications; a new helper does not close them.
+- **R16.** Bind all three gated D runs' actual per-turn decode counts,
+  completion booleans, totals and source digests. Recompute observed whole-turn
+  admission at the **chosen** B_D in procedure and kit. Below three → (b);
+  missing/inconsistent evidence → unresolved/R1-RERUN. This is benign
+  opportunity, not sabotage capability or a guarantee before EOS/context/
+  deadman. Do not assert an earlier R0-read deadline was met: the lead must
+  supply actual freeze/access chronology before any rung-changing proxy.
+- **R02.** Use required **InstantAmperage** from the frozen parser, ≥99%
+  SoC and missing-field refusal. Optional Amperage never substitutes. Retain
+  completed-top-up timing, OBC-off attestation and raw observations. The
+  numeric B window bar/consequence is **U**, lead-owned; the builder's ≤1
+  separate B bar is withdrawn. Charging exclusions remain; arm float does
+  not establish zero battery assist over a whole member.
+- **R05.** W1 replay is **5/17**; 18 is bank/benign seed 93. Keep ≥3-turn,
+  completed/clean source admission and final-policy comparability. Alternate
+  18 supplies no silent singleton E_ref. Without qualified original/alternate
+  reference and prospectively admitted recovery, the result is unresolved;
+  extension windows alone are insufficient.
+- **R04/R08, retained policy.** U4 drift, U5 controlled state and U6 precision
+  remain distinct; failed/imprecise is never pass. No diagnostic-W1 U5 waiver
+  or budget-X7 exception is adopted by this builder. An S6 fallback needs a
+  changed band and a new passing measured record; bare step+authority does
+  not admit W1. Idle-450/4-bit steps are inexpressible in this kit. A future
+  X7 exception requires completed-turn evidence including missing/censored
+  cases; a truncated last turn cannot prove a budget stop. Updated U6 OC at
+  the final Q6 roster remains lead/statistics-owned.
+- **R11, builder's M mechanism choice.** Retain by-day source/config/digest/
+  time-bound offload verification, with **no invented freshness duration**.
+  Require explicit prospective lead-signed `daytime_offload_freshness`
+  (`max_age_s`, `lead_signature`) in config and receipt. Arm checks free disk
+  without mounting/rehashing. Qualified full-span mount-event coverage and
+  its missing-evidence rule are still required; `/Volumes` or polling alone
+  cannot certify continuous absence. KM003C attachment is not a disk mount.
+- **R12.** Preserve align-local early refusal on authenticated unobserved R,
+  failed custody, observer SystemExit absorption/KeyboardInterrupt latch and
+  High Power restore. Do not rewrite the shared chain. `--max-failures 1`
+  is not a whole-chain stop. R1 scheduling/census and W1 guards have distinct
+  policies; #694-on-#699 delta evidence is still an owner/pin obligation.
+- **R13.** Q4/Q6 are affirmative; m≥39/pair plus separate locked test units.
+  R11-2 explicitly sends margin to the magistrate/series plan and lead **before
+  W1**. Six intact windows yield 42 benign/pair before attrition; one lost
+  window leaves 35. D7/D8, an eighth window and ≥6 sabotage remain proposals
+  pending prospective disposition. Freeze actual fit/C/test rosters, both-pair
+  stopping OC and cap; at cap return insufficient calibration/unresolved.
+  No extensions or outcome-driven top-ups are authorized here.
+- **R15.** Untouched H=0 reference; exclude every scored source carrier from
+  calibration; ≥40 total for ≥39 remaining at .025. Strict `>` in H* and the
+  carrier curve, actual integer-dose grids, undefined/censored/nonmonotone
+  crossings explicit. Bootstrap whole windows with multiplicity and fixed
+  pre-resampling thresholds; report its conditional scope and undefined
+  replicate counts, never discard undefined replicates into a narrow interval.
+  Final D scorer wiring/OC and independent admission remain pending.
+
+R11-3: merge KM003C declaration/checks and SECONDARY DC analysis; reuse the
+existing supervised reader. V4's registered residual is GPU-energy. Actual
+samples, clock coverage, custody and battery flow need a clean lead-controlled
+native gate. R11-4: v4's only acquisition additions remain KM003C in every
+window and sealed full transcripts including reasoning. V5 adversary/monitor/
+controls/test endpoints remain an add-on with its own registration; no v4
+transcript is scored here. Stage A/B exact-candidate gate receipts, WP19 native
+qualification, U3 derivation and pending choices are not supplied by this lane.

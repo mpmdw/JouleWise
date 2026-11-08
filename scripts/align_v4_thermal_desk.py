@@ -29,6 +29,11 @@ def registration_evidence(directory):
     return bar, wp19
 
 
+def contrast_predeclaration(wp19, policy):
+    reasons = [wp19.get('contrast_predeclared'), (policy.get('contrast_fit') or {}).get('predeclared')]
+    return '; '.join(r for r in reasons if r) or None
+
+
 def r1_soak_c(directory):
     from joulewise.align.apple.r1_runtime import read_soak_reference, reference_c
     inputs = json.loads((directory/'inputs.json').read_bytes())
@@ -46,6 +51,7 @@ def enrich_record(record, bundle):
     spec = EpisodeSpec.from_text(config['workload_profile']['prompt_text'])
     turns = [json.loads(line) for line in read_bytes(Path(bundle)/'outputs/align_turns.jsonl').splitlines() if line.strip()]
     thermal = ep.hardware.get('thermal') or {}
+    record['cohort_identity'] = registration.cohort_identity(config, spec, ep.hardware.get('runtime_identity') or {})
     record.update(configuration={k: getattr(spec, k) for k in
         ('max_episode_decode_tokens', 'deadman_s', 'max_tokens', 'max_turns')},
         status='incomplete' if ep.hardware.get('token_budget', {}).get('incomplete', True) else 'completed',
@@ -66,6 +72,7 @@ def main(argv=None):
                         metavar='PILOT.json', help='repeat for the K-session desk read')
     args = parser.parse_args(argv)
     bar, wp19 = registration_evidence(args.registration_dir)
+    policy = json.loads((args.registration_dir/'inputs.json').read_bytes())['R1']['thermal_policy']
     manifest = json.loads(args.manifest.read_text())
     root = args.manifest.resolve().parent
     members = []
@@ -108,7 +115,7 @@ def main(argv=None):
     result = window_report(members, cross_windows=inputs.get('cross_windows'),
                            sensitivity=inputs.get('sensitivity'), monitoring=inputs.get('monitoring'),
                            u3_bar=bar, v4=True, delta_slow_c=manifest.get('delta_slow_c'),
-                           contrast_predeclared=wp19.get('contrast_predeclared'))
+                           contrast_predeclared=contrast_predeclaration(wp19, policy))
     soak = r1_soak_c(args.registration_dir) if (args.registration_dir/'r1_soak_reference.json').is_file() else None
     result['registration_diagnostics'] = registration.desk_diagnostics(members, r1_soak=soak)
     result['u3_bar'] = bar

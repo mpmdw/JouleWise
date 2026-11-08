@@ -57,7 +57,9 @@ class KitBridgeTests(unittest.TestCase):
         plan, _, _ = dry.build_kit(dry.SYN_INPUTS)
         dead = {m['spec'].get('deadman_s') for m in plan['members'] if m['role'][:1] in 'XY'}
         self.assertEqual(dead, {kit.CONTRAST_DEADMAN_S})
-        self.assertGreater(kit.CONTRAST_DEADMAN_S, 600, 'a G0 timeout (600 s cap) must fit the deadman')
+        proof = kit.w1_contrast_g0_cap(dry.SYN_R1_SLOTS, 5)
+        self.assertLessEqual(proof['value_s'] + proof['episode_s'] + 10, kit.CONTRAST_DEADMAN_S)
+        self.assertIsNone(proof['predeclared'])
 
     def test_synthetic_t_dead_is_bound_by_l1_and_the_r1_tail(self):
         r1 = dry.SYN_INPUTS['R1']

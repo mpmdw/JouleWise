@@ -15,6 +15,10 @@ WP19_SCHEMA = 'joulewise.align_v4.wp19_identity.v1'
 RULINGS = (4, 5, 6, 9, 11, 15, 17, 18, 20)
 ARTIFACTS = (
     'docs/align/pilot_protocol_v4.md', 'docs/align/v4/DEVIATIONS.md',
+    'docs/align/council-2026-11-06-v4-review/LEAD-RULINGS-2.md',
+    'scripts/align_w1_budget_procedure.py', 'joulewise/align/apple/km003c.py',
+    'scripts/validate_align_v4_w1_plan.py', 'joulewise/align/apple/pilot_analysis.py',
+    'joulewise/align/energy_residual.py',
     'scripts/align_v4_kit.py', 'scripts/align_v4_session.py',
     'scripts/align_v4_thermal_desk.py', 'scripts/align_pilot_session.py',
     'scripts/align_v4_u3_bar.py', 'scripts/align_v4_wp19.py', 'scripts/align_v4_offloads.py',
@@ -22,6 +26,8 @@ ARTIFACTS = (
     'joulewise/align/apple/thermal_desk.py', 'joulewise/align/apple/thermal_gates.py',
     'joulewise/align/apple/endpoint.py', 'joulewise/align/apple/workload.py',
     'scripts/run_night.py', REGISTRATION+'inputs.json', REGISTRATION+'r1_slots.json',
+    REGISTRATION+'identity_pins.json', REGISTRATION+'model_artifact_inventory.json',
+    REGISTRATION+'local_file_verification.json',
     REGISTRATION+'w1_plan.json', REGISTRATION+'u3_bar.json', REGISTRATION+'wp19_receipt.json',
     REGISTRATION+'r1_soak_reference.json',
     'configs/campaigns/align_v4/plan_tree.json', 'configs/campaigns/align_v4/collection_plan.json',
@@ -108,18 +114,6 @@ def require_registration(root):
     return receipt
 
 
-def _gamma_p(a, x):
-    # Lower regularized gamma via convergent series; used only for df <= 4
-    # and the lower .10 chi-square quantile (small-n U3 upper SD limit).
-    term = total = 1/a
-    for n in range(1, 10000):
-        term *= x/(a+n)
-        total += term
-        if abs(term) < abs(total)*1e-15:
-            return total*math.exp(-x+a*math.log(x)-math.lgamma(a))
-    raise ValueError('chi-square quantile did not converge')
-
-
 def derive_u3(pairs, source_sha256):
     if not isinstance(source_sha256, dict) or not source_sha256 or not all(is_digest(v) for v in source_sha256.values()):
         raise ValueError('U3 requires input sha256 digests')
@@ -140,53 +134,38 @@ def derive_u3(pairs, source_sha256):
         relative.append((values[1]-values[0])/statistics.fmean(values))
     if len(relative) < 2:
         raise ValueError('U3 requires at least two eligible replay pairs')
-    sd = statistics.stdev(relative)
-    n, used = len(relative), sd
-    if n < 6:
-        df = n-1
-        lo, hi = 0., 20.
-        for _ in range(100):
-            mid = (lo+hi)/2
-            if _gamma_p(df/2, mid/2) < .1:
-                lo = mid
-            else:
-                hi = mid
-        used = sd*math.sqrt(df/((lo+hi)/2))
-    return {'schema': U3_SCHEMA, 'k': 3, 'floor_j': 8.91, 'n': n,
-            's_rel_sample': sd, 's_rel': used,
-            'small_n_upper_confidence': .90 if n < 6 else None,
+    return {'schema': U3_SCHEMA, 'status': 'PENDING', 'n': len(relative),
+            's_rel_sample': statistics.stdev(relative), 'signed_relative_differences': relative,
             'source_sha256': source_sha256, 'pairs': pairs,
-            'normal_theory_false_fail_per_pair': math.erfc(3/math.sqrt(2)),
-            'empirical_exceedance_fraction': sum(abs(r)*statistics.fmean(p['energies_j']) >
-                max(8.91, 3*used*statistics.fmean(p['energies_j'])) for r, p in zip(relative, pairs))/n,
-            'limitations': 'Normal-theory SD limit; pilot pairs can share trajectories/windows; not a series guarantee.'}
+            'derivation_required': ['frozen predictive distribution and small-sample uncertainty',
+                                    'operating-characteristic and series/dependence sensitivity',
+                                    'explicit limitation of 30B-to-D transfer',
+                                    'lead-adopted bar and independent registration gate'],
+            'limitations': 'Descriptive pilot summary only; no multiplier, margin or false-fail guarantee.'}
 
 
 def validate_u3(bar):
-    if not isinstance(bar, dict) or bar.get('schema') != U3_SCHEMA:
-        raise ValueError('u3_bar.json pending or malformed')
-    expected = derive_u3(bar.get('pairs', []), bar.get('source_sha256'))
-    if bar != expected:
-        raise ValueError('u3_bar.json differs from rederived k = 3 relative bar')
-    return bar
+    # RUN_STATE 212 R11-2/R03: neither k=3 nor 2.576 is an installed rule.
+    # A later scientific derivation and scoped implementation/gate must replace
+    # this stop. A historical v1 k=3 artifact cannot bypass it.
+    raise ValueError('U3 PENDING frozen predictive derivation and operating-characteristic sensitivity (R11/R03)')
 
 
 def u3_margin(mean_energy_j, bar):
     validate_u3(bar)
-    return max(bar['floor_j'], bar['k']*bar['s_rel']*mean_energy_j)
 
 
 def battery_arm(observation, attested_by):
     reasons = []
     if not isinstance(attested_by, str) or not attested_by.strip():
         reasons.append('OBC off requires --obc-off-attested-by')
-    age, soc, current = (observation.get(k) for k in ('update_age_s', 'current_capacity_pct', 'amperage_ma'))
+    age, soc, current = (observation.get(k) for k in ('update_age_s', 'current_capacity_pct', 'instant_amperage_ma'))
     finite = lambda x: type(x) in (int, float) and math.isfinite(x)
     if (observation.get('passed') is not True or observation.get('probe_error') is not False
             or observation.get('external_connected') is not True or observation.get('is_charging') is not False
             or not finite(age) or not 0 <= age <= 180 or not finite(soc) or not 99 <= soc <= 100
             or not finite(current) or abs(current) > 200):
-        reasons.append('battery top-up incomplete/unobserved: require fresh AC, >=99%, not charging, |Amperage| <=200 mA')
+        reasons.append('battery top-up incomplete/unobserved: require fresh AC, >=99%, not charging, |InstantAmperage| <=200 mA')
     return {'admitted': not reasons, 'reasons': reasons, 'obc_off_attested_by': attested_by,
             'observation': observation}
 
@@ -204,7 +183,7 @@ def wp19_identity(fixtures, rendered_prompt_ids, live_x_turns, *, live_source_sh
     live_ok = bool(live_x_turns) and len(live_x_turns) <= len(x) and all(
         all(row.get(k) == ref[k] for k in ('turn', 'prompt_token_ids', 'output_token_ids'))
         for row, ref in zip(live_x_turns, x))
-    passed = all(checks.values()) and live_ok
+    passed = all(checks.values()) and live_ok and len(live_x_turns) == len(x)
     return {'schema': WP19_SCHEMA, 'verdict': 'pass' if passed else 'fail',
             'render_all_turns': checks, 'live_x_identical': live_ok,
             'live_x_turns_compared': len(live_x_turns), 'live_x_complete': len(live_x_turns) == len(x),
@@ -222,10 +201,30 @@ def validate_wp19(receipt):
             or any(type(v) is not bool for v in receipt.get('render_all_turns', {}).values())
             or not receipt.get('static_proof')
             or (receipt['verdict'] == 'pass' and (not all(receipt['render_all_turns'].values())
-                                                 or receipt.get('live_x_identical') is not True))
+                                                 or receipt.get('live_x_identical') is not True
+                                                 or receipt.get('live_x_complete') is not True))
             or (receipt['verdict'] == 'fail' and receipt.get('contrast_predeclared') != 'INCONCLUSIVE: identity broken')):
         raise ValueError('wp19_receipt.json pending or malformed')
     return receipt
+
+
+def cohort_identity(config, spec, runtime):
+    """Bind model/quantization source, observed stack and effective controls.
+
+    Capture/consumer custody locators differ by member; their effective
+    thermal controls stay in the identity. Never substitute requested stack
+    versions for an absent runtime observation.
+    """
+    policy = spec.execution_policy_projection()
+    if 'thermal' in policy:
+        policy['thermal'] = {k: v for k, v in policy['thermal'].items() if k != 'window_reference'}
+    canonical = lambda value: digest(json.dumps(value, sort_keys=True, separators=(',', ':'),
+                                               allow_nan=False).encode())
+    model = config.get('model', {})
+    observed = all(runtime.get(k) for k in ('mlx_version', 'mlx_lm_version', 'model_artifact_identity'))
+    return {'model_source': model.get('source'), 'model_revision': model.get('revision'),
+            'runtime_sha256': canonical(runtime) if observed else None,
+            'execution_policy_sha256': canonical(policy)}
 
 
 def desk_diagnostics(members, *, r1_soak=None):
@@ -237,7 +236,9 @@ def desk_diagnostics(members, *, r1_soak=None):
     chosen = next((i for i in (5, 18) if candidates[i]['admissible']), None)
     sentinel = {'ordinal': chosen, 'candidates': candidates,
                 'E_ref_basis': 'R1 replay pair plus W1 5/17' if chosen == 5 else
-                               'single ordinal-18 run' if chosen == 18 else 'unavailable; extension windows required',
+                               'PENDING matched alternate reference and prospective recovery' if chosen == 18 else
+                               'unresolved; no admissible original or alternate',
+                'reference_status': 'candidate; final-policy comparison required' if chosen == 5 else 'unresolved',
                 'predecessor_disclosure': 'W1 5/17 follow 30B; alternate 18 and D_k late sentinel follow D'}
     reference = next((r.get('window_reference') for r in members if r.get('ordinal') == 5), {}) or {}
     waits = [{'ordinal': r['ordinal'],
@@ -248,7 +249,7 @@ def desk_diagnostics(members, *, r1_soak=None):
     for model in {r.get('model') for r in members}:
         selected = [r for r in members if r.get('model') == model]
         count = sum(any(str(f).startswith('battery.member_span') for f in r.get('flags', [])) for r in selected)
-        windows[model] = {'B_count': count, 'bar_pass': count <= 1,
+        windows[model] = {'B_count': count, 'bar_pass': None, 'status': 'PENDING lead window consequence',
                           'members': [{'id': r['id'], **r.get('battery', {'soc_pct': None, 'charger_w': None})}
                                       for r in selected]}
     return {'sentinel': sentinel, 'battery_windows': windows,

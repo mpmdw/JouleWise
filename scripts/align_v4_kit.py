@@ -103,6 +103,10 @@ def pending_inputs(inputs):
     }
     pending = []
     def visit(value, path):
+        # R11 contrast evidence deliberately retains unknown timings; its exact
+        # non-veto record is validated separately, never treated as D input.
+        if path == 'R1.thermal_policy.contrast_fit':
+            return
         # Empty fan_keys is a valid policy choice (no fan telemetry selected).
         if value is None or value == '' or value == {} or (value == [] and not path.endswith('.fan_keys')):
             pending.append(path)
@@ -186,8 +190,7 @@ def check_r1_evidence(inputs, r1_slots, *, synthetic=False, receipt=None):
     must carry a verdict, every ruling 20 census must have passed, and the
     duty bar must pass or carry a recorded lead fallback step (ruling 1(e)).
     ``receipt`` is the lead's committed ruling 1(f) receipt or None
-    (LEAD-RULINGS-2 R10-4); the contrast G0 cap must fit the contrast deadman
-    either way (R10-2(a)).
+    (LEAD-RULINGS-2 R10-4); R11 binds a non-veto contrast cap/fit on every path.
     """
     if not isinstance(r1_slots, dict) or r1_slots.get('schema') != R1_SLOTS_SCHEMA:
         raise ValueError(f'R1 r1_slots must be a {R1_SLOTS_SCHEMA} record')
@@ -203,7 +206,7 @@ def check_r1_evidence(inputs, r1_slots, *, synthetic=False, receipt=None):
                          'bar and no gated runs; W1 cannot be sized from this R1 record; '
                          'the remedy is an R1 re-run, which is the magistrate\'s call, '
                          'with no per-occurrence lead ruling (LEAD-RULINGS-2 R7-3)')
-    if inconclusive:
+    if {k: v for k, v in inconclusive.items() if k != 'X_G_contrast'}:
         # A designed start state that was never reached leaves beta_T (U5)
         # without a point; before R6-2 it refused the night, so it still
         # refuses W1 here (Sol critique of round 6).
@@ -296,10 +299,12 @@ def check_r1_evidence(inputs, r1_slots, *, synthetic=False, receipt=None):
         raise ValueError('R1 duty bar must record the R6-1 schedule: each gated D run and X-G after a D turn with '
                          f'only W1\'s configured idle {expected} (duty_bar.schedule)')
     if not duty['pass']:
-        fallback = duty.get('lead_fallback')
-        if (not isinstance(fallback, dict) or fallback.get('step') not in DUTY_FALLBACK_STEPS
-                or not isinstance(fallback.get('authority'), str) or not fallback['authority'].strip()):
-            raise ValueError('R1 duty bar failed and no lead fallback step (ruling 1(e)) is recorded')
+        raise ValueError('R1 duty bar failed: no lead fallback step alone qualifies; supply a qualified remeasured '
+                         'final R1 record. Idle-450/4-bit steps are not expressible in this 8-bit kit (R11/R08)')
+    opportunity = turn_opportunity(r1_slots, inputs['R1']['B_D'])
+    if opportunity['status'] != 'pass':
+        raise ValueError('R11 turn opportunity at chosen B_D is ' + opportunity['status'] +
+                         '; qualified per-turn counts and >=3 admitted turns per gated D run required')
 
 
 STEP_D_SEGMENT = 'step_D_prefill_10k_decode_4096'
@@ -393,12 +398,54 @@ def check_duty_bar_consistency(r1_slots):
     duty = r1_slots.get('duty_bar')
     if not isinstance(duty, dict) or duty.get('verdict') != verdict or duty.get('pass') is not (verdict == 'pass'):
         raise ValueError('R1 duty_bar verdict/pass disagrees with the per-run duty verdicts')
+    if verdict == 'pass' and any(row.get('x7') is not False for row in rows):
+        raise ValueError('R11: no X7/deadman waiver is installed; passing duty labels require explicit no-X7 evidence')
 
 
 # The R1 driver's three gated D runs (council ruling 1(b)); ruling 1(f) is
 # judged over all three, never a subset.
 GATED_D_RUN_NAMES = ('D_spam_benign_s1_gated_held_a', 'D_spam_benign_s1_gated_held_b',
                      'D_bank_benign_s1_gated_held')
+
+
+def turn_opportunity(r1_slots, b_d):
+    """Count observed whole-turn admissions at W1's chosen B_D (R11/R16).
+
+    Count exports are lead-owned backfills from explicit bundle bytes; their
+    source digest binds the export. Missing/censored completion evidence never
+    implies a third turn or qualifies a budget-X7 exception.
+    """
+    rows = r1_slots.get('deadman_budget', [])
+    if (type(b_d) is not int or b_d <= 0 or not isinstance(rows, list)
+            or len(rows) != 3 or any(not isinstance(r, dict) for r in rows)
+            or {r.get('run') for r in rows} != set(GATED_D_RUN_NAMES)):
+        return {'status': 'inconclusive', 'B_D': b_d, 'runs': [], 'reason': 'missing gated D roster/budget'}
+    results = []
+    cap = (r1_slots.get('budget_fit_inputs') or {}).get('turn_cap_tokens')
+    for row in rows:
+        counts, completed = row.get('turn_decode_counts'), row.get('turn_completed')
+        valid = (type(cap) is int and isinstance(counts, list) and bool(counts)
+                 and all(type(n) is int and 0 <= n <= cap for n in counts)
+                 and isinstance(completed, list) and len(completed) == len(counts)
+                 and all(type(v) is bool for v in completed)
+                 and all(completed[:-1]) and sum(counts) == row.get('decode_tokens')
+                 and row.get('admitted_turns') == len(counts)
+                 and valid_digest(row.get('turn_counts_source_sha256')))
+        used = admitted = 0
+        if valid:
+            for n in counts:
+                if used >= b_d:
+                    break
+                admitted += 1
+                used += n
+        results.append({'run': row.get('run'), 'admitted_at_B_D': admitted if valid else None,
+                        'status': ('pass' if admitted >= 3 else 'fail') if valid else 'inconclusive'})
+    status = ('inconclusive' if any(r['status'] == 'inconclusive' for r in results)
+              else 'fail' if any(r['status'] == 'fail' for r in results) else 'pass')
+    return {'status': status, 'B_D': b_d, 'runs': results,
+            'limitation': 'Observed benign opportunity only; no guarantee before EOS/context/deadman or of sabotage capability.'}
+
+
 GATED_PHASES = ('G0', 'G1', 'H', 'decode', 'prefill', 'tool', 'tail')
 S6_TUNING_CAP_C = 2.0   # council ruling 1(e) step 1: delta_slow capped at 2.0 C
 
@@ -595,15 +642,11 @@ X_G_EVIDENCE_FIELDS = ('admitted_turns', 'x7', 'phases_s')
 
 
 def w1_contrast_g0_cap(r1_slots, x_max_turns, root=ROOT):
-    """LEAD-RULINGS-2 R10-4 and R10-2(a): the contrast members' own W1 G0 cap
-    and its proof against the contrast deadman (CONTRAST_DEADMAN_S, 1,086.3 s).
+    """R11/R07: deadman-bounded, non-veto contrast on every W1 path.
 
-    The cap is clamp(ceil(1.25 x X-G's G0 wait), 600, R1 timeout); an X-G that
-    is not measured keeps R7-12's D-to-X fallback, the R1 timeout. It fits
-    when R1's X-G ran W1's complete WP18 X turn count (the heaviest contrast
-    member: X decodes more than Y, and only the G arms gate per turn) with no
-    deadman, and cap + X-G's G1 + H + prefill + decode + tool <= the contrast
-    deadman. Returns the arithmetic with ``fits`` and the ``reasons`` it fails.
+    A missing/negative available span gives a zero-cap G0 timeout, never an
+    invented episode estimate. This preserves the member/predecessor order,
+    but its changed heat history must be disclosed in all downstream D rows.
     """
     timeout = r1_g0_timeout_s(root)
     x_g = r1_slots.get('x_g') if isinstance(r1_slots, dict) else None
@@ -613,33 +656,36 @@ def w1_contrast_g0_cap(r1_slots, x_max_turns, root=ROOT):
                 and finite(wait) and wait >= 0)
     reasons = []
     if not measured:
-        reasons.append('X-G is not measured with a released G0, so its D-to-X G0 term is the R1 timeout '
-                       '(R7-12), which leaves no contrast episode inside the deadman')
-    value = _role_cap(float(wait) if measured else timeout, timeout)
+        reasons.append('X-G released wait unavailable')
+    nominal = _role_cap(float(wait) if measured else timeout, timeout)
     turns, x7, phases = (x_g.get(k) for k in X_G_EVIDENCE_FIELDS)
-    if type(x_max_turns) is not int or x_max_turns <= 0:
-        reasons.append('WP18 X max_turns is not a recorded positive integer')
-    elif type(turns) is not int or turns != x_max_turns:
-        reasons.append(f'X-G admitted {turns!r} turns, not the complete WP18 X count {x_max_turns}')
+    if type(x_max_turns) is not int or x_max_turns <= 0 or type(turns) is not int or turns != x_max_turns:
+        reasons.append('X-G did not establish the complete WP18 X turn count')
     if x7 is not False:
-        reasons.append(f'X-G must record x7 false (no deadman); got {x7!r}')
+        reasons.append('X-G completion/no-deadman evidence unavailable')
     episode = None
     if isinstance(phases, dict) and all(finite(phases.get(k)) and phases[k] >= 0 for k in CONTRAST_EPISODE_PHASES):
         episode = math.fsum(phases[k] for k in CONTRAST_EPISODE_PHASES)
     else:
-        reasons.append('X-G must record finite, non-negative ' + ', '.join(CONTRAST_EPISODE_PHASES)
-                       + ' seconds (r1_slots.x_g.phases_s)')
-    worst = None if episode is None else value + episode
-    if worst is not None and worst > CONTRAST_DEADMAN_S + 1e-6:
-        reasons.append(f'contrast cap {value} s + X-G episode {episode:.1f} s = {worst:.1f} s exceeds the '
-                       f'contrast deadman {CONTRAST_DEADMAN_S:.1f} s')
-    return {'authority': 'LEAD-RULINGS-2 R10-2(a), R10-4, R7-12', 'role': 'contrast',
+        reasons.append('X-G episode timing unavailable')
+    available = None if episode is None else math.floor(CONTRAST_DEADMAN_S - episode - 10)
+    value = 0 if available is None else max(0, min(nominal, available))
+    if value == 0:
+        reasons.append('no qualified positive contrast cap; immediate G0 timeout')
+    if measured and value < math.ceil(1.25*wait):
+        reasons.append('deadman-fitted cap is below the released-wait allowance')
+    if value < nominal:
+        reasons.append('reduced contrast cap can change predecessor heat for downstream W1 D')
+    # Native X/Y identity is a separate WP19 requirement, never inferred here.
+    return {'authority': 'LEAD-RULINGS-2 R11 / RUN_STATE 212', 'role': 'contrast',
             'r1_g0_timeout_s': timeout, 'x_g_wait_s': float(wait) if measured else None,
             'x_g_fallback': not measured, 'value_s': value, 'x_max_turns': x_max_turns,
-            'episode_s': episode, 'worst_s': worst, 'deadman_s': CONTRAST_DEADMAN_S,
+            'episode_s': episode, 'available_cap_s': available, 'nominal_cap_s': nominal,
+            'worst_s': None if episode is None else value+episode, 'deadman_s': CONTRAST_DEADMAN_S,
             'fits': not reasons, 'reasons': reasons,
-            'rule': ('clamp(ceil(1.25 * X-G G0 wait), 600, R1 g0_timeout_s); fits when X-G ran the complete WP18 '
-                     'X turns with no deadman and cap + G1 + H + prefill + decode + tool <= the contrast deadman')}
+            'predeclared': 'INCONCLUSIVE: ' + '; '.join(reasons) if reasons else None,
+            'history_disclosure': 'A skipped/capped contrast changes predecessor heat for W1 D; W1 is development only.',
+            'rule': 'cap_c=max(0,min(nominal,floor(contrast_deadman-X_G_episode-10))); missing timing gives 0; non-veto INCONCLUSIVE'}
 
 
 # LEAD-RULINGS-2 R10-2 / R10-4: the lead's ruling 1(f) receipt.
@@ -803,9 +849,6 @@ def verify_ruling_1f_receipt(receipt, r1_slots, t_dead, x_max_turns, root=ROOT):
     if derived['branch'] == 'lead':
         raise ValueError('ruling 1(f) receipt (R10-2(a)) refused: G0* is at least 600 s while the current rule does '
                          'not fit; return to the lead')
-    if not derived['contrast']['fits']:
-        raise ValueError('R10-2(a): the contrast members\' G0 cap cannot be shown to fit the contrast deadman '
-                         f'{CONTRAST_DEADMAN_S:.1f} s from R1\'s X-G record: ' + '; '.join(derived['contrast']['reasons']))
     if derived['branch'] != 'a':
         raise ValueError(f'ruling 1(f) receipt (R10-2(a)) refused: ceil(1.25 x the longest released gated D G0 '
                          f'wait) = {d["admit_bound_s"]} s against G0* = {d["G0_star_s"]:.1f} s, censored gated D G0 '
@@ -848,12 +891,10 @@ def check_r1_budget_and_policy(r1_inputs, r1_slots, *, receipt=None, x_max_turns
     turn_cap_s = S7), and the frozen B_D must satisfy ruling 1(f) against the
     frozen T_dead. When R1 changes the picks, R6-4 binds S6/S7 to
     thermometry.D.s7_for_r1_picks instead; S6 tuning starts from its slow band.
-    With no receipt this is the e901eb2a4 check (cold-review disposition
-    MEDIUM-2): g0_cap_s binds R7-2's G0_cap_W1 for every member, and
-    contrast_g0_cap_s is refused. Under a verified R10-2(a) receipt
-    (LEAD-RULINGS-2 R10-4): D's g0_cap_s binds the receipt's sub-600 s cap
-    with g0_cap_receipt (the receipt's digest), and contrast_g0_cap_s binds
-    the contrast-role cap, which must fit the contrast deadman.
+    With no receipt, D retains the e901eb2a4 G0 term/cap (X-G included).
+    A verified R10-2(a) receipt binds D's sub-600 s cap and receipt digest.
+    R11 supersedes the contrast-only restriction: both paths bind the
+    separate deadman-fitted contrast cap and non-veto predeclaration.
     """
     slots = r1_slots.get('slots') or {}
     if not finite(r1_inputs.get('T_dead')) or r1_inputs['T_dead'] <= 0:
@@ -884,9 +925,6 @@ def check_r1_budget_and_policy(r1_inputs, r1_slots, *, receipt=None, x_max_turns
         if 'g0_cap_receipt' in policy:
             raise ValueError('inputs.R1.thermal_policy.g0_cap_receipt names a ruling 1(f) receipt, but no receipt '
                              f'is committed at {RULING_1F_RECEIPT} (LEAD-RULINGS-2 R10-4)')
-        if 'contrast_g0_cap_s' in policy:
-            raise ValueError('inputs.R1.thermal_policy.contrast_g0_cap_s applies only under an R10-2(a) receipt; '
-                             'without one every W1 member arms R7-2\'s g0_cap_s (cold-review disposition MEDIUM-2)')
         if not finite(policy.get('g0_cap_s')) or policy['g0_cap_s'] != derived['value_s']:
             raise ValueError('inputs.R1.thermal_policy.g0_cap_s must equal r1_slots.g0_cap_w1.value_s '
                              f'{derived["value_s"]} (LEAD-RULINGS-2 R7-2)')
@@ -899,10 +937,9 @@ def check_r1_budget_and_policy(r1_inputs, r1_slots, *, receipt=None, x_max_turns
                              'receipt\'s digest; LEAD-RULINGS-2 R10-4)')
         if not finite(policy.get('g0_cap_s')) or policy['g0_cap_s'] != d_cap:
             raise ValueError(f'inputs.R1.thermal_policy.g0_cap_s must equal {source}, {d_cap}')
-        contrast = verified['contrast']
-        if policy.get('contrast_g0_cap_s') != contrast['value_s']:
-            raise ValueError('inputs.R1.thermal_policy.contrast_g0_cap_s must equal the W1 contrast-role G0 cap '
-                             f'{contrast["value_s"]} (LEAD-RULINGS-2 R10-4)')
+    contrast = w1_contrast_g0_cap(r1_slots, x_max_turns)
+    if policy.get('contrast_g0_cap_s') != contrast['value_s'] or policy.get('contrast_fit') != contrast:
+        raise ValueError('R11 contrast_fit/contrast_g0_cap_s must bind the rederived non-veto contrast on every path')
     classified = (r1_slots.get('thermometry') or {}).get('D') or {}
     changed = classified.get('sensor_pick_changed') is True
     bindings = [('chunk_tokens', slots.get('N_chunk'), 'r1_slots.slots.N_chunk')]
@@ -989,6 +1026,10 @@ def require_ready(inputs, r1_slots=None, *, synthetic=False, receipt=None):
     if inputs['R0']['reasoning_effort'] not in ('xhigh', 'medium', 'low'):
         raise ValueError('R0.reasoning_effort stays a placeholder until R0 passes; then it must be '
                          'the selected ladder rung (xhigh, medium or low)')
+    r0_digest = inputs['R0'].get('record_sha256')
+    sensor_digest = ((inputs['R1'].get('thermal_policy') or {}).get('sensors') or {}).get('r0_sha256')
+    if not valid_digest(r0_digest) or sensor_digest != r0_digest:
+        raise ValueError('R0.record_sha256 must bind thermal_policy.sensors.r0_sha256')
     slots = inputs['R1']
     validate_budget(slots['B_D'])
     if not finite(slots['I_D']) or not 0 <= slots['I_D'] < 1750:
@@ -1303,19 +1344,18 @@ def _rewrite(value):
 def gate_policy_fields(policy, role='D'):
     """Copy runtime gate controls, excluding the inputs-only R1 digest (R6-5).
 
-    LEAD-RULINGS-2 R10-4: inputs.R1.thermal_policy carries one G0 cap per W1
-    role under an R10-2(a) receipt: D members arm g0_cap_s with
-    g0_cap_receipt; contrast members arm contrast_g0_cap_s as their g0_cap_s
-    and never carry the D receipt. Without a receipt (no contrast_g0_cap_s)
-    every member arms R7-2's g0_cap_s, as at e901eb2a4."""
+    R11: D carries its normal or receipt-bound G0 cap. Contrast carries its
+    own deadman-fitted cap and contrast_fit on every path, never D's receipt.
+    """
     if role not in ('D', 'contrast'):
         raise ValueError(f'unknown W1 gate-policy role {role!r}')
     fields = {key: deepcopy(value) for key, value in policy.items()
-              if key not in ('classification_sha256', 'contrast_g0_cap_s')}
+              if key not in ('classification_sha256', 'contrast_g0_cap_s', 'contrast_fit')}
     if role == 'contrast':
         fields.pop('g0_cap_receipt', None)
-        if 'contrast_g0_cap_s' in policy:      # R10-2(a) receipt only; else R7-2's shared cap (e901)
+        if 'contrast_g0_cap_s' in policy:
             fields['g0_cap_s'] = deepcopy(policy['contrast_g0_cap_s'])
+            fields['contrast_fit'] = deepcopy(policy.get('contrast_fit'))
     return fields
 
 
@@ -1644,8 +1684,10 @@ scripts/align_w1_budget_procedure.py) changes that, and only when the 600 s
 rule fits at no B_D: D then arms G0* = T_dead - holds projected to 10,240
 tokens - prefill/tool - 10,240 / r, below 600 s, named in
 thermal_policy.g0_cap_receipt; contrast members arm their own
-thermal_policy.contrast_g0_cap_s, which must fit the 1,086.3 s contrast
-deadman on R1's X-G record. The kit re-derives every number.
+thermal_policy.contrast_g0_cap_s and contrast_fit on EVERY path (R11, RUN_STATE 212).
+Failed/incomplete proof predeclares non-veto INCONCLUSIVE. Missing/nonpositive
+available cap gives immediate G0 timeout; changed predecessor heat is disclosed.
+D sizing/receipt checks remain unchanged. The kit re-derives every number.
 T_dead follows lead ruling L1: min((1750 - I_D), (1800 - I_D - max_r1_tail_s
 - 10)) / 1.13544, with max_r1_tail_s from r1_slots; --check asserts that
 I_D + 1.13544 T_dead + max_r1_tail_s + 10 <= 1800.
@@ -1672,15 +1714,20 @@ drop only 18 first, then decrease B_D by 1024 down to 6144; otherwise return
 to lead. Preserve anchors, contrasts and 5/17. Requalify/freeze changed budgets.
 W1 arm requires --obc-off-attested-by and --w1-disk-config. By-day
 scripts/align_v4_offloads.py verifies configured inventories; the disk config
-names daytime_offload_receipt, no older than 24 h. Arm checks >=80 decimal GB
+names daytime_offload_receipt and an explicit lead-signed
+daytime_offload_freshness policy (max_age_s, lead_signature); no default duration. Arm checks >=80 decimal GB
 free without remounting/re-hashing the SSD. Empty offloads require explicit
 offloads_owed: none. Battery arm requires fresh AC, >=99%, not charging and
-|Amperage| <=200 mA, retaining raw ioreg and pmset evidence.
+|InstantAmperage| <=200 mA, retaining raw ioreg and pmset evidence.
 require_w1_ready also requires registration_receipt.json, bound to current and
 committed protocol/kit/desk/estimand/deviation/U3/WP19 bytes, two admitted gate
 reports and the lead signature. The committed pending template never admits.
-Generate u3_bar.json from explicit pilot replay pairs (k=3 relative form), and
-wp19_receipt.json from tokenizer-only all-turn X/Y rendering plus R1 X-G.
+U3 is PENDING frozen predictive derivation/OC sensitivity: explicit replay
+summaries install no k or energy bar. Historical k=3 receipts cannot admit W1.
+Generate wp19_receipt.json from all-turn X/Y rendering plus complete native X-G.
+The numeric B window consequence and qualified full-span mount audit remain
+lead-owned pending gates. R0.record_sha256 must bind sensor provenance.
+R16 checks actual per-turn opportunity at the chosen B_D, never a capability guarantee.
 The additive align_v4_session.py refuses prepare/install while inputs are pending.
 Its desk is the parameterized pilot instrument desk; WP21 owns full U4–U6,
 K-session and contrast reporting. This kit grants no arm or hardware approval.

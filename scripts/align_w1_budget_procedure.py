@@ -24,9 +24,10 @@ Steps of ``decide`` (R10-2, recorded before any R1 number exists):
   3. otherwise R10-2(b): 4-bit D next, after its own R1-4bit gated night; the
      lead rules on it with Ed. (c) (window council) follows if (a) also fails
      on the 4-bit night.
-Under R10-2(a) the contrast members' cap must fit their deadman; when it
-cannot be shown, --check refuses W1 and this tool says so. With no receipt
-the kit is e901eb2a4's (cold-review disposition MEDIUM-2).
+R11 (RUN_STATE 212) binds a separate contrast cap/fit on every path.
+Unqualified contrast is predeclared non-veto INCONCLUSIVE; D retains its
+normal/receipt sizing rules. Actual per-turn opportunity is checked at the
+chosen B_D before CURRENT-RULE or branch (a) can be recommended.
 """
 from __future__ import annotations
 
@@ -45,7 +46,8 @@ from scripts import align_v4_kit as kit  # noqa: E402
 # The only fields read (R10-2: timing and count fields, never energies).
 SLOT_FIELDS = ('I_D', 'B_D')
 # phases_s is copied only through _phases, key by key (cold-review LOW-3).
-ROW_FIELDS = ('run', 'g0_outcome', 'decode_tokens', 'admitted_turns', 'x7')
+ROW_FIELDS = ('run', 'g0_outcome', 'decode_tokens', 'admitted_turns', 'x7',
+              'turn_decode_counts', 'turn_completed', 'turn_counts_source_sha256')
 FIT_FIELDS = ('r_decode_tok_per_s', 'r_decode_step_d_tok_per_s', 'turn_cap_tokens')
 X_G_FIELDS = ('status', 'g0_outcome', 'g0_wait_s', 'admitted_turns', 'x7')
 DUTY_FIELDS = ('verdict', 'pass')
@@ -120,7 +122,8 @@ def decide(r1_slots, x_max_turns):
     inconclusive = view.get('inconclusive_segments')
     if not isinstance(inconclusive, dict):
         raise ValueError('r1_slots.inconclusive_segments must be recorded (R6-2)')
-    if inconclusive:
+    deciding_inconclusive = {k: v for k, v in inconclusive.items() if k != 'X_G_contrast'}
+    if deciding_inconclusive:
         return {'step': 'R1-RERUN', 'branch': None, 'receipt_draft': None,
                 'reason': ('inconclusive segment(s) ' + ', '.join(sorted(inconclusive))
                            + ': the remedy is an R1 re-run, the magistrate\'s call (R7-3)')}
@@ -131,8 +134,7 @@ def decide(r1_slots, x_max_turns):
     duty = view['duty_bar']
     notes = []
     if not contrast['fits']:
-        notes.append('CONTRAST: the contrast G0 cap cannot be shown to fit the contrast deadman; under an R10-2(a) '
-                     'receipt --check refuses W1: ' + '; '.join(contrast['reasons']))
+        notes.append('CONTRAST: non-veto ' + contrast['predeclared'])
     if duty.get('pass') is not True:
         notes.append(f'DUTY BAR: verdict {duty.get("verdict")!r}; --check also needs r1_slots.duty_bar.lead_fallback '
                      '(ruling 1(e) step) before W1 arms')
@@ -140,9 +142,17 @@ def decide(r1_slots, x_max_turns):
     base = {'T_dead_s': t_dead, 'derived': derived, 'notes': notes,
             'current_rule_largest_fitting_B_D': largest}
     if largest is not None:
+        opportunity = kit.turn_opportunity(view, largest)
+        if opportunity['status'] != 'pass':
+            return {**base, 'step': 'R1-RERUN' if opportunity['status'] == 'inconclusive' else 'R10-2(b)',
+                    'branch': None, 'receipt_draft': None, 'turn_opportunity': opportunity,
+                    'reason': 'R11: missing count evidence or fewer than three turns at chosen B_D'}
         return {**base, 'step': 'CURRENT-RULE', 'branch': None, 'receipt_draft': None,
+                'turn_opportunity': opportunity, 'contrast_predeclared': contrast['predeclared'],
                 'set_inputs': {'R1.B_D': largest, 'R1.T_dead': t_dead,
-                               'R1.thermal_policy.g0_cap_s': kit.w1_g0_cap(view)['value_s']}}
+                               'R1.thermal_policy.g0_cap_s': kit.w1_g0_cap(view)['value_s'],
+                               'R1.thermal_policy.contrast_g0_cap_s': contrast['value_s'],
+                               'R1.thermal_policy.contrast_fit': contrast}}
     branch = derived['branch']
     if branch == 'rerun':
         return {**base, 'step': 'R1-RERUN', 'branch': None, 'receipt_draft': None,
@@ -154,11 +164,18 @@ def decide(r1_slots, x_max_turns):
     if branch == 'a' and (type(top) is not int or top < kit.BUDGET_FLOOR):
         raise ValueError(f'R10-2(a) arms B_D {kit.BUDGET_FLOOR}, but r1_slots.slots.B_D {top} is below it; the fit '
                          'rule only lowers B_D (cold-review LOW-5); return to the lead')
-    out = {**base, 'step': f'R10-2({branch})', 'branch': branch, 'receipt_draft': _draft(branch, derived, view)}
+    opportunity = kit.turn_opportunity(view, kit.BUDGET_FLOOR)
+    if branch == 'a' and opportunity['status'] != 'pass':
+        return {**base, 'step': 'R1-RERUN' if opportunity['status'] == 'inconclusive' else 'R10-2(b)',
+                'branch': None, 'receipt_draft': None, 'turn_opportunity': opportunity,
+                'reason': 'R11: missing count evidence or fewer than three turns at chosen B_D'}
+    out = {**base, 'step': f'R10-2({branch})', 'branch': branch, 'receipt_draft': _draft(branch, derived, view),
+           'turn_opportunity': opportunity, 'contrast_predeclared': contrast['predeclared']}
     if branch == 'a':
         out['set_inputs'] = {'R1.B_D': kit.BUDGET_FLOOR, 'R1.T_dead': t_dead,
                              'R1.thermal_policy.g0_cap_s': derived['derivation']['d_g0_cap_s'],
                              'R1.thermal_policy.contrast_g0_cap_s': contrast['value_s'],
+                             'R1.thermal_policy.contrast_fit': contrast,
                              'R1.thermal_policy.g0_cap_receipt': {
                                  'authority': kit.thermal_gates.R10_G0_CAP_AUTHORITY,
                                  'receipt_sha256': 'the sha256 that `sign` prints'}}

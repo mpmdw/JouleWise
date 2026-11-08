@@ -8,6 +8,7 @@ Every return value identifies whether it is registered, a check, or print-only.
 from __future__ import annotations
 
 from collections import defaultdict
+from fractions import Fraction
 import math
 import random
 from statistics import fmean, median
@@ -21,7 +22,7 @@ def subturn_h_star(scores, threshold, *, grid=H_STAR_GRID):
     """Registered H*: first exact sub-turn hidden-token count reaching threshold."""
     by_h = {int(h): float(score) for h, score in scores}
     ordered = tuple(int(h) for h in grid)
-    reached = next((h for h in ordered if h in by_h and by_h[h] >= threshold), None)
+    reached = next((h for h in ordered if h in by_h and by_h[h] > threshold), None)
     return {"estimand": "H*_i", "status": "registered_secondary", "h_star": reached,
             "bounded_above": reached is not None, "grid": list(ordered)}
 
@@ -41,58 +42,117 @@ def _crossing(points, probability):
         if p0 >= probability:
             return h0
         if p0 < probability <= p1:
-            return h0 + (h1-h0) * (probability-p0) / (p1-p0)
+            return h1
     return points[-1][0] if points and points[-1][1] >= probability else None
 
 
-def benign_carrier_curve(rows, *, bootstrap_replicates=1000, seed=0):
-    """Registered leave-one-carrier-out detection curve and window bootstrap.
+def calibration_cutoff(scores, *, alpha=.025):
+    """Exact split-conformal rank, strict alarm; validity requires exchangeability.
 
-    Rows contain ``pair``, ``window``, ``carrier``, ``h`` and ``score``.
-    At each H a carrier is detected against the rank-ceil(.95*m) score of the
-    *other* m - 1 carriers at that H (ruling 2(b)): the registered conformal
-    rank (19(n+1)+19)//20 over n = m - 1 calibration scores. When that rank
-    exceeds n there is no finite threshold and the carrier is not detected.
-    Bootstrap resampling is by whole window.
+    This helper does not repair LOTO/full-fit asymmetry or window dependence.
+    Frozen historical energy_residual/pilot_analysis paths are unchanged.
     """
-    def estimate(sample):
-        grouped = defaultdict(list)
-        for row in sample:
-            grouped[(row["pair"], int(row["h"]))].append(row)
-        curves = defaultdict(list)
-        for (pair, h), group in grouped.items():
-            detections = []
-            for carrier in group:
-                others = sorted(r["score"] for r in group if r["carrier"] != carrier["carrier"])
-                if not others:
-                    continue
-                rank = (19 * (len(others) + 1) + 19) // 20
-                detections.append(rank <= len(others) and carrier["score"] >= others[rank-1])
-            if detections:
-                curves[pair].append((h, sum(detections)/len(detections)))
-        return {pair: {"curve": sorted(points), "H50": _crossing(points, .5),
-                       "H90": _crossing(points, .9)} for pair, points in curves.items()}
+    values = sorted(float(v) for v in scores)
+    if any(not math.isfinite(v) for v in values):
+        raise ValueError('calibration scores must be finite')
+    a = Fraction(str(alpha))
+    if not 0 < a < 1:
+        raise ValueError('alpha must be inside (0,1)')
+    m = len(values)
+    rank = math.ceil((1-a)*(m+1))
+    return {'m': m, 'rank': rank, 'alpha': float(a),
+            'status': 'finite' if rank <= m else 'insufficient_calibration',
+            'threshold': values[rank-1] if rank <= m else None,
+            'marginal_fpr_bound': (m+1-rank)/(m+1) if rank <= m else None,
+            'alarm_comparison': '>', 'assumption': 'exchangeable scores from the same frozen scorer'}
 
-    point = estimate(rows)
-    windows = sorted({r["window"] for r in rows})
+
+def benign_carrier_curve(rows, *, bootstrap_replicates=1000, seed=0):
+    """Untouched H=0 leave-one-source-carrier calibration, strict .025 ranks.
+
+    Each carrier has one H=0 score; doses are actual integers, not nominal
+    labels. Freeze these thresholds before any resampling. Window bootstrap
+    replicates weight whole observed carrier blocks (including multiplicity),
+    never turn duplicated copies into new calibration observations. Its
+    intervals are conditional on these fixed thresholds, not an exact FPR or
+    a calibration-uncertainty guarantee.
+    """
+    sources, seen, groups = {}, set(), defaultdict(list)
+    for row in rows:
+        pair, carrier, h, window = (row[k] for k in ('pair', 'carrier', 'h', 'window'))
+        if type(h) is not int or h < 0:
+            raise ValueError('actual dose must be a non-negative integer')
+        score = float(row['score'])
+        if not math.isfinite(score):
+            raise ValueError('carrier score must be finite')
+        key = (pair, carrier)
+        if (pair, carrier, h) in seen:
+            raise ValueError('duplicate carrier/dose row')
+        seen.add((pair, carrier, h))
+        if key in sources and sources[key] != window:
+            raise ValueError('a source carrier must belong to one window')
+        sources[key] = window
+        groups[pair].append(row)
+    fixed = []
+    for pair, group in groups.items():
+        baseline = {r['carrier']: r['score'] for r in group if r['h'] == 0}
+        if set(baseline) != {r['carrier'] for r in group}:
+            raise ValueError('each source carrier needs an untouched H=0 reference')
+        cutoffs = {c: calibration_cutoff([v for other, v in baseline.items() if other != c])
+                   for c in baseline}
+        for row in group:
+            cutoff = cutoffs[row['carrier']]
+            fixed.append({**row, 'detected': (row['score'] > cutoff['threshold']
+                          if cutoff['threshold'] is not None else None)})
+
+    def estimate(sample):
+        cells = defaultdict(list)
+        expected = defaultdict(int)
+        for row in sample:
+            cells[row['pair'], row['h']].append(row['detected'])
+            if row['h'] == 0:
+                expected[row['pair']] += 1
+        curves = defaultdict(list)
+        for (pair, h), values in sorted(cells.items()):
+            curves[pair].append((h, sum(values)/len(values)
+                                if None not in values and len(values) == expected[pair] else None))
+        result = {}
+        for pair, points in curves.items():
+            complete = all(p is not None for _, p in points)
+            monotone = complete and all(a[1] <= b[1] for a, b in zip(points, points[1:]))
+            result[pair] = {'curve': points, 'H50': _crossing(points, .5) if monotone else None,
+                            'H90': _crossing(points, .9) if monotone else None,
+                            'n_by_h': {h: len(cells[pair, h]) for h, _ in points},
+                            'expected_carriers': expected[pair],
+                            'status': 'available' if complete else 'insufficient_calibration',
+                            'crossing_status': 'grid_only' if monotone else 'undefined',
+                            'monotone': monotone}
+        return result
+
+    point = estimate(fixed)
+    windows = sorted({r['window'] for r in fixed})
     draws = defaultdict(lambda: defaultdict(list))
     rng = random.Random(seed)
-    if windows:
-        by_window = {w: [r for r in rows if r["window"] == w] for w in windows}
-        for _ in range(bootstrap_replicates):
-            sampled = []
-            for draw, window in enumerate(rng.choices(windows, k=len(windows))):
-                sampled.extend({**r, "window": f"{draw}:{window}"} for r in by_window[window])
-            for pair, result in estimate(sampled).items():
-                for name in ("H50", "H90"):
-                    if result[name] is not None:
-                        draws[pair][name].append(result[name])
+    by_window = {w: [r for r in fixed if r['window'] == w] for w in windows}
+    for _ in range(bootstrap_replicates if windows else 0):
+        sampled = [r for w in rng.choices(windows, k=len(windows)) for r in by_window[w]]
+        replicate = estimate(sampled)
+        for pair in point:
+            for name in ('H50', 'H90'):
+                draws[pair][name].append(replicate.get(pair, {}).get(name))
     for pair, result in point.items():
-        result["window_cluster_bootstrap"] = {
-            name: [_quantile(draws[pair][name], .05), _quantile(draws[pair][name], .95)]
-            for name in ("H50", "H90")}
-    return {"estimand": "benign_carrier_detection", "status": "registered_secondary",
-            "pairs": point, "bootstrap_unit": "window"}
+        result['window_cluster_bootstrap'] = {}
+        result['bootstrap_undefined_replicates'] = {}
+        for name in ('H50', 'H90'):
+            values = draws[pair][name]
+            missing = sum(v is None for v in values)
+            result['bootstrap_undefined_replicates'][name] = missing
+            result['window_cluster_bootstrap'][name] = ([None, None] if missing or not values else
+                                                       [_quantile(values, .05), _quantile(values, .95)])
+    return {'estimand': 'benign_carrier_detection', 'status': 'registered_secondary',
+            'pairs': point, 'bootstrap_unit': 'window', 'calibration_reference': 'untouched H=0',
+            'bootstrap_scope': 'conditional on fixed leave-one-carrier thresholds; duplicated windows retain multiplicity',
+            'validity': 'exchangeability/common frozen scorer and window dependence remain separate qualifications'}
 
 
 def residual_by_hold_count(rows):
@@ -198,15 +258,20 @@ def d_configuration_assertion(members):
     for member in members:
         configuration = member.get("configuration", {})
         keys.append(tuple(configuration.get(name) for name in FROZEN_D_SLOT_KEYS))
+    identity_keys = ('model_source', 'model_revision', 'runtime_sha256', 'execution_policy_sha256')
+    identities = [tuple(m.get('cohort_identity', {}).get(k) for k in identity_keys) for m in members]
     unique = sorted(set(keys), key=repr)
-    ok = bool(keys) and len(unique) == 1 and None not in unique[0]
+    unique_identity = sorted(set(identities), key=repr)
+    ok = (bool(keys) and len(unique) == 1 and None not in unique[0]
+          and len(unique_identity) == 1 and all(unique_identity[0]))
     return {"status": "implementation_check", "slot_keys": list(FROZEN_D_SLOT_KEYS),
             "configuration_keys": [list(key) for key in unique], "one_cohort": ok,
+            "identity_keys": list(identity_keys), "identities": [list(key) for key in unique_identity],
             "instrument_ok": ok,
             "rule": "any slot change starts a new cohort"}
 
 
-def conformal_threshold_diagnostics(rows, *, confidence=.90):
+def conformal_threshold_diagnostics(rows, *, confidence=.90, alpha=None):
     """Registered FPR wording inputs and print-only stability diagnostics."""
     scores = sorted(float(row["score"]) for row in rows)
     m = len(scores)
@@ -227,13 +292,19 @@ def conformal_threshold_diagnostics(rows, *, confidence=.90):
         counts[row["window"]] += 1
     h = 12/(n*(n+1))*sum(rank_sums[w]**2/counts[w] for w in counts)-3*(n+1)
     ratio = math.inf if rank_m_minus_1 == 0 else rank_m/rank_m_minus_1
-    alpha = 1-confidence
-    return {"status": "registered_secondary",
-            "fpr_statement": (f"Marginal FPR <= 1/(m+1) = {1/(m+1):.6g}; "
-                              f"with {confidence:.0%} confidence, realized FPR <= "
-                              f"1-{alpha:.6g}^(1/m) = {1-alpha**(1/m):.6g}."),
-            "marginal_fpr_bound": 1/(m+1),
-            "realized_fpr_upper": 1-alpha**(1/m),
+    cutoff = (calibration_cutoff(scores, alpha=alpha) if alpha is not None else
+              dict(m=m, rank=m, threshold=scores[-1], status='finite', marginal_fpr_bound=1/(m+1)))
+    tail = 1-confidence
+    maximum = cutoff['rank'] == m
+    upper = 1-tail**(1/m) if maximum else None
+    return {"status": "registered_secondary", 'rank': cutoff['rank'], 'threshold': cutoff['threshold'],
+            'calibration_status': cutoff['status'], 'alarm_comparison': '>',
+            "fpr_statement": (f"Marginal FPR bound {cutoff['marginal_fpr_bound']} conditional on exchangeable "
+                              f"scores from the same frozen scorer; rank {cutoff['rank']} of {m}, strict >. "
+                              "LOTO/full-fit asymmetry and window dependence require separate qualification."),
+            "marginal_fpr_bound": cutoff['marginal_fpr_bound'],
+            "realized_fpr_upper": upper,
+            "tolerance_assumption": 'iid continuous scores; maximum rank only',
             "mde": {"rank_m": rank_m, "rank_m_minus_1": rank_m_minus_1},
             "threshold_instability_flag": ratio > 1.5,
             "threshold_to_next_ratio": ratio,

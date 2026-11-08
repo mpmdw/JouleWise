@@ -19,6 +19,17 @@ remain pending. Protocol v4's blind Fable + Opus registration gate is required
 for W1 registration; WP20 itself is not a prerequisite to arm R1.
 `V:1–8; F:589–612; P:196–207,247–250`
 
+
+**R11 authority (2026-11-08):** [RUN_STATE item 212 at
+`bfaf119f2c912921d37a12712fa6cb7338bb1b70`](../../RUN_STATE.md) adopts
+Track 1 HC/HR adjudications in `4526de7d587a412073cf792c959090401e8d4797:
+docs/align/squeeze/AGREEMENT-FINAL.md`. Retrieve either source with `git show`;
+this is a source pin, not a coordination-state edit. The active supersessions
+are in [LEAD-RULINGS-2, Round 11](council-2026-11-06-v4-review/LEAD-RULINGS-2.md#round-11--r11-track-1-2026-11-08).
+The single R01–R16 disposition/evidence map is [apply-r11](squeeze/fanout/apply-r11.md).
+Unknown scientific/native items remain explicit blockers, not installed constants
+or evidence of passing. R1's lane/pin stays unchanged.
+
 ## Authority and source pins
 
 Amendment 1 supersedes the original council design where they differ. The later
@@ -168,7 +179,8 @@ recomputes the registered seeds. `V:44–75; A:90,103–109; P:211–223`
 **D-25a (label only).** Keep `qwen3.8-27b` as the seed-law tag for every D
 quantization, preserving the registered seed witnesses. `qwen3.8-27b-8bit`
 is the configuration label only, never a replacement hash input. Quantizations
-remain separate cohorts. No seed is changed by this registration lane.
+remain separate cohorts. This label-only deviation is confirmed by RUN_STATE
+212 R11-2/R10; no common-random-number inference follows from shared seed strings. No seed is changed by this registration lane.
 
 R0's effort ladder is xhigh → medium → low, stopping at the first passing
 rung. Each rung uses spam/benign and bank/benign, development seeds 91–92,
@@ -353,18 +365,24 @@ Under the three WP14 rulings above, retain these council rules:
   designed start states arm 1,200 s. A G0 that did not release counts at
   1,200 s, and an INCONCLUSIVE X-G falls back to 1,200 s (R7-12). Ruling
   1(f) uses G0_cap_W1 as its G0 term. Every other G0 keeps 600 s.
-  **LEAD-RULINGS-2 R10-4 (per-role caps, under an R10-2(a) receipt only;
+  **LEAD-RULINGS-2 R10-4 (D receipt sizing retained; contrast superseded below by R11;
   cold-review disposition MEDIUM-2):** with no receipt, W1 is exactly as
   above. Every member arms G0_cap_W1 (X-G included), which is 1(f)'s G0
   term, and an INCONCLUSIVE X-G does not refuse on that alone (R7-12).
-  Under a signed R10-2(a) receipt, D's cap is sized on the three gated D
-  waits only (below). Contrast members arm their own cap from X-G
-  (`thermal_policy.contrast_g0_cap_s`, with R7-12's 1,200 s fallback). It
-  must fit the 1,086.3 s contrast deadman on R1's X-G record (complete WP18
-  X turns, no deadman, cap + G1 + H + prefill + decode + tool), or the kit
-  refuses W1. An INCONCLUSIVE X-G then refuses: lead ruling (iv), which
-  supersedes R7-12's "does not refuse on that alone" for W1 admission under
-  a receipt.
+  **R11/R07, RUN_STATE 212:** D's no-receipt G0 term is unchanged;
+  under a signed R10-2(a) receipt it is sized on the three gated D waits.
+  Contrast members have their own evidence-bound cap on **every path**:
+  `cap_c=max(0,min(nominal,floor(T_contrast−X_G_episode−10)))`, where nominal
+  is the existing clamped released-wait rule and T_contrast is about 1,086.3 s.
+  Missing episode timing or a nonpositive available span gives cap 0: an
+  immediate G0 timeout before turn 1. No negative/unknown value is invented.
+  `contrast_fit` binds this arithmetic in the inputs, plan and runtime policy.
+  Failed/incomplete proof, inadequate wait allowance, reduced cap or failed
+  WP19 predeclares **non-veto INCONCLUSIVE** in both desks. This explicitly
+  supersedes R10 builder ruling (iv) and MEDIUM-2 **for contrast only**.
+  A capped/skipped contrast changes predecessor heat for the following D;
+  retain that disclosure and all first outcomes. W1 remains development data;
+  no such history is silently transported into held-out calibration.
   **LEAD-RULINGS-2 R10-2(a) (public deviation, D only, under a signed lead
   receipt `registration/ruling_1f_receipt.json`):** D arms G0* = T_dead −
   holds − prefill/tool − 10,240/r, below 600 s, with r the minimum of
@@ -431,7 +449,7 @@ counts W1 when later sentinel windows make it evaluable. `F:364–409; A:94–99
 |---|---|
 | U1 | Included turns: OS level 0 / Nominal PM; ≤1 X1–X4 member per model-window; ≥99% sidecar coverage through episodes/gates, no gap >2 s; PM gaps ≤max(1 s, 5 periods); G1/H timeouts ≤2% of admissions, G0 ≤1/model-window |
 | U2 | G0 slow-temperature range ≤3 °C; every G1/H release verified within δ of its own episode's E |
-| U3 | Relative form: r=(E_b−E_a)/Ē; \|r\|Ē ≤max(8.91 J, 3·s_rel·Ē), decode active-clock difference ≤0.5%, exact tokens. Read committed `registration/u3_bar.json`; no transfer of absolute 30B joules to D |
+| U3 | **PENDING derivation, R11/R03.** No k=3, 2.576, fixed floor or numerical energy bar installed. Exact-token and active-clock ≤0.5% checks remain; a missing energy bar is INCONCLUSIVE, never a v3 fallback |
 | U4 | Sentinel window-mean relative shift ≤0.25% in magnitude and its 90% t interval within ±0.5%, df W−1; count W1 (W=4 at D3). E_ref = mean of R1 replay pair and W1 ordinals 5 and 17. Four-anchor 30B σ_w is print-only |
 | U5 | R1 three designed start states estimate D β_T; \|β_T\|₉₀·δ_slow ≤c·σ_pair, c=1.0; σ_pair=max(R1 replay-pair SD, 2.97 J). Point inside/upper bound outside means INCONCLUSIVE. Consequence amendment remains PENDING LEAD RULING below |
 | U6 | Early/late margins ±0.5·s_r with trajectory-clustered SEs; imprecise intervals say “calibration unresolved: imprecise”. D prints per-turn-position means, judging a position only if ≥6 trajectories reach it; no turn-index slope gate |
@@ -547,35 +565,70 @@ One W1 session cannot estimate between-window variability. Adaptive adversary,
 API frontier monitor (local secondary), positive-control and test windows are
 v5 add-ons to v4's frozen model/settings/thermal policy, not v4 changes.
 
+**R11/R13 series-plan hold (RUN_STATE 212).** Seven benign/pair/window give
+42 after six intact windows; losing a whole window leaves 35<39, before
+member attrition. The magistrate proposes margin (eighth calibration window
+or prospectively admitted D7/D8); the lead rules it **before W1**. Enumerate
+fit, calibration and locked-test units separately and size **both pairs and
+every stopping condition**. Seven calibration windows is a planning count,
+not a funded cap, roster, yield guarantee or authority to extend.
+
+**R11/R14–R15 scoring contract (RUN_STATE 212).** At m=39, conformal rank 38
+supports ≤5% and maximum rank 39 supports ≤2.5%, conditional on exchangeable
+scores from the same frozen scorer and strict `>`. At alpha=.025, the generic
+rank is maximum only for 39≤m≤78; report the rank actually used. V4's chosen
+maximum is retained as its prospective threshold. LOTO/full-fit asymmetry and
+window dependence remain separate unresolved validity gates. Legacy W1/v3
+`pilot_analysis`/`energy_residual` outputs are selection diagnostics, not a
+newly qualified registration-grade D scorer. No historical output is rewritten.
+
+The v4 carrier helper calibrates on untouched H=0 scores from **other source
+carriers**, at the strict .025 rank: ≥40 total are needed to leave ≥39.
+Actual integer doses, ties, missing calibration and absent/nonmonotone crossings
+stay explicit; H50/H90 are tested-grid crossings, with no interpolated dose.
+Window bootstrap retains duplicate-window multiplicity with thresholds fixed
+before resampling. It is conditional on those thresholds, excludes undefined
+crossings from no interval silently, and is not an exact calibration guarantee.
+Final scorer wiring and its independent common-shift oracle/gate remain pre-D1 work.
+
 ## W1 registration installation (2026-11-08)
 
 This section installs chair rulings **4, 5, 6, 9, 11, 15, 17, 18, 20 and
 WP19**, as scoped by Ed's registration brief and the registration synthesis.
-It grants no live or arm authority. The two proposed amendments below remain
-unadmitted. [DEVIATIONS.md](v4/DEVIATIONS.md) records prospective changes and
+It grants no live or arm authority. R11 below supersedes the earlier builder
+choices; unresolved amendments remain labelled. [DEVIATIONS.md](v4/DEVIATIONS.md) records prospective changes and
 blindness; native fields are deliberately unfilled.
 
 **4 — battery.** Arm within about 30 minutes of a completed top-up. The
 mechanical arm check uses the frozen `battery_float.observe(phase='arm_check')`
 parser and refuses unless AC is connected, charging is false, CurrentCapacity
-≥99%, |Amperage|≤200 mA, and UpdateTime age is 0–180 s. Retain raw ioreg,
+≥99%, |InstantAmperage|≤200 mA, and UpdateTime age is 0–180 s. Retain raw ioreg,
 NotChargingReason/ChargerInhibitReason lines if present, and `pmset -g batt`
 in `staging/v4-arm-NNN.json`. Require `--obc-off-attested-by`: OBC has no
 supported mechanical read here. This is operator attestation, not a parsed
 OBC assertion. R1 drain remains a required print; Ed's charge hold gates D1.
-Charging is named exclusion **B** (`battery.member_span`); at most one B per
-model-window beside U1(b). Print B counts, SoC and charger watts per member;
-missing observations remain unavailable.
+Charging is named exclusion **B** (`battery.member_span`). Print B counts, SoC
+and charger watts per member. **PENDING lead:** the separate numeric B window
+bar/consequence (R02 U); `bar_pass` stays unavailable. Arm float does not prove
+zero battery flow through the member. Missing observations remain unavailable.
 
-**5 — U3.** `scripts/align_v4_u3_bar.py` takes an explicit desk export of
-separated-ordinal (at least three apart), within-session, token-identical
-replay pairs from pilots 4–10. s_rel is the sample SD of r; with fewer than
-six pairs use its one-sided 90% χ² upper SD limit. Commit the input digest,
-pairs, n, k=3, normal-theory per-pair false-fail rate (about 0.27%) and
-empirical exceedances in `registration/u3_bar.json` before reading R1's
-record. This is not a series guarantee under dependence. A D-window U3
-failure means a replacement window under count-only stopping, never smaller m.
-The v4 desk reads this bar; v3's default is unchanged.
+**5 — U3: PENDING derivation (R11/R03; RUN_STATE 212 R11-2).**
+`scripts/align_v4_u3_bar.py` accepts explicit separated-ordinal, within-session,
+token-identical pilot pairs and emits descriptive signed relative differences,
+sample SD, source digests and a **PENDING** block. It emits no multiplier,
+margin or fitted-normal false-fail guarantee. Historical k=3 receipts are refused;
+the v4 desk never falls back to v3's bar. The lead/statistics owner must freeze:
+
+- the predictive distribution for a new replay, including mean drift, scale
+  estimation and small-sample uncertainty;
+- operating characteristics at the final window/stop-rule size, with predictive,
+  dependence and series false-failure sensitivities;
+- the limits of transferring 30B pilot variation to D, and D-specific qualification;
+- the chosen energy bar, derivation/source bytes and independent gate receipt.
+
+No pilot or R1 record is read here. U3 remains unresolved and registration
+cannot pass until this scientific derivation and its scoped implementation are admitted.
+Failed U3 windows stay retained; no smaller m or unauthorized replacement is allowed.
 
 **6 — acceptance.** The U table above supersedes the old U4–U6 bars. U4 counts
 W1 and uses **5 and 17**, never 18. U5 c=1.0 is fixed; the consequence amendment
@@ -598,9 +651,11 @@ and a print-only no-rebuild sensitivity; never silently drop rebuild members.
 
 **15 — sentinels.** A source must be completed, have no X flag and reach
 ≥3 turns. Prefer ordinal 5, whose replay is 17. Pre-named fallback is ordinal
-18 (bank/benign development index 93); its E_ref is that single run. If both
-5 and 18 are inadmissible, D_k has no valid sentinel and U4 requires extension
-windows. Disclose predecessor asymmetry: W1 5/17 both follow 30B after 1(g),
+18 (bank/benign development index 93). It is a separate candidate, never a
+silent singleton E_ref. Before reuse, compare model/stack/effective policy with
+the final D configuration and qualify a matched alternate reference through a
+prospective recovery/gate. If neither is admissible, report **unresolved**;
+extension windows alone cannot create a missing reference. Disclose predecessor asymmetry: W1 5/17 both follow 30B after 1(g),
 fallback 18 follows D, and D_k's late sentinel follows D. Ordinal 18 can never
 silently replace 17 in the four-run spam E_ref.
 
@@ -623,7 +678,9 @@ rebuild counts. Missing R1 values remain unavailable.
 **20 — volumes/offloads.** No external volume, network mount or FUSE volume may be mounted
 from arm through terminal record. Keep the arm census (`diskutil list external`
 included); offloads, SSD work and hash verification occur by day between
-windows. A ≤24 h daytime offload receipt binds configured offloads, and arm
+windows. A source/config/digest/time-bound daytime receipt requires an explicit
+prospective lead-signed `daytime_offload_freshness` policy (`max_age_s`,
+`lead_signature`); **no 24-hour or ±10-minute default is installed**. Arm
 checks current free disk without remounting the SSD. `offloads: []` needs an
 explicit `offloads_owed: none`. The desk must retain an in-window mount-event
 audit; qualify its unified-log query with a daytime mount/unmount experiment
@@ -638,13 +695,28 @@ tokenizer digests in `registration/wp19_receipt.json`. Static proof: warmup
 is greedy, with no episode prompt cache (`mlx_runtime.MlxRuntimeAdapter.warmup`);
 `MlxEndpoint` reseeds by `turn_seed` before each measured draw. Identity
 failure pre-declares the contrast INCONCLUSIVE (“identity broken”) before arm.
-Receipt existence is mandatory; this text is not a native identity pass.
+Receipt existence is mandatory; a partial native X cannot pass WP19 or certify
+unseen X/Y turns. Full renders and static warmup/reseed reasoning do not attest
+the original execution. The native identity gate remains lead-owned.
 
-**PENDING LEAD RULING — contrast-cap amendment (D-C1).** The synthesis proposes
-running the contrast-fit proof on every path and replacing failure refusal by
-cap_c=floor(1086.3−X-G episode seconds−10), possibly below 600 s, with a
-pre-declared INCONCLUSIVE when it cannot deliver or X-G is incomplete.
-This proposal is not installed; existing R10 cap/refusal behavior remains.
+**D-C1 installed by R11/R07 (RUN_STATE 212):** the contrast-cap and identity
+predeclarations above are non-veto on receipt and no-receipt paths. The D sizing
+and receipt validity checks retain their prior semantics.
+
+**R08/R16 — duty and turn opportunity.** A fallback step/authority string does
+not qualify a change. This 8-bit/300-s-idle kit refuses steps 2 (450 s) and 3
+(4-bit). Step 1 needs an actual S6 change and a new, passing gated record at
+that band; timing fit alone is insufficient. No budget-X7 waiver is adopted.
+Any future waiver requires completed-turn evidence for every run, including
+missing/censored cases; a truncated turn cannot prove an earlier budget stop.
+The R10 procedure and kit require source-digest-bound per-turn decode counts,
+completion booleans and totals for all three gated D runs. Recompute observed
+whole-turn admissions at **the chosen B_D**; fewer than three routes to (b),
+missing/inconsistent evidence remains unresolved. At B_D=6,144, two capped
+4,096-token turns prevent a third. Passing benign opportunity establishes no
+sabotage capability and guarantees no turns before EOS/context/deadman.
+A rung-changing proxy needs its actual pre-R0-read freeze/access history;
+this late implementation does not claim that an earlier deadline was met.
 
 **PENDING LEAD RULING — U5 admission amendment.** The synthesis proposes
 admitting W1 on any R1 U5 verdict, with FAIL obliging pre-D1 δ_slow tightening
@@ -761,9 +833,9 @@ in `docs/align/council-2026-11-06-v4-review/OC-TABLE.md` on
 |---:|:---:|---|---|
 | 1 | | R1 | **Code (round 4):** (a)-(e) in the R1 driver, (f) as restated by L1 in the kit and on the R1 record, (g) in the roster above. Still lacks: D wall-time budget text: R1 prints deadman use by phase and predicted turns; a third gated **bank/benign** D run in R1; extended post-D cooldown; the pre-declared duty bar (no X7, ≥ 3 admitted turns, G0 + G1 + H ≤ 40 % of T_dead) and the named fallback order (S6 joint tuning with δ_slow ≤ 2.0 °C, idle 450 s after D, 4-bit, screen-only); the kit assertion I_D + 1.13544·T_dead + tail + 60 s ≤ 1,800; and **W1 ordinals 17 and 18 swapped** (roster table, balance text and fit rule's "drop ordinal 17", which becomes the last ordinal). (Sizing; W1 roster; R1) `C:16–40` |
 | 2 | v4 | paper; before W1 registration | Registered sub-turn H\* estimand (Sol's grid promoted from print-only), benign-carrier detection curve (H50/H90 with window-cluster bootstrap), preserve_thinking estimand statement plus a print-only full-omission variant, WP8 F1 resolved before D1, residual-vs-hold-count print; the D positive-control cell as a paper gate. (Known-H tamper) `C:42–56` |
-| 3 | v4 | D-series | Registration grade restates the old 21/3 target: each pair needs ≥39 eligible benign and ≥6 sabotage, count-only stopping capped at D8, followed by a locked test cohort. A U3 failure means a replacement window, not smaller m. The lead must bind the exact window/seed manifest before D1. (Residual analysis; Ed's standing ruling) |
+| 3 | v4 | D-series | Registration grade restates the old 21/3 target: each pair needs ≥39 eligible benign calibration members plus a separate held-out test cohort. Exact fit/calibration/test rosters, every stop condition and the cap need prospective series-plan authority. D7/D8 and ≥6 sabotage are proposals, not installed authority. At cap: insufficient calibration/unresolved; no outcome-driven top-up. The lead must rule the margin before W1 (RUN_STATE 212 R11-2). (Residual analysis; Ed's standing ruling) |
 | 4 | v4 | W1; D-series | **INSTALLED; evidence pending where named.** Battery arm/top-up/OBC attestation and B bar installed in W1 registration installation §4; native top-up/drain/charge-hold evidence PENDING. |
-| 5 | v4 | W1 | **INSTALLED; evidence pending where named.** Relative U3 with k=3 installed in U table and registration installation §5. Kit/desk require u3_bar.json; real pilot derivation and OC evidence PENDING. |
+| 5 | v4 | W1 | **INSTALLED; evidence pending where named.** R11/R03 removes the unruled k=3 bar. U3 derivation/predictive/OC block is PENDING; v4 cannot pass on a historical constant. |
 | 6 | v4 | R1 (U5); W1 | **INSTALLED; evidence pending where named.** U4 counts W1, E_ref 5/17, c=1 U5 and clustered U6 installed in U table and registration installation §6. Updated OC table and D-series wiring PENDING; U5 amendment PENDING LEAD RULING. |
 | 7 | | R1; W1 | **Code (round 4):** r1_slots freezes the AC powermode; run_night admission and the v4 arm refuse a mismatch (with the R1 marker restore) and the arm records the value and pmset text; bundles record it; the desk sets `instrument_ok` false. Still lacks: Opus executing review of the WP7 lane; r1_slots freezes the AC powermode; every arm and bundle records it, arm refuses on mismatch, desk sets `instrument_ok` false; POWERMODE-PREFLIGHT-RECORD-01 promoted. (R1; instrument checks) `C:106–116` |
 | 8 | | R1 | **Code (round 4):** all four in the R1 driver, plus journal completeness (≥ 0.9 samples per wall second, no gap > 5 s) and a DST-safe Pacific window. Text: Soak and step tests outside 11:45-13:15 local; per-second CPU load journal; redo a segment above 0.5 core for 60 s; soak SD on the detrended last 20 min after \|slope\| ≤ 0.2 °C/min. (R1; bands) `C:118–125` |
@@ -773,7 +845,7 @@ in `docs/align/council-2026-11-06-v4-review/OC-TABLE.md` on
 | 12 | v4 | paper | Replace "no 5 % FPR" with §D's conditional statement (marginal FPR ≤ 1/(m+1); realized FPR ≤ 1 − 0.1^(1/m) at 90 %); window-heterogeneity diagnostic; MDE at rank m and m − 1; flag a threshold > 1.5 × the next score. (Residual analysis; targets) `C:157–165` |
 | 13 | v4 | paper | Pre-registered, labelled clock-conditioned sensitivity; pre/post-gate correlation side by side. (Residual analysis) `C:167–171` |
 | 14 | v4 | D-series | Direction-conditional escalation ladder: timeout-driven failures loosen δ_slow in 0.5 °C steps to the 2.0 °C cap, spread-driven failures tighten; drop "holds on" for heavy cells. (Acceptance consequences) `C:173–176` |
-| 15 | v4 | W1 | **INSTALLED; evidence pending where named.** Sentinel admission, ordinal-18 bank/benign s93 fallback, single-run alternate E_ref and predecessor disclosure installed in registration installation §15. |
+| 15 | v4 | W1 | **INSTALLED; evidence pending where named.** Sentinel admission, ordinal-18 bank/benign s93 fallback, unresolved matched alternate E_ref/recovery and predecessor disclosure installed in registration installation §15. |
 | 16 | | R1 | **Code (round 4):** in the R1 driver. Text: High Power A-B-A: legs start after a G0-style release; adopt only if t_decline(B) ≥ 1.25 × max(A1, A2), with the ∞ and > 25 %-disagreement cases; if adopted, the contrast attribution is conditional on the v4 setup. (R1) `C:186–192` |
 | 17 | v4 | W1 | **INSTALLED; evidence pending where named.** D-17a installed in registration installation §17: only G0 cap, δ_slow, G_turn and N_chunk revisable. B_D/T_dead/quantization/4096/12 fixed before W1; all other slots freeze before D1 arms. |
 | 18 | | W1 | **INSTALLED.** Print-only R−R1 soak, thermal.reference_warm and wait-by-ordinal diagnostics: registration installation §18. Missing R1 soak values stay unavailable. |

@@ -402,11 +402,14 @@ def ready_inputs(i_d=300.0, tail=20.0):
         'WP11': deepcopy(kit.read_inputs(ROOT)['WP11']),
         'WP18': {'X': {'max_turns': 12, 'token_fixture_sha256': 'c' * 64},
                  'Y': {'max_turns': 10, 'token_fixture_sha256': 'd' * 64}},
-        'R0': {'reasoning_effort': 'xhigh'},
+        'R0': {'reasoning_effort': 'xhigh', 'record_sha256': 'a'*64},
         'R1': {'B_D': 8192, 'I_D': i_d, 'T_dead': t_dead, 'thermal_policy': policy},
         'WP15': {'runtime_entrypoint': ['scripts/align_r1_runtime.py', '--config', 'configs/align/v4/r1_runtime.json']},
     }
-    return inputs, r1_record(i_d, tail)
+    slots = r1_record(i_d, tail)
+    contrast = kit.w1_contrast_g0_cap(slots, 12)
+    policy.update(contrast_g0_cap_s=contrast['value_s'], contrast_fit=contrast)
+    return inputs, slots
 
 
 GATED_PHASES = {'G0': 120.0, 'G1': 150.0, 'H': 90.0, 'decode': 280.0, 'prefill': 120.0, 'tool': 6.0}
@@ -428,7 +431,9 @@ def r1_record(i_d, tail, *, source=kit.R1_HARDWARE_SOURCE, ac_powermode=0):
             # 14,000 tokens in 280 s = 50 tok/s; the 600 s G0 floor still fits 1(f).
             'deadman_budget': [{'run': name, 'g0_outcome': 'released',
                                 'phases_s': dict(GATED_PHASES, tail=tail if i == 0 else tail / 2),
-                                'decode_tokens': 14000, 'duty_bar': {'pass': True, 'verdict': 'pass'}}
+                                'decode_tokens': 14000, 'turn_decode_counts': [2000]*7,
+                                'turn_completed': [True]*7, 'admitted_turns': 7, 'x7': False,
+                                'turn_counts_source_sha256': 'c'*64, 'duty_bar': {'pass': True, 'verdict': 'pass'}}
                                for i, name in enumerate(kit.GATED_D_RUN_NAMES)],
             'budget_fit_inputs': {'r_decode_tok_per_s': 50.0, 'r_decode_step_d_tok_per_s': 50.0,
                                   'turn_cap_tokens': 4096},
@@ -451,6 +456,9 @@ def set_decode_rate(slots, rate):
     slots['budget_fit_inputs'].update(r_decode_tok_per_s=rate, r_decode_step_d_tok_per_s=rate)
     for row in slots['deadman_budget']:
         row['decode_tokens'] = round(rate * row['phases_s']['decode'])
+        n = max(4, math.ceil(row['decode_tokens']/4096))
+        q, r = divmod(row['decode_tokens'], n)
+        row.update(turn_decode_counts=[q+(i<r) for i in range(n)], turn_completed=[True]*n, admitted_turns=n)
 
 
 class FakeArmHost:
@@ -548,7 +556,8 @@ class R1EvidenceBindingTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'no lead fallback step'):
             kit.require_ready(inputs, slots)
         slots['duty_bar']['lead_fallback'] = {'step': 1, 'authority': 'LEAD-RULINGS-2 F1'}
-        kit.require_ready(inputs, slots)
+        with self.assertRaisesRegex(ValueError, 'qualified remeasured'):
+            kit.require_ready(inputs, slots)
 
     def test_slots_must_come_from_the_adopted_series_mode_and_pass_the_thermometry_bar(self):
         # LEAD-RULINGS-2 R5-5: protocol v4 :243-251.
@@ -865,7 +874,8 @@ class Round6KitTests(unittest.TestCase):
         inputs, slots = ready_inputs()
         slots['deadman_budget'][1]['decode_tokens'] = 0
         slots['deadman_budget'][1]['phases_s']['decode'] = 0.0
-        kit.require_ready(inputs, slots)
+        with self.assertRaisesRegex(ValueError, 'turn opportunity'):
+            kit.require_ready(inputs, slots)  # no per-turn opportunity can be inferred from zero decode
         for bad in (None, -1, 1.5, True, '14000'):
             inputs, slots = ready_inputs()
             slots['deadman_budget'][0]['decode_tokens'] = bad
@@ -1014,6 +1024,8 @@ class Round7KitTests(unittest.TestCase):
         self.assertIn('X_G_contrast', cap['censored'])
         fit = kit.ruling_1f_fit(slots, 8192, inputs['R1']['T_dead'])
         self.assertEqual(fit['terms_s']['G0_s'], 1200)
+        contrast = kit.w1_contrast_g0_cap(slots, 12)
+        inputs['R1']['thermal_policy'].update(contrast_fit=contrast, contrast_g0_cap_s=contrast['value_s'])
         kit.require_ready(inputs, slots)
         # No G0 interval after a predecessor did no D work: still censored.
         slots['x_g']['g0_wait_s'] = None

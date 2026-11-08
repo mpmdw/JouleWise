@@ -10,30 +10,22 @@ class Ruling2Tests(unittest.TestCase):
         self.assertEqual("registered_secondary", result["status"])
 
     def test_carrier_curve_is_leave_one_out_and_bootstraps_windows(self):
-        rows = []
-        for window in ("D1", "D2"):
-            for carrier in range(6):
-                for h in (128, 256, 512):
-                    rows.append({"pair": "bank", "window": window,
-                                 "carrier": f"{window}-{carrier}", "h": h,
-                                 "score": carrier + h/128})
+        rows = [dict(pair='bank', window=f'D{i//8}', carrier=str(i), h=h, score=i+h)
+                for i in range(40) for h in (0, 128, 256, 512)]
         result = v4.benign_carrier_curve(rows, bootstrap_replicates=20, seed=4)
-        self.assertEqual("window", result["bootstrap_unit"])
-        self.assertIn("H50", result["pairs"]["bank"])
-        self.assertIn("window_cluster_bootstrap", result["pairs"]["bank"])
+        self.assertEqual('window', result['bootstrap_unit'])
+        self.assertEqual(result['pairs']['bank']['H50'], 128)
+        self.assertIn('window_cluster_bootstrap', result['pairs']['bank'])
 
-    def test_carrier_threshold_is_the_conformal_rank_of_the_other_carriers(self):
-        # m = 20 carriers: threshold is rank ceil(.95*20) = 19 of the other 19,
-        # i.e. (19*20+19)//20 = 19 -> the largest other score. A carrier that
-        # only beats the 18th of 19 others is not detected.
-        rows = [{"pair": "spam", "window": "D1", "carrier": f"c{i}", "h": 256,
-                 "score": float(i)} for i in range(20)]
-        curve = v4.benign_carrier_curve(rows, bootstrap_replicates=0)["pairs"]["spam"]["curve"]
-        self.assertEqual([(256, 1/20)], curve)  # only the top carrier exceeds the max of the rest
-        # m = 18: rank (19*18+19)//20 = 18 > 17 others, so no finite threshold.
-        few = [{**row, "pair": "bank"} for row in rows[:18]]
-        curve = v4.benign_carrier_curve(few, bootstrap_replicates=0)["pairs"]["bank"]["curve"]
-        self.assertEqual([(256, 0.0)], curve)
+    def test_carrier_threshold_uses_39_other_untouched_carriers(self):
+        rows = [dict(pair='spam', window='D1', carrier=str(i), h=h, score=i+h)
+                for i in range(40) for h in (0, 256)]
+        curve = v4.benign_carrier_curve(rows, bootstrap_replicates=0)['pairs']['spam']['curve']
+        self.assertEqual([(0, 1/40), (256, 1.)], curve)
+        few = [r for r in rows if r['carrier'] != '39']
+        result = v4.benign_carrier_curve(few, bootstrap_replicates=0)['pairs']['spam']
+        self.assertEqual('insufficient_calibration', result['status'])
+        self.assertIsNone(result['curve'][0][1])
 
     def test_residuals_are_printed_against_hold_count_per_trajectory(self):
         result = v4.residual_by_hold_count([
@@ -92,7 +84,9 @@ class Ruling10Tests(unittest.TestCase):
 
     def test_all_four_fixed_slots_make_one_cohort(self):
         config = dict(max_episode_decode_tokens=4096, deadman_s=1086, max_tokens=4096, max_turns=4)
-        self.assertTrue(v4.d_configuration_assertion([{"configuration": config}])["instrument_ok"])
+        self.assertTrue(v4.d_configuration_assertion([{"configuration": config, 'cohort_identity': {
+            'model_source': 'tiny', 'model_revision': 'synthetic', 'runtime_sha256': 'a'*64,
+            'execution_policy_sha256': 'b'*64}}])["instrument_ok"])
 
 
 class Ruling12Tests(unittest.TestCase):

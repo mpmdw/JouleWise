@@ -161,7 +161,7 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
               ('status', 'dc_in_energy_j', 'dc_in_delta_j', 'dc_in_residual_j', 'flags')}, sort_keys=True))
     report['km003c'] = dc
     # Keep the common v3 desk unchanged. V4 adds its registered thermal desk.
-    from scripts.align_v4_thermal_desk import registration_evidence, enrich_record, r1_soak_c
+    from scripts.align_v4_thermal_desk import registration_evidence, enrich_record, r1_soak_c, contrast_predeclaration
     from joulewise.align.apple.thermal_desk import read_bundle_record, window_report
     from joulewise.align.apple import v4_registration
     registration_dir = Path(state.get('registration_dir', Path(state['measurement_root'])/kit.KIT/'registration'))
@@ -201,7 +201,7 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
         records.append(r)
     policy = (kit.read_inputs(state['measurement_root']).get('R1') or {}).get('thermal_policy') or {}
     report['thermal'] = window_report(records, v4=True, u3_bar=bar,
-        delta_slow_c=policy.get('delta_slow_c'), contrast_predeclared=wp19.get('contrast_predeclared'))
+        delta_slow_c=policy.get('delta_slow_c'), contrast_predeclared=contrast_predeclaration(wp19, policy))
     report['registration_diagnostics'] = v4_registration.desk_diagnostics(records,
         r1_soak=r1_soak_c(registration_dir))
     for model, result in report['thermal']['model_windows'].items():
@@ -281,11 +281,20 @@ def _disk_config_digest(config):
                                      allow_nan=False).encode()).hexdigest()
 
 
-def daytime_offload_receipt(config, *, now=None, gate=None):
+def validate_offload_freshness(policy):
+    import math
+    if (not isinstance(policy, dict) or type(policy.get('max_age_s')) not in (int, float)
+            or not math.isfinite(policy['max_age_s']) or policy['max_age_s'] <= 0
+            or not kit.valid_lead_signature(policy.get('lead_signature'))):
+        raise ValueError('offload freshness requires a prospective lead-signed max_age_s; no default duration (R11/R11)')
+
+
+def daytime_offload_receipt(config, *, now=None, gate=None, freshness_policy=None):
     """By-day only: hash configured offloads while the SSD is available.
 
     The caller validates the R0 config first. No arm/capture is started here.
     """
+    validate_offload_freshness(freshness_policy)
     from joulewise.align.r0_host import w1_disk_gate
     result = (gate or w1_disk_gate)(config)
     rows = result.get('offloads', [])
@@ -293,7 +302,7 @@ def daytime_offload_receipt(config, *, now=None, gate=None):
             or any(r.get('pass') is not True or not r.get('observed') for r in rows)):
         raise ValueError('daytime offloads not verified')
     return {'schema': 'joulewise.align_v4.daytime_offloads.v1', 'epoch_s': (now or time.time)(),
-            'config_sha256': _disk_config_digest(config), 'offloads': rows}
+            'config_sha256': _disk_config_digest(config), 'offloads': rows, 'freshness_policy': freshness_policy}
 
 
 def w1_disk_check(config_path, *, gate=None, now=None):
@@ -311,19 +320,22 @@ def w1_disk_check(config_path, *, gate=None, now=None):
     raw_config = json.loads(Path(config_path).read_text())
     offloads_owed = raw_config.pop('offloads_owed', None)
     daytime_path = raw_config.pop('daytime_offload_receipt', None)
+    freshness = raw_config.pop('daytime_offload_freshness', None)
     config = validate_config(raw_config)
     if not config.get('offloads') and offloads_owed != 'none':
         raise ValueError('W1 offloads: [] requires explicit offloads_owed: none; empty receipts do not pass')
     if daytime_path is not None:
         import shutil
         import math
+        validate_offload_freshness(freshness)
         saved = json.loads(Path(daytime_path).read_bytes())
         if (saved.get('schema') != 'joulewise.align_v4.daytime_offloads.v1'
-                or saved.get('config_sha256') != _disk_config_digest(config)):
+                or saved.get('config_sha256') != _disk_config_digest(config)
+                or saved.get('freshness_policy') != freshness):
             raise ValueError('daytime offload receipt binding mismatch')
         epoch = saved.get('epoch_s')
         age = (now or time.time)()-epoch if type(epoch) in (int, float) else None
-        if age is None or not math.isfinite(age) or not 0 <= age <= 86400:
+        if age is None or not math.isfinite(age) or not 0 <= age <= freshness['max_age_s']:
             raise ValueError('daytime offload receipt stale or future-dated')
         rows = saved.get('offloads', [])
         if (not rows or [r.get('label') for r in rows] != [r['label'] for r in config['offloads']]

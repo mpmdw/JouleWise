@@ -20,7 +20,8 @@ def main(argv=None):
     config = json.loads(args.config.read_bytes())
     config.pop('offloads_owed', None)
     config.pop('daytime_offload_receipt', None)
-    record = daytime_offload_receipt(validate_config(config))
+    freshness = config.pop('daytime_offload_freshness', None)
+    record = daytime_offload_receipt(validate_config(config), freshness_policy=freshness)
     with args.output.open('x') as f:
         f.write(json.dumps(record, indent=2, sort_keys=True, allow_nan=False)+'\n')
     return 0

@@ -47,6 +47,8 @@ def eight_bit_case(*, d_wait=120.0):
     set_decode_rate(slots, 11.9)
     slots['g0_cap_w1'] = kit.w1_g0_cap(slots)
     inputs['R1']['B_D'] = 6144
+    fit = kit.w1_contrast_g0_cap(slots, 12)
+    inputs['R1']['thermal_policy'].update(contrast_g0_cap_s=fit['value_s'], contrast_fit=fit)
     return inputs, slots
 
 
@@ -59,6 +61,7 @@ def arm_receipt(inputs, receipt):
     policy = inputs['R1']['thermal_policy']
     policy['g0_cap_s'] = receipt['derivation']['d_g0_cap_s']
     policy['contrast_g0_cap_s'] = receipt['contrast']['value_s']
+    policy['contrast_fit'] = receipt['contrast']
     policy['g0_cap_receipt'] = {'authority': thermal_gates.R10_G0_CAP_AUTHORITY,
                                 'receipt_sha256': kit.receipt_sha256(receipt)}
     return inputs
@@ -187,8 +190,10 @@ class ReceiptTests(unittest.TestCase):
         honest = proc.sign(proc._draft('a', derived, proc.timing_view(slots)), SIGNATURE)
         with self.assertRaisesRegex(ValueError, r'the current 600 s rule fits'):
             kit.require_ready(inputs, slots, receipt=honest)
-        kit.require_ready(dict(inputs, R1=dict(inputs['R1'], thermal_policy=ready_inputs()[0]['R1']['thermal_policy'])),
-                          slots)    # and with no receipt the 600 s rule admits at 6,144
+        current_policy = ready_inputs()[0]['R1']['thermal_policy']
+        fit_c = kit.w1_contrast_g0_cap(slots, 12)
+        current_policy.update(contrast_g0_cap_s=fit_c['value_s'], contrast_fit=fit_c)
+        kit.require_ready(dict(inputs, R1=dict(inputs['R1'], thermal_policy=current_policy)), slots)    # and with no receipt the 600 s rule admits at 6,144
 
     def test_unsigned_and_non_a_receipts_refuse(self):
         inputs, slots = eight_bit_case()
@@ -298,7 +303,8 @@ class ReceiptTests(unittest.TestCase):
             files = kit.build_files(kit.ROOT)
         plan = json.loads(files[kit.KIT / 'collection_plan.json'])
         caps = {m['role']: m['spec']['thermal']['g0_cap_s'] for m in plan['members'] if m['role'] != 'anchor'}
-        self.assertEqual(set(caps.values()), {625})
+        self.assertEqual(caps['D'], 625)
+        self.assertEqual(caps['X-G'], 0)  # missing episode timing: explicit non-veto contrast
 
 
 class RoleCapTests(unittest.TestCase):
@@ -327,14 +333,16 @@ class RoleCapTests(unittest.TestCase):
         self.assertEqual(fit['terms_s']['G0_s'], 700)
         self.assertFalse(fit['fits'])
         inputs['R1']['thermal_policy']['g0_cap_s'] = 700
+        fit_c = kit.w1_contrast_g0_cap(slots, 12)
+        inputs['R1']['thermal_policy'].update(contrast_g0_cap_s=fit_c['value_s'], contrast_fit=fit_c)
         with self.assertRaisesRegex(ValueError, r'ruling 1\(f\): B_D 6144 does not fit.*G0_s 700'):
             kit.require_ready(inputs, slots)
         inputs['R1']['thermal_policy']['g0_cap_s'] = 600
         with self.assertRaisesRegex(ValueError, r'r1_slots\.g0_cap_w1\.value_s.*LEAD-RULINGS-2 R7-2'):
             kit.require_ready(inputs, slots)
-        # The contrast cap is a receipt-only slot.
+        # R11: contrast cap is legal without a D receipt; D's fit still fails.
         inputs['R1']['thermal_policy'].update(g0_cap_s=700, contrast_g0_cap_s=700)
-        with self.assertRaisesRegex(ValueError, r'contrast_g0_cap_s.*only under an R10-2\(a\) receipt'):
+        with self.assertRaisesRegex(ValueError, r'ruling 1\(f\): B_D 6144 does not fit'):
             kit.require_ready(inputs, slots)
 
     def test_under_a_receipt_d_is_sized_on_d_waits_and_contrast_arms_its_own_cap(self):
@@ -348,38 +356,33 @@ class RoleCapTests(unittest.TestCase):
         arm_receipt(inputs, receipt)
         kit.require_ready(inputs, slots, receipt=receipt)
         inputs['R1']['thermal_policy']['contrast_g0_cap_s'] = 600
-        with self.assertRaisesRegex(ValueError, 'contrast_g0_cap_s must equal the W1 contrast-role G0 cap 625'):
+        with self.assertRaisesRegex(ValueError, 'R11 contrast_fit/contrast_g0_cap_s'):
             kit.require_ready(inputs, slots, receipt=receipt)
 
-    def test_under_a_receipt_the_contrast_cap_must_fit_the_contrast_deadman(self):
-        def refused(change, pattern):
+    def test_contrast_failure_predeclares_inconclusive_and_never_vetoes_d(self):
+        changes = [lambda s: s['x_g'].update(g0_wait_s=560.),
+                   lambda s: s['x_g'].update(admitted_turns=11),
+                   lambda s: s['x_g'].update(x7=True),
+                   lambda s: s['x_g'].update(status='inconclusive', g0_outcome='timeout', g0_wait_s=1200.),
+                   *[lambda s, f=f: s['x_g'].pop(f) for f in kit.X_G_EVIDENCE_FIELDS],
+                   lambda s: s['x_g']['phases_s'].update(decode=-1.)]
+        for change in changes:
             inputs, slots = eight_bit_case()
             change(slots)
             slots['g0_cap_w1'] = kit.w1_g0_cap(slots)
             derived = kit.r10_2_derivation(slots, inputs['R1']['T_dead'], 12)
             self.assertEqual(derived['branch'], 'a')
             self.assertFalse(derived['contrast']['fits'])
+            self.assertTrue(derived['contrast']['predeclared'].startswith('INCONCLUSIVE'))
             receipt = proc.sign(proc._draft('a', derived, proc.timing_view(slots)), SIGNATURE)
             arm_receipt(inputs, receipt)
-            with self.assertRaisesRegex(ValueError, r'R10-2\(a\): the contrast members.*' + pattern):
-                kit.require_ready(inputs, slots, receipt=receipt)
-        self.assertAlmostEqual(kit.CONTRAST_DEADMAN_S, 1086.3, places=1)
-        # 1.25 x 560 = 700; 700 + 426 = 1,126 > 1,086.3.
-        refused(lambda s: s['x_g'].update(g0_wait_s=560.0), 'exceeds the contrast deadman')
-        refused(lambda s: s['x_g'].update(admitted_turns=11), 'not the complete WP18 X count 12')
-        refused(lambda s: s['x_g'].update(x7=True), 'no deadman')
-        # Lead ruling (iv): under R10-2(a) an INCONCLUSIVE X-G refuses W1.
-        refused(lambda s: s['x_g'].update(status='inconclusive', g0_outcome='timeout', g0_wait_s=1200.0), 'R7-12')
-        for field in kit.X_G_EVIDENCE_FIELDS:
-            refused(lambda s, f=field: s['x_g'].pop(f), {'admitted_turns': 'admitted None turns',
-                                                          'x7': 'x7 false', 'phases_s': 'phases_s'}[field])
-        refused(lambda s: s['x_g']['phases_s'].update(decode=-1.0), 'phases_s')
+            kit.require_ready(inputs, slots, receipt=receipt)
 
     def test_template_carries_the_receipt_only_slots(self):
         from scripts import validate_align_v4_w1_plan as validator
         template = validator.build_template()
         policy = template['align_v4']['thermal_policy']
-        for key in ('contrast_g0_cap_s', 'g0_cap_receipt'):      # cold review LOW-5 adds g0_cap_receipt
+        for key in ('g0_cap_receipt',):      # cold review LOW-5 adds g0_cap_receipt
             self.assertIn(validator.PLACEHOLDER, policy[key])
             self.assertIn('delete', policy[key])
         self.assertEqual(json.loads((ROOT / validator.DEFAULT_PLAN.relative_to(ROOT)).read_text()), template)
@@ -522,7 +525,7 @@ class ProcedureTests(unittest.TestCase):
         self.assertEqual(decision['set_inputs']['R1.B_D'], 8192)
         # No receipt: the e901 rule's one cap, X-G included, and no contrast slot (MEDIUM-2).
         self.assertEqual(decision['set_inputs']['R1.thermal_policy.g0_cap_s'], 600)
-        self.assertNotIn('R1.thermal_policy.contrast_g0_cap_s', decision['set_inputs'])
+        self.assertEqual(decision['set_inputs']['R1.thermal_policy.contrast_g0_cap_s'], 600)
         rerun = deepcopy(slots)
         rerun['inconclusive_segments'] = {'planning_turn_R_plus_2C': 'G0 did not release, twice'}
         self.assertEqual(proc.decide(rerun, 12)['step'], 'R1-RERUN')

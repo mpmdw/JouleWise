@@ -307,7 +307,11 @@ def identical_pair(a, b, *, u3_bar=None):
     margin = 3*max(2.97, .0011*energy)
     if u3_bar is not None:
         from joulewise.align.apple.v4_registration import u3_margin
-        margin = u3_margin(energy, u3_bar)
+        try:
+            margin = u3_margin(energy, u3_bar)
+        except ValueError as exc:
+            return {'status': 'inconclusive', 'token_identical': True,
+                    'delta_j': delta, 'margin_j': None, 'reason': str(exc)}
     return {'status': combine(['pass' if abs(delta) <= margin else 'fail', clock_status]),
             'token_identical': True, 'delta_j': delta, 'margin_j': margin,
             'decode_clock_difference_fraction': difference,
@@ -332,7 +336,10 @@ def deciding_experiment(runs, *, v4=False, delta_slow_c=None, predeclared=None):
         from joulewise.align.apple.v4_estimands import contrast_delivery
         if delta_slow_c is None or delta_slow_c <= 0:
             return {**result, 'reason': 'missing registered delta_slow_c'}
-        delivery = contrast_delivery(runs, delta_slow_c=delta_slow_c)
+        by_template = {t: contrast_delivery([r for r in runs if r.get('template') == t],
+                                            delta_slow_c=delta_slow_c) for t in ('X', 'Y')}
+        delivery = {'by_template': by_template,
+                    'delivered': all(r['delivered'] for r in by_template.values())}
         result['delivery'] = delivery
         if not delivery['delivered']:
             return {**result, 'reason': 'treatment not delivered'}
@@ -626,7 +633,7 @@ def acceptance(members, *, pairs=(), u4=None, u5=None, u6=None, u3_bar=None, v4=
     u2 = combine(['pass' if range_c is not None and range_c <= 3 else 'fail' if range_c is not None else 'inconclusive',
                   combine(['inconclusive' if v is None else 'pass' if v else 'fail' for v in release_checks])
                   if release_checks else 'inconclusive'])
-    pair_results = [identical_pair(a, b, u3_bar=u3_bar) for a, b in pairs
+    pair_results = [identical_pair(a, b, u3_bar=({} if v4 and u3_bar is None else u3_bar)) for a, b in pairs
                     if not state_unobserved(a) and not state_unobserved(b)]
     eligible_pairs = [p['status'] for p in pair_results if p['status'] != 'excluded']
     results = {'U1': {'status': combine(checks), 'thermal_excluded_members': excluded,

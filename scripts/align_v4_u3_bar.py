@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Derive the v4 relative U3 bar from an explicit desk export of pilot pairs.
+"""Summarize explicit replay pairs for the PENDING R11 U3 derivation; no bar is installed.
 
 Input: {"pairs": [{"session": "p4", "ordinals": [5, 17],
 "token_identical": true, "energies_j": [Ea, Eb]}, ...]}. No discovery.

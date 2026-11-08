@@ -30,8 +30,10 @@ scripts/align_w1_budget_procedure.py) changes that, and only when the 600 s
 rule fits at no B_D: D then arms G0* = T_dead - holds projected to 10,240
 tokens - prefill/tool - 10,240 / r, below 600 s, named in
 thermal_policy.g0_cap_receipt; contrast members arm their own
-thermal_policy.contrast_g0_cap_s, which must fit the 1,086.3 s contrast
-deadman on R1's X-G record. The kit re-derives every number.
+thermal_policy.contrast_g0_cap_s and contrast_fit on EVERY path (R11, RUN_STATE 212).
+Failed/incomplete proof predeclares non-veto INCONCLUSIVE. Missing/nonpositive
+available cap gives immediate G0 timeout; changed predecessor heat is disclosed.
+D sizing/receipt checks remain unchanged. The kit re-derives every number.
 T_dead follows lead ruling L1: min((1750 - I_D), (1800 - I_D - max_r1_tail_s
 - 10)) / 1.13544, with max_r1_tail_s from r1_slots; --check asserts that
 I_D + 1.13544 T_dead + max_r1_tail_s + 10 <= 1800.
@@ -58,15 +60,20 @@ drop only 18 first, then decrease B_D by 1024 down to 6144; otherwise return
 to lead. Preserve anchors, contrasts and 5/17. Requalify/freeze changed budgets.
 W1 arm requires --obc-off-attested-by and --w1-disk-config. By-day
 scripts/align_v4_offloads.py verifies configured inventories; the disk config
-names daytime_offload_receipt, no older than 24 h. Arm checks >=80 decimal GB
+names daytime_offload_receipt and an explicit lead-signed
+daytime_offload_freshness policy (max_age_s, lead_signature); no default duration. Arm checks >=80 decimal GB
 free without remounting/re-hashing the SSD. Empty offloads require explicit
 offloads_owed: none. Battery arm requires fresh AC, >=99%, not charging and
-|Amperage| <=200 mA, retaining raw ioreg and pmset evidence.
+|InstantAmperage| <=200 mA, retaining raw ioreg and pmset evidence.
 require_w1_ready also requires registration_receipt.json, bound to current and
 committed protocol/kit/desk/estimand/deviation/U3/WP19 bytes, two admitted gate
 reports and the lead signature. The committed pending template never admits.
-Generate u3_bar.json from explicit pilot replay pairs (k=3 relative form), and
-wp19_receipt.json from tokenizer-only all-turn X/Y rendering plus R1 X-G.
+U3 is PENDING frozen predictive derivation/OC sensitivity: explicit replay
+summaries install no k or energy bar. Historical k=3 receipts cannot admit W1.
+Generate wp19_receipt.json from all-turn X/Y rendering plus complete native X-G.
+The numeric B window consequence and qualified full-span mount audit remain
+lead-owned pending gates. R0.record_sha256 must bind sensor provenance.
+R16 checks actual per-turn opportunity at the chosen B_D, never a capability guarantee.
 The additive align_v4_session.py refuses prepare/install while inputs are pending.
 Its desk is the parameterized pilot instrument desk; WP21 owns full U4–U6,
 K-session and contrast reporting. This kit grants no arm or hardware approval.

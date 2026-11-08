@@ -57,9 +57,9 @@ class ProtocolV4DocTests(unittest.TestCase):
         section = self._section('## W1 registration installation')
         for n in (4, 5, 6, 9, 11, 15, 17, 18, 20):
             self.assertIn(f'**{n} —', section)
-        for phrase in ('**WP19', 'PENDING LEAD RULING — contrast-cap',
+        for phrase in ('**WP19', 'D-C1 installed by R11/R07',
                        'PENDING LEAD RULING — U5', 'registration_receipt.json',
-                       'k=3', '5 and 17', 'sealed and\nunscored'):
+                       'no multiplier', '5 and 17', 'sealed and\nunscored'):
             self.assertIn(phrase, section)
 
 

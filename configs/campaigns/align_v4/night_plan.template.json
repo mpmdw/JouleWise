@@ -166,7 +166,8 @@
     "thermal_policy": {
       "chunk_tokens": "PENDING_R1",
       "classification_sha256": "PENDING_R1",
-      "contrast_g0_cap_s": "PENDING_R1: R10-2(a) receipt only; fill from the receipt, or delete this key without a receipt",
+      "contrast_fit": "PENDING_R1: R11 complete contrast_fit record on every path",
+      "contrast_g0_cap_s": "PENDING_R1: R11 contrast cap on every path",
       "delta_fast_c": "PENDING_R1",
       "delta_slow_c": "PENDING_R1",
       "g0_cap_receipt": "PENDING_R1: R10-2(a) receipt only; fill from the receipt, or delete this key without a receipt",

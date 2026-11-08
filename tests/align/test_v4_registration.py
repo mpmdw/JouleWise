@@ -23,6 +23,9 @@ class RegistrationTests(unittest.TestCase):
              patch.object(kit, 'read_ruling_1f_receipt', return_value=None), \
              patch.object(kit, 'require_ready'), patch.object(kit, 'require_sizing'), \
              patch.object(kit, 'validate_wp18_fixtures'):
+            plan = Path(tmp)/kit.KIT/'collection_plan.json'
+            plan.parent.mkdir(parents=True)
+            plan.write_text(json.dumps({'runtime_requirements': {'km003c': kit.km003c.REQUIREMENT}}))
             with self.assertRaisesRegex(ValueError, 'registration_receipt'):
                 kit.require_w1_ready(tmp)
 
@@ -68,23 +71,17 @@ class RegistrationTests(unittest.TestCase):
                 with self.subTest(change=change), self.assertRaises(ValueError):
                     reg.validate_receipt(bad, root)
 
-    def test_u3_relative_sd_small_n_upper_limit_and_energy_scaling(self):
+    def test_u3_is_pending_and_preserves_only_descriptive_replay_summaries(self):
         from joulewise.align.apple import v4_registration as reg
         pairs = [dict(session='p4', ordinals=[i, i+3], token_identical=True,
                       energies_j=[1000*(1-r/2), 1000*(1+r/2)])
                  for i, r in enumerate([-.004, -.002, 0, .002, .004, .006], 1)]
         result = reg.derive_u3(pairs, {'synthetic': 'a'*64})
         import statistics
-        self.assertAlmostEqual(result['s_rel'], statistics.stdev([-.004, -.002, 0, .002, .004, .006]))
-        self.assertEqual(result['k'], 3)
-        small = reg.derive_u3(pairs[:3], {'synthetic': 'a'*64})
-        # chi-square df=2, lower 10% quantile = -2 log(.9).
-        self.assertAlmostEqual(small['s_rel'], .002*math.sqrt(2/(-2*math.log(.9))), places=9)
-        self.assertAlmostEqual(reg.u3_margin(30000, result), 3*result['s_rel']*30000)
-        self.assertEqual(reg.u3_margin(1, result), 8.91)
-        a, b = member(energy=30000), member(energy=30200)
-        self.assertEqual(thermal_desk.identical_pair(a, b, u3_bar=result)['status'], 'pass')
-        self.assertEqual(thermal_desk.identical_pair(a, b)['status'], 'fail')  # v3 unchanged
+        self.assertAlmostEqual(result['s_rel_sample'], statistics.stdev([-.004, -.002, 0, .002, .004, .006]))
+        self.assertEqual(result['status'], 'PENDING')
+        with self.assertRaisesRegex(ValueError, 'PENDING'):
+            reg.u3_margin(30000, result)
         for field, value in [('token_identical', False), ('ordinals', [1, 2]), ('energies_j', [0, 1])]:
             bad = deepcopy(pairs)
             bad[0][field] = value
@@ -114,9 +111,9 @@ class RegistrationTests(unittest.TestCase):
     def test_battery_topup_and_obc_attestation(self):
         from joulewise.align.apple import v4_registration as reg
         good = dict(passed=True, probe_error=False, external_connected=True, is_charging=False,
-                    current_capacity_pct=100, amperage_ma=0, update_age_s=1)
+                    current_capacity_pct=100, instant_amperage_ma=0, update_age_s=1)
         self.assertTrue(reg.battery_arm(good, 'synthetic')['admitted'])
-        for key, value in [('current_capacity_pct', 98), ('amperage_ma', 201),
+        for key, value in [('current_capacity_pct', 98), ('instant_amperage_ma', 201),
                            ('is_charging', True), ('update_age_s', -1), ('update_age_s', 181),
                            ('passed', False), ('current_capacity_pct', None)]:
             with self.subTest(key=key, value=value):
@@ -148,7 +145,7 @@ class RegistrationTests(unittest.TestCase):
     def test_arm_records_battery_and_refuses_missing_attestation(self):
         from scripts import align_v4_session as session
         good = dict(passed=True, probe_error=False, external_connected=True, is_charging=False,
-                    current_capacity_pct=100, amperage_ma=0, update_age_s=1)
+                    current_capacity_pct=100, instant_amperage_ma=0, update_age_s=1)
         with patch('joulewise.align.apple.powermode.admit_ac_powermode', return_value={'admitted': True}), \
              patch('joulewise.align.apple.external_volume.census', return_value={}), \
              patch('joulewise.align.apple.external_volume.arm_check', return_value={'verdict': 'PASS', 'reasons': []}), \
@@ -216,8 +213,10 @@ class RegistrationTests(unittest.TestCase):
                                'destination': '/synthetic/destination'}], 'disk_path': '/synthetic/disk'}
         with tempfile.TemporaryDirectory() as tmp:
             path, receipt_path = Path(tmp)/'config.json', Path(tmp)/'receipt.json'
-            path.write_text(json.dumps({**config, 'daytime_offload_receipt': str(receipt_path)}))
-            receipt = session.daytime_offload_receipt(config, now=lambda: 1000,
+            freshness = {'max_age_s': 100, 'lead_signature': 'lead: synthetic 2026-11-08'}
+            path.write_text(json.dumps({**config, 'daytime_offload_receipt': str(receipt_path),
+                                        'daytime_offload_freshness': freshness}))
+            receipt = session.daytime_offload_receipt(config, now=lambda: 1000, freshness_policy=freshness,
                 gate=lambda c: {'status': 'pass', 'offloads': [{'label': 'synthetic', 'pass': True,
                     'observed': [{'path': 'fixture', 'sha256': 'a'*64}]}]})
             receipt_path.write_text(json.dumps(receipt))
@@ -299,7 +298,8 @@ class RegistrationTests(unittest.TestCase):
         for record in records:
             record.update(configuration=dict(max_tokens=4096, max_turns=12, deadman_s=1000,
                                               max_episode_decode_tokens=6144),
-                          cache_statistics={'rebuilds': 0})
+                          cache_statistics={'rebuilds': 0}, cohort_identity=dict(model_source='tiny', model_revision='synthetic',
+                          runtime_sha256='a'*64, execution_policy_sha256='b'*64))
         with tempfile.TemporaryDirectory() as tmp, \
              patch.object(session.pilot, '_member_rows', return_value=rows), \
              patch.object(session, 'bundle_ac_powermode', return_value=0), \
@@ -312,7 +312,7 @@ class RegistrationTests(unittest.TestCase):
                 return session.powermode_desk_check(state={'measurement_root': tmp}, members=[],
                                                    runs_root=tmp, kit_path=kit.KIT)[0]
             result = check()
-            self.assertTrue(result['v4_synthetic/W1_U3'])  # old absolute-joule bar fails this pair
+            self.assertFalse(result['v4_synthetic/W1_U3'])  # R11 leaves U3 pending; no historical constant
             self.assertTrue(result['v4_D_cohort'])
             records[1]['configuration']['max_turns'] = 11
             self.assertFalse(check()['v4_D_cohort'])

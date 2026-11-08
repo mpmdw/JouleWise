@@ -6,6 +6,7 @@ import math
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from joulewise.align.apple import thermal_desk as desk
 from tests.align.test_attribution import episode, turn, NS
@@ -45,6 +46,7 @@ class DeskTests(unittest.TestCase):
                             fixture['turns'], live_source_sha256='b'*64)
         (root/'u3_bar.json').write_text(json.dumps(bar))
         (root/'wp19_receipt.json').write_text(json.dumps(wp19))
+        (root/'inputs.json').write_text(json.dumps({'R1': {'thermal_policy': {}}}))
         return ['--registration-dir', str(root)]
     def test_dead_collector_counts_as_x4_even_with_runtime_failure(self):
         reasons = desk.calibration_exclusions({
@@ -331,7 +333,9 @@ class DeskTests(unittest.TestCase):
         self.assertIn('df=4', text)
         self.assertIn('Δdecode MHz', text)
 
-    def test_cli_reads_synthetic_bundle_and_writes_reviewable_tables(self):
+    @patch('joulewise.align.apple.v4_registration.validate_u3')
+    def test_cli_reads_synthetic_bundle_and_writes_reviewable_tables(self, _unruled_u3):
+        # Isolate table rendering from R11's deliberate pending registration gate.
         from tests.align.test_thermal_gate import NativeIntegrationTests
         from scripts.align_v4_thermal_desk import main
         helper = NativeIntegrationTests('test_real_workload_endpoint_budget_and_held_stream_keep_exact_tokens')
@@ -352,7 +356,9 @@ class DeskTests(unittest.TestCase):
             self.assertNotEqual(next(iter(report['model_windows'].values()))['U1']['status'], 'pass')
             self.assertIn('Exact exclusion intervals', (output/'THERMAL.md').read_text())
 
-    def test_cli_keeps_a_member_without_artifact_and_refuses_unresolved_references(self):
+    @patch('joulewise.align.apple.v4_registration.validate_u3')
+    def test_cli_keeps_a_member_without_artifact_and_refuses_unresolved_references(self, _unruled_u3):
+        # Synthetic rendering only; the real U3 refusal is tested in test_v4_r11.
         from tests.align.test_thermal_gate import NativeIntegrationTests
         from scripts.align_v4_thermal_desk import main
         helper = NativeIntegrationTests('test_real_workload_endpoint_budget_and_held_stream_keep_exact_tokens')

@@ -53,12 +53,15 @@ SYN_R1_SLOTS = {'schema': kit.R1_SLOTS_SCHEMA, 'source': kit.R1_SYNTHETIC_SOURCE
                 # R6-8 (exec LOW-5): each run's duty verdict; the kit re-derives the bar.
                 'deadman_budget': [{'run': name, 'g0_outcome': 'released',
                                     'phases_s': dict(SYN_PHASES, tail=tail), 'decode_tokens': 8000,
+                                    'turn_decode_counts': [2000]*4, 'turn_completed': [True]*4,
+                                    'admitted_turns': 4, 'x7': False, 'turn_counts_source_sha256': R0_SHA,
                                     'duty_bar': {'pass': True, 'verdict': 'pass'}}
                                    for name, tail in zip(kit.GATED_D_RUN_NAMES, (30.0, 12.0, 12.0))],
                 'budget_fit_inputs': {'r_decode_tok_per_s': 40.0, 'r_decode_step_d_tok_per_s': 40.0,
                                       'turn_cap_tokens': 4096},
                 'external_volumes': [{'point': 't0', 'verdict': 'PASS'}], 'inconclusive_segments': {},
-                'x_g': {'status': 'measured', 'g0_outcome': 'released', 'g0_wait_s': 60.0},
+                'x_g': {'status': 'measured', 'g0_outcome': 'released', 'g0_wait_s': 60.0,
+                        'admitted_turns': 5, 'x7': False, 'phases_s': dict(SYN_PHASES)},
                 'g0_cap_w1': {'authority': 'LEAD-RULINGS-2 R7-2, R7-12', 'r1_g0_timeout_s': 1200.0,
                               'floor_s': 600.0, 'factor': 1.25,
                               'waits_s': {**dict.fromkeys(kit.GATED_D_RUN_NAMES, 60.0), 'X_G_contrast': 60.0},
@@ -82,7 +85,7 @@ SYN_INPUTS = {
     },
     'WP18': {'X': {'max_turns': 5, 'token_fixture_sha256': hashlib.sha256(b'X').hexdigest()},
              'Y': {'max_turns': 5, 'token_fixture_sha256': hashlib.sha256(b'Y').hexdigest()}},
-    'R0': {'reasoning_effort': 'xhigh'},
+    'R0': {'reasoning_effort': 'xhigh', 'record_sha256': R0_SHA},
     'R1': {'B_D': 6144, 'I_D': I_D, 'T_dead': kit.l1_t_dead(I_D, SYN_R1_SLOTS['max_r1_tail_s']),
            'thermal_policy': {'classification_sha256': SYN_R1_SLOTS['thermometry']['D']['classification_sha256'],
                               'sensors': {'s_fast': syn.FAST, 's_slow': syn.SLOW, 'fan_keys': [syn.FAN],
@@ -91,6 +94,10 @@ SYN_INPUTS = {
                               'chunk_tokens': 2048, 'g0_cap_s': 600, 'heavy': True, 'per_turn': True}},
     'WP15': {'runtime_entrypoint': ['scripts/align_r1_runtime.py', '--config', 'configs/align/v4/r1_runtime.json']},
 }
+
+# Synthetic, complete R11 contrast proof; never native evidence.
+_SYN_CONTRAST = kit.w1_contrast_g0_cap(SYN_R1_SLOTS, SYN_INPUTS['WP18']['X']['max_turns'])
+SYN_INPUTS['R1']['thermal_policy'].update(contrast_g0_cap_s=_SYN_CONTRAST['value_s'], contrast_fit=_SYN_CONTRAST)
 
 # One of each injected event, on distinct members (ordinal -> event).
 # Council ruling 1(g) swapped W1 ordinals 17 and 18: the replay of 5 is 17 and

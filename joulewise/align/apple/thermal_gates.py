@@ -101,11 +101,28 @@ def validate_gate_policy(value):
     required = {'sensors', 'delta_fast_c', 'delta_slow_c', 'turn_cap_s', 'per_turn', 'heavy', 'chunk_tokens'}
     if (not isinstance(value, Mapping) or not required <= value.keys()
             or 'window_reference' not in value
-            or set(value) - required - {'window_reference', 'g0_cap_s', 'g0_cap_receipt'}):
+            or set(value) - required - {'window_reference', 'g0_cap_s', 'g0_cap_receipt', 'contrast_fit'}):
         raise ValueError('thermal policy has missing or unknown fields')
     policy = dict(value)
     policy['sensors'] = validate_policy(policy['sensors'])
     receipt = policy.get('g0_cap_receipt')
+    contrast = policy.get('contrast_fit')
+    if 'contrast_fit' in policy:
+        if (not isinstance(contrast, Mapping) or contrast.get('authority') != 'LEAD-RULINGS-2 R11 / RUN_STATE 212'
+                or contrast.get('role') != 'contrast' or policy.get('heavy') is not False
+                or receipt is not None or contrast.get('value_s') != policy.get('g0_cap_s')
+                or (contrast.get('predeclared') is not None and
+                    not str(contrast['predeclared']).startswith('INCONCLUSIVE:'))):
+            raise ValueError('thermal.contrast_fit must bind the R11 non-veto light contrast cap')
+        episode = contrast.get('episode_s')
+        nominal, deadman = contrast.get('nominal_cap_s'), contrast.get('deadman_s')
+        if any(type(v) not in (int, float) or not math.isfinite(v) or v <= 0 for v in (nominal, deadman)):
+            raise ValueError('thermal.contrast_fit timing malformed')
+        if episode is not None and (type(episode) not in (int, float) or not math.isfinite(episode) or episode < 0):
+            raise ValueError('thermal.contrast_fit episode malformed')
+        expected = 0 if episode is None else max(0, min(nominal, math.floor(deadman-episode-10)))
+        if contrast['value_s'] != expected:
+            raise ValueError('thermal.contrast_fit cap differs from deadman arithmetic')
     if 'g0_cap_receipt' in policy:
         # R10-2(a): the receipt travels only with a cap below the 600 s floor.
         if (not isinstance(receipt, Mapping) or set(receipt) != {'authority', 'receipt_sha256'}
@@ -117,10 +134,11 @@ def validate_gate_policy(value):
         policy['g0_cap_receipt'] = dict(receipt)
     if 'g0_cap_s' in policy:
         cap = policy['g0_cap_s']
-        if type(cap) not in (int, float) or not math.isfinite(cap) or not 0 < cap <= G0_CAP_MAX_S:
+        if (type(cap) not in (int, float) or not math.isfinite(cap)
+                or not 0 <= cap <= G0_CAP_MAX_S or (cap == 0 and contrast is None)):
             raise ValueError(f'thermal.g0_cap_s must be finite and in [{G0_CAP_DEFAULT_S}, {G0_CAP_MAX_S}], or in '
                              f'(0, {G0_CAP_MAX_S}] with a g0_cap_receipt ({R10_G0_CAP_AUTHORITY})')
-        if cap < G0_CAP_DEFAULT_S and receipt is None:
+        if cap < G0_CAP_DEFAULT_S and receipt is None and contrast is None:
             raise ValueError(f'thermal.g0_cap_s must be finite and in [{G0_CAP_DEFAULT_S}, {G0_CAP_MAX_S}]; '
                              f'a cap below {G0_CAP_DEFAULT_S} s needs the lead\'s ruling 1(f) receipt '
                              f'(thermal.g0_cap_receipt, {R10_G0_CAP_AUTHORITY})')
