@@ -22,6 +22,11 @@ from joulewise.interfaces import RuntimeEvent
 REFERENCE_SCHEMA = 'joulewise.align_window_reference.v1'
 G0_CAP_DEFAULT_S = 600
 G0_CAP_MAX_S = 1200
+# LEAD-RULINGS-2 R10-2(a): a D member's W1 G0 cap may fall below the 600 s
+# floor only under the lead's committed ruling 1(f) receipt; the policy then
+# names it (g0_cap_receipt), and the kit binds that digest to the receipt bytes.
+R10_G0_CAP_AUTHORITY = 'LEAD-RULINGS-2 R10-2(a)'
+G0_UNOBSERVED_LIMIT_S = 300
 
 
 class WindowReferenceRefused(RuntimeError):
@@ -95,14 +100,32 @@ def sample_rows(rows):
 def validate_gate_policy(value):
     required = {'sensors', 'delta_fast_c', 'delta_slow_c', 'turn_cap_s', 'per_turn', 'heavy', 'chunk_tokens'}
     if (not isinstance(value, Mapping) or not required <= value.keys()
-            or 'window_reference' not in value or set(value) - required - {'window_reference', 'g0_cap_s'}):
+            or 'window_reference' not in value
+            or set(value) - required - {'window_reference', 'g0_cap_s', 'g0_cap_receipt'}):
         raise ValueError('thermal policy has missing or unknown fields')
     policy = dict(value)
     policy['sensors'] = validate_policy(policy['sensors'])
+    receipt = policy.get('g0_cap_receipt')
+    if 'g0_cap_receipt' in policy:
+        # R10-2(a): the receipt travels only with a cap below the 600 s floor.
+        if (not isinstance(receipt, Mapping) or set(receipt) != {'authority', 'receipt_sha256'}
+                or receipt['authority'] != R10_G0_CAP_AUTHORITY
+                or not isinstance(receipt['receipt_sha256'], str) or len(receipt['receipt_sha256']) != 64
+                or any(c not in '0123456789abcdef' for c in receipt['receipt_sha256'])):
+            raise ValueError('thermal.g0_cap_receipt must be {authority: '
+                             f'{R10_G0_CAP_AUTHORITY!r}, receipt_sha256: 64-hex}}')
+        policy['g0_cap_receipt'] = dict(receipt)
     if 'g0_cap_s' in policy:
         cap = policy['g0_cap_s']
-        if type(cap) not in (int, float) or not math.isfinite(cap) or not G0_CAP_DEFAULT_S <= cap <= G0_CAP_MAX_S:
+        if type(cap) not in (int, float) or not math.isfinite(cap) or not 0 < cap <= G0_CAP_MAX_S:
             raise ValueError(f'thermal.g0_cap_s must be finite and in [{G0_CAP_DEFAULT_S}, {G0_CAP_MAX_S}]')
+        if cap < G0_CAP_DEFAULT_S and receipt is None:
+            raise ValueError(f'thermal.g0_cap_s must be finite and in [{G0_CAP_DEFAULT_S}, {G0_CAP_MAX_S}]; '
+                             f'a cap below {G0_CAP_DEFAULT_S} s needs the lead\'s ruling 1(f) receipt '
+                             f'(thermal.g0_cap_receipt, {R10_G0_CAP_AUTHORITY})')
+    if receipt is not None and not (policy.get('g0_cap_s', G0_CAP_DEFAULT_S) < G0_CAP_DEFAULT_S):
+        raise ValueError(f'thermal.g0_cap_receipt only accompanies a g0_cap_s below {G0_CAP_DEFAULT_S} s '
+                         f'({R10_G0_CAP_AUTHORITY})')
     for name in ('delta_fast_c', 'delta_slow_c', 'turn_cap_s'):
         v = policy[name]
         if type(v) not in (int, float) or not math.isfinite(v) or v <= 0:
@@ -534,7 +557,10 @@ class ThermalSession:
                         reason = 'deadman'
                         break
                     elapsed = (now - start) / NS
-                    limit = 300 if unobserved and kind == 'G0' else cap
+                    # The unobserved G0 wait never outlasts the armed cap: under
+                    # R10-2(a) the cap can be below 300 s, and ruling 1(f)'s G0
+                    # term is the armed cap.
+                    limit = min(G0_UNOBSERVED_LIMIT_S, cap) if unobserved and kind == 'G0' else cap
                     if elapsed >= limit:
                         break
                     delay = min(1, limit - elapsed)

@@ -4,7 +4,9 @@ R10-2(a)'s receipt, the per-role W1 G0 caps, the D cap below 600 s, the
 holds projected per decoded token, and the mechanical post-R1 procedure
 (scripts/align_w1_budget_procedure.py). Every R1 record here is synthetic.
 """
+from contextlib import redirect_stderr, redirect_stdout
 from copy import deepcopy
+import io
 import json
 import math
 from pathlib import Path
@@ -127,13 +129,24 @@ class ReceiptTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, r'receipt \(R10-2\(a\)\) refused: ceil\(1.25'):
             kit.require_ready(inputs, slots, receipt=forged)
 
-    def test_a_censored_d_g0_never_takes_branch_a(self):
+    def test_the_admit_bound_reads_released_d_waits_only(self):
+        # R10-2(a): "the longest *released* gated D G0 wait". A censored D G0
+        # is recorded but sets no bound; with none released, (a) cannot be shown.
         inputs, slots = eight_bit_case()
         slots['deadman_budget'][1]['g0_outcome'] = 'deadman'
+        slots['deadman_budget'][1]['phases_s']['G0'] = 900.0
         slots['g0_cap_w1'] = kit.w1_g0_cap(slots)
         decision = proc.decide(slots, 12)
-        self.assertEqual(decision['branch'], 'b')
-        self.assertEqual(decision['derived']['derivation']['W_D_s'], 1200.0)
+        d = decision['derived']['derivation']
+        self.assertEqual((decision['branch'], d['W_D_s'], d['admit_bound_s']), ('a', 120.0, 150))
+        self.assertEqual(d['censored_D'], [kit.GATED_D_RUN_NAMES[1]])
+        self.assertEqual(kit.w1_d_g0_cap(slots)['value_s'], 1200)     # the no-receipt rule keeps R7-2's timeout
+        for row in slots['deadman_budget']:
+            row['g0_outcome'] = 'timeout'
+        slots['g0_cap_w1'] = kit.w1_g0_cap(slots)
+        decision = proc.decide(slots, 12)
+        d = decision['derived']['derivation']
+        self.assertEqual((decision['branch'], d['W_D_s'], d['admit_bound_s']), ('b', None, None))
 
     def test_receipt_is_refused_where_the_current_rule_already_fits(self):
         inputs, slots = ready_inputs()        # 50 tok/s: the 600 s rule fits
@@ -413,7 +426,8 @@ class ProcedureTests(unittest.TestCase):
 
     def test_cli_drafts_signs_and_the_kit_reads_the_receipt(self):
         inputs, slots = eight_bit_case()
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory() as tmp, redirect_stdout(io.StringIO()) as printed, \
+                redirect_stderr(io.StringIO()) as errors:
             tmp = Path(tmp)
             (tmp / 'r1_slots.json').write_text(json.dumps(slots))
             (tmp / 'inputs.json').write_text(json.dumps(inputs))
@@ -424,9 +438,12 @@ class ProcedureTests(unittest.TestCase):
             out.parent.mkdir(parents=True)
             self.assertEqual(proc.main(['sign', str(draft), '--signature', SIGNATURE, '--out', str(out)]), 0)
             receipt = kit.read_ruling_1f_receipt(tmp)
+            self.assertEqual(proc.main(['decide', '--r1-slots', '/nonexistent/r1_slots.json']), 1)
+        self.assertIn('"step": "R10-2(a)"', printed.getvalue())
+        self.assertIn(kit.receipt_sha256(receipt), printed.getvalue())
+        self.assertIn('No such file', errors.getvalue())
         self.assertEqual(receipt['lead_signature'], SIGNATURE)
         kit.require_ready(arm_receipt(inputs, receipt), slots, receipt=receipt)
-        self.assertEqual(proc.main(['decide', '--r1-slots', '/nonexistent/r1_slots.json']), 1)
 
     def test_backfill_copies_x_g_timing_from_r1_result(self):
         inputs, slots = eight_bit_case()

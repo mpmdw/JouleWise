@@ -89,7 +89,8 @@ def build_template(collection_plan: dict | None = None) -> dict:
                         for member in plan["members"]],
             "status": pending,
             "thermal_policy": {"classification_sha256": pending,
-                               "chunk_tokens": pending, "delta_fast_c": pending, "delta_slow_c": pending,
+                               "chunk_tokens": pending, "contrast_g0_cap_s": pending,
+                               "delta_fast_c": pending, "delta_slow_c": pending,
                                "g0_cap_s": pending, "heavy": True, "per_turn": True,
                                "sensors": {"fan_keys": pending, "r0_sha256": pending,
                                            "s_fast": pending, "s_slow": pending},
@@ -154,6 +155,11 @@ def validate(value: dict, inputs: dict | None = None, r1_slots: dict | None = No
     checked = validate_gate_policy({**kit.gate_policy_fields(policy), "window_reference": {"role": "capture"}})
     if checked["heavy"] is not True or checked["per_turn"] is not True:
         _fail("D thermal_policy must be heavy with per-turn gates and holds")
+    # LEAD-RULINGS-2 R10-4: the contrast members arm their own G0 cap.
+    if "contrast_g0_cap_s" not in policy:
+        _fail("thermal_policy.contrast_g0_cap_s (the contrast members' W1 G0 cap, LEAD-RULINGS-2 R10-4) is missing")
+    validate_gate_policy({**kit.gate_policy_fields(policy, role="contrast"), "heavy": False, "per_turn": True,
+                          "window_reference": {"role": "capture"}})
 
     # The template is a second copy of values the kit installs from
     # registration/inputs.json; refuse any disagreement.

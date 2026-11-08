@@ -363,6 +363,25 @@ Under the three WP14 rulings above, retain these council rules:
   designed start states arm 1,200 s. A G0 that did not release counts at
   1,200 s, and an INCONCLUSIVE X-G falls back to 1,200 s (R7-12). Ruling
   1(f) uses G0_cap_W1 as its G0 term. Every other G0 keeps 600 s.
+  **LEAD-RULINGS-2 R10-4 (per-role caps):** W1 arms one G0 cap per role.
+  D members arm the D-role cap, the same rule over D_bank, D_spam a and
+  D_spam b only (`thermal_policy.g0_cap_s`), and that cap is ruling 1(f)'s
+  G0 term. Contrast members arm their own cap from X-G
+  (`thermal_policy.contrast_g0_cap_s`; R7-12's fallback to 1,200 s for an
+  INCONCLUSIVE X-G stays). It must fit the 1,086.3 s contrast deadman on
+  R1's X-G record (complete WP18 X turns, no deadman, cap + G1 + H +
+  prefill + decode + tool), or the kit refuses W1 (R10-2(a)).
+  **LEAD-RULINGS-2 R10-2(a) (public deviation, D only, under a signed lead
+  receipt `registration/ruling_1f_receipt.json`):** D arms G0* = T_dead −
+  holds − prefill/tool − 10,240/r, below 600 s, with r the minimum of
+  step-d's and the gated runs' decode rates and the holds projected per
+  decoded token to 10,240 tokens. It applies only when 1.25 × the longest
+  gated D G0 wait ≤ G0* (an unreleased wait counts at 1,200 s) and the
+  600 s rule does not fit. A D G0 that has not released by G0* ends X2
+  before turn 1, never X7, so 1(f)'s worst case holds with G0* as its G0
+  term. `scripts/align_w1_budget_procedure.py` computes the branch from R1
+  timing and count fields only and drafts the receipt; the kit re-derives
+  every number and refuses on any mismatch.
   **R1's G0 timeout (LEAD-RULINGS-2 R7-2):** R1's gated D runs, X-G,
   step-d and the designed start states (first attempt and retry) arm one
   G0 timeout of 1,200 s, the runtime config's `g0_timeout_s`; the

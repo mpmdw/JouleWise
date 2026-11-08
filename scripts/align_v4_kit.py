@@ -176,7 +176,7 @@ U5_VERDICTS = ('pass', 'fail', 'inconclusive')
 DUTY_FALLBACK_STEPS = (1, 2, 3)
 
 
-def check_r1_evidence(inputs, r1_slots, *, synthetic=False):
+def check_r1_evidence(inputs, r1_slots, *, synthetic=False, receipt=None):
     """Bind r1_slots to R1 evidence (executing review MEDIUM-3).
 
     The record must be the R1 driver's own (schema and hardware source; the
@@ -185,6 +185,9 @@ def check_r1_evidence(inputs, r1_slots, *, synthetic=False):
     the A-B-A verdict, max_r1_tail_s must be the largest gated-run tail, U5
     must carry a verdict, every ruling 20 census must have passed, and the
     duty bar must pass or carry a recorded lead fallback step (ruling 1(e)).
+    ``receipt`` is the lead's committed ruling 1(f) receipt or None
+    (LEAD-RULINGS-2 R10-4); the contrast G0 cap must fit the contrast deadman
+    either way (R10-2(a)).
     """
     if not isinstance(r1_slots, dict) or r1_slots.get('schema') != R1_SLOTS_SCHEMA:
         raise ValueError(f'R1 r1_slots must be a {R1_SLOTS_SCHEMA} record')
@@ -279,7 +282,8 @@ def check_r1_evidence(inputs, r1_slots, *, synthetic=False):
             (row or {}).get('verdict') != 'PASS' for row in volumes):
         raise ValueError('R1 r1_slots must record passing external-volume censuses (ruling 20)')
     check_r1_fast_band(inputs['R1'], r1_slots)
-    check_r1_budget_and_policy(inputs['R1'], r1_slots)
+    check_r1_budget_and_policy(inputs['R1'], r1_slots, receipt=receipt,
+                               x_max_turns=((inputs.get('WP18') or {}).get('X') or {}).get('max_turns'))
     check_duty_bar_consistency(r1_slots)
     duty = r1_slots.get('duty_bar')
     if not isinstance(duty, dict) or type(duty.get('pass')) is not bool:
@@ -466,23 +470,9 @@ def w1_g0_cap(r1_slots, root=ROOT):
             'rule': 'clamp(ceil(1.25 * max counted gated D and X-G G0 wait), 600, R1 g0_timeout_s)'}
 
 
-def ruling_1f_fit(r1_slots, b_d, t_dead):
-    """Council ruling 1(f) for a B_D (lead ruling R5-4): the worst case R1
-    measured must fit T_dead.
-
-    worst = G0_cap_W1 + max (G1 + H) + max (prefill + tool) over the gated D runs
-            + (B_D + turn_cap_tokens) / r_decode
-
-    G0_cap_W1 is re-derived from all gated D and X-G waits, with unreleased
-    waits counted at the R1 timeout (LEAD-RULINGS-2 R7-2, R7-12).
-    A turn is admitted while fewer than B_D decode tokens are spent and then
-    keeps its full per-turn cap (FD:263), so B_D + cap bounds the episode
-    decode. LEAD-RULINGS-2 R6-3: r_decode = min(step-d's measured rate, every
-    gated run's observed rate), re-derived here from
-    ``budget_fit_inputs.r_decode_step_d_tok_per_s`` and each deadman_budget
-    row's ``decode_tokens`` / ``phases_s.decode`` (a run that decoded nothing
-    has no rate). Returns the arithmetic.
-    """
+def gated_fit_inputs(r1_slots):
+    """The three gated D rows, their phase seconds, r_decode and the turn cap
+    (ruling 1(f), R6-3), validated as ruling_1f_fit always has."""
     budget = r1_slots.get('deadman_budget')
     rows = budget if isinstance(budget, list) else []
     names = [row.get('run') if isinstance(row, dict) else None for row in rows]
@@ -515,13 +505,260 @@ def ruling_1f_fit(r1_slots, b_d, t_dead):
     if cap != d_turn_cap_tokens():
         raise ValueError(f'ruling 1(f): the gated runs armed a {cap}-token turn cap, but W1 D members carry '
                          f'{d_turn_cap_tokens()}')
+    return rows, phases, rate, cap
+
+
+def projected_holds_s(rows, phases, tokens_target):
+    """Audit-corrected D-f (LEAD-RULINGS-2 R10-4): each gated run's G1 + H
+    projected per decoded token to ``tokens_target`` (symmetric with the decode
+    term), never below what the run recorded; the maximum over the runs. A run
+    that decoded nothing projects nothing, and refuses if it still recorded
+    G1 or hold seconds."""
+    values = []
+    for row, p in zip(rows, phases):
+        held, tokens = p['G1'] + p['H'], row['decode_tokens']
+        if not tokens:
+            if held > 0:
+                raise ValueError(f'ruling 1(f): {row.get("run")} recorded {held} s of G1 + H with no decoded '
+                                 'token, so its holds cannot be projected per token (R10-4)')
+            values.append(0.0)
+        else:
+            values.append(max(held, held / tokens * tokens_target))
+    return max(values)
+
+
+def ruling_1f_fit(r1_slots, b_d, t_dead, *, receipt=None, x_max_turns=None):
+    """Council ruling 1(f) for a B_D (lead ruling R5-4): the worst case R1
+    measured must fit T_dead.
+
+    worst = G0 term + holds + max (prefill + tool) over the gated D runs
+            + (B_D + turn_cap_tokens) / r_decode
+
+    Without a lead receipt (the R6-3 rule, unchanged): the G0 term is W1's
+    D-role G0 cap (LEAD-RULINGS-2 R10-4: clamp(ceil(1.25 x max gated D wait),
+    600, R1 timeout), unreleased waits at the R1 timeout, R7-2) and holds is
+    the recorded max (G1 + H).
+    With a verified R10-2(a) receipt (``receipt``): the G0 term is the
+    receipt's sub-600 s D cap, the armed cap, and holds is projected per
+    decoded token to B_D + turn_cap_tokens (R10-4, the audit's corrected D-f).
+    A turn is admitted while fewer than B_D decode tokens are spent and then
+    keeps its full per-turn cap (FD:263), so B_D + cap bounds the episode
+    decode. LEAD-RULINGS-2 R6-3: r_decode = min(step-d's measured rate, every
+    gated run's observed rate), re-derived here from
+    ``budget_fit_inputs.r_decode_step_d_tok_per_s`` and each deadman_budget
+    row's ``decode_tokens`` / ``phases_s.decode`` (a run that decoded nothing
+    has no rate). Returns the arithmetic.
+    """
+    rows, phases, rate, cap = gated_fit_inputs(r1_slots)
     g0_cap = w1_g0_cap(r1_slots)
-    terms = {'G0_s': g0_cap['value_s'], 'holds_s': max(p['G1'] + p['H'] for p in phases),
+    d_cap = w1_d_g0_cap(r1_slots)
+    if receipt is None:
+        g0_term, holds, rule = d_cap['value_s'], max(p['G1'] + p['H'] for p in phases), 'R6-3, R10-4 D-role cap'
+    else:
+        verified = verify_ruling_1f_receipt(receipt, r1_slots, t_dead, x_max_turns)
+        g0_term = verified['derivation']['d_g0_cap_s']
+        holds = projected_holds_s(rows, phases, b_d + cap)
+        rule = 'R10-2(a) receipt'
+    terms = {'G0_s': g0_term, 'holds_s': holds,
              'prefill_tool_s': max(p['prefill'] + p['tool'] for p in phases),
              'decode_s': (b_d + cap) / rate}
     worst = math.fsum(terms.values())
     return {'B_D': b_d, 'T_dead_s': t_dead, 'terms_s': terms, 'r_decode_tok_per_s': rate, 'worst_s': worst,
-            'g0_cap_w1': g0_cap, 'fits': worst <= t_dead + 1e-6}
+            'g0_cap_w1': g0_cap, 'd_g0_cap': d_cap, 'rule': rule, 'fits': worst <= t_dead + 1e-6}
+
+
+G0_CAP_FACTOR = 1.25
+
+
+def _role_cap(wait, timeout):
+    """R7-2's clamp(ceil(1.25 x wait), 600, R1 timeout)."""
+    floor = float(thermal_gates.G0_CAP_DEFAULT_S)
+    return int(min(max(math.ceil(G0_CAP_FACTOR * min(wait, timeout)), floor), timeout))
+
+
+def w1_d_g0_cap(r1_slots, root=ROOT):
+    """LEAD-RULINGS-2 R10-4: W1's D-role G0 cap, from the three gated D waits
+    only (X-G no longer sets D's term). Unreleased waits count at the R1
+    timeout (R7-2), as in w1_g0_cap, which re-derives the recorded R7-2 slot."""
+    combined = w1_g0_cap(r1_slots, root)
+    waits = {name: combined['waits_s'][name] for name in GATED_D_RUN_NAMES}
+    timeout = combined['r1_g0_timeout_s']
+    maximum = max(waits.values())
+    return {'authority': 'LEAD-RULINGS-2 R7-2, R10-4', 'role': 'D', 'r1_g0_timeout_s': timeout,
+            'waits_s': waits, 'censored': [n for n in combined['censored'] if n in waits],
+            'max_g0_s': maximum, 'value_s': _role_cap(maximum, timeout),
+            'rule': 'clamp(ceil(1.25 * max counted gated D G0 wait), 600, R1 g0_timeout_s)'}
+
+
+CONTRAST_EPISODE_PHASES = ('G1', 'H', 'prefill', 'decode', 'tool')
+X_G_EVIDENCE_FIELDS = ('admitted_turns', 'x7', 'phases_s')
+
+
+def w1_contrast_g0_cap(r1_slots, x_max_turns, root=ROOT):
+    """LEAD-RULINGS-2 R10-4 and R10-2(a): the contrast members' own W1 G0 cap
+    and its proof against the contrast deadman (CONTRAST_DEADMAN_S, 1,086.3 s).
+
+    The cap is clamp(ceil(1.25 x X-G's G0 wait), 600, R1 timeout); an X-G that
+    is not measured keeps R7-12's D-to-X fallback, the R1 timeout. It fits
+    when R1's X-G ran W1's complete WP18 X turn count (the heaviest contrast
+    member: X decodes more than Y, and only the G arms gate per turn) with no
+    deadman, and cap + X-G's G1 + H + prefill + decode + tool <= the contrast
+    deadman. Returns the arithmetic with ``fits`` and the ``reasons`` it fails.
+    """
+    timeout = r1_g0_timeout_s(root)
+    x_g = r1_slots.get('x_g') if isinstance(r1_slots, dict) else None
+    x_g = x_g if isinstance(x_g, dict) else {}
+    wait = x_g.get('g0_wait_s')
+    measured = (x_g.get('status') == 'measured' and x_g.get('g0_outcome') == 'released'
+                and finite(wait) and wait >= 0)
+    reasons = []
+    if not measured:
+        reasons.append('X-G is not measured with a released G0, so its D-to-X G0 term is the R1 timeout '
+                       '(R7-12), which leaves no contrast episode inside the deadman')
+    value = _role_cap(float(wait) if measured else timeout, timeout)
+    turns, x7, phases = (x_g.get(k) for k in X_G_EVIDENCE_FIELDS)
+    if type(x_max_turns) is not int or x_max_turns <= 0:
+        reasons.append('WP18 X max_turns is not a recorded positive integer')
+    elif type(turns) is not int or turns != x_max_turns:
+        reasons.append(f'X-G admitted {turns!r} turns, not the complete WP18 X count {x_max_turns}')
+    if x7 is not False:
+        reasons.append(f'X-G must record x7 false (no deadman); got {x7!r}')
+    episode = None
+    if isinstance(phases, dict) and all(finite(phases.get(k)) and phases[k] >= 0 for k in CONTRAST_EPISODE_PHASES):
+        episode = math.fsum(phases[k] for k in CONTRAST_EPISODE_PHASES)
+    else:
+        reasons.append('X-G must record finite, non-negative ' + ', '.join(CONTRAST_EPISODE_PHASES)
+                       + ' seconds (r1_slots.x_g.phases_s)')
+    worst = None if episode is None else value + episode
+    if worst is not None and worst > CONTRAST_DEADMAN_S + 1e-6:
+        reasons.append(f'contrast cap {value} s + X-G episode {episode:.1f} s = {worst:.1f} s exceeds the '
+                       f'contrast deadman {CONTRAST_DEADMAN_S:.1f} s')
+    return {'authority': 'LEAD-RULINGS-2 R10-2(a), R10-4, R7-12', 'role': 'contrast',
+            'r1_g0_timeout_s': timeout, 'x_g_wait_s': float(wait) if measured else None,
+            'x_g_fallback': not measured, 'value_s': value, 'x_max_turns': x_max_turns,
+            'episode_s': episode, 'worst_s': worst, 'deadman_s': CONTRAST_DEADMAN_S,
+            'fits': not reasons, 'reasons': reasons,
+            'rule': ('clamp(ceil(1.25 * X-G G0 wait), 600, R1 g0_timeout_s); fits when X-G ran the complete WP18 '
+                     'X turns with no deadman and cap + G1 + H + prefill + decode + tool <= the contrast deadman')}
+
+
+# LEAD-RULINGS-2 R10-2 / R10-4: the lead's ruling 1(f) receipt.
+RULING_1F_RECEIPT = KIT / 'registration/ruling_1f_receipt.json'
+RULING_1F_RECEIPT_SCHEMA = 'joulewise.align_v4.ruling_1f_receipt.v1'
+R10_AUTHORITY = 'LEAD-RULINGS-2 R10-2'
+R10_BRANCHES = {'a': 'budget-sized D G0 cap (8-bit)', 'b': '4-bit D, after its own R1-4bit gated night',
+                'c': 'window council'}
+UNSIGNED = 'PENDING_LEAD_SIGNATURE'
+
+
+def r10_2_derivation(r1_slots, t_dead, x_max_turns, root=ROOT):
+    """LEAD-RULINGS-2 R10-2(a), mechanical: G0* = T_dead - holds - prefill/tool
+    - 10,240/r with r = min(step-d and gated decode rates) and holds projected
+    per decoded token to the same 10,240 tokens (R10-4). Branch (a) when
+    ceil(1.25 x the longest *released* gated D G0 wait) <= G0* (R10-2(a)'s
+    text: a censored D G0 is recorded in censored_D but sets no bound; with
+    no released D wait (a) cannot be shown) and the armed cap floor(G0*) is
+    below 600 s
+    ('current' when it is not: the 600 s rule already fits at the floor);
+    otherwise (b), 4-bit next. Reads only R1 timing and count fields."""
+    rows, phases, rate, cap = gated_fit_inputs(r1_slots)
+    tokens = BUDGET_FLOOR + cap
+    d_cap = w1_d_g0_cap(r1_slots, root)
+    holds = projected_holds_s(rows, phases, tokens)
+    prefill_tool = max(p['prefill'] + p['tool'] for p in phases)
+    decode = tokens / rate
+    g0_star = t_dead - holds - prefill_tool - decode
+    released = [d_cap['waits_s'][name] for name in GATED_D_RUN_NAMES if name not in d_cap['censored']]
+    w_d = max(released) if released else None
+    bound = math.ceil(G0_CAP_FACTOR * w_d) if released else None
+    armed = math.floor(g0_star) if g0_star >= 1 else None
+    if armed is not None and bound is not None and bound <= g0_star:
+        # G0* >= 600 s: the current rule (600 s floor) already fits at the
+        # floor, so no R10-2 deviation applies.
+        branch = 'a' if armed < thermal_gates.G0_CAP_DEFAULT_S else 'current'
+    else:
+        branch = 'b'
+    gated = {row['run']: {'g0_outcome': row.get('g0_outcome'), 'decode_tokens': row['decode_tokens'],
+                          **{f'{k}_s': p[k] for k in ('G0', 'G1', 'H', 'prefill', 'tool', 'decode')}}
+             for row, p in zip(rows, phases)}
+    return {'branch': branch,
+            'inputs': {'T_dead_s': t_dead, 'r1_g0_timeout_s': d_cap['r1_g0_timeout_s'],
+                       'budget_floor_tokens': BUDGET_FLOOR, 'turn_cap_tokens': cap,
+                       'r_decode_tok_per_s': rate, 'gated_d': gated},
+            'derivation': {'tokens': tokens, 'decode_s': decode, 'holds_proj_s': holds,
+                           'prefill_tool_s': prefill_tool, 'G0_star_s': g0_star,
+                           'W_D_s': w_d, 'censored_D': d_cap['censored'], 'admit_bound_s': bound,
+                           'd_g0_cap_s': armed if branch == 'a' else None, 'branch': branch},
+            'contrast': w1_contrast_g0_cap(r1_slots, x_max_turns, root)}
+
+
+def receipt_bytes(receipt):
+    return raw_json(receipt)
+
+
+def receipt_sha256(receipt):
+    return sha(receipt_bytes(receipt))
+
+
+def read_ruling_1f_receipt(root=ROOT):
+    """The committed lead receipt (a canonical raw_json file), or None."""
+    path = Path(root) / RULING_1F_RECEIPT
+    if not path.is_file():
+        return None
+    raw = path.read_bytes()
+    receipt = json.loads(raw)
+    if not isinstance(receipt, dict) or raw != receipt_bytes(receipt):
+        raise ValueError(f'{RULING_1F_RECEIPT} must be a canonical JSON object (indent 2, sorted keys); '
+                         'write it with scripts/align_w1_budget_procedure.py sign')
+    return receipt
+
+
+def _mismatches(recorded, derived, path):
+    """Paths where a receipt differs from the re-derivation (floats to 1e-9)."""
+    if isinstance(derived, dict):
+        if not isinstance(recorded, dict) or set(recorded) != set(derived):
+            return [path]
+        return [m for key in sorted(derived) for m in _mismatches(recorded[key], derived[key], f'{path}.{key}')]
+    if isinstance(derived, list):
+        if not isinstance(recorded, list) or len(recorded) != len(derived):
+            return [path]
+        return [m for i, (a, b) in enumerate(zip(recorded, derived)) for m in _mismatches(a, b, f'{path}[{i}]')]
+    if type(derived) is float or (type(recorded) is float and type(derived) is int):
+        return [] if finite(recorded) and math.isclose(recorded, derived, rel_tol=1e-9, abs_tol=1e-9) else [path]
+    return [] if type(recorded) is type(derived) and recorded == derived else [path]
+
+
+def verify_ruling_1f_receipt(receipt, r1_slots, t_dead, x_max_turns, root=ROOT):
+    """LEAD-RULINGS-2 R10-2/R10-4: a signed receipt that takes branch (a) and
+    whose inputs and derivation equal the kit's re-derivation from the R1
+    record. Branches (b) and (c) never admit 8-bit W1. Returns the derivation."""
+    if (not isinstance(receipt, dict) or receipt.get('schema') != RULING_1F_RECEIPT_SCHEMA
+            or receipt.get('authority') != R10_AUTHORITY):
+        raise ValueError(f'ruling 1(f) receipt must be a {RULING_1F_RECEIPT_SCHEMA} record with authority '
+                         f'{R10_AUTHORITY!r}')
+    signature = receipt.get('lead_signature')
+    if not isinstance(signature, str) or not signature.strip() or signature.startswith(UNSIGNED):
+        raise ValueError('ruling 1(f) receipt is not signed: lead_signature must be the lead\'s signature line')
+    branch = receipt.get('branch')
+    if branch not in R10_BRANCHES:
+        raise ValueError(f'ruling 1(f) receipt branch must be one of {sorted(R10_BRANCHES)}; got {branch!r}')
+    if branch != 'a':
+        raise ValueError(f'ruling 1(f): the lead\'s receipt takes R10-2 branch ({branch}), '
+                         f'{R10_BRANCHES[branch]}; 8-bit W1 does not arm on it')
+    derived = r10_2_derivation(r1_slots, t_dead, x_max_turns, root)
+    wrong = (_mismatches(receipt.get('inputs'), derived['inputs'], 'inputs')
+             + _mismatches(receipt.get('derivation'), derived['derivation'], 'derivation')
+             + _mismatches(receipt.get('contrast'), derived['contrast'], 'contrast'))
+    if wrong:
+        raise ValueError('ruling 1(f) receipt does not match the re-derivation from the R1 record at: '
+                         + ', '.join(wrong) + ' (LEAD-RULINGS-2 R10-4)')
+    d = derived['derivation']
+    if derived['branch'] != 'a':
+        raise ValueError(f'ruling 1(f) receipt (R10-2(a)) refused: ceil(1.25 x the longest released gated D G0 wait) = '
+                         f'{d["admit_bound_s"]} s against G0* = {d["G0_star_s"]:.1f} s, or G0* is not below '
+                         f'{thermal_gates.G0_CAP_DEFAULT_S} s (then the current rule applies and no receipt is '
+                         'needed)')
+    return derived
 
 
 def max_fitting_b_d(r1_slots, t_dead):
@@ -536,7 +773,7 @@ def max_fitting_b_d(r1_slots, t_dead):
     return None
 
 
-def check_r1_budget_and_policy(r1_inputs, r1_slots):
+def check_r1_budget_and_policy(r1_inputs, r1_slots, *, receipt=None, x_max_turns=None):
     """Lead ruling R5-4 (executing review MEDIUM-2, cold pass MEDIUM-2).
 
     inputs.R1.B_D may only be lowered from R1's step-d budget (A1's fit rule),
@@ -545,6 +782,10 @@ def check_r1_budget_and_policy(r1_inputs, r1_slots):
     turn_cap_s = S7), and the frozen B_D must satisfy ruling 1(f) against the
     frozen T_dead. When R1 changes the picks, R6-4 binds S6/S7 to
     thermometry.D.s7_for_r1_picks instead; S6 tuning starts from its slow band.
+    LEAD-RULINGS-2 R10-4: the D members' g0_cap_s binds W1's D-role cap, or,
+    under a verified R10-2(a) receipt, the receipt's sub-600 s cap together
+    with g0_cap_receipt (the receipt's digest); contrast_g0_cap_s binds the
+    contrast-role cap, which must fit the contrast deadman (R10-2(a)).
     """
     slots = r1_slots.get('slots') or {}
     if not finite(r1_inputs.get('T_dead')) or r1_inputs['T_dead'] <= 0:
@@ -570,9 +811,27 @@ def check_r1_budget_and_policy(r1_inputs, r1_slots):
             or sorted(map(str, recorded['censored'])) != sorted(derived['censored'])):
         raise ValueError('r1_slots.g0_cap_w1 is missing or stale; must match the re-derivation '
                          f'{derived} (LEAD-RULINGS-2 R7-2, R7-12)')
-    if not finite(policy.get('g0_cap_s')) or policy['g0_cap_s'] != derived['value_s']:
-        raise ValueError('inputs.R1.thermal_policy.g0_cap_s must equal r1_slots.g0_cap_w1.value_s '
-                         f'{derived["value_s"]} (LEAD-RULINGS-2 R7-2)')
+    if receipt is None:
+        if 'g0_cap_receipt' in policy:
+            raise ValueError('inputs.R1.thermal_policy.g0_cap_receipt names a ruling 1(f) receipt, but no receipt '
+                             f'is committed at {RULING_1F_RECEIPT} (LEAD-RULINGS-2 R10-4)')
+        d_cap, source = w1_d_g0_cap(r1_slots)['value_s'], 'the W1 D-role G0 cap (LEAD-RULINGS-2 R7-2, R10-4)'
+    else:
+        verified = verify_ruling_1f_receipt(receipt, r1_slots, r1_inputs['T_dead'], x_max_turns)
+        d_cap, source = verified['derivation']['d_g0_cap_s'], 'the R10-2(a) receipt\'s d_g0_cap_s'
+        expected = {'authority': thermal_gates.R10_G0_CAP_AUTHORITY, 'receipt_sha256': receipt_sha256(receipt)}
+        if policy.get('g0_cap_receipt') != expected:
+            raise ValueError(f'inputs.R1.thermal_policy.g0_cap_receipt must be {expected} (the committed '
+                             'receipt\'s digest; LEAD-RULINGS-2 R10-4)')
+    if not finite(policy.get('g0_cap_s')) or policy['g0_cap_s'] != d_cap:
+        raise ValueError(f'inputs.R1.thermal_policy.g0_cap_s must equal {source}, {d_cap}')
+    contrast = w1_contrast_g0_cap(r1_slots, x_max_turns)
+    if not contrast['fits']:
+        raise ValueError('R10-2(a): the contrast members\' G0 cap cannot be shown to fit the contrast deadman '
+                         f'{CONTRAST_DEADMAN_S:.1f} s from R1\'s X-G record: ' + '; '.join(contrast['reasons']))
+    if policy.get('contrast_g0_cap_s') != contrast['value_s']:
+        raise ValueError('inputs.R1.thermal_policy.contrast_g0_cap_s must equal the W1 contrast-role G0 cap '
+                         f'{contrast["value_s"]} (LEAD-RULINGS-2 R10-4)')
     classified = (r1_slots.get('thermometry') or {}).get('D') or {}
     changed = classified.get('sensor_pick_changed') is True
     bindings = [('chunk_tokens', slots.get('N_chunk'), 'r1_slots.slots.N_chunk')]
@@ -625,16 +884,19 @@ def check_r1_budget_and_policy(r1_inputs, r1_slots):
                              '(s6_tuning {authority, from_c = S5, to_c = S6})')
         if slots['S6'] > S6_TUNING_CAP_C + 1e-9:
             raise ValueError(f'a tuned S6 must stay within the {S6_TUNING_CAP_C} C cap (council ruling 1(e))')
-    fit = ruling_1f_fit(r1_slots, r1_inputs['B_D'], r1_inputs['T_dead'])
+    fit = ruling_1f_fit(r1_slots, r1_inputs['B_D'], r1_inputs['T_dead'], receipt=receipt, x_max_turns=x_max_turns)
     if not fit['fits']:
         raise ValueError(f'ruling 1(f): B_D {fit["B_D"]} does not fit T_dead {fit["T_dead_s"]:.1f} s: worst '
                          f'{fit["worst_s"]:.1f} s = ' + ' + '.join(f'{k} {v:.1f}' for k, v in fit['terms_s'].items())
-                         + f'; the largest fitting B_D is {max_fitting_b_d(r1_slots, r1_inputs["T_dead"])}'
-                         + f'; g0_cap_w1 = {fit["g0_cap_w1"]}')
+                         + f' ({fit["rule"]}); the largest fitting B_D is '
+                         f'{max_fitting_b_d(r1_slots, r1_inputs["T_dead"])}'
+                         + f'; g0_cap_w1 = {fit["g0_cap_w1"]}; d_g0_cap = {fit["d_g0_cap"]}')
     return fit
 
 
-def require_ready(inputs, r1_slots=None, *, synthetic=False):
+def require_ready(inputs, r1_slots=None, *, synthetic=False, receipt=None):
+    """W1 readiness. ``receipt`` is the lead's ruling 1(f) receipt (LEAD-RULINGS-2
+    R10-4); None is the R6-3 rule, which refuses whenever 1(f) does not fit."""
     pending = pending_inputs(inputs)
     if pending:
         raise ValueError(pending_message(pending))
@@ -663,7 +925,7 @@ def require_ready(inputs, r1_slots=None, *, synthetic=False):
     tail = r1_slots.get('max_r1_tail_s')
     if not finite(tail) or tail < 0:
         raise ValueError('R1 r1_slots must record a finite, non-negative max_r1_tail_s')
-    check_r1_evidence(inputs, r1_slots, synthetic=synthetic)
+    check_r1_evidence(inputs, r1_slots, synthetic=synthetic, receipt=receipt)
     expected = l1_t_dead(slots['I_D'], tail)
     if not finite(slots['T_dead']) or not math.isclose(slots['T_dead'], expected, rel_tol=1e-9):
         raise ValueError('R1.T_dead must equal min((1750 - I_D) / 1.13544, '
@@ -677,6 +939,9 @@ def require_ready(inputs, r1_slots=None, *, synthetic=False):
     policy = validate_gate_policy(policy_input)
     if not policy['heavy'] or not policy['per_turn']:
         raise ValueError('D requires heavy/G1/holds')
+    # R10-4: the contrast members' policy (their own G0 cap, no receipt) is valid too.
+    validate_gate_policy({**gate_policy_fields(slots['thermal_policy'], role='contrast'),
+                          'heavy': False, 'per_turn': True, 'window_reference': {'role': 'capture'}})
     unit = inputs['WP11']['identity_unit']
     if (unit.get('model_source') != D_SOURCE or unit.get('model_revision') != D_REVISION
             or not valid_digest(unit.get('model_artifact_sha256'))):
@@ -893,7 +1158,7 @@ def require_w1_ready(root=ROOT):
     if not any(p.startswith('WP11.') for p in pending_inputs(inputs)):
         pins_raw = (Path(root) / D_PINS).read_bytes()
         validate_d_identity(inputs['WP11'], json.loads(pins_raw), pins_raw=pins_raw)
-    require_ready(inputs, read_r1_slots(root))
+    require_ready(inputs, read_r1_slots(root), receipt=read_ruling_1f_receipt(root))
     require_sizing(root)
     validate_wp18_fixtures(inputs, root)
 
@@ -956,18 +1221,32 @@ def _rewrite(value):
     return value
 
 
-def gate_policy_fields(policy):
-    """Copy runtime gate controls, excluding the inputs-only R1 digest (R6-5)."""
-    return {key: deepcopy(value) for key, value in policy.items() if key != 'classification_sha256'}
+def gate_policy_fields(policy, role='D'):
+    """Copy runtime gate controls, excluding the inputs-only R1 digest (R6-5).
+
+    LEAD-RULINGS-2 R10-4: inputs.R1.thermal_policy carries one G0 cap per W1
+    role. D members arm g0_cap_s (with g0_cap_receipt under an R10-2(a)
+    receipt); contrast members arm contrast_g0_cap_s as their g0_cap_s and
+    never carry the D receipt."""
+    if role not in ('D', 'contrast'):
+        raise ValueError(f'unknown W1 gate-policy role {role!r}')
+    fields = {key: deepcopy(value) for key, value in policy.items()
+              if key not in ('classification_sha256', 'contrast_g0_cap_s')}
+    if role == 'contrast':
+        fields.pop('g0_cap_receipt', None)
+        fields.pop('g0_cap_s', None)
+        if 'contrast_g0_cap_s' in policy:
+            fields['g0_cap_s'] = deepcopy(policy['contrast_g0_cap_s'])
+    return fields
 
 
-def thermal_policy(inputs, *, heavy, per_turn, window_reference):
+def thermal_policy(inputs, *, heavy, per_turn, window_reference, role='D'):
     value = inputs['R1']['thermal_policy']
     if value is None:
         value = dict(sensors=None, delta_fast_c=None, delta_slow_c=None,
                      turn_cap_s=None, chunk_tokens=None)
     else:
-        value = gate_policy_fields(value)
+        value = gate_policy_fields(value, role)
     value.update(heavy=heavy, per_turn=per_turn)
     value['window_reference'] = window_reference
     return value
@@ -1033,7 +1312,7 @@ def build_files(root=ROOT):
                 spec.update(max_turns=inputs['WP18'][name[0]]['max_turns'],
                             deadman_s=CONTRAST_DEADMAN_S,
                             thermal=thermal_policy(inputs, heavy=False, per_turn=name.endswith('G'),
-                                                   window_reference=reference))
+                                                   window_reference=reference, role='contrast'))
             config['workload_profile']['prompt_text'] = json.dumps(spec, sort_keys=True, separators=(',', ':'), allow_nan=False)
             model_id = D_TAG if name == 'D' else 'qwen3-30b-a3b'
             config['run_metadata']['tags'] = [PACK_ID, 'non-claim', 'launch_lineage_required', 'align', 'align_episode',
@@ -1272,11 +1551,21 @@ and Y=b-e18/index14 recorded pilot-7 turn counts and the token-id fixture
 digest. No configured 12-turn fallback is used for the contrast.
 R0.reasoning_effort stays a placeholder until R0 passes.
 R1 must select B_D, I_D, T_dead, sensors, bands, recovery cap and chunk size.
-W1's g0_cap_s binds r1_slots.g0_cap_w1.value_s (LEAD-RULINGS-2 R7-2, R7-12):
-clamp(ceil(1.25 * max counted gated D and X-G G0 wait), 600 s, R1 g0_timeout_s).
-Unreleased G0s count at the full R1 timeout; an inconclusive X-G records
-x_g_fallback. Ruling 1(f) uses this cap + max(G1 + H) + max(prefill + tool)
-+ (B_D + turn_cap_tokens) / min(step-d and gated decode rates).
+W1 arms one G0 cap per role (LEAD-RULINGS-2 R7-2, R7-12, R10-4). D members:
+thermal_policy.g0_cap_s = clamp(ceil(1.25 * max counted gated D G0 wait), 600 s,
+R1 g0_timeout_s). Contrast members: thermal_policy.contrast_g0_cap_s =
+clamp(ceil(1.25 * X-G G0 wait), 600 s, R1 g0_timeout_s) (an inconclusive X-G
+falls back to the timeout, R7-12), which must fit the 1,086.3 s contrast
+deadman on R1's X-G record (complete WP18 X turns, no deadman), or --check
+refuses (R10-2(a)). Unreleased G0s count at the full R1 timeout;
+r1_slots.g0_cap_w1 (the R7-2 record) is still re-derived and bound.
+Ruling 1(f) uses the D cap + max(G1 + H) + max(prefill + tool)
++ (B_D + turn_cap_tokens) / min(step-d and gated decode rates), and refuses
+when that misses T_dead. Only a signed lead receipt
+(registration/ruling_1f_receipt.json, LEAD-RULINGS-2 R10-2(a), drafted by
+scripts/align_w1_budget_procedure.py) changes that: D then arms G0* = T_dead
+- holds projected to 10,240 tokens - prefill/tool - 10,240 / r, below 600 s,
+named in thermal_policy.g0_cap_receipt; the kit re-derives every number.
 T_dead follows lead ruling L1: min((1750 - I_D), (1800 - I_D - max_r1_tail_s
 - 10)) / 1.13544, with max_r1_tail_s from r1_slots; --check asserts that
 I_D + 1.13544 T_dead + max_r1_tail_s + 10 <= 1800.

@@ -1381,6 +1381,19 @@ def budget_fit_inputs(step_d, gated, deadman_rows=()):
                      "every gated run's observed rate) (scripts/align_v4_kit.py ruling_1f_fit)")}
 
 
+def x_g_evidence(result):
+    """LEAD-RULINGS-2 R10-4: the timing and count fields of X-G that prove the
+    contrast members' W1 G0 cap fits their deadman (R10-2(a)): its admitted
+    turns, whether it hit the deadman (x7) and its phase seconds. Recorded as
+    the runtime returned them (None when absent); the kit judges them."""
+    flags = result.get("episode_flags")
+    phases = result.get("phases_s")
+    return {"admitted_turns": result.get("admitted_turns"),
+            "x7": (any(str(flag).startswith("episode.deadman:") for flag in flags)
+                   if isinstance(flags, list) else None),
+            "phases_s": dict(phases) if isinstance(phases, dict) else None}
+
+
 def w1_g0_cap(deadman_rows, x_g, g0_timeout_s):
     """LEAD-RULINGS-2 R7-2 and R7-12: W1's G0 cap, an R1-derived slot.
 
@@ -1772,7 +1785,7 @@ def run(args):
                    "g0_outcome": results["X_G_contrast"]["g0_outcome"], "follows_d_turn": follows["X_G_contrast"],
                    "inter_member_idle_s": results["X_G_contrast"]["inter_member_idle_s"],
                    "g0_wait_s": results["X_G_contrast"].get("g0_wait_s"),
-                   "authority": "LEAD-RULINGS-2 R6-1"}
+                   "authority": "LEAD-RULINGS-2 R6-1", **x_g_evidence(results["X_G_contrast"])}
             g0_cap = w1_g0_cap(deadman, x_g, g0_timeout)
         else:
             # R6-2: recorded, not refused mid-night. With no step-d slots the
