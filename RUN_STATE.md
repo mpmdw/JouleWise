@@ -1042,7 +1042,7 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
-239. **Laptop lead (interactive session 1544c617), 2026-11-08 ~18:00 PST: lead rulings R25 and R26 (blind; synthetic), the P2 correction, the A2(4) scope and the A27 scope.**
+239. **Laptop lead (interactive session 1544c617), 2026-11-08 15:38 PST: lead rulings R25 and R26 (blind; synthetic), the P2 correction, the A2(4) scope and the A27 scope.**
 - **R25, U3 scope for reserves (pre-signature design change).** The production U3 policy template scoped only W1, C1-C8 and T1-T3 (N = 16 comparisons), so a healthy C9-C14 reserve would be U3-inconclusive and contribute zero calibrators (Sol r11-delta6 seat 2, F2).
   - The U3 bar is not yet signed (it is due after R1), so the roster expands prospectively: C9-C14 get U3 scopes.
   - The comparison count is scaled to cover every possible comparison, so the familywise false-fail budget stays β.
@@ -1071,7 +1071,7 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Smoke kit:** the F6 rework is at `0ad6f29f3`. Patching is deleted, the production prepare runs in a bounded child, and the kit is CLI-only. Seven review witnesses that asserted the deleted patch were adapted, by name, to the same property and are mapped in W1-SMOKE-AGREEMENT §10. A final quick Sol check is running.
 - **Air disk:** 42 pushed, clean Sol clones were pruned (+15 GiB), and new Sol clones go to `/Volumes/JW-EXT/jw-wt/`. The SSD link is USB4 40 Gb/s on the M4 Air.
 
-238. **Laptop lead (interactive session 1544c617), 2026-11-08 ~17:10 PST: R24 correction (blind; synthetic); SSD on the Air; v4 rehearsal exact AGREE.**
+238. **Laptop lead (interactive session 1544c617), 2026-11-08 15:13 PST: R24 correction (blind; synthetic); SSD on the Air; v4 rehearsal exact AGREE.**
 - **R24 correction.** Item 236 said that a larger cap lowers gate-admitted FPR under b = .05 drift. That holds only for a fixed common T horizon. The Sol confirmation (`align/2026-11-08-r24-c14-confirm-sol` @ `f5226e11b`) puts T immediately after the stop, the registered calendar. In that case **C14 RAISES gate-admitted FPR versus C10 at every b = .05 setting, by +0.03 to +0.17 pp** (maximum rule). Some pointwise intervals include 0. At b = 0 the cap has no effect.
   - Example: q = .25, e = .10, hot-correlated, τ/s_r = .81, b = .05, maximum rule, T after the stop.
     - C13: qualification 91.98%, gate-admitted FPR 4.628%.
@@ -1092,7 +1092,7 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
   - **A27:** the engine seals C-sabotage token counts. A27 as written: hash only.
   - These are being fixed on Sol `engine-r23e`, followed by a rehearsal rerun. The A7 H* item is awaiting specifics from the comparator builder.
 
-237. **Laptop lead (interactive session 1544c617), 2026-11-08 ~16:30 PST: checkpoint — v4 engine settled; R24 manifest frozen; review-bound threat-model ruling.**
+237. **Laptop lead (interactive session 1544c617), 2026-11-08 15:01 PST: checkpoint — v4 engine settled; R24 manifest frozen; review-bound threat-model ruling.**
 - **v4 primary engine settled at `engine-r23d` @ `a2e36bc19`.**
   - Line of fixes: `engine-r23` (A37 + R23), then `engine-r23b`, `engine-r23c` and `engine-r23d`.
   - Opus cold review of r23, then Opus deltas on r23b and r23c, each ADMIT-WITH-FIXES, with all findings closed.
@@ -1121,7 +1121,7 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
   - **Ruling:** delete the patching. Production prepare runs in a child process under the process-group-killing `grouped_run` with the remaining budget. The smoke kit is CLI-only.
 - **Main CI:** #706's timing fix exposed `tests.b5_analysis.test_mint_kept_units`. It fails standalone on clean main and passed in CI only on state leaked from `test_launch_lineage`. It is being fixed as a hidden dependency; no reweighting.
 
-236. **Laptop lead (interactive session 1544c617), 2026-11-08 ~14:30 PST: lead ruling R24 (blind; synthetic simulation only), the reserve cap for the R22-2 structural replacements.**
+236. **Laptop lead (interactive session 1544c617), 2026-11-08 14:13 PST: lead ruling R24 (blind; synthetic simulation only), the reserve cap for the R22-2 structural replacements.**
 - **Evidence:** Sol R22-2 sim (`align/2026-11-08-r22-sim-sol` @ `8f81bf7bd`) and cap sweep (`align/2026-11-08-r22-cap-sweep-sol` @ `53556a3d6`).
   - Bars that correlate with a hot state bias thresholds relative to an all-states oracle: maximum-rule FPR 4.04% vs 2.32% against the unscorable all-future-states population. On the population that passes the same frozen structural gate, R22 is at oracle level (2.245%).
   - R22 still beats both no-replacement (4.44%) and the old count stop (4.64%) on that counterfactual.
@@ -1139,7 +1139,7 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
   - A barred window contributes nothing to calibration.
   - The time-of-day dependency in the R1 chain test is removed.
 
-235. **Laptop lead (interactive session 1544c617), 2026-11-08 13:05 PST: lead ruling R23 (blind; synthetic evidence only, no v4 data exists) on the first v4 release-tool rehearsal.** The Opus comparator plus `release_v4.py` (`align/2026-11-08-v4-release-tools` @ `698a3f490`) covers all 282,691 engine leaves with 0 unmapped. On the synthetic series it HOLDS (exit 1): 56 of 61 recomputed families agree exactly. The planted mutations each move their intended family.
+235. **Laptop lead (interactive session 1544c617), 2026-11-08 13:43 PST: lead ruling R23 (blind; synthetic evidence only, no v4 data exists) on the first v4 release-tool rehearsal.** The Opus comparator plus `release_v4.py` (`align/2026-11-08-v4-release-tools` @ `698a3f490`) covers all 282,691 engine leaves with 0 unmapped. On the synthetic series it HOLDS (exit 1): 56 of 61 recomputed families agree exactly. The planted mutations each move their intended family.
 - **R23-E1, engine bug:** a zero-capture window crashes `thermal_desk.acceptance` (`KeyError pm_period_s`). Not-captured members never enter acceptance, fits, U-units or claims. The zero-capture attempt is a final, not-counted record, and its retry takes the slot.
 - **R23-1, anchor σ_w (print-only):** it uses the same anchor set as U4, so W1 is included (K = 12). Both the raw method-of-moments σ_w² and max(0, raw) are printed, with K ≥ 3.
 - **R23-2, carrier curve at H = 0 (A8):** the H = 0 point is the honest leave-one-carrier-out false-alarm fraction and is never forced to 0. H50/H90 crossings use doses > 0 only. `level_reached_at_h0` is flagged and leaves that crossing undefined.
