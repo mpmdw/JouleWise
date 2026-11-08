@@ -129,24 +129,27 @@ class ReceiptTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, r'receipt \(R10-2\(a\)\) refused: ceil\(1.25'):
             kit.require_ready(inputs, slots, receipt=forged)
 
-    def test_the_admit_bound_reads_released_d_waits_only(self):
-        # R10-2(a): "the longest *released* gated D G0 wait". A censored D G0
-        # is recorded but sets no bound; with none released, (a) cannot be shown.
-        inputs, slots = eight_bit_case()
-        slots['deadman_budget'][1]['g0_outcome'] = 'deadman'
-        slots['deadman_budget'][1]['phases_s']['G0'] = 900.0
-        slots['g0_cap_w1'] = kit.w1_g0_cap(slots)
-        decision = proc.decide(slots, 12)
-        d = decision['derived']['derivation']
-        self.assertEqual((decision['branch'], d['W_D_s'], d['admit_bound_s']), ('a', 120.0, 150))
-        self.assertEqual(d['censored_D'], [kit.GATED_D_RUN_NAMES[1]])
-        self.assertEqual(kit.w1_d_g0_cap(slots)['value_s'], 1200)     # the no-receipt rule keeps R7-2's timeout
-        for row in slots['deadman_budget']:
-            row['g0_outcome'] = 'timeout'
-        slots['g0_cap_w1'] = kit.w1_g0_cap(slots)
-        decision = proc.decide(slots, 12)
-        d = decision['derived']['derivation']
-        self.assertEqual((decision['branch'], d['W_D_s'], d['admit_bound_s']), ('b', None, None))
+    def test_a_censored_d_g0_blocks_branch_a(self):
+        # Lead ruling on R10 builder decision (i), 2026-11-07: any censored
+        # gated D G0 wait blocks R10-2(a), as the audit's section 6 says.
+        for outcome in ('timeout', 'deadman', 'unobserved'):
+            inputs, slots = eight_bit_case()
+            slots['deadman_budget'][1]['g0_outcome'] = outcome
+            slots['deadman_budget'][1]['phases_s']['G0'] = 900.0
+            slots['g0_cap_w1'] = kit.w1_g0_cap(slots)
+            decision = proc.decide(slots, 12)
+            d = decision['derived']['derivation']
+            with self.subTest(outcome=outcome):
+                self.assertEqual((decision['step'], decision['branch']), ('R10-2(b)', 'b'))
+                self.assertEqual((d['branch'], d['d_g0_cap_s']), ('b', None))
+                self.assertEqual(d['censored_D'], [kit.GATED_D_RUN_NAMES[1]])
+                self.assertEqual(kit.w1_d_g0_cap(slots)['value_s'], 1200)   # no-receipt rule: R7-2's timeout
+                forged = proc.sign(dict(decision['receipt_draft'], branch='a'), SIGNATURE)
+                with self.assertRaisesRegex(ValueError, r'receipt \(R10-2\(a\)\) refused'):
+                    kit.require_ready(inputs, slots, receipt=forged)
+                rerun = deepcopy(slots)
+                rerun['inconclusive_segments'] = {'planning_turn_R_plus_2C': 'G0 did not release, twice'}
+                self.assertEqual(proc.decide(rerun, 12)['step'], 'R1-RERUN')
 
     def test_receipt_is_refused_where_the_current_rule_already_fits(self):
         inputs, slots = ready_inputs()        # 50 tok/s: the 600 s rule fits
@@ -468,6 +471,11 @@ class ProcedureTests(unittest.TestCase):
         result['phases'][1]['result']['g0_wait_s'] = 121.0
         with self.assertRaisesRegex(ValueError, 'disagrees'):
             proc.backfill_x_g(old, result, 'a' * 64)
+        # Lead ruling (b): a recorded lead step that must record its source sha.
+        result['phases'][1]['result']['g0_wait_s'] = 120.0
+        for bad in (None, '', 'a' * 63, 'A' * 64):
+            with self.subTest(sha=bad), self.assertRaisesRegex(ValueError, 'r1_result.json sha256'):
+                proc.backfill_x_g(old, result, bad)
 
 
 class DriverXGEvidenceTests(unittest.TestCase):
@@ -508,3 +516,42 @@ class DriverXGEvidenceTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class W1D2ReportTests(unittest.TestCase):
+    """Lead ruling on R10 open point (c): the W1 desk reports the D members' X2 count and rate (print-only)."""
+
+    def test_desk_reports_d_member_x2_count_and_rate_print_only(self):
+        from scripts import align_v4_session as session
+
+        def episode(g0_outcome, flags=()):
+            intervals = [] if g0_outcome is None else [{'kind': 'G0', 'outcome': g0_outcome, 'duration_s': 200.0}]
+            return {'hardware': {'ac_powermode': {'value': 0}, 'thermal': {'intervals': intervals}},
+                    'flags': list(flags)}
+
+        members = [('d5', 'D', episode('released')), ('d8', 'D', episode('timeout', ['episode.g0_unreleased:0'])),
+                   ('d11', 'D', episode('released', ['thermal.gate_timeout:3'])),
+                   ('d14', 'D', episode('released')), ('x6', 'X-G', episode('timeout')),
+                   ('d17', 'D', None)]
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            registration = root / 'kit/registration'
+            registration.mkdir(parents=True)
+            rows = [{'run_id': run, 'role': role, 'ordinal': i + 5, 'ac_powermode': 0}
+                    for i, (run, role, _) in enumerate(members)]
+            (registration.parent / 'collection_plan.json').write_text(json.dumps({'members': rows}))
+            for run, _, record in members:
+                if record is not None:
+                    outputs = root / 'runs' / run / 'outputs'
+                    outputs.mkdir(parents=True)
+                    (outputs / 'align_episode.json').write_text(json.dumps(record))
+            state = {'registration_dir': str(registration), 'measurement_root': str(root)}
+            added, report = session.powermode_desk_check(state=state, members=[], runs_root=root / 'runs',
+                                                         kit_path=kit.KIT)
+        self.assertEqual(set(added), {'ac_powermode_members'})          # print-only: no instrument check added
+        x2 = report['d_member_x2']
+        self.assertIs(x2['print_only'], True)
+        self.assertEqual((x2['d_members'], x2['read'], x2['x2_count'], x2['g0_timeout_x2_count']), (5, 4, 2, 1))
+        self.assertAlmostEqual(x2['x2_rate'], 2 / 4)
+        self.assertEqual(x2['unread'], ['d17'])
+        self.assertEqual([m['run_id'] for m in x2['members'] if m['x2']], ['d8', 'd11'])
