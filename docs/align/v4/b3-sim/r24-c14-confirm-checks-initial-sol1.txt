@@ -1,0 +1,32 @@
+test_all_16384_bar_tapes (__main__.Checks.test_all_16384_bar_tapes) ... ok
+test_c1_c12_tape_and_threshold_bytes (__main__.Checks.test_c1_c12_tape_and_threshold_bytes) ... ok
+test_deterministic_serialized_replay (__main__.Checks.test_deterministic_serialized_replay) ... ok
+test_exact_probability_and_workload_by_enumeration (__main__.Checks.test_exact_probability_and_workload_by_enumeration) ... ok
+test_no_drift_horizons_and_c10_stopped_identity (__main__.Checks.test_no_drift_horizons_and_c10_stopped_identity) ... ok
+test_no_top_up_and_c13_c14_rescue (__main__.Checks.test_no_top_up_and_c13_c14_rescue) ... FAIL
+test_variable_t_against_scalar_tails (__main__.Checks.test_variable_t_against_scalar_tails) ... ok
+
+======================================================================
+FAIL: test_no_top_up_and_c13_c14_rescue (__main__.Checks.test_no_top_up_and_c13_c14_rescue)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/CapstoneProject/jw-wt/sol-r24-c14-confirm/docs/align/v4/b3-sim/simulate_r24_c14_confirm_sol1.py", line 242, in test_no_top_up_and_c13_c14_rescue
+    self.assertEqual(ok[1].tolist(), [False, False, False, False, True, True])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [True, False, False, False, True, True] != [False, False, False, False, True, True]
+
+First differing element 0:
+True
+False
+
+- [True, False, False, False, True, True]
+?  ------
+
++ [False, False, False, False, True, True]
+?                       +++++++
+
+
+----------------------------------------------------------------------
+Ran 7 tests in 0.911s
+
+FAILED (failures=1)
