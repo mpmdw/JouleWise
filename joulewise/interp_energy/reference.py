@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import hashlib
 from typing import Any
 
-from .forced_decode import canonical_sha256
+from ._common import require_numpy
+from .weight_edits import weights_sha256
 
 
 class NumpyKVCache:
@@ -28,7 +28,7 @@ class NumpyReferenceModel:
     """
 
     def __init__(self, *, seed: int = 0, vocab_size: int = 11, width: int = 8) -> None:
-        import numpy as np
+        np = require_numpy()
         if vocab_size <= 0 or width <= 0:
             raise ValueError("vocab_size and width must be positive")
         self.np = np
@@ -48,10 +48,7 @@ class NumpyReferenceModel:
         return [NumpyKVCache()]
 
     def weights_sha256(self) -> str:
-        manifest = [{"name": name, "dtype": str(array.dtype), "shape": list(array.shape),
-                     "sha256": hashlib.sha256(array.tobytes(order="C")).hexdigest()}
-                    for name, array in sorted(self.weights.items())]
-        return canonical_sha256(manifest)
+        return weights_sha256(self.weights)
 
     def __call__(self, tokens: Any, *, cache: list[NumpyKVCache] | None = None) -> Any:
         np = self.np

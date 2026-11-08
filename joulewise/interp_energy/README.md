@@ -1,290 +1,262 @@
 # Interpretability and energy desk tools
 
-## Fixed-token replay (desk tool, provisional native path)
+This package joins the six wave-1 components of the
+[design study](../../docs/research-audits/2026-11-07/interp-weight-edit-energy.md).
+It provides synthetic software checks and exploratory arithmetic. Native MLX,
+model-specific behaviour, and measurement validity remain **PROVISIONAL**.
+The [ASTRA draft](../../docs/registrations/astra_2ch_v0_draft.md) and
+[analysis draft](../../docs/analysis/astra_2ch/ANALYSIS-PLAN-v0-draft.md) are
+**NOT REGISTERED**. The package is not an implementation of that full plan.
+The [integration report](../../docs/run_reports/interp-energy-desk/INTEGRATION.md)
+records review findings, draft incompatibilities, tests and open decisions.
 
-This implements the Stage 0 replay primitive from
-[`interp-weight-edit-energy.md`](../../docs/research-audits/2026-11-07/interp-weight-edit-energy.md).
-It is synthetic/desk software evidence only. It does not launch telemetry,
-schedule a measurement window, edit weights, or run an energy analysis.
+## Modules and experiments
 
-Run a tiny causal-attention model without MLX (requires NumPy):
+| Module / document | Study experiment | Public entry points and limits |
+|---|---|---|
+| `weight_edits` | Stage 0 edit kit; T fixed-token edits; later H1/H2 strength/bound studies | `SparseDelta`, `RankOneUpdate`, `AblationMask`, `MagnitudePruning`, `Scale`, `SignFlip`, `WeightSwap`, `parameter_hashes`, `weights_sha256`. Dense floating-point primitives; no verified Astra diff loader or direction-fitting algorithm. |
+| `forced_decode` | Stage 0 teacher forcing; Stage 1 T physics channel | `replay`, `MLXBackend`, `NumpyBackend`, `ReplayResult`, `token_sequence_sha256`, `weight_file_identity`. Fixed IDs, fresh model-specific caches, synchronous forwards and diagnostics. |
+| `reference` | Synthetic validation of T | `NumpyReferenceModel`: tiny causal-attention model with real growing K/V arrays; no model files. |
+| `behaviour_channel` | Stage 1 F behaviour channel; later H1 frontier arithmetic | `Answer`, `EnergyModel`, `CapScenario`, `answer_energy`, `summarize_answers`, `compare_answers`, `compare_scenarios`. Count-based predictions only; no free-generation runner, scorer, calibration fitting or measured-energy reducer. |
+| `lockin` | LOCKIN-SWAP / PRBS instrument proposal | `Schedule`, `NoiseModel`, `make_schedule`, `simulate_trace`, `demodulate`, `abba_differences`, `estimate_abba`. Synthetic traces, exploratory block inference; no hardware acquisition or promised lock-in gain. |
+| `power` | Study §2.2 sizing / PSD-gated lock-in feasibility | `plan_power`, `study_reference`. Independent-unit normal planning; no TOST or registered claim decision. |
+| `rail_data_dependence` | S1 Apple-GPU data dependence; Stage 1 P instrument ladder | `Settings`, `make_plan`, `synthetic_weight`, `abba_schedule`, `execute_plan`, `MLXBackend`, `NumpyDryBackend`. Fixed dispatch counts within a geometry/dtype; dry mode is a tiny float32 CPU surrogate. |
+| `operand_stats` | P fill descriptors; possible later H4 toggle work | `hamming_weight`, `zero_fraction`, `bit_toggle_rate`, `operand_statistics`, `combine_statistics`, bf16 encoding helpers. Host storage descriptors, not observed hardware bus activity. |
+| `capture_hooks` | Future authorized P capture | `existing_capture`: lifecycle wrapper around existing powermetrics and KM003C collectors. External native use only; tests mock both collectors. |
+| ASTRA registration / analysis drafts | Proposed Stage 1 P/F/T pilot | Design and proposed estimators only, with seven open slots. They authorize no collection or downloads. |
 
-```sh
-python3 -B scripts/interp_energy/forced_decode.py --dry-run --output /tmp/synthetic-replay.jsonl
-```
+## API and optional dependencies
 
-For a later authorized native software session, supply an existing local mlx-lm
-safetensors directory and JSON arrays of exact prompt/continuation IDs:
-
-```sh
-python3 -B scripts/interp_energy/forced_decode.py \
-  --model /path/to/local/model --prompt-tokens /path/to/prompt.json \
-  --tokens /path/to/fixed-continuation.json --top-k 5 \
-  --prefill-chunk-size 512 --output /path/to/new-replay.jsonl
-```
-
-The loader is local-only, with offline flags and a local-only tokenizer. No
-hub identifiers or model downloads are supported. `--prompt TEXT` is an
-alternative to `--prompt-tokens`; it uses raw encoding with
-`add_special_tokens=False`, without applying a chat template. For a paired
-experiment, save the actual baseline prompt IDs, including its special tokens,
-and reuse those IDs in both arms. Output files are created exclusively.
-
-The Python API accepts already-loaded models, including in-process weight edits:
+Use module-qualified names so the replay and operand-ladder backends cannot be
+confused:
 
 ```python
-from joulewise.interp_energy.forced_decode import MLXBackend, replay
+from joulewise import interp_energy as ie
 
-result = replay(
-    model, prompt_ids, fixed_continuation_ids,
-    model_weights_sha256=current_weights_digest, vocab_size=vocab_size,
-    backend=MLXBackend(), top_k=5, prefill_chunk_size=512,
-)
-result.write_jsonl(output_stream)
+model = ie.reference.NumpyReferenceModel(seed=17)
+backend = ie.forced_decode.NumpyBackend()
+# Native counterparts: ie.forced_decode.MLXBackend() for model replay;
+# ie.rail_data_dependence.MLXBackend() for the synthetic GPU ladder.
 ```
 
-The caller must supply the digest of the **current** weights after every edit,
-using the same hashing convention across arms. This is explicitly marked
-`caller-asserted`. The CLI instead hashes every root-level `*.safetensors` file,
-then hashes a canonical JSON manifest of sorted filenames, byte counts and
-file SHA-256 digests. The manifest is in the header, along with the config file's
-SHA-256. This is an on-disk weights identity, not proof about later in-memory
-mutations. No model name is substituted for a weights hash.
+All public module namespaces load lazily. Importing them needs only the standard
+library and starts no runtime, collector or network operation. Numerical desk
+operations use the optional `interp-energy` NumPy extra. Model replay needs MLX
+and mlx-lm for native execution; the native operand ladder needs MLX and NumPy.
+Dependencies must already be installed for offline work. `rail_data_dependence.MlxBackend`
+is a compatibility alias for the consistent `MLXBackend` spelling.
 
-The loop calls `model.eval()` and materializes parameters before timing. Every
-replay obtains a fresh `mlx_lm.models.cache.make_prompt_cache(model)`, preserving
-model-specific cache implementations. It prefills `prompt[:-1]` in fixed-size
-chunks; step zero feeds `prompt[-1]` and scores `forced[0]`; step i feeds
-`forced[i-1]` and scores `forced[i]`. Each decode call is `[1, 1]`. No sampled or
-argmax token is ever fed back, no EOS terminates replay, and no cache is reused,
-trimmed or explicitly quantized. Like ordinary generation, the final forced
-token is emitted/scored but remains outside the cache. The footer's
-`cache_input_token_count` counts logical consumed IDs, not allocated cache slots.
+The shared `_common.py` owns lazy NumPy loading and canonical JSON hashing.
+Validation specific to an edit, token stream, or statistical model stays in its
+own module. JSON schemas remain component-specific; their field names, units
+and statuses are not interchangeable.
 
-JSONL has a `replay` header, one `token` row per fixed token, and a `complete`
-footer. Missing footers indicate incomplete output. Every row carries model,
-prompt, continuation and replay-policy hashes. Token hashes are SHA-256 over
-compact JSON integer arrays (e.g. `[1,2]`, no whitespace/newline). Match prompt,
-continuation, vocabulary, runtime versions and policy across arms. Only the
-weights identity should vary for a weight-only comparison; the loop does not
-adjudicate experimental validity or enforce model topology/dtype equivalence.
+## Weight edits, identities and replay
 
-Per-token fields include consumed/forced IDs, logical context length, monotonic
-nanosecond forward start/completion, diagnostic completion, forward duration,
-argmax agreement, the forced token's full-vocabulary normalized natural-log
-probability, top-k token IDs/log-probabilities, and forced-token top-k membership.
-`top_k` is clipped to vocabulary size. The forced token is scored even when
-outside top-k. Tied top-k boundary membership is backend-defined; selected ties
-are displayed in token-ID order. Use one backend/runtime version across arms.
-No random operation occurs in replay; deterministic outputs assume a
-deterministic inference model/backend. Timestamps naturally differ across runs.
+Edits act on a flat mutable mapping of dense NumPy/MLX arrays. Layout and dtype
+stay fixed. Reversion restores saved bytes and checks hashes, including signed
+zero and NaN payloads. A mask's `True` entries are zeroed; head selections require
+an explicit axis and contiguous head size. Dense pruning leaves dense storage.
+A rank-one update applies an already supplied direction; it does not fit ROME.
 
-MLX forward completion evaluates logits **and all cache states** so lazy work
-does not spill past the timestamp. Prefill materializes cache state and discards
-lazy logits. Diagnostics run after each completed forward, using float32 on MLX
-and float64 normalization in the NumPy reference; JSON serialization and file
-writes run after replay. Diagnostic kernels, sorting and host bookkeeping still
-add work between forwards. This synchronous instrumented loop does not reproduce
-mlx-lm's asynchronous pipeline timing, and whole-loop energy includes diagnostics.
-Keep this policy identical across arms and assess its overhead in the later
-A/A pilot before making a switching-channel bound. No energy claim follows from
-these tests.
+```python
+base_digest = ie.weight_edits.weights_sha256(model.weights)
+edit = ie.weight_edits.SignFlip("output").apply(model.weights)
+try:
+    result = ie.forced_decode.replay(
+        model, [1, 2, 3], [5, 4, 0, 8], backend=backend,
+        vocab_size=model.vocab_size,
+        model_weights_sha256=ie.weight_edits.weights_sha256(model.weights),
+    )
+finally:
+    edit.revert()
+assert ie.weight_edits.weights_sha256(model.weights) == base_digest
+```
 
-Run targeted modules individually:
+`weights_sha256` hashes a sorted manifest of parameter names, shapes, dtype
+strings and raw-byte SHA-256 digests. `parameter_sha256` hashes one array's raw
+bytes; `parameter_hashes` returns those hashes by name. Use the aggregate for
+`replay` after **every** edit/swap. Hashing scans full parameters and belongs
+outside timed work. `NumpyReferenceModel.weights_sha256()` uses the same helper.
+The replay API labels supplied identities `caller-asserted`: it does not prove
+that a detached mapping contains the model's current leaves.
+
+`WeightSwap(parameters, edited, bind=...)` prepares both states once and supports
+`switch("base")`, `switch("edited")`, `apply`, `revert`, `toggle` and `verify`.
+NumPy scatters changed elements into the original arrays. MLX rebinds prepared
+resident tensors, with synchronization; this does not promise partial physical
+buffer writes. For a real MLX model, bind changed leaves back into it:
+
+```python
+# Native example only; run on an authorized non-measurement Metal machine.
+# from mlx.utils import tree_unflatten
+# bind = lambda changed: model.update(tree_unflatten(list(changed.items())))
+```
+
+Exclusive ownership, uncompiled forwards and evaluated/submitted inference
+before swapping are required. Cache reset and durable schedule logging belong
+to the caller. Every successful switch records monotonic start/completion and
+logical changed bytes; full `verify()` scans run outside chips.
+
+Replay prefills `prompt[:-1]` in fixed chunks. Step zero consumes `prompt[-1]`
+and scores `forced[0]`; each later step consumes the previous forced token.
+There are **D single-token calls** for D forced output tokens; no sampled or
+argmax token is fed back, no EOS stops replay, and the final forced token stays
+outside the cache. Fresh `mlx_lm.models.cache.make_prompt_cache(model)` objects
+preserve model-specific KV/recurrent state implementations. Native hybrid
+reset/support still needs verification.
+
+MLX evaluates logits and cache states before completion timestamps. Diagnostic
+log-probabilities, argmax and top-k run between forwards and add work. This is an
+instrumented synchronous replay, with different overhead from normal asynchronous
+generation. It is not yet the draft's logits-discarding T measurement runner:
+the draft counts full prompt prefill plus D−1 decode calls. Resolve that timing
+boundary and diagnostics policy before registering or calibrating T.
+
+JSONL output has a `replay` header, `token` rows and a `complete` footer; absent
+completion means incomplete output. Prompt, continuation and policy hashes must
+match across paired arms. Token hashes use compact JSON integer arrays. Each
+row includes the current weight digest. Diagnostics use full-vocabulary natural
+log-probabilities; top-k tie membership is backend-defined. Use identical
+runtime versions and policies across arms. File serialization follows replay.
+
+A synthetic CLI needs no model files:
 
 ```sh
-python3.13 -B -m unittest tests.interp_energy.test_forced_decode -v
-python3.13 -B -m unittest tests.interp_energy.test_reference -v
-python3.13 -B -m unittest tests.interp_energy.test_forced_decode_mlx -v
+python3.13 -B scripts/interp_energy/forced_decode.py --dry-run --output /tmp/synthetic-replay.jsonl
 ```
 
-The NumPy tests skip when NumPy is absent. The native tests are gated on MLX and
-mlx-lm package availability and require a functioning Metal device; they build
-a tiny llama from configuration, with no weights download. The lead must run
-that native module outside this sandbox in an authorized software session. It
-checks greedy `generate_step` parity, full-forward forced scores, exact A/A
-repetition, tie repeatability, and cache offsets. Native hybrid/Qwen3.5 support
-and real-model local loading remain unverified; their model-specific caches are
-passed through without substitution. Any later real-model or measurement gate
-remains with the lead.
+The separate native CLI accepts an existing local safetensors directory via
+`--model`, exact JSON IDs via `--prompt-tokens` and `--tokens`, and an exclusive
+`--output`. `--prompt TEXT` uses raw encoding without added special tokens or a
+chat template; saved baseline prompt IDs are preferable for pairs. Offline
+flags/local tokenizer loading prohibit hub fallback. Its on-disk weight identity
+is a sorted safetensors file manifest, distinct from the in-memory parameter
+scheme; neither scheme proves later mutations. Reuse the same scheme across
+arms. Never pass study-data paths to this desk tooling.
 
+## Behaviour model and exploratory uncertainty
 
-## Behaviour-channel desk analysis
-
-`behaviour_channel.py` and `scripts/interp_energy/behaviour_energy.py` predict
-energy from supplied counts and coefficients. They never collect power, load a
-model, fit coefficients, discover datasets or resolve provenance strings. This
-is exploratory Stage 0 tooling for [the design study](../../docs/research-audits/2026-11-07/interp-weight-edit-energy.md)
-and its [checks](../../docs/research-audits/2026-11-07/interp-weight-edit-energy-checks.md),
-not a registration or hardware validation. The implementation is standard
-library only; importing it requires neither MLX nor Torch.
-
-## Model and units
-
-For an answer with `p` prefill tokens, `d` decode tokens, and full answer-window
-duration `t` seconds:
+For prompt p, reported decode count d and full-window duration t:
 
 ```text
 K = p*d + d*(d-1)/2
-E_gross = fixed_j + a*p + b*d + c*K + idle_w*t
+E_gross = fixed_j + prefill_j_per_token*p + decode_j_per_token*d
+          + context_j_per_token_squared*K + idle_w*t
 ```
 
-`a` and `b` are J/token; `c` is J/(decode token × context token), abbreviated
-`context_j_per_token_squared`. `K` sums the contexts `p, ..., p+d-1`, one per
-reported decode token. Use matching token conventions when calibrating. This
-is a linear context-cost approximation, not a universal hardware law. No
-extra quadratic prefill term is implied.
+This is a linear context-cost approximation. Supplied coefficients must match
+the model, dtype, runtime, physical boundary and counting convention. With
+`coefficient_basis="above_idle"`, coefficients exclude idle and `idle_w*t`
+restores gross energy. Nonzero idle power requires both arms' durations. With
+`coefficient_basis="gross"`, idle is already included, `idle_w` must be zero,
+and no above-idle view is inferred. Gross results come first (D-067).
 
-With `coefficient_basis: "above_idle"`, token coefficients and `fixed_j` exclude
-idle. Adding the supplied idle baseline gives gross energy; the above-idle
-secondary view is also reported. `duration_s` is mandatory in both arms if
-either has nonzero `idle_w`: token counts alone do not identify idle joules
-or the counterfactual idle decomposition. With
-`coefficient_basis: "gross"`, coefficients/fixed overhead already include idle;
-`idle_w` must be zero and the above-idle result is null. This follows D-067's
-gross-first reporting rule and avoids charging idle twice. Rates, context
-slope, fixed overhead and power must be nonnegative, finite numbers.
+J/correct uses **all attempts' energy / number correct**. Zero correct produces
+null with an inference status. `compare_answers` pairs unique independent
+problem IDs; repeated seeds of one problem need a separate cluster analysis.
+Delta-method CIs retain energy/correctness and paired-arm covariance; bootstrap
+resamples whole pairs and recomputes ratios. Any undefined zero-correct draw
+withholds that statistic's bootstrap interval instead of dropping the draw.
+Small/sparse samples can have poor coverage. Intervals condition on supplied
+coefficients and exclude calibration error, systematic bounds and claim gates.
 
-J/correct is **total modeled energy of all attempts / number correct**. It is
-not the average energy of correct attempts. Zero correct answers yields null
-with an explicit inference status; no pseudocount is added.
-
-## Exact decomposition and uncertainty
-
-Let `x = (p, d, K, t, 1)` and `theta = (a, b, c, idle_w, fixed_j)`. For energy
-per answer, `u` is the mean of `x`. For energy per correct, `u = mean(x) /
-accuracy`. The change is always edited minus base:
+The exact symmetric accounting is, for midpoint coefficients/work:
 
 ```text
-behaviour = ((theta_edit + theta_base)/2) · (u_edit - u_base)
-rate      = (theta_edit - theta_base) · ((u_edit + u_base)/2)
+behaviour = mean(coefficients) dot (work_edit - work_base)
+rate      = (coefficients_edit - coefficients_base) dot mean(work)
 delta     = behaviour + rate
 ```
 
-Both arms must use the same coefficient basis. The caller must also supply
-coefficients for the same physical energy boundary (for example GPU rail or DC).
-This symmetric allocation splits the work/rate interaction equally between
-the two channels. It is an accounting identity (up to floating point rounding),
-not a causal identification of operand-switching physics. The output also
-breaks it into:
+This allocates interaction equally; it does not causally identify switching.
+Shared coefficients force the rate term to zero by assumption.
+`compare_scenarios` projects a cap/noncap mixture without inventing a CI;
+context exposure is averaged over that mixture, not evaluated at mean length.
 
-- `token_count_j`: behaviour from prefill/decode counts and context exposure.
-- `per_token_j`: changes in prefill/decode/context coefficients at midpoint work.
-- `idle_duration_j` and `idle_power_j`: duration and baseline-power effects.
-- `fixed_count_j` and `fixed_rate_j`: fixed-overhead exposure and coefficient effects.
-
-`behaviour_j = token_count_j + idle_duration_j + fixed_count_j` and
-`rate_j = per_token_j + idle_power_j + fixed_rate_j`. Per answer, the fixed-count
-term is zero. Per correct it also captures changing attempts per correct answer.
-Thus a correctness-only improvement can reduce J/correct even at fixed tokens.
-With a shared energy model all rate terms are zero **by assumption**. This
-cannot establish that a real weight edit has zero fixed-token energy effect.
-
-The delta method uses normal intervals from analytic influence functions. For
-`m = mean(x)`, correctness mean `r`, and a coefficient vector `q`, the per-correct
-influence is `[q·(x-m) - (q·m/r)*(correct-r)] / r`. This retains the covariance
-of energy, correctness and, in paired mode, both arms. Percentile bootstrap
-intervals resample whole problem pairs and recompute all ratios; unpaired mode
-resamples the two arms independently. Each arm needs at least two independent
-units. Paired IDs must be unique with matching rosters; input ordering need not
-match. Use one independent problem/block per ID. Repeated seeds within the same
-problem need a separately specified cluster analysis and are not supported.
-
-If a bootstrap draw has zero correct answers for an arm needed by a statistic,
-its ratio is undefined. The tool reports the count and withholds that statistic's
-bootstrap interval instead of silently deleting those draws. In the small Astra
-base arm this can happen frequently. Finite delta-method intervals with few
-correct answers remain asymptotic approximations; all-correct samples also have
-a boundary warning. Neither method guarantees nominal coverage for sparse
-ratios or tiny samples.
-
-Intervals condition on supplied coefficients; calibration uncertainty,
-systematic baseline bounds, instrument floors, multiplicity and claim gates
-are **not included**. This does not replace D-053's registered contrast analysis
-or the BYTES worst-case metrological bounds. No outcomes are dropped.
-
-## JSON CLI
-
-Supply explicit coefficients and provenance. This deliberately synthetic model
-is an example only; there are no default J/token values:
+The CLI reads only the named JSON. Every model requires explicit `source` and
+`coefficient_basis`; source strings are opaque and never dereferenced. Example:
 
 ```json
-{
-  "base_model": {
-    "prefill_j_per_token": 0.02,
-    "decode_j_per_token": 0.10,
-    "context_j_per_token_squared": 0.0000005,
-    "idle_w": 0,
-    "fixed_j": 1,
-    "coefficient_basis": "above_idle",
-    "source": "synthetic example, not calibrated"
-  }
-}
+{"base_model":{"prefill_j_per_token":0.02,"decode_j_per_token":0.1,
+"coefficient_basis":"above_idle","source":"synthetic, not calibrated"}}
 ```
-
-Save this as `model.json`, then run from the repository root:
 
 ```sh
-python3.13 -B scripts/interp_energy/behaviour_energy.py scenario model.json \
-  --prefill-tokens 256 --noncap-tokens 3000 5000 8000
+python3.13 -B scripts/interp_energy/behaviour_energy.py scenario model.json --prefill-tokens 256 --noncap-tokens 3000 5000 8000
+python3.13 -B scripts/interp_energy/behaviour_energy.py compare answers.json --bootstrap-samples 2000 --confidence .95 --seed 0
 ```
 
-Scenario defaults reproduce the study's public-rate arithmetic: cap 32,768,
-base/edit cap-hit fractions .930/.331, accuracy .079/.481. These are changeable
-CLI parameters. Noncap lengths are assumptions. At lengths 3k/5k/8k, decode
-tokens per correct fall by about 14.5/13.2/11.7 times. These ratios describe
-that cap and configuration, not the best base-model setting. Include base
-thinking-off and budget-cap comparators in a later experiment. Scenario outputs
-have no CIs because the percentages do not identify a sampling distribution.
-Context exposure is averaged across the capped/uncapped mixture; plugging the
-mean length into a quadratic would underestimate it. All noncap answers are
-assumed to have the supplied length; their real length variance would add
-context exposure. Nonzero idle power needs
-`--base-duration-s` and `--edited-duration-s` (expected full-window durations).
+For `compare`, add `base`/`edited` arrays of
+`{"problem_id":"synthetic-1","prefill_tokens":256,"decode_tokens":100,"correct":true}`.
+Provide at least two units per arm; include `duration_s` for nonzero idle. An
+optional `edited_model` allows different costs. Unknown fields, duplicate JSON
+keys, nonfinite values and mismatched pair rosters fail.
 
-For observed counts, add `base` and `edited` arrays to that JSON. An optional
-`edited_model` object allows different costs; otherwise the base model is
-shared. Each answer has this shape:
+This model's d/context convention and null-ratio policy differ from the draft's
+D−1 decode model and infinite EPC endpoints. It predicts energy from counts;
+it does not implement the draft's measured-energy bootstrap, calibration
+uncertainty, Clopper–Pearson, t intervals, floors or TOST.
 
-```json
-{"problem_id": "synthetic-1", "prefill_tokens": 256,
- "decode_tokens": 100, "correct": true, "duration_s": 2.5}
-```
+## Lock-in, power planning and operand ladder
 
-Provide at least two answers per arm, then:
+`lockin` uses A=−1, B=+1 and reports B−A in W. `make_schedule` supports square,
+ABBA, randomized ABBA/BAAB and Manchester bi-phase coding. Manchester here is
+not a maximal-length PRBS. Demodulation uses window-averaged signs, an optional
+known-phase fundamental and fixed edge guards. HAC/block-bootstrap intervals
+use chronological four-chip blocks; they assume dependence decays and cannot
+protect against schedule-correlated drift. Simulation noise is uncalibrated;
+a PSD/chip-length pilot must justify any native modulation gain.
+
+`power.plan_power` sizes independent pairs/sessions using a known-SD normal
+approximation. A pair's duration includes both replays. Systematic bounds never
+average down; `detectable` is a planning screen, not a claim or equivalence test.
 
 ```sh
-python3.13 -B scripts/interp_energy/behaviour_energy.py compare answers.json \
-  --bootstrap-samples 2000 --confidence .95 --seed 0
+python3.13 -B scripts/interp_energy/power_analysis.py --paired-only
+python3.13 -B scripts/interp_energy/rail_data_dependence.py --plan-only --out /tmp/synthetic-operand-plan
+python3.13 -B scripts/interp_energy/rail_data_dependence.py --dry --out /tmp/synthetic-operand-dry
 ```
 
-Both commands write JSON to stdout; redirect to a new file if desired. Inputs
-are never modified. Unknown fields, duplicate keys, nonfinite values, nonboolean
-correctness, fractional/negative token counts, and mismatched pair rosters fail
-with a CLI usage error. `source` and `coefficient_basis` are required explicitly
-by the CLI. The tool reads only the named JSON, with no nested path resolution.
+Plan-only uses no optional dependency. Dry runs execute tiny float32 CPU work,
+with no collectors, no waits and no native dtype validation. Native workloads
+hold shapes, activation inputs and dispatch counts fixed within a geometry/dtype;
+4/8-bit arms use affine packed quantization. Host operand statistics describe
+logical zeros, stored bits and a C-order tile proxy, not observed GPU toggles.
+The default full ladder is broader than the draft P subset. The nominal 81.2
+minute plan includes an assumed setup allowance; residency, native setup time,
+matching dispatch time/frequency, meter cadence and real window sizing remain
+unverified. Collection requires a separate lead-controlled quiet session; an
+active agent must never run `--execute` or actual capture hooks.
 
-## Public, unblinded parameter leads
+## Verification and native handoff
 
-Read these tracked documents as text; do not follow their external data/archive
-paths. The tool does not read any of them automatically.
+Run unittest modules individually, one process at a time. All tests use tiny
+synthetic arrays/configs; capture tests mock collectors. The integration module
+checks edit/revert identities and logits, scheduled swaps with fixed tokens,
+and fresh caches across package components:
 
-- [Study §1.2](../../docs/research-audits/2026-11-07/interp-weight-edit-energy.md#12-how-big-is-the-behaviour-term-for-astra)
-  gives the published cap/accuracy arithmetic and labels 0.05–0.15 J/token for
-  the 0.8B model as a planning estimate, requiring fresh calibration. The ALIGN
-  30B MoE rates do not transfer to the small hybrid model.
-- [Research question bank](../../docs/research_question_bank.md), PC-4/PC-5/PC-6,
-  discusses decode throughput, KV growth and small-model planning anchors.
-- [Known-bytes slot](../../docs/process_traces/2026-10-31-magistrate-5cbfbcfc/KB-SLOT-FILL.md)
-  publishes GPU rail 0.0087901, rails 0.0092431 and DC 0.0388927 J/GB of the
-  rotate-minus-repeat logical-byte contrast. These are boundary-specific
-  **J/GB, not J/token** and are latency-bound microbenchmark contrasts. Using
-  them requires an independently justified bytes/token mapping and regime
-  transfer; multiplying by model bytes alone is not a calibration.
-- [Known-bytes reading rule](../../docs/registrations/bytes_known_bytes_reading_rule_DRAFT.md)
-  documents idle subtraction and worst-case bounds; its half-widths are not
-  standard errors and must not be treated as bootstrap input noise.
+```sh
+python3.13 -B -m unittest tests.interp_energy.test_integration
+```
 
-No sealed Block 5 measurements are needed. A lead must later supply matched,
-unblinded calibration and measurement evidence before making energy claims.
-There are no MLX/native tests for this pure arithmetic component.
+The integration report lists every non-MLX module and its sandbox result.
+Python 3.13 needs an existing NumPy installation for numerical tests; an
+optional-dependency skip is not numerical verification. Python 3.11/3.13 CI
+compatibility still needs confirmation with NumPy.
+
+The lead must run these **outside this sandbox**, on an authorized Metal-capable
+non-measurement machine, one module per process, without downloading weights:
+
+```sh
+python3.13 -B -m unittest tests.interp_energy.test_weight_edits_mlx -v
+python3.13 -B -m unittest tests.interp_energy.test_forced_decode_mlx -v
+python3.13 -B -m unittest tests.interp_energy.test_mlx_native -v
+```
+
+They cover eight edit/swap tests, five replay tests including cross-component
+resident swap/replay, and two tiny operand/encoding tests. Importability gates
+allow bare installations to skip; a skip does not validate Metal. Hybrid model
+support, real collectors, battery/clock alignment, A/A′ floors and the seven
+ASTRA open slots remain separate lead-owned gates. No result here is live
+hardware evidence or authorization to access sealed Block 5 outcomes.

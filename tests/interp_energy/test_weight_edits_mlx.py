@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 try:
     import mlx.core as mx
-except ImportError:
+except (ImportError, OSError):
     mx = None
 
 from joulewise.interp_energy.weight_edits import (

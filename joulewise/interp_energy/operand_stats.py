@@ -9,13 +9,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-
-def _numpy():
-    try:
-        import numpy as np
-    except ImportError as exc:
-        raise RuntimeError("operand statistics require optional NumPy") from exc
-    return np
+from ._common import require_numpy as _numpy
 
 
 def _array(values):

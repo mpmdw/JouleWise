@@ -21,11 +21,12 @@ from joulewise.interp_energy.power import plan_power, study_reference
 
 
 def compare_synthetic(args) -> dict:
+    from joulewise.interp_energy._common import require_numpy
     from joulewise.interp_energy.lockin import (
-        NoiseModel, Schedule, _numpy, demodulate, estimate_abba, make_schedule, simulate_trace,
+        NoiseModel, Schedule, demodulate, estimate_abba, make_schedule, simulate_trace,
     )
 
-    np = _numpy()
+    np = require_numpy()
     if args.trials < 30:
         raise ValueError("at least 30 Monte Carlo trials are required")
     if args.baseline_w <= 0 or not math.isfinite(args.baseline_w):

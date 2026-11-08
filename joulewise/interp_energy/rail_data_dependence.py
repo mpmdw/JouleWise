@@ -20,8 +20,9 @@ import sys
 import time
 
 from joulewise.clock import SystemClock
+from ._common import require_numpy as _numpy
 from joulewise.interp_energy.operand_stats import (
-    _numpy, bfloat16_bits, bfloat16_values, combine_statistics, operand_statistics,
+    bfloat16_bits, bfloat16_values, combine_statistics, operand_statistics,
 )
 
 DTYPES = ("bf16", "fp16", "int8", "int4")
@@ -225,7 +226,7 @@ class NumpyDryBackend:
         return {"numpy_version": _numpy().__version__, "execution": "float32 einsum reference; no target-dtype validation"}
 
 
-class MlxBackend:
+class MLXBackend:
     """Native MLX GPU only; all materialization/quantization outside slots."""
 
     name = "mlx-gpu"
@@ -311,6 +312,10 @@ class MlxBackend:
         return result
 
 
+# Compatibility for wave-1 callers; new code uses the same MLX spelling as replay.
+MlxBackend = MLXBackend
+
+
 def stamp(clock) -> dict:
     paired = asdict(clock.stamp())
     paired["monotonic_ns"] = time.monotonic_ns()
@@ -331,7 +336,7 @@ def execute_plan(plan, output: Path, *, backend=None, capture_factory=None, cloc
     if settings.dry and capture_factory is not None:
         raise ValueError("dry mode cannot start capture hooks")
     clock = clock or SystemClock()
-    backend = backend or (NumpyDryBackend() if settings.dry else MlxBackend())
+    backend = backend or (NumpyDryBackend() if settings.dry else MLXBackend())
     output.mkdir(parents=True, exist_ok=False)
     (output / "plan.json").write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n")
     start = time.perf_counter()

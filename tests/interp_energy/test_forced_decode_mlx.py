@@ -4,13 +4,18 @@ Requires a working Metal device. Importability gates discovery on bare CI;
 the lead must run this module on an authorized non-measurement native session.
 """
 
-import importlib.util
 import unittest
 
-from joulewise.interp_energy.forced_decode import MLXBackend, canonical_sha256, replay
+from joulewise.interp_energy.forced_decode import MLXBackend, replay
+from joulewise.interp_energy.weight_edits import WeightSwap, weights_sha256
 
-HAS_MLX = (importlib.util.find_spec("mlx") is not None
-           and importlib.util.find_spec("mlx_lm") is not None)
+try:
+    import mlx.core
+    import mlx_lm
+except (ImportError, OSError):
+    HAS_MLX = False
+else:
+    HAS_MLX = True
 
 
 @unittest.skipUnless(HAS_MLX, "native MLX + mlx-lm unavailable")
@@ -29,10 +34,8 @@ class NativeReplayTests(unittest.TestCase):
         self.model.eval()
         mx.eval(self.model.parameters())
         # Tiny synthetic parameters only; no file I/O or large host transfers.
-        self.sha = canonical_sha256([
-            [name, str(value.dtype), list(value.shape), value.tolist()]
-            for name, value in tree_flatten(self.model.parameters())
-        ])
+        self.weights = dict(tree_flatten(self.model.parameters()))
+        self.sha = weights_sha256(self.weights)
         self.backend = MLXBackend()
 
     def run_replay(self, prompt, forced, **kwargs):
@@ -85,6 +88,30 @@ class NativeReplayTests(unittest.TestCase):
         for value in (float("nan"), float("inf"), -float("inf")):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 self.backend.diagnostics(self.mx.array([0., value]), 0, 1)
+
+    def test_resident_weight_swap_replay_and_byte_restoration(self):
+        from mlx.utils import tree_flatten, tree_unflatten
+
+        def bind(changed):
+            self.model.update(tree_unflatten(list(changed.items())))
+
+        edited = dict(self.weights)
+        edited['output.weight'] = -edited['output.weight']
+        swap = WeightSwap(self.weights, edited, bind=bind)
+        results = {}
+        for state in ('base', 'edited', 'base', 'edited', 'base'):
+            swap.switch(state)
+            swap.verify()
+            actual = dict(tree_flatten(self.model.parameters()))
+            digest = weights_sha256(actual)
+            self.assertEqual(digest, weights_sha256(self.weights))
+            result = replay(self.model, [1, 2], [0, 16, 3, 0],
+                            model_weights_sha256=digest, vocab_size=17, backend=self.backend)
+            signature = (digest, [r['forced_token_logprob'] for r in result.tokens])
+            self.assertEqual(signature, results.setdefault(state, signature))
+            self.assertEqual([r['input_token_id'] for r in result.tokens], [2, 0, 16, 3])
+        self.assertNotEqual(results['base'], results['edited'])
+        self.assertEqual(results['base'][0], self.sha)
 
 
 if __name__ == "__main__":

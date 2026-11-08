@@ -43,6 +43,8 @@ import operator
 import time
 from typing import Any, Callable, Mapping, MutableMapping, Sequence
 
+from ._common import canonical_sha256, require_numpy
+
 Parameters = MutableMapping[str, Any]
 
 
@@ -54,7 +56,7 @@ class _Backend:
     def __init__(self, array: Any):
         self.kind = type(array).__module__.split(".")[0]
         if self.kind == "numpy":
-            self.xp = importlib.import_module("numpy")
+            self.xp = require_numpy()
             if not isinstance(array, self.xp.ndarray):
                 raise TypeError("expected an ndarray")
             if array.dtype.kind != "f":
@@ -125,6 +127,23 @@ def parameter_sha256(array: Any) -> str:
 def parameter_hashes(parameters: Mapping[str, Any]) -> dict[str, str]:
     """Per-parameter raw-byte hashes; this intentionally scans all weights."""
     return {name: parameter_sha256(a) for name, a in parameters.items()}
+
+
+def weights_sha256(parameters: Mapping[str, Any]) -> str:
+    """Hash a sorted manifest of current dense weights for fixed-token replay.
+
+    Each entry binds name, dtype, shape and C-order raw-byte SHA-256. This scans
+    all parameters and must run outside timed spans. It is an in-memory identity,
+    distinct from the CLI's on-disk safetensors manifest; compare arms using the
+    same scheme and backend. Recompute after every edit or swap before replay.
+    """
+    if any(not isinstance(name, str) or not name for name in parameters):
+        raise ValueError("parameter names must be nonempty strings")
+    return canonical_sha256([
+        {"name": name, "dtype": str(array.dtype), "shape": list(array.shape),
+         "sha256": parameter_sha256(array)}
+        for name, array in sorted(parameters.items())
+    ])
 
 
 def _integer(value: Any) -> int:

@@ -25,14 +25,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterable, TextIO
 
+from ._common import canonical_sha256, require_numpy
+
 SCHEMA = "interp_energy.forced_decode.v1"
-
-
-def canonical_sha256(value: Any) -> str:
-    """SHA-256 of UTF-8, sorted-key compact JSON, without a trailing newline."""
-    return hashlib.sha256(json.dumps(
-        value, sort_keys=True, separators=(",", ":"), allow_nan=False,
-    ).encode("utf-8")).hexdigest()
 
 
 def _positive_int(value: Any, name: str) -> int:
@@ -111,8 +106,7 @@ class NumpyBackend:
     name = "numpy"
 
     def __init__(self) -> None:
-        import numpy as np
-        self.np = np
+        self.np = require_numpy()
 
     def make_cache(self, model: Any) -> list[Any]:
         return model.make_cache()

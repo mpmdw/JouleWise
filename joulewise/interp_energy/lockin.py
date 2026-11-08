@@ -14,19 +14,11 @@ unmodelled schedule-correlated drift/transients can still bias both methods.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from functools import lru_cache
 import math
 from statistics import NormalDist
 from typing import Any
 
-
-@lru_cache(maxsize=1)
-def _numpy():
-    try:
-        import numpy
-    except ImportError as exc:
-        raise RuntimeError("interp-energy simulation requires the NumPy extra") from exc
-    return numpy
+from ._common import require_numpy as _numpy
 
 
 def _finite(name: str, value: float, *, positive: bool = False,

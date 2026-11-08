@@ -8,14 +8,14 @@ try:
 except (ImportError, OSError):
     mx = np = None
 
-from joulewise.interp_energy.rail_data_dependence import CONDITIONS, DTYPES, MlxBackend
+from joulewise.interp_energy.rail_data_dependence import CONDITIONS, DTYPES, MLXBackend
 from joulewise.interp_energy.operand_stats import bfloat16_bits
 
 
 @unittest.skipUnless(mx is not None and np is not None, "optional MLX/NumPy are not importable")
 class MlxNativeTests(unittest.TestCase):
     def test_all_fills_and_dtypes_match_direct_matmul_on_tiny_arrays(self):
-        backend = MlxBackend()
+        backend = MLXBackend()
         for dtype in DTYPES:
             with self.subTest(dtype=dtype):
                 block = {"shape_mnk": [4, 64, 64], "dtype": dtype, "ring_size": 2}
