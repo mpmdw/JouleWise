@@ -1011,6 +1011,23 @@ desk reports them descriptively (`supplemental_sentinels`). The committed-record
 24-member plan is derived from it at materialization. The packet's `sentinel_roster` check requires the
 roster to include them after a U4/U5-inconclusive window.
 
+**R22 - Block 5 lessons applied to v4 (RUN_STATE 234; decided blind, with no v4 data).**
+
+* **R22-1, contention is disclosure-only.** Block 5's rule (0.05 CPU-s/s per 10 s, applied as an
+  exclusion) is never used in v4: at v4's roughly 830 s active episodes it would flag more than 99.7 % of
+  members. Each member records its outside-tree CPU-seconds over its member span (from the monitor's
+  contention journal; `joulewise/align/apple/v4_contention.py`, desk record `contention`). A
+  `contention.unmeasured` coverage gap is bounded: a gap over 30 s is flagged and disclosed, never
+  excluded. **No `contention.*` code can exclude a member**: the desk and the committed-record reader
+  both strip them from every exclusion list and keep them as disclosed codes.
+* **R22-3, balance check by condition.** Exclusions and flags per member-second are compared benign
+  against sabotage, and per task pair, against the exposure-adjusted pooled expectation
+  (`joulewise/align/apple/v4_balance.py`). The result is printed in the desk report and disclosed
+  (`balance_check`, `status: print_only`); it gates nothing and selects nothing.
+* **R22-5, between-window prior.** Record tau_rel = 0.13 % (stress 0.21 %) of cell energy as the Block 5
+  between-window prior. Check B3's tau = 0.5 s_r conversion once W1 or C1 yields the first benign residual
+  SD; until then the 0.5 s_r margin stays an open statistics item (above), not an adopted rule.
+
 ## Discrepancies
 
 This is the design/code discrepancy list Sol recorded for the pinned

@@ -292,6 +292,10 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
     except (OSError, ValueError):
         battery_policy = None
     journal = v4_battery.load_journal(Path(custody)/'hazards/monitor/battery.jsonl') if custody else ([], None, 1)
+    from joulewise.align.apple import v4_contention
+    # R22-1: in-window contention is disclosure-only; every member records its outside-tree CPU-seconds.
+    contention_journal = (v4_contention.load_journal(Path(custody)/'hazards/monitor/contention.jsonl')
+                          if custody else ([], None, 1))
     records = []
     pilot_members = {m['run_id']: m for m in members}
     for row in plan['members']:
@@ -303,10 +307,11 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
                  'flags': ['member.runtime_failure'], 'tokens': None, 'intervals': [],
                  'turn_observation': [], 'coverage': [], 'releases': [], 'turn_admissions': 0,
                  'pm_period_s': .1, 'calibration_exclusions': ['member.runtime_failure'], 'error': str(exc)}
-        r.update({k: row[k] for k in ('ordinal', 'role', 'pool_role') if k in row},
+        r.update({k: row[k] for k in ('ordinal', 'role', 'pool_role', 'condition', 'task_pair') if k in row},
                  window=(state.get('v4_series') or {}).get('window_id', state.get('window_id', 'W1')),
                  stage=row.get('stage_id'))
         v4_battery.attach(r, path, journal)
+        v4_contention.attach(r, path, contention_journal)
         assign_work_group(r, row)
         if row.get('role', '').startswith(('X-', 'Y-')):
             r.update(template=row['role'][0], arm=row['role'][-1])
@@ -314,7 +319,9 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
             expected = [{k: t[k] for k in ('prompt_token_ids', 'output_token_ids')} for t in fixture['turns']]
             r['pilot7_token_identical'] = r.get('tokens') == expected
         p = pilot_members.get(row['run_id'], {})
-        codes = p.get('exclusion_codes', [])
+        codes, disclosed = v4_contention.split_codes(p.get('exclusion_codes', []))
+        if disclosed:
+            r['contention']['disclosed_codes'] = sorted(set(r['contention']['disclosed_codes']) | set(disclosed))
         if any(str(c).startswith('battery.member_span') for c in codes):
             r['flags'].append('battery.member_span')
         r['excluded'] = bool(codes) or bool(r.get('calibration_exclusions'))
@@ -331,6 +338,11 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
             'candidates': {r['ordinal']: sentinel_admissibility(r) for r in records
                            if r.get('pool_role') == 'sentinel' and not r.get('supplemental')},
             'reference_status': 'requires authenticated R1/W1 E_ref for cross-window U4'}
+    # R22-3: the printed balance check by condition (exclusions + flags per member-second); print only.
+    from joulewise.align.apple import v4_balance
+    report['balance_check'] = v4_balance.balance_check(records)
+    for line in v4_balance.lines(report['balance_check']):
+        print(line)
     if supplemental_report(records):
         report['supplemental_sentinels'] = supplemental_report(records)
     for model, result in report['thermal']['model_windows'].items():
