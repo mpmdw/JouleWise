@@ -155,15 +155,13 @@ class AppleSamplerTests(unittest.TestCase):
         self.assertEqual(len(traces[0].values), 2)
 
     def test_epoch_conversion_pricing_and_bounded_span_is_not_counted_twice(self) -> None:
-        # Near 1.8e18 ns the product spacing is 256 ns, so its half-width
-        # must be 128 ns rather than the old unphysical 1 ns.
+        # Exact conversion adds at most half a nanosecond. The retained
+        # conservative legacy pricing still covers the input representation.
         stamp = ClockStamp(1_800_000_000.125, 1000.0, 1000.002, 1e-9, 1e-9)
         exact_ns = Fraction.from_float(stamp.epoch_s) * 1_000_000_000
         conversion_error = abs(Fraction(seconds_ns(stamp.epoch_s)) - exact_ns)
         self.assertLessEqual(conversion_error, Fraction(_conversion_error_ns(stamp.epoch_s)))
-        # The exact-rational oracle is above the old 1 ns representation
-        # allowance, so a return to that under-pricing fails this control.
-        self.assertGreater(conversion_error, 1)
+        self.assertLessEqual(conversion_error, Fraction(1, 2))
         restored = _restore_stamp(_stamp_record(stamp))
         self.assertGreaterEqual(restored.wall_resolution_s * 1e9,
                                 _conversion_error_ns(stamp.epoch_s))

@@ -5,6 +5,7 @@ import hashlib
 import io
 import json
 import math
+from fractions import Fraction
 from pathlib import Path
 import plistlib
 import random
@@ -22,6 +23,7 @@ from joulewise.align.apple.sampler import power_records, TRACE_DOMAIN
 from joulewise.align.attribution import attribute_episode
 from joulewise.align.records import ClockMapping, ToolCall
 from joulewise.align.records import to_json
+from joulewise.interfaces import PowerSample
 from scripts.bench_reduce_sol import synthetic_frames as realistic_frames
 from tests.align.v4_synthetic import synthetic_frames
 from tests.align.test_attribution import episode, turn
@@ -59,9 +61,12 @@ def a37_starts(supports):
 
 def reference_traces(records, *, evidence=EVIDENCE):
     # Snap the original observation sequence, before the sampler projects it.
-    native_supports = a37_starts([(round((r.timestamp_s-r.elapsed_ns/1e9)*1e9),
-                                  round(r.timestamp_s*1e9)) for r in records])
-    traces, flags = power_records(samples_from_records(records), nominal_interval_ns=100_000_000,
+    ends = [round(Fraction(r.timestamp_s)*1_000_000_000) for r in records]
+    native_supports = a37_starts([(end-r.elapsed_ns, end) for r, end in zip(records, ends)])
+    projected = [PowerSample(Fraction(end, 1_000_000_000), r.rail_power_w[rail], 'powermetrics', rail,
+                            Fraction(support[0], 1_000_000_000), Fraction(end, 1_000_000_000))
+                 for r, end, support in zip(records, ends, native_supports) for rail in sol.RAILS]
+    traces, flags = power_records(projected, nominal_interval_ns=100_000_000,
                                   evidence=evidence)
     result, flags = [], list(flags)
     for trace in traces:
@@ -79,6 +84,7 @@ def reference_traces(records, *, evidence=EVIDENCE):
         variable_flag = 'variable_averaging_support:'+trace.channel
         flags = [f for f in flags if f != variable_flag]
         notes['flags'] = [f for f in notes['flags'] if f != variable_flag]
+        notes['support_policy'] = 'A37'
         if len(widths) > 1:
             flags.append(variable_flag); notes['flags'].append(variable_flag)
         trace = replace(trace, notes=json.dumps(notes,sort_keys=True),
@@ -128,7 +134,7 @@ class ExtractorEqualityTests(unittest.TestCase):
         self.assertEqual(list(samples.endpoint_seconds(ENDPOINT)), [r.timestamp_s for r in records])
         pm = []
         for native, detail in zip(records, rich):
-            end = round(detail['timestamp_s'] * 1e9) + OFFSET
+            end = round(Fraction(detail['timestamp_s']) * 1_000_000_000) + OFFSET
             states = (detail.get('gpu') or {}).get('dvfm_states', ())
             active = sum(s.get('used_ns', 0) for s in states)
             clock = sum(s['freq'] * s.get('used_ns', 0) for s in states) / active if active else None
@@ -143,8 +149,8 @@ class ExtractorEqualityTests(unittest.TestCase):
         self.assertEqual(list(mapped['t_ns']), [r['end_ns'] for r in pm])
         self.assertEqual(list(mapped['thermal_start_ns']), [r['start_ns'] for r in pm])
         self.assertEqual(list(mapped['power_start_ns']),
-                         [s[0] for s in a37_starts([(round((r.timestamp_s-r.elapsed_ns/1e9)*1e9)+OFFSET,
-                                                    round(r.timestamp_s*1e9)+OFFSET) for r in records])])
+                         [s[0] for s in a37_starts([(end-r.elapsed_ns, end)
+                                                  for r, end in zip(records, [r['end_ns'] for r in pm])])])
         for i, native in enumerate(records):
             self.assertEqual(samples.columns['native_timestamp_ns'][i], native.metadata['plist_timestamp_ns'])
             for rail in sol.RAILS:

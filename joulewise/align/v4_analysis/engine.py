@@ -164,12 +164,13 @@ def scorer_identity():
                     args=[code.co_argcount, code.co_posonlyargcount, code.co_kwonlyargcount],
                     freevars=code.co_freevars, cellvars=code.co_cellvars,
                     exceptiontable=code.co_exceptiontable.hex())
-    from joulewise.align.apple import v4_cadence, sampling
+    from joulewise.align.apple import v4_cadence, sampling, sampler
+    from joulewise.align.power import windows as power_windows
     from . import raw
     from joulewise.align import attribution
     modules = [sys.modules[__name__], sys.modules[__package__+'.io'],
                residual, residual.er, ac, td, estimands, v4_cadence, sampling, ex, dc_desk, raw,
-               dc_desk.kp, attribution]
+               dc_desk.kp, attribution, sampler, power_windows]
     rows, globals_ = [], {}
     for module in modules:
         constants = {}
@@ -274,6 +275,16 @@ def _screen_member(member, cohort, *, divergent=False):
     t['analysis_classes'] = m['classes']
     if m.get('summary'):
         t['turn_counts'] = [[r[k] for k in ('context_tokens', 'prefill_tokens', 'decode_tokens')] for r in _rows(m)]
+
+
+def _member_output(member, **fields):
+    """A27: all C-sabotage member desks expose only identity and one seal."""
+    identity = {'run_id': member['slot']['run_id']}
+    if 'window' in fields:
+        identity['window'] = fields['window']
+    if 'sealed_sha256' in member:
+        return dict(**identity, status='sealed', sha256=member['sealed_sha256'])
+    return dict(**fields, run_id=identity['run_id'])
 
 
 def _fit_task(task):
@@ -413,6 +424,11 @@ def analyze(payload, *, workers=1, frozen_thresholds=None):
     # share the read-only evidence, without memoizing any decision.
     windows = [{**w, 'members': [{**m, 'thermal': dict(m['thermal'])} for m in w['members']]}
                for w in payload['windows'] if w['window'] != 'W1']
+    for w in windows:
+        if w['window'].startswith('C'):
+            for m in w['members']:
+                if m['slot']['condition'] == 'sabotage':
+                    m['sealed_sha256'] = digest(canonical(m))
     native_manifest = payload.get('series_manifest')
     if not payload.get('synthetic') and native_manifest is None:
         raise ValueError('native analysis requires digest-bound R15 series manifest')
@@ -498,6 +514,9 @@ def analyze(payload, *, workers=1, frozen_thresholds=None):
         pool_pass = bool(captured) and not any(dchecks.get(f'U{i}', {}).get('status') == 'fail' for i in (1, 2, 3))
         w['pool_entry'] = pool_pass
         battery = ac.battery(w['members'])
+        by_run = {m['slot']['run_id']: m for m in w['members']}
+        battery['members'] = [_member_output(by_run[r['run_id']], **{k: v for k, v in r.items() if k != 'run_id'})
+                              for r in battery['members']]
         if captured:
             b_failures = b_failures+1 if battery['status'] == 'fail' else 0
         allowed = {m['slot']['run_id'] for m in w['members'] if m['eligible']}
@@ -522,7 +541,7 @@ def analyze(payload, *, workers=1, frozen_thresholds=None):
             lead_release_present=any(r.get('after_attempt') == attempt for r in payload.get('lead_releases', [])),
             supplemental_sentinels=[dict(ordinal=m['slot']['ordinal'], turn_owned_j=m['thermal'].get('turn_owned_j'),
                                          eligible=m['eligible']) for m in w['members'] if m['slot']['ordinal'] in (23,24)],
-            pool_entry=pool_pass, eligibility=[dict(run_id=m['slot']['run_id'], eligible=m['eligible'],
+            pool_entry=pool_pass, eligibility=[_member_output(m, eligible=m['eligible'],
                 pool_eligible=m in eligible, reasons=m['reasons'], classes=m['classes'], flags=m['flags'],
                 rederived_classes=m['rederived_classes'], recorded_classes=m['recorded_classes'],
                 class_mismatch=m['rederived_classes'] != m['recorded_classes']) for m in w['members']]))
@@ -658,6 +677,10 @@ def analyze(payload, *, workers=1, frozen_thresholds=None):
     u5 = ac.u5(payload.get('r1_sensitivity'))
     dc = dc_desk.analyze_windows([w for w in payload['windows'] if w['window'] == 'W1']+windows,
                                 gpu_fits=fits)
+    sealed = {(w['window'], m['slot']['run_id']): m for w in windows for m in w['members']
+              if m['captured'] and 'sealed_sha256' in m}
+    dc = [_member_output(sealed[(r['window'], r['run_id'])], window=r['window'])
+          if (r['window'], r['run_id']) in sealed else r for r in dc]
     held = sorted(set([*codes, *CLAIM_CODES[:-1], *(['synthetic_only'] if payload.get('synthetic') else [])]))
     claim = dict(status='held', codes=held,
         detection_rate_licensed=all(m['status'] == 'pass' for m in monitoring.values()),
@@ -677,7 +700,7 @@ def analyze(payload, *, workers=1, frozen_thresholds=None):
         U3_derivation=derivation, U4=u4, U5=u5, U6=monitoring,
         thresholds=cutoffs, threshold_freeze=freeze, fits=fits, test=test,
         benign_carriers=carriers, dc_secondary=dc, claim=claim,
-        cache_diagnostics=[dict(window=w['window'], run_id=m['slot']['run_id'],
+        cache_diagnostics=[_member_output(m, window=w['window'],
             statistics=(m.get('summary') or {}).get('cache_statistics'),
             no_rebuild_sensitivity='print_only; never an eligibility exclusion')
             for w in windows for m in w['members']],
@@ -693,7 +716,7 @@ def analyze(payload, *, workers=1, frozen_thresholds=None):
             preserve_thinking='log omission only; no semantic transcript scoring',
             full_omission='print-only full dose in H_grid',
             ordinary_agent='gated/held reference-state energy, not free-running production energy'),
-        realized_counts=[dict(window=w['window'], run_id=m['slot']['run_id'],
+        realized_counts=[_member_output(m, window=w['window'],
             rows=[{k: r[k] for k in ('context_tokens', 'prefill_tokens', 'decode_tokens', 'reasoning_tokens')}
                   for r in _rows(m)] if m.get('summary') else []) for w in windows for m in w['members']],
         registered_scaffold={'status': 'input_judgment', 'custody': payload.get('custody', 'unavailable')})

@@ -35,8 +35,8 @@ def window_supports(
     variable widths. Explicit unknown entries remain unknown. Malformed or
     non-end-stamped supports must never silently select point interpolation.
     This reader's legacy Powermetrics fallback shares edges within the float
-    conversion quantum. Sol applies A37's fixed 1000 ns snap earlier, over
-    the original record sequence, before sorting/filtering power samples.
+    conversion quantum, capped at 1000 ns. Sol's support_policy=A37 bypasses
+    this fallback: it already snapped the original sequence at 1000 ns.
     flags receives support_edge_snapped:<channel> when this fallback snaps.
     The recorded trace and its evidence are never rewritten.
     """
@@ -64,7 +64,7 @@ def window_supports(
                 supports.append(tuple(support))
             else:
                 raise ValueError("invalid sample_support_ns")
-        if trace.source == "powermetrics":
+        if trace.source == "powermetrics" and notes.get('support_policy') != 'A37':
             snapped = 0
             for i in range(1, len(supports)):
                 previous, current = supports[i-1], supports[i]
@@ -73,7 +73,7 @@ def window_supports(
                 start, end = current
                 edge = previous[1]
                 if (start != edge and edge < end
-                        and abs(start-edge) <= _support_edge_quantum_ns(edge)):
+                        and abs(start-edge) <= min(1000, _support_edge_quantum_ns(edge))):
                     supports[i] = (edge, end)
                     snapped += 1
             # One flag per channel, not one per count: the budget summary

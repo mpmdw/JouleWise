@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import math
+from fractions import Fraction
 from dataclasses import replace
 from collections import defaultdict
 from typing import Any, Mapping, Sequence
@@ -27,6 +28,8 @@ POST_WINDOW_DWELL_S = 1.0
 
 
 def _conversion_error_ns(seconds: float) -> float:
+    # Retain the legacy conservative conversion budget for compatibility.
+    # Exact seconds_ns now adds <= 0.5 ns; this does not narrow old bounds.
     # Multiplication rounds by <= half the spacing of the ns product:
     # 128 ns at an epoch near 1.8e18 ns. round() then costs <= 0.5 ns;
     # the latter vanishes for epoch products already spaced by integer ns.
@@ -37,9 +40,13 @@ def _conversion_error_ns(seconds: float) -> float:
     return product_spacing / 2 + (0.5 if product_spacing < 1 else 0.0)
 
 
-def seconds_ns(seconds: float) -> int:
-    """Convert controller seconds once; price float representation in mapping."""
-    return round(seconds * NS_PER_SECOND)
+def seconds_ns(seconds) -> int:
+    """Round exact seconds to ns, ties to even, without a float ns product.
+
+    Text/Decimal retain their decimal value. Floats retain their exact binary
+    value; spelling that float as text would add another rounding step.
+    """
+    return round(Fraction(seconds) * NS_PER_SECOND)
 
 
 def _stamp_record(stamp: ClockStamp) -> dict[str, int]:
@@ -75,8 +82,7 @@ def _restore_stamp(record: Mapping[str, int]) -> ClockStamp:
 def monotonic_ns(stamp: ClockStamp) -> int:
     """Use the midpoint of the existing paired monotonic bracket."""
     return seconds_ns(
-        stamp.monotonic_before_s
-        + (stamp.monotonic_after_s - stamp.monotonic_before_s) / 2
+        (Fraction(stamp.monotonic_before_s) + Fraction(stamp.monotonic_after_s)) / 2
     )
 
 
@@ -93,14 +99,14 @@ def stamp_mapping(
     """
     if not stamps:
         raise ValueError("at least one paired ClockStamp is required")
-    lower = min(s.epoch_s - s.monotonic_after_s for s in stamps)
-    upper = max(s.epoch_s - s.monotonic_before_s for s in stamps)
+    lower = min(Fraction(s.epoch_s) - Fraction(s.monotonic_after_s) for s in stamps)
+    upper = max(Fraction(s.epoch_s) - Fraction(s.monotonic_before_s) for s in stamps)
     flags: list[str] = []
     anchor = (evidence or {}).get("clock_anchor", {})
-    bridge_resolution_s = max(s.wall_resolution_s + s.monotonic_resolution_s for s in stamps)
+    bridge_resolution_s = max(Fraction(s.wall_resolution_s) + Fraction(s.monotonic_resolution_s) for s in stamps)
     if anchor.get("status") == "bounded":
-        anchor_lower = float(anchor["wall_minus_monotonic_lower_s"])
-        anchor_upper = float(anchor["wall_minus_monotonic_upper_s"])
+        anchor_lower = Fraction(anchor["wall_minus_monotonic_lower_s"])
+        anchor_upper = Fraction(anchor["wall_minus_monotonic_upper_s"])
         # The adapter's effective bound already includes the FULL anchor
         # wall-minus-monotonic span. Charge only observations outside it,
         # rather than adding half that span again.
@@ -110,7 +116,7 @@ def stamp_mapping(
         # These episode/serialization observations are distinct from the
         # collector's anchor stamps; their resolution includes restored-record
         # rounding, which must survive even on a bounded native-anchor path.
-        bound_s = float(anchor["effective_clock_anchor_bound_s"]) + outside_s + bridge_resolution_s
+        bound_s = Fraction(anchor["effective_clock_anchor_bound_s"]) + outside_s + bridge_resolution_s
         method = str(anchor["method"])
     else:
         bound_s = (
@@ -120,11 +126,11 @@ def stamp_mapping(
         if evidence is not None:
             flags.append("clock_anchor_unresolved")
     offset_s = -(lower + (upper - lower) / 2)
-    # Paired clock input representation and subtraction/midpoint arithmetic:
-    # each floating operation/read costs at most half its value's ulp.
+    # Retain the conservative input-representation/arithmetic budget even
+    # though the bracket subtraction and midpoint above are now exact.
     representation_ns = max(
-        (math.ulp(s.epoch_s) + math.ulp(s.monotonic_before_s)
-         + math.ulp(s.monotonic_after_s)) * NS_PER_SECOND / 2
+        (math.ulp(float(s.epoch_s)) + math.ulp(float(s.monotonic_before_s))
+         + math.ulp(float(s.monotonic_after_s))) * NS_PER_SECOND / 2
         for s in stamps
     )
     arithmetic_ns = sum(
@@ -134,9 +140,8 @@ def stamp_mapping(
     # Price a trace epoch conversion, a turn monotonic conversion and the
     # offset conversion separately, using spacing at each ns product.
     conversion_ns = max(
-        _conversion_error_ns(s.epoch_s)
-        + _conversion_error_ns(s.monotonic_before_s
-                               + (s.monotonic_after_s - s.monotonic_before_s) / 2)
+        _conversion_error_ns(Fraction(s.epoch_s))
+        + _conversion_error_ns((Fraction(s.monotonic_before_s) + Fraction(s.monotonic_after_s)) / 2)
         for s in stamps
     ) + _conversion_error_ns(offset_s)
     uncertainty_ns = math.ceil(
@@ -213,9 +218,9 @@ def power_records(
                     "method": (evidence or {}).get("clock_anchor", {}).get("method"),
                     "status": (evidence or {}).get("clock_anchor", {}).get("status", "unknown"),
                     "effective_bound_ns": math.ceil(
-                        (evidence or {}).get("clock_anchor", {}).get(
+                        Fraction((evidence or {}).get("clock_anchor", {}).get(
                             "effective_clock_anchor_bound_s", 0.0
-                        ) * NS_PER_SECOND
+                        )) * NS_PER_SECOND
                     ) if (evidence or {}).get("clock_anchor", {}).get("status") == "bounded" else None,
                 },
                 "flags": [flag for flag in flags if flag.endswith(f":{channel}")],

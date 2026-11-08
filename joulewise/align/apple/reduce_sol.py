@@ -10,6 +10,7 @@ from array import array
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
+from fractions import Fraction
 import hashlib
 import json
 import marshal
@@ -26,6 +27,7 @@ from types import CodeType, FunctionType
 from xml.etree import ElementTree as ET
 from xml.parsers import expat
 from . import _reduce_native as native
+from .sampler import seconds_ns
 
 SCHEMA = 'joulewise.powermetrics.reduce-sol.v2'
 MAGIC = b'JWSOLR1\n'
@@ -276,8 +278,17 @@ class SampleColumns:
         return len(self.columns['elapsed_ns'])
 
     def endpoint_seconds(self, first_record_endpoint_s):
-        """Use the adapter's float additions in its original order, before ns conversion."""
+        """Preserve textual seconds; retain the adapter order for float inputs."""
         from joulewise.validation import finite_float
+        if not isinstance(first_record_endpoint_s, float):
+            anchor = Fraction(first_record_endpoint_s)
+            cumulative_ns = 0
+            result = []
+            for i, elapsed in enumerate(self.columns['elapsed_ns']):
+                if i:
+                    cumulative_ns += elapsed
+                result.append(anchor + Fraction(cumulative_ns, 1_000_000_000))
+            return result
         anchor = finite_float(first_record_endpoint_s, 'first_record_endpoint_s')
         cumulative = 0.0
         result = array('d')
@@ -290,7 +301,7 @@ class SampleColumns:
     def monotonic_t_ns(self, first_record_endpoint_s, offset_ns):
         if type(offset_ns) is not int:
             raise ValueError('clock offset must be integer nanoseconds')
-        return array('q', (round(t * 1_000_000_000) + offset_ns
+        return array('q', (seconds_ns(t) + offset_ns
                            for t in self.endpoint_seconds(first_record_endpoint_s)))
 
     def native_pm_samples(self, first_record_endpoint_s, offset_ns):
@@ -307,15 +318,12 @@ class SampleColumns:
     def mapped_columns(self, first_record_endpoint_s, offset_ns):
         """Fresh arrays on the supplied episode clock (normally monotonic).
 
-        Power supports follow the adapter's float conversion; native thermal
-        supports subtract integer elapsed_ns. These two existing conventions
-        differ by sub-microsecond rounding. A37 closes interior seams in both;
-        the first start and every end retain their original placement.
+        Both power and thermal supports subtract native integer elapsed_ns
+        from exactly converted endpoints. A37 changes only interior starts.
         """
         ends = self.monotonic_t_ns(first_record_endpoint_s, offset_ns)
         elapsed = self.columns['elapsed_ns']
-        starts = array('q', (round((t - elapsed[i] / 1_000_000_000.0) * 1_000_000_000) + offset_ns
-                             for i, t in enumerate(self.endpoint_seconds(first_record_endpoint_s))))
+        starts = array('q', (end-elapsed[i] for i, end in enumerate(ends)))
         thermal_starts = array('q', (end-elapsed[i] for i, end in enumerate(ends)))
         _snap_interior_starts(starts, ends)
         _snap_interior_starts(thermal_starts, ends)
@@ -327,16 +335,16 @@ class SampleColumns:
         from joulewise.align.apple.sampler import power_records
         from joulewise.interfaces import PowerSample
         endpoints = self.endpoint_seconds(first_record_endpoint_s)
-        ends = [round(t*1_000_000_000) for t in endpoints]
-        starts = [round((t-self.columns['elapsed_ns'][i]/1_000_000_000.0)*1_000_000_000)
-                  for i, t in enumerate(endpoints)]
+        ends = [seconds_ns(t) for t in endpoints]
+        starts = [end-self.columns['elapsed_ns'][i] for i, end in enumerate(ends)]
         _snap_interior_starts(starts, ends)
         samples = []
-        for i, end in enumerate(endpoints):
-            start = end - self.columns['elapsed_ns'][i] / 1_000_000_000.0
-            samples.extend(PowerSample(timestamp_s=end, power_w=self.columns[rail][i],
+        for i, end in enumerate(ends):
+            # Feed the common projector exact seconds, never float epochs.
+            samples.extend(PowerSample(timestamp_s=Fraction(end, 1_000_000_000), power_w=self.columns[rail][i],
                                        source='powermetrics', rail=rail,
-                                       interval_start_s=start, interval_end_s=end) for rail in RAILS)
+                                       interval_start_s=Fraction(starts[i], 1_000_000_000),
+                                       interval_end_s=Fraction(end, 1_000_000_000)) for rail in RAILS)
         traces, flags = power_records(samples, nominal_interval_ns=nominal_interval_ns, evidence=evidence)
         result, flags = [], list(flags)
         for trace in traces:
@@ -355,6 +363,9 @@ class SampleColumns:
                 flags.append(flag)
                 notes['flags'].append(flag)
             notes['sample_support_ns'] = snapped_supports
+            # Downstream readers must not re-snap projected neighbours with
+            # an epoch-dependent tolerance or interpolate uncovered time.
+            notes['support_policy'] = 'A37'
             widths = {b-a for a, b in snapped_supports}
             variable_flag = f'variable_averaging_support:{trace.channel}'
             flags = [f for f in flags if f != variable_flag]

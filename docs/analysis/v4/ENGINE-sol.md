@@ -1,4 +1,4 @@
-# V4 primary engine (Sol), R23c + R23d
+# V4 primary engine (Sol), R23e
 
 2026-11-08. **PROVISIONAL: synthetic qualification, no live study validation.**
 Authority: the lead's engine-r23 brief (A37 and R23-E1/R23-1–4), on
@@ -25,6 +25,42 @@ including snapshots with full anchor evidence. Native/release anchor IDs must
 be series-unique. The σ_w diagnostic explicitly discloses W1 block inclusion,
 exclusion or unavailability.
 
+R23e applies the lead's P1/P2/A27 rulings on `a2e36bc19` (2026-11-08).
+G1/H timeout intervals re-derive X2 without a recorded flag; an explicit
+positive `g1_h_timeouts` on a stopped episode does likewise. The same thermal
+and calibration exclusion helpers feed U1/U2, W1 screening, GPU fits and
+calibration counts. The ten-C/T-block hand fixture plus a timed-out W1 anchor
+prints K=10 and `W1_anchor_block: excluded:X2`.
+
+Seconds-to-ns conversion uses exact rational arithmetic with ties to even.
+Raw-source JSON preserves the decimal lexemes of endpoint/stamp/anchor fields;
+configuration and other numeric evidence retain their existing types. Decimal,
+text and integer inputs remain exact; already-materialized floats use their
+exact binary value, so `4300000000.000001` converts to epoch +954 ns, not
++1024 ns. Textual endpoints accumulate integer elapsed ns; the trusted float
+API retains its adapter addition order before exact conversion. Supports use
+integer endpoint minus native elapsed ns for both power and thermal rows.
+Legacy conservative clock uncertainty budgets remain in place.
+
+A37 still snaps only original-record interior seams of at most 1000 ns.
+Sol traces carry `support_policy: A37`, preventing a downstream reader from
+snapping different neighbours after sorting/filtering. The legacy reader's
+float-quantum fallback is also capped at 1000 ns. Sol attribution leaves larger
+gaps unfilled, contributes no invented gap energy, and flags `duty.uncovered`;
+uncovered owned time excludes through `energy_unavailable`. Synthetic 9e9 s
+records with 1900/2000 ns seams establish this through the raw adapter and
+member screen. The contiguous 2026-epoch control retains its literal supports,
+30 J integral and eligibility. This does not claim byte equality with incorrect
+pre-R23e subsecond float timing. Scorer/reducer identities cover the changed
+conversion/support code, so prior prospective freezes require regeneration.
+
+A27 seals every C-window sabotage member's per-member output: eligibility,
+battery, cache, realized counts and secondary DC rows retain only their
+identifiers, `status: sealed` and a SHA-256 of the whole input member before
+analysis annotations. Token counts are included in the seal, with no numeric
+token-count leaf. Aggregated registered diagnostics still run; C sabotage
+continues to enter no score, calibration pool, known-H or carrier curve.
+
 ## Ruling → code map
 
 Paths are relative to `joulewise/align/`; engine, acceptance, raw, dc, io and
@@ -41,7 +77,7 @@ exclusions mean modules in `v4_analysis/`.
 | A6 | Logged decode includes reasoning; withheld subtracts the logged count exactly; C/P/J equality checked. Withheld prints alongside. |
 | A7 | Exact earliest-first sub-turn strip. Unreachable nominal dose has null H/score and dose_unreachable. First-k actual doses, separate council grid, eight-dose H_STAR_GRID. |
 | A8 | `apple.v4_estimands.benign_carrier_curve`: per-dose n; crossings on all-carrier prefix; later nonmonotonicity flagged without voiding crossings. Other-carrier untouched thresholds, ≥40 carriers. Engine pins Random(0), choices over sorted window IDs with multiplicity, 1000 replicates, type-1 5/95 order statistics over defined replicates; undefined counts retained. |
-| A9 | `exclusions.FLAG_TO_CLASS/CLASSES`; union of re-derived and recorded classes, both component sets, raw reasons and mismatch printed. Compare class sets. |
+| A9 | `exclusions.FLAG_TO_CLASS/CLASSES`; union of re-derived and recorded classes. `thermal_desk.thermal_timeout_exclusions` derives X2 from G1/H timeout intervals or a positive timeout count on a stopped episode. Component sets, reasons and mismatch print for unsealed members. |
 | A10 | `raw.member` limits registered OS readings to registered_span_ns; production desk derives registered-span X1; episode observations remain visible. |
 | A11 | `apple.thermal_desk.member_record/acceptance`: wall spans through tool ends include holds; collector-grid episode/G0 coverage; PM uncovered-gap or wide-support union. G1+H entries/timeouts over captured members with sidecars, including X1–X4. |
 | A12 | Journal-matched one-sided release checks; released G0 values only; no G1/H releases → U2(b) not_applicable. |
@@ -53,13 +89,13 @@ exclusions mean modules in `v4_analysis/`.
 | A18 | `_test_summary`: one-sided 95% Clopper–Pearson via production incomplete beta; missing assignments retained. |
 | A19 | Exactly eight eligible token-identical W1 runs, second-stage indicator, admission within 2 s. Recorded G1 waiting is an above-E+δ sidecar sample before release. Numbers print even if treatment was not delivered. |
 | A20 | `dc.capture/analyze_windows`: benign DC desk actually runs; whole-member and owned integrals, battery-assist disclosure, own five-term h=0 LOTO model. GPU coefficients never transfer. Non-benign rows sealed; comparison presence/status only. Missing DC never selects GPU. |
-| A21 | `raw.member` calls production stamp_mapping over all stamps, anchor widened; optional exported offset_ns checked exactly. SampleColumns preserves adapter float accumulation/rounding order. |
+| A21 | `raw.member` calls exact production stamp_mapping over all stamps, anchor widened; optional exported offset_ns checked exactly. Raw clock/endpoint decimal lexemes survive JSON parsing. `sampler.seconds_ns` uses exact rational conversion; SampleColumns subtracts integer native elapsed ns. |
 | A22 | U3 heavy-tail trigger uses each difference's zero-centred leave-one-out RMS. |
 | A23 | Only U1–U3 FAIL bars pool entry; INCONCLUSIVE prints and counts. |
 | A24 | Barred windows have no GPU fits/scores and no U6 contribution. DC residual fits withhold barred/ineligible members. |
 | A25 | T fits/scores withheld and thresholds null until calibration_complete; prospective freeze checked before opening T sources. |
 | A26 | Undefined eligible C score holds the threshold with nonfinite_calibration_score; m never silently shrinks. |
-| A27 | C sabotage enters no GPU fit, score, known-H or carrier curve; DC sealed. |
+| A27 | C sabotage enters no GPU fit, score, known-H or carrier curve. Whole-member output is hash/status only, including realized token counts, eligibility, battery, cache and DC desks. |
 | A28 | battery.unobserved is retained for GPU; window B bar unavailable. |
 | A29 | Actual seed and four-slot cohort/model-stack identity checked; named classes exclude mismatches. |
 | A30 | Missing/Unknown PM is not X3; U1(a) inconclusive. |
@@ -69,7 +105,7 @@ exclusions mean modules in `v4_analysis/`.
 | A34 | W1 is a window record in windows[]. Selection-only W1 is refused by analyze and io.load, even with anchor_members. Its screened thermal records supply U1–U3 and contrast; W1 never enters C/T fits or m. |
 | A35 | roster(escalated=True) accepts 24 members; 23/24 supplemental W1:5 replays print descriptively, outside U3/U4/fits/m. |
 | A36 | B bar, consecutive failures and release presence print; missing operational B release never refuses analysis. Arm enforcement remains external. |
-| A37 | `apple.reduce_sol.SampleColumns`: fixed `INTERIOR_SEAM_NS=1000`; snap a later start to the previous end for an interior gap or overlap ≤1000 ns before energy, gap or coverage arithmetic. Power, native PM and mapped columns snap the original record sequence, before power sorting/filtering. Larger seams and all outer edges retain their placement. Power width/variable-support diagnostics are recomputed after snapping. `power/windows.py` documents its separate legacy float-quantum fallback. |
+| A37 | `apple.reduce_sol.SampleColumns`: fixed `INTERIOR_SEAM_NS=1000`; snap an interior gap/overlap ≤1000 ns in original record order before projection. Larger seams and all outer edges retain placement. `support_policy: A37` disables downstream snapping and gap interpolation; legacy fallback snapping is capped at 1000 ns. Power width diagnostics use the final supports. |
 | R23-E1 | `engine._rows/_member_reasons`, `acceptance.window_checks/battery/u4`, v4 thermal acceptance and W1 contrast exclude `captured:false`. Zero-capture final attempts have no pool entry or fits and do not consume a C slot; their retry takes that slot. Missing T assignments use only the last attempt per window, retaining that attempt's member reason/class or pool bar. A zero-capture attempt leaves the consecutive B-failure counter unchanged. |
 | R23-1 | W1 window members pass the same `engine._screen_member` / `_member_reasons` and recorded-class union as C/T before `acceptance.anchor_diagnostic`. Runtime failures, charging flags and seed mismatches exclude the whole W1 anchor block. `anchor_sigma_w.W1_anchor_block` prints `included`, `excluded:<reason>` or `unavailable:<reason>`. Complete eligible synthetic C1–C8 + T1–T3 + W1 yields K=12; a missing/excluded W1 block is explicit even when K=11. K≥3 remains required. `sigma_w2_raw_j2=(MS_window−MS_error)/4` may be negative; `sigma_w2_reported_j2=max(0,raw)` and `anchor_sigma_j=sqrt(reported)` print without a veto. |
 | R23-2 | Carrier H=0 prints the strict untouched score exceedance fraction against other-carrier thresholds. H50/H90 search the all-carrier prefix at H>0 only. Each crossing prints its own status and `level_reached_at_h0` flag; a level already reached at H=0 remains undefined, including bootstrap replicates. |
@@ -276,3 +312,12 @@ Named-path compileall and `git diff --check` passed. Commands, compatibility
 notes and the local-commit handoff are in
 `docs/run_reports/2026-11-08-engine-r23b.md`. No MLX code changed or native
 Metal test was added; this qualification does not validate live hardware.
+
+R23e verification: **200 targeted synthetic tests passed**, including ten new
+hand witnesses and the retained serial/parallel byte-equality checks. Modules
+ran in separate processes; one brief accidental overlap between the initial
+R23c/R23d runs is disclosed in the report. The final reruns were sequential.
+Named-file compileall and `git diff --check` passed. The two reducer cases
+that read captured fixtures/templates and the full suite were deliberately
+unrun. See `docs/run_reports/2026-11-08-engine-r23e.md` for exact commands,
+failing-first evidence, compatibility changes and lead handoff.

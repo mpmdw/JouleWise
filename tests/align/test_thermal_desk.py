@@ -203,10 +203,17 @@ class DeskTests(unittest.TestCase):
         m['coverage'] = [{'sample_fraction': .99, 'gaps_ns': [[0, 2*NS]], 'max_interval_ns': 2*NS}]
         self.assertEqual(desk.acceptance([m])['U1']['status'], 'pass')
         m['intervals'] = [{'kind': 'H', 'outcome': 'timeout'}]
-        m['turn_admissions'] = 50
-        self.assertEqual(desk.acceptance([m])['U1']['status'], 'pass')
+        # The timed-out member is now X2 even without a recorded flag. It
+        # still supplies the timeout denominator, while an included member
+        # supplies the U1 value observations. Totals remain exactly 50/49.
+        included = member('included')
+        included['turn_admissions'] = 1
         m['turn_admissions'] = 49
-        self.assertEqual(desk.acceptance([m])['U1']['status'], 'fail')
+        result = desk.acceptance([m, included])['U1']
+        self.assertEqual(result['thermal_excluded_members'], 1)
+        self.assertEqual(result['status'], 'pass')
+        m['turn_admissions'] = 48
+        self.assertEqual(desk.acceptance([m, included])['U1']['status'], 'fail')
 
     def test_unobserved_is_not_pass_and_exclusions_count_members_once(self):
         m = member()

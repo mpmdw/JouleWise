@@ -4,6 +4,13 @@ import json
 import os
 from pathlib import Path
 from copy import deepcopy
+from decimal import Decimal
+
+EXACT_SECOND_FIELDS = frozenset((
+    'first_record_endpoint_s', 'epoch_s', 'monotonic_before_s', 'monotonic_after_s',
+    'wall_resolution_s', 'monotonic_resolution_s', 'wall_minus_monotonic_lower_s',
+    'wall_minus_monotonic_upper_s', 'effective_clock_anchor_bound_s',
+))
 
 
 def canonical(value):
@@ -15,17 +22,29 @@ def digest(raw):
     return hashlib.sha256(raw).hexdigest()
 
 
-def strict_json(raw):
+def strict_json(raw, *, exact_seconds=False):
+    """Reject duplicate/nonfinite JSON; raw exports keep seconds as lexemes.
+
+    Only the raw-source loader enables exact_seconds. Other numeric evidence
+    keeps its existing int/float representation and canonical output format.
+    """
+    def number(value, seconds=False):
+        if isinstance(value, Decimal):
+            return str(value) if seconds else float(value)
+        if isinstance(value, list):
+            return [number(v, seconds) for v in value]
+        return value
     def pairs(items):
         result = {}
         for key, value in items:
             if key in result:
                 raise ValueError('duplicate JSON key')
-            result[key] = value
+            result[key] = number(value, key in EXACT_SECOND_FIELDS) if exact_seconds else value
         return result
     def invalid(_):
         raise ValueError('nonfinite JSON')
-    return json.loads(raw, object_pairs_hook=pairs, parse_constant=invalid)
+    return json.loads(raw, object_pairs_hook=pairs, parse_constant=invalid,
+                      parse_float=Decimal if exact_seconds else float)
 
 
 def local_path(root, name):
@@ -117,7 +136,7 @@ def load(path, *, calibration_only=False, through_window=None, cache_dir=None, w
         if 'raw_source' in window:
             from . import raw as adapter
             ref = window['raw_source']
-            native = read_source(root, ref)
+            native = strict_json(read_blob(root, ref), exact_seconds=True)
             window['members'] = adapter.window(root, native, window.pop('roster'), window_id=window['window'],
                                               cache_dir=cache_dir, workers=workers)
             census.append(dict(path=ref['path'], sha256=ref['sha256']))

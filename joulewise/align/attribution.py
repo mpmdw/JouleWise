@@ -2,7 +2,8 @@
 
 Point power is linear between samples; a window mean is constant on its
 native support (sample_support_ns in notes, or [t-window, t] for fixed widths).
-Uncovered duty intervals bridge the neighbouring window means linearly.
+Legacy uncovered duty intervals bridge neighbouring window means linearly.
+Sol A37 traces leave those intervals unfilled and flagged for exclusion.
 Their measured fraction is encoded as
 window_average_W;duty.uncovered_fraction=<repr(float)>; the corresponding
 flag is duty.uncovered. Fractions refer to the requested interval, excluding
@@ -256,7 +257,10 @@ class _Trace:
                 if previous is not None:
                     previous_t, previous_value = previous
                     if start > previous_t:
-                        spans.append(_Span(previous_t, start, previous_value, value, True))
+                        if notes.get('support_policy') == 'A37':
+                            spans.append(_Span(previous_t, start, 0., 0., True))
+                        else:
+                            spans.append(_Span(previous_t, start, previous_value, value, True))
                     elif start < previous_t:
                         # Earlier-ending windows own shared support; flag this
                         # unsupported sensor shape rather than double counting.

@@ -667,6 +667,7 @@ def thermal_exclusions(member):
         'thermal.os_level_nonzero', 'thermal.powermetrics_non_nominal',
         'thermal.start_gate_timeout', 'thermal.gate_timeout:',
         'thermal.hold_timeout:', 'thermal.state_unobserved'))]
+    reasons.extend(thermal_timeout_exclusions(member))
     if collector_lost(member):
         # A member failed fast on a dead collector is X4 for U1(b), as in
         # calibration_exclusions.
@@ -744,11 +745,22 @@ def acceptance(members, *, pairs=(), u4=None, u5=None, u6=None, u3_bar=None, v4=
     return results
 
 
+def thermal_timeout_exclusions(member):
+    """A9: a G1/H timeout stops the episode (X2), even without a flag."""
+    reasons = ['thermal.' + ('gate' if i['kind'] == 'G1' else 'hold') + '_timeout:derived'
+               for i in member.get('intervals', ())
+               if i.get('kind') in ('G1', 'H') and i.get('outcome') == 'timeout']
+    if member.get('g1_h_timeouts', 0) > 0 and member.get('status') != 'completed':
+        reasons.append('thermal.gate_timeout:derived_stopped_episode')
+    return reasons
+
+
 def calibration_exclusions(member):
     reasons = [f for f in member.get('flags', ()) if f.startswith((
         'thermal.start_gate_timeout', 'thermal.gate_timeout:', 'thermal.hold_timeout:',
         'thermal.state_unobserved', 'thermal.custody_invalid', 'episode.deadman:',
         'episode.malformed_tool_call:'))]
+    reasons.extend(thermal_timeout_exclusions(member))
     if member.get('registered_os_nonzero'):
         reasons.append('thermal.os_level_nonzero')
     if any(t.get('pm_nominal') is False for t in member.get('turn_observation', ())):

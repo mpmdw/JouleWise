@@ -355,7 +355,7 @@ class ExportContractTests(unittest.TestCase):
         fill, _ = analyze(p)
         self.assertEqual(fill['anchor_sigma_w']['K'], 11)
         for w in fill['windows']:
-            self.assertTrue(all(m['eligible'] for m in w['eligibility'][:4]))
+            self.assertTrue(all(m.get('eligible') or m.get('status') == 'sealed' for m in w['eligibility'][:4]))
             self.assertTrue(all(m['run_id'].startswith(w['window']+':') for m in w['eligibility'][:4]))
 
     def test_anchor_prefix_must_match_manifest_and_observation_window(self):
@@ -434,7 +434,7 @@ class DCRowTests(unittest.TestCase):
             expected = [(w['window'], m['slot']['task_pair'], m['slot']['run_id'])
                         for w in p['windows'] for m in w['members']
                         if m['captured'] and m['slot']['condition']=='benign']
-            values = [r for r in fill['dc_secondary'] if not r.get('sealed')]
+            values = [r for r in fill['dc_secondary'] if r.get('status') != 'sealed']
             self.assertEqual([(r['window'],r['pair'],r['run_id']) for r in values], expected)
             self.assertEqual(len(called), len(expected))
             gpu = {(f['window'],f['pair'],r['run_id']) for f in fill['fits']
@@ -473,7 +473,7 @@ class DCRowTests(unittest.TestCase):
         with patch.object(dc,'capture',side_effect=self.capture):
             fill, _ = analyze(p)
         self.assertFalse(fill['fits'])
-        rows = [r for r in fill['dc_secondary'] if not r.get('sealed')]
+        rows = [r for r in fill['dc_secondary'] if r.get('status') != 'sealed']
         self.assertTrue(any(r['window']=='T3' for r in rows))
         self.assertFalse(any(r['run_id']==missing['slot']['run_id'] for r in rows))
         self.assertTrue(all(r['residual_status']=='no_gpu_row' for r in rows))
