@@ -146,11 +146,22 @@ class Member:
         self.start_ns, self.end_ns = start_mono_ns, t + 5 * NS
 
 
+COHORT = "c" * 64
+
+
+def seed_law(seed_index, pair):
+    """P:166-170 seed law, written again here for the synthetic writer."""
+    name = "spam_filter_update" if pair == "spam" else "bank_transfer_2"
+    text = json.dumps(["align-p4-v1", "qwen3.8-27b", "thinking_on", "shade/" + name, seed_index],
+                      separators=(",", ":"))
+    return int.from_bytes(hashlib.sha256(text.encode()).digest()[:8], "big")
+
+
 def design(c, p, d):
     return (1.0, float(p), float(d), (c + p) * d + d * d / 2, c * p + p * p / 2)
 
 
-def write_member(root, wid, m, epoch_offset_ns, delta=(1.0, 1.0), big=False, full_frames=None):
+def write_member(root, wid, m, epoch_offset_ns, delta=(1.0, 1.0), big=False, full_frames=None, extra=None):
     """Write metadata, episode, thermal journal and the raw plist of one member."""
     base = Path(root) / "windows" / wid / "members" / m.run_id
     span_start = m.start_ns - 10 * NS
@@ -180,23 +191,27 @@ def write_member(root, wid, m, epoch_offset_ns, delta=(1.0, 1.0), big=False, ful
         "first_sample_end_point_epoch_s": (first_end + epoch_offset_ns) / NS}},
         "sampling": {"power_period_ns": period}})
     g0 = {"kind": "G0", "turn": 0, "start_ns": m.start_ns, "end_ns": m.start_ns + 290 * NS,
-          "outcome": "released", "release": {"fast_c": 50.0, "slow_c": 40.0}}
+          "outcome": "released", "release": {"fast_c": 50.0, "slow_c": 40.0},
+          "exit_sample_ns": m.start_ns + 290 * NS}
     intervals = [g0]
     for t in m.turns[1:]:
         intervals.append({"kind": "G1", "turn": t["index"], "start_ns": t["start_ns"] - 30 * NS,
                           "end_ns": t["start_ns"] - NS, "outcome": "released",
-                          "release": {"fast_c": 50.5, "slow_c": 40.2}})
+                          "release": {"fast_c": 50.0, "slow_c": 40.0}, "exit_sample_ns": t["start_ns"] - NS})
     episode = {"episode_id": m.run_id, "task_pair": "shade/" + ("spam_filter_update" if m.pair == "spam"
                                                                 else "bank_transfer_2"),
                "condition": m.condition, "start_ns": m.start_ns, "end_ns": m.end_ns,
-               "turns": [{k: v for k, v in t.items() if not k.startswith("_")} for t in m.turns],
+               "turns": [dict({k: v for k, v in t.items() if not k.startswith("_")},
+                              first_token_ns=t["start_ns"] + NS) for t in m.turns],
                "flags": [],
                "hardware": {"paired_clock_stamps_ns": [stamp, stamp],
+                            "registered_span_ns": [m.start_ns, m.end_ns],
                             "thermal": {"policy": {"sensors": {"fast": "Tg0f", "slow": "Th0x"},
                                                    "delta_fast_c": delta[0], "delta_slow_c": delta[1]},
                                         "episode_reference": {"fast_c": 50.0, "slow_c": 40.0},
                                         "intervals": intervals},
                             "cache": {"rebuilds": 0, "rewinds": 0}}}
+    episode.update(extra or {})
     dump(base / "outputs" / "align_episode.json", episode)
     rows = []
     t = span_start
@@ -250,6 +265,8 @@ def w1_roster():
                "run_id": f"align-v4-w1-e{o:02d}"}
         if contrast:
             row["contrast"] = {"template": contrast[0], "arm": contrast[1], "stage": 0 if o <= 11 else 1}
+        if model == "D":
+            row["seed_index"] = 93 if o == 18 else 1
         out.append(row)
     return out
 
@@ -289,6 +306,7 @@ def write_series(root, windows=None, members_per_window=None, period_ns=100_000_
     series = {"schema": "joulewise.v4_recompute_input.series.v1", "windows": []}
     epoch_offset = EPOCH0_S * NS
     clock = 0
+    next_index = {"spam": 2, "bank": 2}
     for index, wid in enumerate(windows):
         role = "W1" if wid == "W1" else ("calibration" if wid.startswith("C") else "test")
         roster = w1_roster() if wid == "W1" else window_roster(wid, role, index)
@@ -314,7 +332,17 @@ def write_series(root, windows=None, members_per_window=None, period_ns=100_000_
             if r["kind"] == "contrast" and r["contrast"]["arm"] == "S":
                 for t in m.turns:
                     t["_energy"] += 8.0
-            write_member(root, wid, m, epoch_offset)
+            extra = {"identity_sha256": hashlib.sha256(
+                (f"traj-{identical}" if identical is not None else r["run_id"]).encode()).hexdigest()}
+            if r["model"] == "D":
+                if "seed_index" not in r:
+                    if r["kind"] == "sentinel":
+                        r["seed_index"] = 1
+                    else:
+                        r["seed_index"] = next_index[r["pair"]]
+                        next_index[r["pair"]] += 1
+                extra.update(seed=seed_law(r["seed_index"], r["pair"]), cohort_sha256=COHORT)
+            write_member(root, wid, m, epoch_offset, extra=extra)
             clock = m.end_ns + 60 * NS
         streams = {}
         if meter:
@@ -323,17 +351,18 @@ def write_series(root, windows=None, members_per_window=None, period_ns=100_000_
         dump(root / "windows" / wid / "window.json", {
             "schema": "joulewise.v4_recompute_input.window.v1", "window_id": wid, "role": role,
             "members": roster, "adjudication": {"final": True, "excluded": {}},
-            "identity": identity, "battery": {}, "meter": {"streams": streams}})
+            "identity": identity, "battery": {}, "meter": {"streams": streams}, "cohort_sha256": COHORT})
     dump(root / "series.json", series)
     if u3:
-        dump(root / "u3_bar.json", {"signed": True, "beta": 0.05, "N": 16, "f": 1.5,
+        dump(root / "u3_bar.json", {"signed": True, "beta": 0.05, "N": 16, "f": 1.5, "r1_d_screen": 0.004,
                                     "pilot_relative_differences": [0.004, -0.006, 0.003, 0.005, -0.002, 0.001,
                                                                    -0.004]})
     if references:
         dump(root / "references.json", {"r1_replay_pair_j": [1500.0, 1510.0], "delta_slow_c": 1.0,
-                                        "r1_designed_start_states": [{"slow_c": 38.0, "energy_j": 1500.0},
-                                                                     {"slow_c": 40.0, "energy_j": 1501.0},
-                                                                     {"slow_c": 42.0, "energy_j": 1502.5}]})
+                                        "r1_designed_start_states": [
+                                            {"designed_slow_c": 38.0, "g0_release_slow_c": 38.0, "energy_j": 1500.0},
+                                            {"designed_slow_c": 40.0, "g0_release_slow_c": 40.0, "energy_j": 1501.0},
+                                            {"designed_slow_c": 42.0, "g0_release_slow_c": 42.0, "energy_j": 1502.5}]})
     return root
 
 

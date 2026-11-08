@@ -82,7 +82,7 @@ class RefusalTests(unittest.TestCase):
         raw = members / "align-v4-c1-e08/raw/powermetrics.plist"
         raw.write_bytes(raw.read_bytes() + b"<?xml version")
         meta = members / "align-v4-c1-e10/metadata.json"
-        meta.write_text(json.dumps({"sampling": {"power_period_ns": 10**10}}))
+        meta.write_text(json.dumps({"sampling": {"power_period_ns": 10**10}}))   # no clock anchor
         raw = members / "align-v4-c1-e11/raw/powermetrics.plist"
         frames = raw.read_bytes().split(b"\x00")
         raw.write_bytes(b"\x00".join(frames[: len(frames) // 3]) + b"\x00")
@@ -97,12 +97,15 @@ class RefusalTests(unittest.TestCase):
         self.assertIn("pm_turn_span_uncovered", flags["align-v4-c1-e11"])
         excl = out["exclusions"]["C1"]
         for rid in ("e06", "e07", "e08", "e10", "e11"):
-            self.assertIn("energy_unavailable", excl["align-v4-c1-" + rid]["codes"], rid)
+            self.assertIn("energy_unavailable", excl["align-v4-c1-" + rid]["classes"], rid)
             self.assertFalse(excl["align-v4-c1-" + rid]["eligible"])
-        self.assertEqual(excl["align-v4-c1-e12"]["codes"], ["not_captured"])
-        # Excluded members are in no fit and no score.
-        scored = set(out["scores"]["C1"]["spam"]["logged"]) | set(out["scores"]["C1"]["bank"]["logged"])
-        self.assertFalse(scored & {"align-v4-c1-" + r for r in ("e06", "e07", "e08", "e10", "e11", "e12")})
+        self.assertEqual(excl["align-v4-c1-e12"]["classes"], ["not_captured"])
+        # e11's truncated PM is a U1(c) PM gap: the D model-window fails U1, so C1 is barred and, under
+        # R21 A24, never fitted or scored; it still counts toward the 8 with zero calibrators.
+        self.assertFalse(out["acceptance"]["U1"]["C1"]["D"]["parts"]["c_pm_gaps"])
+        self.assertNotIn("C1", out["fits"])
+        row = out["calibration"]["stop"]["windows"][0]
+        self.assertEqual((row["counted"], row["pool_barred"], row["eligible_benign"]), (True, True, {"bank": 0, "spam": 0}))
 
 
 if __name__ == "__main__":
