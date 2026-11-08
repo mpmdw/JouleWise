@@ -49,7 +49,7 @@ None of it needs a quiet window. It does load the CPU and disk for one to a few 
   `manifest` is the registered §4 manifest plus a `sessions` list; `run` is the
   `tests/test_bytes_agreement.py` `run_both` order up to the commitment, with the registered
   comparer (`compare_campaign`). Tested on the synthetic twelve-sub-pack campaign
-  (`tests.test_bytes_stage1`, 9 tests, about 50 s on the Air).
+  (`tests.test_bytes_stage1`, 10 tests, under a minute on the Air).
 
 ## 3. Magistrate instructions (copy-paste; MBP, by day)
 
@@ -85,7 +85,7 @@ cd "$W"
 git rev-parse HEAD                      # record it; it must be the head the PR body names
 shasum -a 256 joulewise/bytes_analysis.py   # must print 18582818c7e03bad148b54dce8b8d60a62e2ffc5597e701ae3ab0418dffc0a71
 mkdir -p "$S1" /private/tmp/jwbytes-tmp
-TMPDIR=/private/tmp/jwbytes-tmp nice -n 10 $PY -m unittest tests.test_bytes_stage1 2>&1 | tail -3   # OK, 9 tests
+TMPDIR=/private/tmp/jwbytes-tmp nice -n 10 $PY -m unittest tests.test_bytes_stage1 2>&1 | tail -3   # OK, 10 tests
 ```
 
 (If `/Users/edr/code/JouleWise` is not your canonical clone on the MBP, use the one you used

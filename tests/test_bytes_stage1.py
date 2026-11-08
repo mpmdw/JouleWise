@@ -140,6 +140,32 @@ class ManifestTests(unittest.TestCase):
             s1.build_manifest(sessions[:-1])
 
 
+class CommandLineTests(unittest.TestCase):
+    """The commands the plan's magistrate steps paste (census, manifest), through main()."""
+
+    def test_census_and_manifest_commands(self):
+        import contextlib
+        import io
+        root = WORK["root"]
+        out = Path(WORK["dir"].name) / "cli"
+        out.mkdir()
+        with contextlib.redirect_stdout(io.StringIO()) as printed:
+            self.assertEqual(s1.main(["census", "--export", str(root / "export"), "--out", str(out / "census.json")]), 0)
+        self.assertEqual(json.loads((out / "census.json").read_text())["verdict"], "OK")
+        self.assertIn('"verdict": "OK"', printed.getvalue())
+        argv = ["manifest", "--out", str(out / "manifest.json")]
+        for session in WORK["manifest"]["sessions"]:
+            argv += ["--session", f"{session['session_id']}={session['archive']}:{root / 'export'}"]
+        with contextlib.redirect_stdout(io.StringIO()) as printed:
+            self.assertEqual(s1.main(argv), 0)
+        manifest = json.loads((out / "manifest.json").read_text())
+        self.assertEqual(len(manifest["sessions"]), 12)
+        self.assertEqual(json.loads(printed.getvalue())["sha256"], ba.digest(manifest))
+        with contextlib.redirect_stderr(io.StringIO()) as error:
+            self.assertEqual(s1.main(argv), 1)   # never overwrites
+        self.assertIn("exists", error.getvalue())
+
+
 class RunTests(unittest.TestCase):
     def test_pre_commit_sequence_writes_agreeing_predictions(self):
         root = WORK["root"]
