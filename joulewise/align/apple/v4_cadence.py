@@ -67,7 +67,7 @@ NEXT_ARM_TRIAGE = (
               'exclusions); counts are provisional until this check passes'),
     dict(id='calibration_stop', source=DERIVED, first_window_na=True,
          text='B3 fixed-8 predicate over the packet counts: continue for a calibration arm '
-              'until 8 counted windows (a structurally barred window is replaced by C9/C10), '
+              'until 8 counted windows (a structurally barred window is replaced by C9-C14), '
               'calibration_complete for a test arm; pending_final_eligibility, '
               'insufficient_calibration and escalate_to_lead refuse'),
     dict(id='battery_window', source=PACKET, first_window_na=True,
@@ -265,10 +265,11 @@ ADDED_SENTINELS_MAX = 2           # R20: U4/U5 inconclusive adds two SUPPLEMENTA
 # R20 (delta5 S2 F5): the supplemental sentinels count toward nothing, not even captured_members, so the
 # count-only ceiling is the 22 ordinary members (it was 24 under the delta2 reading, now superseded).
 CAPTURED_MAX = WINDOW_MEMBERS
-# R22-2 (RUN_STATE 234): up to two pre-declared blind replacement calibration windows (C9, C10). A window is
-# replaced, never added: the total stays 8 COUNTED calibration windows. They are armed only when a C window
-# is barred for a STRUCTURAL reason, never on scores or eligible counts.
-REPLACEMENT_WINDOWS = 2
+# R22-2 (RUN_STATE 234) / R24: up to SIX pre-declared blind replacement calibration windows (C9-C14; the cap
+# moved from C10 to C14 on Sol's reserve-cap sweep: qualification 52.6 % at C10, 84.2 % at C12, 96.2 % at C14
+# at bar rate 1/4). A window is replaced, never added: the total stays 8 ADMITTED (counted) windows. They are
+# armed only when a C window is barred for a STRUCTURAL reason, never on scores, counts or to repair low m.
+REPLACEMENT_WINDOWS = 6
 STRUCTURAL_BARS = ('u1_u3_fail', 'whole_window_capture_failure')     # row['barred'] (set from the committed record)
 ZERO_CAPTURE_BAR = 'zero_capture_refusal'                              # derived: the retry is also a zero capture
 
@@ -321,13 +322,14 @@ def calibration_stop(windows, lead_rulings=()):
     STRUCTURAL reason only (R22-2): its committed record carries ``barred`` (``u1_u3_fail`` or
     ``whole_window_capture_failure``; its eligible counts must be zero), or its zero-capture retry is also
     a zero capture (``zero_capture_refusal``: the attempts of one slot share the id before ``#``). A
-    barred window is not counted and consumes one of up to **two** pre-declared replacement windows (C9,
-    C10), armed only then and never on scores or eligible counts; the total stays 8 counted windows. A
+    barred window is not counted and consumes one of up to **six** pre-declared replacement windows
+    (C9-C14; R24), armed only then, in order, and never on scores, eligible counts or to repair low m; the
+    total stays 8 counted (admitted) windows. A
     **final** window that captured zero members is a zero-capture refusal and does not count; a
     **provisional** zero-capture window, or a provisional barred window, is unfinished and holds the gate
     pending. A window with at least one captured member and no bar counts, whether lost, failed or in
     flight. Two consecutive final zero-capture refusals of different slots, or a zero-capture bar once
-    both replacements are used, escalate to the lead (RUN_STATE 216) until a valid ``lead_rulings`` row
+    all six replacements are used, escalate to the lead (RUN_STATE 216) until a valid ``lead_rulings`` row
     (``resets`` ``zero_capture_escalation``, signed, naming the last window row it follows) resets the
     count. The predicate reads no score, alarm, residual or energy field. Returns ``decision``:
 
@@ -337,8 +339,8 @@ def calibration_stop(windows, lead_rulings=()):
     * ``continue`` - fewer than 8 counted windows and a window (primary or replacement) remains: arm it;
     * ``calibration_complete`` - 8 final counted windows and BOTH pairs have >=39 eligible benign
       summed over all of them (every eligible calibrator counts: no quietest-39 selection, no reordering);
-    * ``insufficient_calibration`` - 8 final counted windows and either pair below 39, or more than two
-      windows barred so that 8 cannot be reached. No ninth counted attempt exists.
+    * ``insufficient_calibration`` - 8 final counted windows and either pair below 39, or more than six
+      windows barred so that 8 cannot be reached (C14 reached with fewer than 8 admitted). No ninth counted attempt exists.
 
     This is not an exchangeability or R13/R14 result.
     """

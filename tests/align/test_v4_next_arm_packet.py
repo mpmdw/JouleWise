@@ -500,33 +500,34 @@ class HistoryChainTests(Base):
         self.assertEqual(decision['attempted'], 0)
         self.assertTrue(packet['packet_preflight']['ready'], packet['packet_preflight'])
 
-    def test_a_third_zero_capture_bar_escalates_until_a_ruling_with_a_committed_text(self):
-        spec = [(w, False, True) for w in ('C1', 'C1#2', 'C2', 'C2#2', 'C3', 'C3#2')]
+    def test_a_seventh_zero_capture_bar_escalates_until_a_ruling_with_a_committed_text(self):
+        # R24: six replacement windows (C9-C14) absorb six bars; the seventh escalates
+        spec = [(f'C{n}{suffix}', False, True) for n in range(1, 8) for suffix in ('', '#2')]
         s = self.calibration_series(spec)
         packet = s.build()
         self.assertFalse(packet['packet_preflight']['ready'])
         self.assertEqual(packet['calibration_decision']['decision'], 'escalate_to_lead')
-        text = b'LEAD RULING SYNTHETIC-1: three zero-capture bars, both replacement windows exhausted\n'
+        text = b'LEAD RULING SYNTHETIC-1: seven zero-capture bars, all six replacement windows exhausted\n'
         ref = s.write(f'{s.dir}/rulings/synthetic-1.txt', text)
-        s.series['lead_rulings'] = [{'ruling_id': 'SYNTHETIC-1', 'after_window': 'C3#2', 'text': ref,
+        s.series['lead_rulings'] = [{'ruling_id': 'SYNTHETIC-1', 'after_window': 'C7#2', 'text': ref,
                                      'lead_signature': 'lead: synthetic-ruling 2026-11-08'}]
         s.write(s.series_path, s.series)
         s.series_commit = s.commit()
         packet = s.build()
         self.assertEqual(packet['lead_rulings'], [{
             'ruling_id': 'SYNTHETIC-1', 'text_sha256': hashlib.sha256(text).hexdigest(),
-            'resets': 'zero_capture_escalation', 'after_window': 'C3#2',
+            'resets': 'zero_capture_escalation', 'after_window': 'C7#2',
             'lead_signature': 'lead: synthetic-ruling 2026-11-08'}])        # the digest is computed, not entered
         # the ruling resets the trailing refusal count but cannot repair calibration: 8 counted windows are
         # out of reach once more than two windows are barred
         self.assertEqual(packet['calibration_decision']['decision'], 'insufficient_calibration')
-        self.assertEqual(packet['calibration_decision']['zero_capture_refusals'], 6)
+        self.assertEqual(packet['calibration_decision']['zero_capture_refusals'], 14)
         self.assertFalse(packet['packet_preflight']['ready'])
         for bad in ({'ruling_id': 'X', 'after_window': 'C9', 'text': ref, 'lead_signature': 'lead: s 2026-11-08'},
-                    {'ruling_id': 'X', 'after_window': 'C3#2', 'text': {**ref, 'sha256': '0'*64},
+                    {'ruling_id': 'X', 'after_window': 'C7#2', 'text': {**ref, 'sha256': '0'*64},
                      'lead_signature': 'lead: s 2026-11-08'},
-                    {'ruling_id': 'X', 'after_window': 'C3#2', 'text': ref, 'lead_signature': 'PENDING'},
-                    {'ruling_id': 'X', 'after_window': 'C3#2', 'text': ref}):
+                    {'ruling_id': 'X', 'after_window': 'C7#2', 'text': ref, 'lead_signature': 'PENDING'},
+                    {'ruling_id': 'X', 'after_window': 'C7#2', 'text': ref}):
             s.series['lead_rulings'] = [bad]
             s.write(s.series_path, s.series)
             s.series_commit = s.commit()

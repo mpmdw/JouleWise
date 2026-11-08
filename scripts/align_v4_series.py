@@ -42,8 +42,8 @@ def pack_id(window_id):
 RESERVED_INDICES = frozenset({1, *range(91, 100)})   # development: W1 1/93, R0 91-92, reserve 94-99
 HELD_OUT_START = 2
 CALIBRATION_WINDOWS = 8                              # counted calibration windows
-REPLACEMENT_WINDOWS = cadence.REPLACEMENT_WINDOWS   # R22-2 cap: C9, C10 are armable, only after a structural bar
-RESERVE_WINDOWS = 4                                  # seeds are allocated for C9-C12; C11, C12 can NOT be armed (cap C10)
+REPLACEMENT_WINDOWS = cadence.REPLACEMENT_WINDOWS   # R24 cap: C9-C14 are armable, in order, only after a structural bar
+RESERVE_WINDOWS = 6                                  # seeds are allocated for C9-C14 (all armable); a window beyond the cap would hold seeds only
 RESERVE_POOL_START = 100                             # contiguous pool after the T range and the reserved 91-99
 TEST_WINDOWS = 3                                     # RUN_STATE 226 R15
 SABOTAGE_ORDINALS = (9, 18)                          # Amendment 1: spread, one per half
@@ -55,16 +55,16 @@ def candidate():
     """The frozen series (RUN_STATE 226 R15): Sol code base, Opus allocation.
 
     W1, then C1-C8 (D_k is C_k: no separate fit windows), the two pre-declared blind replacement windows
-    C9 and C10 (R22-2; armed only after a structural bar of a C window), then T1-T3 (C11 and C12 hold reserve seeds only). Every C/T
+    C9-C14 (R22-2 / R24; each armed only to replace a structural bar of a C window), then T1-T3. Every C/T
     window: anchors 1-4 (original bytes), early W1:5 sentinel at 5, sixteen fresh
     held-out D members at 6-21 alternating pair by pair (odd windows spam first,
     even bank first; first pair on even ordinals) with sabotage at 9 (second
     pair) and 18 (first pair), late sentinel at 22; midpoint after 11. Held-out
     seed indices are distinct, consumed per pair in kit order (window order,
     then ordinal) from 2, skipping 1 and 91-99: C1-C8 use 2-65 and T1-T3 66-89 (exactly as R15; the paired
-    seed check MATCHed them). The reserve pool for C9-C12 is the contiguous range 100-131 (8 per pair per
-    window): 91-99 are reserved development indices, so it starts at 100. Only C9 and C10 are armable (the
-    R22-2 cap); C11 and C12 have fixed seeds but the ledger refuses to arm them. A
+    seed check MATCHed them). The reserve pool for C9-C14 is the contiguous range 100-147 (8 per pair per
+    window): 91-99 are reserved development indices, so it starts at 100. All six are armable (the R24 cap
+    is C14), in order, each only to replace a structural bar. A
     C-window sabotage member is pool ``known_h`` and counts toward nothing.
     """
     selection = []
@@ -77,8 +77,8 @@ def candidate():
     windows = [{'id': 'W1', 'role': 'selection', 'aliases': [], 'members': selection}]
     next_index = dict.fromkeys(PAIRS, HELD_OUT_START)
     # Seeds are consumed per pair in kit order: C1-C8, then T1-T3 (both exactly as R15), then the contiguous
-    # RESERVE pool for C9-C12 from index 100 (91-99 are reserved development indices; 90 is left unused so the
-    # pool is one contiguous range). Run order is C1-C8, C9/C10 only as owed, then T1-T3.
+    # RESERVE pool for C9-C14 from index 100 (91-99 are reserved development indices; 90 is left unused so the
+    # pool is one contiguous range). Run order is C1-C8, C9-C14 only as owed, then T1-T3.
     plan = ([('C', 'calibration', n, False) for n in range(1, CALIBRATION_WINDOWS + 1)]
             + [('T', 'test', n, False) for n in range(1, TEST_WINDOWS + 1)]
             + [('C', 'calibration', CALIBRATION_WINDOWS + n, True) for n in range(1, RESERVE_WINDOWS + 1)])
@@ -125,16 +125,24 @@ def candidate():
                 windows=windows,
                 calibration=dict(counted_windows=CALIBRATION_WINDOWS, benign_per_pair_per_window=7,
                                  minimum_eligible_per_pair=39, replacements=0, fence_from='C6',
-                                 replacement_windows=['C9', 'C10'], replacement_cap=REPLACEMENT_WINDOWS,
-                                 reserve_windows_not_armable=['C11', 'C12'],
-                                 replacement_rule='R22-2: armed only after a STRUCTURAL bar of a C window '
-                                                  '(U1-U3 fail, whole-window capture failure, zero-capture '
-                                                  'refusal beyond the retry); never on scores or counts'),
+                                 replacement_windows=[f'C{n}' for n in range(
+                                     CALIBRATION_WINDOWS + 1, CALIBRATION_WINDOWS + REPLACEMENT_WINDOWS + 1)],
+                                 replacement_cap=REPLACEMENT_WINDOWS,
+                                 reserve_windows_not_armable=[f'C{n}' for n in range(
+                                     CALIBRATION_WINDOWS + REPLACEMENT_WINDOWS + 1,
+                                     CALIBRATION_WINDOWS + RESERVE_WINDOWS + 1)],
+                                 replacement_rule='R22-2 / R24 (cap C14): each armed, in order, ONLY to replace a '
+                                                  'STRUCTURAL bar of a C window (U1-U3 fail, whole-window capture '
+                                                  'failure, zero-capture refusal beyond the retry); never on scores, '
+                                                  'counts or to repair low m'),
                 seed_allocation=dict(held_out_start=HELD_OUT_START, reserved=sorted(RESERVED_INDICES),
                                      order='per pair, kit order: C1-C8, T1-T3 (as R15), then the reserve pool for '
-                                           'C9-C12; distinct indices',
+                                           'C9-C14; distinct indices',
                                      reserve_pool=dict(start=RESERVE_POOL_START, per_pair_per_window=8,
-                                                       windows=['C9', 'C10', 'C11', 'C12'], armable=['C9', 'C10'],
+                                                       windows=[f'C{n}' for n in range(
+                                                           CALIBRATION_WINDOWS + 1, CALIBRATION_WINDOWS + RESERVE_WINDOWS + 1)],
+                                                       armable=[f'C{n}' for n in range(
+                                                           CALIBRATION_WINDOWS + 1, CALIBRATION_WINDOWS + REPLACEMENT_WINDOWS + 1)],
                                                        why_after_90='indices 91-99 are reserved development indices '
                                                                     '(W1 1/93, R0 91-92, reserve 94-99)'),
                                      zero_capture_rearm='reuses the same seeds'),
@@ -245,7 +253,7 @@ def build_files(root, manifest, name, *, extra_sentinels=0):
     root = Path(root)
     window = selected(manifest, name)
     if window.get('armable') is False:
-        raise ValueError(f'{window["id"]} is a reserve window beyond the R22-2 cap (C10): its seeds are fixed '
+        raise ValueError(f'{window["id"]} is a reserve window beyond the reserve-window cap (R24: C14): its seeds are fixed '
                          'but it can not be materialized or armed without a ruling')
     if extra_sentinels not in (0, 2):
         raise ValueError('a window carries 0 or 2 escalation sentinels')
@@ -446,16 +454,16 @@ def calibration_rows(manifest, history):
     entries. F/T and known-H rows never count.
 
     R22-2: calibration is exactly 8 COUNTED windows over C1-C8 plus up to two
-    pre-declared blind replacement windows, C9 and C10. A window barred for a
+    pre-declared blind replacement windows, C9-C14 (R24). A window barred for a
     structural reason (``barred``, or a zero-capture attempt whose retry is also a
-    zero capture) is not counted and owes a replacement; C9 then C10 are armed after
+    zero capture) is not counted and owes a replacement; C9, C10, ... C14 are armed in order after
     C8 only while fewer than 8 windows are counted and never on scores or counts.
-    Only a zero-capture bar beyond the two replacements escalates, and only a
+    Only a zero-capture bar beyond the six replacements escalates, and only a
     lead_release naming the last attempt (resets ``zero_capture_escalation``,
     signed, text digest) resumes the series (RUN_STATE 226 R15).
     """
     cal_ids = [w['id'] for w in manifest['windows'] if w['role'] == 'calibration']
-    # only the first REPLACEMENT_WINDOWS reserve windows are armable; C11 and C12 hold seeds, never an arm
+    # only the first REPLACEMENT_WINDOWS reserve windows are armable; any beyond the cap hold seeds, never an arm
     primary = cal_ids[:CALIBRATION_WINDOWS]
     replacements = cal_ids[CALIBRATION_WINDOWS:CALIBRATION_WINDOWS + REPLACEMENT_WINDOWS]
     test_ids = [w['id'] for w in manifest['windows'] if w['role'] == 'test']
@@ -571,7 +579,7 @@ def desk_row(manifest, window_id, members, u_pass):
         counts = dict.fromkeys(cadence.CAL_PAIRS, 0)
     elif captured and u_pass is False:
         # R22-2: a U1-U3 FAIL is a STRUCTURAL bar. The window enters no pool, is not counted toward the eight
-        # and is replaced by C9/C10 (superseding R15, where it still counted).
+        # and is replaced by C9-C14 (superseding R15, where it still counted).
         counts = dict.fromkeys(cadence.CAL_PAIRS, 0)
         flags.append('u1_u3_failed:window_barred_and_replaced')
         barred = 'u1_u3_fail'

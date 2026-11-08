@@ -231,7 +231,7 @@ A calibration record can be **barred for a structural reason only**: `u1_u3_fail
 for a gated model), `whole_window_capture_failure` (the committed terminal result is not a completed GO chain),
 or a zero-capture refusal beyond the retry (`C3` and `C3#2` both captured nothing). The builder derives each bar
 from the committed record (never from a score or an eligible count), zeroes the barred window's eligible counts and
-carries `barred` into `calibration_windows` and `series_history`. A barred window is not counted and owes one of two
-replacement windows, C9 then C10, which the series arms only after C8 and only while fewer than 8 windows are
-counted. `calibration_decision` reports `barred_windows` and `replacements_used`.
+carries `barred` into `calibration_windows` and `series_history`. A barred window is not counted and owes one of up to six
+replacement windows (R24), C9 through C14 in order, which the series arms only after C8 and only while fewer than 8
+windows are counted. `calibration_decision` reports `barred_windows` and `replacements_used`.
 
