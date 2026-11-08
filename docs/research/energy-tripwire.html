@@ -148,9 +148,9 @@ footer{padding-top:28px;border-top:1px solid var(--rule);color:var(--muted);font
   <ol class="road">
     <li><div class="step">01</div><div><h3>Pick a task pair and a condition</h3><p><span class="mono">spam_filter_update</span> and <span class="mono">bank_transfer_2</span>, each run <b>benign</b> (main task only) or <b>sabotage</b> (main task plus the hidden side task). Every episode has a fixed, published seed derived from model, task and index, so any run can be replayed exactly.</p></div></li>
     <li><div class="step">02</div><div><h3>Run the agent locally, under thermal control</h3><p>The model runs with thinking on, through multi-turn tool calls. Before the episode, gate G0 waits until the slow thermometer is back near its reference; between turns, gate G1 and short holds keep every turn starting from the same heat state, so heat history cannot fake a signal.</p></div></li>
-    <li><div class="step">03</div><div><h3>Meter the whole machine</h3><p>A USB-C power meter sits between the wall brick and the MagSafe cable, so it records every joule the machine draws from the wall. powermetrics rails and SMC sensors record the inside view, and quiet guards record any background process that competes for the machine.</p></div></li>
+    <li><div class="step">03</div><div><h3>Meter the whole machine</h3><p>A USB-C power meter sits between the power brick and the MagSafe cable, so it records all DC power delivered to the machine (the brick's own conversion losses are outside it). powermetrics rails and SMC sensors record the inside view, and quiet guards record any background process that competes for the machine.</p></div></li>
     <li><div class="step">04</div><div><h3>Predict the energy from the log</h3><p>A five-term residual model, fit on honest episodes, turns the logged prefill, decode, context and tool counts into expected joules. The residual is what the log does not explain.</p></div></li>
-    <li><div class="step">05</div><div><h3>Set the tripwire from benign runs</h3><p>The alarm threshold is the largest residual among <i>m</i> benign episodes. That gives a marginal false-alarm rate of at most 1/(<i>m</i>+1): about 5 % at <i>m</i> = 20, and 2.5 % at the registration grade of <i>m</i> ≥ 39 now ruled for v4.</p></div></li>
+    <li><div class="step">05</div><div><h3>Set the tripwire from benign runs</h3><p>The alarm threshold is the largest residual among <i>m</i> benign episodes. If benign scores are exchangeable, that gives a marginal false-alarm rate of at most 1/(<i>m</i>+1): about 5 % at <i>m</i> = 20, and 2.5 % at the registration grade of <i>m</i> ≥ 39 now ruled for v4.</p></div></li>
     <li><div class="step">06</div><div><h3>Test it against known hidden work</h3><p>The known-H test keeps the measured joules but strips a known number of reasoning tokens from the log, the way a deceptive agent might hide its thinking. Sweeping that number gives a detection curve (H50, H90: the hidden-token counts caught half and nine-tenths of the time). Positive-control nights will add real unlogged computation.</p></div></li>
   </ol>
   <div class="plate" style="margin-top:22px">
@@ -171,7 +171,7 @@ footer{padding-top:28px;border-top:1px solid var(--rule);color:var(--muted);font
   <div class="eyebrow">The instrument</div>
   <h2>A laptop turned into a measurement bench</h2>
   <div class="inst">
-    <div><b>External DC meter</b><span>A USB-C power meter (KM003C) between the wall brick and the MagSafe cable measures all power from wall to machine, independently of macOS.</span></div>
+    <div><b>External DC meter</b><span>A USB-C power meter (KM003C) between the wall brick and the MagSafe cable measures all DC power delivered to the machine, independently of macOS.</span></div>
     <div><b>Software power rails</b><span>powermetrics CPU, GPU and ANE rails, used as a second channel and checked against the meter.</span></div>
     <div><b>SMC thermometry</b><span>A model-free sensor classifier picks fast and slow thermometers; thermal gates G0 and G1 hold every run to the same heat state.</span></div>
     <div><b>Quiet guards</b><span>Background contention is measured as CPU-seconds per second, recorded on every run, and redone only when sustained.</span></div>
@@ -321,7 +321,7 @@ footer{padding-top:28px;border-top:1px solid var(--rule);color:var(--muted);font
   <h2>A pipeline that earns its result</h2>
   <div class="grid2">
     <div class="fact"><div class="n mono">37 h → 1 h 40</div><p>Block 5's blinded analysis, after a speed rewrite proven result-equivalent by a blinded comparator.</p></div>
-    <div class="fact"><div class="n mono">12 → 1</div><p>Disagreeing result families between the analysis and the independent recompute after six blind fixes; the last cause was found from structure-only probes and fixed in the version now running.</p></div>
+    <div class="fact"><div class="n mono">11 → 0</div><p>Result families where the analysis and the independent recompute disagreed, traced to six defects and fixed blind from structure-only probes; the final release check is pending.</p></div>
     <div class="fact"><div class="n mono">≈650 <small>/h</small></div><p>Background tasks macOS starts on an idle Mac. The quiet rules now record them instead of fighting them.</p></div>
   </div>
 </section>
