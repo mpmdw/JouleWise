@@ -1042,6 +1042,20 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+225. **Laptop lead (interactive session 1544c617), 2026-11-08 01:00 PST: R1 ARM GO. Arm exactly `20e9edbc446a9f89a68badc1bd32bb0934cbb86d`, at the earliest t0 (item 224).** The lead's Opus executing review returned ADMIT_WITH_FIXES with no BLOCKER and no HIGH. The record is `docs/align/reviews/2026-11-08-r1-arm-fixes-lead-opus-review.md` on `lane/2026-11-08-r1-arm-fixes-review` @ `1a94ffb69`.
+- **REQUIRED (N1): do NOT follow the runbook's fetch line.** Runbook §1 fetches `refs/heads/lane/2026-11-08-r1-arm`, which is `5c0b79d31` and has none of D2/D3/D5. Instead:
+  1. `git -C "$M" fetch origin 20e9edbc446a9f89a68badc1bd32bb0934cbb86d` (or `lane/2026-11-08-r1-arm-fixes`), then `git -C "$M" switch --detach 20e9edbc446a9f89a68badc1bd32bb0934cbb86d`.
+  2. Before `install`, confirm that `git -C "$M" rev-parse HEAD`, and both `repo_head` and `measurement_head` in `night_plan.json`, are all `20e9edbc4…`.
+  3. Confirm `git -C "$M" status --short` is empty before `prepare` (this also covers N3). After `prepare`, confirm that the D5 literal in `$S/chain.zsh` is `40a49bde4475c583719dc178d5f66963abe29918350b288a829c91bf54946be0`.
+- **t0:** at least now + 15 min, sized with `arm_align_r1.py size --t0 <epoch>`. A t0 tonight gives 105,427 s with one 11:45 crossing. The review checked worst case one crossing, no redo, every pre-R1 step at its cap: R1 ends at t0 + 101,862 s against a deadline of t0 + 105,727 s.
+- **Known, not blocking:**
+  - N2: a load redo fits only if admission and the bookends come in under their caps (disclosed, meets item 216).
+  - N4: the display-dwell helper fails closed.
+  - N5: the bookends write their ledger rows to `$M/runs`.
+  - `test_run_night` has one pre-existing error (`Ruling76DriverTests...observer_faults`, also at `e901eb2a4`).
+  - Runbook text fix later.
+- **Unchanged:** the arm notice to Ed before install; display asleep; no external volume; exit before t0; item 222 (3) after R1, including checking the KM003C capture and the Automatic restore.
+
 224. **Laptop lead (interactive session 1544c617), 2026-11-08 00:55 PST: LEAD RULING R13, R1 route. Sol's HAZARD_PACK route, `lane/2026-11-08-r1-arm-fixes` @ `20e9edbc4`. Arm at the EARLIEST t0, not 13:20-14:00.**
 - **Route:** the agreement report (`docs/align/R1-ARM-AGREEMENT.md` on `lane/2026-11-08-r1-arm-opus` @ `fa7b8bae1`, Opus with final say) recommends Sol's route with D2, D3 and D5. Adopted, at `20e9edbc4`, which holds those fixes and the runbook lines (item 223). The Opus route (`d5882a34e`) is not used.
 - **Arm condition:** the lead's independent Opus executing review of `20e9edbc4` (item 219) is running on the laptop now. When it reports, the lead posts item 225 with the verdict and the exact sha:
