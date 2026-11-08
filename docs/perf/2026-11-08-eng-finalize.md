@@ -5,6 +5,14 @@ Authority: latency synthesis §4 rank 3; RUN_STATE 213–215; engineering only.
 All execution used synthetic files. No network, model weights, measurement
 pipeline or sealed data were used. Coordination state is unchanged.
 
+Review follow-up: branch `fix-finalize` addresses F-L1/F-L2 from the
+Opus cold review at `f551a6749`. F-M1 limits the performance claim: this
+branch is **not on the R1/v4 lane**. Its relevant prospective v4 saving is
+repeated terminal inventories of `night/` and `night/evidence/`; it does not
+speed the large ALIGN archive/copy path. See the
+[unapplied v4 port note](eng-finalize-port-to-v4-lane.md) for pinned code
+evidence and a separate synthetic archive-inventory experiment.
+
 ## Change and equality boundary
 
 - `joulewise/file_hashes.py`: 1 MiB streaming reads; bounded 1/2/4/8 threads,
@@ -24,7 +32,13 @@ Reuse is deliberately **operation-local**, keyed by path plus device, inode,
 mode, link count, size, mtime_ns and ctime_ns for link and target. Before/opened/
 after file identities are checked; failures never cache a digest. Same-length
 rewrites with restored mtime invalidate through ctime; replacements invalidate
-through identity. This relies on ordinary filesystem metadata behavior for
+through identity. Reuse now requires Darwin `statfs` to identify APFS for
+both link and target devices, and both observed timestamps to have
+sub-microsecond components. Unknown or non-APFS volumes, failed detection,
+and coarse-looking timestamps disable reuse; streaming and worker selection
+still work, with fresh byte reads on every inventory. The timestamp test is
+conservative: an APFS timestamp that happens to align to a microsecond also
+loses reuse. This relies on ordinary filesystem metadata behavior for
 already closed files, not a cryptographic proof of storage immutability.
 Every new process/harvest and every destination authentication reads all bytes
 again. Reuse across restarts would require an authenticated immutable-object
@@ -34,9 +48,21 @@ Harvest manifests retain exact sorted JSON bytes, digests, modes, sizes,
 timestamps and literal symlink text. Night artifacts retain their existing
 ordering, missing-file omission and unreadable-file diagnostic behavior; their
 historical symlink-target policy is unchanged. A file detected changing while
-being hashed fails closed with an I/O error rather than caching a mixed read.
+being hashed gets an initial attempt plus up to three retries, with 10/20/30 ms
+backoffs and fresh fingerprints/digests. Persistent mutation fails closed
+with `OSError` naming the file; the night inventory keeps its path and error
+entry, and publishes no digest for it. Missing files, ordinary read failures
+and interruption are not retried. Uncached admission hashes use the same
+stable-snapshot retry policy. No failed attempt populates the cache.
 No claim is made that arbitrary concurrent mutation has byte-identical race
 timing to the old whole-file read.
+
+F-L3 remains a documented limitation: interruption that unwinds the worker
+pool joins in-flight readers before returning, so it can wait for whole-file
+reads (and bounded mutation retries). Cooperative cancellation would require
+a separate change; no reader is abandoned here. F-L4 is documented and tested:
+an unrelated new thread does not inherit `hash_scope` and gets a fresh
+instance. Do not globalize the cache to remove that harmless loss of reuse.
 
 The existing Git copy/commit/push sequence and raw-log disclosure filter are
 unchanged. Tests mock that transport. Compression, cloud confirmation, second
