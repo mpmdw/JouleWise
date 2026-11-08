@@ -47,6 +47,26 @@
         "ratio": 16.1
       }
     },
-    "store_check_full_s_median": 0.143
+    "store_check_full_s_median": 0.143,
+    "single_pack_load_8_to_11_median_of_3": {
+      "note": "harvest_offload.pack (origin/align/2026-11-08-harvest-off-fix) bound to finalized_manifest.v2, then this tool's adopt (no repack) and the Air verify of the consumed pack (no raw tree written)",
+      "T4": {
+        "harvest_pack_raw_mb_s": 382.8,
+        "harvest_pack_cpu_s_per_gb": 3.95,
+        "adopt_s": 0.01,
+        "air_verify_raw_mb_s": 560.91,
+        "recheck_mb_s": 1203.39,
+        "ratio": 16.08
+      },
+      "T0": {
+        "harvest_pack_raw_mb_s": 444.24,
+        "harvest_pack_cpu_s_per_gb": 3.68,
+        "adopt_s": 0.0,
+        "air_verify_raw_mb_s": 691.5,
+        "recheck_mb_s": 1432.07,
+        "ratio": 16.08
+      },
+      "finalize_manifest_s": 3.32
+    }
   }
 }

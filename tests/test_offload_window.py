@@ -188,6 +188,7 @@ class Fixture(unittest.TestCase):
                       record_manifest=self.manifest, record_manifest_sha256=self.manifest_sha, terminal=TERMINAL,
                       duplicate_root=[], codec="auto", level=3, threads=2, part_mib=1, hash_on_mbp=False,
                       deadline_epoch=None, budget_s=600.0, safety=1.5, release_older=True, rates_seed=None,
+                      harvest_pack=None, pack=True,
                       min_free_gib=0.0, pressure_compressed_local=False)
         values.update(over)
         return SimpleNamespace(**values)
@@ -417,16 +418,64 @@ class Envelope(Fixture):
             ow.parse_record_manifest(json.dumps(doc).encode(), self.tmp)
 
 
+def build_harvest_pack(root: Path, out: Path, finalized_sha: str, externals=()) -> dict:
+    """The harvest-off lane's pack format (harvest_offload._pack): payload.tar.zst + MANIFEST.json.
+    Mirrors its walk, rows and manifest keys; the end-to-end run checks against the real module."""
+    out.mkdir(parents=True)
+    rows, outside = {}, {}
+    payload = out / "payload.tar.zst"
+    with payload.open("wb") as sink:
+        proc = subprocess.Popen([ow.zstd_cli(), "-q", "-3", "-T4", "-c"], stdin=subprocess.PIPE, stdout=sink)
+        with ow.tarfile.open(fileobj=proc.stdin, mode="w|", format=ow.tarfile.PAX_FORMAT) as tar:
+            for path in sorted(root.rglob("*"), key=lambda p: p.relative_to(root).as_posix()):
+                rel = path.relative_to(root).as_posix()
+                info = os.lstat(path)
+                ti = ow.tarfile.TarInfo(rel)
+                ti.mode, ti.mtime = ow.stat.S_IMODE(info.st_mode), int(info.st_mtime)
+                if path.is_symlink():
+                    ti.type, ti.linkname = ow.tarfile.SYMTYPE, os.readlink(path)
+                    tar.addfile(ti)
+                    rows[rel] = {"link": ti.linkname}
+                elif path.is_dir():
+                    ti.type = ow.tarfile.DIRTYPE
+                    tar.addfile(ti)
+                    rows[rel] = {"dir": True, "mode": ti.mode}
+                else:
+                    raw = path.read_bytes()
+                    ti.size = len(raw)
+                    tar.addfile(ti, io.BytesIO(raw))
+                    rows[rel] = {"sha256": sha(raw), "size": len(raw), "mode": ti.mode}
+            for index, path in enumerate(externals):
+                raw = Path(path).read_bytes()
+                ti = ow.tarfile.TarInfo(f".external/{index:04d}")
+                ti.size, ti.mode = len(raw), 0o644
+                tar.addfile(ti, io.BytesIO(raw))
+                outside[ti.name] = {"path": str(path), "sha256": sha(raw), "size": len(raw), "mode": 0o644}
+        proc.stdin.close()
+        assert proc.wait() == 0
+    manifest = {"schema": ow.SCHEMA_HARVEST_PACK, "source_root": str(root), "entries": rows, "external": outside,
+                "files": sum("sha256" in r for r in rows.values()), "bytes": sum(r.get("size", 0) for r in rows.values()),
+                "payload": {"name": "payload.tar.zst", "sha256": sha(payload.read_bytes()), "size": payload.stat().st_size},
+                "zstd_level": 3, "finalized_manifest_sha256": finalized_sha}
+    (out / "MANIFEST.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+    return manifest
+
+
 class FinalizedManifestV2(Fixture):
-    """The harvest-off lane's record-bound manifest: files, literal links and every directory."""
+    """Lead ruling 2026-11-08, one pack per window: a finalized_manifest.v2 record is packed once by the
+    harvest-off lane, and the offload consumes that pack (verify, transport, second copy, release)."""
 
     def setUp(self):
         super().setUp()
         (self.record / "view").symlink_to("/Users/edr/measurement-checkout/configs")  # literal, never followed
         (self.record / "members/m01/latest").symlink_to("raw")
         (self.record / "members/m03/empty").mkdir(parents=True)
+        self.ledger = self.tmp / "mbp/checkout/runs/calibration-ledger.jsonl"
+        self.ledger.parent.mkdir(parents=True)
+        self.ledger.write_bytes(b'{"cal":1}\n')
+        self.pack_dir = self.tmp / "mbp/jw-wt/offload/w1-test/offload"
 
-    def v2(self):
+    def v2(self, inputs=()):
         entries = {}
         for path in sorted(self.record.rglob("*")):
             rel = path.relative_to(self.record).as_posix()
@@ -437,46 +486,158 @@ class FinalizedManifestV2(Fixture):
             else:
                 raw = path.read_bytes()
                 entries[rel] = {"sha256": sha(raw), "size": len(raw)}
+        bound = [self.ledger, *inputs]
         doc = {"schema": ow.SCHEMA_FINALIZED_V2, "source_root": str(self.record), "entries": entries,
-               "closure": {"links": {}, "files": {"/ledger.jsonl": {"sha256": "0" * 64, "size": 1}}, "ignored": {},
-                           "inputs": {}, "mirror": None, "ignored_policy": {}}}
+               "closure": {"links": {}, "ignored": {}, "mirror": None, "ignored_policy": {},
+                           "inputs": {str(p): {"real": str(p)} for p in bound},
+                           "files": {str(p): {"sha256": sha(p.read_bytes()), "size": p.stat().st_size} for p in bound}}}
         raw = json.dumps(doc, sort_keys=True, separators=(",", ":")).encode()  # canonical bytes, as finalize writes
         out = self.tmp / "mbp/finalized_manifest.json"
         out.write_bytes(raw)
+        self.v2_path, self.v2_sha = out, sha(raw)
         return out, sha(raw)
 
-    def test_round_trip_keeps_links_and_empty_dirs(self):
-        path, digest = self.v2()
-        self.assertEqual(self.run_offload(record_manifest=path, record_manifest_sha256=digest), 0)
-        raw = self.store / "windows/w1-test/raw"
-        self.assertEqual(os.readlink(raw / "view"), "/Users/edr/measurement-checkout/configs")
-        self.assertEqual(os.readlink(raw / "members/m01/latest"), "raw")
-        self.assertTrue((raw / "members/m03/empty").is_dir())
+    def packed(self, inputs=(), **over):
+        self.v2(inputs)
+        self.hmanifest = build_harvest_pack(self.record, self.pack_dir, over.pop("bound_to", self.v2_sha),
+                                            externals=[self.ledger])
+        return dict(record_manifest=self.v2_path, record_manifest_sha256=self.v2_sha, harvest_pack=self.pack_dir,
+                    pack=False, **over)
+
+    def test_consumes_the_harvest_pack_without_repacking(self):
+        self.assertEqual(self.run_offload(**self.packed()), 0)
+        span = self.span()
+        self.assertEqual([s["name"] for s in span["stages"]], ["release_older", "adopt_harvest_pack", "push",
+                                                                "verify"])  # release held: no second copy yet
+        self.assertEqual(span["pack_format"], ow.SCHEMA_HARVEST_PACK)
+        self.assertFalse(any((self.state / "w1-test/parts").iterdir()))  # nothing packed on this side
+        inbox = self.store / "inbox/w1-test"
+        self.assertEqual((inbox / "payload.tar.zst").read_bytes(), (self.pack_dir / "payload.tar.zst").read_bytes())
+        self.assertEqual((inbox / "MANIFEST.json").read_bytes(), (self.pack_dir / "MANIFEST.json").read_bytes())
+        self.assertEqual((inbox / "record-manifest.bin").read_bytes(), self.v2_path.read_bytes())
+        body = ow.check_sealed(json.loads((self.store / "windows/w1-test/air-receipt.json").read_text()))
+        self.assertEqual((body["links_verified"], body["dirs_verified"], body["externals_verified"]), (2, 10, 1))
+        self.assertFalse(body["extracted"])  # the harvest restore is the raw tree for v4 sessions
+        self.assertFalse((self.store / "windows/w1-test/raw").exists())
         manifest = json.loads((self.state / "w1-test/offload-manifest.json").read_text())
-        self.assertEqual(manifest["record_format"], "finalized_manifest.v2")
-        self.assertEqual(manifest["closure_external_not_offloaded"], 1)
+        self.assertEqual(manifest["closure_external_not_offloaded"], 0)
         self.confirm_second_copy()
+        names = {r["name"] for r in ow.check_sealed(json.loads(
+            (self.store / "second/w1-test" / ow.SECOND_RECEIPT).read_text()))["files"]}
+        self.assertEqual(names, {"payload.tar.zst", "MANIFEST.json", ow.MANIFEST_NAME, ow.RECORD_MANIFEST_NAME})
         result = self.offload().release()
-        self.assertEqual(result["links_deleted"], 2)
+        self.assertEqual((result["files_deleted"], result["links_deleted"]), (len(self.files), 2))
         self.assertEqual(list(self.record.iterdir()), [])
+        self.assertFalse(self.pack_dir.exists())  # payload and MANIFEST.json gone; the empty directory too
+        self.assertTrue(self.ledger.exists())     # a closure input is never deleted
+
+    def test_pack_mode_refuses_a_v2_record(self):
+        path, digest = self.v2()
+        self.assertEqual(self.run_offload(record_manifest=path, record_manifest_sha256=digest), 2)
+        self.assertIn("finalized_manifest_v2_is_packed_once_by_harvest_off", self.span()["reason"])
+
+    def test_pack_bound_to_another_finalize_is_a_mismatch(self):
+        self.assertEqual(self.run_offload(**self.packed(bound_to="e" * 64)), 3)
+        self.assertIn("harvest_pack_bound_to_another_finalize", self.span()["reason"])
+        self.assertEqual(self.transport.calls, [])
+
+    def test_pack_entries_must_equal_the_finalize(self):
+        args = self.packed()
+        doc = json.loads((self.pack_dir / "MANIFEST.json").read_text())
+        doc["entries"]["empty.txt"]["sha256"] = "f" * 64
+        (self.pack_dir / "MANIFEST.json").write_text(json.dumps(doc))
+        self.assertEqual(self.run_offload(**args), 3)
+        self.assertIn("harvest_pack_entries_differ_from_finalize", self.span()["reason"])
+
+    def test_unbound_external_is_a_mismatch(self):
+        args = self.packed()
+        doc = json.loads((self.pack_dir / "MANIFEST.json").read_text())
+        doc["external"][".external/0000"]["path"] = "/elsewhere/ledger.jsonl"
+        (self.pack_dir / "MANIFEST.json").write_text(json.dumps(doc))
+        self.assertEqual(self.run_offload(**args), 3)
+        self.assertIn("harvest_pack_external_not_bound", self.span()["reason"])
+
+    def test_corrupt_payload_is_caught_by_the_air(self):
+        args = self.packed()
+        payload = self.pack_dir / "payload.tar.zst"
+        raw = bytearray(payload.read_bytes())
+        raw[len(raw) // 2] ^= 1  # same size: only the Air's digest check can see it
+        payload.write_bytes(bytes(raw))
+        self.assertEqual(self.run_offload(**args), 3)
+        self.assertIn("commit_digest_mismatch:payload.tar.zst", self.span()["reason"])
+        self.assertFalse((self.store / "windows/w1-test/air-receipt.json").exists())
+        self.assert_nothing_deleted()
+
+    def test_member_outside_the_finalize_is_caught_by_the_air(self):
+        args = self.packed()
+        # A self-consistent pack (payload digest and MANIFEST agree) whose payload holds an extra member.
+        (self.record / "smuggled.bin").write_bytes(b"x")
+        shutil.rmtree(self.pack_dir)
+        hm = build_harvest_pack(self.record, self.pack_dir, self.v2_sha, externals=[self.ledger])
+        (self.record / "smuggled.bin").unlink()
+        hm["entries"].pop("smuggled.bin")
+        (self.pack_dir / "MANIFEST.json").write_text(json.dumps(hm, indent=2, sort_keys=True) + "\n")
+        self.assertEqual(self.run_offload(**args), 3)
+        self.assertIn("unexpected_member:smuggled.bin", self.span()["reason"])
 
     def test_unlisted_directory_refuses(self):
-        path, digest = self.v2()
+        args = self.packed()
         (self.record / "late-dir").mkdir()
-        self.assertEqual(self.run_offload(record_manifest=path, record_manifest_sha256=digest), 2)
+        self.assertEqual(self.run_offload(**args), 2)
         self.assertIn("envelope_unlisted_dir:late-dir", self.span()["reason"])
 
     def test_link_target_changed_is_a_mismatch(self):
-        path, digest = self.v2()
+        args = self.packed()
         (self.record / "view").unlink()
         (self.record / "view").symlink_to("/somewhere/else")
-        self.assertEqual(self.run_offload(record_manifest=path, record_manifest_sha256=digest), 3)
+        self.assertEqual(self.run_offload(**args), 3)
 
     def test_source_root_must_be_the_record_root(self):
-        path, digest = self.v2()
+        args = self.packed()
         other = self.tmp / "mbp/elsewhere"
         shutil.copytree(self.record, other, symlinks=True)
-        self.assertEqual(self.run_offload(record_root=other, record_manifest=path, record_manifest_sha256=digest), 2)
+        self.assertEqual(self.run_offload(record_root=other, **args), 2)
+
+    # Lead ruling 2026-11-08: terminal evidence outside the session root is a bound closure input.
+    def move_terminal_outside(self):
+        night = self.tmp / "mbp/custody/night"
+        night.mkdir(parents=True)
+        for rel in [r for r in self.files if r.startswith("custody/night/")]:
+            (night / Path(rel).name).write_bytes(self.files.pop(rel))
+            (self.record / rel).unlink()
+        (self.record / "custody/night").rmdir()
+        (self.record / "custody").rmdir()
+        return night
+
+    def test_terminal_evidence_as_closure_inputs(self):
+        night = self.move_terminal_outside()
+        args = self.packed(inputs=sorted(night.iterdir()), terminal=str(night / "result.json"))
+        self.assertEqual(self.run_offload(**args), 0)
+        self.assertEqual(self.span()["terminal"]["terminal"], str(night / "result.json"))
+
+    def test_terminal_marker_present_but_unbound_refuses(self):
+        night = self.move_terminal_outside()
+        bound = sorted(night.iterdir())
+        (night / "chain.unkilled").write_text("{}")
+        args = self.packed(inputs=bound, terminal=str(night / "result.json"))
+        self.assertEqual(self.run_offload(**args), 2)
+        self.assertIn("terminal_marker_not_in_closure", self.span()["reason"])
+
+    def test_terminal_marker_bound_but_absent_or_changed(self):
+        night = self.move_terminal_outside()
+        args = self.packed(inputs=sorted(night.iterdir()), terminal=str(night / "result.json"))
+        (night / "courier.sent").unlink()
+        self.assertEqual(self.run_offload(**args), 3)
+        self.assertIn("terminal_marker_bound_but_absent", self.span()["reason"])
+        (night / "courier.sent").write_text("{x}")  # back, other bytes
+        self.assertEqual(self.run_offload(**args), 3)
+        self.assertIn("terminal_digest_mismatch", self.span()["reason"])
+
+    def test_terminal_outside_must_be_bound(self):
+        night = self.move_terminal_outside()
+        args = self.packed(terminal=str(night / "result.json"))  # not declared as inputs
+        self.assertEqual(self.run_offload(**args), 2)
+        self.assertIn("terminal_not_in_closure", self.span()["reason"])
 
 
 class Terminal(Fixture):

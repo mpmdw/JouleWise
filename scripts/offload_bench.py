@@ -300,6 +300,87 @@ def bench_pipeline(member: Path, work: Path, *, members: int = 1, store_root: Pa
     return out
 
 
+def bench_single_pack(member: Path, work: Path, harvest_offload: Path, *, members: int = 1,
+                      store_root: Path | None = None) -> dict:
+    """One pack per window (lead ruling 2026-11-08): harvest_offload.pack (the harvest-off lane's module,
+    passed by path because it lives on that lane) bound to its finalized_manifest.v2, then this tool's
+    adopt (no repack), the Air verify of the consumed pack, and the fresh recheck."""
+    import importlib.util
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import offload_window as ow
+    spec = importlib.util.spec_from_file_location("harvest_offload", harvest_offload)
+    ho = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ho)
+    session = work / "session"
+    if not session.exists():
+        for i in range(members):
+            for path in sorted(p for p in member.rglob("*") if p.is_file()):
+                dest = session / f"m{i:02d}" / path.relative_to(member)
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(path, dest)
+        night = session / "night"
+        night.mkdir()
+        (night / "result.json").write_text(json.dumps({"plan_id": "bench", "verdict": "GO", "ended_epoch_s": 1.0}))
+        for name in ("chain.started", "chain.exited", "courier.sent"):
+            (night / name).write_text("{}")
+    raw = sum(p.stat().st_size for p in session.rglob("*") if p.is_file())
+    start = time.perf_counter()
+    finalized = ho.finalized_manifest(session)
+    finalize_s = time.perf_counter() - start
+    fbytes = json.dumps(finalized, sort_keys=True, separators=(",", ":")).encode()
+    fpath = work / "finalized_manifest.json"
+    fpath.write_bytes(fbytes)
+    fsha = hashlib.sha256(fbytes).hexdigest()
+    if store_root is not None:
+        probe, binding = ow.VolumeProbe(), work / "store-binding.json"
+        ow.init_store(store_root, binding, probe=probe, min_free_gib=20, allow_noowners=True)
+    else:
+        probe, store_root, binding = _LocalProbe(), work / "store", work / "store-binding.json"
+        ow.init_store(store_root, binding, probe=probe, mount_point=work, min_free_gib=0)
+    out = {"raw_bytes": raw, "members": members, "finalize_manifest_s": finalize_s}
+    for threads in (4, 0):
+        window = f"bench-single-t{threads}"
+        pack_dir = work / f"hpack{threads}"
+        cpu0, start = os.times(), time.perf_counter()
+        hman = ho.pack(session, pack_dir, finalized=finalized, level=3, threads=threads)
+        pack_s = time.perf_counter() - start
+        cpu1 = os.times()
+        off = ow.Offload(work / f"hstate{threads}", window)
+        start = time.perf_counter()
+        manifest = off.adopt_harvest_pack(session, fpath, fsha, pack_dir, terminal="night/result.json")
+        adopt_s = time.perf_counter() - start
+        gate = ow.Gate(binding, probe=probe)
+        gate._ready("verify")
+        inbox = store_root / "inbox" / window
+        inbox.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(pack_dir / "payload.tar.zst", inbox / "payload.tar.zst")
+        shutil.copyfile(pack_dir / "MANIFEST.json", inbox / "MANIFEST.json")
+        shutil.copyfile(fpath, inbox / ow.RECORD_MANIFEST_NAME)
+        shutil.copyfile(off.dir / ow.MANIFEST_NAME, inbox / ow.MANIFEST_NAME)
+        start = time.perf_counter()
+        gate.verify(window)
+        verify_s = time.perf_counter() - start
+        start = time.perf_counter()
+        reply = gate.receipts(window, "0" * 32)
+        recheck_s = time.perf_counter() - start
+        rechecked = sum(r["bytes"] for r in reply["fresh"]["rechecked"])
+        out[f"T{threads}"] = {
+            "compressed_bytes": hman["payload"]["size"], "ratio": raw / hman["payload"]["size"],
+            "harvest_pack_s": pack_s, "harvest_pack_raw_mb_s": raw / 1e6 / pack_s,
+            "harvest_pack_cpu_s_per_gb": ((cpu1.user + cpu1.system + cpu1.children_user + cpu1.children_system)
+                                          - (cpu0.user + cpu0.system + cpu0.children_user + cpu0.children_system))
+                                         / (raw / 1e9),
+            "adopt_s": adopt_s, "air_verify_s": verify_s, "air_verify_raw_mb_s": raw / 1e6 / verify_s,
+            "recheck_s": recheck_s, "recheck_mb_s": rechecked / 1e6 / recheck_s,
+            "manifest_pack_format": manifest["pack_format"]}
+        shutil.rmtree(pack_dir)
+        shutil.rmtree(off.dir.parent)
+        for sub in ("inbox", "windows"):
+            shutil.rmtree(store_root / sub / window)
+        (store_root / "queue" / f"{window}.json").unlink()
+    return out
+
+
 def window_model(ratio: float, pack_mb_s: float, verify_mb_s: float, recheck_mb_s: float) -> list[dict]:
     rows = []
     for name, gb in (("W1", 18.6), ("D", 26.4)):
@@ -321,6 +402,8 @@ def main(argv=None):
     parser.add_argument("--skip-codecs", action="store_true", help="only the real code path")
     parser.add_argument("--members", type=int, default=1, help="synthetic members in the pipeline record")
     parser.add_argument("--store-root", type=Path, help="bind the Air store here (a directory on the real SSD)")
+    parser.add_argument("--harvest-offload", type=Path,
+                        help="path to the harvest-off lane's harvest_offload.py: time the single-pack path instead")
     args = parser.parse_args(argv)
     args.work.mkdir(parents=True, exist_ok=True)
     gen = Generator()
@@ -339,7 +422,10 @@ def main(argv=None):
         result["cli"] = bench_cli(tar, args.work, (1, 3, 6, 9), (1, 4), args.repeats)
         result["stdlib"] = bench_stdlib(tar)
         tar.unlink()
-    if not args.skip_pipeline:
+    if args.harvest_offload is not None:
+        result["single_pack"] = bench_single_pack(member, args.work, args.harvest_offload, members=args.members,
+                                                  store_root=args.store_root)
+    elif not args.skip_pipeline:
         result["pipeline"] = bench_pipeline(member, args.work, members=args.members, store_root=args.store_root)
         p = result["pipeline"]["T4"]
         result["window_model"] = window_model(p["ratio"], p["pack_raw_mb_s"], p["air_verify_raw_mb_s"],

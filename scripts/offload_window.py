@@ -5,7 +5,9 @@ Design: docs/ops/AIR-OFFLOAD.md (the merged Opus+Sol build; the comparison is
 docs/ops/AIR-OFFLOAD-AGREEMENT.md). Standard library only (Python >= 3.11).
 
 MBP side (runs right after finalize, commit and push, at the START of cool-down):
-  run         pack -> push -> Air verify -> release older windows, inside a monotonic deadline
+  run         [adopt the harvest-off pack | pack] -> push -> Air verify -> release older windows, inside a
+              monotonic deadline. One pack per window: a finalized_manifest.v2 record is packed once by the
+              harvest-off lane (--harvest-pack); --pack is the fallback for R1 and legacy manifests only
   release     delete the MBP copy only after a FRESH Air receipt (the Air re-hashes the
               compressed parts against the MBP's nonce) AND a sealed second-copy receipt
   triage      evidence for the pre-arm `quiet_start_state` entry
@@ -73,7 +75,14 @@ SCHEMA_CLOSED = "joulewise.closed_record.v1"
 SCHEMA_HARVEST = "joulewise.harvest_window.v1"
 GATE_VERSION = 2
 WINDOW_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
-PART_NAME = re.compile(r"part-\d{4}\.tar\.(?:zst|gz)\Z")
+PART_NAME = re.compile(r"(?:part-\d{4}\.tar\.(?:zst|gz)|payload\.tar\.zst)\Z")
+# The harvest-off lane's canonical pack of a v4 session root (joulewise/align/apple/harvest_offload.py on
+# origin/align/2026-11-08-harvest-off-fix): <dir>/payload.tar.zst + <dir>/MANIFEST.json. Kept under the same
+# names on the Air, so the harvest restore (`unpack --offload <store>/inbox/<K>`) reads the verified copy.
+SCHEMA_HARVEST_PACK = "joulewise.align_v4.harvest_offload.v1"
+HARVEST_PAYLOAD, HARVEST_MANIFEST = "payload.tar.zst", "MANIFEST.json"
+HARVEST_EXTERNAL = re.compile(r"\.external/\d{4}\Z")
+EXTRA_NAMES = frozenset({HARVEST_MANIFEST})
 HEX64 = re.compile(r"[0-9a-f]{64}\Z")
 NONCE = re.compile(r"[0-9a-f]{32}\Z")
 HOST = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.@:-]*\Z")
@@ -476,6 +485,8 @@ class Envelope:
         self.dirs: set[str] = set()
         self.strict_dirs = False
         self.closure_external = 0  # v2: external inputs bound by the manifest, never moved here
+        self.closure_inputs: dict[str, dict] = {}  # v2: declared absolute inputs -> {sha256, size}
+        self.doc = None
 
     def add_file(self, rel, digest, size=None):
         rel = safe_relpath(rel)
@@ -522,6 +533,12 @@ def parse_record_manifest(raw: bytes, record_root: Path, manifest_path: Path | N
                     raise Mismatch(f"finalized_manifest_bad_entry:{rel}")
             closure = doc["closure"]
             env.closure_external = sum(len(closure.get(k) or {}) for k in ("files", "ignored"))
+            bound = closure.get("files") or {}
+            for name in closure.get("inputs") or {}:
+                row = bound.get(name)
+                if isinstance(row, dict) and isinstance(row.get("sha256"), str) and type(row.get("size")) is int:
+                    env.closure_inputs[name] = {"sha256": row["sha256"], "size": row["size"]}
+            env.doc = doc
         elif schema == SCHEMA_R1:  # joulewise/align/apple/r1_runtime.py k_harvest
             env = Envelope("r1_harvest_manifest.v1")
             require(os.path.abspath(str(doc.get("root", ""))) == str(record_root),
@@ -633,38 +650,86 @@ def check_envelope(root: Path, env: Envelope) -> dict[str, os.stat_result]:
     return infos
 
 
-def terminal_check(root: Path, rel: str, env: Envelope, now) -> dict:
-    """The window is terminal (agreement item 2): result.json names a plan, a known verdict and a
-    past ended_epoch_s; chain.started has chain.exited; no chain.unkilled; courier.sent present.
-    Every marker must be a listed file of the envelope (so its bytes are custody-bound)."""
-    rel = safe_relpath(rel)
-    require(rel in env.files, f"terminal_not_in_manifest:{rel}")
-    fd = open_nofollow(root, rel)
-    with os.fdopen(fd, "rb") as stream:
-        raw = stream.read()
-    require(sha_bytes(raw) == env.files[rel]["sha256"], f"terminal_digest_mismatch:{rel}", Mismatch)
+def terminal_check(root: Path, ref: str, env: Envelope, now) -> dict:
+    """The window is terminal (agreement item 2): result.json names a plan, a known verdict and a past
+    ended_epoch_s; chain.started has chain.exited; no chain.unkilled; courier.sent present.
+
+    `ref` is record-relative (then it and its sibling markers are files of the envelope), or absolute:
+    then it and its siblings must be declared inputs of the finalized_manifest.v2 closure, bound by bytes
+    (lead ruling 2026-11-08: the terminal evidence is inside the finalized manifest's closure). Every
+    marker's bytes are checked; a marker present but not bound refuses, one bound but absent is a mismatch."""
+    if ref.startswith("/"):
+        path = plain_path(ref)
+        bound = env.closure_inputs
+        require(str(path) in bound, f"terminal_not_in_closure:{ref}")
+
+        def read(p: Path) -> bytes:
+            row = bound[str(p)]
+            try:
+                fd = os.open(p, os.O_RDONLY | os.O_NOFOLLOW)
+            except OSError as exc:
+                raise Mismatch(f"terminal_marker_unreadable:{p}") from exc
+            with os.fdopen(fd, "rb") as stream:
+                require(stat.S_ISREG(os.fstat(stream.fileno()).st_mode), f"terminal_marker_not_regular:{p}")
+                raw = stream.read()
+            require(sha_bytes(raw) == row["sha256"] and len(raw) == row["size"], f"terminal_digest_mismatch:{p}",
+                    Mismatch)
+            return raw
+
+        def present(name):
+            p = path.parent / name
+            on_disk, declared = os.path.lexists(p), str(p) in bound
+            require(not on_disk or declared, f"terminal_marker_not_in_closure:{p}")
+            require(on_disk or not declared, f"terminal_marker_bound_but_absent:{p}", Mismatch)
+            if on_disk:
+                read(p)
+            return on_disk
+        raw, label = read(path), str(path)
+    else:
+        rel = safe_relpath(ref)
+        require(rel in env.files, f"terminal_not_in_manifest:{rel}")
+        fd = open_nofollow(root, rel)
+        with os.fdopen(fd, "rb") as stream:
+            raw = stream.read()
+        require(sha_bytes(raw) == env.files[rel]["sha256"], f"terminal_digest_mismatch:{rel}", Mismatch)
+        folder = rel.rpartition("/")[0]
+
+        def present(name):
+            p = f"{folder}/{name}" if folder else name
+            require(p not in env.links, f"terminal_marker_is_symlink:{p}")
+            return p in env.files  # the envelope check proved listed == present, unlisted == absent
+        label = rel
     try:
         result = json.loads(raw)
     except ValueError:
-        raise Refusal(f"terminal_not_json:{rel}") from None
+        raise Refusal(f"terminal_not_json:{label}") from None
     require(isinstance(result, dict) and isinstance(result.get("plan_id"), str) and result["plan_id"],
             "terminal_plan_absent")
     ended = result.get("ended_epoch_s")
     require(result.get("verdict") in TERMINAL_VERDICTS and type(ended) in (int, float) and math.isfinite(ended)
             and ended <= now(), "record_is_not_terminal")
-    folder = rel.rpartition("/")[0]
-
-    def present(name):
-        path = f"{folder}/{name}" if folder else name
-        require(path not in env.links, f"terminal_marker_is_symlink:{path}")
-        return path in env.files  # the envelope check proved listed == present, unlisted == absent
     require(not present("chain.unkilled"), "terminal_chain_unkilled")
     started, exited = present("chain.started"), present("chain.exited")
     require((started and exited) or (not started and not exited and result["verdict"] == "REFUSED"
                                      and result.get("chain_exit_code") is None and result.get("chain_sha256") is None),
             "terminal_chain_open_or_ambiguous")
     require(present("courier.sent"), "terminal_courier_not_sent")
-    return {"terminal": rel, "verdict": result["verdict"], "ended_epoch_s": ended, "plan_id": result["plan_id"]}
+    return {"terminal": label, "verdict": result["verdict"], "ended_epoch_s": ended, "plan_id": result["plan_id"]}
+
+
+def harvest_entries(entries) -> dict:
+    """harvest_offload's transport rows in finalized_manifest.v2 form (its own `_as_finalized`)."""
+    require(isinstance(entries, dict), "harvest_pack_entries_malformed", Mismatch)
+    out = {}
+    for name, row in entries.items():
+        require(isinstance(row, dict), f"harvest_pack_entry_malformed:{name}", Mismatch)
+        if "link" in row:
+            out[name] = {"link": row["link"]}
+        elif row.get("dir"):
+            out[name] = {"directory": True}
+        else:
+            out[name] = {"sha256": row.get("sha256"), "size": row.get("size")}
+    return out
 
 
 # -- interlock: the magistrate's lease and shared loop lock (agreement item 1) ---------------
@@ -766,9 +831,8 @@ class Offload:
     def journal(self, row: dict):
         append_jsonl(self.dir / "offload-journal.jsonl", {"t": self.now(), "window_id": self.window_id, **row})
 
-    # -- pack
-    def build_plan(self, record_root: Path, record_manifest: Path, record_manifest_sha256: str,
-                   codec: dict, part_bytes: int, duplicate_roots=(), terminal: str | None = None) -> dict:
+    # -- the record: closed envelope and terminal evidence (both modes)
+    def preflight(self, record_root, record_manifest, record_manifest_sha256, terminal):
         record_root = plain_path(record_root)
         require(record_root.is_dir(), "record_root_missing")
         raw = read_record_manifest(record_manifest, record_manifest_sha256)
@@ -779,6 +843,18 @@ class Offload:
             term = {"terminal": None, "skipped_for_synthetic_window": True}
         else:
             term = terminal_check(record_root, terminal, env, self.now)
+        return record_root, raw, env, infos, term
+
+    def _local_parts(self, manifest: dict) -> Path:
+        return Path(manifest.get("local_parts_dir") or self.parts_dir)
+
+    # -- pack (fallback for R1 and legacy manifests)
+    def build_plan(self, record_root: Path, record_manifest: Path, record_manifest_sha256: str,
+                   codec: dict, part_bytes: int, duplicate_roots=(), terminal: str | None = None) -> dict:
+        record_root, _, env, infos, term = self.preflight(record_root, record_manifest, record_manifest_sha256,
+                                                          terminal)
+        # Lead ruling 2026-11-08: one pack per window. A v4 session is packed once, by the harvest-off lane.
+        require(env.fmt != "finalized_manifest.v2", "finalized_manifest_v2_is_packed_once_by_harvest_off:use_--harvest-pack")
         files, parts, current, current_bytes = [], [], [], 0
         suffix = "zst" if codec["name"] == "zstd" else "gz"
         for rel in sorted(env.files):
@@ -803,7 +879,9 @@ class Offload:
                 "closure_external_not_offloaded": env.closure_external,
                 "parts": [{"name": name, "files": sum(1 for f in files if f["part"] == name),
                            "raw_bytes": sum(f["size"] for f in files if f["part"] == name)} for name in names],
-                "duplicate_roots": [str(plain_path(p)) for p in duplicate_roots]}
+                "duplicate_roots": [str(plain_path(p)) for p in duplicate_roots],
+                "pack_format": "offload_window.v2", "extra_objects": [], "externals": [],
+                "local_parts_dir": str(self.parts_dir)}
 
     def pack(self, record_root, record_manifest, record_manifest_sha256, *, codec, part_bytes=2 << 30,
              duplicate_roots=(), hash_on_mbp=False, terminal=None) -> dict:
@@ -841,6 +919,77 @@ class Offload:
         manifest = {**{k: v for k, v in plan.items() if k != "schema"}, "schema": SCHEMA_MANIFEST,
                     "parts": sealed_parts, "compressed_bytes": sum(p["bytes"] for p in sealed_parts)}
         write_once(manifest_path, canonical(manifest), "duplicate_run_conflict")
+        return manifest
+
+    # -- one pack per window: consume the harvest-off lane's pack of a finalized_manifest.v2 record
+    def adopt_harvest_pack(self, record_root, record_manifest, record_manifest_sha256, harvest_pack, *,
+                           duplicate_roots=(), terminal=None) -> dict:
+        """The record's single canonical pack is harvest_offload.pack, bound to the committed finalize
+        manifest. Its parts are consumed, never repacked: the transport manifest must carry the committed
+        pin, the same restore namespace, exactly the finalize entries and only bound external inputs; the
+        payload must have its recorded size. Its bytes are verified end to end on the Air (commit digest,
+        then every member against the pinned finalize manifest). No raw or payload hashing on the MBP."""
+        self.ensure_dirs()
+        manifest_path = self.dir / MANIFEST_NAME
+        if os.path.lexists(manifest_path):  # sealed earlier (the raw files may be released by now)
+            manifest = read_json(manifest_path)
+            require(manifest["record_manifest_sha256"] == record_manifest_sha256
+                    and manifest["record_root"] == str(plain_path(record_root))
+                    and manifest.get("pack_format") == SCHEMA_HARVEST_PACK, "duplicate_run_conflict", Mismatch)
+            return manifest
+        record_root, raw, env, infos, term = self.preflight(record_root, record_manifest, record_manifest_sha256,
+                                                            terminal)
+        require(env.fmt == "finalized_manifest.v2", "harvest_pack_needs_finalized_manifest_v2")
+        pack_dir = plain_path(harvest_pack)
+        require(pack_dir.is_dir(), "harvest_pack_missing")
+        require(pack_dir != record_root and record_root not in pack_dir.parents, "harvest_pack_inside_record")
+        try:
+            fd = os.open(pack_dir / HARVEST_MANIFEST, os.O_RDONLY | os.O_NOFOLLOW)
+        except FileNotFoundError:
+            raise Refusal("harvest_pack_manifest_missing") from None
+        with os.fdopen(fd, "rb") as stream:
+            hraw = stream.read()
+        hdoc = json.loads(hraw, object_pairs_hook=_no_duplicate_keys)
+        require(isinstance(hdoc, dict) and hdoc.get("schema") == SCHEMA_HARVEST_PACK, "harvest_pack_schema")
+        require(hdoc.get("finalized_manifest_sha256") == record_manifest_sha256,
+                "harvest_pack_bound_to_another_finalize", Mismatch)
+        require(hdoc.get("source_root") == str(record_root), "harvest_pack_namespace_differs", Mismatch)
+        require(harvest_entries(hdoc.get("entries")) == env.doc["entries"], "harvest_pack_entries_differ_from_finalize",
+                Mismatch)
+        externals = []
+        for member, row in sorted((hdoc.get("external") or {}).items()):
+            require(HARVEST_EXTERNAL.match(member) is not None and isinstance(row, dict)
+                    and env.closure_inputs.get(row.get("path")) == {"sha256": row.get("sha256"), "size": row.get("size")},
+                    f"harvest_pack_external_not_bound:{member}", Mismatch)
+            externals.append({"member": member, "path": row["path"], "sha256": row["sha256"], "size": row["size"]})
+        payload = hdoc.get("payload")
+        require(isinstance(payload, dict) and payload.get("name") == HARVEST_PAYLOAD
+                and HEX64.match(str(payload.get("sha256", ""))) is not None and type(payload.get("size")) is int,
+                "harvest_pack_payload_malformed", Mismatch)
+        info = os.lstat(pack_dir / HARVEST_PAYLOAD)
+        require(stat.S_ISREG(info.st_mode) and info.st_nlink == 1 and info.st_size == payload["size"],
+                "harvest_pack_payload_size", Mismatch)
+        files = [{"path": rel, "size": infos[rel].st_size, "mtime_ns": infos[rel].st_mtime_ns,
+                  "mode": stat.S_IMODE(infos[rel].st_mode), "sha256": env.files[rel]["sha256"], "part": HARVEST_PAYLOAD}
+                 for rel in sorted(env.files)]
+        raw_bytes = sum(f["size"] for f in files)
+        write_once(self.dir / RECORD_MANIFEST_NAME, raw, "record_manifest_changed")
+        manifest = {"schema": SCHEMA_MANIFEST, "window_id": self.window_id, "record_root": str(record_root),
+                    "record_manifest_sha256": record_manifest_sha256, "record_format": env.fmt,
+                    "pack_format": SCHEMA_HARVEST_PACK,
+                    "codec": {"name": "zstd", "impl": "harvest_offload", "level": hdoc.get("zstd_level")},
+                    "part_bytes": None, "files": files,
+                    "links": [{"path": rel, "target": env.links[rel], "part": HARVEST_PAYLOAD} for rel in sorted(env.links)],
+                    "dirs": [{"path": rel, "part": HARVEST_PAYLOAD} for rel in sorted(env.dirs)],
+                    "externals": externals, "raw_bytes": raw_bytes, "terminal": term,
+                    "closure_external_not_offloaded": env.closure_external - len(externals),
+                    "parts": [{"name": HARVEST_PAYLOAD, "sha256": payload["sha256"], "bytes": payload["size"],
+                               "raw_bytes": raw_bytes, "files": len(files)}],
+                    "extra_objects": [{"name": HARVEST_MANIFEST, "sha256": sha_bytes(hraw), "bytes": len(hraw)}],
+                    "local_parts_dir": str(pack_dir), "compressed_bytes": payload["size"],
+                    "duplicate_roots": [str(plain_path(p)) for p in duplicate_roots]}
+        write_once(manifest_path, canonical(manifest), "duplicate_run_conflict")
+        self.journal({"event": "harvest_pack_adopted", "payload_sha256": payload["sha256"], "bytes": payload["size"]})
         return manifest
 
     def _pack_part(self, record_root: Path, part: dict, rows: dict, codec: dict, hash_on_mbp: bool) -> dict:
@@ -934,12 +1083,17 @@ class Offload:
             return status  # already verified on the Air: idempotent
         need = manifest["compressed_bytes"] + (manifest["raw_bytes"] if hello.get("extract") else 0)
         require(hello.get("free_bytes", 0) - need >= hello.get("floor_bytes", 0), "air_ssd_space", TransportError)
-        uploads = [(RECORD_MANIFEST_NAME, self.dir / RECORD_MANIFEST_NAME)]
-        uploads += [(p["name"], self.parts_dir / p["name"]) for p in manifest["parts"]]
-        uploads.append((MANIFEST_NAME, self.dir / MANIFEST_NAME))  # last: its arrival marks completeness
-        for name, path in uploads:
+        local = self._local_parts(manifest)
+        # The sealed digests are sent (the MBP does not re-hash the payload); the Air's commit checks each.
+        uploads = [(RECORD_MANIFEST_NAME, self.dir / RECORD_MANIFEST_NAME, manifest["record_manifest_sha256"])]
+        uploads += [(p["name"], local / p["name"], p["sha256"]) for p in manifest["parts"]]
+        uploads += [(x["name"], local / x["name"], x["sha256"]) for x in manifest.get("extra_objects", [])]
+        uploads.append((MANIFEST_NAME, self.dir / MANIFEST_NAME, msha))  # last: its arrival marks completeness
+        for name, path, digest in uploads:
             self.check_quiet_allowed()
-            digest, size = hash_file(path)
+            info = os.lstat(path)
+            require(stat.S_ISREG(info.st_mode), f"upload_not_regular:{name}", Mismatch)
+            size = info.st_size
             remote = status.get("files", {}).get(name, {})
             if remote.get("final") == size:
                 continue  # committed earlier; commit checked the digest
@@ -972,6 +1126,8 @@ class Offload:
                 and body.get("files_verified") == len(manifest["files"])
                 and body.get("links_verified") == len(manifest["links"])
                 and body.get("dirs_verified") == len(manifest["dirs"])
+                and body.get("externals_verified", 0) == len(manifest.get("externals", []))
+                and body.get("extra_objects", []) == manifest.get("extra_objects", [])
                 and body.get("raw_bytes") == manifest["raw_bytes"]
                 and isinstance(body.get("store_volume_uuid"), str)
                 and body.get("parts") == [{"name": p["name"], "sha256": p["sha256"], "bytes": p["bytes"]}
@@ -983,6 +1139,7 @@ class Offload:
         msha, msize = self._manifest_identity()
         rsize = (self.dir / RECORD_MANIFEST_NAME).stat().st_size
         rows = [{"name": p["name"], "sha256": p["sha256"], "bytes": p["bytes"]} for p in manifest["parts"]]
+        rows += [dict(x) for x in manifest.get("extra_objects", [])]
         rows += [{"name": MANIFEST_NAME, "sha256": msha, "bytes": msize},
                  {"name": RECORD_MANIFEST_NAME, "sha256": manifest["record_manifest_sha256"], "bytes": rsize}]
         return sorted(rows, key=lambda r: r["name"])
@@ -1036,7 +1193,7 @@ class Offload:
             # Pressure rule: raw goes, the Air-verified compressed parts stay on the MBP,
             # so two verified copies still exist (MBP parts + Air SSD).
             for part in manifest["parts"]:
-                digest, size = hash_file(self.parts_dir / part["name"])
+                digest, size = hash_file(self._local_parts(manifest) / part["name"])
                 require(digest == part["sha256"] and size == part["bytes"], f"local_part_corrupt:{part['name']}", Mismatch)
             result = self._delete_raw(manifest, "pressure_compressed_local", fresh)
             write_atomic(self.dir / "raw-released.json", canonical(result))
@@ -1045,9 +1202,13 @@ class Offload:
         write_once(self.dir / "receipt-second.json", canonical(second), "second_receipt_changed")
         result = self._delete_raw(manifest, "two_verified_copies", fresh) if not os.path.lexists(
             self.dir / "raw-released.json") else read_json(self.dir / "raw-released.json")
-        for part in manifest["parts"]:
+        local = self._local_parts(manifest)
+        for name in [p["name"] for p in manifest["parts"]] + [x["name"] for x in manifest.get("extra_objects", [])]:
             with contextlib.suppress(FileNotFoundError):
-                os.unlink(self.parts_dir / part["name"])
+                os.unlink(local / name)
+        if local != self.parts_dir:
+            with contextlib.suppress(OSError):
+                os.rmdir(local)  # only when empty (the harvest lane's copy of the finalize manifest may stay)
         result = {**result, "parts_deleted": True, "rule": "two_verified_copies"}
         write_atomic(self.dir / "released.json", canonical(result))
         self.journal({"event": "released", **{k: result[k] for k in ("files_deleted", "rule")}})
@@ -1239,11 +1400,12 @@ def load_rates(state_root: Path, seed: Path | None = RATES_SEED) -> dict:
     return rates
 
 
-def predict_s(raw: int, rates: dict, done: dict, recheck_bytes: int = 0) -> float:
+def predict_s(raw: int, rates: dict, done: dict, recheck_bytes: int = 0, compressed: int | None = None) -> float:
+    compressed = raw / rates["ratio"] if compressed is None else compressed
     pack = 0 if done.get("packed") else raw / (rates["pack_raw_mb_s"] * 1e6)
-    push = 0 if done.get("verified") else raw / rates["ratio"] / (rates["push_mb_s"] * 1e6)
+    push = 0 if done.get("verified") else compressed / (rates["push_mb_s"] * 1e6)
     verify = 0 if done.get("verified") else raw / (rates["verify_raw_mb_s"] * 1e6)
-    recheck = (recheck_bytes + raw / rates["ratio"]) / (rates["recheck_mb_s"] * 1e6)
+    recheck = (recheck_bytes + compressed) / (rates["recheck_mb_s"] * 1e6)
     return pack + push + verify + recheck + 10.0  # ssh handshakes and fsyncs
 
 
@@ -1308,10 +1470,20 @@ def _run_stages(args, off, state_root, span, runner, now, mono, deadline, state_
     write_atomic(off.dir / "timing" / "offload-start.json", canonical(span))
     rates = load_rates(state_root, getattr(args, "rates_seed", RATES_SEED))
     manifest_path = off.dir / MANIFEST_NAME
-    done = {"packed": manifest_path.exists(), "verified": (off.dir / "receipt-air.json").exists()}
-    raw_bytes = read_json(manifest_path)["raw_bytes"] if done["packed"] else _raw_size(args)
+    harvest_pack = getattr(args, "harvest_pack", None)
+    done = {"packed": manifest_path.exists() or harvest_pack is not None,
+            "verified": (off.dir / "receipt-air.json").exists()}
+    compressed = None
+    if manifest_path.exists():
+        sealed_manifest = read_json(manifest_path)
+        raw_bytes, compressed = sealed_manifest["raw_bytes"], sealed_manifest["compressed_bytes"]
+    else:
+        raw_bytes = _raw_size(args)
+        if harvest_pack is not None:
+            with contextlib.suppress(OSError):
+                compressed = os.lstat(Path(harvest_pack) / HARVEST_PAYLOAD).st_size
     older_bytes = _pending_older_bytes(state_root, args.window_id) if args.release_older else 0
-    predicted = predict_s(raw_bytes, rates, done, older_bytes)
+    predicted = predict_s(raw_bytes, rates, done, older_bytes, compressed)
     span["predicted_s"] = round(predicted, 1)
     span["rates_used"] = rates
     off.check_deadline(predicted * args.safety, "predicted_overrun")
@@ -1321,10 +1493,15 @@ def _run_stages(args, off, state_root, span, runner, now, mono, deadline, state_
             state_root, args.window_id, runner, now, mono, deadline, state_probe, lease,
             args.pressure_compressed_local and _pressure(args, state_root)))))
     manifest = {}
-    span["stages"].append(_stage("pack", now, lambda: manifest.update(off.pack(
-        args.record_root, args.record_manifest, args.record_manifest_sha256,
-        codec=choose_codec(args.codec, args.level, args.threads), part_bytes=args.part_mib << 20,
-        duplicate_roots=args.duplicate_root, hash_on_mbp=args.hash_on_mbp, terminal=args.terminal))))
+    if harvest_pack is not None:  # lead ruling 2026-11-08: one pack per window, consumed as is
+        span["stages"].append(_stage("adopt_harvest_pack", now, lambda: manifest.update(off.adopt_harvest_pack(
+            args.record_root, args.record_manifest, args.record_manifest_sha256, harvest_pack,
+            duplicate_roots=args.duplicate_root, terminal=args.terminal))))
+    else:
+        span["stages"].append(_stage("pack", now, lambda: manifest.update(off.pack(
+            args.record_root, args.record_manifest, args.record_manifest_sha256,
+            codec=choose_codec(args.codec, args.level, args.threads), part_bytes=args.part_mib << 20,
+            duplicate_roots=args.duplicate_root, hash_on_mbp=args.hash_on_mbp, terminal=args.terminal))))
     if not done["verified"]:
         span["stages"].append(_stage("push", now, lambda: off.push(manifest)))
         span["stages"].append(_stage("verify", now, lambda: off.verify(manifest)))
@@ -1338,6 +1515,7 @@ def _run_stages(args, off, state_root, span, runner, now, mono, deadline, state_
         held = str(exc)
     outcome = {"outcome": "verified_on_air", "raw_bytes": manifest["raw_bytes"],
                "compressed_bytes": manifest["compressed_bytes"], "record_format": manifest["record_format"],
+               "pack_format": manifest.get("pack_format", "offload_window.v2"),
                "terminal": manifest["terminal"], "release_held": held, "older": older,
                "disk_pressure": _pressure(args, state_root)}
     _update_rates(state_root, rates, manifest, span, older_bytes)
@@ -1572,7 +1750,8 @@ class Gate:
         return make_dir(self.root / kind / valid_window(window_id))
 
     def _name(self, name: str) -> str:
-        require(name in (MANIFEST_NAME, RECORD_MANIFEST_NAME) or PART_NAME.match(name) is not None, "bad_name")
+        require(name in (MANIFEST_NAME, RECORD_MANIFEST_NAME) or name in EXTRA_NAMES or PART_NAME.match(name) is not None,
+                "bad_name")
         return name
 
     def dispatch(self, command: str, stdin) -> dict:
@@ -1605,7 +1784,7 @@ class Gate:
                 if entry.is_symlink() or not entry.is_file(follow_symlinks=False):
                     continue
                 base, partial = (entry.name[:-8], True) if entry.name.endswith(".partial") else (entry.name, False)
-                if base in (MANIFEST_NAME, RECORD_MANIFEST_NAME) or PART_NAME.match(base):
+                if base in (MANIFEST_NAME, RECORD_MANIFEST_NAME) or base in EXTRA_NAMES or PART_NAME.match(base):
                     files.setdefault(base, {})["partial" if partial else "final"] = entry.stat(
                         follow_symlinks=False).st_size
         manifest = inbox / MANIFEST_NAME
@@ -1683,9 +1862,18 @@ class Gate:
             files = {row["path"]: row for row in manifest["files"]}
             links = {row["path"]: row for row in manifest["links"]}
             dirs = {row["path"]: row for row in manifest["dirs"]}
+            externals = {row["member"]: row for row in manifest.get("externals", [])}
             for part in manifest["parts"]:
                 got, size = hash_file(inbox / part["name"])
                 require(got == part["sha256"] and size == part["bytes"], f"part_digest:{part['name']}", Mismatch)
+            for extra in manifest.get("extra_objects", []):
+                require(hash_file(inbox / self._name(extra["name"])) == (extra["sha256"], extra["bytes"]),
+                        f"extra_digest:{extra['name']}", Mismatch)
+            harvest = manifest.get("pack_format") == SCHEMA_HARVEST_PACK
+            if harvest:
+                self._check_harvest_binding(inbox, manifest, files, links, dirs, externals)
+            # A v4 session's raw tree is the harvest restore (at the session's own path); here it is verify-only.
+            extract = self.extract and not harvest
             staging = wdir / "raw.staging"
             for stale in (staging, wdir / "raw"):  # an interrupted verify leaves no receipt: redo
                 if os.path.lexists(stale):
@@ -1700,16 +1888,20 @@ class Gate:
                             name = member.name
                             require(name not in seen, f"duplicate_member:{name}", Mismatch)
                             seen.add(name)
-                            if member.isreg():
+                            if member.isreg() and name in externals:  # a bound closure input (the ledger)
+                                row = externals[name]
+                                self._check_member(tar, member, {"path": name, "sha256": row["sha256"],
+                                                                 "size": row["size"]}, staging, False)
+                            elif member.isreg():
                                 row = files.get(name)
                                 require(row is not None and row["part"] == part["name"], f"unexpected_member:{name}",
                                         Mismatch)
-                                self._check_member(tar, member, row, staging)
+                                self._check_member(tar, member, row, staging, extract)
                             elif member.issym():
                                 row = links.get(name)
                                 require(row is not None and row["part"] == part["name"]
                                         and member.linkname == row["target"], f"unexpected_link:{name}", Mismatch)
-                                if self.extract:
+                                if extract:
                                     fd, leaf = parent_fd(staging, name, make_dirs=True)
                                     try:
                                         os.symlink(row["target"], leaf, dir_fd=fd)
@@ -1718,7 +1910,7 @@ class Gate:
                             elif member.isdir():
                                 require(name in dirs and dirs[name]["part"] == part["name"], f"unexpected_dir:{name}",
                                         Mismatch)
-                                if self.extract:
+                                if extract:
                                     fd, leaf = parent_fd(staging, name, make_dirs=True)
                                     try:
                                         with contextlib.suppress(FileExistsError):
@@ -1729,30 +1921,53 @@ class Gate:
                                         os.close(fd)
                             else:
                                 raise Mismatch(f"unexpected_member_type:{name}")
-            require(seen == set(files) | set(links) | set(dirs), "missing_members", Mismatch)
-            if self.extract:
+            require(seen == set(files) | set(links) | set(dirs) | set(externals), "missing_members", Mismatch)
+            if extract:
                 os.replace(staging, wdir / "raw")
             else:
                 shutil.rmtree(staging)
             body = {"schema": SCHEMA_AIR, "window_id": window_id, "offload_manifest_sha256": msha,
                     "record_manifest_sha256": manifest["record_manifest_sha256"],
                     "files_verified": len(files), "links_verified": len(links), "dirs_verified": len(dirs),
+                    "externals_verified": len(externals), "extra_objects": manifest.get("extra_objects", []),
+                    "pack_format": manifest.get("pack_format", "offload_window.v2"),
                     "raw_bytes": sum(r["size"] for r in files.values()),
                     "parts": [{"name": p["name"], "sha256": p["sha256"], "bytes": p["bytes"]}
                               for p in manifest["parts"]],
                     "store_volume_uuid": self.store.doc["volume_uuid"], "store_id": self.store.doc["store_id"],
-                    "extracted": self.extract, "verified_epoch_s": self.now(), "host": socket.gethostname()}
+                    "extracted": extract, "verified_epoch_s": self.now(), "host": socket.gethostname()}
             receipt = sealed(body)
             write_atomic(receipt_path, canonical(receipt))
             write_atomic(self.root / "queue" / (window_id + ".json"),
                          canonical({"window_id": window_id, "offload_manifest_sha256": msha}))
             return receipt
 
-    def _check_member(self, tar, member, row, staging: Path):
+    def _check_harvest_binding(self, inbox, manifest, files, links, dirs, externals):
+        """Independent of the MBP's offload manifest: the pinned finalize manifest and the harvest transport
+        manifest must describe exactly the rows this verify checks every member against."""
+        env = parse_record_manifest((inbox / RECORD_MANIFEST_NAME).read_bytes(), Path(manifest["record_root"]))
+        require(env.fmt == "finalized_manifest.v2"
+                and {k: (v["sha256"], v["size"]) for k, v in env.files.items()}
+                == {k: (r["sha256"], r["size"]) for k, r in files.items()}
+                and env.links == {k: r["target"] for k, r in links.items()} and env.dirs == set(dirs),
+                "offload_manifest_differs_from_finalize", Mismatch)
+        hdoc = json.loads((inbox / HARVEST_MANIFEST).read_bytes())
+        require(isinstance(hdoc, dict) and hdoc.get("schema") == SCHEMA_HARVEST_PACK
+                and hdoc.get("finalized_manifest_sha256") == manifest["record_manifest_sha256"]
+                and hdoc.get("source_root") == manifest["record_root"]
+                and harvest_entries(hdoc.get("entries")) == env.doc["entries"]
+                and (hdoc.get("payload") or {}).get("sha256") == manifest["parts"][0]["sha256"]
+                and {m: (r.get("path"), r.get("sha256"), r.get("size")) for m, r in (hdoc.get("external") or {}).items()}
+                == {m: (r["path"], r["sha256"], r["size"]) for m, r in externals.items()}
+                and all(env.closure_inputs.get(r["path"]) == {"sha256": r["sha256"], "size": r["size"]}
+                        for r in externals.values()),
+                "harvest_manifest_differs_from_finalize", Mismatch)
+
+    def _check_member(self, tar, member, row, staging: Path, extract: bool):
         source = tar.extractfile(member)
         digest, size = hashlib.sha256(), 0
         out = None
-        if self.extract:
+        if extract:
             fd = open_nofollow(staging, row["path"], os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644, make_dirs=True)
             out = os.fdopen(fd, "wb")
         try:
@@ -1785,6 +2000,7 @@ class Gate:
         inbox = self.root / "inbox" / window_id
         rechecked = []
         expected = {p["name"]: (p["sha256"], p["bytes"]) for p in body["parts"]}
+        expected.update({x["name"]: (x["sha256"], x["bytes"]) for x in body.get("extra_objects", [])})
         for name in sorted([*expected, MANIFEST_NAME, RECORD_MANIFEST_NAME]):
             got, size = hash_file(inbox / name, nocache=True)
             if name in expected:
@@ -1834,7 +2050,8 @@ def _pending_second(store: Store):
 
 
 def _custody_names(air: dict) -> list[str]:
-    return sorted([MANIFEST_NAME, RECORD_MANIFEST_NAME] + [p["name"] for p in air["parts"]])
+    return sorted([MANIFEST_NAME, RECORD_MANIFEST_NAME] + [p["name"] for p in air["parts"]]
+                  + [x["name"] for x in air.get("extra_objects", [])])
 
 
 def _write_second_receipt(store: Store, window_id: str, body: dict):
@@ -2029,9 +2246,15 @@ def main(argv=None) -> int:
     run.add_argument("--record-manifest", type=Path, required=True)
     run.add_argument("--record-manifest-sha256", required=True)
     term = run.add_mutually_exclusive_group(required=True)
-    term.add_argument("--terminal", help="record-relative result.json, e.g. night/result.json")
+    term.add_argument("--terminal", help="record-relative result.json (e.g. night/result.json), or an absolute "
+                                         "path bound as an input of the finalized_manifest.v2 closure")
     term.add_argument("--no-terminal-check", dest="terminal", action="store_const", const=None,
                       help=f"synthetic windows only (ids starting {NO_TERMINAL_PREFIXES})")
+    mode = run.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--harvest-pack", type=Path,
+                      help="finalized_manifest.v2 records: the harvest-off lane's pack directory "
+                           "(payload.tar.zst + MANIFEST.json), consumed as is, never repacked")
+    mode.add_argument("--pack", action="store_true", help="fallback for R1 and legacy manifests: pack here")
     run.add_argument("--duplicate-root", action="append", default=[], type=Path)
     run.add_argument("--codec", choices=("auto", "zstd-cli", "zstd-stdlib", "gzip"), default="auto")
     run.add_argument("--level", type=int, default=3)

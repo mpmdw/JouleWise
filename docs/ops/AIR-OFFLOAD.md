@@ -6,7 +6,7 @@ Opus build (`ops/2026-11-08-air-offload-opus` @ `7e0c264e0`) with the Sol build'
 This document replaces `AIR-OFFLOAD-opus.md` (deleted here) and Sol's `AIR-OFFLOAD.md` (on its own branch).
 
 Code: `scripts/offload_window.py` (standard library only, Python >= 3.11), tests `tests/test_offload_window.py`
-(86 tests); operator setup `scripts/offload_setup_air.sh` (sudo, Air) and `scripts/offload_setup_mbp.sh` (no sudo,
+(96 tests); operator setup `scripts/offload_setup_air.sh` (sudo, Air) and `scripts/offload_setup_mbp.sh` (no sudo,
 MBP); benchmark `scripts/offload_bench.py`; seed rates `configs/ops/air_offload_rates.json`.
 
 **Status: built and tested off the MBP; nothing installed.** No ssh, no MBP contact, no account, key or
@@ -16,10 +16,16 @@ LaunchAgent was created. The operator steps in §3 need Ed (sudo on the Air) and
 
 - **Where it runs:** on the MBP at the start of cool-down, after finalize, commit and push, and only then. It
   refuses to start, or stops resumably, so that all of its activity ends at least 120 s before the dwell.
-- **Cost per D window (26.4 GB raw), conservative seed rates:** MBP busy about 86 s (pack about 53 s, push of
-  about 1.65 GB about 33 s at 50 MB/s); Air verify about 59 s; fresh recheck of the previous window about 2 s. End
-  to end about 2.6 min; admission estimate (×1.5) about 4 min, against a 15-25 min cool-down. Measured on the real
-  SSD in §8.
+- **One pack per window (lead ruling 2026-11-08).** An ALIGN v4 session (a `finalized_manifest.v2` record) is
+  packed once, by the harvest-off lane (`harvest_offload.pack`, step 1c of its runbook). This tool **consumes that
+  pack** (`run --harvest-pack <dir>`): it checks it against the committed finalize digest, then transports,
+  second-copies, receipts and releases it. It never repacks. Its own pack (`run --pack`) remains only for R1 and
+  legacy manifests, and refuses a v2 record.
+- **Cost per D window (26.4 GB raw), measured with the single pack (§8):** the harvest-off pack is about 69 s
+  (zstd -3 -T4, it hashes every file as it packs); this tool then adds on the MBP about 0.1 s of metadata checks and
+  the push of about 1.65 GB (about 33 s at 50 MB/s, 6 s at 300 MB/s). MBP pack + push: about 102 s, against about
+  143 s with two packs. The Air verifies the consumed pack in about 47 s and writes no second raw tree. Admission
+  estimate (×1.5) for this tool's part: about 2.2 min, against a 15-25 min cool-down.
 - **Custody:** the MBP deletes a window only after (1) a sealed Air receipt that every raw file matched the
   record's own sha256 digests, (2) a sealed second-copy receipt (default: iCloud, server-confirmed by an
   evict/re-download/sha256 round trip, off-site), and (3) a **fresh** receipt: at release time the Air re-hashes the
@@ -37,13 +43,13 @@ LaunchAgent was created. The operator steps in §3 need Ed (sudo on the Air) and
 | # | Item | How it is done here |
 |---|---|---|
 | 1 | Interlock (Sol) | `Lease` client: takes the magistrate's **existing** persistent loop lock (`flock`, never creates the file), reads the lease `joulewise.air_offload_gate.v1` and the watchdog state before every stage (each part, each upload, verify, release): `phase == cooldown`, not armed or measuring, same `generation`, same `record_manifest_sha256`, `record_committed` and `record_pushed`, `fenced_checkouts == []`. Its deadline is `min(quiet_dwell, expires) − 120 s`. The probe always runs too. The span records `interlock.mode` (`probe_only` or `lease+loop_lock+probe`) |
-| 2 | Terminal evidence (Sol) | `--terminal <record-relative result.json>` is required. Before pack: the file is listed and its bytes match the manifest digest; `plan_id`, a known verdict (`GO`, `ABORTED`, `COLLECTED`, `CHAIN_STOPPED`, `REFUSED`) and a past `ended_epoch_s`; `chain.started` has `chain.exited` (or a zero-capture `REFUSED` with neither); no `chain.unkilled`; `courier.sent`. Every marker must be a listed regular file. `--no-terminal-check` is accepted only for window ids starting `smoke-` or `bench-` |
+| 2 | Terminal evidence (Sol) | `--terminal <record-relative result.json>` (or an absolute path, see below) is required. Before pack: the file is listed and its bytes match the manifest digest; `plan_id`, a known verdict (`GO`, `ABORTED`, `COLLECTED`, `CHAIN_STOPPED`, `REFUSED`) and a past `ended_epoch_s`; `chain.started` has `chain.exited` (or a zero-capture `REFUSED` with neither); no `chain.unkilled`; `courier.sent`. Every marker must be a listed regular file. `--no-terminal-check` is accepted only for window ids starting `smoke-` or `bench-` |
 | 3 | Complete envelope (Sol) | The record tree must equal the manifest's envelope. Unlisted file, unlisted symlink, unlisted directory (v2 lists all), special file, hard link (`st_nlink != 1`), `.git` or `restricted` member: exit 2, before any pack or network. The walk never enters a `.git` or `restricted` directory. A listed entry that is missing, of another type, another size or another link target: exit 3. A manifest that lives inside the record (for example `ssd-closed.json`) travels as a file under its pinned digest |
 | 4 | Fresh receipts, cheap (Sol, Opus cost) | `receipts W NONCE`: the Air re-hashes the custody objects (the compressed parts, `offload-manifest.json`, `record-manifest.bin`, read with `F_NOCACHE`), re-reads and re-checks the sealed second-copy receipt, and returns a sealed fresh receipt bound to the nonce and both receipt hashes. The raw tree is a derived convenience and is not re-hashed. A replayed answer or a decayed part refuses (exit 3) and nothing is deleted |
 | 5 | Confinement (Sol) | `scripts/offload_setup_air.sh`: dedicated hidden non-admin account `jw-offload`, root-owned gate script in `/usr/local/libexec/jw-offload/`, root-owned `authorized_keys` and binding in `/usr/local/etc/jw-offload/`, an sshd `Match User jw-offload` block (`ForceCommand`, publickey only, no TTY or forwarding). MBP ssh uses `-F /dev/null`, an explicit `UserKnownHostsFile`, `GlobalKnownHostsFile=/dev/null`, `StrictHostKeyChecking=yes`, `BatchMode` |
 | 6 | Deadline mechanism (Sol) with the Opus margin | The deadline is held on the monotonic clock (a wall-clock step cannot extend it). A `SIGALRM` backstop at the deadline interrupts blocking I/O; `SIGTERM` unwinds the same way; both exit 4 with state kept. ssh and zstd run in their own process groups, killed as a group on any exit path. The 120 s pre-dwell margin and the `rates.json` × 1.5 admission are kept |
 | 7 | Deletion journal (Sol) | `deleting.json` (state `deleting`, the inventory of every file and link to delete with size and mtime or link text, the fresh receipt's hash) is written outside the record before the first unlink, and set to `deleted` at the end. A resumed release re-checks every remaining entry and refuses any new file in the record |
-| 8 | Manifest formats | `joulewise.align_v4.finalized_manifest.v2` (the harvest-off lane), `joulewise.ssd_closed_record.v1`, `joulewise.closed_record.v1`, `joulewise.harvest_window.v1`, `joulewise.align.r1_harvest_manifest.v1`, `SHA256SUMS`. Anything else, including schema-less JSON, refuses |
+| 8 | Manifest formats | `joulewise.align_v4.finalized_manifest.v2` (the harvest-off lane; consumed with its pack, §1a), `joulewise.ssd_closed_record.v1`, `joulewise.closed_record.v1`, `joulewise.harvest_window.v1`, `joulewise.align.r1_harvest_manifest.v1`, `SHA256SUMS`. Anything else, including schema-less JSON, refuses |
 | 9 | Second copy | Default `air-icloud` (round-trip proof, off-site, evicted afterwards; holds when the Air's internal disk is below 15 GiB free). Allowed alternative `air-second-disk` onto a bound store whose volume UUID differs **and** which shares no APFS physical store with the primary (probed live with diskutil). Either counts only with a sealed receipt that matches the custody objects and names the primary store's volume UUID |
 
 Kept from the Opus build without change: zstd -3 -T4 in tar parts (2 GiB raw), no raw hashing on the MBP by
@@ -52,11 +58,44 @@ the 120 s pre-dwell margin, the default pressure policy `hold` with opt-in `--pr
 append-only resumable `put`/`commit` transport, and the timing receipts `timing/offload-start.json` and
 `timing/offload-span.json` (`kind: backup`) plus the `triage` command for `quiet_start_state`.
 
-**finalized_manifest.v2 specifics.** The record root must be the manifest's `source_root`. Files are checked by
-sha256 and size, symlinks are carried literally as tar symlink members (the Air checks the link text and recreates
-the link in its raw tree; nothing is ever written through a link), every directory is listed and recreated
-(empty ones too). The closure's external inputs (for example the calibration ledger) live outside the record: they
-are counted in the offload manifest (`closure_external_not_offloaded`), never moved and never deleted.
+### 1a. finalized_manifest.v2 records: one pack, consumed (lead ruling 2026-11-08)
+
+The harvest-off pack directory (`$OUT/offload`: `payload.tar.zst` + `MANIFEST.json`, schema
+`joulewise.align_v4.harvest_offload.v1`) is the record's only pack. `run --harvest-pack $OUT/offload` does, with
+no raw or payload hashing on the MBP:
+
+1. The record checks as for any record: the finalize manifest's bytes match the pinned digest `H`; the session
+   root equals its `source_root` and is exactly its envelope (every file, literal link and directory); the terminal
+   evidence holds.
+2. The transport manifest is checked against the finalize manifest, as `harvest_offload.unpack` does:
+   `finalized_manifest_sha256 == H`, the same `source_root`, its entries equal the finalize entries exactly, every
+   `.external/NNNN` member is a declared closure input with the bound bytes, and the payload has its recorded size.
+   Any difference is exit 3 and nothing is sent.
+3. The payload, `MANIFEST.json`, the finalize manifest (as `record-manifest.bin`) and the offload manifest are
+   pushed under their sealed digests. The Air's `commit` re-hashes each one.
+4. The Air verify re-derives every expected row from the pinned finalize manifest (not from the MBP's offload
+   manifest), re-checks `MANIFEST.json` against it, then streams the payload and checks every member: files by
+   sha256 and size, links by text, directories, and the bound external inputs. A member outside the finalize
+   manifest is exit 3. It writes **no raw tree**: for a v4 session the raw tree is the harvest restore at the
+   session's own path.
+5. The custody objects (payload, `MANIFEST.json`, both manifests) are second-copied, rechecked fresh at release
+   and, after two copies, deleted from the pack directory together with the session's files (the directory goes if
+   empty). The closure's external inputs (the calibration ledger) are never moved here and never deleted.
+
+**The harvest restore reads the verified copy in place.** The store keeps the harvest names, so on the Air:
+`$RUN unpack --offload /Volumes/JW-EXT/jw-offload/inbox/$K --finalized-manifest
+/Volumes/JW-EXT/jw-offload/inbox/$K/record-manifest.bin --finalized-sha256 $H`. This replaces the separate
+transfer of `$OUT/offload` in the harvest-off runbook's step 1d. Checked end to end with the real
+`harvest_offload.unpack` (§9).
+
+**Terminal evidence (lead ruling 2026-11-08).** `result.json`, `chain.*` and `courier.sent` must be inside the
+finalize manifest's closure: either files of the session root (`--terminal night/result.json`, record-relative),
+or, if the native layout puts them outside the session root, declared as external inputs of
+`finalized_manifest.v2` by the harvest-off finalize (bound by bytes), and named by absolute path
+(`--terminal /abs/.../night/result.json`). Then every marker that exists on disk must be a bound input with
+matching bytes, and every bound marker must exist. A marker present but unbound refuses (exit 2), a bound marker
+absent or changed is exit 3. The magistrate's N1 native census confirms which layout is real; declaring the inputs
+is a harvest-off finalize change, not this tool's.
 
 ## 2. Design
 
@@ -146,8 +185,8 @@ point, volume UUID, store id and free floor.
 
 | When | MBP step | Notes |
 |---|---|---|
-| Window terminal | finalize, hash, commit and push (unchanged), including the record manifest whose sha256 the record pins | For ALIGN v4 the harvest-off lane's `finalize-manifest` (`finalized_manifest.v2`) is that manifest |
-| Cool-down start `t_c` | `offload_window.py run --state-root S --window-id K --record-root R --record-manifest M --record-manifest-sha256 H --terminal <R-relative result.json> --deadline-epoch <planned dwell start − 120>` | One call; prints the span. Exit 0 = verified on the Air. Without a planned dwell start, `t_c + 900 − 120` is safe |
+| Window terminal | finalize, hash, commit and push (unchanged), including the record manifest whose sha256 the record pins | For ALIGN v4: the harvest-off runbook's 1b (`finalize-manifest`, digest `H`) and 1c (`pack --threads 4`, the single pack; the CLI's default `--threads 0` uses every core) |
+| Cool-down start `t_c` | v4: `offload_window.py run --state-root S --window-id K --record-root <session root> --record-manifest $OUT/finalized_manifest.json --record-manifest-sha256 H --harvest-pack $OUT/offload --terminal <result.json> --deadline-epoch <planned dwell start − 120>`. R1 or legacy: the same with `--pack` instead of `--harvest-pack` | One call; prints the span. Exit 0 = verified on the Air. Without a planned dwell start, `t_c + 900 − 120` is safe |
 | Right after | Commit `S/K/timing/offload-span.json` into the record branch | `window_timing --span offload=<path>` reads it; `kind: backup` maps to `offload` |
 | Pre-arm checks | `offload_window.py triage --state-root S --window-id K --dwell-start-epoch <planned>` | Evidence for `quiet_start_state`; exit 2 if an offload is running, started without an end receipt, or ended within 120 s of the dwell |
 | Dwell, arm | unchanged | |
@@ -209,7 +248,8 @@ lease is the primary exclusion and the probe a second opinion. The contract (fro
 | 5 `air:store_*`, `air_ssd_space`, `transport_*` | Air asleep or unreachable, SSD unmounted or a different volume, below the free floor | The MBP keeps the window; the next turnaround resumes. A UUID mismatch needs Ed |
 | 6 `io_error` | e.g. ENOSPC on the MBP | Disk guard; the arm's own disk checks still apply |
 
-Restoring needs no code: `zstd -dc part-NNNN.tar.zst | tar -x` on any Mac, then check against the record manifest
+Restoring needs no code: `zstd -dc part-NNNN.tar.zst | tar -x` (or `payload.tar.zst` for a v4 session; the
+harvest-off `unpack` is the checked route) on any Mac, then check against the record manifest
 (done in the end-to-end test, §9).
 
 ## 8. Measured rates (2026-11-08, Apple M4 Air, real SSD)
@@ -228,6 +268,22 @@ real JW-EXT volume by diskutil UUID. The Air was shared with other lanes: one ru
 | Receipt recheck, cold (parts written with `F_NOCACHE`, re-read from the SSD) | — | 953 MB/s | 900 |
 | Compression ratio (synthetic; real captures compress better) | 16.1 | 16.1 | 16.0 |
 | Full store check (`diskutil` UUID probe), per `hello`/`stat`/`verify`/`receipts` call | — | 0.14 s | — |
+
+**The single pack (lead ruling 2026-11-08)**, `offload_bench.py ... --harvest-offload <harvest_offload.py>`: the
+harvest-off lane's real `pack` on the same 8 members (finalize manifest written first, 3.3 s), then this tool's
+adopt and the Air verify of the consumed pack. Median of 3 at load 8-11:
+
+| Stage | zstd -3 -T4 | zstd -3 -T0 (the harvest CLI default) |
+|---|---|---|
+| `harvest_offload.pack` (MBP; it hashes every file while packing) | 383 MB/s raw, 3.95 CPU-s/GB | 444 MB/s, 3.68 CPU-s/GB |
+| This tool's adopt (envelope scan, transport manifest against the finalize manifest) | 0.01 s | 0.01 s |
+| Air verify of the consumed pack (payload re-hash, decompress, every member; no raw tree written) | 561 MB/s raw | 692 MB/s raw |
+| Fresh recheck | 1,203 MB/s | 1,432 MB/s |
+
+**D window (26.4 GB) on the MBP, re-measured with the single pack** (the M3 Max will differ; the next real window's
+span measures it): harvest pack about 69 s (T4) + this tool's adopt about 0.1 s + push about 33 s at 50 MB/s = about
+**102 s**, against about 143 s with two packs (harvest pack 69 s + this tool's pack 41 s at the loaded 646 MB/s +
+push 33 s). The pack time belongs to the harvest-off lane's step 1c; this tool's own MBP work is the push.
 
 The Opus build's earlier figures (pack 490 MB/s, verify 265 MB/s) were taken on a busier Air; all of these vary
 about 3-4x with load, so the seed uses the loaded medians. Push is not measured (Wi-Fi) and stays at 40 MB/s. The
@@ -252,11 +308,20 @@ cool-down lengthens measurably.
 
 ## 9. Evidence
 
-- `TMPDIR=/private/tmp/... python3.13 -B -m unittest tests.test_offload_window`: 86 tests, OK (happy path,
+- `TMPDIR=/private/tmp/... python3.13 -B -m unittest tests.test_offload_window`: 96 tests, OK (including the
+  consumed harvest pack: no repack, pack bound to another finalize, entries or externals that differ, a corrupt
+  payload, a smuggled member, and terminal evidence as bound closure inputs) (happy path,
   envelope, v2 links and dirs, terminal evidence, lease and loop lock, store binding, deadline incl. the `SIGALRM`
   backstop and process-group kill, the two-copy rule with fresh receipts, the deletion journal, the second-disk
   alternative, the local subprocess gate, the setup scripts' syntax). `tests.test_offload_bench`: OK.
-- End to end on the real SSD (`/Volumes/JW-EXT/jw-offload-test`, removed afterwards): a 1.01 GB synthetic terminal
+- End to end with the single pack (same setup as below): the real `harvest_offload.finalized_manifest(...,
+  inputs=(ledger,))` and `harvest_offload.pack(threads=4, external=(ledger,))`; `run --pack` refused the v2
+  record; `run --harvest-pack` verified it on the Air in 2.25 s (22 files, 2 links, 15 dirs, 1 external; no raw tree
+  extracted); a payload decayed after the receipts made release fail closed (`air_part_decayed:payload.tar.zst`);
+  release then deleted the session's files and links and the consumed pack, left the ledger, and the real
+  `harvest_offload.unpack` restored the session from `/…/inbox/e2e-w1` at its own path with every digest
+  matching.
+- End to end on the real SSD (`/Volumes/JW-EXT/jw-offload-test`, removed afterwards), first round, own pack: a 1.01 GB synthetic terminal
   record with a manifest written by the harvest-off lane's own `harvest_offload.finalized_manifest()`, the real
   CLI (`run`, `release`, `triage`, `init-store`, `air-second-disk`), the gate as a real subprocess with the
   forced-command protocol (`--air-local-binding`), the real diskutil probe. Results: verified on the Air in 5.1 s;
@@ -274,14 +339,12 @@ cool-down lengthens measurably.
 
 1. **Ed:** §3a on the Air (sudo), including Remote Login; this also enables ownership on JW-EXT.
 2. **Magistrate:** §3b on the MBP, then the smoke test (§3b step 3) and one iCloud round trip on it.
-3. **Lead ruling on the terminal path for ALIGN v4 records.** `--terminal` must name the record-relative
-   `result.json` whose `chain.*` and `courier.sent` siblings are in the same manifest. For a v4 session root this has
-   not been checked against a real tree (not readable from here); if the night custody lives outside the session
-   root, the record root or the manifest must include it, or the run refuses (fail closed).
-4. **One pack per window.** The harvest-off lane's step 1c also packs the session root (zstd -3) for its own Air
-   restore. Running both doubles the MBP's pack time in cool-down (about +53 s for D). Either point this tool at the
-   same session root and let the harvest restore read from the Air's verified raw tree, or carry the harvest-off
-   package as the record; that is a lead decision across the two lanes.
+3. **Terminal layout (ruled):** the magistrate's N1 native census confirms where `result.json`, `chain.*` and
+   `courier.sent` live. If outside the session root, the harvest-off finalize declares them as external inputs
+   (§1a); until then the run refuses clearly (`terminal_not_in_manifest` / `terminal_not_in_closure`).
+4. **One pack (ruled, built):** the harvest-off runbook's step 1c should pass `--threads 4` (its CLI default is
+   `--threads 0`, every core), and its step 1d becomes `run --harvest-pack` here plus the in-place `unpack` (§1a).
+   Both are harvest-off runbook edits.
 5. **Magistrate wiring of the lease and loop lock** (§5): a magistrate change with its own review. Until then the
    probe is the active exclusion.
 6. **Real-data calibration:** the first real offload's span and `rates.json` replace the seed rates; record the
