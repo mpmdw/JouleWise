@@ -1,0 +1,13 @@
+{"argv": ["/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude"], "exit_code": 1, "monotonic_ns": 2113757189920166, "refusal": null, "stderr": "", "stdout": ""}
+{"argv": ["/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude"], "exit_code": 1, "monotonic_ns": 2113978823249625, "refusal": null, "stderr": "", "stdout": ""}
+{"argv": ["/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude"], "exit_code": 1, "monotonic_ns": 2113979674691625, "refusal": null, "stderr": "", "stdout": ""}
+{"argv": ["/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude"], "exit_code": 1, "monotonic_ns": 2114009717534291, "refusal": null, "stderr": "", "stdout": ""}
+{"argv": ["/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude"], "exit_code": 1, "monotonic_ns": 2114039730060916, "refusal": null, "stderr": "", "stdout": ""}
+{"argv": ["/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude"], "exit_code": 1, "monotonic_ns": 2114069738739083, "refusal": null, "stderr": "", "stdout": ""}
+{"argv": ["/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude"], "exit_code": 1, "monotonic_ns": 2114099750648291, "refusal": null, "stderr": "", "stdout": ""}
+{"argv": ["/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude"], "exit_code": 1, "monotonic_ns": 2114129757802000, "refusal": null, "stderr": "", "stdout": ""}
+{"argv": ["/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude"], "exit_code": 1, "monotonic_ns": 2114159769936541, "refusal": null, "stderr": "", "stdout": ""}
+{"argv": ["/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude"], "exit_code": 1, "monotonic_ns": 2114189778370541, "refusal": null, "stderr": "", "stdout": ""}
+{"argv": ["/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude"], "exit_code": 1, "monotonic_ns": 2114219789434250, "refusal": null, "stderr": "", "stdout": ""}
+{"argv": ["/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude"], "exit_code": 1, "monotonic_ns": 2114249789741000, "refusal": null, "stderr": "", "stdout": ""}
+{"argv": ["/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude"], "exit_code": 1, "monotonic_ns": 2114279798151875, "refusal": null, "stderr": "", "stdout": ""}

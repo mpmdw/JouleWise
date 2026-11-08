@@ -1,0 +1,66 @@
+{
+  "call": 1,
+  "ran_by": "arm",
+  "results": [
+    {
+      "argv": [
+        "/Users/edr/night-custody/measurement/JouleWise-measurement-20261102-align-pilot2/.venv/bin/python",
+        "-B",
+        "/Users/edr/night-custody/measurement/JouleWise-measurement-20261102-align-pilot2/scripts/collect_window_flags.py",
+        "--stage",
+        "arm",
+        "--custody",
+        "/Users/edr/night-align/r1-20261108T085636Z",
+        "--repo",
+        "/Users/edr/night-custody/measurement/JouleWise-measurement-20261102-align-pilot2",
+        "--pack",
+        "/Users/edr/night-align/r1-20261108T085636Z/align-r1-runtime",
+        "--plan-id",
+        "align-r1-20261108T0917Z",
+        "--attempt",
+        "1",
+        "--h-claim",
+        "20e9edbc446a9f89a68badc1bd32bb0934cbb86d",
+        "--chain",
+        "/Users/edr/night-align/r1-20261108T085636Z/chain.zsh",
+        "--chain-sidecar",
+        "/Users/edr/night-align/r1-20261108T085636Z/chain.zsh.sha256",
+        "--ledger",
+        "/Users/edr/night-custody/measurement/JouleWise-measurement-20261102-align-pilot2/runs/calibration_observation_ledger.jsonl",
+        "--head-pin",
+        "/Users/edr/night-custody/measurement/JouleWise-measurement-20261102-align-pilot2/configs/calibration/calibration_ledger_head.json",
+        "--session-id",
+        "align-r1-20261108T0917Z",
+        "--catalog",
+        "/Users/edr/night-custody/measurement/JouleWise-measurement-20261102-align-pilot2/configs/campaigns/v5_claim_25g83/flag_catalog.json",
+        "--sealed-inventory",
+        "/Users/edr/night-custody/measurement/JouleWise-measurement-20261102-align-pilot2/configs/campaigns/v5_claim_25g83/sealed_inventory.json",
+        "--identity-pins",
+        "/Users/edr/night-custody/measurement/JouleWise-measurement-20261102-align-pilot2/configs/campaigns/v5_claim_25g83/identity_pins.json"
+      ],
+      "elapsed_s": 0.499662209,
+      "error": null,
+      "finished": {
+        "monotonic_ns": 2113758182515125,
+        "monotonic_raw_ns": 2113758182514750,
+        "wall_ns": 1794129421198732000
+      },
+      "name": "flags.arm",
+      "returncode": 0,
+      "started": {
+        "monotonic_ns": 2113757682852916,
+        "monotonic_raw_ns": 2113757682852708,
+        "wall_ns": 1794129420699070000
+      },
+      "stderr": "",
+      "stdout": {
+        "name": "collector-flags.arm.stdout",
+        "path": "hazards/arm-raw/collector-flags.arm.stdout",
+        "sha256": "3a69e0f0195960a7af8de404a10e833dba519f3f4e12e034a0ec689395ac6022",
+        "size": 385
+      },
+      "timed_out": false
+    }
+  ],
+  "schema": "joulewise.b5_arm_collectors.v1"
+}
