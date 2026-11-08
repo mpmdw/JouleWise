@@ -28,7 +28,7 @@ export PY="$M/.venv/bin/python"
 The versions must still be `0.31.2 0.31.3 5.12.1`. No package installation is
 part of this route. Use the existing R0 host preparation: Mac15,9 on AC and
 not charging, no external volume mounted, narrow sudo permission for the two
-`pmset -c powermode 0/2` commands, network-time OFF permission and working
+`pmset -c powermode 0/2` commands, network-time OFF/ON permission and working
 powermetrics. The driver's unchanged volume and power guards remain in force.
 The established keep-awake job stays loaded (RUN_STATE item 19).
 
@@ -55,24 +55,29 @@ If quiet segments cannot avoid the listed jobs, notify the lead **before
 arming**, as RUN_STATE item 202(4) requires. This is a scheduling notification,
 not authority to change a threshold or a segment.
 
-Set t0 only when the review/notice is ready. This example leaves the existing
-180-second installer budget (`bytes_h_session.install`) before the exclusive
-installation cutoff. The cutoff itself is t0 minus the watchdog's 180-second
-plan lead minus the driver's 120-second install-close margin. Rounding is to a
-whole minute because the shared calendar requires it. An explicit later
-whole-minute Unix epoch can replace this selection.
+Set t0 only when the review/notice is ready, **at least 15 minutes from now**
+(R1-ARM-FIX-1 arm notice). Preparation enforces this interval. The existing
+installation cutoff is t0 minus the watchdog's 180-second plan lead minus the
+driver's 120-second install-close margin. Allow the existing 180-second
+installer budget (`bytes_h_session.install`) before that cutoff, and choose a
+later t0 if review/notice/install needs more time. Rounding is to a whole minute
+because the shared calendar requires it.
 
 ```zsh
 export S="/Users/edr/night-align/r1-$(date -u +%Y%m%dT%H%M%SZ)"
-export T0="$("$PY" -B -c 'import math,os,sys,time; sys.path.insert(0,os.environ["M"]); from scripts import run_night,magistrate_watchdog; print(60*math.ceil((time.time()+magistrate_watchdog.PLAN_LEAD_S+run_night.INSTALL_CLOSE_MARGIN_S+180)/60))')"
+export T0="$("$PY" -B -c 'import math,os,sys,time; sys.path.insert(0,os.environ["M"]); from joulewise.align.r1_arm import ARM_NOTICE_S; print(60*math.ceil((time.time()+ARM_NOTICE_S)/60))')"
+"$PY" -B "$M/scripts/arm_align_r1.py" size --t0 "$T0"
 "$PY" -B "$M/scripts/arm_align_r1.py" prepare --measurement-root "$M" --custody-root "$S" --t0 "$T0"
+df -g /Users/edr | tee "$S/df-arm.txt"
 cat "$S/arm.json"
 "$PY" -B "$M/scripts/arm_align_r1.py" render --custody-root "$S" --output "$S/rendered"
 plutil -p "$S/rendered/com.joulewise.night.plist"
 plutil -p "$S/rendered/com.joulewise.night.deadman.plist"
 ```
 
-`window_max_s = 105127` (29 h 12 min 7 s) is a ceiling, not a reservation:
+`window_max_s` depends on t0. The script prints the base terms, counted local
+11:45 crossings and final seconds; `arm.json` retains the same derivation.
+It is a ceiling, not a reservation:
 
 | Term | Seconds | Source |
 |---|---:|---|
@@ -81,6 +86,17 @@ plutil -p "$S/rendered/com.joulewise.night.deadman.plist"
 | Two diagnostic bookends | 3,600 | twice `b5.chain.STAGE_WALL_BUDGET_S.pre_calibration_capture` (1,800 each) |
 | Bookend teardown/close allowances | 1,200 | twice the existing 600-second session-status budget; covers the budget helper's 30-second TERM grace and bounded process censuses/reap |
 | Final R1 harvest/result writes | 600 | one existing session-status wall allowance |
+| Display sleep dwell before the pre bookend | 300 | R0-L3 / RUN_STATE items 206, 209: R0 re-run 11 passing dwell |
+
+The old base is 105,127 s; adding the dwell gives 105,427 s. The redo floor
+already includes one 11,164 s batch encounter. Each further local 11:45 in
+`[t0, t0 + window_max_s)` adds 11,164 s (item 216); recalculate the crossings
+until the size stops changing. Calendar crossings use America/Los_Angeles,
+including DST. For 2026-11-08 t0 at 13:30 PT there is one crossing: 105,427 s.
+At 08:00 PT there are two: 116,591 s. The corresponding D2-only numbers before
+the new dwell are 105,127 s and 116,291 s. The existing driver already supervises
+the meter within the arm/close allowances, so no extra 30 s is added. This
+route retains exact seconds; it does not apply the Opus route's minute rounding.
 
 Extra sustained-load redos can still reach this ceiling; it is not a promise
 that every possible sequence of two redos per quiet segment will fit. The
@@ -93,6 +109,18 @@ are **not a claim-eligible reserved W1 bracket**: R1 may exceed the existing
 `bookends/{pre,post}.json` and do not veto the R1 chain. No W1 harvest runs.
 The shared KM003C monitor also starts; it is a diagnostic and meter absence
 does not veto R1. R1's v4 residual is GPU energy (item 212 R11-3).
+
+Before either bookend, the generated wrapper checks the SHA-256 of
+`scripts/night_chains/align_r1_rehearsal.zsh` against a literal captured from
+the measurement checkout at preparation. A mismatch or unreadable source
+exits 65 before display preparation, bookends or the chain. This is the same
+chain-source pin as agreement D5 / the Opus wrapper; it does not authenticate
+every transitive Python import. The installer checks checkout heads at install.
+Preserve those bytes: **no git operation in the measurement checkout between
+install and t0**, including status/fetch/checkout. The wrapper then calls
+`pmset displaysleepnow` and dwells 300 s before the pre bookend; sleep-command
+failure is a flag, never a veto. `night/r1_wrapper.jsonl` records the sleep
+outcome and dwell start/end.
 
 The R1 sampler-span allowance is 5,764 seconds, the ceiling of the existing
 `segment_bounds` maximum at the committed G0 timeout and step deadman. Clock
@@ -115,10 +143,11 @@ not send mail. There is no new notice approval protocol.
 
 > ALIGN v4 R1 hardware rehearsal is arming on Mac15,9, after R0 passed.
 > Measurement checkout/head: …; custody: … . t0: … Pacific / … UTC.
-> Ceiling: 105,127 s after t0, plus the existing 300 s shutdown grace; it
+> Ceiling: … s after t0 (the final `arm.json` value), plus the existing 300 s shutdown grace; it
 > normally ends as soon as R1 completes. No agent session will remain at t0.
 > Please keep the Mac on AC, not charging, with the external SSD unplugged;
-> do not start agents or other work during collection. Security Responses
+> the display stays asleep; do not wake/touch the Mac or start agents or other
+> work until the latest end time … . Security Responses
 > remain automatic. Scheduled-job contamination may redo a segment and can
 > refuse R1 after its retry cap; the lead has been notified if those times
 > cannot be avoided. R1 owns High Power and restores Automatic. KM003C runs
@@ -130,9 +159,12 @@ not send mail. There is no new notice approval protocol.
 "$PY" -B "$M/scripts/arm_align_r1.py" install --custody-root "$S"
 launchctl print "gui/$(id -u)/com.joulewise.night"
 launchctl print "gui/$(id -u)/com.joulewise.night.deadman"
+pmset displaysleepnow
 ```
 
-Exit the magistrate and every other agent session now. Do not run the driver
+The magistrate sleeps the display before exiting. No git operation in `$M`
+is allowed between install and t0. Exit the magistrate and every other agent
+session now. Do not run the driver
 or `--dry-arm` from an agent tree as a live probe. LaunchAgent is the wake
 source; the installed plists name the absolute `night_plan.json`, so the
 watchdog's existing installed-plan fence sees this custody even outside its
@@ -144,7 +176,10 @@ which starts no agent and sends no email.
 
 ## 4. On return, preserve the result and uninstall
 
+At the next activation after R1, restore network time; the night leaves it OFF.
+
 ```zsh
+sudo -n systemsetup -setusingnetworktime on
 cat "$S/night/align-r1/r1_result.json"
 cat "$S/night/align-r1/r1_slots.json"
 cat "$S/night/result.json"
@@ -162,6 +197,8 @@ can leave its diagnostic monitor/meter until dead-man recovery on an interrupt
 (integration report R8 residual); do not describe a power restore as proof that
 those diagnostic processes ended. The lead owns live verification and the
 post-R1 record/kit fill.
+At this activation also check for stray `km003c_monitor.py` and
+`hazard_monitor.py` processes (agreement D7).
 
 ## Scheduled jobs during R1 (item 202(4))
 

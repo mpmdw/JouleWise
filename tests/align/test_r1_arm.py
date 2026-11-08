@@ -18,6 +18,7 @@ import threading
 import time
 import unittest
 from unittest.mock import patch
+from zoneinfo import ZoneInfo
 
 from joulewise.align import r1_arm as arm
 from joulewise.align.apple import powermode
@@ -44,11 +45,11 @@ class ArmTests(unittest.TestCase):
         self.root = Path(temporary.name).resolve()
 
     def prepare(self, measurement=ROOT, *, live_t0=False):
-        t0 = math.ceil((time.time() + 2 * run_night.INSTALL_CLOSE_MARGIN_S + watchdog.PLAN_LEAD_S) / 60) * 60
         now = time.time()
+        t0 = math.ceil((now + arm.ARM_NOTICE_S) / 60) * 60
         if live_t0:
             t0 = int(now // 60) * 60
-            now = t0 - watchdog.PLAN_LEAD_S - 2 * run_night.INSTALL_CLOSE_MARGIN_S
+            now = t0 - arm.ARM_NOTICE_S
         record = arm.prepare(measurement, self.root / 'custody', t0, now=now)
         self.custody = self.root / 'custody'
         self.plan_path = Path(record['plan'])
@@ -57,8 +58,9 @@ class ArmTests(unittest.TestCase):
 
     def test_plan_pins_single_chain_and_derives_the_long_deadline(self):
         record = self.prepare()
-        self.assertEqual(record['window_max_s'], 105127)
-        self.assertEqual(record['window_max_s'], sum(record['derivation'].values()))
+        sizing = record['derivation']
+        self.assertEqual(record['window_max_s'], sum(sizing['base_terms_s'].values()) + sizing['extra_batch_s'])
+        self.assertEqual(sizing['base_terms_s']['display_dwell_s'], arm.DISPLAY_DWELL_S)
         self.assertEqual(self.plan.ac_powermode, 0)
         self.assertEqual(self.plan.receipt_class, 'HAZARD_PACK')
         self.assertEqual(self.plan.hazard_window['member_count'], 0)
@@ -73,6 +75,99 @@ class ArmTests(unittest.TestCase):
         self.assertGreater(run_night.deadman_epoch(self.plan), self.plan.t0_epoch_s + 86400)
         with self.assertRaises(FileExistsError):
             arm.prepare(ROOT, self.custody, int(self.plan.t0_epoch_s))
+
+    def test_sizing_counts_local_crossings_and_adds_the_display_dwell(self):
+        # All expected seconds come from the original route terms + item 216;
+        # D3's additional dwell is shown separately from D2's original base.
+        base = (arm.R1_RETRY_FLOOR_S + arm.b5_plan.T0_STAGE_CAP_S
+                + 2 * (arm.BOOKEND_S + arm.CLOSE_S) + arm.HARVEST_S)
+        for hour, minute, crossings in ((13, 30, 1), (8, 0, 2)):
+            with self.subTest(hour=hour):
+                t0 = datetime(2026, 11, 8, hour, minute, tzinfo=arm.BATCH_ZONE).timestamp()
+                expected = base + (crossings - 1) * arm.BATCH_ENCOUNTER_S
+                original = arm.crossing_size(t0, base)
+                self.assertEqual(original['window_max_s'], expected)
+                final = arm.size_window(t0)
+                self.assertEqual(final['batch_window_crossings'], crossings)
+                self.assertEqual(final['window_max_s'], expected + arm.DISPLAY_DWELL_S)
+                replay = arm.crossing_size(t0, final['base_s'])
+                self.assertEqual(replay, {k: v for k, v in final.items() if k != 'base_terms_s'})
+                cli = subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/arm_align_r1.py'),
+                                      'size', '--t0', str(int(t0))], capture_output=True, text=True, check=True)
+                self.assertEqual(json.loads(cli.stdout), final)
+
+    def test_sizing_uses_local_calendar_across_dst_and_half_open_end(self):
+        self.assertEqual(arm.BATCH_ZONE, ZoneInfo('America/Los_Angeles'))
+        # Fall-back is 2026-11-01, < 30 h after this t0. The next 11:45 is
+        # 29 h 45 min away (one extra elapsed hour), beyond the base window.
+        # Spring-forward is 2026-03-08, < 30 h after the second t0. Its next
+        # 11:45 is only 28 h 45 min away (one fewer hour), inside the window.
+        for date, hour, crossings in (((2026, 10, 31), 7, 1), ((2026, 3, 7), 6, 2)):
+            with self.subTest(date=date):
+                t0 = datetime(*date, hour, tzinfo=arm.BATCH_ZONE).timestamp()
+                sizing = arm.size_window(t0)
+                self.assertEqual(sizing['batch_window_crossings'], crossings)
+                self.assertEqual(sizing['window_max_s'], arm.BASE_WINDOW_S + arm.DISPLAY_DWELL_S
+                                 + (crossings - 1) * arm.BATCH_ENCOUNTER_S)
+                for epoch in sizing['batch_crossings_epoch_s']:
+                    local = datetime.fromtimestamp(epoch, arm.BATCH_ZONE)
+                    self.assertEqual((local.hour, local.minute), (11, 45))
+        t0 = datetime(2026, 11, 8, 11, 45, tzinfo=arm.BATCH_ZONE).timestamp()
+        # A full standard-time day includes t0 but excludes the next 11:45.
+        self.assertEqual(arm.crossing_size(t0, 24 * 60 * 60)['batch_crossings_epoch_s'], [t0])
+
+    def test_prepare_requires_fifteen_minute_notice_without_writing_custody(self):
+        t0 = math.ceil(time.time() / 60) * 60
+        with self.assertRaisesRegex(ValueError, '15 minutes'):
+            arm.prepare(ROOT, self.root / 'custody', t0, now=t0 - arm.ARM_NOTICE_S + 1)
+        self.assertFalse((self.root / 'custody').exists())
+
+    def test_display_dwell_records_failure_without_veto_and_waits_full_dwell(self):
+        for outcome in (0, 7, OSError('synthetic missing pmset')):
+            with self.subTest(outcome=str(outcome)):
+                custody = self.root / str(outcome)
+                (custody / 'night').mkdir(parents=True)
+                clock = [0]  # virtual elapsed seconds; no wall-clock sleep or host command
+                def run(argv, **kwargs):
+                    self.assertEqual(argv, ['/usr/bin/pmset', 'displaysleepnow'])
+                    if isinstance(outcome, OSError):
+                        raise outcome
+                    return subprocess.CompletedProcess(argv, outcome)
+                def sleep(seconds):
+                    self.assertEqual(seconds, arm.DISPLAY_DWELL_S)
+                    clock[0] += seconds
+                self.assertEqual(arm.display_dwell(custody, run=run, sleep=sleep, now=lambda: clock[0]), 0)
+                records = [json.loads(line) for line in (custody / 'night/r1_wrapper.jsonl').read_text().splitlines()]
+                self.assertEqual([row['event'] for row in records], ['displaysleepnow', 'dwell_start', 'dwell_end'])
+                self.assertEqual(records[0]['flag'], None if outcome == 0 else 'r1.display_sleep_failed')
+                self.assertEqual(records[2]['epoch_s'] - records[1]['epoch_s'], arm.DISPLAY_DWELL_S)
+
+    def test_mutated_chain_exits_65_before_any_wrapper_work(self):
+        measurement, _, fakebin = self.synthetic_measurement(False)
+        self.prepare(measurement)
+        source = measurement / arm.CHAIN_SOURCE
+        pinned = arm.digest(source)
+        wrapper = Path(self.plan.chain_path).read_text()
+        self.assertIn(pinned, wrapper)
+        raw = bytearray(source.read_bytes())
+        raw[-1] ^= 1  # exactly one byte differs after generation
+        source.write_bytes(raw)
+        night = self.custody / 'night'
+        night.mkdir()
+        # If the digest gate is bypassed, the first helper/chain command
+        # hits this executable sentinel; no real pmset or sudo can execute.
+        called = self.root / 'unexpected-work'
+        sentinel = self.root / 'sentinel'
+        executable(sentinel, f'from pathlib import Path\nPath({str(called)!r}).touch()\nraise SystemExit(99)\n')
+        env = dict(os.environ, NIGHT_DIR=str(night), MEASUREMENT_ROOT=str(measurement), PY=str(sentinel),
+                   PATH=str(fakebin) + ':' + os.environ['PATH'],
+                   EVIDENCE_CHAIN_SOURCE_SHA256=arm.digest(source))  # mutable env cannot replace the literal
+        result = subprocess.run(['/bin/zsh', '-f', self.plan.chain_path], env=env, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 65, result.stderr)
+        self.assertFalse(called.exists())
+        self.assertFalse((night / 'align-r1').exists())
+        self.assertFalse((night / 'r1_wrapper.jsonl').exists())
+        self.assertFalse((self.custody / 'bookends').exists())
 
     def test_shared_plists_fence_watchdog_through_a_second_day(self):
         self.prepare()
@@ -111,7 +206,24 @@ class ArmTests(unittest.TestCase):
         (measurement / 'joulewise').symlink_to(ROOT / 'joulewise', target_is_directory=True)
         (scripts / 'night_chains').mkdir()
         shutil.copy2(ROOT / 'scripts/night_chains/align_r1_rehearsal.zsh', scripts / 'night_chains/align_r1_rehearsal.zsh')
-        shutil.copy2(ROOT / 'scripts/arm_align_r1.py', scripts / 'arm_align_r1.py')
+        # Keep the real CLI/wrapper helper and record-writing path; replace
+        # only its host command and 300 s wall-clock wait in the child process.
+        scripts.joinpath('arm_align_r1.py').write_text(f'''
+import sys, subprocess
+sys.path.insert(0, {str(ROOT)!r})
+from scripts.arm_align_r1 import main
+from joulewise.align import r1_arm
+real_dwell = r1_arm.display_dwell
+clock = [0]
+def fake_sleep(seconds):
+    assert seconds == r1_arm.DISPLAY_DWELL_S
+    clock[0] += seconds
+def fake_pmset(argv, **kwargs):
+    assert argv == ['/usr/bin/pmset', 'displaysleepnow']
+    return subprocess.CompletedProcess(argv, 7)
+r1_arm.display_dwell = lambda custody: real_dwell(custody, run=fake_pmset, sleep=fake_sleep, now=lambda: clock[0])
+raise SystemExit(main())
+''')
         (measurement / '.venv/bin').mkdir(parents=True)
         (measurement / '.venv/bin/python').symlink_to(sys.executable)
         self.mode = self.root / 'mode'
@@ -173,7 +285,13 @@ else:
 ''')
         # Calibration capture is an other-lane/hardware seam. Make it fail
         # deliberately, proving a records fault cannot veto R1.
-        scripts.joinpath('validate_powermetrics_fiducial.py').write_text('raise SystemExit(7)\n')
+        scripts.joinpath('validate_powermetrics_fiducial.py').write_text('''
+import json, os
+from pathlib import Path
+records = [json.loads(line) for line in (Path(os.environ['NIGHT_DIR']) / 'r1_wrapper.jsonl').read_text().splitlines()]
+assert records[-1]['event'] == 'dwell_end'
+raise SystemExit(7)
+''')
         return measurement, runtime, fakebin
 
     def exercise(self, interrupt=False):
@@ -265,6 +383,10 @@ else:
             self.fail('missing R1 result: ' + json.dumps({str(p.relative_to(self.custody)): p.read_text(errors='replace')[-6000:]
                       for p in self.custody.rglob('*') if p.is_file() and p.suffix in ('.log', '.json', '.stderr')}, default=str))
         result = json.loads(result_path.read_text())
+        display = [json.loads(line) for line in (night / 'r1_wrapper.jsonl').read_text().splitlines()]
+        self.assertEqual([row['event'] for row in display], ['displaysleepnow', 'dwell_start', 'dwell_end'])
+        self.assertEqual(display[0]['flag'], 'r1.display_sleep_failed')
+        self.assertEqual(display[-1]['epoch_s'] - display[-2]['epoch_s'], arm.DISPLAY_DWELL_S)
         self.assertEqual(self.mode.read_text(), '0')
         self.assertFalse((self.root / 'host/high-power.marker').exists())
         self.assertFalse((measurement / '.align-r1-high-power').exists())
@@ -283,6 +405,7 @@ else:
             self.assertEqual(result['status'], 'complete')
             self.assertTrue((night / 'align-r1/r1_slots.json').is_file())
             self.assertEqual(json.loads((self.custody / 'bookends/pre.json').read_text())['flag'], 'r1.bookend_failed')
+            self.assertEqual(json.loads((self.custody / 'bookends/pre.json').read_text())['exit_code'], 7)
             self.assertEqual(json.loads((self.custody / 'bookends/post.json').read_text())['flag'], 'r1.bookend_failed')
             self.assertTrue((night / 'meter_supervision.jsonl').is_file())
         print('R1_SYNTHETIC ' + json.dumps({'interrupt': interrupt, 'exit': code, 'r1_status': result['status'],

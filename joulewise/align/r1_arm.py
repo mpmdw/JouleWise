@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+from datetime import datetime, timedelta
 import json
 import math
 from pathlib import Path
@@ -10,6 +11,7 @@ import shutil
 import subprocess
 import sys
 import time
+from zoneinfo import ZoneInfo
 
 from joulewise.b5 import chain, plan as b5_plan
 from joulewise.b6.plan_inputs import CLOCK_THRESHOLDS
@@ -27,7 +29,48 @@ CLOSE_S = chain.STAGE_WALL_BUDGET_S["session_status_record"]  # 600 s teardown a
 HARVEST_S = CLOSE_S  # one existing session-status budget for final manifest/result writes
 # The arm itself is inside run_night's t0-based deadline too (not extra time
 # before it). Its existing cap must therefore be added, as must both bookends.
-WINDOW_MAX_S = R1_RETRY_FLOOR_S + b5_plan.T0_STAGE_CAP_S + 2 * (BOOKEND_S + CLOSE_S) + HARVEST_S
+BASE_WINDOW_S = R1_RETRY_FLOOR_S + b5_plan.T0_STAGE_CAP_S + 2 * (BOOKEND_S + CLOSE_S) + HARVEST_S
+BATCH_ENCOUNTER_S = 11_164  # RUN_STATE item 216; the floor includes the first encounter
+DISPLAY_DWELL_S = 300  # R0-L3 / RUN_STATE items 206, 209: re-run 11 passing dwell
+ARM_NOTICE_S = 15 * 60  # R1-ARM-FIX-1: choose t0 at least 15 minutes ahead
+BATCH_ZONE = ZoneInfo("America/Los_Angeles")  # R1 ruling 8 local batch clock
+CHAIN_SOURCE = Path("scripts/night_chains/align_r1_rehearsal.zsh")
+
+
+def crossing_size(t0, base_s):
+    """Item 216 fixed point, counting local 11:45 in the half-open window.
+
+    The daily encounter adds less than even a DST-shortened day, so this
+    monotone iteration converges without an arbitrary iteration limit.
+    """
+    window_s = base_s
+    while True:
+        day = datetime.fromtimestamp(t0, BATCH_ZONE).date()
+        crossings = []
+        while True:
+            epoch = datetime(day.year, day.month, day.day, 11, 45, tzinfo=BATCH_ZONE).timestamp()
+            if epoch >= t0 + window_s:
+                break
+            if epoch >= t0:
+                crossings.append(epoch)
+            day += timedelta(days=1)
+        extra = max(0, len(crossings) - 1)
+        wanted = base_s + extra * BATCH_ENCOUNTER_S
+        if wanted == window_s:
+            return {"base_s": base_s, "batch_crossings_epoch_s": crossings,
+                    "batch_window_crossings": len(crossings), "extra_batch_encounters": extra,
+                    "batch_encounter_s": BATCH_ENCOUNTER_S, "extra_batch_s": extra * BATCH_ENCOUNTER_S,
+                    "window_max_s": window_s}
+        window_s = wanted
+
+
+def size_window(t0):
+    terms = {"r1_retry_floor_s": R1_RETRY_FLOOR_S, "hazard_arm_s": b5_plan.T0_STAGE_CAP_S,
+             "bookends_s": 2 * BOOKEND_S, "close_s": 2 * CLOSE_S, "harvest_s": HARVEST_S,
+             "display_dwell_s": DISPLAY_DWELL_S}
+    # No extra meter allowance: the existing hazard driver supervises it,
+    # including startup/close, within the unchanged arm/close budgets above.
+    return dict(crossing_size(t0, sum(terms.values())), base_terms_s=terms)
 
 
 def digest(path):
@@ -48,6 +91,9 @@ def prepare(measurement_root, custody_root, t0, *, planned_bytes=0, now=None):
     measurement = Path(measurement_root).expanduser().resolve(strict=True)
     custody = Path(custody_root).expanduser().resolve()
     clock = time.time() if now is None else now
+    if t0 < clock + ARM_NOTICE_S:
+        raise ValueError("t0 must leave at least 15 minutes for the arm notice")
+    sizing = size_window(t0)
     head = subprocess.check_output(["git", "-C", str(measurement), "rev-parse", "HEAD"], text=True).strip()
     config = json.loads((measurement / "configs/align/v4/r1_runtime.json").read_text())
     # Longest single segment (not the whole night): a continuous sampler can
@@ -119,7 +165,7 @@ def prepare(measurement_root, custody_root, t0, *, planned_bytes=0, now=None):
     mapping = {
         "schema": "joulewise.night_plan.v5", "schema_version": 5,
         "plan_id": plan_id, "receipt_class": "HAZARD_PACK", "ac_powermode": 0,
-        "t0_epoch_s": t0, "window_max_s": WINDOW_MAX_S, "authored_epoch_s": clock,
+        "t0_epoch_s": t0, "window_max_s": sizing["window_max_s"], "authored_epoch_s": clock,
         "repo_head": head, "measurement_root": str(measurement), "measurement_head": head,
         "chain_path": str(custody / "chain.zsh"), "chain_sha256_path": str(custody / "chain.zsh.sha256"),
         "custody_root": str(custody), "registration_path": None, "hazard_window": window,
@@ -145,9 +191,7 @@ def prepare(measurement_root, custody_root, t0, *, planned_bytes=0, now=None):
     write(custody / "night_plan.json", mapping)
     record = {"schema": "joulewise.align.r1_arm.v1", "plan": str(custody / "night_plan.json"),
               "plan_sha256": digest(custody / "night_plan.json"), "schedule": scheduling,
-              "window_max_s": WINDOW_MAX_S,
-              "derivation": {"r1_retry_floor_s": R1_RETRY_FLOOR_S, "hazard_arm_s": b5_plan.T0_STAGE_CAP_S,
-                             "bookends_s": 2 * BOOKEND_S, "close_s": 2 * CLOSE_S, "harvest_s": HARVEST_S},
+              "window_max_s": sizing["window_max_s"], "derivation": sizing,
               "flags": (["disk.allocation_unsized; shared headroom and live disk floor remain"] if not planned_bytes else [])}
     write(custody / "arm.json", record)
     return record
@@ -156,16 +200,42 @@ def prepare(measurement_root, custody_root, t0, *, planned_bytes=0, now=None):
 def wrapper_bytes(measurement, custody):
     q = shlex.quote
     script = q(str(Path(measurement) / "scripts/arm_align_r1.py"))
+    source = Path(measurement) / CHAIN_SOURCE
+    source_sha256 = digest(source)
     # Do not exec: a successful chain is followed by the post bookend. On a
     # signal the whole group receives TERM, and no fresh bookend is started.
     # The original chain and driver retain their power restore traps/lock.
     return ("#!/bin/zsh -f\nset -u\ntrap 'exit 130' HUP INT TERM\n"
             ': "${NIGHT_DIR:?}" "${MEASUREMENT_ROOT:?}" "${PY:?}"\n'
+            # Literal, not a mutable sidecar/environment pin. Do this before
+            # display sleep, dwell, bookends or the R1 chain (agreement D5).
+            f'actual="$(/usr/bin/shasum -a 256 {q(str(source))} 2>/dev/null)"\n'
+            f'if [[ "${{actual%% *}}" != {q(source_sha256)} ]]; then\n'
+            '  print -u2 -- "R1 chain source changed; refusing before wrapper work"\n'
+            '  exit 65\nfi\n'
+            f'"$PY" -B {script} _display-dwell --custody-root {q(str(custody))} || exit $?\n'
             f'"$PY" -B {script} _bookend --custody-root {q(str(custody))} --slot pre\n'
-            f'/bin/zsh -f {q(str(Path(measurement) / "scripts/night_chains/align_r1_rehearsal.zsh"))}\n'
+            f'/bin/zsh -f {q(str(source))}\n'
             'r1_rc=$?\n'
             f'"$PY" -B {script} _bookend --custody-root {q(str(custody))} --slot post\n'
             'exit "$r1_rc"\n').encode()
+
+
+def display_dwell(custody_root, *, run=subprocess.run, sleep=time.sleep, now=time.time):
+    """R0-L3 display preparation, with failure recorded as a non-veto flag."""
+    record = Path(custody_root) / "night/r1_wrapper.jsonl"
+    def note(event, **fields):
+        with record.open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps(dict(event=event, epoch_s=now(), **fields), sort_keys=True) + "\n")
+    try:
+        rc = run(["/usr/bin/pmset", "displaysleepnow"], check=False).returncode
+        note("displaysleepnow", exit_code=rc, flag=None if rc == 0 else "r1.display_sleep_failed")
+    except OSError as error:
+        note("displaysleepnow", error=str(error), flag="r1.display_sleep_failed")
+    note("dwell_start", dwell_s=DISPLAY_DWELL_S)
+    sleep(DISPLAY_DWELL_S)
+    note("dwell_end", dwell_s=DISPLAY_DWELL_S)
+    return 0
 
 
 def bookend(custody_root, slot, *, run=subprocess.run):
