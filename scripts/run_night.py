@@ -49,6 +49,7 @@ sys.path.insert(0, str(REPO_ROOT))
 from joulewise import arm_readiness as readiness
 from joulewise import arm_readiness_evidence_t0 as t0_author
 from joulewise import battery_float, night_gate, t0_rehearsal, quiet_admission, network_time_off
+from joulewise.file_hashes import _stream_sha256, current_hashes, hash_scope, WORKER_COUNTS
 from joulewise.measurement_liveness import (  # noqa: E402
     observe_identity, pending_launch_closed, _start_token,
 )
@@ -185,7 +186,7 @@ _CODES = _build_code_map({code for code in NIGHT_GATE_REASON_CODES | NIGHT_DRIVE
 
 
 def _sha256_path(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    return _stream_sha256(path)
 
 
 _SHA256_HEX_RE = re.compile(r"[0-9a-f]{64}")
@@ -1370,7 +1371,7 @@ def _run_chain_once_impl(chain_path, plan, probes, night_dir, claim_descriptor,
         return exit_code, None, census_count, census_hits, True
 
 
-def _artifact_entry(custody_root: Path, path: Path) -> dict[str, Any] | None:
+def _artifact_entry(custody_root: Path, path: Path, *, hashes=None) -> dict[str, Any] | None:
     relative = str(path.relative_to(custody_root))
     try:
         path.stat()
@@ -1379,12 +1380,19 @@ def _artifact_entry(custody_root: Path, path: Path) -> dict[str, Any] | None:
     except Exception as exc:
         return {"path": relative, "sha256": None, "error": type(exc).__name__}
     try:
-        return {"path": relative, "sha256": _sha256_path(path)}
+        return {"path": relative, "sha256": (hashes or current_hashes()).sha256(path)}
     except Exception as exc:
         return {"path": relative, "sha256": None, "error": type(exc).__name__}
 
 
 def _artifact_list(custody_root: Path, night_dir: Path) -> list[dict[str, Any]]:
+    hashes = current_hashes()
+
+    def entries(paths):
+        return [entry for entry in hashes.map(
+            lambda path: _artifact_entry(custody_root, path, hashes=hashes), paths)
+            if entry is not None]
+
     paths = [
         custody_root / "night.log",
         night_dir / "receipt.json",
@@ -1427,13 +1435,13 @@ def _artifact_list(custody_root: Path, night_dir: Path) -> list[dict[str, Any]]:
         # custody; these files carry verdicts, return codes and digests.
         *(night_dir / name for name in HAZARD_ARTIFACTS),
     ]
-    artifacts = [entry for path in paths
-                 if (entry := _artifact_entry(custody_root, path)) is not None]
+    artifacts = entries(paths)
     evidence = night_dir / "evidence"
 
     def discovery_failed(error):
         raise error
 
+    discovered = []
     try:
         # Unlike rglob, walk's onerror makes inaccessible subtrees explicit.
         # Ordinary container directories are traversal nodes, not artifacts.
@@ -1444,13 +1452,14 @@ def _artifact_list(custody_root: Path, night_dir: Path) -> list[dict[str, Any]]:
         for directory, dirs, files in os.walk(evidence, onerror=discovery_failed):
             dirs.sort()
             for name in sorted(files):
-                entry = _artifact_entry(custody_root, Path(directory) / name)
-                if entry is not None:
-                    artifacts.append(entry)
+                discovered.append(Path(directory) / name)
     except Exception as exc:
+        artifacts.extend(entries(discovered))
         artifacts.append({"path": str(evidence.relative_to(custody_root)),
                           "sha256": None, "error": type(exc).__name__,
                           "diagnostic": "evidence discovery incomplete"})
+    else:
+        artifacts.extend(entries(discovered))
     return artifacts
 
 
@@ -5115,6 +5124,8 @@ def build_parser() -> argparse.ArgumentParser:
         command = subcommands.add_parser(name)
         command.add_argument("--plan", required=True, type=Path, metavar="PLAN.json")
         command.add_argument("--courier-bin", type=Path, metavar="ABSOLUTE_PATH")
+        command.add_argument("--hash-workers", type=int, choices=WORKER_COUNTS, default=1,
+                             help="terminal record hash readers (default: 1)")
         if name == "run":
             command.add_argument(
                 "--dry-arm", action="store_true",
@@ -5196,11 +5207,14 @@ def _main(argv: list[str] | None = None) -> int:
         locator = produce_g7_control(args.plan, args.rehearsal_receipt, args.rehearsal_go)
         sys.stdout.buffer.write(_json_bytes(locator))
         return 0 if json.loads(Path(locator["path"]).read_bytes())["verdict"] == "PASS" else EXIT_REFUSED
-    if args.command == "run":
-        return run_night(args.plan, courier_bin=args.courier_bin, dry_arm=args.dry_arm)
-    if args.command == "rehearse":
-        return run_night(args.plan, rehearsal=True, courier_bin=args.courier_bin)
-    return dead_man(args.plan, courier_bin=args.courier_bin)
+    # Only artifact inventories use this cache. Gate/admission hashes always
+    # stream afresh, and workers exist only while consuming terminal artifacts.
+    with hash_scope(args.hash_workers):
+        if args.command == "run":
+            return run_night(args.plan, courier_bin=args.courier_bin, dry_arm=args.dry_arm)
+        if args.command == "rehearse":
+            return run_night(args.plan, rehearsal=True, courier_bin=args.courier_bin)
+        return dead_man(args.plan, courier_bin=args.courier_bin)
 
 
 def main(argv: list[str] | None = None) -> int:

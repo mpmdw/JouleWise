@@ -32,6 +32,7 @@ from scripts import issue_calibration_acceptance_generation as issuer
 from scripts import cap_replay_harness
 from scripts.calibration_cadence_report import native_intervals_ms, STOP_THRESHOLD_MS
 from joulewise import battery_float
+from joulewise.file_hashes import FileHashes, WORKER_COUNTS
 from joulewise.calibration_ledger import artifact_hashes, load_calibration_ledger_snapshot
 from joulewise.measurement_liveness import census as measurement_census
 from joulewise.night_gate import NightPlan, PlanError
@@ -49,20 +50,22 @@ def json_bytes(value):
     return (json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + "\n").encode()
 
 
-def inventory(root):
+def inventory(root, *, hashes=None, workers=1):
     """Do not follow symlinks; retain original mode and nanosecond timestamps."""
-    rows = {}
-    for path in [root, *sorted(root.rglob("*"))]:
+    hashes = hashes if hashes is not None else FileHashes(workers)
+
+    def entry(path):
         st = path.lstat()
         row = {"mode": st.st_mode, "size": st.st_size, "mtime_ns": st.st_mtime_ns}
         if path.is_symlink():
             row["link"] = os.readlink(path)
         elif path.is_file():
-            row["sha256"] = digest(path.read_bytes())
+            row["sha256"] = hashes.sha256(path)
         elif not path.is_dir():
             raise HarvestRefusal("unsupported evidence file type")
-        rows[path.relative_to(root).as_posix()] = row
-    return rows
+        return path.relative_to(root).as_posix(), row
+
+    return dict(hashes.map(entry, [root, *sorted(root.rglob("*"))]))
 
 
 def copy_matches(original, copied):
@@ -322,7 +325,11 @@ def harvest(args, *, runner=subprocess.run, census=measurement_census, now=time.
         raise HarvestRefusal("window delivery or termination evidence missing")
     if not census(parents=[night_root.parent]).clear:
         raise HarvestRefusal("measurement ownership is not clear")
-    source_inventories = {name: inventory(source) for name, source in zip(("custody-root", "measurement-runs"), sources)}
+    # Ownership/completion is clear above. Reuse only this operation's source
+    # hashes; every destination inventory below gets an independent reader.
+    hashes = FileHashes(getattr(args, "hash_workers", 1))
+    source_inventories = {name: inventory(source, hashes=hashes)
+                          for name, source in zip(("custody-root", "measurement-runs"), sources)}
     exports = coordinates(plan, night_root)
     runs_root = Path(exports["RUNS_ROOT"])
     if not any(runs_root == source or source in runs_root.parents for source in sources):
@@ -500,7 +507,7 @@ def harvest(args, *, runner=subprocess.run, census=measurement_census, now=time.
         if revision6 and (destination / "custody-root/harvest/r9_window.json").read_bytes() != r9_raw:
             raise HarvestRefusal("existing R9 record differs; refusing overwrite")
         if (destination / "harvest.json").read_bytes() != json_bytes(record) or any(
-                not copy_matches(rows, {path: row for path, row in inventory(destination / name).items()
+                not copy_matches(rows, {path: row for path, row in inventory(destination / name, workers=hashes.workers).items()
                                        if not revision6 or name != "custody-root" or
                                        (path in rows or path not in {"harvest", "harvest/r9_window.json"})})
                 for name, rows in source_inventories.items()):
@@ -517,8 +524,8 @@ def harvest(args, *, runner=subprocess.run, census=measurement_census, now=time.
             stage.mkdir()
             for name, source in zip(source_inventories, sources):
                 shutil.copytree(source, stage / name, symlinks=True)
-                if (inventory(source) != source_inventories[name]
-                        or not copy_matches(source_inventories[name], inventory(stage / name))):
+                if (inventory(source, hashes=hashes) != source_inventories[name]
+                        or not copy_matches(source_inventories[name], inventory(stage / name, workers=hashes.workers))):
                     raise HarvestRefusal("source changed or courier copy disagrees")
             if revision6:
                 r9_path = stage / "custody-root/harvest/r9_window.json"
@@ -562,6 +569,8 @@ def main(argv=None, **injected):
     parser.add_argument("--prior-harvest-record", type=Path, action="append", default=[],
                         help="committed harvest record for each preceding Revision 6 session")
     parser.add_argument("--session-ids", action="append", help="ordered cumulative sessions; repeat flag; current window last")
+    parser.add_argument("--hash-workers", type=int, choices=WORKER_COUNTS, default=1,
+                        help="closed-file hash readers (benchmark in a gap; default: 1)")
     args = parser.parse_args(argv)
     try:
         record = harvest(args, **injected)
