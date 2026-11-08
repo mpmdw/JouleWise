@@ -144,7 +144,8 @@ class PostW1DeskWitness(unittest.TestCase):
                 log = write_battery_log(Path(tmp) / 'battery.jsonl', 5000.)
                 record = session.arm_checks(
                     '.', {}, runner=run, now=lambda: 5000., obc_off_attested_by='synthetic',
-                    battery_log=log, commit_check=lambda root, commit: True, next_arm_triage=bad)
+                    battery_log=log, commit_check=lambda root, commit: True,
+                    record_check=lambda root, packet: True, next_arm_triage=bad)
         self.assertFalse(record['admitted'], record)
 
 

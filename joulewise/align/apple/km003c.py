@@ -126,10 +126,12 @@ def capture_member(streams, *, member_span, baseline_span, episode, model=None):
         return _empty(['meter.episode_outside_member'])
     rejected = []
     for name, stream in streams:
+        if stream.trailer is None and stream.present:
+            rejected.append('meter.stream_unclosed')    # disclosed with any rejection by this stream
         if not stream.present:
             rejected.append('meter.absent')
             continue
-        offset = kp.raw_offset_ns(stream)
+        offset = kp.raw_offset_ns(stream, allow_unclosed=True)
         if offset is None or not stream.aligned:
             rejected.append('meter.clock_unresolved')
             continue
@@ -173,12 +175,13 @@ def capture_member(streams, *, member_span, baseline_span, episode, model=None):
             turn_energy[turn.index] = (active, 0.0)
         rows = er.turn_rows_from_episode(episode, turn_energy, hidden_token_counts_logged=True,
                                          uncertainty_kind='diagnostic_equal_weights')
+        unclosed = ['meter.stream_unclosed'] if stream.trailer is None else []
         row = {**_empty(), 'status': 'available', 'stream': name,
                'raw_offset_ns': offset, 'member_span_ns': list(member_span),
                'baseline_span_ns': list(baseline_span), 'dc_in_energy_j': energy,
                'episode_dc_in_energy_j': episode_j, 'baseline_w': base_w,
                'dc_in_delta_j': energy - base_w * ((window[1] - window[0]) / 1e9),
-               'flags': list(dict.fromkeys([*(f['code'] for f in disclosures), *rows.flags])),
+               'flags': list(dict.fromkeys([*unclosed, *(f['code'] for f in disclosures), *rows.flags])),
                'turn_rows': [asdict(r) for r in rows], 'residual_status': 'dc_fit_not_supplied'}
         if model is not None:
             _predict(row, model)
@@ -203,7 +206,7 @@ def session_report(custody, plan_members, runs_root, summaries):
     if custody is None:
         return unavailable_report(plan_members, 'meter.custody_unavailable')
     custody, runs_root = Path(custody), Path(runs_root)
-    sources, streams, source_flags = [], [], []
+    sources, streams, source_flags, stream_flags = [], [], [], {}
     try:
         supervision = _json(custody / 'night/hazard_result.json').get('meter') or {}
     except Exception:  # diagnostic evidence cannot block the rails desk
@@ -217,10 +220,18 @@ def session_report(custody, plan_members, runs_root, summaries):
         try:
             digest = hashlib.sha256(read_bytes(path)).hexdigest()
             sources.append({'path': name, 'sha256': digest})
+            parsed = kp.parse(path)
             if expected.get(name) != digest:
-                source_flags.append('meter.custody_hash_mismatch')
-                continue
-            streams.append((name, kp.parse(path)))
+                # A reader that died leaves no closing line and closing custody may have recorded no
+                # hash for it (smoke G3): salvage its complete records, disclosed per stream. A
+                # recorded hash that differs, or a closed stream with no matching hash, is an integrity
+                # failure and the stream stays out.
+                if parsed.trailer is None and expected.get(name) is None:
+                    stream_flags[name] = ['meter.custody_hash_unrecorded']
+                else:
+                    source_flags.append('meter.custody_hash_mismatch')
+                    continue
+            streams.append((name, parsed))
         except Exception as exc:  # parser/decompression failure is missing DC, never a rail exclusion
             source_flags.append('meter.stream_unreadable:' + type(exc).__name__)
     summaries = {m['run_id']: m for m in summaries}
@@ -236,7 +247,7 @@ def session_report(custody, plan_members, runs_root, summaries):
                                  baseline_span=idle_baseline_span(metadata, events), episode=episode)
         except Exception as exc:  # preserve an unreadable member in the secondary roster
             row = _empty(['meter.member_unreadable:' + type(exc).__name__])
-        row['flags'] = list(dict.fromkeys([*row['flags'], *source_flags]))
+        row['flags'] = list(dict.fromkeys([*row['flags'], *source_flags, *stream_flags.get(row.get('stream'), ())]))
         if supervision.get('start_failures') or supervision.get('errors') or supervision.get('crash_loop'):
             row['flags'].append('meter.supervision_fault')
         members[rid] = row
