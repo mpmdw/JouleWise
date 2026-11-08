@@ -71,6 +71,15 @@ The additive align_v4_session.py refuses prepare/install while inputs are pendin
 Its desk is the parameterized pilot instrument desk; WP21 owns full U4–U6,
 K-session and contrast reporting. This kit grants no arm or hardware approval.
 
+RUN_STATE 210 / squeeze: runtime_requirements.km003c explicitly enables the
+Block HAZARD_PACK driver's existing reader and supervision, before the first
+idle baseline through the final member, in hazards/meter/ with closing hashes.
+require_w1_ready refuses a missing/disabled/changed declaration. The v4 desk
+prints per-member DC integrals and a separate five-term DC residual, labelled
+SECONDARY / not yet registered. Missing coverage or one dropped counter makes
+that member's DC channel missing and never changes powermetrics eligibility.
+See docs/align/squeeze/KM003C-ALIGN.md for custody and remaining live gates.
+
 `night_plan.template.json` is the fail-closed Window-1 planning sheet for the
 pilot night-plan v5 family; it is not itself a run_night plan (prepare writes
 that). Every R1 value, including every member cost, is an explicit

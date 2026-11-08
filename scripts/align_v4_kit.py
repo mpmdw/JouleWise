@@ -20,7 +20,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from scripts.align_pilot_kit import raw_json, sha
 from joulewise.align.apple.sampling import episode_seed, turn_seed
-from joulewise.align.apple import r1_runtime, thermal_gates
+from joulewise.align.apple import km003c, r1_runtime, thermal_gates
 from joulewise.b5 import chain
 
 KIT = Path('configs/campaigns/align_v4')
@@ -1225,6 +1225,12 @@ def validate_wp18_fixtures(inputs, root=ROOT):
 
 def require_w1_ready(root=ROOT):
     """Everything W1 prepare/arm needs from the kit: inputs, D identity, R1 sizing, WP18 fixtures."""
+    try:
+        collection_plan = json.loads((Path(root) / KIT / 'collection_plan.json').read_bytes())
+    except (OSError, ValueError) as exc:
+        raise ValueError('RUN_STATE 210 / squeeze ruling: W1/D requires a readable collection plan '
+                         'that enables KM003C capture') from exc
+    km003c.require_enabled(collection_plan)
     inputs = read_inputs(root)
     if not any(p.startswith('WP11.') for p in pending_inputs(inputs)):
         pins_raw = (Path(root) / D_PINS).read_bytes()
@@ -1449,6 +1455,7 @@ def build_files(root=ROOT):
                 reconciliations=['WP16/A1 D seed 1 overrides window-plan choice 101; held-out starts at 2.',
                                  'Synthesized ruling: checkpoint limit 0 throughout series overrides A1 conditional enablement.'],
                 runtime_requirements=dict(
+                    km003c=km003c.REQUIREMENT.copy(),
                     ac_powermode=ac_powermode, D_tools='family-validated XML via qwen3_5', presence_penalty=0,
                     # Fable cold pass LOW-7 (LEAD-RULINGS-2 R5-7): W1 members run
                     # from their own configs through the plan's stage commands;
@@ -1677,6 +1684,15 @@ wp19_receipt.json from tokenizer-only all-turn X/Y rendering plus R1 X-G.
 The additive align_v4_session.py refuses prepare/install while inputs are pending.
 Its desk is the parameterized pilot instrument desk; WP21 owns full U4–U6,
 K-session and contrast reporting. This kit grants no arm or hardware approval.
+
+RUN_STATE 210 / squeeze: runtime_requirements.km003c explicitly enables the
+Block HAZARD_PACK driver's existing reader and supervision, before the first
+idle baseline through the final member, in hazards/meter/ with closing hashes.
+require_w1_ready refuses a missing/disabled/changed declaration. The v4 desk
+prints per-member DC integrals and a separate five-term DC residual, labelled
+SECONDARY / not yet registered. Missing coverage or one dropped counter makes
+that member's DC channel missing and never changes powermetrics eligibility.
+See docs/align/squeeze/KM003C-ALIGN.md for custody and remaining live gates.
 
 `night_plan.template.json` is the fail-closed Window-1 planning sheet for the
 pilot night-plan v5 family; it is not itself a run_night plan (prepare writes

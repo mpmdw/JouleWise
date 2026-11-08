@@ -147,6 +147,19 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
     verdict = kit.validate_powermode_members(plan, observed)
     checks = {'ac_powermode_members': verdict['instrument_ok']}
     report = {**verdict, 'd_member_x2': d_member_x2_report(plan['members'], runs_root)}
+    from joulewise.align.apple import km003c
+    try:
+        custody = (state.get('inputs') or {}).get('custody_root')
+        if custody is None and state.get('plan_path'):
+            custody = pilot.h.read(state['plan_path'])['custody_root']
+        dc = km003c.session_report(custody, plan['members'], runs_root, members)
+    except Exception as exc:  # secondary diagnostics must never become a rails admission gate
+        dc = km003c.unavailable_report(plan['members'], 'meter.desk_failed:' + type(exc).__name__,
+                                       detail=str(exc))
+    for rid, row in dc['members'].items():
+        print(f'{rid} {km003c.LABEL}: ' + json.dumps({k: row[k] for k in
+              ('status', 'dc_in_energy_j', 'dc_in_delta_j', 'dc_in_residual_j', 'flags')}, sort_keys=True))
+    report['km003c'] = dc
     # Keep the common v3 desk unchanged. V4 adds its registered thermal desk.
     from scripts.align_v4_thermal_desk import registration_evidence, enrich_record, r1_soak_c
     from joulewise.align.apple.thermal_desk import read_bundle_record, window_report
