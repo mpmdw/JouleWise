@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 import sys
 
@@ -59,15 +60,22 @@ def main(argv=None):
     log_path = args.smoke_dir.with_name(args.smoke_dir.name + '.out')
     violations = smoke.destination_violations(args.smoke_dir, roots) + [
         v for v in smoke.destination_violations(log_path, roots) if 'production' in v['why']]
+    if args.detach and os.path.lexists(log_path):
+        # D3-1: the detached log is always NEW; an existing (possibly hard-linked or symlinked) file
+        # is never appended to.
+        violations.append({'path': str(log_path), 'why': 'the detached log already exists'})
     if violations:
         print(json.dumps({'smoke': 'refused', 'reason': 'destination', 'violations': violations}, default=str),
               file=sys.stderr)
         return 2
     if args.detach:
-        args.smoke_dir.parent.mkdir(parents=True, exist_ok=True)
         rest = [a for a in (argv if argv is not None else sys.argv[1:]) if a != '--detach']
-        pid = smoke.detach([sys.executable, '-B', str(Path(__file__).resolve()), *rest],
-                           args.smoke_dir.with_name(args.smoke_dir.name + '.out'))
+        try:
+            os.close(smoke._walk_dir(args.smoke_dir.parent, create=True))   # no non-system symlink followed
+            pid = smoke.detach([sys.executable, '-B', str(Path(__file__).resolve()), *rest], log_path)
+        except (smoke.IsolationAbort, OSError) as exc:
+            print(json.dumps({'smoke': 'refused', 'reason': 'detached log', 'error': str(exc)}), file=sys.stderr)
+            return 2
         print(json.dumps({'detached_pid': pid, 'smoke_dir': str(args.smoke_dir)}))
         return 0
     runner = smoke.SmokeRunner(

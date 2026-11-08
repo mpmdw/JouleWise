@@ -217,3 +217,24 @@ frozen `series/` manifest, because every arm now binds the series (RUN_STATE 226
 probe skips exactly the arm's one nested equality exemption, `checks.record_committed.pushed_tip` (delta4).
 
 Native behaviour remains unmeasured.
+
+## 9. Delta3 reviews (HOLD at 8ebc175c3) and their fixes
+
+Reviews: `docs/align/v4/W1-SMOKE-DELTA3-sol1.md` (D3-1 to D3-6) and `W1-SMOKE-DELTA3-sol2.md` (F1 to F8). Both
+witness modules are on this branch unmodified and pass: `test_smoke_delta3_sol1` (16 tests) and
+`test_smoke_delta3_sol2` (15 tests). The accepted residual is unchanged. It covers the production prepare's
+and the installer's own pathname writes, and a child's later lookup of TMPDIR. Every runner write is anchored.
+
+| Finding | Fix |
+|---|---|
+| F3: `safe_write` follows ancestors of its base | `Anchor`: `run()` creates the smoke directory NEW by descriptor and pins it. Every runner write and mkdir walks from that descriptor with O_NOFOLLOW per component (`safe_write`, `safe_mkdir`, `safe_unlink`, `safe_copytree`, renameat for `main.superseded`). A path base (direct calls, tests) is walked from `/` and follows only root-owned symlinks (the macOS `/var`, `/tmp` and `/etc` links). |
+| D3-1 / F2: writes bypassing `safe_write` | `finalize.json`, `teardown-unproven.json` (a refusal is logged and teardown returns unproven), the receipt-clone perturbation, the venv `.pth`, `smoke-reduction.json`/`session.json` in `prepare_smoke`, and `materialize_kit` now go through the anchor. `fault_session` no longer shadows its anchor and makes every directory by descriptor. The detached `.out` is created exclusively and non-following, and the CLI refuses an existing log (exit 2). |
+| D3-2 / F1: published before the install record | `published_plan_owner(expected=...)` compares the plist's single `--plan` with the pending session's plan. Publication before `state['install']` is adopted and uninstalled; a different plan is still never touched. |
+| D3-3 / F4: isolate timeout descendants | `grouped_run`: the session leader reports its pid before exec. On return, failure or timeout, the whole group is SIGKILLed and proven gone, or the run is a `TeardownFailure`. TMPDIR is verified after every isolation command. |
+| F6: prepare commands outside the budget | During prepare, module-level `subprocess.run` and every `run=subprocess.run` keyword default in loaded `scripts.*`/`joulewise.*` modules (plus `important_capacity`'s `run`) go through `budgeted_subprocess`. That means the budget is required, the timeout is clipped (a call without one gets the remaining budget) and the group is killed whole. |
+| D3-4 / F5: deadline argv membership | `plan_option`: exactly one `--plan` (no `--plan=`) naming the session plan. The plist must have the shape `<python> …/run_night.py run`; the installer argv must be `install_night_agent.sh` without `--uninstall`/`--render-only`. |
+| D3-5 / F7: FIFO blocks | The leaf is opened O_NONBLOCK; ENXIO becomes `IsolationAbort`, and the leaf is fstat-checked before O_NONBLOCK is cleared. |
+| D3-6 / F8: short writes | `_write_all` loops until the buffer is written and fails on no progress. |
+
+A failed main arm now makes `run()` return 1. Packet coverage is unchanged at 358 mutations after the R22-2 merge.
+Merged with v4-r11 @ `f25654e97`. Native behaviour remains unmeasured.

@@ -1113,10 +1113,17 @@ def check_deadline(ctx):
     plan_path = session.get('plan_path')
     install_argv = [str(a) for a in ((session.get('install') or {}).get('argv') or [])]
     custody = plan.get('custody_root')
+    from joulewise.align.w1_smoke import plan_option
+    # F5 / D3-4: the plan is the value of exactly one --plan option in each argv, in the intended
+    # command shape; the path appearing as some other argument binds nothing.
+    plist_shape = len(args) > 2 and Path(args[1]).name == 'run_night.py' and args[2] == 'run'
+    installer_shape = (bool(install_argv) and Path(install_argv[0]).name == 'install_night_agent.sh'
+                       and not {'--uninstall', '--render-only'} & set(install_argv))
     binding = {
-        'plist runs the session plan': bool(plan_path) and plan_path in args,
+        'plist runs the session plan': bool(plan_path) and plist_shape and plan_option(args) == plan_path,
         'session plan sha256 = copied plan bytes': session.get('plan_sha256') == digest,
-        'session installer argv names the plan': bool(plan_path) and plan_path in install_argv,
+        'session installer argv names the plan': bool(plan_path) and installer_shape
+            and plan_option(install_argv) == plan_path,
         'installer exited 0': (session.get('install') or {}).get('exit_code') == 0,
         'plan path is the plan custody night_plan.json': bool(plan_path) and bool(custody) and
             Path(plan_path).name == 'night_plan.json' and _same_dir(Path(plan_path).parent, custody),
