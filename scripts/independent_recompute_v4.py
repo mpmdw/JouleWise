@@ -2270,13 +2270,14 @@ def sealed_row(row, captured):
 
 def seal_aggregate(agg, fn, members, results, elig, sealed_ids):
     """A27: an aggregate that includes scored C-sabotage thermal fields prints its verdict and parts, the
-    hash of the full aggregate, and the same aggregate over the members that are not sealed."""
+    hash of the full aggregate, and the same aggregate (verdict and parts included) over the members that are not
+    sealed. The all-member verdict and parts are unchanged."""
     keep = {k: agg[k] for k in ("verdict", "parts")}
     hidden = {k: v for k, v in agg.items() if k not in keep}
     rest = [m for m in members if m["run_id"] not in sealed_ids]
     benign = fn(rest, results, elig) if rest else None
     return dict(keep, sealed_sha256=hashlib.sha256(canonical(hidden)).hexdigest(),
-                benign_only={k: v for k, v in benign.items() if k not in ("verdict", "parts")} if benign else None)
+                benign_only=benign)
 
 
 def recompute(root, workers=1, cache_dir=None, timings=None, stage="full", freeze_in=None):

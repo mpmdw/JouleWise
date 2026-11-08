@@ -84,6 +84,7 @@ class SeriesTests(unittest.TestCase):
         u1 = out["acceptance"]["U1"]["C3"]["D"]
         self.assertEqual(sorted(u1), ["benign_only", "parts", "sealed_sha256", "verdict"])
         self.assertNotIn("align-v4-c3-e09", u1["benign_only"]["included"])
+        self.assertIn(u1["benign_only"]["verdict"], ("pass", "fail", "inconclusive"))
         self.assertEqual(sorted(out["acceptance"]["U2"]["C3"]["D"]), ["benign_only", "parts", "sealed_sha256", "verdict"])
         self.assertIn("g0_timeouts", out["acceptance"]["U1"]["T1"]["D"])          # T windows are not sealed
         self.assertEqual(set(out["reduction"]["align-v4-c3-e09"]["columns"]["gpu_mw"]), {"sha256", "n"})
