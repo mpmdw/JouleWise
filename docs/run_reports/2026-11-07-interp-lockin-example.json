@@ -1,0 +1,153 @@
+{
+  "schema": "joulewise.interp_energy.power.v1",
+  "status": "DESK_ONLY",
+  "study_reference": {
+    "source": "docs/research-audits/2026-11-07/interp-weight-edit-energy.md \u00a72.2",
+    "baseline_energy_j": 2700.0,
+    "pair_sd_j": 2.97,
+    "alpha": 0.05,
+    "target_power": 0.8,
+    "replay_seconds_assumed": 100.0,
+    "rows": [
+      {
+        "effect_fraction": 0.0001,
+        "required_pairs": 950,
+        "required_replays": 1900,
+        "required_hours": 52.77777777777778,
+        "pairs_using_rounded_2_80": 949
+      },
+      {
+        "effect_fraction": 3e-05,
+        "required_pairs": 10553,
+        "required_replays": 21106,
+        "required_hours": 586.2777777777778,
+        "pairs_using_rounded_2_80": 10541
+      },
+      {
+        "effect_fraction": 1e-05,
+        "required_pairs": 94972,
+        "required_replays": 189944,
+        "required_hours": 5276.222222222223,
+        "pairs_using_rounded_2_80": 94864
+      }
+    ]
+  },
+  "paired_plan": {
+    "effect_fraction": 1e-05,
+    "unit_sd_fraction": 0.0011,
+    "alpha": 0.05,
+    "target_power": 0.8,
+    "unit_seconds": 200.0,
+    "budget_units": 18,
+    "budget_hours": 1.0,
+    "used_budget_hours": 1.0,
+    "detection_power": 0.050170423070074556,
+    "mde_fraction": 0.00072637396545988,
+    "required_units": 94972,
+    "required_hours": 5276.222222222223,
+    "systematic_bound_fraction": 0.0,
+    "above_systematic_bound": true,
+    "statistically_detectable": false,
+    "detectable": false,
+    "required_pairs": 94972,
+    "required_replays": 189944,
+    "baseline_energy_j": 2700.0,
+    "pair_sd_j": 2.97
+  },
+  "notes": [
+    "Fraction means B-A divided by unmodulated baseline energy/power at equal duration.",
+    "Study reproduction always uses alpha=.05 and power=.8; paired_plan uses requested values.",
+    "Statistical plans are not registered claim/equivalence intervals or hardware validation."
+  ],
+  "synthetic_comparison": {
+    "status": "SYNTHETIC_UNCALIBRATED",
+    "noise_model": {
+      "white_sd_w": 0.03,
+      "pink_sd_w": 0.1,
+      "thermal_amplitude_w": 0.1,
+      "thermal_tau_seconds": 300.0,
+      "steps": [],
+      "burst_rate_hz": 0.01,
+      "burst_mean_seconds": 1.0,
+      "burst_amplitude_w": 0.1
+    },
+    "sample_rate_hz": 8.0,
+    "trials": 128,
+    "seed": 20261107,
+    "designs": {
+      "slow_abba": {
+        "schedule": "randomized_abba",
+        "chip_seconds": 16.0,
+        "blocks_per_session": 16,
+        "session_seconds": 1024.0,
+        "mean_estimate_w": -0.0007101121777078898,
+        "bias_w": -0.0009801121777078899,
+        "session_sd_w": 0.01062035600831108,
+        "coverage_95": 0.9140625,
+        "coverage_mc_se": 0.01926379375927805,
+        "ci_warnings": [
+          "asymptotic CI; fewer than 30 blocks"
+        ],
+        "empirical_rejection_rate_95": 0.0859375,
+        "plan_independent_sessions": {
+          "effect_fraction": 1e-05,
+          "unit_sd_fraction": 0.0003933465188263363,
+          "alpha": 0.05,
+          "target_power": 0.8,
+          "unit_seconds": 1024.0,
+          "budget_units": 3,
+          "budget_hours": 1.0,
+          "used_budget_hours": 0.8533333333333334,
+          "detection_power": 0.05022213940814762,
+          "mde_fraction": 0.0006362364128837692,
+          "required_units": 12144,
+          "required_hours": 3454.2933333333335,
+          "systematic_bound_fraction": 0.0,
+          "above_systematic_bound": true,
+          "statistically_detectable": false,
+          "detectable": false
+        }
+      },
+      "lockin": {
+        "schedule": "randomized_abba",
+        "chip_seconds": 2.0,
+        "blocks_per_session": 128,
+        "session_seconds": 1024.0,
+        "mean_estimate_w": 0.0004012345633201377,
+        "bias_w": 0.0001312345633201377,
+        "session_sd_w": 0.0037843165075819984,
+        "coverage_95": 0.9609375,
+        "coverage_mc_se": 0.01926379375927805,
+        "ci_warnings": [],
+        "empirical_rejection_rate_95": 0.0390625,
+        "plan_independent_sessions": {
+          "effect_fraction": 1e-05,
+          "unit_sd_fraction": 0.00014015987065118512,
+          "alpha": 0.05,
+          "target_power": 0.8,
+          "unit_seconds": 1024.0,
+          "budget_units": 3,
+          "budget_hours": 1.0,
+          "used_budget_hours": 0.8533333333333334,
+          "detection_power": 0.05175118582715219,
+          "mde_fraction": 0.00022670802731251336,
+          "required_units": 1542,
+          "required_hours": 438.61333333333334,
+          "systematic_bound_fraction": 0.0,
+          "above_systematic_bound": true,
+          "statistically_detectable": false,
+          "detectable": false
+        }
+      }
+    },
+    "variance_ratio_slow_over_lockin": 7.875955358310829,
+    "assumptions": [
+      "Independent sessions, independently randomized schedules; no continuous-trace sqrt(time) claim.",
+      "White SD is per sampling window; kHz is a simulation cadence, not a KM003C specification.",
+      "Coverage/rejections use exploratory 95% HAC CIs with automatic lags; sizing uses requested alpha/power.",
+      "Session SD and the variance ratio have Monte Carlo uncertainty; gains depend on these noise assumptions.",
+      "No replay count is assigned to in-process swap chips; required_units means independent sessions.",
+      "Acquisition hours omit setup, warm-up and guards; systematic bounds never average down."
+    ]
+  }
+}
