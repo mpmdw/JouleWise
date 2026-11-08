@@ -55,7 +55,7 @@ class FakeWorld:
                  release_c=None, released=True, mount_after=None, journal_gap_kind=None, tail=20.0,
                  precool_timeout=(), leg_g0_unreleased=(), thermometry_status="pass",
                  b_d=8192, slot_changes=None, failed_soak_reads=0, g0_timeout=(), calibration_g0_timeouts=None,
-                 gated_decode_tokens=12600, g0_waits=None, step_d_rate=20.0):
+                 gated_decode_tokens=12600, g0_waits=None, step_d_rate=20.0, gated_admitted_turns=3):
         self.tail = tail
         self.step_d_rate = step_d_rate
         # R7-2: gated run / X-G (by output name) -> its released G0 wait (s).
@@ -66,6 +66,7 @@ class FakeWorld:
         # R6-2: kind -> how many times step-d / a designed state reports INCONCLUSIVE.
         self.calibration_g0_timeouts = dict(calibration_g0_timeouts or {})
         self.gated_decode_tokens = gated_decode_tokens
+        self.gated_admitted_turns = gated_admitted_turns
         self.leg_g0_unreleased = set(leg_g0_unreleased)
         self.thermometry_status = thermometry_status
         self.invocations = []     # (kind, output name, AC powermode at the call)
@@ -198,7 +199,7 @@ class FakeWorld:
         if kind.startswith("d-") and "planning" not in kind and kind != "d-4bit":
             payload.update(energy_j={"d-spam-benign-s1-a": 30000.0, "d-spam-benign-s1-b": 30036.0,
                                      "d-bank-benign-s1": 32000.0}[kind],
-                           admitted_turns=3, x7=False, turn_cap_tokens=4096,
+                           admitted_turns=self.gated_admitted_turns, x7=False, turn_cap_tokens=4096,
                            # R6-3: 12,600 tokens in 700 s = 18 tok/s (step-d: 20).
                            decode_tokens=self.gated_decode_tokens,
                            deadman={"T_dead_s": 1451.018, "phases_s": {
@@ -1066,37 +1067,106 @@ class R1Tests(unittest.TestCase):
         self.assertEqual(moments[-1].astimezone(PACIFIC).strftime("%Y-%m-%d %H:%M %Z"), "2027-03-14 13:15 PDT")
         self.assertEqual(r1._now_local().tzinfo, PACIFIC)
 
-    def test_driver_record_satisfies_the_kit_evidence_binding(self):
-        # MEDIUM-3 end to end: the kit binds exactly what the driver writes.
+    @staticmethod
+    def lane_shaped_record(td, synthetic):
+        """What the R1 lane driver (e901eb2a4) writes, as the kit receives it.
+
+        The lane driver predates R10-4 and R16: its x_g carries no
+        admitted_turns/x7/phases_s and its gated rows carry no per-turn counts.
+        Both are lead-owned backfills (``backfill-x-g``, ``backfill-turn-counts``).
+        """
+        # 28,000 decode tokens in 7 admitted turns: <= 4,096 per turn, as a real run.
+        with patch.object(r1, "_run", FakeWorld(step_d_rate=40.0, gated_decode_tokens=28000,
+                                                gated_admitted_turns=7)):
+            assert r1.run(R1Tests.args(None, td, synthetic=synthetic)) == 0
+        raw = (Path(td) / "run/r1_result.json").read_bytes()
+        slots = json.loads((Path(td) / "registration/r1_slots.json").read_text())
+        for key in ("admitted_turns", "x7", "phases_s"):
+            slots["x_g"].pop(key, None)
+        for row in slots["deadman_budget"]:
+            for key in ("turn_decode_counts", "turn_completed", "turn_counts_source_sha256"):
+                row.pop(key, None)
+        return slots, json.loads(raw), raw
+
+    @staticmethod
+    def bind_inputs(slots):
         from scripts import align_v4_kit as kit
         from tests.align.test_v4_kit import ready_inputs
+        inputs, _ = ready_inputs(101.5, slots["max_r1_tail_s"])
+        policy = inputs["R1"]["thermal_policy"]
+        # R5-4: the thermal policy is the one R1 measured; R7-2: W1's G0 cap is R1's slot.
+        policy.update(chunk_tokens=slots["slots"]["N_chunk"], delta_slow_c=slots["slots"]["S6"],
+                      turn_cap_s=slots["slots"]["S7"], g0_cap_s=slots["g0_cap_w1"]["value_s"],
+                      # R6-5: the policy carries R1's classification digest.
+                      classification_sha256=slots["thermometry"]["D"]["classification_sha256"])
+        # R11 R07: the contrast cap/fit are re-derived from THIS record, on every path.
+        contrast = kit.w1_contrast_g0_cap(slots, inputs["WP18"]["X"]["max_turns"])
+        policy.update(contrast_g0_cap_s=contrast["value_s"], contrast_fit=contrast)
+        return inputs
+
+    def test_driver_record_satisfies_the_kit_evidence_binding(self):
+        # MEDIUM-3 end to end: the kit binds exactly what the driver writes, plus the
+        # two lead-owned backfills (R10-4 X-G evidence, R11/R16 per-turn counts) that
+        # a lane-shaped record needs before W1.
+        import hashlib
+        from scripts import align_v4_kit as kit
+        from scripts import align_w1_budget_procedure as procedure
         for synthetic in (False, True):
             with self.subTest(synthetic=synthetic), tempfile.TemporaryDirectory() as td:
                 # R7-2: 1(f) now carries G0_cap_W1 (>= 600 s), so the fake
                 # decodes at 40 tok/s for the frozen B_D to fit T_dead.
-                with patch.object(r1, "_run", FakeWorld(step_d_rate=40.0, gated_decode_tokens=28000)):
-                    self.assertEqual(r1.run(self.args(td, synthetic=synthetic)), 0)
-                slots = json.loads((Path(td) / "registration/r1_slots.json").read_text())
-                inputs, _ = ready_inputs(101.5, slots["max_r1_tail_s"])
-                # R5-4: the thermal policy is the one R1 measured; R7-2: W1's G0 cap is R1's slot.
-                inputs["R1"]["thermal_policy"].update(chunk_tokens=slots["slots"]["N_chunk"],
-                                                      delta_slow_c=slots["slots"]["S6"],
-                                                      turn_cap_s=slots["slots"]["S7"],
-                                                      g0_cap_s=slots["g0_cap_w1"]["value_s"])
+                slots, result, raw = self.lane_shaped_record(td, synthetic)
                 self.assertEqual(slots["g0_cap_w1"]["value_s"], 600)
                 self.assertEqual(slots["budget_fit_inputs"]["turn_cap_tokens"], 4096)
                 # R6-3: min(step-d 40 tok/s, the gated runs' 40 tok/s).
                 self.assertEqual(slots["budget_fit_inputs"]["r_decode_tok_per_s"], 40.0)
                 self.assertEqual(slots["budget_fit_inputs"]["r_decode_step_d_tok_per_s"], 40.0)
-                # R6-5: the policy carries R1's classification digest.
-                inputs["R1"]["thermal_policy"]["classification_sha256"] = \
-                    slots["thermometry"]["D"]["classification_sha256"]
+                # Compatibility with a lane-shaped record: unbackfilled, W1 refuses (R11 inconclusive).
+                with self.assertRaisesRegex(ValueError, "turn opportunity|contrast"):
+                    kit.require_ready(self.bind_inputs(slots), slots, synthetic=synthetic)
+                slots = procedure.backfill_x_g(slots, result, hashlib.sha256(raw).hexdigest())
+                export = {row["run"]: {"turn_decode_counts": self.even_split(row["decode_tokens"], row["admitted_turns"], 4096),
+                                       "turn_completed": [True] * row["admitted_turns"]}
+                          for row in slots["deadman_budget"]}
+                export_raw = json.dumps(export, sort_keys=True).encode()
+                slots = procedure.backfill_turn_counts(slots, export, hashlib.sha256(export_raw).hexdigest())
+                inputs = self.bind_inputs(slots)
                 if synthetic:
                     with self.assertRaisesRegex(ValueError, "source must be"):
                         kit.require_ready(inputs, slots)
                     kit.require_ready(inputs, slots, synthetic=True)
                 else:
                     kit.require_ready(inputs, slots)
+
+    @staticmethod
+    def even_split(total, turns, cap):
+        base, extra = divmod(total, turns)
+        counts = [base + (1 if i < extra else 0) for i in range(turns)]
+        assert all(0 <= n <= cap for n in counts), counts
+        return counts
+
+    def test_turn_count_backfill_never_overwrites_and_refuses_a_mismatched_export(self):
+        import hashlib
+        from scripts import align_w1_budget_procedure as procedure
+        with tempfile.TemporaryDirectory() as td:
+            slots, _result, _raw = self.lane_shaped_record(td, True)
+            good = {row["run"]: {"turn_decode_counts": self.even_split(row["decode_tokens"], row["admitted_turns"], 4096),
+                                 "turn_completed": [True] * row["admitted_turns"]}
+                    for row in slots["deadman_budget"]}
+            digest = hashlib.sha256(json.dumps(good, sort_keys=True).encode()).hexdigest()
+            done = procedure.backfill_turn_counts(slots, good, digest)
+            self.assertEqual({row["turn_counts_source_sha256"] for row in done["deadman_budget"]}, {digest})
+            with self.assertRaisesRegex(ValueError, "already records"):
+                procedure.backfill_turn_counts(done, good, digest)
+            run = slots["deadman_budget"][0]["run"]
+            for change in ({"turn_decode_counts": [1]}, {"turn_completed": []}, {"turn_decode_counts": [-1] * 3}):
+                bad = {**good, run: {**good[run], **change}}
+                with self.subTest(change=change), self.assertRaises(ValueError):
+                    procedure.backfill_turn_counts(slots, bad, digest)
+            with self.assertRaises(ValueError):
+                procedure.backfill_turn_counts(slots, {k: v for k, v in good.items() if k != run}, digest)
+            with self.assertRaises(ValueError):
+                procedure.backfill_turn_counts(slots, good, "nothex")
 
     def test_plan_pins_durations_and_gated_held_members(self):
         rows = r1.phase_plan(False)
@@ -1311,6 +1381,8 @@ class Round5RulingTests(unittest.TestCase):
                                                   delta_slow_c=registration["slots"]["S6"],
                                                   turn_cap_s=registration["slots"]["S7"],
                                                   classification_sha256="c" * 64, g0_cap_s=1200)
+            contrast = kit.w1_contrast_g0_cap(registration, 12)    # R11: re-derived from this record
+            inputs["R1"]["thermal_policy"].update(contrast_g0_cap_s=contrast["value_s"], contrast_fit=contrast)
             with self.assertRaisesRegex(ValueError, r"ruling 1\(f\).*G0_s 1200\.0"):
                 kit.check_r1_evidence(inputs, registration, synthetic=True)
         with tempfile.TemporaryDirectory() as td:

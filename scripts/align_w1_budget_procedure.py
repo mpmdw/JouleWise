@@ -13,6 +13,10 @@ functions, so it cannot disagree with ``--check``.
   backfill-x-g  copy X-G's admitted turns, deadman flag and phase seconds from
                 r1_result.json into r1_slots.x_g, for an R1 record written
                 before the driver recorded them (R10-4)
+  backfill-turn-counts
+                copy the lead's explicit per-turn count export (R11/R16) into
+                the three gated D deadman_budget rows, binding its sha256; the
+                R1 driver does not record per-turn counts
 
 Steps of ``decide`` (R10-2, recorded before any R1 number exists):
   0. any inconclusive segment: R1-RERUN (R7-3, the magistrate's call); stop.
@@ -227,6 +231,46 @@ def backfill_x_g(r1_slots, r1_result, r1_result_sha256):
     return out
 
 
+def backfill_turn_counts(r1_slots, export, export_sha256):
+    """r1_slots with the gated D runs' per-turn counts from a lead-owned export.
+
+    ``export`` maps each gated D run name to ``{'turn_decode_counts': [int, ...],
+    'turn_completed': [bool, ...]}`` taken from explicit bundle bytes (R11/R16:
+    count-only, never an energy or score). The record keeps the export's sha256 in
+    ``turn_counts_source_sha256``. Existing values are never overwritten, and the
+    lengths and decode-token sum must agree with the driver's own row, so a
+    mismatched export is refused here as well as by ``kit.turn_opportunity``."""
+    if not kit.valid_digest(export_sha256):
+        raise ValueError('backfill-turn-counts must record the export sha256 (64 lowercase hex)')
+    rows = r1_slots.get('deadman_budget')
+    if (not isinstance(rows, list) or len(rows) != 3 or not isinstance(export, dict)
+            or {r.get('run') for r in rows if isinstance(r, dict)} != set(kit.GATED_D_RUN_NAMES)
+            or set(export) != set(kit.GATED_D_RUN_NAMES)):
+        raise ValueError('turn-count export must cover exactly the three gated D runs of r1_slots')
+    cap = (r1_slots.get('budget_fit_inputs') or {}).get('turn_cap_tokens')
+    out = deepcopy(r1_slots)
+    for row in out['deadman_budget']:
+        entry = export[row['run']]
+        counts, completed = (entry.get(k) if isinstance(entry, dict) else None
+                             for k in ('turn_decode_counts', 'turn_completed'))
+        present = [k for k in ('turn_decode_counts', 'turn_completed', 'turn_counts_source_sha256')
+                   if row.get(k) is not None]
+        if present:
+            raise ValueError(f'{row["run"]} already records {present}; nothing is overwritten')
+        if (type(cap) is not int or not isinstance(counts, list) or not counts
+                or any(type(n) is not int or not 0 <= n <= cap for n in counts)
+                or not isinstance(completed, list) or len(completed) != len(counts)
+                or any(type(v) is not bool for v in completed)
+                or sum(counts) != row.get('decode_tokens') or row.get('admitted_turns') != len(counts)):
+            raise ValueError(f'{row["run"]}: export disagrees with the driver row '
+                             '(per-turn counts, completion flags, decode_tokens, admitted_turns)')
+        row.update(turn_decode_counts=list(counts), turn_completed=list(completed),
+                   turn_counts_source_sha256=export_sha256)
+    out['turn_counts_backfill'] = {'authority': 'RUN_STATE 212 R16; lead-owned export',
+                                   'lead_step': True, 'export_sha256': export_sha256}
+    return out
+
+
 def _load(path):
     return json.loads(Path(path).read_bytes())
 
@@ -246,9 +290,18 @@ def main(argv=None):
     p.add_argument('--r1-slots', type=Path, default=ROOT / kit.R1_SLOTS)
     p.add_argument('--r1-result', type=Path, required=True)
     p.add_argument('--out', type=Path, required=True)
+    p = sub.add_parser('backfill-turn-counts')
+    p.add_argument('--r1-slots', type=Path, default=ROOT / kit.R1_SLOTS)
+    p.add_argument('--counts-export', type=Path, required=True)
+    p.add_argument('--out', type=Path, required=True)
     args = parser.parse_args(argv)
     try:
-        if args.command == 'decide':
+        if args.command == 'backfill-turn-counts':
+            raw = args.counts_export.read_bytes()
+            out = backfill_turn_counts(_load(args.r1_slots), json.loads(raw), hashlib.sha256(raw).hexdigest())
+            args.out.write_text(json.dumps(out, indent=2, sort_keys=True) + '\n')
+            print(f'wrote {args.out}')
+        elif args.command == 'decide':
             x_max_turns = _load(args.inputs)['WP18']['X']['max_turns']
             out = decide(_load(args.r1_slots), x_max_turns)
             draft = out.pop('receipt_draft')
