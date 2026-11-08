@@ -14,9 +14,14 @@ blocks". A fault that a 30-45 min check can catch must never cost a 12 h W1/D wi
   - the series-manifest binding;
   - transcript and process-group discipline.
 
-It lives on `align/2026-11-08-w1-smoke-merged`. That branch merges `align/2026-11-08-v4-r11` @ `48a4d1d76`,
+It lives on `align/2026-11-08-w1-smoke-merged`. That branch merges `align/2026-11-08-v4-r11` @ `1a2574b49`,
 which carries the packet rebuild (`scripts/align_v4_next_arm_packet.py`), the W1 blockers, and the
 delta2 fixes (G2, G3).
+
+**Sol reviews (HOLD at `f6251227a`), fixed here.** Both witness modules are on the branch, and they pass
+with every `expectedFailure` removed: `tests/align/test_smoke_review_sol1.py` (21 tests) and
+`test_smoke_review_sol2.py` (14 tests). Section 7 of `W1-SMOKE-AGREEMENT.md` maps each finding to its
+fix and lists three named witness adaptations to the landed schema.
 
 **Lead rulings applied:**
 1. Opus owns the single merged kit, and the command folds into `scripts/align_v4_prequal.py`.
@@ -88,14 +93,14 @@ the launcher's own dwell test seam (`JOULEWISE_R0_TEST_DISPLAY_DWELL_S=0.1`) and
 | Check | Gates | What it runs | Goes green when |
 |---|---|---|---|
 | `arm-cli` | w1 | `align_v4_session.py install --help`, then `install` without evidence (argparse must name every required flag: `--w1-disk-config`, `--obc-off-attested-by`, `--battery-log`, `--next-arm-triage`). Then the production `main(['install', …])` through `h.install` against a fake host, in 12 cases. The measurement root is a git repo with a committed R1 record. The battery log is synthetic. The cases: control; triage missing, edited or pre-R12; `record_commit` unknown; top-up with no charge, stale or future-dated; OBC unattested; a disk image mounted; battery charging; powermode mismatch. | The control admits and calls the installer exactly once. The 11 faults each refuse with their documented reason before the installer. |
-| `packet-rebuild` | w1 | **G1, packet as pointer.** The fixture is the fixer's real record schema (`tests/align/test_v4_next_arm_packet.Scenario`: the `window_record.v1` index and `series/state.json` with `previous_record` links). The series is W1, C1, C2, a zero-capture C3, then its retry `C3#2`. The producer, `build_packet`, writes the packet. The production `arm_checks` (fake host, fake meter probe) is run on it, and the rebuild is read from `next_arm_triage.rebuilt_packet`. Then three runs: the rebuild itself (the packet must admit); the rebuild with `pushed_tip` and `packet_preflight` changed (must admit); the same packet an hour later, past `valid_until_epoch_s` (must refuse). Host checks such as battery are judged elsewhere; only `next_arm_triage:` reasons count here. | It is green on `48a4d1d76`. |
-| `packet-tamper` | w1 | **G1b, packet as pointer.** Every single-field change to the rebuild must refuse: 44 today, covering each key changed, each key removed, an added key, and edited basis text, with the ignored fields excluded. A chain with a hole must also refuse: the rebuild with every element naming the zero-capture attempt (C3) removed from `window_chain` and `calibration_windows`. | It is green on `48a4d1d76`. |
+| `packet-rebuild` | w1 | **G1, packet as pointer.** The fixture is the fixer's real record schema (`Scenario`): W1, C1, C2, a zero-capture C3 and its retry `C3#2`. The packet comes from the real producer `build_packet`. The production `arm_checks` runs with a fake host and a fake meter probe, and the rebuild is read from `next_arm_triage.rebuilt_packet`. Four probes, all judged on `next_arm_triage:` reasons only: the rebuild must admit; the rebuild with only `pushed_tip`/`packet_preflight` changed must admit; one second **before** `valid_until_epoch_s` it must admit; one second **after**, it must be refused *for expiry* (`expired` / `valid_until`), never for an unrelated reason (S3). A missing `valid_until_epoch_s` FAILs. | Green. |
+| `packet-tamper` | w1 | **G1b.** An admitted control comes first: the arm's own rebuild. If that control is refused, the check FAILs, because no refusal can then be attributed to tampering (S3). Then every single change must be refused as a mismatch (`does not match its committed sources` / `could not be rebuilt`); any other refusal reason counts as not refused. The changes: every top-level key changed or removed; an added key; in **every** check entry the status flipped, the basis edited, the status removed and a key added (S2-3: nested leaves); every `window_chain`/`calibration_windows` element's first leaf changed; and the chain with the zero-capture attempt removed. About 100 arm runs, 6 in parallel. | Green. |
 | `calibration-stop` | w1 | `calibration_stop` over the planned C1-C8 (7/7 per pair, 22 members): the 8 prefixes, zero-capture, escalation, provisional, insufficient, a ninth window, loss of two whole windows (completes) and of three (insufficient). Then 5 triage-integrated arms, with the arm-derived identity. | It is green now. |
 | `cal-escalation-exit` | w1 | MED-2(a): two final zero-capture refusals escalate. Then a signed `lead_rulings` row (`resets: zero_capture_escalation`) resets the count, and the triage admits the next calibration arm. | It is green now. |
 | `kit-ready` | w1 | `align_v4_kit.py --check` on a clean clone of the candidate | The kit is W1-ready (R0 and R1 values filled). |
-| `receipt` | w1 | Three parts. **(Sol)** The static import closure of `endpoint.py`, `run_night.py` and `align_v4_session.py` must be covered by `ARTIFACTS`. A validator self-test: an exact receipt is admitted; a digest mismatch and a working-bytes drift are refused. Then the committed receipt via `require_registration`, whose bound commit must be an ancestor of the candidate, with a clean checkout. | The receipt is registered. A receipt cannot contain its own commit, so the merged kit requires the bound commit to be an *ancestor* of the candidate rather than Sol's literal `receipt.commit == candidate`. |
-| `series-manifest` | w1 | **(Sol)** `--series-projection`: one W1, then C1-C8 in order, then tests, with 7/7 benign. It is bound by sha256 to its source manifest, and fixed-8 is checked on it. | The lead freezes and projects the series. |
-| `deadline` | r1 | **(Sol)** `--deadline-projection` of the installed plan: segments × attempts, plus 11,164 s per possible batch encounter, plus bracket/close/harvest. The R1 floors (67,371 s, or 96,427 s with a redo) apply to R1 only. The projection's kind must match `--w1-next`. | The magistrate supplies the projection for the next window's installed plan. |
+| `receipt` | w1 | Three parts. **(Sol)** The static import closure of `endpoint.py`, `run_night.py` and `align_v4_session.py`, **every** first-party path including `scripts/` (S10), must be covered by `ARTIFACTS`. A validator self-test: an exact receipt is admitted; a digest mismatch and a working-bytes drift are refused. Then the committed receipt via `require_registration`, whose bound commit must be an ancestor of the candidate, with a clean checkout. | The receipt is registered. A receipt cannot contain its own commit, so the merged kit requires the bound commit to be an *ancestor* of the candidate rather than Sol's literal `receipt.commit == candidate`. |
+| `series-manifest` | w1 | `--series-projection`: one W1, then C1-C8 in order, then tests, with 7/7 benign. It names its source manifest by sha256, and the projected roster must **equal the source's `windows` roster** (order, roles, windows, per-pair counts). A digest binds bytes; the roster has to describe them (S2). Fixed-8 is checked on that roster. | The lead freezes and projects the series. |
+| `deadline` | r1 | `--deadline-projection` is a repo-relative copy of the next window's **installed `night_plan.json`**, identified by sha256 (S1/S2-4). A free schedule declaration is refused. The plan must be a HAZARD_PACK v5 plan whose `plan_id` kind (`align-r1-`, `align-v4-`; never `align-v4-smoke-`) is the next measurement. Its `window_max_s` must cover its own `programmed_span_s` through the plan writer's formula (`plan_inputs.window_max_s`), and for R1 also the corrected floors (67,371 s, or 96,427 s if the plan has a retry or redo). | The magistrate copies in the installed plan. |
 | `r1-w1-chain` | w1 | `R1-TO-W1-CHAIN.md` as written, on a lane-shaped synthetic R1 record in a clean clone: exporter, `backfill-x-g`, `backfill-turn-counts`, `derive-contrast` (equal to the kit's re-derivation), `decide`, `kit.require_ready`, then the kit steps the runbook's shell block documents. | **G2.** It is green on `8d0dabc73`: the runbook now regenerates the kit (step 7) before `--check`. |
 | `km003c-launch` | r1 | The real HAZARD_PACK driver with a live sample-writing stand-in meter, run clean and with the reader SIGKILLed mid-chain. Custody hashes and the SIGTERM stop are checked; the reader must restart into `stream-002`; the straddling member must read DC `missing` with `meter.*` flags; the other members must read `available` with rails unchanged. Also the production argv and `require_enabled`. | It is green now. |
 | `km003c-crash-radius` | w1 | **G3.** A member that ended *before* the reader was killed | It is green on `8d0dabc73` (unclosed-stream salvage). |
@@ -138,8 +143,46 @@ These are checked against the production roots:
 - `production_roots` in `w1_smoke.json` (`~/night-align`, `~/night-custody`, `~/night-archive`). These
   are compared as strings only, never opened.
 
-Each fault session is checked again before its attempt. A single hit aborts the smoke (exit 2), and
-`parse` shows `isolated-clone` FAIL.
+**When isolation is checked, and how hits are handled** (Sol S4/S5, S2-1):
+- Before ANY write, `destination_violations` checks the smoke directory: it must be new, and neither it
+  nor its nearest existing ancestor may lie inside a production root. A refusal writes nothing at all,
+  not even the log.
+- Isolation is checked again after `isolate`, after prepare (state and plan), before every fault
+  (that fault session's state and its plan copy) and before the main arm.
+- Every **write locator** (custody, runs parent and runs roots, backups, ledger, measurement/view/pack
+  roots, chain, `disk_volumes`) must be absolute and inside the smoke directory in both its lexical and
+  its resolved form. A relative locator is a violation.
+- A read-only exemption (the base site-packages) never excuses a write locator, and it is
+  component-bounded.
+- `TMPDIR` for every command is `<smoke-dir>/tmp`.
+- Configured roots are protected in both their lexical and their resolved form. Only link metadata is
+  read; no root is opened or listed.
+- The reducer refuses to write through a symlink or outside its session.
+- Any hit raises `IsolationAbort`. The whole smoke stops (exit 2) before any further arm, and `parse`
+  shows `isolated-clone` FAIL.
+
+**Hard limits** (Sol S5/S7, S2-2), not reports:
+- **Teardown.** A fault's teardown that cannot be proven stops the smoke before the main arm: the disk
+  image still mounted, the receipt clone not removed, or a teardown error. So does a fault that reached
+  the installer.
+- **Budget.** One deadline (`budget_s` = 2,700 s) clips every command timeout and every sleep.
+  Exceptions are teardown commands. Nothing is armed unless `arm_reserve_s` (1,800 s) of budget is left.
+- **Owned teardown.** On a budget expiry, a failed terminal or any error after the main install, `finally`
+  uninstalls only the job this smoke installed (`install_night_agent.sh --plan <its plan> --uninstall`),
+  stops and reaps the contender, and proves the job unloaded and no process naming its plan. If that
+  proof fails, it leaves `teardown-unproven.json`.
+- **Process groups.** A command timeout kills the whole process group (TERM, then KILL regardless of the
+  leader), reaps the leader and proves the group gone. A surviving group is a `TeardownFailure` (S8).
+- **Meter kill.** The meter kill targets only this window's reader, by the pgid in its
+  `meter_supervision.jsonl`; there is never a global `pkill`.
+
+**Gap guards** also refuse a **published but unloaded** production plan (Sol S6):
+`~/Library/LaunchAgents/com.joulewise.night{,.deadman}.plist`.
+
+**Receipt locators** (S9): the seam replaces the view's symlinked kit directory with a regular copy, and
+the session's `measurement_root` is the isolated clone itself. The production install's
+`kit.generate(check=True)` / `require_registration` therefore resolves receipt locators without
+symlinks.
 
 `tests/align/test_w1_smoke.IsolationTests` runs the real `isolate` and the real `measurement_view` on a
 stand-in production checkout. It fails if any smoke path resolves inside a production root, if the ledger
@@ -163,8 +206,9 @@ $M/.venv/bin/python -B scripts/align_v4_w1_smoke.py parse <smoke-dir> --json <sm
 $M/.venv/bin/python -B scripts/align_v4_w1_smoke.py faults
 ```
 
-- `<smoke-root>` must not be under `~`, under the checkout, or under any production root; the guard
-  refuses otherwise.
+- `<smoke-root>` must not be under the checkout or any production root. The guard refuses those before
+  writing anything. A dedicated smoke root outside the window run roots is recommended; a smoke root
+  under `~` is no longer refused, and the earlier claim that it was is withdrawn.
 - `--detach` re-runs the command in a new session.
 - Every command is run in its own process group, with TERM then KILL on timeout. Its transcript is
   written create-once to `<smoke-dir>/transcripts/NNNN-*.json`.

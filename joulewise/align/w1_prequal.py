@@ -501,33 +501,65 @@ def _rebuild(ctx, name):
     return scenario.root, scenario, now, pointer, arm, _find_rebuilt(arm)
 
 
+PACKET_REFUSALS = ('does not match its committed sources', 'could not be rebuilt')
+EXPIRY_REFUSALS = ('expired', 'valid_until')
+_FLIP = {'pass': 'fail', 'fail': 'pass', 'not_applicable': 'pass', 'recorded': 'pass', 'deferred': 'pass'}
+
+
+def _bump(value):
+    if isinstance(value, bool):
+        return not value
+    if isinstance(value, (int, float)):
+        return value + 1
+    if isinstance(value, str):
+        if value in _FLIP:
+            return _FLIP[value]
+        return value + 'x' if not re.fullmatch(r'[0-9a-f]{40,64}', value) else ('f' if value[0] != 'f' else 'e') + value[1:]
+    if isinstance(value, list):
+        return value[:-1] if value else [{'injected': True}]
+    if isinstance(value, dict):
+        return {**value, 'injected': True}
+    return 'injected' if value is None else None
+
+
 def _mutations(packet):
-    """Every single-field change to a packet (ignored fields excluded), plus additions and removals."""
-    def bump(value):
-        if isinstance(value, bool):
-            return not value
-        if isinstance(value, (int, float)):
-            return value + 1
-        if isinstance(value, str):
-            return value + 'x' if not re.fullmatch(r'[0-9a-f]{40,64}', value) else ('f' if value[0] != 'f' else 'e') + value[1:]
-        if isinstance(value, list):
-            return value[:-1] if value else [{'injected': True}]
-        if isinstance(value, dict):
-            return {**value, 'injected': True}
-        return 'injected' if value is None else None
+    """Single changes to a packet (ignored fields excluded): every top-level key changed or removed, an
+    added key; in EVERY check entry its status flipped, its basis edited, its status removed and a key
+    added (S2-3: nested leaves); in every window_chain/calibration_windows element its first leaf changed."""
     for key in sorted(packet):
         if key in PACKET_IGNORED:
             continue
-        yield f'changed {key}', {**packet, key: bump(packet[key])}
+        yield f'changed {key}', {**packet, key: _bump(packet[key])}
         yield f'removed {key}', {k: v for k, v in packet.items() if k != key}
     yield 'added field', {**packet, 'injected_field': 'x'}
-    checks = packet.get('checks')
-    if isinstance(checks, dict) and checks:
-        name = sorted(checks)[0]
-        edited = copy.deepcopy(packet)
-        if isinstance(edited['checks'][name], dict):
-            edited['checks'][name]['basis'] = str(edited['checks'][name].get('basis')) + ' (edited)'
-            yield f'edited basis text of {name}', edited
+    for name, entry in sorted((packet.get('checks') or {}).items()):
+        if not isinstance(entry, dict):
+            continue
+        for label, change in (('status flipped', lambda e: e.__setitem__('status', _bump(e.get('status', 'pass')))),
+                              ('basis edited', lambda e: e.__setitem__('basis', str(e.get('basis')) + ' (edited)')),
+                              ('status removed', lambda e: e.pop('status', None)),
+                              ('key added', lambda e: e.__setitem__('injected', True))):
+            edited = copy.deepcopy(packet)
+            change(edited['checks'][name])
+            yield f'checks.{name}: {label}', edited
+    for list_key in ('window_chain', 'calibration_windows'):
+        for index, element in enumerate(packet.get(list_key) or []):
+            if isinstance(element, dict) and element:
+                leaf = sorted(element)[0]
+                edited = copy.deepcopy(packet)
+                edited[list_key][index][leaf] = _bump(element[leaf])
+                yield f'{list_key}[{index}].{leaf} changed', edited
+
+
+def _refused_for(arm, needles):
+    """The arm refused the PACKET for one of the expected reasons (S3: not for an unrelated one)."""
+    return any(n in str(r) for r in arm.get('reasons', ()) if str(r).startswith('next_arm_triage:') for n in needles)
+
+
+def _arms(ctx, root, packets, now):
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        return list(pool.map(lambda packet: _arm_file(ctx, root, packet, now=now), packets))
 
 
 def _zero_capture_attempt(packet):
@@ -553,9 +585,9 @@ def _omit_attempt(packet, attempt):
     return walk(packet), removed[0]
 
 
-@check('packet-rebuild', 'G1 (packet as pointer): the arm rebuilds the next-arm packet from the identities it names '
-       'and a valid rebuild admits; ignored fields (pushed_tip, packet_preflight) may differ; an expired packet '
-       'is refused', gates='w1')
+@check('packet-rebuild', 'G1 (packet as pointer): the arm rebuilds the next-arm packet from the identities it names; '
+       'a valid rebuild admits; ignored fields (pushed_tip, packet_preflight) may differ; expiry is mandatory: '
+       'admits just before valid_until_epoch_s and refuses just after it FOR EXPIRY', gates='w1')
 def check_packet_rebuild(ctx):
     root, scenario, now, pointer, arm, rebuilt = _rebuild(ctx, 'rebuild')
     evidence = {'pointer_verdict': _verdict(arm), 'series': ['W1', *(w for w, _ in SERIES)],
@@ -565,30 +597,30 @@ def check_packet_rebuild(ctx):
                       'packet from the identities it names (lead ruling: the packet is only a pointer). '
                       + GAP_REFS['packet-rebuild'], **evidence)
     valid = {**rebuilt, **{k: pointer[k] for k in PACKET_IGNORED if k in pointer}}
-    verdicts = {'rebuild': _arm_file(ctx, root, valid, now=now)}
-    verdicts['ignored-fields-differ'] = _arm_file(ctx, root, {**valid, 'pushed_tip': '0' * 40,
-                                                                  'packet_preflight': {'other': True}}, now=now)
-    verdicts['expired'] = _arm_file(ctx, root, valid, now=now + 3600)
+    expiry = valid.get('valid_until_epoch_s')
+    evidence['valid_until_epoch_s'] = expiry
+    if type(expiry) not in (int, float):
+        return result(FAIL, 'the rebuilt packet carries no numeric valid_until_epoch_s (expiry is mandatory)',
+                      **evidence)
+    cases = {'rebuild': (valid, now),
+             'ignored-fields-differ': ({**valid, 'pushed_tip': '0' * 40, 'packet_preflight': {'other': True}}, now),
+             'just-before-expiry': (valid, expiry - 1), 'just-after-expiry': (valid, expiry + 1)}
+    verdicts = {name: _arm_file(ctx, root, packet, now=at) for name, (packet, at) in cases.items()}
     evidence['verdicts'] = {k: _verdict(v) for k, v in verdicts.items()}
-    evidence['valid_until_epoch_s'] = valid.get('valid_until_epoch_s')
-    failures = []
-    if not _triage_ok(verdicts['rebuild']):
-        failures.append('the arm refuses its own rebuild: ' + '; '.join(evidence['verdicts']['rebuild']['reasons'])[:400])
-    if not _triage_ok(verdicts['ignored-fields-differ']):
-        failures.append('a difference only in pushed_tip/packet_preflight is refused')
-    if 'valid_until_epoch_s' not in valid:
-        failures.append('the rebuilt packet carries no valid_until_epoch_s (expiry is mandatory)')
-    if _triage_ok(verdicts['expired']):
-        failures.append('the same packet admits 30 days later: expiry is not enforced')
+    failures = [f'{name} is refused: ' + '; '.join(evidence['verdicts'][name]['reasons'])[:300]
+                for name in ('rebuild', 'ignored-fields-differ', 'just-before-expiry')
+                if not _triage_ok(verdicts[name])]
+    if not _refused_for(verdicts['just-after-expiry'], EXPIRY_REFUSALS):
+        failures.append('one second past valid_until_epoch_s the packet is not refused for expiry')
     if failures:
         return result(FAIL, '; '.join(failures), **evidence)
-    return result(PASS, 'the arm rebuilds the packet; a valid rebuild admits, ignored fields may differ, the '
-                  'same packet an hour later (past valid_until_epoch_s) refuses', **evidence)
+    return result(PASS, 'the arm rebuilds the packet; a valid rebuild admits, ignored fields may differ; it admits '
+                  '1 s before valid_until_epoch_s and is refused for expiry 1 s after', **evidence)
 
 
-@check('packet-tamper', 'G1b (packet as pointer): a packet that differs from the arm\'s rebuild in ANY field '
-       '(changed, removed, added, edited basis text) is refused, and so is a chain that omits an attempt '
-       '(zero-capture C3#1 before C3#2)', gates='w1')
+@check('packet-tamper', 'G1b (packet as pointer): with an admitted control, a packet that differs from the arm\'s '
+       'rebuild in ANY field (top-level or nested check status/basis, chain elements) is refused as not matching '
+       'its committed sources, and so is a chain that omits the zero-capture attempt', gates='w1')
 def check_packet_tamper(ctx):
     root, scenario, now, pointer, arm, rebuilt = _rebuild(ctx, 'tamper')
     if rebuilt is None:
@@ -596,27 +628,31 @@ def check_packet_tamper(ctx):
                       'rebuild; today a field the arm does not re-derive is trusted as supplied. '
                       + GAP_REFS['packet-tamper'], pointer_verdict=_verdict(arm))
     valid = {**rebuilt, **{k: pointer[k] for k in PACKET_IGNORED if k in pointer}}
-    admitted_mutations = []
-    tried = 0
-    for label, mutated in _mutations(valid):
-        tried += 1
-        if _triage_ok(_arm_file(ctx, root, mutated, now=now)):
-            admitted_mutations.append(label)
+    control = _arm_file(ctx, root, valid, now=now)
+    if not _triage_ok(control):
+        return result(FAIL, 'the control (the arm\'s own rebuild) is refused, so no refusal below can be '
+                      'attributed to tampering: ' + '; '.join(_verdict(control)['reasons'])[:300],
+                      control=_verdict(control))
+    mutations = list(_mutations(valid))
     attempt = _zero_capture_attempt(valid)
     holed, removed = _omit_attempt(valid, attempt) if attempt else (valid, 0)
-    hole = _arm_file(ctx, root, holed, now=now) if removed else None
-    evidence = {'mutations_tried': tried, 'admitted_mutations': admitted_mutations, 'zero_capture_attempt': attempt,
-                'omitted_elements': removed, 'omitted_attempt_admitted': _triage_ok(hole) if hole else None}
+    if removed:
+        mutations.append((f'chain omits attempt {attempt}', holed))
+    verdicts = _arms(ctx, root, [m for _, m in mutations], now)
+    not_refused = [label for (label, _), verdict in zip(mutations, verdicts)
+                   if not _refused_for(verdict, PACKET_REFUSALS)]
+    evidence = {'mutations_tried': len(mutations), 'admitted_mutations': not_refused, 'zero_capture_attempt': attempt,
+                'omitted_elements': removed, 'control': _verdict(control)}
     failures = []
-    if admitted_mutations:
-        failures.append(f'{len(admitted_mutations)} of {tried} single-field changes admit: {admitted_mutations[:8]}')
     if not removed:
         failures.append('the rebuilt packet lists no zero-capture attempt: the chain does not list every attempt')
-    elif _triage_ok(hole):
-        failures.append(f'a packet whose chain omits attempt {attempt} admits')
+    if not_refused:
+        failures.append(f'{len(not_refused)} of {len(mutations)} changes are not refused as a mismatch with the '
+                        f'committed sources: {not_refused[:8]}')
     if failures:
         return result(FAIL, '; '.join(failures), **evidence)
-    return result(PASS, f'all {tried} single-field changes and the chain omitting {attempt} are refused', **evidence)
+    return result(PASS, f'control admits; all {len(mutations)} changes (top-level, nested check entries, chain '
+                  f'elements, and the chain omitting {attempt}) are refused as mismatches', **evidence)
 
 
 def _window(name, spam=7, bank=7, status='final', captured=22):
@@ -751,7 +787,7 @@ def check_receipt(ctx):
                      'gates': {s: {'verdict': 'ADMIT', 'path': gate_doc,
                                    'sha256': reg.digest((clone / gate_doc).read_bytes())} for s in 'AB'}}
         self_test = {}
-        uncovered = sorted(p for p in executed_closure(clone) if p.startswith('joulewise/') and p not in reg.ARTIFACTS)
+        uncovered = sorted(p for p in executed_closure(clone) if p not in reg.ARTIFACTS)   # scripts too (S10)
         if uncovered:
             return result(FAIL, f'{len(uncovered)} executed modules are not bound by the receipt: {uncovered[:8]}',
                           uncovered=uncovered)
@@ -931,8 +967,9 @@ def _repo_json(ctx, relative):
     return json.loads(raw), hashlib.sha256(raw).hexdigest()
 
 
-@check('series-manifest', 'Sol port: the lead-frozen series projection (one W1, C1-C8 in order, then tests; 7/7 '
-       'benign) bound by sha256 to its source manifest, and fixed-8 on it', gates='w1')
+@check('series-manifest', 'Sol port, roster-bound: the frozen series projection (one W1, C1-C8 in order, then '
+       'tests; 7/7 benign) equals the roster of the source manifest it names by sha256, and fixed-8 holds on it',
+       gates='w1')
 def check_series_manifest(ctx):
     from joulewise.align.apple import v4_registration as reg
     if not ctx.series_projection:
@@ -940,24 +977,84 @@ def check_series_manifest(ctx):
                                'manifest is not projected yet (never inferred from outcomes)')
     value, digest = _repo_json(ctx, ctx.series_projection)
     source = value.get('source') or {}
-    if hashlib.sha256(reg._local(ctx.repo, source.get('path', '')).read_bytes()).hexdigest() != source.get('sha256'):
+    try:
+        raw = reg._local(ctx.repo, source.get('path', '')).read_bytes()
+    except (OSError, ValueError) as exc:
+        return result(FAIL, f'series source manifest unreadable: {exc}')
+    if hashlib.sha256(raw).hexdigest() != source.get('sha256'):
         return result(FAIL, 'series projection does not bind its frozen source manifest bytes')
-    return result(PASS, 'series projection bound and fixed-8', projection_sha256=digest, **validate_series(value))
+    try:
+        manifest = json.loads(raw)
+    except ValueError:
+        return result(FAIL, 'series source manifest is not JSON')
+    roster = manifest.get('windows') if isinstance(manifest, dict) else None
+    if not isinstance(roster, list) or not roster:
+        return result(FAIL, 'series source manifest carries no window roster to project')
+    canon = lambda rows: json.dumps(rows, sort_keys=True, separators=(',', ':'))
+    if canon(roster) != canon(value.get('windows')):
+        return result(FAIL, 'the projected roster differs from the hashed source manifest (order, roles, windows or '
+                      'per-pair counts): a digest binds bytes, the roster must describe them (S2)')
+    return result(PASS, 'series projection equals its source roster and is fixed-8', projection_sha256=digest,
+                  source_sha256=source['sha256'], **validate_series({**value, 'windows': roster}))
 
 
-@check('deadline', 'Sol port: window_max_s of the installed plan covers every segment, retry and possible '
-       '11,164 s batch encounter plus bracket/close/harvest (R1 floors 67,371 / 96,427 s apply to R1 only)',
-       gates='r1')
+def _find_key(value, key):
+    if isinstance(value, dict):
+        if key in value:
+            return value[key]
+        for item in value.values():
+            found = _find_key(item, key)
+            if found is not None:
+                return found
+    elif isinstance(value, list):
+        for item in value:
+            found = _find_key(item, key)
+            if found is not None:
+                return found
+    return None
+
+
+def plan_kind(plan_id):
+    plan_id = str(plan_id or '')
+    if plan_id.startswith('align-r1-'):
+        return 'r1'
+    if plan_id.startswith('align-v4-smoke-'):
+        return 'smoke'
+    if plan_id.startswith('align-v4-'):
+        return 'w1'
+    return None
+
+
+@check('deadline', 'the INSTALLED plan (a repo-relative copy of night_plan.json, by sha256) sizes the window: its '
+       'own window_max_s covers its own programmed span through the plan writer\'s formula, and for R1 the '
+       'corrected floors (67,371 / 96,427 s); its kind (plan_id) must be the next measurement', gates='r1')
 def check_deadline(ctx):
+    from joulewise import night_gate
+    from joulewise.b6 import plan_inputs
     if not ctx.deadline_projection:
-        return result(FAIL, 'no --deadline-projection supplied: size the next window from its installed plan\'s '
-                      'actual segments (RUN_STATE 215/216), not a printed figure')
-    value, digest = _repo_json(ctx, ctx.deadline_projection)
-    kind = (value.get('smoke_deadline_projection') or {}).get('kind')
-    if kind not in (ctx.next, 'd'):
-        return result(FAIL, f'deadline projection is for {kind!r}, not the next measurement {ctx.next!r}')
-    return result(PASS, 'installed window_max_s covers the projected schedule', plan_sha256=digest,
-                  **validate_deadline(value))
+        return result(FAIL, 'no --deadline-projection supplied: pass a copy of the next window\'s installed '
+                      'night_plan.json, never a printed figure or a free declaration (RUN_STATE 215/216)')
+    plan, digest = _repo_json(ctx, ctx.deadline_projection)
+    evidence = {'plan_sha256': digest, 'plan_id': plan.get('plan_id')}
+    if plan.get('schema') != night_gate.HAZARD_PLAN_SCHEMA or plan.get('receipt_class') != night_gate.HAZARD_PACK:
+        return result(FAIL, 'the deadline input is not an installed HAZARD_PACK night plan (schema/receipt_class); '
+                      'a schedule declaration is not bound to the plan being armed (S1)', **evidence)
+    kind = plan_kind(plan.get('plan_id'))
+    if kind != ctx.next:
+        return result(FAIL, f'the installed plan {plan.get("plan_id")!r} is a {kind!r} plan, not the next '
+                      f'measurement {ctx.next!r}', **evidence)
+    span, maximum = _find_key(plan, 'programmed_span_s'), plan.get('window_max_s')
+    if type(span) not in (int, float) or type(maximum) not in (int, float):
+        return result(FAIL, 'the installed plan carries no numeric programmed_span_s / window_max_s', **evidence)
+    required = plan_inputs.window_max_s({'programmed_span_s': {'seconds': span}})
+    if kind == 'r1':
+        retries = bool(_find_key(plan, 'retry') or _find_key(plan, 'redo'))
+        required = max(required, 96427 if retries else 67371)
+    evidence.update(kind=kind, programmed_span_s=span, window_max_s=maximum, required_s=required)
+    if maximum < required:
+        return result(FAIL, f'window_max_s {maximum} < {required} s required by the plan\'s own span', **evidence)
+    return result(PASS, f'installed {kind} plan {plan.get("plan_id")}: window_max_s {maximum} >= {required} s '
+                  f'(span {span} s)', **evidence)
 
 
 def runbook_kit_steps(path):

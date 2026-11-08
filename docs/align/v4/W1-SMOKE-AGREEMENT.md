@@ -163,3 +163,36 @@ links, `valid_until_epoch_s`, and `next_arm_triage.rebuilt_packet`), with packet
 are all refused. The arm's real meter probe (`km003c_monitor.py`) is replaced by a fake in PREQUAL, and a
 `meter-not-live` arm case was added. The native smoke's triage-fault needles now expect the rebuild
 refusal (`does not match its committed sources` / `could not be rebuilt`).
+
+## 7. Sol reviews (HOLD at f6251227a) and their fixes
+
+Reviews: `docs/align/v4/w1-smoke-review-sol1.md` and `w1-smoke-review-sol2.md` (from
+`align/2026-11-08-w1-smoke-review-sol{1,2}`). Their witness modules are on this branch and pass in full;
+every `expectedFailure` is removed.
+
+**Already fixed at `9d76a5e43`:** S3's packet-tamper "unexpected success". The real-arm packet checks
+existed at that head, but they still lacked expiry specificity and nested mutations. Every other finding
+was open.
+
+| Finding | Fix |
+|---|---|
+| S4 / S2-1: isolation checked after writes; relative locators; aliases; read-only exemption; symlink write | `destination_violations` runs before any write. Every write locator must be absolute and inside the smoke dir. Roots and candidates are compared in both lexical and resolved form (with /private firmlinks folded). The read-only exemption never covers writes and is component-bounded. Command `TMPDIR` lives inside the smoke dir. The reducer refuses symlinked or outside targets. |
+| S5: a fault's isolation failure does not stop the main arm; fault plans are not scanned | Each fault's state **and** plan copy is checked first. `IsolationAbort` is terminal for the smoke. |
+| S6: a published but unloaded plan is invisible; global pkill | The guards refuse on published night/deadman plists. The meter kill targets only the window's reader pgid. |
+| S7 / S2-2: budget and teardown were reports | One deadline (commands, sleeps, waits). `arm_reserve_s` is required before the arm. A failed teardown is a `TeardownFailure`. Owned-job uninstall plus a proof (or `teardown-unproven.json`) in `finally`. The contender is reaped. |
+| S8: timeout descendants | `bounded_run` always sends the group KILL, reaps the leader and proves the group gone. Real-process tests: `BoundedRunTests`. |
+| S9: the view fails receipt path validation | `materialize_kit` replaces the view's kit symlink with a copy, and the session arms from the isolated clone. |
+| S1 / S2-4: deadline unbound | Bound to a copy of the installed `night_plan.json`: its own span and formula, its `plan_id` kind, the R1 floors. A `d` or smoke plan cannot qualify r1 or w1. |
+| S2: series bytes but not roster | The projection must equal the hashed source's `windows` roster. |
+| S3 / S2-3: unrelated refusals; nested status | Specific refusal reasons are required; expiry is probed at ±1 s around `valid_until_epoch_s`; an admitted control comes first; every check entry's nested leaves and every chain element are mutated. |
+| S10: scripts excluded | Coverage checks every first-party closure path. |
+
+**Witness adaptations by the kit owner,** listed in the sol1 module docstring:
+- The S3 expiry key is `valid_until_epoch_s`; the fixer renamed it.
+- S9 checks the smoke's view after `materialize_kit`, not the shared BYTES `measurement_view`.
+- The planted-symlink reduction is now refused with `IsolationAbort`, and the witness asserts that
+  together with the unchanged victim bytes.
+
+**Not claimed:**
+- Native MBP behaviour, the 45-min wall time and real launchd teardown remain unmeasured.
+- Configured-root resolution touches link metadata only.

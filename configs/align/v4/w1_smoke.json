@@ -32,5 +32,7 @@
     "~/night-custody",
     "~/night-archive"
   ],
-  "production_roots_note": "Besides the measurement checkout and wherever its runs/ resolves: production window run, custody and archive parents. Compared as strings only, never opened or listed."
+  "production_roots_note": "Besides the measurement checkout and wherever its runs/ resolves: production window run, custody and archive parents. Compared as strings only, never opened or listed.",
+  "arm_reserve_s": 1800,
+  "arm_reserve_note": "the main window is armed only with at least this much of budget_s left (t0 lead, dwell, calibrations, two members, close); otherwise the smoke stops unarmed"
 }

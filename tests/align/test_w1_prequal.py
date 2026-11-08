@@ -133,7 +133,7 @@ class CadenceTests(_Ctx):
         self.assertEqual(row['status'], wp.FAIL)
         self.assertIn('omits attempt C3', row['detail'])
         with mock.patch.object(session, 'arm_checks', RebuildingArm(expiry=False)):
-            self.assertIn('expiry is not enforced', self.probe('packet-rebuild')['detail'])
+            self.assertIn('not refused for expiry', self.probe('packet-rebuild')['detail'])
 
 
 class RebuildingArm:
@@ -171,10 +171,11 @@ class RebuildingArm:
         same = strip(packet) == strip(rebuilt)
         if not self.chain_strict and isinstance(packet.get('calibration_windows'), list):
             same = same or (strip({**packet, 'calibration_windows': rebuilt['calibration_windows']}) == strip(rebuilt))
-        fresh = not self.expiry or (now or __import__('time').time)() < rebuilt['valid_until_epoch_s']
-        ok = same and fresh
-        return {'admitted': ok, 'reasons': [] if ok else ['next_arm_triage: packet differs from the rebuild or expired'],
-                'next_arm_triage': {'rebuilt_packet': rebuilt}}
+        fresh = (not self.expiry or 'valid_until_epoch_s' not in rebuilt
+                 or (now or __import__('time').time)() <= rebuilt['valid_until_epoch_s'])
+        reasons = ([] if same else ['next_arm_triage: packet does not match its committed sources'])
+        reasons += [] if fresh else ['next_arm_triage: packet expired before this arm']
+        return {'admitted': not reasons, 'reasons': reasons, 'next_arm_triage': {'rebuilt_packet': rebuilt}}
 
 
 class PortedSolTests(_Ctx):
@@ -200,27 +201,54 @@ class PortedSolTests(_Ctx):
         return self.write('series', value)
 
     def test_series_projection_binding_and_fixed_eight(self):
+        windows = ([{'window': 'W1', 'role': 'w1'}]
+                   + [{'window': f'C{i}', 'role': 'calibration', 'benign_per_pair': {'spam': 7, 'bank': 7}}
+                      for i in range(1, 9)] + [{'window': 'T1', 'role': 'test'}])
+        import hashlib
+
+        def projection(name, source_windows, projected=windows, sha=None):
+            source = self.write(f'source-{name}', {'windows': source_windows})
+            digest = sha or hashlib.sha256((self.tmp / 'proj' / source).read_bytes()).hexdigest()
+            return self.write(f'series-{name}', {
+                'schema': wp.SERIES_SCHEMA, 'windows': projected, 'source': {'path': source, 'sha256': digest}})
         self.write('placeholder', {})
         self.assertEqual(self.probe('series-manifest', next='r1')['status'], wp.PENDING)
-        self.assertEqual(self.probe('series-manifest', series_projection=self.series())['status'], wp.PASS)
-        bad = self.series(source={'path': self.write('other', {'x': 1}), 'sha256': '0' * 64})
-        self.assertEqual(self.probe('series-manifest', series_projection=bad)['status'], wp.FAIL)
-        reordered = self.series(windows=[{'window': 'C1', 'role': 'calibration'}])
-        self.assertEqual(self.probe('series-manifest', series_projection=reordered)['status'], wp.FAIL)
-
-    def test_deadline_projection_r1_floors_and_encounters(self):
-        self.assertEqual(self.probe('deadline', next='r1')['status'], wp.FAIL)
-        plan = {'window_max_s': 100000, 'smoke_deadline_projection': {
-            'kind': 'r1', 'bracket_s': 600, 'close_s': 600, 'harvest_s': 600,
-            'segments': [{'bound_s': 30000, 'attempts': 2, 'batch_encounters': 1}]}}
-        row = self.probe('deadline', next='r1', deadline_projection=self.write('ok', plan))
-        self.assertEqual(row['status'], wp.PASS, row['detail'])
-        self.assertEqual(row['evidence']['required_s'], max(30000 * 2 + 11164, 96427) + 1800)   # R1 redo floor
-        short = {**plan, 'window_max_s': 90000}       # below the 96,427 s redo floor + overhead
-        self.assertEqual(self.probe('deadline', next='r1', deadline_projection=self.write('short', short))['status'],
+        self.assertEqual(self.probe('series-manifest', series_projection=projection('ok', windows))['status'], wp.PASS)
+        short = [dict(w) for w in windows]
+        short[1]['benign_per_pair'] = {'spam': 1, 'bank': 1}
+        self.assertEqual(self.probe('series-manifest', series_projection=projection('short', short))['status'],
                          wp.FAIL)
-        self.assertEqual(self.probe('deadline', next='w1', deadline_projection=self.write('ok2', plan))['status'],
-                         wp.FAIL)    # an R1 projection cannot size W1
+        self.assertEqual(self.probe('series-manifest', series_projection=projection('sha', windows, sha='0' * 64))[
+            'status'], wp.FAIL)
+        self.assertEqual(self.probe('series-manifest', series_projection=projection(
+            'two', windows[:2], projected=windows[:2]))['status'], wp.FAIL)     # roster agrees, not fixed-8
+
+    def installed_plan(self, name, **change):
+        from joulewise import night_gate
+        plan = {'schema': night_gate.HAZARD_PLAN_SCHEMA, 'receipt_class': night_gate.HAZARD_PACK,
+                'plan_id': 'align-v4-20261109T000000Z', 'window_max_s': 44640,
+                'pack': {'programmed_span_s': 26927}}
+        plan.update(change)
+        return self.write(name, plan)
+
+    def test_deadline_is_bound_to_the_installed_plan(self):
+        self.write('placeholder', {})
+        self.assertEqual(self.probe('deadline', next='w1')['status'], wp.FAIL)
+        row = self.probe('deadline', next='w1', deadline_projection=self.installed_plan('w1'))
+        self.assertEqual(row['status'], wp.PASS, row['detail'])
+        self.assertEqual(row['evidence']['required_s'], 44640)
+        short = self.installed_plan('short', window_max_s=30000)
+        self.assertEqual(self.probe('deadline', next='w1', deadline_projection=short)['status'], wp.FAIL)
+        self.assertEqual(self.probe('deadline', next='r1', deadline_projection=self.installed_plan('w1b'))['status'],
+                         wp.FAIL)                                         # a W1 plan cannot size R1
+        smoke_plan = self.installed_plan('smoke', plan_id='align-v4-smoke-20261109T0000Z')
+        self.assertEqual(self.probe('deadline', next='w1', deadline_projection=smoke_plan)['status'], wp.FAIL)
+        r1 = self.installed_plan('r1', plan_id='align-r1-20261108T0917Z', window_max_s=60000)
+        self.assertEqual(self.probe('deadline', next='r1', deadline_projection=r1)['status'], wp.FAIL)   # floor
+        r1_ok = self.installed_plan('r1ok', plan_id='align-r1-20261108T0917Z', window_max_s=105427)
+        self.assertEqual(self.probe('deadline', next='r1', deadline_projection=r1_ok)['status'], wp.PASS)
+        declaration = self.write('decl', {'window_max_s': 99999, 'smoke_deadline_projection': {'kind': 'w1'}})
+        self.assertEqual(self.probe('deadline', next='w1', deadline_projection=declaration)['status'], wp.FAIL)
 
     def test_executed_closure_reaches_the_arm_and_driver_modules(self):  # noqa: D102
         closure = wp.executed_closure(ROOT)

@@ -91,7 +91,10 @@ class FakeMBP:
         if argv[0] == '/bin/rm':
             shutil.rmtree(argv[-1], ignore_errors=True)
             return done(0)
-        if argv[0] == '/usr/bin/pkill':
+        if argv[0] == '/bin/kill':
+            return done(0)
+        if argv[0].endswith('install_night_agent.sh') and '--uninstall' in argv:
+            self.job_loaded = False
             return done(0)
         if 'align_v4_prequal.py' in ' '.join(argv) and '--w1-probe' in argv:
             return done(0, json.dumps({'check': 'r1-w1-chain', 'status': 'PASS', 'detail': 'synthetic'}) + '\n')
@@ -131,6 +134,7 @@ class FakeMBP:
             streams.append({'path': path.relative_to(custody).as_posix(),
                             'sha256': hashlib.sha256(path.read_bytes()).hexdigest()})
         (custody / 'night').mkdir(parents=True, exist_ok=True)
+        (custody / 'night/meter_supervision.jsonl').write_text(json.dumps({'event': 'start', 'pgid': 4747}) + '\n')
         (custody / 'night/hazard_result.json').write_text(json.dumps({'meter': {
             'starts': 1 + self.meter_restarts, 'restarts': self.meter_restarts, 'streams': streams,
             'stop': {'proven_stopped': True}}}))
@@ -218,7 +222,8 @@ class RunnerTests(unittest.TestCase):
         self.popen.assert_called_once()
         self.assertEqual(self.popen.call_args.args[0], ['/usr/bin/yes'])
         self.assertTrue(self.popen.call_args.kwargs['start_new_session'])
-        self.assertIn(['/usr/bin/pkill', '-KILL', '-f', 'scripts/km003c_monitor.py'], mbp.calls)
+        self.assertIn(['/bin/kill', '-KILL', '--', '-4747'], mbp.calls)       # only this window's reader
+        self.assertFalse(any(c[0] == '/usr/bin/pkill' for c in mbp.calls))
         steps = [json.loads(l)['step'] for l in (self.tmp / 'smoke' / smoke.LOG).read_text().splitlines()]
         self.assertLess(steps.index('meter-kill'), steps.index('cpu-contender'))     # kill in the first member
         # Every fault attempt used a past-t0 plan copy and its own custody.
@@ -464,6 +469,41 @@ class PieceTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class BoundedRunTests(unittest.TestCase):
+    """S8: a timeout kills the WHOLE process group; no descendant survives (real processes)."""
+
+    def test_a_term_ignoring_descendant_does_not_survive_its_leaders_timeout(self):
+        script = 'trap "" TERM; (trap "" TERM; while :; do sleep 1; done) & while :; do sleep 1; done'
+        result = smoke.bounded_run(['/bin/sh', '-c', script], timeout=1)
+        self.assertEqual(result.returncode, 124)
+        self.assertFalse(result.group_survived)
+        with self.assertRaises(ProcessLookupError):
+            os.killpg(result.pgid, 0)
+
+    def test_a_leader_that_exits_on_term_still_gets_its_group_killed(self):
+        script = '(trap "" TERM; while :; do sleep 1; done) & trap "exit 0" TERM; while :; do sleep 1; done'
+        result = smoke.bounded_run(['/bin/sh', '-c', script], timeout=1)
+        self.assertEqual(result.returncode, 124)
+        self.assertFalse(result.group_survived)
+        with self.assertRaises(ProcessLookupError):
+            os.killpg(result.pgid, 0)
+
+    def test_normal_commands_return_their_code(self):
+        result = smoke.bounded_run(['/bin/sh', '-c', 'echo hi; exit 3'], timeout=10)
+        self.assertEqual((result.returncode, result.stdout.strip()), (3, 'hi'))
+
+    def test_a_surviving_group_is_a_teardown_failure_for_the_runner(self):
+        out = subprocess.CompletedProcess(['x'], 124, '', '')
+        out.group_survived = True
+        with tempfile.TemporaryDirectory() as tmp:
+            runner = smoke.SmokeRunner(ROOT, Path(tmp) / 's', packet={}, battery_log='b', obc_off_attested_by='o',
+                                       w1_disk_config='d', prequal_report='p', run=lambda argv, **kw: out,
+                                       isolate_fn=fake_isolate, prepare=fake_prepare)
+            runner.dir.mkdir()
+            with self.assertRaises(smoke.TeardownFailure):
+                runner.cmd(['/bin/true'])
 
 
 class ProductionReaderTests(unittest.TestCase):
