@@ -63,8 +63,10 @@ NEXT_ARM_TRIAGE = (
          text='U4/U5 inconclusive adds two sentinels to remaining windows; roster for the '
               'next window recorded'),
     dict(id='member_eligibility', source=PACKET, first_window_na=True,
-         text='final eligibility adjudication of the previous window (identity X5, U3 pairs, '
-              'exclusions); counts are provisional until this check passes'),
+         text='eligibility adjudication of the previous window (identity X5, U3 pairs, '
+              'exclusions). R17: provisional (light triage, no harvest) unless the full desk is '
+              'due; window k final eligibility is recorded before the arm of k+2; provisional '
+              'counts never decide calibration_stop at 8'),
     dict(id='calibration_stop', source=DERIVED, first_window_na=True,
          text='B3 fixed-8 predicate over the packet counts: continue for a calibration arm '
               'until 8 counted windows, '

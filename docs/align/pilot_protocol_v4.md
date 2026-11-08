@@ -869,7 +869,7 @@ from the committed record before the arm; the arm waits for them.
 | `thermal_escalation` | U1-U3 result and the registered escalation ladder, recorded before use, never in place |
 | `cohort_pool_rules` | U1-U3 failure bars pool entry; one frozen cohort; no pooling across a changed configuration |
 | `sentinel_roster` | U4/U5 inconclusive adds two sentinels to the remaining windows |
-| `member_eligibility` | final eligibility adjudication (identity X5, U3 pairs, exclusions); counts are provisional until it passes |
+| `member_eligibility` | eligibility adjudication (identity X5, U3 pairs, exclusions). Lead ruling R17 (RUN_STATE 228): at the arm it passes on the light triage's **provisional** adjudication (no harvest) unless the full desk is due; window k's **final** eligibility (the off-MBP harvest and full desk, carried by record k or by record k+1's `previous_final`) is required before the arm of k+2 and before any arm the full desk gates |
 | `calibration_stop` | the B3 fixed-8 predicate over the packet counts (derived, not asserted): continue until 8 counted windows, `calibration_complete` before a test arm |
 | `battery_window` | previous window's B bar (rule `zero_B_auto_resume_v1`, W1-BLOCKERS lead ruling 9): pass, or the first non-passing window in a row resumes automatically on fresh admissible top-up + OBC attestation (`charging_battery`); a second consecutive non-passing window needs a signed `battery_rulings` row |
 | `full_desk_gate` | the full desk; a false `v4_B_bar` alone does not fail it (`battery_window` governs) |
@@ -934,9 +934,12 @@ on calibration; no calibration window is repurposed as test or fit. The predicat
 reads window status and eligible benign counts per pair only, never a score, alarm,
 residual or energy field (`v4_cadence.calibration_stop`):
 
-1. Eligibility is final before the decision. Counts are provisional until
-   `member_eligibility` passes; provisional counts schedule windows 1-7, and with 8
-   counted windows any provisional one gives `pending_final_eligibility`.
+1. Eligibility is final before the decision. Counts are provisional until the full
+   desk's final adjudication is recorded (lead ruling R17: window k's final eligibility
+   before the arm of k+2, so at most the previous window is provisional); provisional
+   counts schedule windows 1-7, and with 8 counted windows any provisional one gives
+   `pending_final_eligibility`. RUN_STATE 216's "from window 6" fence is withdrawn
+   (R17; it belonged to the superseded count stop).
 2. After 8 final counted windows: if **both** pairs (spam and bank) have at least 39
    eligible benign summed over the 8, calibration is complete (`calibration_complete`)
    and test windows may follow. Every eligible calibrator counts; there is no

@@ -108,5 +108,8 @@ def calibration_row(window_id, plan_rows, eligibility, *, calibrator=is_calibrat
     for row in plan_rows:
         if calibrator(row) and eligibility['members'][row['run_id']]['eligible']:
             counts[PAIR_OF_TASK[row['task_pair']]] += 1
-    return {'window': window_id, 'status': eligibility['stage'],
+    # A zero-capture window has nothing a harvest could exclude: its row is final at once
+    # (v4_cadence treats a provisional zero-capture row as unfinished and holds the gate).
+    status = 'final' if eligibility['captured_members'] == 0 else eligibility['stage']
+    return {'window': window_id, 'status': status,
             'captured_members': eligibility['captured_members'], 'eligible_benign': counts}

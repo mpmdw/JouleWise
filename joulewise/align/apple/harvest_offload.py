@@ -67,14 +67,67 @@ def _walk(root: Path):
 EXTERNAL = '.external'
 
 
+def finalized_manifest(root: Path | str) -> dict[str, dict[str, Any]]:
+    """The record-bound tree manifest, written on the MBP at finalize and committed with the record.
+
+    Relative path -> ``{sha256, size}`` (regular file), ``{link}`` (symlink, kept
+    literally) or ``{directory: True}``. Sol's finalized-manifest contract, extended
+    with literal links because every ALIGN session's measurement view is links.
+    """
+    root = Path(root)
+    rows: dict[str, dict[str, Any]] = {}
+    for path in _walk(root):
+        relative = path.relative_to(root).as_posix()
+        info = os.lstat(path)
+        if stat.S_ISLNK(info.st_mode):
+            rows[relative] = {'link': os.readlink(path)}
+        elif stat.S_ISDIR(info.st_mode):
+            rows[relative] = {'directory': True}
+        elif stat.S_ISREG(info.st_mode):
+            rows[relative] = {'sha256': _file_sha256(path), 'size': info.st_size}
+        else:
+            raise OffloadRefused(f'unsupported file type: {relative}')
+    return rows
+
+
+def manifest_sha256(manifest: dict[str, Any]) -> str:
+    return hashlib.sha256(json.dumps(manifest, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+
+
+def _as_finalized(rows: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    out = {}
+    for name, row in rows.items():
+        if 'link' in row:
+            out[name] = {'link': row['link']}
+        elif row.get('dir'):
+            out[name] = {'directory': True}
+        else:
+            out[name] = {'sha256': row['sha256'], 'size': row['size']}
+    return out
+
+
+def _check_finalized(rows, finalized, where):
+    actual = _as_finalized(rows)
+    if actual != finalized:
+        missing = sorted(set(finalized) - set(actual))
+        extra = sorted(set(actual) - set(finalized))
+        changed = sorted(k for k in set(actual) & set(finalized) if actual[k] != finalized[k])
+        raise OffloadRefused(f'{where} differs from the finalized record manifest: missing={missing[:5]} '
+                             f'extra={extra[:5]} changed={changed[:5]}')
+
+
 def pack(source_root: Path | str, out_dir: Path | str, *, level: int = DEFAULT_LEVEL,
-         threads: int = 0, external: tuple[Path | str, ...] = ()) -> dict[str, Any]:
+         threads: int = 0, external: tuple[Path | str, ...] = (),
+         finalized: dict[str, dict[str, Any]] | None = None) -> dict[str, Any]:
     """Pack ``source_root`` into ``out_dir`` (new). Returns the manifest.
 
     ``external`` names absolute regular files outside the root that the harvest
     reads at their own path (the measurement checkout's calibration ledger, which
     the window appended to). They travel in the same payload and are restored at
     the same absolute path, append-only: absent, identical or a byte prefix.
+
+    ``finalized`` (the record-bound manifest from finalize): every packed byte,
+    link and directory must equal it, or the pack refuses and leaves nothing.
     """
     source = Path(source_root)
     if not source.is_absolute() or source.is_symlink() or not source.is_dir():
@@ -133,11 +186,18 @@ def pack(source_root: Path | str, out_dir: Path | str, *, level: int = DEFAULT_L
             code = process.wait()
         if code != 0:
             raise OffloadRefused(f'zstd failed with exit {code}')
+    if finalized is not None:
+        try:
+            _check_finalized(rows, finalized, 'packed tree')
+        except OffloadRefused:
+            shutil.rmtree(out, ignore_errors=True)
+            raise
     manifest = {'schema': SCHEMA, 'source_root': str(source), 'entries': rows, 'external': outside,
                 'files': sum('sha256' in r for r in rows.values()),
                 'bytes': sum(r.get('size', 0) for r in rows.values()),
                 'payload': {'name': PAYLOAD, 'sha256': _file_sha256(payload), 'size': payload.stat().st_size},
-                'zstd_level': int(level)}
+                'zstd_level': int(level),
+                'finalized_manifest_sha256': manifest_sha256(finalized) if finalized is not None else None}
     (out / MANIFEST).write_text(json.dumps(manifest, indent=2, sort_keys=True) + '\n')
     return manifest
 
@@ -165,16 +225,25 @@ def _safe_relative(name: str) -> PurePosixPath:
     return relative
 
 
-def unpack(offload_dir: Path | str, dest_root: Path | str | None = None) -> dict[str, Any]:
+def unpack(offload_dir: Path | str, dest_root: Path | str | None = None, *,
+           finalized: dict[str, dict[str, Any]] | None = None,
+           finalized_sha256: str | None = None) -> dict[str, Any]:
     """Restore at the manifest's absolute source root after full verification.
 
     ``dest_root`` must equal the recorded source root (it exists only to make the
     caller state it). The destination must not exist. Returns the manifest.
+    With ``finalized`` and ``finalized_sha256`` (the digest committed in the window
+    record), the chain committed digest -> finalized manifest -> offload manifest ->
+    restored bytes is checked end to end; the self-written manifest alone is not trusted.
     """
     offload = Path(offload_dir)
     manifest = json.loads((offload / MANIFEST).read_bytes())
     if manifest.get('schema') != SCHEMA:
         raise OffloadRefused('not a harvest offload manifest')
+    if finalized_sha256 is not None or finalized is not None:
+        if finalized is None or finalized_sha256 is None or manifest_sha256(finalized) != finalized_sha256:
+            raise OffloadRefused('finalized record manifest missing or not the committed digest')
+        _check_finalized(manifest['entries'], finalized, 'offload manifest')
     target = Path(manifest['source_root'])
     if dest_root is not None and Path(dest_root) != target:
         raise OffloadRefused('restore path differs from the recorded source root; harvest bytes would differ')

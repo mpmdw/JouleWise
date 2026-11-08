@@ -213,6 +213,7 @@ EXECUTED_CLOSURE = (
     'joulewise/flags/sink.py',
     'joulewise/floor_extraction.py',
     'joulewise/floor_mint_estimator.py',
+    'joulewise/harvest_profile.py',
     'joulewise/hazards/__init__.py',
     'joulewise/hazards/arm.py',
     'joulewise/hazards/base.py',

@@ -32,7 +32,7 @@ class Scenario:
     """One window record (and the series state that points at it) in a synthetic Git repository."""
 
     def __init__(self, directory, window='W1', *, previous=None, captured=True, eligible=True,
-                 b_bar=True):
+                 b_bar=True, provisional=False, previous_final=False):
         self.root = Path(directory)
         if previous is None:
             self.git('init', '-q')
@@ -82,6 +82,7 @@ class Scenario:
         self.absent_captures = set() if captured else set(ids)
         self.omit_sources = set()
         self.raw_custody = False
+        self.provisional, self.previous_final = provisional, previous_final
         if not captured:
             self.sources['result'].update(verdict='REFUSED', chain_exit_code=None, chain_sha256=None)
             self.omit_sources.update(('chain_started', 'chain_exited'))
@@ -117,6 +118,21 @@ class Scenario:
         self.sources['watchdog_state'].setdefault('released_terminal_windows', [
             f"{self.sources['plan']['plan_id']}:/DO-NOT-FOLLOW/custody:"
             f"{builder.digest((json.dumps(self.sources['result'], sort_keys=True) + chr(10)).encode())}"])
+        if self.provisional:
+            # R17: committed before the Air full desk finished; the light triage stands in.
+            self.final_sources = {k: copy.deepcopy(self.sources[k]) for k in builder.FINAL_SOURCES}
+            light_thermal = copy.deepcopy(self.thermal)
+            for m in light_thermal['members']:
+                m['excluded'] = bool(m['calibration_exclusions'])
+            self.sources['light_triage'] = {'schema': builder.LIGHT_TRIAGE_SCHEMA, 'window': self.window,
+                'thermal': light_thermal, 'checks': {'v4_B_bar': self.sources['desk']['checks']['v4_B_bar']},
+                'km003c': self.sources['pilot']['extra_checks']['km003c']}
+            self.sources['desk'] = {'plan_id': self.sources['plan']['plan_id'], 'status': 'running_off_mbp'}
+            self.omit_sources.update(('pilot', 'exclusions'))
+        if self.previous_final:
+            prior = self.previous
+            self.record['previous_final'] = {'record_sha256': prior.link['sha256'], 'sources': {
+                k: self.write(f'{d}/previous-final/{k}.json', v) for k, v in prior.final_sources.items()}}
         self.record['sources'] = {k: self.write(f'{d}/evidence/{k}.json', v)
                                   for k, v in self.sources.items() if k not in self.omit_sources}
         pairs = [m['run_id'] for m in self.members]
@@ -133,6 +149,14 @@ class Scenario:
         self.git('update-ref', 'refs/remotes/synthetic/records', self.record_commit)
         self.link = {'commit': self.record_commit, 'path': self.record_path, 'sha256': index['sha256']}
         self.series['last_passed_record'] = dict(self.link)
+        if self.provisional:
+            # Its desk has not passed yet: the last desk-passed state is the previous record's.
+            prior = self.previous
+            self.series['last_passed_record'] = dict(prior.passed_ref)
+        self.passed_ref = dict(self.series['last_passed_record'])
+        if self.previous_final:
+            # The previous window's desk passed off the MBP and rides in this record.
+            self.previous.passed_ref = {**self.previous.link, 'final_record': dict(self.link)}
         if change_code:
             self.write(CODE_PATH, b'synthetic-code-v2\n')       # the working tree (the arm's code) moves on
         self.series.update(previous_record=dict(self.link),
@@ -687,6 +711,88 @@ class ArmRebuildTests(Base):
                 return subprocess.CompletedProcess(argv, 0, b'', b'')
             self.assertFalse(session._probe_meter_live(tmp, runner=absent)['live'])
             self.assertFalse(session._probe_meter_live(tmp, runner=lambda argv, **k: subprocess.CompletedProcess(argv, 2, b'', b''))['live'])
+
+
+class R17ProvisionalTests(Base):
+    """RUN_STATE 228 R17: provisional eligibility at the arm; window k final before the arm of k+2."""
+
+    def series_of(self, specs):
+        temp = tempfile.TemporaryDirectory(prefix='jw-triage-r17-')
+        self.addCleanup(temp.cleanup)
+        previous = Scenario(temp.name, 'W1').finish()
+        for window, kwargs in specs:
+            previous = Scenario(temp.name, window, previous=previous, **kwargs).finish()
+        return previous
+
+    def test_previous_window_arms_on_the_light_triage(self):
+        s = self.series_of([('C1', {}), ('C2', {'provisional': True})])
+        packet = s.build()
+        self.assertTrue(packet['packet_preflight']['ready'], packet['packet_preflight'])
+        self.assertEqual([r['status'] for r in packet['calibration_windows']], ['final', 'provisional'])
+        self.assertIn('R17 provisional', packet['checks']['member_eligibility']['basis'])
+        self.assertEqual(packet['checks']['full_desk_gate']['status'], 'deferred')
+        self.assertTrue(evaluate(s, packet)['admitted'])
+
+    def test_window_k_must_be_final_before_the_arm_of_k_plus_2(self):
+        stale = self.series_of([('C1', {'provisional': True}), ('C2', {})])
+        packet = stale.build()
+        self.assertFalse(packet['packet_preflight']['ready'])
+        self.assertIn('R17: final eligibility of C1', packet['calibration_error'])
+        bound = self.series_of([('C1', {'provisional': True}), ('C2', {'previous_final': True})])
+        packet = bound.build()
+        self.assertTrue(packet['packet_preflight']['ready'], packet['packet_preflight'])
+        self.assertEqual([r['status'] for r in packet['calibration_windows']], ['final', 'final'])
+
+    def test_final_counts_come_from_the_successor_and_may_only_be_lower(self):
+        temp = tempfile.TemporaryDirectory(prefix='jw-triage-r17b-')
+        self.addCleanup(temp.cleanup)
+        w1 = Scenario(temp.name, 'W1').finish()
+        c1 = Scenario(temp.name, 'C1', previous=w1, provisional=True)
+        c1.sources['exclusions']['members_excluded'] = [{'run_id': c1.members[0]['run_id'], 'codes': ['clock.step']}]
+        c1.thermal['members'][0]['excluded'] = True          # the harvest excluded one member
+        c1.finish()
+        c2 = Scenario(temp.name, 'C2', previous=c1, previous_final=True).finish()
+        rows = c2.build()['calibration_windows']
+        self.assertEqual(rows[0]['status'], 'final')
+        self.assertEqual(sum(rows[0]['eligible_benign'].values()), 1)
+        self.assertEqual(sum(c1.build()['calibration_windows'][0]['eligible_benign'].values()), 2)  # provisional
+
+    def test_full_desk_due_refuses_the_provisional_adjudication(self):
+        temp = tempfile.TemporaryDirectory(prefix='jw-triage-r17d-')
+        self.addCleanup(temp.cleanup)
+        w1 = Scenario(temp.name, 'W1').finish()
+        w1.passed_ref = dict(w1.link)
+        c1 = Scenario(temp.name, 'C1', previous=w1, provisional=True).finish()
+        changed = c1.build(current='f' * 64)          # code/config moved since the last desk pass
+        self.assertFalse(changed['packet_preflight']['ready'])
+        self.assertIn('member_eligibility', ' '.join(changed['packet_preflight']['reasons']))
+        provisional_w1 = Scenario(tempfile.mkdtemp(prefix='jw-triage-r17w-', dir=temp.name), 'W1')
+        provisional_w1.provisional = True
+        provisional_w1.previous = w1                  # only for its passed_ref; W1 always needs the full desk
+        packet = provisional_w1.finish().build()
+        self.assertFalse(packet['packet_preflight']['ready'])
+
+    def test_previous_final_must_name_the_record_it_finalizes(self):
+        temp = tempfile.TemporaryDirectory(prefix='jw-triage-r17e-')
+        self.addCleanup(temp.cleanup)
+        w1 = Scenario(temp.name, 'W1').finish()
+        c1 = Scenario(temp.name, 'C1', previous=w1, provisional=True).finish()
+        c2 = Scenario(temp.name, 'C2', previous=c1, previous_final=True).finish()
+        record = copy.deepcopy(c2.record)
+        record['previous_final']['record_sha256'] = '0' * 64
+        index = c2.write(c2.record_path, record)
+        c2.record_commit = c2.commit()
+        c2.git('update-ref', 'refs/remotes/synthetic/records', c2.record_commit)
+        c2.series['previous_record'] = {'commit': c2.record_commit, 'path': c2.record_path, 'sha256': index['sha256']}
+        c2.write(c2.series_path, c2.series)
+        c2.series_commit = c2.commit()
+        packet = c2.build()
+        self.assertFalse(packet['packet_preflight']['ready'])
+        self.assertIn('previous_final must name this record', packet['calibration_error'])
+
+    def test_schema_constants_match_the_light_triage_module(self):
+        from joulewise.align.apple import light_triage
+        self.assertEqual(builder.LIGHT_TRIAGE_SCHEMA, light_triage.SCHEMA)
 
 
 if __name__ == '__main__':

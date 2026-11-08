@@ -40,6 +40,10 @@ IDENTITY_FIELDS = ('record_commit', 'record_path', 'series_commit', 'series_path
 SERIES_PATH = 'series/state.json'
 MANIFEST_PATH = 'configs/campaigns/align_v4/series/series_manifest.json'   # the frozen D/C/T series (R15)
 FULL_DESK_GATE_EXEMPT = ('v4_B_bar',)     # = align_v4_session.FULL_DESK_GATE_EXEMPT (tested equal)
+# R17 (RUN_STATE 228): the off-MBP full desk's sources. A record committed before the Air desk finished
+# carries ``light_triage`` instead; its successor record carries ``previous_final`` = these sources for it.
+FINAL_SOURCES = ('pilot', 'desk', 'exclusions')
+LIGHT_TRIAGE_SCHEMA = 'joulewise.align_v4.light_triage.v1'   # = light_triage.SCHEMA (tested equal)
 
 
 def digest(raw):
@@ -158,10 +162,44 @@ class WindowRecord:
         require(link is None or (isinstance(link, dict) and set(link) == {'commit', 'path', 'sha256'}),
                 'previous_record must be null (first record) or {commit, path, sha256}')
         self.previous_link = link
+        self.final_from = None     # (commit, sources) from the successor's ``previous_final`` (R17)
 
     def source(self, name, *, json_value=True):
+        if name in FINAL_SOURCES and self.final_from is not None:
+            commit, sources = self.final_from
+            return self.evidence.source(commit, sources.get(name), json_value=json_value)
         return self.evidence.source(self.commit, self.record.get('sources', {}).get(name),
                                     json_value=json_value)
+
+    def is_final(self):
+        """Whether the full desk's final adjudication is bound to this record (own or successor's)."""
+        names = self.record.get('sources', {})
+        return self.final_from is not None or ('pilot' in names and 'exclusions' in names)
+
+    def light(self):
+        light = self.source('light_triage')
+        require(light.get('schema') == LIGHT_TRIAGE_SCHEMA and light.get('window') == self.window,
+                'light triage source missing or for another window')
+        return light
+
+    def pilot_view(self):
+        """PILOT.json when final; otherwise the light triage's identical thermal section (R17 proof)."""
+        if self.is_final():
+            return self.source('pilot')
+        light = self.light()
+        return {'status': 'provisional', 'extra_checks': {'thermal': light['thermal'],
+                **({'km003c': light['km003c']} if 'km003c' in light else {})}}
+
+    def bind_final(self, successor):
+        """Accept the successor record's ``previous_final`` sources as this record's final adjudication."""
+        final = successor.record.get('previous_final')
+        if final is None:
+            return
+        require(isinstance(final, dict) and set(final) == {'record_sha256', 'sources'}
+                and final['record_sha256'] == self.sha256
+                and isinstance(final['sources'], dict) and set(final['sources']) == set(FINAL_SOURCES),
+                'previous_final must name this record and carry exactly the full desk sources')
+        self.final_from = (successor.commit, final['sources'])
 
     def roster(self):
         members = self.source('collection_plan')['members']
@@ -189,7 +227,7 @@ class WindowRecord:
             self.evidence.raw_evidence(self.commit, self.path, descriptor)
 
     def thermal(self, *, validate_reports=True):
-        pilot = self.source('pilot')
+        pilot = self.pilot_view()
         thermal = pilot.get('extra_checks', {}).get('thermal', pilot)
         require(thermal.get('schema') == 'joulewise.align.thermal_desk.v1', 'thermal desk missing')
         members = thermal['members']
@@ -207,9 +245,17 @@ class WindowRecord:
                         in ('pass', 'fail', 'inconclusive') for k in range(1, 6)), 'U1-U5 unevaluated')
         return thermal
 
-    def eligibility(self):
+    def eligibility(self, *, allow_provisional=False):
+        """Final counts from the full desk; provisional ones from the light triage only when allowed (R17)."""
+        if self.is_final():
+            status, exclusions = 'final', self.source('exclusions')
+        else:
+            require(allow_provisional, 'R17: final eligibility of ' + self.window + ' must be recorded '
+                    'before the arm of the window after next, and before any arm the full desk gates')
+            self.light()
+            # The harvest has not run: only calibration exclusions; it can only remove members later.
+            status, exclusions = 'provisional', {'members_excluded': []}
         thermal = self.thermal()
-        exclusions = self.source('exclusions')
         require(isinstance(exclusions.get('members_excluded'), list), 'final exclusions missing')
         excluded = {r['run_id']: r['codes'] for r in exclusions['members_excluded']}
         require(set(excluded) <= {m['id'] for m in thermal['members']}, 'exclusions outside roster')
@@ -258,8 +304,9 @@ class WindowRecord:
                 if pool_ok and planned.get('role') == 'D' and planned.get('condition') == 'benign':
                     require(planned.get('task_pair') in counts, 'unknown benign task pair')
                     counts[planned['task_pair']] += 1
-        return {'window': self.window, 'status': 'final', 'captured_members': len(captured),
-                'eligible_benign': counts}
+        # A zero-capture window has nothing a harvest could exclude: final at once.
+        return {'window': self.window, 'status': 'final' if not captured else status,
+                'captured_members': len(captured), 'eligible_benign': counts}
 
 
 def template():
@@ -460,7 +507,7 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
 
     def meter_coverage():
         # SECONDARY coverage is a recorded tabulation and never gates (Opus cold MED-2b, MED-3).
-        pilot = previous.source('pilot')
+        pilot = previous.pilot_view()
         report = pilot.get('extra_checks', {}).get('km003c', pilot.get('km003c'))
         if not (isinstance(report, dict) and isinstance(report.get('members'), dict)):
             return {'status': 'recorded', 'basis': 'meter tabulation missing for the previous window (non-gating)',
@@ -501,11 +548,31 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
         require(isinstance(last_ref, dict), 'last desk-passed record missing')
         last_record = WindowRecord(evidence, last_ref['commit'], last_ref['path'])
         require(last_record.sha256 == last_ref.get('sha256'), 'last desk-passed record digest mismatch')
+        final_ref = last_ref.get('final_record')
+        if final_ref is not None:
+            # R17: the desk passed off the MBP; its sources ride in the successor record's previous_final.
+            require(isinstance(final_ref, dict) and set(final_ref) == {'commit', 'path', 'sha256'},
+                    'last desk-passed final_record must be {commit, path, sha256}')
+            successor = WindowRecord(evidence, final_ref['commit'], final_ref['path'])
+            require(successor.sha256 == final_ref['sha256'], 'last desk-passed final record digest mismatch')
+            last_record.bind_final(successor)
+            require(last_record.final_from is not None, 'final record carries no previous_final')
         last = last_record.source('desk')
         require(desk_passes(last),
                 'last desk-passed state has no passing desk')
         code_commit = evidence.commit(last_record.record.get('code_commit', last_record.commit))
         return last_record, committed_artifact_set_digest(evidence, code_commit)
+
+    def provisional_allowed():
+        """R17: the previous window may arm the next on its provisional adjudication unless the full desk
+        is due (previous window W1, or code/config changed since the last desk-passed state)."""
+        if previous.window == 'W1':
+            return False
+        try:
+            _record, last_digest = last_desk_state()
+        except (ValueError, KeyError, TypeError, AttributeError):
+            return False
+        return last_digest == current_artifact_set_sha256
 
     def thermal():
         reports = previous.thermal()['model_windows']
@@ -547,7 +614,7 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
         require(set(pool) <= ids, 'pool members outside previous D roster')
         if any(r[f'U{k}']['status'] != 'pass' for r in table['model_windows'].values() for k in (1, 2, 3)):
             require(not pool, 'U1-U3 failure bars pool entry')
-        eligible = previous.eligibility()
+        eligible = previous.eligibility(allow_provisional=provisional_allowed())
         excluded = {m['id'] for m in members if m['excluded']}
         require(not (set(pool) & excluded), 'excluded member entered pool')
         if pool:
@@ -568,8 +635,12 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
         return {'basis': 'next sentinel roster recorded with U4/U5 consequence', 'sentinel_ids': planned}
 
     def eligibility():
-        return {'basis': 'final desk eligibility, identity X5, U3 pair exclusions and capture inventory reconciled',
-                'counts': previous.eligibility()}
+        counts = previous.eligibility(allow_provisional=provisional_allowed())
+        basis = ('final desk eligibility, identity X5, U3 pair exclusions and capture inventory reconciled'
+                 if counts['status'] == 'final' else
+                 'R17 provisional adjudication (light triage: X5, U3 pairs, calibration exclusions); '
+                 'final eligibility due before the arm of the window after next')
+        return {'basis': basis, 'counts': counts}
 
     def full_desk():
         next_plan()
@@ -627,6 +698,8 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
             record = parent
         chain.reverse()
         require(chain[0].window in ('R1', 'W1'), 'series history does not reach the first v4 record')
+        for older, newer in zip(chain, chain[1:]):
+            older.bind_final(newer)
         packet['window_chain'] = [{'window': r.window, 'commit': r.commit, 'path': r.path, 'sha256': r.sha256,
                                    'previous_sha256': (r.previous_link or {}).get('sha256')} for r in chain]
         counted = []
@@ -634,7 +707,12 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
             if record.record.get('role') != 'calibration':
                 continue
             record.verify_raw()
-            row = record.eligibility()
+            # R17: only the previous window may still be provisional, and only when no full desk is due.
+            row = record.eligibility(allow_provisional=record is previous and provisional_allowed())
+            if row['status'] == 'final' and record is not previous:
+                barred = {m['id'] for m in record.thermal()['members'] if m['excluded']}
+                require(not (barred & set(series.get('pool_members') or [])),
+                        'R17: a finally excluded member of ' + record.window + ' is in the pool')
             counted.append((record, row['captured_members']))
             packet['calibration_windows'].append(row)
         attempts(counted)
@@ -701,7 +779,7 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
 
         def bar(record):
             try:
-                checks = record.source('desk').get('checks')
+                checks = (record.source('desk') if record.is_final() else record.light()).get('checks')
                 return isinstance(checks, dict) and checks.get('v4_B_bar') is True
             except (ValueError, KeyError, TypeError, AttributeError):
                 return False

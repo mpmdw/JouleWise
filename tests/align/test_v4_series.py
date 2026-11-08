@@ -263,12 +263,21 @@ class PacketTests(unittest.TestCase):
         cal = [attempt(self.root, f'C{i}', spam=4, bank=7) for i in range(1, 9)]
         with self.assertRaisesRegex(ValueError, 'insufficient_calibration'):
             self.packet('T1', self.fit + cal)
+        # R17 (RUN_STATE 228): only the previous attempt may be provisional (window k final before k+2).
+        # The withdrawn RUN_STATE 216 clause no longer fences C6: a provisional C5 arms C6.
+        latest = [attempt(self.root, f'C{i}', status='provisional' if i == 5 else 'final') for i in range(1, 6)]
+        self.packet('C6', self.fit + latest)
         cal = [attempt(self.root, f'C{i}', status='provisional' if i == 1 else 'final') for i in range(1, 9)]
-        self.packet('C5', self.fit + cal[:4])
-        with self.assertRaisesRegex(ValueError, 'C6 onward'):
+        self.packet('C2', self.fit + cal[:1])
+        with self.assertRaisesRegex(ValueError, 'R17: window k final'):
+            self.packet('C3', self.fit + cal[:2])
+        with self.assertRaisesRegex(ValueError, 'R17: window k final'):
             self.packet('C6', self.fit + cal[:5])
-        with self.assertRaisesRegex(ValueError, 'pending_final_eligibility'):
+        with self.assertRaisesRegex(ValueError, 'R17: window k final'):
             self.packet('T1', self.fit + cal)
+        last = [attempt(self.root, f'C{i}', status='provisional' if i == 8 else 'final') for i in range(1, 9)]
+        with self.assertRaisesRegex(ValueError, 'pending_final_eligibility'):
+            self.packet('T1', self.fit + last)       # the 8th decision never reads provisional counts
         zero = attempt(self.root, 'C1', captured=0, spam=0, bank=0)
         self.packet('C1', self.fit + [zero])
         zero2 = attempt(self.root, 'C1', captured=0, spam=0, bank=0, suffix='a2')

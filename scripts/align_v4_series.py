@@ -99,7 +99,8 @@ def candidate():
                 d_mapping='alias_calibration', test_windows=TEST_WINDOWS, order=[r['id'] for r in windows],
                 windows=windows,
                 calibration=dict(counted_windows=CALIBRATION_WINDOWS, benign_per_pair_per_window=7,
-                                 minimum_eligible_per_pair=39, replacements=0, fence_from='C6'),
+                                 minimum_eligible_per_pair=39, replacements=0,
+                                 final_eligibility='R17: window k final before the arm of k+2 and before any full-desk-gated arm'),
                 seed_allocation=dict(held_out_start=HELD_OUT_START, reserved=sorted(RESERVED_INDICES),
                                      order='per pair, kit order: window order then ordinal; distinct indices',
                                      zero_capture_rearm='reuses the same seeds'),
@@ -525,9 +526,11 @@ def bind_packet(root, name, packet, *, authenticated_by_rebuild=False):
     cal_attempts = {r['window'] for r in rows}
     if packet.get('lead_rulings', []) != [r for r in releases if r['after_window'] in cal_attempts]:
         raise ValueError('lead_rulings disagree with the lead_release entries of the series history')
-    # R216 final-eligibility fence starts at the sixth calibration arm (kept by R15).
-    if target['role'] == 'calibration' and int(target['id'][1:]) >= 6 and any(r['status'] != 'final' for r in rows):
-        raise ValueError('C6 onward requires final eligibility for prior calibration windows')
+    # R17 (RUN_STATE 228; replaces the withdrawn RUN_STATE 216 "from window 6" fence): only the previous
+    # attempt may still be provisional. Window k's final eligibility is due before the arm of k+2.
+    attempts = _attempts(history)
+    if any(a.get('status') != 'final' for a in attempts[:-1]):
+        raise ValueError('R17: window k final eligibility must be recorded before the arm of k+2')
     if not authenticated_by_rebuild:
         for check in packet.get('checks', {}).values():
             if evidence(check.get('evidence')) != check.get('status'):
