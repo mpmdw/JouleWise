@@ -8,6 +8,9 @@ in milliwatts; JouleWise emits watts.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+from contextvars import ContextVar
+import copy
 import getpass
 import hashlib
 import json
@@ -1750,7 +1753,50 @@ def samples_from_raw_powermetrics(
     return samples_from_records(parse_powermetrics_records(data, timestamp_anchor_s=timestamp_anchor_s))
 
 
+_record_reuse = ContextVar('powermetrics_record_reuse', default=None)
+
+
+@contextmanager
+def reuse_parsed_records(*, max_bytes=128 << 20):
+    """One-entry, one-assessment cache; ordinary capture/parser calls are unchanged.
+
+    The key authenticates actual bytes plus BOTH anchor options. Never cache a
+    path or stat result. Deep copies preserve callers' mutable record dictionaries.
+    ``max_bytes`` caps raw input size, not Python heap size; native RSS must be
+    measured before increasing it. Large captures simply use the original path.
+    """
+    if type(max_bytes) is not int or max_bytes < 0:
+        raise ValueError('parse cache max_bytes must be a nonnegative integer')
+    token = _record_reuse.set({'max_bytes': max_bytes, 'key': None, 'value': None})
+    try:
+        yield
+    finally:
+        _record_reuse.reset(token)
+
+
 def _parse_powermetrics_records(
+    data: bytes,
+    *,
+    timestamp_anchor_s: float | None = None,
+    first_record_endpoint_s: float | None = None,
+) -> tuple[list[PowermetricsRecord], _DroppedFrameDiagnostic | None]:
+    cache = _record_reuse.get()
+    if cache is None or len(data) > cache['max_bytes']:
+        if cache is not None:
+            cache['key'], cache['value'] = None, None
+        return _parse_powermetrics_records_uncached(data, timestamp_anchor_s=timestamp_anchor_s,
+                                                   first_record_endpoint_s=first_record_endpoint_s)
+    key = (hashlib.sha256(data).digest(), len(data), type(timestamp_anchor_s), timestamp_anchor_s,
+           type(first_record_endpoint_s), first_record_endpoint_s)
+    if key != cache['key']:
+        cache['key'], cache['value'] = None, None
+        value = _parse_powermetrics_records_uncached(data, timestamp_anchor_s=timestamp_anchor_s,
+                                                   first_record_endpoint_s=first_record_endpoint_s)
+        cache['key'], cache['value'] = key, value
+    return copy.deepcopy(cache['value'])
+
+
+def _parse_powermetrics_records_uncached(
     data: bytes,
     *,
     timestamp_anchor_s: float | None = None,
