@@ -201,7 +201,18 @@ def _directory_listing(target: Path, collected: _ClosureFiles | None = None, *, 
     return names
 
 
-def _link_chain(path: Path, session_reals) -> tuple[list[str], str, bool]:
+def _rebase(path: str, rebase) -> str:
+    """On the Air, a hop into the restore namespace (not yet published) is resolved in the staged tree."""
+    if rebase is None:
+        return path
+    namespace, staging = rebase
+    parent = Path(os.path.realpath(os.path.dirname(path)))
+    if _under(parent, namespace):
+        return str(staging / parent.relative_to(namespace) / os.path.basename(path))
+    return path
+
+
+def _link_chain(path: Path, session_reals, rebase=None) -> tuple[list[str], str, bool]:
     """Follow a link hop by hop as the kernel does (D2, delta2).
 
     Each hop is joined to its link's directory WITHOUT lexical normalization, and inspected with
@@ -212,7 +223,7 @@ def _link_chain(path: Path, session_reals) -> tuple[list[str], str, bool]:
     while True:
         text = os.readlink(current)
         hops.append(text)
-        following = os.path.join(os.path.dirname(current), text)
+        following = _rebase(os.path.join(os.path.dirname(current), text), rebase)
         try:
             is_link = stat.S_ISLNK(os.lstat(following).st_mode)
         except FileNotFoundError:
@@ -229,15 +240,18 @@ def _link_chain(path: Path, session_reals) -> tuple[list[str], str, bool]:
         current = following
 
 
-def _classify_link(path: Path, root_real: Path, mirror_real: Path | None, session_reals=None):
+def _classify_link(path: Path, root_real: Path, mirror_real: Path | None, session_reals=None, rebase=None):
     """``(class, real target, hops)``: internal, mirror, session, absent or bytes.
 
     The hop chain is classified BEFORE the end is resolved (delta2, lead ruling 2): a chain with an
     external hop is external even when it ends back inside the session (class ``session``).
     """
     session_reals = (root_real,) if session_reals is None else session_reals
-    hops, end, external_hop = _link_chain(path, session_reals)
+    hops, end, external_hop = _link_chain(path, session_reals, rebase)
     target = Path(os.path.realpath(end))
+    if rebase is not None and _under(target, rebase[1]):
+        # Report a target in the staged tree under the namespace it is published at (as at finalize).
+        target = rebase[0] / target.relative_to(rebase[1])
     inside = any(_under(target, root) for root in session_reals)
     if inside and not external_hop:
         return 'internal', None, None
@@ -472,13 +486,15 @@ def _verify_closure(closure: dict[str, Any], root: Path, *, mirror_identity: dic
             raise OffloadRefused(f'{where}: declared input {name} resolves to {os.path.realpath(name)}, '
                                  f'not the finalized {row["real"]}')
     root_real = Path(os.path.realpath(root))
-    session_reals = (root_real,) + ((Path(os.path.realpath(namespace)),) if namespace is not None else ())
+    namespace_real = Path(os.path.realpath(namespace)) if namespace is not None else None
+    session_reals = (root_real,) + ((namespace_real,) if namespace_real is not None else ())
+    rebase = (namespace_real, root_real) if namespace_real is not None and namespace_real != root_real else None
     mirror_real = Path(os.path.realpath(mirror['root'])) if mirror is not None else None
     policy = closure['ignored_policy']
     declared_real = {row['real'] for row in closure['inputs'].values()}
     transported_real = {os.path.realpath(name) for name in transported} | set(transported)
     for relative, row in sorted(closure['links'].items()):
-        kind, target, hops = _classify_link(root / relative, root_real, mirror_real, session_reals)
+        kind, target, hops = _classify_link(root / relative, root_real, mirror_real, session_reals, rebase)
         if kind != row['class'] or str(target) != row['target'] or hops != row['hops']:
             raise OffloadRefused(f'{where}: external link {relative} resolves differently from the finalized '
                                  f'record manifest ({kind} {target} via {hops})')

@@ -192,3 +192,8 @@ The full list of modules run:
 | **External alias ending inside the session** (both seats) | The hop chain is classified before the end is resolved. An external hop makes the link external (class `session`, every hop bound, verified against the restore namespace). |
 | **Byte-bound ignored directory membership** (seat 1) | Bound directories record `members` (sorted names and sizes). Declared inputs carry no size: their bytes are bound separately. Verification re-enumerates. |
 | **Symlink parent plus `..`** (seat 2) | No lexical normalization: hops are joined to the link's directory and inspected with lstat (kernel semantics). Any `..` in an external hop or a declared input refuses. |
+
+**Confirmation seat regression (`d2e512a53`) and its fix.**
+- **The regression:** an unchanged session chain (`S/selected.json` → external alias → `S/current.json` → `data.json`) failed to restore. On the Air, the hop back into `S` was inspected at the absent publish path.
+- **The fix:** during verification, a hop whose resolved parent lies in the restore namespace is now resolved inside the staged tree (`_rebase`), and the target is reported under the namespace, exactly as at finalize.
+- **Tests:** `tests/align/test_hoff_confirm_sol.py` is brought in unmodified and passes. `test_a_nested_session_chain_is_resolved_in_the_staged_tree_and_still_bound` checks both that the honest layout restores and that a retargeted alias still refuses.

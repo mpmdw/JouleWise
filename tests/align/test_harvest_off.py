@@ -344,6 +344,35 @@ class R17ReviewCustodyTests(unittest.TestCase):
         with self.assertRaisesRegex(self.off.OffloadRefused, 'further link'):
             self.finalize(mirror=self.mirror)
 
+    def test_a_nested_session_chain_is_resolved_in_the_staged_tree_and_still_bound(self):
+        # Confirmation seat: S/selected -> external alias -> S/current -> data. The honest layout restores
+        # (the session hops resolve inside the staged tree); retargeting the external alias still refuses.
+        for retarget in (False, True):
+            with self.subTest(retarget=retarget):
+                base = Path(tempfile.mkdtemp(prefix='nested-', dir=REAL_TMP))
+                self.addCleanup(shutil.rmtree, base, True)
+                source = base / 'session'
+                source.mkdir()
+                (source / 'data.json').write_bytes(b'{"a":1}')
+                (source / 'other.json').write_bytes(b'{"b":2}')
+                (source / 'current.json').symlink_to('data.json')
+                alias = base / 'operator-current'
+                alias.symlink_to(source / 'current.json')
+                (source / 'selected.json').symlink_to(alias)
+                final = self.off.finalized_manifest(source)
+                self.off.pack(source, base / 'o', finalized=final)
+                source.rename(base / 'kept')
+                if retarget:
+                    alias.unlink()
+                    alias.symlink_to(source / 'other.json')
+                    with self.assertRaisesRegex(self.off.OffloadRefused, 'resolves differently'):
+                        self.off.unpack(base / 'o', finalized=final,
+                                        finalized_sha256=self.off.manifest_sha256(final))
+                    self.assertFalse(source.exists())
+                else:
+                    self.off.unpack(base / 'o', finalized=final, finalized_sha256=self.off.manifest_sha256(final))
+                    self.assertEqual((source / 'selected.json').read_bytes(), b'{"a":1}')
+
     def test_transport_manifest_cannot_choose_the_namespace(self):
         final = self.finalize(mirror=self.mirror)
         manifest = self.off.pack(self.src, self.root / 'o', finalized=final, mirror_identity=self.identity)
