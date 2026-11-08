@@ -4,6 +4,7 @@ No capture imports, filesystem discovery, path following, or measurement reads.
 All intervals are half-open integer nanoseconds on the recorded epoch axis.
 This is an accounting diagnostic, never a hardware/eligibility qualification.
 See docs/perf/2026-11-08-eng-timing.md for supported sources and limitations.
+R0 duration budgets and archival NOTE limits: docs/perf/2026-11-08-r0-timing.md.
 """
 from __future__ import annotations
 
@@ -165,18 +166,22 @@ class _Reader:
     def warn(self, source, reason):
         self.warnings.append(source+": "+reason)
 
-    def load(self, path, lines=False):
+    def blob(self, path):
         safe_path(path)
         if path not in self.sources:
             try:
                 raw = self.read_blob(path)
             except (KeyError, FileNotFoundError):
                 self.warn(path, "source_unavailable")
-                return [] if lines else None
+                return None
             self.sources[path] = {"sha256": hashlib.sha256(raw).hexdigest(), "bytes": len(raw)}
             self.raw[path] = raw
-        else:
-            raw = self.raw[path]
+        return self.raw[path]
+
+    def load(self, path, lines=False):
+        raw = self.blob(path)
+        if raw is None:
+            return [] if lines else None
         if lines:
             result = []
             for number, line in enumerate(raw.splitlines(), 1):
@@ -450,7 +455,7 @@ def _plain(value):
 
 def read_window(read_blob, *, night_result=None, chain_journal=None, chain_started=None,
                 chain_exited=None, night_log=None, r1_result=None, plan=None, bundles=(),
-                spans=(), stage_phases=None):
+                spans=(), stage_phases=None, r0_result=None, r0_note=None):
     """Build an observed-envelope ledger. read_blob reads only named sources.
 
     Spans are (phase, path) pairs pointing at EXISTING timed JSON documents;
@@ -458,6 +463,22 @@ def read_window(read_blob, *, night_result=None, chain_journal=None, chain_start
     Plan t0/window_max_s define a reservation only, never observed time.
     """
     reader = _Reader(read_blob)
+    if r0_result and r0_note:
+        raise ValueError("supply only one R0 source: --r0-result or --r0-note")
+    r0 = None
+    if r0_result or r0_note:
+        from joulewise.align.window_timing_r0 import R0Timing
+        path = r0_result or r0_note
+        parser = R0Timing(path, ns, reader.warn)
+        raw = reader.blob(path)
+        if raw is not None:
+            r0 = parser.native(reader.load(path)) if r0_result else parser.note(raw.decode())
+            if r0["start_ns"] is not None and r0["end_ns"] is not None:
+                reader.bounds.append((r0["start_ns"], r0["end_ns"]))
+            if r0["dwell"]:
+                dwell = r0["dwell"]
+                reader.add(dwell["start_ns"], dwell["end_ns"], "dwell", path+"#observed_dwell", 15)
+                reader.bounds.append((dwell["start_ns"], dwell["end_ns"]))
     stage_phases = stage_phases or {}
     if any(p not in PHASES for p in stage_phases.values()):
         raise ValueError("unknown stage phase")
@@ -570,12 +591,15 @@ def read_window(read_blob, *, night_result=None, chain_journal=None, chain_start
         if ceiling["status"] == "closed_before_ceiling":
             ceiling["idle_to_ceiling"] = "not_in_this_record"
     missing = [phase for phase in PHASES[:-1] if not any(i.phase == phase for i in reader.intervals)]
-    return dict(schema="joulewise.align.window_timing.v1", start_ns=a, end_ns=b, wall_ns=b-a,
+    report = dict(schema="joulewise.align.window_timing.v1", start_ns=a, end_ns=b, wall_ns=b-a,
                 bounds_basis="observed_envelope_of_named_sources", ledger=rows,
                 phase_ns=totals(rows, "phase"), activity_ns=totals(rows, "activity"),
                 members=reader.members, stages=reader.stages, attempts=reader.attempts,
                 ceiling=ceiling, unavailable_phases=missing, warnings=sorted(set(reader.warnings)),
                 sources=reader.sources, phase_annotations=annotations, stage_phase_annotations=stage_phases)
+    if r0 is not None:
+        report["r0"] = r0
+    return report
 
 
 def worksheet(report):
@@ -586,6 +610,9 @@ def worksheet(report):
              "phase             seconds      fraction"]
     for phase, duration in report["phase_ns"].items():
         lines.append(f"{phase:15} {duration/NS:12.6f} {duration/wall if wall else 0:12.6%}")
+    if "r0" in report:
+        from joulewise.align.window_timing_r0 import worksheet_r0
+        lines += worksheet_r0(report["r0"])
     lines += ["", "MEMBERS (seconds; phase shares use the member's observed wall)",
               "member\twall\tidle\tscaffold\tprefill\tdecode\ttool\tG0\tG1\tH\tunknown\ttail\tturns\ttokens\tunavailable"]
     def seconds(value):
@@ -641,6 +668,9 @@ def main(argv=None):
     parser.add_argument("--ref", required=True, help="local committed export ref; never fetched")
     for option in ("night-result", "chain-journal", "chain-started", "chain-exited", "night-log", "r1-result", "plan"):
         parser.add_argument("--"+option)
+    r0_options = parser.add_mutually_exclusive_group()
+    r0_options.add_argument("--r0-result", help="native R0 report.json; timing/identity fields only")
+    r0_options.add_argument("--r0-note", help="committed R0 summary NOTE when report is not committed")
     parser.add_argument("--bundle", action="append", default=[], help="committed bundle directory; repeat for each member")
     parser.add_argument("--span", action="append", default=[], type=_assignment,
                         help="PHASE=PATH to an existing timed JSON document (operator phase annotation)")
@@ -651,7 +681,7 @@ def main(argv=None):
     try:
         source = GitRecords(args.repo, args.ref)
         report = read_window(source.read, **{name: getattr(args, name) for name in
-                             ("night_result", "chain_journal", "chain_started", "chain_exited", "night_log", "r1_result", "plan")},
+                             ("night_result", "chain_journal", "chain_started", "chain_exited", "night_log", "r1_result", "plan", "r0_result", "r0_note")},
                              bundles=args.bundle, spans=args.span, stage_phases=dict(args.stage_phase))
         report["source_commit"] = source.commit
     except (ValueError, OSError, InvalidOperation) as error:
