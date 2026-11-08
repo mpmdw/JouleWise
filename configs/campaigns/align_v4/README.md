@@ -58,15 +58,16 @@ pilot-3 disk law (two copies). Until then --check and prepare refuse with
 that reason. Use fit_roster with R1 measured cost estimates:
 drop only 18 first, then decrease B_D by 1024 down to 6144; otherwise return
 to lead. Preserve anchors, contrasts and 5/17. Requalify/freeze changed budgets.
-W1 arm requires --obc-off-attested-by, --battery-log, --next-arm-triage and --w1-disk-config. By-day
+W1 arm requires --obc-off-attested-by, --battery-log (and --window-battery-journal), --next-arm-triage and --w1-disk-config. By-day
 scripts/align_v4_offloads.py verifies configured inventories; the disk config
 names daytime_offload_receipt and an explicit lead-signed
 daytime_offload_freshness policy (max_age_s, lead_signature); no default duration. Arm checks >=80 decimal GB
 free without remounting/re-hashing the SSD. Empty offloads require explicit
 offloads_owed: none. Battery arm requires fresh AC, >=99%, not charging and
 |InstantAmperage| <=200 mA, retaining raw ioreg and pmset evidence (pmset is evidence only).
-Top-up evidence is derived from the logged battery record (--battery-log, sampled continuously: a
-completed charge within 30 min, or continuous float since one), never typed. DC residuals print for benign members only.
+Top-up evidence is derived from the logged battery record, never typed: a completed charge within
+30 min, or continuous float since one. --battery-log is the between-window sampler log (stopped before
+the arm dwell; none runs during a window) and --window-battery-journal the window's own 1 Hz SMC capture. DC residuals print for benign members only.
 R12: a window ends at authenticated terminal completion (the 59,520 s maximum is a
 ceiling, not a reservation). W1/D arm also requires --next-arm-triage, the frozen
 B2 list (joulewise/align/apple/v4_cadence.NEXT_ARM_TRIAGE), every entry gating.

@@ -414,7 +414,8 @@ class RegistrationTextTests(unittest.TestCase):
         for phrase in ('Stage A checklist additions', 'JW_WP22_FULL=1', '**Strict:**', '**Amendment:**', '`amendments` row',
                        '**strict is the default**', 'AMENDMENT_ALLOWLIST', 'dynamic closure', 'dynamic_closure_trace.json',
                        '--battery-log', 'derived from a logged battery record', 'continuous float',
-                       'sample --loop', 'consecutive', 'no continuity rule',
+                       'sample --loop', 'consecutive', 'no continuity rule', 'No sampler runs during a window',
+                       '--window-battery-journal', 'stop --pidfile P',
                        'BENIGN members only', 'sealed (hash only)', 'U3 inconclusive'):
             self.assertIn(phrase, text)
 

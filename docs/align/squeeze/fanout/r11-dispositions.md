@@ -119,3 +119,12 @@ RUN_STATE 217, and the arm-call witnesses to the battery-log API).
 | G1 stale packet | The packet carries `record_path` and `record_sha256`; the arm checks the blob at `record_commit` and that it is the last commit changing the path | `align_v4_session.py` (`_record_bound`), `tests/align/test_v4_record_binding.py` |
 | G2 chain doc | Kit regeneration inserted between installing the slots and `--check`; the doc block is a tested script | `scripts/align_r1_to_w1_chain.py`, `tests/align/test_r1_to_w1_chain.py` |
 | G3 KM003C crash radius | An unclosed stream is salvaged up to its last valid record (start offset, no fabricated samples); only members overlapping the gap are DC-missing | `km003c.py`, `km003c_parse.py`, `tests/align/test_km003c.py` |
+
+## Ruling: no battery sampler during a window
+
+An ioreg spawn every 120 s on the measuring Mac is out-of-tree activity the quiet guard exists to
+catch. `sample --loop` now runs only between windows (start at terminal completion, `stop`
+before the arm dwell; `--pidfile`), and across a window the float evidence is the window's own
+1 Hz SMC battery journal, converted by `v4_topup.window_records` and merged in time order with
+the between-window logs (`--window-battery-journal`). A boundary gap above 300 s, or a missing
+window journal, breaks continuity as before. Amendment allowlist unchanged.

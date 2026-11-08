@@ -4,7 +4,8 @@
 - `align/2026-11-08-w1-blockers-sol` (`35dccf241`), taken as the base;
 - `origin/align/2026-11-08-v4-r11`, merged in (not rebased): first at
   `2cce80ede`, then again at `9891d679b` (delta2: strict receipt, dynamic
-  closure, top-up, smoke G1-G3).
+  closure, top-up, smoke G1-G3), and a third time at `8d0dabc73` (no battery sampler
+  during a window).
 
 It implements the lead's rulings on
 [W1-BLOCKERS-AGREEMENT](W1-BLOCKERS-AGREEMENT.md) (on

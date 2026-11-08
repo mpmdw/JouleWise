@@ -296,6 +296,25 @@ class BatteryTests(unittest.TestCase):
         from scripts import align_v4_session as session
         self.assertFalse(session.battery_windows_pass({}))
 
+    def test_v4_desk_writes_the_evidence_aware_full_desk_verdict(self):
+        from scripts import align_v4_session as session
+        with tempfile.TemporaryDirectory() as tmp:
+            pilot_path = Path(tmp)/'PILOT.json'
+            charged = {'run_id': 'c', 'excluded': True, 'exclusion_codes': ['battery.member_span'],
+                       'task_pair': 'p', 'condition': 'benign',
+                       'summary': {'energy': {'gpu': {'joules': 1., 'segment_sum_j': 1.}}, 'flags': [],
+                                   'configuration': {'sampler': {}}, 'window_evidence_precheck': {'eligible': True}}}
+            pilot_path.write_text(json.dumps({'members': [charged]}))
+            status = {'pilot': str(pilot_path), 'checks': {
+                'I1_all_bundles_readable': True, 'I2_energy_on_every_episode': True,
+                'I3_attribution_tiles_episode': True, 'chain_eligibility': False,
+                'no_member_exclusions': False, 'v4_B_bar': False}}
+            with patch.object(session.pilot, 'desk', return_value=status):
+                result = session.desk(tmp, harvest=False)
+            self.assertIs(result['full_desk_gate']['pass'], True)
+            self.assertEqual(result['full_desk_gate']['charging_only_members_removed'], ['c'])
+            self.assertTrue(json.loads((Path(tmp)/'desk.json').read_text())['full_desk_gate']['pass'])
+
     def test_false_b_bar_alone_does_not_fail_the_full_desk_gate(self):
         # Ruling 9: v4_B_bar is recorded false, the full-desk gate ignores it,
         # and v4_cadence battery_window governs the resume.

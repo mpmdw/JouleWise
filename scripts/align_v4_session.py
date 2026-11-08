@@ -292,7 +292,8 @@ def desk(session_root, **kwargs):
     status['full_desk_gate'] = {'pass': members is not None and full_desk_gate_pass(status.get('checks'), members),
                                 'charging_only_members_removed': removed,
                                 'rule': 'all desk checks except v4_B_bar; charging-only exclusions removed (ruling 9)'}
-    pilot.h.write(Path(status['pilot']).parent/'desk.json', status)
+    if status.get('pilot'):
+        pilot.h.write(Path(status['pilot']).parent/'desk.json', status)
     print('full_desk_gate: ' + ('pass' if status['full_desk_gate']['pass'] else 'fail'))
     return status
 
@@ -344,7 +345,7 @@ def _record_bound(root, packet):
 
 
 def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=None, owner=None,
-               obc_off_attested_by=None, battery_runner=None, battery_log=None,
+               obc_off_attested_by=None, battery_runner=None, battery_log=None, window_battery_journal=None,
                now=None, next_arm_triage=None, commit_check=None, record_check=None):
     """W1/D arm evidence: ruling 7 AC powermode and ruling 20 volumes.
 
@@ -379,7 +380,9 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
     # within 1800 s, or continuous float since it); a hand-entered time is not admissible.
     from joulewise.align.apple import v4_topup
     now_s = (now or time.time)()
-    evidence = v4_topup.derive_from_file(battery_log, now_s) if battery_log is not None else None
+    as_list = lambda value: [] if value is None else [value] if isinstance(value, (str, Path)) else list(value)
+    logs, journals = as_list(battery_log), as_list(window_battery_journal)
+    evidence = v4_topup.derive_from_sources(logs, journals, now_s) if logs or journals else None
     topup = ({'completed_at_epoch_s': evidence['completed_at_epoch_s'], 'source': evidence['source']}
              if evidence and evidence['admissible'] else None)
     battery = battery_arm(observed, obc_off_attested_by, topup, now_epoch_s=now_s)
@@ -650,10 +653,10 @@ def _termination_handlers():
 def _arm_and_install(session, state, measurement_root, plan, high, *, runner, volume_runner, now,
                      w1_disk_config, disk_gate, lock=None, owner=None,
                      obc_off_attested_by=None, battery_runner=None, battery_log=None,
-                     next_arm_triage=None, commit_check=None, record_check=None, **kwargs):
+                     window_battery_journal=None, next_arm_triage=None, commit_check=None, record_check=None, **kwargs):
     record = arm_checks(measurement_root, plan, runner=runner, volume_runner=volume_runner, lock=lock,
                         owner=owner, obc_off_attested_by=obc_off_attested_by, battery_runner=battery_runner,
-                        battery_log=battery_log, now=now,
+                        battery_log=battery_log, window_battery_journal=window_battery_journal, now=now,
                         next_arm_triage=next_arm_triage, commit_check=commit_check,
                         record_check=record_check)
     if high is not None:
@@ -692,9 +695,12 @@ def main(argv=None):
                           help='validated R0 desk config (disk_path, W1 offloads) for the W1 disk gate')),
                                        ('--obc-off-attested-by', dict(required=True,
                           help='operator attesting Optimized Battery Charging is off')),
-                                       ('--battery-log', dict(type=Path, required=True,
-                          help='JSONL battery log (scripts/align_v4_battery_log.py sample); the arm derives '
-                               'top-up evidence from it: a completed charge within 30 min, or continuous float since')),
+                                       ('--battery-log', dict(type=Path, required=True, action='append',
+                          help='JSONL between-window battery log (scripts/align_v4_battery_log.py sample --loop, '
+                               'run only between windows); repeatable; the arm derives top-up evidence from it')),
+                                       ('--window-battery-journal', dict(type=Path, action='append',
+                          help='a window hazard battery journal (the 1 Hz SMC B0AC lines and ioreg lines) merged '
+                               'in time order with the between-window log; repeatable')),
                                        ('--next-arm-triage', dict(type=Path, required=True,
                           help='R12 B2 next-arm triage packet (JSON) built off the MBP from the committed record'))))
 
