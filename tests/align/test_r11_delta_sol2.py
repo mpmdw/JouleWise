@@ -139,13 +139,12 @@ class PostW1DeskWitness(unittest.TestCase):
              patch('joulewise.align.apple.external_volume.arm_check', return_value={'verdict': 'PASS'}), \
              patch('joulewise.battery_float.observe', return_value=(observation, b'synthetic')):
             run = lambda argv: subprocess.CompletedProcess(argv, 0, 'synthetic pmset', '')
-            from tests.align.test_v4_cadence import write_battery_log
+            from tests.align.test_v4_cadence import arm_seams, write_battery_log
             with tempfile.TemporaryDirectory() as tmp:
                 log = write_battery_log(Path(tmp) / 'battery.jsonl', 5000.)
                 record = session.arm_checks(
                     '.', {}, runner=run, now=lambda: 5000., obc_off_attested_by='synthetic',
-                    battery_log=log, commit_check=lambda root, commit: True,
-                    record_check=lambda root, packet: True, next_arm_triage=bad)
+                    battery_log=log, next_arm_triage=bad, **arm_seams())
         self.assertFalse(record['admitted'], record)
 
 

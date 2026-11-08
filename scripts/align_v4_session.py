@@ -138,6 +138,55 @@ def d_member_x2_report(plan_members, runs_root):
             'x2_rate': count / len(rows) if rows else None, 'members': rows}
 
 
+def battery_windows_pass(windows):
+    return bool(windows) and all(w.get('bar_pass') is True for w in windows.values())
+
+
+# Lead ruling 9 (R14; W1-BLOCKERS-AGREEMENT): B is an operational stop with automatic
+# resume. A false v4_B_bar is recorded but does not block the full-desk gate, and a
+# member excluded ONLY for charging (v4_battery.EXCLUDE) is removed from the window
+# without failing the common desk's exclusion-derived checks (Sol2 review S2-01).
+# v4_cadence ``battery_window`` governs the resume.
+FULL_DESK_GATE_EXEMPT = ('v4_B_bar',)
+EXCLUSION_DERIVED = ('no_member_exclusions', 'chain_eligibility')
+
+
+def _exclusion_codes(member):
+    codes = [*(member.get('exclusion_codes') or []), *(member.get('calibration_exclusions') or [])]
+    summary = member.get('summary') or {}
+    codes += list(summary.get('exclusion_codes') or [])
+    return {str(c).split(':')[0] for c in codes}
+
+
+def charging_only_exclusion(member):
+    """True iff the member is excluded and every exclusion code is a charging B code."""
+    from joulewise.align.apple.v4_battery import EXCLUDE
+    codes = _exclusion_codes(member)
+    return bool(member.get('excluded')) and bool(codes) and codes <= set(EXCLUDE)
+
+
+def full_desk_gate_pass(checks, members=None):
+    """The ``full_desk_gate`` verdict.
+
+    Every desk check must be true except ``v4_B_bar``. With the desk's
+    ``members`` (evidence-aware), the exclusion-derived checks are re-derived
+    with charging-only exclusions not counted, so B alone never fails the gate;
+    any other exclusion still does. Without members the checks stand as recorded.
+    """
+    gated = {k: v for k, v in (checks or {}).items() if k not in FULL_DESK_GATE_EXEMPT}
+    if members is not None and any(k in gated for k in EXCLUSION_DERIVED):
+        # Charging-only members stay in the window evidence (readability, prechecks);
+        # only their B exclusion stops counting against the desk.
+        neutral = [{**m, 'excluded': False} if charging_only_exclusion(m) else m for m in members]
+        recomputed, _, _ = pilot.instrument_checks(neutral)
+        others = any(m.get('excluded') for m in neutral)
+        if 'no_member_exclusions' in gated:
+            gated['no_member_exclusions'] = not others
+        if 'chain_eligibility' in gated:
+            gated['chain_eligibility'] = recomputed['chain_eligibility'] is True and not others
+    return bool(gated) and all(v is True for v in gated.values())
+
+
 def powermode_desk_check(*, state, members, runs_root, kit_path):
     """Council ruling 7: any member whose bundle-recorded AC powermode differs
     from the frozen series value sets ``instrument_ok`` false. The report also
@@ -178,6 +227,12 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
         checks['v4_registration_evidence'] = False
         report['registration_error'] = str(exc)
         return checks, report
+    from joulewise.align.apple import v4_battery
+    try:
+        battery_policy = json.loads((registration_dir/'battery_window_policy.json').read_bytes())
+    except (OSError, ValueError):
+        battery_policy = None
+    journal = v4_battery.load_journal(Path(custody)/'hazards/monitor/battery.jsonl') if custody else ([], None, 1)
     records = []
     pilot_members = {m['run_id']: m for m in members}
     for row in plan['members']:
@@ -191,6 +246,7 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
                  'pm_period_s': .1, 'calibration_exclusions': ['member.runtime_failure'], 'error': str(exc)}
         r.update({k: row[k] for k in ('ordinal', 'role') if k in row},
                  window=state.get('window_id', 'W1'), stage=row.get('stage_id'))
+        v4_battery.attach(r, path, journal)
         if row.get('replay_of'):
             r['identical_work_group'] = row['replay_of']
         elif row.get('ordinal') == 5 or row.get('role', '').startswith(('X-', 'Y-')):
@@ -210,11 +266,14 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
     report['thermal'] = window_report(records, v4=True, u3_bar=bar,
         delta_slow_c=policy.get('delta_slow_c'), contrast_predeclared=contrast_predeclaration(wp19, policy))
     report['registration_diagnostics'] = v4_registration.desk_diagnostics(records,
-        r1_soak=r1_soak_c(registration_dir))
+        r1_soak=r1_soak_c(registration_dir), battery_policy=battery_policy)
     for model, result in report['thermal']['model_windows'].items():
         for n in (1, 2, 3):
             checks[f'v4_{model}_U{n}'] = result[f'U{n}']['status'] == 'pass'
-    checks['v4_B_bar'] = all(w['bar_pass'] for w in report['registration_diagnostics']['battery_windows'].values())
+    checks['v4_B_bar'] = battery_windows_pass(report['registration_diagnostics']['battery_windows'])
+    for name, row in report['registration_diagnostics']['battery_windows'].items():
+        print(f'{name} battery: '+json.dumps({k: row[k] for k in
+              ('B_count', 'unobserved_count', 'assist_count', 'bar_pass', 'consequence')}, sort_keys=True))
     checks['v4_D_cohort'] = report['registration_diagnostics']['d_cohort']['instrument_ok']
     return checks, report
 
@@ -223,7 +282,20 @@ def desk(session_root, **kwargs):
     kwargs.setdefault('kit', kit.KIT)
     kwargs.setdefault('desk_schema', kit.DESK_SCHEMA)
     kwargs.setdefault('extra_checks', powermode_desk_check)
-    return pilot.desk(session_root, **kwargs)
+    status = pilot.desk(session_root, **kwargs)
+    # Evidence-aware full-desk verdict (ruling 9) beside the common desk status.
+    try:
+        members = pilot.h.read(status['pilot']).get('members', [])
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        members = None
+    removed = [m.get('run_id') for m in members or () if charging_only_exclusion(m)]
+    status['full_desk_gate'] = {'pass': members is not None and full_desk_gate_pass(status.get('checks'), members),
+                                'charging_only_members_removed': removed,
+                                'rule': 'all desk checks except v4_B_bar; charging-only exclusions removed (ruling 9)'}
+    if status.get('pilot'):
+        pilot.h.write(Path(status['pilot']).parent/'desk.json', status)
+    print('full_desk_gate: ' + ('pass' if status['full_desk_gate']['pass'] else 'fail'))
+    return status
 
 
 ARM_RECORD_SCHEMA = 'joulewise.align_v4_arm.v1'
@@ -246,35 +318,69 @@ def _commit_exists(root, commit):
         return False
 
 
-def _record_bound(root, packet):
-    """Whether the packet is bound to the last committed window record (smoke G1).
+def _probe_meter_live(root, *, runner=subprocess.run, seconds=3):
+    """Verify the KM003C reader live at arm time (never lead-entered): run the monitor briefly.
 
-    ``record_path`` at ``record_commit`` must hash to ``record_sha256``, and that commit must be
-    the last one that changed the path, so a stale but well-formed packet (built before the
-    record was re-committed) refuses.
+    Live means: a stream with status streaming, samples, a clock fit, a closing line and a
+    consistent raw offset. Secondary channel: the result gates nothing but this check itself.
+    """
+    import tempfile
+    from joulewise.external import km003c_parse as kp
+    with tempfile.TemporaryDirectory(prefix='v4-meter-probe-') as tmp:
+        out = Path(tmp) / 'probe.jsonl'
+        done = runner([sys.executable, '-B', str(Path(root) / 'scripts/km003c_monitor.py'), '--out', str(out),
+                       '--duration', str(seconds)], cwd=root, capture_output=True, timeout=seconds+60, check=False)
+        if getattr(done, 'returncode', 1) != 0 or not out.is_file():
+            return {'live': False, 'reason': f'monitor probe exit {getattr(done, "returncode", None)}'}
+        stream = kp.parse(out)
+        offset = kp.raw_offset_ns(stream)
+        live = bool(stream.present and stream.aligned and stream.trailer is not None and offset is not None)
+        return {'live': live, 'samples': len(stream.host_ns), 'raw_offset_ns': offset,
+                'stream_sha256': _sha256(out.read_bytes()), 'probe_seconds': seconds,
+                **({} if live else {'reason': 'no aligned samples with a closing line'})}
+
+
+def _record_bound(root, packet):
+    """Whether the packet is bound to the LATEST committed window record (smoke G1, delta3).
+
+    Three facts, all from committed Git objects: ``record_path`` at ``record_commit`` hashes to
+    ``record_sha256`` and that commit is the last one that changed the record path (a re-committed
+    record refuses); and the canonical series ledger (``series/state.json``) at HEAD names exactly
+    this record as its ``previous_record`` and equals the packet's ``series_sha256`` (a newer
+    window, even at a new record path, moves the ledger and stales an older window's packet).
+    Unrelated commits do not stale a packet.
     """
     import re
     if not isinstance(packet, dict):
         return False
     commit, path, digest = packet.get('record_commit'), packet.get('record_path'), packet.get('record_sha256')
+    series_path = packet.get('series_path')
     if (not isinstance(commit, str) or not re.fullmatch(r'[0-9a-f]{40}', commit) or not isinstance(path, str)
             or not path or Path(path).is_absolute() or '..' in Path(path).parts
-            or not isinstance(digest, str) or not re.fullmatch(r'[0-9a-f]{64}', digest)):
+            or not isinstance(digest, str) or not re.fullmatch(r'[0-9a-f]{64}', digest)
+            or not isinstance(series_path, str) or Path(series_path).is_absolute() or '..' in Path(series_path).parts):
         return False
     try:
         blob = subprocess.run(['git', 'show', f'{commit}:{path}'], cwd=root, capture_output=True,
                               timeout=30, check=False)
         latest = subprocess.run(['git', 'log', '-1', '--format=%H', '--', path], cwd=root,
                                 capture_output=True, text=True, timeout=30, check=False)
-    except (OSError, subprocess.SubprocessError):
+        ledger = subprocess.run(['git', 'show', f'HEAD:{series_path}'], cwd=root, capture_output=True,
+                                timeout=30, check=False)
+        state = json.loads(ledger.stdout) if ledger.returncode == 0 else None
+    except (OSError, subprocess.SubprocessError, ValueError):
         return False
     return (blob.returncode == 0 and _sha256(blob.stdout) == digest
-            and latest.returncode == 0 and latest.stdout.strip() == commit)
+            and latest.returncode == 0 and latest.stdout.strip() == commit
+            and isinstance(state, dict)
+            and state.get('previous_record') == {'commit': commit, 'path': path, 'sha256': digest}
+            and packet.get('series_sha256') == _sha256(ledger.stdout))
 
 
 def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=None, owner=None,
                obc_off_attested_by=None, battery_runner=None, battery_log=None, window_battery_journal=None,
-               now=None, next_arm_triage=None, commit_check=None, record_check=None):
+               now=None, next_arm_triage=None, commit_check=None, record_check=None,
+               packet_builder=None, meter_probe=None):
     """W1/D arm evidence: ruling 7 AC powermode and ruling 20 volumes.
 
     Ruling 7: the AC-profile powermode must equal the plan's frozen series
@@ -328,29 +434,61 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
     except (OSError, subprocess.SubprocessError) as exc:
         battery['pmset_batt'] = {'exit_code': None, 'error': str(exc), 'evidence_only': True}
     reasons += battery['reasons']
-    # R12 B2: the frozen next-arm triage list gates every arm; the powermode,
-    # volume and battery results above are its arm-computed members and the
-    # off-MBP packet supplies the rest (joulewise.align.apple.v4_cadence).
+    # R12 B2: the frozen next-arm triage list gates every arm. The supplied packet is a POINTER, never
+    # trusted data (lead ruling 2026-11-08, Opus packet review HIGH-1/2): the arm rebuilds the packet
+    # itself from the identities the supplied one names, with its own clock and artifact-set digest,
+    # judges its own build, and refuses a supplied packet that differs from it. Powermode, volume,
+    # battery and the live meter are computed here from current hardware, never entered.
     from joulewise.align.apple import v4_cadence, v4_registration
-    packet, packet_file_sha256 = next_arm_triage, None
-    if isinstance(packet, (str, Path)):
+    supplied, packet_file_sha256 = next_arm_triage, None
+    if isinstance(supplied, (str, Path)):
         try:
-            raw_packet = Path(packet).read_bytes()
-            packet, packet_file_sha256 = json.loads(raw_packet), _sha256(raw_packet)
+            raw_packet = Path(supplied).read_bytes()
+            supplied, packet_file_sha256 = json.loads(raw_packet), _sha256(raw_packet)
         except (OSError, ValueError):
-            packet = None
-    commit = packet.get('record_commit') if isinstance(packet, dict) else None
-    identity = {'artifact_set_sha256': v4_registration.artifact_set_digest(measurement_root),
-                'record_commit_exists': (commit_check or _commit_exists)(measurement_root, commit),
-                'record_bound': bool((record_check or _record_bound)(measurement_root, packet))}
-    triage = v4_cadence.next_arm_triage(packet, {
-        'series_powermode': bool(power['admitted']),
-        'external_volume': volumes['verdict'] == external_volume.PASS,
-        'charging_battery': bool(battery['admitted'])}, identity)
-    triage['packet_file_sha256'] = packet_file_sha256
+            supplied = None
+    current_digest = v4_registration.artifact_set_digest(measurement_root)
+    built, matches, rebuild_error = None, False, None
+    try:
+        if packet_builder is not None:
+            built, matches = packet_builder(measurement_root, supplied, now_epoch_s=now_s,
+                                            current_artifact_set_sha256=current_digest)
+        else:
+            from scripts import align_v4_next_arm_packet as builder
+            built, matches = builder.rebuild_and_compare(measurement_root, supplied, now_epoch_s=now_s,
+                                                         current_artifact_set_sha256=current_digest)
+    except (ValueError, KeyError, TypeError, AttributeError, OSError) as exc:
+        rebuild_error = f'{type(exc).__name__}: {exc}'
+    try:
+        meter = (meter_probe or _probe_meter_live)(measurement_root)
+    except Exception as exc:  # noqa: BLE001 - an unverifiable meter refuses; it never raises out of the arm
+        meter = {'live': False, 'reason': f'{type(exc).__name__}: {exc}'}
+    internal = {'series_powermode': bool(power['admitted']),
+                'external_volume': volumes['verdict'] == external_volume.PASS,
+                'charging_battery': bool(battery['admitted']),
+                'meter_reader_live': meter.get('live') is True}
+    if built is None:
+        triage = v4_cadence.next_arm_triage(None, internal, None, now_epoch_s=now_s)
+        triage['reasons'].append(f'packet could not be rebuilt from its named sources: {rebuild_error}')
+        triage['admitted'] = False
+    else:
+        commit = built.get('record_commit')
+        identity = {'artifact_set_sha256': current_digest,
+                    'record_commit_exists': (commit_check or _commit_exists)(measurement_root, commit),
+                    'record_bound': bool((record_check or _record_bound)(measurement_root, built))}
+        triage = v4_cadence.next_arm_triage(built, internal, identity, now_epoch_s=now_s)
+        if not matches:
+            triage['admitted'] = False
+            triage['reasons'].append('packet does not match its committed sources (the supplied packet '
+                                     'differs from the arm\'s own build)')
+    triage.update(packet_file_sha256=packet_file_sha256, supplied_packet_matches_rebuild=matches,
+                  rebuilt_packet=built, rebuilt_packet_sha256=(v4_cadence._canonical_sha256(built) if built else None),
+                  meter_live_evidence=meter, rebuild_error=rebuild_error)
     reasons += ['next_arm_triage: ' + reason for reason in triage['reasons']
                 if not reason.startswith(('triage series_powermode', 'triage external_volume',
-                                          'triage charging_battery'))]
+                                          'triage charging_battery', 'triage meter_reader_live'))]
+    reasons += ([] if internal['meter_reader_live'] else
+                ['next_arm_triage: triage meter_reader_live failed'])
     return {'schema': ARM_RECORD_SCHEMA, 'admitted': not reasons, 'reasons': reasons,
             'next_arm_triage': triage,
             'ac_powermode': power, 'external_volumes': volumes, 'battery': battery,
@@ -581,12 +719,13 @@ def _termination_handlers():
 def _arm_and_install(session, state, measurement_root, plan, high, *, runner, volume_runner, now,
                      w1_disk_config, disk_gate, lock=None, owner=None,
                      obc_off_attested_by=None, battery_runner=None, battery_log=None,
-                     window_battery_journal=None, next_arm_triage=None, commit_check=None, record_check=None, **kwargs):
+                     window_battery_journal=None, next_arm_triage=None, commit_check=None, record_check=None,
+                     packet_builder=None, meter_probe=None, **kwargs):
     record = arm_checks(measurement_root, plan, runner=runner, volume_runner=volume_runner, lock=lock,
                         owner=owner, obc_off_attested_by=obc_off_attested_by, battery_runner=battery_runner,
                         battery_log=battery_log, window_battery_journal=window_battery_journal, now=now,
                         next_arm_triage=next_arm_triage, commit_check=commit_check,
-                        record_check=record_check)
+                        record_check=record_check, packet_builder=packet_builder, meter_probe=meter_probe)
     if high is not None:
         record['high_power_enter'] = high
         if not high['ok']:

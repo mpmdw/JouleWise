@@ -16,7 +16,7 @@ from unittest.mock import patch
 from joulewise.align.apple import v4_cadence as cadence
 from joulewise.align.apple import v4_registration as registration
 from scripts import align_v4_session as session
-from tests.align.test_v4_cadence import INTERNAL, passing_packet, window, write_battery_log
+from tests.align.test_v4_cadence import INTERNAL, arm_seams, passing_packet, window, write_battery_log
 
 
 class TemporaryCandidate:
@@ -120,8 +120,7 @@ class TriageEvidenceWitnesses(unittest.TestCase):
             log = write_battery_log(Path(tmp) / 'battery.jsonl', 5000.)
             records = [session.arm_checks(tmp, {}, runner=runner, now=lambda: 5000.,
                         obc_off_attested_by='synthetic', battery_log=log,
-                        commit_check=lambda root, commit: True, record_check=lambda root, packet: True,
-                        next_arm_triage=deepcopy(p)) for p in packets]
+                        next_arm_triage=deepcopy(p), **arm_seams()) for p in packets]
         self.assertTrue(all(r['admitted'] for r in records))
         # Both histories complete, but 53 and 56 eligible are different calibration sets.
         # Retaining the packet, its digest or an immutable evidence reference

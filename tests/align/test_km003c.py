@@ -223,28 +223,70 @@ class DeskTests(unittest.TestCase):
         summaries.append({**summaries[0], 'run_id': 'late'})
         return custody, runs, stream, plan, summaries
 
-    def test_crashed_reader_keeps_dc_for_members_before_the_gap_and_never_fabricates_samples(self):
-        # Smoke G3: with and without a custody hash recorded for the unclosed stream.
-        for record_hash in (False, True):
-            with self.subTest(record_hash=record_hash), tempfile.TemporaryDirectory() as tmp:
-                custody, runs, stream, plan, summaries = self.crashed_fixture(Path(tmp), record_hash=record_hash)
-                parsed = kp.parse(stream)
-                self.assertIsNone(parsed.trailer)
-                self.assertLess(parsed.host_ns[-1], OFFSET + 3_400_000_000)       # only complete records survive
-                report = meter.session_report(custody, plan, runs, summaries)
-                before, after = report['members']['member'], report['members']['late']
-                self.assertEqual(before['status'], 'available', before['flags'])
-                self.assertEqual(before['dc_in_energy_j'], 56)         # 28 W over its 2 s, samples as recorded
-                self.assertIn('meter.stream_unclosed', before['flags'])
-                if not record_hash:
-                    self.assertIn('meter.custody_hash_unrecorded', before['flags'])
-                self.assertEqual(after['status'], 'missing')
-                self.assertIn('meter.member_uncovered', after['flags'])
-                self.assertIsNone(after['dc_in_energy_j'])
-                self.assertIsNone(after['dc_in_residual_j'])
-                self.assertNotIn('meter.custody_hash_mismatch', before['flags'])
+    def test_crashed_reader_with_a_recorded_digest_keeps_dc_before_the_gap_and_never_fabricates_samples(self):
+        # Smoke G3: a listed, supervised stream whose recorded digest matches its (truncated) bytes.
+        with tempfile.TemporaryDirectory() as tmp:
+            custody, runs, stream, plan, summaries = self.crashed_fixture(Path(tmp), record_hash=True)
+            parsed = kp.parse(stream)
+            self.assertIsNone(parsed.trailer)
+            self.assertLess(parsed.host_ns[-1], OFFSET + 3_400_000_000)           # only complete records survive
+            report = meter.session_report(custody, plan, runs, summaries)
+            before, after = report['members']['member'], report['members']['late']
+            self.assertEqual(before['status'], 'available', before['flags'])
+            self.assertEqual(before['dc_in_energy_j'], 56)                       # 28 W over its 2 s, as recorded
+            self.assertIn('meter.stream_unclosed', before['flags'])
+            self.assertEqual(after['status'], 'missing')
+            self.assertIn('meter.member_uncovered', after['flags'])
+            self.assertIsNone(after['dc_in_energy_j'])
+            self.assertIsNone(after['dc_in_residual_j'])
 
-    def test_a_closed_stream_with_a_missing_or_wrong_hash_is_still_excluded(self):
+    def test_unrecorded_digest_means_exclude_not_salvage(self):
+        # A listed stream whose digest the supervisor never recorded: not authenticated, so excluded.
+        with tempfile.TemporaryDirectory() as tmp:
+            custody, runs, stream, plan, summaries = self.crashed_fixture(Path(tmp), record_hash=False)
+            row = meter.session_report(custody, plan, runs, summaries)['members']['member']
+            self.assertEqual(row['status'], 'missing')
+            self.assertIn('meter.custody_digest_unrecorded', row['flags'])
+            self.assertNotIn('meter.stream_unlisted', row['flags'])
+            self.assertIsNone(row['dc_in_energy_j'])
+
+    def test_unrecorded_stream_means_never_available_dc(self):
+        # A file the custody manifest never names (a stray or copied stream): separate case, own flag.
+        with tempfile.TemporaryDirectory() as tmp:
+            custody, runs, stream, plan, summaries = self.crashed_fixture(Path(tmp), record_hash=True)
+            stream.rename(stream.with_name('stream-099.jsonl'))
+            row = meter.session_report(custody, plan, runs, summaries)['members']['member']
+            self.assertEqual(row['status'], 'missing')
+            self.assertIn('meter.stream_unlisted', row['flags'])
+            self.assertNotIn('meter.custody_digest_unrecorded', row['flags'])
+            self.assertIsNone(row['dc_in_energy_j'])
+
+    def test_a_stray_stream_cannot_preempt_the_authenticated_one(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            custody, runs, stream, plan, summaries = self.fixture(Path(tmp))
+            stray = stream.with_name('stream-000.jsonl')                          # sorts first, never listed
+            rows = [json.loads(line) for line in stream.read_text().splitlines()]
+            for row in rows:
+                if row['k'] == 'b':
+                    fields = list(kp.SAMPLE.unpack(bytes.fromhex(row['p'])))
+                    fields[3] *= 2
+                    row['p'] = kp.SAMPLE.pack(*fields).hex()
+            stray.write_text(''.join(json.dumps(r) + '\n' for r in rows if r['k'] != 't'))
+            result = meter.session_report(custody, plan, runs, summaries)['members']['member']
+            self.assertEqual((result['status'], result['dc_in_energy_j']), ('available', 84.))
+            self.assertEqual(result['stream'], 'hazards/meter/stream-001.jsonl')
+            self.assertIn('meter.stream_unlisted', result['flags'])               # disclosed, never used
+
+    def test_no_supervisor_record_means_no_stream_has_provenance(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            custody, runs, stream, plan, summaries = self.crashed_fixture(Path(tmp), record_hash=True)
+            (custody / 'night/hazard_result.json').unlink()
+            row = meter.session_report(custody, plan, runs, summaries)['members']['member']
+            self.assertEqual(row['status'], 'missing')
+            self.assertIn('meter.unsupervised', row['flags'])
+            self.assertIsNone(row['dc_in_energy_j'])
+
+    def test_closed_streams_with_a_missing_or_wrong_hash_are_excluded_with_their_own_flags(self):
         with tempfile.TemporaryDirectory() as tmp:
             custody, runs, stream, plan, summaries = self.fixture(Path(tmp))
             record = json.loads((custody / 'night/hazard_result.json').read_text())
@@ -252,7 +294,7 @@ class DeskTests(unittest.TestCase):
             (custody / 'night/hazard_result.json').write_text(json.dumps(record))
             row = meter.session_report(custody, plan, runs, summaries)['members']['member']
             self.assertEqual(row['status'], 'missing')
-            self.assertIn('meter.custody_hash_mismatch', row['flags'])
+            self.assertIn('meter.custody_digest_unrecorded', row['flags'])
         with tempfile.TemporaryDirectory() as tmp:
             custody, runs, stream, plan, summaries = self.crashed_fixture(Path(tmp), record_hash=True)
             record = json.loads((custody / 'night/hazard_result.json').read_text())

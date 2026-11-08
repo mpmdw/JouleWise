@@ -213,9 +213,10 @@ class R11Tests(unittest.TestCase):
 
     def test_battery_window_bar_remains_unruled(self):
         r = member('battery')
-        result = reg.desk_diagnostics([r])['battery_windows']['synthetic']
+        result = reg.desk_diagnostics([r])['battery_windows']['synthetic/W1']
         self.assertIsNone(result['bar_pass'])
-        self.assertEqual(result['status'], 'PENDING lead window consequence')
+        self.assertEqual(result['status'], 'inconclusive')
+        self.assertIn('PENDING', result['consequence'])
 
     def test_template_has_contrast_fit_on_every_path(self):
         from scripts import validate_align_v4_w1_plan as validator

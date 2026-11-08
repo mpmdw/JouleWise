@@ -116,11 +116,20 @@ def main(argv=None, *, reader_factory=smc.Reader, quiet_check=r0.require_quiet,
     parser.add_argument("--idle-max-seconds", type=int, default=r0.IDLE_MAX_S)
     parser.add_argument("--load-seconds", type=int, default=60)
     parser.add_argument("--recovery-seconds", type=int, default=600)
+    parser.add_argument("--contention-policy", choices=("refuse", "redo", "flag"), default="refuse",
+                        help="refuse: any outside CPU over 0.05 CPU-s/s refuses (default); R0-L3 redo/flag: "
+                             "record contention, and on >=0.5 cores sustained 60 s exit 4 (redo) or flag")
     args = parser.parse_args(argv)
     if min(args.seconds, args.idle_seconds, args.idle_max_seconds, args.load_seconds, args.recovery_seconds) <= 0:
         parser.error("durations must be positive")
     if args.idle_max_seconds < args.idle_seconds:
         parser.error("idle-max-seconds must be >= idle-seconds")
+    if args.contention_policy != "refuse":
+        census = quiet_check
+        if census is r0.require_quiet:
+            def census():
+                return r0.require_quiet(record_contention=True)
+        quiet_check = r0.Ruling8Quiet(args.contention_policy, census=census)
     reader, journal = None, None
     old_handlers = {}
     def interrupted(signum, _frame):
@@ -139,6 +148,8 @@ def main(argv=None, *, reader_factory=smc.Reader, quiet_check=r0.require_quiet,
                              gpu_step=args.gpu_step, quiet_check=quiet_check, ctx=ctx_factory(),
                              sink=journal.write, load_factory=load_factory)
         selected = [s["key"] for s in capture["inventory"]["keys"]]
+        if isinstance(quiet_check, r0.Ruling8Quiet):
+            capture["contention"] = quiet_check.summary()  # beside the picks (R0-L3 item 4)
         report = {"schema": "joulewise.align_smc_r0.v1", "status": "PROVISIONAL",
                   "thermometry_bar": "PENDING_R1_CLASSIFICATION",
                   "hardware": hardware, "hardware_after": metadata(),
@@ -156,6 +167,20 @@ def main(argv=None, *, reader_factory=smc.Reader, quiet_check=r0.require_quiet,
         write_create_once(args.output / "summary.md", markdown(report, hashlib.sha256(raw).hexdigest()).encode())
         print(f"PROVISIONAL R0 report: {args.output / 'summary.md'}")
         return 0
+    except r0.ContentionRedo as exc:
+        # R0-L3: keep the partial journal and the episode; the R0 host moves
+        # this directory aside and runs the capture once more under flag.
+        print(f"R0 capture abandoned for one redo: {exc}", file=sys.stderr)
+        if journal is not None:
+            stamp = ctx_factory().stamp().to_json()
+            journal.write({"schema": "joulewise.hazard_journal.v1", "module": "temperature",
+                           "kind": "event", "started": stamp, "finished": stamp,
+                           "session": "r0-failure", "seq": 1, "raw": [],
+                           "values": {"event": "capture_abandoned_sustained_contention"}, "error": str(exc)})
+        if args.output.is_dir():
+            write_create_once(args.output / "contention.json",
+                              (json.dumps(exc.summary, indent=2, sort_keys=True) + "\n").encode())
+        return r0.CONTENTION_REDO_EXIT
     except (OSError, ValueError, RuntimeError) as exc:
         # Preserve partial samples for a failed capture; never produce a success
         # report or silently retry. Backend and worker cleanup live in finally.

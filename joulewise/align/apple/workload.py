@@ -888,6 +888,10 @@ def read_episode_bundle(bundle: Path) -> Episode:
 
     No native plist is parsed here and no finalized file is modified. The
     serialized episode and trace remain separately authenticated bundle inputs.
+    A bundle whose primary bytes were compressed (e.g. ``align_episode.json.zst``
+    with no plain file) is refused explicitly by ``BundleReader``
+    (``CompressedBundleRequiresRestore``): restore before reading; there is no
+    silent fallback to the compressed sibling.
     """
     reader = BundleReader(Path(bundle))
     episode = from_json(Episode, (Path(bundle) / "outputs" / "align_episode.json").read_text())

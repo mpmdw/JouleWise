@@ -5,12 +5,14 @@ Synthetic temporary Git repositories only.
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 from joulewise.align.apple import v4_registration as registration
 from tests.align import test_r11_delta_sol1 as delta
 
 SIGNATURE = 'lead: synthetic-amendment 2026-11-08'
-AMENDABLE = 'joulewise/kv_size.py'          # analysis-only (census category), on the amendment allowlist
+AMENDABLE = 'joulewise/kv_size.py'          # delta3: nothing is amendable in the real registration; the mechanism is exercised
+                                            # by patching one analysis-only path into the allowlist
 STRICT_EXAMPLES = ('docs/align/pilot_protocol_v4.md', 'scripts/align_v4_kit.py', 'joulewise/align/apple/endpoint.py',
                    'joulewise/align/apple/prompt_cache.py', 'scripts/run_night.py', 'scripts/launch_window.py',
                    'scripts/km003c_monitor.py', 'joulewise/external/km003c_usb.py', 'scripts/hazard_monitor.py',
@@ -32,24 +34,32 @@ def amendment(candidate, path, new_text, *, reason='infrastructure fix', signatu
 
 
 class TierClassificationTests(unittest.TestCase):
-    def test_strict_and_amendment_paths(self):
-        for path in STRICT_EXAMPLES:
+    def test_every_bound_path_is_strict_and_the_allowlist_is_empty(self):
+        # delta3 S1 F01 / S2 H1: every bound path is statically reachable (a module body runs on
+        # import), so none is "absent from both the static closure and the dynamic trace".
+        self.assertEqual(registration.AMENDMENT_ALLOWLIST, ())
+        for path in STRICT_EXAMPLES + (AMENDABLE,):
             with self.subTest(path=path):
                 self.assertIn(path, registration.ARTIFACTS)
                 self.assertTrue(registration.is_strict(path))
-        self.assertIn(AMENDABLE, registration.ARTIFACTS)
-        self.assertFalse(registration.is_strict(AMENDABLE))
-        amendable = [p for p in registration.ARTIFACTS if not registration.is_strict(p)]
-        self.assertEqual(sorted(amendable), sorted(registration.AMENDMENT_ALLOWLIST))
-        self.assertLessEqual(len(amendable), 30)            # short and lead-reviewable
+        self.assertTrue(all(registration.is_strict(p) for p in registration.ARTIFACTS))
         self.assertFalse([p for p in registration.STRICT_SCRIPTS if p not in registration.ARTIFACTS])
         self.assertTrue(all(registration.is_strict(p) for p in registration.STRICT_SCRIPTS))
-        # strict is the default: an unlisted bound path is strict
-        unlisted = [p for p in registration.ARTIFACTS if p not in registration.AMENDMENT_ALLOWLIST]
-        self.assertTrue(all(registration.is_strict(p) for p in unlisted))
+
+    def test_a_listed_path_would_be_the_only_amendable_one(self):
+        with mock.patch.object(registration, 'AMENDMENT_ALLOWLIST', (AMENDABLE,)):
+            self.assertFalse(registration.is_strict(AMENDABLE))
+            amendable = [p for p in registration.ARTIFACTS if not registration.is_strict(p)]
+            self.assertEqual(amendable, [AMENDABLE])
 
 
 class ReceiptTierTests(unittest.TestCase):
+    def setUp(self):
+        # exercise the amendment mechanism on one synthetic allowlist entry
+        patcher = mock.patch.object(registration, 'AMENDMENT_ALLOWLIST', (AMENDABLE,))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def candidate(self):
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
