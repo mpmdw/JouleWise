@@ -153,3 +153,12 @@ window journal, breaks continuity as before. Amendment allowlist unchanged.
 | S2 F2 `lru_cache` on U3 admission | All caches removed from `v4_u3` (decision cache and the pure-math memos): admission recomputes (about 0.2 s) | `v4_u3.py`, `v4_registration.validate_u3` |
 | S1 L1 / S2 F3 nested pushed tip | `canonical` also drops `checks.record_committed.pushed_tip`; reachability is re-proved by the rebuild | `align_v4_next_arm_packet.canonical` |
 | S1 stale R0 tests / S2 F4 | `test_r1_runtime` uses explicit temporary pending fixtures; the shipped templates carry `medium` | `tests/align/test_r1_runtime.py` |
+
+## Integration item 4: D/C/T series (dct-series-merged @ 25860dcaf) and R20
+
+| Item | Change | Where |
+|---|---|---|
+| Merge | `origin/align/2026-11-08-dct-series-merged` merged (not rebased). Seed check: MATCH (`align/2026-11-08-series-seed-check-sol`), so the manifest bytes are unchanged | `configs/campaigns/align_v4/series/series_manifest.json` |
+| Arm binds the series with the arm-rebuild design | The arm binds its OWN rebuild of the packet (`bind_packet(..., authenticated_by_rebuild=True)`); the builder derives `next_window_id`, `series_manifest_sha256` and a chronological `series_history` (lead releases from `lead_rulings`) from the hash-chained records. `make_packet` is a dev/test producer needing an explicit expiry and arm clock | `align_v4_series.py`, `align_v4_session._arm_and_install`, builder |
+| R15 text | Protocol section "R15 - the frozen D/C/T series" | `docs/align/pilot_protocol_v4.md` |
+| R20 escalation sentinels | Ordinals 23 and 24 after the late sentinel, exact replays of W1:5, supplemental diagnostics (no identical-work group, no held-out seed, never counted), ceiling 62,400 s (R15); `--extra-sentinels 2`; protocol text | `align_v4_series.escalation_allocations`, `build_files`, `align_v4_session.assign_work_group`, `supplemental_report` |

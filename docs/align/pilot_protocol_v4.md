@@ -982,6 +982,35 @@ retry segment that touches 11:45-13:15 can meet its own encounter, so size from 
 installed plan's actual segments; RUN_STATE 216). `docs/align/r1_runtime_contract.md`,
 "R1 night worst case".
 
+**R15 - the frozen D/C/T series (RUN_STATE 226).** After W1 the series is C1-C8 (D_k is C_k: there
+are no separate fit windows; `--window-id D3` selects C3), then three test windows T1-T3 with the D
+shape and no v5 content. Every C/T window has 22 members: anchors 1-4 (original bytes), the W1:5
+sentinel at ordinal 5, sixteen fresh held-out D members at 6-21 alternating pair by pair (odd windows
+start with spam, even windows with bank), sabotage at ordinals 9 and 18, and the late sentinel at 22;
+the midpoint follows ordinal 11. Held-out seed indices are distinct and consumed per pair in kit order
+from 2, skipping 1 and 91-99 (C1-C8 use 2-65, T1-T3 use 66-89); a zero-capture re-arm reuses the same
+seeds. A C-window sabotage member is pool `known_h` and counts toward nothing. A U1-U3 fail bars the
+window from the pool but the window still counts toward the eight. Final adjudication may lower the
+desk's provisional counts, never raise them. The manifest is
+`configs/campaigns/align_v4/series/series_manifest.json` (bound and strict; its bytes were paired-seed
+checked, MATCH) and is built by `scripts/align_v4_series.py`. **Every arm binds the series, W1
+included**; the arm binds its own rebuild of the packet (a supplied packet is only a pointer), whose
+history is derived from the hash-chained records. An ordinary window may run to **59,520 s**; a window
+that carries the two escalation sentinels below may run to **62,400 s**.
+
+**R20 - escalation sentinels (RUN_STATE 226).** When a window's U4/U5 is inconclusive, the next window
+(never W1) appends two sentinels at **ordinals 23 and 24**, after the late sentinel at 22 and before
+the closing reference/scaffold (`align_v4_series.py materialize --window-id Cn --extra-sentinels 2`,
+`align_v4_session.py prepare --window-id Cn --extra-sentinels 2`). Both replay the admitted W1:5
+trajectory exactly: the same D model, spam/benign, seed index 1 (hence the same episode and turn seeds
+under the seed law), sampler, budgets, cache policy and stack. Each is a separate batch-1 member with
+the normal idle and thermal gates. They are **supplemental diagnostics**: U4's W and W-1 df are
+unchanged, they join no identical-work group (U3's frozen comparison scope is unchanged), they use no
+held-out seed, they never count toward the window's captured members or any calibration count, and the
+desk reports them descriptively (`supplemental_sentinels`). The frozen manifest bytes do not change; the
+24-member plan is derived from it at materialization. The packet's `sentinel_roster` check requires the
+roster to include them after a U4/U5-inconclusive window.
+
 ## Discrepancies
 
 This is the design/code discrepancy list Sol recorded for the pinned

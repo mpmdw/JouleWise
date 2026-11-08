@@ -49,6 +49,8 @@ _NAMED_ARTIFACTS = (
     # installers read theirs. A changed template changes what runs, so each is strict.
     'configs/launchd/com.joulewise.night.plist.template', 'configs/launchd/com.joulewise.night-probe.plist.template',
     'configs/launchd/com.joulewise.magistrate.plist.template', 'configs/launchd/com.joulewise.b6loop.plist.template',
+    # RUN_STATE 226 R15: the frozen D/C/T series (order, roles, seeds) and its builder bind with W1.
+    'scripts/align_v4_series.py', 'configs/campaigns/align_v4/series/series_manifest.json',
 )
 
 
@@ -62,8 +64,6 @@ _NAMED_ARTIFACTS = (
 # subset of ARTIFACTS. Not seen by a static walk: importlib string imports, computed
 # paths and third-party modules (declared separately).
 EXECUTED_CLOSURE = (
-    'joulewise/align/apple/v4_u3.py',
-    'joulewise/align/apple/v4_battery.py',
     'joulewise/__init__.py',
     'joulewise/adapters/__init__.py',
     'joulewise/adapters/local_transport.py',

@@ -38,6 +38,7 @@ IDENTITY_FIELDS = ('record_commit', 'record_path', 'series_commit', 'series_path
 # The series ledger is ONE canonical append-only file, rewritten by each window's commit. Its latest
 # committed version names the latest window record (delta3 G1), so an older packet cannot stay current.
 SERIES_PATH = 'series/state.json'
+MANIFEST_PATH = 'configs/campaigns/align_v4/series/series_manifest.json'   # the frozen D/C/T series (R15)
 FULL_DESK_GATE_EXEMPT = ('v4_B_bar',)     # = align_v4_session.FULL_DESK_GATE_EXEMPT (tested equal)
 
 
@@ -379,6 +380,7 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
         'series_commit': series_commit, 'series_path': series_path, 'series_sha256': digest(series_raw),
         'pushed_ref': pushed_ref, 'previous_window': previous.window,
         'next_window_role': None, 'calibration_windows': [], 'lead_rulings': [], 'battery_rulings': [], 'window_chain': [],
+        'next_window_id': None, 'series_manifest_sha256': None, 'series_history': [],
         'last_desk_passed_artifact_set_sha256': None,
         'checks': {}, 'arm_pending': [r['id'] for r in cadence.NEXT_ARM_TRIAGE if r['source'] == cadence.ARM],
         'entry_sources': {r['id']: r['source'] for r in cadence.NEXT_ARM_TRIAGE}}
@@ -648,6 +650,32 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
                 'resets': 'zero_capture_escalation', 'after_window': row['after_window'],
                 'lead_signature': row['lead_signature']})
         packet['calibration_decision'] = cadence.calibration_stop(packet['calibration_windows'], packet['lead_rulings'])
+        # The frozen series binding (R15) needs the window id the arm will run and the chronological history,
+        # DERIVED here from the authenticated hash chain (the arm binds its own rebuild, never a supplied one).
+        plan_window = next_plan()['window']
+        require(isinstance(plan_window, str) and cadence.WINDOW_ID.match(plan_window), 'next plan window id invalid')
+        packet['next_window_id'] = plan_window.split('#')[0]
+        try:
+            packet['series_manifest_sha256'] = digest(evidence.read(series_commit, MANIFEST_PATH))
+        except ValueError:
+            packet['series_manifest_sha256'] = None
+        by_attempt = {r['window']: r for r in packet['calibration_windows']}
+        history = []
+        for record in chain:
+            if record.window in ('R1', 'W1'):
+                continue
+            if record.record.get('role') == 'calibration':
+                row = by_attempt[record.window]
+                counts = {'captured_members': row['captured_members'], 'status': row['status'],
+                          'eligible_benign': row['eligible_benign']}
+            else:
+                counts = {'captured_members': len(record.captures()), 'status': 'final',
+                          'eligible_benign': dict.fromkeys(cadence.CAL_PAIRS, 0)}
+            history.append({'window_id': record.window.split('#')[0], 'attempt_id': record.window, **counts})
+            for ruling in packet['lead_rulings']:
+                if ruling['after_window'] == record.window:
+                    history.append({'lead_release': dict(ruling)})
+        packet['series_history'] = history
         for row in series.get('battery_rulings', []):
             require(isinstance(row, dict) and set(row) == {'ruling_id', 'after_window', 'text', 'lead_signature'},
                     'battery ruling row malformed')
@@ -662,6 +690,7 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
         packet['lead_rulings'] = []
         packet['battery_rulings'] = []
         packet['window_chain'] = []
+        packet['series_history'] = []
         packet['calibration_error'] = history_error
     def battery():
         # Lead ruling 9 (R14, rule zero_B_auto_resume_v1): the previous window's B bar. Missing
