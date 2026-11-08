@@ -1042,6 +1042,33 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+234. **Laptop lead (interactive session 1544c617), 2026-11-08 13:10 PST: lead ruling R22, Block 5 lessons applied to v4 before W1 registration.** Decided blind, with no v4 data. Source: `docs/analysis/b5/LESSONS-FOR-V4-V5.md` on `analysis/2026-11-08-b5-lessons` @ `7fdd43912`.
+- **R22-1, contention:** in-window contention in v4 is DISCLOSURE-ONLY. Block 5's rule (0.05 CPU-s/s per 10 s, applied as an exclusion) is never used. At v4's roughly 830 s active episodes it would flag more than 99.7 % of members.
+  - Each member records its outside-tree CPU-seconds.
+  - A `contention.unmeasured` monitor gap is bounded: a gap over 30 s is flagged and disclosed, never excluded.
+  - This goes into the registration text.
+- **R22-2, whole-window loss under fixed-8:** add up to **two pre-declared blind replacement calibration windows, C9 and C10**.
+  - They are armed ONLY when a C window is barred for a STRUCTURAL reason: a U1-U3 FAIL, a whole-window capture failure, or a zero-capture refusal beyond the retry. A replacement never depends on scores or on eligible counts.
+  - Seeds for C9 and C10 are pre-allocated now, in kit order after C8, skipping 1 and 91-99.
+  - The total stays at 8 counted calibration windows. A barred window is replaced, not added.
+  - If both replacements are used and a pair still has fewer than 39, the outcome is `insufficient_calibration`.
+  - A Sol simulation must confirm that this rule keeps FPR at the fixed-8 level under drift, before registration. The rule is not a count stop.
+- **R22-3, balance check by condition:** exclusions and flags per member-second are compared benign against sabotage and per pair, against the exposure-adjusted expectation. The result is printed and disclosed.
+- **R22-4, comparator rules R-C1 to R-C6** (lessons §5) are required in `compare_v4_recompute.py` and `release_v4.py` before the synthetic rehearsal:
+  - an empty family holds unless declared expected-empty;
+  - a blind row-count manifest;
+  - a recompute/integrity/exempt marking for every family;
+  - registered sensitivity lines computed on hard-case fixtures;
+  - eligibility re-derived from raw journals;
+  - log-relative bars on p-values.
+- **R22-5:** record τ_rel = 0.13 % (stress 0.21 %) of cell energy as the Block 5 between-window prior. Check B3's τ = 0.5 s_r conversion once W1 or C1 gives the first benign residual SD.
+- **R22-6, MBP host hygiene before the W1 arm.** The sudo and Settings items need Ed's OK:
+  - keep photoanalysisd and mediaanalysisd stopped, with a PREQUAL check;
+  - turn off Significant Locations, Analytics and Siri Suggestions;
+  - `mdutil -a -i off`;
+  - `softwareupdate --schedule off`.
+- **R22-7:** Block 5 is unsealed, so its harvest archives (`~/night-archive/harvest-v5-b5-*`) may now be read for process and timing fields only, to build the guard-replay corpus and the culprit table. All other night-archive content stays sealed.
+
 233. **Laptop lead (interactive session 1544c617), 2026-11-08 12:45 PST: the v5 DESIGN RULING IS SIGNED; A37 ruled; post-move resume.**
 - **v5:** `docs/align/squeeze/v5-design/RULING-DRAFT.md` revision 7 is adopted as the v5 design ruling, at `align/2026-11-08-v5design-ruling` @ `4078c0850`. It went through seven rounds, each with two independent Sol reviews. Round 7 got SIGN from both seats (`-delta7-sol1` @ `d8344de4e`, `-delta7-sol2` @ `66f698303`). Opus wrote it, and the lead has the final say on design.
   - **Design:** the hybrid. Native attacks run on Sol2's ground-up backbone, reusing v4's engineering and fresh calibration.
