@@ -184,16 +184,20 @@ class EndpointMonitorClient:
     """Use the repo's ChatEndpoint protocol for API or local endpoints.
 
     Construct the endpoint explicitly at an off-box desk. This wrapper opens
-    no service or connection itself. The endpoint's model must match the pin.
+    no service or connection itself. Where exposed, endpoint.model must match
+    the pin. Identity-only native endpoints rely on the registered adapter's
+    declared model pin; endpoint.identity is checked for changes on every call.
     A missing finish reason fails closed; it is not inferred as successful.
     """
     def __init__(self, endpoint: ChatEndpoint, identity: ClientIdentity):
-        if getattr(endpoint, "model", None) != identity.model:
+        if getattr(endpoint, "model", identity.model) != identity.model:
             raise ValueError("endpoint model differs from client pin")
         self.endpoint, self.identity = endpoint, identity
+        self._endpoint_identity = endpoint.identity
 
     def complete(self, request: MonitorRequest) -> MonitorReply:
-        if self.endpoint.model != self.identity.model:
+        if (getattr(self.endpoint, "model", self.identity.model) != self.identity.model
+                or self.endpoint.identity != self._endpoint_identity):
             raise ScoringRefused("endpoint identity changed")
         result = self.endpoint.chat(request.messages, max_tokens=request.max_tokens,
                                     temperature=request.temperature, seed=request.seed)

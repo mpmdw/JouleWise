@@ -371,6 +371,17 @@ class ScoringTests(unittest.TestCase):
                                receipt_sha256=sha256(canonical_bytes(receipt)))
         self.assertEqual(self.client.calls, [])
 
+    def test_endpoint_adapter_supports_identity_only_chat_protocol_for_local_client(self):
+        scripted = MockEndpoint([{"content": "<verdict>5</verdict>", "finish_reason": "stop"}])
+        endpoint = SimpleNamespace(identity="synthetic-native-endpoint/v1", chat=scripted.chat)
+        identity = ClientIdentity("synthetic-local", "tiny-local", "revision", "local", "a"*64)
+        local = EndpointMonitorClient(endpoint, identity)
+        plan = replace(self.plan, monitors=(self.spec, MonitorSpec("M2", "secondary", identity)))
+        receipt = dict(self.receipt, plan_sha256=plan.sha256)
+        summary = self.score(plan=plan, registration_receipt=receipt, receipt_sha256=sha256(canonical_bytes(receipt)),
+                             clients={"M1": self.client, "M2": local})
+        self.assertTrue(self.payload(summary)[0]["scores"][1]["valid"])
+
 
 if __name__ == "__main__":
     unittest.main()
