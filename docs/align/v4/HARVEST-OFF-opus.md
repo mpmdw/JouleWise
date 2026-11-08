@@ -319,6 +319,6 @@ python3.13 -B -m unittest tests.test_adapters_powermetrics      # 3 OK
 python3.13 -B -m unittest tests.test_audit_powermetrics_parser  # 4 OK
 python3.13 -B -m unittest tests.b6.test_session_wrapper         # 6 OK
 python3.13 -B -m unittest tests.test_harvest_b5_window          # see commit note
-python3.13 -B -m unittest tests.test_desk_compressed_readers    # see commit note
+python3.13 -B -m unittest tests.test_desk_compressed_readers    # 9 OK
 python3.13 -B -m unittest tests.align.test_v4_powermode_record  # 8 OK, 1 FAIL pre-existing on base (P5)
 ```
