@@ -69,7 +69,7 @@
   ],
   "generator": {
     "path": "scripts/align_v4_kit.py",
-    "sha256": "27e52d7441d008debb2ae7e9a4d1dbc3cf35018a18afe38fae49817b3e38223a"
+    "sha256": "3b10987658ac5680e76b030a552a17b44d677e496475d2abaaf1b43bb34483d8"
   },
   "module_order": [
     "align-v4-qwen3-30b-a3b",
