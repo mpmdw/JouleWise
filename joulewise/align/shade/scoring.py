@@ -217,6 +217,17 @@ class WindowInput:
     members: tuple[TranscriptSource, ...]
 
 
+def transcript_roster_sha256(windows: Sequence[WindowInput]) -> str:
+    """Registration-time member coverage pin, independent of future captures.
+
+    Anonymous IDs can be assigned to the frozen planned slots before capture.
+    Binding just window IDs would allow a nonempty subset of members to score.
+    Content hashes and paths belong to the later private capture manifest.
+    """
+    return sha256(canonical_bytes(sorted(
+        (w.window_id, sorted(m.anonymous_id for m in w.members)) for w in windows)))
+
+
 def _require_registration(plan, windows, receipt, expected_digest, document):
     # This check precedes ALL transcript reads, rendering, client calls and
     # seal creation. It applies to every input, including all v4 windows.
@@ -227,7 +238,8 @@ def _require_registration(plan, windows, receipt, expected_digest, document):
     try:
         expected = {"status": "registered", "study_id": plan.study_id, "plan_sha256": plan.sha256,
                     "registration_sha256": sha256(document), "pipeline_code_sha256": pipeline_code_sha256(),
-                    "window_ids": sorted(w.window_id for w in windows)}
+                    "window_ids": sorted(w.window_id for w in windows),
+                    "transcript_roster_sha256": transcript_roster_sha256(windows)}
         if (not _hash(expected_digest) or sha256(canonical_bytes(dict(receipt))) != expected_digest
                 or any(receipt.get(k) != v for k, v in expected.items())
                 or not isinstance(receipt.get("lead_signature"), str)

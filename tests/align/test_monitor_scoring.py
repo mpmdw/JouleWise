@@ -15,7 +15,7 @@ from joulewise.align.endpoints import MockEndpoint
 from joulewise.align.shade.scoring import (
     ClientIdentity, EndpointMonitorClient, MonitorSpec, PromptArtifact, MonitorReply,
     TranscriptSource, WindowInput, ScoringPlan, RegistrationRequired, ScoringRefused,
-    canonical_bytes, sha256, pipeline_code_sha256, score_batch,
+    canonical_bytes, sha256, pipeline_code_sha256, transcript_roster_sha256, score_batch,
     main,
 )
 from tests.align import test_monitor_readable as fixtures
@@ -57,6 +57,7 @@ class ScoringTests(unittest.TestCase):
                         "study_id": self.plan.study_id, "plan_sha256": self.plan.sha256,
                         "registration_sha256": sha256(self.registration),
                         "pipeline_code_sha256": pipeline_code_sha256(), "window_ids": ["T1"],
+                        "transcript_roster_sha256": transcript_roster_sha256((self.window,)),
                         "lead_signature": "Lead: synthetic test only"}
 
     def score(self, **kwargs):
@@ -82,7 +83,7 @@ class ScoringTests(unittest.TestCase):
     def test_receipt_binds_document_config_code_windows_and_signature(self):
         for key, value in (("status", "draft"), ("study_id", "wrong"), ("plan_sha256", "0"*64),
                            ("registration_sha256", "0"*64), ("pipeline_code_sha256", "0"*64),
-                           ("window_ids", ["T2"]), ("lead_signature", "")):
+                           ("window_ids", ["T2"]), ("transcript_roster_sha256", "0"*64), ("lead_signature", "")):
             altered = dict(self.receipt, **{key: value})
             with self.subTest(key=key), self.assertRaises(RegistrationRequired):
                 self.score(registration_receipt=altered, receipt_sha256=sha256(canonical_bytes(altered)))
@@ -219,7 +220,7 @@ class ScoringTests(unittest.TestCase):
         b = replace(a, anonymous_id="anon-b")
         c = replace(a, anonymous_id="anon-c")
         windows = (WindowInput("T1", (a, b)), WindowInput("T2", (c,)))
-        receipt = dict(self.receipt, window_ids=["T1", "T2"])
+        receipt = dict(self.receipt, window_ids=["T1", "T2"], transcript_roster_sha256=transcript_roster_sha256(windows))
         clients = [FakeClient(), FakeClient()]
         summaries = []
         reversed_roster = tuple(replace(w, members=tuple(reversed(w.members))) for w in reversed(windows))
@@ -249,6 +250,7 @@ class ScoringTests(unittest.TestCase):
     def test_interruption_retains_completed_calls_and_blocks_silent_resume(self):
         second = replace(self.window.members[0], anonymous_id="anon-2")
         window = replace(self.window, members=self.window.members+(second,))
+        receipt = dict(self.receipt, transcript_roster_sha256=transcript_roster_sha256((window,)))
         client = FakeClient()
         def complete(request):
             client.calls.append(request)
@@ -257,13 +259,15 @@ class ScoringTests(unittest.TestCase):
             return MonitorReply("<verdict>17</verdict>")
         client.complete = complete
         with self.assertRaises(KeyboardInterrupt):
-            self.score(windows=(window,), clients={"M1": client})
+            self.score(windows=(window,), clients={"M1": client}, registration_receipt=receipt,
+                       receipt_sha256=sha256(canonical_bytes(receipt)))
         batches = list((self.root / "sealed").iterdir())
         self.assertEqual(len(batches), 1)
         self.assertTrue((batches[0] / "T1" / "call-000001.json").is_file())
         self.assertFalse((batches[0] / "completed.json").exists())
         with self.assertRaises(ScoringRefused):
-            self.score(windows=(window,), clients={"M1": client})
+            self.score(windows=(window,), clients={"M1": client}, registration_receipt=receipt,
+                       receipt_sha256=sha256(canonical_bytes(receipt)))
         self.assertEqual(len(client.calls), 2)
 
     def cli_files(self):
@@ -354,6 +358,18 @@ class ScoringTests(unittest.TestCase):
         self.assertEqual(result["sample"]["reasoning_text"], "first sample")
         self.assertTrue((batch / "T1" / "request-000001-1.json").is_file())
         self.assertFalse((batch / "completed.json").exists())
+
+    def test_receipt_refuses_a_member_omission_before_any_transcript_read(self):
+        second = replace(self.window.members[0], anonymous_id="anon-2")
+        whole = replace(self.window, members=self.window.members+(second,))
+        receipt = dict(self.receipt, transcript_roster_sha256=transcript_roster_sha256((whole,)))
+        # Remove one member, leaving a nonempty window with the same window ID.
+        with patch.object(Path, "read_bytes", side_effect=AssertionError("transcript touched")):
+            with patch("joulewise.align.shade.scoring.pipeline_code_sha256", return_value=receipt["pipeline_code_sha256"]):
+                with self.assertRaises(RegistrationRequired):
+                    self.score(windows=(self.window,), registration_receipt=receipt,
+                               receipt_sha256=sha256(canonical_bytes(receipt)))
+        self.assertEqual(self.client.calls, [])
 
 
 if __name__ == "__main__":
