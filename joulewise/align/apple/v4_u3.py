@@ -18,7 +18,6 @@ Opus arithmetic:
 All numerical policy inputs require lead adoption. A descriptive export without
 that policy remains PENDING.
 """
-from functools import lru_cache
 import json
 import math
 import random
@@ -50,19 +49,16 @@ def _tail(z):
     return math.erfc(z/math.sqrt(2))
 
 
-@lru_cache(maxsize=4096)
 def series_false_fail(q, n, tests):
     """Model series false-fail of N null tests sharing one RMS scale with n df."""
     return _chi_expect(n, lambda u: -math.expm1(tests*math.log1p(-min(_tail(q*u), 1-1e-16))))
 
 
-@lru_cache(maxsize=4096)
 def per_pair_false_fail(q, n):
     """P(|T_n| > q): the exact predictive false-fail of one new null pair."""
     return _chi_expect(n, lambda u: _tail(q*u))
 
 
-@lru_cache(maxsize=256)
 def series_quantile(n, tests, beta):
     lo, hi = 0.0, 200.0
     for _ in range(64):
@@ -185,11 +181,10 @@ def operating_characteristics(policy, pred):
     D scale transfer. Rates are diagnostics, never a simulated admission bit.
     """
     policy_checks(policy)
-    return json.loads(_oc_cached(canonical(policy), pred['n'], pred['series_quantile_q']))
+    return json.loads(_oc(canonical(policy), pred['n'], pred['series_quantile_q']))
 
 
-@lru_cache(maxsize=16)
-def _oc_cached(serialized_policy, n, k):
+def _oc(serialized_policy, n, k):
     policy = json.loads(serialized_policy)
     reps = policy['simulations']
     factor = policy['d_transfer_factor']
@@ -263,8 +258,7 @@ def derive(pairs, source_sha256, policy):
             'status': 'PENDING', 'lead_signature': None, 'independent_gate': None}
 
 
-@lru_cache(maxsize=16)
-def validate_cached(serialized):
+def validate(serialized):
     from scripts.align_v4_kit import valid_lead_signature
     from joulewise.align.apple.v4_registration import is_digest
     bar = json.loads(serialized)

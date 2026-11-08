@@ -900,7 +900,7 @@ HIGH-1/2/3): the arm rebuilds the packet with `scripts/align_v4_next_arm_packet.
 (a strict-tier, executed-closure builder) from the identities the packet names
 (`record_commit`/`record_path`, the series commit/path, the pushed ref), with the arm's own clock
 and artifact-set digest, judges its own build, and refuses a supplied packet whose canonical
-form differs from the rebuild in any field, removal, addition or basis text. Only `pushed_tip` and
+form differs from the rebuild in any field, removal, addition or basis text. Only `pushed_tip` (top level, and the same pointer nested in the `record_committed` check) and
 `packet_preflight` are ignored. Expiry is mandatory: a missing or non-numeric `valid_until_epoch_s`
 refuses, and so does an arm clock past it. The window records are hash-chained
 (`previous_record` links, canonical series ledger `series/state.json`); the rebuild walks the chain

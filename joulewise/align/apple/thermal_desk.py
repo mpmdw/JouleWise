@@ -10,6 +10,7 @@ from collections import defaultdict
 import math
 from statistics import fmean, stdev
 import json
+import re
 from pathlib import Path
 
 from joulewise.align.attribution import attribute_episode
@@ -885,7 +886,11 @@ def window_report(members, *, cross_windows=None, sensitivity=None, monitoring=N
                                 u3_bar=u3_bar, v4=v4)
             if v4 and u3_bar and pairs:
                 population = 'D' if any(m.get('role') == 'D' for m in selected) else '30B'
-                allowed = u3_bar.get('policy', {}).get('checks_by_window', {}).get(window, {}).get(population)
+                # A zero-capture retry (`C3#2`) keeps its counted slot's registered U3 scope (delta4 S2 F1);
+                # records and reports keep the full attempt id. No comparison or calibration slot is added.
+                retry = re.fullmatch(r'([CTD][1-9][0-9]*)#[1-9][0-9]*', window) if isinstance(window, str) else None
+                scope = retry.group(1) if retry else window
+                allowed = u3_bar.get('policy', {}).get('checks_by_window', {}).get(scope, {}).get(population)
                 if type(allowed) is not int or len(pairs) > allowed:
                     result['U3'].update(status='inconclusive', reason='U3 comparisons exceed the frozen series scope')
                     result['hardware_control'] = 'inconclusive'

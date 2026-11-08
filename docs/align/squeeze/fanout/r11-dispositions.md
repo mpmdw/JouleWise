@@ -143,3 +143,13 @@ window journal, breaks continuity as before. Amendment allowlist unchanged.
 | S1 F02 launch templates | The four `configs/launchd/*.plist.template` files are bound and strict | `v4_registration._NAMED_ARTIFACTS` |
 | S1 F03 / S2 M1 (G1) stale record | The record is bound to the series ledger's latest window (`previous_record` + `series_sha256` at HEAD) through the hash-chained records the arm rebuilds | `align_v4_session._record_bound` |
 | S1 F04 / S2 H2 (G3) salvage | Salvage only for a stream listed in the window's custody manifest AND supervised by the shared driver, with a recorded matching digest. An unlisted or unsupervised stream is never available DC and is not parsed; an unrecorded digest excludes. Separate flags: `meter.unsupervised`, `meter.stream_unlisted`, `meter.custody_digest_unrecorded` (mismatch: `meter.custody_hash_mismatch`) | `km003c.session_report` |
+
+## Delta4 (Sol1 HOLD, Sol2 ADMIT_WITH_FIXES on 48a4d1d76)
+
+| Finding | Change | Where |
+|---|---|---|
+| S1 F1 source sorting defeats the raw-order refusal | Each battery source (log or converted window journal) is checked in its own raw order for strictly increasing timestamps BEFORE merging; a regression or duplicate refuses with a structured reason. No new threshold or continuity rule | `v4_topup.derive_from_sources` |
+| S2 F1 `Cn#k` loses its U3 scope | A validated retry id is normalized to its counted slot for the `checks_by_window` lookup; records keep the full attempt id; no slot is added | `thermal_desk.window_report` |
+| S2 F2 `lru_cache` on U3 admission | All caches removed from `v4_u3` (decision cache and the pure-math memos): admission recomputes (about 0.2 s) | `v4_u3.py`, `v4_registration.validate_u3` |
+| S1 L1 / S2 F3 nested pushed tip | `canonical` also drops `checks.record_committed.pushed_tip`; reachability is re-proved by the rebuild | `align_v4_next_arm_packet.canonical` |
+| S1 stale R0 tests / S2 F4 | `test_r1_runtime` uses explicit temporary pending fixtures; the shipped templates carry `medium` | `tests/align/test_r1_runtime.py` |

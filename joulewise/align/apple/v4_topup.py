@@ -201,6 +201,18 @@ def derive_from_sources(logs, journals, now_epoch_s, **kwargs):
     except (OSError, ValueError) as exc:
         return {'admissible': False, 'basis': None, 'completed_at_epoch_s': None, 'source': None,
                 'log_sha256': None, 'reasons': [f'battery evidence unreadable: {exc}']}
+    # Raw order per source first (delta4 S1 F1): a source whose clock goes backwards or repeats is refused
+    # BEFORE merging, so sorting can never repair a regression into a completed-charge transition.
+    for index, records in enumerate(sources):
+        timed = [r['wall_time_s'] for r in records if isinstance(r, dict) and _finite(r.get('wall_time_s'))]
+        if any(b <= a for a, b in zip(timed, timed[1:])):
+            kind = 'between-window log' if index < len(logs or ()) else 'window journal'
+            return {'admissible': False, 'basis': None, 'completed_at_epoch_s': None, 'source': None,
+                    'log_sha256': None, 'observations': sum(len(r) for r in sources),
+                    'reasons': [f'battery {kind} {index} observations are not strictly increasing in time '
+                                '(raw order, before merging)'],
+                    'sources': {'between_window_logs': len(logs or ()), 'window_journals': len(journals or ()),
+                                'source_sha256': digests}}
     combined = hashlib.sha256(''.join(digests).encode()).hexdigest() if len(digests) != 1 else digests[0]
     result = derive(merge_in_time_order(*sources), now_epoch_s, log_sha256=combined, **kwargs)
     result['sources'] = {'between_window_logs': len(logs or ()), 'window_journals': len(journals or ()),
