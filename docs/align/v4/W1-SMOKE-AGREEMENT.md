@@ -212,4 +212,8 @@ this branch unmodified and pass: `test_smoke_delta_sol1` and `test_smoke_delta_s
 | D5 / D2-4: a forged plan passes the deadline | An evidence bundle (plan, session, published plist) must bind one plan path and sha256. The plan must be a production `NightPlan`, and the span is read only from `hazard_window.programmed_span_s`. |
 | D6 / D2-5: chain leaves | Every leaf of every check entry and chain element is changed and removed, plus a key added to each. |
 
+Merged with v4-r11 @ `356c41c82` (delta5). Two adaptations came with it. First, the arm fixtures commit the
+frozen `series/` manifest, because every arm now binds the series (RUN_STATE 226 R15). Second, the tamper
+probe skips exactly the arm's one nested equality exemption, `checks.record_committed.pushed_tip` (delta4).
+
 Native behaviour remains unmeasured.

@@ -249,6 +249,9 @@ def arm_fixture(ctx, name, *, now, t0_offset_s=3600):
     plan.setdefault('runtime_requirements', {})['ac_powermode'] = 0
     (measurement / kit.KIT / 'collection_plan.json').write_text(json.dumps(plan))
     (measurement / kit.R1_SLOTS).write_text(json.dumps({'ac_powermode': 0}))
+    series = ctx.repo / kit.KIT / 'series'
+    if series.is_dir():                 # RUN_STATE 226 R15: every arm binds the frozen series
+        shutil.copytree(series, measurement / kit.KIT / 'series')
     _fresh(scenario, now).finish()
     session.mkdir(parents=True)
     custody.mkdir(parents=True)
@@ -438,6 +441,9 @@ def _arm_on_records(ctx, measurement, packet_or_path, *, now, quiet=True):
 # receipt, lead rulings) and requires canonical equality, ignoring only these fields. Expiry is
 # mandatory; window records are hash-chained to their predecessor; zero-capture retries are C3#2.
 PACKET_IGNORED = ('pushed_tip', 'packet_preflight')
+# The one exact nested exemption the arm applies (scripts/align_v4_next_arm_packet.canonical, delta4):
+# the informational pushed tip inside the record_committed check is the same volatile pointer.
+PACKET_NESTED_IGNORED = (('checks', 'record_committed', 'pushed_tip'),)
 # W1, C1, C2, a zero-capture C3, its retry C3#2 (the fixer's attempt-id convention).
 SERIES = (('C1', True), ('C2', True), ('C3', False), ('C3#2', True))
 
@@ -569,7 +575,7 @@ def _mutations(packet):
         if 'status' in entry:
             yield f'checks.{name}: status flipped', _edit(packet, ('checks', name, 'status'), 'change')
         for path, _leaf in _leaves(entry):
-            if path == ('status',):
+            if path == ('status',) or ('checks', name) + path in PACKET_NESTED_IGNORED:
                 continue
             label = 'checks.' + name + '.' + '.'.join(map(str, path))
             yield label + ' changed', _edit(packet, ('checks', name) + path, 'change')

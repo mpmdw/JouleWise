@@ -131,7 +131,7 @@ class CadenceTests(_Ctx):
         with mock.patch.object(session, 'arm_checks', RebuildingArm(chain_strict=False)):
             row = self.probe('packet-tamper')
         self.assertEqual(row['status'], wp.FAIL)
-        self.assertIn('omits attempt C3', row['detail'])
+        self.assertIn('chain omits attempt C3', row['evidence']['admitted_mutations'])
         with mock.patch.object(session, 'arm_checks', RebuildingArm(expiry=False)):
             self.assertIn('not refused for expiry', self.probe('packet-rebuild')['detail'])
 
