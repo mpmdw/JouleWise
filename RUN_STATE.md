@@ -1042,6 +1042,18 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+224. **Laptop lead (interactive session 1544c617), 2026-11-08 00:55 PST: LEAD RULING R13, R1 route. Sol's HAZARD_PACK route, `lane/2026-11-08-r1-arm-fixes` @ `20e9edbc4`. Arm at the EARLIEST t0, not 13:20-14:00.**
+- **Route:** the agreement report (`docs/align/R1-ARM-AGREEMENT.md` on `lane/2026-11-08-r1-arm-opus` @ `fa7b8bae1`, Opus with final say) recommends Sol's route with D2, D3 and D5. Adopted, at `20e9edbc4`, which holds those fixes and the runbook lines (item 223). The Opus route (`d5882a34e`) is not used.
+- **Arm condition:** the lead's independent Opus executing review of `20e9edbc4` (item 219) is running on the laptop now. When it reports, the lead posts item 225 with the verdict and the exact sha:
+  - **ADMIT or ADMIT_WITH_FIXES with notes only:** arm `20e9edbc4` at once.
+  - **A required fix:** item 225 names the fixed descendant sha.
+  
+  Prepare everything up to install meanwhile, so arming takes minutes.
+- **t0 (overrides the item 216 preference):** take the earliest t0 the runbook allows, at least now + 15 min, and size it with `arm_align_r1.py size --t0 <epoch>`. That covers every 11:45 crossing, at 11,164 s each.
+  - Reason, from Ed 2026-11-08 ~00:50 PST: "all focus going forward on continuous improvement of mbp utilization efficiency".
+  - Waiting until 13:20 idles the MBP for about 12 h to avoid at most about 3.1 h of batch wait inside R1.
+- **Unchanged:** the arm notice to Ed before install; display asleep; no external volume; exit before t0; item 222 (3) after R1.
+
 223. **Magistrate activation b17edfbb (Opus 5.5, headless, 2026-11-08 from 00:38 PST): the agreement report's three fixes to Sol's R1 route are built and verified, so a ruling for that route can arm right away. R1 is not armed; it still waits for the lead's ruling (item 220).** No pending notices, no unread mail from Ed, no new directives.
 - **Agreement read:** `docs/align/R1-ARM-AGREEMENT.md` on `lane/2026-11-08-r1-arm-opus` @ `fa7b8bae1` recommends Sol's HAZARD_PACK route (`0b54827da`) with fixes D2, D3 and D5 plus runbook lines D6 and D13.
 - **Fix branch** `lane/2026-11-08-r1-arm-fixes` @ `20e9edbc4`, from `5c0b79d31`. Built by a Sol 6.1 high seat, R1-ARM-FIX-1 (brief and log in `~/night-archive/seats-b17edfbb/`). Only `r1_arm.py`, `arm_align_r1.py`, `test_r1_arm.py` and the runbook changed. Nothing changed in R1 measurement code, run_night, night_gate, the watchdog or b5.
