@@ -22,7 +22,16 @@ Started 2026-11-07 by the laptop lead from Ed's decisions. Update it in place; k
 R0 → R1 (RUN_STATE 202) → W1 under ruling R10 (RUN_STATE 203) → D windows (Q4: 3 windows of 59,520 s) → registration-grade calibration (Q6). Pre-W1 blockers are in `docs/research-audits/2026-11-07/w1-prearm-gate.md`.
 
 ## Interp × energy (Ed's main interest)
-Design study: `docs/research-audits/2026-11-07/interp-weight-edit-energy.md`. It covers how surgical weight edits change power and performance, whether that signal can be pulled out of machine noise, and a staged pilot. Until it lands, this section points to it.
+Design study: `docs/research-audits/2026-11-07/interp-weight-edit-energy.md` (draft PR #702; 18 ideas, 36 adversarial checks).
+- **Ed's reference** exists as a blog post, not a paper: MIT CSAIL, "Sparks of Weight-Space Programming" (2026-11-02). Astra edited 0.016 % of Qwen3.5-0.8B's weights; MATH-500 went from 7.9 % to 48.1 %, and answers hitting the cap fell from 93 % to 33 %. The post has no energy data. An independent rerun found thinking-off already scores 45.8 %.
+- **Physics:** for surgical edits, almost all the energy effect comes through **behaviour** (tokens generated; about 12-15× fewer tokens per correct answer in the Astra case). The fixed-token, weight-only effect is predicted at ≤ 3e-5 of energy, likely ≤ 1e-6. Separating it from zero would need about 95,000 replay pairs, so the deliverable is an **upper bound**.
+- **Noise:** background processes are not the limit (0.2 % of the known-bytes half-width). The limits are the tiny surgical effect itself, and the chance that the powermetrics rails are *modelled*, not measured. Any small-effect claim must be checked against the KM003C DC meter.
+- **Best first experiment: ASTRA-2CH** (one measurement-Mac window after desk prep).
+  - Measure energy on the free-running edited and base models.
+  - Replay the same tokens through both weight sets to bound the weight-only effect.
+  - Run a synthetic data-dependence test of the rails.
+  - Needs Ed's OK to download Qwen3.5-0.8B and the edit, plus a forced-token decode loop. Queued **behind** Mac experiments 1-2, BYTES stage 1, the ALIGN windows and the Paper 1 freeze.
+- **Refuted ideas:** ROUTER-EDIT (the repo's question bank already predicts a null) and DVFS-COUPLE (the GPU clock is pinned on the fan-cooled Mac).
 
 ## Other audits (2026-11-07, PR #695)
 W1 pre-arm gate · W1 budget fallback · Block 6 design (REG §17 amendments before the B5 unseal) · B5 release-to-paper · literature · research program · proportionality.
