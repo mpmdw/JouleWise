@@ -93,7 +93,7 @@ class FakeMBP:
             return done(0)
         if argv[0] == '/usr/bin/pkill':
             return done(0)
-        if argv[-1:] and 'align_v4_w1_prequal.py' in ' '.join(argv):
+        if 'align_v4_prequal.py' in ' '.join(argv) and '--w1-probe' in argv:
             return done(0, json.dumps({'check': 'r1-w1-chain', 'status': 'PASS', 'detail': 'synthetic'}) + '\n')
         if 'align_v4_session.py' in ' '.join(argv) and 'install' in argv:
             return self.install(argv)
@@ -145,7 +145,7 @@ def default_fault(name):
     if fault['expect'] == 'refuse_before_arm':
         return 1, 'align_pilot_session: registration_receipt digest drift: docs/x.md', None
     if fault['expect'] == 'usage':
-        return 2, 'error: the following arguments are required: --topup-completed-at', None
+        return 2, 'error: the following arguments are required: --battery-log', None
     return 1, 'v4 arm refused', {'admitted': False, 'reasons': ['next_arm_triage: ' + fault['needle']]}
 
 
@@ -160,11 +160,18 @@ def fake_prepare(measurement_root, session_root, keep, **kwargs):
     (session / 'staging/smoke-reduction.json').write_text(json.dumps(reduction))
     state = {'session_id': 'align-v4-smoke-20261108T0000Z', 'preparation_status': 'STAGED',
              'plan_path': str(plan), 'plan_sha256': hashlib.sha256(plan.read_bytes()).hexdigest(),
-             'measurement_root': str(session / 'measurement'), 'source_measurement_root': str(ROOT),
+             'measurement_root': str(session / 'measurement'), 'source_measurement_root': str(measurement_root),
              'inputs': {'custody_root': str(custody), 'runs_parent': str(session / 'runs-parent')},
              't0_epoch_s': 1_800_000_420, 'window_max_s': 44640, 'smoke_reduction': reduction}
     (session / 'session.json').write_text(json.dumps(state))
     return state
+
+
+def fake_isolate(measurement_root, smoke_dir, *, python=None):
+    clone = Path(smoke_dir) / 'measurement'
+    (clone / '.venv/bin').mkdir(parents=True)
+    return {'clone': str(clone), 'head': 'a' * 40, 'ledger': str(clone / 'runs/ledger.jsonl'),
+            'copied': [], 'source_ledger_sha256': 'b' * 64, 'smoke_ledger_sha256': 'b' * 64, 'readonly': []}
 
 
 def member_reader(state, killed, others):
@@ -189,11 +196,11 @@ class RunnerTests(unittest.TestCase):
         self.popen = mock.Mock(return_value=FakeProcess())
 
     def runner(self, mbp, **kw):
-        return smoke.SmokeRunner(ROOT, self.tmp / 'smoke', packet=wp.triage_packet(), topup_completed_at='1',
-                                 topup_source='synthetic', obc_off_attested_by='synthetic',
-                                 w1_disk_config=self.tmp / 'disk.json', prequal_report=self.prequal,
-                                 python='/fake/python', run=mbp, popen=self.popen, sleep=self.clock.sleep,
-                                 clock=self.clock, prepare=fake_prepare, **kw)
+        kw.setdefault('prepare', fake_prepare)
+        return smoke.SmokeRunner(ROOT, self.tmp / 'smoke', packet=wp.triage_packet(), battery_log=self.tmp / 'battery.jsonl',
+                                 obc_off_attested_by='synthetic', w1_disk_config=self.tmp / 'disk.json',
+                                 prequal_report=self.prequal, python='/fake/python', run=mbp, popen=self.popen,
+                                 sleep=self.clock.sleep, clock=self.clock, isolate_fn=fake_isolate, **kw)
 
     def parse(self):
         return smoke.parse(self.tmp / 'smoke', member_reader=member_reader)
@@ -286,6 +293,100 @@ class RunnerTests(unittest.TestCase):
         self.assertIn('prepare-again', steps)
         self.assertTrue((self.tmp / 'smoke/main.superseded').is_dir())
         self.assertEqual(self.parse()['status'], 'PASS')
+
+
+class IsolationTests(unittest.TestCase):
+    """Lead ruling (HARD): a smoke can never write a production ledger, custody or runs path."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = Path(tempfile.mkdtemp(prefix='w1smoke-iso-'))
+        cls.production = cls.tmp / 'production'
+        subprocess.run(['git', 'clone', '--quiet', '--shared', str(ROOT), str(cls.production)], check=True)
+        from joulewise.b5 import plan as b5_plan
+        cls.ledger = cls.production / b5_plan.DEFAULT_LEDGER_RELATIVE
+        cls.ledger.parent.mkdir(parents=True, exist_ok=True)
+        cls.ledger.write_text('{"production": true}\n')
+        cls.before = hashlib.sha256(cls.ledger.read_bytes()).hexdigest()
+        cls.smoke_dir = cls.tmp / 'smoke'
+        cls.smoke_dir.mkdir()
+        import sys
+        cls.iso = smoke.isolate(cls.production, cls.smoke_dir, python=sys.executable)
+        from scripts import align_v4_kit as kit, bytes_h_session as h
+        cls.session = cls.smoke_dir / 'main'
+        cls.session.mkdir()
+        with contextlib.redirect_stdout(io.StringIO()):
+            cls.view, cls.pack = h.measurement_view(Path(cls.iso['clone']), cls.session, kit=kit.KIT, pack_id=kit.PACK_ID)
+            smoke.reduce_view(cls.view, cls.pack, smoke.load_config(ROOT)['keep'])
+        cls.state = {'measurement_root': str(cls.view), 'source_measurement_root': cls.iso['clone'],
+                     'plan_path': str(cls.session / 'custody/night_plan.json'),
+                     'inputs': {'custody_root': str(cls.session / 'custody'),
+                                'runs_parent': str(cls.session / 'runs-parent'),
+                                'ledger_path': str(cls.view / b5_plan.DEFAULT_LEDGER_RELATIVE),
+                                'pack_root': str(cls.pack)}}
+        cls.roots = smoke.production_roots(cls.production, smoke.load_config(ROOT))
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmp, True)
+
+    def violations(self, state=None, plan=None):
+        return smoke.isolation_violations(self.smoke_dir, state or self.state, self.roots, plan=plan,
+                                          readonly=self.iso['readonly'])
+
+    def test_the_isolated_smoke_resolves_nowhere_inside_production(self):
+        self.assertEqual(self.violations(), [])
+        smoke_ledger = os.path.realpath(self.state['inputs']['ledger_path'])
+        self.assertTrue(smoke_ledger.startswith(os.path.realpath(self.smoke_dir)))
+        self.assertNotEqual(os.stat(smoke_ledger).st_ino, os.stat(self.ledger).st_ino)
+        self.assertEqual(hashlib.sha256(self.ledger.read_bytes()).hexdigest(), self.before)
+        self.assertEqual(self.iso['smoke_ledger_sha256'], self.before)     # a copy, not a new ledger
+        # every symlink the production measurement view makes resolves into the isolated clone
+        for path in self.view.iterdir():
+            if path.is_symlink():
+                self.assertTrue(os.path.realpath(path).startswith(os.path.realpath(self.smoke_dir)), path)
+
+    def test_any_path_into_production_is_a_violation(self):
+        prod_runs = str(self.production / 'runs')
+        for key in ('custody_root', 'runs_parent', 'ledger_path'):
+            with self.subTest(key=key):
+                bad = json.loads(json.dumps(self.state))
+                bad['inputs'][key] = prod_runs + '/x'
+                self.assertTrue(self.violations(bad))
+        self.assertTrue(self.violations(plan={'claim_runs_root': str(self.production / 'runs/claim')}))
+        link = self.session / 'sneaky'
+        link.symlink_to(self.production / 'runs')
+        try:
+            self.assertTrue(any(v['why'] == 'symlink under the smoke directory' for v in self.violations()))
+        finally:
+            link.unlink()
+        self.assertTrue(smoke.isolation_violations(self.production / 'runs' / 'smoke', {}, self.roots))
+        configured = smoke.production_roots(self.production, {'production_roots': ['/prod-custody']})
+        self.assertTrue(smoke.isolation_violations(self.smoke_dir, {'inputs': {'custody_root': '/prod-custody/w9'}},
+                                                   configured))
+
+    def test_the_runner_aborts_before_any_arm_when_prepare_escapes(self):
+        clock = Clock()
+        tmp = Path(tempfile.mkdtemp(prefix='w1smoke-esc-'))
+        self.addCleanup(shutil.rmtree, tmp, True)
+        prequal = tmp / 'prequal.json'
+        prequal.write_text(json.dumps({'status': 'PASS', 'commit': 'a' * 40, 'next': 'w1', 'checkout_dirty': False}))
+
+        def escaping_prepare(m, session, keep, **kw):
+            state = fake_prepare(m, session, keep)
+            state['inputs']['custody_root'] = str(ROOT / 'runs' / 'smoke-custody')
+            return state
+        mbp = FakeMBP(self, clock)
+        with mock.patch.dict(os.environ, {'JOULEWISE_HOST_STATE_DIR': str(tmp / 'host')}):
+            (tmp / 'host').mkdir()
+            runner = smoke.SmokeRunner(ROOT, tmp / 'smoke', packet=wp.triage_packet(), battery_log=tmp / 'b.jsonl',
+                                       obc_off_attested_by='s', w1_disk_config=tmp / 'd.json', prequal_report=prequal,
+                                       run=mbp, popen=mock.Mock(), sleep=clock.sleep, clock=clock,
+                                       prepare=escaping_prepare, isolate_fn=fake_isolate)
+            self.assertEqual(runner.run(), 2)
+        self.assertFalse(any('install' in c for c in mbp.calls))
+        rows = {r['check']: r['status'] for r in smoke.parse(tmp / 'smoke', member_reader=member_reader)['checks']}
+        self.assertEqual(rows['isolated-clone'], 'FAIL')
 
 
 class PieceTests(unittest.TestCase):

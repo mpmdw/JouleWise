@@ -26,5 +26,11 @@
       "note": "anchor idle is 300 s (sampling.idle_seconds); +90 s lands inside the measured request"
     },
     "note": "the meter is killed in the first member, so the W1 member runs in the restarted stream, which is SIGTERM-closed with a trailer: its DC must be available. A reader killed later would void DC for every earlier member of its stream (PREQUAL km003c-crash-radius)."
-  }
+  },
+  "production_roots": [
+    "~/night-align",
+    "~/night-custody",
+    "~/night-archive"
+  ],
+  "production_roots_note": "Besides the measurement checkout and wherever its runs/ resolves: production window run, custody and archive parents. Compared as strings only, never opened or listed."
 }

@@ -9,11 +9,15 @@ Sequence (``SmokeRunner.run``):
 
 1. Gap guards: no night job loaded, no host night lock, no run_night process,
    and an Air PREQUAL report that PASSes at this exact commit.
-2. Prepare: the production ``align_v4_session.prepare`` (kit W1-ready check,
-   models present, disk snapshot, identities, plan writer) with one seam: the
-   session-local measurement view's pack is reduced to the smoke keep
-   (``reduce_view``). The kit directory and the measurement checkout are never
-   edited.
+2. Isolate (lead ruling, HARD): an isolated clone of the measurement commit
+   inside the smoke directory, with a COPIED calibration ledger and head pin
+   (distinct inodes, ``b6.smoke.copy_ledger``), its own ``runs/``, custody and
+   runs roots, and a venv whose interpreter is the base Python. Every path the
+   smoke can write is checked against the production roots
+   (``isolation_violations``) before any arm; one hit aborts the smoke.
+   Prepare: the production ``align_v4_session.prepare`` on that clone, with one
+   seam: the session-local measurement view's pack is reduced to the smoke keep
+   (``reduce_view``). The kit directory is never edited.
 3. Arm fault injections, each its own production arm attempt
    (``align_v4_session.py install``) on a session copy whose plan copy has t0
    in the past, so the installer is unreachable even if an arm admits; each
@@ -136,6 +140,118 @@ def prepare_smoke(measurement_root, session_root, keep, *, prepare_fn=None, **kw
     return state
 
 
+def production_roots(measurement_root, config):
+    """Every root a smoke must never write: the checkout, its runs/ (wherever it resolves), configured roots."""
+    m = Path(measurement_root)
+    roots = {os.path.realpath(m), os.path.realpath(m / 'runs')}
+    # Configured roots are compared as strings (abspath): they are never resolved, listed or opened.
+    roots.update(os.path.abspath(os.path.expanduser(r)) for r in config.get('production_roots', ()))
+    return sorted(roots)
+
+
+def _inside(path, roots):
+    real = os.path.realpath(path)
+    return next((r for r in roots if real == r or real.startswith(r.rstrip('/') + '/')), None)
+
+
+def _absolute_strings(value):
+    if isinstance(value, str):
+        if value.startswith('/'):
+            yield value
+    elif isinstance(value, dict):
+        for item in value.values():
+            yield from _absolute_strings(item)
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            yield from _absolute_strings(item)
+
+
+SMOKE_WRITE_KEYS = ('custody_root', 'runs_parent', 'claim_backup_destination', 'bound_backup_destination',
+                    'ledger_path', 'measurement_root', 'pack_root', 'registration_dir', 'plan_path',
+                    'session_root', 'source_measurement_root')
+
+
+def isolation_violations(smoke_dir, state, roots, *, plan=None, readonly=()):
+    """Every smoke path that resolves inside a production root (an empty list means isolated).
+
+    Checked: the smoke directory; every absolute path in the session state and the plan
+    (resolved through symlinks, so a view link into the checkout counts); the ledger the
+    plan writer binds; every symlink under the smoke directory. ``readonly`` names
+    production files the smoke may READ (model sources, the venv's base site-packages)
+    and that no smoke command writes; they are reported but not violations.
+    """
+    found = []
+    hit = _inside(smoke_dir, roots)
+    if hit:
+        found.append({'path': str(smoke_dir), 'root': hit, 'why': 'smoke directory inside a production root'})
+    for label, value in (('state', state), ('plan', plan or {})):
+        for path in sorted(set(_absolute_strings(value))):
+            hit = _inside(path, roots)
+            if hit and not any(os.path.realpath(path).startswith(os.path.realpath(r)) for r in readonly):
+                found.append({'path': path, 'resolves_to': os.path.realpath(path), 'root': hit, 'why': label})
+    inputs = (state or {}).get('inputs') or {}
+    for key in SMOKE_WRITE_KEYS:
+        value = inputs.get(key, (state or {}).get(key))
+        if isinstance(value, str) and value.startswith('/') and _inside(value, roots):
+            found.append({'path': value, 'root': _inside(value, roots), 'why': f'write path {key}'})
+    for directory, dirs, files in os.walk(smoke_dir):
+        for name in dirs + files:
+            path = Path(directory) / name
+            if path.is_symlink():
+                hit = _inside(path, roots)
+                if hit:
+                    found.append({'path': str(path), 'resolves_to': os.path.realpath(path), 'root': hit,
+                                  'why': 'symlink under the smoke directory'})
+        dirs[:] = [d for d in dirs if not (Path(directory) / d).is_symlink() and d != '.git']
+    unique = {json.dumps(f, sort_keys=True): f for f in found}
+    return list(unique.values())
+
+
+def isolate(measurement_root, smoke_dir, *, python=None, run=None):
+    """The isolated measurement for the smoke: a clone of HEAD inside ``smoke_dir`` with a copied ledger.
+
+    ``git clone --shared`` reads the checkout's objects and writes only the clone. The
+    calibration ledger and head pin are copied (``b6.smoke.copy_ledger``: distinct
+    inodes, destination inside ``smoke_dir``, source bytes unchanged), and the pin copy
+    is committed in the clone so the plan writer's committed-pin check binds the copy.
+    ``runs/`` holds only the copied ledger. The venv is created from the checkout's
+    interpreter, so it resolves to the base Python, and reads the checkout's
+    site-packages through a .pth (read only).
+    """
+    from joulewise.b5 import plan as b5_plan
+    from joulewise.b6 import smoke as b6_smoke
+    run = run or (lambda argv, **kw: subprocess.run([str(a) for a in argv], capture_output=True, text=True,
+                                                    check=True, timeout=600, **kw))
+    m, smoke_dir = Path(measurement_root).resolve(), Path(smoke_dir).resolve()
+    clone = smoke_dir / 'measurement'
+    head = run(['git', '-C', str(m), 'rev-parse', 'HEAD']).stdout.strip()
+    run(['git', 'clone', '--quiet', '--shared', '--no-checkout', str(m), str(clone)])
+    git = lambda *a: run(['git', '-C', str(clone), *a])
+    git('checkout', '--quiet', '--detach', head)
+    git('remote', 'remove', 'origin')
+    for key, value in (('user.name', 'W1 Smoke'), ('user.email', 'smoke@invalid'), ('commit.gpgsign', 'false'),
+                       ('maintenance.auto', 'false'), ('gc.auto', '0'), ('core.hooksPath', '/dev/null')):
+        git('config', '--local', key, value)
+    copied = b6_smoke.copy_ledger(m, clone, smoke_dir)
+    git('add', b5_plan.HEAD_PIN_RELATIVE)
+    git('commit', '--quiet', '--allow-empty', '-m', 'SMOKE ledger pin copy (non-registrable)')
+    base_python = python or str(m / '.venv/bin/python')
+    run([base_python, '-m', 'venv', '--without-pip', str(clone / '.venv')])
+    sites = list((clone / '.venv/lib').glob('python*/site-packages'))
+    source_sites = list((m / '.venv/lib').glob('python*/site-packages'))
+    if len(sites) != 1:
+        raise ValueError('smoke venv site-packages cannot be resolved uniquely')
+    if len(source_sites) == 1:
+        (sites[0] / 'smoke_measurement_packages.pth').write_text(str(source_sites[0].resolve()) + '\n')
+    ledger = clone / b5_plan.DEFAULT_LEDGER_RELATIVE
+    source = m / b5_plan.DEFAULT_LEDGER_RELATIVE
+    if os.stat(ledger).st_ino == os.stat(source).st_ino:
+        raise ValueError('smoke ledger shares the production inode')
+    return {'clone': str(clone), 'head': head, 'ledger': str(ledger), 'copied': list(copied),
+            'source_ledger_sha256': sha256(source), 'smoke_ledger_sha256': sha256(ledger),
+            'readonly': [str(p.resolve()) for p in source_sites]}
+
+
 def fault_session(main_session, name, root, *, now):
     """A disposable arm session: the main session's state, a fresh custody and a past-t0 plan copy.
 
@@ -191,35 +307,66 @@ ARM_FAULTS = (
      'needle': 'digest drift', 'doc': 'one receipt-bound file differs by one byte in a disposable clone'},
     {'id': 'disk-image-mounted', 'setup': 'dmg', 'expect': 'refuse', 'needle': 'external_volume_mounted:',
      'doc': 'hdiutil attach of a 2 MB read-only disk image'},
-    {'id': 'topup-missing', 'args': {'--topup-completed-at': 'missing'}, 'expect': 'refuse',
-     'needle': 'completed top-up evidence missing', 'doc': 'no completed top-up time'},
-    {'id': 'topup-omitted', 'drop': ('--topup-completed-at',), 'expect': 'usage',
-     'needle': '--topup-completed-at', 'doc': 'the flag itself omitted (argparse usage error)'},
+    {'id': 'topup-missing', 'battery': 'no-charge', 'expect': 'refuse',
+     'needle': 'completed top-up evidence missing',
+     'doc': 'a battery log with no completed charge (floating only); v4_topup derives no evidence'},
+    {'id': 'topup-omitted', 'drop': ('--battery-log',), 'expect': 'usage',
+     'needle': '--battery-log', 'doc': 'the --battery-log flag itself omitted (argparse usage error)'},
 )
 
 
-def _run(argv, *, timeout=600, env=None, cwd=None):
-    return subprocess.run([str(a) for a in argv], capture_output=True, text=True, check=False,
-                          timeout=timeout, env=env, cwd=cwd)
+def bounded_run(argv, *, timeout=600, env=None, cwd=None):
+    """Run in its own process group; on timeout TERM then KILL the whole group (Sol's discipline)."""
+    import signal
+    process = subprocess.Popen([str(a) for a in argv], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                               start_new_session=True, env=env, cwd=cwd)
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        stdout = stderr = ''
+        for sig in (signal.SIGTERM, signal.SIGKILL):
+            try:
+                os.killpg(process.pid, sig)
+            except ProcessLookupError:
+                pass
+            try:
+                stdout, stderr = process.communicate(timeout=5)
+                break
+            except subprocess.TimeoutExpired:
+                continue
+        return subprocess.CompletedProcess(argv, 124, stdout or '', (stderr or '') + f'\n[timed out after {timeout} s]')
+    return subprocess.CompletedProcess(argv, process.returncode, stdout, stderr)
+
+
+_run = bounded_run
 
 
 class SmokeRunner:
     """Executes the smoke; every host action goes through ``run``/``popen``/``sleep``/``clock``."""
 
-    def __init__(self, measurement_root, smoke_dir, *, packet, topup_completed_at, topup_source,
-                 obc_off_attested_by, w1_disk_config, prequal_report, python=None, config=None,
-                 run=_run, popen=subprocess.Popen, sleep=time.sleep, clock=time.time,
-                 prepare=prepare_smoke, poll_s=5.0):
+    def __init__(self, measurement_root, smoke_dir, *, packet, battery_log, obc_off_attested_by,
+                 w1_disk_config, prequal_report, python=None, config=None, run=_run, popen=subprocess.Popen,
+                 sleep=time.sleep, clock=time.time, prepare=prepare_smoke, isolate_fn=isolate, poll_s=5.0):
         self.m = Path(measurement_root)
         self.dir = Path(smoke_dir)
         self.packet = packet
-        self.topup_at, self.topup_source, self.obc = topup_completed_at, topup_source, obc_off_attested_by
+        self.battery_log, self.obc = Path(battery_log), obc_off_attested_by
         self.disk_config, self.prequal = Path(w1_disk_config), Path(prequal_report)
-        self.python = python or str(self.m / '.venv/bin/python')
+        self.base_python = python or str(self.m / '.venv/bin/python')
         self.config = config or load_config(self.m)
         self.run_cmd, self.popen, self.sleep, self.clock = run, popen, sleep, clock
-        self.prepare_fn, self.poll_s = prepare, poll_s
-        self.started = None
+        self.prepare_fn, self.isolate_fn, self.poll_s = prepare, isolate_fn, poll_s
+        self.roots = production_roots(self.m, self.config)
+        self.clone, self.readonly, self.started, self.transcripts = None, (), None, 0
+
+    @property
+    def python(self):
+        """Every smoke command runs from the isolated clone's venv once it exists."""
+        return str(self.clone / '.venv/bin/python') if self.clone else self.base_python
+
+    @property
+    def code(self):
+        return self.clone or self.m
 
     # -- log -----------------------------------------------------------------
     def log(self, step, outcome, **fields):
@@ -230,7 +377,17 @@ class SmokeRunner:
         return row
 
     def cmd(self, argv, timeout=600, **kw):
+        """One bounded command; its full transcript is written create-once and hashed (Sol's discipline)."""
+        argv = [str(a) for a in argv]
+        started = self.clock()
         out = self.run_cmd(argv, timeout=timeout, **kw)
+        self.transcripts += 1
+        path = self.dir / 'transcripts' / f'{self.transcripts:04d}-{Path(argv[0]).name}.json'
+        path.parent.mkdir(parents=True, exist_ok=True)
+        record = {'argv': argv, 'rc': out.returncode, 'stdout': out.stdout or '', 'stderr': out.stderr or '',
+                  'started': started, 'ended': self.clock(), 'timeout_s': timeout}
+        with path.open('x') as handle:
+            handle.write(json.dumps(record, indent=2, sort_keys=True, default=str) + '\n')
         return out.returncode, out.stdout or '', out.stderr or ''
 
     # -- 1. guards -----------------------------------------------------------
@@ -260,10 +417,24 @@ class SmokeRunner:
                  prequal={k: report.get(k) for k in ('status', 'commit', 'next', 'checkout_dirty')})
         return ok, head
 
-    # -- 2. prepare ----------------------------------------------------------
+    # -- 2. isolate and prepare --------------------------------------------------
+    def isolate(self):
+        record = self.isolate_fn(self.m, self.dir, python=self.base_python)
+        self.clone, self.readonly = Path(record['clone']), tuple(record.get('readonly', ()))
+        self.log('isolate', 'pass', production_roots=self.roots, **record)
+
+    def check_isolation(self, state, step):
+        plan = None
+        if state.get('plan_path') and Path(state['plan_path']).is_file():
+            plan = json.loads(Path(state['plan_path']).read_bytes())
+        violations = isolation_violations(self.dir, state, self.roots, plan=plan, readonly=self.readonly)
+        self.log('isolation', 'pass' if not violations else 'abort', at=step, violations=violations[:20],
+                 production_roots=self.roots)
+        return not violations
+
     def prepare_main(self):
         session = self.dir / 'main'
-        state = self.prepare_fn(self.m, session, self.config['keep'])
+        state = self.prepare_fn(self.clone, session, self.config['keep'])
         plan_id = json.loads(Path(state['plan_path']).read_bytes()).get('plan_id') if state.get('plan_path') else None
         labelled = str(state.get('session_id', '')).startswith(LABEL_PREFIX)
         ok = state.get('preparation_status') == 'STAGED' and labelled
@@ -275,10 +446,10 @@ class SmokeRunner:
     # -- 3 and 4. arm attempts --------------------------------------------------
     def install_argv(self, session, *, packet_path, args=None, drop=()):
         values = {'--session-root': str(session), '--w1-disk-config': str(self.disk_config),
-                  '--obc-off-attested-by': self.obc, '--topup-completed-at': str(self.topup_at),
-                  '--topup-source': self.topup_source, '--next-arm-triage': str(packet_path)}
+                  '--obc-off-attested-by': self.obc, '--battery-log': str(self.battery_log),
+                  '--next-arm-triage': str(packet_path)}
         values.update(args or {})
-        argv = [self.python, '-B', str(self.m / 'scripts/align_v4_session.py'), 'install']
+        argv = [self.python, '-B', str(self.code / 'scripts/align_v4_session.py'), 'install']
         for key, value in values.items():
             if key not in drop:
                 argv += [key, value]
@@ -298,8 +469,14 @@ class SmokeRunner:
                 setup = self._receipt_clone(session, root / name / 'clone', teardown)
             elif fault.get('setup') == 'dmg':
                 setup = self._attach_dmg(root / name, teardown)
-            argv = self.install_argv(session, packet_path=packet_path, args=fault.get('args'),
-                                     drop=fault.get('drop', ()))
+            args = dict(fault.get('args') or {})
+            if fault.get('battery'):
+                from joulewise.align.w1_prequal import battery_log
+                args['--battery-log'] = str(battery_log(root / name / 'battery.jsonl', self.clock(), fault['battery']))
+            fault_state = json.loads((session / 'session.json').read_bytes())
+            if isolation_violations(self.dir, fault_state, self.roots, readonly=self.readonly):
+                raise RuntimeError('fault session is not isolated from production roots; not run')
+            argv = self.install_argv(session, packet_path=packet_path, args=args, drop=fault.get('drop', ()))
             rc, out, err = self.cmd(argv, timeout=300)
         finally:
             for step in reversed(teardown):
@@ -316,11 +493,11 @@ class SmokeRunner:
 
     def _receipt_clone(self, session, clone, teardown):
         from joulewise.align.apple import v4_registration as reg
-        rc, _, err = self.cmd(['git', 'clone', '--quiet', '--shared', str(self.m), str(clone)], timeout=600)
+        rc, _, err = self.cmd(['git', 'clone', '--quiet', '--shared', str(self.code), str(clone)], timeout=600)
         teardown.append(lambda: {'rm_clone': self.cmd(['/bin/rm', '-rf', str(clone)], timeout=600)[0]})
         if rc:
             raise RuntimeError('receipt clone failed: ' + err[-300:])
-        head = self.cmd(['git', '-C', str(self.m), 'rev-parse', 'HEAD'], timeout=30)[1].strip()
+        head = self.cmd(['git', '-C', str(self.code), 'rev-parse', 'HEAD'], timeout=30)[1].strip()
         self.cmd(['git', '-C', str(clone), 'checkout', '--quiet', '--detach', head], timeout=600)
         victim = next((p for p in reg.ARTIFACTS if p.endswith('.md') and (clone / p).is_file()), None)
         if victim is None:
@@ -432,8 +609,8 @@ class SmokeRunner:
     # -- 8. R1 -> W1 chain ---------------------------------------------------
     def chain(self):
         work = self.dir / 'chain'
-        argv = [self.python, '-B', str(self.m / 'scripts/align_v4_w1_prequal.py'), '--probe', 'r1-w1-chain',
-                '--work', str(work), '--next', 'w1', '--repo', str(self.m), '--python-bin', self.python]
+        argv = [self.python, '-B', str(self.code / 'scripts/align_v4_prequal.py'), '--w1-probe', 'r1-w1-chain',
+                '--work', str(work), '--w1-next', 'w1', '--repo', str(self.code), '--python-bin', self.python]
         rc, out, err = self.cmd(argv, timeout=900)
         row = next((json.loads(line) for line in reversed(out.splitlines()) if line.startswith('{')), {})
         self.log('r1-w1-chain', 'pass' if row.get('status') == 'PASS' else 'fail', rc=rc,
@@ -453,6 +630,12 @@ class SmokeRunner:
             self.log('end', 'abort', reason='gap guards')
             return 2
         try:
+            self.isolate()
+        except Exception as exc:  # noqa: BLE001 - no isolated clone, no smoke
+            self.log('isolate', 'abort', error=f'{type(exc).__name__}: {exc}')
+            self.log('end', 'abort', reason='isolation', wall_s=round(self.clock() - self.started, 1))
+            return 2
+        try:
             ok, session, state = self.prepare_main()
         except Exception as exc:  # noqa: BLE001 - a prepare refusal ends the smoke, recorded
             self.log('prepare', 'fail', error=f'{type(exc).__name__}: {exc}')
@@ -461,6 +644,9 @@ class SmokeRunner:
         if not ok:
             self.log('end', 'fail', reason='prepare')
             return 1
+        if not self.check_isolation(state, 'prepare'):
+            self.log('end', 'abort', reason='isolation', wall_s=round(self.clock() - self.started, 1))
+            return 2
         for fault in ARM_FAULTS:
             try:
                 self.arm_fault(fault, session)
@@ -479,6 +665,9 @@ class SmokeRunner:
             if not ok:
                 self.log('end', 'fail', reason='prepare-again', wall_s=round(self.clock() - self.started, 1))
                 return 1
+            if not self.check_isolation(state, 'prepare-again'):
+                self.log('end', 'abort', reason='isolation', wall_s=round(self.clock() - self.started, 1))
+                return 2
         ok, state = self.arm_main(session)
         if ok:
             self.in_window_faults(state, deadline)
@@ -587,6 +776,12 @@ def parse(smoke_dir, *, member_reader=member_dc_and_contention):
     budget = start.get('budget_s', 2700)
     add('labelled-non-registrable', start.get('label') == 'smoke' and start.get('registrable') is False,
         f'label={start.get("label")} registrable={start.get("registrable")}')
+    isolation = by.get('isolation') or [{}]
+    isolated = (by.get('isolate') or [{}])[-1]
+    add('isolated-clone', isolated.get('outcome') == 'pass' and bool(by.get('isolation'))
+        and all(r.get('outcome') == 'pass' for r in isolation),
+        f'clone={isolated.get("clone")} ledger copied={isolated.get("smoke_ledger_sha256") is not None}; '
+        f'violations={[v for r in isolation for v in (r.get("violations") or [])][:3]}')
     guards = (by.get('guards') or [{}])[-1]
     add('gap-guards', guards.get('outcome') == 'pass', json.dumps({k: guards.get(k) for k in (
         'night_job_absent', 'run_night_processes', 'night_lock_free', 'dirty', 'prequal')}, default=str))
@@ -619,7 +814,8 @@ def parse(smoke_dir, *, member_reader=member_dc_and_contention):
     if state_path.is_file() and main.get('outcome') == 'pass':
         state = json.loads(state_path.read_bytes())
         reduction = json.loads((smoke_dir / 'main/staging/smoke-reduction.json').read_bytes())
-        config = load_config(Path(state.get('source_measurement_root', REPO)))
+        source = Path(state.get('source_measurement_root') or REPO)
+        config = load_config(source if (source / CONFIG).is_file() else REPO)
         spec = config['in_window_faults']
         killed = reduction['kept_runs'][spec['meter_kill']['stage']][0]
         target = reduction['kept_runs'][spec['cpu_contender']['stage']][0]

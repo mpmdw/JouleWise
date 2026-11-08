@@ -119,3 +119,20 @@ faults that motivated the kit. Port these pieces from Sol:
 - Before arming R1, run Opus Part A with `--next r1`. It blocks only on `arm-route` until the ruled R1
   route is declared in `arm_routes.json`.
 - Do not run Part B natively until item 6 is merged.
+
+## 6. Lead rulings and the merged kit (2026-11-08)
+
+The lead adopted the recommendation. The single merged kit is on `align/2026-11-08-w1-smoke-merged`
+(documented in `W1-SMOKE.md`). It is merged onto `align/2026-11-08-v4-r11` @ `2cce80ede`, which already
+carries the MED-2(a) `lead_rulings` rows, the packet `record_commit` check, the WP22 fix and the
+strict-tier receipt work.
+
+| Item | Done |
+|---|---|
+| Sol ports | Executed-closure coverage plus receipt commit (as an ancestor, with a clean checkout); edited-packet bytes (`triage-edited-bytes`); segment deadline (`deadline`); series binding (`series-manifest`); bounded process-group commands and create-once transcripts in the native runner. |
+| One command | `scripts/align_v4_prequal.py --w1-next {r1,w1}`. `scripts/align_v4_w1_prequal.py` is removed. |
+| Reduced labelled `smoke` window | Approved and kept. |
+| Isolation (HARD) | `w1_smoke.isolate` (clone, `copy_ledger`, own `runs/` and custody, base-interpreter venv) plus `isolation_violations` before every arm, and `IsolationTests`. The do-not-run note is removed. |
+| Contender | Sol's dry-arm refusal is dropped. The in-window `contention.request_overlap` is required. |
+| G1/G1b/G2/G3 | Handed to the v4 fixer. The checks are written as behavioural properties, so they go green on the fix: G1 (C2 packet refused after C3), G1b (an edited copy of the committed packet refused), G2 (the runbook's shell block regenerates before `--check`), G3 (a pre-kill member keeps DC). |
+| Opt-in audit | The base launcher check is semantic (green against `origin/main`). The `optin-required` WARN row lists 134 opt-in-only required tests; 14 are run here (WP22). |

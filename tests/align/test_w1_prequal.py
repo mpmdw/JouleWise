@@ -84,20 +84,115 @@ class CadenceTests(_Ctx):
             row = self.probe('calibration-stop')
         self.assertEqual(row['status'], wp.FAIL)
 
-    def test_escalation_exit_reports_the_med2_deadlock(self):
+    def test_escalation_exit_resumes_on_a_signed_lead_ruling(self):
         row = self.probe('cal-escalation-exit')
-        self.assertEqual(row['status'], wp.FAIL)
-        self.assertIn('MED-2', row['detail'])
+        self.assertEqual(row['status'], wp.PASS, row['detail'])
         from joulewise.align.apple import v4_cadence as cad
         real = cad.calibration_stop
-        with mock.patch.object(cad, 'calibration_stop', lambda rows: {'decision': 'continue'}
-                               if any(r.get('kind') == 'lead_ruling' for r in rows) else real(rows)):
-            self.assertEqual(self.probe('cal-escalation-exit')['status'], wp.PASS)
+        with mock.patch.object(cad, 'calibration_stop', lambda rows, rulings=(): real(rows)):   # rulings ignored
+            row = self.probe('cal-escalation-exit')
+        self.assertEqual(row['status'], wp.FAIL)
+        self.assertIn('MED-2', row['detail'])
 
-    def test_staleness_gap_is_reported_until_the_packet_binds_the_record(self):
+    def test_staleness_gap_is_reported_and_goes_green_when_the_arm_binds_the_latest_record(self):
         row = self.probe('triage-staleness')
         self.assertEqual(row['status'], wp.FAIL)
-        self.assertTrue(row['evidence']['verdicts']['stale'])
+        self.assertTrue(row['evidence']['verdicts']['fresh']['admitted'])
+        self.assertTrue(row['evidence']['verdicts']['stale']['admitted'])
+        from joulewise.align.apple import v4_cadence as cad
+        real = cad.next_arm_triage
+
+        def latest_only(packet, internal, identity=None):      # a stand-in for the G1 fix
+            verdict = real(packet, internal, identity)
+            if packet.get('previous_window') == 'C2':
+                verdict = {**verdict, 'admitted': False, 'reasons': verdict['reasons'] + ['stale record']}
+            return verdict
+        with mock.patch.object(cad, 'next_arm_triage', latest_only):
+            self.assertEqual(self.probe('triage-staleness')['status'], wp.PASS)
+
+    def test_edited_packet_bytes_gap_and_green_on_a_digest_binding(self):
+        row = self.probe('triage-edited-bytes')
+        self.assertEqual(row['status'], wp.FAIL)
+        self.assertTrue(row['evidence']['verdicts']['committed']['admitted'])
+        from joulewise.align.apple import v4_cadence as cad
+        real = cad.next_arm_triage
+
+        def digest_bound(packet, internal, identity=None):     # a stand-in for the G1b fix
+            verdict = real(packet, internal, identity)
+            if 'edited after commit' in json.dumps(packet):
+                verdict = {**verdict, 'admitted': False, 'reasons': ['packet bytes differ from the committed packet']}
+            return verdict
+        with mock.patch.object(cad, 'next_arm_triage', digest_bound):
+            self.assertEqual(self.probe('triage-edited-bytes')['status'], wp.PASS)
+
+
+class PortedSolTests(_Ctx):
+    def write(self, name, value):
+        proj = self.tmp / 'proj'
+        (proj / 'plans').mkdir(parents=True, exist_ok=True)
+        (proj / 'plans' / f'{name}.json').write_text(json.dumps(value))
+        return f'plans/{name}.json'
+
+    def probe(self, name, **ctx):
+        ctx.setdefault('repo', self.tmp / 'proj')
+        return super().probe(name, **ctx)
+
+    def series(self, **change):
+        source = self.write('source', {'frozen': True})
+        windows = ([{'window': 'W1', 'role': 'w1'}]
+                   + [{'window': f'C{i}', 'role': 'calibration', 'benign_per_pair': {'spam': 7, 'bank': 7}}
+                      for i in range(1, 9)] + [{'window': 'T1', 'role': 'test'}])
+        import hashlib
+        value = {'schema': wp.SERIES_SCHEMA, 'windows': windows,
+                 'source': {'path': source, 'sha256': hashlib.sha256((self.tmp / 'proj' / source).read_bytes()).hexdigest()}}
+        value.update(change)
+        return self.write('series', value)
+
+    def test_series_projection_binding_and_fixed_eight(self):
+        self.write('placeholder', {})
+        self.assertEqual(self.probe('series-manifest', next='r1')['status'], wp.PENDING)
+        self.assertEqual(self.probe('series-manifest', series_projection=self.series())['status'], wp.PASS)
+        bad = self.series(source={'path': self.write('other', {'x': 1}), 'sha256': '0' * 64})
+        self.assertEqual(self.probe('series-manifest', series_projection=bad)['status'], wp.FAIL)
+        reordered = self.series(windows=[{'window': 'C1', 'role': 'calibration'}])
+        self.assertEqual(self.probe('series-manifest', series_projection=reordered)['status'], wp.FAIL)
+
+    def test_deadline_projection_r1_floors_and_encounters(self):
+        self.assertEqual(self.probe('deadline', next='r1')['status'], wp.FAIL)
+        plan = {'window_max_s': 100000, 'smoke_deadline_projection': {
+            'kind': 'r1', 'bracket_s': 600, 'close_s': 600, 'harvest_s': 600,
+            'segments': [{'bound_s': 30000, 'attempts': 2, 'batch_encounters': 1}]}}
+        row = self.probe('deadline', next='r1', deadline_projection=self.write('ok', plan))
+        self.assertEqual(row['status'], wp.PASS, row['detail'])
+        self.assertEqual(row['evidence']['required_s'], max(30000 * 2 + 11164, 96427) + 1800)   # R1 redo floor
+        short = {**plan, 'window_max_s': 90000}       # below the 96,427 s redo floor + overhead
+        self.assertEqual(self.probe('deadline', next='r1', deadline_projection=self.write('short', short))['status'],
+                         wp.FAIL)
+        self.assertEqual(self.probe('deadline', next='w1', deadline_projection=self.write('ok2', plan))['status'],
+                         wp.FAIL)    # an R1 projection cannot size W1
+
+    def test_executed_closure_reaches_the_arm_and_driver_modules(self):  # noqa: D102
+        closure = wp.executed_closure(ROOT)
+        for path in ('scripts/align_v4_session.py', 'joulewise/align/apple/v4_cadence.py', 'joulewise/b5/driver.py'):
+            self.assertIn(path, closure)
+
+    def test_runbook_kit_steps(self):
+        doc = self.tmp / 'doc.md'
+        doc.write_text('```sh\npython3 scripts/align_v4_kit.py --check   # step\n```\n')
+        self.assertEqual(wp.runbook_kit_steps(doc), ['check'])
+        doc.write_text('```sh\npython3 scripts/align_v4_kit.py\npython3 scripts/align_v4_kit.py --check\n```\n'
+                       '# python3 scripts/align_v4_kit.py outside the block\n')
+        self.assertEqual(wp.runbook_kit_steps(doc), ['regenerate', 'check'])
+        doc.write_text('no block\n')
+        with self.assertRaises(ValueError):
+            wp.runbook_kit_steps(doc)
+
+    def test_optin_ledger_is_a_warn_row_that_never_blocks(self):
+        row = self.probe('optin-required', repo=ROOT)
+        self.assertEqual(row['status'], wp.WARN)
+        self.assertIn('tests.align.test_v4_w1_synthetic -> wp22-dry-run (JW_WP22_FULL=1)', row['evidence']['covered'])
+        self.write('placeholder', {})
+        self.assertEqual(self.probe('optin-required')['status'], wp.WARN)
 
 
 class SizingTests(_Ctx):
@@ -111,12 +206,11 @@ class SizingTests(_Ctx):
         self.assertIn('not committed yet', at_gate['detail'])
 
     def test_an_unplanned_wait_in_the_w1_closure_fails(self):
-        from joulewise.align.apple import v4_registration as reg
         fake = self.tmp / 'repo'
         shutil.copytree(ROOT / 'configs/campaigns/align_v4', fake / 'configs/campaigns/align_v4')
         (fake / 'scripts').mkdir()
         (fake / 'scripts/waits.py').write_text('wait_outside_os_batch(1)\n')
-        with mock.patch.object(reg, 'EXECUTED_CLOSURE', ('scripts/waits.py',)):
+        with mock.patch.object(wp, 'executed_closure', lambda root: {'scripts/waits.py'}):
             row = self.probe('w1-window-max', repo=fake)
         self.assertEqual(row['status'], wp.FAIL)
         self.assertIn('waits outside the programmed span', row['detail'])
@@ -192,12 +286,20 @@ class ReceiptTests(_Ctx):
     def test_self_test_admits_exact_and_refuses_drift_then_reports_the_pending_receipt(self):
         from joulewise.align.apple import v4_registration as reg
         bound = ('docs/align/v4/PREQUAL.md', 'scripts/align_v4_kit.py')
-        with mock.patch.object(reg, 'ARTIFACTS', bound):
+        with mock.patch.object(reg, 'ARTIFACTS', bound), mock.patch.object(wp, 'executed_closure', lambda root: set()):
             row = self.probe('receipt', next='r1')
         self.assertEqual(row['status'], wp.PENDING, row['detail'])
         self.assertEqual(row['evidence']['self_test']['exact'], 'admitted')
         self.assertIn('digest drift', row['evidence']['self_test']['digest_mismatch'])
         self.assertIn('digest drift', row['evidence']['self_test']['working_bytes_drift'])
+
+    def test_an_executed_module_outside_the_receipt_fails(self):
+        from joulewise.align.apple import v4_registration as reg
+        trimmed = tuple(p for p in reg.ARTIFACTS if p != 'joulewise/align/apple/v4_cadence.py')
+        with mock.patch.object(reg, 'ARTIFACTS', trimmed):
+            row = self.probe('receipt', next='r1')
+        self.assertEqual(row['status'], wp.FAIL)
+        self.assertIn('joulewise/align/apple/v4_cadence.py', row['evidence']['uncovered'])
 
     def test_absent_bound_artifacts_are_pending_before_w1_and_fail_at_w1(self):
         self.assertIn(self.probe('receipt', next='r1')['status'], (wp.PENDING,))
@@ -213,7 +315,7 @@ class ChainTests(_Ctx):
         self.assertIn('kit.require_ready(backfilled record)', steps)
         self.assertIn(row['status'], (wp.PASS, wp.FAIL))
         if row['status'] == wp.FAIL:      # only the runbook-drift finding or a pending refusal may remain
-            self.assertIn('R1-TO-W1-CHAIN.md step 6', row['detail'])
+            self.assertIn('R1-TO-W1-CHAIN.md as written', row['detail'])
 
 
 class MeterTests(_Ctx):
@@ -265,6 +367,11 @@ class OrchestratorTests(unittest.TestCase):
         self.assertEqual(report['status'], 'FAIL')
         self.assertEqual({r['check']: r for r in report['checks']}['receipt']['status'], wp.FAIL)
 
+    def test_warn_never_blocks(self):
+        report = wp.run_all(self.ctx('w1'), spawn=self.rows({'optin-required': wp.WARN}))
+        self.assertEqual(report['status'], 'PASS')
+        self.assertIn('| optin-required | WARN |', wp.table(report))
+
     def test_waivers_and_subsets(self):
         report = wp.run_all(self.ctx('w1'), spawn=self.rows({'triage-staleness': wp.FAIL}),
                             waivers={'triage-staleness': 'lead ruling X'})
@@ -278,7 +385,7 @@ class OrchestratorTests(unittest.TestCase):
         good = json.dumps({'check': 'arm-route', 'status': 'PASS', 'detail': 'ok'})
         for out, expected in ((f'noise\n{good}\n', 'PASS'), ('garbage\n', 'FAIL'), ('', 'FAIL')):
             ctx.run = lambda argv, out=out, **kw: completed(argv, 0, out)
-            self.assertEqual(wp.spawn_probe('arm-route', ctx, ROOT / 'scripts/align_v4_w1_prequal.py')['status'],
+            self.assertEqual(wp.spawn_probe('arm-route', ctx, ROOT / 'scripts/align_v4_prequal.py')['status'],
                              expected)
 
         def timeout(argv, **kw):
@@ -296,16 +403,17 @@ class OrchestratorTests(unittest.TestCase):
 class CliTests(unittest.TestCase):
     def test_probe_mode_and_usage_errors(self):
         with tempfile.TemporaryDirectory() as tmp:
-            out = subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/align_v4_w1_prequal.py'), '--probe',
-                                  'calibration-stop', '--work', tmp, '--next', 'w1'],
+            out = subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/align_v4_prequal.py'), '--w1-probe',
+                                  'calibration-stop', '--work', tmp, '--w1-next', 'w1'],
                                  capture_output=True, text=True, cwd=ROOT, timeout=120)
             self.assertEqual(out.returncode, 0, out.stderr)
             self.assertEqual(json.loads(out.stdout.splitlines()[-1])['status'], 'PASS')
-            from scripts import align_v4_w1_prequal as cli
-            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
-                cli.main(['--output', str(Path(tmp) / 'r'), '--only', 'nope'])
-            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
-                cli.main(['--output', str(Path(tmp) / 'r'), '--waive', 'arm-route'])
+            from scripts import align_v4_prequal as cli
+            for argv in (['--w1-next', 'w1', '--output', str(Path(tmp) / 'r'), '--only', 'nope'],
+                         ['--w1-next', 'w1', '--output', str(Path(tmp) / 'r'), '--waive', 'arm-route'],
+                         ['--w1-probe', 'arm-route']):
+                with self.subTest(argv=argv), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                    cli.main(argv)
 
 
 if __name__ == '__main__':

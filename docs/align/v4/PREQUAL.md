@@ -236,22 +236,37 @@ anything the Air can stand in for.
 6. The Mac's `$M/.venv` contents (versions beyond the three pins, such as `tokenizers`) are
    not visible off the Mac. A venv lockfile recorded by R0 would let the prequal match it.
 
-## W1 and next-arm extension (RUN_STATE 219)
+## W1 and next-arm extension (RUN_STATE 219/220, merged smoke kit)
 
-`scripts/align_v4_w1_prequal.py` (module `joulewise/align/w1_prequal.py`) runs every code path the next
-window executes, off the Mac, with a fake host. It covers:
+`scripts/align_v4_prequal.py --w1-next {r1,w1}` (module `joulewise/align/w1_prequal.py`) runs every code
+path the next window executes, off the Mac, with a fake host. It covers:
 - the production arm CLI and its required evidence;
-- the next-arm triage;
-- the fixed-8 calibration stop;
-- the registration receipt against the candidate commit;
-- the R1 -> W1 chain;
-- the KM003C launch through the HAZARD_PACK driver;
+- the next-arm triage, including staleness and edited packet bytes;
+- the fixed-8 calibration stop and its lead-ruling exit;
+- the receipt: executed-closure coverage and the candidate commit;
+- the series projection;
+- the installed-plan deadline;
+- the R1 -> W1 chain as documented;
+- the KM003C launch and crash radius;
 - W1 `window_max_s` sizing;
 - the full WP22 dry run;
-- the native smoke kit's expectations;
-- "an arm route exists end to end for the next measurement" (`configs/align/v4/arm_routes.json`).
+- the isolated native smoke kit;
+- "an arm route exists end to end for the next measurement" (`configs/align/v4/arm_routes.json`);
+- a WARN-only row for required tests that run only behind an opt-in (opt-in audit ledger).
 
-Command, check table and current results: `docs/align/v4/W1-SMOKE-opus.md`. **Rule for the magistrate:**
-an R1 arm cites a `--next r1` report and a W1 arm cites a `--next w1` report. Each report must have
-`status: PASS` at the measurement checkout's commit, with `checkout_dirty: false`, in addition to the
-R0-style `prequal.json` above.
+The command, check table and expected greens are in `docs/align/v4/W1-SMOKE.md`.
+
+**Rule for the magistrate:**
+- An R1 arm cites a `--w1-next r1` report, and a W1 arm cites a `--w1-next w1` report.
+- Each report must have `status: PASS` at the measurement checkout's commit, with `checkout_dirty: false`.
+- These reports are in addition to the R0-style `prequal.json` above.
+
+**Launcher check (opt-in audit 2026-11-08).** `launcher` compares `runner.json` semantically:
+- the unresolved venv interpreter;
+- the runner script;
+- the required `--config` and `--output` values;
+- only the allowed optional flags `--keep-going` and `--checks`;
+- no forbidden flag.
+
+It is not an exact argv list, so `origin/main`'s default `--keep-going` passes. For dwell launchers, the
+`run --help` probe uses the launcher's test dwell seam and a no-op `pmset`.

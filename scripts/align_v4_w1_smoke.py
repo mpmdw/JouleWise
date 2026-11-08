@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ALIGN v4 native W1 smoke (Opus build); see docs/align/v4/W1-SMOKE-opus.md.
+"""ALIGN v4 native W1 smoke (Opus build); see docs/align/v4/W1-SMOKE.md.
 
 MBP only, by the magistrate, in a gap between windows, never during one.
 
@@ -32,9 +32,9 @@ def main(argv=None):
     run.add_argument('--next-arm-triage', type=Path, required=True, help='the packet planned for the W1 arm')
     run.add_argument('--w1-disk-config', type=Path, required=True)
     run.add_argument('--obc-off-attested-by', required=True)
-    run.add_argument('--topup-completed-at', required=True)
-    run.add_argument('--topup-source', required=True)
-    run.add_argument('--python-bin', help='default: <measurement-root>/.venv/bin/python')
+    run.add_argument('--battery-log', type=Path, required=True,
+                     help='the live battery log the W1 arm will read (scripts/align_v4_battery_log.py sample)')
+    run.add_argument('--python-bin', help='base interpreter for the isolated venv (default: <measurement-root>/.venv/bin/python)')
     run.add_argument('--detach', action='store_true', help='re-run detached in a new session and return')
     parse = sub.add_parser('parse')
     parse.add_argument('smoke_dir', type=Path)
@@ -62,7 +62,7 @@ def main(argv=None):
         return 0
     runner = smoke.SmokeRunner(
         args.measurement_root, args.smoke_dir, packet=json.loads(args.next_arm_triage.read_bytes()),
-        topup_completed_at=args.topup_completed_at, topup_source=args.topup_source,
+        battery_log=args.battery_log,
         obc_off_attested_by=args.obc_off_attested_by, w1_disk_config=args.w1_disk_config,
         prequal_report=args.prequal_report, python=args.python_bin)
     return runner.run()

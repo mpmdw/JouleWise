@@ -1,7 +1,7 @@
 {
   "schema": "joulewise.align_v4.arm_routes.v1",
   "authority": "RUN_STATE 219 (an arm route exists end to end for the next measurement is a PREQUAL item) and 220 (routes are built by Sol and Opus independently, agreed, then ruled)",
-  "note": "Checked by scripts/align_v4_w1_prequal.py arm-route. A route is 'declared' only after a lead ruling names it; every step's entry point must exist and answer. Add the R1 route here when the lead rules on R1-ARM-AGREEMENT.",
+  "note": "Checked by scripts/align_v4_prequal.py --w1-next (arm-route check). A route is 'declared' only after a lead ruling names it; every step's entry point must exist and answer. Add the R1 route here when the lead rules on R1-ARM-AGREEMENT.",
   "routes": {
     "r1": {
       "status": "none",
@@ -10,14 +10,14 @@
     "w1": {
       "status": "declared",
       "receipt_class": "HAZARD_PACK",
-      "runbook": "docs/align/v4/W1-SMOKE-opus.md",
+      "runbook": "docs/align/v4/W1-SMOKE.md",
       "steps": [
         {"id": "prepare", "requires": ["scripts/align_v4_session.py", "scripts/align_v4_kit.py", "scripts/bytes_h_session.py"],
          "probe": {"argv": ["{python}", "-B", "scripts/align_v4_session.py", "prepare", "--help"],
                    "expect_text": ["--measurement-root", "--session-root"]}},
-        {"id": "arm-install", "requires": ["joulewise/align/apple/v4_cadence.py", "joulewise/align/apple/v4_registration.py"],
+        {"id": "arm-install", "requires": ["joulewise/align/apple/v4_cadence.py", "joulewise/align/apple/v4_registration.py", "joulewise/align/apple/v4_topup.py", "scripts/align_v4_battery_log.py"],
          "probe": {"argv": ["{python}", "-B", "scripts/align_v4_session.py", "install", "--help"],
-                   "expect_text": ["--w1-disk-config", "--obc-off-attested-by", "--topup-completed-at", "--topup-source", "--next-arm-triage"]}},
+                   "expect_text": ["--w1-disk-config", "--obc-off-attested-by", "--battery-log", "--next-arm-triage"]}},
         {"id": "night-agent-installer", "requires": ["scripts/install_night_agent.sh", "scripts/b6_courier.sh"],
          "probe": {"argv": ["/bin/zsh", "scripts/install_night_agent.sh"], "expect_rc": [2],
                    "expect_text": ["--plan PLAN.json", "--python ABS_PATH", "--courier-bin ABS_PATH"]}},
