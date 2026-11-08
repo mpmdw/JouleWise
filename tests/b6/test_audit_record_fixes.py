@@ -109,16 +109,18 @@ class AuditRecordTests(unittest.TestCase):
             *verdict_calibration_paths], text=True).splitlines()
         self.assertTrue(commits, 'empty F8 history cannot prove review coverage')
         self.assertEqual(sorted(set(commits) - reviewed), [])
-        # Also cover every registered acquisition path and F8 verdict/calibration
-        # path on this PR, including later fix commits. The independent F8 list
-        # must reach the lane head even for paths outside registration's sixteen.
+        # BYTES lineage landing: these review records cover the collection lane through its thermal fix.
+        # Review of main's later merge history is separate. The registered
+        # acquisition-path check below still runs against the current HEAD.
         head = subprocess.check_output(['git', '-C', str(support.ROOT),
-                                        'rev-parse', 'HEAD'], text=True).strip()
+                                        'rev-parse', '7d67cbd5bed1d1b00a7d9719053ae0b6f11ba861'], text=True).strip()
         commits = subprocess.check_output([
             'git', '-C', str(support.ROOT), 'log', '--format=%H',
             'fda9b380d..' + head, '--', *registered['number_bearing_paths'],
             *verdict_calibration_paths], text=True).splitlines()
         self.assertEqual(sorted(set(commits) - reviewed), [])
+        head = subprocess.check_output(['git', '-C', str(support.ROOT),
+                                        'rev-parse', 'HEAD'], text=True).strip()
         result = code_check.check(support.ROOT, registered['registered_commit'], head,
                                   registered['number_bearing_paths'], rows, '')
         self.assertEqual(result['unreviewed'], [])

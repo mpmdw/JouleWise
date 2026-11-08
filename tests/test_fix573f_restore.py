@@ -1,6 +1,6 @@
 """FIX-573f: the cold review's storage probes, without live hardware."""
 import ast
-from contextlib import ExitStack, redirect_stderr, redirect_stdout
+from contextlib import ExitStack, contextmanager, redirect_stderr, redirect_stdout
 import hashlib
 import io
 import json
@@ -120,7 +120,8 @@ class FailClosedReadTests(unittest.TestCase):
                 ww.strict_validate_bundles(paths, workers=2)
 
     def test_parallel_materializations_cannot_jointly_cross_reserve(self):
-        context = multiprocessing.get_context('fork')
+        # BYTES lineage landing: keep parent-owned cached fixtures out of fork cleanup.
+        context = multiprocessing.get_context('spawn')
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             source, scratch = root / 'archive/sources/claim-runs/run', root / 'scratch'
@@ -213,18 +214,29 @@ class ColdReviewProbeTests(unittest.TestCase):
     def test_prepare_restores_the_complete_bundle_before_its_own_checks(self):
         self.compress()
         session = object.__new__(ww.AuthenticatedConsumptionSession)
-        def inspect(**kwargs):
-            plain = kwargs['bundle_paths']['corpus0']
+        session._prepared = False
+        session.calibration_ledger_snapshot = None
+        restored = []
+        @contextmanager
+        def observe_restore(*args, **kwargs):
+            with restore.readable_run(*args, **kwargs) as plain:
+                restored.append(plain)
+                yield plain
+        def inspect(reasons):
+            plain = restored[0]
             self.assertNotEqual(plain, self.live)
             self.assertTrue((plain / 'instrument_calibration/manifest.json').is_file())
             self.assertFalse(list(plain.rglob('*.zst')))
             self.assertEqual(reduce_bundle(plain, reducer_version='0.5.2').to_dict(), self.plain)
-            self.assertEqual(kwargs['original_paths'], {'corpus0': self.live})
-            return plain
-        with mock.patch.object(session, '_prepare_plain', side_effect=inspect):
-            plain = session._prepare(bundle_paths={'corpus0': self.live}, policy=SimpleNamespace(),
-                                     compression_records=self.journal)
-        self.assertFalse(plain.exists())
+            self.assertEqual(session._preparation_identity, (('corpus0', str(self.live.resolve())),))
+            self.assertEqual(reasons, {'calibration_ledger_snapshot_required'})
+        # BYTES lineage landing: restoration directly encloses main's _prepare body.
+        with mock.patch.object(ww, 'readable_run', side_effect=observe_restore), \
+                mock.patch.object(session, '_fail_global', side_effect=inspect):
+            session._prepare(bundle_paths={'corpus0': self.live}, policy=SimpleNamespace(),
+                             compression_records=self.journal)
+        self.assertEqual(len(restored), 1)
+        self.assertFalse(restored[0].exists())
 
     def test_probe2_mint_and_bound_recheck_restore_before_predicates_and_inventory(self):
         def select():
@@ -355,19 +367,23 @@ class ReductionCensusTests(unittest.TestCase):
                                       if isinstance(node, ast.ImportFrom) and node.module == 'joulewise.reduce'
                                       for alias in node.names if alias.name in names}
                 walk(tree, path.relative_to(ROOT).as_posix(), call_names)
+        # BYTES lineage landing: main's verified leaves retain the issued reducer's entry points.
         self.assertCountEqual(calls, [
             ('joulewise/reduce.py', '_rederive_summary_for_authenticated_fiducial_bound', 'reduce_bundle'),
             ('joulewise/controller.py', '_stage_reduce', 'reduce_bundle'),
-            ('joulewise/cli.py', '_plain_strict_problems', 'reduce_bundle'),
-            ('joulewise/cli.py', '_plain_strict_problems', 'reduce_bundle'),
-            ('joulewise/cli.py', '_plain_strict_problems', 'reduce_bundle'),
+            ('joulewise/analysis_verified_store.py', 'reduce_bundle_dict', 'reduce_bundle'),
+            ('joulewise/analysis_verified_store.py', 'reduce_bundle_dict', 'reduce_bundle'),
+            ('joulewise/cli.py', '_strict_reduce_dict', 'reduce_bundle'),
             ('joulewise/cli.py', '_cmd_reduce', 'reduce_bundle'),
             ('joulewise/b5/harvest.py', 'rereduce', 'reduce_bundle'),
-            ('joulewise/whole_window.py', '_prepare_plain', '_rederive_summary_for_authenticated_fiducial_bound'),
-            ('joulewise/whole_window.py', '_plain_reference_energy_evidence_detail', 'reduce_bundle'),
+            ('joulewise/whole_window.py', '_rederive_operative_summary', '_rederive_summary_for_authenticated_fiducial_bound'),
+            ('joulewise/whole_window.py', '_verified_reduce_dict', 'reduce_bundle'),
             ('joulewise/bytes_analysis.py', 'operative_summary', '_rederive_summary_for_authenticated_fiducial_bound')])
         self.assertCountEqual(references, [
             ('joulewise/controller.py', '_stage_reduce', 'reduce_bundle'),
+            ('joulewise/whole_window.py', '_verified_reduce_dict', 'reduce_bundle'),
+            ('joulewise/whole_window.py', '_verified_reduce_dict', '_GENUINE_REDUCE_BUNDLE'),
+            ('joulewise/whole_window.py', '_prepare', '_rederive_summary_for_authenticated_fiducial_bound'),
             ('scripts/harvest_v5_g2b_window.py', 'l10_a', 'reduce_bundle')])
         # The historical injected reducer is also an entry point, even without an ast.Call spelling.
         legacy = ast.parse((ROOT / 'scripts/harvest_v5_g2b_window.py').read_text())

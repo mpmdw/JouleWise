@@ -215,7 +215,7 @@ class ColdReviewProbe3Tests(unittest.TestCase):
                 ww._current_core_rederivation_reasons(**kwargs)
         check.assert_called_once()
 
-    def test_prepare_plain_passes_calibration_restore_refusal(self):
+    def test_prepare_passes_calibration_restore_refusal(self):
         with restore.readable_run(self.live, **self.kwargs) as plain:
             session = ww.AuthenticatedConsumptionSession(
                 plain.parent, {'corpus0'},
@@ -226,10 +226,10 @@ class ColdReviewProbe3Tests(unittest.TestCase):
             with mock.patch.object(ww, 'calibration_bracket_for_bundles', return_value=({'b_fiducial_s': 1}, ())), \
                  mock.patch.object(ww, '_verify_instrument_calibration', side_effect=restore.RestoreRefused('late prepare')):
                 with self.assertRaisesRegex(restore.RestoreRefused, 'late prepare'):
-                    session._prepare_plain(bundle_paths={'corpus0': plain}, policy=policy,
-                                           original_paths={'corpus0': self.live})
+                    # BYTES lineage landing: main's _prepare directly owns the restoration scope.
+                    session._prepare(bundle_paths={'corpus0': plain}, policy=policy)
 
-    def test_prepare_plain_passes_dominated_rederivation_restore_refusal(self):
+    def test_prepare_passes_dominated_rederivation_restore_refusal(self):
         with restore.readable_run(self.live, **self.kwargs) as plain:
             session = ww.AuthenticatedConsumptionSession(
                 plain.parent, {'corpus0'},
@@ -245,8 +245,8 @@ class ColdReviewProbe3Tests(unittest.TestCase):
                  mock.patch.object(ww, '_rederive_summary_for_authenticated_fiducial_bound',
                                    side_effect=restore.RestoreRefused('late dominated prepare')) as rederive:
                 with self.assertRaisesRegex(restore.RestoreRefused, 'late dominated prepare'):
-                    session._prepare_plain(bundle_paths={'corpus0': plain}, policy=policy,
-                                           original_paths={'corpus0': self.live})
+                    # BYTES lineage landing: main's _prepare directly owns the restoration scope.
+                    session._prepare(bundle_paths={'corpus0': plain}, policy=policy)
                 rederive.assert_called_once()
 
     def test_evaluation_basis_primary_hashes_restore_with_the_archive_journal(self):
@@ -269,7 +269,8 @@ class ColdReviewProbe3Tests(unittest.TestCase):
                 ww._validated_evaluation_basis(row, self.live.parent)
 
     def test_operator_and_reader_share_lock_with_different_scratch_directories(self):
-        context = multiprocessing.get_context('fork')
+        # BYTES lineage landing: keep parent-owned cached fixtures out of fork cleanup.
+        context = multiprocessing.get_context('spawn')
         entered, release, started, checked = (context.Event() for _ in range(4))
         results = context.Queue()
         common = (self.live, self.journal, self.case / 'operator-scratch')

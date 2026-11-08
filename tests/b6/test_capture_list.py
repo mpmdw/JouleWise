@@ -22,11 +22,9 @@ class CaptureListTests(unittest.TestCase):
     def test_append_contention_whole_lines(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "captures.jsonl"
-            # "spawn" re-imports __main__ from its file; the shard runner (CI and the
-            # local method) feeds the test program on stdin (main path "<stdin>"), which
-            # kills spawn children at startup (precedent: tests/test_agent_census_concurrency.py,
-            # PR #371). These children only draw or append, so a forked child is safe.
-            ctx = multiprocessing.get_context("fork" if "fork" in multiprocessing.get_all_start_methods() else "spawn")
+            # BYTES lineage landing: fork can finalize parent-owned cached fixtures when it clears atexit.
+            # The shard runner now detaches an unfileable __main__, so spawn works there too.
+            ctx = multiprocessing.get_context("spawn")
             queue = ctx.Queue()
             processes = [ctx.Process(target=append_child, args=(path, n, queue)) for n in (1, 2)]
             try:

@@ -202,11 +202,9 @@ blinding.bind_session_keys(Path(directory), "same-session", set(json.loads(names
     def test_racing_first_draw_one_file_one_value(self):
         with tempfile.TemporaryDirectory() as tmp:
             directory = Path(tmp) / "pack" / "blinding"
-            # "spawn" re-imports __main__ from its file; the shard runner (CI and the
-            # local method) feeds the test program on stdin (main path "<stdin>"), which
-            # kills spawn children at startup (precedent: tests/test_agent_census_concurrency.py,
-            # PR #371). These children only draw or append, so a forked child is safe.
-            ctx = multiprocessing.get_context("fork" if "fork" in multiprocessing.get_all_start_methods() else "spawn")
+            # BYTES lineage landing: fork can finalize parent-owned cached fixtures when it clears atexit.
+            # The shard runner now detaches an unfileable __main__, so spawn works there too.
+            ctx = multiprocessing.get_context("spawn")
             gate, queue = ctx.Event(), ctx.Queue()
             processes = [ctx.Process(target=factor_child, args=(directory, gate, queue)) for _ in range(2)]
             try:

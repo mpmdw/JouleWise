@@ -4,6 +4,7 @@ from __future__ import annotations
 import base64
 import contextlib
 import csv
+from datetime import datetime, timezone
 import hashlib
 import io
 import json
@@ -112,7 +113,8 @@ def reference_template():
 
 class Clock:
     def __init__(self):
-        self.value = time.time()
+        # BYTES lineage landing: synthetic rounds must precede the registered close date.
+        self.value = datetime(2026, 10, 20, tzinfo=timezone.utc).timestamp()
     def __call__(self):
         return self.value
 
@@ -683,10 +685,12 @@ def bytes_rehearsal(root):
             return subprocess.CompletedProcess(argv, 0, stdout='', stderr='')
         return subprocess.run(argv, **{"capture_output": True, "text": True, "timeout": 120,
                                        "check": False, **kwargs})
+    # BYTES lineage landing: the rehearsal shares the fixed synthetic collection clock.
+    rehearsal_clock = Clock()
     def factory(repo, loop_root, **kwargs):
-        kwargs.update(run=runner, mailer=Mailer(loop_root, __import__(
+        kwargs.update(clock=rehearsal_clock, run=runner, mailer=Mailer(loop_root, __import__(
             'joulewise.flags.catalog', fromlist=['load_catalog']).load_catalog(measurement / config['flag_catalog']),
-            clock=time.time, transport=Transport()))
+            clock=rehearsal_clock, transport=Transport()))
         loop = real_loop(repo, loop_root, **kwargs)
         loop.lanes.precheck.run = lambda *args: PrecheckResult(fingerprint={'synthetic': True})
         loop.lanes.driver.launchctl_bin = str(fake)

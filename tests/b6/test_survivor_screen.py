@@ -166,10 +166,14 @@ class SurvivorTests(unittest.TestCase):
                 helper.return_value = (None, None)
                 self.assertRaises(ValueError, reader, {"run_id": "r"})
 
-    def test_main_reference_reader_uses_primary_bundle_even_with_rereduction(self):
+    def test_main_reference_reader_fallback_uses_primary_bundle_even_with_rereduction(self):
+        from joulewise import whole_window
+
         # Old-shaped summaries take the main reader's compatibility leg;
         # there is no substitute energy arithmetic in the block-six reader.
-        with tempfile.TemporaryDirectory() as tmp:
+        # BYTES lineage landing: main now supplies the preferred writer helper; force its fallback here.
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.object(whole_window, "_neg8_writer_reference_energy", None):
             root = Path(tmp)
             summary = {"gross_energy_j": 10, "idle_subtracted_energy_j": 8,
                        "energy_anchor_shift_envelopes": {"/gross_energy_j":
