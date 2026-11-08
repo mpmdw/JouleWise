@@ -13,7 +13,7 @@ RECEIPT_SCHEMA = 'joulewise.align_v4.registration_receipt.v1'
 U3_SCHEMA = 'joulewise.align_v4.u3_bar.v1'
 WP19_SCHEMA = 'joulewise.align_v4.wp19_identity.v1'
 RULINGS = (4, 5, 6, 9, 11, 15, 17, 18, 20)
-ARTIFACTS = (
+_NAMED_ARTIFACTS = (
     'docs/align/pilot_protocol_v4.md', 'docs/align/v4/DEVIATIONS.md',
     'docs/align/council-2026-11-06-v4-review/LEAD-RULINGS-2.md',
     'scripts/align_w1_budget_procedure.py', 'joulewise/align/apple/km003c.py',
@@ -25,9 +25,6 @@ ARTIFACTS = (
     'joulewise/align/apple/v4_registration.py', 'joulewise/align/apple/v4_estimands.py',
     'joulewise/align/apple/thermal_desk.py', 'joulewise/align/apple/thermal_gates.py',
     'joulewise/align/apple/endpoint.py', 'joulewise/align/apple/workload.py',
-    # R09 work/accounting: EpisodePromptCache is executed by endpoint.py in
-    # every measured turn (R11 review sol2 F01).
-    'joulewise/align/apple/prompt_cache.py',
     'scripts/run_night.py', REGISTRATION+'inputs.json', REGISTRATION+'r1_slots.json',
     REGISTRATION+'identity_pins.json', REGISTRATION+'model_artifact_inventory.json',
     REGISTRATION+'local_file_verification.json',
@@ -35,6 +32,205 @@ ARTIFACTS = (
     REGISTRATION+'r1_soak_reference.json',
     'configs/campaigns/align_v4/plan_tree.json', 'configs/campaigns/align_v4/collection_plan.json',
 )
+
+
+# Static import closure (stdlib ``ast``; module- and function-level imports,
+# parent packages included) of the episode path and the W1/D night entry points
+# (endpoint.py, scripts/run_night.py, scripts/align_v4_session.py), restricted to
+# joulewise/. R11 lead ruling 3 (Sol2 F01): the exact-candidate receipt binds the
+# executed code, not a hand-picked subset. tests/align/test_v4_executed_closure.py
+# recomputes this closure and fails if it is not a subset of ARTIFACTS.
+# Not seen by a static walk: importlib string imports and third-party modules.
+EXECUTED_CLOSURE = (
+    'joulewise/align/apple/prompt_cache.py',
+    'joulewise/__init__.py',
+    'joulewise/adapters/__init__.py',
+    'joulewise/adapters/local_transport.py',
+    'joulewise/adapters/mlx_runtime.py',
+    'joulewise/adapters/mock_runtime.py',
+    'joulewise/adapters/mock_spec_runtime.py',
+    'joulewise/adapters/mock_telemetry.py',
+    'joulewise/adapters/node_client.py',
+    'joulewise/adapters/nvidia_smi.py',
+    'joulewise/adapters/powermetrics.py',
+    'joulewise/adapters/suite_control.py',
+    'joulewise/agent_identity.py',
+    'joulewise/aggregate.py',
+    'joulewise/align/__init__.py',
+    'joulewise/align/apple/__init__.py',
+    'joulewise/align/apple/budget.py',
+    'joulewise/align/apple/campaign.py',
+    'joulewise/align/apple/diagnostics.py',
+    'joulewise/align/apple/external_volume.py',
+    'joulewise/align/apple/generation.py',
+    'joulewise/align/apple/pilot.py',
+    'joulewise/align/apple/powermode.py',
+    'joulewise/align/apple/r1_runtime.py',
+    'joulewise/align/apple/r1_runtime_contract.py',
+    'joulewise/align/apple/registry_select.py',
+    'joulewise/align/apple/sampler.py',
+    'joulewise/align/apple/sampling.py',
+    'joulewise/align/apple/smc_enumeration.py',
+    'joulewise/align/apple/smc_reader.py',
+    'joulewise/align/apple/stop_precedence.py',
+    'joulewise/align/apple/thermal.py',
+    'joulewise/align/apple/xml_tool_calls.py',
+    'joulewise/align/attribution.py',
+    'joulewise/align/endpoints.py',
+    'joulewise/align/interfaces.py',
+    'joulewise/align/mock_world.py',
+    'joulewise/align/power/__init__.py',
+    'joulewise/align/power/windows.py',
+    'joulewise/align/r0.py',
+    'joulewise/align/r0_host.py',
+    'joulewise/align/r0_mlx.py',
+    'joulewise/align/r0_runner.py',
+    'joulewise/align/r0_step.py',
+    'joulewise/align/records.py',
+    'joulewise/align/runner.py',
+    'joulewise/align/shade/__init__.py',
+    'joulewise/align/shade/monitor.py',
+    'joulewise/align/shade/task.py',
+    'joulewise/align/shade/upstream.py',
+    'joulewise/analysis_engine/__init__.py',
+    'joulewise/analysis_engine/artifact.py',
+    'joulewise/analysis_engine/claims.py',
+    'joulewise/analysis_engine/distributions.py',
+    'joulewise/analysis_engine/estimators.py',
+    'joulewise/analysis_engine/inputs.py',
+    'joulewise/analysis_engine/multiplicity.py',
+    'joulewise/analysis_engine/ratio.py',
+    'joulewise/analysis_engine/registry.py',
+    'joulewise/analysis_engine/sensitivity.py',
+    'joulewise/analysis_manifest.py',
+    'joulewise/analysis_manifest_v3.py',
+    'joulewise/arm_readiness.py',
+    'joulewise/arm_readiness_evidence.py',
+    'joulewise/arm_readiness_evidence_t0.py',
+    'joulewise/arm_retry.py',
+    'joulewise/authentication_io.py',
+    'joulewise/axi_decode_config.py',
+    'joulewise/b5/__init__.py',
+    'joulewise/b5/chain.py',
+    'joulewise/b5/driver.py',
+    'joulewise/b5/harvest.py',
+    'joulewise/b5/plan.py',
+    'joulewise/b6/__init__.py',
+    'joulewise/b6/acceptance.py',
+    'joulewise/b6/acceptance_interface.py',
+    'joulewise/b6/agent_pause.py',
+    'joulewise/b6/analysis_lane.py',
+    'joulewise/b6/archive.py',
+    'joulewise/b6/calibration.py',
+    'joulewise/b6/capture_list.py',
+    'joulewise/b6/capture_screen.py',
+    'joulewise/b6/code_check.py',
+    'joulewise/b6/compose.py',
+    'joulewise/b6/courier.py',
+    'joulewise/b6/desk_identity.py',
+    'joulewise/b6/desk_lane.py',
+    'joulewise/b6/driver_lane.py',
+    'joulewise/b6/fingerprint.py',
+    'joulewise/b6/idle_wait.py',
+    'joulewise/b6/lanes.py',
+    'joulewise/b6/model_files.py',
+    'joulewise/b6/pack_registration.py',
+    'joulewise/b6/plan_inputs.py',
+    'joulewise/b6/precheck.py',
+    'joulewise/b6/precheck_lane.py',
+    'joulewise/b6/queue.py',
+    'joulewise/b6/registration.py',
+    'joulewise/b6/session_paths.py',
+    'joulewise/b6/sleep_guard.py',
+    'joulewise/b6/smoke.py',
+    'joulewise/b6/survivor_screen.py',
+    'joulewise/battery_float.py',
+    'joulewise/bundle.py',
+    'joulewise/bundle_read.py',
+    'joulewise/calibration_bracketing.py',
+    'joulewise/calibration_custody_worker.py',
+    'joulewise/calibration_dispositions.py',
+    'joulewise/calibration_epoch_continuation.py',
+    'joulewise/calibration_exits.py',
+    'joulewise/calibration_ledger.py',
+    'joulewise/campaign_generator_core.py',
+    'joulewise/campaign_provenance.py',
+    'joulewise/cli.py',
+    'joulewise/clock.py',
+    'joulewise/clock_reference.py',
+    'joulewise/controller.py',
+    'joulewise/cooldown.py',
+    'joulewise/cooldown_anchor.py',
+    'joulewise/corecaptured_loop.py',
+    'joulewise/desk_compress.py',
+    'joulewise/desk_restore.py',
+    'joulewise/detection_floor.py',
+    'joulewise/detection_floor_registry.py',
+    'joulewise/determinism_gate.py',
+    'joulewise/doctor.py',
+    'joulewise/dominance_closeout.py',
+    'joulewise/dwell.py',
+    'joulewise/envelope_gate.py',
+    'joulewise/environment.py',
+    'joulewise/environment_admission.py',
+    'joulewise/external/__init__.py',
+    'joulewise/external/km003c_parse.py',
+    'joulewise/flags/__init__.py',
+    'joulewise/flags/catalog.py',
+    'joulewise/flags/core.py',
+    'joulewise/flags/exclusions.py',
+    'joulewise/flags/schema.py',
+    'joulewise/flags/sink.py',
+    'joulewise/floor_extraction.py',
+    'joulewise/hazards/__init__.py',
+    'joulewise/hazards/arm.py',
+    'joulewise/hazards/base.py',
+    'joulewise/hazards/battery.py',
+    'joulewise/hazards/clock.py',
+    'joulewise/hazards/contention.py',
+    'joulewise/hazards/disk.py',
+    'joulewise/hazards/instrument.py',
+    'joulewise/hazards/monitor.py',
+    'joulewise/hazards/smc.py',
+    'joulewise/hazards/thermal.py',
+    'joulewise/identity_pins.py',
+    'joulewise/idle_admission.py',
+    'joulewise/idle_dependence.py',
+    'joulewise/interfaces.py',
+    'joulewise/kernel_clock.py',
+    'joulewise/kv_size.py',
+    'joulewise/measurement_liveness.py',
+    'joulewise/model_panel.py',
+    'joulewise/network_time_off.py',
+    'joulewise/night_agent_install.py',
+    'joulewise/night_gate.py',
+    'joulewise/night_kinds.py',
+    'joulewise/night_plan_writer.py',
+    'joulewise/output_identity.py',
+    'joulewise/powermetrics_fiducial.py',
+    'joulewise/prewindow.py',
+    'joulewise/provenance.py',
+    'joulewise/publication_privacy.py',
+    'joulewise/quiet_admission.py',
+    'joulewise/quiet_predicate_campaign.py',
+    'joulewise/receipt_oracle.py',
+    'joulewise/reduce.py',
+    'joulewise/report.py',
+    'joulewise/salvage_dangler.py',
+    'joulewise/sampler_teardown.py',
+    'joulewise/schemas.py',
+    'joulewise/session_structure.py',
+    'joulewise/suite.py',
+    'joulewise/t0_rehearsal.py',
+    'joulewise/tolerances.py',
+    'joulewise/uncertainty_evidence.py',
+    'joulewise/v5_qualification.py',
+    'joulewise/validation.py',
+    'joulewise/whole_window.py',
+    'joulewise/window_lineage.py',
+    'joulewise/zero_capture_facts.py',
+)
+ARTIFACTS = _NAMED_ARTIFACTS + tuple(p for p in EXECUTED_CLOSURE if p not in _NAMED_ARTIFACTS)
 
 
 def digest(raw):
@@ -56,6 +252,32 @@ def _local(root, path):
         if target.is_symlink():
             raise ValueError('registration receipt symlink refused')
     return target
+
+
+def _committed_bytes(root, commit, paths):
+    """Bytes of ``commit:path`` for every path in one ``git cat-file --batch``.
+
+    A path absent at the commit maps to None. One process keeps a receipt over
+    the full executed-module closure cheap.
+    """
+    request = ''.join(f'{commit}:{path}\n' for path in paths).encode()
+    try:
+        out = subprocess.run(['git', 'cat-file', '--batch'], cwd=root, input=request,
+                             capture_output=True, check=True).stdout
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise ValueError('registration_receipt commit unreadable') from exc
+    result, offset = {}, 0
+    for path in paths:
+        end = out.index(b'\n', offset)
+        header = out[offset:end].split()
+        offset = end+1
+        if len(header) == 3 and header[1] == b'blob':
+            size = int(header[2])
+            result[path] = out[offset:offset+size]
+            offset += size+1
+        else:
+            result[path] = None
+    return result
 
 
 def validate_receipt(receipt, root):
@@ -92,13 +314,15 @@ def validate_receipt(receipt, root):
     for path, expected in bindings.items():
         if not is_digest(expected):
             raise ValueError(f'registration_receipt invalid digest: {path}')
+    pinned = _committed_bytes(root, commit, list(bindings))
+    for path, expected in bindings.items():
         try:
             raw = _local(root, path).read_bytes()
-            pinned = subprocess.run(['git', 'show', f'{commit}:{path}'], cwd=root,
-                                    capture_output=True, check=True).stdout
-        except (OSError, subprocess.CalledProcessError) as exc:
+        except OSError as exc:
             raise ValueError(f'registration_receipt missing committed artifact: {path}') from exc
-        if digest(raw) != expected or digest(pinned) != expected:
+        if pinned.get(path) is None:
+            raise ValueError(f'registration_receipt missing committed artifact: {path}')
+        if digest(raw) != expected or digest(pinned[path]) != expected:
             raise ValueError(f'registration_receipt digest drift: {path}')
     return receipt
 
