@@ -235,3 +235,23 @@ anything the Air can stand in for.
    asserts that, and that a nested `.cache/huggingface/` path still fails.
 6. The Mac's `$M/.venv` contents (versions beyond the three pins, such as `tokenizers`) are
    not visible off the Mac. A venv lockfile recorded by R0 would let the prequal match it.
+
+## W1 and next-arm extension (RUN_STATE 219)
+
+`scripts/align_v4_w1_prequal.py` (module `joulewise/align/w1_prequal.py`) runs every code path the next
+window executes, off the Mac, with a fake host. It covers:
+- the production arm CLI and its required evidence;
+- the next-arm triage;
+- the fixed-8 calibration stop;
+- the registration receipt against the candidate commit;
+- the R1 -> W1 chain;
+- the KM003C launch through the HAZARD_PACK driver;
+- W1 `window_max_s` sizing;
+- the full WP22 dry run;
+- the native smoke kit's expectations;
+- "an arm route exists end to end for the next measurement" (`configs/align/v4/arm_routes.json`).
+
+Command, check table and current results: `docs/align/v4/W1-SMOKE-opus.md`. **Rule for the magistrate:**
+an R1 arm cites a `--next r1` report and a W1 arm cites a `--next w1` report. Each report must have
+`status: PASS` at the measurement checkout's commit, with `checkout_dirty: false`, in addition to the
+R0-style `prequal.json` above.
