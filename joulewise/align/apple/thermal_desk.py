@@ -815,6 +815,16 @@ def markdown_report(report):
             owned += ' (re-attributed without thermal intervals; holds not excluded)'
         rows.append('| '+m['id']+' | '+owned+' | '+str(m.get('gross_episode_j'))+' | '+
                     str(m.get('gross_latency_s'))+' | '+', '.join(calibration_exclusions(m))+' |')
+    rows.extend(['', 'KM003C whole controller request (diagnostic; distinct from the GPU episode/turn span).',
+                 'DC input excludes adapter AC loss. Missing battery evidence leaves machine totals unavailable.', '',
+                 '| Member | DC input J | Signed battery J | Machine J | Meter status / reasons | Meter flags |',
+                 '|---|---|---|---|---|---|'])
+    for m in report['members']:
+        dc = m.get('dc_input') or {}
+        rows.append('| '+' | '.join(str(v) for v in (m['id'], dc.get('meter_gross_j'),
+            dc.get('battery_gross_j'), dc.get('machine_gross_j'),
+            dc.get('status', 'unavailable') + '; ' + ', '.join(dc.get('reasons', ['meter record not joined'])),
+            ', '.join(dc.get('flags', [])) if dc.get('flags_status') == 'supplied' else 'not supplied'))+' |')
     table = report.get('tool_call_flags') or tool_call_table(report['members'])
     rows.extend(['', '| Member | JSON malformed turns (recorded) | XML refused turns (recorded) | XML malformed turns (excluded) |',
                  '|---|---|---|---|'])

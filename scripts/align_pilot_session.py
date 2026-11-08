@@ -348,6 +348,15 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
     for member in members:
         member['harvest_flags'] = harvest_flags.get(member['run_id'], [])
         member['battery_discharge'] = battery.get(member['run_id'])
+    # Add the existing harvested whole-request DC integral alongside the rails.
+    # This remains a diagnostic: v4's frozen rail fit and checks do not read it.
+    from joulewise.align.apple.meter_desk import read_meter_record, member_meter
+    meter = read_meter_record(session / 'archive/withheld/meter.json') if harvest and result.returncode in (0, 6) else {
+        'record': None, 'reason': 'harvest not run or failed; stored archive may be stale',
+        'path': None, 'sha256': None}
+    for member in members:
+        member['dc_input'] = member_meter(meter['record'], member['run_id'],
+            flags=(harvest_flags.get(None, []) + member['harvest_flags']) if flag_path.is_file() else None)
     comparison = cross_pilot_identity(members, compare_session) if compare_session else None
     checks, deterministic, _legacy_spreads = instrument_checks(members)
     from joulewise.align.apple.pilot_analysis import sampling_checks, residual_analysis, episode_eligible, episode_ineligibility_reasons
@@ -379,6 +388,7 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
              'exclusions_path': str(exclusion_path), 'members_excluded': (exclusions or {}).get('members_excluded', []),
              'cross_pilot_token_identity': comparison,
              'session_harvest_flags': harvest_flags.get(None, []),
+             'meter_record': {k: v for k, v in meter.items() if k != 'record'},
              'harvest_flags_status': 'recorded' if flag_path.is_file() else 'not_recorded',
              **({'extra_checks': extra_report} if extra_checks is not None else {}),
              'status': 'instrument_ok' if all(v is True for v in checks.values()) else 'instrument_incomplete'}
@@ -429,6 +439,8 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
                 'episode_scope_alternative_ineligible_reasons',
                 'raw_within_cell_energy_sd', 'residual_analysis'):
         print(key + ': ' + json.dumps(pilot[key], sort_keys=True, allow_nan=False))
+    print('whole_request_dc_input: ' + json.dumps({m['run_id']: m['dc_input'] for m in pilot['members']},
+                                               sort_keys=True, allow_nan=False))
     print('repeat_energy_spread: ' + json.dumps(spreads, sort_keys=True))
     print('harvest_exit: ' + str(result.returncode))
     print('harvest_status: ' + status['harvest_status'])

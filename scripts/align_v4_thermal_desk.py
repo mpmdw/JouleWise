@@ -4,6 +4,8 @@
 No discovery, calibration refit, measurement launch, or v3 desk alteration.
 Manifest members carry bundle, window, identical_work_group and contrast tags.
 Optional os_journal/temperature_journal name explicit JSONL evidence files.
+Optional manifest meter_record names the harvested withheld/meter.json;
+meter_run_id maps a member to that record when its bundle ID differs.
 """
 import argparse
 import json
@@ -26,6 +28,9 @@ def main(argv=None):
     args = parser.parse_args(argv)
     manifest = json.loads(args.manifest.read_text())
     root = args.manifest.resolve().parent
+    from joulewise.align.apple.meter_desk import read_meter_record, member_meter
+    meter = read_meter_record(root/manifest['meter_record']) if 'meter_record' in manifest else {
+        'record': None, 'reason': 'manifest supplies no meter_record', 'path': None, 'sha256': None}
     members = []
     def journal(name):
         return [json.loads(line) for line in (root/name).read_text().splitlines() if line.strip()]
@@ -46,6 +51,7 @@ def main(argv=None):
                       'intervals': [], 'tokens': None}
         # Scientific measurements and verdicts cannot be overridden by roster tags.
         record.update({k: item[k] for k in ('window', 'identical_work_group', 'compare_reference_id', 'template', 'arm') if k in item})
+        record['dc_input'] = member_meter(meter['record'], item.get('meter_run_id', record['id']))
         members.append(record)
     by_id = {m['id']: m for m in members}
     for item, record in zip(manifest['members'], members):
@@ -64,6 +70,7 @@ def main(argv=None):
     result = window_report(members, cross_windows=inputs.get('cross_windows'),
                            sensitivity=inputs.get('sensitivity'), monitoring=inputs.get('monitoring'))
     result['K_session_read'] = compared or {'status': 'inconclusive', 'reason': 'no --compare-session inputs'}
+    result['meter_record'] = {k: v for k, v in meter.items() if k != 'record'}
     args.output.mkdir(parents=True, exist_ok=False)
     (args.output/'PILOT.json').write_text(json.dumps(result, indent=2, sort_keys=True, allow_nan=False)+'\n')
     (args.output/'THERMAL.md').write_text(markdown_report(result))
