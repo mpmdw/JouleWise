@@ -348,3 +348,135 @@ other outcome-bearing content was seen by the tracer, the assembler or the lead.
 
 > The release event has not happened. The lead has seen no Block 5 energy or outcome value. Ed delegated
 > preregistration rulings to the lead.
+
+---
+
+## Signing statement for DLE-4
+
+DLE-4 carries the following statement verbatim, made by the signer at signing:
+
+> The release event has not happened. The lead has seen no Block 5 energy or outcome value. Ed delegated
+> preregistration rulings to the lead.
+
+Signer: the block-5 lead (Opus), 2026-11-07. The cause was found blind. The lead ran structure-only probes of the r3
+dry run's floor binding: key names of campaign-log rows, row and id counts, and status and reason enum words. No
+energy value, interval, outcome word of a real contrast or other outcome-bearing content was seen by the lead or by
+the fixing seat, which worked on synthetic data only.
+
+---
+
+## DLE-4. Analysis version r4: the D5 cause, an L9 campaign-log member parse
+
+- **Status.** ADOPTED, 2026-11-07, on `lane/2026-11-07-b5-analysis-r4`. Supersedes the analysis commit
+  `b5/analysis-r3` (`68e47e1f2`) for the block-5 dry run and release. The new commit is tagged `b5/analysis-r4`
+  after merge. As under DLE-3, the cited rebind of the analysis pin is the tag and the re-run, not a hash in the tree.
+- **Source.** The lead's structure-only probes of the r3 dry run, which follow up the D5 section of the release-hold
+  trace (`docs/run_reports/2026-11-07-b5-release-hold-trace.md`). What they found:
+  - **The four cells.** All four GAMMA floor cells, `d117-qwen3-{1p7b,8b}-{decode,prefill-p2048}-floor-v5`, are left
+    out of `bound_cell_ids`.
+  - **The problems.** Eight global binding problems do it, one per cell and component:
+    `component_evidence_root_disagreement: cells[i].provenance.{absolute,comparative}.campaign_log does not bind
+    every calibration bundle exactly once`.
+  - **What passes.** The order-manifest checks (member order and the A/B/B/A blocks) and the sha256 pins all pass.
+  - **The log.** Each campaign log has 261 rows. Grouped by key set:
+    - 9 campaign verdict rows;
+    - 144 provenance attestation rows;
+    - 104-105 executed-member rows (`status` ok);
+    - 2-3 refused-member rows (`status` failed, with run ids outside the cells);
+    - one campaign-level whole-window evaluation row, whose `bundle_ids` lists the campaign's bundles.
+  - **The count.** The binder's parse finds 107 distinct ids and 211-212 in total. Every cell member has count 2:
+    one executed-member row and the evaluation row.
+
+### Changes that change L9 output (not result-equal to r3)
+
+1. **D5, the campaign-log member parse (plan §3.1 step 9, §7.2 step 1).**
+   - **Original rule.** PLAN §3.1 step 9: the claim gate runs "one `--evidence-root` per floor pack". The step that
+     reads an output authenticates it (§3.1, lines 155-156). PLAN §7.2 step 1 makes a floor that fails that
+     authentication `floor_artifact_invalid` (`not_estimable`). PLAN §3.1 "Refusals": a tooling refusal goes to R3.
+   - **Defect: L9 is the wrong side.** The floor binder reads the executed member order of each component's
+     `campaign_log.jsonl` with `_order_member_ids` (`joulewise/analysis_engine/inputs.py`). For every row, that
+     function counted the `bundle_ids` list, or else `bundle_id` or `run_id`. It did not tell the runner's
+     per-member rows from campaign-level records.
+     - The runner (`scripts/run_campaign.py`) writes per-member rows with `log_row`, which never sets `record_type`.
+     - It writes its in-runner whole-window evaluation with `record_type`
+       `idle_admission_whole_window_verdict` and `bundle_ids` = the campaign's members.
+     - So that row named every calibration bundle a second time, and the "exactly once" check refused every cell
+       of the artifact.
+     - The registered input is not at fault. The mint's component authentication reads the same log bytes
+       (`scripts/mint_floor_artifact.py` `_authenticate_component`, called by the generalized mint) and requires the
+       log to hold exactly one evaluation basis, which is the one this row carries. The mint therefore accepted what
+       the binder refused: two readers in the analysis chain (the step-5 mint and the step-9 binder) disagreed on
+       the same registered bytes. The floor members did not fail
+       registered authentication, so this is an L9 fix, not an R3 producer cure.
+   - **Why the tests missed it.** The synthetic S10 chain's floors bind, so its floor logs carry no campaign-level
+     row that names the members. The binder's unit fixtures hold only member rows. So no test covered a log with
+     this evaluation row.
+   - **Change.** In the campaign-log branch, `_order_member_ids` now skips every row that has a `record_type`.
+     - **Why `record_type` and not a structural rule.** In the writer's schema, every campaign-level record carries
+       a `record_type`: the evaluation row, `campaign_verdict`, `campaign_stop`, `shakedown_gate`, the provenance
+       attestation and `campaign_occurrence_supersession`. No member row carries one. So the field decides it
+       exactly.
+       - A structural rule (rows with `run_id`, `run_index` and `executed_order`) would also drop member rows the
+         runner writes without an order entry (`config_error` rows, `block_order_warning` rows).
+       - It would also drop the synthetic S10 chain's member rows, which carry no `run_index`.
+     - **What is unchanged.**
+       - Failed, refused, timed-out, blocked and drained member rows still count as executed attempts. They are
+         `log_row` rows.
+       - The "exactly once", order and contiguous A/B/B/A checks are as strict as before.
+       - The order-manifest branch is unchanged.
+     - **Commits and tests.** Commit `cf42f2a98`, with failing-first tests in commit `cb2498c2a`:
+       - `tests/test_analysis_engine_campaign_log_members.py`, on a synthetic log of the probed shape. It binds after
+         the fix. Before the fix it refused with the probed problem words, one per component.
+         - A duplicate executed-member row still refuses.
+         - A failed attempt on a cell member still counts.
+       - The CLI binding fixture in `tests/test_analysis_integration.py`, whose evidence-root logs gain the
+         campaign-level rows. With production identity, every cell binds after the fix; before it, none did.
+   - **Effect on estimands.** None. No estimand, estimator, decision rule or threshold changes.
+     - The binder now reads the registered campaign evidence as the runner wrote it.
+     - On the block-5 dry run, the GAMMA floor cells can bind. A GAMMA contrast's floor then resolves through the
+       registered §7.2 path, instead of refusing with `floor_artifact_invalid` (after DLE-3's D5b label;
+       `floor_transport_inapplicable` before it).
+     - Which outcome follows is not known to the lead and is not part of this ruling.
+   - **Consumer check.** `_order_member_ids` has one caller, `_campaign_order_binding_problems`, inside
+     `bind_floor_artifact_evidence`. Every floor binding goes through it: the claim gate (`analyze-claims`), the
+     block-5 claim replay in `joulewise/paper_custody.py` and the dry run's step 9. The mint's own
+     `bind_floor_artifact_evidence` (`scripts/mint_floor_artifact.py`) is a separate function: it checks the log's
+     sha256 and reads no member order from it.
+     - A log whose campaign-level rows carry no `bundle_ids`, `bundle_id` or `run_id` parses exactly as before.
+     - A log in the probed shape used to refuse every floor cell and now binds. No tracked claim-verdicts record
+       carries a refused floor resolution (DLE-3's consumer check), so no published or frozen result changes.
+     - The one real-data output it changes is the unreleased r3 dry run's GAMMA claim verdicts, which the r4 dry
+       run replaces.
+   - **Independence of the recompute.** `scripts/independent_recompute_b5.py` (stdlib only, no `joulewise` import)
+     reads no campaign log and no order manifest. It takes the armwise maximum of the per-model floor cells directly,
+     with no binding admission. So it shares neither this parse nor its defect.
+
+### Observability note (no change)
+
+`component_evidence_root_disagreement` is not one of the ten surfaced floor binding codes
+(`_FLOOR_BINDING_REASON_CODES`, `joulewise/analysis_engine/inputs.py`). So the engine wrapper's refusal for D5 was
+the bare `artifact_schema_invalid` with no binding code beside it, and the cause had to be found by a probe that
+replays the binder. The vocabulary is left unchanged here: adding a code changes the claim artifact's public reason
+set, which is a separate ruling. This note records the gap.
+
+### Rebind and release condition
+
+- **Cited rebinds under this entry.** `joulewise/analysis_engine/inputs.py` has no hash pin in the tree. The hazard
+  refusal census lists it as `not_scanned`, class `analysis` (`configs/gates/hazard_refusals.json`); that is
+  unchanged. Its pin is the
+  analysis commit (the tag above). No frozen file is touched.
+- **The D5 release condition of DLE-3 is satisfied.**
+  - **The cause is answered** by the lead's structure-only probe, above.
+  - **Its fix has landed** as an L9 fix with a cited rebind (this entry), once merged and tagged.
+  - **What r4 still needs before DLE-1's stages run against it.** The block-5 dry run re-runs at `b5/analysis-r4`.
+    The comparator's D5 rows (`floor_gate_j`, and the floor and outcome leaves of the GAMMA contrasts) stay not
+    waivable. If they still disagree on the r4 dry run, that is a new hold, traced structure only.
+  - **Checks first reached on real data.** On the r3 dry run the "exactly once" check broke out of the campaign-log
+    loop first, so the log's own member-order and contiguous A/B/B/A checks have never run on these logs. They run
+    at r4. The member rows carry their order-manifest `run_index`, and the order manifest passes the same checks, so
+    they are expected to pass, but this is not yet shown. A refusal there would be a new D5 finding, not covered by
+    this entry.
+  - The r3 dry run is not released.
+
+> The release event has not happened. The lead has seen no Block 5 energy or outcome value. Ed delegated
+> preregistration rulings to the lead.
