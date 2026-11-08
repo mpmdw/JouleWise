@@ -35,7 +35,8 @@ disclosure, whatever the rows' numeric agreement). Any other result holds the re
 exemption, the LEAN-COVERAGE-AUDIT gap) and structure_flags; like the comparator's own exit, these counts do not
 gate, and a nonzero count under agree is expected, not a defect.
 
-Exit codes: 0 agree; 1 hold (the comparator found a disagreement, or an undetermined within-bar limit form); 2 hold on a refusal (custody, binding,
+Exit codes (precedence 2 > 1 > 0): 0 agree; 1 hold (the comparator, itself exiting 0 or 1, found a disagreement or an
+undetermined within-bar limit form); 2 hold on a refusal (custody, binding,
 recompute or comparator). The verdict (stdout, and verdict.json in --restricted-out) carries structure only;
 values and differences stay in --restricted-out (recompute.json, comparison.json, the programs' streams).
 """
@@ -404,6 +405,11 @@ def stage_compare(custody, entries, index_path, restricted, python):
         # The comparator always writes the list (compare_b5_recompute.run); absent or odd means unreadable.
         return status, "comparison_output_unreadable", False
     status["limit_undetermined"] = {"count": len(undetermined), "rows": sorted(undetermined)}
+    if code not in (0, 1):
+        # Precedence is refused (exit 2) > hold (exit 1) > agree (exit 0): a comparator that refused (its exit 2, e.g.
+        # unmapped step-11 leaves) or failed is a refusal whatever summary it wrote, never a family disagreement or an
+        # undetermined-form hold.
+        return status, "comparator_refused", False
     disagreement = any(row["fail"] for row in families.values())
     if undetermined and not disagreement and not status["step11"]["unmapped"] and not status["step11"]["nonfinite"] \
             and not status["step11"]["absent_sources"]:

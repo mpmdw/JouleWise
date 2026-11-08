@@ -208,37 +208,46 @@ def equality_case(printed=True, widths=(.5,) * 5, bound=None, diagnostic_edit=No
 class DeltaRuleTests(unittest.TestCase):
     def test_strict_equality_does_not_accept_an_incorrect_limit_label(self):
         # Actual binary64 producer operands, no rounding perturbation: comparative values all 1, widths all .5,
-        # n=5, guard=1.5 => linear == guard * point. The engine's strict > says not limited (R704-D3).
+        # n=5, guard=1.5 => linear == guard * point. The engine's strict > says not limited. Inside the bar the
+        # printed (incorrect) label is held, not decided (delta-2 S1-1): an undetermined row for each printed form,
+        # none AGREE-and-silent.
         compared, own, estimate = equality_case(printed=True)
         self.assertFalse(detection_floor.admissible_set_uncertainty_dominates_point_floor(estimate))
         self.assertEqual(own["linear_deviation_bound_j"], own["guard"] * own["point_unguarded_floor_j"])
-        bad = disagreeing(compared.rows)
-        # The printed cell and form, the presence of floor_limit and its words are each wrong.
-        self.assertTrue(rows_with(bad, "claim_evaluation/floor_limit/presence"), bad)
-        self.assertTrue(any(row["family"] == "routing_id" and "point_floor_diagnostics" in row["key"] for row in bad))
-        self.assertEqual(undetermined(compared), [])
+        rows = undetermined(compared)
+        self.assertTrue(rows)
+        self.assertEqual(sorted(row["key"] for row in rows), cmp.limit_undetermined(compared.rows))
+        self.assertTrue(all(row["l9"] == "present" and row["recompute"] == "absent" for row in rows))
 
     def test_exact_equality_with_no_label_printed_is_undetermined_not_silently_decided(self):
-        # Nothing printed to be bit-identical to: the strict relation is not trusted at the bar. The row says so.
+        # Nothing printed: the same rows, l9 absent.
         compared, _, _ = equality_case(printed=False)
         self.assertEqual(disagreeing(compared.rows), [])
         rows = undetermined(compared)
         self.assertTrue(rows)
         self.assertTrue(all(row["recompute"] in ("present", "absent") and row["l9"] == "absent" for row in rows))
 
-    def test_a_bound_just_above_the_guarded_floor_with_identical_operands_is_decided_limited(self):
-        above = lambda own: own["guard"] * own["point_unguarded_floor_j"] * (1 + 1e-9)
-        compared, own, _ = equality_case(printed=True, bound=above)
-        self.assertGreater(own["linear_deviation_bound_j"], own["guard"] * own["point_unguarded_floor_j"])
-        self.assertEqual(disagreeing(compared.rows), [])
-        self.assertEqual(undetermined(compared), [])
-        # And the same bound with the diagnostic withheld is not decided: the row is recorded, AGREE.
-        compared, _, _ = equality_case(printed=False, bound=above)
-        self.assertEqual(disagreeing(compared.rows), [])
-        self.assertTrue(undetermined(compared))
+    def test_inside_the_bar_is_undetermined_whatever_the_bound_or_the_print(self):
+        # Delta-2 S1-1: just above, exactly at and just under the guarded floor, printed with identical operands or
+        # not printed, every form is an undetermined row. No bit-identity exception exists for the unprinted bound.
+        for name, bound in (("above", lambda own: own["guard"] * own["point_unguarded_floor_j"] * (1 + 1e-9)),
+                            ("at", None),
+                            ("under", lambda own: own["guard"] * own["point_unguarded_floor_j"] * (1 - 1e-9))):
+            for printed in (True, False):
+                with self.subTest(bound=name, printed=printed):
+                    compared, _, _ = equality_case(printed=printed, bound=bound)
+                    self.assertTrue(undetermined(compared))
+                    self.assertEqual(disagreeing([r for r in compared.rows if "limit_decision" in r["key"]]), [])
 
-    def test_a_bound_just_under_the_guarded_floor_with_identical_operands_fails_the_label(self):
-        under = lambda own: own["guard"] * own["point_unguarded_floor_j"] * (1 - 1e-9)
+    def test_outside_the_bar_the_strict_relation_still_decides(self):
+        # 1% above the guarded floor: limited, printed: AGREE, no undetermined row; the same bound with nothing
+        # printed is a plain disagreement (a missing diagnostic and presence). 1% under: a printed label fails.
+        above = lambda own: own["guard"] * own["point_unguarded_floor_j"] * 1.01
+        under = lambda own: own["guard"] * own["point_unguarded_floor_j"] * .99
+        compared, _, _ = equality_case(printed=True, bound=above)
+        self.assertEqual((undetermined(compared), disagreeing(compared.rows)), ([], []))
+        compared, _, _ = equality_case(printed=False, bound=above)
+        self.assertTrue(disagreeing(compared.rows))
         compared, _, _ = equality_case(printed=True, bound=under)
         self.assertTrue(disagreeing(compared.rows))
         self.assertEqual(undetermined(compared), [])

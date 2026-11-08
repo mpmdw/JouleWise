@@ -292,19 +292,22 @@ class FloorLimitRuleTests(GateCase):
             floor["widths_j"] = [0.0] * 9
         self.exit_nonzero()
 
-    def test_a_bound_within_the_bar_is_decided_only_on_bit_identical_operands(self):
-        # R704-D3 (RC-CMP-11 F1): 1e-9 relative over the guarded point floor is inside the floor_j bar. The printed
-        # diagnostics carry the recompute's point floor, guard and guarded floor exactly, so the strict > decides:
-        # limited, as printed (AGREE, no undetermined row).
+    def test_a_bound_within_the_bar_is_always_undetermined_even_with_identical_printed_operands(self):
+        # Delta-2 S1-1 (supersedes the bit-identity exception of R704-D3): L9 never prints the linear bound, so
+        # inside the bar no decision operand set can be shown identical. Printed point floor, guard and guarded
+        # floor equal to the recompute's exactly change nothing: every form is a within_bar_undetermined row (AGREE
+        # numerically), the comparison lists it and exits 1.
         verdict, fill = with_floor_limit(self, dominated=False)
         for key, floor in self.ours["floors"].items():
             if "/decode/" in key:  # the prefill contrast prints nothing and stays away from the bar
                 floor["linear_deviation_bound_j"] = POINT * (1 + 1e-9)
         result = self.shipped()
         self.assertEqual(self.fails(result), {})
-        self.assertFalse([r for r in result["comparisons"] if r.get("reason") == "within_bar_undetermined"])
-        self.assertEqual(result["limit_undetermined"], [])
-        self.assertEqual(self.exit_code(CODED)[0], 0)
+        rows = [r for r in result["comparisons"] if r.get("reason") == "within_bar_undetermined"]
+        self.assertEqual(len(rows), 4 + 4 + 2 * 2)
+        self.assertTrue(all(r["l9"] == "present" and r["verdict"] == "AGREE" for r in rows))
+        self.assertEqual(sorted(r["key"] for r in rows), result["limit_undetermined"])
+        self.assertEqual(self.exit_code(CODED)[0], 1)
 
     def test_a_bound_within_the_bar_with_no_label_printed_is_undetermined_and_recorded(self):
         # Nothing printed to be bit-identical to: neither presence is silently accepted; every undetermined form is a
@@ -330,14 +333,16 @@ class FloorLimitRuleTests(GateCase):
         self.assertEqual(sorted(r["key"] for r in rows), [k for k in result["limit_undetermined"] if k.startswith(DECODE)])
         self.assertEqual(self.exit_code(CODED)[0], 1)
 
-    def test_a_bound_exactly_at_the_guarded_floor_does_not_pass_a_printed_label(self):
-        # The engine's relation is strict >: equality is not limited, so the printed label fails (R704-D3).
+    def test_a_bound_exactly_at_the_guarded_floor_never_exits_zero_with_a_printed_label(self):
+        # The engine's relation is strict > (equality is not limited), but inside the bar the label is held, not
+        # decided: the incorrect printed label cannot pass (exit 1, rows listed).
         with_floor_limit(self, dominated=False)
-        for floor in self.ours["floors"].values():
-            floor["linear_deviation_bound_j"] = floor["guard"] * floor["point_unguarded_floor_j"]
+        for key, floor in self.ours["floors"].items():
+            if "/decode/" in key:
+                floor["linear_deviation_bound_j"] = floor["guard"] * floor["point_unguarded_floor_j"]
         result = self.shipped()
-        self.assertIn("outcome_word", self.fails(result))
-        self.assertNotEqual(self.exit_code(CODED)[0], 0)
+        self.assertTrue([k for k in result["limit_undetermined"] if k.startswith(DECODE)])
+        self.assertEqual(self.exit_code(CODED)[0], 1)
 
     def test_the_guard_enters_the_comparison(self):
         # A bound above the point floor but under guard x point is not dominated (guard 1.5 here).

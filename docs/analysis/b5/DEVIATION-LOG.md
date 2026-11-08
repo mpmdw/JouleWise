@@ -577,18 +577,24 @@ Decided from the code and the registration (structure only). No bar is widened a
   `routing_id` row, so a diagnostic printed for a form the rule does not limit, or dropped for one it does, is DISAGREE;
   the presence of `claim_evaluation/floor_limit` is an `outcome_word` row; and its class and source words are compared
   against the engine's words only where the rule says limited (missing otherwise: DISAGREE). Inside the
-  `floor_j` bar of its guarded point floor (R704-D3, the lead's ruling after Sol's delta review; no broader exemption
-  than RC-CMP-11) the recompute's number is not trusted to decide the engine's strict `>`, so the existing RC-CMP-11 F1
-  treatment applies through `Comparison.atom` and `Comparison.word`: where the recompute's decision operands are
-  bit-identical to the printed ones (the printed diagnostic carries the recompute's point floor, guard and guarded
-  floor exactly; L9 prints no bound, so its bound is taken as the recompute's) the strict `>` decides, so a bound
-  exactly at the guarded floor is not limited and a printed limited label fails; otherwise (nothing printed, or other
-  numbers) the form is undetermined and a `within_bar_undetermined` row (the `limit_decision` rows, one per cell and
+  `floor_j` bar of its guarded point floor (R704-D3, the lead's ruling after Sol's delta review, as narrowed after the
+  delta-2 reviews S1-1) the form is always undetermined: L9 never prints the engine's linear bound and the engine computes
+  it with a different floating-point expression than the recompute (the absolute form's other-width sum), so no decision
+  operand set can be shown bit-identical and the RC-CMP-11 F1 exception is not used for limit decisions. Through
+  `Comparison.atom` and `Comparison.word` a `within_bar_undetermined` row (the `limit_decision` rows, one per cell and
   form at the floor, the claim evaluation and each resolution) records both labels, AGREE only if the printed numbers
-  agree within their bar. The hold is automatic: the comparison lists the keys of every such row
-  (`limit_undetermined`) and exits 1, and `scripts/release_b5.py` reports their count and keys (structure only, no
-  value) and exits 1 with reason `within_bar_undetermined`, whatever the rows' numeric agreement; exit 0 requires
-  zero such rows, and the lead discloses each one. Neither label is ever accepted silently. A form that is not `computed` (below minimum, or `not_computed` after `make_floors` retained its
+  agree within their bar. Outside the bar the strict `>` decides. The hold is automatic: the comparison lists the keys
+  of every such row (`limit_undetermined`) and exits 1, and `scripts/release_b5.py` reports their count and keys
+  (structure only, no value) and exits 1 with reason `within_bar_undetermined`, whatever the rows' numeric agreement;
+  exit 0 requires zero such rows. Precedence is refused (exit 2) > hold (exit 1) > agree (exit 0) in both: a
+  comparator that exits 2 (for example, a disagreeing fill copy is unmapped) is a release refusal and is never
+  reported as `within_bar_undetermined` or as a disagreement hold; its family counts are still reported. Neither label
+  is ever accepted silently.
+  **Disclosed consequence.** A value genuinely inside the bar holds the release until the lead discloses it and Ed
+  decides: a correct non-limited form at or just under the threshold prints no diagnostic and is undetermined even
+  when every number agrees, and rerunning the same immutable inputs cannot clear it (an equality can also be
+  structural, for example a maximum with zero width and other members with positive widths). That is the intended
+  behaviour, not a defect, and there is no liveness guarantee. A form that is not `computed` (below minimum, or `not_computed` after `make_floors` retained its
   terms because the drift allowance is unrecorded) has no limit, and a `computed` record without its four terms
   (`widths_j`, `linear_deviation_bound_j`, `guard`, `point_unguarded_floor_j`) refuses
   `recompute_floor_terms_missing` instead of meaning "no limit". The label stays a label beside the floor (no outcome reads it), but a wrong one no longer
@@ -615,6 +621,15 @@ Decided from the code and the registration (structure only). No bar is widened a
   `_floor_row`: `all_usable and limited`); a usable limited resolution keeps its own diagnostic when its partner
   refuses. Usability is read from the independent recompute (a finite floor gate for the arm's registered cell in
   `floor_cells`), not from a printed status, so a printed refusal does not suppress a check the recompute says is due.
+  **Inherited limit (delta-2 S1-2, S2-1).** The independent recompute has no transport model and its output exposes
+  no transported or exact status for a registered cell, so usability cannot be derived from it beyond this proxy
+  (the source cell's floor arithmetic is available). A consumer the engine refuses for transport (for example,
+  consumer power outside the calibrated envelope) while its source has a finite gate is therefore still expected to
+  carry the metadata the engine correctly withholds; the rows disagree, so the proxy fails closed (a hold, never an
+  agreement), and the numeric floor rows (a null against a finite floor) already hold such a refusal. The registered
+  Block-5 route is `exact_stack_only`, which the general transport-stress test does not apply to; the proxy is not
+  claimed equivalent to the engine's usability. A printed refusal is not trusted to suppress a check. Extending the
+  recompute is out of scope (it stays byte-identical).
 - **Pruned.** The flat-shape rules and the `FLOOR_DIAGNOSTICS` exemption are deleted: a diagnostic printed directly
   under `point_floor_diagnostics` now refuses (`test_input_gate.py`
   `test_numbers_under_floor_diagnostics_refuse_sol` updated to say so).
@@ -636,7 +651,8 @@ copy that differs from the verdict is not coverage.
 `tests/independent_recompute/test_sol_delta_review_704.py` (Sol's delta witnesses, now ordinary tests, with the added
 cases for R704-D1, D2 and D3), the within-bar tests of `test_floor_limit.py` and the hold tests of
 `test_release_b5.py` (one undetermined row exits 1 with the reason and the row keys; none leaves exit 0) cover the
-three dispositions.
+three dispositions. The delta-2 witnesses (`test_sol_delta2_review_704_sol1.py`, `_sol2.py`) are ordinary tests: the unprinted
+bound and the refusal precedence are fixed, and the transport-usability witnesses pin the disclosed proxy limit as fail-closed.
 
 ### Release condition
 

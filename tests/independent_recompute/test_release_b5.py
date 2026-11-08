@@ -181,11 +181,26 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual(argv[argv.index("--workers") + 1], "3")
 
     def test_disagreement_holds_with_family_counts_only(self):
+        # A family disagreement the comparator reports with its own exit 1 is a hold (exit 1).
         ours = copy.deepcopy(self.ours)
-        cid = tc.DECODE
-        ours["contrasts"][cid]["dbar_j"] += 1.0
+        ours["members"]["ALPHA"]["run-a"]["E_j"]["decode"] += 1.0
         verdict, code, _ = self.release(ours=ours)
         self.assertEqual((code, verdict["verdict"], verdict["reason"]), (1, "hold", "comparator_disagreement"))
+        self.assertEqual(verdict["stages"]["comparator"]["exit"], 1)
+        families = verdict["stages"]["comparator"]["families"]
+        self.assertEqual(families["run_phase_energy_j"]["verdict"], "hold")
+        self.assertGreater(families["run_phase_energy_j"]["fail"], 0)
+        self.assertEqual(families["contrast_j"]["verdict"], "agree")
+
+    def test_a_comparator_refusal_outranks_a_family_disagreement(self):
+        # Precedence is refused (2) > hold (1) > agree (0): a contrast estimate that disagrees is also a fill copy
+        # that is not coverage, so the comparator refuses (exit 2) and the release is a refusal, never a hold. The
+        # family counts are still reported.
+        ours = copy.deepcopy(self.ours)
+        ours["contrasts"][tc.DECODE]["dbar_j"] += 1.0
+        verdict, code, _ = self.release(ours=ours)
+        self.assertEqual((code, verdict["verdict"], verdict["reason"]), (2, "hold", "comparator_refused"))
+        self.assertEqual(verdict["stages"]["comparator"]["exit"], 2)
         families = verdict["stages"]["comparator"]["families"]
         self.assertEqual(families["contrast_j"]["verdict"], "hold")
         self.assertGreater(families["contrast_j"]["fail"], 0)
@@ -215,6 +230,15 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual(listed["count"], 4 + 4 + 4)
         self.assertTrue(all(tc.DECODE in key and "/limit_decision/" in key for key in listed["rows"]))
         self.assertEqual(comparator["exit"], 1)
+
+    def test_a_comparator_refusal_is_never_reported_as_an_undetermined_hold(self):
+        # Undetermined rows and a refusal together (a disagreeing contrast copy is unmapped, exit 2): the refusal wins.
+        ours = copy.deepcopy(self.ours)
+        self.within_bar(ours)
+        ours["contrasts"][tc.DECODE]["dbar_j"] += 1.0
+        verdict, code, _ = self.release(ours=ours)
+        self.assertEqual((code, verdict["verdict"], verdict["reason"]), (2, "hold", "comparator_refused"))
+        self.assertEqual(verdict["stages"]["comparator"]["exit"], 2)
 
     def test_no_undetermined_row_means_the_release_is_unchanged(self):
         # Away from the bar the rule decides: limited forms with no label printed are a plain disagreement, not a hold

@@ -86,9 +86,10 @@ Rules (RC-CMP-1 A1-A4):
 - DLE-5 (attribution-floor metadata): the D-078 rule is re-derived from the recompute's own computed floor terms
   (limited_forms; a computed record without them refuses recompute_floor_terms_missing). The aggregate metadata is
   expected only when every arm's floor is usable (the engine's conditional publication), a usable limited arm keeps its
-  own diagnostic. Inside the floor_j bar the engine's strict > decides only on operands bit-identical to the printed
-  diagnostic's (RC-CMP-11 F1); otherwise a within_bar_undetermined row records the form, listed in the output's limit_undetermined (keys
-  only) and holding the comparison (exit 1) and so the release. The fill's copy of the verdict's
+  own diagnostic. Outside the floor_j bar the engine's strict > decides; inside it every form is undetermined (L9 prints no
+  bound, so no operand set is bit-identical: delta-2 S1-1) and a within_bar_undetermined row records it, listed in the
+  output's limit_undetermined (keys only) and holding the comparison (exit 1; a refusal, exit 2, outranks it) and so the
+  release. The fill's copy of the verdict's
   attribution-floor metadata, derivation-exempt words and flags included, is equal leaf by leaf in both directions
   (floor_limit_copy_defects);
 - stdout carries per-family pass/fail counts and structure codes only; values and
@@ -2219,13 +2220,14 @@ def limited_forms(c, ours, contrast, registry, key="", allowed=None, printed=Non
     computed form into not_computed when the whole-window drift allowance is unrecorded, after the terms are
     retained) has no limit. A computed record without its terms refuses (recompute_floor_terms_missing).
 
-    Outside the floor_j bar of the guarded point floor the strict relation decides. Inside it (R704-D3, RC-CMP-11 F1)
-    the form is decided by the engine's strict > only where the recompute's decision operands are bit-identical to the
-    printed ones: printed, the cell's point diagnostic (printed: {cell: {form: diagnostic}}) carries the recompute's
-    point floor, guard and guarded floor exactly (L9 prints no bound; its side of the bound is taken as the
-    recompute's). Otherwise (no such diagnostic, or other numbers) the form is None, undetermined, and with decision
-    (the row scope) Comparison.word records a within_bar_undetermined row for it, AGREE only if the printed numbers
-    agree within their bar. Without printed no row is made."""
+    Outside the floor_j bar of the guarded point floor the strict relation decides. Inside it the form is always
+    undetermined (None; R704-D3 and Sol delta-2 S1-1): the engine's bound is not printed by L9 and is computed by a
+    different floating-point expression than the recompute's (the absolute form sums the other widths differently),
+    so no decision operand can be shown bit-identical and the RC-CMP-11 F1 exception has nothing to stand on. With
+    decision (the row scope), Comparison.word records a within_bar_undetermined row for it (printed: {cell: {form:
+    diagnostic}}, whose point floor, guard and guarded floor are the printed numbers that must agree within their
+    bar for the row to be AGREE); the comparison and the release check hold on every such row. Without printed no row
+    is made."""
     floors = ours.get("floors") if isinstance(ours.get("floors"), dict) else {}
     result = {}
     for cell_id in (contrast or {}).get("floor_cells", ()):
@@ -2246,22 +2248,16 @@ def limited_forms(c, ours, contrast, registry, key="", allowed=None, printed=Non
                 if linear > gate:
                     result.setdefault(cell_id, {})[form] = True
                 continue
-            diagnostic = get(printed, cell_id, form) if printed is not None else None
-            operands = tuple(get(diagnostic, name) for name in ("unguarded_floor_j", "guard_factor", "guarded_floor_j"))
-            identical = all(finite(v) for v in operands) and operands == (point, guard, gate)
-            test = lambda number, threshold: number > threshold
-            atom = c.atom("limited", "floor_j", where, linear, linear, gate, test,
-                          l9_threshold=operands[2] if finite(operands[2]) else gate)
-            if not identical:
-                # Not bit-identical (or nothing printed): the strict relation cannot be trusted at the bar.
+            result.setdefault(cell_id, {})[form] = None
+            if decision is not None:
+                diagnostic = get(printed, cell_id, form)
+                operands = tuple(get(diagnostic, name) for name in ("unguarded_floor_j", "guard_factor", "guarded_floor_j"))
+                # The strict relation on the recompute's own terms, kept as the row's recompute word; the atom is open
+                # by construction (we are inside the bar), and agrees when nothing is printed or the printed numbers do.
+                atom = c.atom("limited", "floor_j", where, linear, linear, gate, lambda number, threshold: number > threshold)
                 atom["within"] = True
                 atom["agree"] = diagnostic is None or all(
                     finite(v) and abs(v - w) <= c.bar("floor_j", where, w) for v, w in zip(operands, (point, guard, gate)))
-            if atom["within"]:
-                result.setdefault(cell_id, {})[form] = None
-            elif atom["truth"]:
-                result.setdefault(cell_id, {})[form] = True
-            if decision is not None:
                 c.word("outcome_word", f"{decision}/{cell_id}/{form}", "present" if isinstance(diagnostic, dict) else "absent",
                        "present" if atom["truth"] else "absent", [atom], lambda t: "present" if t["limited"] else "absent")
     return result
