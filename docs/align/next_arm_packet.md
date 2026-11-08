@@ -38,7 +38,7 @@ and part of the executed closure.
 
 The arm itself computes `series_powermode`, `external_volume`, `charging_battery` and
 `meter_reader_live` (a short live KM003C probe) from current hardware; the packet cannot assert
-them. The complete 15-entry source map (14 gating; `meter_coverage` is recorded, non-gating) is
+them. The complete 16-entry source map (15 gating; `meter_coverage` is recorded, non-gating) is
 retained in `entry_sources`, and the consumer computes `calibration_stop` from the authenticated
 counts. `prepared_at`, the live meter check and the battery evidence are never lead-entered.
 Expiry is mandatory: the builder sets `valid_until_epoch_s` to the earlier quiet/meter observation
@@ -168,6 +168,7 @@ No native collection readiness is claimed by the synthetic tests.
 | sentinel_roster | U4/U5 consequence and exact next roster | next frozen roster must include two extra sentinels after U4/U5 inconclusive |
 | member_eligibility | final exclusions, X5/token comparisons and capture inventory | desk and final exclusions disagree; identity X5/U3 pair unresolved |
 | calibration_stop | count-only fixed-eight predicate over authenticated history | escalate_to_lead; pending_final_eligibility; insufficient_calibration; role mismatch |
+| battery_window | the desk's `v4_B_bar` for the previous record; `consecutive_non_pass` is the trailing non-passing run on the hash-linked chain (missing evidence is a non-pass; R1 has no B bar); the consumer turns a first non-pass into an automatic resume and needs a signed `battery_rulings` row for the second | previous B window did not pass; no signed battery ruling after the second |
 | full_desk_gate | passing native desk and matching computed code/config state | full desk must complete and pass after W1 or a code/config change |
 
 Coverage/fault **tabulation** gates; a historic fault itself is retained and
@@ -202,3 +203,13 @@ and unique and `after_window` must match the current two-zero tail. It changes n
 eligibility, order, eight-window cap or 39/pair target. Two further zeros escalate again; it cannot
 admit a ninth counted window or repair insufficient calibration. A U1-U3 failure gives that model
 0 eligible from that window (R15, RUN_STATE 226).
+
+## Battery rulings (lead ruling 9, W1-BLOCKERS)
+
+A second consecutive non-passing B window needs a `battery_rulings` row in the series ledger,
+shaped like a lead ruling: `{"ruling_id","after_window","text","lead_signature"}`, where `text`
+names a committed ruling text file at the series commit. The builder emits
+`{ruling_id, text_sha256 (computed from those bytes), after_window, lead_signature}`; the
+consumer admits it only when `after_window` is the previous window. A false `v4_B_bar` alone does
+not fail the full desk (`full_desk_gate.pass` from the native desk, else the recorded checks minus
+the exempt key); `battery_window` governs it.

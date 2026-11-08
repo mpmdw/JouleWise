@@ -18,7 +18,7 @@ from joulewise.align.apple import thermal_desk, v4_battery, v4_cadence, v4_regis
 from scripts import align_pilot_session, align_v4_session, align_v4_u3_export
 from tests.align.test_r11_delta_sol1 import TemporaryCandidate
 from tests.align.test_thermal_desk import member
-from tests.align.test_v4_cadence import IDENTITY, INTERNAL, passing_packet
+from tests.align.test_v4_cadence import IDENTITY, INTERNAL, NOW_EPOCH, passing_packet
 from tests.align.v4_registration_fixtures import battery_policy, export, signed_bar
 
 
@@ -245,23 +245,23 @@ class BatteryWitnesses(unittest.TestCase):
             packet = passing_packet()
             packet['checks']['battery_window'] = {'status': 'fail', 'basis': reason,
                                                    'consecutive_non_pass': 1}
-            first = v4_cadence.next_arm_triage(packet, INTERNAL, IDENTITY)
+            first = v4_cadence.next_arm_triage(packet, INTERNAL, IDENTITY, now_epoch_s=NOW_EPOCH)
             self.assertTrue(first['admitted'], first['reasons'])
             self.assertEqual(first['checks']['battery_window']['status'], 'automatic_resume')
             self.assertFalse(v4_cadence.next_arm_triage(packet, {**INTERNAL, 'charging_battery': False},
-                                                       IDENTITY)['admitted'])
+                                                       IDENTITY, now_epoch_s=NOW_EPOCH)['admitted'])
             packet['checks']['battery_window']['consecutive_non_pass'] = 2
             ruling = {'ruling_id': 'synthetic-review', 'text_sha256': 'd'*64, 'after_window': 'C2',
                       'lead_signature': 'lead: synthetic-review 2026-11-08'}
             for rows in ([], [{**ruling, 'lead_signature': None}], [{**ruling, 'after_window': 'C1'}]):
                 self.assertFalse(v4_cadence.next_arm_triage({**packet, 'battery_rulings': rows}, INTERNAL,
-                                                           IDENTITY)['admitted'])
+                                                           IDENTITY, now_epoch_s=NOW_EPOCH)['admitted'])
             self.assertTrue(v4_cadence.next_arm_triage({**packet, 'battery_rulings': [ruling]}, INTERNAL,
-                                                      IDENTITY)['admitted'])
+                                                      IDENTITY, now_epoch_s=NOW_EPOCH)['admitted'])
         for status in ('inconclusive', 'deferred', 'not_applicable'):
             packet = passing_packet()
             packet['checks']['battery_window'] = {'status': status, 'basis': 'unavailable evidence'}
-            self.assertFalse(v4_cadence.next_arm_triage(packet, INTERNAL, IDENTITY)['admitted'])
+            self.assertFalse(v4_cadence.next_arm_triage(packet, INTERNAL, IDENTITY, now_epoch_s=NOW_EPOCH)['admitted'])
 
     def test_B_only_exclusion_does_not_reblock_full_desk_automatic_resume(self):
         # Review finding S2-01: the common desk also sets no_member_exclusions

@@ -38,6 +38,7 @@ IDENTITY_FIELDS = ('record_commit', 'record_path', 'series_commit', 'series_path
 # The series ledger is ONE canonical append-only file, rewritten by each window's commit. Its latest
 # committed version names the latest window record (delta3 G1), so an older packet cannot stay current.
 SERIES_PATH = 'series/state.json'
+FULL_DESK_GATE_EXEMPT = ('v4_B_bar',)     # = align_v4_session.FULL_DESK_GATE_EXEMPT (tested equal)
 
 
 def digest(raw):
@@ -329,6 +330,28 @@ def attempts(chain):
             expected_attempt += 1
 
 
+def desk_passes(desk):
+    """Whether a native desk.json counts as a passing full desk.
+
+    Lead ruling 9 (W1-BLOCKERS): a false v4_B_bar alone does not fail the full desk (the triage row
+    battery_window governs it). The native desk writes its own evidence-aware verdict
+    (``full_desk_gate.pass``, charging-only exclusions removed); without it the recorded checks
+    stand, minus the exempt B bar.
+    """
+    if not isinstance(desk, dict) or desk.get('harvest_status') != 'ok':
+        return False
+    gate = desk.get('full_desk_gate')
+    if isinstance(gate, dict) and isinstance(gate.get('pass'), bool):
+        return gate['pass']
+    checks = desk.get('checks')
+    if not isinstance(checks, dict):
+        return False
+    gated = {k: v for k, v in checks.items() if k not in FULL_DESK_GATE_EXEMPT}
+    only_exempt_failed = any(checks.get(k) is False for k in FULL_DESK_GATE_EXEMPT)
+    return (bool(gated) and all(v is True for v in gated.values())
+            and (desk.get('pilot_status') == 'instrument_ok' or only_exempt_failed))
+
+
 def build_packet(repo, *, record_commit, record_path, series_commit, series_path, pushed_ref,
                  now_epoch_s, current_artifact_set_sha256):
     require(number(now_epoch_s), 'arm clock unavailable')
@@ -348,7 +371,7 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
         'record_path': record_path, 'record_sha256': previous.sha256,
         'series_commit': series_commit, 'series_path': series_path, 'series_sha256': digest(series_raw),
         'pushed_ref': pushed_ref, 'previous_window': previous.window,
-        'next_window_role': None, 'calibration_windows': [], 'lead_rulings': [], 'window_chain': [],
+        'next_window_role': None, 'calibration_windows': [], 'lead_rulings': [], 'battery_rulings': [], 'window_chain': [],
         'last_desk_passed_artifact_set_sha256': None,
         'checks': {}, 'arm_pending': [r['id'] for r in cadence.NEXT_ARM_TRIAGE if r['source'] == cadence.ARM],
         'entry_sources': {r['id']: r['source'] for r in cadence.NEXT_ARM_TRIAGE}}
@@ -470,9 +493,7 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
         last_record = WindowRecord(evidence, last_ref['commit'], last_ref['path'])
         require(last_record.sha256 == last_ref.get('sha256'), 'last desk-passed record digest mismatch')
         last = last_record.source('desk')
-        require(last.get('pilot_status') == 'instrument_ok' and isinstance(last.get('checks'), dict)
-                and last['checks'] and all(v is True for v in last['checks'].values())
-                and last.get('harvest_status') == 'ok',
+        require(desk_passes(last),
                 'last desk-passed state has no passing desk')
         code_commit = evidence.commit(last_record.record.get('code_commit', last_record.commit))
         return last_record, committed_artifact_set_digest(evidence, code_commit)
@@ -549,9 +570,7 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
         # differs from the one the last desk passed on.
         required = previous.window == 'W1' or last_digest != current_artifact_set_sha256
         desk = previous.source('desk')
-        checks = desk.get('checks')
-        passing = (desk.get('pilot_status') == 'instrument_ok' and isinstance(checks, dict) and checks
-                   and all(v is True for v in checks.values()) and desk.get('harvest_status') == 'ok')
+        passing = desk_passes(desk)
         if desk.get('status') == 'running_off_mbp' and not required:
             return {'status': 'deferred', 'basis': 'unchanged later window; full desk running off MBP'}
         require(required is False or passing,
@@ -579,6 +598,7 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
     except (ValueError, KeyError, TypeError, AttributeError):
         packet['last_desk_passed_artifact_set_sha256'] = None
     history_error = None
+    battery_chain = None
     try:
         # Hash-linked series history (ruling 3): walk previous_record links from the previous record
         # back to the first record; an omitted attempt cannot be skipped because it is the link.
@@ -621,12 +641,47 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
                 'resets': 'zero_capture_escalation', 'after_window': row['after_window'],
                 'lead_signature': row['lead_signature']})
         packet['calibration_decision'] = cadence.calibration_stop(packet['calibration_windows'], packet['lead_rulings'])
+        for row in series.get('battery_rulings', []):
+            require(isinstance(row, dict) and set(row) == {'ruling_id', 'after_window', 'text', 'lead_signature'},
+                    'battery ruling row malformed')
+            text = evidence.source(series_commit, row['text'], json_value=False)
+            require(bool(text.strip()), 'battery ruling text empty')
+            packet['battery_rulings'].append({'ruling_id': row['ruling_id'], 'text_sha256': digest(text),
+                'after_window': row['after_window'], 'lead_signature': row['lead_signature']})
+        battery_chain = chain
     except (ValueError, KeyError, TypeError, AttributeError) as exc:
         history_error = str(exc)
         packet['calibration_windows'] = [{}]  # cannot silently truncate or take R1's N/A shortcut
         packet['lead_rulings'] = []
+        packet['battery_rulings'] = []
         packet['window_chain'] = []
         packet['calibration_error'] = history_error
+    def battery():
+        # Lead ruling 9 (R14, rule zero_B_auto_resume_v1): the previous window's B bar. Missing
+        # evidence is a non-pass; consecutive_non_pass counts the trailing non-passing windows on
+        # the hash-linked chain (R1 has no B bar). The consumer turns a first non-pass into an
+        # automatic resume and needs a signed battery_rulings row for a second.
+        require(battery_chain is not None, 'window chain unavailable')
+
+        def bar(record):
+            try:
+                checks = record.source('desk').get('checks')
+                return isinstance(checks, dict) and checks.get('v4_B_bar') is True
+            except (ValueError, KeyError, TypeError, AttributeError):
+                return False
+        if bar(previous):
+            return {'basis': 'previous window B bar passed'}
+        streak = 0
+        for record in reversed(battery_chain):
+            if record.window == 'R1' or bar(record):
+                break
+            streak += 1
+        return {'status': 'fail', 'consecutive_non_pass': max(streak, 1),
+                'basis': f'previous window B bar did not pass ({max(streak, 1)} consecutive non-passing)'}
+    if previous.window == 'R1':
+        packet['checks']['battery_window'] = {'status': 'not_applicable', 'basis': 'previous window is R1'}
+    else:
+        check('battery_window', battery)
     # ARM booleans are deliberately absent from the packet. This evaluation assumes them only to
     # isolate packet readiness; it is never arm authority.
     expiry = packet['checks'].get('quiet_start_state', {}).get('valid_until_epoch_s')

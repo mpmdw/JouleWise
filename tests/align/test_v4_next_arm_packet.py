@@ -31,7 +31,8 @@ CODE_PATH = 'scripts/run_night.py'      # a bound artifact: its bytes move the a
 class Scenario:
     """One window record (and the series state that points at it) in a synthetic Git repository."""
 
-    def __init__(self, directory, window='W1', *, previous=None, captured=True, eligible=True):
+    def __init__(self, directory, window='W1', *, previous=None, captured=True, eligible=True,
+                 b_bar=True):
         self.root = Path(directory)
         if previous is None:
             self.git('init', '-q')
@@ -63,7 +64,7 @@ class Scenario:
                         'tokens': [[1, 2, 3]]} for i in ids]},
                 'km003c': {'members': {i: {'status': 'available', 'flags': []} for i in ids}}}},
             'desk': {'plan_id': plan_id, 'pilot_status': 'instrument_ok',
-                     'checks': {'synthetic_check': True}, 'harvest_status': 'ok'},
+                     'checks': {'synthetic_check': True, 'v4_B_bar': b_bar}, 'harvest_status': 'ok'},
             'exclusions': {'members_excluded': []}}
         self.record = {'schema': builder.RECORD_SCHEMA, 'window': window,
                        'role': 'development' if window in ('W1', 'R1') else 'calibration',
@@ -187,8 +188,9 @@ class Base(unittest.TestCase):
         self.addCleanup(temp.cleanup)
         first = Scenario(temp.name, 'W1').finish()
         previous = first
-        for window, captured, eligible in specs:
-            current = Scenario(temp.name, window, previous=previous, captured=captured, eligible=eligible).finish()
+        for window, captured, eligible, *rest in specs:
+            current = Scenario(temp.name, window, previous=previous, captured=captured, eligible=eligible,
+                               b_bar=rest[0] if rest else True).finish()
             previous = current
         return previous
 
@@ -204,7 +206,7 @@ class PacketTests(Base):
         self.assertEqual(packet['checks']['sentinel_roster']['sentinel_ids'], s.series['sentinel_ids'])
         self.assertEqual(set(packet['checks']), {r['id'] for r in cad.NEXT_ARM_TRIAGE if r['source'] == cad.PACKET})
         self.assertEqual(set(packet['entry_sources']), set(cad.TRIAGE_IDS))
-        self.assertEqual(len(cad.TRIAGE_IDS), 15)
+        self.assertEqual(len(cad.TRIAGE_IDS), 16)      # 15 gating + non-gating meter_coverage (battery_window added by ruling 9)
         self.assertEqual(packet['arm_pending'], list(INTERNAL))
         self.assertIn('meter_reader_live', packet['arm_pending'])
         self.assertEqual(packet, s.build())          # reproducible: the arm's clock is not embedded
@@ -446,6 +448,41 @@ class HistoryChainTests(Base):
                     [('C1', True, True), ('C1#2', True, True)]):
             with self.subTest(bad=[b[0] for b in bad]):
                 self.assertFalse(self.calibration_series(bad).build()['packet_preflight']['ready'])
+
+    def test_battery_window_follows_the_desk_b_bar_along_the_chain(self):
+        # Lead ruling 9 (W1-BLOCKERS): pass; first non-pass resumes automatically; a second
+        # consecutive non-pass needs a signed battery ruling whose text digest the builder computes.
+        passed = self.calibration_series([('C1', True, True)]).build()
+        self.assertEqual(passed['checks']['battery_window']['status'], 'pass')
+        first = self.calibration_series([('C1', True, True), ('C2', True, True, False)]).build()
+        self.assertEqual(first['checks']['battery_window']['consecutive_non_pass'], 1)
+        self.assertTrue(first['packet_preflight']['ready'], first['packet_preflight'])      # automatic_resume
+        s = self.calibration_series([('C1', True, True, False), ('C2', True, True, False)])
+        second = s.build()
+        self.assertEqual(second['checks']['battery_window']['consecutive_non_pass'], 2)
+        self.assertFalse(second['packet_preflight']['ready'])
+        text = b'LEAD BATTERY DISPOSITION SYNTHETIC-B1: resume after two non-passing B windows\n'
+        ref = s.write(f'{s.dir}/rulings/battery-1.txt', text)
+        s.series['battery_rulings'] = [{'ruling_id': 'SYNTHETIC-B1', 'after_window': 'C2', 'text': ref,
+                                        'lead_signature': 'lead: synthetic-battery 2026-11-08'}]
+        s.write(s.series_path, s.series)
+        s.series_commit = s.commit()
+        ruled = s.build()
+        self.assertEqual(ruled['battery_rulings'], [{
+            'ruling_id': 'SYNTHETIC-B1', 'text_sha256': hashlib.sha256(text).hexdigest(), 'after_window': 'C2',
+            'lead_signature': 'lead: synthetic-battery 2026-11-08'}])
+        self.assertTrue(ruled['packet_preflight']['ready'], ruled['packet_preflight'])
+        # a passing window in between resets the streak; a ruling for another window does not resume
+        reset = self.calibration_series([('C1', True, True, False), ('C2', True, True), ('C3', True, True, False)]).build()
+        self.assertEqual(reset['checks']['battery_window']['consecutive_non_pass'], 1)
+        s.series['battery_rulings'][0]['after_window'] = 'C1'
+        s.write(s.series_path, s.series)
+        s.series_commit = s.commit()
+        self.assertFalse(s.build()['packet_preflight']['ready'])
+        # a failed B bar alone does not fail the full desk (the exempt key matches the session's)
+        from scripts import align_v4_session as session
+        self.assertEqual(builder.FULL_DESK_GATE_EXEMPT, session.FULL_DESK_GATE_EXEMPT)
+        self.assertEqual(first['checks']['full_desk_gate']['status'], 'pass')
 
     def test_two_zero_capture_attempts_escalate_until_a_ruling_with_a_committed_text(self):
         s = self.calibration_series([('C1', False, True), ('C1#2', False, True)])

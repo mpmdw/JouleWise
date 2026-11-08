@@ -47,7 +47,7 @@ Cross-checks: `perf/2026-11-08-r12-review-sol1`, `-sol2`. Protocol section
 | Item | Change | Where |
 |---|---|---|
 | B1 | A window ends at authenticated terminal completion; 59,520 s is a ceiling, not a reservation; custody, quiet admission and ceiling kept | protocol R12 B1 and the Sizing line; kit README text |
-| B2 | Frozen 15-entry next-arm triage list (14 gating; `meter_coverage` is recorded, non-gating); arm evaluates it (`--next-arm-triage`); full desk gating after W1 and after code/config change | `v4_cadence.NEXT_ARM_TRIAGE`, `next_arm_triage`; `align_v4_session.arm_checks` |
+| B2 | Frozen 16-entry next-arm triage list (15 gating, after `battery_window`; `meter_coverage` is recorded, non-gating); arm evaluates it (`--next-arm-triage`); full desk gating after W1 and after code/config change | `v4_cadence.NEXT_ARM_TRIAGE`, `next_arm_triage`; `align_v4_session.arm_checks` |
 | B3 | Fixed 8 counted calibration windows (RUN_STATE 217 reverted the count stop), both pairs >=39 after 8, cap accounting, insufficient-calibration outcome | `v4_cadence.calibration_stop`; protocol R12 B3 |
 | R1 sizing | 61,607 s marked stale; 67,371 s one-encounter no-redo subtotal plus bracket/close/harvest; 96,427 s redo floor (RUN_STATE 216 corrected 215's 90,663 s) | `docs/align/r1_runtime_contract.md`, `LEAD-RULINGS-2.md` correction note |
 
@@ -135,7 +135,7 @@ window journal, breaks continuity as before. Amendment allowlist unchanged.
 |---|---|---|
 | Opus HIGH-1 packet is trusted text | A packet is a pointer. The arm rebuilds it with `build_packet` from the identities the packet names (own clock, own artifact-set digest) and requires canonical equality ignoring only `pushed_tip` and `packet_preflight`; a rebuild error refuses | `align_v4_session.arm_checks`, `align_v4_next_arm_packet.rebuild_and_compare` |
 | Opus HIGH-2 expiry optional | `valid_until_epoch_s` is mandatory and numeric; the arm clock must be before it | `v4_cadence.next_arm_triage` |
-| Opus HIGH-3 wire compatibility | `meter_reader_live` (ARM, gating) and `meter_coverage` (non-gating) split; `last_desk_passed_artifact_set_sha256` computed from committed bytes (`artifact_set_digest_at`); window ids validated; 15 entries, "14" text fixed | builder, `v4_cadence.py`, `v4_registration.py` |
+| Opus HIGH-3 wire compatibility | `meter_reader_live` (ARM, gating) and `meter_coverage` (non-gating) split; `last_desk_passed_artifact_set_sha256` computed from committed bytes (`artifact_set_digest_at`); window ids validated; 16 entries (battery_window added by ruling 9), "14" text fixed | builder, `v4_cadence.py`, `v4_registration.py` |
 | Opus MED-1..4 | Quiet state, live meter, `prepared_at` and battery evidence are computed at the arm (meter by a short monitor probe); the quiet start state keeps the committed observation until the condition-waits evaluator lands; hash-chained window records (omitted attempt detected); `text_sha256` of a lead ruling computed from a committed text file | builder, `align_v4_session._probe_meter_live` |
 | Opus L1 | A U1-U3 fail gives that model 0 eligible from that window (R15, RUN_STATE 226) | builder |
 | Zero-capture retry | Same window id with an attempt suffix: `C3#2`; `WINDOW_ID` accepts `#k`; the frozen order is unchanged | `v4_cadence.WINDOW_ID` |

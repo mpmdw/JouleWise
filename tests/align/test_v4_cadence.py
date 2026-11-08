@@ -116,25 +116,25 @@ class TriageListTests(unittest.TestCase):
         # non-passing B window; two in a row need a signed battery disposition.
         packet = passing_packet()
         packet['checks']['battery_window'] = {'status': 'fail', 'basis': 'C2 B=1', 'consecutive_non_pass': 1}
-        result = cad.next_arm_triage(packet, INTERNAL, IDENTITY)
+        result = cad.next_arm_triage(packet, INTERNAL, IDENTITY, now_epoch_s=NOW_EPOCH)
         self.assertTrue(result['admitted'], result['reasons'])
         self.assertEqual(result['checks']['battery_window']['status'], 'automatic_resume')
         # The resume still needs the arm-computed top-up/OBC check.
-        self.assertFalse(cad.next_arm_triage(packet, {**INTERNAL, 'charging_battery': False}, IDENTITY)['admitted'])
+        self.assertFalse(cad.next_arm_triage(packet, {**INTERNAL, 'charging_battery': False}, IDENTITY, now_epoch_s=NOW_EPOCH)['admitted'])
         packet['checks']['battery_window']['consecutive_non_pass'] = 2
-        refused = cad.next_arm_triage(packet, INTERNAL, IDENTITY)
+        refused = cad.next_arm_triage(packet, INTERNAL, IDENTITY, now_epoch_s=NOW_EPOCH)
         self.assertFalse(refused['admitted'])
         ruling = {'ruling_id': 'RUN_STATE-B', 'text_sha256': 'd'*64, 'after_window': 'C2',
                   'lead_signature': 'lead: synthetic 2026-11-08'}
         for bad in ({**ruling, 'after_window': 'C1'}, {**ruling, 'lead_signature': ''}, {**ruling, 'extra': 1}):
             with self.subTest(bad=bad):
-                self.assertFalse(cad.next_arm_triage({**packet, 'battery_rulings': [bad]}, INTERNAL, IDENTITY)['admitted'])
-        resumed = cad.next_arm_triage({**packet, 'battery_rulings': [ruling]}, INTERNAL, IDENTITY)
+                self.assertFalse(cad.next_arm_triage({**packet, 'battery_rulings': [bad]}, INTERNAL, IDENTITY, now_epoch_s=NOW_EPOCH)['admitted'])
+        resumed = cad.next_arm_triage({**packet, 'battery_rulings': [ruling]}, INTERNAL, IDENTITY, now_epoch_s=NOW_EPOCH)
         self.assertTrue(resumed['admitted'], resumed['reasons'])
         self.assertEqual(resumed['checks']['battery_window']['status'], 'resumed_by_lead')
         for streak in (None, 0, True):
             packet['checks']['battery_window']['consecutive_non_pass'] = streak
-            self.assertFalse(cad.next_arm_triage(packet, INTERNAL, IDENTITY)['admitted'])
+            self.assertFalse(cad.next_arm_triage(packet, INTERNAL, IDENTITY, now_epoch_s=NOW_EPOCH)['admitted'])
 
     def test_packet_cannot_supply_or_override_arm_computed_checks(self):
         packet = passing_packet()
@@ -227,7 +227,7 @@ class TriageListTests(unittest.TestCase):
         for bad in (None, 'abc', 'B' * 40):
             self.assertFalse(cad.next_arm_triage(passing_packet(record_commit=bad), INTERNAL, IDENTITY, now_epoch_s=NOW_EPOCH)['admitted'])
         # smoke G1: the packet must also be bound to the last committed record
-        self.assertFalse(cad.next_arm_triage(passing_packet(), INTERNAL, {**IDENTITY, 'record_bound': False})['admitted'])
+        self.assertFalse(cad.next_arm_triage(passing_packet(), INTERNAL, {**IDENTITY, 'record_bound': False}, now_epoch_s=NOW_EPOCH)['admitted'])
         self.assertFalse(cad.next_arm_triage(passing_packet(record_sha256=None), INTERNAL, IDENTITY, now_epoch_s=NOW_EPOCH)['admitted'])
         self.assertFalse(cad.next_arm_triage(passing_packet(record_path=None), INTERNAL, IDENTITY, now_epoch_s=NOW_EPOCH)['admitted'])
 

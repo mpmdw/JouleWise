@@ -18,7 +18,7 @@ from unittest.mock import patch
 from joulewise.align.apple import v4_battery as battery, v4_cadence as cadence
 from joulewise.align.apple import v4_registration as registration, v4_u3 as u3
 from scripts import align_v4_session as session, align_v4_u3_export as exporter
-from tests.align.test_v4_cadence import IDENTITY, INTERNAL, passing_packet
+from tests.align.test_v4_cadence import IDENTITY, INTERNAL, NOW_EPOCH, passing_packet
 from tests.align.v4_registration_fixtures import battery_policy, export, signed_bar
 
 
@@ -204,20 +204,20 @@ class BatteryWitnesses(unittest.TestCase):
         packet = passing_packet()
         packet['checks']['battery_window'] = dict(status='fail', basis='missing evidence; not a pass',
                                                  consecutive_non_pass=1)
-        result = cadence.next_arm_triage(packet, INTERNAL, IDENTITY)
+        result = cadence.next_arm_triage(packet, INTERNAL, IDENTITY, now_epoch_s=NOW_EPOCH)
         self.assertTrue(result['admitted'], result['reasons'])
         self.assertEqual(result['checks']['battery_window']['status'], 'automatic_resume')
-        self.assertFalse(cadence.next_arm_triage(packet, {**INTERNAL, 'charging_battery': False}, IDENTITY)['admitted'])
+        self.assertFalse(cadence.next_arm_triage(packet, {**INTERNAL, 'charging_battery': False}, IDENTITY, now_epoch_s=NOW_EPOCH)['admitted'])
 
     def test_second_nonpass_requires_a_signed_current_window_ruling(self):
         packet = passing_packet()
         packet['checks']['battery_window'] = dict(status='fail', basis='missing then charging', consecutive_non_pass=2)
         ruling = dict(ruling_id='review-test', text_sha256='a'*64, after_window='C2',
                       lead_signature='lead: synthetic 2026-11-08')
-        self.assertFalse(cadence.next_arm_triage(packet, INTERNAL, IDENTITY)['admitted'])
+        self.assertFalse(cadence.next_arm_triage(packet, INTERNAL, IDENTITY, now_epoch_s=NOW_EPOCH)['admitted'])
         for bad in ({**ruling, 'lead_signature': None}, {**ruling, 'after_window': 'C1'}):
-            self.assertFalse(cadence.next_arm_triage({**packet, 'battery_rulings': [bad]}, INTERNAL, IDENTITY)['admitted'])
-        self.assertTrue(cadence.next_arm_triage({**packet, 'battery_rulings': [ruling]}, INTERNAL, IDENTITY)['admitted'])
+            self.assertFalse(cadence.next_arm_triage({**packet, 'battery_rulings': [bad]}, INTERNAL, IDENTITY, now_epoch_s=NOW_EPOCH)['admitted'])
+        self.assertTrue(cadence.next_arm_triage({**packet, 'battery_rulings': [ruling]}, INTERNAL, IDENTITY, now_epoch_s=NOW_EPOCH)['admitted'])
 
     def test_only_b_bar_is_exempt_from_full_desk_gate(self):
         self.assertTrue(session.full_desk_gate_pass({'v4_B_bar': False, 'v4_D_U3': True}))
