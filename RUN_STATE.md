@@ -1042,6 +1042,35 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+237. **Laptop lead (interactive session 1544c617), 2026-11-08 ~16:30 PST: checkpoint — v4 engine settled; R24 manifest frozen; review-bound threat-model ruling.**
+- **v4 primary engine settled at `engine-r23d` @ `a2e36bc19`.**
+  - Line of fixes: `engine-r23` (A37 + R23), then `engine-r23b`, `engine-r23c` and `engine-r23d`.
+  - Opus cold review of r23, then Opus deltas on r23b and r23c, each ADMIT-WITH-FIXES, with all findings closed.
+  - The last patch (Opus) got a Sol review: ADMIT.
+  - R23-4 clarified: only the DC residual row set mirrors the GPU benign rows. DC-in VALUE rows print for every captured benign member, with `residual_status: no_gpu_row` (Ed's KM003C rule).
+  - Export contract extended: W1 is delivered as a window record (A34), and a selection-only W1 is refused. Anchor ids are strictly `<window_id>:<run_id>`. W1 anchors are ordinals 1-4 with `series_role: anchor`. `W1_anchor_block` discloses whether W1 entered σ_w.
+  - The final comparator rehearsal against r23d is with the comparator builder.
+- **R24 applied on `align/2026-11-08-v4-r11` @ `10d889d12`.**
+  - Manifest sha256 `21313cc2791865e01f322c24606db62ba2ac6a65adda6d737e5b7432bef2ad5c`.
+  - The paired independent Sol seed check MATCHes with zero differences on both seats (`align/2026-11-08-seedcheck-r24-sol1` @ `79c8e7e57`, `-sol2` @ `558c867a8`): 18 windows, 392 members, 3,294 leaves.
+  - W1, C1-C8 and T1-T3 are byte-identical to R15. **The manifest is frozen.**
+- **Lead ruling (review bound, binding on the harvest-off and smoke-kit lanes):** these tools defend against operator and host mistakes, functional bugs and stale state, NOT against a deliberate same-user adversary racing renames or planting links. After the current fix rounds, a new finding HOLDs only with a plausible operator, host or functional failure path; adversarial-only races are LOW.
+- **Harvest-off (R17):** Opus fix `6938c3733`. Sol delta seats 1 and 2 both HOLD on the same findings:
+  - an external-parent write-through into a tracked checkout file;
+  - link-to-link and mirror-target binding;
+  - ignored inputs;
+  - walk errors;
+  - sweep identity;
+  - the child fence;
+  - finality predicate drift.
+
+  Both seats rule the builder's two disputed witnesses WRONG.
+  - **Ruling:** the no-harvest finality exemption applies only to actual capture absence. A window with only supplemental captures still needs a harvest. cmd_final and WindowRecord share one predicate.
+  - The ignored-input census is a lead-owned native N1 gate. Fixes are in progress.
+- **Smoke kit:** delta3 is fixed at `80bbfa2cd`. Delta4 seat 1 says ADMIT-WITH-FIXES and seat 2 HOLDs, both on F6: the module-level `subprocess.run` patching leaks.
+  - **Ruling:** delete the patching. Production prepare runs in a child process under the process-group-killing `grouped_run` with the remaining budget. The smoke kit is CLI-only.
+- **Main CI:** #706's timing fix exposed `tests.b5_analysis.test_mint_kept_units`. It fails standalone on clean main and passed in CI only on state leaked from `test_launch_lineage`. It is being fixed as a hidden dependency; no reweighting.
+
 236. **Laptop lead (interactive session 1544c617), 2026-11-08 ~14:30 PST: lead ruling R24 (blind; synthetic simulation only), the reserve cap for the R22-2 structural replacements.**
 - **Evidence:** Sol R22-2 sim (`align/2026-11-08-r22-sim-sol` @ `8f81bf7bd`) and cap sweep (`align/2026-11-08-r22-cap-sweep-sol` @ `53556a3d6`).
   - Bars that correlate with a hot state bias thresholds relative to an all-states oracle: maximum-rule FPR 4.04% vs 2.32% against the unscorable all-future-states population. On the population that passes the same frozen structural gate, R22 is at oracle level (2.245%).
