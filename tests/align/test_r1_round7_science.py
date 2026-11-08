@@ -6,6 +6,8 @@ setting is touched.
 """
 from __future__ import annotations
 
+import math
+
 import hashlib
 import json
 from pathlib import Path
@@ -138,9 +140,16 @@ class G0TimeoutTests(_World):
         self.assertEqual(value["redo_release_s"], 665)
         self.assertAlmostEqual(value["no_redo_s"], 54342.9664 + 1863.9952, places=3)
         self.assertAlmostEqual(value["no_redo_s"], 56206.96, places=1)
-        self.assertAlmostEqual(value["with_one_batch_wait_s"], 61606.96, places=1)
+        # RUN_STATE 215/216: one encounter waits the step-d bound plus the 5,400 s blackout.
+        self.assertAlmostEqual(value["batch_blackout_s"], 5400)
+        self.assertAlmostEqual(value["batch_encounter_max_s"], 5763.9952 + 5400)
+        self.assertAlmostEqual(value["with_one_batch_encounter_s"], 67370.9568, places=3)
+        self.assertEqual(math.ceil(value["with_one_batch_encounter_s"]), 67371)
         self.assertAlmostEqual(value["r6_2_retry_max_s"], 4 * (1500 + 5763.9952))   # step-30b takes no R6-2 retry
-        self.assertAlmostEqual(value["with_retries_and_one_batch_wait_s"], 90662.94, places=1)
+        self.assertAlmostEqual(value["with_retries_and_one_batch_encounter_s"], 96426.93, places=1)
+        self.assertEqual(math.ceil(value["with_retries_and_one_batch_encounter_s"]), 96427)
+        for stale in ("batch_window_wait_max_s", "with_one_batch_wait_s", "with_retries_and_one_batch_wait_s"):
+            self.assertNotIn(stale, value)
 
 
 class G0CapW1Tests(_World):

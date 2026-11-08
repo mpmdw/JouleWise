@@ -831,9 +831,13 @@ field (`v4_cadence.calibration_stop`):
    **both** pairs (spam and bank) have at least 39 eligible benign summed over all
    n windows, stop (`stop_complete`). Every eligible calibrator in the retained
    prefix counts; there is no best-39, no reordering and no skipping.
-3. Cap accounting: every attempted window, including a lost or failed one and one
-   in flight, consumes one of the 8. One lost window leaves 35 after six
-   (7 x 6 = 42, less 7). There is no ninth attempt.
+3. Cap accounting (lead ruling, RUN_STATE 216): a window that captured **zero**
+   members (a zero-capture refusal) does not count toward the cap of 8 and carries
+   no eligible members; a window with at least one captured member counts, whether
+   lost, failed or in flight. Two consecutive zero-capture refusals escalate to the
+   lead (`escalate_to_lead`; nothing is armed until the lead rules). One lost counted
+   window leaves 35 after six (7 x 6 = 42, less 7). There is no ninth counted
+   attempt, and no refusal path reorders, adds or drops a window.
 4. Failure outcome: at eight final windows with either pair below 39 the result is
    `insufficient_calibration`; no extension, no D7/D8, no relaxed target.
 5. A window launched as calibration stays calibration; from window 6 the next window
@@ -854,14 +858,14 @@ seat is running it) before W1, and the scorer, rank and LOTO/full-fit
 asymmetry above stay open. The stop is frozen before any window is run: it may not
 be changed after looking at early yield, and a different rule needs prospective
 authority and an access-history disposition.
-**Not yet ruled (lead):** treatment of a zero-capture refusal (an arm refused before
-any capture) for cap accounting is not defined here; the predicate counts exactly
-the window rows it is given, and no refusal path may reorder, add or drop a window.
 
 **R1 sizing correction.** Do not size an R1 deadline from 61,607 s. A step-D batch
 encounter can wait up to 11,164 s; the corrected one-encounter, no-redo phase
-subtotal is 67,371 s (plus bracket, close and harvest), and 90,663 s applies if a
-redo is planned (`docs/align/r1_runtime_contract.md`, "R1 night worst case").
+subtotal is 67,371 s (plus bracket, close and harvest). If a redo is planned the
+floor is 96,427 s (56,207 + 29,056 retry allowance + one 11,164 s encounter; each
+retry segment that touches 11:45-13:15 can meet its own encounter, so size from the
+installed plan's actual segments; RUN_STATE 216). `docs/align/r1_runtime_contract.md`,
+"R1 night worst case".
 
 ## Discrepancies
 

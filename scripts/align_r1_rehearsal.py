@@ -1318,7 +1318,8 @@ def night_worst_case_s(runtime_argv=None, include_4bit=False):
     leg its release + member bound, any other model segment the 1,800 s
     member bound). The calibration brackets and the harvest are not bounded
     here. Each quiet-segment redo (MAX_SEGMENT_REDOS) adds a release and the
-    segment again, and one ruling 8 batch-window wait adds up to 5,400 s.
+    segment again, and one ruling 8 batch-window encounter adds up to the
+    segment's bound plus 5,400 s (11,164 s for step-d; RUN_STATE 215/216).
 
     Round-6 integration: the table is the R6-1/R6-2/R6-6 one, with the
     runtime config's calibration precool cap (as ``run`` builds it), and
@@ -1348,10 +1349,23 @@ def night_worst_case_s(runtime_argv=None, include_4bit=False):
             retry_s += precool_cap_s + bound
     (h0, m0), (h1, m1) = OS_BATCH_WINDOW_LOCAL
     total = math.fsum(row["bound_s"] for row in rows)
-    wait = float((h1 * 60 + m1 - h0 * 60 - m0) * 60)
+    blackout = float((h1 * 60 + m1 - h0 * 60 - m0) * 60)
+    # RUN_STATE 215/216: wait_outside_os_batch waits to the blackout's end whenever a segment
+    # would overlap its start, so ONE encounter waits up to the segment's own
+    # bound plus the blackout width (a supremum), not the width alone. The
+    # largest bound is step-d's (5,763.9952 s): 11,163.9952 s per encounter.
+    encounter = max(row["bound_s"] for row in rows) + blackout
     return {"segments": rows, "no_redo_s": total, "precool_cap_s": precool_cap_s, "g0_timeout_s": g0_timeout,
-            "redo_release_s": release_segment_bound_s(), "batch_window_wait_max_s": wait, "with_one_batch_wait_s": total + wait,
-            "r6_2_retry_max_s": retry_s, "with_retries_and_one_batch_wait_s": total + retry_s + wait}
+            "redo_release_s": release_segment_bound_s(), "batch_blackout_s": blackout,
+            "batch_encounter_max_s": encounter,
+            # One-encounter, no-redo, no-retry phase subtotal (67,371 s): excludes the
+            # calibration brackets, close and harvest, and any second encounter.
+            "with_one_batch_encounter_s": total + encounter,
+            "r6_2_retry_max_s": retry_s,
+            # Floor when a redo/retry is planned (96,427 s): each retry segment that
+            # touches 11:45-13:15 can meet its own encounter, so size from the
+            # installed plan's actual segments.
+            "with_retries_and_one_batch_encounter_s": total + retry_s + encounter}
 
 
 def budget_fit_inputs(step_d, gated, deadman_rows=()):

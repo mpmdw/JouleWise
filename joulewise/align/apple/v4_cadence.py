@@ -56,8 +56,8 @@ NEXT_ARM_TRIAGE = (
               'exclusions); counts are provisional until this check passes'),
     dict(id='calibration_stop', source=DERIVED, first_window_na=True,
          text='B3 stop predicate over the packet counts: continue for a calibration arm, '
-              'stop_complete for a test arm; pending_final_eligibility and '
-              'insufficient_calibration refuse'),
+              'stop_complete for a test arm; pending_final_eligibility, '
+              'insufficient_calibration and escalate_to_lead refuse'),
     dict(id='full_desk_gate', source=PACKET, first_window_na=False,
          text='full desk completed and passing before arm when the previous window is W1 or '
               'code/config changed since the last desk-passed state; otherwise it may run '
@@ -159,22 +159,28 @@ BENIGN_PER_PAIR_PER_WINDOW = 7    # protocol default roster: 14 benign (7/pair) 
 
 
 def calibration_stop(windows):
-    """Prospective count-only stop. ``windows`` is the attempted windows in the frozen order.
+    """Prospective count-only stop. ``windows`` lists the window attempts in the frozen order.
 
-    Each entry: ``{'window': id, 'status': 'final'|'provisional',
-    'eligible_benign': {'spam': n, 'bank': n}}``. Failed or lost windows are
-    attempted windows too (they consume cap) and carry their final counts
-    (zero when nothing is eligible). The predicate reads no score, alarm,
-    residual or energy field. Returns ``decision``:
+    Each entry: ``{'window': unique id, 'status': 'final'|'provisional',
+    'captured_members': int >= 0, 'eligible_benign': {'spam': n, 'bank': n}}``.
+    Cap accounting (lead ruling, RUN_STATE 216): a window that captured **zero**
+    members is a zero-capture refusal and does not count toward the cap of 8 (its
+    eligible counts must be zero); a window with at least one captured member
+    counts, whether lost, failed or in flight, and carries its final counts
+    (zero when nothing is eligible). Two consecutive zero-capture refusals
+    escalate to the lead. The predicate reads no score, alarm, residual or
+    energy field. Returns ``decision``:
 
-    * ``continue`` - fewer than 6 attempted windows, or 6..7 final windows with
+    * ``escalate_to_lead`` - the last two attempts are both zero-capture refusals;
+      nothing is armed until the lead rules;
+    * ``continue`` - fewer than 6 counted windows, or 6..7 final windows with
       some pair below the target; arm the next frozen window;
-    * ``pending_final_eligibility`` - 6 or more attempted windows and any of them
+    * ``pending_final_eligibility`` - 6 or more counted windows and any of them
       is provisional: no stop/continue decision, and no further arm;
-    * ``stop_complete`` - at the first n in 6..8 whose first n windows are all
-      final and where BOTH pairs have >=39 eligible benign summed over all n;
-    * ``insufficient_calibration`` - 8 final windows and a pair below 39. No
-      ninth attempt exists.
+    * ``stop_complete`` - at the first n in 6..8 whose first n counted windows are
+      all final and where BOTH pairs have >=39 eligible benign summed over all n;
+    * ``insufficient_calibration`` - 8 final counted windows and a pair below 39.
+      No ninth counted attempt exists.
 
     Every eligible benign member of the retained prefix counts; there is no
     quietest-39 selection and no reordering. This is not an exchangeability or
@@ -182,33 +188,47 @@ def calibration_stop(windows):
     """
     if not isinstance(windows, (list, tuple)):
         raise ValueError('windows must be a sequence in frozen order')
-    if len(windows) > CAL_CAP_WINDOWS:
-        raise ValueError(f'more than the cap of {CAL_CAP_WINDOWS} attempted calibration windows')
-    seen, totals = set(), dict.fromkeys(CAL_PAIRS, 0)
+    seen, counted, refusals = set(), [], 0
+    trailing_zero = 0
     for row in windows:
         counts = row.get('eligible_benign') if isinstance(row, dict) else None
         if (not isinstance(row, dict) or not isinstance(row.get('window'), str) or row['window'] in seen
                 or row.get('status') not in ('final', 'provisional')
+                or type(row.get('captured_members')) is not int or row['captured_members'] < 0
                 or not isinstance(counts, dict) or set(counts) != set(CAL_PAIRS)
                 or any(type(n) is not int or not 0 <= n <= BENIGN_PER_PAIR_PER_WINDOW for n in counts.values())):
-            raise ValueError('calibration window rows need a unique id, final|provisional status and '
-                             f'integer eligible_benign in 0..{BENIGN_PER_PAIR_PER_WINDOW} for each pair')
+            raise ValueError('calibration window rows need a unique id, final|provisional status, '
+                             'integer captured_members >= 0 and integer eligible_benign in '
+                             f'0..{BENIGN_PER_PAIR_PER_WINDOW} for each pair')
         seen.add(row['window'])
+        if row['captured_members'] == 0:
+            if any(counts.values()):
+                raise ValueError('a zero-capture window cannot carry eligible members')
+            refusals += 1
+            trailing_zero += 1
+            continue
+        trailing_zero = 0
+        counted.append(row)
+    if len(counted) > CAL_CAP_WINDOWS:
+        raise ValueError(f'more than the cap of {CAL_CAP_WINDOWS} counted calibration windows')
+    totals = dict.fromkeys(CAL_PAIRS, 0)
+    for row in counted:
         for pair in CAL_PAIRS:
-            totals[pair] += counts[pair]
-    attempted = len(windows)
-    final = all(row['status'] == 'final' for row in windows)
+            totals[pair] += row['eligible_benign'][pair]
+    attempted = len(counted)
+    final = all(row['status'] == 'final' for row in counted)
     base = {'attempted': attempted, 'cap': CAL_CAP_WINDOWS, 'minimum': CAL_MIN_WINDOWS,
             'target_per_pair': CAL_TARGET_PER_PAIR, 'eligible_by_pair': totals,
-            'counts_are_final': final}
+            'counts_are_final': final, 'zero_capture_refusals': refusals}
+    if trailing_zero >= 2:
+        return {**base, 'decision': 'escalate_to_lead'}
     if attempted < CAL_MIN_WINDOWS:
         return {**base, 'decision': 'continue'}
     if not final:
         return {**base, 'decision': 'pending_final_eligibility'}
-    # First n in 6..attempted whose prefix meets both pairs (earlier prefixes were final too).
     for n in range(CAL_MIN_WINDOWS, attempted+1):
         prefix = dict.fromkeys(CAL_PAIRS, 0)
-        for row in windows[:n]:
+        for row in counted[:n]:
             for pair in CAL_PAIRS:
                 prefix[pair] += row['eligible_benign'][pair]
         if all(prefix[pair] >= CAL_TARGET_PER_PAIR for pair in CAL_PAIRS):

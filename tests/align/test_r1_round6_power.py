@@ -124,12 +124,13 @@ class V4SessionHighPowerTests(HostStateCase):
         return measurement, root
 
     def install(self, root, host, *, installed=None):
-        with patch.object(kit, 'require_w1_ready'), \
+        from tests.align.test_v4_kit import topup
+        with patch.object(kit, 'require_w1_ready'), patch.object(kit, 'generate'), \
                 patch.object(pilot, 'install', return_value={'exit_code': 0} if installed is None else installed) \
                 as install:
             try:
-                return session.install(root, runner=host, volume_runner=host,
-                                       w1_disk_config=W1DiskGateTests.config(self, self.tmp),
+                return session.install(root, runner=host, volume_runner=host, obc_off_attested_by='synthetic',
+                                       w1_disk_config=W1DiskGateTests.config(self, self.tmp), **topup(),
                                        disk_gate=lambda c: {'status': 'pass', 'offloads': []})
             finally:
                 self.installer_called = install.called
@@ -197,8 +198,10 @@ class V4SessionHighPowerTests(HostStateCase):
             probe.release()
             return {'exit_code': 0}
         host = FakeArmHost(mode=0, marker=self.marker)
-        with patch.object(kit, 'require_w1_ready'), patch.object(pilot, 'install', side_effect=installer):
-            session.install(root, runner=host, volume_runner=host,
+        from tests.align.test_v4_kit import topup
+        with patch.object(kit, 'require_w1_ready'), patch.object(kit, 'generate'), \
+                patch.object(pilot, 'install', side_effect=installer):
+            session.install(root, runner=host, volume_runner=host, obc_off_attested_by='synthetic', **topup(),
                             w1_disk_config=W1DiskGateTests.config(self, self.tmp),
                             disk_gate=lambda c: {'status': 'pass', 'offloads': []})
         self.assertEqual(seen, [False])
@@ -385,7 +388,8 @@ class R1NightWorstCaseTests(unittest.TestCase):
         self.assertAlmostEqual(bounds['step_D_prefill_10k_decode_4096'], 5763.9952)
         self.assertAlmostEqual(bounds['high_power_B'], r1.aba_leg_bound_s(['fake-runtime']))
         self.assertAlmostEqual(value['no_redo_s'], sum(bounds.values()))
-        self.assertEqual(value['batch_window_wait_max_s'], 5400)
+        self.assertEqual(value['batch_blackout_s'], 5400)
+        self.assertAlmostEqual(value['batch_encounter_max_s'], max(bounds.values()) + 5400)
 
     def test_worst_case_uses_the_round6_table_and_counts_the_r6_2_retries(self):
         # Round-6 integration: the R6-1/R6-2/R6-6 phase table with the runtime
@@ -401,8 +405,8 @@ class R1NightWorstCaseTests(unittest.TestCase):
         calibration = [row for row in value['segments'] if row['kind'] in r1.contract.G0_INCONCLUSIVE_KINDS]
         self.assertEqual(len(calibration), 4)
         self.assertAlmostEqual(value['r6_2_retry_max_s'], sum(cap + row['bound_s'] for row in calibration))
-        self.assertAlmostEqual(value['with_retries_and_one_batch_wait_s'],
-                               value['no_redo_s'] + value['r6_2_retry_max_s'] + 5400)
+        self.assertAlmostEqual(value['with_retries_and_one_batch_encounter_s'],
+                               value['no_redo_s'] + value['r6_2_retry_max_s'] + value['batch_encounter_max_s'])
 
 
 if __name__ == '__main__':

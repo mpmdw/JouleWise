@@ -49,8 +49,10 @@ Cross-checks: `perf/2026-11-08-r12-review-sol1`, `-sol2`. Protocol section
 | B1 | A window ends at authenticated terminal completion; 59,520 s is a ceiling, not a reservation; custody, quiet admission and ceiling kept | protocol R12 B1 and the Sizing line; kit README text |
 | B2 | Frozen 14-entry next-arm triage list, all gating; arm evaluates it (`--next-arm-triage`); full desk gating after W1 and after code/config change | `v4_cadence.NEXT_ARM_TRIAGE`, `next_arm_triage`; `align_v4_session.arm_checks` |
 | B3 | Count-only stop, minimum 6, cap 8, both pairs >=39, cap accounting, insufficient-calibration outcome; exchangeability left to a separate simulation | `v4_cadence.calibration_stop`; protocol R12 B3 |
-| R1 sizing | 61,607 s marked stale; 67,371 s one-encounter no-redo subtotal plus bracket/close/harvest; 90,663 s if a redo is planned | `docs/align/r1_runtime_contract.md`, `LEAD-RULINGS-2.md` correction note |
+| R1 sizing | 61,607 s marked stale; 67,371 s one-encounter no-redo subtotal plus bracket/close/harvest; 96,427 s redo floor (RUN_STATE 216 corrected 215's 90,663 s) | `docs/align/r1_runtime_contract.md`, `LEAD-RULINGS-2.md` correction note |
 
-Open (lead): zero-capture refusal accounting; the >=6 sabotage target (not
+Resolved by RUN_STATE 216: a zero-capture window does not count toward the cap of 8, one with >=1 captured member counts, two consecutive zero-capture refusals escalate to the lead (`calibration_stop`, protocol B3 item 3). `night_worst_case_s` and its tests corrected to the per-encounter rule.
+
+Open (lead): the >=6 sabotage target (not
 adopted); fit/C/T roles and any fit-support deduction; the C1-C8/T manifest
-contents; R1 code (`night_worst_case_s`, its test) still prints the stale numbers.
+contents.

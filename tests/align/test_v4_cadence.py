@@ -23,8 +23,9 @@ def passing_packet(**overrides):
     return packet
 
 
-def window(name, spam, bank, status='final'):
-    return {'window': name, 'status': status, 'eligible_benign': {'spam': spam, 'bank': bank}}
+def window(name, spam, bank, status='final', captured=18):
+    return {'window': name, 'status': status, 'captured_members': captured,
+            'eligible_benign': {'spam': spam, 'bank': bank}}
 
 
 INTERNAL = {'series_powermode': True, 'external_volume': True, 'charging_battery': True}
@@ -142,6 +143,31 @@ class CalibrationStopTests(unittest.TestCase):
         result = cad.calibration_stop(rows)
         self.assertEqual((result['decision'], result['eligible_by_pair']['spam']), ('continue', 35))
 
+    def test_zero_capture_windows_do_not_count_toward_the_cap_and_two_in_a_row_escalate(self):
+        refused = lambda name: window(name, 0, 0, captured=0)
+        rows = [window('C1', 7, 7), refused('C2-refusal-1'), window('C2', 7, 7)]
+        result = cad.calibration_stop(rows)
+        self.assertEqual((result['decision'], result['attempted'], result['zero_capture_refusals']),
+                         ('continue', 2, 1))
+        # one captured member counts, even when lost
+        self.assertEqual(cad.calibration_stop([window('C1', 0, 0, captured=1)])['attempted'], 1)
+        # eight counted windows plus refusals: still no ninth counted attempt
+        eight = [window(f'C{i}', 0, 0) for i in range(1, 9)]
+        self.assertEqual(cad.calibration_stop(eight + [refused('R1')])['decision'], 'insufficient_calibration')
+        with self.assertRaises(ValueError):
+            cad.calibration_stop(eight + [window('C9', 7, 7)])
+        # two consecutive zero-capture refusals escalate; a captured window between them does not
+        two = [window('C1', 7, 7), refused('R1'), refused('R2')]
+        self.assertEqual(cad.calibration_stop(two)['decision'], 'escalate_to_lead')
+        self.assertEqual(cad.calibration_stop([refused('R1'), window('C1', 7, 7), refused('R2')])['decision'], 'continue')
+        for role in ('calibration', 'test'):
+            self.assertFalse(cad.next_arm_triage(passing_packet(calibration_windows=two, next_window_role=role),
+                                                 INTERNAL)['admitted'])
+        with self.assertRaises(ValueError):
+            cad.calibration_stop([window('C1', 3, 0, captured=0)])     # zero-capture cannot carry eligible members
+        with self.assertRaises(ValueError):
+            cad.calibration_stop([{'window': 'C1', 'status': 'final', 'eligible_benign': {'spam': 0, 'bank': 0}}])
+
     def test_cap_accounting_counts_lost_windows_and_fails_closed_at_eight(self):
         rows = [window(f'C{i}', 7, 7) for i in range(1, 4)] + [window(f'C{i}', 0, 0) for i in range(4, 9)]
         result = cad.calibration_stop(rows)
@@ -193,7 +219,7 @@ class RegistrationTextTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         text = (root / 'docs/align/pilot_protocol_v4.md').read_text()
         start = text.index('## R12 window cadence')
-        cls.section = text[start:text.index('\n## ', start+10)]
+        cls.section = ' '.join(text[start:text.index('\n## ', start+10)].split())
         cls.r1 = (root / 'docs/align/r1_runtime_contract.md').read_text()
 
     def test_protocol_states_b1_b2_b3_and_lists_every_triage_check(self):
@@ -201,13 +227,13 @@ class RegistrationTextTests(unittest.TestCase):
             self.assertIn(f'`{name}`', self.section)
         for phrase in ('ceiling, not a reservation', 'authenticated terminal completion', 'minimum 6'.replace('minimum 6', '{6, 7, 8}'),
                        'insufficient_calibration', 'separate simulation', 'not satisfied by counts alone',
-                       'Not yet ruled', '67,371 s', '90,663 s', '--next-arm-triage'):
+                       'zero-capture', 'escalate to the lead', '67,371 s', '96,427 s', '--next-arm-triage'):
             self.assertIn(phrase, self.section)
 
     def test_stale_r1_sizing_is_marked_and_corrected(self):
         self.assertIn('STALE', self.r1)
         self.assertIn('67,371 s', self.r1)
-        self.assertIn('90,663 s', self.r1)
+        self.assertIn('96,427 s', self.r1)
         self.assertNotIn('window_max_s` is set from this table', self.r1)
 
 
