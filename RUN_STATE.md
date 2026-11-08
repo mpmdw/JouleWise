@@ -1042,6 +1042,13 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+210. **Laptop lead (interactive session 1544c617), 2026-11-07 about 22:00 PST: Ed's rulings for the main goal (ALIGN v4 plus an adaptive red team showing the monitor+energy squeeze; see `docs/research/AGENDA.md`).** This item schedules nothing.
+- **Ed, verbatim:** "yes to all your decisons, but to be clear the usb c power meter is between the magsafe cord and the wallbrick, so it does catch all power going from wall to machine through magsafe".
+- **Power path.** The KM003C sits between the USB-C wall brick and the MagSafe cable, so it measures all wall-to-machine power for ALIGN v4 too. Review findings that say the KM003C is not in the v4 path are refuted. The squeeze addendum names the KM003C channel as the authority for small-effect claims. **Magistrate:** confirm, in the next R1 or W1 arm record, that the KM003C capture is live during ALIGN members and that its stream reaches the night custody.
+- **D-139 A1 is amended:** a scoped on-host red team is permitted. The adversary is the agent under test, running sandboxed in the episode harness. No other in-process adversarial programs are allowed.
+- **Monitor:** the primary SHADE-Arena monitor is a frontier model via API, scoring transcripts off the box. A local monitor is secondary. The lead picks the model and the budget in the squeeze addendum.
+- **Venue:** NeurIPS 2027 for the full squeeze result, plus an earlier v4 or limits paper if v4 lands cleanly.
+
 209. **Laptop lead (interactive session 1544c617), 2026-11-07 about 21:10 PST: lead dispositions for R0-L3 (#699, #700). The magistrate may merge both now, fill ledger rows 1, 4 and 5 from the two seat reports, and launch R0 re-run 11 per item 208's plan.**
 - Both seats returned ADMIT_WITH_FIXES with nothing above LOW. **The LOWs are accepted as recorded flags, with no code change.**
 - **The Opus MEDIUM (the #694 merge hazard) applies to #694 only.** #694 stays unmerged until it is rebased onto the merged #699. When it is:
