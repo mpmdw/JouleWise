@@ -115,7 +115,9 @@ class Delta5Witnesses(unittest.TestCase):
         self.assertEqual(result.stdout, (ROOT / series.MANIFEST).read_bytes())
         self.assertEqual(result.stdout, series.raw_json(self.manifest))
         trace = json.loads((ROOT / 'docs/align/v4/dynamic_closure_trace.json').read_bytes())
-        self.assertEqual(len(trace['executed']), 180)
+        # the committed trace grows with each merged module (timing_receipts joined at integration item 6)
+        self.assertGreaterEqual(len(trace['executed']), 180)
+        self.assertIn('joulewise/timing_receipts.py', trace['executed'])
         self.assertTrue(trace['scenarios']['dct_series_window']['ok'])
         for path in ('scripts/align_v4_series.py', series.MANIFEST.as_posix()):
             self.assertIn(path, v4_registration.ARTIFACTS)

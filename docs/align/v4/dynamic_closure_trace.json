@@ -971,6 +971,7 @@
   "joulewise/sampler_teardown.py",
   "joulewise/schemas.py",
   "joulewise/suite.py",
+  "joulewise/timing_receipts.py",
   "joulewise/tolerances.py",
   "joulewise/uncertainty_evidence.py",
   "joulewise/validation.py",
@@ -1177,7 +1178,7 @@
    "tests_run": 144
   },
   "dct_series_window": {
-   "new_paths": 140,
+   "new_paths": 141,
    "ok": true,
    "tests_run": 32
   },
@@ -1200,11 +1201,6 @@
    "new_paths": 2,
    "ok": true,
    "tests_run": 47
-  },
-  "timing_receipts_delta": {
-   "new_paths": 139,
-   "ok": true,
-   "tests_run": 3
   },
   "wp22_synthetic_w1_chain": {
    "new_paths": 30,
