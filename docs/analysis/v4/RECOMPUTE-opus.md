@@ -57,6 +57,23 @@ was not read.
 - W1 U3 replay pairs already used the screened classes: an ineligible member gives `inconclusive`
   (`replay_member_ineligible`), X5 gives `excluded_x5`.
 
+**Opus delta-review corrections (lead, 2026-11-08):**
+- P2 corrected: the "raw value" is what the harness RECORDED. A binary float is taken exactly
+  (`Fraction(float)`), then ns, half to even; integer fields stay exact; never the decimal lexeme. This is
+  what `seconds_ns` does. With A21's float elapsed accumulation, the permanent large-epoch fixtures give
+  953/954 ns seams at 4.3e9 s (snapped) and 1,907/1,908 ns at 9e9 s (kept). An exported production
+  `offset_ns` must equal the re-derived one (`clock_offset_differs_from_production` otherwise).
+- A2(4) at owned-time level: exclude iff an owned turn segment (turn span plus own tool calls, minus
+  gates/holds) has uncovered time, interior gap or partial edge coverage. Uncovered gate or pre-turn time
+  does not exclude; it is disclosed (`pm.episode_covered`, `pm.spans[*].largest_gap_ns`). Test
+  `test_a2_4_applies_to_owned_turn_segments_only`.
+- A27 scope: the SCORED C-sabotage roster (held-out D sabotage in calibration windows) is sealed; the 30B
+  anchor-sabotage replays (ordinals 2/3) are anchors and print. A sealed member prints, in `members` and
+  `exclusions`, only `status: sealed` and `sealed_sha256` (members keep the roster echo), plus
+  `captured: false` when not captured. U1/U2 aggregates of a calibration window's D model that include a
+  sealed member print `verdict`, `parts`, `sealed_sha256` and a `benign_only` aggregate; verdicts are
+  unchanged. Non-benign DC rows stay sealed (A20).
+
 Every new test failed against `c0d1efcae` and passes here. `synth.write_member` now starts the episode 5 s
 after its G0 window, as production places G0 before the episode.
 

@@ -108,7 +108,10 @@ class RefusalTests(unittest.TestCase):
         self.assertEqual(rc_, 0, stderr)
         doc = json.loads(out.read_text())
         self.assertFalse(any(e["captured"] for e in doc["exclusions"]["C1-z1"].values()))
-        self.assertTrue(all(e["captured"] for e in doc["exclusions"]["C1"].values()))
+        self.assertTrue(all(e.get("captured", e.get("status") == "sealed") for e in doc["exclusions"]["C1"].values()))
+        # A27: a not-captured sealed member prints status sealed plus captured: false.
+        zc_sealed = [e for e in doc["exclusions"]["C1-z1"].values() if e.get("status") == "sealed"]
+        self.assertTrue(zc_sealed and all(e["captured"] is False for e in zc_sealed))
         shutil.copytree(root / "windows/C1/members", root / "windows/C1-z1/members")
         for d in (root / "windows/C1-z1/members").iterdir():
             if ":" in d.name:
@@ -151,7 +154,7 @@ class RefusalTests(unittest.TestCase):
         # e12: never captured
         shutil.rmtree(members / "align-v4-c1-e12")
         out = rc.recompute(root, workers=1)
-        flags = {rid: m["flags"] for rid, m in out["members"]["C1"].items()}
+        flags = {rid: m["flags"] for rid, m in out["members"]["C1"].items() if m.get("status") != "sealed"}
         self.assertEqual(flags["align-v4-c1-e06"], ["episode_malformed"])
         self.assertEqual(flags["align-v4-c1-e07"], ["pm_raw_missing"])
         self.assertEqual(flags["align-v4-c1-e08"], ["pm_unreadable"])

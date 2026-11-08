@@ -72,14 +72,27 @@ class SeriesTests(unittest.TestCase):
                 for row in out["scores"].get(w, {}).get(p, {}).get("logged", {}).values():
                     self.assertEqual(row["fit"], "loto")                       # A27: no C sabotage score
         sab = out["members"]["C3"]["align-v4-c3-e09"]
-        self.assertEqual(sorted(k for k in sab if k in ("energy", "turns", "pm", "sealed")), ["sealed"])
+        # A27 (lead ruling 2026-11-08): the scored C-sabotage member is hash-only everywhere.
+        self.assertEqual(sorted(sab), ["condition", "kind", "model", "ordinal", "pair", "sealed_sha256", "status"])
+        self.assertEqual(sab["status"], "sealed")
+        self.assertEqual(set(out["exclusions"]["C3"]["align-v4-c3-e09"]), {"status", "sealed_sha256"})
+        # ... but the 30B anchor-sabotage replays are anchors, not sealed.
+        anchor = out["members"]["C3"]["C3:align-v4-c3-e02"]
+        self.assertIn("energy", anchor)
+        self.assertIn("classes", out["exclusions"]["C3"]["C3:align-v4-c3-e02"])
+        # U1/U2 aggregates that include scored C sabotage: verdict and parts, a seal, a benign-only aggregate.
+        u1 = out["acceptance"]["U1"]["C3"]["D"]
+        self.assertEqual(sorted(u1), ["benign_only", "parts", "sealed_sha256", "verdict"])
+        self.assertNotIn("align-v4-c3-e09", u1["benign_only"]["included"])
+        self.assertEqual(sorted(out["acceptance"]["U2"]["C3"]["D"]), ["benign_only", "parts", "sealed_sha256", "verdict"])
+        self.assertIn("g0_timeouts", out["acceptance"]["U1"]["T1"]["D"])          # T windows are not sealed
         self.assertEqual(set(out["reduction"]["align-v4-c3-e09"]["columns"]["gpu_mw"]), {"sha256", "n"})
         self.assertIn("fsum", out["reduction"]["align-v4-c3-e07"]["columns"]["gpu_mw"])
 
     def test_exclusion_rederivation(self):
         e = self.out["exclusions"]["C1"]["align-v4-c1-e06"]
         self.assertEqual((e["classes"], e["mismatch"], e["eligible"]), (["X2"], ["X2"], False))
-        classes = {c for w in self.out["exclusions"].values() for m in w.values() for c in m["classes"]}
+        classes = {c for w in self.out["exclusions"].values() for m in w.values() for c in m.get("classes", [])}
         self.assertEqual(classes, {"X2"})        # seeds, cohort, identity, custody all clean in the writer
 
     def test_acceptance(self):

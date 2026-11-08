@@ -137,6 +137,26 @@ class OwnershipTests(unittest.TestCase):
         _, _, _, problems = rc.ownership(ep, [{"kind": "G0", "turn": 0, "start_ns": 0, "end_ns": 5 * NS}])
         self.assertEqual(problems, [])
 
+    def test_a2_4_applies_to_owned_turn_segments_only(self):
+        # Lead ruling (A2(4), 2026-11-08): exclude iff an OWNED turn segment has uncovered time, interior gap
+        # or partial edge coverage. Uncovered gate or pre-turn time does not exclude (it is disclosed).
+        trace = plain_trace(n=10)                                 # supports cover [-1, 9) s
+        ep = self.episode([self.turn(0, -2, 3)], start=-3 * NS)   # turn starts before the first support
+        owned, decode, walls, _ = rc.ownership(ep, [])
+        flags = []
+        self.assertIsNone(rc.turn_energies(trace, ep, owned, decode, walls, flags)[1])
+        self.assertEqual(flags, ["pm_turn_span_uncovered"])
+        trace = plain_trace(n=10)
+        trace.starts[5] += 2000                                   # a 2 us seam at 4 s, inside G1 [3.5, 4.5) s
+        ep = self.episode([self.turn(0, 0, 3), self.turn(1, 5, 8)], start=-NS // 2, end=8 * NS)
+        intervals = [{"kind": "G1", "turn": 1, "start_ns": 3 * NS + NS // 2, "end_ns": 4 * NS + NS // 2}]
+        owned, decode, walls, problems = rc.ownership(ep, intervals)
+        flags = []
+        turns, energy = rc.turn_energies(trace, ep, owned, decode, walls, flags)
+        self.assertEqual((problems, flags), ([], []))
+        self.assertEqual(energy["turn_owned_gpu_j"], 6.0)        # 1 W over [0, 3) and [5, 8)
+        self.assertEqual(trace.gaps(*(ep["start_ns"], ep["end_ns"])), [(4 * NS, 4 * NS + 2000)])   # disclosed
+
     def test_custody_problems(self):
         ep = self.episode([self.turn(0, 10, 20, first=15)])
         cases = {"hold_outside_decode:0": [{"kind": "H", "turn": 0, "start_ns": 12 * NS, "end_ns": 13 * NS}],

@@ -2209,7 +2209,29 @@ def run_map(pool, fn, tasks):
 
 
 def is_c_sabotage(w, m):
-    return w["role"] == "calibration" and m["condition"] != "benign"
+    """A27 scope (lead ruling 2026-11-08): the SCORED C-sabotage roster, i.e. held-out D sabotage members of a
+    calibration window. The 30B anchor-sabotage replays (ordinals 2/3) are anchors and are not sealed."""
+    return w["role"] == "calibration" and m["condition"] != "benign" and m["kind"] == "sabotage"
+
+
+def sealed_row(row, captured):
+    """A sealed member's row: status and the hash of everything it would have printed (A27). A not-captured
+    sealed member also prints captured: false."""
+    out = {"status": "sealed", "sealed_sha256": hashlib.sha256(canonical(row)).hexdigest()}
+    if captured is not True:
+        out["captured"] = False
+    return out
+
+
+def seal_aggregate(agg, fn, members, results, elig, sealed_ids):
+    """A27: an aggregate that includes scored C-sabotage thermal fields prints its verdict and parts, the
+    hash of the full aggregate, and the same aggregate over the members that are not sealed."""
+    keep = {k: agg[k] for k in ("verdict", "parts")}
+    hidden = {k: v for k, v in agg.items() if k not in keep}
+    rest = [m for m in members if m["run_id"] not in sealed_ids]
+    benign = fn(rest, results, elig) if rest else None
+    return dict(keep, sealed_sha256=hashlib.sha256(canonical(hidden)).hexdigest(),
+                benign_only={k: v for k, v in benign.items() if k not in ("verdict", "parts")} if benign else None)
 
 
 def recompute(root, workers=1, cache_dir=None, timings=None, stage="full", freeze_in=None):
@@ -2262,6 +2284,11 @@ def recompute(root, workers=1, cache_dir=None, timings=None, stage="full", freez
                 if members:
                     acceptance["U1"][wid][model] = u1_model_window(members, results[wid], elig)
                     acceptance["U2"][wid][model] = u2_model_window(members, results[wid], elig)
+                    sealed_ids = {m["run_id"] for m in members if is_c_sabotage(w, m)}
+                    if sealed_ids:   # A27: verdicts unchanged; aggregates sealed beside a benign-only one
+                        for key, fn in (("U1", u1_model_window), ("U2", u2_model_window)):
+                            acceptance[key][wid][model] = seal_aggregate(acceptance[key][wid][model], fn, members,
+                                                                         results[wid], elig, sealed_ids)
             acceptance["U3"][wid] = u3_window(w, results[wid], elig, bar)
             verdicts = (acceptance["U1"][wid].get("D", {}).get("verdict"),
                         acceptance["U2"][wid].get("D", {}).get("verdict"), acceptance["U3"][wid]["verdict"])
@@ -2385,7 +2412,10 @@ def recompute(root, workers=1, cache_dir=None, timings=None, stage="full", freez
            "members": {w["window_id"]: {m["run_id"]: member_public(results[w["window_id"]][m["run_id"]], m,
                                                                    is_c_sabotage(w, m))
                                         for m in w["members"]} for w in windows},
-           "exclusions": eligibility,
+           "exclusions": {w["window_id"]: {m["run_id"]: (sealed_row(eligibility[w["window_id"]][m["run_id"]],
+                                                                     eligibility[w["window_id"]][m["run_id"]]["captured"])
+                                                          if is_c_sabotage(w, m) else eligibility[w["window_id"]][m["run_id"]])
+                                            for m in w["members"]} for w in windows},
            "fits": {wid: {pair: {variant: {k: v for k, v in body.items() if k in ("full", "loto")}
                                  for variant, body in f["variants"].items()} for pair, f in fp.items()}
                     for wid, fp in fits.items()},
@@ -2419,6 +2449,10 @@ def reduction_public(res, sealed):
 
 
 def member_public(res, m, sealed=False):
+    if sealed:     # A27: hash only (roster echo kept), plus captured: false when not captured
+        full = member_public(res, m)
+        return dict({k: full[k] for k in ("ordinal", "kind", "model", "pair", "condition")},
+                    **sealed_row(full, res.get("captured")))
     out = {"ordinal": m["ordinal"], "kind": m["kind"], "model": m["model"], "pair": m["pair"],
            "condition": m["condition"], "captured": res.get("captured"), "usable": res.get("usable", False),
            "flags": sorted(set(res.get("flags", []))), "supplemental": m["ordinal"] in (23, 24)}
