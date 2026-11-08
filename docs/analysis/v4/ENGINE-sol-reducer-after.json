@@ -1,0 +1,87 @@
+{
+  "synthetic_only": true,
+  "python": "3.13.18 (main, Oct 25 2026, 18:31:23) [Clang 17.0.0 (clang-1700.6.4.2)]",
+  "architecture": "arm64",
+  "producer_sha256": "335e6bde4c9f26efe7c27bafc8d4b67249842de569d6ca7c8d56240d028e5cf3",
+  "unprofiled": {
+    "bytes": 653115,
+    "samples": 12,
+    "parse_records": {
+      "wall_s": 0.04201008297968656,
+      "cpu_s": 0.04102500000000009
+    },
+    "decode_rich": {
+      "wall_s": 0.04129054199438542,
+      "cpu_s": 0.04086499999999993
+    },
+    "clock_mapping": {
+      "wall_s": 4.625064320862293e-06,
+      "cpu_s": 4.000000000004e-06
+    },
+    "integration": {
+      "wall_s": 6.416928954422474e-06,
+      "cpu_s": 5.999999999950489e-06
+    },
+    "C_XML_tree_only": {
+      "wall_s": 0.013252041069790721,
+      "cpu_s": 0.013014999999999999
+    },
+    "plistlib_MB_per_cpu_s": 15.919926873857369
+  },
+  "profiled": {
+    "bytes": 653115,
+    "samples": 12,
+    "parse_records": {
+      "wall_s": 0.11854100006166846,
+      "cpu_s": 0.11775599999999997
+    },
+    "decode_rich": {
+      "wall_s": 0.12844704207964242,
+      "cpu_s": 0.12736000000000003
+    },
+    "clock_mapping": {
+      "wall_s": 1.1874944902956486e-05,
+      "cpu_s": 1.0999999999983245e-05
+    },
+    "integration": {
+      "wall_s": 1.2959004379808903e-05,
+      "cpu_s": 1.3000000000040757e-05
+    },
+    "C_XML_tree_only": {
+      "wall_s": 0.011543666943907738,
+      "cpu_s": 0.011430999999999969
+    },
+    "plistlib_MB_per_cpu_s": 5.546341587689801
+  },
+  "profile": "         919838 function calls in 0.259 seconds\n\n   Ordered by: cumulative time\n   List reduced from 79 to 25 due to restriction <25>\n\n   ncalls  tottime  percall  cumtime  percall filename:lineno(function)\n        1    0.000    0.000    0.259    0.259 bench_reduce_sol.py:79(baseline)\n        5    0.000    0.000    0.259    0.052 bench_reduce_sol.py:73(timed)\n        2    0.000    0.000    0.241    0.120 powermetrics.py:2056(_powermetrics_documents)\n       24    0.000    0.000    0.240    0.010 plistlib.py:923(loads)\n       24    0.000    0.000    0.240    0.010 plistlib.py:901(load)\n       24    0.000    0.000    0.240    0.010 plistlib.py:207(parse)\n       24    0.066    0.003    0.240    0.010 {method 'ParseFile' of 'pyexpat.xmlparser' objects}\n        1    0.000    0.000    0.128    0.128 powermetrics.py:1863(decode_rich_telemetry)\n        1    0.000    0.000    0.119    0.119 powermetrics.py:1703(parse_powermetrics_records)\n        1    0.000    0.000    0.118    0.118 powermetrics.py:1753(_parse_powermetrics_records)\n    67152    0.025    0.000    0.099    0.000 plistlib.py:228(handle_end_element)\n    67152    0.017    0.000    0.038    0.000 plistlib.py:222(handle_begin_element)\n   134326    0.023    0.000    0.036    0.000 plistlib.py:233(handle_data)\n    17592    0.013    0.000    0.028    0.000 plistlib.py:290(end_integer)\n    29136    0.010    0.000    0.021    0.000 plistlib.py:270(end_key)\n   134304    0.019    0.000    0.019    0.000 {built-in method builtins.getattr}\n    57504    0.012    0.000    0.017    0.000 plistlib.py:252(get_data)\n    37992    0.013    0.000    0.017    0.000 plistlib.py:236(add_object)\n   154126    0.015    0.000    0.015    0.000 {method 'append' of 'list' objects}\n     8904    0.004    0.000    0.012    0.000 plistlib.py:259(begin_dict)\n        1    0.001    0.001    0.012    0.012 bench_reduce_sol.py:85(xml_only)\n     9960    0.004    0.000    0.011    0.000 plistlib.py:297(end_real)\n       12    0.001    0.000    0.010    0.001 ElementTree.py:1345(XML)\n       12    0.009    0.001    0.009    0.001 {method 'feed' of 'xml.etree.ElementTree.XMLParser' objects}\n    77836    0.006    0.000    0.006    0.000 {built-in method builtins.isinstance}\n\n\n",
+  "member": {
+    "samples": 200,
+    "raw_bytes": 10885311,
+    "reduced_bytes": 12966,
+    "full_plistlib": {
+      "wall_s": 0.6089254160178825,
+      "cpu_s": 0.6114680000000001
+    },
+    "extractor": {
+      "wall_s": 0.035637791035696864,
+      "cpu_s": 0.04116500000000012
+    },
+    "plistlib_MB_per_cpu_s": 17.801930763343293,
+    "extractor_MB_per_cpu_s": 264.43121583869714,
+    "cold_cache": {
+      "wall_s": 0.034972417051903903,
+      "cpu_s": 0.04052199999999995
+    },
+    "warm_cache": {
+      "wall_s": 0.007913207984529436,
+      "cpu_s": 0.007913999999999977
+    },
+    "serial_window_reduction": {
+      "wall_s": 0.03387533302884549,
+      "cpu_s": 0.0394420000000002
+    },
+    "window_members": 1,
+    "window_note": "Repeated extraction passes over one synthetic file; warm OS page cache; no derived cache.",
+    "byte_identical": true
+  }
+}

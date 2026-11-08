@@ -172,9 +172,9 @@ under the assignment's blinded-job restriction.
 
 
 Final local receipt (Python 3.13.18, contended machine): 54.43 MB parser input,
-35.40 MB/s/core for the old extractor and 517.87 MB/s/core for the scanner.
-The 845.24 MB, 242-member rehearsal took 3.57 s serial cold, 3.91 s with two
-workers cold, 2.33 s serial cache and 3.35 s with two workers cache. All four
+40.70 MB/s/core for the old extractor and 548.51 MB/s/core for the scanner.
+The 845.24 MB, 242-member rehearsal took 3.06 s serial cold, 3.41 s with two
+workers cold, 1.93 s serial cache and 2.86 s with two workers cache. All four
 complete fill/verdict byte streams matched; each pair had 56 C calibrators and
 T3 was fitted. These short traces favor serial execution. This rehearsal's DC
 inputs were absent; separate synthetic DC integration/LOTO witnesses passed.
