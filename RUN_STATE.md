@@ -1042,6 +1042,36 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+218. **Magistrate activation 17ca7bed (Opus 5.5, headless, 2026-11-07 from 23:48 PST): R0 re-run 11 PASSED, complete_r0 true. Kit filled with the R0 rung. R1 cannot be armed yet because no route exists to arm it. A Sol xhigh seat is building one.** No pending notices, no unread mail from Ed. The open directive issues are unchanged and none acted on this slice.
+- **R0 re-run 11** (`/Users/edr/night-align/r0-v4-20261108T0550Z`, 21:41-23:45 PST, 7,437 s): `pass`; all 13 checks pass or are diagnostic/not_required by design.
+  - SMC `s_fast` TV0h (alias TV1h), `s_slow` Tf08 (design_literal rule; picks PROVISIONAL, R1 re-classifies).
+  - Ladder selected `medium` (xhigh bad-cap fraction 0.25 failed; medium 0.20). Load NLL 11.0368 vs reference 11.0642. Peak memory 37.0 GB. B7 not required (rewind 0.0).
+  - D pins PASS.
+  - Contention: SMC not contended; two long-decode guard flags (softwareupdated 0.25-0.29 core at about 23:10, the known scan).
+  - Display: dwell 300 s, no wake, so the run is admissible (item 209).
+  - Activation 5bcfa84e exited 21:36:15, before the dwell ended; no agent alive during the run.
+  - Record: `records/2026-11-08-align-r0-v4-rerun11` @ `d8bc5baa1`. It holds only NOTE.md: GitHub push protection matched a Stripe-test-key-shaped string in model-generated fixture text inside report.json (not a credential; not bypassed). The reports stay on the Mac, pinned by sha256 in the NOTE. Ed mailed on thread `1a198fafa8fc12ba`.
+- **Item 202 (1)-(2) done** on `lane/2026-11-07-r1-kit-r0fill`:
+  - `5d9b66dd4`: `R0.reasoning_effort = "medium"`, kit regenerated; `--check` blocks on exactly `R1.B_D, R1.I_D, R1.T_dead, R1.thermal_policy`.
+  - `d9d1098c6`: `configs/align/v4/r1_runtime.json` `sensors` filled. The runtime refuses (exit 2) while it reads PENDING_R0, a step item 202 did not list. Values: TV0h/Tf08, fans F0Ac/F1Ac, `r0_sha256` = sha256 of R0's `smc/r0.json` `e6231a8f…769b`.
+  - 8 snapshot tests that pin the committed pending state now fail as expected (6 in `test_v4_kit`, 2 in `test_r1_runtime`). The R1-ARM-1 seat updates them.
+- **Why R1 cannot arm (item 202 (3)):** no R1 night plan or arm route exists. The R1 integration report says so ("There is still no R1 plan"; prerequisite 5).
+  - A `DIAGNOSTIC_NO_PACK` plan refuses in `night_gate._check_registration` (no ruled R1 registration).
+  - `run_night --dry-arm` takes only HAZARD_PACK plans.
+  - The pilot session tooling arms member windows, not the R1 chain.
+- **Seat R1-ARM-1** (Sol 6.1 xhigh, local, Mac otherwise idle). Branch `lane/2026-11-08-r1-arm` from `d9d1098c6`. Brief and output `~/night-archive/seats-17ca7bed/R1-ARM-1-*`.
+  - It chooses the smallest correct route (HAZARD_PACK window around the R1 chain, a ruled R1 registration, or an R0-style launcher).
+  - It runs the route end to end on a synthetic runtime through the real run_night or launcher, and writes the runbook.
+  - It sizes `window_max_s` from item 216's 96,427 s floor plus bracket/close/harvest.
+  - It answers item 202 (4) from code, and fixes the snapshot tests.
+  - No R1 measurement code changes.
+
+**Next activation (replaces item 211's pointer; items 202-204, 207, 209, 210, 212-217 hold):**
+(1) Read R1-ARM-1's report (`.codex-report/R1-ARM-1.md` on `lane/2026-11-08-r1-arm`). Re-execute its synthetic end-to-end run yourself. Have one independent executing review (cloud Claude, or a different Sol seat) of any change to `run_night.py`, `night_gate.py` or the watchdog, because arming code decides whether a window measures.
+(2) Then arm R1 from a measurement checkout of that branch per its runbook: arm notice to Ed before install; display asleep; `window_max_s` ≥ 96,427 s plus derived bracket/close/harvest; no external volume. Exit before t0.
+(3) If the seat returns NEEDS_RULING on anything that changes which data count, take it to the laptop lead in a RUN_STATE item, and to Ed only if the lead is silent.
+(4) Item 205 (4) holds: Flash-Next and the SSD qualification wait for Ed at the Mac (Sunday).
+
 217. **Laptop lead (interactive session 1544c617), 2026-11-07 about 23:40 PST: R12 B3 reverted to a FIXED 8 calibration windows.** Two independent synthetic simulations (`align/2026-11-08-b3-sim-sol1` @ `09d7b3c7f`, `-sol2` @ `95d43c054`) agree. Stopping on counts saves about one window, but under window-level drift it lowers the threshold and raises future benign FPR against fixed 8:
 - sol1, clustered/hot state: maximum rule 2.84 % vs 2.14 %; 5 % rank 5.38 % vs 4.13 %;
 - sol2, hot10, tau .5: 2.73 % vs 2.22 %.
