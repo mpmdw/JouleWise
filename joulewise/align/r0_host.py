@@ -70,7 +70,9 @@ class QuietGuard:
     include shared defaults and configured extras; missing roots fail closed.
     A refusal is latched even if an endpoint catches the raised exception.
     Contaminant CPU uses cumulative TIME over at least prewindow.INTERVAL_S;
-    the first clean admission waits for that baseline before returning.
+    the first admission waits for that baseline before returning. Under
+    R0-L3 a contaminant over the 0.05 CPU-s/s bar is a flag in the receipt and
+    in ``contention_flags``, never a refusal.
     """
 
     def __init__(self, parents, *, run=subprocess.run, inspect_custody=census,
@@ -84,6 +86,7 @@ class QuietGuard:
         self._previous_over = {}
         self.failure = None
         self.receipts = []
+        self.contention_flags = []
 
     def _now(self):
         now = self.clock()
@@ -269,9 +272,16 @@ class QuietGuard:
             busy = self._cpu_interval(receipt)
             receipt["busy"] = busy
             if busy:
+                # R0-L3: contaminant CPU contention is recorded, not fatal.
+                # The census refusals above still refuse and latch.
                 names = ", ".join(f"{row['pid']} {row['command']} {row['cpu_s_per_s']:.6g} CPU-s/s"
                                   for row in busy)
-                raise Refused(f"contaminating CPU contention: {names}")
+                receipt["contention_flag"] = f"contaminating CPU contention: {names}"
+                self.contention_flags.append({
+                    "monotonic_s": now, "flag": receipt["contention_flag"],
+                    "interval": {k: receipt["cpu_interval"].get(k)
+                                 for k in ("start_monotonic_s", "end_monotonic_s", "elapsed_s")},
+                    "busy": busy})
             self.last = self._now()
         except Exception as exc:
             if not any(item is receipt for item in self.receipts):
@@ -489,6 +499,41 @@ def host_snapshot(run=command):
             "note": "Read-only desk readiness; R1 lever adoption and arm readiness require their own gates."}
 
 
+DISPLAY_TRANSITION = re.compile(
+    r"^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d [+-]\d{4})\s.*?\bDisplay is turned (on|off)\b", re.M)
+
+
+def display_census(started_epoch, finished_epoch, run=subprocess.run):
+    """R0-L3 display ruling (RUN_STATE 206): record, never refuse.
+
+    Records `pmset -g`'s displaysleep value, the display state at the run's
+    start (the last transition before it) and every `pmset -g log` display
+    transition inside [started_epoch, finished_epoch].
+    """
+    from datetime import datetime
+    record = {"displaysleep_minutes": None, "display_at_start": None, "transitions": [],
+              "display_woke_during_run": None}
+    env = {**os.environ, "LC_ALL": "C"}
+    try:
+        settings = run(("/usr/bin/pmset", "-g"), capture_output=True, text=True, timeout=15, env=env)
+        match = re.search(r"(?m)^\s*displaysleep\s+(\d+)", settings.stdout)
+        record["displaysleep_minutes"] = int(match[1]) if match else None
+    except Exception as exc:
+        record["pmset_g_error"] = f"{type(exc).__name__}: {exc}"
+    try:
+        log = run(("/usr/bin/pmset", "-g", "log"), capture_output=True, text=True, timeout=60, env=env)
+        for match in DISPLAY_TRANSITION.finditer(log.stdout):
+            when = datetime.strptime(match[1], "%Y-%m-%d %H:%M:%S %z").timestamp()
+            if when < started_epoch:
+                record["display_at_start"] = match[2]
+            elif when <= finished_epoch:
+                record["transitions"].append({"state": match[2], "epoch_s": when, "line": match[0].strip()})
+        record["display_woke_during_run"] = any(t["state"] == "on" for t in record["transitions"])
+    except Exception as exc:
+        record["pmset_log_error"] = f"{type(exc).__name__}: {exc}"
+    return record
+
+
 def smc_enumeration(repo, output, step=None):
     try:
         profile = profile_config(step)
@@ -499,12 +544,34 @@ def smc_enumeration(repo, output, step=None):
     if not script.is_file():
         return {"status": "unavailable", "reason": "SMC lane not integrated"}
     import sys
-    argv = [sys.executable, "-B", str(script), "--output", str(output), "--gpu-step",
-            "--idle-seconds", str(profile["idle_seconds"]), "--idle-max-seconds", str(profile["idle_max_seconds"]),
-            "--load-seconds", str(profile["load_seconds"]),
-            "--recovery-seconds", str(profile["recovery_seconds"])]
-    result = subprocess.run(argv, capture_output=True, text=True, timeout=budget["timeout_seconds"])
+    from joulewise.align.apple.smc_enumeration import CONTENTION_REDO_EXIT
+    output = Path(output)
+    redone = []
+    # R0-L3: ruling 8 in R0. A sustained episode (largest single process,
+    # kernel_task excluded, >=0.5 cores for 60 s)
+    # abandons the first capture for ONE redo; the redo records any further
+    # episode as `contended` rather than abandoning or refusing.
+    for policy in ("redo", "flag"):
+        argv = [sys.executable, "-B", str(script), "--output", str(output), "--gpu-step",
+                "--idle-seconds", str(profile["idle_seconds"]), "--idle-max-seconds", str(profile["idle_max_seconds"]),
+                "--load-seconds", str(profile["load_seconds"]),
+                "--recovery-seconds", str(profile["recovery_seconds"]), "--contention-policy", policy]
+        result = subprocess.run(argv, capture_output=True, text=True, timeout=budget["timeout_seconds"])
+        if policy == "flag" or result.returncode != CONTENTION_REDO_EXIT:
+            break
+        attempt = {"argv": argv, "exit_code": result.returncode, "stderr": result.stderr,
+                   "reason": "sustained background CPU contention (R0-L3 redo)"}
+        rejected = output.with_name(f"{output.name}.rejected{len(redone) + 1}")
+        if output.is_dir():
+            try:
+                attempt["contention"] = json.loads((output / "contention.json").read_text())
+            except (OSError, ValueError) as exc:
+                attempt["contention_error"] = f"{type(exc).__name__}: {exc}"
+            output.rename(rejected)
+            attempt["output_dir"] = str(rejected)
+        redone.append(attempt)
     receipt = {"status": "fail" if result.returncode else "inconclusive",
+               "contention_redo": redone, "contended": False,
                "argv": argv, "exit_code": result.returncode, "smc_step_budget": budget,
                "timeout_seconds": budget["timeout_seconds"],
                "stdout": result.stdout, "stderr": result.stderr,
@@ -577,6 +644,11 @@ def smc_enumeration(repo, output, step=None):
                        selected_key_aliases=classification["selected_key_aliases"],
                        exponential_fit_diagnostic=diagnostic, source_response=payload["response"])
         receipt["capture_coverage_diagnostic"] = payload["coverage"]
+        # R0-L3: the capture's contention receipts and flag, read beside the
+        # picks; recorded, never a refusal. A legacy payload has none.
+        receipt["contention"] = classification["contention"]
+        receipt["contention_by_phase"] = classification["contention_by_phase"]
+        receipt["contended"] = bool((payload.get("contention") or {}).get("contended"))
         by_key = {row["key"]: row for row in classification["ranking"]}
         selected_rows = {key: by_key[key] for key in selection.values() if key in by_key}
         receipt["selected_key_readability"] = {key: {field: row[field] for field in (
