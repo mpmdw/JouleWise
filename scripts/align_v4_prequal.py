@@ -38,13 +38,18 @@ def main(argv=None):
     parser.add_argument("--r0-report", type=Path, help="an R0 report.json to run the D pin verifier against")
     parser.add_argument("--offline", action="store_true", help="no network: HF listing not run, caches only")
     parser.add_argument("--only", help="comma-separated subset (the report is then incomplete)")
+    parser.add_argument('--w1-smoke-only', action='store_true',
+                        help='offline W1 software extension only; does not qualify the R0/model checks')
+    parser.add_argument('--w1-series', help='repo-relative planning-only series projection (no outcomes)')
+    parser.add_argument('--w1-window-plan', help='repo-relative planned window with deadline projection')
+    parser.add_argument('--w1-candidate', help='candidate commit the registration receipt must bind (default HEAD)')
     args = parser.parse_args(argv)
     os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
     if args.output.exists():
         parser.error("--output must be a new directory")
     if not 1 <= args.generated_transitions <= 12:
         parser.error("--generated-transitions must be in [1, 12]")
-    names = {n for n, _ in prequal.AIR_CHECKS + prequal.MODEL_CHECKS}
+    names = {n for n, _ in prequal.AIR_CHECKS + prequal.MODEL_CHECKS + prequal.W1_CHECKS}
     only = set(args.only.split(",")) if args.only else None
     if only and not only <= names:
         parser.error(f"unknown checks: {sorted(only - names)}")
@@ -55,9 +60,14 @@ def main(argv=None):
                           model_backend=args.model_backend, sibling_repo=args.sibling_repo,
                           sibling_revision=args.sibling_revision,
                           generated_transitions=args.generated_transitions, offline=args.offline,
-                          r0_report=args.r0_report)
-    report = prequal.run(ctx, only=only)
+                          r0_report=args.r0_report, w1_series=args.w1_series,
+                          w1_window_plan=args.w1_window_plan, w1_candidate=args.w1_candidate)
+    report = prequal.run(ctx, only=only, w1_only=args.w1_smoke_only)
     prequal.write(report, args.output)
+    print('| Check | Result |')
+    print('|---|---|')
+    for row in report['checks']:
+        print(f"| {row['check']} | {row['status'].upper()} |")
     print(f"{report['status']}: {args.output / 'prequal.json'}; failed={report['failed']} not_run={report['not_run']}")
     return EXIT[report["status"]]
 

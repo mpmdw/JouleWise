@@ -27,6 +27,8 @@ import tempfile
 import time
 import traceback
 
+from joulewise.align.w1_prequal import CHECKS as W1_CHECKS
+
 REPO = Path(__file__).resolve().parents[2]
 SCHEMA = "joulewise.align.v4.prequal.v1"
 STATUSES = ("pass", "fail", "diagnostic", "not_run")
@@ -106,7 +108,8 @@ class Context:
     def __init__(self, *, repo=REPO, work=None, hf_cache=None, stage="r0", python_bin=None,
                  launcher=None, launcher_ref=None, model_backend="none", sibling_repo=SIBLING_REPO,
                  sibling_revision=SIBLING_REVISION, generated_transitions=12, offline=False,
-                 r0_report=None, hf_api=None, stack=None):
+                 r0_report=None, hf_api=None, stack=None, w1_series=None,
+                 w1_window_plan=None, w1_candidate=None, w1_run=None):
         self.repo = Path(repo)
         self.work = Path(work or tempfile.mkdtemp(prefix="jwprequal-"))
         self.hf_cache = Path(hf_cache or self.work / "hf")
@@ -118,6 +121,9 @@ class Context:
         self.generated_transitions = generated_transitions
         self.offline = offline
         self.r0_report = r0_report
+        self.w1_series, self.w1_window_plan = w1_series, w1_window_plan
+        self.w1_candidate = w1_candidate
+        self.w1_run = w1_run or subprocess.run
         self._hf_api = hf_api
         self.stack = dict(STACK if stack is None else stack)
         self._cache = {}
@@ -1010,10 +1016,11 @@ MODEL_CHECKS = (("model-load", check_model_load), ("load", check_load), ("genera
 NETWORK_CHECKS = {"d-pins"}
 
 
-def run(ctx, *, only=None, skip=()):
+def run(ctx, *, only=None, skip=(), w1_only=False):
     started = time.monotonic()
     rows = []
-    selected = [(n, f) for n, f in AIR_CHECKS + MODEL_CHECKS if (only is None or n in only) and n not in skip]
+    required = W1_CHECKS if w1_only else AIR_CHECKS + MODEL_CHECKS + (W1_CHECKS if ctx.stage == 'w1' else ())
+    selected = [(n, f) for n, f in required if (only is None or n in only) and n not in skip]
     for name, fn in selected:
         t0 = time.monotonic()
         if name in dict(MODEL_CHECKS) and ctx.model_backend == "none":
@@ -1035,9 +1042,10 @@ def run(ctx, *, only=None, skip=()):
         rows.append(row)
     failed = [r["check"] for r in rows if r["status"] == "fail"]
     missing = [r["check"] for r in rows if r["status"] == "not_run"]
-    unselected = [n for n, _ in AIR_CHECKS + MODEL_CHECKS if n not in {r["check"] for r in rows}]
+    unselected = [n for n, _ in required if n not in {r["check"] for r in rows}]
     status = "fail" if failed else "incomplete" if (missing or unselected) else "pass"
-    return {"schema": SCHEMA, "status": status, "stage": ctx.stage, "failed": failed,
+    return {"schema": SCHEMA, "status": status, "stage": ctx.stage,
+            "scope": "w1-software-extension-only" if w1_only else "full-prequal", "failed": failed,
             "not_run": missing + unselected, "checks": rows, "mac_only": MAC_ONLY,
             "host": host_facts(), "checkout": checkout_facts(ctx.repo),
             "implementation_sha256": {p: hashlib.sha256((ctx.repo / p).read_bytes()).hexdigest() for p in (
@@ -1046,7 +1054,14 @@ def run(ctx, *, only=None, skip=()):
                 "configs/align/v4/r0_desk.json", "configs/align/v4/qwen38-27b-8bit-hf-pins.json",
                 "configs/align/v4/prequal_r0_reference.json", "configs/align/v4/r0_nll_reference.json",
                 "configs/align/v4/prequal_sibling_nll_reference.json", "scripts/validate_align_v4_w1_plan.py",
-                "configs/campaigns/align_v4/registration/inputs.json")
+                "configs/campaigns/align_v4/registration/inputs.json", "joulewise/align/w1_prequal.py",
+                "tests/align/test_w1_smoke_paths.py", "scripts/align_v4_session.py",
+                "scripts/align_r1_turn_counts_export.py", "scripts/align_w1_budget_procedure.py",
+                "joulewise/align/apple/v4_cadence.py", "joulewise/align/apple/v4_registration.py",
+                "joulewise/b5/driver.py", "joulewise/align/apple/km003c.py",
+                "tests/align/test_v4_kit.py", "tests/align/test_v4_cadence.py",
+                "tests/align/test_r1_rehearsal.py", "tests/align/test_r1_turn_counts_export.py",
+                "tests/align/test_km003c.py", "tests/test_b5_driver.py", "tests/test_b5_driver_p3.py")
                 if (ctx.repo / p).is_file()},
             "model_backend": ctx.model_backend, "total_seconds": round(time.monotonic() - started, 3),
             "authority": "RUN_STATE item 183 (no check pinned to the Mac if it can run elsewhere); "

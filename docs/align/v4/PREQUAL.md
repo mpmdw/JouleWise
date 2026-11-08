@@ -193,6 +193,57 @@ anything the Air can stand in for.
 
 ## Remaining
 
+### W1 extension (offline; w1-smoke lane)
+
+Run the additional software gates before spending MBP time:
+
+```sh
+python3.13 -B scripts/align_v4_prequal.py \
+  --offline --w1-smoke-only --stage w1 --output /private/tmp/w1-prequal-NEW \
+  --w1-candidate CANDIDATE_FULL_SHA \
+  --w1-series path/in/this/checkout/series-projection.json \
+  --w1-window-plan path/in/this/checkout/planned-window.json
+```
+
+This prints a PASS/FAIL table and writes the usual JSON/Markdown reports.
+Any failure exits 1; an omitted required check exits 3. Without
+`--w1-smoke-only`, `--stage w1` includes these gates alongside the existing
+R0/model checks. An extension-only pass **does not replace** full PREQUAL.
+All W1 extension checks are offline; no model weights, sensors or study paths
+are opened. The three path probes run targeted unittest classes, one bounded
+subprocess at a time, with host command runners injected.
+
+| Check | Evidence |
+|---|---|
+| `w1-arm-cli` | Real CLI parses/forwards every required arm argument; omission refuses; real `_arm_and_install` writes arm records and refuses missing top-up/OBC, failed triage and external-volume observations before installer handoff. Host/disk/installer seams are synthetic. |
+| `w1-executed-receipt` | Independently walks the static first-party import closure; validates every bound artifact against Git **and working bytes**, plus exact candidate commit and clean checkout. Pending registration fails. |
+| `w1-calibration-series` | A source-hash-bound planning projection names one W1, fixed C1-C8, then a separate test cohort; exercises no early stop, both-pair shortfall, pending final eligibility, zero-capture replacement and two-zero escalation. No outcomes are read. |
+| `w1-r1-chain` | Synthetic lane-shaped R1 (no bundle key): real export CLI, both backfill CLIs, derive-contrast, real kit regeneration/`--check`, then a deliberate generated-byte mismatch. Synthetic readiness replaces prospective registration only in this probe; the candidate receipt is checked separately. |
+| `w1-meter-launch` | Shared HAZARD_PACK production meter argv, injected fake meter process and process census, supervision/hash/stop custody; parser proves missing DC for an interrupted member leaves GPU admission unchanged. No real USB or GPU channel is qualified. |
+| `w1-window-deadline` | Explicit segment/attempt/blackout budget, plus bracket/close/harvest. Applies item 216's R1 floors, 67,371 s without redo / 96,427 s with redo; never confuses those with W1's own span. |
+| `w1-triage-integrity` | Deliberately stale **valid** packet. Currently FAIL: production triage v1 has no freshness or digest binding. A malformed-packet refusal is not a substitute. |
+
+The series projection is a planning interface, not a new source of registration
+authority. Its JSON has `schema: joulewise.align_v4.smoke_series_plan.v1`,
+`source: {path, sha256}` (safe repository-relative frozen source manifest), and
+`windows: [{window, role, benign_per_pair?}]`. Roles are `w1`, `calibration`,
+`test`; calibration must be C1-C8 with `benign_per_pair: {spam: 7, bank: 7}`.
+The lead must review the projection against the frozen manifest. The check
+hashes the manifest but does not infer a schedule from a prose manifest.
+
+The planned-window JSON carries the actual `window_max_s` plus a
+`smoke_deadline_projection` object: `kind: r1|w1`,
+`segments: [{bound_s, attempts, batch_encounters}]`, `bracket_s`, `close_s`,
+`harvest_s`. `attempts` includes every permitted retry; `batch_encounters`
+counts every attempt that can encounter 11:45-13:15. Each encounter reserves
+11,164 s. These inputs must come from the installed plan's t0 and schedule;
+the validator does not reconstruct that schedule. Missing projections fail,
+and no default is guessed from the old R1 display.
+
+See [W1-SMOKE.md](W1-SMOKE.md) for native blockers and the output parser.
+
+### Earlier remaining work
+
 1. **Layer-streamed D backend (Air+LS), designed but not built.** It would have caught the
    2026-11-06 `load` failure off the Mac. Design:
    - Download D's 29.5 GB once to the Air. This exceeds today's 2 GB rule and needs a ruling.
