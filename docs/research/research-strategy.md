@@ -2,6 +2,12 @@
 
 This records the strategy discussion of 7-8 November 2026. It is the "why" behind `docs/research/AGENDA.md`, which holds the "what next". Update both together.
 
+## 0. Capstone milestones (Ed, 2026-11-08)
+- **Nov 30: capstone talk.** Headline: the sabotage energy tripwire (v3 pilots, the instrument with known-bytes as validation, the squeeze framework, v4 in progress; v4 outcomes stay sealed).
+- **Mid-December: capstone paper.** The sabotage-tripwire pilot study, with BYTES and known-bytes as the instrument-validation section. v4 results go in only if v4 passes its registered release by about Dec 10.
+- **About six months of advisor-supervised research:** v4 → v5 (the squeeze) → NeurIPS 2027 (mid-May).
+- The older BYTES-led "Paper 1" framing is superseded.
+
 ## 1. What result we are aiming for
 | What is shown | Likely level |
 |---|---|
