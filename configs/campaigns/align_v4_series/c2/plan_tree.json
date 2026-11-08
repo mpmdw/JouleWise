@@ -1,0 +1,1662 @@
+{
+  "acceptance_policy": {
+    "arming_prerequisites": [
+      {
+        "id": "D117-U2",
+        "status": "required_before_arm"
+      },
+      {
+        "id": "D117-POSTCOLLECTION-TRUST-01",
+        "status": "required_before_mint"
+      },
+      {
+        "id": "D117-U11-IDPIN-PROJECTION",
+        "status": "required_before_arm"
+      }
+    ],
+    "issued_acceptance": {
+      "acceptance_id": "d079_calibration_acceptance_v2_n24_25g83_r2",
+      "artifact_sha256": "f949f511254e03b50b0be1cea37f74c1e8e6b4c49926c6c197024beea07b3660",
+      "derivation_sha256": "10965d36527c73217154efdbd75ab923412685f3e79526bd31f33e6f9142e5c0",
+      "path": "configs/calibration/calibration_acceptance_d079_v2_n24_25g83_r2.json"
+    },
+    "issued_ledger_head": {
+      "head_sha256": "a5b825b7dd77856be8d612be759be84f925a32f6e671481c2662bb03cbf57014",
+      "path": "configs/calibration/calibration_ledger_head.json"
+    },
+    "selection": "issued_d116_artifact_only",
+    "successor_effect": "invalidate_and_reissue_readiness_and_pin_projection"
+  },
+  "arm_attachments": {},
+  "attempt_policy": {
+    "authority": "R6; Block-6 catalog unchanged",
+    "minimum_kept_units_per_stratum": 5,
+    "outcome_dependent_top_up": "forbidden",
+    "science_member_replacements": 0
+  },
+  "b6_layout": {
+    "corpus": {
+      "planned": 18,
+      "stop_after_valid": 12
+    },
+    "packs": [
+      "align-v4-c2"
+    ],
+    "schema_version": "joulewise.b6_session_layout.v1"
+  },
+  "campaign_policy": {
+    "path": "configs/campaign_policies/quiet_mac_p2_b5.json",
+    "sha256": "ba0f7b7f1538fe87f6281362efbba4b05f7dff74b4bfd78e84c98b9e8859bc60"
+  },
+  "closeout_attachments": {
+    "backup_requirements": {
+      "bound_root_verified": true,
+      "claim_root_verified": true,
+      "required_successful_backups": 2
+    },
+    "bracket_binding_sha256": null,
+    "evaluation_basis_sha256": null,
+    "extraction_report_sha256": null,
+    "postcollection_receipt_digests": [],
+    "terminal_ledger_head": null,
+    "todo": "TODO(postcollection): leave receipt-derived closeout fields empty until a completed claim window supplies authenticated evidence.",
+    "whole_window_verdict_sha256": null
+  },
+  "draft_status": "PROVISIONAL_SKELETON",
+  "external_inputs": [
+    "artifacts",
+    "manifests"
+  ],
+  "generator": {
+    "member_builder": "scripts/align_v4_kit.py",
+    "member_builder_sha256": "68d68a412a67eab2ae5eb6894dc5625070fc5208fd3f0de7af7b032b21e67232",
+    "path": "scripts/align_v4_series.py",
+    "sha256": "9f3df966f56b0e92e70ecd392130cc3e58806ffa9bee1398b0864d59ba2f4e90"
+  },
+  "module_order": [
+    "align-v4-c2-qwen3-30b-a3b",
+    "align-v4-c2-qwen3.8-27b"
+  ],
+  "non_claim": true,
+  "plan": {
+    "actual_sha256": "759749d500a9c712d48b6d6e1931d6238f35870214217d7f8e7ddc1466eed812",
+    "declared_sha256": "759749d500a9c712d48b6d6e1931d6238f35870214217d7f8e7ddc1466eed812",
+    "path": "collection_plan.json",
+    "plan_id": "align-v4-c2"
+  },
+  "roots": {
+    "bound_root_leaf": "runs_align_v4_c2_bound",
+    "claim_root_leaf": "runs_align_v4_c2"
+  },
+  "schema_version": "joulewise.d117_plan_tree.v1",
+  "science": [
+    {
+      "ac_powermode": null,
+      "arm": null,
+      "block_id": null,
+      "block_index": 1,
+      "config": "align-pilot-v3-episodes-a-e01.json",
+      "config_path": "configs/campaigns/align_v4_series/c2/stages/episodes-a/align-pilot-v3-episodes-a-e01.json",
+      "config_sha256": "6d2c4ecda2022b25ccb68bc455bf783851f5d77b7b09c89737cdd0a50df4bb58",
+      "index": 1,
+      "model_tag": "qwen3-30b-a3b-mlx",
+      "module_id": "align-v4-c2-qwen3-30b-a3b",
+      "pack_id": "align-v4-c2",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 1,
+      "role": "absolute_repeat",
+      "run_id": "align-pilot-v3-episodes-a-e01",
+      "stage_id": "align-v4-c2-episodes-a",
+      "workload": "align_episode"
+    },
+    {
+      "ac_powermode": null,
+      "arm": null,
+      "block_id": null,
+      "block_index": 2,
+      "config": "align-pilot-v3-episodes-a-e02.json",
+      "config_path": "configs/campaigns/align_v4_series/c2/stages/episodes-a/align-pilot-v3-episodes-a-e02.json",
+      "config_sha256": "6a5c0daaa019e66440e8860ef82163312dea84fd9aaaa28f6fd0f3b6464712a8",
+      "index": 2,
+      "model_tag": "qwen3-30b-a3b-mlx",
+      "module_id": "align-v4-c2-qwen3-30b-a3b",
+      "pack_id": "align-v4-c2",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 1,
+      "role": "absolute_repeat",
+      "run_id": "align-pilot-v3-episodes-a-e02",
+      "stage_id": "align-v4-c2-episodes-a",
+      "workload": "align_episode"
+    },
+    {
+      "ac_powermode": null,
+      "arm": null,
+      "block_id": null,
+      "block_index": 3,
+      "config": "align-pilot-v3-episodes-a-e03.json",
+      "config_path": "configs/campaigns/align_v4_series/c2/stages/episodes-a/align-pilot-v3-episodes-a-e03.json",
+      "config_sha256": "56105368782182d14e5dbd125854de1dff888cad4c1c25d21aa6820fcf2062d2",
+      "index": 3,
+      "model_tag": "qwen3-30b-a3b-mlx",
+      "module_id": "align-v4-c2-qwen3-30b-a3b",
+      "pack_id": "align-v4-c2",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 1,
+      "role": "absolute_repeat",
+      "run_id": "align-pilot-v3-episodes-a-e03",
+      "stage_id": "align-v4-c2-episodes-a",
+      "workload": "align_episode"
+    },
+    {
+      "ac_powermode": null,
+      "arm": null,
+      "block_id": null,
+      "block_index": 4,
+      "config": "align-pilot-v3-episodes-a-e04.json",
+      "config_path": "configs/campaigns/align_v4_series/c2/stages/episodes-a/align-pilot-v3-episodes-a-e04.json",
+      "config_sha256": "5b893b05211f36450bb60c7c01b39ec1721415022c65797d0c2fb3831d1a7bfa",
+      "index": 4,
+      "model_tag": "qwen3-30b-a3b-mlx",
+      "module_id": "align-v4-c2-qwen3-30b-a3b",
+      "pack_id": "align-v4-c2",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 1,
+      "role": "absolute_repeat",
+      "run_id": "align-pilot-v3-episodes-a-e04",
+      "stage_id": "align-v4-c2-episodes-a",
+      "workload": "align_episode"
+    },
+    {
+      "ac_powermode": null,
+      "arm": null,
+      "block_id": null,
+      "block_index": 5,
+      "config": "align-v4-c2-episodes-a-e05.json",
+      "config_path": "configs/campaigns/align_v4_series/c2/stages/episodes-a/align-v4-c2-episodes-a-e05.json",
+      "config_sha256": "84d5279c52070e8ee30b9f069032b88f30fb4d52c753b8b87d08f08e86e9afbd",
+      "index": 5,
+      "model_tag": "qwen3.8-27b-mlx",
+      "module_id": "align-v4-c2-qwen3.8-27b",
+      "pack_id": "align-v4-c2",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 2,
+      "role": "absolute_repeat",
+      "run_id": "align-v4-c2-episodes-a-e05",
+      "stage_id": "align-v4-c2-episodes-a",
+      "workload": "align_episode"
+    },
+    {
+      "ac_powermode": null,
+      "arm": null,
+      "block_id": null,
+      "block_index": 6,
+      "config": "align-v4-c2-episodes-a-e06.json",
+      "config_path": "configs/campaigns/align_v4_series/c2/stages/episodes-a/align-v4-c2-episodes-a-e06.json",
+      "config_sha256": "25dd81c7af7ab53bad53d324937232f9f9063cfd25704077cccff69882ada404",
+      "index": 6,
+      "model_tag": "qwen3.8-27b-mlx",
+      "module_id": "align-v4-c2-qwen3.8-27b",
+      "pack_id": "align-v4-c2",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 1,
+      "role": "absolute_repeat",
+      "run_id": "align-v4-c2-episodes-a-e06",
+      "stage_id": "align-v4-c2-episodes-a",
+      "workload": "align_episode"
+    },
+    {
+      "ac_powermode": null,
+      "arm": null,
+      "block_id": null,
+      "block_index": 7,
+      "config": "align-v4-c2-episodes-a-e07.json",
+      "config_path": "configs/campaigns/align_v4_series/c2/stages/episodes-a/align-v4-c2-episodes-a-e07.json",
+      "config_sha256": "928241625a46918441781e667df9d587a59f82288c65afb19b1c0202ddaf57d0",
+      "index": 7,
+      "model_tag": "qwen3.8-27b-mlx",
+      "module_id": "align-v4-c2-qwen3.8-27b",
+      "pack_id": "align-v4-c2",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 1,
+      "role": "absolute_repeat",
+      "run_id": "align-v4-c2-episodes-a-e07",
+      "stage_id": "align-v4-c2-episodes-a",
+      "workload": "align_episode"
+    },
+    {
+      "ac_powermode": null,
+      "arm": null,
+      "block_id": null,
+      "block_index": 8,
+      "config": "align-v4-c2-episodes-a-e08.json",
+      "config_path": "configs/campaigns/align_v4_series/c2/stages/episodes-a/align-v4-c2-episodes-a-e08.json",
+      "config_sha256": "dc93376984ff0588f09551fc4e404905676419a12b80c4b34a334e1a85101fec",
+      "index": 8,
+      "model_tag": "qwen3.8-27b-mlx",
+      "module_id": "align-v4-c2-qwen3.8-27b",
+      "pack_id": "align-v4-c2",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 1,
+      "role": "absolute_repeat",
+      "run_id": "align-v4-c2-episodes-a-e08",
+      "stage_id": "align-v4-c2-episodes-a",
+      "workload": "align_episode"
+    },
+    {
+      "ac_powermode": null,
+      "arm": null,
+      "block_id": null,
+      "block_index": 9,
+      "config": "align-v4-c2-episodes-a-e09.json",
+      "config_path": "configs/campaigns/align_v4_series/c2/stages/episodes-a/align-v4-c2-episodes-a-e09.json",
+      "config_sha256": "ab4f85d680a9f3a0890f002fd9102973d65772fdc00a348efb4d7be03a0752b4",
+      "index": 9,
+      "model_tag": "qwen3.8-27b-mlx",
+      "module_id": "align-v4-c2-qwen3.8-27b",
+      "pack_id": "align-v4-c2",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 1,
+      "role": "absolute_repeat",
+      "run_id": "align-v4-c2-episodes-a-e09",
+      "stage_id": "align-v4-c2-episodes-a",
+      "workload": "align_episode"
+    },
+    {
+      "ac_powermode": null,
+      "arm": null,
+      "block_id": null,
+      "block_index": 10,
+      "config": "align-v4-c2-episodes-a-e10.json",
+      "config_path": "configs/campaigns/align_v4_series/c2/stages/episodes-a/align-v4-c2-episodes-a-e10.json",
+      "config_sha256": "2506985eb23ca96aa819449a88057900f196182752afaf7d1e30d04d171bf2b7",
+      "index": 10,
+      "model_tag": "qwen3.8-27b-mlx",
+      "module_id": "align-v4-c2-qwen3.8-27b",
+      "pack_id": "align-v4-c2",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 1,
+      "role": "absolute_repeat",
+      "run_id": "align-v4-c2-episodes-a-e10",
+      "stage_id": "align-v4-c2-episodes-a",
+      "workload": "align_episode"
+    },
+    {
+      "ac_powermode": null,
+      "arm": null,
+      "block_id": null,
+      "block_index": 11,
+      "config": "align-v4-c2-episodes-a-e11.json",
+      "config_path": "configs/campaigns/align_v4_series/c2/stages/episodes-a/align-v4-c2-episodes-a-e11.json",
+      "config_sha256": "30463ad035d0f75871d7e8e0a617fb4ffb302bc4f04a133d84ea16a6787a98af",
+      "index": 11,
+      "model_tag": "qwen3.8-27b-mlx",
+      "module_id": "align-v4-c2-qwen3.8-27b",
+      "pack_id": "align-v4-c2",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 1,
+      "role": "absolute_repeat",
+      "run_id": "align-v4-c2-episodes-a-e11",
+      "stage_id": "align-v4-c2-episodes-a",
+      "workload": "align_episode"
+    },
+    {
+      "ac_powermode": null,
+      "arm": null,
+      "block_id": null,
+      "block_index": 1,
+      "config": "align-v4-c2-episodes-b-e12.json",
+      "config_path": "configs/campaigns/align_v4_series/c2/stages/episodes-b/align-v4-c2-episodes-b-e12.json",
+      "config_sha256": "cc0aa7fc57c1832cb73ee3baf0a4eb44f38078afe6471260872a1bcb852b4030",
+      "index": 1,
+      "model_tag": "qwen3.8-27b-mlx",
+      "module_id": "align-v4-c2-qwen3.8-27b",
+      "pack_id": "align-v4-c2",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 1,
+      "role": "absolute_repeat",
+      "run_id": "align-v4-c2-episodes-b-e12",
+      "stage_id": "align-v4-c2-episodes-b",
+      "workload": "align_episode"
+    },
+    {
+      "ac_powermode": null,
+      "arm": null,
+      "block_id": null,
+      "block_index": 2,
+      "config": "align-v4-c2-episodes-b-e13.json",
+      "config_path": "configs/campaigns/align_v4_series/c2/stages/episodes-b/align-v4-c2-episodes-b-e13.json",
+      "config_sha256": "1bf2a54d3e5668f62f4e57726f6a494ebafabfc553287700656a4068463fef99",
+      "index": 2,
+      "model_tag": "qwen3.8-27b-mlx",
+      "module_id": "align-v4-c2-qwen3.8-27b",
+      "pack_id": "align-v4-c2",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 1,
+      "role": "absolute_repeat",
+      "run_id": "align-v4-c2-episodes-b-e13",
+      "stage_id": "align-v4-c2-episodes-b",
+      "workload": "align_episode"
+    },
+    {
+      "ac_powermode": null,
+      "arm": null,
+      "block_id": null,
+      "block_index": 3,
+      "config": "align-v4-c2-episodes-b-e14.json",
+      "config_path": "configs/campaigns/align_v4_series/c2/stages/episodes-b/align-v4-c2-episodes-b-e14.json",
+      "config_sha256": "c0a7fc0243e88b30ade542ec6790f306d6155c7f595e3023060e707e1c7b578b",
+      "index": 3,
+      "model_tag": "qwen3.8-27b-mlx",
+      "module_id": "align-v4-c2-qwen3.8-27b",
+      "pack_id": "align-v4-c2",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 1,
+      "role": "absolute_repeat",
+      "run_id": "align-v4-c2-episodes-b-e14",
+      "stage_id": "align-v4-c2-episodes-b",
+      "workload": "align_episode"
+    },
+    {
+      "ac_powermode": null,
+      "arm": null,
+      "block_id": null,
+      "block_index": 4,
+      "config": "align-v4-c2-episodes-b-e15.json",
+      "config_path": "configs/campaigns/align_v4_series/c2/stages/episodes-b/align-v4-c2-episodes-b-e15.json",
+      "config_sha256": "5a83b25597e1771eb529cc803cc89021c0422779959d22f3d33124f3b6b2cdce",
+      "index": 4,
+      "model_tag": "qwen3.8-27b-mlx",
+      "module_id": "align-v4-c2-qwen3.8-27b",
+      "pack_id": "align-v4-c2",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 1,
+      "role": "absolute_repeat",
+      "run_id": "align-v4-c2-episodes-b-e15",
+      "stage_id": "align-v4-c2-episodes-b",
+      "workload": "align_episode"
+    },
+    {
+      "ac_powermode": null,
+      "arm": null,
+      "block_id": null,
+      "block_index": 5,
+      "config": "align-v4-c2-episodes-b-e16.json",
+      "config_path": "configs/campaigns/align_v4_series/c2/stages/episodes-b/align-v4-c2-episodes-b-e16.json",
+      "config_sha256": "86573b40d49a1d93e478285251c08d0166b186c176c602e4d495bd9ff376abc5",
+      "index": 5,
+      "model_tag": "qwen3.8-27b-mlx",
+      "module_id": "align-v4-c2-qwen3.8-27b",
+      "pack_id": "align-v4-c2",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 1,
+      "role": "absolute_repeat",
+      "run_id": "align-v4-c2-episodes-b-e16",
+      "stage_id": "align-v4-c2-episodes-b",
+      "workload": "align_episode"
+    },
+    {
+      "ac_powermode": null,
+      "arm": null,
+      "block_id": null,
+      "block_index": 6,
+      "config": "align-v4-c2-episodes-b-e17.json",
+      "config_path": "configs/campaigns/align_v4_series/c2/stages/episodes-b/align-v4-c2-episodes-b-e17.json",
+      "config_sha256": "ac274341748bff38da9af7886ec69d4f02043a699137954bf82545d5f8e53adf",
+      "index": 6,
+      "model_tag": "qwen3.8-27b-mlx",
+      "module_id": "align-v4-c2-qwen3.8-27b",
+      "pack_id": "align-v4-c2",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 1,
+      "role": "absolute_repeat",
+      "run_id": "align-v4-c2-episodes-b-e17",
+      "stage_id": "align-v4-c2-episodes-b",
+      "workload": "align_episode"
+    },
+    {
+      "ac_powermode": null,
+      "arm": null,
+      "block_id": null,
+      "block_index": 7,
+      "config": "align-v4-c2-episodes-b-e18.json",
+      "config_path": "configs/campaigns/align_v4_series/c2/stages/episodes-b/align-v4-c2-episodes-b-e18.json",
+      "config_sha256": "a283eaeceeecfc20c1e58e0bb89f1588c9f0f419d5f45d8fa13f18602a23bfad",
+      "index": 7,
+      "model_tag": "qwen3.8-27b-mlx",
+      "module_id": "align-v4-c2-qwen3.8-27b",
+      "pack_id": "align-v4-c2",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 1,
+      "role": "absolute_repeat",
+      "run_id": "align-v4-c2-episodes-b-e18",
+      "stage_id": "align-v4-c2-episodes-b",
+      "workload": "align_episode"
+    },
+    {
+      "ac_powermode": null,
+      "arm": null,
+      "block_id": null,
+      "block_index": 8,
+      "config": "align-v4-c2-episodes-b-e19.json",
+      "config_path": "configs/campaigns/align_v4_series/c2/stages/episodes-b/align-v4-c2-episodes-b-e19.json",
+      "config_sha256": "42f4e449e7cb9bbf6ebbf125ce1c663e2a2453b36b98f49ab30bdcc2066e1ad9",
+      "index": 8,
+      "model_tag": "qwen3.8-27b-mlx",
+      "module_id": "align-v4-c2-qwen3.8-27b",
+      "pack_id": "align-v4-c2",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 1,
+      "role": "absolute_repeat",
+      "run_id": "align-v4-c2-episodes-b-e19",
+      "stage_id": "align-v4-c2-episodes-b",
+      "workload": "align_episode"
+    },
+    {
+      "ac_powermode": null,
+      "arm": null,
+      "block_id": null,
+      "block_index": 9,
+      "config": "align-v4-c2-episodes-b-e20.json",
+      "config_path": "configs/campaigns/align_v4_series/c2/stages/episodes-b/align-v4-c2-episodes-b-e20.json",
+      "config_sha256": "e530c46b7701f064371dcf99c3a06711ef1fd0f3760e659f10e681e9f7e8b6e2",
+      "index": 9,
+      "model_tag": "qwen3.8-27b-mlx",
+      "module_id": "align-v4-c2-qwen3.8-27b",
+      "pack_id": "align-v4-c2",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 1,
+      "role": "absolute_repeat",
+      "run_id": "align-v4-c2-episodes-b-e20",
+      "stage_id": "align-v4-c2-episodes-b",
+      "workload": "align_episode"
+    },
+    {
+      "ac_powermode": null,
+      "arm": null,
+      "block_id": null,
+      "block_index": 10,
+      "config": "align-v4-c2-episodes-b-e21.json",
+      "config_path": "configs/campaigns/align_v4_series/c2/stages/episodes-b/align-v4-c2-episodes-b-e21.json",
+      "config_sha256": "276f54299799c158c910ec52e1186a9a46ee3d4b8c3adcaff84bcc874d51da7c",
+      "index": 10,
+      "model_tag": "qwen3.8-27b-mlx",
+      "module_id": "align-v4-c2-qwen3.8-27b",
+      "pack_id": "align-v4-c2",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 1,
+      "role": "absolute_repeat",
+      "run_id": "align-v4-c2-episodes-b-e21",
+      "stage_id": "align-v4-c2-episodes-b",
+      "workload": "align_episode"
+    },
+    {
+      "ac_powermode": null,
+      "arm": null,
+      "block_id": null,
+      "block_index": 11,
+      "config": "align-v4-c2-episodes-b-e22.json",
+      "config_path": "configs/campaigns/align_v4_series/c2/stages/episodes-b/align-v4-c2-episodes-b-e22.json",
+      "config_sha256": "7b58707ce0f02552843db26b2f47c56bc5574fb2a02923cf0ce063ee512ec113",
+      "index": 11,
+      "model_tag": "qwen3.8-27b-mlx",
+      "module_id": "align-v4-c2-qwen3.8-27b",
+      "pack_id": "align-v4-c2",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 2,
+      "role": "absolute_repeat",
+      "run_id": "align-v4-c2-episodes-b-e22",
+      "stage_id": "align-v4-c2-episodes-b",
+      "workload": "align_episode"
+    }
+  ],
+  "stage_graph": [
+    {
+      "expected_count": 1,
+      "input": {
+        "kind": "arm_bindings"
+      },
+      "kind": "bracket_reservation",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "literal",
+                  "value": "--ledger"
+                },
+                {
+                  "kind": "binding",
+                  "value": "ledger_path"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--head-pin"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/calibration/calibration_ledger_head.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--plan"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/bytes-s1-p1/collection_plan.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--session-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bracket_session_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--window-id"
+                },
+                {
+                  "kind": "tree_pointer",
+                  "value": "/window_identity/window_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--plan-id"
+                },
+                {
+                  "kind": "tree_pointer",
+                  "value": "/plan/plan_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--plan-sha256"
+                },
+                {
+                  "kind": "tree_pointer",
+                  "value": "/plan/actual_sha256"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--evidence-root-id"
+                },
+                {
+                  "kind": "tree_pointer",
+                  "value": "/window_identity/evidence_root_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-root"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--pre-attempt-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_attempt_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--post-attempt-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "post_attempt_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--pre-custody-locator"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--post-custody-locator"
+                },
+                {
+                  "kind": "binding",
+                  "value": "post_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--identity-epoch-json"
+                },
+                {
+                  "kind": "binding",
+                  "value": "identity_epoch_json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--t1-bindings-json"
+                },
+                {
+                  "kind": "binding",
+                  "value": "t1_bindings_json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--execute"
+                }
+              ],
+              "interface_id": "joulewise.calibration_window_bracket_reservation.cli.v1",
+              "tool_id": "bracket_reserver"
+            },
+            "command_id": "align-v4-c2-bracket-reservation.bracket_reservation",
+            "command_kind": "bracket_reservation",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 1,
+      "predecessor": null,
+      "stage_id": "align-v4-c2-bracket-reservation",
+      "successor": "align-v4-c2-pre-calibration"
+    },
+    {
+      "expected_count": 1,
+      "input": {
+        "kind": "arm_bindings",
+        "slot": "pre"
+      },
+      "kind": "calibration_capture",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "literal",
+                  "value": "--allow-live"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--output-root"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "instrument_validation",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--session-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bracket_session_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--slot"
+                },
+                {
+                  "kind": "literal",
+                  "value": "pre"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--attempt-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_attempt_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                }
+              ],
+              "interface_id": "joulewise.powermetrics_fiducial.cli.v1",
+              "tool_id": "fiducial_capture"
+            },
+            "command_id": "align-v4-c2-pre-calibration.calibration_capture",
+            "command_kind": "calibration_capture",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 2,
+      "predecessor": "align-v4-c2-bracket-reservation",
+      "stage_id": "align-v4-c2-pre-calibration",
+      "successor": "align-v4-c2-bound-collection"
+    },
+    {
+      "corpus": {
+        "planned": 18,
+        "stop_after_valid": 12
+      },
+      "expected_count": 18,
+      "input": {
+        "kind": "manifest",
+        "manifest_id": "neg8-reference-corpus-order-v2",
+        "path": "configs/campaigns/neg8_reference_corpus_v5/order_manifest.json",
+        "sha256": "9cad99874d11a194eec5f56964a7d9a7f4ae361f6ff1f95e1a55dfe3216ff36f"
+      },
+      "kind": "campaign_collection",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/neg8_reference_corpus_v5"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bound_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "bound_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "align-v4-c2-bound-collection.campaign_collection",
+            "command_kind": "campaign_collection",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 3,
+      "predecessor": "align-v4-c2-pre-calibration",
+      "stage_id": "align-v4-c2-bound-collection",
+      "successor": "align-v4-c2-bound-derivation"
+    },
+    {
+      "expected_count": 1,
+      "input": {
+        "kind": "external_artifact",
+        "path": "configs/campaigns/neg8_reference_corpus_v5/derivation/settled_corpus.json",
+        "sha256": "c957880aef0d3b99f82cc917eb3f3e8a24a5aca2665134b19430b89e0f553304"
+      },
+      "kind": "bound_derivation",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "literal",
+                  "value": "--derive-neg8-drift-bound"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/neg8_reference_corpus_v5/derivation/settled_corpus.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--neg8-drift-bound-output"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "neg8-drift-bound.json",
+                  "value": "bound_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bound_runs_root"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "align-v4-c2-bound-derivation.bound_derivation",
+            "command_kind": "bound_derivation",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 4,
+      "predecessor": "align-v4-c2-bound-collection",
+      "stage_id": "align-v4-c2-bound-derivation",
+      "successor": "align-v4-c2-reference-start"
+    },
+    {
+      "expected_count": 3,
+      "input": {
+        "kind": "manifest",
+        "manifest_id": "neg8-window-reference-start-triplet-v1",
+        "path": "configs/campaigns/window_references_v5/start_triplet/order_manifest.json",
+        "sha256": "9cac197255bdc9a0a1a0b8ee8ceb587ba3c8cabc20b976b2543dc3a400d37cb0"
+      },
+      "kind": "campaign_collection",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/window_references_v5/start_triplet"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "align-v4-c2-reference-start.campaign_collection",
+            "command_kind": "campaign_collection",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 5,
+      "predecessor": "align-v4-c2-bound-derivation",
+      "stage_id": "align-v4-c2-reference-start",
+      "successor": "align-v4-c2-episodes-a"
+    },
+    {
+      "expected_count": 11,
+      "input": {
+        "kind": "manifest",
+        "manifest_id": "align-v4-c2-episodes-a",
+        "path": "configs/campaigns/align_v4_series/c2/stages/episodes-a/order_manifest.json",
+        "sha256": "deb8e6be6ce64ac619fe5a723db05759ec6658b3f24f3167fcab4013da9b26cf"
+      },
+      "kind": "campaign_collection",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/align_v4_series/c2/stages/episodes-a"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "align-v4-c2-episodes-a.campaign_collection",
+            "command_kind": "campaign_collection",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 6,
+      "predecessor": "align-v4-c2-reference-start",
+      "stage_id": "align-v4-c2-episodes-a",
+      "successor": "align-v4-c2-reference-midpoint"
+    },
+    {
+      "expected_count": 1,
+      "input": {
+        "kind": "manifest",
+        "manifest_id": "neg8-window-reference-midpoint-v1",
+        "path": "configs/campaigns/window_references_v5/midpoint/order_manifest.json",
+        "sha256": "9ccedd91307985ba5641e791f4ac89f4e250fca414a4ba713cc7977ced6abb21"
+      },
+      "kind": "campaign_collection",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/window_references_v5/midpoint"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "align-v4-c2-reference-midpoint.campaign_collection",
+            "command_kind": "campaign_collection",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 7,
+      "predecessor": "align-v4-c2-episodes-a",
+      "stage_id": "align-v4-c2-reference-midpoint",
+      "successor": "align-v4-c2-episodes-b"
+    },
+    {
+      "expected_count": 11,
+      "input": {
+        "kind": "manifest",
+        "manifest_id": "align-v4-c2-episodes-b",
+        "path": "configs/campaigns/align_v4_series/c2/stages/episodes-b/order_manifest.json",
+        "sha256": "179adc3d3541de969d88471d81b37c80e5ff064b550ff4b18bd1df2e79985a43"
+      },
+      "kind": "campaign_collection",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/align_v4_series/c2/stages/episodes-b"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "align-v4-c2-episodes-b.campaign_collection",
+            "command_kind": "campaign_collection",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 8,
+      "predecessor": "align-v4-c2-reference-midpoint",
+      "stage_id": "align-v4-c2-episodes-b",
+      "successor": "align-v4-c2-reference-end"
+    },
+    {
+      "expected_count": 3,
+      "input": {
+        "kind": "manifest",
+        "manifest_id": "neg8-window-reference-end-triplet-v1",
+        "path": "configs/campaigns/window_references_v5/end_triplet/order_manifest.json",
+        "sha256": "8e65a4347aafa0722a60a2bd58c7e8061b860db66fa06f6acec24d1a1ade5c67"
+      },
+      "kind": "campaign_collection",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/window_references_v5/end_triplet"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "align-v4-c2-reference-end.campaign_collection",
+            "command_kind": "campaign_collection",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 9,
+      "predecessor": "align-v4-c2-episodes-b",
+      "stage_id": "align-v4-c2-reference-end",
+      "successor": "align-v4-c2-post-calibration"
+    },
+    {
+      "expected_count": 1,
+      "input": {
+        "kind": "arm_bindings",
+        "slot": "post"
+      },
+      "kind": "calibration_capture",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "literal",
+                  "value": "--allow-live"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--output-root"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "instrument_validation",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--session-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bracket_session_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--slot"
+                },
+                {
+                  "kind": "literal",
+                  "value": "post"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--attempt-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "post_attempt_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                }
+              ],
+              "interface_id": "joulewise.powermetrics_fiducial.cli.v1",
+              "tool_id": "fiducial_capture"
+            },
+            "command_id": "align-v4-c2-post-calibration.calibration_capture",
+            "command_kind": "calibration_capture",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 10,
+      "predecessor": "align-v4-c2-reference-end",
+      "stage_id": "align-v4-c2-post-calibration",
+      "successor": "align-v4-c2-whole-window-verdict"
+    },
+    {
+      "expected_count": 1,
+      "input": {
+        "kind": "collected_roots"
+      },
+      "kind": "whole_window_verdict",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "literal",
+                  "value": "--whole-window-verdict"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--neg8-drift-bound"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "neg8-drift-bound.json",
+                  "value": "bound_runs_root"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "align-v4-c2-whole-window-verdict.whole_window_verdict",
+            "command_kind": "whole_window_verdict",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 11,
+      "predecessor": "align-v4-c2-post-calibration",
+      "stage_id": "align-v4-c2-whole-window-verdict",
+      "successor": "align-v4-c2-backup"
+    },
+    {
+      "expected_count": 2,
+      "input": {
+        "kind": "collected_roots"
+      },
+      "kind": "backup",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_backup_destination"
+                }
+              ],
+              "interface_id": "joulewise.backup_runs.cli.v1",
+              "tool_id": "backup_runs"
+            },
+            "command_id": "align-v4-c2-backup.backup",
+            "command_kind": "backup",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          },
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "binding",
+                  "value": "bound_runs_root"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bound_backup_destination"
+                }
+              ],
+              "interface_id": "joulewise.backup_runs.cli.v1",
+              "tool_id": "backup_runs"
+            },
+            "command_id": "align-v4-c2-backup.backup",
+            "command_kind": "backup",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 12,
+      "predecessor": "align-v4-c2-whole-window-verdict",
+      "stage_id": "align-v4-c2-backup",
+      "successor": null
+    }
+  ],
+  "window_identity": {
+    "evidence_root_id": "evidence-align-v4-c2",
+    "window_id": "align-v4-c2"
+  }
+}

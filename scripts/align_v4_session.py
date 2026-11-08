@@ -29,29 +29,51 @@ if str(ROOT) not in sys.path:
 from scripts import align_pilot_session as pilot, align_v4_kit as kit
 
 
-def series_ac_powermode(measurement_root):
+def series_ac_powermode(measurement_root, kit_dir=kit.KIT):
     """The R1-frozen series AC powermode the generated collection plan carries."""
-    plan = json.loads((Path(measurement_root) / kit.KIT / 'collection_plan.json').read_bytes())
+    plan = json.loads((Path(measurement_root) / kit_dir / 'collection_plan.json').read_bytes())
     value = (plan.get('runtime_requirements') or {}).get('ac_powermode')
     if type(value) is not int or value not in (0, 2):
         raise ValueError(f'v4 collection plan freezes no series AC powermode (got {value!r})')
     return value
 
 
-def prepare(measurement_root, session_root, *, power_runner=None, **kwargs):
+def _series_gen():
+    from scripts import align_v4_series
+    return align_v4_series
+
+
+def prepare(measurement_root, session_root, *, power_runner=None, window=None, **kwargs):
     # Lead ruling R6-7: at every session start a host-level High Power marker
     # means an Automatic restore is owed. Restore it first (never under a
     # measuring night, which holds the host night lock and restores at its own
     # close) and refuse the session if the restore fails its read-back.
     start = session_start_restore(measurement_root, runner=power_runner)
-    kit.generate(measurement_root, check=True, source_root=measurement_root)
+    series_window = None
+    if window is not None and str(window).upper() != 'W1':
+        # A C/T window of the frozen series (align_v4_series): its own kit, pack
+        # and plan, through the same shared prepare as W1. W1 stays registered.
+        window_id, spec, manifest = _series_gen().require_window_ready(measurement_root, window)
+        kwargs.update(kit=Path(spec['kit']), pack_id=spec['pack_id'],
+                      session_prefix=f'align-v4-{window_id.lower()}-')
+        if 'ac_powermode' not in kwargs:
+            kwargs['ac_powermode'] = series_ac_powermode(measurement_root, Path(spec['kit']))
+        from joulewise.align.apple import v4_series
+        series_window = {'window': window_id, 'role': spec['role'], 'kit': spec['kit'],
+                         'pack_id': spec['pack_id'], 'manifest_sha256': v4_series.manifest_sha256(manifest)}
+    else:
+        kit.generate(measurement_root, check=True, source_root=measurement_root)
     # Lead ruling R5-6: the night plan declares the frozen series powermode, so
     # run_night admits a High Power host only for a W1 that adopted it.
-    kwargs.setdefault('ac_powermode', series_ac_powermode(measurement_root))
+    if 'ac_powermode' not in kwargs:
+        kwargs['ac_powermode'] = series_ac_powermode(measurement_root)
     kwargs.setdefault('kit', kit.KIT)
     kwargs.setdefault('pack_id', kit.PACK_ID)
     kwargs.setdefault('session_prefix', 'align-v4-')
     state = pilot.prepare(measurement_root, session_root, **kwargs)
+    if series_window is not None:
+        state['series'] = series_window
+        pilot.h.write(Path(session_root) / 'session.json', state)
     if start['action'] != 'none':
         try:
             pilot.h.write(Path(session_root) / f'staging/v4-session-start-restore-{time.time_ns()}.json', start)
@@ -164,7 +186,11 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
     from scripts.align_v4_thermal_desk import registration_evidence, enrich_record, r1_soak_c, contrast_predeclaration
     from joulewise.align.apple.thermal_desk import read_bundle_record, window_report
     from joulewise.align.apple import v4_registration
-    registration_dir = Path(state.get('registration_dir', Path(state['measurement_root'])/kit.KIT/'registration'))
+    series_window = (state.get('series') or {}).get('window')
+    # Series windows read the registered W1 evidence (U3 bar, WP19, soak); their
+    # own registration dir holds only the window identity and sizing files.
+    registration_dir = (Path(state['measurement_root'])/kit.KIT/'registration' if series_window else
+                        Path(state.get('registration_dir', Path(state['measurement_root'])/kit.KIT/'registration')))
     try:
         bar, wp19 = registration_evidence(registration_dir)
     except (OSError, ValueError) as exc:
@@ -183,7 +209,7 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
                  'turn_observation': [], 'coverage': [], 'releases': [], 'turn_admissions': 0,
                  'pm_period_s': .1, 'calibration_exclusions': ['member.runtime_failure'], 'error': str(exc)}
         r.update({k: row[k] for k in ('ordinal', 'role') if k in row},
-                 window='W1', stage=row.get('stage_id'))
+                 window=series_window or 'W1', stage=row.get('stage_id'))
         if row.get('replay_of'):
             r['identical_work_group'] = row['replay_of']
         elif row.get('ordinal') == 5 or row.get('role', '').startswith(('X-', 'Y-')):
@@ -209,10 +235,42 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
             checks[f'v4_{model}_U{n}'] = result[f'U{n}']['status'] == 'pass'
     checks['v4_B_bar'] = all(w['bar_pass'] for w in report['registration_diagnostics']['battery_windows'].values())
     checks['v4_D_cohort'] = report['registration_diagnostics']['d_cohort']['instrument_ok']
+    if series_window:
+        report['series_ledger_row'] = series_desk_row(state, plan['members'], records, runs_root,
+                                                      report['thermal'])
     return checks, report
 
 
+def series_desk_row(state, plan_members, records, runs_root, thermal_report):
+    """The window's provisional series-ledger row (captures, eligible benign per pair).
+
+    Counts only; no score. A member is captured when its run bundle exists; it
+    is excluded by any harvest or X1-X8 exclusion. ``u_pass`` is the D model
+    window's U1-U3 verdict. The member_eligibility adjudication finalizes it.
+    """
+    from joulewise.align.apple import v4_series
+    import hashlib
+    series = state['series']
+    manifest = _series_gen().read_manifest(state['measurement_root'])
+    excluded = {r.get('id'): bool(r.get('excluded')) for r in records}
+    members = [{'run_id': m['run_id'], 'captured': (Path(runs_root) / m['run_id']).is_dir(),
+                'excluded': excluded.get(m['run_id'], True)} for m in plan_members]
+    d_window = (thermal_report.get('model_windows') or {}).get(v4_series.D_TAG) or {}
+    statuses = [(d_window.get(f'U{n}') or {}).get('status') for n in (1, 2, 3)]
+    u_pass = True if statuses == ['pass'] * 3 else False if 'fail' in statuses else None
+    custody = (state.get('inputs') or {}).get('custody_root')
+    result = Path(custody) / 'night/result.json' if custody else None
+    record = hashlib.sha256(result.read_bytes()).hexdigest() if result and result.is_file() else None
+    attempt = state.get('series_attempt') or 1
+    return v4_series.ledger_row_from_desk(manifest, series['window'], attempt, record_sha256=record,
+                                          members=members, u_pass=u_pass)
+
+
 def desk(session_root, **kwargs):
+    session_json = Path(session_root) / 'session.json'
+    series = (pilot.h.read(session_json) or {}).get('series') if session_json.is_file() else None
+    if series:
+        kwargs['kit'] = Path(series['kit'])
     kwargs.setdefault('kit', kit.KIT)
     kwargs.setdefault('desk_schema', kit.DESK_SCHEMA)
     kwargs.setdefault('extra_checks', powermode_desk_check)
@@ -243,7 +301,7 @@ def parse_topup_completed_at(value):
 
 def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=None, owner=None,
                obc_off_attested_by=None, battery_runner=None, topup_completed_at=None,
-               topup_source=None, now=None, next_arm_triage=None):
+               topup_source=None, now=None, next_arm_triage=None, series_window=None, series_manifest=None):
     """W1/D arm evidence: ruling 7 AC powermode and ruling 20 volumes.
 
     Ruling 7: the AC-profile powermode must equal the plan's frozen series
@@ -308,8 +366,20 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
     reasons += ['next_arm_triage: ' + reason for reason in triage['reasons']
                 if not reason.startswith(('triage series_powermode', 'triage external_volume',
                                           'triage charging_battery'))]
+    # Series binding (align_v4_series): a C/T arm needs a packet whose ledger makes
+    # this window the next frozen window; a W1 packet that carries a binding is
+    # checked too (an unbound W1 packet keeps the W1 route unchanged).
+    binding = None
+    if series_window is not None or (isinstance(packet, dict) and 'series' in packet):
+        from joulewise.align.apple import v4_series
+        try:
+            manifest = series_manifest or _series_gen().read_manifest(measurement_root)
+            binding = v4_series.check_arm_binding(packet, manifest, series_window or 'W1')
+        except (OSError, ValueError) as exc:
+            binding = [f'series manifest unavailable: {exc}']
+        reasons += ['series_binding: ' + reason for reason in binding]
     return {'schema': ARM_RECORD_SCHEMA, 'admitted': not reasons, 'reasons': reasons,
-            'next_arm_triage': triage,
+            'next_arm_triage': triage, 'series_window': series_window or 'W1', 'series_binding': binding,
             'ac_powermode': power, 'external_volumes': volumes, 'battery': battery,
             # Lead ruling R7-10: the host state directory this arm used.
             'host_state_dir': powermode.host_state_dir()}
@@ -427,10 +497,19 @@ def install(session_root, *, runner=None, volume_runner=None, now=None, w1_disk_
     session = Path(session_root)
     state = pilot.h.read(session / 'session.json')
     measurement_root = state['measurement_root']
-    # Council ruling 7: the frozen series powermode comes from the measurement
-    # checkout's r1_slots, and arm refuses on a mismatch with the host.
-    kit.generate(measurement_root, check=True, source_root=measurement_root)
-    plan = json.loads((Path(measurement_root) / kit.KIT / 'collection_plan.json').read_bytes())
+    series = state.get('series')
+    kit_dir = kit.KIT
+    if series:
+        # A C/T window: W1 registration ready, the series byte-identical and
+        # this window sized (align_v4_series.require_window_ready).
+        window_id, spec, manifest = _series_gen().require_window_ready(measurement_root, series['window'])
+        kit_dir = Path(spec['kit'])
+        kwargs.update(series_window=window_id, series_manifest=manifest)
+    else:
+        # Council ruling 7: the frozen series powermode comes from the measurement
+        # checkout's r1_slots, and arm refuses on a mismatch with the host.
+        kit.generate(measurement_root, check=True, source_root=measurement_root)
+    plan = json.loads((Path(measurement_root) / kit_dir / 'collection_plan.json').read_bytes())
     from joulewise.align.apple import powermode
     high = None
     # Lead ruling R6-7: the High Power marker is host-level, so every later
@@ -538,11 +617,13 @@ def _termination_handlers():
 def _arm_and_install(session, state, measurement_root, plan, high, *, runner, volume_runner, now,
                      w1_disk_config, disk_gate, lock=None, owner=None,
                      obc_off_attested_by=None, battery_runner=None, topup_completed_at=None,
-                     topup_source=None, next_arm_triage=None, **kwargs):
+                     topup_source=None, next_arm_triage=None, series_window=None, series_manifest=None,
+                     **kwargs):
     record = arm_checks(measurement_root, plan, runner=runner, volume_runner=volume_runner, lock=lock,
                         owner=owner, obc_off_attested_by=obc_off_attested_by, battery_runner=battery_runner,
                         topup_completed_at=topup_completed_at, topup_source=topup_source, now=now,
-                        next_arm_triage=next_arm_triage)
+                        next_arm_triage=next_arm_triage, series_window=series_window,
+                        series_manifest=series_manifest)
     if high is not None:
         record['high_power_enter'] = high
         if not high['ok']:
@@ -558,6 +639,8 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open('x') as handle:
         handle.write(json.dumps(record, indent=2, sort_keys=True) + '\n')
+    if record['admitted'] and series_window is not None:
+        state['series_attempt'] = next_arm_triage_attempt(next_arm_triage)
     state.setdefault('v4_arm_records', []).append({'path': str(path), 'admitted': record['admitted'],
                                                     'ac_powermode': record['ac_powermode'].get('observed'),
                                                     'reasons': record['reasons']})
@@ -570,10 +653,24 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
     return pilot.install(session, **kwargs)
 
 
+def next_arm_triage_attempt(packet):
+    """The series attempt number a bound packet arms (None for an unbound W1 packet)."""
+    if isinstance(packet, (str, Path)):
+        try:
+            packet = json.loads(Path(packet).read_bytes())
+        except (OSError, ValueError):
+            return None
+    binding = packet.get('series') if isinstance(packet, dict) else None
+    return binding.get('attempt') if isinstance(binding, dict) else None
+
+
 def main(argv=None):
     return pilot.main(argv, kit=kit.KIT, pack_id=kit.PACK_ID, desk_schema=kit.DESK_SCHEMA,
                       session_prefix='align-v4-', prepare_fn=prepare, install_fn=install,
                       desk_extra_checks=powermode_desk_check,
+                      prepare_options=(('--window', dict(
+                          help='a C/T window of the frozen series (C1-C8, aliases D1-D8, T1-T3); '
+                               'omit for W1')),),
                       install_options=(('--w1-disk-config', dict(
                           type=Path, required=True,
                           help='validated R0 desk config (disk_path, W1 offloads) for the W1 disk gate')),

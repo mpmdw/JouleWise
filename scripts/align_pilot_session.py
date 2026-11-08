@@ -437,12 +437,15 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
 
 def main(argv=None, *, kit=KIT, pack_id=PACK_ID, desk_schema=SCHEMA,
          prepare_fn=prepare, install_fn=install, session_prefix='align-pilot-',
-         desk_extra_checks=None, install_options=()):
+         desk_extra_checks=None, install_options=(), prepare_options=()):
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
     p = commands.add_parser('prepare')
     p.add_argument('--measurement-root', type=Path, required=True)
     p.add_argument('--session-root', type=Path, required=True)
+    # Kit-specific prepare arguments (flag, argparse options), forwarded as keywords.
+    for flag, options in prepare_options:
+        p.add_argument(flag, **options)
     for name in ('install', 'desk'):
         commands.add_parser(name).add_argument('--session-root', type=Path, required=True)
     commands.choices['desk'].add_argument('--no-harvest', action='store_true', help='Extract to session/inspection/<utc>-<unique>/; preserve harvest files and skip archive/compression.')
@@ -453,8 +456,10 @@ def main(argv=None, *, kit=KIT, pack_id=PACK_ID, desk_schema=SCHEMA,
     args = parser.parse_args(argv)
     try:
         if args.command == 'prepare':
+            extra = {flag.lstrip('-').replace('-', '_'): getattr(args, flag.lstrip('-').replace('-', '_'))
+                     for flag, _ in prepare_options}
             prepare_fn(args.measurement_root, args.session_root, kit=kit, pack_id=pack_id,
-                       session_prefix=session_prefix)
+                       session_prefix=session_prefix, **extra)
         elif args.command == 'install':
             extra = {flag.lstrip('-').replace('-', '_'): getattr(args, flag.lstrip('-').replace('-', '_'))
                      for flag, _ in install_options}

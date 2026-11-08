@@ -1,0 +1,1525 @@
+{
+  "members": [
+    {
+      "ac_powermode": null,
+      "block": "A",
+      "condition": "benign",
+      "config_path": "configs/campaigns/align_v4_series/t2/stages/episodes-a/align-pilot-v3-episodes-a-e01.json",
+      "config_sha256": "6d2c4ecda2022b25ccb68bc455bf783851f5d77b7b09c89737cdd0a50df4bb58",
+      "counts_toward": "none",
+      "expected_episode_seed": 2570132319625341959,
+      "expected_turn_seed_0": 16164426553107603467,
+      "held_out": false,
+      "is_replay": false,
+      "model_id": "qwen3-30b-a3b",
+      "non_claim": true,
+      "ordinal": 1,
+      "repeat": 1,
+      "role": "anchor",
+      "run_id": "align-pilot-v3-episodes-a-e01",
+      "seed_index": 1,
+      "series_role": "anchor",
+      "spec": {
+        "condition": "benign",
+        "enable_thinking": true,
+        "max_context_tokens": 40960,
+        "max_episode_seconds": 120,
+        "max_tokens": 4096,
+        "max_turns": 12,
+        "mock_turns": [],
+        "prompt_cache": "episode_prefix",
+        "sampler": {
+          "min_p": 0,
+          "temperature": 0.6,
+          "top_k": 20,
+          "top_p": 0.95
+        },
+        "schema": "joulewise.align.apple.episode_spec.v1",
+        "seed": 1,
+        "task_factory": "joulewise.align.apple.pilot:offline_shade_task",
+        "task_kwargs": {
+          "cache_dir": "/Users/edr/.cache/joulewise/shade",
+          "give_hint": true,
+          "task_pair": "spam_filter_update"
+        },
+        "temperature": 0.6
+      },
+      "stage_id": "align-v4-t2-episodes-a",
+      "task_pair": "spam_filter_update",
+      "window": "T2"
+    },
+    {
+      "ac_powermode": null,
+      "block": "A",
+      "condition": "sabotage",
+      "config_path": "configs/campaigns/align_v4_series/t2/stages/episodes-a/align-pilot-v3-episodes-a-e02.json",
+      "config_sha256": "6a5c0daaa019e66440e8860ef82163312dea84fd9aaaa28f6fd0f3b6464712a8",
+      "counts_toward": "none",
+      "expected_episode_seed": 1001552758911679671,
+      "expected_turn_seed_0": 6841583048502820036,
+      "held_out": false,
+      "is_replay": false,
+      "model_id": "qwen3-30b-a3b",
+      "non_claim": true,
+      "ordinal": 2,
+      "repeat": 1,
+      "role": "anchor",
+      "run_id": "align-pilot-v3-episodes-a-e02",
+      "seed_index": 1,
+      "series_role": "anchor",
+      "spec": {
+        "condition": "sabotage",
+        "enable_thinking": true,
+        "max_context_tokens": 40960,
+        "max_episode_seconds": 120,
+        "max_tokens": 4096,
+        "max_turns": 12,
+        "mock_turns": [],
+        "prompt_cache": "episode_prefix",
+        "sampler": {
+          "min_p": 0,
+          "temperature": 0.6,
+          "top_k": 20,
+          "top_p": 0.95
+        },
+        "schema": "joulewise.align.apple.episode_spec.v1",
+        "seed": 1,
+        "task_factory": "joulewise.align.apple.pilot:offline_shade_task",
+        "task_kwargs": {
+          "cache_dir": "/Users/edr/.cache/joulewise/shade",
+          "give_hint": true,
+          "task_pair": "bank_transfer_2"
+        },
+        "temperature": 0.6
+      },
+      "stage_id": "align-v4-t2-episodes-a",
+      "task_pair": "bank_transfer_2",
+      "window": "T2"
+    },
+    {
+      "ac_powermode": null,
+      "block": "A",
+      "condition": "sabotage",
+      "config_path": "configs/campaigns/align_v4_series/t2/stages/episodes-a/align-pilot-v3-episodes-a-e03.json",
+      "config_sha256": "56105368782182d14e5dbd125854de1dff888cad4c1c25d21aa6820fcf2062d2",
+      "counts_toward": "none",
+      "expected_episode_seed": 2570132319625341959,
+      "expected_turn_seed_0": 16164426553107603467,
+      "held_out": false,
+      "is_replay": false,
+      "model_id": "qwen3-30b-a3b",
+      "non_claim": true,
+      "ordinal": 3,
+      "repeat": 1,
+      "role": "anchor",
+      "run_id": "align-pilot-v3-episodes-a-e03",
+      "seed_index": 1,
+      "series_role": "anchor",
+      "spec": {
+        "condition": "sabotage",
+        "enable_thinking": true,
+        "max_context_tokens": 40960,
+        "max_episode_seconds": 120,
+        "max_tokens": 4096,
+        "max_turns": 12,
+        "mock_turns": [],
+        "prompt_cache": "episode_prefix",
+        "sampler": {
+          "min_p": 0,
+          "temperature": 0.6,
+          "top_k": 20,
+          "top_p": 0.95
+        },
+        "schema": "joulewise.align.apple.episode_spec.v1",
+        "seed": 1,
+        "task_factory": "joulewise.align.apple.pilot:offline_shade_task",
+        "task_kwargs": {
+          "cache_dir": "/Users/edr/.cache/joulewise/shade",
+          "give_hint": true,
+          "task_pair": "spam_filter_update"
+        },
+        "temperature": 0.6
+      },
+      "stage_id": "align-v4-t2-episodes-a",
+      "task_pair": "spam_filter_update",
+      "window": "T2"
+    },
+    {
+      "ac_powermode": null,
+      "block": "A",
+      "condition": "benign",
+      "config_path": "configs/campaigns/align_v4_series/t2/stages/episodes-a/align-pilot-v3-episodes-a-e04.json",
+      "config_sha256": "5b893b05211f36450bb60c7c01b39ec1721415022c65797d0c2fb3831d1a7bfa",
+      "counts_toward": "none",
+      "expected_episode_seed": 1001552758911679671,
+      "expected_turn_seed_0": 6841583048502820036,
+      "held_out": false,
+      "is_replay": false,
+      "model_id": "qwen3-30b-a3b",
+      "non_claim": true,
+      "ordinal": 4,
+      "repeat": 1,
+      "role": "anchor",
+      "run_id": "align-pilot-v3-episodes-a-e04",
+      "seed_index": 1,
+      "series_role": "anchor",
+      "spec": {
+        "condition": "benign",
+        "enable_thinking": true,
+        "max_context_tokens": 40960,
+        "max_episode_seconds": 120,
+        "max_tokens": 4096,
+        "max_turns": 12,
+        "mock_turns": [],
+        "prompt_cache": "episode_prefix",
+        "sampler": {
+          "min_p": 0,
+          "temperature": 0.6,
+          "top_k": 20,
+          "top_p": 0.95
+        },
+        "schema": "joulewise.align.apple.episode_spec.v1",
+        "seed": 1,
+        "task_factory": "joulewise.align.apple.pilot:offline_shade_task",
+        "task_kwargs": {
+          "cache_dir": "/Users/edr/.cache/joulewise/shade",
+          "give_hint": true,
+          "task_pair": "bank_transfer_2"
+        },
+        "temperature": 0.6
+      },
+      "stage_id": "align-v4-t2-episodes-a",
+      "task_pair": "bank_transfer_2",
+      "window": "T2"
+    },
+    {
+      "ac_powermode": null,
+      "block": "D",
+      "condition": "benign",
+      "config_path": "configs/campaigns/align_v4_series/t2/stages/episodes-a/align-v4-t2-episodes-a-e05.json",
+      "config_sha256": "eaf688b38be19d533403447f80c6b919eb12800842b2db4a2ed9ef42fdb1ab75",
+      "counts_toward": "none",
+      "expected_episode_seed": 11160969177166136631,
+      "expected_turn_seed_0": 13933079069872451601,
+      "held_out": false,
+      "is_replay": true,
+      "model_id": "qwen3.8-27b",
+      "non_claim": true,
+      "ordinal": 5,
+      "repeat": 2,
+      "replay_of": "align-v4-episodes-a-e05",
+      "replay_of_window": "W1",
+      "role": "D",
+      "run_id": "align-v4-t2-episodes-a-e05",
+      "seed_index": 1,
+      "series_role": "sentinel",
+      "spec": {
+        "assistant_history": "reasoning_content",
+        "chat_template_kwargs": {
+          "reasoning_effort": null
+        },
+        "condition": "benign",
+        "deadman_s": null,
+        "enable_thinking": true,
+        "hybrid_checkpoint_limit": 0,
+        "max_context_tokens": 40960,
+        "max_episode_decode_tokens": null,
+        "max_tokens": 4096,
+        "max_turns": 12,
+        "mock_turns": [],
+        "prompt_cache": "episode_prefix",
+        "sampler": {
+          "min_p": 0,
+          "temperature": 1.0,
+          "top_k": 20,
+          "top_p": 0.95
+        },
+        "schema": "joulewise.align.apple.episode_spec.v1",
+        "seed": 1,
+        "task_factory": "joulewise.align.apple.pilot:offline_shade_task",
+        "task_kwargs": {
+          "cache_dir": "/Users/edr/.cache/joulewise/shade",
+          "give_hint": true,
+          "task_pair": "spam_filter_update"
+        },
+        "temperature": 1.0,
+        "thermal": {
+          "chunk_tokens": null,
+          "delta_fast_c": null,
+          "delta_slow_c": null,
+          "heavy": true,
+          "per_turn": true,
+          "sensors": null,
+          "turn_cap_s": null,
+          "window_reference": {
+            "role": "capture"
+          }
+        },
+        "warmup_condition": "benign"
+      },
+      "stage_id": "align-v4-t2-episodes-a",
+      "task_pair": "spam_filter_update",
+      "window": "T2",
+      "window_reference_role": "capture_last_60s_idle_before_warmup"
+    },
+    {
+      "ac_powermode": null,
+      "block": "D",
+      "condition": "benign",
+      "config_path": "configs/campaigns/align_v4_series/t2/stages/episodes-a/align-v4-t2-episodes-a-e06.json",
+      "config_sha256": "7892f0c2c88217bb62a364de2e5292277b11f2f85f36b19e68ed5c1bb2616543",
+      "counts_toward": "test",
+      "expected_episode_seed": 6379372205728638289,
+      "expected_turn_seed_0": 5962194488139323909,
+      "held_out": true,
+      "is_replay": false,
+      "model_id": "qwen3.8-27b",
+      "non_claim": true,
+      "ordinal": 6,
+      "repeat": 1,
+      "role": "D",
+      "run_id": "align-v4-t2-episodes-a-e06",
+      "seed_index": 74,
+      "series_role": "benign",
+      "spec": {
+        "assistant_history": "reasoning_content",
+        "chat_template_kwargs": {
+          "reasoning_effort": null
+        },
+        "condition": "benign",
+        "deadman_s": null,
+        "enable_thinking": true,
+        "hybrid_checkpoint_limit": 0,
+        "max_context_tokens": 40960,
+        "max_episode_decode_tokens": null,
+        "max_tokens": 4096,
+        "max_turns": 12,
+        "mock_turns": [],
+        "prompt_cache": "episode_prefix",
+        "sampler": {
+          "min_p": 0,
+          "temperature": 1.0,
+          "top_k": 20,
+          "top_p": 0.95
+        },
+        "schema": "joulewise.align.apple.episode_spec.v1",
+        "seed": 74,
+        "task_factory": "joulewise.align.apple.pilot:offline_shade_task",
+        "task_kwargs": {
+          "cache_dir": "/Users/edr/.cache/joulewise/shade",
+          "give_hint": true,
+          "task_pair": "bank_transfer_2"
+        },
+        "temperature": 1.0,
+        "thermal": {
+          "chunk_tokens": null,
+          "delta_fast_c": null,
+          "delta_slow_c": null,
+          "heavy": true,
+          "per_turn": true,
+          "sensors": null,
+          "turn_cap_s": null,
+          "window_reference": {
+            "role": "consume",
+            "source_config_sha256": "eaf688b38be19d533403447f80c6b919eb12800842b2db4a2ed9ef42fdb1ab75",
+            "source_run_id": "align-v4-t2-episodes-a-e05"
+          }
+        },
+        "warmup_condition": "benign"
+      },
+      "stage_id": "align-v4-t2-episodes-a",
+      "task_pair": "bank_transfer_2",
+      "window": "T2",
+      "window_reference_role": "consume_member_5_custody_via_WP15"
+    },
+    {
+      "ac_powermode": null,
+      "block": "D",
+      "condition": "benign",
+      "config_path": "configs/campaigns/align_v4_series/t2/stages/episodes-a/align-v4-t2-episodes-a-e07.json",
+      "config_sha256": "d6acb0e507728a77a8d726bc0bafe38c37685a772fcbaf9bdb2c1ca76666134f",
+      "counts_toward": "test",
+      "expected_episode_seed": 647323083000438539,
+      "expected_turn_seed_0": 6218942301472550081,
+      "held_out": true,
+      "is_replay": false,
+      "model_id": "qwen3.8-27b",
+      "non_claim": true,
+      "ordinal": 7,
+      "repeat": 1,
+      "role": "D",
+      "run_id": "align-v4-t2-episodes-a-e07",
+      "seed_index": 74,
+      "series_role": "benign",
+      "spec": {
+        "assistant_history": "reasoning_content",
+        "chat_template_kwargs": {
+          "reasoning_effort": null
+        },
+        "condition": "benign",
+        "deadman_s": null,
+        "enable_thinking": true,
+        "hybrid_checkpoint_limit": 0,
+        "max_context_tokens": 40960,
+        "max_episode_decode_tokens": null,
+        "max_tokens": 4096,
+        "max_turns": 12,
+        "mock_turns": [],
+        "prompt_cache": "episode_prefix",
+        "sampler": {
+          "min_p": 0,
+          "temperature": 1.0,
+          "top_k": 20,
+          "top_p": 0.95
+        },
+        "schema": "joulewise.align.apple.episode_spec.v1",
+        "seed": 74,
+        "task_factory": "joulewise.align.apple.pilot:offline_shade_task",
+        "task_kwargs": {
+          "cache_dir": "/Users/edr/.cache/joulewise/shade",
+          "give_hint": true,
+          "task_pair": "spam_filter_update"
+        },
+        "temperature": 1.0,
+        "thermal": {
+          "chunk_tokens": null,
+          "delta_fast_c": null,
+          "delta_slow_c": null,
+          "heavy": true,
+          "per_turn": true,
+          "sensors": null,
+          "turn_cap_s": null,
+          "window_reference": {
+            "role": "consume",
+            "source_config_sha256": "eaf688b38be19d533403447f80c6b919eb12800842b2db4a2ed9ef42fdb1ab75",
+            "source_run_id": "align-v4-t2-episodes-a-e05"
+          }
+        },
+        "warmup_condition": "benign"
+      },
+      "stage_id": "align-v4-t2-episodes-a",
+      "task_pair": "spam_filter_update",
+      "window": "T2",
+      "window_reference_role": "consume_member_5_custody_via_WP15"
+    },
+    {
+      "ac_powermode": null,
+      "block": "D",
+      "condition": "benign",
+      "config_path": "configs/campaigns/align_v4_series/t2/stages/episodes-a/align-v4-t2-episodes-a-e08.json",
+      "config_sha256": "6600695d75c7353d60d926730c216ab5cff4fdf62f9ad735e319a2f25c179568",
+      "counts_toward": "test",
+      "expected_episode_seed": 2831155568260761321,
+      "expected_turn_seed_0": 6556953254296004588,
+      "held_out": true,
+      "is_replay": false,
+      "model_id": "qwen3.8-27b",
+      "non_claim": true,
+      "ordinal": 8,
+      "repeat": 1,
+      "role": "D",
+      "run_id": "align-v4-t2-episodes-a-e08",
+      "seed_index": 75,
+      "series_role": "benign",
+      "spec": {
+        "assistant_history": "reasoning_content",
+        "chat_template_kwargs": {
+          "reasoning_effort": null
+        },
+        "condition": "benign",
+        "deadman_s": null,
+        "enable_thinking": true,
+        "hybrid_checkpoint_limit": 0,
+        "max_context_tokens": 40960,
+        "max_episode_decode_tokens": null,
+        "max_tokens": 4096,
+        "max_turns": 12,
+        "mock_turns": [],
+        "prompt_cache": "episode_prefix",
+        "sampler": {
+          "min_p": 0,
+          "temperature": 1.0,
+          "top_k": 20,
+          "top_p": 0.95
+        },
+        "schema": "joulewise.align.apple.episode_spec.v1",
+        "seed": 75,
+        "task_factory": "joulewise.align.apple.pilot:offline_shade_task",
+        "task_kwargs": {
+          "cache_dir": "/Users/edr/.cache/joulewise/shade",
+          "give_hint": true,
+          "task_pair": "bank_transfer_2"
+        },
+        "temperature": 1.0,
+        "thermal": {
+          "chunk_tokens": null,
+          "delta_fast_c": null,
+          "delta_slow_c": null,
+          "heavy": true,
+          "per_turn": true,
+          "sensors": null,
+          "turn_cap_s": null,
+          "window_reference": {
+            "role": "consume",
+            "source_config_sha256": "eaf688b38be19d533403447f80c6b919eb12800842b2db4a2ed9ef42fdb1ab75",
+            "source_run_id": "align-v4-t2-episodes-a-e05"
+          }
+        },
+        "warmup_condition": "benign"
+      },
+      "stage_id": "align-v4-t2-episodes-a",
+      "task_pair": "bank_transfer_2",
+      "window": "T2",
+      "window_reference_role": "consume_member_5_custody_via_WP15"
+    },
+    {
+      "ac_powermode": null,
+      "block": "D",
+      "condition": "sabotage",
+      "config_path": "configs/campaigns/align_v4_series/t2/stages/episodes-a/align-v4-t2-episodes-a-e09.json",
+      "config_sha256": "2e2e8ef2e72ca7d409175c05c351e443e7e584a126a4c72daee6dcfdef816c80",
+      "counts_toward": "test",
+      "expected_episode_seed": 11341338173300944893,
+      "expected_turn_seed_0": 5300561892715430230,
+      "held_out": true,
+      "is_replay": false,
+      "model_id": "qwen3.8-27b",
+      "non_claim": true,
+      "ordinal": 9,
+      "repeat": 1,
+      "role": "D",
+      "run_id": "align-v4-t2-episodes-a-e09",
+      "seed_index": 75,
+      "series_role": "sabotage",
+      "spec": {
+        "assistant_history": "reasoning_content",
+        "chat_template_kwargs": {
+          "reasoning_effort": null
+        },
+        "condition": "sabotage",
+        "deadman_s": null,
+        "enable_thinking": true,
+        "hybrid_checkpoint_limit": 0,
+        "max_context_tokens": 40960,
+        "max_episode_decode_tokens": null,
+        "max_tokens": 4096,
+        "max_turns": 12,
+        "mock_turns": [],
+        "prompt_cache": "episode_prefix",
+        "sampler": {
+          "min_p": 0,
+          "temperature": 1.0,
+          "top_k": 20,
+          "top_p": 0.95
+        },
+        "schema": "joulewise.align.apple.episode_spec.v1",
+        "seed": 75,
+        "task_factory": "joulewise.align.apple.pilot:offline_shade_task",
+        "task_kwargs": {
+          "cache_dir": "/Users/edr/.cache/joulewise/shade",
+          "give_hint": true,
+          "task_pair": "spam_filter_update"
+        },
+        "temperature": 1.0,
+        "thermal": {
+          "chunk_tokens": null,
+          "delta_fast_c": null,
+          "delta_slow_c": null,
+          "heavy": true,
+          "per_turn": true,
+          "sensors": null,
+          "turn_cap_s": null,
+          "window_reference": {
+            "role": "consume",
+            "source_config_sha256": "eaf688b38be19d533403447f80c6b919eb12800842b2db4a2ed9ef42fdb1ab75",
+            "source_run_id": "align-v4-t2-episodes-a-e05"
+          }
+        },
+        "warmup_condition": "benign"
+      },
+      "stage_id": "align-v4-t2-episodes-a",
+      "task_pair": "spam_filter_update",
+      "window": "T2",
+      "window_reference_role": "consume_member_5_custody_via_WP15"
+    },
+    {
+      "ac_powermode": null,
+      "block": "D",
+      "condition": "benign",
+      "config_path": "configs/campaigns/align_v4_series/t2/stages/episodes-a/align-v4-t2-episodes-a-e10.json",
+      "config_sha256": "97673a385664a153e8665f1a4231836375190dfc627653dcc7419482c386eab8",
+      "counts_toward": "test",
+      "expected_episode_seed": 14741996097936914322,
+      "expected_turn_seed_0": 14648894052563805482,
+      "held_out": true,
+      "is_replay": false,
+      "model_id": "qwen3.8-27b",
+      "non_claim": true,
+      "ordinal": 10,
+      "repeat": 1,
+      "role": "D",
+      "run_id": "align-v4-t2-episodes-a-e10",
+      "seed_index": 76,
+      "series_role": "benign",
+      "spec": {
+        "assistant_history": "reasoning_content",
+        "chat_template_kwargs": {
+          "reasoning_effort": null
+        },
+        "condition": "benign",
+        "deadman_s": null,
+        "enable_thinking": true,
+        "hybrid_checkpoint_limit": 0,
+        "max_context_tokens": 40960,
+        "max_episode_decode_tokens": null,
+        "max_tokens": 4096,
+        "max_turns": 12,
+        "mock_turns": [],
+        "prompt_cache": "episode_prefix",
+        "sampler": {
+          "min_p": 0,
+          "temperature": 1.0,
+          "top_k": 20,
+          "top_p": 0.95
+        },
+        "schema": "joulewise.align.apple.episode_spec.v1",
+        "seed": 76,
+        "task_factory": "joulewise.align.apple.pilot:offline_shade_task",
+        "task_kwargs": {
+          "cache_dir": "/Users/edr/.cache/joulewise/shade",
+          "give_hint": true,
+          "task_pair": "bank_transfer_2"
+        },
+        "temperature": 1.0,
+        "thermal": {
+          "chunk_tokens": null,
+          "delta_fast_c": null,
+          "delta_slow_c": null,
+          "heavy": true,
+          "per_turn": true,
+          "sensors": null,
+          "turn_cap_s": null,
+          "window_reference": {
+            "role": "consume",
+            "source_config_sha256": "eaf688b38be19d533403447f80c6b919eb12800842b2db4a2ed9ef42fdb1ab75",
+            "source_run_id": "align-v4-t2-episodes-a-e05"
+          }
+        },
+        "warmup_condition": "benign"
+      },
+      "stage_id": "align-v4-t2-episodes-a",
+      "task_pair": "bank_transfer_2",
+      "window": "T2",
+      "window_reference_role": "consume_member_5_custody_via_WP15"
+    },
+    {
+      "ac_powermode": null,
+      "block": "D",
+      "condition": "benign",
+      "config_path": "configs/campaigns/align_v4_series/t2/stages/episodes-a/align-v4-t2-episodes-a-e11.json",
+      "config_sha256": "9a0d2af5740ab864c47323c90b4c2191fb0a769c10dc00e0190ee429d028bffe",
+      "counts_toward": "test",
+      "expected_episode_seed": 4101008713882898531,
+      "expected_turn_seed_0": 2437763709243878276,
+      "held_out": true,
+      "is_replay": false,
+      "model_id": "qwen3.8-27b",
+      "non_claim": true,
+      "ordinal": 11,
+      "repeat": 1,
+      "role": "D",
+      "run_id": "align-v4-t2-episodes-a-e11",
+      "seed_index": 76,
+      "series_role": "benign",
+      "spec": {
+        "assistant_history": "reasoning_content",
+        "chat_template_kwargs": {
+          "reasoning_effort": null
+        },
+        "condition": "benign",
+        "deadman_s": null,
+        "enable_thinking": true,
+        "hybrid_checkpoint_limit": 0,
+        "max_context_tokens": 40960,
+        "max_episode_decode_tokens": null,
+        "max_tokens": 4096,
+        "max_turns": 12,
+        "mock_turns": [],
+        "prompt_cache": "episode_prefix",
+        "sampler": {
+          "min_p": 0,
+          "temperature": 1.0,
+          "top_k": 20,
+          "top_p": 0.95
+        },
+        "schema": "joulewise.align.apple.episode_spec.v1",
+        "seed": 76,
+        "task_factory": "joulewise.align.apple.pilot:offline_shade_task",
+        "task_kwargs": {
+          "cache_dir": "/Users/edr/.cache/joulewise/shade",
+          "give_hint": true,
+          "task_pair": "spam_filter_update"
+        },
+        "temperature": 1.0,
+        "thermal": {
+          "chunk_tokens": null,
+          "delta_fast_c": null,
+          "delta_slow_c": null,
+          "heavy": true,
+          "per_turn": true,
+          "sensors": null,
+          "turn_cap_s": null,
+          "window_reference": {
+            "role": "consume",
+            "source_config_sha256": "eaf688b38be19d533403447f80c6b919eb12800842b2db4a2ed9ef42fdb1ab75",
+            "source_run_id": "align-v4-t2-episodes-a-e05"
+          }
+        },
+        "warmup_condition": "benign"
+      },
+      "stage_id": "align-v4-t2-episodes-a",
+      "task_pair": "spam_filter_update",
+      "window": "T2",
+      "window_reference_role": "consume_member_5_custody_via_WP15"
+    },
+    {
+      "ac_powermode": null,
+      "block": "D",
+      "condition": "benign",
+      "config_path": "configs/campaigns/align_v4_series/t2/stages/episodes-b/align-v4-t2-episodes-b-e12.json",
+      "config_sha256": "55f33bee60ae89cf26e3b0d541c82f991501068d68152ee56b2c6b5772fb0761",
+      "counts_toward": "test",
+      "expected_episode_seed": 595560691141186139,
+      "expected_turn_seed_0": 17958746962398165365,
+      "held_out": true,
+      "is_replay": false,
+      "model_id": "qwen3.8-27b",
+      "non_claim": true,
+      "ordinal": 12,
+      "repeat": 1,
+      "role": "D",
+      "run_id": "align-v4-t2-episodes-b-e12",
+      "seed_index": 77,
+      "series_role": "benign",
+      "spec": {
+        "assistant_history": "reasoning_content",
+        "chat_template_kwargs": {
+          "reasoning_effort": null
+        },
+        "condition": "benign",
+        "deadman_s": null,
+        "enable_thinking": true,
+        "hybrid_checkpoint_limit": 0,
+        "max_context_tokens": 40960,
+        "max_episode_decode_tokens": null,
+        "max_tokens": 4096,
+        "max_turns": 12,
+        "mock_turns": [],
+        "prompt_cache": "episode_prefix",
+        "sampler": {
+          "min_p": 0,
+          "temperature": 1.0,
+          "top_k": 20,
+          "top_p": 0.95
+        },
+        "schema": "joulewise.align.apple.episode_spec.v1",
+        "seed": 77,
+        "task_factory": "joulewise.align.apple.pilot:offline_shade_task",
+        "task_kwargs": {
+          "cache_dir": "/Users/edr/.cache/joulewise/shade",
+          "give_hint": true,
+          "task_pair": "bank_transfer_2"
+        },
+        "temperature": 1.0,
+        "thermal": {
+          "chunk_tokens": null,
+          "delta_fast_c": null,
+          "delta_slow_c": null,
+          "heavy": true,
+          "per_turn": true,
+          "sensors": null,
+          "turn_cap_s": null,
+          "window_reference": {
+            "role": "consume",
+            "source_config_sha256": "eaf688b38be19d533403447f80c6b919eb12800842b2db4a2ed9ef42fdb1ab75",
+            "source_run_id": "align-v4-t2-episodes-a-e05"
+          }
+        },
+        "warmup_condition": "benign"
+      },
+      "stage_id": "align-v4-t2-episodes-b",
+      "task_pair": "bank_transfer_2",
+      "window": "T2",
+      "window_reference_role": "consume_member_5_custody_via_WP15"
+    },
+    {
+      "ac_powermode": null,
+      "block": "D",
+      "condition": "benign",
+      "config_path": "configs/campaigns/align_v4_series/t2/stages/episodes-b/align-v4-t2-episodes-b-e13.json",
+      "config_sha256": "cd10ddf7bee3e6847fd201d91048a21391a18135f23f22e1902ad87f3f88a299",
+      "counts_toward": "test",
+      "expected_episode_seed": 224283716800607147,
+      "expected_turn_seed_0": 10106506041903351650,
+      "held_out": true,
+      "is_replay": false,
+      "model_id": "qwen3.8-27b",
+      "non_claim": true,
+      "ordinal": 13,
+      "repeat": 1,
+      "role": "D",
+      "run_id": "align-v4-t2-episodes-b-e13",
+      "seed_index": 77,
+      "series_role": "benign",
+      "spec": {
+        "assistant_history": "reasoning_content",
+        "chat_template_kwargs": {
+          "reasoning_effort": null
+        },
+        "condition": "benign",
+        "deadman_s": null,
+        "enable_thinking": true,
+        "hybrid_checkpoint_limit": 0,
+        "max_context_tokens": 40960,
+        "max_episode_decode_tokens": null,
+        "max_tokens": 4096,
+        "max_turns": 12,
+        "mock_turns": [],
+        "prompt_cache": "episode_prefix",
+        "sampler": {
+          "min_p": 0,
+          "temperature": 1.0,
+          "top_k": 20,
+          "top_p": 0.95
+        },
+        "schema": "joulewise.align.apple.episode_spec.v1",
+        "seed": 77,
+        "task_factory": "joulewise.align.apple.pilot:offline_shade_task",
+        "task_kwargs": {
+          "cache_dir": "/Users/edr/.cache/joulewise/shade",
+          "give_hint": true,
+          "task_pair": "spam_filter_update"
+        },
+        "temperature": 1.0,
+        "thermal": {
+          "chunk_tokens": null,
+          "delta_fast_c": null,
+          "delta_slow_c": null,
+          "heavy": true,
+          "per_turn": true,
+          "sensors": null,
+          "turn_cap_s": null,
+          "window_reference": {
+            "role": "consume",
+            "source_config_sha256": "eaf688b38be19d533403447f80c6b919eb12800842b2db4a2ed9ef42fdb1ab75",
+            "source_run_id": "align-v4-t2-episodes-a-e05"
+          }
+        },
+        "warmup_condition": "benign"
+      },
+      "stage_id": "align-v4-t2-episodes-b",
+      "task_pair": "spam_filter_update",
+      "window": "T2",
+      "window_reference_role": "consume_member_5_custody_via_WP15"
+    },
+    {
+      "ac_powermode": null,
+      "block": "D",
+      "condition": "benign",
+      "config_path": "configs/campaigns/align_v4_series/t2/stages/episodes-b/align-v4-t2-episodes-b-e14.json",
+      "config_sha256": "041589dcb5e485c8fb0e098e49b52bd523afb56ec7e4fbb0d4deae607ff29c76",
+      "counts_toward": "test",
+      "expected_episode_seed": 6947162891558150628,
+      "expected_turn_seed_0": 4544031735542869593,
+      "held_out": true,
+      "is_replay": false,
+      "model_id": "qwen3.8-27b",
+      "non_claim": true,
+      "ordinal": 14,
+      "repeat": 1,
+      "role": "D",
+      "run_id": "align-v4-t2-episodes-b-e14",
+      "seed_index": 78,
+      "series_role": "benign",
+      "spec": {
+        "assistant_history": "reasoning_content",
+        "chat_template_kwargs": {
+          "reasoning_effort": null
+        },
+        "condition": "benign",
+        "deadman_s": null,
+        "enable_thinking": true,
+        "hybrid_checkpoint_limit": 0,
+        "max_context_tokens": 40960,
+        "max_episode_decode_tokens": null,
+        "max_tokens": 4096,
+        "max_turns": 12,
+        "mock_turns": [],
+        "prompt_cache": "episode_prefix",
+        "sampler": {
+          "min_p": 0,
+          "temperature": 1.0,
+          "top_k": 20,
+          "top_p": 0.95
+        },
+        "schema": "joulewise.align.apple.episode_spec.v1",
+        "seed": 78,
+        "task_factory": "joulewise.align.apple.pilot:offline_shade_task",
+        "task_kwargs": {
+          "cache_dir": "/Users/edr/.cache/joulewise/shade",
+          "give_hint": true,
+          "task_pair": "bank_transfer_2"
+        },
+        "temperature": 1.0,
+        "thermal": {
+          "chunk_tokens": null,
+          "delta_fast_c": null,
+          "delta_slow_c": null,
+          "heavy": true,
+          "per_turn": true,
+          "sensors": null,
+          "turn_cap_s": null,
+          "window_reference": {
+            "role": "consume",
+            "source_config_sha256": "eaf688b38be19d533403447f80c6b919eb12800842b2db4a2ed9ef42fdb1ab75",
+            "source_run_id": "align-v4-t2-episodes-a-e05"
+          }
+        },
+        "warmup_condition": "benign"
+      },
+      "stage_id": "align-v4-t2-episodes-b",
+      "task_pair": "bank_transfer_2",
+      "window": "T2",
+      "window_reference_role": "consume_member_5_custody_via_WP15"
+    },
+    {
+      "ac_powermode": null,
+      "block": "D",
+      "condition": "benign",
+      "config_path": "configs/campaigns/align_v4_series/t2/stages/episodes-b/align-v4-t2-episodes-b-e15.json",
+      "config_sha256": "fdebef1ba3a6f474d169508dcc57bc8ade63af19a52ef951e7ff3bf834411d93",
+      "counts_toward": "test",
+      "expected_episode_seed": 15773125931826211544,
+      "expected_turn_seed_0": 13155557454338512667,
+      "held_out": true,
+      "is_replay": false,
+      "model_id": "qwen3.8-27b",
+      "non_claim": true,
+      "ordinal": 15,
+      "repeat": 1,
+      "role": "D",
+      "run_id": "align-v4-t2-episodes-b-e15",
+      "seed_index": 78,
+      "series_role": "benign",
+      "spec": {
+        "assistant_history": "reasoning_content",
+        "chat_template_kwargs": {
+          "reasoning_effort": null
+        },
+        "condition": "benign",
+        "deadman_s": null,
+        "enable_thinking": true,
+        "hybrid_checkpoint_limit": 0,
+        "max_context_tokens": 40960,
+        "max_episode_decode_tokens": null,
+        "max_tokens": 4096,
+        "max_turns": 12,
+        "mock_turns": [],
+        "prompt_cache": "episode_prefix",
+        "sampler": {
+          "min_p": 0,
+          "temperature": 1.0,
+          "top_k": 20,
+          "top_p": 0.95
+        },
+        "schema": "joulewise.align.apple.episode_spec.v1",
+        "seed": 78,
+        "task_factory": "joulewise.align.apple.pilot:offline_shade_task",
+        "task_kwargs": {
+          "cache_dir": "/Users/edr/.cache/joulewise/shade",
+          "give_hint": true,
+          "task_pair": "spam_filter_update"
+        },
+        "temperature": 1.0,
+        "thermal": {
+          "chunk_tokens": null,
+          "delta_fast_c": null,
+          "delta_slow_c": null,
+          "heavy": true,
+          "per_turn": true,
+          "sensors": null,
+          "turn_cap_s": null,
+          "window_reference": {
+            "role": "consume",
+            "source_config_sha256": "eaf688b38be19d533403447f80c6b919eb12800842b2db4a2ed9ef42fdb1ab75",
+            "source_run_id": "align-v4-t2-episodes-a-e05"
+          }
+        },
+        "warmup_condition": "benign"
+      },
+      "stage_id": "align-v4-t2-episodes-b",
+      "task_pair": "spam_filter_update",
+      "window": "T2",
+      "window_reference_role": "consume_member_5_custody_via_WP15"
+    },
+    {
+      "ac_powermode": null,
+      "block": "D",
+      "condition": "benign",
+      "config_path": "configs/campaigns/align_v4_series/t2/stages/episodes-b/align-v4-t2-episodes-b-e16.json",
+      "config_sha256": "35f8ce30b4c493688490c41afba20c663281bb8c5a39fbb89a1e8ddceb1c1c04",
+      "counts_toward": "test",
+      "expected_episode_seed": 17344595603846749147,
+      "expected_turn_seed_0": 1493403978681087502,
+      "held_out": true,
+      "is_replay": false,
+      "model_id": "qwen3.8-27b",
+      "non_claim": true,
+      "ordinal": 16,
+      "repeat": 1,
+      "role": "D",
+      "run_id": "align-v4-t2-episodes-b-e16",
+      "seed_index": 79,
+      "series_role": "benign",
+      "spec": {
+        "assistant_history": "reasoning_content",
+        "chat_template_kwargs": {
+          "reasoning_effort": null
+        },
+        "condition": "benign",
+        "deadman_s": null,
+        "enable_thinking": true,
+        "hybrid_checkpoint_limit": 0,
+        "max_context_tokens": 40960,
+        "max_episode_decode_tokens": null,
+        "max_tokens": 4096,
+        "max_turns": 12,
+        "mock_turns": [],
+        "prompt_cache": "episode_prefix",
+        "sampler": {
+          "min_p": 0,
+          "temperature": 1.0,
+          "top_k": 20,
+          "top_p": 0.95
+        },
+        "schema": "joulewise.align.apple.episode_spec.v1",
+        "seed": 79,
+        "task_factory": "joulewise.align.apple.pilot:offline_shade_task",
+        "task_kwargs": {
+          "cache_dir": "/Users/edr/.cache/joulewise/shade",
+          "give_hint": true,
+          "task_pair": "bank_transfer_2"
+        },
+        "temperature": 1.0,
+        "thermal": {
+          "chunk_tokens": null,
+          "delta_fast_c": null,
+          "delta_slow_c": null,
+          "heavy": true,
+          "per_turn": true,
+          "sensors": null,
+          "turn_cap_s": null,
+          "window_reference": {
+            "role": "consume",
+            "source_config_sha256": "eaf688b38be19d533403447f80c6b919eb12800842b2db4a2ed9ef42fdb1ab75",
+            "source_run_id": "align-v4-t2-episodes-a-e05"
+          }
+        },
+        "warmup_condition": "benign"
+      },
+      "stage_id": "align-v4-t2-episodes-b",
+      "task_pair": "bank_transfer_2",
+      "window": "T2",
+      "window_reference_role": "consume_member_5_custody_via_WP15"
+    },
+    {
+      "ac_powermode": null,
+      "block": "D",
+      "condition": "benign",
+      "config_path": "configs/campaigns/align_v4_series/t2/stages/episodes-b/align-v4-t2-episodes-b-e17.json",
+      "config_sha256": "5b25a43db586c7eadc4ff6fff3267a78e7c0cb0cf2a43a0aff52bba15c4f68f0",
+      "counts_toward": "test",
+      "expected_episode_seed": 18418948670235586891,
+      "expected_turn_seed_0": 13265293840983684877,
+      "held_out": true,
+      "is_replay": false,
+      "model_id": "qwen3.8-27b",
+      "non_claim": true,
+      "ordinal": 17,
+      "repeat": 1,
+      "role": "D",
+      "run_id": "align-v4-t2-episodes-b-e17",
+      "seed_index": 79,
+      "series_role": "benign",
+      "spec": {
+        "assistant_history": "reasoning_content",
+        "chat_template_kwargs": {
+          "reasoning_effort": null
+        },
+        "condition": "benign",
+        "deadman_s": null,
+        "enable_thinking": true,
+        "hybrid_checkpoint_limit": 0,
+        "max_context_tokens": 40960,
+        "max_episode_decode_tokens": null,
+        "max_tokens": 4096,
+        "max_turns": 12,
+        "mock_turns": [],
+        "prompt_cache": "episode_prefix",
+        "sampler": {
+          "min_p": 0,
+          "temperature": 1.0,
+          "top_k": 20,
+          "top_p": 0.95
+        },
+        "schema": "joulewise.align.apple.episode_spec.v1",
+        "seed": 79,
+        "task_factory": "joulewise.align.apple.pilot:offline_shade_task",
+        "task_kwargs": {
+          "cache_dir": "/Users/edr/.cache/joulewise/shade",
+          "give_hint": true,
+          "task_pair": "spam_filter_update"
+        },
+        "temperature": 1.0,
+        "thermal": {
+          "chunk_tokens": null,
+          "delta_fast_c": null,
+          "delta_slow_c": null,
+          "heavy": true,
+          "per_turn": true,
+          "sensors": null,
+          "turn_cap_s": null,
+          "window_reference": {
+            "role": "consume",
+            "source_config_sha256": "eaf688b38be19d533403447f80c6b919eb12800842b2db4a2ed9ef42fdb1ab75",
+            "source_run_id": "align-v4-t2-episodes-a-e05"
+          }
+        },
+        "warmup_condition": "benign"
+      },
+      "stage_id": "align-v4-t2-episodes-b",
+      "task_pair": "spam_filter_update",
+      "window": "T2",
+      "window_reference_role": "consume_member_5_custody_via_WP15"
+    },
+    {
+      "ac_powermode": null,
+      "block": "D",
+      "condition": "sabotage",
+      "config_path": "configs/campaigns/align_v4_series/t2/stages/episodes-b/align-v4-t2-episodes-b-e18.json",
+      "config_sha256": "9bb5c6101a54f55051fe18c1f012088ce9d6163c09049df76e5a868f91cd7f9b",
+      "counts_toward": "test",
+      "expected_episode_seed": 10229071606223300367,
+      "expected_turn_seed_0": 13441886254943973351,
+      "held_out": true,
+      "is_replay": false,
+      "model_id": "qwen3.8-27b",
+      "non_claim": true,
+      "ordinal": 18,
+      "repeat": 1,
+      "role": "D",
+      "run_id": "align-v4-t2-episodes-b-e18",
+      "seed_index": 80,
+      "series_role": "sabotage",
+      "spec": {
+        "assistant_history": "reasoning_content",
+        "chat_template_kwargs": {
+          "reasoning_effort": null
+        },
+        "condition": "sabotage",
+        "deadman_s": null,
+        "enable_thinking": true,
+        "hybrid_checkpoint_limit": 0,
+        "max_context_tokens": 40960,
+        "max_episode_decode_tokens": null,
+        "max_tokens": 4096,
+        "max_turns": 12,
+        "mock_turns": [],
+        "prompt_cache": "episode_prefix",
+        "sampler": {
+          "min_p": 0,
+          "temperature": 1.0,
+          "top_k": 20,
+          "top_p": 0.95
+        },
+        "schema": "joulewise.align.apple.episode_spec.v1",
+        "seed": 80,
+        "task_factory": "joulewise.align.apple.pilot:offline_shade_task",
+        "task_kwargs": {
+          "cache_dir": "/Users/edr/.cache/joulewise/shade",
+          "give_hint": true,
+          "task_pair": "bank_transfer_2"
+        },
+        "temperature": 1.0,
+        "thermal": {
+          "chunk_tokens": null,
+          "delta_fast_c": null,
+          "delta_slow_c": null,
+          "heavy": true,
+          "per_turn": true,
+          "sensors": null,
+          "turn_cap_s": null,
+          "window_reference": {
+            "role": "consume",
+            "source_config_sha256": "eaf688b38be19d533403447f80c6b919eb12800842b2db4a2ed9ef42fdb1ab75",
+            "source_run_id": "align-v4-t2-episodes-a-e05"
+          }
+        },
+        "warmup_condition": "benign"
+      },
+      "stage_id": "align-v4-t2-episodes-b",
+      "task_pair": "bank_transfer_2",
+      "window": "T2",
+      "window_reference_role": "consume_member_5_custody_via_WP15"
+    },
+    {
+      "ac_powermode": null,
+      "block": "D",
+      "condition": "benign",
+      "config_path": "configs/campaigns/align_v4_series/t2/stages/episodes-b/align-v4-t2-episodes-b-e19.json",
+      "config_sha256": "8f723659b18b9117690d4c90b3fb4fec03fece6048d30c3be824ffd32e69a955",
+      "counts_toward": "test",
+      "expected_episode_seed": 16073979187482668435,
+      "expected_turn_seed_0": 11560949990930784502,
+      "held_out": true,
+      "is_replay": false,
+      "model_id": "qwen3.8-27b",
+      "non_claim": true,
+      "ordinal": 19,
+      "repeat": 1,
+      "role": "D",
+      "run_id": "align-v4-t2-episodes-b-e19",
+      "seed_index": 80,
+      "series_role": "benign",
+      "spec": {
+        "assistant_history": "reasoning_content",
+        "chat_template_kwargs": {
+          "reasoning_effort": null
+        },
+        "condition": "benign",
+        "deadman_s": null,
+        "enable_thinking": true,
+        "hybrid_checkpoint_limit": 0,
+        "max_context_tokens": 40960,
+        "max_episode_decode_tokens": null,
+        "max_tokens": 4096,
+        "max_turns": 12,
+        "mock_turns": [],
+        "prompt_cache": "episode_prefix",
+        "sampler": {
+          "min_p": 0,
+          "temperature": 1.0,
+          "top_k": 20,
+          "top_p": 0.95
+        },
+        "schema": "joulewise.align.apple.episode_spec.v1",
+        "seed": 80,
+        "task_factory": "joulewise.align.apple.pilot:offline_shade_task",
+        "task_kwargs": {
+          "cache_dir": "/Users/edr/.cache/joulewise/shade",
+          "give_hint": true,
+          "task_pair": "spam_filter_update"
+        },
+        "temperature": 1.0,
+        "thermal": {
+          "chunk_tokens": null,
+          "delta_fast_c": null,
+          "delta_slow_c": null,
+          "heavy": true,
+          "per_turn": true,
+          "sensors": null,
+          "turn_cap_s": null,
+          "window_reference": {
+            "role": "consume",
+            "source_config_sha256": "eaf688b38be19d533403447f80c6b919eb12800842b2db4a2ed9ef42fdb1ab75",
+            "source_run_id": "align-v4-t2-episodes-a-e05"
+          }
+        },
+        "warmup_condition": "benign"
+      },
+      "stage_id": "align-v4-t2-episodes-b",
+      "task_pair": "spam_filter_update",
+      "window": "T2",
+      "window_reference_role": "consume_member_5_custody_via_WP15"
+    },
+    {
+      "ac_powermode": null,
+      "block": "D",
+      "condition": "benign",
+      "config_path": "configs/campaigns/align_v4_series/t2/stages/episodes-b/align-v4-t2-episodes-b-e20.json",
+      "config_sha256": "fa4da3a17159b4b6e2658824974dd3e39a74ea2e46a330aa2652e24c19123812",
+      "counts_toward": "test",
+      "expected_episode_seed": 13083737287250346246,
+      "expected_turn_seed_0": 14197340350640081503,
+      "held_out": true,
+      "is_replay": false,
+      "model_id": "qwen3.8-27b",
+      "non_claim": true,
+      "ordinal": 20,
+      "repeat": 1,
+      "role": "D",
+      "run_id": "align-v4-t2-episodes-b-e20",
+      "seed_index": 81,
+      "series_role": "benign",
+      "spec": {
+        "assistant_history": "reasoning_content",
+        "chat_template_kwargs": {
+          "reasoning_effort": null
+        },
+        "condition": "benign",
+        "deadman_s": null,
+        "enable_thinking": true,
+        "hybrid_checkpoint_limit": 0,
+        "max_context_tokens": 40960,
+        "max_episode_decode_tokens": null,
+        "max_tokens": 4096,
+        "max_turns": 12,
+        "mock_turns": [],
+        "prompt_cache": "episode_prefix",
+        "sampler": {
+          "min_p": 0,
+          "temperature": 1.0,
+          "top_k": 20,
+          "top_p": 0.95
+        },
+        "schema": "joulewise.align.apple.episode_spec.v1",
+        "seed": 81,
+        "task_factory": "joulewise.align.apple.pilot:offline_shade_task",
+        "task_kwargs": {
+          "cache_dir": "/Users/edr/.cache/joulewise/shade",
+          "give_hint": true,
+          "task_pair": "bank_transfer_2"
+        },
+        "temperature": 1.0,
+        "thermal": {
+          "chunk_tokens": null,
+          "delta_fast_c": null,
+          "delta_slow_c": null,
+          "heavy": true,
+          "per_turn": true,
+          "sensors": null,
+          "turn_cap_s": null,
+          "window_reference": {
+            "role": "consume",
+            "source_config_sha256": "eaf688b38be19d533403447f80c6b919eb12800842b2db4a2ed9ef42fdb1ab75",
+            "source_run_id": "align-v4-t2-episodes-a-e05"
+          }
+        },
+        "warmup_condition": "benign"
+      },
+      "stage_id": "align-v4-t2-episodes-b",
+      "task_pair": "bank_transfer_2",
+      "window": "T2",
+      "window_reference_role": "consume_member_5_custody_via_WP15"
+    },
+    {
+      "ac_powermode": null,
+      "block": "D",
+      "condition": "benign",
+      "config_path": "configs/campaigns/align_v4_series/t2/stages/episodes-b/align-v4-t2-episodes-b-e21.json",
+      "config_sha256": "544dc619f12396d7c433f00aa65045b70b398e03846b420e86de7d5d486f5e11",
+      "counts_toward": "test",
+      "expected_episode_seed": 15473962481357512116,
+      "expected_turn_seed_0": 2551063062633923852,
+      "held_out": true,
+      "is_replay": false,
+      "model_id": "qwen3.8-27b",
+      "non_claim": true,
+      "ordinal": 21,
+      "repeat": 1,
+      "role": "D",
+      "run_id": "align-v4-t2-episodes-b-e21",
+      "seed_index": 81,
+      "series_role": "benign",
+      "spec": {
+        "assistant_history": "reasoning_content",
+        "chat_template_kwargs": {
+          "reasoning_effort": null
+        },
+        "condition": "benign",
+        "deadman_s": null,
+        "enable_thinking": true,
+        "hybrid_checkpoint_limit": 0,
+        "max_context_tokens": 40960,
+        "max_episode_decode_tokens": null,
+        "max_tokens": 4096,
+        "max_turns": 12,
+        "mock_turns": [],
+        "prompt_cache": "episode_prefix",
+        "sampler": {
+          "min_p": 0,
+          "temperature": 1.0,
+          "top_k": 20,
+          "top_p": 0.95
+        },
+        "schema": "joulewise.align.apple.episode_spec.v1",
+        "seed": 81,
+        "task_factory": "joulewise.align.apple.pilot:offline_shade_task",
+        "task_kwargs": {
+          "cache_dir": "/Users/edr/.cache/joulewise/shade",
+          "give_hint": true,
+          "task_pair": "spam_filter_update"
+        },
+        "temperature": 1.0,
+        "thermal": {
+          "chunk_tokens": null,
+          "delta_fast_c": null,
+          "delta_slow_c": null,
+          "heavy": true,
+          "per_turn": true,
+          "sensors": null,
+          "turn_cap_s": null,
+          "window_reference": {
+            "role": "consume",
+            "source_config_sha256": "eaf688b38be19d533403447f80c6b919eb12800842b2db4a2ed9ef42fdb1ab75",
+            "source_run_id": "align-v4-t2-episodes-a-e05"
+          }
+        },
+        "warmup_condition": "benign"
+      },
+      "stage_id": "align-v4-t2-episodes-b",
+      "task_pair": "spam_filter_update",
+      "window": "T2",
+      "window_reference_role": "consume_member_5_custody_via_WP15"
+    },
+    {
+      "ac_powermode": null,
+      "block": "D",
+      "condition": "benign",
+      "config_path": "configs/campaigns/align_v4_series/t2/stages/episodes-b/align-v4-t2-episodes-b-e22.json",
+      "config_sha256": "fdb5f88f8a850f148d1f58d383806241f4630605e877a52a004d624263b85423",
+      "counts_toward": "none",
+      "expected_episode_seed": 11160969177166136631,
+      "expected_turn_seed_0": 13933079069872451601,
+      "held_out": false,
+      "is_replay": true,
+      "model_id": "qwen3.8-27b",
+      "non_claim": true,
+      "ordinal": 22,
+      "repeat": 2,
+      "replay_of": "align-v4-t2-episodes-a-e05",
+      "replay_of_window": "T2",
+      "role": "D",
+      "run_id": "align-v4-t2-episodes-b-e22",
+      "seed_index": 1,
+      "series_role": "sentinel",
+      "spec": {
+        "assistant_history": "reasoning_content",
+        "chat_template_kwargs": {
+          "reasoning_effort": null
+        },
+        "condition": "benign",
+        "deadman_s": null,
+        "enable_thinking": true,
+        "hybrid_checkpoint_limit": 0,
+        "max_context_tokens": 40960,
+        "max_episode_decode_tokens": null,
+        "max_tokens": 4096,
+        "max_turns": 12,
+        "mock_turns": [],
+        "prompt_cache": "episode_prefix",
+        "sampler": {
+          "min_p": 0,
+          "temperature": 1.0,
+          "top_k": 20,
+          "top_p": 0.95
+        },
+        "schema": "joulewise.align.apple.episode_spec.v1",
+        "seed": 1,
+        "task_factory": "joulewise.align.apple.pilot:offline_shade_task",
+        "task_kwargs": {
+          "cache_dir": "/Users/edr/.cache/joulewise/shade",
+          "give_hint": true,
+          "task_pair": "spam_filter_update"
+        },
+        "temperature": 1.0,
+        "thermal": {
+          "chunk_tokens": null,
+          "delta_fast_c": null,
+          "delta_slow_c": null,
+          "heavy": true,
+          "per_turn": true,
+          "sensors": null,
+          "turn_cap_s": null,
+          "window_reference": {
+            "role": "consume",
+            "source_config_sha256": "eaf688b38be19d533403447f80c6b919eb12800842b2db4a2ed9ef42fdb1ab75",
+            "source_run_id": "align-v4-t2-episodes-a-e05"
+          }
+        },
+        "warmup_condition": "benign"
+      },
+      "stage_id": "align-v4-t2-episodes-b",
+      "task_pair": "spam_filter_update",
+      "window": "T2",
+      "window_reference_role": "consume_member_5_custody_via_WP15"
+    }
+  ],
+  "midpoint_after_ordinal": 11,
+  "non_claim": true,
+  "pending_inputs": [
+    "R0.reasoning_effort",
+    "R1.B_D",
+    "R1.I_D",
+    "R1.T_dead",
+    "R1.thermal_policy"
+  ],
+  "plan_id": "align-v4-t2",
+  "protocol": "docs/align/pilot_protocol_v4.md",
+  "runtime_requirements": {
+    "D_tools": "family-validated XML via qwen3_5",
+    "ac_powermode": null,
+    "km003c": {
+      "custody_directory": "hazards/meter",
+      "enabled": true,
+      "label": "SECONDARY / not yet registered",
+      "reader": "scripts/km003c_monitor.py",
+      "scope": "before_first_idle_baseline_through_last_member",
+      "supervisor": "joulewise.b5.driver"
+    },
+    "presence_penalty": 0,
+    "w1_launcher": "per-member configs via the plan_tree stage commands (the specs carry the roles)",
+    "window_reference": {
+      "capture_config_sha256": "eaf688b38be19d533403447f80c6b919eb12800842b2db4a2ed9ef42fdb1ab75",
+      "capture_ordinal": 5,
+      "capture_run_id": "align-v4-t2-episodes-a-e05",
+      "rule": "the early sentinel (ordinal 5) captures its last 60 s of idle before warmup; every later D member consumes it"
+    }
+  },
+  "schema_version": "joulewise.align_v4.v1",
+  "seed_bits": 64,
+  "seed_law": "align-p4-v1",
+  "series_alias": null,
+  "series_manifest": "configs/campaigns/align_v4_series/series_manifest.json",
+  "series_manifest_sha256": "8ad6a5d93f5499468c801147e64ff00effd1b994c21f57c23e633ec88d03709a",
+  "series_role": "test",
+  "series_window": "T2",
+  "source_receipts": [
+    {
+      "commit": "83e2dac59",
+      "ordinal": 1,
+      "path": "configs/campaigns/align_pilot_v3/stages/episodes-a/align-pilot-v3-episodes-a-e01.json",
+      "sha256": "6d2c4ecda2022b25ccb68bc455bf783851f5d77b7b09c89737cdd0a50df4bb58"
+    },
+    {
+      "commit": "83e2dac59",
+      "ordinal": 2,
+      "path": "configs/campaigns/align_pilot_v3/stages/episodes-a/align-pilot-v3-episodes-a-e02.json",
+      "sha256": "6a5c0daaa019e66440e8860ef82163312dea84fd9aaaa28f6fd0f3b6464712a8"
+    },
+    {
+      "commit": "83e2dac59",
+      "ordinal": 3,
+      "path": "configs/campaigns/align_pilot_v3/stages/episodes-a/align-pilot-v3-episodes-a-e03.json",
+      "sha256": "56105368782182d14e5dbd125854de1dff888cad4c1c25d21aa6820fcf2062d2"
+    },
+    {
+      "commit": "83e2dac59",
+      "ordinal": 4,
+      "path": "configs/campaigns/align_pilot_v3/stages/episodes-a/align-pilot-v3-episodes-a-e04.json",
+      "sha256": "5b893b05211f36450bb60c7c01b39ec1721415022c65797d0c2fb3831d1a7bfa"
+    }
+  ],
+  "status": "PROVISIONAL_SKELETON",
+  "turn_seed_law": "align-p4-turn-v1"
+}

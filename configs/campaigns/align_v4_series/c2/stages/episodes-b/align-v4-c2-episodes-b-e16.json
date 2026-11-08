@@ -1,0 +1,64 @@
+{
+  "hardware_target": {
+    "device_kind": "apple_silicon_unified_memory",
+    "host": null,
+    "id": "macbook_m3_max",
+    "notes": "PROVISIONAL ALIGN v4 series align-v4-c2 non-claim skeleton; not admitted for execution.",
+    "runtime_backend": "mlx",
+    "telemetry_backend": "powermetrics",
+    "transport": "local"
+  },
+  "interconnect": {
+    "link_speed_mbps": null,
+    "name": "local",
+    "notes": null
+  },
+  "model": {
+    "context_window": null,
+    "family": "qwen3_5",
+    "name": "Qwen3.8-27B-8bit",
+    "revision": "815b83c0df8ffd1d1b5244cf75fd6ef14fca9ef9",
+    "source": "/Users/edr/jw_models/mlx-community/Qwen3.8-27B-8bit",
+    "weight_format": "mlx"
+  },
+  "quantization": {
+    "bits": 8,
+    "group_size": 64,
+    "name": "int8"
+  },
+  "run_id": "align-v4-c2-episodes-b-e16",
+  "run_metadata": {
+    "ambient_temp_c": null,
+    "notes": null,
+    "operator": "lead",
+    "project": "capstone-joulewise",
+    "tags": [
+      "align-v4-c2",
+      "non-claim",
+      "launch_lineage_required",
+      "align",
+      "align_episode",
+      "align-model=qwen3.8-27b",
+      "align-condition=benign",
+      "align-task=bank_transfer_2",
+      "align-repeat=1",
+      "align-stage=episodes-b",
+      "align-series-role=benign"
+    ]
+  },
+  "sampling": {
+    "idle_seconds": 300.0,
+    "power_hz": 10.0,
+    "warmup_seconds": 5.0
+  },
+  "schema_version": "0.1",
+  "workload_profile": {
+    "dataset_ref": null,
+    "name": "align_episode",
+    "output_tokens": null,
+    "prompt_text": "{\"assistant_history\":\"reasoning_content\",\"chat_template_kwargs\":{\"reasoning_effort\":null},\"condition\":\"benign\",\"deadman_s\":null,\"enable_thinking\":true,\"hybrid_checkpoint_limit\":0,\"max_context_tokens\":40960,\"max_episode_decode_tokens\":null,\"max_tokens\":4096,\"max_turns\":12,\"mock_turns\":[],\"prompt_cache\":\"episode_prefix\",\"sampler\":{\"min_p\":0,\"temperature\":1.0,\"top_k\":20,\"top_p\":0.95},\"schema\":\"joulewise.align.apple.episode_spec.v1\",\"seed\":15,\"task_factory\":\"joulewise.align.apple.pilot:offline_shade_task\",\"task_kwargs\":{\"cache_dir\":\"/Users/edr/.cache/joulewise/shade\",\"give_hint\":true,\"task_pair\":\"bank_transfer_2\"},\"temperature\":1.0,\"thermal\":{\"chunk_tokens\":null,\"delta_fast_c\":null,\"delta_slow_c\":null,\"heavy\":true,\"per_turn\":true,\"sensors\":null,\"turn_cap_s\":null,\"window_reference\":{\"role\":\"consume\",\"source_config_sha256\":\"84d5279c52070e8ee30b9f069032b88f30fb4d52c753b8b87d08f08e86e9afbd\",\"source_run_id\":\"align-v4-c2-episodes-a-e05\"}},\"warmup_condition\":\"benign\"}",
+    "prompt_tokens": null,
+    "repetitions": 1,
+    "warmup_runs": 1
+  }
+}

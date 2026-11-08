@@ -1,0 +1,31 @@
+{
+  "D": {
+    "folded_sha256": "a8d1c5c963787dd9dc524912e05d409172124da773d196e8f5123820b4c36b30",
+    "hf_pins": {
+      "path": "configs/align/v4/qwen38-27b-8bit-hf-pins.json",
+      "repo": "mlx-community/Qwen3.8-27B-8bit",
+      "revision": "815b83c0df8ffd1d1b5244cf75fd6ef14fca9ef9",
+      "sha256": "3a1835342b4576b53fb715eb18e53877b54de8e9d04b1f71854d302c9d3635b8"
+    },
+    "method": "R0 re-run on the measurement Mac (Mac15,9) hashed the six D weight shards during model-load (joulewise.provenance.model_artifact_identity, the governed file_set identity). Every shard sha256 and size equals the HF LFS pin at the D revision, and the folded sha256 recomputes from the pins alone (scripts/align_v4_kit.py validate_d_identity).",
+    "record": {
+      "branch": "records/2026-11-06-align-r0-v4-rerun",
+      "check": "model-load",
+      "check_status": "pass",
+      "checkout_head": "f3af22b94a92b8d8b58d7cd9dbebed554a30fb91",
+      "commit": "a1c2e890088fdee1275ac401d88a4ca6011d33f6",
+      "created_utc": "2026-11-06T17:03:29.440418+00:00",
+      "hw_model": "Mac15,9",
+      "json_pointer": "/checks/3/load/model_artifact_identity",
+      "path": "docs/align/r0/2026-11-06-rerun/report.json",
+      "sha256": "857ed2859ee0ef7a82c00e3a3bb425c8325eecf9262a717db86b5577ab91c780"
+    },
+    "scope": "Weight shards only: the governed artifact identity file set. The non-weight files (config, tokenizer, template) are checked against the same pins by scripts/align_v4_verify_d_pins.py. Identity only: the same R0 run failed its load check (NLL), which is a separate R0 verdict, not an identity question.",
+    "status": "verified",
+    "weight_bytes": 29501218479,
+    "weight_files": 6
+  },
+  "inherited_30B_commit": "83e2dac59",
+  "note": "No local files were inspected by this builder.",
+  "status": "WP11_D_FROM_R0_RECORD"
+}
