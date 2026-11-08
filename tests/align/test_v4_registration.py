@@ -168,45 +168,58 @@ class RegistrationTests(unittest.TestCase):
 
     def test_arm_records_battery_and_refuses_missing_attestation(self):
         from scripts import align_v4_session as session
-        from tests.align.test_v4_cadence import passing_packet
+        from tests.align.test_v4_cadence import passing_packet, write_battery_log
         packet = passing_packet()
+        yes = lambda root, commit: True
         good = dict(passed=True, probe_error=False, external_connected=True, is_charging=False,
                     current_capacity_pct=100, instant_amperage_ma=0, update_age_s=1)
-        with patch('joulewise.align.apple.powermode.admit_ac_powermode', return_value={'admitted': True}), \
+        with tempfile.TemporaryDirectory() as tmp, \
+             patch('joulewise.align.apple.powermode.admit_ac_powermode', return_value={'admitted': True}), \
              patch('joulewise.align.apple.external_volume.census', return_value={}), \
              patch('joulewise.align.apple.external_volume.arm_check', return_value={'verdict': 'PASS', 'reasons': []}), \
              patch('joulewise.battery_float.observe', return_value=(good, b'synthetic raw')) as observe:
             run = lambda argv: subprocess.CompletedProcess(argv, 0, 'synthetic pmset', '')
-            record = session.arm_checks('.', {}, runner=run)
-            self.assertFalse(record['admitted'])
-            record = session.arm_checks('.', {}, obc_off_attested_by='synthetic', runner=run,
-                                        now=lambda: 5000., topup_source='synthetic', next_arm_triage=packet)
-            self.assertFalse(record['admitted'])
-            record = session.arm_checks('.', {}, obc_off_attested_by='synthetic', runner=run,
-                                        now=lambda: 5000., topup_completed_at=4900, topup_source='synthetic', next_arm_triage=packet)
-            self.assertTrue(record['admitted'])
-            self.assertEqual(record['battery']['topup'], {'completed_at_epoch_s': 4900., 'source': 'synthetic'})
+            log = write_battery_log(Path(tmp) / 'battery.jsonl', 5000., completion_age=100)        # (a) completed charge
+            floated = write_battery_log(Path(tmp) / 'float.jsonl', 5000., completion_age=2400)     # (b) continuous float
+            stale = write_battery_log(Path(tmp) / 'stale.jsonl', 5000., completion_age=2400, end_age=900)
+            arm = lambda **kw: session.arm_checks('.', {}, obc_off_attested_by=kw.pop('obc', 'synthetic'), runner=run,
+                                                  now=lambda: 5000., commit_check=yes, **kw)
+            self.assertFalse(session.arm_checks('.', {}, runner=run)['admitted'])
+            self.assertFalse(arm(obc='', battery_log=log, next_arm_triage=packet)['admitted'])     # no attestation
+            self.assertFalse(arm(next_arm_triage=packet)['admitted'])                              # no battery evidence
+            record = arm(battery_log=log, next_arm_triage=packet)
+            self.assertTrue(record['admitted'], record['reasons'])
+            evidence = record['battery']['topup_evidence']
+            self.assertEqual(evidence['basis'], 'completed_charge')
+            self.assertTrue(evidence['source'].startswith('battery_log:completed_charge:'))
+            self.assertEqual(record['battery']['topup']['source'], evidence['source'])
+            record = arm(battery_log=floated, next_arm_triage=packet)
+            self.assertTrue(record['admitted'], record['reasons'])
+            self.assertEqual(record['battery']['topup_evidence']['basis'], 'continuous_float')
+            self.assertFalse(arm(battery_log=stale, next_arm_triage=packet)['admitted'])           # stale latest observation
+            self.assertFalse(arm(battery_log=Path(tmp) / 'missing.jsonl', next_arm_triage=packet)['admitted'])
+            # L8: a failing pmset is evidence only
+            bad_pmset = lambda argv: subprocess.CompletedProcess(argv, 1, '', 'pmset failed')
+            with_bad = session.arm_checks('.', {}, obc_off_attested_by='synthetic', runner=bad_pmset, now=lambda: 5000.,
+                                          commit_check=yes, battery_log=log, next_arm_triage=packet)
+            self.assertTrue(with_bad['admitted'], with_bad['reasons'])
+            self.assertTrue(with_bad['battery']['pmset_batt']['evidence_only'])
             self.assertEqual(set(record['next_arm_triage']['checks']), set(__import__(
                 'joulewise.align.apple.v4_cadence', fromlist=['x']).TRIAGE_IDS))
             # R12 B2: the triage list gates the arm itself.
-            self.assertFalse(session.arm_checks('.', {}, obc_off_attested_by='synthetic', runner=run,
-                now=lambda: 5000., topup_completed_at=4900, topup_source='synthetic')['admitted'])
+            self.assertFalse(arm(battery_log=log)['admitted'])
             bad = passing_packet()
-            bad['checks']['meter_samples_clock']['status'] = 'fail'
-            refused = session.arm_checks('.', {}, obc_off_attested_by='synthetic', runner=run,
-                now=lambda: 5000., topup_completed_at=4900, topup_source='synthetic', next_arm_triage=bad)
+            bad['checks']['meter_reader_live']['status'] = 'fail'
+            refused = arm(battery_log=log, next_arm_triage=bad)
             self.assertFalse(refused['admitted'])
-            self.assertIn('next_arm_triage: triage meter_samples_clock failed', refused['reasons'])
-            record = session.arm_checks('.', {}, obc_off_attested_by='synthetic', runner=run,
-                                        now=lambda: 5000., topup_completed_at='2000-01-01T00:00:00+00:00',
-                                        topup_source='synthetic', next_arm_triage=packet)
-            self.assertFalse(record['admitted'])
-            record = session.arm_checks('.', {}, obc_off_attested_by='synthetic', runner=run,
-                                        now=lambda: 5000., topup_completed_at='not a time', topup_source='synthetic',
-                                        next_arm_triage=packet)
-            self.assertFalse(record['admitted'])
+            self.assertIn('next_arm_triage: triage meter_reader_live failed', refused['reasons'])
             self.assertEqual(record['battery']['raw_ioreg'], 'synthetic raw')
             self.assertEqual(observe.call_args.kwargs['phase'], 'arm_check')
+
+    def test_hand_entered_topup_time_is_not_an_arm_input(self):
+        from scripts import align_v4_session as session
+        with self.assertRaises(TypeError):
+            session.arm_checks('.', {}, topup_completed_at=4900., topup_source='typed by hand')
 
     def test_disk_gate_rejects_implicit_empty_offloads(self):
         from scripts import align_v4_session as session

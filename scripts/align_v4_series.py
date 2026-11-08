@@ -39,14 +39,27 @@ def pack_id(window_id):
     return 'align-v4-' + window_id.lower()
 
 
-def candidate(*, d_mapping='separate_fit', test_windows=3):
-    """Prospective proposal, including BOTH pairs/conditions/seeds in every slot.
+RESERVED_INDICES = frozenset({1, *range(91, 100)})   # development: W1 1/93, R0 91-92, reserve 94-99
+HELD_OUT_START = 2
+CALIBRATION_WINDOWS = 8
+TEST_WINDOWS = 3                                     # RUN_STATE 226 R15
+SABOTAGE_ORDINALS = (9, 18)                          # Amendment 1: spread, one per half
+D_CEILING_S = 59520                                  # Ed Q4
+ESCALATED_CEILING_S = 62400                          # RUN_STATE 226 R15: +2-sentinel windows only
 
-    Separate D fit windows avoid assigning a calibrator to fit. The alias option
-    instead names D1=C1 etc.; its independent fit source must be admitted.
+
+def candidate():
+    """The frozen series (RUN_STATE 226 R15): Sol code base, Opus allocation.
+
+    W1, then C1-C8 (D_k is C_k: no separate fit windows), then T1-T3. Every C/T
+    window: anchors 1-4 (original bytes), early W1:5 sentinel at 5, sixteen fresh
+    held-out D members at 6-21 alternating pair by pair (odd windows spam first,
+    even bank first; first pair on even ordinals) with sabotage at 9 (second
+    pair) and 18 (first pair), late sentinel at 22; midpoint after 11. Held-out
+    seed indices are distinct, consumed per pair in kit order (window order,
+    then ordinal) from 2, skipping 1 and 91-99: C1-C8 use 2-65, T1-T3 66-89. A
+    C-window sabotage member is pool ``known_h`` and counts toward nothing.
     """
-    if d_mapping not in ('separate_fit', 'alias_calibration') or test_windows not in (3, 6):
-        raise ValueError('choose separate_fit|alias_calibration and 3|6 test windows')
     selection = []
     for ordinal, (role, pair, condition, index) in enumerate(w1.ROSTER, 1):
         model = w1.D_TAG if role == 'D' else 'qwen3-30b-a3b'
@@ -55,21 +68,24 @@ def candidate(*, d_mapping='separate_fit', test_windows=3):
             condition=condition, seed_index=index, model_id=model, episode_seed=seed,
             turn_seed_0=turn_seed(seed, 0)))
     windows = [{'id': 'W1', 'role': 'selection', 'aliases': [], 'members': selection}]
-    groups = ([('D', 'fit', 3, 101)] if d_mapping == 'separate_fit' else [])
-    groups += [('C', 'calibration', 8, 2), ('T', 'test', test_windows, 201)]
-    for prefix, role, count, start in groups:
+    next_index = dict.fromkeys(PAIRS, HELD_OUT_START)
+    for prefix, role, count in (('C', 'calibration', CALIBRATION_WINDOWS), ('T', 'test', TEST_WINDOWS)):
         for number in range(1, count + 1):
-            indices = list(range(start + 7 * (number - 1), start + 7 * number))
-            rows = []
-            for pair, condition in zip((PAIRS[0], PAIRS[1], PAIRS[0], PAIRS[1]),
-                                       ('benign', 'sabotage', 'sabotage', 'benign')):
-                rows.append(dict(pool='anchor', pair=pair, condition=condition, seed_index=1))
+            first = PAIRS[0] if number % 2 else PAIRS[1]
+            second = PAIRS[1] if first == PAIRS[0] else PAIRS[0]
+            rows = [dict(pool='anchor', pair=pair, condition=condition, seed_index=1)
+                    for pair, condition in zip((PAIRS[0], PAIRS[1], PAIRS[0], PAIRS[1]),
+                                               ('benign', 'sabotage', 'sabotage', 'benign'))]
             rows.append(dict(pool='sentinel', pair=PAIRS[0], condition='benign', seed_index=1))
-            for index in indices:
-                for pair in PAIRS:
-                    rows.append(dict(pool=role, pair=pair, condition='benign', seed_index=index))
-            for pair in PAIRS:
-                rows.append(dict(pool=role, pair=pair, condition='sabotage', seed_index=indices[0]))
+            for ordinal in range(6, 22):
+                pair = first if ordinal % 2 == 0 else second
+                sabotage = ordinal in SABOTAGE_ORDINALS
+                while next_index[pair] in RESERVED_INDICES:
+                    next_index[pair] += 1
+                pool = role if not sabotage or role == 'test' else 'known_h'
+                rows.append(dict(pool=pool, pair=pair, condition='sabotage' if sabotage else 'benign',
+                                 seed_index=next_index[pair]))
+                next_index[pair] += 1
             rows.append(deepcopy(rows[4]))
             for ordinal, row in enumerate(rows, 1):
                 model = 'qwen3-30b-a3b' if row['pool'] == 'anchor' else w1.D_TAG
@@ -77,27 +93,31 @@ def candidate(*, d_mapping='separate_fit', test_windows=3):
                 row.update(ordinal=ordinal, model_id=model, episode_seed=seed,
                            turn_seed_0=turn_seed(seed, 0))
             name = prefix + str(number)
-            aliases = ['D' + str(number)] if prefix == 'C' and number <= 3 and d_mapping == 'alias_calibration' else []
-            windows.append(dict(id=name, role=role, aliases=aliases, midpoint_after_ordinal=11, members=rows))
-    return dict(schema=SCHEMA, status='PROPOSAL_REQUIRES_LEAD_ADMISSION', d_mapping=d_mapping,
-                test_windows=test_windows, order=[r['id'] for r in windows], windows=windows,
-                calibration=dict(counted_windows=8, benign_per_pair_per_window=7,
-                                 minimum_eligible_per_pair=39, replacements=0),
-                sentinel=dict(source='W1:5', late_replay_of=5, extra_on_inconclusive=2),
+            windows.append(dict(id=name, role=role, aliases=['D' + str(number)] if prefix == 'C' else [],
+                                midpoint_after_ordinal=11, members=rows))
+    return dict(schema=SCHEMA, status='FROZEN_PER_RUN_STATE_226_R15_PENDING_PAIRED_SEED_CHECK',
+                d_mapping='alias_calibration', test_windows=TEST_WINDOWS, order=[r['id'] for r in windows],
+                windows=windows,
+                calibration=dict(counted_windows=CALIBRATION_WINDOWS, benign_per_pair_per_window=7,
+                                 minimum_eligible_per_pair=39, replacements=0, fence_from='C6'),
+                seed_allocation=dict(held_out_start=HELD_OUT_START, reserved=sorted(RESERVED_INDICES),
+                                     order='per pair, kit order: window order then ordinal; distinct indices',
+                                     zero_capture_rearm='reuses the same seeds'),
+                sentinel=dict(source='W1:5', late_replay_of=5, extra_on_inconclusive=2,
+                              escalated_ceiling_s=ESCALATED_CEILING_S),
                 seed_law='align-p4-v1', turn_seed_law='align-p4-turn-v1',
                 test_shape='v4: 14 benign + 2 sabotage; no v5 attacks or physical controls',
-                open_rulings=['D/F/C mapping and independent fit/scorer contract', '3 vs 6 test windows and shape',
-                              'C/T/F seed ranges and within-window condition seed reuse',
-                              'W1 sentinel/cohort clearance; U4/U5 extra-sentinel disposition',
-                              'R13/R14 scorer validity, dependence and threshold freeze'])
+                authority='RUN_STATE 226 R15',
+                open_rulings=['paired seed check of these manifest bytes before signing',
+                              'placement of the two escalation sentinels (U4/U5 inconclusive)'])
 
 
 def validate(manifest):
-    # Accept only the two fully specified designs supported by this builder;
-    # changing a slot requires a reviewed builder change, never a silent edit.
+    # Accept only the frozen design (RUN_STATE 226 R15); changing a slot needs a
+    # reviewed builder change and a new paired seed check, never a silent edit.
     if not isinstance(manifest, dict) or manifest.get('schema') != SCHEMA:
         raise ValueError('missing series manifest')
-    expected = candidate(d_mapping=manifest.get('d_mapping'), test_windows=manifest.get('test_windows'))
+    expected = candidate()
     if manifest != expected:
         raise ValueError('series allocation differs from the frozen executable design')
     return manifest
@@ -225,7 +245,9 @@ def build_files(root, manifest, name):
             run_id=config['run_id'], config_path=path.as_posix(), config_sha256=sha(raw),
             spec=json.loads(config['workload_profile']['prompt_text']), stage_id=stage['stage_id'],
             repeat=2 if ordinal == 22 else 1, is_replay=ordinal == 22,
-            held_out=allocation['pool'] in ('calibration', 'test'), non_claim=True,
+            held_out=allocation['pool'] in ('calibration', 'known_h', 'test'), non_claim=True,
+            counts_toward=('calibration' if allocation['pool'] == 'calibration' else
+                           'test' if allocation['pool'] == 'test' else 'none'),
             ac_powermode=original['runtime_requirements']['ac_powermode'])
         if ordinal >= 5:
             member['window_reference_role'] = ('capture_last_60s_idle_before_warmup' if ordinal == 5 else
@@ -278,27 +300,56 @@ def build_files(root, manifest, name):
     return files
 
 
-def derive_sizing(root, window, tree, plan):
+def member_seconds(root, plan):
+    """Per-member planning seconds (RUN_STATE 226 R15: D members at the largest W1 D member time).
+
+    From the committed R1-filled W1 plan when it exists: anchors keep their W1
+    member_s and every D member takes the largest W1 D member_s. Before R1 there
+    is no W1 plan; the Amendment-1 planning allowances (anchors 3131.27/4, D
+    1,800 s) are used and flagged, and native prepare refuses anyway (W1 not ready).
+    """
+    raw = w1.read_w1_plan_bytes(root)
+    if raw is None:
+        return ({str(m['ordinal']): (3131.27 / 4 if m['pool_role'] == 'anchor' else 1800) for m in plan['members']},
+                ['sizing.planning_allowances_pending_r1_w1_plan'], None)
+    rows = json.loads(raw)['align_v4']['members']
+    anchors = {row['ordinal']: row['member_s'] for row in rows if row['role'] == 'anchor'}
+    d_max = max(row['member_s'] for row in rows if row['role'] == 'D')
+    return ({str(m['ordinal']): (anchors[m['ordinal']] if m['pool_role'] == 'anchor' else d_max)
+             for m in plan['members']}, [], sha(raw))
+
+
+def window_ceiling_s(extra_sentinels=0):
+    """59,520 s for an ordinary D/C/T window; 62,400 s with the two escalation sentinels (R15)."""
+    if extra_sentinels not in (0, 2):
+        raise ValueError('a window carries 0 or 2 escalation sentinels')
+    return ESCALATED_CEILING_S if extra_sentinels else D_CEILING_S
+
+
+def derive_sizing(root, window, tree, plan, *, extra_sentinels=0):
     source = json.loads(w1.frozen(root, w1.ANCHOR_COMMIT, w1.SOURCE_KIT / 'registration/sizing_b5.json'))['packs']['align-pilot-v3']
     law = source['disk_member_law']
-    # Unchanged 1,800 s D member cap, historical anchor planning law; no shortened idle/scaffold.
-    seconds = {str(m['ordinal']): (3131.27 / 4 if m['pool_role'] == 'anchor' else 1800)
-               for m in plan['members']}
+    seconds, flags, w1_plan_sha256 = member_seconds(root, plan)
     upper = {k: math.ceil(law['intercept'] + law['slope'] * v + law['largest_positive_residual'])
              for k, v in seconds.items()}
     scaffold = source['disk_derivation']['scaffold_bytes']
-    span = math.ceil(w1.SCAFFOLD_S + sum(seconds.values()))
+    span = math.ceil(w1.SCAFFOLD_S + math.fsum(seconds.values()))
     from joulewise.b6.plan_inputs import window_max_s
+    maximum = window_max_s({'programmed_span_s': {'seconds': span}})
+    ceiling = window_ceiling_s(extra_sentinels)
+    if maximum > ceiling or max(seconds.values()) > w1.MEMBER_CAP_S:
+        raise ValueError(f'{window["id"]}: window maximum {maximum} s exceeds the {ceiling} s ceiling '
+                         'or a member exceeds 1,800 s; return to lead')
     pack = plan['plan_id']
     return dict(schema_version='joulewise.b5_sizing.v1', non_claim=True,
         sources=dict(series_manifest_sha256=plan['series_manifest_sha256'], window=window['id'],
-                     disk_law_commit=w1.ANCHOR_COMMIT), packs={pack: dict(pack_id=pack, flags=[],
+                     disk_law_commit=w1.ANCHOR_COMMIT, w1_plan_sha256=w1_plan_sha256), packs={pack: dict(pack_id=pack, flags=flags,
         align_members=len(seconds), scaffold_members=sum(s['expected_count'] for s in tree['stage_graph']
             if s['kind'] == 'campaign_collection') - len(seconds),
         member_count=sum(s['expected_count'] for s in tree['stage_graph'] if s['kind'] == 'campaign_collection'),
         member_seconds=seconds, member_upper_bytes=upper, disk_member_law=law,
-        programmed_span_s=span, window_max_s=window_max_s({'programmed_span_s': {'seconds': span}}),
-        T_stream_max_s=1800, estimated_footprint_bytes=2 * (sum(upper.values()) + scaffold),
+        programmed_span_s=span, window_max_s=maximum, window_ceiling_s=ceiling,
+        T_stream_max_s=max(seconds.values()), estimated_footprint_bytes=2 * (sum(upper.values()) + scaffold),
         disk_derivation=dict(peak_copies=2, B_bytes=sum(upper.values()) + scaffold,
                              scaffold_bytes=scaffold, extra_wait_peak_bytes=0, fixed_retained_bytes=0))})
 
@@ -317,12 +368,38 @@ def generate(root, name, *, check=False):
     return selected(manifest, name)
 
 
+RELEASE_FIELDS = ('ruling_id', 'text_sha256', 'resets', 'after_window', 'lead_signature')
+
+
 def calibration_rows(manifest, history):
-    """Validate chronological attempts, zero-capture retry, disjoint roles and finality."""
+    """Validate the chronological series ledger; return (calibration rows, next window, previous window, releases).
+
+    ``history`` holds attempt entries (``window_id``, ``attempt_id``, ``status``,
+    ``captured_members``, ``eligible_benign``, ``evidence``; optionally
+    ``desk_eligible_benign``, the desk's provisional counts, which the final
+    adjudication may lower but never raise) and ``lead_release`` entries. Two
+    consecutive zero-capture attempts escalate; only a lead_release naming the
+    last attempt (resets ``zero_capture_escalation``, signed, text digest)
+    resumes the series (RUN_STATE 226 R15). F/T and known-H rows never count.
+    """
     order = manifest['order'][1:]
-    cursor, rows, previous, trailing_zero = 0, [], 'W1', 0
-    seen = set()
+    cursor, rows, previous, trailing_zero, releases = 0, [], 'W1', 0, []
+    seen, last_attempt = set(), None
     for attempt in history:
+        if 'lead_release' in attempt:
+            release = attempt['lead_release']
+            if (set(attempt) != {'lead_release'} or not isinstance(release, dict) or set(release) != set(RELEASE_FIELDS)
+                    or release['resets'] not in cadence.RULING_RESETS or not w1.valid_digest(release['text_sha256'])
+                    or not isinstance(release['ruling_id'], str) or not release['ruling_id'].strip()
+                    or not w1.valid_lead_signature(release['lead_signature'])):
+                raise ValueError('lead_release needs ruling_id, text_sha256, resets, after_window, lead_signature')
+            if trailing_zero < 2 or release['after_window'] != last_attempt:
+                raise ValueError('lead_release must follow an escalation and name its last attempt')
+            trailing_zero = 0
+            releases.append(dict(release))
+            continue
+        if trailing_zero >= 2:
+            raise ValueError('two consecutive zero-capture refusals: escalate_to_lead')
         if cursor >= len(order) or attempt['window_id'] != order[cursor]:
             raise ValueError('history skips/reorders a frozen window')
         if attempt['attempt_id'] in seen:
@@ -337,17 +414,58 @@ def calibration_rows(manifest, history):
                 or sum(row['eligible_benign'].values()) > row['captured_members']
                 or (not row['captured_members'] and row['status'] != 'final')):
             raise ValueError('impossible captured/eligible counts')
+        desk = attempt.get('desk_eligible_benign')
+        if desk is not None and (not isinstance(desk, dict) or set(desk) != set(row['eligible_benign'])
+                                 or any(row['eligible_benign'][k] > desk[k] for k in desk)):
+            raise ValueError('final adjudication may lower the desk counts, never raise them')
         trailing_zero = 0 if row['captured_members'] else trailing_zero + 1
-        if trailing_zero >= 2:
-            raise ValueError('two consecutive zero-capture refusals: escalate_to_lead')
         if window['role'] == 'calibration':
             rows.append(row)
         elif any(row['eligible_benign'].values()):
             raise ValueError('F/T members cannot enter calibration')
-        previous = attempt['attempt_id']
+        previous, last_attempt = attempt['window_id'], attempt['attempt_id']
         if row['captured_members']:
             cursor += 1
-    return rows, (order[cursor] if cursor < len(order) else None), previous
+    if trailing_zero >= 2:
+        raise ValueError('two consecutive zero-capture refusals: escalate_to_lead')
+    return rows, (order[cursor] if cursor < len(order) else None), previous, releases
+
+
+def desk_row(manifest, window_id, members, u_pass):
+    """The desk's provisional counts for one window: captures and ``desk_eligible_benign``.
+
+    ``members``: one row per planned member ``{'run_id', 'captured', 'excluded'}``
+    (captured: the run bundle exists; excluded: any harvest or X1-X8 exclusion).
+    A calibrator counts when captured and not excluded. A U1-U3 FAIL of the D
+    model window bars the whole window from the pool, though it still counts
+    toward the eight (RUN_STATE 226 R15); a U verdict that is neither pass nor
+    fail is flagged for the final adjudication. Counts only, never a score.
+    """
+    window = selected(manifest, window_id)
+    rows = {row['run_id']: row for row in members}
+    planned = {pack_id(window['id']) + f"-e{m['ordinal']:02}" if m['pool'] != 'anchor' else None: m
+               for m in window['members']}
+    planned.pop(None, None)
+    captured = sum(bool(row['captured']) for row in members)
+    counts = dict.fromkeys(cadence.CAL_PAIRS, 0)
+    for run_id, member in planned.items():
+        row = rows.get(run_id)
+        if member['pool'] == 'calibration' and row and row['captured'] and not row['excluded']:
+            counts[PAIR_KEYS[member['pair']]] += 1
+    flags = []
+    if window['role'] != 'calibration':
+        counts = dict.fromkeys(cadence.CAL_PAIRS, 0)
+    elif captured and u_pass is False:
+        counts = dict.fromkeys(cadence.CAL_PAIRS, 0)
+        flags.append('u1_u3_failed:pool_entry_barred')
+    elif captured and u_pass is None:
+        flags.append('u1_u3_not_pass_or_fail:final_adjudication_decides')
+    return {'window_id': window['id'], 'captured_members': captured, 'desk_eligible_benign': counts,
+            'status': 'provisional', 'flags': flags}
+
+
+def _attempts(history):
+    return [entry for entry in history if 'lead_release' not in entry]
 
 
 def bind_packet(root, name, packet):
@@ -359,29 +477,32 @@ def bind_packet(root, name, packet):
     history = packet.get('series_history')
     if not isinstance(history, list):
         raise ValueError('series triage needs chronological history')
-    rows, next_id, previous = calibration_rows(manifest, history)
+    rows, next_id, previous, releases = calibration_rows(manifest, history)
     if target['id'] == 'W1':
         if history or packet.get('previous_window') != 'R1':
             raise ValueError('W1 must follow R1 with no series history')
     elif target['id'] != next_id or packet.get('previous_window') != previous:
-        raise ValueError('triage does not arm the next frozen window')
-    if packet.get('previous_window_is_w1') is not (target['id'] != 'W1' and not history):
+        raise ValueError(f'triage does not arm the next frozen window ({next_id})')
+    if 'previous_window_is_w1' in packet and packet['previous_window_is_w1'] is not (previous == 'W1' and target['id'] != 'W1'):
         raise ValueError('previous W1 flag disagrees with series history')
     role = None if target['id'] == 'W1' else ('test' if target['role'] == 'test' else 'calibration')
     if packet.get('next_window_role') != role or packet.get('calibration_windows') != rows:
         raise ValueError('triage role/counts disagree with frozen series history')
-    # R216 final-eligibility fence starts at the sixth calibration arm.
+    cal_attempts = {r['window'] for r in rows}
+    if packet.get('lead_rulings', []) != [r for r in releases if r['after_window'] in cal_attempts]:
+        raise ValueError('lead_rulings disagree with the lead_release entries of the series history')
+    # R216 final-eligibility fence starts at the sixth calibration arm (kept by R15).
     if target['role'] == 'calibration' and int(target['id'][1:]) >= 6 and any(r['status'] != 'final' for r in rows):
         raise ValueError('C6 onward requires final eligibility for prior calibration windows')
     for check in packet.get('checks', {}).values():
         if evidence(check.get('evidence')) != check.get('status'):
             raise ValueError('triage status disagrees with bound evidence')
-    for attempt in history:
+    for attempt in _attempts(history):
         expected = {k: attempt[k] for k in ('window_id', 'attempt_id', 'status', 'captured_members', 'eligible_benign')}
         if evidence(attempt.get('evidence')) != expected:
             raise ValueError('history counts disagree with bound eligibility receipt')
     if target['role'] == 'test':
-        stop = cadence.calibration_stop(rows)
+        stop = cadence.calibration_stop(rows, packet.get('lead_rulings', []))
         if stop['decision'] != 'calibration_complete':
             raise ValueError('calibration_stop: ' + stop['decision'])
         admission = json.loads((Path(root) / ADMISSION).read_bytes())
@@ -393,23 +514,48 @@ def bind_packet(root, name, packet):
     return packet
 
 
-def make_packet(root, name, history, checks, *, code_or_config_changed):
+def _commit_exists(root, commit):
+    import re
+    import subprocess
+    if not isinstance(commit, str) or not re.fullmatch(r'[0-9a-f]{40}', commit):
+        return False
+    try:
+        return subprocess.run(['git', 'cat-file', '-e', f'{commit}^{{commit}}'], cwd=root,
+                              capture_output=True, timeout=20, check=False).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def make_packet(root, name, history, checks, *, record_commit, last_desk_passed_artifact_set_sha256,
+                commit_check=None):
+    """The R12 packet for ``name``: derived from the ledger, evidence bytes embedded.
+
+    The W1-flag and code/config-changed flags are DERIVED by the arm
+    (v4_cadence); they are not written here. ``record_commit`` is the previous
+    record's commit; ``last_desk_passed_artifact_set_sha256`` the bound-artifact
+    digest recorded when the last full desk passed.
+    """
+    from joulewise.align.apple import v4_registration
     history, checks = deepcopy(history), deepcopy(checks)
     manifest = load(root)
     target = selected(manifest, name)
-    rows, _, previous = calibration_rows(manifest, history)
+    rows, _, previous, releases = calibration_rows(manifest, history)
+    cal_attempts = {r['window'] for r in rows}
     packet = dict(schema=cadence.TRIAGE_SCHEMA, series_manifest_sha256=sha((Path(root) / MANIFEST).read_bytes()),
         next_window_id=target['id'], series_history=history, previous_window='R1' if name == 'W1' else previous,
-        previous_window_is_w1=target['id'] != 'W1' and not history,
-        code_or_config_changed=code_or_config_changed,
+        record_commit=record_commit, last_desk_passed_artifact_set_sha256=last_desk_passed_artifact_set_sha256,
         next_window_role=None if name == 'W1' else ('test' if target['role'] == 'test' else 'calibration'),
-        calibration_windows=rows, checks=checks)
+        calibration_windows=rows, lead_rulings=[r for r in releases if r['after_window'] in cal_attempts],
+        checks=checks)
     bind_packet(root, name, packet)
-    result = cadence.next_arm_triage(packet, dict.fromkeys(('series_powermode', 'external_volume', 'charging_battery'), True))
+    identity = {'artifact_set_sha256': v4_registration.artifact_set_digest(root),
+                'record_commit_exists': (commit_check or _commit_exists)(root, record_commit)}
+    result = cadence.next_arm_triage(
+        packet, dict.fromkeys(('series_powermode', 'external_volume', 'charging_battery'), True), identity)
     if not result['admitted']:
         raise ValueError('packet not ready: ' + '; '.join(result['reasons']))
     for reference in ([check['evidence'] for check in checks.values()]
-                      + [attempt['evidence'] for attempt in history]):
+                      + [attempt['evidence'] for attempt in _attempts(history)]):
         evidence(reference)
         if 'content_utf8' not in reference:
             reference['content_utf8'] = Path(reference['path']).read_bytes().decode('utf-8')
@@ -421,8 +567,6 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest='command', required=True)
     p = sub.add_parser('candidate')
-    p.add_argument('--d-mapping', choices=('separate_fit', 'alias_calibration'), default='separate_fit')
-    p.add_argument('--test-windows', type=int, choices=(3, 6), default=3)
     p.add_argument('--out', type=Path, required=True)
     for command in ('materialize', 'packet'):
         p = sub.add_parser(command)
@@ -431,17 +575,19 @@ def main(argv=None):
         if command == 'materialize':
             p.add_argument('--check', action='store_true')
         else:
-            p.add_argument('--sources', type=Path, required=True, help='JSON: history, checks, code_or_config_changed')
+            p.add_argument('--sources', type=Path, required=True,
+                           help='JSON: history, checks, record_commit, last_desk_passed_artifact_set_sha256')
             p.add_argument('--out', type=Path, required=True)
     args = parser.parse_args(argv)
     if args.command == 'candidate':
-        args.out.write_bytes(raw_json(candidate(d_mapping=args.d_mapping, test_windows=args.test_windows)))
+        args.out.write_bytes(raw_json(candidate()))
     elif args.command == 'materialize':
         generate(args.root, args.window_id, check=args.check)
     else:
         sources = json.loads(args.sources.read_bytes())
-        args.out.write_bytes(raw_json(make_packet(args.root, args.window_id, sources['history'], sources['checks'],
-                                                code_or_config_changed=sources['code_or_config_changed'])))
+        args.out.write_bytes(raw_json(make_packet(
+            args.root, args.window_id, sources['history'], sources['checks'], record_commit=sources['record_commit'],
+            last_desk_passed_artifact_set_sha256=sources['last_desk_passed_artifact_set_sha256'])))
     return 0
 
 

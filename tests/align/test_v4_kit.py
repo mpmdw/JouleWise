@@ -24,12 +24,44 @@ from scripts import validate_align_v4_w1_plan as validator
 ROOT = Path(__file__).resolve().parents[2]
 
 
+_LOG_DIR = []
+
+
 def topup():
-    """Synthetic completed-top-up evidence, one minute before the arm."""
+    """Synthetic arm evidence: a battery log (completed charge 10 min ago, floating since),
+    a passing triage packet and an always-found record commit. No hand-entered time."""
+    import tempfile
     import time
+    from tests.align.test_v4_cadence import passing_packet, write_battery_log
+    if not _LOG_DIR:
+        _LOG_DIR.append(tempfile.TemporaryDirectory(prefix='v4-kit-battery-'))
+    path = Path(_LOG_DIR[0].name) / f'battery-{time.time_ns()}.jsonl'
+    write_battery_log(path, time.time())
+    return dict(battery_log=path, next_arm_triage=w1_bound_packet(), commit_check=lambda root, commit: True)
+
+
+SERIES_MANIFEST = Path('configs/campaigns/align_v4/series/series_manifest.json')
+
+
+def seed_series(measurement):
+    """RUN_STATE 226 R15: the W1 arm binds the frozen series, so a synthetic
+    measurement root carries the committed series manifest."""
+    target = Path(measurement) / SERIES_MANIFEST
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes((ROOT / SERIES_MANIFEST).read_bytes())
+
+
+def w1_bound_packet():
+    """A passing W1 packet (previous window R1) bound to the committed series manifest."""
     from tests.align.test_v4_cadence import passing_packet
-    return dict(topup_completed_at=time.time()-60, topup_source='synthetic',
-                next_arm_triage=passing_packet())
+    packet = passing_packet(previous_window='R1', next_window_role=None, calibration_windows=[])
+    for check in packet['checks'].values():
+        raw = json.dumps(check['status'])
+        check['evidence'] = {'path': 'inline', 'pointer': '', 'content_utf8': raw,
+                             'sha256': hashlib.sha256(raw.encode()).hexdigest()}
+    packet.update(series_manifest_sha256=hashlib.sha256((ROOT / SERIES_MANIFEST).read_bytes()).hexdigest(),
+                  next_window_id='W1', series_history=[])
+    return packet
 
 
 def independent_seed(value):
@@ -1191,6 +1223,7 @@ class SessionParameterTests(unittest.TestCase):
         plan = json.loads((ROOT / kit.KIT / 'collection_plan.json').read_text())
         plan['runtime_requirements']['ac_powermode'] = mode_expected
         (measurement / kit.KIT / 'registration').mkdir(parents=True)
+        seed_series(measurement)
         (measurement / kit.KIT / 'collection_plan.json').write_text(json.dumps(plan))
         (measurement / kit.R1_SLOTS).write_text(json.dumps({'ac_powermode': mode_expected}))
         pilot.h.write(session_root / 'session.json', {'measurement_root': str(measurement)})
@@ -1579,6 +1612,7 @@ class W1HighPowerTests(unittest.TestCase):
         from joulewise.align.apple import powermode
         measurement = Path(tmp) / 'm'
         (measurement / kit.KIT).mkdir(parents=True, exist_ok=True)
+        seed_series(measurement)
         (measurement / kit.KIT / 'collection_plan.json').write_text(json.dumps(
             {'runtime_requirements': {'ac_powermode': ac_powermode}}))
         session_root = Path(tmp) / 's'
@@ -1719,6 +1753,7 @@ class W1HighPowerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             measurement = Path(tmp)
             (measurement / kit.KIT).mkdir(parents=True)
+            seed_series(measurement)
             (measurement / kit.KIT / 'collection_plan.json').write_text(json.dumps(
                 {'runtime_requirements': {'ac_powermode': 2}}))
             with patch.object(kit, 'generate'), patch.object(pilot.h, 'prepare', return_value='ok') as prepare:
@@ -1733,6 +1768,7 @@ class W1DiskGateTests(unittest.TestCase):
         measurement = Path(tmp) / 'm'
         plan = {'runtime_requirements': {'ac_powermode': 0}}
         (measurement / kit.KIT).mkdir(parents=True, exist_ok=True)
+        seed_series(measurement)
         (measurement / kit.KIT / 'collection_plan.json').write_text(json.dumps(plan))
         session_root = Path(tmp) / 's'
         (session_root / 'staging').mkdir(parents=True, exist_ok=True)
@@ -1799,12 +1835,11 @@ class W1DiskGateTests(unittest.TestCase):
         seen.clear()
         with patch.object(session, 'install', fake):
             self.assertEqual(session.main(['install', '--session-root', 's', '--w1-disk-config', '/c.json',
-                                           '--obc-off-attested-by', 'synthetic', '--topup-completed-at', '1700000000',
-                                           '--topup-source', 'synthetic',
+                                           '--obc-off-attested-by', 'synthetic', '--battery-log', '/b.jsonl',
                                            '--next-arm-triage', '/t.json']), 0)
         self.assertEqual(seen, {'session_root': Path('s'), 'w1_disk_config': Path('/c.json'),
-                                'obc_off_attested_by': 'synthetic', 'topup_completed_at': '1700000000',
-                                'topup_source': 'synthetic', 'next_arm_triage': Path('/t.json')})
+                                'obc_off_attested_by': 'synthetic', 'battery_log': Path('/b.jsonl'),
+                                'next_arm_triage': Path('/t.json')})
 
 
 if __name__ == '__main__':

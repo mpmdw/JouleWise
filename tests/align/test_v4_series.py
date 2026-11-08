@@ -9,6 +9,7 @@ from copy import deepcopy
 import base64
 import hashlib
 import io
+import math
 import json
 import os
 from pathlib import Path
@@ -40,7 +41,7 @@ def ref(path, pointer=''):
 
 
 def attempt(root, name, *, captured=22, spam=7, bank=7, status='final', suffix='a1'):
-    if name.startswith(('D', 'T')):
+    if name.startswith('T'):
         spam = bank = 0
     row = dict(window_id=name, attempt_id=name + '-' + suffix, captured_members=captured,
                eligible_benign=dict(spam=spam, bank=bank), status=status)
@@ -48,8 +49,12 @@ def attempt(root, name, *, captured=22, spam=7, bank=7, status='final', suffix='
     return dict(row, evidence=ref(path))
 
 
+RECORD_COMMIT = 'a' * 40
+
+
 def sources(root, *, first=False, full='pass'):
-    statuses = {r['id']: ('not_applicable' if first and r['first_window_na'] else 'pass')
+    statuses = {r['id']: ('recorded' if r.get('gating', True) is False else
+                          'not_applicable' if first and r['first_window_na'] else 'pass')
                 for r in cad.NEXT_ARM_TRIAGE if r['source'] == cad.PACKET}
     statuses['full_desk_gate'] = full
     path = write(root, 'triage-source.json', statuses)
@@ -58,7 +63,7 @@ def sources(root, *, first=False, full='pass'):
 
 
 def freeze_test(root, history):
-    rows, _, _ = s.calibration_rows(s.load(root), history)
+    rows, _, _, _ = s.calibration_rows(s.load(root), history)
     freeze = write(root, 'synthetic-threshold-freeze.json', dict(status='pass',
         manifest_sha256=s.sha((Path(root) / s.MANIFEST).read_bytes()), calibration_rows_sha256=s.sha(s.raw_json(rows))))
     path = Path(root) / s.ADMISSION
@@ -74,36 +79,74 @@ class ManifestTests(unittest.TestCase):
         cls.files = s.build_files(ROOT, cls.manifest, 'C1')
 
     def test_candidate_is_reproducible_and_roles_seeds_are_disjoint(self):
+        # RUN_STATE 226 R15: D_k = C_k, distinct seeds in kit order, sabotage at 9/18, 3 tests.
         self.assertEqual((ROOT / s.MANIFEST).read_bytes(), s.raw_json(s.candidate()))
         m = self.manifest
-        self.assertEqual(m['order'], ['W1', 'D1', 'D2', 'D3'] + [f'C{i}' for i in range(1, 9)] + ['T1', 'T2', 'T3'])
-        pools = {role: set() for role in ('fit', 'calibration', 'test')}
-        for window in m['windows'][1:]:
-            self.assertEqual(len(window['members']), 22)
-            rows = [r for r in window['members'] if r['pool'] == window['role']]
-            self.assertEqual(sum(r['condition'] == 'benign' for r in rows), 14)
-            self.assertEqual(sum(r['condition'] == 'sabotage' for r in rows), 2)
-            for row in rows:
-                pools[window['role']].add(row['seed_index'])
+        self.assertEqual(m['order'], ['W1'] + [f'C{i}' for i in range(1, 9)] + ['T1', 'T2', 'T3'])
+        per_pair = {pair: [] for pair in s.PAIRS}
+        ranges = {'calibration': set(), 'known_h': set(), 'test': set()}
+        for number, window in enumerate(m['windows'][1:], 1):
+            members = window['members']
+            self.assertEqual(len(members), 22)
+            self.assertEqual([r['pool'] for r in members[:5] + members[21:]], ['anchor'] * 4 + ['sentinel'] * 2)
+            fresh = members[5:21]
+            index_in_role = int(window['id'][1:])
+            first = s.PAIRS[0] if index_in_role % 2 else s.PAIRS[1]
+            self.assertEqual([r['pair'] for r in fresh[::2]], [first] * 8)
+            self.assertTrue(all(fresh[i]['pair'] != fresh[i + 1]['pair'] for i in range(15)))
+            self.assertEqual([r['ordinal'] for r in fresh if r['condition'] == 'sabotage'], [9, 18])
+            sabotage_pool = 'known_h' if window['role'] == 'calibration' else 'test'
+            for row in fresh:
+                pool = window['role'] if row['condition'] == 'benign' else sabotage_pool
+                self.assertEqual(row['pool'], pool)
+                per_pair[row['pair']].append(row['seed_index'])
+                ranges[pool].add(row['seed_index'])
+            for row in members:
                 raw = json.dumps(['align-p4-v1', row['model_id'], 'thinking_on',
                                  'shade/' + row['pair'], row['seed_index']], separators=(',', ':')).encode()
                 self.assertEqual(row['episode_seed'], int.from_bytes(hashlib.sha256(raw).digest()[:8], 'big'))
-        self.assertEqual([len(pools[k]) for k in ('fit', 'calibration', 'test')], [21, 56, 21])
-        self.assertTrue(pools['fit'].isdisjoint(pools['calibration'] | pools['test']))
-        self.assertTrue(pools['calibration'].isdisjoint(pools['test']))
-        self.assertFalse(set.union(*pools.values()) & {1, 91, 92, 93})
+        for pair, seeds in per_pair.items():
+            self.assertEqual(seeds, sorted(seeds))                      # kit order
+            self.assertEqual(len(seeds), len(set(seeds)))               # distinct: no condition reuse
+            self.assertEqual((seeds[0], seeds[-1]), (2, 89))
+            self.assertFalse(set(seeds) & s.RESERVED_INDICES)
+        self.assertEqual((min(ranges['calibration'] | ranges['known_h']), max(ranges['calibration'] | ranges['known_h'])), (2, 65))
+        self.assertEqual((min(ranges['test']), max(ranges['test'])), (66, 89))
 
-    def test_both_mapping_and_test_count_options_are_executable_and_explicit(self):
-        for mapping in ('separate_fit', 'alias_calibration'):
-            for count in (3, 6):
-                m = s.validate(s.candidate(d_mapping=mapping, test_windows=count))
-                self.assertEqual(s.selected(m, 'D1')['id'], 'C1' if mapping == 'alias_calibration' else 'D1')
-                self.assertEqual(len([w for w in m['windows'] if w['role'] == 'calibration']), 8)
-                self.assertEqual(len([w for w in m['windows'] if w['role'] == 'test']), count)
+    def test_alias_mapping_three_tests_and_frozen_bytes(self):
+        m = self.manifest
+        for k in range(1, 9):
+            self.assertEqual(s.selected(m, f'D{k}')['id'], f'C{k}')
+        self.assertEqual(len([w for w in m['windows'] if w['role'] == 'calibration']), 8)
+        self.assertEqual(len([w for w in m['windows'] if w['role'] == 'test']), 3)
+        self.assertEqual((m['d_mapping'], m['test_windows']), ('alias_calibration', 3))
         bad = deepcopy(self.manifest)
         bad['windows'][4]['members'][6]['seed_index'] = 1
         with self.assertRaisesRegex(ValueError, 'frozen'):
             s.validate(bad)
+
+    def test_ceilings_ordinary_and_escalated(self):
+        from joulewise.b6.plan_inputs import window_max_s
+        self.assertEqual((s.window_ceiling_s(), s.window_ceiling_s(2)), (59520, 62400))
+        with self.assertRaises(ValueError):
+            s.window_ceiling_s(1)
+        span = lambda d: math.ceil(w1.SCAFFOLD_S + 3131.27 + d * 1800)
+        ordinary, escalated = (window_max_s({'programmed_span_s': {'seconds': span(d)}}) for d in (18, 20))
+        self.assertEqual((ordinary, escalated), (58260, 61860))
+        self.assertLessEqual(ordinary, s.window_ceiling_s())
+        self.assertGreater(escalated, s.window_ceiling_s())
+        self.assertLessEqual(escalated, s.window_ceiling_s(2))
+
+    def test_d_members_are_sized_at_the_largest_w1_d_member_time(self):
+        plan = json.loads(self.files[s.kit_path('C1') / 'collection_plan.json'])
+        rows = [{'ordinal': i, 'role': 'anchor' if i <= 4 else 'D', 'member_s': 700.0 + i if i <= 4 else 1500.0 + i}
+                for i in range(1, 19)]
+        with patch.object(w1, 'read_w1_plan_bytes', return_value=json.dumps({'align_v4': {'members': rows}}).encode()):
+            seconds, flags, digest = s.member_seconds(ROOT, plan)
+        self.assertEqual(flags, [])
+        self.assertTrue(w1.valid_digest(digest))
+        self.assertEqual([seconds[str(i)] for i in range(1, 5)], [701.0, 702.0, 703.0, 704.0])
+        self.assertEqual({seconds[str(i)] for i in range(5, 23)}, {1518.0})
 
     def test_kit_has_real_scaffold_configs_reference_custody_identity_and_sizing(self):
         f = self.files
@@ -133,6 +176,8 @@ class ManifestTests(unittest.TestCase):
             self.assertEqual((sized['align_members'], sized['member_count'], sized['programmed_span_s']), (22, 47, 40527))
             self.assertEqual(sized['estimated_footprint_bytes'], 52889269446)
             self.assertLessEqual(sized['window_max_s'], 59520)
+            self.assertEqual(sized['window_ceiling_s'], 59520)
+            self.assertEqual(sized['flags'], ['sizing.planning_allowances_pending_r1_w1_plan'])
             pins = registration.load_identity_pins(reg)
             self.assertEqual(len(pins['units']), 23)
 
@@ -182,24 +227,28 @@ class PacketTests(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
         write(self.root, s.MANIFEST, s.candidate())
-        self.fit = [attempt(self.root, f'D{i}') for i in range(1, 4)]
+        self.fit = []      # RUN_STATE 226 R15: D_k = C_k, no separate fit windows
 
-    def packet(self, name, history, **kw):
+    def packet(self, name, history, *, desk_digest=None, **kw):
         if name.startswith('T'):
             freeze_test(self.root, history)
+        from joulewise.align.apple import v4_registration
         return s.make_packet(self.root, name, history, sources(self.root, first=name == 'W1', **kw),
-                             code_or_config_changed=False)
+                             record_commit=RECORD_COMMIT, commit_check=lambda root, commit: True,
+                             last_desk_passed_artifact_set_sha256=desk_digest or v4_registration.artifact_set_digest(self.root))
 
     def test_w1_fit_calibration_test_order_and_exact_fixed_eight(self):
         self.assertTrue(self.packet('W1', [])['previous_window'] == 'R1')
-        self.assertTrue(self.packet('D1', [])['previous_window_is_w1'])
-        self.assertEqual(self.packet('D2', self.fit[:1])['calibration_windows'], [])
+        self.assertEqual(self.packet('D1', [])['previous_window'], 'W1')
         self.assertEqual(self.packet('C1', self.fit)['calibration_windows'], [])
         cal = [attempt(self.root, f'C{i}') for i in range(1, 9)]
         for i in range(1, 9):
             self.packet(f'C{i}', self.fit + cal[:i-1])
         pkt = self.packet('T1', self.fit + cal)
-        result = cad.next_arm_triage(pkt, dict.fromkeys(('series_powermode', 'external_volume', 'charging_battery'), True))
+        from joulewise.align.apple import v4_registration
+        result = cad.next_arm_triage(pkt, dict.fromkeys(('series_powermode', 'external_volume', 'charging_battery'), True),
+                                     {'artifact_set_sha256': v4_registration.artifact_set_digest(self.root),
+                                      'record_commit_exists': True})
         self.assertTrue(result['admitted'], result['reasons'])
         self.assertEqual(result['checks']['calibration_stop']['decision'], 'calibration_complete')
         self.packet('T2', self.fit + cal + [attempt(self.root, 'T1')])
@@ -224,6 +273,52 @@ class PacketTests(unittest.TestCase):
             self.packet('C1', self.fit + [zero, zero2])
         final = attempt(self.root, 'C1', suffix='a2')
         self.packet('C2', self.fit + [zero, final])
+
+    def test_lead_release_resumes_after_escalation(self):
+        cal = [attempt(self.root, f'C{i}') for i in range(1, 3)]
+        z1 = attempt(self.root, 'C3', captured=0, spam=0, bank=0)
+        z2 = attempt(self.root, 'C3', captured=0, spam=0, bank=0, suffix='a2')
+        release = {'lead_release': dict(ruling_id='RUN_STATE 999', text_sha256='c' * 64,
+                                        resets='zero_capture_escalation', after_window='C3-a2',
+                                        lead_signature='lead: SYNTHETIC-ONLY 2026-11-08')}
+        with self.assertRaisesRegex(ValueError, 'escalate_to_lead'):
+            self.packet('C3', cal + [z1, z2])
+        packet = self.packet('C3', cal + [z1, z2, release])
+        self.assertEqual(packet['lead_rulings'], [release['lead_release']])
+        # A release that names another attempt, or comes before an escalation, refuses.
+        for bad in (dict(release['lead_release'], after_window='C3-a1'),):
+            with self.assertRaisesRegex(ValueError, 'lead_release'):
+                self.packet('C3', cal + [z1, z2, {'lead_release': bad}])
+        with self.assertRaisesRegex(ValueError, 'lead_release'):
+            self.packet('C3', cal + [z1, release])
+        # The released series continues: C3 captured, then C4.
+        self.packet('C4', cal + [z1, z2, release, attempt(self.root, 'C3', suffix='a3')])
+
+    def test_final_counts_may_lower_never_raise_desk_counts(self):
+        row = attempt(self.root, 'C1', spam=6, bank=7)
+        self.packet('C2', [dict(row, desk_eligible_benign={'spam': 7, 'bank': 7})])
+        with self.assertRaisesRegex(ValueError, 'never raise'):
+            self.packet('C2', [dict(row, desk_eligible_benign={'spam': 5, 'bank': 7})])
+
+    def test_desk_row_counts_and_u1_u3_pool_bar(self):
+        m = s.load(ROOT)
+        members = [{'run_id': (s.pack_id('C1') + f"-e{r['ordinal']:02}" if r['pool'] != 'anchor' else
+                               f"align-pilot-v3-episodes-a-e{r['ordinal']:02}"),
+                    'captured': True, 'excluded': r['ordinal'] in (6, 7, 9)} for r in s.selected(m, 'C1')['members']]
+        row = s.desk_row(m, 'C1', members, True)    # 6 spam benign, 7 bank benign, 9 bank known-H
+        self.assertEqual((row['captured_members'], row['desk_eligible_benign']), (22, {'spam': 6, 'bank': 6}))
+        failed = s.desk_row(m, 'C1', members, False)
+        self.assertEqual(failed['desk_eligible_benign'], {'spam': 0, 'bank': 0})
+        self.assertIn('u1_u3_failed:pool_entry_barred', failed['flags'])
+        none = s.desk_row(m, 'C1', [dict(r, captured=False) for r in members], None)
+        self.assertEqual((none['captured_members'], none['desk_eligible_benign']), (0, {'spam': 0, 'bank': 0}))
+        self.assertEqual(s.desk_row(m, 'T1', members, True)['desk_eligible_benign'], {'spam': 0, 'bank': 0})
+
+    def test_w1_arm_requires_a_series_bound_packet(self):
+        packet = self.packet('W1', [])
+        s.bind_packet(self.root, 'W1', packet)
+        with self.assertRaisesRegex(ValueError, 'does not bind'):
+            s.bind_packet(self.root, 'W1', {k: v for k, v in packet.items() if k != 'series_manifest_sha256'})
 
     def test_bound_evidence_cannot_change_or_be_forged_in_packet(self):
         packet = self.packet('C1', self.fit)
@@ -301,6 +396,10 @@ class FakeWorld:
         (self.model / 'weight').write_bytes(b'synthetic')
         self.installer_calls = []
 
+    def battery_log(self, state):
+        from tests.align.test_v4_cadence import write_battery_log
+        return write_battery_log(self.root / 'battery.jsonl', state['t0_epoch_s'] - 1)
+
     def run_process(self, argv, **kwargs):
         if argv[0] == 'launchctl':
             return SimpleNamespace(returncode=113, stdout='', stderr=
@@ -317,7 +416,10 @@ class FakeWorld:
         if self.name.startswith('T'):
             freeze_test(m, history)
         checks = sources(self.root, first=self.name == 'W1')
-        packet = s.make_packet(m, self.name, history, checks, code_or_config_changed=False)
+        from joulewise.align.apple import v4_registration
+        packet = s.make_packet(m, self.name, history, checks, record_commit=RECORD_COMMIT,
+                               last_desk_passed_artifact_set_sha256=v4_registration.artifact_set_digest(m),
+                               commit_check=lambda root, commit: True)
         # The source builder is separately checked against its exact output;
         # synthetic model/power readiness intentionally differs from a native kit.
         with ExitStack() as stack, redirect_stdout(io.StringIO()):
@@ -358,8 +460,8 @@ class FakeWorld:
             stack.enter_context(patch.dict(os.environ, {'JOULEWISE_HOST_STATE_DIR': str(self.root / 'host-state')}))
             installed = session.install(self.session, run=self.run_process, runner=host, volume_runner=host,
                 now=lambda: state['t0_epoch_s'] - 1, next_arm_triage=packet,
-                obc_off_attested_by='SYNTHETIC operator', topup_completed_at=state['t0_epoch_s'] - 61,
-                topup_source='SYNTHETIC completion')
+                obc_off_attested_by='SYNTHETIC operator', battery_log=self.battery_log(state),
+                commit_check=lambda root, commit: True)
             test.assertEqual(installed['exit_code'], 0)
             test.assertEqual(len(self.installer_calls), 1)
             harness.plan_path = Path(state['plan_path'])

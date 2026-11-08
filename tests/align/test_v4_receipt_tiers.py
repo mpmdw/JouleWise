@@ -1,0 +1,121 @@
+"""MED-1: strict tier = re-register on change; amendment tier = lead-signed amendment row.
+
+Synthetic temporary Git repositories only.
+"""
+from pathlib import Path
+import tempfile
+import unittest
+
+from joulewise.align.apple import v4_registration as registration
+from tests.align import test_r11_delta_sol1 as delta
+
+SIGNATURE = 'lead: synthetic-amendment 2026-11-08'
+AMENDABLE = 'joulewise/b6/idle_wait.py'
+STRICT_EXAMPLES = ('docs/align/pilot_protocol_v4.md', 'scripts/align_v4_kit.py', 'joulewise/align/apple/endpoint.py',
+                   'joulewise/align/apple/prompt_cache.py', 'scripts/run_night.py', 'scripts/launch_window.py',
+                   'scripts/km003c_monitor.py', 'joulewise/external/km003c_usb.py', 'scripts/hazard_monitor.py',
+                   'scripts/bytes_h_session.py', 'scripts/run_campaign.py', 'joulewise/adapters/mlx_runtime.py',
+                   'scripts/night_chains/align_r1_rehearsal.zsh', 'joulewise/align/apple/v4_topup.py')
+
+
+def amendment(candidate, path, new_text, *, reason='infrastructure fix', signature=SIGNATURE, old=None):
+    old = old or candidate.receipt['artifacts'][path]
+    candidate.write(path, new_text)
+    candidate.commit(f'Synthetic change to {path}')
+    return {'path': path, 'old_sha256': old, 'new_sha256': candidate.digest(path),
+            'reason': reason, 'lead_signature': signature}
+
+
+class TierClassificationTests(unittest.TestCase):
+    def test_strict_and_amendment_paths(self):
+        for path in STRICT_EXAMPLES:
+            with self.subTest(path=path):
+                self.assertIn(path, registration.ARTIFACTS)
+                self.assertTrue(registration.is_strict(path))
+        self.assertIn(AMENDABLE, registration.ARTIFACTS)
+        self.assertFalse(registration.is_strict(AMENDABLE))
+        amendable = [p for p in registration.ARTIFACTS if not registration.is_strict(p)]
+        self.assertTrue(amendable)
+        self.assertTrue(all(p.startswith(('joulewise/', 'scripts/')) for p in amendable))
+        self.assertFalse([p for p in registration.STRICT_SCRIPTS if p not in registration.ARTIFACTS])
+
+
+class ReceiptTierTests(unittest.TestCase):
+    def candidate(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        return delta.TemporaryCandidate(Path(self._tmp.name))
+
+    def test_strict_tier_change_needs_a_new_receipt_even_with_an_amendment_row(self):
+        for path in ('joulewise/align/apple/endpoint.py', 'scripts/launch_window.py', 'docs/align/pilot_protocol_v4.md'):
+            with self.subTest(path=path):
+                candidate = self.candidate()
+                row = amendment(candidate, path, 'changed strict-tier bytes\n')
+                with self.assertRaisesRegex(ValueError, 'digest drift.*strict tier'):
+                    registration.validate_receipt(candidate.receipt, candidate.root)
+                candidate.receipt['amendments'] = [row]
+                with self.assertRaisesRegex(ValueError, 'strict-tier path'):
+                    registration.validate_receipt(candidate.receipt, candidate.root)
+
+    def test_amendment_tier_change_is_refused_without_a_row_and_admitted_with_a_signed_one(self):
+        candidate = self.candidate()
+        row = amendment(candidate, AMENDABLE, 'fixed infrastructure code\n')
+        with self.assertRaisesRegex(ValueError, f'digest drift: {AMENDABLE}.*amendment tier'):
+            registration.validate_receipt(candidate.receipt, candidate.root)
+        candidate.receipt['amendments'] = [row]
+        registration.validate_receipt(candidate.receipt, candidate.root)
+
+    def test_amendment_rows_are_checked(self):
+        candidate = self.candidate()
+        row = amendment(candidate, AMENDABLE, 'fixed infrastructure code\n')
+        bad_rows = {
+            'wrong new sha': {**row, 'new_sha256': 'e' * 64},
+            'wrong old sha': {**row, 'old_sha256': 'e' * 64},
+            'no reason': {**row, 'reason': ' '},
+            'unsigned': {**row, 'lead_signature': 'PENDING_LEAD_SIGNATURE'},
+            'extra field': {**row, 'note': 'x'},
+            'missing field': {k: v for k, v in row.items() if k != 'reason'},
+            'bad digest': {**row, 'new_sha256': 'nothex'},
+            'unbound path': {**row, 'path': 'joulewise/not_bound.py'},
+        }
+        for name, bad in bad_rows.items():
+            with self.subTest(name=name):
+                candidate.receipt['amendments'] = [bad]
+                with self.assertRaises(ValueError):
+                    registration.validate_receipt(candidate.receipt, candidate.root)
+        candidate.receipt['amendments'] = 'not a list'
+        with self.assertRaises(ValueError):
+            registration.validate_receipt(candidate.receipt, candidate.root)
+
+    def test_amendments_chain_and_a_later_unamended_edit_is_still_refused(self):
+        candidate = self.candidate()
+        first = amendment(candidate, AMENDABLE, 'first fix\n')
+        second = amendment(candidate, AMENDABLE, 'second fix\n', old=first['new_sha256'])
+        candidate.receipt['amendments'] = [first, second]
+        registration.validate_receipt(candidate.receipt, candidate.root)
+        broken = {**second, 'old_sha256': 'a' * 64}
+        candidate.receipt['amendments'] = [first, broken]
+        with self.assertRaisesRegex(ValueError, 'chain broken'):
+            registration.validate_receipt(candidate.receipt, candidate.root)
+        candidate.receipt['amendments'] = [first]                    # the working bytes moved past it
+        with self.assertRaisesRegex(ValueError, 'digest drift'):
+            registration.validate_receipt(candidate.receipt, candidate.root)
+
+    def test_the_committed_pin_is_not_amendable(self):
+        # An amendment never rewrites what the gates reviewed: the receipt's own digest must
+        # still match the pinned commit.
+        candidate = self.candidate()
+        candidate.receipt['artifacts'][AMENDABLE] = 'c' * 64
+        with self.assertRaisesRegex(ValueError, 'digest drift'):
+            registration.validate_receipt(candidate.receipt, candidate.root)
+
+    def test_artifact_set_digest_moves_with_any_bound_byte(self):
+        candidate = self.candidate()
+        before = registration.artifact_set_digest(candidate.root)
+        self.assertEqual(before, registration.artifact_set_digest(candidate.root))
+        candidate.write(AMENDABLE, 'edited\n')
+        self.assertNotEqual(before, registration.artifact_set_digest(candidate.root))
+
+
+if __name__ == '__main__':
+    unittest.main()

@@ -10,7 +10,8 @@ class Ruling2Tests(unittest.TestCase):
         self.assertEqual("registered_secondary", result["status"])
 
     def test_h_star_refuses_invalid_rows_and_never_skips_unobserved_grid_doses(self):
-        for rows in ([(128.9, 2.)], [(128, 2.), (128, 0.)], [(-128, 2.)], [(True, 2.)], [(128, float('nan'))]):
+        for rows in ([(128.9, 2.)], [(128, 2.), (128, 0.)], [(-128, 2.)], [(True, 2.)], [(128, float('nan'))],
+                     [(128, True)], [(128, '2')]):         # L9: a bool or string score is not a score
             with self.subTest(rows=rows), self.assertRaises(ValueError):
                 v4.subturn_h_star(rows, 1.)
         skipped = v4.subturn_h_star([(128, 0.), (384, 2.)], 1.)

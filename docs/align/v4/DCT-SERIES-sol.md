@@ -1,5 +1,7 @@
 # D/calibration/test executable series — Sol build
 
+> **Superseded for use by the merged build** (`align/2026-11-08-dct-series-merged`, [DCT-SERIES-MERGED.md](DCT-SERIES-MERGED.md)) under RUN_STATE 226 R15. This record of the independent build is kept unchanged below.
+
 2026-11-08. Base `origin/align/2026-11-08-v4-r11` (`05b6d04cb`).
 Branch `align/2026-11-08-dct-series-sol`. **PROVISIONAL; requires the
 independent Opus build, agreement and lead admission before native use.**

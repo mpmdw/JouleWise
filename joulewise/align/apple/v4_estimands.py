@@ -36,6 +36,8 @@ def subturn_h_star(scores, threshold, *, grid=H_STAR_GRID):
             raise ValueError('H* actual dose must be a non-negative integer')
         if h in by_h:
             raise ValueError('duplicate H* dose row')
+        if type(score) not in (int, float):
+            raise ValueError('H* score must be a number, not a bool or other type')
         score = float(score)
         if not math.isfinite(score):
             raise ValueError('H* score must be finite')
