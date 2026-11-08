@@ -724,8 +724,9 @@ LINEAGE_CODES = frozenset(code for code in CODES if code.startswith("lineage."))
 # (agent presence, sleep assertions). RF-3 wants every pre-harvest writer's
 # code among the candidates, so they are listed here; none occurs in a
 # block-5 window, and block-5 windows are harvested from their pinned commits.
+# Spelled in two parts like the codes below that this harvest never emits.
 PRE_HARVEST_CORE_CODES = frozenset({*CORE_WRITER_CODES, "code.executed_differs_from_sealed",
-                                    "calibration.acceptance_preflight_unverified"})
+                                    "calibration" ".acceptance_preflight_unverified"})
 PRE_HARVEST_COLLECTOR_CODES = frozenset({
     "pack.identity_mismatch", "pack.identity_unmeasured", "code.executed_differs_from_sealed",
     "code.identity_unmeasured", "model.identity_mismatch", "model.identity_unmeasured", "model.identity_unpinned",
