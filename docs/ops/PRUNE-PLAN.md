@@ -1,5 +1,8 @@
 # Release-day prune plan
 
+> **Execution order and current status: [PRUNE-EXECUTION](PRUNE-EXECUTION.md) (2026-11-08).** Backup and tags are done there;
+> the ruleset, branch batches, disk and MBP steps are gated as listed. Where the two differ, PRUNE-EXECUTION governs.
+
 **PLAN ONLY — no operation is authorized by this document today.** Revised for
 Opus's `ADMIT_WITH_FIXES` cold review on
 `origin/ops/2026-11-08-prune-plan-opus-review:docs/ops/prune-plan-opus-review.md`.

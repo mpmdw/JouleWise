@@ -154,6 +154,49 @@ class PruneOpsTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue((output / "BRANCH-NAME-CONSUMERS.tsv").is_file())
 
+    def test_archive_commit_may_trail_main_but_not_leave_it(self):
+        tags = self.refresh()
+        old = self.base
+        self.put("tools/later.py", "# later\n")
+        self.git("add", ".")
+        self.git("commit", "-m", "main moved after the archive tag")
+        self.base = self.git("rev-parse", "HEAD")
+        self.git("update-ref", "refs/remotes/origin/main", self.base)
+        census.inventory(self.repo, self.out, self.previous)
+        with contextlib.redirect_stdout(io.StringIO()):
+            verifier.verify(self.repo, self.out, tags, old)  # immutable tag one behind main
+        self.git("checkout", "--orphan", "elsewhere")
+        self.git("commit", "--allow-empty", "-m", "not on main")
+        stray = self.git("rev-parse", "HEAD")
+        self.git("checkout", "main")
+        with self.assertRaisesRegex(ValueError, "or its ancestor"):
+            verifier.verify(self.repo, self.out, tags, stray)
+
+    def test_batch_gate_refuses_consumed_moved_pr_and_keep_names(self):
+        import prune_batch_gate as batch_gate
+        for name in ("clean", "pr-base", "moved"):
+            self.git("update-ref", f"refs/remotes/origin/{name}", self.base)
+            self.previous.append(dict(branch=name, snapshot_commit=self.base,
+                                      disposition="MERGED-CANDIDATE"))
+        self.hold()  # tools/check.py on the HOLD tip names old-name
+        self.refresh()
+        names.scan(self.repo, self.out, self.out / "BRANCH-NAME-CONSUMERS.tsv")
+        self.git("tag", "-a", "archive/x", self.base, "-m", "archive")
+        self.put("tools/later.py", "# later\n")
+        self.git("add", ".")
+        self.git("commit", "-m", "later")
+        self.git("update-ref", "refs/remotes/origin/moved", self.git("rev-parse", "HEAD"))
+        approved, refused = batch_gate.gate(
+            self.repo, self.out, ["clean", "old-name", "pr-base", "moved", "hold", "records/x"],
+            ["7\tfeature\tpr-base"], "archive/x")
+        self.assertEqual([r["branch"] for r in approved], ["clean"])
+        reasons = dict(refused)
+        self.assertIn("name-consumer-hit", reasons["old-name"])
+        self.assertIn("open-pr-head-or-base", reasons["pr-base"])
+        self.assertIn("tip-moved-or-gone", reasons["moved"])
+        self.assertIn("not-merged-candidate-in-fresh-census", reasons["hold"])
+        self.assertIn("keep-set", reasons["records/x"])
+
     def test_literal_prefilter_escapes_names_and_shares_overlapping_prefixes(self):
         pattern = names.literal_pattern(["impl/a.b", "impl/a+b", "old", "old-name"])
         self.assertIsNotNone(pattern.search("uses impl/a.b"))

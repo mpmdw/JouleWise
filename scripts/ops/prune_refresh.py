@@ -6,7 +6,7 @@ import re
 
 from prune_inventory import git, inventory, rows, write_tsv
 from prune_branch_names import scan
-from prune_verify import verify
+from prune_verify import is_ancestor, verify
 
 
 def main():
@@ -20,18 +20,20 @@ def main():
     if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", args.archive_date):
         parser.error("archive date must be YYYY-MM-DD")
     base = git(args.repo, "rev-parse", "refs/remotes/origin/main^{commit}").decode().strip()
-    if args.archive_commit != base:
-        parser.error("ARCHIVE_COMMIT must equal origin/main (fetch first in the later connected session)")
+    # Before the archive tag exists ARCHIVE_COMMIT is fresh origin/main; after
+    # creation it is the tag's (immutable) commit, which must stay an ancestor.
+    if not is_ancestor(args.repo, args.archive_commit, base):
+        parser.error("ARCHIVE_COMMIT must be origin/main or its ancestor (fetch first)")
     inventory(args.repo, args.output, rows(args.inputs / "BRANCH-TRIAGE.tsv"))
     tags = rows(args.inputs / "TAGS-TO-CREATE.tsv")
     archive = [r for r in tags if r["tag"].startswith("archive/process-traces-before-release-prune-")]
     if len(archive) != 1:
         parser.error("exactly one archive input row required")
     archive[0].update(tag="archive/process-traces-before-release-prune-" + args.archive_date,
-                      commit=base)
+                      commit=args.archive_commit)
     write_tsv(args.output / "TAGS-TO-CREATE.tsv", ["tag", "commit"], tags)
     matches = scan(args.repo, args.output, args.output / "BRANCH-NAME-CONSUMERS.tsv")
-    verify(args.repo, args.output, args.output / "TAGS-TO-CREATE.tsv", base)
+    verify(args.repo, args.output, args.output / "TAGS-TO-CREATE.tsv", args.archive_commit)
     print("Branch-name hits require dispositions:", matches)
 
 

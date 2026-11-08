@@ -9,13 +9,22 @@ import json
 from pathlib import Path
 import re
 
+import subprocess
+
 from prune_inventory import git, reachable, rows, scope as expected_scope
+
+
+def is_ancestor(repo, commit, ref):
+    return subprocess.run(["git", "-c", "gc.auto=0", "-C", str(repo), "merge-base", "--is-ancestor",
+                           commit, ref], capture_output=True).returncode == 0
 
 
 def verify(repo, census, tags, archive_commit, release_ready=False):
     base = git(repo, "rev-parse", "refs/remotes/origin/main^{commit}").decode().strip()
-    if archive_commit != base:
-        raise ValueError("ARCHIVE_COMMIT must equal freshly fetched origin/main")
+    # The archive tag is created once at release-day main and never moves; main
+    # keeps moving afterwards. Require ancestry, not equality, after creation.
+    if not is_ancestor(repo, archive_commit, base):
+        raise ValueError("ARCHIVE_COMMIT must be freshly fetched origin/main or its ancestor")
     current = dict(line.split() for line in git(
         repo, "for-each-ref", "--format=%(refname) %(objectname)",
         "refs/remotes/origin").decode().splitlines())

@@ -1,5 +1,5 @@
 tag	commit
-archive/process-traces-before-release-prune-2026-11-08	c07b388e90d9f085e6428a1e0d96b0361ff417f0
+archive/process-traces-before-release-prune-2026-11-08	901d7580def7862127ad2f4acb33011286d7e688
 pin/align-v4-measurement-snapshot	9c40e4e5d9fa453cce3c70984e11fa382b7d4591
 pin/align-v4-r1-integration-snapshot	e901eb2a480d51377a494be9d797733dfcd0220b
 pin/b5-accepted-analysis	b13a510dc15b5e280309f7dd6b280426bf44afc6
@@ -32,3 +32,6 @@ pin/bytes-registration	7b622eb957b3b49a34ca9405ea1384939ed1f0fe
 pin/b6-kit	1c1bc3204c8ba8fa6d880b9b9a920362bd01fa4c
 pin/b5-corpus18-text-gate	8ce450ad55949e9e30fd21261b4b0eb687e1915a
 pin/b5-hclaim-ci	9271df94f0e5bac1d4dfd9c0122c73b90e6cef20
+pin/b5-release-checkout	02ef89f5c67c5bec2b04ab6521129e3f878cdfa6
+archive/recovered/498ad1d0-qpe01-harness	498ad1d0c0f9ad0293adce6649eb71af6cd8958e
+archive/recovered/e55ac391a-cw-impl-scratch-merge	e55ac391a3bd89365a7f4d85edc8de79cddf1afe
