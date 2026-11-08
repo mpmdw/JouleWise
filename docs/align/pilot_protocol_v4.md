@@ -620,12 +620,19 @@ at or above 99 % on AC, at most 300 s apart. Basis (a): the last completed charg
 within 1800 s of the arm, nothing charging after it and the latest row fresh and floating
 (no continuity rule). Basis (b), continuous float: older than 1800 s, every row since is valid, on AC, not
 charging, at or above 99 %, no gap above 300 s, latest row fresh; the evidence time is the
-latest observation. The arm reads its own clock. Procedure: run
-`scripts/align_v4_battery_log.py sample --loop --interval-s 120` **continuously** as a cheap
-logger from the series' initial charge acquisition (let the battery drop below 99 % once
-and charge to float with the sampler running) through every window and turnaround, so
-back-to-back arms are not stranded by a charge completed long ago; a sampler pause over
-300 s costs only basis (b) until the next completed charge. `pmset -g batt` is retained
+latest observation. The arm reads its own clock. **No sampler runs during a window** (an
+ioreg spawn on the measuring Mac is out-of-tree activity the quiet guard exists to catch).
+Magistrate sequence: at terminal completion start
+`scripts/align_v4_battery_log.py sample --loop --interval-s 120 --pidfile P`; finalize, hash,
+push, cool down and triage with it running; **stop it (`stop --pidfile P`) before the quiet/arm
+dwell**; arm with `--battery-log` (each between-window log) and `--window-battery-journal`
+(each window's hazard battery journal). Across a window the float evidence is that window's
+own 1 Hz SMC battery capture (`B0AC` lines plus the ioreg lines carrying AC, charging and SoC;
+`v4_topup.window_records` carries the latest ioreg state onto each SMC line and calls B0AC
+above +200 mA charging), merged in time order with the between-window logs. A boundary gap
+above 300 s, or a missing window journal, breaks continuity and costs only basis (b) until the
+next completed charge. Initial charge acquisition: before the series, run the sampler while the
+battery drops below 99 % once and charges to float. `pmset -g batt` is retained
 evidence only. UpdateTime dates the observation, not the end of charging. R1 drain remains a required print; Ed's charge hold gates D1.
 Charging is named exclusion **B** (`battery.member_span`). Print B counts, SoC
 and charger watts per member. **PENDING lead:** the separate numeric B window
@@ -839,7 +846,7 @@ from the committed record before the arm; the arm waits for them.
 |---|---|
 | `record_committed` | previous record finalized, hashed, committed and pushed |
 | `terminal_completion` | B1 authenticated terminal release |
-| `quiet_start_state` | quiet start state and dwell; no desk, hashing or evidence traffic on the MBP |
+| `quiet_start_state` | quiet start state and dwell; no desk, hashing or evidence traffic on the MBP; the between-window battery sampler is stopped before the dwell |
 | `series_powermode` | AC powermode equals the plan-frozen series value (arm-computed; not Automatic-only) |
 | `external_volume` | no external/network/FUSE volume mounted (ruling 20; arm-computed) |
 | `charging_battery` | AC, >=99%, not charging, |InstantAmperage|<=200 mA, completed top-up within 30 min, OBC attested (R02; arm-computed) |

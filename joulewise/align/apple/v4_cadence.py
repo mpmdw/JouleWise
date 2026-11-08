@@ -32,7 +32,8 @@ NEXT_ARM_TRIAGE = (
               'delivery and the watchdog empty-process latch (B1; not a direct-child exit)'),
     dict(id='quiet_start_state', source=PACKET, first_window_na=False,
          text='machine back in the quiet start state: cool-down and display/quiet dwell, '
-              'no desk, hashing or evidence traffic on the MBP'),
+              'no desk, hashing or evidence traffic on the MBP; the between-window battery '
+              'sampler is stopped before the dwell'),
     dict(id='series_powermode', source=ARM, first_window_na=False,
          text='AC powermode equals the plan-frozen series value (High Power if adopted), '
               'stale R1 marker restored first; not an Automatic-only check'),

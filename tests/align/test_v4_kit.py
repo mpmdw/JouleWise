@@ -1809,9 +1809,11 @@ class W1DiskGateTests(unittest.TestCase):
         with patch.object(session, 'install', fake):
             self.assertEqual(session.main(['install', '--session-root', 's', '--w1-disk-config', '/c.json',
                                            '--obc-off-attested-by', 'synthetic', '--battery-log', '/b.jsonl',
+                                           '--battery-log', '/c.jsonl', '--window-battery-journal', '/w.jsonl',
                                            '--next-arm-triage', '/t.json']), 0)
         self.assertEqual(seen, {'session_root': Path('s'), 'w1_disk_config': Path('/c.json'),
-                                'obc_off_attested_by': 'synthetic', 'battery_log': Path('/b.jsonl'),
+                                'obc_off_attested_by': 'synthetic', 'battery_log': [Path('/b.jsonl'), Path('/c.jsonl')],
+                                'window_battery_journal': [Path('/w.jsonl')],
                                 'next_arm_triage': Path('/t.json')})
 
 
