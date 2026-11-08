@@ -1,0 +1,689 @@
+{
+  "authority": "origin/lane/2026-11-05-align-window-council:docs/align/council-2026-11-05/FINAL-DESIGN.md \u00a7\u00a72.1,2.2,2.8; load NLL bar: authority_load_reference",
+  "authority_amendment": "docs/align/council-2026-11-05/FINAL-DESIGN-AMENDMENT-1.md \u00a7\u00a7A1,A3,A5",
+  "authority_amendment_commit": "6eb1ff5be31bec330ae5af262c2b4c7601e7755e",
+  "authority_blob": "0a802a3097a20c9f4dd5e8823d858302ae596785",
+  "authority_commit": "219fb151515383cbbcde887d096837a829c67396",
+  "authority_load_reference": "docs/align/v4/R0-LOAD-REFERENCE-NOTE.md",
+  "authority_load_reference_basis": "lead ruling 2026-11-06 under RUN_STATE items 181/183 (Ed: approve changes that speed the science and harm nothing)",
+  "authority_load_reference_blob": "59927657f8ed8abcf13983697c4c55ac9890ba74",
+  "authority_step_ruling": "docs/align/r0_step_test_ruling.md (laptop lead, 2026-11-05)",
+  "census": [
+    {
+      "agent": {
+        "argv": [
+          "/usr/bin/pgrep",
+          "-a",
+          "-lf",
+          "[c]odex|[c]laude"
+        ],
+        "exit_code": 1,
+        "monotonic_ns": 2086190749106500,
+        "stderr": "",
+        "stdout": "",
+        "stdout_bytes": null
+      },
+      "busy": [],
+      "chains": [],
+      "cpu_interval": {
+        "contaminants": [],
+        "elapsed_s": 30.212598104,
+        "end_monotonic_s": 2086221.059481291,
+        "exited_over_limit": [],
+        "long_interval": false,
+        "regressed_counters": [],
+        "regressed_noncontaminant": [],
+        "start_monotonic_s": 2086190.846883187,
+        "unaccounted": [
+          {
+            "command": "contactsd",
+            "pid": 43489,
+            "reason": "exited",
+            "start": "Sat Nov 7 17:36:37 2026"
+          },
+          {
+            "command": "contactsd",
+            "pid": 43490,
+            "reason": "exited",
+            "start": "Sat Nov 7 17:36:37 2026"
+          },
+          {
+            "command": "contactsd",
+            "pid": 43491,
+            "reason": "exited",
+            "start": "Sat Nov 7 17:36:37 2026"
+          },
+          {
+            "command": "contactsd",
+            "pid": 43492,
+            "reason": "exited",
+            "start": "Sat Nov 7 17:36:37 2026"
+          },
+          {
+            "command": "contactsd",
+            "pid": 43493,
+            "reason": "exited",
+            "start": "Sat Nov 7 17:36:37 2026"
+          },
+          {
+            "command": "contactsd",
+            "pid": 43495,
+            "reason": "exited",
+            "start": "Sat Nov 7 17:36:37 2026"
+          },
+          {
+            "command": "contactsd",
+            "pid": 43496,
+            "reason": "exited",
+            "start": "Sat Nov 7 17:36:37 2026"
+          },
+          {
+            "command": "contactsd",
+            "pid": 43497,
+            "reason": "exited",
+            "start": "Sat Nov 7 17:36:37 2026"
+          },
+          {
+            "command": "contactsd",
+            "pid": 43498,
+            "reason": "exited",
+            "start": "Sat Nov 7 17:36:37 2026"
+          },
+          {
+            "command": "contactsd",
+            "pid": 43635,
+            "reason": "exited",
+            "start": "Sat Nov 7 17:36:54 2026"
+          },
+          {
+            "command": "contactsd",
+            "pid": 43636,
+            "reason": "exited",
+            "start": "Sat Nov 7 17:36:54 2026"
+          },
+          {
+            "command": "ps",
+            "pid": 43784,
+            "reason": "exited",
+            "start": "Sat Nov 7 17:37:33 2026"
+          }
+        ]
+      },
+      "custody": {
+        "refusals": [],
+        "warnings": [
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/48968-5cc30d52d8ba1a3ce21cae0eef44607bd09517787a743fe1.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/38552-6d4194d19d3f296dec02b6c0e288387c856d3fb0f4eaf1c6.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/78528-54dc846582ea4c4417ea90a0b1135d1ef376abf205bff6bd.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/38385-f57b820a00858f76999b50a4c2b72b61186e3c3698c51f8e.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/94658-9ba30bfbc8314b661d7b1766f7287a58aa3e5db086d130aa.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/36590-d515dea00f46d7127c7415474cb538f5a6699f02adb3206b.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/57492-83f4f69e1edb3ff283814ea6df1b5dbdb6d21398ce43f995.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/94330-d2ae1de2d69ceda12cb7111612c52ff69cdf4527ff8791c7.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/84715-fc788594f075a6c6e5f3fc1d6ed029ecba83965334b4c5c2.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/98110-82119e421c1adfe7d85534dd65cc795e985a4f6ea93df91d.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/85784-23e7245d27e40908c925bbcf0a9e2e07571db18fc1ac26a8.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/68684-a97701da6a451abdd7acb1028bda4f2a8f55e5db525ae057.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/62346-f06b54684fe6049860045d50d221f7eaa5824c45f3f898c2.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/36581-4f2687d554cfc5c621f8e054bbeab2f9569cc9e8e0145257.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/42819-059c083804d959162b41d6002d79aa4217588b66a78db6c1.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/9065-ddaea9ca1c8d47902412201af6909e62b4f185490055c7fb.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/13457-ea123397bfc9eb27a25b10b186969d9384505d4b52990cd6.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/4198-d1982fd3a16dce106aaff200a62b0c38f3cb2e9bd7687fa6.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/64585-98f9976ae4492ec178efc55b48b0a5ebde8698d0ee46b88c.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/44242-a4a3b3d783e80574a67d464a4329b6b79a20d00ac903617e.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/29008-ca38174a3be25cd74ef93b087645d003275a2835352118f1.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/57389-18ded853892b5f8b06179a02b255cffe72aef8bec545dcc3.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/68617-90c63d0690d25676b2042671093b08d38aa372622c4b7134.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/8448-0aded8756d40078e49c424f2ac8a8dfe3579cc5202f63f5b.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/42718-a3fc390b957b2e81837fed71bf240892d163e5e56a948d9e.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/42799-b22be68560f29011277ec7b0f34b055750cf4fc902765daf.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/36480-ca5cf391aa963fbaeb8ff16e0ba9c2664ddc762e489e2a41.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/50277-21a0f0bcbf88893ee3394da93721c977104693931985caaf.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/70643-d63d74c20f65a33bb084a0986e54de3e49ab8d81e5b5eca5.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/84860-ef6cfa75708b67ca0974b734ec381a3999cef4c166269efa.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/13420-96880f7d9034e020bb9dc5be17ba13aa8c5d5a9c73baa3ca.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/20687-9164a6725ed6b1ba4399e5f956eb441f57d8556d4928bd94.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/92296-80421f208f1176236f7e5738119ece03181d2f6fd27b3d47.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/53642-9239952a38b6006030399a159e37ca407ea02c789c40d1d5.json"
+        ]
+      },
+      "installed_night_agents": [],
+      "launchctl": {
+        "exit_code": 113,
+        "stderr": "Bad request.\nCould not find service \"com.joulewise.night\" in domain for user gui: 501\n",
+        "stdout": ""
+      },
+      "monotonic_s": 2086190.732630375,
+      "pcpu_diagnostic": [],
+      "resolved_custody_parents": [
+        "/Users/edr/night-custody"
+      ]
+    },
+    {
+      "agent": {
+        "argv": [
+          "/usr/bin/pgrep",
+          "-a",
+          "-lf",
+          "[c]odex|[c]laude"
+        ],
+        "exit_code": 1,
+        "monotonic_ns": 2086221136616166,
+        "stderr": "",
+        "stdout": "",
+        "stdout_bytes": null
+      },
+      "busy": [],
+      "chains": [],
+      "cpu_interval": {
+        "contaminants": [],
+        "elapsed_s": 30.386255917,
+        "end_monotonic_s": 2086221.233139104,
+        "exited_over_limit": [],
+        "long_interval": false,
+        "regressed_counters": [],
+        "regressed_noncontaminant": [],
+        "start_monotonic_s": 2086190.846883187,
+        "unaccounted": [
+          {
+            "command": "contactsd",
+            "pid": 43489,
+            "reason": "exited",
+            "start": "Sat Nov 7 17:36:37 2026"
+          },
+          {
+            "command": "contactsd",
+            "pid": 43490,
+            "reason": "exited",
+            "start": "Sat Nov 7 17:36:37 2026"
+          },
+          {
+            "command": "contactsd",
+            "pid": 43491,
+            "reason": "exited",
+            "start": "Sat Nov 7 17:36:37 2026"
+          },
+          {
+            "command": "contactsd",
+            "pid": 43492,
+            "reason": "exited",
+            "start": "Sat Nov 7 17:36:37 2026"
+          },
+          {
+            "command": "contactsd",
+            "pid": 43493,
+            "reason": "exited",
+            "start": "Sat Nov 7 17:36:37 2026"
+          },
+          {
+            "command": "contactsd",
+            "pid": 43495,
+            "reason": "exited",
+            "start": "Sat Nov 7 17:36:37 2026"
+          },
+          {
+            "command": "contactsd",
+            "pid": 43496,
+            "reason": "exited",
+            "start": "Sat Nov 7 17:36:37 2026"
+          },
+          {
+            "command": "contactsd",
+            "pid": 43497,
+            "reason": "exited",
+            "start": "Sat Nov 7 17:36:37 2026"
+          },
+          {
+            "command": "contactsd",
+            "pid": 43498,
+            "reason": "exited",
+            "start": "Sat Nov 7 17:36:37 2026"
+          },
+          {
+            "command": "contactsd",
+            "pid": 43635,
+            "reason": "exited",
+            "start": "Sat Nov 7 17:36:54 2026"
+          },
+          {
+            "command": "contactsd",
+            "pid": 43636,
+            "reason": "exited",
+            "start": "Sat Nov 7 17:36:54 2026"
+          },
+          {
+            "command": "ps",
+            "pid": 43784,
+            "reason": "exited",
+            "start": "Sat Nov 7 17:37:33 2026"
+          }
+        ]
+      },
+      "custody": {
+        "refusals": [],
+        "warnings": [
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/48968-5cc30d52d8ba1a3ce21cae0eef44607bd09517787a743fe1.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/38552-6d4194d19d3f296dec02b6c0e288387c856d3fb0f4eaf1c6.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/78528-54dc846582ea4c4417ea90a0b1135d1ef376abf205bff6bd.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/38385-f57b820a00858f76999b50a4c2b72b61186e3c3698c51f8e.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/94658-9ba30bfbc8314b661d7b1766f7287a58aa3e5db086d130aa.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/36590-d515dea00f46d7127c7415474cb538f5a6699f02adb3206b.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/57492-83f4f69e1edb3ff283814ea6df1b5dbdb6d21398ce43f995.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/94330-d2ae1de2d69ceda12cb7111612c52ff69cdf4527ff8791c7.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/84715-fc788594f075a6c6e5f3fc1d6ed029ecba83965334b4c5c2.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/98110-82119e421c1adfe7d85534dd65cc795e985a4f6ea93df91d.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/85784-23e7245d27e40908c925bbcf0a9e2e07571db18fc1ac26a8.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/68684-a97701da6a451abdd7acb1028bda4f2a8f55e5db525ae057.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/62346-f06b54684fe6049860045d50d221f7eaa5824c45f3f898c2.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/36581-4f2687d554cfc5c621f8e054bbeab2f9569cc9e8e0145257.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/42819-059c083804d959162b41d6002d79aa4217588b66a78db6c1.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/9065-ddaea9ca1c8d47902412201af6909e62b4f185490055c7fb.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/13457-ea123397bfc9eb27a25b10b186969d9384505d4b52990cd6.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/4198-d1982fd3a16dce106aaff200a62b0c38f3cb2e9bd7687fa6.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/64585-98f9976ae4492ec178efc55b48b0a5ebde8698d0ee46b88c.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/44242-a4a3b3d783e80574a67d464a4329b6b79a20d00ac903617e.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/29008-ca38174a3be25cd74ef93b087645d003275a2835352118f1.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/57389-18ded853892b5f8b06179a02b255cffe72aef8bec545dcc3.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/68617-90c63d0690d25676b2042671093b08d38aa372622c4b7134.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/8448-0aded8756d40078e49c424f2ac8a8dfe3579cc5202f63f5b.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/42718-a3fc390b957b2e81837fed71bf240892d163e5e56a948d9e.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/42799-b22be68560f29011277ec7b0f34b055750cf4fc902765daf.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/36480-ca5cf391aa963fbaeb8ff16e0ba9c2664ddc762e489e2a41.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/50277-21a0f0bcbf88893ee3394da93721c977104693931985caaf.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/70643-d63d74c20f65a33bb084a0986e54de3e49ab8d81e5b5eca5.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/84860-ef6cfa75708b67ca0974b734ec381a3999cef4c166269efa.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/13420-96880f7d9034e020bb9dc5be17ba13aa8c5d5a9c73baa3ca.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/20687-9164a6725ed6b1ba4399e5f956eb441f57d8556d4928bd94.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/92296-80421f208f1176236f7e5738119ece03181d2f6fd27b3d47.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/53642-9239952a38b6006030399a159e37ca407ea02c789c40d1d5.json"
+        ]
+      },
+      "installed_night_agents": [],
+      "launchctl": {
+        "exit_code": 113,
+        "stderr": "Bad request.\nCould not find service \"com.joulewise.night\" in domain for user gui: 501\n",
+        "stdout": ""
+      },
+      "monotonic_s": 2086221.120825666,
+      "pcpu_diagnostic": [],
+      "resolved_custody_parents": [
+        "/Users/edr/night-custody"
+      ]
+    },
+    {
+      "agent": {
+        "argv": [
+          "/usr/bin/pgrep",
+          "-a",
+          "-lf",
+          "[c]odex|[c]laude"
+        ],
+        "exit_code": 1,
+        "monotonic_ns": 2086221270127541,
+        "stderr": "",
+        "stdout": "",
+        "stdout_bytes": null
+      },
+      "busy": [],
+      "chains": [],
+      "cpu_interval": {
+        "contaminants": [],
+        "elapsed_s": 30.519289125,
+        "end_monotonic_s": 2086221.366172312,
+        "exited_over_limit": [],
+        "long_interval": false,
+        "regressed_counters": [],
+        "regressed_noncontaminant": [],
+        "start_monotonic_s": 2086190.846883187,
+        "unaccounted": [
+          {
+            "command": "contactsd",
+            "pid": 43489,
+            "reason": "exited",
+            "start": "Sat Nov 7 17:36:37 2026"
+          },
+          {
+            "command": "contactsd",
+            "pid": 43490,
+            "reason": "exited",
+            "start": "Sat Nov 7 17:36:37 2026"
+          },
+          {
+            "command": "contactsd",
+            "pid": 43491,
+            "reason": "exited",
+            "start": "Sat Nov 7 17:36:37 2026"
+          },
+          {
+            "command": "contactsd",
+            "pid": 43492,
+            "reason": "exited",
+            "start": "Sat Nov 7 17:36:37 2026"
+          },
+          {
+            "command": "contactsd",
+            "pid": 43493,
+            "reason": "exited",
+            "start": "Sat Nov 7 17:36:37 2026"
+          },
+          {
+            "command": "contactsd",
+            "pid": 43495,
+            "reason": "exited",
+            "start": "Sat Nov 7 17:36:37 2026"
+          },
+          {
+            "command": "contactsd",
+            "pid": 43496,
+            "reason": "exited",
+            "start": "Sat Nov 7 17:36:37 2026"
+          },
+          {
+            "command": "contactsd",
+            "pid": 43497,
+            "reason": "exited",
+            "start": "Sat Nov 7 17:36:37 2026"
+          },
+          {
+            "command": "contactsd",
+            "pid": 43498,
+            "reason": "exited",
+            "start": "Sat Nov 7 17:36:37 2026"
+          },
+          {
+            "command": "contactsd",
+            "pid": 43635,
+            "reason": "exited",
+            "start": "Sat Nov 7 17:36:54 2026"
+          },
+          {
+            "command": "contactsd",
+            "pid": 43636,
+            "reason": "exited",
+            "start": "Sat Nov 7 17:36:54 2026"
+          },
+          {
+            "command": "ps",
+            "pid": 43784,
+            "reason": "exited",
+            "start": "Sat Nov 7 17:37:33 2026"
+          }
+        ]
+      },
+      "custody": {
+        "refusals": [],
+        "warnings": [
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/48968-5cc30d52d8ba1a3ce21cae0eef44607bd09517787a743fe1.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/38552-6d4194d19d3f296dec02b6c0e288387c856d3fb0f4eaf1c6.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/78528-54dc846582ea4c4417ea90a0b1135d1ef376abf205bff6bd.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/38385-f57b820a00858f76999b50a4c2b72b61186e3c3698c51f8e.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/94658-9ba30bfbc8314b661d7b1766f7287a58aa3e5db086d130aa.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/36590-d515dea00f46d7127c7415474cb538f5a6699f02adb3206b.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/57492-83f4f69e1edb3ff283814ea6df1b5dbdb6d21398ce43f995.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/94330-d2ae1de2d69ceda12cb7111612c52ff69cdf4527ff8791c7.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/84715-fc788594f075a6c6e5f3fc1d6ed029ecba83965334b4c5c2.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/98110-82119e421c1adfe7d85534dd65cc795e985a4f6ea93df91d.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/85784-23e7245d27e40908c925bbcf0a9e2e07571db18fc1ac26a8.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/68684-a97701da6a451abdd7acb1028bda4f2a8f55e5db525ae057.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/62346-f06b54684fe6049860045d50d221f7eaa5824c45f3f898c2.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/36581-4f2687d554cfc5c621f8e054bbeab2f9569cc9e8e0145257.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/42819-059c083804d959162b41d6002d79aa4217588b66a78db6c1.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/9065-ddaea9ca1c8d47902412201af6909e62b4f185490055c7fb.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/13457-ea123397bfc9eb27a25b10b186969d9384505d4b52990cd6.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/4198-d1982fd3a16dce106aaff200a62b0c38f3cb2e9bd7687fa6.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/64585-98f9976ae4492ec178efc55b48b0a5ebde8698d0ee46b88c.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/44242-a4a3b3d783e80574a67d464a4329b6b79a20d00ac903617e.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/29008-ca38174a3be25cd74ef93b087645d003275a2835352118f1.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/57389-18ded853892b5f8b06179a02b255cffe72aef8bec545dcc3.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/68617-90c63d0690d25676b2042671093b08d38aa372622c4b7134.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/8448-0aded8756d40078e49c424f2ac8a8dfe3579cc5202f63f5b.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/42718-a3fc390b957b2e81837fed71bf240892d163e5e56a948d9e.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/42799-b22be68560f29011277ec7b0f34b055750cf4fc902765daf.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/36480-ca5cf391aa963fbaeb8ff16e0ba9c2664ddc762e489e2a41.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/50277-21a0f0bcbf88893ee3394da93721c977104693931985caaf.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/70643-d63d74c20f65a33bb084a0986e54de3e49ab8d81e5b5eca5.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/84860-ef6cfa75708b67ca0974b734ec381a3999cef4c166269efa.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/13420-96880f7d9034e020bb9dc5be17ba13aa8c5d5a9c73baa3ca.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/20687-9164a6725ed6b1ba4399e5f956eb441f57d8556d4928bd94.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/92296-80421f208f1176236f7e5738119ece03181d2f6fd27b3d47.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/53642-9239952a38b6006030399a159e37ca407ea02c789c40d1d5.json"
+        ]
+      },
+      "installed_night_agents": [],
+      "launchctl": {
+        "exit_code": 113,
+        "stderr": "Bad request.\nCould not find service \"com.joulewise.night\" in domain for user gui: 501\n",
+        "stdout": ""
+      },
+      "monotonic_s": 2086221.254237541,
+      "pcpu_diagnostic": [],
+      "resolved_custody_parents": [
+        "/Users/edr/night-custody"
+      ]
+    },
+    {
+      "agent": {
+        "argv": [
+          "/usr/bin/pgrep",
+          "-a",
+          "-lf",
+          "[c]odex|[c]laude"
+        ],
+        "exit_code": 1,
+        "monotonic_ns": 2086282665994125,
+        "stderr": "",
+        "stdout": "",
+        "stdout_bytes": null
+      },
+      "busy": [],
+      "chains": [],
+      "cpu_interval": {
+        "contaminants": [],
+        "elapsed_s": 61.397329354,
+        "end_monotonic_s": 2086282.763501666,
+        "exited_over_limit": [],
+        "long_interval": true,
+        "regressed_counters": [],
+        "regressed_noncontaminant": [],
+        "start_monotonic_s": 2086221.366172312,
+        "unaccounted": [
+          {
+            "command": "ps",
+            "pid": 43865,
+            "reason": "exited",
+            "start": "Sat Nov 7 17:38:04 2026"
+          }
+        ]
+      },
+      "custody": {
+        "refusals": [],
+        "warnings": [
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/48968-5cc30d52d8ba1a3ce21cae0eef44607bd09517787a743fe1.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/38552-6d4194d19d3f296dec02b6c0e288387c856d3fb0f4eaf1c6.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/78528-54dc846582ea4c4417ea90a0b1135d1ef376abf205bff6bd.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/38385-f57b820a00858f76999b50a4c2b72b61186e3c3698c51f8e.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/94658-9ba30bfbc8314b661d7b1766f7287a58aa3e5db086d130aa.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/36590-d515dea00f46d7127c7415474cb538f5a6699f02adb3206b.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/57492-83f4f69e1edb3ff283814ea6df1b5dbdb6d21398ce43f995.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/94330-d2ae1de2d69ceda12cb7111612c52ff69cdf4527ff8791c7.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/84715-fc788594f075a6c6e5f3fc1d6ed029ecba83965334b4c5c2.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/98110-82119e421c1adfe7d85534dd65cc795e985a4f6ea93df91d.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/85784-23e7245d27e40908c925bbcf0a9e2e07571db18fc1ac26a8.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/68684-a97701da6a451abdd7acb1028bda4f2a8f55e5db525ae057.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/62346-f06b54684fe6049860045d50d221f7eaa5824c45f3f898c2.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/36581-4f2687d554cfc5c621f8e054bbeab2f9569cc9e8e0145257.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/42819-059c083804d959162b41d6002d79aa4217588b66a78db6c1.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/9065-ddaea9ca1c8d47902412201af6909e62b4f185490055c7fb.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/13457-ea123397bfc9eb27a25b10b186969d9384505d4b52990cd6.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/4198-d1982fd3a16dce106aaff200a62b0c38f3cb2e9bd7687fa6.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/64585-98f9976ae4492ec178efc55b48b0a5ebde8698d0ee46b88c.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/44242-a4a3b3d783e80574a67d464a4329b6b79a20d00ac903617e.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/29008-ca38174a3be25cd74ef93b087645d003275a2835352118f1.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/57389-18ded853892b5f8b06179a02b255cffe72aef8bec545dcc3.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/68617-90c63d0690d25676b2042671093b08d38aa372622c4b7134.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/8448-0aded8756d40078e49c424f2ac8a8dfe3579cc5202f63f5b.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/42718-a3fc390b957b2e81837fed71bf240892d163e5e56a948d9e.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/42799-b22be68560f29011277ec7b0f34b055750cf4fc902765daf.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/36480-ca5cf391aa963fbaeb8ff16e0ba9c2664ddc762e489e2a41.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/50277-21a0f0bcbf88893ee3394da93721c977104693931985caaf.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/70643-d63d74c20f65a33bb084a0986e54de3e49ab8d81e5b5eca5.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/84860-ef6cfa75708b67ca0974b734ec381a3999cef4c166269efa.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/13420-96880f7d9034e020bb9dc5be17ba13aa8c5d5a9c73baa3ca.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/20687-9164a6725ed6b1ba4399e5f956eb441f57d8556d4928bd94.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/92296-80421f208f1176236f7e5738119ece03181d2f6fd27b3d47.json",
+          "stale dead owner: /Users/edr/night-custody/active-campaigns/53642-9239952a38b6006030399a159e37ca407ea02c789c40d1d5.json"
+        ]
+      },
+      "installed_night_agents": [],
+      "launchctl": {
+        "exit_code": 113,
+        "stderr": "Bad request.\nCould not find service \"com.joulewise.night\" in domain for user gui: 501\n",
+        "stdout": ""
+      },
+      "long_interval": true,
+      "monotonic_s": 2086282.649394541,
+      "pcpu_diagnostic": [],
+      "resolved_custody_parents": [
+        "/Users/edr/night-custody"
+      ]
+    }
+  ],
+  "checkout_head": "5f817856b33f65b269a44ea52811dbbed28d02a8",
+  "checks": [
+    {
+      "argv": [
+        "/Users/edr/night-custody/measurement/JouleWise-measurement-20261102-align-pilot2/.venv/bin/python",
+        "-B",
+        "/Users/edr/night-custody/measurement/JouleWise-measurement-20261102-align-pilot2/scripts/align_smc_enumerate.py",
+        "--output",
+        "/Users/edr/night-align/r0-v4-20261108T0140Z/smc",
+        "--gpu-step",
+        "--idle-seconds",
+        "300",
+        "--idle-max-seconds",
+        "1200",
+        "--load-seconds",
+        "900",
+        "--recovery-seconds",
+        "600"
+      ],
+      "check": "smc",
+      "check_seconds": 61.66350070782937,
+      "exit_code": 3,
+      "note": "Idle plus load-step selection; R1 still owns thermal-control qualification.",
+      "selection_status": "PROVISIONAL",
+      "smc_source_commit": "58525031a",
+      "smc_step_budget": {
+        "capture_seconds": 2700,
+        "journal_bytes_estimate": 143202600,
+        "journal_bytes_per_slot_estimate": 53038,
+        "journal_estimate_note": "Measured 95,467,641 bytes /1,800 slots, rounded up; verify after enumeration.",
+        "profile": {
+          "idle_max_seconds": 1200,
+          "idle_seconds": 300,
+          "load_seconds": 900,
+          "recovery_seconds": 600
+        },
+        "sample_period_seconds": 1,
+        "timeout_seconds": 3300
+      },
+      "status": "fail",
+      "stderr": "R0 refused/failed: NotQuiet: outside-tree CPU contention or unmeasured host CPU: {'interval': {'monotonic_ns': [2086251946842020, 2086282633041979], 'monotonic_raw_ns': [2086251946841437, 2086282633041291], 'wall_ns': [1794101914963058500, 1794101945649258500]}, 'error': None, 'elapsed_s': 30.686199959, 'clean': False, 'max_outside': {'pid': 415, 'command': 'WindowServer', 'start': 'Wed Oct 14 15:08:38 2026', 'cpu_s_per_s': 0.08375100219100116}, 'outside_over_limit': [{'pid': 415, 'command': 'WindowServer', 'start': 'Wed Oct 14 15:08:38 2026', 'cpu_s_per_s': 0.08375100219100116}, {'pid': 676, 'command': 'ControlCenter', 'start': 'Wed Oct 14 15:08:47 2026', 'cpu_s_per_s': 0.05702889254251698}], 'exited_over_limit': [], 'outside_listed': [{'pid': 415, 'command': 'WindowServer', 'start': 'Wed Oct 14 15:08:38 2026', 'cpu_s_per_s': 0.08375100219100116}, {'pid': 676, 'command': 'ControlCenter', 'start': 'Wed Oct 14 15:08:47 2026', 'cpu_s_per_s': 0.05702889254251698}, {'pid': 438, 'command': 'airportd', 'start': 'Wed Oct 14 15:08:39 2026', 'cpu_s_per_s': 0.01792336622765412}, {'pid': 635, 'command': 'sysmond', 'start': 'Wed Oct 14 15:08:46 2026', 'cpu_s_per_s': 0.011079899122550899}, {'pid': 389, 'command': 'locationd', 'start': 'Wed Oct 14 15:08:38 2026', 'cpu_s_per_s': 0.009776381578715715}, {'pid': 1, 'command': 'launchd', 'start': 'Wed Oct 14 15:07:52 2026', 'cpu_s_per_s': 0.009776381578693486}, {'pid': 612, 'command': 'com.apple.Driver', 'start': 'Wed Oct 14 15:08:46 2026', 'cpu_s_per_s': 0.005865828947239802}], 'outside_total_cpu_s_per_s': 0.22387913815260388, 'outside_process_count': 725, 'tree_cpu_s_per_s': 0.05507361622677355, 'tree_process_count': 3, 'kernel_task_cpu_s_per_s': None, 'kernel_task_included': True, 'host_busy_cpu_s_per_s': 0.35195034185276924, 'host_idle_cpu_s_per_s': 15.628550457939912, 'host_ticks': {'busy_ticks': 1080, 'idle_ticks': 47958, 'cpus': 16, 'ticks_per_s': 100.0, 'elapsed_s': 30.686147208}, 'host_error': None, 'outside_aggregate_cpu_s_per_s': 0.2968767256259957, 'unattributed_cpu_s_per_s': 0.07299758747339183, 'unattributed_resolution_cpu_s_per_s': 0.5047872226272269, 'aggregate_limit_s_per_s': None, 'aggregate_over_limit': False, 'unaccounted': [{'pid': 43953, 'command': 'ps', 'start': 'Sat Nov 7 17:38:34 2026', 'reason': 'exited'}], 'raw': [{'name': 'ps.txt', 'sha256': '58b0d0e2b49aefc377ad1d6277a2186bdde804955e73ba1dc6d17932c9be347d', 'size': 49493, 'path': None}, {'name': 'ps.txt', 'sha256': '70a5f34f07d348e546922ef067cc8338a4653ec89cffe6de3d17b7c0a0192de0', 'size': 49493, 'path': None}], 'cpu_limit_s_per_s': 0.05, 'aggregate_cpu_limit_s_per_s': None, 'aggregate_above_0_05': True, 'regressed_counters': [], 'long_interval': False}\n",
+      "stdout": "",
+      "step_ruling": "docs/align/r0_step_test_ruling.md",
+      "timeout_seconds": 3300
+    }
+  ],
+  "complete_r0": false,
+  "config": {
+    "anchor_source": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/snapshots/d388dead1515f5e085ef7a0431dd8fadf0886c57",
+    "custody_parents": [],
+    "disk_path": "/Users/edr",
+    "measurement_hw_model": "Mac15,9",
+    "models": {
+      "D": {
+        "source": "/Users/edr/jw_models/mlx-community/Qwen3.8-27B-8bit"
+      }
+    },
+    "offloads": [],
+    "schema": "joulewise.align.r0.config.v1",
+    "shade_cache": "/Users/edr/.cache/joulewise/shade",
+    "smc_step": {
+      "idle_max_seconds": 1200,
+      "idle_seconds": 300,
+      "load_seconds": 900,
+      "recovery_seconds": 600
+    }
+  },
+  "config_sha256": "f24cd67cfb37b7da235ce49162066ad0db11e7b5565c3f3b386ad47b9ace620c",
+  "created_utc": "2026-11-08T01:37:33.748682+00:00",
+  "decisions_pending_lead_action": [],
+  "evidence_kind": "live_desk",
+  "finished_utc": "2026-11-08T01:39:05.801262+00:00",
+  "implementation_sha256": {
+    "align_r0_checks.py": "6d11345ece37e9bbf52fb81993454300a15624ec2556ee06daf8cef7c812f1fa",
+    "r0.py": "6f09e38c08725d725e36a999cb7e0e341c231f87fd86b33929aa1848856ee18b",
+    "r0_host.py": "d7581647ea39a18151bf0c2b25475512595ec2aabfaa3ffa0c7d1e2a88fafe8d",
+    "r0_mlx.py": "1393a38b77eafe6d3f8737d1da165984ba8cb45bff31bb3774af36a5576b6491",
+    "r0_nll_reference.json": "d62016921f16e937e452a458c740654805a5c0243b15c651139e8faca7eedf95",
+    "r0_runner.py": "33fef58d173055be26310b82c3032645eef7c5eb0732d375a532accf3dd004c2",
+    "r0_step.py": "36e3b04743641641efb7210d1407a9cefe518ea90fb8bec91caed7a7a0438f91"
+  },
+  "keep_going": false,
+  "limitations": [
+    "Selection data, not R1 thermal or arm validation.",
+    "R1 must freeze token budgets, intercepts and thermal slots.",
+    "Local inventories do not independently authenticate the remote revision."
+  ],
+  "long_decode_max_attempts": 2,
+  "pins": {
+    "D": {
+      "bits": 8,
+      "budget": 6144,
+      "bytes": 29531521322,
+      "family": "qwen3_5",
+      "name": "Qwen3.8-27B-8bit",
+      "peak_bytes": 45000000000,
+      "revision": "815b83c0df8ffd1d1b5244cf75fd6ef14fca9ef9",
+      "tag": "qwen3.8-27b"
+    }
+  },
+  "schema": "joulewise.align.r0.report.v1",
+  "selected_checks": [
+    "smc",
+    "host",
+    "disk",
+    "load",
+    "template",
+    "generated",
+    "memory",
+    "ladder",
+    "long-decode"
+  ],
+  "selected_models": [
+    "D"
+  ],
+  "smc_selection_missing": true,
+  "smc_step_budget": {
+    "capture_seconds": 2700,
+    "journal_bytes_estimate": 143202600,
+    "journal_bytes_per_slot_estimate": 53038,
+    "journal_estimate_note": "Measured 95,467,641 bytes /1,800 slots, rounded up; verify after enumeration.",
+    "profile": {
+      "idle_max_seconds": 1200,
+      "idle_seconds": 300,
+      "load_seconds": 900,
+      "recovery_seconds": 600
+    },
+    "sample_period_seconds": 1,
+    "timeout_seconds": 3300
+  },
+  "status": "fail",
+  "stopped_after": {
+    "check": "smc",
+    "model": null,
+    "outcome": "fail"
+  },
+  "total_seconds": 92.05258229188621
+}
