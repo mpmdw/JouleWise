@@ -112,13 +112,22 @@ class RegistrationTests(unittest.TestCase):
         from joulewise.align.apple import v4_registration as reg
         good = dict(passed=True, probe_error=False, external_connected=True, is_charging=False,
                     current_capacity_pct=100, instant_amperage_ma=0, update_age_s=1)
-        self.assertTrue(reg.battery_arm(good, 'synthetic')['admitted'])
+        topup = {'completed_at_epoch_s': 1000., 'source': 'synthetic'}
+        self.assertTrue(reg.battery_arm(good, 'synthetic', topup, now_epoch_s=1060.)['admitted'])
         for key, value in [('current_capacity_pct', 98), ('instant_amperage_ma', 201),
                            ('is_charging', True), ('update_age_s', -1), ('update_age_s', 181),
                            ('passed', False), ('current_capacity_pct', None)]:
             with self.subTest(key=key, value=value):
-                self.assertFalse(reg.battery_arm({**good, key: value}, 'synthetic')['admitted'])
-        self.assertFalse(reg.battery_arm(good, '')['admitted'])
+                self.assertFalse(reg.battery_arm({**good, key: value}, 'synthetic', topup, now_epoch_s=1060.)['admitted'])
+        self.assertFalse(reg.battery_arm(good, '', topup, now_epoch_s=1060.)['admitted'])
+        # R02: completed-top-up timing is source/time-bound and fail-closed.
+        self.assertFalse(reg.battery_arm(good, 'synthetic', None, now_epoch_s=1060.)['admitted'])
+        self.assertFalse(reg.battery_arm(good, 'synthetic', topup)['admitted'])
+        self.assertFalse(reg.battery_arm(good, 'synthetic', {**topup, 'source': ' '}, now_epoch_s=1060.)['admitted'])
+        self.assertFalse(reg.battery_arm(good, 'synthetic', {**topup, 'completed_at_epoch_s': None}, now_epoch_s=1060.)['admitted'])
+        self.assertFalse(reg.battery_arm(good, 'synthetic', topup, now_epoch_s=999.)['admitted'])
+        self.assertTrue(reg.battery_arm(good, 'synthetic', topup, now_epoch_s=2800.)['admitted'])
+        self.assertFalse(reg.battery_arm(good, 'synthetic', topup, now_epoch_s=2800.5)['admitted'])
 
     def test_wp19_requires_all_turns_and_live_x_with_static_proof(self):
         from joulewise.align.apple import v4_registration as reg
@@ -132,6 +141,21 @@ class RegistrationTests(unittest.TestCase):
         self.assertEqual(failed['verdict'], 'fail')
         self.assertEqual(failed['live_x_turns_compared'], 2)
         self.assertEqual(failed['contrast_predeclared'], 'INCONCLUSIVE: identity broken')
+
+    def test_wp19_zero_native_turns_is_a_retained_nonveto_failure_never_a_pass(self):
+        from joulewise.align.apple import v4_registration as reg
+        fixtures = {arm: {'turns': [{'turn': i, 'prompt_token_ids': [i+1], 'output_token_ids': [i+2]} for i in range(3)]}
+                    for arm in ('X', 'Y')}
+        rendered = {arm: [t['prompt_token_ids'] for t in f['turns']] for arm, f in fixtures.items()}
+        empty = reg.wp19_identity(fixtures, rendered, [], live_source_sha256='b'*64)
+        self.assertEqual(reg.validate_wp19(empty), empty)
+        for forged in ({'verdict': 'pass'}, {'live_x_complete': True}, {'live_x_identical': True},
+                       {'live_x_turns_compared': -1}, {'contrast_predeclared': None}):
+            with self.subTest(forged=forged), self.assertRaises(ValueError):
+                reg.validate_wp19({**empty, **forged})
+        full = reg.wp19_identity(fixtures, rendered, fixtures['X']['turns'], live_source_sha256='b'*64)
+        with self.assertRaises(ValueError):
+            reg.validate_wp19({**full, 'live_x_turns_compared': 0})
 
     def test_install_rechecks_generated_kit_before_host_operations(self):
         from scripts import align_v4_session as session
@@ -153,8 +177,20 @@ class RegistrationTests(unittest.TestCase):
             run = lambda argv: subprocess.CompletedProcess(argv, 0, 'synthetic pmset', '')
             record = session.arm_checks('.', {}, runner=run)
             self.assertFalse(record['admitted'])
-            record = session.arm_checks('.', {}, obc_off_attested_by='synthetic', runner=run)
+            record = session.arm_checks('.', {}, obc_off_attested_by='synthetic', runner=run,
+                                        now=lambda: 5000., topup_source='synthetic')
+            self.assertFalse(record['admitted'])
+            record = session.arm_checks('.', {}, obc_off_attested_by='synthetic', runner=run,
+                                        now=lambda: 5000., topup_completed_at=4900, topup_source='synthetic')
             self.assertTrue(record['admitted'])
+            self.assertEqual(record['battery']['topup'], {'completed_at_epoch_s': 4900., 'source': 'synthetic'})
+            record = session.arm_checks('.', {}, obc_off_attested_by='synthetic', runner=run,
+                                        now=lambda: 5000., topup_completed_at='2000-01-01T00:00:00+00:00',
+                                        topup_source='synthetic')
+            self.assertFalse(record['admitted'])
+            record = session.arm_checks('.', {}, obc_off_attested_by='synthetic', runner=run,
+                                        now=lambda: 5000., topup_completed_at='not a time', topup_source='synthetic')
+            self.assertFalse(record['admitted'])
             self.assertEqual(record['battery']['raw_ioreg'], 'synthetic raw')
             self.assertEqual(observe.call_args.kwargs['phase'], 'arm_check')
 

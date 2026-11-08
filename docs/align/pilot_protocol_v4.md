@@ -606,7 +606,10 @@ parser and refuses unless AC is connected, charging is false, CurrentCapacity
 NotChargingReason/ChargerInhibitReason lines if present, and `pmset -g batt`
 in `staging/v4-arm-NNN.json`. Require `--obc-off-attested-by`: OBC has no
 supported mechanical read here. This is operator attestation, not a parsed
-OBC assertion. R1 drain remains a required print; Ed's charge hold gates D1.
+OBC assertion. Require `--topup-completed-at` (epoch s or ISO-8601 with offset) and
+`--topup-source`: the arm refuses without source/time-bound completed-top-up
+evidence, if it is future-dated or older than 30 minutes (UpdateTime dates the
+observation, not the end of charging). R1 drain remains a required print; Ed's charge hold gates D1.
 Charging is named exclusion **B** (`battery.member_span`). Print B counts, SoC
 and charger watts per member. **PENDING lead:** the separate numeric B window
 bar/consequence (R02 U); `bar_pass` stays unavailable. Arm float does not prove

@@ -23,9 +23,10 @@ class R11Tests(unittest.TestCase):
     def test_battery_uses_required_instant_current_not_optional_average(self):
         good = dict(passed=True, probe_error=False, external_connected=True, is_charging=False,
                     update_age_s=1, current_capacity_pct=99, instant_amperage_ma=0, amperage_ma=None)
-        self.assertTrue(reg.battery_arm(good, 'synthetic')['admitted'])
+        topup = {'completed_at_epoch_s': 1000., 'source': 'synthetic'}
+        self.assertTrue(reg.battery_arm(good, 'synthetic', topup, now_epoch_s=1060.)['admitted'])
         self.assertFalse(reg.battery_arm({**good, 'instant_amperage_ma': None, 'amperage_ma': 0},
-                                         'synthetic')['admitted'])
+                                         'synthetic', topup, now_epoch_s=1060.)['admitted'])
 
     def test_u3_diagnostics_do_not_install_a_constant_or_a_bar(self):
         pairs = [dict(session='synthetic', ordinals=[i, i+3], token_identical=True,

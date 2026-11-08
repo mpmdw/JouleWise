@@ -282,6 +282,35 @@ class DeskTests(unittest.TestCase):
             r['residual_j'] = [100 if r['start_ns'] >= 3 else 0]*3
         self.assertEqual(desk.monitoring_stability(benign, **kw)['status'], 'fail')
 
+    def test_v4_u6_uses_half_sr_clustered_margin_without_slope_or_mean_margin(self):
+        def benign(per_episode):
+            return [{'pair': p, 'start_ns': i, 'trajectory': f'{p}-{i}', 'residual_j': per_episode(i)}
+                    for p in ('spam', 'bank') for i in range(6)]
+        kw = {'split_rule': 'within_pair_episode_order', 'mean_turn_j': 100, 'mean_30b_turn_j': 100,
+              'mean_episode_j': 3000}
+        stable = benign(lambda i: [0., 100., 200.])    # the old slope gate failed this
+        self.assertEqual(desk.monitoring_stability_v4(stable, cell_residual_sd=10, **kw)['status'], 'pass')
+        result = desk.monitoring_stability_v4(stable, **kw)
+        self.assertEqual(result['status'], 'inconclusive')
+        shifted = benign(lambda i: [0., 0., 0.] if i < 3 else [2., 2., 2.])
+        self.assertEqual(desk.monitoring_stability_v4(shifted, cell_residual_sd=10, **kw)['status'], 'pass')
+        failed = desk.monitoring_stability_v4(shifted, cell_residual_sd=2, **kw)
+        self.assertEqual((failed['status'], failed['margin_j']), ('fail', 1.0))
+        self.assertEqual(failed['se_kind'], 'trajectory_clustered')
+        self.assertEqual(desk.monitoring_stability_v4(shifted, cell_residual_sd=2, split_rule=None)['status'],
+                         'inconclusive')
+        self.assertEqual(desk.monitoring_stability_v4(
+            [{k: v for k, v in r.items() if k != 'trajectory'} for r in shifted],
+            cell_residual_sd=10, **kw)['status'], 'inconclusive')
+        # Imprecise intervals are labelled and never pass.
+        noisy = benign(lambda i: [0., 50.*(-1)**i, 90.*(-1)**(i//2)])
+        wide = desk.monitoring_stability_v4(noisy, cell_residual_sd=1, **kw)
+        self.assertNotEqual(wide['status'], 'pass')
+        self.assertEqual(sorted(wide['turn_position_residual_means']['means_j']), [0, 1, 2])
+        # A pre-computed legacy-rule U6 cannot be accepted by the v4 acceptance.
+        legacy = desk.monitoring_stability(stable, **kw)
+        self.assertEqual(desk.acceptance([member()], u6=legacy, v4=True)['U6']['status'], 'inconclusive')
+
     def test_journal_release_verification_and_energy_are_recomputed(self):
         p = policy()
         intervals = [gate('G0', -10*NS, 0), gate('H', 4*NS, 6*NS)]
@@ -426,7 +455,7 @@ class DeskTests(unittest.TestCase):
             self.assertEqual(result['monitoring'], u6)
 
     def test_session_reader_computes_u5_u6_from_portable_inputs(self):
-        benign = [{'pair': pair, 'start_ns': i, 'residual_j': [0., 0., 0.]}
+        benign = [{'pair': pair, 'start_ns': i, 'trajectory': f'{pair}-{i}', 'residual_j': [0., 0., 0.]}
                   for pair in ('spam', 'bank') for i in range(6)]
         with tempfile.TemporaryDirectory() as d:
             paths = []
@@ -437,8 +466,7 @@ class DeskTests(unittest.TestCase):
                     part['u5_inputs'] = {'synthetic': {'heavy': False, 'smaller_pair_sr_j': 400,
                         'mean_energy_j': 2000, 'mean_30b_energy_j': 1000,
                         'contrast': desk.deciding_experiment(contrast(12))}}
-                    part['u6_inputs'] = {'synthetic': {'benign': benign, 'mean_turn_j': 100,
-                        'mean_30b_turn_j': 100, 'mean_episode_j': 3000,
+                    part['u6_inputs'] = {'synthetic': {'benign': benign, 'cell_residual_sd': 10,
                         'split_rule': 'within_pair_episode_order'}}
                 path = Path(d)/f'{i}.json'
                 path.write_text(json.dumps({'v4_desk_evidence': part}))

@@ -19,12 +19,38 @@ FROZEN_D_SLOT_KEYS = ("max_episode_decode_tokens", "deadman_s", "max_tokens", "m
 
 
 def subturn_h_star(scores, threshold, *, grid=H_STAR_GRID):
-    """Registered H*: first exact sub-turn hidden-token count reaching threshold."""
-    by_h = {int(h): float(score) for h, score in scores}
-    ordered = tuple(int(h) for h in grid)
-    reached = next((h for h in ordered if h in by_h and by_h[h] > threshold), None)
+    """Registered H*: first exact sub-turn hidden-token count reaching threshold.
+
+    Rows are actual measured doses: non-negative integers, unique, with finite
+    scores (R15). Invalid rows are refused, never coerced or overwritten. The
+    first crossing is resolved only if every earlier registered-grid dose was
+    observed and at or below threshold; otherwise it is undefined, not the
+    first present exceedance.
+    """
+    ordered = tuple(grid)
+    if any(type(h) is not int or h < 0 for h in ordered) or len(set(ordered)) != len(ordered):
+        raise ValueError('H* grid must be unique non-negative integer doses')
+    by_h = {}
+    for h, score in scores:
+        if type(h) is not int or h < 0:
+            raise ValueError('H* actual dose must be a non-negative integer')
+        if h in by_h:
+            raise ValueError('duplicate H* dose row')
+        score = float(score)
+        if not math.isfinite(score):
+            raise ValueError('H* score must be finite')
+        by_h[h] = score
+    reached, unresolved = None, []
+    for h in ordered:
+        if h not in by_h:
+            unresolved.append(h)
+        elif by_h[h] > threshold:
+            reached = h if not unresolved else None
+            break
     return {"estimand": "H*_i", "status": "registered_secondary", "h_star": reached,
-            "bounded_above": reached is not None, "grid": list(ordered)}
+            "bounded_above": reached is not None, "grid": list(ordered),
+            "undefined_missing_grid_doses": unresolved if reached is None else [],
+            "off_grid_doses": sorted(h for h in by_h if h not in ordered)}
 
 
 def _quantile(values, probability):

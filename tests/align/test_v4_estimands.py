@@ -9,6 +9,17 @@ class Ruling2Tests(unittest.TestCase):
         self.assertEqual(384, result["h_star"])
         self.assertEqual("registered_secondary", result["status"])
 
+    def test_h_star_refuses_invalid_rows_and_never_skips_unobserved_grid_doses(self):
+        for rows in ([(128.9, 2.)], [(128, 2.), (128, 0.)], [(-128, 2.)], [(True, 2.)], [(128, float('nan'))]):
+            with self.subTest(rows=rows), self.assertRaises(ValueError):
+                v4.subturn_h_star(rows, 1.)
+        skipped = v4.subturn_h_star([(128, 0.), (384, 2.)], 1.)
+        self.assertIsNone(skipped['h_star'])
+        self.assertEqual(skipped['undefined_missing_grid_doses'], [256])
+        self.assertEqual(v4.subturn_h_star([(256, 2.), (128, 0.)], 1.)['h_star'], 256)
+        self.assertEqual(v4.subturn_h_star([(128, 1.)], 1.)['h_star'], None)   # strict exceedance
+        self.assertEqual(v4.subturn_h_star([(128, 0.), (100, 5.)], 1.)['off_grid_doses'], [100])
+
     def test_carrier_curve_is_leave_one_out_and_bootstraps_windows(self):
         rows = [dict(pair='bank', window=f'D{i//8}', carrier=str(i), h=h, score=i+h)
                 for i in range(40) for h in (0, 128, 256, 512)]

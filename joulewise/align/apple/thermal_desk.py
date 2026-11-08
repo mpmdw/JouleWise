@@ -435,7 +435,7 @@ def cross_window(windows, reference_j, *, anchor_sessions=None):
                          'sentinels': _sentinel_equivalence(windows, reference_j)})
 
 
-def session_desk_evidence(pilot_paths, *, adapter=None):
+def session_desk_evidence(pilot_paths, *, adapter=None, v4=True):
     """Read desk-only U4--U6 evidence from K ``PILOT.json`` files.
 
     ``adapter`` is the deliberately narrow seam for the off-repository
@@ -443,6 +443,10 @@ def session_desk_evidence(pilot_paths, *, adapter=None):
     return the same mapping as the portable ``v4_desk_evidence`` object used
     by fixtures: ``anchors``, ``sentinels``, ``u5`` and ``u6``.  No path from
     a PILOT file is followed here.
+
+    ``v4=True`` (the ``v4_desk_evidence`` contract) evaluates U6 with the
+    adopted R04 rule (``monitoring_stability_v4``); ``v4=False`` keeps the
+    historical turn-index-slope/Welch rule for pre-v4 callers only.
     """
     paths = [Path(p) for p in pilot_paths]
     pilots = [json.loads(p.read_text()) for p in paths]
@@ -477,7 +481,7 @@ def session_desk_evidence(pilot_paths, *, adapter=None):
         for model, raw in u5_inputs.items():
             u5[model] = state_sensitivity(**raw)
         for model, raw in u6_inputs.items():
-            u6[model] = monitoring_stability(**raw)
+            u6[model] = monitoring_stability_v4(**raw) if v4 else monitoring_stability(**raw)
         evidence = {'anchors': anchors, 'sentinels': sentinels,
                     'sentinel_reference_j': reference, 'u5': u5, 'u6': u6}
     if not isinstance(evidence, dict):
@@ -528,8 +532,66 @@ def _correlation(x, y):
     return sum((a-xm)*(b-ym) for a, b in pairs)/math.sqrt(xx*yy) if xx*yy else None
 
 
+def monitoring_stability_v4(benign, *, cell_residual_sd=None, split_rule=None, **_legacy_margin_inputs):
+    """v4 U6 (AGREEMENT-FINAL R04, protocol U6): early/late +/-0.5*s_r.
+
+    Uncertainty is trajectory-clustered (``v4_estimands.u6_stability``); an
+    imprecise interval is labelled ``calibration unresolved: imprecise`` and is
+    never a pass. D reports per-turn-position residual means, judged only where
+    >=6 trajectories reach the position; there is no turn-index slope gate and
+    no ``.0037*mean`` margin. ``cell_residual_sd`` is the registered cell s_r,
+    in the same unit as each ``residual_j`` entry (per turn); it is never
+    inferred from energies. Missing s_r, split convention or trajectory ids is
+    INCONCLUSIVE. The legacy mean-energy keyword inputs are accepted and ignored.
+    Each record has pair, start_ns, trajectory and residual_j (per-turn list);
+    halves are chronological episodes within pair (``within_pair_episode_order``).
+    """
+    from joulewise.align.apple import v4_estimands as v4_est
+    if split_rule != 'within_pair_episode_order':
+        return {'status': 'inconclusive', 'rule': V4_U6_RULE,
+                'reason': 'protocol v4 must freeze the early/late split convention'}
+    if (type(cell_residual_sd) not in (int, float) or not math.isfinite(cell_residual_sd)
+            or cell_residual_sd < 0):
+        return {'status': 'inconclusive', 'rule': V4_U6_RULE,
+                'reason': 'requires the registered cell residual s_r (cell_residual_sd); not inferred from energy'}
+    if any(r.get('trajectory') is None for r in benign):
+        return {'status': 'inconclusive', 'rule': V4_U6_RULE,
+                'reason': 'requires a trajectory id on every benign record for clustered uncertainty'}
+    groups = defaultdict(list)
+    for r in benign:
+        groups[r['pair']].append(r)
+    rows, positions = [], []
+    for pair, group in groups.items():
+        ordered = sorted(group, key=lambda r: r['start_ns'])
+        middle = len(ordered)//2
+        for index, record in enumerate(ordered):
+            half = 'late' if index >= middle else 'early'
+            trajectory = (pair, record['trajectory'])
+            for position, residual in enumerate(record['residual_j']):
+                rows.append({'trajectory': trajectory, 'half': half, 'residual_j': residual})
+                positions.append({'turn_position': position, 'trajectory': trajectory, 'residual_j': residual})
+    if not rows:
+        return {'status': 'inconclusive', 'rule': V4_U6_RULE, 'reason': 'no benign residual records'}
+    result = v4_est.u6_stability(rows, cell_residual_sd=cell_residual_sd)
+    verdict = result['verdict']
+    positions = v4_est.d_turn_position_means(positions)
+    return {'status': verdict if verdict in ('pass', 'fail') else 'inconclusive', 'rule': V4_U6_RULE,
+            'verdict': verdict, 'imprecise': verdict not in ('pass', 'fail'),
+            **{k: result[k] for k in ('effect_j', 'ci90_j', 'margin_j', 'trajectory_clustered_se_j',
+                                      'se_kind') if k in result},
+            'cell_residual_sd': cell_residual_sd, 'turn_position_residual_means': positions,
+            'corr_residual_release_slow': _correlation([sum(r['residual_j']) for r in benign], [r.get('release_slow_c') for r in benign]),
+            'corr_residual_clock': _correlation([sum(r['residual_j']) for r in benign], [r.get('mean_clock_mhz') for r in benign])}
+
+
+V4_U6_RULE = 'v4: +/-0.5*s_r, trajectory-clustered, position means, no slope gate'
+
+
 def monitoring_stability(benign, *, mean_turn_j, mean_30b_turn_j, mean_episode_j, split_rule=None):
-    """Frozen-fit residual records; no temperature/clock term is fitted.
+    """LEGACY (pre-v4) U6: turn-index slope, Welch halves, .0037*mean margin.
+
+    Superseded for v4 by ``monitoring_stability_v4`` (R04); kept for historical
+    callers only. Frozen-fit residual records; no temperature/clock term is fitted.
 
     Each record has pair, start_ns, residual_j (per-turn list), and optionally
     release_slow_c/mean_clock_mhz. Early/late means halves of chronological
@@ -643,6 +705,9 @@ def acceptance(members, *, pairs=(), u4=None, u5=None, u6=None, u3_bar=None, v4=
                'U4': ((u4 or {}).get('sentinels', {'status': 'inconclusive'}) if v4 else _combined_u4(u4)),
                'U5': u5 or {'status': 'inconclusive', 'reason': 'requires pair s_r and state sensitivity evidence'},
                'U6': u6 or {'status': 'inconclusive', 'reason': 'requires frozen-fit benign residuals'}}
+    if v4 and u6 and 'slope_j_per_turn' in u6:
+        results['U6'] = {'status': 'inconclusive', 'reason':
+                         'legacy turn-index-slope U6 is not the v4 rule (R04); recompute with monitoring_stability_v4'}
     hardware = combine([results[f'U{k}']['status'] for k in range(1, 6)])
     results['hardware_control'] = hardware
     results['monitoring_calibration'] = results['U6']['status']

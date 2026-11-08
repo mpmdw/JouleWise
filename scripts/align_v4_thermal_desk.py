@@ -110,7 +110,7 @@ def main(argv=None):
         compare_id = item.get('compare_reference_id')
         if compare_id and compare_id not in by_id:
             raise ValueError(f'unresolved compare_reference_id: {compare_id}')
-    compared = session_desk_evidence(args.compare_session) if args.compare_session else None
+    compared = session_desk_evidence(args.compare_session, v4=True) if args.compare_session else None
     inputs = compared if compared and compared.get('status') == 'pass' else {}
     result = window_report(members, cross_windows=inputs.get('cross_windows'),
                            sensitivity=inputs.get('sensitivity'), monitoring=inputs.get('monitoring'),

@@ -58,7 +58,7 @@ pilot-3 disk law (two copies). Until then --check and prepare refuse with
 that reason. Use fit_roster with R1 measured cost estimates:
 drop only 18 first, then decrease B_D by 1024 down to 6144; otherwise return
 to lead. Preserve anchors, contrasts and 5/17. Requalify/freeze changed budgets.
-W1 arm requires --obc-off-attested-by and --w1-disk-config. By-day
+W1 arm requires --obc-off-attested-by, --topup-completed-at, --topup-source and --w1-disk-config. By-day
 scripts/align_v4_offloads.py verifies configured inventories; the disk config
 names daytime_offload_receipt and an explicit lead-signed
 daytime_offload_freshness policy (max_age_s, lead_signature); no default duration. Arm checks >=80 decimal GB

@@ -24,6 +24,12 @@ from scripts import validate_align_v4_w1_plan as validator
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def topup():
+    """Synthetic completed-top-up evidence, one minute before the arm."""
+    import time
+    return dict(topup_completed_at=time.time()-60, topup_source='synthetic')
+
+
 def independent_seed(value):
     # Deliberately does not call kit/runtime seed helpers.
     raw = json.dumps(value, ensure_ascii=True, separators=(',', ':')).encode('utf-8')
@@ -1200,12 +1206,12 @@ class SessionParameterTests(unittest.TestCase):
                     patch.object(session, 'w1_disk_check', return_value={'status': 'pass'}), \
                     patch.object(pilot, 'install', return_value={'exit_code': 0}) as install:
                 with self.assertRaisesRegex(ValueError, 'set High Power failed.*AC powermode 0 != expected 2'):
-                    session.install(session_root, runner=host, volume_runner=host, obc_off_attested_by='synthetic')
+                    session.install(session_root, runner=host, volume_runner=host, obc_off_attested_by='synthetic', **topup())
                 install.assert_not_called()
                 self.assertEqual(seen, [str(measurement)])
                 self.assertEqual(host.mode, 0)
                 host.fail_high = False
-                session.install(session_root, runner=host, volume_runner=host, obc_off_attested_by='synthetic')
+                session.install(session_root, runner=host, volume_runner=host, obc_off_attested_by='synthetic', **topup())
                 install.assert_called_once()
                 self.assertEqual(host.mode, 2)
 
@@ -1218,7 +1224,7 @@ class SessionParameterTests(unittest.TestCase):
                     patch.object(kit, 'generate'), \
                     patch.object(session, 'w1_disk_check', return_value={'status': 'pass'}), \
                     patch.object(pilot, 'install'):
-                session.install(session_root, runner=host, volume_runner=host, obc_off_attested_by='synthetic')
+                session.install(session_root, runner=host, volume_runner=host, obc_off_attested_by='synthetic', **topup())
             record = json.loads((session_root / 'staging/v4-arm-001.json').read_text())
             self.assertTrue(record['admitted'])
             self.assertEqual(record['ac_powermode']['observed'], 0)
@@ -1238,7 +1244,7 @@ class SessionParameterTests(unittest.TestCase):
                     patch.object(session, 'w1_disk_check', return_value={'status': 'pass'}), \
                     patch.object(pilot, 'install') as install:
                 with self.assertRaisesRegex(ValueError, 'external_volume_mounted:/Volumes/JW-EXT'):
-                    session.install(session_root, runner=host, volume_runner=host, obc_off_attested_by='synthetic')
+                    session.install(session_root, runner=host, volume_runner=host, obc_off_attested_by='synthetic', **topup())
                 install.assert_not_called()
             record = json.loads((session_root / 'staging/v4-arm-001.json').read_text())
             self.assertFalse(record['admitted'])
@@ -1256,7 +1262,7 @@ class SessionParameterTests(unittest.TestCase):
                     patch.object(kit, 'generate'), \
                     patch.object(session, 'w1_disk_check', return_value={'status': 'pass'}), \
                     patch.object(pilot, 'install') as install:
-                session.install(session_root, runner=host, volume_runner=host, obc_off_attested_by='synthetic')
+                session.install(session_root, runner=host, volume_runner=host, obc_off_attested_by='synthetic', **topup())
                 install.assert_called_once()
             self.assertEqual(host.mode, 0)
             self.assertFalse(marker.exists())
@@ -1584,7 +1590,7 @@ class W1HighPowerTests(unittest.TestCase):
         with patch.object(kit, 'generate'), \
                 patch.object(pilot, 'install', return_value={'exit_code': 0}) as install:
             try:
-                session.install(session_root, runner=self.host, volume_runner=self.host, obc_off_attested_by='synthetic', w1_disk_config=config,
+                session.install(session_root, runner=self.host, volume_runner=self.host, obc_off_attested_by='synthetic', **topup(), w1_disk_config=config,
                                 disk_gate=lambda c: {'status': gate_status, 'offloads': []})
             finally:
                 self.called = install.called
@@ -1653,7 +1659,7 @@ class W1HighPowerTests(unittest.TestCase):
             host = self.host
             measurement = Path(tmp) / 'm'
             with patch.object(kit, 'generate'), patch.object(pilot, 'install'):
-                session.install(Path(tmp) / 's', runner=host, volume_runner=host, obc_off_attested_by='synthetic',
+                session.install(Path(tmp) / 's', runner=host, volume_runner=host, obc_off_attested_by='synthetic', **topup(),
                                 w1_disk_config=W1DiskGateTests.config(self, tmp),
                                 disk_gate=lambda c: {'status': 'pass', 'offloads': []})
             self.assertEqual(host.calls.count(('sudo', '-n', '/usr/bin/pmset', '-c', 'powermode', '2')), sets)
@@ -1663,7 +1669,7 @@ class W1HighPowerTests(unittest.TestCase):
             state['inputs'] = {'custody_root': str(custody)}
             (Path(tmp) / 's/session.json').write_text(json.dumps(state))
             with patch.object(kit, 'generate'), self.assertRaisesRegex(ValueError, 'session is terminal'):
-                session.install(Path(tmp) / 's', runner=host, volume_runner=host, obc_off_attested_by='synthetic')
+                session.install(Path(tmp) / 's', runner=host, volume_runner=host, obc_off_attested_by='synthetic', **topup())
             self.assertEqual(host.calls.count(('sudo', '-n', '/usr/bin/pmset', '-c', 'powermode', '2')), sets)
 
     def test_an_r1_crash_marker_is_never_taken_for_the_w1_marker(self):
@@ -1732,7 +1738,7 @@ class W1DiskGateTests(unittest.TestCase):
         with patch.object(kit, 'generate'), patch.object(pilot, 'install') as install:
             try:
                 host = FakeArmHost(mode=0)
-                session.install(session_root, runner=host, volume_runner=host, obc_off_attested_by='synthetic', **kwargs)
+                session.install(session_root, runner=host, volume_runner=host, obc_off_attested_by='synthetic', **topup(), **kwargs)
             finally:
                 self.called = install.called
         return session_root
@@ -1791,9 +1797,11 @@ class W1DiskGateTests(unittest.TestCase):
         seen.clear()
         with patch.object(session, 'install', fake):
             self.assertEqual(session.main(['install', '--session-root', 's', '--w1-disk-config', '/c.json',
-                                           '--obc-off-attested-by', 'synthetic']), 0)
+                                           '--obc-off-attested-by', 'synthetic', '--topup-completed-at', '1700000000',
+                                           '--topup-source', 'synthetic']), 0)
         self.assertEqual(seen, {'session_root': Path('s'), 'w1_disk_config': Path('/c.json'),
-                                'obc_off_attested_by': 'synthetic'})
+                                'obc_off_attested_by': 'synthetic', 'topup_completed_at': '1700000000',
+                                'topup_source': 'synthetic'})
 
 
 if __name__ == '__main__':

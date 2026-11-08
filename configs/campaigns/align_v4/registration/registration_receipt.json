@@ -17,6 +17,7 @@
     "joulewise/align/apple/endpoint.py": null,
     "joulewise/align/apple/km003c.py": null,
     "joulewise/align/apple/pilot_analysis.py": null,
+    "joulewise/align/apple/prompt_cache.py": null,
     "joulewise/align/apple/thermal_desk.py": null,
     "joulewise/align/apple/thermal_gates.py": null,
     "joulewise/align/apple/v4_estimands.py": null,

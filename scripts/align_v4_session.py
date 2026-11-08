@@ -222,8 +222,28 @@ def desk(session_root, **kwargs):
 ARM_RECORD_SCHEMA = 'joulewise.align_v4_arm.v1'
 
 
+def parse_topup_completed_at(value):
+    """Epoch seconds, or ISO-8601 with an explicit UTC offset, to epoch seconds."""
+    import datetime
+    import math
+    if value is None:
+        return None
+    if type(value) in (int, float):
+        return float(value) if math.isfinite(value) else None
+    try:
+        return float(value) if math.isfinite(float(value)) else None
+    except (TypeError, ValueError):
+        pass
+    try:
+        stamp = datetime.datetime.fromisoformat(str(value))
+    except ValueError:
+        return None
+    return stamp.timestamp() if stamp.tzinfo is not None else None
+
+
 def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=None, owner=None,
-               obc_off_attested_by=None, battery_runner=None):
+               obc_off_attested_by=None, battery_runner=None, topup_completed_at=None,
+               topup_source=None, now=None):
     """W1/D arm evidence: ruling 7 AC powermode and ruling 20 volumes.
 
     Ruling 7: the AC-profile powermode must equal the plan's frozen series
@@ -253,7 +273,9 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
     from joulewise import battery_float
     from joulewise.align.apple.v4_registration import battery_arm
     observed, raw = battery_float.observe(phase='arm_check', runner=battery_runner or runner)
-    battery = battery_arm(observed, obc_off_attested_by)
+    topup = {'completed_at_epoch_s': parse_topup_completed_at(topup_completed_at),
+             'source': topup_source} if topup_completed_at is not None or topup_source is not None else None
+    battery = battery_arm(observed, obc_off_attested_by, topup, now_epoch_s=(now or time.time)())
     battery['raw_ioreg'] = raw.decode('ascii', errors='backslashreplace')
     # Preserve optional reason fields verbatim without changing the frozen parser.
     battery['charging_reason_lines'] = [line for line in battery['raw_ioreg'].splitlines()
@@ -497,9 +519,11 @@ def _termination_handlers():
 
 def _arm_and_install(session, state, measurement_root, plan, high, *, runner, volume_runner, now,
                      w1_disk_config, disk_gate, lock=None, owner=None,
-                     obc_off_attested_by=None, battery_runner=None, **kwargs):
+                     obc_off_attested_by=None, battery_runner=None, topup_completed_at=None,
+                     topup_source=None, **kwargs):
     record = arm_checks(measurement_root, plan, runner=runner, volume_runner=volume_runner, lock=lock,
-                        owner=owner, obc_off_attested_by=obc_off_attested_by, battery_runner=battery_runner)
+                        owner=owner, obc_off_attested_by=obc_off_attested_by, battery_runner=battery_runner,
+                        topup_completed_at=topup_completed_at, topup_source=topup_source, now=now)
     if high is not None:
         record['high_power_enter'] = high
         if not high['ok']:
@@ -535,7 +559,12 @@ def main(argv=None):
                           type=Path, required=True,
                           help='validated R0 desk config (disk_path, W1 offloads) for the W1 disk gate')),
                                        ('--obc-off-attested-by', dict(required=True,
-                          help='operator attesting Optimized Battery Charging is off'))))
+                          help='operator attesting Optimized Battery Charging is off')),
+                                       ('--topup-completed-at', dict(required=True,
+                          help='when the battery top-up completed: epoch seconds or ISO-8601 with UTC offset; '
+                               'arm refuses if it is future-dated or more than 30 min old')),
+                                       ('--topup-source', dict(required=True,
+                          help='who/what attests that completion time (operator name or log)'))))
 
 
 if __name__ == '__main__':

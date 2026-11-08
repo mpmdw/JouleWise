@@ -25,6 +25,9 @@ ARTIFACTS = (
     'joulewise/align/apple/v4_registration.py', 'joulewise/align/apple/v4_estimands.py',
     'joulewise/align/apple/thermal_desk.py', 'joulewise/align/apple/thermal_gates.py',
     'joulewise/align/apple/endpoint.py', 'joulewise/align/apple/workload.py',
+    # R09 work/accounting: EpisodePromptCache is executed by endpoint.py in
+    # every measured turn (R11 review sol2 F01).
+    'joulewise/align/apple/prompt_cache.py',
     'scripts/run_night.py', REGISTRATION+'inputs.json', REGISTRATION+'r1_slots.json',
     REGISTRATION+'identity_pins.json', REGISTRATION+'model_artifact_inventory.json',
     REGISTRATION+'local_file_verification.json',
@@ -155,7 +158,20 @@ def u3_margin(mean_energy_j, bar):
     validate_u3(bar)
 
 
-def battery_arm(observation, attested_by):
+# Protocol section 4 / AGREEMENT-FINAL R02: arm within about 30 minutes of a
+# completed top-up. The wording is the registered bound; no slack is added.
+TOPUP_WINDOW_S = 30*60
+
+
+def battery_arm(observation, attested_by, topup=None, *, now_epoch_s=None):
+    """Arm-time battery predicate (R02).
+
+    ``topup`` is source- and time-bound completion evidence,
+    ``{'completed_at_epoch_s': float, 'source': str}``. UpdateTime dates the
+    current ioreg observation, not the end of charging, so a fresh observation
+    never substitutes for it. Missing, future-dated or older-than-window
+    evidence refuses.
+    """
     reasons = []
     if not isinstance(attested_by, str) or not attested_by.strip():
         reasons.append('OBC off requires --obc-off-attested-by')
@@ -166,8 +182,22 @@ def battery_arm(observation, attested_by):
             or not finite(age) or not 0 <= age <= 180 or not finite(soc) or not 99 <= soc <= 100
             or not finite(current) or abs(current) > 200):
         reasons.append('battery top-up incomplete/unobserved: require fresh AC, >=99%, not charging, |InstantAmperage| <=200 mA')
+    topup_age = None
+    completed = topup.get('completed_at_epoch_s') if isinstance(topup, dict) else None
+    source = topup.get('source') if isinstance(topup, dict) else None
+    if not finite(completed) or not isinstance(source, str) or not source.strip():
+        reasons.append('completed top-up evidence missing: require --topup-completed-at and --topup-source')
+    elif not finite(now_epoch_s):
+        reasons.append('completed top-up cannot be timed: arm time unavailable')
+    else:
+        topup_age = now_epoch_s-completed
+        if topup_age < 0:
+            reasons.append('completed top-up time is after the arm time')
+        elif topup_age > TOPUP_WINDOW_S:
+            reasons.append(f'completed top-up is stale: {topup_age:.0f} s > {TOPUP_WINDOW_S} s before arm')
     return {'admitted': not reasons, 'reasons': reasons, 'obc_off_attested_by': attested_by,
-            'observation': observation}
+            'topup': topup if isinstance(topup, dict) else None, 'topup_age_s': topup_age,
+            'topup_window_s': TOPUP_WINDOW_S, 'observation': observation}
 
 
 def wp19_identity(fixtures, rendered_prompt_ids, live_x_turns, *, live_source_sha256):
@@ -196,13 +226,19 @@ def wp19_identity(fixtures, rendered_prompt_ids, live_x_turns, *, live_source_sh
 def validate_wp19(receipt):
     if (not isinstance(receipt, dict) or receipt.get('schema') != WP19_SCHEMA
             or receipt.get('verdict') not in ('pass', 'fail') or not is_digest(receipt.get('live_source_sha256'))
-            or type(receipt.get('live_x_turns_compared')) is not int or receipt['live_x_turns_compared'] < 1
+            or type(receipt.get('live_x_turns_compared')) is not int or receipt['live_x_turns_compared'] < 0
             or set(receipt.get('render_all_turns', {})) != {'X', 'Y'}
             or any(type(v) is not bool for v in receipt.get('render_all_turns', {}).values())
             or not receipt.get('static_proof')
             or (receipt['verdict'] == 'pass' and (not all(receipt['render_all_turns'].values())
+                                                 or receipt['live_x_turns_compared'] < 1
                                                  or receipt.get('live_x_identical') is not True
                                                  or receipt.get('live_x_complete') is not True))
+            # R11 R07: zero native X turns is a retained non-veto failed
+            # identity (INCONCLUSIVE contrast), never a PASS or complete X.
+            or (receipt['live_x_turns_compared'] == 0 and (receipt['verdict'] != 'fail'
+                                                          or receipt.get('live_x_identical') is True
+                                                          or receipt.get('live_x_complete') is True))
             or (receipt['verdict'] == 'fail' and receipt.get('contrast_predeclared') != 'INCONCLUSIVE: identity broken')):
         raise ValueError('wp19_receipt.json pending or malformed')
     return receipt
