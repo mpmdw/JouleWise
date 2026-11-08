@@ -827,7 +827,8 @@ def _audit(event: str, args: tuple) -> None:
         elif event in _PROCESS_EVENTS or event.startswith("os.exec") or event.startswith("os.spawn"):
             _mark(fills, "subprocess")
         elif event in _THREAD_EVENTS:
-            _mark(fills, "thread")
+            if not _custody_probe_thread(args):
+                _mark(fills, "thread")
         elif event in _DIRECTORY_EVENTS:
             _mark(fills, "chdir")
         elif event.startswith("socket."):
@@ -836,6 +837,31 @@ def _audit(event: str, args: tuple) -> None:
         _mark(fills, "recorder_error")
     finally:
         _IN_HOOK.active = False
+
+
+def _custody_probe_thread(args: tuple) -> bool:
+    """A thread start that is calibration_ledger.probe_custody's locator probe.
+
+    That daemon runs only ``Path.exists``/``Path.is_dir`` on the locator
+    (tests/b5_analysis/test_l4_custody_probe.py pins its code); probe_custody
+    marks the fill unstorable itself unless the probe selected the single
+    locator as an existing directory. Exactly that code object, with exactly
+    that thread name, is exempt; any other thread still makes a fill unstorable.
+    """
+
+    bootstrap = args[0] if args else None
+    thread = getattr(bootstrap, "__self__", None)
+    if not isinstance(thread, threading.Thread):
+        return False
+    ledger = sys.modules.get("joulewise.calibration_ledger")
+    if ledger is None or not hasattr(ledger, "custody_probe_code"):
+        return False
+    target = getattr(thread, "_target", None)
+    try:
+        return (thread.name == ledger.CUSTODY_PROBE_THREAD_NAME
+                and getattr(target, "__code__", None) is ledger.custody_probe_code())
+    except Exception:  # noqa: BLE001 - unknown: not exempt
+        return False
 
 
 def _install_hook() -> None:
@@ -1091,9 +1117,35 @@ class LeafSpec:
     # yield the same value and the same reads, and the key does not tell them
     # apart (see ``reduce_bundle_dict``).
     plain_trees: bool = False
+    # A registered key-only projection; forwarded call arguments stay intact.
+    scalar_key: Callable[[tuple], tuple] | None = None
+    # A registered value predicate (review of PR #634, finding 1): a fill whose
+    # value fails it is never stored, so it is never exported or merged either.
+    storable_value: Callable[[Any], bool] | None = None
 
     def roles(self) -> dict[str, str]:
         return dict(self.params)
+
+
+def _scalar_bytes(spec: LeafSpec, arguments: Mapping[str, Any]) -> bytes:
+    values = tuple((name, arguments[name]) for name, role in spec.params if role == SCALAR)
+    return canonical_bytes(values if spec.scalar_key is None else spec.scalar_key(values))
+
+
+def _bracket_scalar_key(values: tuple) -> tuple:
+    """L4's temporary ledger parent is key-only; the frozen leaf never reads it."""
+    from joulewise.calibration_ledger import CalibrationLedgerSnapshot
+
+    return tuple((name, replace(value, ledger_path=Path(value.ledger_path.name))
+                  if name == "ledger_snapshot" and isinstance(value, CalibrationLedgerSnapshot)
+                  and isinstance(value.ledger_path, PurePath) else value) for name, value in values)
+
+
+def _bracket_storable_value(value: Any) -> bool:
+    """L4 stores only the passed, reason-free outcome it would serve (bracket._storable_value)."""
+    from joulewise.b5_analysis.bracket import _storable_value
+
+    return _storable_value(value)
 
 
 def _calibration_key(metadata: Any) -> str | None:
@@ -1238,6 +1290,8 @@ LEAVES: tuple[LeafSpec, ...] = (
          ("bracket_evidence_root_id", SCALAR), ("diagnostics", SCALAR), ("trigger_scope", SCALAR),
          ("_allow_unissued_fixture", SCALAR)),
         path_free=True,
+        scalar_key=_bracket_scalar_key,
+        storable_value=_bracket_storable_value,
     ),
     LeafSpec(
         "L5_environment_refusals",
@@ -1460,7 +1514,7 @@ class VerifiedStore:
         bound = signature.bind(*args, **kwargs)
         bound.apply_defaults()
         arguments = dict(bound.arguments)
-        scalars = canonical_bytes(tuple((name, arguments[name]) for name, role in spec.params if role == SCALAR))
+        scalars = _scalar_bytes(spec, arguments)
         trees: list[_TreeRef] = []
         for name, role in spec.params:
             if role == TREE:
@@ -2068,8 +2122,16 @@ class VerifiedStore:
             _FILLS.reset(token)
         if fill.v2_failed or any(getattr(row, "failed", False) for row in recorded or ()):
             storable = False
+        if storable and prepared.spec.storable_value is not None:
+            try:
+                if not prepared.spec.storable_value(value):
+                    fill.unstorable.add("value_predicate")
+            except Exception:  # noqa: BLE001 - an unjudgeable value is not stored
+                fill.unstorable.add("value_predicate")
         if not storable:
             self._count(f"{leaf_id}:unstorable")
+            for reason in sorted(fill.unstorable) or ["run_state"]:
+                self._count(f"{leaf_id}:unstorable:{reason.split(':', 1)[0]}")
             return value
         try:
             entry = self._entry(prepared, fill, value, views, before, session, snapshot, recorded,
@@ -2080,6 +2142,9 @@ class VerifiedStore:
             entry = None
         if entry is None:
             self._count(f"{leaf_id}:unstorable")
+            reason = ("clock" if fill.clock else sorted(fill.unstorable)[0].split(":", 1)[0] if fill.unstorable
+                      else "entry")
+            self._count(f"{leaf_id}:unstorable:{reason}")
             return value
         if outcome is not None:
             outcome["comparable"] = True
@@ -2102,8 +2167,7 @@ class VerifiedStore:
         if getattr(caches, "worker_observer_unavailable", False):
             return None
         with _suspended():
-            if canonical_bytes(tuple((name, prepared.arguments[name]) for name, role in prepared.spec.params
-                                     if role == SCALAR)) != prepared.scalars:
+            if _scalar_bytes(prepared.spec, prepared.arguments) != prepared.scalars:
                 return None
             for tree, verdict in zip(prepared.trees, prepared.verdicts):
                 walk = _walk(tree.root)
@@ -2437,6 +2501,14 @@ class VerifiedStore:
         self._count("poison")
         if self._served.get(key):
             self._defect("poisoned_after_serving")
+
+    def discard_entries(self, selector: Callable[[str, Entry], bool]) -> None:
+        """Evict expired cache values without clearing poison, defects or counters."""
+        with self._lock:
+            expired = [key for key, entry in self._entries.items() if selector(key, entry)]
+            for key in expired:
+                del self._entries[key]
+                self._new.discard(key)
 
     def export_entries(self, selector: Callable[[str, Entry], bool] | None = None,
                        *, new_only: bool = False) -> dict[str, Any]:

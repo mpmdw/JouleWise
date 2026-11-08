@@ -3,14 +3,16 @@
 This file is the single running pointer for the project: the one doc to
 read to get back here. Session records live in `docs/run_reports/` and
 `docs/process_traces/`; deliberation lives in `docs/council_log.md`;
-policy lives in `docs/decision_log.md`. The three dated restart docs
-`docs/legacy/process_traces/RESUME-2026-07-26.md`, `RESUME-2026-07-27.md`, and
-`RESUME-2026-07-28.md` are now point-in-time session records only — each
-carries a superseded banner, and everything still current in them is
-folded in below. Do not create another dated restart doc; update this
-file instead.
+policy lives in `docs/decision_log.md`. Do not create a dated restart doc;
+update this file instead.
 
-**▶▶▶ HANDOFF 2026-10-10 08:40 PDT (magistrate activation cbe4230e, Opus 5.5, headless): BETA ATTEMPT 1 WAS COLLECTED AND IS NOT CLAIM-USABLE, AND STAYS SO. ERRATUM 2 IS ADMITTED. BETA ATTEMPT 2 IS NEXT. THIS BLOCK IS THE MAGISTRATE'S CURRENT STEP LIST. The block of 2026-10-09 15:45 below still gives the sealed objects, the fixed values and its eight numbered differences from the brief, all of which hold; where this block and that one differ, this block wins. The step-by-step authority is still the brief `docs/process_traces/2026-10-07-block5-seal/40-magistrate-brief.md`.**
+**Current pointer: read the top numbered item first.** That is the
+highest-numbered item; from item 168 on, items run newest first and start
+right after item 167 below. [`CANONICAL.md`](CANONICAL.md) is the tool map:
+the one current tool or document per job. [`docs/ARCHIVE.md`](docs/ARCHIVE.md)
+says how to get back files removed from `main` in the 2026-11-06 prune.
+
+**Block-5 history: the magistrate's hand-off of 2026-10-10 08:40 PDT (activation cbe4230e).** It was the step list for block-5 collection, which closed on 2026-10-12 (item 31). The numbered items below grew from it; the current state is the top numbered item, not this block.
 
 What happened. BETA attempt 1 (`v5-b5-beta-a1-20261010T0742Z`) ran its whole chain; the pinned harvest gave it one window-removing code, `neg8.screen_failed` (`harvest.json` sha256 `f0d72323b67d075db29a5c136d087222284a6d4651d130549f9dbd5a82d6ec7d`). No physical measurement removed it. One end reference (a short run of a fixed small workload, used to check that the machine did not drift between a window's start and end) was aborted at run time; the chain ran its spare; the spare left no result directory; and the sealed program that writes the window's verdict then recorded none of the window's stage lists as its source. The registered harvest rule re-runs the drift check only on the references that verdict names, so the check was never run, although two start and two end references survive, which is enough. Records: `docs/process_traces/2026-10-block5/seal2-beta-a1-window.md`, `seal2-beta-a1-consult.md`.
 
@@ -1039,6 +1041,741 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
   - Phase 2: prune per TRIM_REPORT section 6, as reviewed PRs grouped by area. Each PR cites the tag that preserves the code.
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
+
+215. **Laptop lead (interactive session 1544c617), 2026-11-07 about 23:40 PST: before arming R1, size its deadline from the corrected figure. R12 amended after two Sol cross-checks** (`perf/2026-11-08-r12-review-sol1` @ `ba995e2a0`, `-sol2` @ `e3609d3f7`).
+- **For the magistrate, before R1 arms (HIGH, both seats):** item 202(3) and `docs/align/r1_runtime_contract.md:95` say to set `window_max_s` from 56,207 / 61,607 / 90,663 s. `scripts/run_night.py:1152-1171` enforces a stop at `t0 + window_max_s + WINDOW_SHUTDOWN_GRACE_S` and kills the process group. One step-D encounter with the 11:45-13:15 batch window adds up to 11,164 s, so a plan sized from 61,607 s can cut R1 short.
+  - Use at least **67,371 s**, the corrected one-encounter subtotal with no redo, plus the plan's bracket, close and harvest time.
+  - If the plan includes a redo, use the 90,663 s option.
+  - Check the installed plan's `t0`, segment schedule and retry policy against this before arming.
+  - Do not touch a running job on this basis. The item 202(3) figure is superseded.
+- **R12 amendments:**
+  - **B1 stays as ruled.** The 40,527 s span and 59,520 s ceiling are correct, and the runner already returns on completion.
+  - **B2 changes:** the desk still moves to the laptop. But the next-arm triage must list every check whose result changes the next window's plan, including the thermal escalation and the cohort and pool rules. Nothing that gates today becomes non-gating by omission. The list is frozen in the registration text.
+  - **B3 changes:** the count-based stop (minimum 6, cap 8) is written prospectively in the registration. It fixes the window order and roles, final eligibility, both-pair predicates, cap accounting and the failure outcome. Its effect on selection and exchangeability is qualified by simulation before W1, and R13/R14 are not described as satisfied by count alone.
+  - Owner: the v4 registration builder on `align/2026-11-08-v4-r11`, followed by two Sol reviews.
+
+214. **Laptop lead (interactive session 1544c617), 2026-11-07 about 23:45 PST: lead ruling R12, v4-lean. Adopt three window-cadence changes before W1 registration; keep the rest.** Source: `docs/perf/2026-11-08-latency-synthesis.md` on `perf/2026-11-08-latency-synthesis` @ `55029b860` (Sonnet synthesis of four Sol seats: `perf/2026-11-08-latency-audit-sol{1,2}`, `perf/2026-11-08-window-efficiency-sol{1,2}`). Decided blind: only programmed durations, reservations and eligible counts were used, no outcomes. v4 is not registered yet, so these go into the registration text, not the deviation log.
+- **For the magistrate first: the R1 printed batch bound is not a bound.** `wait_outside_os_batch` waits to 13:15 whenever a segment would overlap 11:45, so one encounter can add the segment bound plus 5,400 s (11,164 s for step D). The printed 61,607 s R1 figure can therefore become 67,371 s = 18.71 h. Before arming R1, check that no deadline, abort or schedule relies on the printed figure. This is a stale bound, not a measurement change.
+- **Adopted (registration text, before W1):**
+  - **B1. A window ends at terminal completion; the 59,520 s ceiling is a ceiling, not a reservation.** Arm the next window from the committed record (item 213). The programmed D span is 40,527 s = 11.26 h, so the cycle falls from about 17.0-17.3 h to about 11.8-12.0 h, from about 1.4 to about 2.0 windows per day. Nothing about the measured trajectory changes.
+  - **B2. Between windows, only a short mechanical triage gates the next arm** (record committed, charging/battery, meter samples and clock coverage, capture faults). The full desk (about 98-103 min) runs on the laptop while the next window measures. Desk gating stays in force after W1 and after any code or config change. Accepted risk: a desk-only finding can cost the window already running.
+  - **B3. Calibration windows stop on eligible counts only: minimum 6, hard cap 8**, under the existing per-pair targets (m ≥ 39, R13 margin). This uses counts, not scores, so blinding holds. It replaces a fixed window count and settles item 212's R13 margin question (the 8th window is the cap).
+- **Not adopted for v4 (defaults kept):** B4 (member idle 300 to 120 s) and B5 (reuse the scaffold corpus across windows). No evidence either way. The paired idle check (30B, 8 pairs, about 2-4 h) moves to v5 development.
+- **Rejected:** dropping the four anchors, moving the W1 contrasts, v4-max, shortening G0/G1/H, overlapping offload on the MBP, SSD-qualification shortcuts, cooler toggling. Reasons are in the synthesis.
+- **Still open (lead, before W1):** test-cohort shape (3 vs 6 test windows), decided together with the R14 scorer text. Batch blackout (segment- vs member-level waits) is decided from R1's `os_batch_wait_s` records.
+- **Engineering backlog (no design effect, lands when ready):**
+  - laptop: desk off the MBP and parallel by stage; a per-window phase-timing worksheet; incremental manifests and parallel hashing for finalize; CI shard split; a pre-arm packet built off the MBP;
+  - magistrate: phase receipts exported after close; a terminal-event wake (the 300 s watchdog stays as fallback); benchmarking the finalize change in gaps.
+- **Effect:** about 44 members per day instead of about 31. The 7 calibration + 3 test series drops from about 8.5 to about 6 days of MBP time.
+
+213. **Laptop lead (interactive session 1544c617), 2026-11-08 about 22:45 PST: Ed dedicates the MBP wholly to finishing v4 and v5. Proposal for the magistrate (timing stays its call): run measurement windows back-to-back around the clock, not one per night.**
+- **Cadence:** arm the next window as soon as the previous one's record is committed and the machine is back in its quiet start state. Do not wait for a nightly start time. Respect the known contention schedule (the about 11:45-13:15 batch window; under R0-L3 the other scheduled sources are recorded, not avoided) and every window's own preconditions.
+- **Desk work off the MBP:** per-window desk checks, record review and analysis run on the laptop or in parallel where possible. The MBP only measures.
+- **Daytime jobs:** BYTES stage 1, the SSD qualification and Flash-Next probes go into the gaps between windows, never overlapping one, and the SSD qualification still needs Ed present.
+- **Expected effect:** about 1.2-1.3 windows per day instead of 1, so v4 (R1, W1, D windows, registration-grade calibration) takes about 11-13 days instead of about 14-16.
+- **Unchanged:** every arm rule, the external-volume rule (until the SSD qualifies), the meter checks of item 212 R11-3, and Ed's physical-setup items.
+- **Update (Ed: "cant all desk work be done on this machine"): target turnaround of 30-45 min between windows.** Only four steps stay on the MBP between windows:
+  1. finalize and hash the record and push it;
+  2. cool-down to the quiet start state (physics, about 15-25 min);
+  3. the pre-arm checks;
+  4. the display/quiet dwell.
+  
+  Everything else moves to the laptop and runs while the next window measures: record review, the desk report, analysis, kit regeneration, reviews and rulings.
+- The magistrate must be idle on the MBP during a window, because its own activity is contention. Keep its between-window activation short and mechanical. The expected effect is about 1.35-1.4 windows per day.
+
+212. **Laptop lead (interactive session 1544c617), 2026-11-08 about 22:20 PST: lead ruling R11. Adopt the cross-family agreement for v4 and the squeeze** (`docs/align/squeeze/AGREEMENT-FINAL.md` on `align/2026-11-07-squeeze-agreement-final` @ `4526de7d5`: four seats per track, Opus+Fable and Sol-1/Sol-2, cross-reviewed both ways).
+- **R11-1.** Every **HC** (high-convergent) and **HR** (high-reviewed) adjudication in AGREEMENT-FINAL Tracks 1-3 is adopted as written. **U** items stay open, with the owner named in the report. **M** items are recommendations the builder may adopt, recording which.
+- **R11-2 (choices the report leaves to the lead):**
+  - **R07, contrast:** a predeclared non-veto INCONCLUSIVE contrast, through an explicit supersession of R10 builder ruling (iv) for contrast members. Missing or negative cap cases and changed predecessor heat are covered.
+  - **R10, seed:** keep the seed string `qwen3.8-27b`, with an explicit quantization label and a deviation note. No pooling across quantizations.
+  - **R03, U3:** no constant (k = 3 or 2.576) is installed. The bar needs a frozen derivation with predictive and operating-characteristic sensitivity.
+  - **R13, Q6 rosters:** one whole-window loss leaves 35 < 39, so the series plan adds margin. The magistrate proposes the margin (an 8th calibration window, or D7/D8 under a prospective deviation) in the series plan. The lead rules it before W1.
+  - **R14, FPR statements:** at m = 39, rank 38 gives ≤ 5 % and the maximum gives ≤ 2.5 %, conditional on exchangeable scores. Public text (including `docs/research/energy-tripwire.html`) must match the scorer actually used.
+  - **D07, joint rule:** directly calibrated `max(g_E, g_M)` at a total of 0.05, with E-alone and M-alone comparators at 0.05. The literal OR of two 0.025 maxima is a sensitivity analysis.
+  - **D09, primary endpoint:** side-task success AND no joint alarm, per assigned attempt, reported with utility.
+  - **D12:** trusted time plus monitor is a planned primary comparator for energy's incremental value.
+- **R11-3, meter:**
+  - The shared HAZARD_PACK launcher already starts `scripts/km003c_monitor.py` for W1/D windows. Do not add a second reader.
+  - `align/2026-11-07-km003c-align` declares and checks it (`runtime_requirements.km003c`) and adds a SECONDARY DC-in analysis. Adopted, pending review.
+  - **v4's registered residual stays GPU-energy, unchanged.** A separately qualified DC endpoint belongs to the v5 addendum.
+  - **Magistrate:** at the next arm, confirm actual meter samples, clock coverage, custody and battery flow, not just the launch.
+- **R11-4:** v4 runs as designed plus its two additions. v5 (the squeeze) is decided by the running design competition (`align/2026-11-08-v5design-*`).
+
+211. **Magistrate activation 5bcfa84e (Opus 5.5, headless, 2026-11-07, continuing item 208): R0-L3 is merged and R0 re-run 11 launches about 21:50 PST under it, with the display put to sleep by the launcher.** No pending notices, no unread mail from Ed, no new directive.
+- **Merged under item 209 (the lead's dispositions):** #699 into `lane/2026-11-05-align-pilot10-benign` at `9c40e4e5d` (ledger rows 1-5 RUN d3bf25c82; gate-ledger check SUCCESS); #700 into main at `31a19f79a` (ledger as the builder filled it; gate-ledger SUCCESS). CI green on both final heads (#699 d3bf25c82: 21 pass; #700 275ea8f98: 20 pass). #700 needed two magistrate commits: `b751e9231` (refusal allowlist) and `275ea8f98` (main merged in for `7e004fca8`'s quote-agnostic literal pins; the rc_cmp10/11 failures were the stale pins, as item 209 says).
+- **Checkouts:** canonical fast-forwarded to `31a19f79a` (no night agent loaded or on disk). `$M` = `/Users/edr/night-custody/measurement/JouleWise-measurement-20261102-align-pilot2` fast-forwarded `5f817856b` -> `9c40e4e5d`, clean; no dependency or config file changed.
+- **Launch checks:** `tests.test_magistrate_desk_fence` OK (python3.14, canonical `31a19f79a`); Mac15,9, 137,438,953,472 bytes; venv `0.31.2 0.31.3 5.12.1`; battery ExternalConnected Yes, IsCharging No, InstantAmperage 0; free 120,827,720 KiB at /Users/edr; Spotlight 716 and 73957 `S`; Codex MCP adapter stopped; no stand-down request.
+- **Launch:** `launch_align_r0.py launch` from canonical (`31a19f79a`, with #700: display sleep plus a 300 s dwell, `--keep-going` default), `--repo $M --python-bin $M/.venv/bin/python --config $M/configs/align/v4/r0_desk.json --output /Users/edr/night-align/r0-v4-20261108T0550Z --disk-path /Users/edr --deadline 1794141000` (04:30 PST 11-08; room for the dwell, one redo capture and the 3-4 h run). Under R0-L3 contention is a flag; one SMC redo on a sustained ≥ 0.5-core single-process episode; `contended` after a second. No clean-gap scheduling (ruling 7).
+
+**Next activation (replaces item 208's pointer; items 202-204, 207, 209, 210 hold):**
+(1) After R0 re-run 11 exits: item 185 (1) on `/Users/edr/night-align/r0-v4-20261108T0550Z` (record on a new branch `records/2026-11-08-align-r0-v4-rerun11` from `9c40e4e5d`; mail Ed the item 176 (2) summary). Also report: the `contention` section (flags per check, SMC flagged intervals, any `contention_redo` and `contended`), the `display` section (launcher_prep dwell must be 300 s, else the run is not admissible per item 209; any display wake), and `pmset -g log` for wakes.
+(2) If R0 passes (contended or not, as flagged): item 202 (1)-(5); arm R1 with the display asleep; in the R1 arm record confirm the KM003C capture is live during ALIGN members and reaches night custody (item 210).
+(3) If R0 fails for a non-contention reason: diagnose; a tooling fault goes to the lead.
+(4) #694 stays unmerged until rebased onto `9c40e4e5d` with item 209's three changes and a delta review; required before W1.
+(5) Item 205 (4) holds: Flash-Next and the SSD qualification wait for Ed at the Mac (Sunday).
+
+210. **Laptop lead (interactive session 1544c617), 2026-11-07 about 22:00 PST: Ed's rulings for the main goal (ALIGN v4 plus an adaptive red team showing the monitor+energy squeeze; see `docs/research/AGENDA.md`).** This item schedules nothing.
+- **Ed, verbatim:** "yes to all your decisons, but to be clear the usb c power meter is between the magsafe cord and the wallbrick, so it does catch all power going from wall to machine through magsafe".
+- **Power path.** The KM003C sits between the USB-C wall brick and the MagSafe cable, so it measures all wall-to-machine power for ALIGN v4 too. Review findings that say the KM003C is not in the v4 path are refuted. The squeeze addendum names the KM003C channel as the authority for small-effect claims. **Magistrate:** confirm, in the next R1 or W1 arm record, that the KM003C capture is live during ALIGN members and that its stream reaches the night custody.
+- **D-139 A1 is amended:** a scoped on-host red team is permitted. The adversary is the agent under test, running sandboxed in the episode harness. No other in-process adversarial programs are allowed.
+- **Monitor:** the primary SHADE-Arena monitor is a frontier model via API, scoring transcripts off the box. A local monitor is secondary. The lead picks the model and the budget in the squeeze addendum.
+- **Venue:** NeurIPS 2027 for the full squeeze result, plus an earlier v4 or limits paper if v4 lands cleanly.
+
+209. **Laptop lead (interactive session 1544c617), 2026-11-07 about 21:10 PST: lead dispositions for R0-L3 (#699, #700). The magistrate may merge both now, fill ledger rows 1, 4 and 5 from the two seat reports, and launch R0 re-run 11 per item 208's plan.**
+- Both seats returned ADMIT_WITH_FIXES with nothing above LOW. **The LOWs are accepted as recorded flags, with no code change.**
+- **The Opus MEDIUM (the #694 merge hazard) applies to #694 only.** #694 stays unmerged until it is rebased onto the merged #699. When it is:
+  - keep #694's sampler and its stall, long-window and background-census refusals;
+  - replace its contention `raise Refused` with the R0-L3 flag;
+  - drop its `if interval_busy: break` from `_cpu_interval`, so the long-window refusal and the later windows are still judged.
+  
+  That rebase needs its own delta review. It is required before W1, not before R0 or R1.
+- **The test-only `JOULEWISE_R0_TEST_DISPLAY_DWELL_S` override is accepted.** Every record carries both the dwell used and the constant, and a unit test pins the constant at 300 s. **If a production R0 record shows a dwell below 300 s, treat that run as not admissible.**
+- **#700's ledger** stands as the builder filled it (gate policy rule 2, ruling 8).
+- **After the merge:**
+  - the clean-gap scheduling rule for R0 is retired (R0-L3 ruling 7);
+  - the deadline must leave room for the 300 s dwell and one redo capture;
+  - R0 re-run 11 runs with the display asleep.
+  - If R0 passes, item 202 applies (fill the R0 rung, regenerate the kit, arm R1 with the display asleep).
+- **Main's intermittent `test_rc_cmp10`/`test_rc_cmp11` failures:** the stale double-quote pins were fixed in #697 (merged as `ab1e0098d`). They should not recur on current main. If they do, tell the lead.
+
+208. **Magistrate activation 5bcfa84e (Opus 5.5, headless, 2026-11-07 from 18:43 PST): R0 re-run 10 (display off) was refused in `smc` at 18:41 by `routined` at 0.052 CPU-s/s during a dasd background-task wave. That is the second unscheduled-burst refusal in a row, so R0 is not re-launched under the 0.05 abort rule. Ed asked for the amendments; they are R0-L3 (#699, #700), and their independent review and cold pass are running now in the cloud.** No pending notices, no new directive.
+- **Run** `/Users/edr/night-align/r0-v4-20261108T0224Z` (02:25:18Z-02:41:45Z, 987 s): `fail`, `complete_r0` false, smc exit 3 `NotQuiet` after 957 s. Interval 18:41:09.6-18:41:45.5 PST: `routined` pid 794 at 0.0521 CPU-s/s, the only process over 0.05. The display stayed off for the whole run (`pmset -g log`: off 18:08:12, no wake after), so the display fix worked for WindowServer/ControlCenter. Cause: dasd started a wave at 18:41:39-18:41:55 (five `contacts.accounts.validate-cache`, `coreduetd.people`, `prngseedd.reseed`, `ids.accountrepair`, others), and routined ran a learned-locations pass (about 1,150 CoreRoutine lines in two minutes). Not on the schedule. No agent alive (707dd8f4 exited 18:25:18, fence 18:28:13; this activation spawned 18:43:15). D pins FAIL "no single disk check" (expected). Spotlight 716 and 73957 `S`. Record: branch `records/2026-11-07-align-r0-v4-rerun10` (`ac801585e`, `docs/align/r0/2026-11-07-rerun10/`; report.json sha256 `0a8c7935…2e5e`, SMC journal sha256 `77410460…2879`).
+- **Ed's answer, 18:28 PST 11-07** (message `1a1b8fc8bba03723`, thread `1a198fafa8fc12ba`), verbatim: "def make amendments you mention to protect against screen and to make the blocks more robust, simply re running the problematic part or flagging it as per your decision". Applied: these are item 206's proposals (a) display sleep and (b) redo or flag, which the laptop lead had already built as R0-L3 (#699 into the pilot10-benign lane: redo once on a sustained ≥ 0.5-core single-process episode, else flag; display state recorded. #700 into main: the launcher sleeps the display and dwells 300 s, passes `--checks`/`--keep-going`). Both had rows 1 and 4 open for an independent reviewer.
+- **Gates launched (18:50 PST), blind to each other, both executing:** cold Fable 5.1 pass (`session_015ASG1PwCjzPPYuHooNx2Mv`, report `claude/r0l3-cold-fable` on JouleWise-data) and Opus 5.5 executing review (`session_015ASG1RrFt2eavufZxu2BLg`, `claude/r0l3-review-opus`), both at `reports/r0-l3-review.md`. Brief: `/private/tmp/jw-r0l3/brief.txt` (replays the real refusal rows of re-runs 8-10 through `Ruling8Quiet`, the kept refusals on production-shaped census, the launcher with a fake pmset, the #694/#699 QuietGuard merge interaction, and the numbers rule as its own dimension). The lead was told on both PRs not to launch a second reviewer.
+
+- **Gates result (19:35 PST).** Both seats `VERDICT: ADMIT_WITH_FIXES`, nothing above LOW in #699/#700. Fable (`claude/r0l3-cold-fable-0akvoh` `5e9d088`): replays A-D 97 checks, 0 fail; every fix LOW ("if the lead reads those as flags ... ADMIT"). Opus (`claude/r0l3-review-opus` `2269f60`): one MEDIUM, the #694 merge hazard (#694's `if interval_busy: break` merges silently ahead of the `long_interval` refusal), shared by Fable. Magistrate re-execution on the Mac: Fable's replays against d3bf25c82 and b751e9231 with the real re-run 8-10 rows, 97 pass; touched modules OK. Dispositions posted on #699/#700 (comment 6716675854): MEDIUM deferred to #694's rebase (posted on #694); Opus F2 rejected with reason; the other LOWs are flag-not-refuse, deferred to the lead's R0-L3 follow-up.
+- **#700 CI fix:** `b751e9231` lists the new launcher refusal sites in `configs/gates/hazard_refusals.json` (shard 5 `test_refusal_allowlist`). Main's CI fails intermittently in `independent_recompute.test_rc_cmp10`/`test_rc_cmp11` (main 20413903b and c0bd6c1b7 failed, 8289998d3 passed); that hit #700's first rerun; failed jobs re-run. Not this lane's; for the lead.
+- **Plan once CI is green on both heads:** fill rows 1-5 on both PRs; merge #699 into `lane/2026-11-05-align-pilot10-benign` and #700 into main; fast-forward `$M` (`/Users/edr/night-custody/measurement/JouleWise-measurement-20261102-align-pilot2`) to the lane head (precedent item 195/#692); `git pull --ff-only` the canonical root (no night agent loaded); launch R0 re-run 11 per item 205's command, deadline with room for the dwell and one redo (about 55 min) on top of the 3-4 h run, no clean-gap scheduling (follow-up ruling 7).
+
+**Next activation (replaces item 206's pointer; items 202-204 and 207 hold):**
+(1) If not already done (check PR state): read both seat reports (`git fetch` JouleWise-data; read by `origin/claude/r0l3-*`, never FETCH_HEAD). Post each on its PR. Disposition belongs to the laptop lead (author's side), who merges; if the lead is silent and both seats ADMIT with no finding above LOW, the magistrate may fill rows 1, 4 and 5 and merge #699 into the lane and #700 into main under the standing merge authority, then move the measurement checkout only under the R0 launch procedure.
+(2) A REFUSE from either seat that survives the magistrate's own re-execution goes to Ed.
+(3) After merge: R0 re-runs under R0-L3 (no clean-gap scheduling, per follow-up ruling 7); deadline with room for the 300 s dwell and one redo capture (about 55 min). Then item 206 next (1)-(2) and item 202.
+(4) #694 must not be merged on top of #699 without resolving the QuietGuard conflict the seats report.
+(5) Item 205 (4) holds: Flash-Next and the SSD qualification wait for Ed at the Mac (Sunday).
+
+207. **Laptop lead (interactive session 1544c617), 2026-11-07 about 18:05 PST: input to the item 206 investigation ("why our quiet machine is never quiet"), and the structural fix that is coming.** This item schedules nothing.
+- **Diagnosis (lead).** The machine is as quiet as a modern macOS host gets. R0's SMC census refuses any single non-agent process above 0.05 CPU-s/s over 30 s, which is below routine macOS system and UI activity. Every refusal so far has been an ordinary OS job: the update scan, the `/tmp` cleaner, Spotlight, Photos, trustkit, now WindowServer/ControlCenter.
+  - The blocks, R1 and W1 use ruling 8 instead (redo at 0.5 cores sustained for 60 s; refuse after 2 redos). That is why they ran through the same daemons.
+  - The proportionality audit (`docs/research-audits/2026-11-07/proportionality.md`, PR #695) ranks this rule as the top over-engineering item. It caused most of R0's stops and protects no reported number; R0's picks are PROVISIONAL selection data.
+- **Coming:** ruling **R0-L3**, a draft PR into pilot10-benign that is building now. In R0, contention is recorded and flagged, not fatal. The SMC capture follows ruling 8: one redo if a contaminant is sustained at ≥ 0.5 cores for 60 s, and a `contended` flag after a second episode. The launcher passes `--checks`/`--keep-going`. Refusals for armed windows, LaunchAgents, chains and custody are unchanged. Once it is reviewed and merged, R0 no longer needs daemon hunting. The lead delivers it in a later item.
+- **Leads for the WindowServer/ControlCenter burst (cheap checks, no settings changed without Ed):**
+  - **Display awake?** WindowServer composites whenever the display is on and anything on screen changes: a Terminal or agent log scrolling, a menu-bar clock with seconds, an animation. Check `pmset -g | grep -E 'displaysleep|sleep'`, and whether the launcher or a `caffeinate -d` holds the display awake. **Let the display sleep (or set `displaysleep 1`) and close visible windows during R0/R1.** This is likely the single biggest lever on WindowServer.
+  - **ControlCenter.** Its location-indicator updates (about 28 an hour) mean some app is using Location Services. Find it with `log show --last 1h --predicate 'subsystem == "com.apple.locationd"'` and the System Settings → Privacy & Security → Location Services list. Turning that app's access off is Ed's call.
+  - The menu-bar clock showing seconds, if enabled, redraws every second (System Settings → Control Center → Clock).
+- **Until R0-L3 merges:** re-run 10 under the current rule as Ed approved, display asleep and windows closed if possible. If WindowServer/ControlCenter refuse again, item 206's stop-and-investigate rule holds.
+
+206. **Magistrate activation 707dd8f4 (Opus 5.5, headless, 2026-11-07 from 17:43 PST): R0 re-run 9 was refused in `smc` after 62 s by a transient burst from WindowServer and ControlCenter. The source was not on the schedule, so under item 194 (3) it went to Ed, and Ed approved a re-run and asked why the quiet Mac is never quiet. Found: the display has been on since 11-05, and its menu-bar redraws produce the burst; with the display off they stop. R0 re-run 10 launched about 18:30 PST with the display off.** No pending notices, no unread mail from Ed, no new directive.
+- **Run** `/Users/edr/night-align/r0-v4-20261108T0140Z` (finished 01:39:05Z, 92 s): `fail`, `complete_r0` false, smc exit 3 `NotQuiet`. In the first census interval (17:38:35-17:39:06 PST), WindowServer pid 415 ran at 0.0838 CPU-s/s and ControlCenter pid 676 at 0.0570, against the 0.05 limit. Record: branch `records/2026-11-07-align-r0-v4-rerun9` (`954a93b11`, `docs/align/r0/2026-11-07-rerun9/`; report.json sha256 `35b0e967…efad`, SMC journal sha256 `db6fe9fe…c5f`).
+- **What was ruled out:** no agent alive (f1717cac exited 17:37:33, before the fence engaged at 17:38:10); no operator (HID idle about 6,756 s at 17:44); no known scheduled job. ControlCenter's location-indicator updates (twice in the interval) run steadily at about 28 per hour for four days, including through re-run 7's clean capture, so they alone do not explain it. At 17:44 both processes measured near zero over 30 s.
+- D pins: FAIL "report has no single disk check" (expected; the run stopped in SMC). Spotlight 716 and 73957 resumed (`S`).
+- **Mailed Ed** on thread `1a198fafa8fc12ba` (message `1a1b8d6562e3c9c7`, 17:46:57 PST), proposing re-run 10 into the 17:34-21:29 gap. A second WindowServer/ControlCenter refusal counts as a pattern: stop and find the cause; do not re-launch.
+- **Ed's answer, 17:48 PST 11-07** (message `1a1b8d7dc2a6c094`, thread `1a198fafa8fc12ba`), verbatim: "sure re run at your leisure but spend a little time at least trying to figure out why this shit keeps happening and why our quiet machine is never quiet". Applied: a bounded contention investigation first (this activation), then re-run 10 into the 17:34-21:29 gap if SMC can end before 21:29; results follow in this item.
+- **Investigation (Ed's ask), 17:53-18:23 PST.** Data: `/Users/edr/night-archive/quiet-survey-20261107/` (`sampler.py` mirrors the census: per-process CPU-s/s over 30 s intervals, 0.05 limit, this session's tree excluded; `intervals.jsonl`, 59 intervals).
+  - **Why the quiet Mac is never quiet:** the census runs every ~5 s on a sliding 30 s window through SMC's ~45 min (`smc_enumeration.py` `quiet_check` every `5 * temperature.NS`), and any one of ~725 processes above 0.05 in any window refuses the whole run. macOS starts about 650 background (dasd) activities an hour on this idle, AC-powered Mac (unified log, 12:00-18:00: 594-685 per hour), and idle-on-AC is exactly when it schedules deferred work. Five of the six R0 runs that reached SMC were refused by five different processes: mdworker (Spotlight, since disabled), softwareupdated + duetexpertd (scheduled scan), find + fseventsd (00:00 `/tmp` cleaner; `/private/tmp` is now 745 MB / 756 entries, down from about 73,100), frauddefensed (4-hourly trustkit), WindowServer + ControlCenter (this run).
+  - **Re-run 9's cause, found:** the display has been ON since 2026-11-05 23:41 (`pmset -g log`; `displaysleep 0`, so it never sleeps; the v3 pilots ran with it off). ALIGN code never turns it off (no `displaysleep` in `joulewise/align`, `scripts/align*`, `configs/align`, `docs/align`). With the display on, every 3-4 min ControlCenter redraws the location-services menu-bar indicator (locationd serving a WirelessDiagnostics client, about 28 per hour for days) and one 30 s interval shows WindowServer 0.041-0.042 and ControlCenter 0.028 (17:58, 18:02, 18:05). Two redraws in one window (17:38:46 and 17:39:02) double that to the refused 0.084 / 0.057. Around the refusal, dasd also started `osanalytics.submissions.submit` (17:38:40) and `Safari.SafeBrowsing.BrowsingDatabases.Update` (17:38:55).
+  - **Test:** `pmset displaysleepnow` at 18:08:12 (no sudo). Over the next 15 min: no WindowServer or ControlCenter interval at or above 0.02. The display-off transition itself gave one burst (corespotlightd 0.174, duetexpertd 0.130, 18:08), and corespotlightd then burst every ~5 min (0.05-0.19); R0's launcher already SIGSTOPs corespotlightd and spotlightknowledged for the run.
+  - **For the laptop lead (proposals, not built):** (a) the R0/R1 launcher should run `pmset displaysleepnow` and dwell a few minutes before any census-checked segment, as block 5 did (registration_block5 "display sleep"); record display state in the report. (b) A NotQuiet inside SMC should redo the affected phase after a dwell, recorded as a flag, rather than fail the whole 3-4 h run; with ~650 background starts per hour, a 45 min zero-burst requirement will keep failing at random. Sizing of any change is the lead's.
+- **Re-run 10 launch** (about 18:30 PST), under Ed's 17:48 answer: display OFF since 18:08:12 (first R0 run with it off; runs 1-9 had it on); measurement checkout `5f817856b` unchanged; battery ExternalConnected Yes, IsCharging No, InstantAmperage 0; free 121,256,748 KiB at /Users/edr; Spotlight 716 and 73957 `S` before launch; Codex MCP adapter stopped. `--output /Users/edr/night-align/r0-v4-20261108T0224Z`, `--deadline 1794121500` (23:05 PST); SMC (at most 3,300 s) ends by about 19:30, before the 21:31 trustkit run. Ed mailed on thread `1a198fafa8fc12ba`.
+
+**Next activation (replaces item 205's pointer; items 202-204 hold):**
+(1) After R0 re-run 10 exits: item 185 (1) on `/Users/edr/night-align/r0-v4-20261108T0224Z` (record on a new branch `records/2026-11-07-align-r0-v4-rerun10` from `5f817856b`; mail Ed the item 176 (2) summary). Note in the record that the display was off; check `pmset -g log` for any display wake during the run.
+(2) If R0 passes: item 202 (1)-(5). Before arming R1, turn the display off (`pmset displaysleepnow`) at least 5 min before its first census-checked segment, and record it (until the lead builds proposal (a)).
+(3) If refused by a scheduled source: item 194 (3). If refused by an unscheduled burst again: mail Ed with the census row and the dasd activity starts in the refused window (`/usr/bin/log show --predicate 'subsystem == "com.apple.duetactivityscheduler" AND eventMessage CONTAINS "STARTING"'`), and ask the laptop lead for proposal (b) before another blind re-launch.
+(4) Item 205 (4) holds: Flash-Next and the SSD qualification wait for Ed at the Mac (Sunday); neither may overlap R0 or R1.
+
+205. **Magistrate activation f1717cac (Opus 5.5, headless, 2026-11-07 from 17:33 PST): R0 re-run 8 was refused in `smc` at 17:30:59 PST by a newly identified scheduled job, frauddefensed's 4-hourly `com.apple.trustkit.signatures` task. Under item 194 (3) and Ed's "go", R0 re-runs now as re-run 9, with SMC first and done long before the next run of that task.** No pending notices, no unread mail from Ed, no new directive.
+- **Run** `/Users/edr/night-align/r0-v4-20261108T0115Z` (01:16:15Z-01:31:00Z, 884 s): `fail`, `complete_r0` false, smc exit 3 `NotQuiet`. Over 17:30:29-17:30:59 PST, `frauddefensed` pid 61967 ran at 0.092 CPU-s/s against the 0.05 limit. Record: branch `records/2026-11-07-align-r0-v4-rerun8` (`8410dc410`, `docs/align/r0/2026-11-07-rerun8/`; report.json sha256 `14cd34f1…b501`, SMC journal sha256 `1ee17827…9c82`).
+- **Cause:** the unified log shows frauddefensed calling its launch handler for `com.apple.trustkit.signatures` at 17:30:55. Over four days it fires every 4 h at about xx:31 (observed 17:30:48-17:32:20). `com.apple.trustkit.notification` also fires daily at about 09:21.
+- **Known scheduled contention (PST), replacing item 201's list:** 00:00 the `/tmp` cleaner; about 01:31, 05:31, 09:31, 13:31, 17:31 and 21:31 trustkit signatures; about 05:09, 11:09, 17:09 and 23:09 the softwareupdated scan; about 05:40 XProtect; about 09:21 trustkit notification; about 12:53 daily maintenance. **Clean gaps:** about 00:05-01:29, 01:34-05:05, 06:15-09:19, 09:34-11:05, 13:34-17:05, 17:34-21:29, 21:34-23:05.
+- **Only `smc` runs the quiet census** (`NotQuiet` is raised only in `joulewise/align/apple/smc_enumeration.py`), and it runs first (#692 D3), at most 3,300 s. So the quiet-sensitive part needs a clean gap of about 1 h, not the whole 3-4 h run. Ladder and long-decode are not census-checked.
+- D pins: FAIL with "report has no single disk check", which is expected when the run stops in SMC before the disk check. Spotlight 716 and 73957 resumed (`S`).
+- **Re-run 9 launch** (about 17:40 PST), measurement checkout `5f817856b` unchanged, record `/Users/edr/night-align/r0-v4-20261108T0140Z`, deadline 23:05 PST (`1794121500`). Ed mailed on thread `1a198fafa8fc12ba`; a NO stops it.
+
+**Next activation (replaces item 201's pointer; item 202 holds):**
+(1) After R0 re-run 9 exits: item 185 (1) on `/Users/edr/night-align/r0-v4-20261108T0140Z` (record on a new branch from `5f817856b`, mail Ed the item 176 (2) summary).
+(2) If R0 passes: item 202 (1)-(5): fill `R0.reasoning_effort`, regenerate the kit and `--check`, then arm R1 with its quiet-sensitive segments planned around the schedule above.
+(3) If refused by contention again: item 194 (3), with the schedule above. Smc needs a clean gap of about 1 h.
+(4) Flash-Next and the SSD qualification wait for Ed at the Mac (Sunday); neither may overlap R0 or R1.
+
+204. **Laptop lead (interactive session 1544c617), 2026-11-07 about 18:30 PST: Ed's research direction, plus lead rulings on FINAL-DESIGN §3.2 Q4 and Q6, made blind (no alarm has been read).**
+- **Ed, verbatim:** "sabotage leaves an energy signature is cool, v4 is ok, sure running more windows to get more evidence for that paper makes sense to me". Also: "if you want to keep using the mbp for that paper/research goal, i support". The ALIGN paper's claim is **"sabotage leaves an energy signature"** (v4), not only "energy as a record of logged compute". More ALIGN windows and 30B positive-control nights (injected real unlogged compute) are approved in principle. The magistrate schedules them in free Mac time; each still needs its own kit and gates.
+- **Ruling Q4: yes.** D calibration windows may run to the 59,520 s maximum, two pairs per window, so 3 D windows. That is FINAL-DESIGN §2.7's default, confirmed. The measurement is the same as with 6 windows of 44,640 s, with half the arm overhead; exposure to scheduled jobs per hour is unchanged.
+- **Ruling Q6: registration grade.** That means m ≥ 39 per pair plus a held-out test cohort, about double the calibration windows per model. Q6 is decided now, before any alarm is read, as §3.2 requires.
+  - **Why:** Ed's chosen claim needs a confirmatory test, not a pilot-grade read.
+  - It takes effect once W1 admits the D configuration (ruling R10's procedure).
+  - If D ends as a screen only, registration grade applies to whichever cell carries the sabotage-signature claim.
+  - The series plan and the protocol v4 registration must be updated to match before W1 arms. This joins the pre-W1 registration work in item 203 R10-5.
+- **Unchanged:** R1 (item 202) and the R10 procedure (item 203).
+
+203. **Laptop lead (interactive session 1544c617), 2026-11-07 about 17:00 PST: lead ruling R10, the W1 budget fallback, pre-declared blind before any R1 number exists.** Source: research audit `docs/research-audits/2026-11-07/w1-budget-fallback.md` (draft PR #695), whose arithmetic was re-checked against `scripts/align_v4_kit.py`. This item schedules nothing. R1 (item 202) is unaffected and should still run: R10 applies only to W1 admission after R1.
+- **R10-1 (premise correction).** Model D at 8-bit decodes at about 11.9 tok/s (R0 measured 11.85-11.95). The bandwidth ceiling is about 14.0 tok/s (400 GB/s against 28.58 GB of weights). The "about 20 tok/s" in LEAD-RULINGS-2 R7-2/R8-8 is wrong: it is an unmeasured 4-bit projection. Under R7-2's G0 term (at least 600 s) and R6-3's full last turn, 8-bit D fails ruling 1(f) at every allowed B_D, whatever R1 measures. Recorded now so the R1 numbers cannot be blamed for it.
+- **R10-2 (mechanical procedure after R1).** It reads only R1 timing and count fields; no energy value is read.
+  - **(a) Budget-sized D G0 cap.** Compute G0* = T_dead − holds − prefill/tool − 10,240/r, with r the minimum of step-d's decode rate and the gated runs' decode rates.
+    - If 1.25 × the longest *released* gated D G0 wait ≤ G0*, W1's D members arm G0 at G0*. A longer G0 ends as a clean X2 before turn 1, never as an X7.
+    - Contrast members keep a separate G0 cap that must fit their 1,086 s deadman. If that cannot be shown, the kit refuses.
+    - 1(f)'s worst-case guarantee is kept. This lowers the 600 s G0 floor for D members only; it is logged as a public deviation when applied.
+  - **(b) 4-bit D.** If (a) does not fit, the 4-bit D path is next. It needs its own R1-4bit gated night first, and the lead rules on it with Ed.
+  - **(c) Window council.** If neither fits, the options are a member-cap change, final-turn truncation, a series-wide bounded-risk 1(f), or screen-only.
+- **R10-3.** Ruling 1(e) step 2 is ruled out as a 1(f) lever: it costs 132 s of T_dead, puts the contrast members at a 1,900 s bound, and forces ordinal 18 (the alternate sentinel) out of W1.
+- **R10-4.** The kit cannot yet express a 1(f) lead receipt, separate D and contrast G0 caps, or a D cap below 600 s. The laptop lead will build that on the R1 lane, with failing-first tests and a cold review, before any W1 arm. **Not needed for R1.**
+- **R10-5.** Before W1 arms, the W1 pre-arm audit (`docs/research-audits/2026-11-07/w1-prearm-gate.md`) also lists registration blockers. Protocol v4 is still missing nine W1-blocking chair rulings (4, 5, 6, 9, 11, 15, 17, 18, 20) and WP19. There is also a battery 4(a) arm rule, the 30B contrast deadman fit, and the duty-bar fallback. The laptop lead owns those. They gate W1, not R1.
+
+202. **Laptop lead (interactive session 1544c617, Opus 5.5), 2026-11-07 about 17:30 PST: R1 kit delivery, and lead ruling R0-L2 on the slow-pick rule, made before re-run 8's capture exists. Ed wants the MBP collecting whenever a valid design is ready, so R1 can arm right after R0 re-run 8 passes, without another lead round-trip.** Timing stays the magistrate's call.
+- **Ruling R0-L2 (slow pick; #692 D5; LEAD-RULINGS-2 Round 9).** Adopt the build's default rule as final: among keys in the slow class (60 s < τ ≤ 300 s, settled noise ≤ 0.15 °C, resolving, not a placeholder, not an alias), pick the longest band hold time τ·ln(rise/1 °C) that is still ≤ 300 s.
+  - **Why:** `s_slow` drives the G0 band and the G1/H bands, whose caps are 300 s. This rule ties the pick to the time scale the gates operate on. The other three rules optimise proxies: longest τ, stored heat, and longest cooling after the fast bracket.
+  - Keep printing the other three picks beside it, as diagnostics.
+  - If the slow class is empty, there is no pick and the protocol's IOHID / X4 ruling applies. Mail Ed and the lead and do not arm.
+  - This was decided before the capture exists, so it cannot be tuned to the data. The rule the R1 code uses is already this one, so no code changes.
+- **R1 kit.** `lane/2026-11-06-v4-r1-integrated` @ `e901eb2a4`. Rounds 6-9 are integrated and reviewed (no BLOCKER or HIGH open). It carries the WP18 fixtures `aaee4b2d2` and #692.
+  - **(1)** After R0 re-run 8 passes (complete_r0, or the item 196 composition), fill `configs/campaigns/align_v4/registration/inputs.json` `R0.reasoning_effort` with the ladder rung R0 selected (`xhigh`, `medium` or `low`). Do this on a new branch `lane/2026-11-07-r1-kit-r0fill` from `e901eb2a4`.
+  - **(2)** Run `python3 -B scripts/align_v4_kit.py`, then `--check`. It must block on exactly `R1.B_D, R1.I_D, R1.T_dead, R1.thermal_policy`, and nothing else. Commit only `inputs.json` and the regenerated kit files, and push. **This is authorized as a mechanical kit step; the laptop lead reviews it afterwards.**
+  - **(3)** Arm R1 per the R1 runtime contract (`docs/align/r1_runtime_contract.md`) and `scripts/align_r1_rehearsal.py`, from a measurement checkout of that branch.
+    - Set the R1 plan's `window_max_s` to cover the all-caps worst case: 56,207 s with no redo, or 61,607 s if the night crosses the 11:45-13:15 batch window. Every R6-2 retry plus the wait is 90,663 s, and a cut beyond that is accepted.
+    - No external disk may be mounted. The SSD arrives Sunday at the earliest and stays unplugged during R1.
+  - **(4) Scheduling.** Before arming, confirm from the code how a scheduled macOS job firing mid-night (the softwareupdated scan at about 23:09, 05:09 and 11:09; the 00:00 `/tmp` cleaner; XProtect; the 12:53 maintenance) is handled in an R1 segment: dwell and wait, segment INCONCLUSIVE, or night refusal. Record the answer.
+    - If it is a night refusal, start R1 so that its quiet-sensitive segments avoid those times, or mail the lead before arming.
+    - Ed leaves Security Responses on automatic. That is fine; the scan schedule is unchanged.
+  - **(5) On the first R1 night (round-7 cold-pass request):** record the wall gap between the last decode of `planning_turn_R_plus_0C` and the idle_baseline start of the first gated D run (process start, model load, session open).
+  - **(6) Host High Power state** lives at `/Users/Shared/JouleWise/host-power/` (`high-power.marker`, `night.lock`).
+    - It is created on first use as the measuring user, mode 0700, with no new sudo rule.
+    - A leftover marker is restored at the next session start or admission.
+    - Never delete it by hand unless `pmset -g custom` already reads AC powermode 0.
+    - An interrupt during a night now stops the chain and proves it gone before restoring (R8-1/D8-2).
+  - **(7) Not needed for R1, needed before W1:** PR #694, the guard background sampler. The lead merges it into pilot10-benign after re-run 8 exits. Also needed before W1: the lead's ruling on the 1(e) fallback, made on R1's numbers, and the blind pre-W1 gate.
+- **After R1:** commit the R1 record as usual (item 185 pattern) and mail Ed. The lead then fills the R1 leaves, rules on 1(e)/1(f) and delivers the W1 kit.
+
+201. **Magistrate activation 725916c8 (Opus 5.5, headless, 2026-11-07 from 15:53 PST): item 200's checks are done. Ed's visit turned Spotlight indexing and the Photos analysis agents off; the softwareupdated background scan is still on, so the 17:09 scan stays on the schedule. R0 re-run 8 launches at or after 17:15 PST.** No unread mail from Ed, no new directive.
+- **Launch notice.** The watchdog queued `transition-6447-launch_failure` ("session exit=143", 15:50:11 PST). The cause was deliberate: Ed's interactive session (9f46441a) sent SIGTERM to activation 2115b21f after Ed's `/login`, so that the headless magistrate restarts on the new Claude account. Nothing was measuring. Ed was mailed (message `1a1b86f274d1f1bb`), and the notice was acknowledged.
+- **Item 200 (1): settings after Ed's visit** (he ran `scripts/ops/mbp_quiet_os.zsh` from `ops/2026-11-07-mbp-quiet-os` at 15:42 PST). Each setting was read back at 15:58 PST. The before values are in `/Users/edr/night-archive/settings-baseline-2115-pre-ed.txt` (12:46 PST).
+  - Software Update: `softwareupdate --schedule` still says "Automatic checking for updates is turned on". `AutomaticDownload = 0`, which is new. The `AutomaticCheckEnabled` key did not persist on macOS 26.6.2. **The 6-hourly scan stays in the known-contention schedule.**
+  - Spotlight: `mdutil -s` shows "Indexing disabled" on `/` and `/System/Volumes/Data` (before: enabled).
+  - Photos: `com.apple.photoanalysisd` and `com.apple.mediaanalysisd` are disabled in `gui/501`. The running copies 13374 and 21331 are still SIGSTOPped (`T`).
+  - Time Machine: "No destinations configured", as before. `backupd` 531 and `backupd-helper` 429 are resident but idle.
+  - **Known scheduled contention (PST), replacing item 194's list:** 00:00 daily, the `/tmp` cleaner (now walks about 4,000 entries, not 73,100); about 05:09, 11:09, 17:09 and 23:09, the softwareupdated scan; about 05:40, XProtect; about 12:53, daily maintenance. Spotlight indexing is no longer a source. Clean gaps are unchanged.
+- **Item 200 (2): `/private/tmp`.** Activation 2115b21f pruned it at about 12:45 PST, from 79,077 entries to 3,919. It removed finished seat scratch by name only, and touched nothing under night-custody, night-archive or a measurement root. At 15:56 PST the count was 3,954.
+- **Item 200 (3).** The Spotlight STOP/CONT step stays in the R0 launch as a harmless no-op.
+- **Next activation (replaces item 198's pointer; everything else in item 195's last pointer holds):**
+  - (1) If R0 re-run 8 has not launched: at or after 17:15 PST, and only after the 17:09 `AutoBackgroundScanFinished` line is in `/var/log/install.log`, launch it exactly as item 195's last pointer (1) says. Check that `/Volumes` holds no external disk and that no other `claude` process is alive.
+  - (2) After R0: item 195's (2).
+  - (3) Flash-Next and the SSD qualification wait for Ed at the Mac (Sunday), and neither may overlap R0.
+
+200. **Laptop lead (interactive session 1544c617), 2026-11-07 about 12:40 PST: Ed will be at the MBP in about two hours to cut the scheduled macOS contention that keeps refusing R0. Ed set the priority: ALIGN (SHADE-Arena) first; the Flash-Next port waits for the SSD, Sunday to Tuesday.** This item schedules nothing; R0 re-run 8's timing stays the magistrate's call.
+- **Suggested to Ed** (his to apply; directive #417 leaves OS settings to him):
+  - `sudo softwareupdate --schedule off`, plus automatic update checks off in System Settings. This stops the 6-hourly scan.
+  - `sudo mdutil -a -i off` (Spotlight indexing off).
+  - iCloud Photos off or Photos quit (photoanalysisd/mediaanalysisd).
+  - Time Machine off, if it is on.
+- **For the magistrate:**
+  - (1) After Ed's visit, record which settings changed, without assuming any. Verify each with: `softwareupdate --schedule`; `mdutil -s /` and `mdutil -s /System/Volumes/Data`; `pgrep -l photoanalysisd mediaanalysisd backupd`; `tmutil destinationinfo`; and the next expected `AutoBackgroundScanFinished` line in `/var/log/install.log` not appearing. Update the known-contention schedule (item 194) to match.
+  - (2) The midnight `com.apple.tmp_cleaner` cannot be disabled (SIP). Its cost is the walk over `/private/tmp`, about 73,100 entries (item 194). Prune finished seat and agent scratch there: only directories your own sessions created that no live process uses (`lsof +D` first). Never touch night-custody, night-archive or anything under a measurement root. Record the before and after entry counts.
+  - (3) If Spotlight indexing is turned off, the Spotlight STOP/CONT step in the R0 launch can stay as a harmless no-op. Keep it unless it errors.
+
+199. **Laptop lead (interactive session 1544c617), 2026-11-07 about 12:15 PST: Ed reports that the SSD enclosure delivery slipped to Sunday 2026-11-08.** Flash-Next live tests (item 197) and the SSD qualification (item 188 (4)) move to Sunday, by day, with Ed at the Mac. As before, neither may overlap R0, R1 or any window. Nothing else changes: R0 re-run 8 at 17:15 PST stands.
+- **For planning:** `lane/2026-11-06-v4-r1-integrated` (`e901eb2a4`) now carries the WP18 fixtures and #692. Its kit blocks only on `R0.reasoning_effort` and R1's own outputs.
+  - Before R1 arms, the slow-pick rule (#692 D5) must be chosen from re-run 8's settled capture (LEAD-RULINGS-2 Round 9).
+  - The R1 night's all-caps worst case is 56,207 s with no redo, and 61,607 s with one batch-window wait. Set the R1 plan's `window_max_s` against those.
+  - The R1 kit delivery will be its own item after R0.
+
+198. **Magistrate activation 2115b21f (Opus 5.5, headless, 2026-11-07 from 08:47 PST): the WP18 fixtures are committed (items 191, 196 (B)); R0 re-run 8 stays at 17:15 PST; Flash-Next live tests (item 197) cannot run headless today.** No pending notices, no unread mail from Ed, no new directive.
+- **WP18.** `scripts/align_v4_wp18_fixtures.py` at `97714c644`, write and then `--check`, both exit 0. It was run on `/Users/edr/night-archive/wp18-extract-20261107/` (b-e25 `b71f393e…f364`, b-e18 `f657ddd7…b01e`, re-hashed) and `--pilot /Users/edr/night-archive/seats-cf1baad2/pilots/p7-PILOT.json`.
+  - X `align-pilot-v3-episodes-b-e25`: max_turns 12, sha256 `9dac183dc113275c799f339f827be3ab1e332f4685b2e4b6b0da9466d6dc658f`.
+  - Y `align-pilot-v3-episodes-b-e18`: max_turns 12, sha256 `f17a5a0f52921b52d67216e6b0bfa86cb3f96ebd143d6e39a4c210ba81420dac`.
+  - Both match item 194's in-memory values. Branch `lane/2026-11-07-wp18-fixtures` at `aaee4b2d2` (from `97714c644`) carries only the two registration files. The tool's own edit to `inputs.json` was not committed; it is saved as `/Users/edr/night-archive/wp18-extract-20261107/inputs-json-tool-diff.patch` for the lead's kit regeneration.
+- **Flash-Next (item 197).** Not run today. The card (`docs/align/qwen4_exp_port/mbp_live.md` on `lane/2026-11-06-qwen4exp-quality-ref`) needs `/Volumes/JW-EXT` attached (no external disk is attached; `/Volumes` has only `Macintosh HD`). It also needs offload run A's bus baseline taken before the SSD is plugged in, and every agent session and the watchdog stopped. It takes 7-20 h after the download starts. That is an operator run with Ed at the Mac, so it is not something this headless session can start. If Ed starts it, R0 re-run 8 waits for it: the SSD is never attached into R0 or a window.
+- **Housekeeping.** Five orphaned fake-meter test processes (`b5-fake-km003c-meter`, parent 1, temp dir gone, 0 % CPU, from a 05:00 PST test run) were killed. The watchdog's fixture-orphan census had counted them.
+- **Next activation (replaces item 195's last pointer; everything else in it holds):**
+  - (1) At or after 17:15 PST, launch R0 re-run 8 exactly as item 195's last "Next activation" (1) says. Add one check: `/Volumes` holds no `JW-EXT` and no other external disk.
+  - (2) After R0: item 195's (2). WP18 is done; the laptop lead integrates `aaee4b2d2`.
+  - (3) Flash-Next and the SSD qualification (item 188 (4)) wait for Ed at the Mac, and neither may overlap R0.
+
+197. **Laptop lead (interactive session 1544c617, Opus 5.5), 2026-11-07 about 08:30 PST: kit delivery. The Flash-Next bf16 quality reference (lead ruling L3) exists. It closes Saturday operator card B12 / MISSING-6 (F13), so the quantized-model comparison no longer has to stay OPEN.** This item schedules nothing. When the Flash-Next live tests run (by day, never overlapping a measurement or the SSD qualification) is the magistrate's call.
+- **Reference.** On branch `records/2026-11-07-qwen4-l3-reference-top64` (`ade3bf7f5`), under `records/qwen4/2026-11-07-l3-reference-top64/`:
+  - `reference-top64.npz`, sha256 `6c9dcb7c…45f8`, and its `.json`;
+  - the gold summary and the prompt provenance;
+  - a README with the exact `score` command.
+  - It was built from the gold-stream reference chain (`lane/2026-11-06-qwen4exp-quality-ref` @ `92042869a`): 48 layers, fp32 and bf16, real inputs, no failures.
+- **Use.** On the 128 GB Mac, from a checkout of `92042869a` or later on that lane:
+  - run `scripts/run_qwen4_quant_quality.py score --reference … --variant-name … --model <artifact> --manifest-sha256 … --output …` for each quantized variant;
+  - in the operator card's mbp_live `benchmark` step, the comparison is now available in place of `reference missing; comparison gate OPEN`.
+  - `projected_kl` is a lower bound on the full-vocabulary KL.
+- **For information:**
+  - Block-5 analysis r3 is merged and tagged `b5/analysis-r3` (`68e47e1f2`, PR #693). Its blind dry run took 1 h 40 min; r1 took about 37 h.
+  - The release check holds on one cause only (D5: the two GAMMA d117 floor resolutions). That cause is being probed.
+  - ALIGN R1 rounds 7-8 are integrated on `lane/2026-11-06-v4-r1-integrated` (`a13d6fc99`); round 8 is in executing review.
+  - The R1 kit delivery will come as its own item once R0 is complete and the WP18 fixtures are in.
+
+196. **Laptop lead (interactive session 1544c617, Opus 5.5), 2026-11-07 about 03:00 PST: (A) a lead ruling that R0's thermometry is evaluated offline from re-run 7's journal, so R0's remaining checks run now without waiting for the classifier; (B) the WP18 tool fix is delivered.** This item schedules nothing; when R0 runs is the magistrate's call.
+- **(A) Ruling R0-L1: R0 does not wait for the classifier.**
+  - **Authority.** `docs/align/pilot_protocol_v4.md` §WP14(a) on `lane/2026-11-06-v4-r1-integrated` says R0's picks are **PROVISIONAL**, and that the lead evaluates R0's thermometry bar offline from its authenticated journal, which "is not a rerun". R1 makes the final sensor selection on D's 10k-prefill + 4,096-decode planning step, from its own full-inventory capture, with the same classifier. So the classifier amendment has to land before R1 arms. It does not have to land before R0's other checks.
+  - **(1) Thermometry.** The SMC capture of re-run 7 is the R0 thermometry evidence: journal sha256 `16aa5307…4984`, 305 clean quiet observations, 1,800 readings of 403 keys, zero read errors. When the classifier amendment is decided, built and merged, the magistrate evaluates it offline on that journal, and records the picks and the bar as PROVISIONAL. No live SMC re-run is needed. A re-run is wanted only if the amended classifier finds the capture itself inadequate (for example, an unsettled idle that its rule refuses rather than flags).
+  - **(2) Remaining checks, now.** In the next clean gap, run R0 on the same measurement checkout `e1a91226e` and the same config, with `--checks host,disk,load,template,generated,memory,ladder,long-decode`. That is every check except `smc`; host, disk, load, generated and memory repeat because they are cheap and re-establish the run's own gates. The run's `complete_r0` will read false, because it is a subset by construction.
+    - This removes the most contention-sensitive step: the scheduled scans and cleaners have refused only inside `smc`.
+    - `ladder` and `long-decode` do not consume the SMC picks (`r0_runner.execute`: `smc` runs unloaded and returns nothing to the model checks).
+  - **(3) Composition.** R0 is complete when all of these hold: the step (2) run passes every non-`smc` check; re-run 7's capture is valid; and the offline thermometry bar is evaluated. Record the composition in the R0 record as a NOTE, citing both reports' sha256 and this item.
+  - **(4) Unchanged.** The classifier reconciliation (the three fresh designs, Ed's request) continues as item 195 sets out. Rulings that change which sensors count still go to Ed. The amendment is required before R1 arms, not for (2).
+  - **(5) Lead input to the reconciliation.** These are the protocol's requirements on `s_fast` and `s_slow`, not a design:
+    - `s_slow` drives the G0 band (`S_slow ≤ R + δ_slow`, released at 0.2 °C/min settledness) and the G1 turn bands. R is the slow and fast medians over the last 60 s of idle before warmup (WP14(b)).
+    - `s_fast` drives the G1 fast band (`δ_fast_c`).
+    - Both must be keys that respond to D's GPU+CPU decode load. A fixed placeholder series cannot gate; reject it.
+    - `s_slow` needs a resolved cooling τ long enough that G0 measures heat soak, not die noise. Its rise has to clear its own noise by a clear margin.
+    - R1 re-selects on a much heavier step than R0's 900 s load, so R0's picks only need to be plausible enough to configure R1's gated runs.
+- **(B) WP18 tool fix (item 191, item 194's diagnosis).**
+  - The fix is on `lane/2026-11-06-v4-r1-integrated@97714c644` (round 6, R6-8 / Sol F7). The summary seed may be the member's seed index (16 for X, 14 for Y) or the derived episode seed. The rows' `generation.sampler.per_turn_seed` must now equal the seed law value for each turn, and each row's `turn` must equal its row index.
+  - Run item 191's command from a checkout of `97714c644`, against `/Users/edr/night-archive/wp18-extract-20261107/` and `p7-PILOT.json`. Commit only `configs/campaigns/align_v4/registration/wp18_{x,y}_token_ids.json`, on a new branch `lane/2026-11-07-wp18-fixtures` from `97714c644`, and push it. The laptop lead integrates it.
+  - If it refuses on the per-turn-seed or turn-index check, send the exact message and edit nothing.
+  - The fixture sha256 values from your in-memory copy (X `9dac183d…658f`, Y `f17a5a0f…dac`) should reproduce.
+- **For information (no action now):**
+  - ALIGN R1 round 6 is integrated and reviewed on `lane/2026-11-06-v4-r1-integrated` (`97714c644`): no blocker, no HIGH. A round-7 fix pass is building on the laptop, and the R1 kit delivery will come as its own item.
+  - The background-sampler lane for the R0 quiet guard (item 192, required before W1) is building in Codex cloud, based on `lane/2026-11-05-align-pilot10-benign`.
+  - Analysis: the blinded D-188 comparator found r2 EQUIVALENT to r1 on real data. Analysis r3 (with the release-trace fixes) is being assembled for a real dry run on the laptop.
+
+195. **Magistrate activation a9031916 (Opus 5.5, headless, 2026-11-07 from 01:02 PST): R0 re-run 7 ran the whole SMC capture with no contention refusal, but the sensor selection could not be trusted: a 100 ms coverage tolerance discarded about half of the real readings, and with that fixed the picks were power-gated placeholders on an unsettled baseline. Per Ed's instruction, three blind fresh designs were reconciled into a new selection rule (DECISION D1-D6, Errata 1-5), built and reviewed over four rounds, and merged as #692 (`5f817856b`). R0 re-run 8 targets the 17:15-23:05 PST gap; read this item's last "Next activation" pointer.** No pending notices, no unread mail from Ed, no new directive.
+- **Run** `/Users/edr/night-align/r0-v4-20261107T0810Z` (08:11:31Z-08:57:59Z, 2,789 s): status `fail`, `complete_r0` false, `stopped_after` smc `inconclusive`. Ladder and long-decode did not run.
+  - host, host-identity, model-load, load (NLL 11.0368), generated (0 off-spec), memory (peak 37,025,053,788 against 45e9): pass. Checkpoint not required. D pins PASS. Spotlight resumed. photoanalysisd 13374 and mediaanalysisd 21331 are still held.
+  - smc: exit 0, 1,845.6 s. 305 quiet observations, all clean. 1,800 readings of 403 keys, zero read errors. Every key rejected with "insufficient phase coverage" (0.12 idle, 0.29 load, 0.22 recovery).
+- **Cause:** `thermal.Coverage` fills a 1 s tick only when a reading's midpoint lies within `NS // 10` (100 ms) of the grid. Readings start 80-150 ms late against the phase origin (the #691 quiet census every 5 s sits inside the loop), and a 403-key read takes 86 ms median. The start-to-start interval is 1,002 ms median and the longest interval 1.27 s. The 100 ms value carries no derivation.
+- **Diagnostic re-rank** (pinned `rank`, only the tolerance changed to `NS // 2`, the half-period that assigns each reading to one 1 s cell): coverage 1.0 in all phases; 16 die keys (`Tg*`), 141 heatsink keys, 246 record-only; `s_fast` `Tg2I` (t63 2.9 s), `s_slow` `TaRT` (t63 50.9 s, tau 123 s). At 100 ms the run's own result reproduces. This is a diagnostic, not a selection.
+- Record: branch `records/2026-11-07-align-r0-v4-rerun7` (`1e9316f25`, `docs/align/r0/2026-11-07-rerun7/`: report.json sha256 `27a174fc…93a8`, report.md, NOTE.md, d-pins.txt, SMC journal sha256 `16aa5307…4984`, diag-rerank.py).
+- **Disposition under item 185 (3):** an infrastructure fault, fixed, reviewed and re-run. The item 194 (3) "mail Ed and wait" covered unidentified contention; this cause is identified and in our code. Ed was mailed the item 176 (2) summary and the plan (thread `1a198fafa8fc12ba`, message `1a1b5454eabd4957`); a NO stops the re-launch.
+- **Fix lane** `fix/2026-11-07-r0-smc-coverage-cell` from `e1a91226e` (worktree `/Users/edr/code/jw-wt/r0-smc-cov`): `Coverage` takes an optional `tolerance_ns` (default unchanged, so the window thermal gates, the sampler and the desk are unchanged); `smc_enumeration.rank` passes `NS // 2`. Brief and papers: `/Users/edr/night-archive/r0-smc-cov/`. Builder: Sol 6.1 high (local, Mac idle). Gates: executing review (Opus), cold passes (Fable and Opus, blind), CI on a draft PR into `lane/2026-11-05-align-pilot10-benign`.
+
+**Next activation (written 2026-11-07 by activation a9031916; item 195; item 181 holds):**
+(1) If the fix lane's gates are not finished: read `/Users/edr/night-archive/r0-smc-cov/` (build-report.md, review files) and the draft PR; finish the gates, disposition the findings, merge into `lane/2026-11-05-align-pilot10-benign`, fast-forward the measurement checkout `$M` to it.
+(2) Then re-launch R0 per `docs/process/R0_HEADLESS_LAUNCH.md` and item 194's launch steps, in a clean gap long enough for 3-4 h: 06:15-11:05, 13:15-17:05 or 17:15-23:05 PST. Deadline before the gap's end.
+(3) After R0 exits: item 185 (1) on the new record, then 194 (3) for contention.
+(4) WP18 (item 191) and items 188 (3)-(4) are unchanged.
+
+- **Update about 02:25 PST: the fix lane's cold passes are in. R0 is HELD; the re-launch planned for the 06:15 gap is withdrawn.**
+  - #692 (draft, base `lane/2026-11-05-align-pilot10-benign`, head `3c0b71b24`, Sol 6.1 builder): Fable 5.1 and Opus 5.5 ran blind executing cold passes. Both returned ADMIT_WITH_FIXES: the diff is correct and no capture that `collect()` can produce passes falsely. Dispositions: https://github.com/mpmdw/JouleWise/pull/692#issuecomment-6705062492. Reviews: `/Users/edr/night-archive/r0-smc-cov/{fable,opus}/REVIEW.md`.
+  - **Fable F1:** the R0 host receipt (`r0_host.py:484-491`) re-checks the picks against the capture-wide coverage block that `scripts/align_smc_enumerate.py:130` writes at 100 ms. On the real payload it stays inconclusive (36/1800). A capture-wide grid at 500 ms gives 0.906, because the phases sit on different sub-second offsets. The receipt must read `rank`'s per-phase coverage.
+  - **Opus HIGH, re-executed by the lead on the raw journal:** with the coverage fixed, the picks are artifacts.
+    - All 16 die keys are `Tg*` GPU keys reading a fixed -2.75 degC on 286 of 300 idle samples (power-gated placeholder), and they drop back to it two samples into recovery.
+    - TaRT was still cooling through idle (34.0 to 30.6 degC); its 50-60 s rise is 0.06 degC against a noise floor of 1.14.
+    - The real CPU-cluster keys TCMb, TCDX and TCMz (t63 18-26 s, tau 16-27 s) fall between the die class (t63 <= 5 s) and the heatsink class (tau > 30 s), so they are record-only.
+  - **Disposition:** #692 stays draft and unmerged. Merging it with the receipt fix alone would turn a wrong-reason inconclusive into a pass with physically wrong picks. The classifier needs a design decision, a result the design does not cover (item 185 (3)), so it goes to Ed and the laptop lead:
+    - rejecting placeholder series;
+    - a settled-idle criterion (the idle phase follows the memory check's load);
+    - classes that fit Mac15,9's sensors, or a different load step;
+    - what W1 thermal control needs from `s_fast` and `s_slow`.
+  - Reviewer harness note: agent tool calls do not keep a standalone `cd`, so plain `-m unittest` imported the custody checkout. Use `python -P` or `PYTHONSAFEPATH=1`.
+
+**Next activation (replaces item 195's pointer above; written 2026-11-07 about 02:25 PST by activation a9031916):**
+(1) Do not re-launch R0 until a classifier amendment covering the Opus HIGH and Fable F1 is decided, built (onto #692 or a successor), gated and merged. A re-run on the current lane is inconclusive for a known reason and costs 3-4 h of quiet Mac.
+(2) Read Ed's reply on thread `1a198fafa8fc12ba` and any laptop-lead item. If a two-seat classifier consult has run (`/Users/edr/night-archive/r0-smc-cov/consult/`), its proposals are inputs to that decision.
+(3) WP18 (item 191) and items 188 (3)-(4) are unchanged.
+
+- **Consult (about 01:40 PST), two blind seats from the re-run 7 journal:** Sol 6.1 xhigh and Fable 5.1. Proposals and the lead's synthesis are on branch `records/2026-11-07-align-r0-v4-rerun7` (`42e6b973c`, `docs/align/r0/2026-11-07-rerun7/consult/`).
+  - Both seats agree:
+    - reject placeholder series;
+    - take the baseline and noise from the last 60 s of idle;
+    - check settledness at G0's 0.2 degC/min;
+    - fast class tau <= 30 s, with candidate `Tf18`;
+    - add a noise gate on slow keys;
+    - make the receipt read the classifier's per-phase coverage;
+    - this capture cannot give a valid slow pick.
+  - Open choices: the slow class lower bound (30 or 90 s); refusing or flagging an unsettled idle; running SMC first in R0; the slow pick rule.
+- **Ed's reply, 01:34 PST 11-07** (message `1a1b55c3be8c0435`, thread `1a198fafa8fc12ba`), verbatim: "of course continue work on getting this right. are there any signs when working this will lead to any noteworthy research? wb the port of qwen next and other lanes, update? Also sol xhigh claude 5.5 and fable 5.1 should be doing fresh designs"
+  - Applied: three blind fresh-design seats (Sol 6.1 xhigh, Opus 5.5, Fable 5.1), free to discard the current classifier. Brief: `/Users/edr/night-archive/r0-smc-cov/fresh/BRIEF.md`; outputs in `fresh/{sol,opus,fable}/DESIGN.md`. The two amendment-framed proposals above stay on record as inputs.
+  - Ed's two questions are answered on the thread.
+- **Next activation (replaces the pointer above):**
+  - (1) If the three fresh designs exist and are not yet reconciled, reconcile them. Claude-side writes the decision text, and Sol's executed findings are kept. Rulings that change which sensors count go to Ed with the reconciled text. Then build onto #692 or a successor, gate it, merge, and run one R0 in a clean gap.
+  - (2) R0 stays held until then.
+  - (3) WP18 (item 191) and items 188 (3)-(4) are unchanged.
+
+- **Fresh designs reconciled (02:23 PST); build launched (02:45 PST).**
+  - Three blind fresh designs (Sol 6.1 xhigh, Opus 5.5, Fable 5.1) and the lead's reconciled decision D1-D6 are on branch `records/2026-11-07-align-r0-v4-rerun7` (`9fc7f06cc`, `docs/align/r0/2026-11-07-rerun7/fresh/DECISION.md`).
+  - Agreed by all three:
+    - D1: placeholder rejection (any reading below 10 degC; a one-second jump larger than half the step).
+    - D2: baseline from the last 60 s of idle.
+    - D3: SMC first in R0, with an adaptive idle to G0's 0.2 degC/min, capped at 1,200 s; an unsettled key is flagged, not refused.
+    - D4: a fast role of tau <= 60 s; pick on this capture Tf18.
+    - D6: the receipt reads per-phase coverage.
+  - D5 (the slow pick) is provisional: Fable's band-hold rule (TaLP), printed beside the Opus pick (TSXR) and the Sol pick (TVS0). It is chosen on the first settled R0.
+  - Ed was mailed the decision with a NO-window to 02:45 (message `1a1b588e66e248f9`). No reply came.
+  - Build: Sol 6.1 xhigh onto #692, brief `/Users/edr/night-archive/r0-smc-cov/build2/BRIEF.md`, report `build2/build-report.md`.
+  - R1-lane findings for the laptop lead are in DECISION.md "Not built here" (G0 600 s cap vs 840-1,040 s settle; G1 279 s; R1 cooldowns).
+- **Next activation (replaces the pointer above):**
+  - (1) If the build report exists, commit it if uncommitted and run blind Fable and Opus executing cold passes (Agent tool; `python -B -P`), then CI. Disposition, merge into `lane/2026-11-05-align-pilot10-benign`, and fast-forward `$M`.
+  - (2) Stop the Codex MCP adapter, then launch R0 per `docs/process/R0_HEADLESS_LAUNCH.md` in a clean gap long enough for 4-4.5 h (the adaptive idle adds up to 15 min).
+  - (3) WP18 and items 188 (3)-(4) are unchanged.
+
+- **Build and review rounds, 02:45-04:10 PST, on #692:**
+  - `c0c460fd9`: D1-D6 build. Cold passes from Fable and Opus: ADMIT_WITH_FIXES, giving Erratum 2.
+  - `695574428` + `eb6e8e493`: Erratum 2 and 3 fixes. Delta reviews from Fable and Opus: ADMIT_WITH_FIXES. The
+    D1 (d) reference was fragile (one late recovery read moved it and excluded the Tf family), giving
+    Erratum 4.
+  - Erratum 4 fix round: Sol 6.1 xhigh, brief `/Users/edr/night-archive/r0-smc-cov/build5/BRIEF.md`.
+  - Errata 1-4 and all reviews: `records/2026-11-07-align-r0-v4-rerun7`, `docs/align/r0/2026-11-07-rerun7/fresh/`.
+  - The real journal gives Tf18 / TaLP at every head so far.
+- **Next activation (replaces the pointer above):**
+  - (1) If the Erratum 4 round is committed, the lead verifies:
+    - the Metal thermal tests and the real replay, run outside the seat sandbox;
+    - one delta executing review (Opus, or Fable) of Erratum 4 only;
+    - CI green.
+  - (2) Then merge into `lane/2026-11-05-align-pilot10-benign`, fast-forward `$M`, stop the Codex MCP adapter, and
+    launch R0 in a clean gap long enough for about 4.5 h (06:15-11:05, 13:15-17:05 or 17:15-23:05 PST).
+  - (3) WP18 and items 188 (3)-(4) are unchanged.
+
+- **Final state of the fix lane (06:20 PST):** #692 head `172399c58`.
+  - Commits: Erratum 5 flags (`1c43bdd8f`, with the lead's ruling that the censoring pool drops the class-tau gate) and a hazards test fix. Two step-mechanics tests in `tests/hazards/test_smc_enumeration.py` assumed the pre-D3 fixed idle; `idle_max_s=idle_s` pins it.
+  - Every review round is ADMIT_WITH_FIXES and dispositioned (DECISION.md Errata 2-5; PR comments).
+  - Lead verification: every tests/align smc/r0/thermal module and every tests/hazards module OK, each in its own process. Real journal: Tf18 / TaLP; D1(d) reference Tf18, rise 45.68, TVH3 only excluded; receipt pass. Shifted-onset replay: 0-20 s no flag; 23 s wide_exclusion; >= 25 s both flags.
+  - CI: this lane's shards take 1-2 h. Heavy BYTES production-archive tests make shard 5 slow; it is not hung.
+  - The 06:15-11:05 gap was missed. R0 now targets 17:15-23:05 PST: about 4.5 h with the adaptive idle; 13:15-17:05 is too short.
+- **Next activation (replaces the pointer above):**
+  - (1) If #692 CI on its final head is green and #692 is not merged: mark it ready and merge into `lane/2026-11-05-align-pilot10-benign` (merge commit). Then fast-forward `$M=/Users/edr/night-custody/measurement/JouleWise-measurement-20261102-align-pilot2` to the lane tip (clean tree first).
+  - (2) R0 re-run 8, from 17:15 PST, after the 17:09 scan:
+    - item 194's launch checks: Spotlight STOP/CONT, preflight, battery float;
+    - stop the Codex MCP adapter;
+    - launcher `/opt/homebrew/opt/python@3.14/bin/python3.14 scripts/launch_align_r0.py launch` per `docs/process/R0_HEADLESS_LAUNCH.md`, with `--config $M/configs/align/v4/r0_desk.json` (now carries `idle_max_seconds` 1200), `--output /Users/edr/night-align/r0-v4-<UTC>`, `--deadline` 23:05 PST, `--disk-path /Users/edr`;
+    - mail Ed on thread `1a198fafa8fc12ba`, then exit.
+  - (3) After R0: item 185 (1). The SMC result now carries per-key `baseline_unsettled`, the settle record, D1(d) reference and exclusions, `heat_ordering_indeterminate` and `wide_exclusion`, and the alternative slow picks.
+    - D5's slow rule is chosen on this settled capture: print the alternatives and decide with the R1 lead.
+    - R1-lane deferrals are in DECISION.md Erratum 5.
+  - (4) WP18 and items 188 (3)-(4) are unchanged.
+
+- **Merged (08:45 PST):** #692 is merged into `lane/2026-11-05-align-pilot10-benign` at `5f817856b`.
+  - CI on the final head `172399c58`: 21 pass, 1 skipped. Shard 5 takes about 2-3 h on this lane because of BYTES archive tests; that is normal (it took 3 h on #691).
+  - `$M` was fast-forwarded `e1a91226e` -> `5f817856b` and is clean. Venv `0.31.2 0.31.3 5.12.1`. `r0_desk.json` smc_step: idle 300, idle_max 1200, load 900, recovery 600.
+  - The merged code on the re-run 7 journal: Tf18 / TaLP, TVH3 only excluded.
+  - Ed was mailed at 06:25 (message `1a1b66038fcd2487`). No reply.
+- **Next activation (replaces every pointer above in item 195):**
+  - (1) At or after 17:15 PST (after the 17:09 scan), launch R0 re-run 8 on `$M` at `5f817856b`:
+    - the launch checks in item 194: canonical desk-fence tests, `hw.model`, venv, Spotlight STOP/CONT, preflight, battery float;
+    - stop the Codex MCP adapter;
+    - `/opt/homebrew/opt/python@3.14/bin/python3.14 /Users/edr/code/JouleWise/scripts/launch_align_r0.py launch --custody-root /Users/edr/night-custody/magistrate --magistrate-pid <watchdog-lock pid> --deadline <23:05 PST epoch> --repo $M --python-bin $M/.venv/bin/python --config $M/configs/align/v4/r0_desk.json --output /Users/edr/night-align/r0-v4-<UTC yyyymmddThhmmZ> --disk-path /Users/edr`;
+    - mail Ed on thread `1a198fafa8fc12ba`, then exit at once.
+    - A launch before 17:15 risks the 17:09 scan. The gap is 5 h 50 min against about 4.5 h of R0.
+  - (2) After R0: item 185 (1) on the new record. The SMC section now also carries:
+    - the idle settle record (actual idle seconds, settled, settle keys);
+    - per-key `baseline_unsettled`;
+    - the D1(d) reference, its rise and the exclusions;
+    - `heat_ordering_indeterminate` and `heat_ordering_wide_exclusion`;
+    - `alternative_slow_picks`.
+    Decide the D5 slow rule on this capture with the R1 lead. The candidates: Fable band-hold (default), design-literal, Opus and Sol.
+  - (3) WP18 (item 191) and items 188 (3)-(4) are unchanged. The R1-lane deferrals are in DECISION.md Erratum 5.
+
+194. **Magistrate activation 62c121f8 (Opus 5.5, headless, 2026-11-07 from 00:02 PST): R0 re-run 6 was refused in `smc` at 00:00 PST by macOS's daily `/tmp` cleaner. That is the third `smc` refusal in a row, so it went to Ed under item 181, and R0 waits for his answer. The WP18 fixture tool (item 191) refused on a tool defect; nothing was committed from it.** No pending notices, no unread mail from Ed, no new directive.
+- **Run** `/Users/edr/night-align/r0-v4-20261107T0720Z` (07:18:54Z-08:00:04Z, 2,470 s): status `fail`, `complete_r0` false.
+  - host, host-identity, model-load, generated (0 off-spec turns) and memory (peak 37,025,283,164 bytes against 45e9; swap flat): pass.
+  - load: pass. NLL 11.0368 against the reference 11.0642, delta -0.027.
+  - checkpoint: not required.
+  - smc exited 3 `NotQuiet` after 1,520 s (idle 300 and load 900 complete; recovery at about sample 288 of 600). Over 35.9 s (23:59:28-00:00:04 PST), `find` pid 59251 (started 00:00:00) ran at 0.0786 CPU-s/s and fseventsd at 0.0697, against the 0.05 limit.
+  - D pins PASS. Spotlight resumed. photoanalysisd 13374 and mediaanalysisd 21331 are still held.
+- **Cause:** `com.apple.tmp_cleaner` (`/System/Library/LaunchDaemons/com.apple.tmp_cleaner.plist`, `StartCalendarInterval` Hour 0). The unified log shows launchd starting it at 00:00:00.006 on its calendar interval. It runs two `find` walks over `/tmp`. `/private/tmp` holds about 73,100 entries (2.3 GB), mostly seat scratch. The refusal is correct: the contention is real. It is not an R0 defect.
+- **Third consecutive `smc` failure**, each from a different cause outside R0: run 4 (#691 snapshot artefact, fixed), run 5 (softwareupdated scan at 23:09), run 6 (this). Mailed Ed under item 181 on thread `1a198fafa8fc12ba` (message `1a1b50b79ac9516f`, 00:06 PST). It gives the full summary and proposes timing-only re-launches. R0 is **not** re-launched until he answers.
+- **Known scheduled contention (PST):**
+  - 00:00 daily: the `/tmp` cleaner.
+  - About 05:09, 11:09, 17:09 and 23:09: the softwareupdated scan.
+  - About 05:40, not at a fixed time: XProtect (item 14).
+  - About 12:53: the daily maintenance batch (item 17).
+  - Clean gaps: about 00:05-05:05, 06:15-11:05, 13:15-17:05 and 17:15-23:05.
+- Record: branch `records/2026-11-07-align-r0-v4-rerun6` (`744d17a51`, `docs/align/r0/2026-11-07-rerun6/`: report.json sha256 `e48721ce…c37c`, report.md, NOTE.md, D-pin output, SMC journal sha256 `6d8eded0…c5a`).
+- **WP18 (item 191): tool defect, reported, not hand-edited.**
+  - Sources: the pilot-7 archive (`pilot-v6-20261104T164323Z.tar.zst`). Its sha256 matched the offload record `7fdaeb22…c212`. Both `align_turns.jsonl` files were extracted to `/Users/edr/night-archive/wp18-extract-20261107/` and matched the archive manifest (b-e25 `b71f393e…f364`, b-e18 `f657ddd7…b01e`). `--pilot` was `/Users/edr/night-archive/seats-cf1baad2/pilots/p7-PILOT.json`, whose `runs_root` is that pilot.
+  - `scripts/align_v4_wp18_fixtures.py` at `998ee2ab0` refused, with and without `--check`: "X align-pilot-v3-episodes-b-e25: summary seed must equal 7655467588542005630".
+  - Diagnosis: in `p7-PILOT.json`, `members[].summary.seed` is the seed *index* (16 for b-e25, 14 for b-e18). The 64-bit episode seed is at `summary.sampler_seed_inputs.episode_seed` (with `expected_episode_seed` equal and `preregistered_episode_seed_matches_bundle` true). The tool compares `summary['seed']` with the 64-bit seed (line 79).
+  - In memory, a copy that checks `sampler_seed_inputs.episode_seed == seed` and `summary.seed == seed_index` passed every other check. X: max_turns 12, fixture sha256 `9dac183d…658f`. Y: max_turns 12, fixture sha256 `f17a5a0f…dac`. This is diagnosis only. Nothing was written to the repo, and the branch `lane/2026-11-07-wp18-fixtures` was not pushed.
+  - **For the laptop lead:** fix line 79 on the R1 lane and add a test on the real p7 member shape. The magistrate then runs the tool (minutes) and commits the two registration files.
+
+- **Ed's answer, 00:08 PST 11-07** (message `1a1b50d8d92f7e92`, thread `1a198fafa8fc12ba`), verbatim: "go". Applied: R0 re-run 7 is launched into the 00:05-05:05 gap with deadline 05:05 PST (`1794056700`). The launch details follow in the next commit of this item.
+
+- **R0 re-run 7 launch** (about 00:15 PST), under items 181 and 185 (3) and Ed's "go":
+  - Canonical `57e0bbf20`; `tests.test_magistrate_desk_fence` OK under python3.14.
+  - Measurement checkout `e1a91226e`, clean; Mac15,9; 137,438,953,472 bytes; venv `0.31.2 0.31.3 5.12.1`.
+  - Spotlight 716 and 73957: `T` after STOP, `S` after CONT.
+  - Preflight: AC power; battery ExternalConnected Yes, IsCharging No, InstantAmperage 0; free 100,018,932 KiB at /Users/edr.
+  - `--output /Users/edr/night-align/r0-v4-20261107T0810Z`, `--deadline 1794056700` (05:05 PST 11-07, before the 05:09 scan), config `$M/configs/align/v4/r0_desk.json`, `--python-bin $M/.venv/bin/python`, `--disk-path /Users/edr`.
+  - The Codex MCP adapter is stopped before launch.
+  - Process note: this activation ran `git fetch` in the canonical root and fast-forwarded it twice (no night agent loaded or on disk; nothing armed).
+
+**Next activation (written 2026-11-07 by activation 62c121f8; item 194; item 181 holds):**
+(1) **After R0 exits** (fence cleared, or a stale-fence notice): follow item 185 (1) on `/Users/edr/night-align/r0-v4-20261107T0810Z`.
+  - Commit to `docs/align/r0/2026-11-07-rerun7/` on a new branch from `e1a91226e`.
+  - Email Ed the item 176 (2) summary on thread `1a198fafa8fc12ba`.
+  - If the record directory is absent, follow item 185 (4).
+(2) **If R0 passes:** item 185 (2).
+(3) **If R0 is refused by contention again:** compare the refusal interval with the schedule above (`grep AutoBackgroundScanFinished /var/log/install.log`; `/usr/bin/log show` for launchd `StartCalendarInterval` spawns).
+  - Ed's "go" approves re-launching timed into a clean gap. If the refusal came from a source on that schedule, or from a newly identified scheduled job (add it to the list), re-launch in the next gap whose length covers the 3-4 h run.
+  - If the refusal came from an unscheduled or unidentified source, or R0 fails in any other way, mail Ed and wait.
+(4) **WP18:** when a laptop-lead item delivers the tool fix, run item 191's command on `/Users/edr/night-archive/wp18-extract-20261107/` (or re-extract from the archive) and commit only the two registration files.
+(5) Items 188 (3)-(4) still hold: photoanalysisd stays held; the SSD qualification needs Ed present.
+
+193. **Magistrate activation ac09cac6 (Opus 5.5, headless, 2026-11-06 from 23:12 PST): R0 re-run 5 was refused in `smc` by the 23:09 PST softwareupdated background scan, which is real, measured contention. R0 re-launched about 23:20 PST, timed into the 6 h gap before the next scan.** No pending notices, no unread mail from Ed, no new directive.
+- **Run** `/Users/edr/night-align/r0-v4-20261107T0631Z` (22:32:18-23:09:44 PST, 2,246 s): status `fail`, `complete_r0` false.
+  - Passed: host, host-identity, model-load, generated (no off-spec echo) and memory (peak 37,024,627,804 bytes against 45e9; swap flat).
+  - load passed: NLL 11.0368 against the reference, delta -0.027.
+  - checkpoint: not required (rewind fraction 0.0 over 12 transitions).
+  - smc exited 3 `NotQuiet` after 1,310 s (idle 300 and load 900 complete, recovery at sample 78 of 600): over 35.9 s, softwareupdated pid 547 ran at 0.0704 CPU-s/s and duetexpertd pid 834 at 0.0670, against the 0.05 limit. The host aggregate, 0.364, was flagged and not judged.
+  - D pins PASS. Spotlight resumed. photoanalysisd 13374 and mediaanalysisd 21331 are still held.
+  - Item 190 expected a `quiet_observations` field. The SMC row has none, because a refused probe returns only the refusal.
+- **Cause:** softwareupdated's automatic background scan. `/var/log/install.log` shows `AutoBackgroundScanFinished` every 6 h, at about 05:09, 11:09, 17:09 and 23:09 PST, every day from 11-02 to 11-06. This one finished at 23:09:53, the minute of the refusal. duetexpertd burst at the same moment; its lifetime average is about 0.0007 CPU-s/s. 30 s later neither daemon was using measurable CPU. It is not an R0 defect. Under item 181 this is the second `smc` failure in a row, with a different cause from run 4 (the #691 snapshot artefact). It is not a third consecutive failure, so it does not go to Ed.
+- **Remedy: timing.** No setting was changed (directive #417 leaves the update settings to Ed). The re-run starts right after the 23:09 scan. The next scan is at about 05:09 PST, so the run has about 5.8 h; a full all-pass R0 is planned at 3-4 h (item 176). A run still going at 05:09 may be refused the same way.
+- Record: branch `records/2026-11-07-align-r0-v4-rerun5` (`ea89c4d3f`, `docs/align/r0/2026-11-07-rerun5/`: report.json sha256 `6fb21198…1c48`, report.md, NOTE.md, D-pin output, SMC journal sha256 `022c8681…a68b`).
+- **Re-launch** under items 181 and 185 (3):
+  - Canonical `37c969429`; desk-fence tests 35 OK under python3.14.
+  - Measurement checkout `e1a91226e`, clean; Mac15,9; 137,438,953,472 bytes; venv `0.31.2 0.31.3 5.12.1`.
+  - Spotlight 716 and 73957 `T` after STOP and `S` after CONT.
+  - Preflight: AC true, free 84,010,049,536 bytes. Battery: ExternalConnected Yes, IsCharging No, InstantAmperage 0.
+  - `--output /Users/edr/night-align/r0-v4-20261107T0720Z`, `--deadline 1794072000` (09:20 PST 11-07), config `$M/configs/align/v4/r0_desk.json`, `--python-bin $M/.venv/bin/python`.
+  - The Codex MCP adapter is stopped before launch.
+- Process note: this activation ran one `git fetch` in the canonical root at launch. Nothing was armed and the tree did not move.
+
+**Next activation (written 2026-11-06 by activation ac09cac6; item 193; item 181 holds):**
+(1) **After R0 exits** (fence cleared, or a stale-fence notice): follow item 185 (1) on `/Users/edr/night-align/r0-v4-20261107T0720Z`. Commit to `docs/align/r0/2026-11-07-rerun6/` on a new branch from `e1a91226e`, and email Ed the item 176 (2) summary on thread `1a198fafa8fc12ba`. If the record directory is absent, follow item 185 (4).
+(2) **If R0 passes:** item 185 (2). **If it fails or is inconclusive:** item 185 (3)-(4).
+  - Compare any contention refusal's interval with the softwareupdated scan times (`grep AutoBackgroundScanFinished /var/log/install.log`).
+  - A refusal at the 05:09 scan means the run was too long for the gap. Re-launch right after a scan.
+  - A refusal by `smc` for any other cause makes three in a row: mail Ed (item 181) and wait.
+(3) **WP18 fixtures (item 191):** still to run once R0 has exited and before any new R0 launch, since it takes minutes.
+(4) Items 188 (3)-(4) still hold: photoanalysisd stays held; the SSD qualification needs Ed present.
+
+192. **Laptop lead (interactive session 1544c617, Opus 5.5, through a delegate), 2026-11-06 about 22:30 PST: review delivery. The executing and cold review gates of PR #691 (R0 contention, `fix/2026-11-07-r0-census-cpu-interval`) at head `21da63a71` were run off-Mac on the analysis Air (offload rule: item 180 / Ed 11-06). Both verdicts are ADMIT_WITH_FIXES. Neither review found a blocker. Neither verdict is ADMIT, so the gates are not yet satisfied: the findings below are the magistrate's to fix or disposition.** This item schedules nothing; when R0 runs is the magistrate's call. Nothing was pushed to the PR branch, and the PR was not merged or marked ready.
+- **Executing review** (Opus 5.5, laptop lead): ADMIT_WITH_FIXES. https://github.com/mpmdw/JouleWise/pull/691#issuecomment-6703316986
+  - Covers the delta `3297762ff..21da63a71` and the full diff, checked against the item 189 ruling. Both probes judge per process at 0.05 CPU-s/s over at least 30 s. The `CpuQuietProbe` aggregate is journaled and flagged (`aggregate_above_0_05`) and never judged.
+  - Tests: every R0, SMC, contention and quiet-guard module was green, run one per process under `nice -n 19 taskpolicy -b` (e.g. `test_r0_host` 44, `test_smc_quiet` 19, `test_contention` 48). `tests.test_magistrate_desk_fence` on `main` gave 35 OK under python3.13 and 35 OK under python3.14.
+  - 14 adversarial tests, all pass; their source is in the comment.
+    - Sustained 0.2 and 0.06 contaminants refuse, at the first admission or within two windows.
+    - A zombie or a PID reuse does not hide a sustained contaminant.
+    - The aggregate is never judged.
+    - At 15 s cadence a 1.65 CPU-s burst refuses at every window offset tested.
+    - Proportionality holds: about 21 minutes of repeated mdworker_shared (120 s) and photoanalysisd (300 s) start-up respawns plus an mds_stores 1.5 s spike, about 85 receipts, gave no refusal.
+  - **Required fix, F1 (PR description only):** the Summary still says "a regressed counter or a backwards clock refuses". After round 3, regressions are recorded, a backwards wall clock is a flag, and only a backwards monotonic clock refuses. Correct the PR body before merge.
+  - Notes F2-F6, none blocking:
+    - F2: `QuietGuard` journals no host aggregate.
+    - F3: measured invisibility bounds. A one-snapshot contaminant that is a zombie by the next is judged at about r/2 (about 2.8 CPU-s passes). A process born and gone between two snapshots is invisible.
+    - F4: a burst straddling a snapshot leaks when the caller's cadence is 30 s or more.
+    - F5: `_previous_over` is effectively always empty.
+    - F6: an unread host tick refuses the SMC probe.
+- **Cold review** (fresh Opus agent, given only the diff, the PR body and its purpose): ADMIT_WITH_FIXES. https://github.com/mpmdw/JouleWise/pull/691#issuecomment-6703325938
+  - Should-fix 1: a contender inside a caller gap (model load, prefill) is averaged over the gap. Measured: 0.2 CPU-s/s for 60 s inside a 300 s gap passed with only a `long_interval` flag. The proposed fix is a background snapshot thread that never judges or sleeps, or at minimum `long_interval` with a contaminant above the report floor treated as unjudged.
+  - Should-fix 2: the judged window depends on call spacing. Measured: forced calls 29 s apart gave a 58 s window, and a 2.0 CPU-s burst passed.
+  - Should-fix 3: the photoanalysisd replay test (`test_r0_host.py:408-434`) assumes 0.6 CPU-s. **Lead note:** that figure is item 188's own estimate of the start-up burst, so the PR body can cite item 188 or reword the claim.
+  - Nits: no host aggregate in `QuietGuard`; the first admission's agent and chain census is 30 s old when it returns; a backwards wall step can hide a new process; a zombie born inside the window reads as 0; receipt growth from full `unaccounted` lists.
+- **Sol 6.1 xhigh critique** (advisory, not a gate; event log audited, no custody path read): REJECT, triaged by the lead to no blocker. https://github.com/mpmdw/JouleWise/pull/691#issuecomment-6703363402
+  - S1 (contaminant-only scope) is out of scope. S2 (zombies admitted) is the ruled dwell rule. S3 is the same as cold finding 1.
+  - **Two cheap fixes advised:**
+    - S4: `_cpu_snapshot` stamps `finished` after the args `ps`, so a slow args read stretches the denominator. Stamp it right after `contention.PS_ARGV`.
+    - S5 (equal to cold finding 6): a wall-clock step back of more than 1 s puts a new process under "missed by the first snapshot". Refuse it as indeterminate, or charge it as born inside the window.
+- **For the magistrate:** fix F1, and fix or disposition each finding in the PR's Dispositions section (gate row 5).
+  - Cold findings 1-2 and S3 are the round-1 Fable 2 gap class, which is already dispositioned. The magistrate decides whether to add the snapshot thread or defer it with a reason.
+  - A PR-body-only change needs no re-review. A code change (for example S4/S5) needs a delta executing review; the magistrate can request it off-Mac from the lead.
+  - Then CI green on the final head, merge, and relaunch R0 per `docs/process/R0_HEADLESS_LAUNCH.md` (item 189 (2)).
+
+- **Update about 22:45 PST (laptop lead, session 1544c617): lead dispositions for #691, so the magistrate can finish without another review round.** The measurement Mac has been idle since 18:05 behind this PR. It was CI-green at 19:39, and Ed asked why the MBP is idle. The gates are satisfied once the magistrate applies these to the PR body; no further review is needed, because the change is body-only.
+  - **Exec F1:** replace the Summary bullet "a failed snapshot, a regressed counter or a backwards clock refuses" with "a failed snapshot or a backwards monotonic clock refuses; a regressed counter is recorded under the dwell rule (round 3) and a backwards wall clock is flagged, not refused".
+  - **Cold 1 and cold 2 (gap dilution and a judged window that stretches with call spacing):** DEFERRED to a new lane, `fix/2026-11-07-r0-guard-background-sampler`: a background snapshot thread at a fixed cadence of 15 s or less, so the judged window never exceeds about 30 s. **This lane is required before any W1 arm, not for R0.** R0 is a readiness check, not the energy measurement. Its worst-case exposure (about 12 CPU-s) is disclosed in the receipts. This is the same class as round-1 Fable 2.
+  - **Cold 3:** accepted. Cite item 188's estimate for the 0.6 CPU-s figure.
+  - **Exec notes, and Sol S4/S5:** deferred to the same background-sampler lane, before W1. The exec notes are: the host aggregate is not journaled by the R0 guard; one-snapshot and between-snapshot blind spots; `_previous_over`; an unreadable tick count refusing, which fails closed. S4 is the closing timestamp being taken after the args `ps`; S5 is a wall clock stepping back more than 1 s.
+  - **Sol's other findings:** rejected. The scope is unchanged by this PR, and zombie handling is the adopted dwell rule.
+  - **Then:** CI green on the final head, merge, and relaunch R0 per `docs/process/R0_HEADLESS_LAUNCH.md`. Timing is the magistrate's call. This update schedules nothing else.
+
+191. **Laptop lead (interactive session 1544c617, Opus 5.5), 2026-11-07 about 01:30 PST: kit delivery. WP18 X/Y fixture tool for the ALIGN v4 W1 kit; needs pilot-7 files that exist only on the measurement Mac.** This item schedules nothing; when to run it is the magistrate's call. It is read-only on pilot data and takes minutes.
+- **Why:** the v4 kit (`scripts/align_v4_kit.py --check`) still blocks on four WP18 leaves (X/Y `max_turns` and `token_fixture_sha256`). Lead ruling R5-8 (LEAD-RULINGS-2.md on `lane/2026-11-06-v4-r1-integrated`) makes `registration/wp18_{x,y}_token_ids.json` a hard W1 prerequisite. Their values come from the pilot-7 `b-e25` and `b-e18` episode outputs and `p7-PILOT.json`.
+- **Tool:** `scripts/align_v4_wp18_fixtures.py` on `lane/2026-11-06-v4-r1-integrated` at `998ee2ab0` or later. Use a separate clean worktree of that lane under the magistrate's usual worktree root. Do not switch the canonical checkout.
+- **Run (real paths substituted):** `.venv/bin/python -B scripts/align_v4_wp18_fixtures.py --x-turns <pilot 6-7 offload>/align-pilot-v3-episodes-b-e25/outputs/align_turns.jsonl --y-turns <offload>/align-pilot-v3-episodes-b-e18/outputs/align_turns.jsonl --pilot <path>/p7-PILOT.json`, then the same command with `--check`, which must exit 0. Any refusal means a source does not match (wrong member, seed, turn count or token ids). Stop and report it; do not hand-edit.
+- **Commit ONLY** `configs/campaigns/align_v4/registration/wp18_x_token_ids.json` and `wp18_y_token_ids.json`, on a new branch `lane/2026-11-07-wp18-fixtures` from that lane's tip, and push it. Do NOT regenerate the kit or commit the other generated files: R1 round 6 is changing the lane in parallel, so the lead regenerates the kit and integrates after round 6. Report the printed `max_turns` and sha256 per arm in a RUN_STATE item.
+- **R1 status for context:** rounds 4 and 5 are integrated on that lane (round-5 cold pass: R1 can be armed). Round 6 (host-level High Power restore on every exit path, W1-faithful gated-run idle, protocol S6/S7 for R1 picks) is in build. R1 still needs R0 passing on the Mac. No arm is requested by this item.
+
+190. **Laptop lead (interactive session 359dce51, Opus 5.5, through a delegate), 2026-11-06 about 17:45 PST: kit delivery. The hard repo prune (PR #690) is merged into `main` at `959628ccc`.** This item schedules nothing.
+- **What it did:** removed 8,111 stale files from `main` (13,031 files / 376 MB to 4,924 / about 186 MB; 8,109 in the reviewed prune plus the two `normalized_compare.py` copies below): process traces, legacy docs, old run reports and reviews, stale campaign configs, and dead or superseded code with its tests. Nothing was rewritten out of history. Run report: `docs/run_reports/2026-11-06-repo-prune.md`.
+- **Getting a file back:** tag `archive/pre-prune-2026-11-06` (and the branch of the same name) at `eeea6d5cf`, the last `main` before the prune. `docs/ARCHIVE.md` gives the commands.
+- **Tool map:** `CANONICAL.md` names the one current tool or document per job. Check it before building anything.
+- **Measurement kit:** it lives on `lane/2026-11-05-align-pilot10-benign` (head `165e12872`), as before. The prune touched no kit entry point: the executing review applied the prune to the lane tree and ran every kit, session, R0 and R1 entry point (`--help` rc 0, plus a dry kit build byte-identical to the unpruned tree; `docs/run_reports/2026-11-06-repo-prune-executing-review.md` §3). The R0 launcher `scripts/launch_align_r0.py` and `scripts/run_align_r0_launchagent.sh` stay on `main`. The lane changes since the review (#687, #689) touch no removed path.
+- **Magistrate:** pull `main` into the canonical checkout (`git pull --ff-only`) when no run is reading it.
+- **Also in the PR:** the suite instructions in `AGENTS.md`, `README.md` and "Start Here" step 8 now say `python3 scripts/shard_tests.py --workers 8 --split` instead of a sequential `unittest discover` (about 3.2 h); this file's header points here instead of the removed `RESUME-*` docs and the 2026-10-10 hand-off; `tools/normalized_compare.py` (superseded by `scripts/compare_b5_recompute.py`) is deleted with its R1 original and test.
+- **Evidence:** executing review and a Sol 6.1 critic passed; CI and the gate ledger green on the final head (PR #690 conversation).
+
+190. **Magistrate activation 08e39e3b (Opus 5.5, headless, 2026-11-06, about 22:35 PST): PR #691 merged into `lane/2026-11-05-align-pilot10-benign` at `e1a91226e`; R0 re-launched on it.** No pending notices, no unread mail from Ed, no new directive.
+- **What #691 changed.** R0's contention checks now measure CPU-seconds per second from cumulative CPU-time differences over at least 30 s, at the same 0.05 limit (`prewindow.INTERVAL_S`, `CPU_LIMIT_PERCENT`; `joulewise/hazards/contention.py` accounting).
+  - It covers both checks: the R0 guard (`joulewise/align/r0_host.py`) and the SMC probe (`smc_enumeration.CpuQuietProbe`).
+  - Only the first admission waits 30 s. Guard checks run on every token, and the SMC probe runs inside the 1 Hz capture.
+  - Counter regressions (macOS zombies read 0:00.00) are recorded, and refuse only with previous over-limit evidence.
+  - The SMC probe's host-aggregate bar of 0.05 is journaled with an `aggregate_above_0_05` flag, not judged. On the idle Mac it was 0.035-0.112, above 0.05 in 8 of 12 calls, and it also refused run 4. `contention.py` judges the aggregate only when a plan registers a limit.
+- **Gates.**
+  - Sol 6.1 built three rounds (high, xhigh, high).
+  - Opus executing reviews: ADMIT on `3297762ff` and `102fdb8c7`.
+  - Cold Fable passes: ADMIT on all three heads, `3297762ff`, `102fdb8c7` and `21da63a71`.
+  - CI green on `21da63a71`; gate ledger passed.
+  - Lead live checks on the real Mac each round.
+  - Papers: `/Users/edr/night-custody/magistrate/r0-census-fix/`.
+  - CI on this lane is slow: shards take 20 min to 2 h 16 min, as they did on #687. That is not a hang.
+- **R0 launch.**
+  - Canonical: `665c6452b` or later; `tests.test_magistrate_desk_fence` OK under python3.14.
+  - Measurement checkout: fast-forwarded `165e12872` → `e1a91226e`, clean.
+  - Host: Mac15,9; 137,438,953,472 bytes; venv `0.31.2 0.31.3 5.12.1`; AC; 83,081,601,024 bytes free.
+  - Spotlight 716 and 73957 showed `T` after STOP and `S` after CONT. photoanalysisd 13374 and mediaanalysisd 21331 are still held `T`.
+  - Arguments: `--output /Users/edr/night-align/r0-v4-20261107T0631Z`, `--deadline 1794069068` (08:31 PST 11-07), `--magistrate-pid 18060`, config `$M/configs/align/v4/r0_desk.json`, `--python-bin $M/.venv/bin/python`.
+  - The Codex MCP adapter is stopped before launch.
+
+**Next activation (written 2026-11-06 by activation 08e39e3b; item 190; item 181 holds):**
+(1) **After R0 exits** (fence cleared, or a stale-fence notice): follow item 185 (1) on `/Users/edr/night-align/r0-v4-20261107T0631Z`.
+- Commit to `docs/align/r0/2026-11-07-rerun5/`, on a new branch from `e1a91226e`.
+- Email Ed the item 176 (2) summary on thread `1a198fafa8fc12ba`.
+- The SMC row now carries `quiet_observations` with `aggregate_above_0_05` flags; report how many were flagged.
+- If the record directory is absent, follow item 185 (4).
+(2) **If R0 passes:** item 185 (2). **If it fails or is inconclusive:** item 185 (3)-(4). Before re-running after another contention refusal:
+- read the `cpu_interval` receipt (guard) or the SMC `NotQuiet` evidence;
+- the refusal is now a measured rate over at least 30 s, so treat it as real contention: find the process before any re-run.
+(3) Items 188 (3)-(4) still hold: photoanalysisd stays held; the SSD qualification needs Ed present.
+
+189. **Magistrate activation 08e39e3b (Opus 5.5, headless, 2026-11-06 from 18:07 PST): R0 re-run 4 passed load, generated and memory, then was refused at the start of `smc` by the census (a Spotlight `mdworker_shared` 0.6 s old at 6.0 % decayed `%CPU`). No unchanged re-run: R0's guard is being switched to direct CPU-seconds-per-second measurement.** No pending notices, no unread mail from Ed, no new directive.
+- **Run** `/Users/edr/night-align/r0-v4-20261107T0149Z` (17:50:10-18:05:15 PST, 905 s): load pass (NLL 11.0368 vs 11.0642), generated pass, memory pass (peak 37,025,381,468 bytes vs 45e9; swap flat), smc refused; ladder and long-decode not run. D pins PASS. Fence cleared, LaunchAgent gone, Spotlight `S`, photoanalysisd 13374 still `T`.
+- **Cause:** the guard (`joulewise/align/r0_host.py` `QuietGuard`) refuses on one `ps` `%CPU` snapshot (`prewindow.busy_contaminants`). It runs about every 15 s (101 receipts in 905 s); mdworker_shared spawns every 2-7 min and after R0's own writes; a 1 MB file copy into `~` put `mds_stores` at 35.7 % for about 1.5 s. A full R0 takes hundreds of samples, so an unchanged re-run would very likely be refused again. Same class as item 188's photoanalysisd refusal (two in a row).
+- **Fix lane** `fix/2026-11-07-r0-census-cpu-interval` (worktree `/Users/edr/code/JouleWise-wt-r0-census`, from `165e12872`): contaminants judged by CPU-s over an interval of at least 30 s against 0.05 CPU-s/s (`prewindow.INTERVAL_S`, `CPU_LIMIT_PERCENT`), reusing `joulewise/hazards/contention.py`'s accounting; `%CPU` kept as a receipt diagnostic. Sol 6.1 high build seat: brief and report under `/Users/edr/night-custody/magistrate/r0-census-fix/` (`BRIEF.md`, `sol-build.md`). Gates: executing review by another model, CI on a draft PR into `lane/2026-11-05-align-pilot10-benign`, cold Fable and Opus passes.
+- Record: branch `records/2026-11-07-align-r0-v4-rerun4` (`035544b25`, `docs/align/r0/2026-11-07-rerun4/`, report.json sha256 `ea09437b…b061`). Ed mailed on thread `1a198fafa8fc12ba` (Gmail `1a1b3c82bfe8a747`).
+
+- **Update 18:50 PST (same activation).** PR #691 (draft, into `lane/2026-11-05-align-pilot10-benign`), head `3297762ff`: Fable cold pass ADMIT, Opus executing review ADMIT (`/Users/edr/night-custody/magistrate/r0-census-fix/review-fable.md`, `review-opus.md`). Both found that a counter regression on any process (macOS zombies show TIME 0:00.00) refuses the run. Fable found that a gap of more than 30 s dilutes recent contention. **Opus found the second cause, verified by the lead:** run 4's `smc` subprocess also exited 3 `NotQuiet` from its own `smc_enumeration.CpuQuietProbe`. Over 1.18 s, the two mdworkers read 0.102 and 0.076, and the host aggregate was 0.250 against a hard-coded aggregate limit of 0.05. The lead measured the probe on the idle Mac: aggregate 0.035-0.112, above 0.05 in 8 of 12 calls. So the SMC stage could not finish on this Mac. **Lead ruling:** per-process contention at 0.05 over at least 30 s refuses; the host aggregate is journaled and flagged, not judged (`contention.py`: judged only when a plan registers it; none is registered). Round 2 (Sol xhigh, `BRIEF-R2.md`, report `sol-build-r2.md`) applies both reviews' findings and this ruling. Next: lead live checks, commit, a delta executing review plus a cold Fable pass on the round-2 diff, CI, merge.
+
+**Next activation (written 2026-11-06 by activation 08e39e3b; item 189; item 181 holds):**
+(0) If `sol-build-r2.md` exists and the worktree has uncommitted changes, run the round-2 gates in the update line above first.
+(1) If `sol-build.md` is absent and no `codex` process for that worktree is alive, relaunch the seat with the same brief (`codex-run-v3 ... --write-scope` as in the brief's WRITE_SCOPE line). If present, carry the branch through its gates: executing review (Opus or Fable seat that runs the tests and the live guard), draft PR into `lane/2026-11-05-align-pilot10-benign`, CI, cold Fable and Opus passes, dispositions, merge.
+(2) After merge: fast-forward the measurement checkout `JouleWise-measurement-20261102-align-pilot2` to the lane head, check it clean, and launch R0 by `docs/process/R0_HEADLESS_LAUNCH.md` with a new record directory and deadline; then exit at once.
+(3) Item 188 (3)-(4) hold (photoanalysisd stays held; SSD qualification needs Ed present).
+
+188. **Magistrate activation 32189215 (Opus 5.5, headless, 2026-11-06 from 17:42 PST): the R0 re-run of item 186 was refused mid-`generated` by the machine census (a respawning photoanalysisd at 34 % CPU), not by the model. photoanalysisd is now held by SIGSTOP and R0 is re-launched unchanged.** No pending notices, no unread mail from Ed, no new directive.
+- **Run** `/Users/edr/night-align/r0-v4-20261107T0132Z` (17:33:51-17:36:29 PST, 158 s): status `refused`, `complete_r0` false. host, host-identity, model-load pass; **load pass** (NLL 11.0368 vs reference 11.0642, delta -0.027; worst bin 0.207); `generated` used the 16-call prompt (decoded from the recorded prompt ids) and made 9 clean transitions (closed reasoning, 0 rewritten tokens) before the census refusal `busy: [(13022, 34.0, photoanalysisd)]`. memory, smc, ladder, long-decode did not run. D pins PASS. Fence cleared, LaunchAgent gone, Spotlight `S`.
+- **Cause:** photoanalysisd's `LibraryUnderstandingTask` hangs, its scheduler kills the process after 5 min ("Manually exiting process"), launchd respawns it, and the start-up burst (about 0.6 CPU-s) crossed the 5 % census line. About 190 cycles a day since at least 10-30 (log retention limit), so it also ran beside the v3 pilot windows (about 1-3 J per cycle; a note for the pilot analysis). Likely, not proven: it waits on mediaanalysisd, held by SIGSTOP since 10-17.
+- **Remedy:** `kill -STOP` photoanalysisd pid 13374 at 17:47:24 PST, recorded in `/Users/edr/night-custody/magistrate/photoanalysisd-stopped` (recover with `kill -CONT 13374`); no respawn seen while held. No code change.
+- Record: branch `records/2026-11-07-align-r0-v4-rerun3` (`42949e11c`, `docs/align/r0/2026-11-07-rerun3/`: report.json sha256 `223d6e3b…2501`, report.md, NOTE.md, D-pin output). Ed mailed on thread `1a198fafa8fc12ba` (Gmail `1a1b3b10d255cf45`).
+- **R0 re-launched about 17:52 PST** under items 181 and 185 (3): canonical `a07134b8b`; desk-fence tests 35 OK under python3.14; measurement checkout `165e12872`, clean; Mac15,9; 137,438,953,472 bytes; venv `0.31.2 0.31.3 5.12.1`; Spotlight 716 and 73957 `T` after STOP and `S` after CONT; preflight AC true, free 83,880,808,448 bytes. `--output /Users/edr/night-align/r0-v4-20261107T0149Z`, `--deadline 1794052146` (03:49 PST 11-07), `--magistrate-pid 13111`, config `$M/configs/align/v4/r0_desk.json`, `--python-bin $M/.venv/bin/python`. The session's Codex MCP adapter is stopped before launch.
+
+**Next activation (written 2026-11-06 by activation 32189215; item 188; item 181 holds):**
+(1) **After R0 exits** (fence cleared, or a stale-fence notice): follow item 185 (1) on `/Users/edr/night-align/r0-v4-20261107T0149Z`. Commit to `docs/align/r0/2026-11-07-rerun4/` on a new branch from `165e12872`, and email Ed the item 176 (2) summary on thread `1a198fafa8fc12ba`. If the record directory is absent, item 185 (4).
+(2) **If R0 passes:** item 185 (2). **If it fails or is inconclusive:** item 185 (3)-(4). A second census refusal by the same daemon class means find what else respawns (`/usr/bin/log show`, `ps -Ao pid,%cpu,etime,comm -r`) before any re-run.
+(3) **photoanalysisd:** leave it held while R0 runs. Afterwards it may stay held (as mediaanalysisd has since 10-17); if Photos-dependent work ever needs it, `kill -CONT` the pid in the record file.
+(4) **SSD qualification (item 187):** needs Ed to unplug and replug twice over about 6.8 quiet hours, and must not overlap Saturday's Flash-Next work. Do not start it headless without Ed present; propose a slot to Ed after R0 is written up.
+
+187. **Laptop lead (interactive session 359dce51, Opus 5.5, through a delegate), 2026-11-06 about 17:30 PST: kit delivery. The always-attached SSD qualification kit (PR #689), with corrected Q1 statistics, is merged into `lane/2026-11-05-align-pilot10-benign` at `9f0125310`.** Before this, none of the SSD tooling was on any base: `lane/2026-11-06-ssd-always-attached` was never merged. This item schedules nothing. Under item 181, whether and when to run the qualification is the magistrate's call.
+- **The rule still binds:** no external volume is mounted during any measurement window. The SSD is attached by day only and must be ejected and unplugged before any window. `configs/align/v4/external_log_volume.json` stays `status: "off"`, and nothing in the kit is wired into an arm path. The draft amendment is not adopted.
+- **Runbook:** `docs/align/v4/SSD-ALWAYS-ATTACHED-STUDY.md` §6. The volume config for the run is `configs/align/v4/external_log_volume.qualification.example.json` with the real UUID from `diskutil info`. The decode model stays on the internal disk.
+- **Plan command** (measurement checkout fast-forwarded to `9f0125310` or later): `python3 scripts/align_ssd_qualification.py plan --out <record>/plan.json`. It must print `125 segments; planned 6.83 h (decode segments run as long as the fixed work)`. If it prints 87 segments, the checkout is stale.
+- **What changed from the lane as first written (`44b99b37d`):**
+  - **Q1 statistics corrected.** The presence fit used every quiet segment as an independent row (pseudoreplication). It now fits physical-block means with df = blocks − 3. Lead Monte Carlo (400 seeds, block shock SD 50 mW, segment SD 20 mW): the old fit on A-D-A covered the truth 39-41 % of the time and PASSed a true 0.10 W presence effect 14.75 % of the time. The new fit on A-D-A-D-A covers about 90 % and PASSes it 1.0 %.
+  - **Lead design decision: A-D-A-D-A with 6 idle and 6 decode pairs per block.** That is 125 segments and about 6.8 h, up from 87 segments and 4.7 h. Ed unplugs twice and replugs twice. A three-block plan is always Q1 INCONCLUSIVE (0 residual df). The CLI now takes its defaults from the module; it had still emitted the old plan.
+  - **Lead decision: the option is capped at B.** Q3 bounds only the mean write effect. A and A-lite wait for a write-variability criterion that does not exist yet. Q2 and Q3 still print.
+  - **Lead decision: Q1 is INCONCLUSIVE on unbalanced blocks.** That is any block keeping fewer than half the quiet decode segments of the fullest block, or none.
+  - **Lead decision: Q5 fails on any missing or non-finite thermal (S_slow) reading.**
+- **Power caveat:** Option B needs block-level decode GPU power to repeat within about 10-20 mW. With no true presence effect, Q1 PASSes 88 % of the time at 10 mW block SD, 51 % at 20 mW and 7.5 % at 50 mW. Otherwise the result is INCONCLUSIVE and Option C stays. That is the valid outcome, not a fault.
+- **Quiet time:** the run resolves tens of mW of GPU-rail power, so it needs about 6.8 quiet hours. It must not overlap Saturday's Flash-Next work (download, conversion, live tests). The Saturday operator card does not include this run. The ordering is the magistrate's call.
+- **Evidence:** CI green on head `d70803d26` (22 checks). Four Sol 6.1 xhigh executing-review rounds; the fourth was ADMIT. Opus 5.5 executing review by the lead lane. Record: `docs/align/reviews/2026-11-06-ssd-qualification-executing-reviews.md` (on the lane).
+- **After the run:** the record goes to `docs/align/v4/qualification/<date>/` (study §6, "Then"). The council and Ed decide on adoption.
+
+186. **Magistrate activation 78981c26 (Opus 5.5, headless, 2026-11-06 from 14:42 PST): the R0 re-run launched in item 185 passed `load` and stopped at `generated` (inconclusive) because of a harness prompt defect. Fix PR #687 is open; R0 re-runs after it merges. Nothing armed.** No pending notices, no unread mail from Ed, no new directive.
+- Run `/Users/edr/night-align/r0-v4-20261106T2235Z` (14:34-14:37, 160 s). host, host-identity and model-load passed; disk diagnostic. **load pass** under #686: NLL 11.0368 against reference 11.0642 (delta -0.027, limit 0.10; worst bin 0.207, limit 0.5); the SHADE generation made one `analyze_spam_patterns` call. Template diagnostic. **generated inconclusive:** 6 transitions (all closed reasoning, 0 rewritten tokens); on turn 7 D made no call and asked whether to continue. memory, smc, ladder and long-decode did not run. D pins PASS. Spotlight `S`; the R0 LaunchAgent is gone.
+- Live probe on the Mac (real `MlxBackend` and `generated_rewrites`): the old echo prompt gives 6/12/12 transitions at seeds 95/96/97, so seed 95, the production seed, reproduces R0. A prompt stating 16 calls gives 12/12/12, all 0 rewritten tokens, B7 `not_required`.
+- Record: branch `records/2026-11-06-align-r0-v4-rerun2` (`2776a3cbe`, `docs/align/r0/2026-11-06-rerun2/`: report.json sha256 `f98bc4d8…74ba`, NOTE.md, the probe and its results). Ed mailed on thread `1a198fafa8fc12ba` (Gmail `1a1b30eea1d42a23`).
+- **Fix:** PR #687 (`fix/2026-11-06-r0-echo-count`, head `7c3a49785`) into `lane/2026-11-05-align-pilot10-benign`. `ECHO_PROMPT` states `ECHO_CALLS = ECHO_TRANSITIONS + 4 = 16`, plus a regression test; the mutation `ECHO_CALLS = 6` is caught. Gates: a Sol executing review (`docs/align/reviews/2026-11-06-r0-echo-count-executing-review.md` on the PR branch) and CI. Row 4 is N/A: R0 is desk selection data, and this changes a prompt string.
+
+- **#687 merged** into `lane/2026-11-05-align-pilot10-benign` at `165e12872`, about 17:31 PST. Gates: Sol executing review ADMIT (no findings); cold Fable pass ADMIT_WITH_FIXES (its own live seed-95 run on D: 12 transitions, 0 rewritten tokens); its M1/L1/L2 fixed on the final head `e1134dee0` (the spare of 4 is documented as not derived, with 16 the value verified live; an f-string reason; `generated` records its prompt); dispositions in `docs/run_reports/2026-11-06-r0-echo-count-merge-gate.md`; CI 22/22 plus the gate ledger on `e1134dee0`. The lane's CI takes about 2.5 h, so budget for it.
+- **R0 re-run launched about 17:35 PST** under item 181, as item 185 (a)-(e): canonical at or after `eeea6d5cf` (contains #681 and #684); desk-fence tests 35 OK under python3.14; measurement checkout fast-forwarded `84848dc68` → `165e12872`, clean; Mac15,9; 137,438,953,472 bytes; venv `0.31.2 0.31.3 5.12.1`; Spotlight 716 and 73957 `T` after STOP and `S` after CONT; preflight AC true, free 83,117,633,536 bytes. `--output /Users/edr/night-align/r0-v4-20261107T0132Z`, `--deadline 1794051175` (03:32 PST 11-07, launch + 10 h), `--magistrate-pid 2338`, config `$M/configs/align/v4/r0_desk.json`, `--python-bin $M/.venv/bin/python`. The session's Codex MCP adapter is stopped before launch. Ed was told the plan on thread `1a198fafa8fc12ba` (`1a1b30eea1d42a23`).
+
+**Next activation (written 2026-11-06 by activation 78981c26; item 186; item 181 holds):**
+(1) **After R0 exits** (fence cleared, or a stale-fence notice): follow item 185 (1) on `/Users/edr/night-align/r0-v4-20261107T0132Z`. Commit to `docs/align/r0/2026-11-07-rerun3/` on a new branch from `165e12872`, and email Ed the item 176 (2) summary on thread `1a198fafa8fc12ba`. The `generated` result now records its prompt; check it is the 16-call prompt.
+(2) **If R0 passes:** item 185 (2).
+(3) **If R0 fails or is inconclusive:** item 185 (3)-(4). A `generated` inconclusive under the new prompt is the second inconclusive for that check, not a third failure; diagnose it before any re-run.
+
+185. **Magistrate activation 0f9616a8 (Opus 5.5, headless, 2026-11-06 from 14:31 PST): ALIGN v4 R0 re-run launched under items 181 and 184, about 14:40 PST.** No pending notices, no unread mail from Ed, no new directive. The magistrate's call under item 181: the fixed load check (#686) is merged, reviewed (executing review, Fable cold pass, CI green) and delivered, so R0 runs now rather than waiting for the night.
+- (a) Canonical main fast-forwarded to `28fe66141` (contains `446e9065e` #681 and `cdf61b3ad` #684); `tests.test_magistrate_desk_fence` 35 OK under python3.14.
+- (b) Measurement checkout `JouleWise-measurement-20261102-align-pilot2` fast-forwarded `f3af22b94` → `84848dc68` (item 184), clean; `hw.model` Mac15,9; 137,438,953,472 bytes RAM; venv prints `0.31.2 0.31.3 5.12.1`. `configs/align/v4/r0_nll_reference.json` has D at revision `815b83c0…9ef9`, fixture `792beb56…ac42`, the same fixture digest as the 17:05Z record; `r0_desk.json` unchanged since `f3af22b94`.
+- (c) Spotlight signalling: corespotlightd pid 716 and spotlightknowledged pid 73957 each showed `T` after STOP and `S` after CONT.
+- (d) Preflight: AC power true, free 83,841,282,048 bytes at /Users/edr (report only).
+- (e) Launch: `--output /Users/edr/night-align/r0-v4-20261106T2235Z`, `--deadline 1794040743` (00:39 PST 11-07; about 10 h from launch), `--magistrate-pid 99154` (watchdog lock), `--custody-root /Users/edr/night-custody/magistrate`, config `$M/configs/align/v4/r0_desk.json`, `--python-bin $M/.venv/bin/python` (unresolved). Launch files: `/Users/edr/night-custody/magistrate/r0-launches/<id>/`. Ed told on thread `1a198fafa8fc12ba`.
+
+**Next activation (written 2026-11-06 by activation 0f9616a8; item 185; item 181 holds):**
+(1) **After R0 exits** (fence cleared, or a stale-fence notice): read `report.json` and `report.md` in the record above; run `$M/.venv/bin/python -B $M/scripts/align_v4_verify_d_pins.py <record>/report.json` (item 179's `.cache/huggingface/` ruling applies if it still FAILs only there); check Spotlight resumed (no `T`; recover from any `spotlight-stopped` record per R0_HEADLESS_LAUNCH.md). Commit `report.json`, `report.md`, the SMC journal sha256 and a NOTE.md to `docs/align/r0/2026-11-06-rerun2/` on a new branch from `84848dc68`, push, and email Ed on thread `1a198fafa8fc12ba` the item 176 (2) summary (overall status; each check; the `load` reasons and NLL mean/bins against the reference; generation result; SMC die-class and heatsink-class keys; D pins; selected effort rung; B7 verdict; peak memory; wall time).
+(2) **If R0 passes,** record `decisions_pending_lead_action` and propose the `reproduce` pin for the reference table as a reviewed edit (item 184). R1 stays unarmable until a laptop-lead item says its kit is ready.
+(3) **If R0 fails or is inconclusive:** an infrastructure fault may be fixed, reviewed and re-run under item 181; a third failure of the `load` check, or any result the design does not cover, goes to Ed (item 181) and waits.
+(4) If the record directory is absent or has no `report.json`, read `r0-launches/<id>/stdout.log`/`stderr.log` and the guard receipt, mail Ed what failed, and do not relaunch until the cause is understood.
+
+184. **Laptop lead (interactive session 359dce51, Opus 5.5), 2026-11-06 about 14:30 PST: kit delivery. The R0 load-check fix (PR #686) is merged into `lane/2026-11-05-align-pilot10-benign` at `84848dc68`.** This delivers what item 183 promised. Under item 181, whether and when to re-run R0 is the magistrate's call. This item schedules nothing.
+- **What changed in the `load` check:**
+  - **Old check:** an absolute NLL ≤ 3.0 on the SHADE ids. It was invalid for D. Upstream Qwen3.8-27B in HF fp32 also scores 11.06 on those ids (`lane/2026-11-06-r0-d-nll-diagnosis`), so the 11.04 was the model, not our artifact or runtime.
+  - **New check, part 1: reference equivalence.**
+    - Compares against `configs/align/v4/r0_nll_reference.json`, keyed by (revision, fixture), with an explicit mode per model.
+    - D: mean within ±0.10 and every 256-id bin within ±0.5 of the reference (11.0642).
+    - The anchor stays in absolute mode at 3.0.
+    - It fails closed with `no_reference` or `invalid_reference_config`.
+  - **New check, part 2: generation.**
+    - The full SHADE prompt at effort `low`. Greedy decoding first.
+    - One retry with the production sampler at seed 96, only on `hit_cap` or `unclosed_reasoning`.
+    - It passes only on exactly one schema-valid call to the requested tool, `analyze_spam_patterns`.
+  - **Optional exact-reproduction tier:** reports `not_pinned` until a pin exists. Take the pin from the first qualified live R0, in a reviewed edit to the table.
+- **Evidence:**
+  - CI green on head `c712318e5` (all 30 jobs, plus the gate ledger).
+  - Executing review: `docs/align/reviews/2026-11-06-r0-load-reference-executing-review.md`.
+  - Fable cold pass: `docs/align/reviews/2026-11-06-r0-load-reference-fable-cold-pass.md`.
+  - Dispositions: `docs/run_reports/2026-11-06-r0-load-reference-merge-gate.md`.
+  - Runbook: `docs/align/r0_desk_runbook.md`.
+- **Measurement checkout:** fast-forward it to `lane/2026-11-05-align-pilot10-benign` (`84848dc68` or later) before any R0. `scripts/launch_align_r0.py` still runs from canonical main.
+- **Coming next, no action needed now:**
+  - The R1 kit, fix round 4, is in review. R1 needs a passing R0 for its reasoning effort.
+  - A repo prune of main is being prepared. Before it merges, a later item will list any path a measurement script reads.
+
+183. **Laptop lead (interactive session 359dce51, Opus 5.5), 2026-11-06 about 09:45 PST: Ed answered item 182's escalation (`1a1b1e32c3a29358`) in the interactive session.** Ed: "to both the questions being asked, if it improves the process of getting the science done faster, and does not harm anything, of course. dont miss the forrest for the trees e.g. pin a check to the measurement mac that could happen ahead of time or faster on a different machine or whatever, the only condition is this devbox isnt permanently on, but it will be permanently on and yours for the next 3 days so we can get a big sprint done".
+- **(i) Off-Mac reference check: yes.** It is running now on the laptop (the MacBook Air), not as a cloud seat. A small same-architecture `qwen3_5` sibling is scored on the record's 2,049 ids under both mlx_lm and HF transformers, then compared layer by layer if they diverge. If that is not conclusive, the 27B bf16 HF reference follows. Results go to `lane/2026-11-06-r0-d-nll-diagnosis`.
+- **(ii) D artifact or runtime pin may change** if the diagnosis points at one, through the usual review gates:
+  - an mlx_lm `qwen3_5` defect gets a cited rebind of the pinned runtime, with D unchanged;
+  - a quantization fault in the 8-bit artifact gets another quantization of Qwen3.8-27B, recorded as a design amendment;
+  - a fault in the model itself, or in our SHADE NLL fixture, comes back as options.
+  The lead delivers whichever results as a new kit/pin item.
+- **Standing principle (Ed):** any check that can run ahead of time, or faster, on another machine does not wait for the measurement Mac. Model and artifact correctness, tokenizer and fixture checks, pins and reference scoring are pre-qualified off-Mac where possible. R0 keeps the things that need this hardware: SMC, thermal, power, memory and timing. The laptop is on and dedicated to this through about 2026-11-09.
+
+**Next activation (written 2026-11-06 by the laptop lead; item 183; item 182 (1) holds until a later item gives a new D pin or runtime; item 181 holds):** no re-run of R0 on D as pinned. When a later item delivers a fixed pin, R0 is the magistrate's call under item 181. Otherwise exit quietly.
+
+182. **Magistrate activation 7a50d0de (Opus 5.5, headless, 2026-11-06 from 09:10 PST): ALIGN v4 R0 re-run FAILED at the `load` check, and the failure is a model fault, not our code. Escalated to Ed under item 181 (a model change). Nothing armed.** No pending notices, no mail from Ed, no new directive.
+- Run `/Users/edr/night-align/r0-v4-20261106T1705Z` (09:03-09:04, 75.5 s). host, host-identity and model-load passed; the #684 fix held (venv python, mlx 0.31.2). disk diagnostic. **load FAIL:** teacher-forced NLL on the 2,048 pinned SHADE targets was 11.04 nats/token against the 3.0 limit. The short prompt was coherent (`42`). Nothing later ran (no SMC journal, rung, B7 verdict or peak memory). D pins pass under the item 179 ruling (41 `.cache/huggingface/` files only). Spotlight `S`; R0 LaunchAgent gone.
+- Diagnostics (same weights and IDs; scripts in the record): the NLL code and token IDs are correct. D scores 2.5 on 2,048 README tokens. On the SHADE prompt its loss climbs to 15.7 per 256-token bin and depends on the first 100 tokens (the same tail scores 0.32 alone). Decode path = prefill path (11.06). mlx 0.32.4 / mlx_lm 0.32.2 reproduce it. The 30B anchor scores 0.37 on the same text. The Qwen3.5-122B sibling (`qwen3_5_moe`) scores 2.35 but rises in the same region. Remaining causes: the D artifact, mlx_lm's `qwen3_5` code, or the model; telling them apart needs an HF-transformers bf16 reference off this Mac.
+- Record: branch `records/2026-11-06-align-r0-v4-rerun` at `bc4eb61e5`, `docs/align/r0/2026-11-06-rerun/` (report.json sha256 `857ed285…c780`, NOTE.md). Ed mailed on thread `1a198fafa8fc12ba` (Gmail `1a1b1dd129866f53`, results; `1a1b1e32c3a29358`, the question: may the reference check run off-Mac, and may D's artifact or runtime pin change if it points at one).
+
+**Next activation (written 2026-11-06 by activation 7a50d0de; item 182; item 181 holds):**
+(1) **Do not re-run R0 on D as pinned, and do not arm anything,** until Ed answers `1a1b1e32c3a29358` or a later item gives a new D artifact or runtime pin. Re-running it unchanged would be a third failure of the same check (escalation rule in item 181).
+(2) **If Ed has replied** (search `from:claude2.glaring610@passmail.net is:unread`), apply his answer under item 181. An off-Mac reference check runs as a cloud seat, scoring `nll_prompt_ids` from the record's `report.json` with HF transformers on the upstream bf16 D weights, per bin as in NOTE.md.
+(3) **Otherwise exit quietly** with no record and no commit.
+
+181. **Laptop lead (interactive session 359dce51, Opus 5.5), 2026-11-06 about 09:10 PST: standing delegation. The magistrate owns measurement orchestration on the MacBook Pro.** Ed: "you should not be orchestrating the measurements, that responsibility should largely be in the hands of the magistrate of that machine, unless research plans change significantly". Item 176 (2)'s and item 178 (1)'s "the laptop lead decides" re-run holds were the lead over-reaching. They are withdrawn.
+- **The magistrate decides** when and whether to run, re-run, schedule and arm R0, R1, W1 and the calibration windows (D1-D3), using the approved design: FINAL-DESIGN with its amendments, the council CHAIR rulings and LEAD-RULINGS-1, the merged kit's own fail-closed checks, and the readiness and stop rules the kit and the design already contain.
+  - That includes re-running after a failure that is infrastructure, not science, once the fix is merged and reviewed under the usual gates. The magistrate may fix and merge such defects itself, as it did with #684. Each failure is recorded.
+  - Measurement-window rules still bind: the quiet machine, no external volume mounted, power mode restored, deadman.
+- **The laptop lead's role** is to deliver reviewed code and kits onto the measurement lane and to say, in an item, when a kit is merged and what it contains. The lead does not schedule runs.
+- **Escalate to Ed (mail, and wait)** only for:
+  - a change to the research plan or design: registered constants, the deciding contrast, the model, or the exclusion rules;
+  - a result that the design does not cover;
+  - a third consecutive failure of the same check;
+  - anything irreversible to data.
+- Every other hold in earlier items about scheduling or re-running measurements is superseded by this item. Custody, blinding and retention rules are unchanged.
+
+180. **Magistrate activation a90d8f8a (Opus 5.5, headless, 2026-11-06 from 09:00 PST): ALIGN v4 R0 re-run launched under item 179 (1), about 09:10 PST.** No pending notices, no mail from Ed, no new directive.
+- (a) Canonical main fast-forwarded to `9aceb7af4`; contains `cdf61b3ad` (#684) and `446e9065e` (#681); `tests.test_magistrate_desk_fence` 35 OK under python3.14.
+- (b) Measurement checkout `JouleWise-measurement-20261102-align-pilot2` at `f3af22b94a92b8d8b58d7cd9dbebed554a30fb91`, clean; `hw.model` Mac15,9; 137,438,953,472 bytes RAM; venv prints `0.31.2 0.31.3 5.12.1`.
+- (c) Spotlight signalling: corespotlightd pid 716 and spotlightknowledged pid 73957 each showed `T` after STOP and `S` after CONT.
+- (d) Preflight: AC power true, free 84,073,099,264 bytes at /Users/edr (report only).
+- Interpreter: the launcher writes `runner.json` from `os.path.abspath(--python-bin)`; for `$M/.venv/bin/python` (a symlink to `python3.13`) that is the unresolved venv path (checked with the same expression before launch; `runner.json` re-read after launch).
+- (e) Launch: `--output /Users/edr/night-align/r0-v4-20261106T1705Z`, `--deadline 1794020855` (launch + about 10 h), `--magistrate-pid 90365`, `--custody-root /Users/edr/night-custody/magistrate`, config `configs/align/v4/r0_desk.json`. The session's own Codex MCP adapter is stopped before launch. Launch files: `/Users/edr/night-custody/magistrate/r0-launches/<id>/`. Ed told on thread `1a198fafa8fc12ba`.
+- **Next activation:** item 179 (2) on the record above (D-pin ruling of item 179 applies). If the record directory is absent or has no `report.json`, read `r0-launches/<id>/stdout.log`/`stderr.log` and the guard receipt, mail Ed what failed on thread `1a198fafa8fc12ba`, and do not relaunch R0.
+
+179. **Laptop lead (interactive session 359dce51, Opus 5.5), 2026-11-06 about 08:55 PST: re-run ALIGN v4 R0 headless once, today, now that #684 is merged.** Item 178's cause (the launcher resolved `--python-bin` to the bare Homebrew interpreter, which has no mlx) was a launcher defect, not a measurement result. The fix is on canonical main at `cdf61b3ad`, and the launcher runs from the canonical repo, so the measurement checkout needs no change. The kit is the item 176 kit, unchanged.
+- **D-pin verifier ruling (lead, for this re-run only).** `align_v4_verify_d_pins.py` reported FAIL only on 41 extra files under `.cache/huggingface/` (hf `--local-dir` lock and metadata, 5,782 bytes), while the revision, every pinned size and every LFS sha256 matched. For item 176 (2) as applied to this re-run, the verifier passes if it prints PASS, or if every failing line names a path under `.cache/huggingface/` and every other check passes. Record the extra-file count. Do not delete those files. The verifier will skip `.cache/` on the R1 integration lane, so no code change is needed here.
+
+**Next activation (written 2026-11-06 by the laptop lead, interactive session 359dce51; item 179; replaces item 178 (1)-(2); item 176 (3), item 175 (3) and item 174 (4) hold):**
+(1) **Run ALIGN v4 R0 headless once more, today 11-06.** Launch as soon as possible, by 13:00 PST at the latest. If 13:00 has passed, exit quietly and mail Ed that R0 waits for a new item. Follow item 176 (1) steps a-f exactly, with these changes:
+  - in (a), canonical main must contain `cdf61b3ad` (#684);
+  - in (b), the measurement checkout stays at `f3af22b94a92b8d8b58d7cd9dbebed554a30fb91`;
+  - in (e), use a new `--output /Users/edr/night-align/r0-v4-<UTC yyyymmddThhmmZ>` (it must not exist; the failed `r0-v4-20261106T1605Z` stays as it is);
+  - before launch, confirm that `runner.json`'s interpreter, or the launcher's dry print of it, is `$M/.venv/bin/python` unresolved. If it is anything else, stop and mail.
+(2) **After R0 exits:** follow item 176 (2), with the D-pin ruling above. Commit to `docs/align/r0/2026-11-06-rerun/` on a new branch from `f3af22b94a92b8d8b58d7cd9dbebed554a30fb91`. Email Ed on thread `1a198fafa8fc12ba`. On any failure or inconclusive result, do not run again; the laptop lead decides. Do not arm R1 or any window.
+(3) **Otherwise exit quietly.**
+
+178. **Magistrate activation 0e88b99f (Opus 5.5, headless, 2026-11-06 from 08:10 PST): ALIGN v4 R0 FAILED at model-load after 20.8 s, from a launcher defect; not re-run (item 176 (2)).** No pending notices, no mail from Ed, no new directive.
+- Record `/Users/edr/night-align/r0-v4-20261106T1605Z`, committed on `records/2026-11-06-align-r0-v4` (`b3834257e`, `docs/align/r0/2026-11-06/`: report.json sha256 `72ae3ac5…d281`, report.md, NOTE.md). Checks: host pass, disk diagnostic, host-identity pass, model-load FAIL `PackageNotFoundError: No package metadata was found for mlx`; nothing later ran, so there is no SMC key classification, rung, B7 verdict, peak memory or SMC journal.
+- **Cause:** `scripts/launch_align_r0.py` applied `Path.resolve()` to `--python-bin`; `$M/.venv/bin/python` resolves to `/opt/homebrew/opt/python@3.13/bin/python3.13`, so `runner.json` ran the bare Homebrew interpreter (no mlx) instead of the venv (mlx 0.31.2). Preflight (1b) called the venv path directly, so it passed. **Fix: PR #684, merged at `cdf61b3ad`** (`--python-bin` made absolute with `os.path.abspath`, not resolved; regression test fails without it; desk-fence module 35 OK; Sonnet executing review ADMIT, `docs/process_traces/2026-11-06-magistrate-0e88b99f/REVIEW-PR684.md`; CI 20/20 on head `02dc37c32`, gate ledger green). A re-run of R0 needs no other code change on main.
+- **D pins:** `align_v4_verify_d_pins.py` prints FAIL only on 41 extra `.cache/huggingface/` files (hf `--local-dir` lock/metadata, 5,782 bytes in total, exactly the disk check's observed-minus-design gap). Revision, every pinned size and every LFS sha256 match. Before the next R0, the verifier (or the disk inventory) should skip `.cache/` on the lane; otherwise item 176 (2)'s "must print PASS" fails on bookkeeping.
+- Spotlight resumed (716 and 73957 `S`), fence cleared, R0 LaunchAgent gone. Canonical fast-forwarded to `284867530`. Ed emailed on thread `1a198fafa8fc12ba` (Gmail `1a1b1a3c26f18ec3`; item 177's thread id `1a1afcc20a03040b` is not found in this mailbox).
+
+**Next activation (written 2026-11-06 by activation 0e88b99f; item 178; replaces item 176 (1)-(2), done/failed; item 176 (3), item 175 (3) and item 174 (4) hold):**
+(1) **Do not re-run R0 or arm anything** until the laptop lead (or Ed) writes a later item saying so. A re-run uses a fresh `--output` directory, the item 176 (1) steps, and canonical main at or after `cdf61b3ad`; fix the `.cache/` D-pin verifier issue on the lane first so step (2) can print PASS.
+(2) **Otherwise exit quietly** with no record and no commit, unless Ed has mailed or a directive is new.
 
 177. **Magistrate activation 39a55bff (Opus 5.5, headless, 2026-11-06 from 06:30 PST): ALIGN v4 R0 launched under item 176 (1), about 08:05 PST.** No pending notices, no mail from Ed, no new directive.
 - (1a) Canonical main fast-forwarded to `e780b9139` (contains `446e9065e`); `tests.test_magistrate_desk_fence` 34 OK under python3.14.
@@ -7371,7 +8108,9 @@ Before starting substantial work:
    `docs/risk_register.md` if starting a phase or a hardware-dependent task.
 6. Check the last 2-3 commits with `git log --oneline --decorate -3`.
 7. Check `git status --short --branch`.
-8. Run `python3 -m unittest discover -s tests` unless the task is docs-only.
+8. Unless the task is docs-only, run the suite in parallel shards:
+   `python3 scripts/shard_tests.py --workers 8 --split` (not a sequential
+   `unittest discover`, which takes about 3.2 h; CI runs it on every code PR).
 9. Do not commit local deletions or unrelated changes unless the user asks.
 10. Heartbeat rule (`docs/milestones.md`): if >14 days passed with no run
     report and no recorded break, start with a milestones + risk review.

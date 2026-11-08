@@ -23,7 +23,7 @@ from unittest import mock
 from joulewise import analysis_member_pool as member_pool, analysis_run_cache as arc
 from joulewise import floor_extraction as fe, powermetrics_fiducial as pf, whole_window as ww
 from joulewise.authentication_io import V2AuthenticationInputError
-from joulewise.b5_analysis import bracket, dry_run as d, parallel
+from joulewise.b5_analysis import bracket, dry_run as d, parallel, resume
 from joulewise.b5_analysis.archive import CensusRow
 from joulewise.b5_analysis.deadline_observer import (CALIBRATION_WALL_DEADLINE, DeadlineObserver,
                                                        OBSERVER_UNAVAILABLE)
@@ -281,16 +281,29 @@ class ParallelStepTests(unittest.TestCase):
         index = root / 'index.json'
         index.write_bytes(d._canonical({'schema': 'joulewise.b5_window_index.v1', 'attempts': []}))
         steps = [(name, (lambda s, r, name=name: [s.record(name)]) if name != '2' else step) for name in d.STEP_IDS]
-        with mock.patch.object(d, 'STEPS', steps), mock.patch.object(parallel, 'run_child', firing_worker), \
-                mock.patch.object(d, 'validate_dry_run_record'), mock.patch.object(d, '_record_parts',
-                                                                                  return_value=([], [], [])), \
-                contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-            code = d.run('blind-dry-run', index, root / 'custody', workers=2, _test_repo_root=root / 'repo',
-                         _git=lambda repo: 'b' * 40)
-        record = json.loads((root / 'custody/dry-run/B5-BLIND-DRY-RUN-RECORD.json').read_bytes())
+
+        def go(custody, retries):
+            with mock.patch.object(d, 'STEPS', steps), mock.patch.object(parallel, 'run_child', firing_worker), \
+                    mock.patch.object(resume, 'MAX_RETRIES', retries), \
+                    mock.patch.object(d, 'validate_dry_run_record'), mock.patch.object(d, '_record_parts',
+                                                                                      return_value=([], [], [])), \
+                    contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                code = d.run('blind-dry-run', index, root / custody, workers=2, _test_repo_root=root / 'repo',
+                             _git=lambda repo: 'b' * 40)
+            record = json.loads((root / custody / 'dry-run/B5-BLIND-DRY-RUN-RECORD.json').read_bytes())
+            return code, next(row for row in record['steps'] if row['step'] == '2')
+        # Without the lane b5-robust step retry, the firing is the step's tooling refusal.
+        code, step2 = go('custody', 0)
         self.assertEqual(code, 2)
-        step2 = next(row for row in record['steps'] if row['step'] == '2')
         self.assertEqual((step2['status'], step2['refusal']), ('tooling_refusal', CALIBRATION_WALL_DEADLINE))
+        # With it, the step reruns serially (no pool worker, so no forced firing) and passes;
+        # the refused attempt is logged in restricted recovery custody.
+        code, step2 = go('retried', resume.MAX_RETRIES)
+        self.assertEqual((code, step2['status']), (0, 'ok'))
+        log = root / 'retried/dry-run/restricted' / resume.RESUME_DIR / resume.RETRIES
+        rows = [json.loads(line) for line in log.read_text().splitlines()]
+        self.assertEqual([(row['event'], row['step'], row['reason']) for row in rows],
+                         [('step_retry', '2', CALIBRATION_WALL_DEADLINE)])
 
 
 

@@ -191,11 +191,13 @@ The repository currently contains:
 ## Verify
 
 ```bash
-python3 -m unittest discover -s tests
+python3 scripts/shard_tests.py --workers 8 --split
 ```
 
-The command's output is the current result. CI runs the same tests, split
-into parallel jobs, for every change that touches a file other than
+This runs the whole suite in 8 parallel shards (set the number to your core
+count). Do not run `python3 -m unittest discover -s tests` sequentially: it
+takes about 3.2 hours. The command's output is the current result. CI runs the
+same tests, split into parallel jobs, for every change that touches a file other than
 documentation; this page does not pin a pass or skip count that would drift as
 coverage grows.
 

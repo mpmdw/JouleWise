@@ -31,7 +31,7 @@ still running; **indeterminate** means the available records or observations
 cannot establish that answer. The **guard**, the check that can stop the status
 script, refuses an update when it finds a recorded process still running or an
 indeterminate observation. The detailed rules below implement the
-[lead's decision](../process_traces/2026-09-08-handoff-redo/99ap-magistrate-terminal-review-window-liveness.md)
+[lead's decision](https://github.com/mpmdw/JouleWise/blob/archive/pre-prune-2026-11-06/docs/process_traces/2026-09-08-handoff-redo/99ap-magistrate-terminal-review-window-liveness.md)
 for chains, campaigns, and their custody records at Git revision `655b3368`
 (the source version used by the final Code map). [P3]
 
@@ -75,7 +75,7 @@ waiting, or ended. Do not interchange these two response formats. [F2]
 operations commands may perform,
 `/bin/ps -o pid=,pgid=,lstart= -p $$` was denied with
 `operation not permitted: /bin/ps`. The retained
-[2026-09-08 process capture](../process_traces/2026-09-02-hands-free-week/21b-rehearsal-20260909-bench/pass3-process-tree-keepalive.txt)
+[2026-09-08 process capture](https://github.com/mpmdw/JouleWise/blob/archive/pre-prune-2026-11-06/docs/process_traces/2026-09-02-hands-free-week/21b-rehearsal-20260909-bench/pass3-process-tree-keepalive.txt)
 contains the following actual PID, parent PID (the process that launched it),
 and date prefix; only the trailing command text is omitted:
 
@@ -91,7 +91,7 @@ Removing the parent-PID column gives this **six-field historical extract**:
 
 This extract is PID plus date, not the production response. The capture does
 not contain PGID or process state; `83075` must not be relabeled PGID. Its
-[matching saved record](../process_traces/2026-09-02-hands-free-week/21-activation-784a764e/magistrate.lock.json)
+[matching saved record](https://github.com/mpmdw/JouleWise/blob/archive/pre-prune-2026-11-06/docs/process_traces/2026-09-02-hands-free-week/21-activation-784a764e/magistrate.lock.json)
 records PID `83086`, start token `Tue Sep 8 01:41:58 2026`, and launch time
 `1788856918.677485`. It describes an agent process, not a measurement.
 

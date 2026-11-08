@@ -1,0 +1,331 @@
+<title>Energy Signature Talk</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column; a 10-minute timing strip up top, then one block per slide (what's on screen, what to say). */
+:root {
+  --bg: #f5f6f8;
+  --panel: #ffffff;
+  --fg: #161a20;
+  --muted: #5a6370;
+  --line: #dce0e6;
+  --accent: #a96400;
+  --accent-soft: #f6e7cf;
+  --seg-a: #c9d0da;
+  --seg-b: #aeb7c4;
+  --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --body: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1216; --panel: #161a20; --fg: #e6e9ed; --muted: #9aa3ae; --line: #2a3039;
+    --accent: #f0a53c; --accent-soft: #3a2a12; --seg-a: #2f3641; --seg-b: #3d4552; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1216; --panel: #161a20; --fg: #e6e9ed; --muted: #9aa3ae; --line: #2a3039;
+  --accent: #f0a53c; --accent-soft: #3a2a12; --seg-a: #2f3641; --seg-b: #3d4552; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg);
+  font-family: var(--body); font-size: 17px; line-height: 1.6;
+}
+.wrap {
+  max-width: 760px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 72px;
+  display: flex; flex-direction: column; gap: 40px;
+}
+h1, h2, h3, .label, .chip, .strip a { font-family: var(--display); }
+h1 { font-size: clamp(1.7rem, 4.5vw, 2.4rem); line-height: 1.15; margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+h2 { font-size: 1.35rem; line-height: 1.25; margin: 0; text-wrap: balance; }
+h3 { font-size: 1.05rem; margin: 0; }
+p { margin: 0; }
+code, .num { font-family: var(--mono); font-size: 0.86em; }
+.num { font-variant-numeric: tabular-nums; }
+.eyebrow { font-family: var(--display); font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+header { display: flex; flex-direction: column; gap: 14px; }
+.lede { color: var(--muted); max-width: 62ch; }
+.lede strong { color: var(--fg); font-weight: 600; }
+
+/* timing strip */
+.timing { display: flex; flex-direction: column; gap: 8px; }
+.strip { display: flex; width: 100%; height: 44px; border-radius: 6px; overflow: hidden; border: 1px solid var(--line); }
+.strip a {
+  flex-basis: 0; min-width: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 0.8rem; font-weight: 600; color: var(--fg); text-decoration: none;
+  background: var(--seg-a); border-right: 1px solid var(--bg);
+}
+.strip a:nth-child(even) { background: var(--seg-b); }
+.strip a:last-child { border-right: 0; }
+.strip a.slack { background: var(--bg); color: var(--muted); font-weight: 500; }
+.strip a:hover, .strip a:focus-visible { background: var(--accent); color: var(--bg); outline: none; }
+.scale { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 0.75rem; color: var(--muted); }
+
+/* rules */
+.rules { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 18px 20px; display: flex; flex-direction: column; gap: 10px; }
+.rules ul { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 6px; font-size: 0.95rem; }
+
+/* slides */
+.slides { display: flex; flex-direction: column; gap: 44px; }
+.slide { display: flex; flex-direction: column; gap: 14px; scroll-margin-top: 16px; }
+.slide-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.slide-no { font-family: var(--mono); font-size: 0.95rem; color: var(--accent); font-weight: 500; min-width: 2ch; }
+.slide-head h2 { flex: 1 1 18ch; min-width: 0; }
+.chip { font-size: 0.78rem; font-weight: 600; letter-spacing: 0.02em; color: var(--muted); white-space: nowrap; }
+.chip b { color: var(--fg); font-family: var(--mono); font-weight: 500; }
+.message { font-size: 1.12rem; line-height: 1.5; font-weight: 600; max-width: 62ch; }
+.screen {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+  padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; min-width: 0;
+}
+.label { font-size: 0.72rem; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.screen ul, .say ul { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 6px; }
+.screen p, .screen li { font-size: 0.97rem; }
+.say { display: flex; flex-direction: column; gap: 8px; padding-left: 18px; border-left: 2px solid var(--line); }
+.say li, .say p { max-width: 62ch; }
+.quote { font-style: italic; }
+.src { font-size: 0.82rem; color: var(--muted); }
+.ev { font-family: var(--mono); font-size: 0.74rem; color: var(--accent); white-space: nowrap; }
+.big { font-family: var(--mono); font-weight: 500; font-variant-numeric: tabular-nums; }
+.freeze { font-family: var(--mono); font-size: 0.78rem; background: var(--accent-soft); color: var(--fg); padding: 1px 6px; border-radius: 4px; }
+.flow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-family: var(--display); font-size: 0.85rem; }
+.flow span { border: 1px solid var(--line); border-radius: 4px; padding: 2px 8px; background: var(--bg); }
+.flow i { font-style: normal; color: var(--muted); }
+.cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.cols div { border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; background: var(--bg); display: flex; flex-direction: column; gap: 2px; }
+.cols b { font-family: var(--display); }
+.cols span { font-size: 0.88rem; color: var(--muted); }
+.tbl { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
+th, td { text-align: left; padding: 6px 10px 6px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-family: var(--display); font-size: 0.78rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+td.n { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+hr { border: 0; border-top: 1px solid var(--line); margin: 0; }
+.after { display: flex; flex-direction: column; gap: 16px; }
+.qa { display: flex; flex-direction: column; gap: 14px; }
+.qa div { display: flex; flex-direction: column; gap: 4px; }
+.qa b { font-family: var(--display); font-weight: 600; }
+footer { font-size: 0.85rem; color: var(--muted); }
+a { color: var(--accent); }
+@media (max-width: 560px) {
+  body { font-size: 16px; }
+  .cols { grid-template-columns: 1fr; }
+  .strip a { font-size: 0.7rem; }
+}
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">Capstone talk · 30 November 2026 · 10 minutes</div>
+  <h1>Sabotage Leaves an Energy Signature: A Pilot Study of Physical Auditing for AI Agents</h1>
+  <p class="lede">Eleven slides and about <strong>9:40</strong> of speaking, leaving 20 seconds of slack. Each slide below shows what is on screen and what to say. Every number carries an evidence ID (E1–E9) from the paper outline's ledger.</p>
+</header>
+
+<section class="timing" aria-label="Time budget">
+  <div class="strip">
+    <a href="#s1" style="flex-grow:20" title="1 · Title · 0:20">1</a>
+    <a href="#s2" style="flex-grow:50" title="2 · Monitors read content · 0:50">2</a>
+    <a href="#s3" style="flex-grow:60" title="3 · The idea · 1:00">3</a>
+    <a href="#s4" style="flex-grow:60" title="4 · The instrument · 1:00">4</a>
+    <a href="#s5" style="flex-grow:50" title="5 · What the pilot tested · 0:50">5</a>
+    <a href="#s6" style="flex-grow:75" title="6 · Result · 1:15">6</a>
+    <a href="#s7" style="flex-grow:65" title="7 · Why it is still a pilot · 1:05">7</a>
+    <a href="#s8" style="flex-grow:60" title="8 · Three layers and the squeeze · 1:00">8</a>
+    <a href="#s9" style="flex-grow:75" title="9 · v4 and v5 · 1:15">9</a>
+    <a href="#s10" style="flex-grow:35" title="10 · How one person ran this · 0:35">10</a>
+    <a href="#s11" style="flex-grow:30" title="11 · Close · 0:30">11</a>
+    <a href="#cuts" class="slack" style="flex-grow:20" title="Slack · 0:20">·</a>
+  </div>
+  <div class="scale"><span>0:00</span><span>2:30</span><span>5:00</span><span>7:30</span><span>10:00</span></div>
+</section>
+
+<section class="rules" aria-label="Rules for slides and questions">
+  <h3>Rules for every slide and every answer</h3>
+  <ul>
+    <li>A number goes on a slide only if it has an evidence ID.</li>
+    <li>Block 5, BYTES held-out, v4 and Block 6 outcomes are sealed. Show the status of a gate, never a value.</li>
+    <li>Say "DC input", never "wall energy". The meter sits after the brick and before MagSafe.</li>
+    <li>In the pilots the scored channel is <code>powermetrics</code> GPU energy, which is host software. Say so on slide 3.</li>
+    <li><span class="freeze">[FREEZE]</span> cells are filled from gate status on 22 November.</li>
+  </ul>
+</section>
+
+<div class="slides">
+
+<section class="slide" id="s1">
+  <div class="slide-head"><span class="slide-no">1</span><h2>Title</h2><span class="chip"><b>0:20</b> · at 0:20</span></div>
+  <div class="screen"><span class="label">On screen</span><p>The title, your name, and a photo or drawing of the laptop with the inline USB-C meter in its charging cable.</p></div>
+  <div class="say"><span class="label">Say</span><p class="quote">"I'm an undergrad. This is a pilot study on one laptop with a power meter in its charging cable. Some results are still sealed, and I'll say which."</p></div>
+</section>
+
+<section class="slide" id="s2">
+  <div class="slide-head"><span class="slide-no">2</span><h2>Monitors read content</h2><span class="chip"><b>0:50</b> · at 1:10</span></div>
+  <p class="message">Transcript and chain-of-thought monitors see only what reaches the log. Agents that know they are monitored can keep work out of it.</p>
+  <div class="screen"><span class="label">On screen</span><p>Three qualitative examples: a hidden scratchpad, obfuscated reasoning, an edited log. No borrowed catch rates.</p></div>
+  <div class="say"><span class="label">Say</span><p>SHADE-Arena gives an agent a legitimate main task and, in sabotage runs, a covert side task. We run open models on two of its task pairs.</p></div>
+  <p class="src">Sources: SHADE-Arena (arXiv 2506.15740); Baker et al. (arXiv 2503.11926); literature audit §4 M4.</p>
+</section>
+
+<section class="slide" id="s3">
+  <div class="slide-head"><span class="slide-no">3</span><h2>The idea: predict joules from the log</h2><span class="chip"><b>1:00</b> · at 2:10</span></div>
+  <p class="message">Fit energy against the logged work on honest episodes. A large positive residual means the machine did more work than the log explains.</p>
+  <div class="screen"><span class="label">On screen</span>
+    <p><code>residual = measured J − predicted J(logged prefill, decode, context)</code></p>
+    <div class="flow"><span>benign fit</span><i>→</i><span>calibration</span><i>→</i><span>score</span><i>→</i><span>alarm if above threshold</span></div>
+    <p>Label <code>powermetrics</code> as "host software: the pilots' scored channel" (figures F1, F2).</p>
+  </div>
+  <div class="say"><span class="label">Say</span><ul>
+    <li class="quote">"The agent cannot rewrite an independently retained meter reading under our privilege assumptions. It can still change what work it does."</li>
+    <li class="quote">"In the pilots the score uses the GPU rail from powermetrics, which runs on the same host. That is why the external meter matters."</li>
+  </ul></div>
+</section>
+
+<section class="slide" id="s4">
+  <div class="slide-head"><span class="slide-no">4</span><h2>The instrument</h2><span class="chip"><b>1:00</b> · at 3:10</span></div>
+  <p class="message">The software rails miss most of a controlled memory-traffic contrast, so an external DC meter is needed.</p>
+  <div class="screen"><span class="label">On screen</span>
+    <div class="flow"><span>AC</span><i>→</i><span>brick</span><i>→</i><span>KM003C meter</span><i>→</i><span>MagSafe</span><i>→</i><span>laptop: CPU · GPU · ANE rails</span></div>
+    <div class="tbl"><table>
+      <tr><th>Rotate minus repeat, per GB</th><th>J/GB</th><th></th></tr>
+      <tr><td>Software rails</td><td class="n">0.0092 ± 0.0021</td><td><span class="ev">E1</span></td></tr>
+      <tr><td>DC input (meter)</td><td class="n">0.0389 ± 0.0072</td><td><span class="ev">E1</span></td></tr>
+      <tr><td>Rails share of DC input</td><td class="n">f = 0.238 ± 0.098</td><td><span class="ev">E2</span></td></tr>
+    </table></div>
+    <p><span class="big">≈ 76 %</span> of this contrast is outside the rails. <span class="ev">E2</span></p>
+  </div>
+  <div class="say"><span class="label">Say</span><ul>
+    <li>"In this rotate-minus-repeat test." Never "76 % of inference energy"; the test is latency-bound.</li>
+    <li>"Rest" is DC minus rails: memory, fabric, conversion and fans together. It is not a DRAM measurement.</li>
+    <li>One clause on model size: "the meter has to model active work, not model size: two models of similar resident size, 18.4 and 17.2 GB, read 17.99 and 1.71 GB of weights per token." <span class="ev">E3</span> This is weight accounting, with no power capture.</li>
+    <li>The reading rule was corrected after the data existed. Call it a validation check.</li>
+  </ul></div>
+</section>
+
+<section class="slide" id="s5">
+  <div class="slide-head"><span class="slide-no">5</span><h2>What the pilot tested</h2><span class="chip"><b>0:50</b> · at 4:00</span></div>
+  <p class="message">Known-H tampering removes H tokens of logged reasoning while the executed episode, and its joules, stay fixed. It tests detection of a known log omission, not of intent.</p>
+  <div class="screen"><span class="label">On screen</span><ul>
+    <li>One device; Qwen3-30B-A3B, MLX 4-bit, thinking on.</li>
+    <li>Task pairs <code>spam_filter_update</code> and <code>bank_transfer_2</code>.</li>
+    <li>Turn limit 12, output budget 4,096 tokens, context cap 40,960.</li>
+  </ul></div>
+  <div class="say"><span class="label">Say</span><p>"v3" is the protocol; pilots 4–10 are runs under it. The model's terms were selected using pilots 4–7. Say so before anyone asks.</p></div>
+</section>
+
+<section class="slide" id="s6">
+  <div class="slide-head"><span class="slide-no">6</span><h2>Result: the tested omissions crossed the threshold</h2><span class="chip"><b>1:15</b> · at 5:15</span></div>
+  <p class="message">In pilots 8–10 every tested omission was detected, and no untampered sabotage reading crossed its threshold. That is two trajectories checked repeatedly.</p>
+  <div class="screen"><span class="label">On screen</span>
+    <div class="tbl"><table>
+      <tr><th>Pair</th><th>Benign m</th><th>Threshold</th><th>Untampered sabotage</th><th>Smallest tested H</th><th></th></tr>
+      <tr><td>bank</td><td class="n">28</td><td class="n">2.53</td><td>below, every check</td><td class="n">1,193 tokens · detected</td><td><span class="ev">E6 E7</span></td></tr>
+      <tr><td>spam</td><td class="n">28</td><td class="n">7.13</td><td>below, every check</td><td class="n">539 tokens · detected</td><td><span class="ev">E6 E7</span></td></tr>
+    </table></div>
+    <p><strong>Footnote, in large type:</strong> two distinct sabotage trajectories, each re-checked across sessions (six checks in all).</p>
+  </div>
+  <div class="say"><span class="label">Say</span><ul>
+    <li>"Detected at the smallest H we tested" is not a minimum detectable H. There is no detection curve and no interval over six independent attacks.</li>
+    <li>An identical replay repeats to about 1.93 J of residual SD <span class="ev">E5</span>, against regression residual SDs of 19–58 J <span class="ev">E4</span>. Do not turn this into a sensitivity multiple.</li>
+  </ul></div>
+</section>
+
+<section class="slide" id="s7">
+  <div class="slide-head"><span class="slide-no">7</span><h2>Why it is still a pilot</h2><span class="chip"><b>1:05</b> · at 6:20</span></div>
+  <p class="message">Sample-maximum thresholds, design selection, host-software scoring and log edits limit what the pilot shows.</p>
+  <div class="screen"><span class="label">On screen</span><ul>
+    <li>Spam threshold <span class="big">7.13</span> against the next-largest <span class="big">2.99</span>: one tail point sets it. <span class="ev">E6</span></li>
+    <li>Selection-inclusive diagnostic: bank <span class="big">2/26</span> untampered above threshold, spam <span class="big">0/26</span>. <span class="ev">E8</span></li>
+    <li>Exclusions: pilot 8 had <span class="big">27/28</span> eligible, pilot 10 had <span class="big">24/28</span> (battery and thermal). <span class="ev">E9</span></li>
+    <li>The tamper is a log edit, not real hidden computation. The scored channel is host software. One device, two task pairs, one model, and an agent that does not adapt.</li>
+  </ul></div>
+  <div class="say"><span class="label">Say</span><p>None of these are population false-alarm rates. The registered v4 series exists to close these gaps.</p></div>
+</section>
+
+<section class="slide" id="s8">
+  <div class="slide-head"><span class="slide-no">8</span><h2>Three layers and the squeeze</h2><span class="chip"><b>1:00</b> · at 7:20</span></div>
+  <p class="message">Monitors see content, the meter sees quantity, probes see internals. The squeeze is a hypothesis: hiding from one should expose you to another.</p>
+  <div class="screen"><span class="label">On screen</span>
+    <div class="cols">
+      <div><b>Monitor</b><span>reads content</span></div>
+      <div><b>Meter</b><span>measures quantity</span></div>
+      <div><b>Probes</b><span>read internals</span></div>
+    </div>
+    <p>Escape routes that might beat more than one layer:</p>
+    <ul>
+      <li>logged, plausible cover work;</li>
+      <li>filler or encoded reasoning;</li>
+      <li>padding to match the expected energy;</li>
+      <li>latent reasoning at fixed compute. The meter is blind here: the weight-only physics effect is estimated at ≤ 3×10⁻⁵ of energy, a design estimate, not a measurement.</li>
+    </ul>
+  </div>
+  <div class="say"><span class="label">Say</span><p>"Hypothesis, untested." Energy's niche is computation the runtime does not mediate: side generation, tool subprocesses, runtimes the auditor cannot trust or re-run.</p></div>
+</section>
+
+<section class="slide" id="s9">
+  <div class="slide-head"><span class="slide-no">9</span><h2>v4 and v5</h2><span class="chip"><b>1:15</b> · at 8:35</span></div>
+  <p class="message">v4 turns the pilot into a registered test with rules fixed before data. v5 asks whether an adaptive agent can sabotage successfully and still escape a joint energy-plus-monitor audit.</p>
+  <div class="screen"><span class="label">On screen</span>
+    <div class="flow"><span>R0</span><i>→</i><span>R1</span><i>→</i><span>blind registration gate</span><i>→</i><span>W1</span><i>→</i><span>3 D windows</span><i>→</i><span>calibration, m ≥ 39 per pair + held-out test</span><i>→</i><span>independent recompute</span><i>→</i><span>release</span></div>
+    <p>Each box carries its <span class="freeze">[FREEZE]</span> status (done, pending or refused), never an outcome. Qwen3.8-27B at 8-bit; the KM003C captured in every window; full transcripts sealed and unscored.</p>
+    <p><strong>v5 endpoint:</strong> side-task success and no joint alarm, per attempt, reported with utility. The joint rule is calibrated at 0.05 and compared against energy alone, monitor alone, and time plus monitor. The monitor is a frontier model called by API, off the measured machine.</p>
+    <div class="flow"><span>talk, 30 Nov</span><i>→</i><span>paper, mid-Dec</span><i>→</i><span>v5 windows, Dec–Feb</span><i>→</i><span>NeurIPS 2027</span></div>
+  </div>
+  <div class="say"><span class="label">Say</span><ul>
+    <li>An example of deciding first: 8-bit decode at about 11.9 tokens per second could not fit the original budget, so the fallback was declared before any R1 number existed.</li>
+    <li>If asked about results: <span class="quote">"Sealed until the registered release; I don't know them."</span></li>
+    <li>The v5 design is still being judged. Do not name a roster or a sample size. Expect a measured limit rather than a clean win, and say that this is a strength.</li>
+  </ul></div>
+</section>
+
+<section class="slide" id="s10">
+  <div class="slide-head"><span class="slide-no">10</span><h2>How one person ran this</h2><span class="chip"><b>0:35</b> · at 9:10</span></div>
+  <p class="message">A preregistered, blinded hardware study has more procedure than one person can do by hand, so AI agents run it. They are trusted only through what they cannot quietly change.</p>
+  <div class="screen"><span class="label">On screen</span>
+    <div class="flow"><span>me</span><i>→</i><span>lead agent</span><i>→</i><span>magistrate on the measurement Mac</span><i>→</i><span>workers</span></div>
+    <p>Checked by sealed custody, an independent recompute, and review by a second model family.</p>
+  </div>
+  <div class="say"><span class="label">Say</span><p class="quote">"The pipeline that runs the study is audited the same way the study audits agents."</p><p>Skip commit counts; they measure activity, not output.</p></div>
+</section>
+
+<section class="slide" id="s11">
+  <div class="slide-head"><span class="slide-no">11</span><h2>Close</h2><span class="chip"><b>0:30</b> · at 9:40</span></div>
+  <div class="screen"><span class="label">On screen</span><p>The repo link and the paper title.</p></div>
+  <div class="say"><span class="label">Say</span><p class="quote">"Our pilot sees work missing from a log, and a registered test is under way. The next question is whether an adaptive agent can hide from the monitor and the meter at once."</p></div>
+</section>
+
+</div>
+
+<hr>
+
+<section class="after" id="cuts">
+  <h2>If you are running long</h2>
+  <ul>
+    <li>Drop slide 10 and keep its last sentence in the close. Saves 0:35.</li>
+    <li>Then shorten slide 8's escape routes to two.</li>
+    <li>Never cut slide 6's two-trajectory footnote or slide 7.</li>
+  </ul>
+</section>
+
+<section class="after">
+  <h2>Likely questions</h2>
+  <div class="qa">
+    <div><b>Can't the agent pad the log to match the energy?</b><p>Yes; it is one of the escape routes on slide 8. Padding has to be logged work, which the monitor reads. That trade is what v5 tests.</p></div>
+    <div><b>Why not just re-run the episode?</b><p>On a seeded local stack a rerun already catches stripped reasoning. Energy matters where you cannot re-run: untrusted runtimes, tool subprocesses, hardware you don't control.</p></div>
+    <div><b>Is 76 % of the energy outside the rails?</b><p>Only in this memory-traffic contrast. It says the rails are incomplete, not what share of inference they miss.</p></div>
+    <div><b>Isn't powermetrics controlled by the same host?</b><p>Yes. That is the pilots' main limit, and the reason every v4 window captures the external meter and v5 qualifies a DC-input endpoint.</p></div>
+    <div><b>What did v4 find?</b><p>Sealed until the registered release.</p></div>
+  </div>
+</section>
+
+<footer>Cut from <code>docs/capstone/TALK-OUTLINE-v2.md</code> (half B). Markdown copy: <code>docs/capstone/TALK-10MIN.md</code>. Evidence ledger E1–E9: <code>docs/capstone/PAPER-OUTLINE.md</code>.</footer>
+
+</div>

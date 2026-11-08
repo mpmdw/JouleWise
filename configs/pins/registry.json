@@ -124,19 +124,19 @@
         "kind": "P"
       },
       "historical_pin": {
-        "count": 49,
+        "count": 47,
         "kind": "P"
       },
       "issued_code": {
-        "count": 42,
+        "count": 41,
         "kind": "P"
       },
       "issued_config": {
-        "count": 793,
+        "count": 795,
         "kind": "P"
       },
       "pack_config_bytes": {
-        "count": 19382,
+        "count": 19238,
         "kind": "P"
       },
       "pinned_config_copy": {
@@ -160,17 +160,17 @@
         "kind": "B"
       },
       "synthetic_literal": {
-        "count": 109,
+        "count": 105,
         "kind": "B"
       }
     },
     "by_kind": {
-      "B": 3570,
-      "P": 23739
+      "B": 3566,
+      "P": 23594
     },
-    "files": 2646,
-    "literals": 27309,
-    "resolved_checked": 15881
+    "files": 2635,
+    "literals": 27160,
+    "resolved_checked": 15880
   },
   "target_format": "<method>[@<commit>]:<path>[::<definition>], indexed by a row's target; @<commit> marks an era record, verified at that commit",
   "targets": [
@@ -2884,6 +2884,10 @@
       ["/attempts/7/harvest_record_sha256", "issued_config", null],
       ["/attempts/8/harvest_record_sha256", "issued_config", null],
       ["/attempts/9/harvest_record_sha256", "issued_config", null]
+    ]},
+    {"path": "configs/analysis/b5/equivalence_open_indices.json", "regenerators": ["issued_config"], "rows": [
+      ["/open_indices/0/window_index_sha256", "issued_config", null],
+      ["/open_indices/1/window_index_sha256", "issued_config", null]
     ]},
     {"path": "configs/analysis/b5/seal_pins.json", "regenerators": ["estimator_code", "issued_config"], "rows": [
       ["/pins/pin1/files/joulewise~1b5~1harvest.py", "issued_config", 1951],
@@ -24920,167 +24924,6 @@
       ["/stack_identity/workload_profiles/decode_and_prefill_p42/suite_manifest_sha256", "pack_config_bytes", null],
       ["/stack_identity/workload_profiles/prefill_p2048/prompt_text_utf8_sha256", "pack_config_bytes", null]
     ]},
-    {"path": "configs/campaigns/exploratory_2026_07_17/01_olmoe-1b-7b/exploratory-20260717-olmoe-1b-7b.json", "regenerators": ["pack_config_bytes"], "rows": [
-      ["/hardware_target/notes", "pack_config_bytes", null],
-      ["/workload_profile/suite_manifest_sha256", "pack_config_bytes", null]
-    ]},
-    {"path": "configs/campaigns/exploratory_2026_07_17/02_qwen3-4b/exploratory-20260717-qwen3-4b.json", "regenerators": ["pack_config_bytes"], "rows": [
-      ["/workload_profile/suite_manifest_sha256", "pack_config_bytes", null]
-    ]},
-    {"path": "configs/campaigns/exploratory_2026_07_17/03_qwen35-122b/exploratory-20260717-qwen35-122b.json", "regenerators": ["pack_config_bytes"], "rows": [
-      ["/workload_profile/suite_manifest_sha256", "pack_config_bytes", null]
-    ]},
-    {"path": "configs/campaigns/exploratory_2026_07_17/suite_manifests/jw_sentinel_v1_olmoe-1b-7b.json", "regenerators": ["pack_config_bytes"], "rows": [
-      ["/generator/parameters_hash", "pack_config_bytes", null],
-      ["/items/0/item_id", "pack_config_bytes", null],
-      ["/items/0/source/source_item_id", "pack_config_bytes", null],
-      ["/items/0/source/source_sha256", "pack_config_bytes", null],
-      ["/items/1/item_id", "pack_config_bytes", null],
-      ["/items/1/source/source_item_id", "pack_config_bytes", null],
-      ["/items/1/source/source_sha256", "pack_config_bytes", null],
-      ["/items/2/item_id", "pack_config_bytes", null],
-      ["/items/2/source/source_item_id", "pack_config_bytes", null],
-      ["/items/2/source/source_sha256", "pack_config_bytes", null],
-      ["/items/3/item_id", "pack_config_bytes", null],
-      ["/items/3/source/source_item_id", "pack_config_bytes", null],
-      ["/items/3/source/source_sha256", "pack_config_bytes", null],
-      ["/items/4/item_id", "pack_config_bytes", null],
-      ["/items/4/source/source_item_id", "pack_config_bytes", null],
-      ["/items/4/source/source_sha256", "pack_config_bytes", null],
-      ["/source_manifest/source_id", "pack_config_bytes", null],
-      ["/source_manifest/subset_sha256", "pack_config_bytes", null]
-    ]},
-    {"path": "configs/campaigns/exploratory_2026_07_17/suite_manifests/jw_sentinel_v1_olmoe-1b-7b_annotations.json", "regenerators": ["pack_config_bytes"], "rows": [
-      ["/items/360e2c0736b0d5ddc0da9130a3ab0e979857a5d146f22c160537eafdc74d9d0e#key", "pack_config_bytes", null],
-      ["/items/360e2c0736b0d5ddc0da9130a3ab0e979857a5d146f22c160537eafdc74d9d0e/token_ids_sha256", "pack_config_bytes", null],
-      ["/items/360e2c0736b0d5ddc0da9130a3ab0e979857a5d146f22c160537eafdc74d9d0e/tokenizer_id", "pack_config_bytes", null],
-      ["/items/3cff7e8284445882678d91c67ef01b8855b3d410dddde48117c7fcb4bb539039#key", "pack_config_bytes", null],
-      ["/items/3cff7e8284445882678d91c67ef01b8855b3d410dddde48117c7fcb4bb539039/bank_hash", "pack_config_bytes", null],
-      ["/items/3cff7e8284445882678d91c67ef01b8855b3d410dddde48117c7fcb4bb539039/token_ids_sha256", "pack_config_bytes", null],
-      ["/items/3cff7e8284445882678d91c67ef01b8855b3d410dddde48117c7fcb4bb539039/tokenizer_id", "pack_config_bytes", null],
-      ["/items/77f0761459a5749731889eb34fb72e3d56e94823b96f4d16be2a9f19462a318d#key", "pack_config_bytes", null],
-      ["/items/77f0761459a5749731889eb34fb72e3d56e94823b96f4d16be2a9f19462a318d/token_ids_sha256", "pack_config_bytes", null],
-      ["/items/77f0761459a5749731889eb34fb72e3d56e94823b96f4d16be2a9f19462a318d/tokenizer_id", "pack_config_bytes", null],
-      ["/items/9b04270370688e241cfb226a99d89d3d8d42431c9fc3ecb51cb094f5ac3c91eb#key", "pack_config_bytes", null],
-      ["/items/9b04270370688e241cfb226a99d89d3d8d42431c9fc3ecb51cb094f5ac3c91eb/bank_hash", "pack_config_bytes", null],
-      ["/items/9b04270370688e241cfb226a99d89d3d8d42431c9fc3ecb51cb094f5ac3c91eb/token_ids_sha256", "pack_config_bytes", null],
-      ["/items/9b04270370688e241cfb226a99d89d3d8d42431c9fc3ecb51cb094f5ac3c91eb/tokenizer_id", "pack_config_bytes", null],
-      ["/items/a6116d2be307e539f4545d09f3b8d5555c899be55c0fff83f036b3d79c21a63d#key", "pack_config_bytes", null],
-      ["/items/a6116d2be307e539f4545d09f3b8d5555c899be55c0fff83f036b3d79c21a63d/bank_hash", "pack_config_bytes", null],
-      ["/items/a6116d2be307e539f4545d09f3b8d5555c899be55c0fff83f036b3d79c21a63d/token_ids_sha256", "pack_config_bytes", null],
-      ["/items/a6116d2be307e539f4545d09f3b8d5555c899be55c0fff83f036b3d79c21a63d/tokenizer_id", "pack_config_bytes", null],
-      ["/source_manifest/source_id", "pack_config_bytes", null],
-      ["/source_manifest/subset_sha256", "pack_config_bytes", null],
-      ["/source_manifest/tokenizer_files_sha256", "pack_config_bytes", null],
-      ["/source_manifest/tokenizer_id", "pack_config_bytes", null],
-      ["/tokenizer/files/4/sha256", "pack_config_bytes", null],
-      ["/tokenizer/files/6/sha256", "pack_config_bytes", null],
-      ["/tokenizer/files/8/sha256", "pack_config_bytes", null],
-      ["/tokenizer/files_sha256", "pack_config_bytes", null],
-      ["/tokenizer/tokenizer_id", "pack_config_bytes", null]
-    ]},
-    {"path": "configs/campaigns/exploratory_2026_07_17/suite_manifests/jw_sentinel_v1_qwen3-4b.json", "regenerators": ["pack_config_bytes"], "rows": [
-      ["/generator/parameters_hash", "pack_config_bytes", null],
-      ["/items/0/item_id", "pack_config_bytes", null],
-      ["/items/0/source/source_item_id", "pack_config_bytes", null],
-      ["/items/0/source/source_sha256", "pack_config_bytes", null],
-      ["/items/1/item_id", "pack_config_bytes", null],
-      ["/items/1/source/source_item_id", "pack_config_bytes", null],
-      ["/items/1/source/source_sha256", "pack_config_bytes", null],
-      ["/items/2/item_id", "pack_config_bytes", null],
-      ["/items/2/source/source_item_id", "pack_config_bytes", null],
-      ["/items/2/source/source_sha256", "pack_config_bytes", null],
-      ["/items/3/item_id", "pack_config_bytes", null],
-      ["/items/3/source/source_item_id", "pack_config_bytes", null],
-      ["/items/3/source/source_sha256", "pack_config_bytes", null],
-      ["/items/4/item_id", "pack_config_bytes", null],
-      ["/items/4/source/source_item_id", "pack_config_bytes", null],
-      ["/items/4/source/source_sha256", "pack_config_bytes", null],
-      ["/source_manifest/source_id", "pack_config_bytes", null],
-      ["/source_manifest/subset_sha256", "pack_config_bytes", null]
-    ]},
-    {"path": "configs/campaigns/exploratory_2026_07_17/suite_manifests/jw_sentinel_v1_qwen3-4b_annotations.json", "regenerators": ["pack_config_bytes"], "rows": [
-      ["/items/6914b659ce121b267c9b68d5e09307d93d8265eea90812b4a921256c65c5096c#key", "pack_config_bytes", null],
-      ["/items/6914b659ce121b267c9b68d5e09307d93d8265eea90812b4a921256c65c5096c/bank_hash", "pack_config_bytes", null],
-      ["/items/6914b659ce121b267c9b68d5e09307d93d8265eea90812b4a921256c65c5096c/token_ids_sha256", "pack_config_bytes", null],
-      ["/items/6914b659ce121b267c9b68d5e09307d93d8265eea90812b4a921256c65c5096c/tokenizer_id", "pack_config_bytes", null],
-      ["/items/7144b2f4b6301f014d267d69a21962c16e65882351b44a34e3c7cd7569daaf75#key", "pack_config_bytes", null],
-      ["/items/7144b2f4b6301f014d267d69a21962c16e65882351b44a34e3c7cd7569daaf75/bank_hash", "pack_config_bytes", null],
-      ["/items/7144b2f4b6301f014d267d69a21962c16e65882351b44a34e3c7cd7569daaf75/token_ids_sha256", "pack_config_bytes", null],
-      ["/items/7144b2f4b6301f014d267d69a21962c16e65882351b44a34e3c7cd7569daaf75/tokenizer_id", "pack_config_bytes", null],
-      ["/items/9bccc93be8a69abd6148ed2e38abe367c73622d897d734e1445c880d7278bed1#key", "pack_config_bytes", null],
-      ["/items/9bccc93be8a69abd6148ed2e38abe367c73622d897d734e1445c880d7278bed1/token_ids_sha256", "pack_config_bytes", null],
-      ["/items/9bccc93be8a69abd6148ed2e38abe367c73622d897d734e1445c880d7278bed1/tokenizer_id", "pack_config_bytes", null],
-      ["/items/b515bff47331541d75c685ff6e43fa87dcb53f200260a34e771353b70c038d0d#key", "pack_config_bytes", null],
-      ["/items/b515bff47331541d75c685ff6e43fa87dcb53f200260a34e771353b70c038d0d/bank_hash", "pack_config_bytes", null],
-      ["/items/b515bff47331541d75c685ff6e43fa87dcb53f200260a34e771353b70c038d0d/token_ids_sha256", "pack_config_bytes", null],
-      ["/items/b515bff47331541d75c685ff6e43fa87dcb53f200260a34e771353b70c038d0d/tokenizer_id", "pack_config_bytes", null],
-      ["/items/f3242227e5d0a6abd606a4ac2e7182b9dab952c778cf9e4b14336767aabb6348#key", "pack_config_bytes", null],
-      ["/items/f3242227e5d0a6abd606a4ac2e7182b9dab952c778cf9e4b14336767aabb6348/token_ids_sha256", "pack_config_bytes", null],
-      ["/items/f3242227e5d0a6abd606a4ac2e7182b9dab952c778cf9e4b14336767aabb6348/tokenizer_id", "pack_config_bytes", null],
-      ["/source_manifest/source_id", "pack_config_bytes", null],
-      ["/source_manifest/subset_sha256", "pack_config_bytes", null],
-      ["/source_manifest/tokenizer_files_sha256", "pack_config_bytes", null],
-      ["/source_manifest/tokenizer_id", "pack_config_bytes", null],
-      ["/tokenizer/files/0/sha256", "pack_config_bytes", null],
-      ["/tokenizer/files/3/sha256", "pack_config_bytes", null],
-      ["/tokenizer/files/4/sha256", "pack_config_bytes", null],
-      ["/tokenizer/files/6/sha256", "pack_config_bytes", null],
-      ["/tokenizer/files/8/sha256", "pack_config_bytes", null],
-      ["/tokenizer/files/9/sha256", "pack_config_bytes", null],
-      ["/tokenizer/files_sha256", "pack_config_bytes", null],
-      ["/tokenizer/tokenizer_id", "pack_config_bytes", null]
-    ]},
-    {"path": "configs/campaigns/exploratory_2026_07_17/suite_manifests/jw_sentinel_v1_qwen35-122b.json", "regenerators": ["pack_config_bytes"], "rows": [
-      ["/generator/parameters_hash", "pack_config_bytes", null],
-      ["/items/0/item_id", "pack_config_bytes", null],
-      ["/items/0/source/source_item_id", "pack_config_bytes", null],
-      ["/items/0/source/source_sha256", "pack_config_bytes", null],
-      ["/items/1/item_id", "pack_config_bytes", null],
-      ["/items/1/source/source_item_id", "pack_config_bytes", null],
-      ["/items/1/source/source_sha256", "pack_config_bytes", null],
-      ["/items/2/item_id", "pack_config_bytes", null],
-      ["/items/2/source/source_item_id", "pack_config_bytes", null],
-      ["/items/2/source/source_sha256", "pack_config_bytes", null],
-      ["/items/3/item_id", "pack_config_bytes", null],
-      ["/items/3/source/source_item_id", "pack_config_bytes", null],
-      ["/items/3/source/source_sha256", "pack_config_bytes", null],
-      ["/items/4/item_id", "pack_config_bytes", null],
-      ["/items/4/source/source_item_id", "pack_config_bytes", null],
-      ["/items/4/source/source_sha256", "pack_config_bytes", null],
-      ["/source_manifest/source_id", "pack_config_bytes", null],
-      ["/source_manifest/subset_sha256", "pack_config_bytes", null]
-    ]},
-    {"path": "configs/campaigns/exploratory_2026_07_17/suite_manifests/jw_sentinel_v1_qwen35-122b_annotations.json", "regenerators": ["pack_config_bytes"], "rows": [
-      ["/items/06852c7be50050bee6a629da01ac1b21b41e7ef2d9fc93d9612ea53a95dd6527#key", "pack_config_bytes", null],
-      ["/items/06852c7be50050bee6a629da01ac1b21b41e7ef2d9fc93d9612ea53a95dd6527/bank_hash", "pack_config_bytes", null],
-      ["/items/06852c7be50050bee6a629da01ac1b21b41e7ef2d9fc93d9612ea53a95dd6527/token_ids_sha256", "pack_config_bytes", null],
-      ["/items/06852c7be50050bee6a629da01ac1b21b41e7ef2d9fc93d9612ea53a95dd6527/tokenizer_id", "pack_config_bytes", null],
-      ["/items/18f2538d8ffd3215b246d9dd4f84035d2db7644a4888b016ce77756aff1fda56#key", "pack_config_bytes", null],
-      ["/items/18f2538d8ffd3215b246d9dd4f84035d2db7644a4888b016ce77756aff1fda56/bank_hash", "pack_config_bytes", null],
-      ["/items/18f2538d8ffd3215b246d9dd4f84035d2db7644a4888b016ce77756aff1fda56/token_ids_sha256", "pack_config_bytes", null],
-      ["/items/18f2538d8ffd3215b246d9dd4f84035d2db7644a4888b016ce77756aff1fda56/tokenizer_id", "pack_config_bytes", null],
-      ["/items/1ab14b9d11233168c4f8d0ef1af2d72f3e8c4c8b126dbe559fb95b8d7d10a81b#key", "pack_config_bytes", null],
-      ["/items/1ab14b9d11233168c4f8d0ef1af2d72f3e8c4c8b126dbe559fb95b8d7d10a81b/bank_hash", "pack_config_bytes", null],
-      ["/items/1ab14b9d11233168c4f8d0ef1af2d72f3e8c4c8b126dbe559fb95b8d7d10a81b/token_ids_sha256", "pack_config_bytes", null],
-      ["/items/1ab14b9d11233168c4f8d0ef1af2d72f3e8c4c8b126dbe559fb95b8d7d10a81b/tokenizer_id", "pack_config_bytes", null],
-      ["/items/722dd6364618445950082529ec56f30b6364c58e9e0e0b64f04ca66b62287ac1#key", "pack_config_bytes", null],
-      ["/items/722dd6364618445950082529ec56f30b6364c58e9e0e0b64f04ca66b62287ac1/token_ids_sha256", "pack_config_bytes", null],
-      ["/items/722dd6364618445950082529ec56f30b6364c58e9e0e0b64f04ca66b62287ac1/tokenizer_id", "pack_config_bytes", null],
-      ["/items/dc5f9a6be0f2bafb30c197e11d755f332660c0368da1b39b7d0f40b22515dc13#key", "pack_config_bytes", null],
-      ["/items/dc5f9a6be0f2bafb30c197e11d755f332660c0368da1b39b7d0f40b22515dc13/token_ids_sha256", "pack_config_bytes", null],
-      ["/items/dc5f9a6be0f2bafb30c197e11d755f332660c0368da1b39b7d0f40b22515dc13/tokenizer_id", "pack_config_bytes", null],
-      ["/source_manifest/source_id", "pack_config_bytes", null],
-      ["/source_manifest/subset_sha256", "pack_config_bytes", null],
-      ["/source_manifest/tokenizer_files_sha256", "pack_config_bytes", null],
-      ["/source_manifest/tokenizer_id", "pack_config_bytes", null],
-      ["/tokenizer/files/1/sha256", "pack_config_bytes", null],
-      ["/tokenizer/files/6/sha256", "pack_config_bytes", null],
-      ["/tokenizer/files/8/sha256", "pack_config_bytes", null],
-      ["/tokenizer/files/9/sha256", "pack_config_bytes", null],
-      ["/tokenizer/files_sha256", "pack_config_bytes", null],
-      ["/tokenizer/tokenizer_id", "pack_config_bytes", null]
-    ]},
     {"path": "configs/campaigns/g2a_prefill_probe_25g83/registration_block2.md", "regenerators": ["sealed_registration"], "rows": [
       ["#L52", "sealed_registration", 496],
       ["#L66", "sealed_registration", 24],
@@ -26706,9 +26549,6 @@
     ]},
     {"path": "configs/campaigns/p2_015_floors/order_manifest.json", "regenerators": ["pack:p2_015_floors"], "rows": [
       ["/calibration_plan_sha256", "pack_config_bytes", 1621]
-    ]},
-    {"path": "configs/campaigns/p2_015_smoke/production_shakedown/p2038_production_shakedown.json", "regenerators": ["pack_config_bytes"], "rows": [
-      ["/workload_profile/suite_manifest_sha256", "pack_config_bytes", null]
     ]},
     {"path": "configs/campaigns/quiet_predicate_evidence_01/README.md", "regenerators": ["pack_config_bytes"], "rows": [
       ["#L9", "pack_config_bytes", 1622]
@@ -31034,6 +30874,9 @@
       ["/prompts/6/text_utf8_sha256", "issued_config", null],
       ["/prompts/7/text_utf8_sha256", "issued_config", null]
     ]},
+    {"path": "tests/b5_analysis/fixtures/equivalence/s10_remint.py", "rows": [
+      ["#L62", "synthetic_literal", null]
+    ]},
     {"path": "tests/b5_analysis/test_claim_gate_kept_quads.py", "rows": [
       ["#L157", "synthetic_literal", null]
     ]},
@@ -35034,9 +34877,6 @@
       ["#L1614", "synthetic_literal", null],
       ["#L1618", "synthetic_literal", null]
     ]},
-    {"path": "tests/test_analysis_manifest_v2.py", "regenerators": ["issued_code"], "rows": [
-      ["#L19", "issued_code", 1792]
-    ]},
     {"path": "tests/test_analysis_manifest_v3.py", "regenerators": ["issued_code"], "rows": [
       ["#L61", "issued_code", 1792]
     ]},
@@ -35350,10 +35190,6 @@
       ["#L357", "recorded_evidence", 1733],
       ["#L450", "fixture_content", 1870]
     ]},
-    {"path": "tests/test_phase_share.py", "rows": [
-      ["#L310", "historical_pin", null],
-      ["#L320", "historical_pin", null]
-    ]},
     {"path": "tests/test_powermetrics_fiducial.py", "regenerators": ["pinned_config_copy"], "rows": [
       ["#L1030", "historical_pin", null],
       ["#L1607", "pinned_config_copy", 24],
@@ -35412,17 +35248,16 @@
       ["#L46", "historical_pin", null]
     ]},
     {"path": "tests/test_schemas.py", "regenerators": ["pinned_config_copy"], "rows": [
-      ["#L201", "pinned_config_copy", 32],
-      ["#L207", "synthetic_literal", null],
-      ["#L462", "synthetic_literal", null],
+      ["#L200", "pinned_config_copy", 32],
+      ["#L206", "synthetic_literal", null],
+      ["#L461", "synthetic_literal", null],
       ["#L47", "synthetic_literal", null],
       ["#L48", "synthetic_literal", null],
       ["#L49", "synthetic_literal", null],
       ["#L50", "synthetic_literal", null],
       ["#L51", "synthetic_literal", null],
       ["#L52", "synthetic_literal", null],
-      ["#L53", "synthetic_literal", null],
-      ["#L54", "pinned_config_copy", 1709]
+      ["#L53", "pinned_config_copy", 1709]
     ]},
     {"path": "tests/test_single_count_discipline_matrix.py", "rows": [
       ["#L219", "historical_pin", null],
@@ -35463,12 +35298,6 @@
       ["#L49", "pinned_config_copy", 1710],
       ["#L60", "pinned_config_copy", 1713],
       ["#L70", "pinned_config_copy", 117]
-    ]},
-    {"path": "tests/test_workloads.py", "rows": [
-      ["#L124", "synthetic_literal", null],
-      ["#L134", "synthetic_literal", null],
-      ["#L186", "synthetic_literal", null],
-      ["#L294", "synthetic_literal", null]
     ]},
     {"path": "tests/verify_w1w2_disposition_sources.py", "rows": [
       ["#L21", "recorded_evidence", 1742]

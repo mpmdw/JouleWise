@@ -771,7 +771,24 @@
     "tests.twins.test_harvest_twin": 0.004,
     "tests.twins.test_harvest_twin_comparison": 7.145
   },
-  "timing_exemptions": {},
+  "timing_exemptions": {
+    "tests.b5_analysis.test_candidate_physics_memo": "Added on main after the 2026-11-06 harvest; pending hosted timing. Still discovered and packed at the conservative unknown weight (26.98 s).",
+    "tests.b5_analysis.test_l4_custody_probe": "Added on main after the 2026-11-06 harvest; pending hosted timing. Still discovered and packed at the conservative unknown weight (26.98 s).",
+    "tests.b5_analysis.test_pack_parallel": "Added on main after the 2026-11-06 harvest; pending hosted timing. Still discovered and packed at the conservative unknown weight (26.98 s).",
+    "tests.b5_analysis.test_producer_parallel": "Added on main after the 2026-11-06 harvest; pending hosted timing. Still discovered and packed at the conservative unknown weight (26.98 s).",
+    "tests.b5_analysis.test_reported_parallel": "Added on main after the 2026-11-06 harvest; pending hosted timing. Still discovered and packed at the conservative unknown weight (26.98 s).",
+    "tests.b5_analysis.test_resume": "Added on main after the 2026-11-06 harvest; pending hosted timing. Still discovered and packed at the conservative unknown weight (26.98 s).",
+    "tests.b5_analysis.test_resume_correctness": "Added on main after the 2026-11-06 harvest; pending hosted timing. Still discovered and packed at the conservative unknown weight (26.98 s).",
+    "tests.b5_analysis.test_sensitivity_parallel": "Added on main after the 2026-11-06 harvest; pending hosted timing. Still discovered and packed at the conservative unknown weight (26.98 s).",
+    "tests.b5_analysis.test_speed_plan": "Added on main after the 2026-11-06 harvest; pending hosted timing. Still discovered and packed at the conservative unknown weight (26.98 s).",
+    "tests.b5_analysis.test_speed_quantile_memo": "Added on main after the 2026-11-06 harvest; pending hosted timing. Still discovered and packed at the conservative unknown weight (26.98 s).",
+    "tests.b5_analysis.test_speed_reserved_vocabulary": "Added on main after the 2026-11-06 harvest; pending hosted timing. Still discovered and packed at the conservative unknown weight (26.98 s).",
+    "tests.independent_recompute.test_member_pool": "Added on main after the 2026-11-06 harvest; pending hosted timing. Still discovered and packed at the conservative unknown weight (26.98 s).",
+    "tests.independent_recompute.test_release_b5": "Added on main after the 2026-11-06 harvest; pending hosted timing. Still discovered and packed at the conservative unknown weight (26.98 s).",
+    "tests.independent_recompute.test_release_trace_20261107": "Added on main after the 2026-11-06 harvest; pending hosted timing. Still discovered and packed at the conservative unknown weight (26.98 s).",
+    "tests.test_analysis_engine_campaign_log_members": "Added on main after the 2026-11-06 harvest; pending hosted timing. Still discovered and packed at the conservative unknown weight (26.98 s).",
+    "tests.test_bytes_campaign_split": "New offline regression for the pending ALIGN patch; no hosted timing yet. Discovered and packed at the conservative unknown weight (26.98 s)."
+  },
   "untimed_module_allowance": {
     "_what_this_is": "Read only by tests/test_shard_tests.py's completeness guard, never by the packer. A discovered module with no weight in seconds_by_module (and no timing_exemptions entry) passes the guard only if its name starts with one of these prefixes AND its source file is no larger than max_source_bytes. Such a module is packed at unknown_module_weight_seconds (26.98 s, the mean hosted ordinary-module weight) until the next CI harvest weighs it. Purpose: many align/qwen4 lanes add small modules in parallel, and a guard that demands a weight before any CI run has measured the module breaks every merge order but one.",
     "_size_bound_is_coarse": "Source size bounds the allowance; it does not predict runtime. Hosted, the 105 PR #682 tests.align modules have median 0.9 s and 76 of them run under 10 s, but tests.align.test_moe_calibration is 7,921 bytes and runs 1,377 s. A heavy module that slips under the bound shows up as a shard running past its ORDINARY SHARD ESTIMATES line; weigh it at that point.",
@@ -783,5 +800,6 @@
       "max_source_bytes": 32768,
       "reason": "Top-level qwen4/qwen4exp modules from the Flash-Next port lanes need MLX or real weights and skip on hosted runners: every hosted observation of one is under 0.05 s."
     }
-  }
+  },
+  "_pending_hosted_observations_2026_11_08": "New modules merged from origin/main c07b388e9 have no hosted observations available offline. The exact timing_exemptions below acknowledge that gap without inventing medians or removing tests; CI still discovers and packs each at unknown_module_weight_seconds (26.98 s). Replace each exemption with a measured hosted weight after the next CI run."
 }

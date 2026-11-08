@@ -1,9 +1,10 @@
 """Deterministic reporting primitives for the T-0 clock reference.
 
 This collector deliberately reports observations without applying evidence
-policy.  The 0.5 s pin ceiling remains owned by ``MAX_OFFSET_S`` at
-``scripts/quiet_window_clock.sh:30``; the separate 5 ms anchor ceiling remains
-owned by that script at ``scripts/quiet_window_clock.sh:7,14,60-62``.  Quorum,
+policy.  The 0.5 s pin ceiling was owned by ``MAX_OFFSET_S`` at
+``scripts/quiet_window_clock.sh:30`` and the separate 5 ms anchor ceiling at
+``scripts/quiet_window_clock.sh:7,14,60-62`` (script retired in the 2026-11-06
+prune; see ``archive/pre-prune-2026-11-06:scripts/quiet_window_clock.sh``).  Quorum,
 agreement, and refusal therefore belong to the evidence author and arm-side
 predicate, not here.
 """

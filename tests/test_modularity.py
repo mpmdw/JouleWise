@@ -9,10 +9,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from joulewise.analysis_manifest_v2 import (
-    extract_analysis_plan_row,
-    validate_analysis_registry,
-)
 from joulewise.detection_floor_registry import (
     DetectionFloorRegistryError,
     load_detection_floor_closed_sets,
@@ -23,8 +19,6 @@ ROOT = Path(__file__).resolve().parents[1]
 CAMPAIGN_DIR = ROOT / "configs" / "campaigns" / "p2_015_floors"
 GENERATOR = CAMPAIGN_DIR / "generate_configs.py"
 CAMPAIGN_SPEC = CAMPAIGN_DIR / "campaign_spec.json"
-ANALYSIS_REGISTRY = ROOT / "configs" / "analysis_registry" / "slice_2m_ap2.v1.json"
-ANALYSIS_PLANS = ROOT / "docs" / "contracts" / "analysis_plans.md"
 DETECTION_REGISTRY = (
     ROOT / "configs" / "analysis_registry" / "detection_floor_closed_sets.v1.json"
 )
@@ -203,32 +197,6 @@ class CampaignSpecificationTests(unittest.TestCase):
 
 
 class ClosedSetRegistryTests(unittest.TestCase):
-    def test_analysis_condition_pairs_are_validated_as_registry_declarations(self) -> None:
-        registry = json.loads(ANALYSIS_REGISTRY.read_text(encoding="utf-8"))
-        registry["condition_pairs"] = [
-            {"condition_a": "short_short", "condition_b": "long_short"},
-            {"condition_a": "long_short", "condition_b": "mid_mid"},
-        ]
-        self.assertEqual(validate_analysis_registry(registry), [])
-
-        duplicate = copy.deepcopy(registry)
-        duplicate["condition_pairs"].append(copy.deepcopy(duplicate["condition_pairs"][0]))
-        self.assertIn(
-            "registry.condition_pairs: duplicate ordered pair",
-            validate_analysis_registry(duplicate),
-        )
-
-    def test_frozen_ap2_row_requires_all_pairs_from_its_four_profiles(self) -> None:
-        registry = json.loads(ANALYSIS_REGISTRY.read_text(encoding="utf-8"))
-        registry["condition_pairs"] = [
-            {"condition_a": "short_short", "condition_b": "long_short"}
-        ]
-        ap_row = extract_analysis_plan_row(ANALYSIS_PLANS)
-        self.assertIn(
-            "registry.condition_pairs: profiles must match AP-2 selection_scope",
-            validate_analysis_registry(registry, ap_row=ap_row),
-        )
-
     def test_detection_floor_registry_bytes_are_checksum_bound(self) -> None:
         registry = load_detection_floor_closed_sets(repository_root=ROOT)
         observed = hashlib.sha256(DETECTION_REGISTRY.read_bytes()).hexdigest()

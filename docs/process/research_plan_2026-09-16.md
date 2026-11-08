@@ -3,7 +3,7 @@
 **Date:** 2026-09-16. **Author:** Fable writer seat under the magistrate's
 dictated structure. **Inputs:** the Fable exploration seat (`RQ-NEXT-*`), the
 Astra exploration (`RQ-D-A*`), the literature seat, the
-[coverage map](../research_question_coverage-2026-09-04.md) and
+[coverage map](https://github.com/mpmdw/JouleWise/blob/archive/pre-prune-2026-11-06/docs/research_question_coverage-2026-09-04.md) and
 [`CLAIMS_STATUS.md`](../../CLAIMS_STATUS.md). Question ids resolve in
 [`research_question_bank.md`](../research_question_bank.md).
 

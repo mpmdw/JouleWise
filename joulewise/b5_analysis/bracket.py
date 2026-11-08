@@ -5,7 +5,7 @@ handled by the frozen evaluator (and by finalization), never by B_max.
 """
 from __future__ import annotations
 
-import dataclasses
+from contextlib import contextmanager
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 import hashlib
@@ -182,6 +182,20 @@ def _seed_copy(target: Path, digests: Mapping[str, str]) -> None:
         pass
 
 
+@contextmanager
+def _temporary_members():
+    """Keep path-bound reductions no longer than the copies they describe."""
+    with tempfile.TemporaryDirectory(prefix="l9-bracket-members-") as directory:
+        root = Path(os.path.realpath(directory))
+        store = vdl.active_store()
+        try:
+            yield root
+        finally:
+            if store is not None:
+                store.discard_entries(lambda _key, entry: entry.leaf_id == "L3_reduce_dict" and any(
+                    Path(identity.rsplit("\0", 1)[-1]).is_relative_to(root) for identity, _ in entry.trees))
+
+
 def _servable(assessment: Any, reasons: Any) -> bool:
     """Whether a stored L4 value may be served: exactly the outcome this caller accepts.
 
@@ -259,8 +273,8 @@ def _calibration_assessment(runs_root: Path, paths: Sequence[Path], policy: Any,
     (tests/test_custody_mode_inventory.py) then sees ``mode`` as this wrapper's
     own scalar parameter, censused at the issuing caller, never as forwarded
     ``**kwargs``. Every direct frozen call (each bypass) passes the caller's
-    own arguments; the renamed ledger snapshot below is handed only to the
-    store (which keys on it and, on a miss, fills with it).
+    own arguments. The store normalizes the snapshot's temporary ledger parent
+    only while constructing its key, never in the arguments it executes.
     """
     fn = calibration.calibration_bracket_for_bundles
     store = vdl.active_store()
@@ -275,14 +289,7 @@ def _calibration_assessment(runs_root: Path, paths: Sequence[Path], policy: Any,
                   bracket_binding=bracket_binding, bracket_window_id=bracket_window_id,
                   bracket_plan_id=bracket_plan_id, bracket_plan_sha256=bracket_plan_sha256,
                   bracket_evidence_root_id=bracket_evidence_root_id, trigger_scope=trigger_scope)
-    # _snapshot loads the authenticated prefix from a per-evaluation temporary
-    # file, deleted before this call, so the snapshot's ledger_path would make
-    # every evaluation's key distinct. Nothing reads that field
-    # (calibration_bracketing.py never names it, and no snapshot method does;
-    # test_leaf_bracket checks both): key and pass its final name only, like
-    # the path-free copies.
-    keyed = dataclasses.replace(ledger_snapshot, ledger_path=Path(ledger_snapshot.ledger_path.name))
-    hit = store.probe(L4, fn, runs_root, paths, policy, mode=mode, ledger_snapshot=keyed,
+    hit = store.probe(L4, fn, runs_root, paths, policy, mode=mode, ledger_snapshot=ledger_snapshot,
                       bracket_binding=bracket_binding, bracket_window_id=bracket_window_id,
                       bracket_plan_id=bracket_plan_id, bracket_plan_sha256=bracket_plan_sha256,
                       bracket_evidence_root_id=bracket_evidence_root_id, trigger_scope=trigger_scope)
@@ -296,10 +303,70 @@ def _calibration_assessment(runs_root: Path, paths: Sequence[Path], policy: Any,
                       bracket_binding=bracket_binding, bracket_window_id=bracket_window_id,
                       bracket_plan_id=bracket_plan_id, bracket_plan_sha256=bracket_plan_sha256,
                       bracket_evidence_root_id=bracket_evidence_root_id, trigger_scope=trigger_scope)
-    return store.call(L4, fn, runs_root, paths, policy, mode=mode, ledger_snapshot=keyed,
+    if hit is None:
+        _prefetch_candidate_physics(ledger_snapshot, mode)
+    return store.call(L4, fn, runs_root, paths, policy, mode=mode, ledger_snapshot=ledger_snapshot,
                       bracket_binding=bracket_binding, bracket_window_id=bracket_window_id,
                       bracket_plan_id=bracket_plan_id, bracket_plan_sha256=bracket_plan_sha256,
                       bracket_evidence_root_id=bracket_evidence_root_id, trigger_scope=trigger_scope)
+
+
+def _prefetch_one_candidate(directory: str, runs_root: str, mode: str) -> None:
+    """Member task: authenticate one ledger candidate so its physics refit is remembered.
+
+    The frozen loader keeps the refit in the run's candidate-physics memo (shipped
+    back with the task); its result is discarded here.
+    """
+    calibration.load_calibration_candidate(Path(directory), runs_root=Path(runs_root), mode=mode)
+
+
+def _prefetch_candidate_physics(ledger_snapshot: Any, mode: Any) -> None:
+    """Speed only (b5 under-90 round 2): refit an L4 miss's ledger candidates in parallel.
+
+    The frozen evaluator then authenticates and verifies each candidate serially,
+    exactly as before, and finds each refit already remembered. Nothing here is
+    consumed: no read row, census, deadline, physics or store entry of a prefetch
+    task reaches the run, only refit values computed without a deadline firing.
+    Any failure leaves the frozen path to compute as it always did.
+    """
+    try:
+        from joulewise import analysis_run_cache
+        from joulewise.analysis_member_pool import member_map
+
+        caches = analysis_run_cache.current()
+        if caches is None or caches.workers < 2 or calibration.CANDIDATE_PHYSICS_MEMO is None:
+            return
+        calls = []
+        # Exactly the rows calibration_bracketing.discover_calibration_candidates
+        # authenticates (its predicates, in its order). Any other valid ledger row
+        # (open-session, derivation-kind or superseded-capture) is never refitted
+        # by the frozen evaluator, so prefetching it is pure waste: on the
+        # synthetic S10 chain 51 rows per pack against 4 discovered, step 3b
+        # 84 s -> 409 s at ten workers (lane 2026-11-07-b5-r3-speed-fix).
+        finalized = {session.session_id for session in ledger_snapshot.bracket_sessions
+                     if session.state == "finalized"}
+        for observation in ledger_snapshot.observations:
+            if (observation.disposition != "valid" or observation.content_id is None
+                    or observation.is_historical_import or not observation.custody_locator
+                    or observation.bracket_session_id is not None
+                    and observation.bracket_session_id not in finalized
+                    or calibration._is_derivation_kind_observation(observation, ledger_snapshot)
+                    or calibration._capture_pipeline_refusal_for_observation(observation) is not None):
+                continue
+            custody = Path(observation.custody_locator)
+            calls.append(((str(custody), str(custody.parent.parent), mode), {}))
+        if len(calls) < 2:
+            return
+        outcomes = member_map(_prefetch_one_candidate, calls, account=False)
+        table = analysis_run_cache.memo(calibration.CANDIDATE_PHYSICS_MEMO)
+        for outcome in outcomes or ():
+            memos = (outcome.vdl_new or {}).get("memos") or {}
+            if outcome.ok and outcome.firings == 0 and table is not None:
+                for key, value in (memos.get(calibration.CANDIDATE_PHYSICS_MEMO) or {}).items():
+                    if type(value) is float:
+                        table.setdefault(key, value)
+    except Exception:  # noqa: BLE001 - a prefetch never decides anything
+        return
 
 
 def _window_inputs(archive: ArchiveHandle, inputs: _Inputs, directory: Path):
@@ -465,8 +532,8 @@ def evaluate_window_bracket(archive: ArchiveHandle, *, repo_root: Path) -> Windo
     # using the wrapper, including its registered-valid anti-withholding check.
     if acceptance != calibration.load_calibration_acceptance_bound():
         raise AnalysisRefusal("window_bracket_not_passed")
-    with tempfile.TemporaryDirectory(prefix="l9-bracket-members-") as directory:
-        paths = _window_inputs(archive, inputs, Path(directory))
+    with _temporary_members() as directory:
+        paths = _window_inputs(archive, inputs, directory)
         assessment, reasons = _calibration_assessment(
             archive.window.claim_runs_root, paths, policy, mode="issuing",
             ledger_snapshot=snapshot, bracket_binding=binding,

@@ -64,7 +64,7 @@ class SelectionTests(unittest.TestCase):
 
     def test_a211_denied_even_when_cheap_touched_or_unknown(self):
         denied = {
-            "tests.test_paper_round7_artifacts", "tests.test_admit_model_panel_entry",
+            "tests.test_paper_round7_artifacts",
             "tests.test_rpt001_report_slice", "tests.test_floor_extraction",
             "tests.test_run_campaign",
         }

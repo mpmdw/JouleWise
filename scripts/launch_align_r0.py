@@ -11,6 +11,7 @@ import math
 import os
 from pathlib import Path
 import plistlib
+import re
 import signal
 import stat
 import subprocess
@@ -24,6 +25,18 @@ FENCE_NAME = "desk_fence.json"
 # watchdog fence; a cap stops a unit slip (ms for s) or a typo from fencing
 # the magistrate for days if the job hangs or its PID is reused.
 MAX_DESK_SECONDS = 12 * 3600
+# R0-L3 item 3: a comma list of runner check names (the runner validates
+# the names themselves); nothing else may reach the runner's argv.
+CHECKS_PATTERN = re.compile(r"[a-z][a-z-]*(?:,[a-z][a-z-]*)*")
+# R0-L3 display ruling (RUN_STATE 206): with the display on, menu-bar redraws
+# every 3-4 min wake WindowServer and ControlCenter and trip the census. The
+# launcher sleeps the display (no sudo) and dwells this long before the
+# runner's first census-checked segment.
+DISPLAY_SLEEP_DWELL_S = 300
+# Test seam only: the LaunchAgent harness cannot wait 300 s. Never set it for
+# a real run; the record carries both the dwell used and the constant.
+DISPLAY_DWELL_TEST_ENV = "JOULEWISE_R0_TEST_DISPLAY_DWELL_S"
+DISPLAY_PREP_ENV = "JOULEWISE_R0_DISPLAY_PREP"
 
 
 def positive_seconds(value: str) -> float:
@@ -144,6 +157,23 @@ def preflight(args) -> None:
     print(json.dumps({"ac_power": True, "free_bytes": free, "disk_check": "report_only"}), flush=True)
 
 
+def display_dwell_seconds() -> float:
+    override = os.environ.get(DISPLAY_DWELL_TEST_ENV)
+    return DISPLAY_SLEEP_DWELL_S if override is None else positive_seconds(override)
+
+
+def sleep_display(pmset_bin) -> dict:
+    """`pmset displaysleepnow` (no sudo). A failure is recorded, never a refusal."""
+    record = {"argv": [str(pmset_bin), "displaysleepnow"], "epoch_s": time.time()}
+    try:
+        result = subprocess.run(record["argv"], capture_output=True, text=True, timeout=15,
+                                env={**os.environ, "LC_ALL": "C"})
+        record.update(exit_code=result.returncode, stderr=result.stderr.strip())
+    except (OSError, subprocess.SubprocessError) as exc:
+        record.update(exit_code=None, stderr=f"{type(exc).__name__}: {exc}")
+    return record
+
+
 def run_until_deadline(args) -> int:
     """Bound the runner by the same deadline that releases the watchdog fence."""
     # Leave time to terminate a stuck runner and resume Spotlight before the
@@ -151,6 +181,9 @@ def run_until_deadline(args) -> int:
     remaining = args.deadline - time.time() - 10
     if remaining <= 0:
         raise TimeoutError("R0 desk deadline already passed")
+    dwell = display_dwell_seconds()
+    if remaining <= dwell:
+        raise TimeoutError(f"R0 desk deadline leaves no room for the {dwell:g} s display dwell")
     child = None
 
     def interrupted(signum, _frame):
@@ -159,8 +192,18 @@ def run_until_deadline(args) -> int:
     for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
         signal.signal(signum, interrupted)
     try:
+        # RUN_STATE 206: display off, then dwell, before any census-checked
+        # segment. The runner records the display state and any wake.
+        prep = {"displaysleepnow": sleep_display(args.pmset_bin), "dwell_s": dwell,
+                "dwell_constant_s": DISPLAY_SLEEP_DWELL_S}
+        time.sleep(dwell)
+        prep["dwell_end_epoch_s"] = time.time()
+        print(json.dumps({"display_prep": prep}), flush=True)
+        remaining = args.deadline - time.time() - 10
+        if remaining <= 0:
+            raise TimeoutError("R0 desk deadline passed during the display dwell")
         runner = json.loads(args.runner_spec.read_text())
-        child = subprocess.Popen(runner)
+        child = subprocess.Popen(runner, env={**os.environ, DISPLAY_PREP_ENV: json.dumps(prep)})
         return child.wait(timeout=remaining)
     finally:
         # launchd and the shell may both deliver TERM. Finish reaping before
@@ -184,6 +227,8 @@ def launch(args) -> None:
         raise ValueError(f"desk deadline is more than {MAX_DESK_SECONDS} s ahead")
     if args.output.exists():
         raise ValueError("R0 output must be a new record directory")
+    if args.checks is not None and not CHECKS_PATTERN.fullmatch(args.checks):
+        raise ValueError("--checks must be comma-separated runner check names")
     runner = args.repo / "scripts/align_r0_checks.py"
     if not runner.is_file() or not args.config.is_file() or not os.access(args.python_bin, os.X_OK):
         raise ValueError("measurement checkout runner, config and executable interpreter required")
@@ -198,8 +243,12 @@ def launch(args) -> None:
     plist = job / f"{label}.plist"
     wrapper = Path(__file__).with_name("run_align_r0_launchagent.sh").resolve()
     runner_spec = job / "runner.json"
+    # R0-L3 item 3: pass a check subset (R0-L1) and --keep-going (the desk
+    # default) through; the runner's prerequisite gates still apply.
     runner_spec.write_text(json.dumps([str(args.python_bin), str(runner),
-                                      "--config", str(args.config), "--output", str(args.output)]) + "\n")
+                                      "--config", str(args.config), "--output", str(args.output),
+                                      *(["--checks", args.checks] if args.checks is not None else []),
+                                      *(["--keep-going"] if args.keep_going else [])]) + "\n")
     # Keep the measurement entry-point name out of the launcher ancestors'
     # argv: QuietGuard correctly refuses a second align_r0_checks process.
     arguments = ["/bin/bash", str(wrapper), str(Path(__file__).resolve()),
@@ -251,6 +300,9 @@ def main(argv=None) -> int:
     start.add_argument("--output", type=Path, required=True)
     start.add_argument("--python-bin", type=Path, required=True)
     start.add_argument("--disk-path", type=Path, required=True)
+    start.add_argument("--checks", help="comma-separated runner check subset (R0-L1); default: the runner's full list")
+    start.add_argument("--keep-going", action=argparse.BooleanOptionalAction, default=True,
+                       help="continue after a failed check (R0-L3 desk default; --no-keep-going stops at the first)")
     start.add_argument("--launchctl-bin", default="/bin/launchctl")
     start.add_argument("--pmset-bin", default="/usr/bin/pmset")
     start.add_argument("--pgrep-bin", default="/usr/bin/pgrep")
@@ -276,10 +328,16 @@ def main(argv=None) -> int:
     run = sub.add_parser("run")
     run.add_argument("--deadline", type=float, required=True)
     run.add_argument("--runner-spec", type=Path, required=True)
+    run.add_argument("--pmset-bin", default="/usr/bin/pmset")
     args = parser.parse_args(argv)
-    for name in ("repo", "config", "output", "python_bin", "disk_path", "custody_root"):
+    for name in ("repo", "config", "output", "disk_path", "custody_root"):
         if hasattr(args, name):
             setattr(args, name, getattr(args, name).expanduser().resolve())
+    # Absolute but NOT symlink-resolved: a venv interpreter is a symlink to its
+    # base Python, and Python finds the venv (pyvenv.cfg) from the invoked path.
+    # Resolving it ran R0 on 2026-11-06 under bare Homebrew 3.13 (no mlx).
+    if hasattr(args, "python_bin"):
+        args.python_bin = Path(os.path.abspath(args.python_bin.expanduser()))
     try:
         if args.command == "launch":
             launch(args)
