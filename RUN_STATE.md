@@ -1042,6 +1042,23 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+209. **Laptop lead (interactive session 1544c617), 2026-11-07 about 21:10 PST: lead dispositions for R0-L3 (#699, #700). The magistrate may merge both now, fill ledger rows 1, 4 and 5 from the two seat reports, and launch R0 re-run 11 per item 208's plan.**
+- Both seats returned ADMIT_WITH_FIXES with nothing above LOW. **The LOWs are accepted as recorded flags, with no code change.**
+- **The Opus MEDIUM (the #694 merge hazard) applies to #694 only.** #694 stays unmerged until it is rebased onto the merged #699. When it is:
+  - keep #694's sampler and its stall, long-window and background-census refusals;
+  - replace its contention `raise Refused` with the R0-L3 flag;
+  - drop its `if interval_busy: break` from `_cpu_interval`, so the long-window refusal and the later windows are still judged.
+  
+  That rebase needs its own delta review. It is required before W1, not before R0 or R1.
+- **The test-only `JOULEWISE_R0_TEST_DISPLAY_DWELL_S` override is accepted.** Every record carries both the dwell used and the constant, and a unit test pins the constant at 300 s. **If a production R0 record shows a dwell below 300 s, treat that run as not admissible.**
+- **#700's ledger** stands as the builder filled it (gate policy rule 2, ruling 8).
+- **After the merge:**
+  - the clean-gap scheduling rule for R0 is retired (R0-L3 ruling 7);
+  - the deadline must leave room for the 300 s dwell and one redo capture;
+  - R0 re-run 11 runs with the display asleep.
+  - If R0 passes, item 202 applies (fill the R0 rung, regenerate the kit, arm R1 with the display asleep).
+- **Main's intermittent `test_rc_cmp10`/`test_rc_cmp11` failures:** the stale double-quote pins were fixed in #697 (merged as `ab1e0098d`). They should not recur on current main. If they do, tell the lead.
+
 208. **Magistrate activation 5bcfa84e (Opus 5.5, headless, 2026-11-07 from 18:43 PST): R0 re-run 10 (display off) was refused in `smc` at 18:41 by `routined` at 0.052 CPU-s/s during a dasd background-task wave. That is the second unscheduled-burst refusal in a row, so R0 is not re-launched under the 0.05 abort rule. Ed asked for the amendments; they are R0-L3 (#699, #700), and their independent review and cold pass are running now in the cloud.** No pending notices, no new directive.
 - **Run** `/Users/edr/night-align/r0-v4-20261108T0224Z` (02:25:18Z-02:41:45Z, 987 s): `fail`, `complete_r0` false, smc exit 3 `NotQuiet` after 957 s. Interval 18:41:09.6-18:41:45.5 PST: `routined` pid 794 at 0.0521 CPU-s/s, the only process over 0.05. The display stayed off for the whole run (`pmset -g log`: off 18:08:12, no wake after), so the display fix worked for WindowServer/ControlCenter. Cause: dasd started a wave at 18:41:39-18:41:55 (five `contacts.accounts.validate-cache`, `coreduetd.people`, `prngseedd.reseed`, `ids.accountrepair`, others), and routined ran a learned-locations pass (about 1,150 CoreRoutine lines in two minutes). Not on the schedule. No agent alive (707dd8f4 exited 18:25:18, fence 18:28:13; this activation spawned 18:43:15). D pins FAIL "no single disk check" (expected). Spotlight 716 and 73957 `S`. Record: branch `records/2026-11-07-align-r0-v4-rerun10` (`ac801585e`, `docs/align/r0/2026-11-07-rerun10/`; report.json sha256 `0a8c7935…2e5e`, SMC journal sha256 `77410460…2879`).
 - **Ed's answer, 18:28 PST 11-07** (message `1a1b8fc8bba03723`, thread `1a198fafa8fc12ba`), verbatim: "def make amendments you mention to protect against screen and to make the blocks more robust, simply re running the problematic part or flagging it as per your decision". Applied: these are item 206's proposals (a) display sleep and (b) redo or flag, which the laptop lead had already built as R0-L3 (#699 into the pilot10-benign lane: redo once on a sustained ≥ 0.5-core single-process episode, else flag; display state recorded. #700 into main: the launcher sleeps the display and dwells 300 s, passes `--checks`/`--keep-going`). Both had rows 1 and 4 open for an independent reviewer.
