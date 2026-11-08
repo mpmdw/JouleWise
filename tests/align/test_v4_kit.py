@@ -185,7 +185,8 @@ class KitTests(unittest.TestCase):
             for key in ('max_episode_decode_tokens', 'deadman_s'):
                 self.assertIn(key, spec)
                 self.assertIsNone(spec[key])
-            self.assertEqual(spec['chat_template_kwargs'], {'reasoning_effort': None})
+            # R0 re-run 11 selected the medium rung (RUN_STATE item 218; kit @ 5d9b66dd4).
+            self.assertEqual(spec['chat_template_kwargs'], {'reasoning_effort': 'medium'})
             self.assertIs(spec['thermal']['heavy'], True)
             self.assertIs(spec['thermal']['per_turn'], True)
         self.assertEqual(self.plan['runtime_requirements']['D_tools'], 'family-validated XML via qwen3_5')
@@ -290,12 +291,19 @@ class KitTests(unittest.TestCase):
         self.assertEqual(self.tree['draft_status'], 'PROVISIONAL_SKELETON')
 
     def test_placeholders_fail_check_and_cannot_be_hidden_by_status(self):
-        with self.assertRaisesRegex(ValueError, 'BLOCKED.*R0.*R1'):
+        # R0 is filled (item 218); the committed kit blocks on R1's own outputs only.
+        with self.assertRaisesRegex(ValueError, 'BLOCKED by placeholders: R1.B_D, R1.I_D, R1.T_dead, '
+                                                'R1.thermal_policy'):
             kit.generate(ROOT, check=True)
         inputs = kit.read_inputs(ROOT)
         inputs['status'] = 'ready'
-        with self.assertRaisesRegex(ValueError, 'BLOCKED.*R0.reasoning_effort'):
+        with self.assertRaisesRegex(ValueError, 'BLOCKED.*R1.T_dead'):
             kit.require_ready(inputs)
+        # An emptied R0 rung still blocks, whatever status says.
+        emptied = json.loads(json.dumps(inputs))
+        emptied['R0']['reasoning_effort'] = None
+        with self.assertRaisesRegex(ValueError, 'BLOCKED.*R0.reasoning_effort'):
+            kit.require_ready(emptied)
         self.assertIn('R1.T_dead', self.plan['pending_inputs'])
         # WP18 is filled; an emptied WP18 leaf still blocks, whatever status says.
         inputs['WP18']['X']['max_turns'] = None
@@ -312,9 +320,10 @@ class KitTests(unittest.TestCase):
         # WP11 (W1-blockers lane) and WP15 (the R1 runtime argv) are supplied;
         # emptying either must still block on its own.
         # WP18 is filled from the committed fixtures; it is checked below with the supplied owners.
-        self.assertEqual(pending_owners, {'R0', 'R1'})
+        # R0 is filled from re-run 11 (item 218); it is checked below with the supplied owners.
+        self.assertEqual(pending_owners, {'R1'})
         for owner, fields in kit.read_inputs(ROOT).items():
-            if not isinstance(fields, dict) or owner not in pending_owners | {'WP11', 'WP15', 'WP18'}:
+            if not isinstance(fields, dict) or owner not in pending_owners | {'R0', 'WP11', 'WP15', 'WP18'}:
                 continue
             candidate = {k: {name: 'supplied' for name in v} for k, v in kit.read_inputs(ROOT).items()
                          if isinstance(v, dict)}
@@ -1126,7 +1135,7 @@ class SessionParameterTests(unittest.TestCase):
     def test_v4_prepare_refuses_before_shared_prepare_or_session_creation(self):
         with tempfile.TemporaryDirectory() as tmp, patch.object(pilot, 'prepare') as prepare:
             target = Path(tmp) / 'new-session'
-            with self.assertRaisesRegex(ValueError, 'BLOCKED.*R0.reasoning_effort'):
+            with self.assertRaisesRegex(ValueError, 'BLOCKED.*R1.T_dead'):
                 session.prepare(ROOT, target)
             prepare.assert_not_called()
             self.assertFalse(target.exists())
@@ -1146,7 +1155,7 @@ class SessionParameterTests(unittest.TestCase):
 
     def test_v4_install_refuses_before_shared_installer(self):
         with patch.object(pilot.h, 'read', return_value={'measurement_root': str(ROOT)}), patch.object(pilot, 'install') as install:
-            with self.assertRaisesRegex(ValueError, 'BLOCKED.*R0.reasoning_effort'):
+            with self.assertRaisesRegex(ValueError, 'BLOCKED.*R1.T_dead'):
                 session.install('synthetic-session', w1_disk_config='/x.json')
             install.assert_not_called()
 
@@ -1394,8 +1403,9 @@ class PendingMessageTests(unittest.TestCase):
         self.assertNotIn('WP11', text)
         self.assertNotIn('WP15', text)  # the R1 runtime argv is committed in inputs.json
         self.assertNotIn('WP18', text)  # filled from the committed X/Y token fixtures
-        for owner in ('R0', 'R1'):
-            self.assertIn(f'| {owner}: ' + kit.PENDING_REASONS[owner], text)
+        # R0 is filled (item 218): only R1's reason remains, and R0's is gone.
+        self.assertIn('| R1: ' + kit.PENDING_REASONS['R1'], text)
+        self.assertNotIn('| R0: ', text)
 
 
 class W1SizingTests(unittest.TestCase):

@@ -184,7 +184,15 @@ class ConformanceTests(unittest.TestCase):
     def test_pending_inputs_refuse_before_work_with_a_terminal_record(self):
         with tempfile.TemporaryDirectory(dir=TMP) as td:
             root = Path(td)
-            production = REPO / "configs/align/v4/r1_runtime.json"
+            # R0 re-run 11 filled the committed sensors (item 218, d9d1098c6): the
+            # production config is no longer pending, so it is never run here (it
+            # would read this host). A copy with the pre-R0 sensors still refuses.
+            committed = json.loads((REPO / "configs/align/v4/r1_runtime.json").read_text())
+            self.assertEqual(committed["backend"], "production")
+            self.assertEqual((committed["sensors"]["s_fast"], committed["sensors"]["s_slow"]), ("TV0h", "Tf08"))
+            rt.sensors_policy(committed)   # filled: accepted without any host command
+            production = root / "r1_runtime_pending_r0.json"
+            production.write_text(json.dumps(dict(committed, sensors="PENDING_R0")))
             code, _ = call(production, root / "idle", "idle", "--duration-s", "5")
             self.assertEqual(code, rt.EXIT_REFUSED)
             self.assertIn("PENDING R0", custody(root / "idle")["error"])
@@ -206,8 +214,12 @@ class ConformanceTests(unittest.TestCase):
             production = json.loads((REPO / "configs/align/v4/r1_runtime.json").read_text())
             for key in ("d_spam", "d_bank"):
                 _, spec = rt.read_template(production["templates"][key])
+                # R0 re-run 11 selected medium (item 218; kit regenerated at 5d9b66dd4).
+                self.assertEqual(spec["chat_template_kwargs"], {"reasoning_effort": "medium"})
+                rt.require_effort(spec, key)
+                pending = dict(spec, chat_template_kwargs={"reasoning_effort": None})
                 with self.assertRaisesRegex(rt.Refused, "PENDING R0"):
-                    rt.require_effort(spec, key)
+                    rt.require_effort(pending, key)
             # WP18 is filled (fixtures merged): the production X-G template
             # carries an integer max_turns. A template whose max_turns is still
             # pending (the pre-WP18 kit) is refused by the runtime.
