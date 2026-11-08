@@ -23,7 +23,8 @@ def registration_evidence(directory):
         bar = json.loads((directory/'u3_bar.json').read_bytes())
     except (OSError, ValueError) as exc:
         raise ValueError('v4 desk requires registered u3_bar.json') from exc
-    registration.validate_u3(bar)
+    source_root = ROOT if directory.absolute().is_relative_to(ROOT) else directory
+    registration.validate_u3(bar, root=source_root)
     wp19 = json.loads((directory/'wp19_receipt.json').read_bytes())
     registration.validate_wp19(wp19)
     return bar, wp19
@@ -52,6 +53,9 @@ def enrich_record(record, bundle):
     turns = [json.loads(line) for line in read_bytes(Path(bundle)/'outputs/align_turns.jsonl').splitlines() if line.strip()]
     thermal = ep.hardware.get('thermal') or {}
     record['cohort_identity'] = registration.cohort_identity(config, spec, ep.hardware.get('runtime_identity') or {})
+    identity = record['cohort_identity']
+    record['u3_configuration_sha256'] = (registration.digest(json.dumps(identity, sort_keys=True,
+        separators=(',', ':')).encode()) if all(identity.values()) else None)
     record.update(configuration={k: getattr(spec, k) for k in
         ('max_episode_decode_tokens', 'deadman_s', 'max_tokens', 'max_turns')},
         status='incomplete' if ep.hardware.get('token_budget', {}).get('incomplete', True) else 'completed',
@@ -75,6 +79,13 @@ def main(argv=None):
     policy = json.loads((args.registration_dir/'inputs.json').read_bytes())['R1']['thermal_policy']
     manifest = json.loads(args.manifest.read_text())
     root = args.manifest.resolve().parent
+    from joulewise.align.apple import v4_battery
+    try:
+        battery_policy = json.loads((args.registration_dir/'battery_window_policy.json').read_bytes())
+    except (OSError, ValueError):
+        battery_policy = None
+    battery_journal = (v4_battery.load_journal(root/manifest['battery_journal'])
+                       if manifest.get('battery_journal') else ([], None, 1))
     members = []
     def journal(name):
         return [json.loads(line) for line in (root/name).read_text().splitlines() if line.strip()]
@@ -97,6 +108,7 @@ def main(argv=None):
         # Scientific measurements and verdicts cannot be overridden by roster tags.
         record.update({k: item[k] for k in ('window', 'identical_work_group', 'compare_reference_id', 'template', 'arm',
                                           'ordinal', 'role', 'stage') if k in item})
+        v4_battery.attach(record, root/item['bundle'], battery_journal)
         members.append(record)
     by_id = {m['id']: m for m in members}
     for item, record in zip(manifest['members'], members):
@@ -114,16 +126,23 @@ def main(argv=None):
     inputs = compared if compared and compared.get('status') == 'pass' else {}
     result = window_report(members, cross_windows=inputs.get('cross_windows'),
                            sensitivity=inputs.get('sensitivity'), monitoring=inputs.get('monitoring'),
-                           u3_bar=bar, v4=True, delta_slow_c=manifest.get('delta_slow_c'),
+                           u3_bar=bar, v4=True, delta_slow_c=manifest.get('delta_slow_c', policy.get('delta_slow_c')),
                            contrast_predeclared=contrast_predeclaration(wp19, policy))
     soak = r1_soak_c(args.registration_dir) if (args.registration_dir/'r1_soak_reference.json').is_file() else None
-    result['registration_diagnostics'] = registration.desk_diagnostics(members, r1_soak=soak)
+    result['registration_diagnostics'] = registration.desk_diagnostics(members, r1_soak=soak,
+                                                                    battery_policy=battery_policy)
     result['u3_bar'] = bar
     result['wp19'] = wp19
     result['K_session_read'] = compared or {'status': 'inconclusive', 'reason': 'no --compare-session inputs'}
     args.output.mkdir(parents=True, exist_ok=False)
     (args.output/'PILOT.json').write_text(json.dumps(result, indent=2, sort_keys=True, allow_nan=False)+'\n')
-    (args.output/'THERMAL.md').write_text(markdown_report(result))
+    battery_rows = ['\n## Battery window consequences', '',
+                    '| Model/window | B | Missing | Assist | Verdict | Consequence |',
+                    '|---|---:|---:|---:|---|---|']
+    for name, row in result['registration_diagnostics']['battery_windows'].items():
+        battery_rows.append(f"| {name} | {row['B_count']} | {row['unobserved_count']} | {row['assist_count']} | "
+                            f"{row['status']} | {row['consequence']} |")
+    (args.output/'THERMAL.md').write_text(markdown_report(result)+'\n'.join(battery_rows)+'\n')
     return 0
 
 

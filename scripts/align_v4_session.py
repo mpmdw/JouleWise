@@ -138,6 +138,10 @@ def d_member_x2_report(plan_members, runs_root):
             'x2_rate': count / len(rows) if rows else None, 'members': rows}
 
 
+def battery_windows_pass(windows):
+    return bool(windows) and all(w.get('bar_pass') is True for w in windows.values())
+
+
 def powermode_desk_check(*, state, members, runs_root, kit_path):
     """Council ruling 7: any member whose bundle-recorded AC powermode differs
     from the frozen series value sets ``instrument_ok`` false. The report also
@@ -171,6 +175,12 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
         checks['v4_registration_evidence'] = False
         report['registration_error'] = str(exc)
         return checks, report
+    from joulewise.align.apple import v4_battery
+    try:
+        battery_policy = json.loads((registration_dir/'battery_window_policy.json').read_bytes())
+    except (OSError, ValueError):
+        battery_policy = None
+    journal = v4_battery.load_journal(Path(custody)/'hazards/monitor/battery.jsonl') if custody else ([], None, 1)
     records = []
     pilot_members = {m['run_id']: m for m in members}
     for row in plan['members']:
@@ -184,6 +194,7 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
                  'pm_period_s': .1, 'calibration_exclusions': ['member.runtime_failure'], 'error': str(exc)}
         r.update({k: row[k] for k in ('ordinal', 'role') if k in row},
                  window='W1', stage=row.get('stage_id'))
+        v4_battery.attach(r, path, journal)
         if row.get('replay_of'):
             r['identical_work_group'] = row['replay_of']
         elif row.get('ordinal') == 5 or row.get('role', '').startswith(('X-', 'Y-')):
@@ -203,11 +214,14 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
     report['thermal'] = window_report(records, v4=True, u3_bar=bar,
         delta_slow_c=policy.get('delta_slow_c'), contrast_predeclared=contrast_predeclaration(wp19, policy))
     report['registration_diagnostics'] = v4_registration.desk_diagnostics(records,
-        r1_soak=r1_soak_c(registration_dir))
+        r1_soak=r1_soak_c(registration_dir), battery_policy=battery_policy)
     for model, result in report['thermal']['model_windows'].items():
         for n in (1, 2, 3):
             checks[f'v4_{model}_U{n}'] = result[f'U{n}']['status'] == 'pass'
-    checks['v4_B_bar'] = all(w['bar_pass'] for w in report['registration_diagnostics']['battery_windows'].values())
+    checks['v4_B_bar'] = battery_windows_pass(report['registration_diagnostics']['battery_windows'])
+    for name, row in report['registration_diagnostics']['battery_windows'].items():
+        print(f'{name} battery: '+json.dumps({k: row[k] for k in
+              ('B_count', 'unobserved_count', 'assist_count', 'bar_pass', 'consequence')}, sort_keys=True))
     checks['v4_D_cohort'] = report['registration_diagnostics']['d_cohort']['instrument_ok']
     return checks, report
 

@@ -107,6 +107,13 @@ class CleanWindowTests(_Window):
         self.assertEqual([m['calibration_exclusions'] for m in self.record['desk']['members']],
                          [[]] * len(self.record['desk']['members']))
 
+    def test_clean_window_passes_the_signed_battery_consequence(self):
+        from scripts.align_v4_session import battery_windows_pass
+        windows = self.record['desk']['registration_diagnostics']['battery_windows']
+        self.assertTrue(battery_windows_pass(windows))
+        self.assertTrue(all(w['B_count'] == 0 for w in windows.values()))
+        self.assertTrue(self.record['desk']['registration_diagnostics']['d_cohort']['instrument_ok'])
+
     def test_desk_energy_matches_independent_world_integral(self):
         oracle = {m['run_id']: m['E_oracle_j'] for m in self.record['expected']['members']}
         for m in self.record['desk']['members']:

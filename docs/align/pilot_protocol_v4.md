@@ -613,14 +613,22 @@ evidence, if it is future-dated or older than 30 minutes (UpdateTime dates the
 observation, not the end of charging). R1 drain remains a required print; Ed's charge hold gates D1.
 Charging is named exclusion **B** (`battery.member_span`). Print B counts, SoC
 and charger watts per member. **PENDING lead:** the separate numeric B window
-bar/consequence (R02 U); `bar_pass` stays unavailable. Arm float does not prove
+bar/consequence (R02 U); `bar_pass` stays unavailable without a signed policy. The
+SOL candidate [W1-BLOCKERS-sol](v4/W1-BLOCKERS-sol.md) implements an explicitly
+adopted zero-B rule, discharge disclosure and missing-evidence consequences;
+the checked-in `battery_window_policy.json` remains PENDING. Arm float does not prove
 zero battery flow through the member. Missing observations remain unavailable.
 
 **5 — U3: PENDING derivation (R11/R03; RUN_STATE 212 R11-2).**
 `scripts/align_v4_u3_bar.py` accepts explicit separated-ordinal, within-session,
-token-identical pilot pairs and emits descriptive signed relative differences,
-sample SD, source digests and a **PENDING** block. It emits no multiplier,
-margin or fitted-normal false-fail guarantee. Historical k=3 receipts are refused;
+token-identical pilot pairs. Without policy it emits descriptive signed relative
+differences, sample SD, source digests and a **PENDING** block. That path emits
+no multiplier or energy margin. The SOL candidate
+[W1-BLOCKERS-sol](v4/W1-BLOCKERS-sol.md) adds a reproducible Student-t predictive
+derivation, synthetic OC/sensitivity and a source/commit-bound v2 validator.
+Its policy, transfer assumptions and final horizon require prospective lead
+adoption and an independent gate; the builder installs no numerical default.
+Historical k=3 receipts are refused;
 the v4 desk never falls back to v3's bar. The lead/statistics owner must freeze:
 
 - the predictive distribution for a new replay, including mean drift, scale
@@ -630,8 +638,8 @@ the v4 desk never falls back to v3's bar. The lead/statistics owner must freeze:
 - the limits of transferring 30B pilot variation to D, and D-specific qualification;
 - the chosen energy bar, derivation/source bytes and independent gate receipt.
 
-No pilot or R1 record is read here. U3 remains unresolved and registration
-cannot pass until this scientific derivation and its scoped implementation are admitted.
+No pilot or R1 record is read here. U3 remains unresolved for live registration
+until its scientific derivation, policy, source export and implementation are admitted.
 Failed U3 windows stay retained; no smaller m or unauthorized replacement is allowed.
 
 **6 — acceptance.** The U table above supersedes the old U4–U6 bars. U4 counts

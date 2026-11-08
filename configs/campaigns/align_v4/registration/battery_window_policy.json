@@ -1,0 +1,7 @@
+{
+  "schema": "joulewise.align_v4.battery_window.v1",
+  "status": "PENDING",
+  "rule": "zero_B_disclose_assist_v1",
+  "lead_signature": null,
+  "proposal": "SOL recommendation only. Zero charging/AC-loss B members per model-window; missing span evidence is inconclusive; discharge on AC is disclosed and retained for GPU rails. Lead must adopt prospectively after independent review."
+}
