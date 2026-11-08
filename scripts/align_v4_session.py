@@ -935,12 +935,26 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
                         record_check=record_check, packet_builder=packet_builder, meter_probe=meter_probe,
                         dwell_start=dwell_start, series_bind=series_bind, pre_dwell=pre_dwell)
     # After the stamp: the single in-memory dwell value, written once, then the handoff (or refusal).
+    dwell = {'schema': ARM_DWELL_SCHEMA, 'arm_record': str(path), 'admitted': record['admitted'],
+             'quiet_dwell': record['quiet_dwell']}
     with dwell_path.open('x') as handle:
-        handle.write(json.dumps({'schema': ARM_DWELL_SCHEMA, 'arm_record': str(path), 'admitted': record['admitted'],
-                                 'quiet_dwell': record['quiet_dwell']}, indent=2, sort_keys=True) + '\n')
+        handle.write(json.dumps(dwell, indent=2, sort_keys=True) + '\n')
     if not record['admitted']:
         raise ValueError('v4 arm refused: ' + '; '.join(record['reasons']))
-    return pilot.install(session, now=now or time.time, **kwargs)
+    # Lead ruling: also record when the installer's launchctl calls returned, on the dwell's monotonic
+    # clock, so analysis can disclose the post-stamp installer interval (a later rule may trim it).
+    outcome = 'raised'
+    try:
+        installed = pilot.install(session, now=now or time.time, **kwargs)
+        outcome = 'returned'
+        return installed
+    finally:
+        dwell['quiet_dwell'] = {**dwell['quiet_dwell'], 'installer_end_ns': time.monotonic_ns(),
+                                'installer_outcome': outcome}
+        temporary = dwell_path.with_name(dwell_path.name + '.tmp')
+        with temporary.open('x') as handle:
+            handle.write(json.dumps(dwell, indent=2, sort_keys=True) + '\n')
+        os.replace(temporary, dwell_path)
 
 
 def main(argv=None):

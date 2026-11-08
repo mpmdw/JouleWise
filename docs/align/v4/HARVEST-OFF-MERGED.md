@@ -173,6 +173,7 @@ The full list of modules run:
 | **Cost** | Directory enumeration is memoized per finalize. The file, directory and byte bounds apply during the walk. |
 
 **Open after this round.**
+0. **Lead rulings on this round:** items 1-4 below are accepted as built. Seat 1's raise-in-hook witness is ruled WRONG and carries a one-line comment. The N1 census is a native checklist item (runbook §7a). The dwell record now also carries `installer_end_ns`, the moment the installer's launchctl calls returned.
 1. **Seat 1 delta `test_a_forbidden_open_audit_event_must_fail_the_test_not_only_log` stays red.** It requires the parent audit hook to RAISE, while seat 2's `test_audit_must_report_filesystem_bytes_paths` requires the same call to record without raising. No single hook can do both. I followed the lead's D8 form: record, and FAIL the module at teardown. Children refuse outright.
 2. **D7 fixtures not rewritten.** The B5 window copies the digest-pinned acceptance config, whose home locators are text. Rewriting them breaks its pins. "Children cannot get one back" is met by the child fence instead.
 3. **D3 deviation (library default only):** undeclared ignored content is byte-bound rather than refused, so the witnesses' finalize-then-unpack flow holds. The production CLI refuses.

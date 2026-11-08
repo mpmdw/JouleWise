@@ -226,6 +226,27 @@ a,b=p(sys.argv[1]),p(sys.argv[2]); print(json.dumps({"equal": a==b, "differ": so
   "$MBP_ARCHIVE" "$S/archive"
 ```
 
+## 7a. Native checklist before the first armed window on this route
+
+These are magistrate-owned native gates. None of them can be passed off the MBP or with synthetic data.
+
+1. **N1 census of ignored inputs (lead ruling, R17 delta D3).** Required before the first real `finalize-manifest` can pass. Git identity does not cover ignored checkout content, so every ignored file a real harvest reads must be a declared input.
+   - **Run** the native smoke's N1 profile on the MBP: a real finalize → pack → Air restore → harvest → desk. Record every ignored path under `M` that the harvest and desk open, for example with `fs_usage -w -f filesys` filtered to `M`, or the stage profile plus an audit hook.
+   - **Compare** the list with `configs/align/v4/harvest_off_ignored_inputs.json`:
+     - `identity_bound` (`.venv/`): covered by the interpreter and package identity.
+     - `regenerated`: caches that are never read as inputs.
+     - `declared_directories` (`runs/`): directories whose consumed files are exactly the declared inputs.
+   - **Declare each consumed ignored file** as a finalize input. Today that is only the calibration ledger, which comes from the plan's `ledger_path`. Any other file needs a reviewed code change to `_ledger_input`'s declared set, never an ad hoc CLI flag. Add its directory to `declared_directories` if it is not there.
+   - **An ignored path that is linked but not consumed** goes under `regenerated` only if it really is a cache. Otherwise keep the dependency out of the measurement view.
+   - **Commit the declaration change with the census receipt**, and record it in RUN_STATE. Until then, a session whose links reach any other ignored content refuses at finalize, fail closed: `reaches an undeclared ignored input`.
+   - Re-run the census after any change to the measurement view, the harvest or the desk.
+2. **Time the first native finalize** (`finalize-manifest`, including the per-link `git ls-files` and closure hashing). Then time pack and the Air restore.
+3. **N2:** archive identity between the MBP and the Air, §7.
+4. **The native sweep:** the knee and per-worker RSS on a representative session, §7.
+5. **Quiet boundary:** check the arm's dwell record on a real arm, §8.
+   - `quiet_dwell.start_ns` follows every arm-side write.
+   - `installer_end_ns` minus `start_ns` is the post-stamp installer interval. It is disclosed, not trimmed.
+
 ## 8. Arm-side notes
 
 - **Light triage `thermal_escalation`** reads `status: pass` only when every U1–U3 passed. An `inconclusive` result, like a `fail`, owes the registered consequence unless `--ladder-recorded` (R17 review F6). This is what the packet builder applies.
@@ -234,7 +255,8 @@ a,b=p(sys.argv[1]),p(sys.argv[2]); print(json.dumps({"equal": a==b, "differ": so
 - The stamp is the arm's last step. After it come only:
   1. the in-memory probe-before-dwell order;
   2. one write of that single dwell value, `staging/v4-arm-NNN.dwell.json` (`quiet_dwell.start_ns`, `meter_probe_before_dwell`, final `admitted`);
-  3. the installer handoff, or the refusal.
+  3. the installer handoff, or the refusal;
+  4. when the installer's launchctl calls return (or it raises), the same dwell record is rewritten once with `quiet_dwell.installer_end_ns` (the same monotonic clock) and `installer_outcome`. This is a lead ruling: analysis discloses the post-stamp installer interval, and a later rule may trim it.
 - The arm record's `quiet_dwell` names that file and carries `start_ns: null`. Read the dwell from the `.dwell.json` file.
 - Witness: `tests.align.test_v4_next_arm_packet.ArmOrderWitness`.
 

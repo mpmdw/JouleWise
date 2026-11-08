@@ -814,10 +814,13 @@ class ArmOrderWitness(Base):
         cut = kinds.index('DWELL')
         before, after = events[:cut], events[cut + 1:]
         dwell_record = str(target / 'staging/v4-arm-001.dwell.json')
-        # After the stamp: exactly the one dwell-record write, then the installer handoff.
-        self.assertEqual([e for e in after if e[0] != 'write' or e[1] != dwell_record],
-                         [('subprocess', 'seam:INSTALL')], after)
-        self.assertEqual(sum(e == ('write', dwell_record) for e in after), 1, after)
+        # After the stamp: exactly the one dwell-record write, then the installer handoff; after the
+        # installer returns, only that same dwell record is rewritten with installer_end_ns (lead ruling).
+        def dwell_write(event):
+            return event[0] == 'write' and dwell_record in event[1]
+        install = after.index(('subprocess', 'seam:INSTALL'))
+        self.assertEqual(after[:install], [('write', dwell_record)], after)
+        self.assertTrue(after[install + 1:] and all(dwell_write(e) for e in after[install + 1:]), after)
         # Before it: the Git work, every host seam, the disk gate's disk_usage and every record write.
         self.assertTrue(any(k == 'subprocess' and 'git' in v for k, v in before), before)
         for name in ('powermode', 'volumes', 'battery', 'meter_probe', 'powermode_check'):
@@ -831,6 +834,8 @@ class ArmOrderWitness(Base):
         self.assertTrue(dwell['admitted'])
         self.assertTrue(dwell['quiet_dwell']['meter_probe_before_dwell'])
         self.assertTrue(dwell['quiet_dwell']['record_checks_and_writes_before_dwell'])
+        self.assertEqual(dwell['quiet_dwell']['installer_outcome'], 'returned')
+        self.assertGreater(dwell['quiet_dwell']['installer_end_ns'], dwell['quiet_dwell']['start_ns'])
         record = json.loads((target / 'staging/v4-arm-001.json').read_bytes())
         self.assertIsNone(record['quiet_dwell']['start_ns'])
         self.assertEqual(record['quiet_dwell']['dwell_record'], dwell_record)
