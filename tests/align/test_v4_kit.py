@@ -1,7 +1,7 @@
 """WP16 acceptance on pinned repo configs and synthetic inputs; no study data."""
 from collections import Counter
 from copy import deepcopy
-from contextlib import redirect_stderr
+from contextlib import contextmanager, redirect_stderr
 import hashlib
 import io
 import json
@@ -9,6 +9,7 @@ import os
 import math
 from pathlib import Path
 import subprocess
+import shutil
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -22,6 +23,22 @@ from scripts import align_pilot_session as pilot, align_v4_kit as kit, align_v4_
 from scripts import validate_align_v4_w1_plan as validator
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+@contextmanager
+def pending_r0_kit():
+    """A real pending kit, independent of the measurement checkout's fills."""
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        shutil.copytree(ROOT / kit.KIT, root / kit.KIT)
+        shutil.copytree(ROOT / 'configs/align/v4', root / 'configs/align/v4')
+        inputs = kit.read_inputs(root)
+        inputs['R0']['reasoning_effort'] = None
+        (root / kit.INPUTS).write_text(json.dumps(inputs))
+        frozen = kit.frozen
+        with patch.object(kit, 'frozen', lambda _root, commit, path: frozen(ROOT, commit, path)):
+            kit.generate(root, source_root=root)
+            yield root
 
 
 def independent_seed(value):
@@ -165,10 +182,13 @@ class KitTests(unittest.TestCase):
             self.assertEqual(policy['per_turn'], m['role'].endswith('G'))
 
     def test_d_has_required_base_controls_and_explicit_pending_slots(self):
-        for m in self.members:
+        with pending_r0_kit() as root:
+            files = kit.build_files(root)
+        members = json.loads(files[kit.KIT / 'collection_plan.json'])['members']
+        for m in members:
             if m['role'] != 'D':
                 continue
-            config = BenchmarkConfig.from_mapping(json.loads(self.files[Path(m['config_path'])]))
+            config = BenchmarkConfig.from_mapping(json.loads(files[Path(m['config_path'])]))
             self.assertEqual((config.model.family, config.model.source, config.model.revision),
                              ('qwen3_5', kit.D_SOURCE, kit.D_REVISION))
             spec = m['spec']
@@ -290,9 +310,10 @@ class KitTests(unittest.TestCase):
         self.assertEqual(self.tree['draft_status'], 'PROVISIONAL_SKELETON')
 
     def test_placeholders_fail_check_and_cannot_be_hidden_by_status(self):
-        with self.assertRaisesRegex(ValueError, 'BLOCKED.*R0.*R1'):
-            kit.generate(ROOT, check=True)
-        inputs = kit.read_inputs(ROOT)
+        with pending_r0_kit() as root:
+            with self.assertRaisesRegex(ValueError, 'BLOCKED.*R0.*R1'):
+                kit.generate(root, check=True, source_root=root)
+            inputs = kit.read_inputs(root)
         inputs['status'] = 'ready'
         with self.assertRaisesRegex(ValueError, 'BLOCKED.*R0.reasoning_effort'):
             kit.require_ready(inputs)
@@ -301,22 +322,27 @@ class KitTests(unittest.TestCase):
         inputs['WP18']['X']['max_turns'] = None
         with self.assertRaisesRegex(ValueError, 'BLOCKED.*WP18.X.max_turns'):
             kit.require_ready(inputs)
-        with redirect_stderr(io.StringIO()) as err:
-            self.assertEqual(kit.main(['--check']), 1)
+        generate = kit.generate
+        with pending_r0_kit() as root, redirect_stderr(io.StringIO()) as err, \
+                patch.object(kit, 'generate', side_effect=lambda output_root, check: generate(
+                    output_root, check=check, source_root=root)):
+            self.assertEqual(kit.main(['--check', '--output-root', str(root)]), 1)
         self.assertIn('BLOCKED by placeholders', err.getvalue())
 
     def test_each_missing_owner_is_independently_fail_closed(self):
         # Even if all other owners have supplied nonempty values, this owner
         # cannot disappear from the required-input check.
-        pending_owners = {p.split('.')[0] for p in kit.pending_inputs(kit.read_inputs(ROOT))}
+        with pending_r0_kit() as root:
+            pending = kit.read_inputs(root)
+        pending_owners = {p.split('.')[0] for p in kit.pending_inputs(pending)}
         # WP11 (W1-blockers lane) and WP15 (the R1 runtime argv) are supplied;
         # emptying either must still block on its own.
         # WP18 is filled from the committed fixtures; it is checked below with the supplied owners.
         self.assertEqual(pending_owners, {'R0', 'R1'})
-        for owner, fields in kit.read_inputs(ROOT).items():
+        for owner, fields in pending.items():
             if not isinstance(fields, dict) or owner not in pending_owners | {'WP11', 'WP15', 'WP18'}:
                 continue
-            candidate = {k: {name: 'supplied' for name in v} for k, v in kit.read_inputs(ROOT).items()
+            candidate = {k: {name: 'supplied' for name in v} for k, v in pending.items()
                          if isinstance(v, dict)}
             # Committed values may already be supplied (WP15's runtime argv is);
             # an owner whose leaves are emptied must still block on its own.
@@ -1124,10 +1150,10 @@ class SessionParameterTests(unittest.TestCase):
         self.assertEqual(pilot.SCHEMA, 'joulewise.align_pilot_desk.v3')
 
     def test_v4_prepare_refuses_before_shared_prepare_or_session_creation(self):
-        with tempfile.TemporaryDirectory() as tmp, patch.object(pilot, 'prepare') as prepare:
+        with pending_r0_kit() as root, tempfile.TemporaryDirectory() as tmp, patch.object(pilot, 'prepare') as prepare:
             target = Path(tmp) / 'new-session'
             with self.assertRaisesRegex(ValueError, 'BLOCKED.*R0.reasoning_effort'):
-                session.prepare(ROOT, target)
+                session.prepare(root, target)
             prepare.assert_not_called()
             self.assertFalse(target.exists())
 
@@ -1145,7 +1171,9 @@ class SessionParameterTests(unittest.TestCase):
             self.assertFalse(target.exists())
 
     def test_v4_install_refuses_before_shared_installer(self):
-        with patch.object(pilot.h, 'read', return_value={'measurement_root': str(ROOT)}), patch.object(pilot, 'install') as install:
+        with pending_r0_kit() as root, \
+                patch.object(pilot.h, 'read', return_value={'measurement_root': str(root)}), \
+                patch.object(pilot, 'install') as install:
             with self.assertRaisesRegex(ValueError, 'BLOCKED.*R0.reasoning_effort'):
                 session.install('synthetic-session', w1_disk_config='/x.json')
             install.assert_not_called()
@@ -1388,8 +1416,8 @@ class PendingMessageTests(unittest.TestCase):
             self.assertIn(needle, text)
 
     def test_committed_kit_check_states_every_remaining_owner_reason(self):
-        with self.assertRaises(ValueError) as caught:
-            kit.generate(ROOT, check=True)
+        with pending_r0_kit() as root, self.assertRaises(ValueError) as caught:
+            kit.generate(root, check=True, source_root=root)
         text = str(caught.exception)
         self.assertNotIn('WP11', text)
         self.assertNotIn('WP15', text)  # the R1 runtime argv is committed in inputs.json

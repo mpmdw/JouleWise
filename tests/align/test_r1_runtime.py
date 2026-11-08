@@ -184,7 +184,10 @@ class ConformanceTests(unittest.TestCase):
     def test_pending_inputs_refuse_before_work_with_a_terminal_record(self):
         with tempfile.TemporaryDirectory(dir=TMP) as td:
             root = Path(td)
-            production = REPO / "configs/align/v4/r1_runtime.json"
+            production = root / "pending_r0.json"
+            data = json.loads((REPO / "configs/align/v4/r1_runtime.json").read_text())
+            data["sensors"] = "PENDING_R0"
+            production.write_text(json.dumps(data))
             code, _ = call(production, root / "idle", "idle", "--duration-s", "5")
             self.assertEqual(code, rt.EXIT_REFUSED)
             self.assertIn("PENDING R0", custody(root / "idle")["error"])
@@ -205,7 +208,12 @@ class ConformanceTests(unittest.TestCase):
             root = Path(td)
             production = json.loads((REPO / "configs/align/v4/r1_runtime.json").read_text())
             for key in ("d_spam", "d_bank"):
-                _, spec = rt.read_template(production["templates"][key])
+                template, spec = rt.read_template(production["templates"][key])
+                spec["chat_template_kwargs"]["reasoning_effort"] = None
+                template["workload_profile"]["prompt_text"] = json.dumps(spec)
+                pending_r0 = root / (key + "_pending_r0.json")
+                pending_r0.write_text(json.dumps(template))
+                _, spec = rt.read_template(str(pending_r0))
                 with self.assertRaisesRegex(rt.Refused, "PENDING R0"):
                     rt.require_effort(spec, key)
             # WP18 is filled (fixtures merged): the production X-G template
