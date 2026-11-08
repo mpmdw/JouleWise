@@ -41,17 +41,24 @@ class CadenceTests(unittest.TestCase):
                 done = cad.calibration_stop([*rows, row('C9')])
                 self.assertEqual((done['decision'], done['attempted']), ('calibration_complete', 8))
 
-    def test_two_replacements_and_the_third_bar_cannot_reach_eight(self):
+    def test_six_replacements_and_the_seventh_bar_cannot_reach_eight(self):
+        # R24: the cap is C14. Six bars are absorbed by C9-C14; a seventh leaves 7 admitted windows at most.
         two = [row('C1', barred='u1_u3_fail'), row('C2', barred='whole_window_capture_failure'),
                *[row(f'C{i}') for i in range(3, 9)], row('C9'), row('C10')]
         self.assertEqual(cad.calibration_stop(two)['decision'], 'calibration_complete')
-        three = [row('C1', barred='u1_u3_fail'), row('C2', barred='u1_u3_fail'), row('C3', barred='u1_u3_fail'),
-                 *[row(f'C{i}') for i in range(4, 11)]]
-        result = cad.calibration_stop(three)
-        self.assertEqual(result['decision'], 'insufficient_calibration')     # 7 counted windows of C1-C10 at most
-        self.assertEqual(result['replacements_used'], 3)
+        six = [*[row(f'C{i}', barred='u1_u3_fail') for i in range(1, 7)], row('C7'), row('C8'),
+               *[row(f'C{i}') for i in range(9, 15)]]
+        done = cad.calibration_stop(six)
+        self.assertEqual((done['decision'], done['attempted'], done['replacements_used']),
+                         ('calibration_complete', 8, 6))
+        short = cad.calibration_stop(six[:-1])                     # C14 not yet run: 7 admitted, a window remains
+        self.assertEqual((short['decision'], short['attempted']), ('continue', 7))
+        seven = [*[row(f'C{i}', barred='u1_u3_fail') for i in range(1, 8)], row('C8'), *[row(f'C{i}') for i in range(9, 15)]]
+        result = cad.calibration_stop(seven)
+        self.assertEqual(result['decision'], 'insufficient_calibration')    # C14 reached with fewer than 8 admitted
+        self.assertEqual((result['attempted'], result['replacements_used']), (7, 7))
 
-    def test_a_pair_still_below_39_after_both_replacements_is_insufficient(self):
+    def test_a_pair_still_below_39_after_8_admitted_windows_is_insufficient(self):
         rows = [row('C1', barred='u1_u3_fail'), row('C2', barred='u1_u3_fail'),
                 *[row(f'C{i}', 6, 7) for i in range(3, 9)], row('C9', 1, 7), row('C10', 0, 7)]
         result = cad.calibration_stop(rows)
@@ -74,8 +81,10 @@ class CadenceTests(unittest.TestCase):
                          ('continue', ['C1#2'], 1))
         single = cad.calibration_stop(rows[:1])
         self.assertEqual((single['decision'], single['replacements_used']), ('continue', 0))     # awaits its retry
-        three = [row(f'C{n}{suffix}', 0, 0, captured=0) for n in (1, 2, 3) for suffix in ('', '#2')]
-        self.assertEqual(cad.calibration_stop(three)['decision'], 'escalate_to_lead')            # beyond both replacements
+        six = [row(f'C{n}{suffix}', 0, 0, captured=0) for n in range(1, 7) for suffix in ('', '#2')]
+        self.assertEqual(cad.calibration_stop(six)['decision'], 'continue')                      # six bars: all replaced
+        seven = [row(f'C{n}{suffix}', 0, 0, captured=0) for n in range(1, 8) for suffix in ('', '#2')]
+        self.assertEqual(cad.calibration_stop(seven)['decision'], 'escalate_to_lead')            # beyond all six replacements
         other_slots = [row('C1', 0, 0, captured=0), row('C2', 0, 0, captured=0)]
         self.assertEqual(cad.calibration_stop(other_slots)['decision'], 'escalate_to_lead')      # unchanged RUN_STATE 216 rule
 
@@ -109,22 +118,20 @@ class ManifestTests(unittest.TestCase):
         cls.manifest = series.candidate()
 
     def test_order_and_the_pre_declared_replacement_windows(self):
-        self.assertEqual(self.manifest['order'], ['W1', *[f'C{i}' for i in range(1, 11)], 'T1', 'T2', 'T3'])
+        self.assertEqual(self.manifest['order'], ['W1', *[f'C{i}' for i in range(1, 15)], 'T1', 'T2', 'T3'])
         by_id = {w['id']: w for w in self.manifest['windows']}
-        for name in ('C9', 'C10'):
+        for name in (f'C{i}' for i in range(9, 15)):          # R24: all six reserve windows are armable
             self.assertIs(by_id[name]['replacement'], True)
             self.assertNotIn('armable', by_id[name])
             self.assertEqual((by_id[name]['role'], by_id[name]['aliases']), ('calibration', []))
             self.assertEqual(len(by_id[name]['members']), 22)
-        for name in ('C11', 'C12'):                       # seeds fixed, never armable (cap C10)
-            self.assertIs(by_id[name]['replacement'], True)
-            self.assertIs(by_id[name]['armable'], False)
-            self.assertNotIn(name, self.manifest['order'])
         self.assertTrue(all('replacement' not in by_id[f'C{i}'] for i in range(1, 9)))
         calibration = self.manifest['calibration']
-        self.assertEqual((calibration['counted_windows'], calibration['replacement_cap']), (8, 2))
-        self.assertEqual(calibration['replacement_windows'], ['C9', 'C10'])
-        self.assertEqual(calibration['reserve_windows_not_armable'], ['C11', 'C12'])
+        self.assertEqual((calibration['counted_windows'], calibration['replacement_cap']), (8, 6))
+        self.assertEqual(calibration['replacement_windows'], [f'C{i}' for i in range(9, 15)])
+        self.assertEqual(calibration['reserve_windows_not_armable'], [])
+        self.assertIn('never on scores', calibration['replacement_rule'].replace('ONLY to replace', 'never on scores'))
+        self.assertIn('to repair low m', calibration['replacement_rule'])
         series.validate(self.manifest)                                       # the frozen executable design
 
     def test_t_seeds_are_exactly_r15_and_the_reserve_pool_is_contiguous_after_the_reserved_range(self):
@@ -134,41 +141,33 @@ class ManifestTests(unittest.TestCase):
         for name, (low, high) in {'T1': (66, 73), 'T2': (74, 81), 'T3': (82, 89)}.items():
             self.assertEqual((fresh(name)[0], fresh(name)[-1]), (low, high))     # unchanged from R15
         pool = {}
-        for name, (low, high) in {'C9': (100, 107), 'C10': (108, 115), 'C11': (116, 123), 'C12': (124, 131)}.items():
-            self.assertEqual((fresh(name)[0], fresh(name)[-1]), (low, high))
+        for i in range(9, 15):
+            name, low = f'C{i}', 100 + 8 * (i - 9)
+            self.assertEqual((fresh(name)[0], fresh(name)[-1]), (low, low + 7))
             pool[name] = fresh(name)
+        self.assertEqual(fresh('C13')[0], 132)
+        self.assertEqual((fresh('C14')[0], fresh('C14')[-1]), (140, 147))
         every = sorted(i for seeds in pool.values() for i in seeds)
-        self.assertEqual(every, list(range(100, 132)))                           # one contiguous pool, 8 per pair per window
+        self.assertEqual(every, list(range(100, 148)))                           # one contiguous pool, 8 per pair per window
         self.assertFalse(set(every) & series.RESERVED_INDICES)                    # 91-99 are reserved development indices
         self.assertEqual(self.manifest['seed_allocation']['reserve_pool']['start'], 100)
         per_pair = {pair: [] for pair in series.PAIRS}
-        for name in [*(f'C{i}' for i in range(1, 9)), 'T1', 'T2', 'T3', 'C9', 'C10', 'C11', 'C12']:
+        for name in [*(f'C{i}' for i in range(1, 9)), 'T1', 'T2', 'T3', *(f'C{i}' for i in range(9, 15))]:
             for r in by_id[name]['members']:
                 if r['ordinal'] in range(6, 22):
                     per_pair[r['pair']].append(r['seed_index'])
         for pair, seeds in per_pair.items():
             self.assertEqual(seeds, sorted(seeds))                                # kit order
-            self.assertEqual(len(seeds), len(set(seeds)))                         # distinct across all 15 windows
+            self.assertEqual(len(seeds), len(set(seeds)))                         # distinct across all 17 windows
             self.assertFalse(set(seeds) & series.RESERVED_INDICES)
-            self.assertEqual((seeds[0], seeds[-1], len(seeds)), (2, 131, 120))
+            self.assertEqual((seeds[0], seeds[-1], len(seeds)), (2, 147, 136))
 
-    def test_reserve_windows_beyond_the_cap_cannot_be_materialized_or_armed(self):
-        for name in ('C11', 'C12'):
-            with self.assertRaisesRegex(ValueError, 'reserve window beyond the R22-2 cap'):
-                series.build_files(__import__('pathlib').Path(__file__).resolve().parents[2], self.manifest, name)
-        # even with every primary and both armable replacements barred, nothing arms C11
-        barred = [dict(window_id=f'C{i}', attempt_id=f'C{i}', status='final', captured_members=22,
-                       eligible_benign=dict(spam=0, bank=0), barred='u1_u3_fail') for i in range(1, 11)]
-        with self.assertRaises(ValueError):
-            series.calibration_rows(self.manifest, barred)                        # the third bar already escalates/refuses
-        two = barred[:2] + [dict(window_id=f'C{i}', attempt_id=f'C{i}', status='final', captured_members=22,
-                                 eligible_benign=dict(spam=7, bank=7)) for i in range(3, 9)]
-        with self.assertRaisesRegex(ValueError, 'skips/reorders'):
-            series.calibration_rows(self.manifest, [*two, dict(window_id='C9', attempt_id='C9', status='final',
-                captured_members=22, eligible_benign=dict(spam=7, bank=7)),
-                dict(window_id='C11', attempt_id='C11', status='final', captured_members=22,
-                     eligible_benign=dict(spam=7, bank=7))])
-
+    def test_every_replacement_window_materializes_and_there_is_no_window_beyond_c14(self):
+        root = __import__('pathlib').Path(__file__).resolve().parents[2]
+        for name in ('C9', 'C14'):
+            self.assertTrue(series.build_files(root, self.manifest, name))
+        with self.assertRaisesRegex(ValueError, 'not in the frozen series'):
+            series.selected(self.manifest, 'C15')
 
 class SeriesLedgerTests(unittest.TestCase):
     @classmethod
@@ -201,7 +200,7 @@ class SeriesLedgerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'skips/reorders'):
             series.calibration_rows(self.manifest, [*barred, self.entry('T1', spam=0, bank=0)])
 
-    def test_two_barred_windows_use_both_replacements_in_order(self):
+    def test_barred_windows_use_the_replacements_in_order_up_to_c14(self):
         history = self.history(self.entry('C1', barred='u1_u3_fail'), self.entry('C2', barred='whole_window_capture_failure'),
                                *[f'C{i}' for i in range(3, 9)])
         self.assertEqual(series.calibration_rows(self.manifest, history)[1], 'C9')
@@ -211,6 +210,20 @@ class SeriesLedgerTests(unittest.TestCase):
         self.assertEqual(series.calibration_rows(self.manifest, history)[1], 'T1')
         with self.assertRaisesRegex(ValueError, 'skips/reorders'):
             series.calibration_rows(self.manifest, [*history[:-1], self.entry('C9', 'C9-again')])
+        # six bars walk the whole reserve in order; each is armed only after the previous is consumed
+        bars = [self.entry(f'C{i}', barred='u1_u3_fail') for i in range(1, 7)]
+        history = [*bars, *self.history('C7', 'C8')]
+        for name in (f'C{i}' for i in range(9, 15)):
+            self.assertEqual(series.calibration_rows(self.manifest, history)[1], name)
+            history.append(self.entry(name))
+        self.assertEqual(series.calibration_rows(self.manifest, history)[1], 'T1')
+        with self.assertRaisesRegex(ValueError, 'skips/reorders'):
+            series.calibration_rows(self.manifest, [*bars, *self.history('C7', 'C8'), self.entry('C10')])
+        # a seventh bar leaves 8 unreachable: nothing further is armed (not even T1)
+        seven = [self.entry(f'C{i}', barred='u1_u3_fail') for i in range(1, 8)]
+        self.assertIsNone(series.calibration_rows(self.manifest, seven)[1])
+        with self.assertRaisesRegex(ValueError, 'skips/reorders'):
+            series.calibration_rows(self.manifest, [*seven, self.entry('C8')])
 
     def test_a_zero_capture_retry_that_is_zero_again_is_a_bar_not_an_escalation(self):
         history = self.history(self.entry('C1', 'C1', captured=0, spam=0, bank=0),
@@ -219,16 +232,19 @@ class SeriesLedgerTests(unittest.TestCase):
         self.assertEqual((nxt, previous), ('C2', 'C1'))                      # the slot is consumed (barred)
         # a single zero keeps the slot open for its retry
         self.assertEqual(series.calibration_rows(self.manifest, history[:1])[1], 'C1')
-        # three zero-capture bars exhaust the replacements and escalate
-        three = []
-        for n in (1, 2, 3):
-            three += [self.entry(f'C{n}', f'C{n}', captured=0, spam=0, bank=0),
-                      self.entry(f'C{n}', f'C{n}#2', captured=0, spam=0, bank=0)]
+        def zeros(count):
+            out = []
+            for n in range(1, count + 1):
+                out += [self.entry(f'C{n}', f'C{n}', captured=0, spam=0, bank=0),
+                        self.entry(f'C{n}', f'C{n}#2', captured=0, spam=0, bank=0)]
+            return out
+        series.calibration_rows(self.manifest, zeros(6))                      # six zero-capture bars: all replaced
+        # a seventh zero-capture bar exhausts the replacements (C14) and escalates
         with self.assertRaisesRegex(ValueError, 'escalate_to_lead'):
-            series.calibration_rows(self.manifest, three)
+            series.calibration_rows(self.manifest, zeros(7))
         release = {'lead_release': dict(ruling_id='R', text_sha256='a' * 64, resets='zero_capture_escalation',
-                                        after_window='C3#2', lead_signature='lead: synthetic 2026-11-08')}
-        self.assertIsNone(series.calibration_rows(self.manifest, [*three, release])[1])   # a release cannot repair 8 windows
+                                        after_window='C7#2', lead_signature='lead: synthetic 2026-11-08')}
+        self.assertIsNone(series.calibration_rows(self.manifest, [*zeros(7), release])[1])   # a release cannot repair 8 windows
 
     def test_only_a_calibration_window_can_be_barred(self):
         history = self.history(*[f'C{i}' for i in range(1, 9)])

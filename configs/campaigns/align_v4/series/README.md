@@ -4,11 +4,13 @@
 code base with Opus's allocation. It still needs one paired seed check before
 the lead signs `series/admission.json`.
 
-**Order.** W1, then C1–C8, then C9 and C10 only as owed, then T1–T3. D_k is C_k, so
-`--window-id D3` selects C3; there are no separate fit windows. C9 and C10 are the two
-pre-declared blind replacement calibration windows (R22-2): armed only after a STRUCTURAL
-bar of a C window (U1–U3 FAIL, whole-window capture failure, zero-capture refusal beyond the
-retry), never on scores or counts; calibration stays exactly 8 counted windows.
+**Order.** W1, then C1–C8, then C9–C14 only as owed, then T1–T3. D_k is C_k, so
+`--window-id D3` selects C3; there are no separate fit windows. C9–C14 are the six
+pre-declared blind replacement calibration windows (R22-2 / R24, cap C14): each armed, in order,
+ONLY to replace a STRUCTURAL bar of a C window (U1–U3 FAIL, whole-window capture failure,
+zero-capture refusal beyond the retry), never on scores, counts or to repair low m;
+calibration stays exactly 8 admitted windows (`insufficient_calibration` if a pair is below 39
+after 8, or C14 is reached with fewer than 8 admitted).
 
 **Window shape.** Every C/T window has 22 members:
 
@@ -25,7 +27,7 @@ retry), never on scores or counts; calibration stays exactly 8 counted windows.
 - The midpoint follows ordinal 11.
 
 **Seeds.** Held-out seeds are distinct and consumed per pair in kit order: C1–C8
-use 2–65, T1–T3 use 66–89 (exactly R15), and the contiguous reserve pool for C9–C12 is 100–131 (C11 and C12 hold seeds only; the cap is C10), never 1 or 91–99. A zero-capture re-arm reuses the
+use 2–65, T1–T3 use 66–89 (exactly R15), and the contiguous reserve pool for C9–C14 is 100–147 (8 per pair per window; C13 132–139, C14 140–147), never 1 or 91–99. A zero-capture re-arm reuses the
 same seeds.
 
 **Ceiling.** An ordinary window may run to 59,520 s. A window carrying the two

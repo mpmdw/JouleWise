@@ -369,7 +369,7 @@ def attempts(chain):
     """The counted-order check over a chain of calibration attempts (oldest first).
 
     ``chain``: ``(record, captured_members, barred)`` triples. Frozen order is unchanged: slots are C1..C8,
-    then (R22-2) the replacement windows C9 and C10 only while fewer than 8 windows are counted. A
+    then (R22-2 / R24) the replacement windows C9-C14 only while fewer than 8 windows are counted. A
     zero-capture attempt keeps its window id with an attempt suffix (``C3`` then ``C3#2``); a slot whose
     retry is also a zero capture is barred. A barred slot is not counted and owes a replacement. An
     omitted attempt breaks the sequence.
