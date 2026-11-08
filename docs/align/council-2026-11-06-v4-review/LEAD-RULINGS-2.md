@@ -732,3 +732,96 @@ No deviation.
 Before R1 arms, the slow-pick rule (#692 D5) must be chosen from R0 re-run 8's settled capture; R1 must not run on the provisional rule.
 
 Recorded. R1 calls `rank(stage="r1")` and inherits whatever slow rule `rank` holds when it runs. On this head that is still D5's provisional band-hold rule. No code change in this round.
+
+## Round 10 (2026-11-07)
+
+Lead ruling R10, the W1 budget fallback, was pre-declared blind before any R1 number existed. Its source is `RUN_STATE.md` item 203 on `origin/main`, which rests on the research audit `docs/research-audits/2026-11-07/w1-budget-fallback.md` (`origin/research/2026-11-07-w1-budget-fallback`, draft PR #695). The ruling is quoted below verbatim from item 203. R10-1, R10-2, R10-3 and R10-5 are recorded only. R10-4 asked for a kit change, and one builder (an Opus 5.5 sub-agent of the laptop lead) implemented it on `lane/2026-11-07-w1-kit-r10`, branched from `lane/2026-11-06-v4-r1-integrated@e901eb2a4`:
+
+- `4d2d9520c`: failing-first tests, `tests/align/test_w1_kit_r10.py`. All R1 records in them are synthetic. On `e901eb2a4` 22 of its 23 tests fail. The 23rd is the guard that, with no receipt, the 1(f) refusal is unchanged.
+- `0efaf0cf6`: the code, the existing-test fixture updates, and the protocol v4 and R1-contract text;
+- `5295f06ba`: the kit and W1 template regenerated;
+- `e967221cc`: test fixture, the driver tests' `FakeWorld` x-g returns X-G's turns, flags and phases, as the real runtime does;
+- `f37cd791e`: the WP22 synthetic W1's stand-in R1 X-G runs the WP18 X turn count that the dry run measures;
+- the doc commit that adds this section.
+
+R1 (item 202) is not affected. `lane/2026-11-06-v4-r1-integrated` itself is unchanged, and the R1 driver change below only adds fields.
+
+> 203. **Laptop lead (interactive session 1544c617), 2026-11-07 about 17:00 PST: lead ruling R10, the W1 budget fallback, pre-declared blind before any R1 number exists.** Source: research audit `docs/research-audits/2026-11-07/w1-budget-fallback.md` (draft PR #695), whose arithmetic was re-checked against `scripts/align_v4_kit.py`. This item schedules nothing. R1 (item 202) is unaffected and should still run: R10 applies only to W1 admission after R1.
+> - **R10-1 (premise correction).** Model D at 8-bit decodes at about 11.9 tok/s (R0 measured 11.85-11.95). The bandwidth ceiling is about 14.0 tok/s (400 GB/s against 28.58 GB of weights). The "about 20 tok/s" in LEAD-RULINGS-2 R7-2/R8-8 is wrong: it is an unmeasured 4-bit projection. Under R7-2's G0 term (at least 600 s) and R6-3's full last turn, 8-bit D fails ruling 1(f) at every allowed B_D, whatever R1 measures. Recorded now so the R1 numbers cannot be blamed for it.
+> - **R10-2 (mechanical procedure after R1).** It reads only R1 timing and count fields; no energy value is read.
+>   - **(a) Budget-sized D G0 cap.** Compute G0* = T_dead − holds − prefill/tool − 10,240/r, with r the minimum of step-d's decode rate and the gated runs' decode rates.
+>     - If 1.25 × the longest *released* gated D G0 wait ≤ G0*, W1's D members arm G0 at G0*. A longer G0 ends as a clean X2 before turn 1, never as an X7.
+>     - Contrast members keep a separate G0 cap that must fit their 1,086 s deadman. If that cannot be shown, the kit refuses.
+>     - 1(f)'s worst-case guarantee is kept. This lowers the 600 s G0 floor for D members only; it is logged as a public deviation when applied.
+>   - **(b) 4-bit D.** If (a) does not fit, the 4-bit D path is next. It needs its own R1-4bit gated night first, and the lead rules on it with Ed.
+>   - **(c) Window council.** If neither fits, the options are a member-cap change, final-turn truncation, a series-wide bounded-risk 1(f), or screen-only.
+> - **R10-3.** Ruling 1(e) step 2 is ruled out as a 1(f) lever: it costs 132 s of T_dead, puts the contrast members at a 1,900 s bound, and forces ordinal 18 (the alternate sentinel) out of W1.
+> - **R10-4.** The kit cannot yet express a 1(f) lead receipt, separate D and contrast G0 caps, or a D cap below 600 s. The laptop lead will build that on the R1 lane, with failing-first tests and a cold review, before any W1 arm. **Not needed for R1.**
+> - **R10-5.** Before W1 arms, the W1 pre-arm audit (`docs/research-audits/2026-11-07/w1-prearm-gate.md`) also lists registration blockers. Protocol v4 is still missing nine W1-blocking chair rulings (4, 5, 6, 9, 11, 15, 17, 18, 20) and WP19. There is also a battery 4(a) arm rule, the 30B contrast deadman fit, and the duty-bar fallback. The laptop lead owns those. They gate W1, not R1.
+
+### R10-4 as implemented
+
+**1. Ruling 1(f) lead receipt.**
+- **The file.** `configs/campaigns/align_v4/registration/ruling_1f_receipt.json`, schema `joulewise.align_v4.ruling_1f_receipt.v1`, authority `LEAD-RULINGS-2 R10-2`. It carries:
+  - the branch (`a`, `b` or `c`);
+  - the R1 timing inputs it was computed from;
+  - the derivation and the contrast proof;
+  - the rule texts, the X2 exposure and the deviation-log line;
+  - `lead_signature`.
+- **How the kit reads it.** `align_v4_kit.require_w1_ready` reads the file, which must be canonical JSON (indent 2, sorted keys), and `ruling_1f_fit(..., receipt=)` honours it.
+- **No receipt.** The kit behaves as before: 1(f) refuses unconditionally when it does not fit, and names the largest fitting B_D (R6-3). This branch commits no receipt.
+- **Refused receipts.** A receipt is refused if it is unsigned (`PENDING_LEAD_SIGNATURE`), has another schema or authority, or takes branch (b) or (c). The refusal names the branch: 8-bit W1 never arms on (b) or (c).
+
+**2. Separate W1 G0 caps (R7-12's "D-to-X" wording kept).**
+- **D members.** They arm `inputs.R1.thermal_policy.g0_cap_s`, the D-role cap (`w1_d_g0_cap`). That is R7-2's clamp(ceil(1.25 × max wait), 600 s, 1,200 s) over the three gated D waits only, with an unreleased wait at 1,200 s. This cap is 1(f)'s G0 term. An INCONCLUSIVE X-G no longer sets D's term to 1,200 s.
+- **Contrast members.** They arm `thermal_policy.contrast_g0_cap_s` (`w1_contrast_g0_cap`), which `gate_policy_fields(..., role='contrast')` installs as their `g0_cap_s`. It is clamp(ceil(1.25 × X-G's G0 wait), 600 s, 1,200 s). An X-G that is not `measured` keeps R7-12's fallback to 1,200 s for the D-to-X term.
+- **The contrast proof.** The contrast cap must fit `CONTRAST_DEADMAN_S` (1,086.3 s) on R1's X-G record, or the kit refuses W1. That means:
+  - X-G `measured` with a released G0;
+  - `admitted_turns` equal to WP18 X's `max_turns`;
+  - `x7` false;
+  - cap + G1 + H + prefill + decode + tool ≤ 1,086.3 s.
+
+  X-G bounds every contrast member: X decodes more than Y, and only the G arms gate per turn.
+- **The R7-2 record.** `r1_slots.g0_cap_w1` is still re-derived and bound field by field, so a record from the R1 night stays valid.
+- **Template and validator.** The W1 template and its validator carry `contrast_g0_cap_s`.
+- **The driver.** It now records X-G's `admitted_turns`, `x7` and `phases_s` in `r1_slots.x_g` (`align_r1_rehearsal.x_g_evidence`). A record written before this change can take those fields from `r1_result.json` with `align_w1_budget_procedure.py backfill-x-g`. That command reads only those fields, checks them against `r1_slots.x_g`, never overwrites, and records the provenance.
+
+**3. D cap below 600 s under an R10-2(a) receipt.**
+- **The cap.** D arms floor(G0\*), where G0\* = T_dead − holds − max(prefill + tool) − 10,240/r and r = min(step-d and every gated run's decode rate).
+- **Re-derivation.** The kit re-derives the receipt's inputs, derivation and contrast proof with `r10_2_derivation`. The procedure uses the same function. Any mismatch is refused (floats compared to 1e-9).
+- **Refusals.** The kit also refuses:
+  - when ceil(1.25 × the longest released gated D G0 wait) > G0\*;
+  - when no D wait released;
+  - when G0\* ≥ 600 s, because the current rule then already fits and no receipt is needed.
+- **Binding the receipt.** `inputs.R1.thermal_policy` must carry `g0_cap_s` = the receipt's `d_g0_cap_s` and `g0_cap_receipt` = {authority `LEAD-RULINGS-2 R10-2(a)`, `receipt_sha256` of the committed bytes}. Without a receipt that field is refused.
+- **`thermal_gates.validate_gate_policy`.** It accepts a cap in (0, 600) only together with a well-formed `g0_cap_receipt`, and accepts the receipt only with such a cap. The 600-1,200 s range and the 600 s default are unchanged.
+- **Unobserved G0.** The runtime's unobserved-G0 wait is now min(300 s, cap). Before, a sub-300 s armed cap could be outlasted by the 300 s X4 wait, which would break 1(f)'s "term = armed cap". For every cap ≥ 300 s nothing changes.
+- **Where the caps go.** D members, 5, 17 and 18 included, carry the cap and the receipt. Contrast members never carry the receipt.
+
+**4. Holds projected per decoded token.** `projected_holds_s` = max over the gated D runs of max(G1 + H, (G1 + H) / decode_tokens × N).
+- N is 10,240 in G0\*, and B_D + the 4,096 turn cap in the receipt branch's 1(f) check. So it is symmetric with the decode term, and equals 10,240 at the floor.
+- A run that decoded nothing projects nothing. It refuses if it still recorded G1 or hold seconds.
+
+**5. `scripts/align_w1_budget_procedure.py`** (pre-declared and mechanical).
+- **`decide`.** It reads only a whitelist of R1 timing and count fields (`timing_view`): slot I_D and B_D, `max_r1_tail_s`, `inconclusive_segments`, `budget_fit_inputs`, the duty-bar verdict, and the gated rows' and X-G's G0 outcome, waits, phases, decode tokens, turns and x7. A test with a key-logging record proves that no energy, U5, β_T, MDE or thermometry key is read. The steps:
+  - R1-RERUN, if any segment is inconclusive;
+  - CURRENT-RULE, if the kit's rule fits at some B_D ≥ 6,144;
+  - R10-2(a);
+  - otherwise R10-2(b), with a 1.70 × r 4-bit rate printed as a projection only.
+
+  For (a) and (b) it writes the receipt draft and lists the `inputs.R1` values to set. It names a failed duty bar or a contrast that cannot fit.
+- **`sign`.** It sets the lead's signature line, writes the canonical receipt and prints its `g0_cap_receipt`.
+
+**Builder decisions, for the lead to confirm:**
+- **(i) The admit bound reads released D waits only**, as R10-2(a)'s text says ("the longest *released* gated D G0 wait"). A censored D G0 is listed in `censored_D` but sets no bound, and with no released D wait (a) cannot be shown. The audit's §6 had "not censored_D" as an extra condition. If the lead wants that, it is a one-line change. The no-receipt D cap still counts a censored wait at 1,200 s (R7-2).
+- **(ii) The bound is ceil(1.25 × W_D) ≤ G0\*, and the armed cap is floor(G0\*).** Both use R7-2's integer convention. They are at most 1 s stricter than the ruling's 1.25 × W_D ≤ G0\*.
+- **(iii) Holds projection applies in the receipt branch only.** Without a receipt, 1(f)'s holds term stays the recorded max(G1 + H), so the no-receipt kit is unchanged. At B_D above the floor, an unconditional projection would refuse some records that fit today. For example, a synthetic test record fits at B_D 7,168 now and would fit only at 6,144. Making it unconditional is a one-line change if the lead wants it.
+- **(iv) The contrast proof is unconditional,** as R10-2(a) says ("If that cannot be shown, the kit refuses"). So an INCONCLUSIVE X-G now refuses W1: its 1,200 s contrast cap cannot fit the 1,086.3 s deadman. That reverses R7-12's "it does not refuse on that alone" in effect. `test_v4_kit` records the change.
+- **(v) Neither PT nor the contrast episode is projected,** and both sum phase seconds. PT is max(prefill + tool) over truncated gated runs, as 1(f) already uses it. Seconds outside the recorded phases are not counted, as in 1(f).
+
+**Open, for a lead ruling (not changed):**
+- **(a) Which ruling 1(e) step goes into `duty_bar.lead_fallback` under R10-2(a).** The kit still requires one when the duty bar does not pass, and the audit (§3 C1) expects it to fail at 8-bit for budget reasons. The procedure only names the need.
+- **(b) Backfilling X-G's evidence for tonight's R1 record** (driver from `e901eb2a4`) is a mechanical edit of `r1_slots.json` from `r1_result.json`. The lead should confirm that this is acceptable as a recorded lead step, like `s6_tuning`.
+- **(c) A W1 D member after a 30B member under G0\*.** Its X2 exposure is unmeasured until W1 (audit A6, C2). The receipt's `x2_exposure` line states R1's D-after-D waits only.
+
+**Tests.** All 127 tests/align modules pass at `f37cd791e`. They ran one module per process, at most two at a time, under `nice -n 19 taskpolicy -b`. `test_v4_w1_synthetic` ran with `JW_WP22_FULL=1`: 18 tests, with the one expected failure being the existing WP22 F3. `test_w1_kit_r10` has 23 tests, `test_v4_kit` 116 and `test_r1_rehearsal` 73. The regenerated kit's `--check` blocks on `R0.reasoning_effort, R1.B_D, R1.I_D, R1.T_dead, R1.thermal_policy` only. The v3 kit diff against `lane/2026-11-05-align-pilot10-benign` is empty.
