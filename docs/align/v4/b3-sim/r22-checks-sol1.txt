@@ -1,0 +1,98 @@
+nice: setpriority: Operation not permitted
+test_deterministic_replay_bytes (__main__.Checks.test_deterministic_replay_bytes) ... ok
+test_exact_probabilities_independent_enumeration (__main__.Checks.test_exact_probabilities_independent_enumeration) ... ok
+test_future_population_and_immutability (__main__.Checks.test_future_population_and_immutability) ... ok
+test_no_bars_same_tape_equals_oracle (__main__.Checks.test_no_bars_same_tape_equals_oracle) ... ok
+test_no_reserve_for_low_member_counts (__main__.Checks.test_no_reserve_for_low_member_counts) ... ok
+test_old_count_stop_and_score_ranks (__main__.Checks.test_old_count_stop_and_score_ranks) ... ok
+test_replacement_bar_and_cap (__main__.Checks.test_replacement_bar_and_cap) ... ok
+test_scalar_enumeration_of_every_bar_tape (__main__.Checks.test_scalar_enumeration_of_every_bar_tape) ... ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.341s
+
+OK
+completed gaussian_independent 0.125 0.1 0.0 0.0
+completed gaussian_independent 0.125 0.1 0.0 0.05
+completed gaussian_independent 0.125 0.1 0.13 0.0
+completed gaussian_independent 0.125 0.1 0.13 0.05
+completed gaussian_independent 0.125 0.1 0.21 0.0
+completed gaussian_independent 0.125 0.1 0.21 0.05
+completed gaussian_independent 0.125 0.1 0.25 0.0
+completed gaussian_independent 0.125 0.1 0.25 0.05
+completed gaussian_independent 0.125 0.1 0.5 0.0
+completed gaussian_independent 0.125 0.1 0.5 0.05
+completed gaussian_independent 0.125 0.1 0.8076923076923077 0.0
+completed gaussian_independent 0.125 0.1 0.8076923076923077 0.05
+completed gaussian_independent 0.25 0.1 0.0 0.0
+completed gaussian_independent 0.25 0.1 0.0 0.05
+completed gaussian_independent 0.25 0.1 0.13 0.0
+completed gaussian_independent 0.25 0.1 0.13 0.05
+completed gaussian_independent 0.25 0.1 0.21 0.0
+completed gaussian_independent 0.25 0.1 0.21 0.05
+completed gaussian_independent 0.25 0.1 0.25 0.0
+completed gaussian_independent 0.25 0.1 0.25 0.05
+completed gaussian_independent 0.25 0.1 0.5 0.0
+completed gaussian_independent 0.25 0.1 0.5 0.05
+completed gaussian_independent 0.25 0.1 0.8076923076923077 0.0
+completed gaussian_independent 0.25 0.1 0.8076923076923077 0.05
+completed hot_independent 0.125 0.1 0.0 0.0
+completed hot_independent 0.125 0.1 0.0 0.05
+completed hot_independent 0.125 0.1 0.13 0.0
+completed hot_independent 0.125 0.1 0.13 0.05
+completed hot_independent 0.125 0.1 0.21 0.0
+completed hot_independent 0.125 0.1 0.21 0.05
+completed hot_independent 0.125 0.1 0.25 0.0
+completed hot_independent 0.125 0.1 0.25 0.05
+completed hot_independent 0.125 0.1 0.5 0.0
+completed hot_independent 0.125 0.1 0.5 0.05
+completed hot_independent 0.125 0.1 0.8076923076923077 0.0
+completed hot_independent 0.125 0.1 0.8076923076923077 0.05
+completed hot_independent 0.25 0.1 0.0 0.0
+completed hot_independent 0.25 0.1 0.0 0.05
+completed hot_independent 0.25 0.1 0.13 0.0
+completed hot_independent 0.25 0.1 0.13 0.05
+completed hot_independent 0.25 0.1 0.21 0.0
+completed hot_independent 0.25 0.1 0.21 0.05
+completed hot_independent 0.25 0.1 0.25 0.0
+completed hot_independent 0.25 0.1 0.25 0.05
+completed hot_independent 0.25 0.1 0.5 0.0
+completed hot_independent 0.25 0.1 0.5 0.05
+completed hot_independent 0.25 0.1 0.8076923076923077 0.0
+completed hot_independent 0.25 0.1 0.8076923076923077 0.05
+completed hot_correlated 0.125 0.1 0.0 0.0
+completed hot_correlated 0.125 0.1 0.0 0.05
+completed hot_correlated 0.125 0.1 0.13 0.0
+completed hot_correlated 0.125 0.1 0.13 0.05
+completed hot_correlated 0.125 0.1 0.21 0.0
+completed hot_correlated 0.125 0.1 0.21 0.05
+completed hot_correlated 0.125 0.1 0.25 0.0
+completed hot_correlated 0.125 0.1 0.25 0.05
+completed hot_correlated 0.125 0.1 0.5 0.0
+completed hot_correlated 0.125 0.1 0.5 0.05
+completed hot_correlated 0.125 0.1 0.8076923076923077 0.0
+completed hot_correlated 0.125 0.1 0.8076923076923077 0.05
+completed hot_correlated 0.25 0.1 0.0 0.0
+completed hot_correlated 0.25 0.1 0.0 0.05
+completed hot_correlated 0.25 0.1 0.13 0.0
+completed hot_correlated 0.25 0.1 0.13 0.05
+completed hot_correlated 0.25 0.1 0.21 0.0
+completed hot_correlated 0.25 0.1 0.21 0.05
+completed hot_correlated 0.25 0.1 0.25 0.0
+completed hot_correlated 0.25 0.1 0.25 0.05
+completed hot_correlated 0.25 0.1 0.5 0.0
+completed hot_correlated 0.25 0.1 0.5 0.05
+completed hot_correlated 0.25 0.1 0.8076923076923077 0.0
+completed hot_correlated 0.25 0.1 0.8076923076923077 0.05
+completed hot_correlated 0.125 0.2 0.0 0.0
+completed hot_correlated 0.125 0.2 0.0 0.05
+completed hot_correlated 0.125 0.2 0.5 0.0
+completed hot_correlated 0.125 0.2 0.5 0.05
+completed hot_correlated 0.125 0.2 0.8076923076923077 0.0
+completed hot_correlated 0.125 0.2 0.8076923076923077 0.05
+completed hot_correlated 0.25 0.2 0.0 0.0
+completed hot_correlated 0.25 0.2 0.0 0.05
+completed hot_correlated 0.25 0.2 0.5 0.0
+completed hot_correlated 0.25 0.2 0.5 0.05
+completed hot_correlated 0.25 0.2 0.8076923076923077 0.0
+completed hot_correlated 0.25 0.2 0.8076923076923077 0.05

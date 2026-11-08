@@ -1,0 +1,20 @@
+{
+  "r22-counts-sol1.csv": {
+    "raw_sha256": "f0c34968849dde3690ea3435d0bc54d6c31ff5a43c9eba964652639a0ff37191",
+    "lf_sha256": "ddc94649fb41a7c7188cfecbf7378a038b6651af954cc1b4a0388546893dbcef",
+    "rows": 336,
+    "parsed_rows_identical": true
+  },
+  "r22-scores-sol1.csv": {
+    "raw_sha256": "75c5551c8ae2955b7ac8a50a1155033af12baa94ad0e3cd8ad61116ee9e7846e",
+    "lf_sha256": "cd86a400f86145fd6cc0c897df6cc61ad0bb114314630ea57991c3d55e6c6dc3",
+    "rows": 3024,
+    "parsed_rows_identical": true
+  },
+  "r22-fixes-sol1.csv": {
+    "raw_sha256": "54b18b4034bf38195a9060967f89a4d1fdaaafedbeddd11421746ea3759daf1f",
+    "lf_sha256": "435302ecf010b1d35cc47cbad431b46fdbe0790ab335898f3985ece1fcaccce4",
+    "rows": 1344,
+    "parsed_rows_identical": true
+  }
+}

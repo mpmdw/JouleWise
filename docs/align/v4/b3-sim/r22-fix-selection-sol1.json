@@ -1,0 +1,37 @@
+{
+  "minimum_restore": 0.75,
+  "minimum_nominal": null,
+  "validation_scenarios": [
+    [
+      "hot_correlated",
+      0.25,
+      0.1,
+      0.8076923076923077,
+      0.0
+    ],
+    [
+      "hot_correlated",
+      0.25,
+      0.2,
+      0.8076923076923077,
+      0.05
+    ],
+    [
+      "hot_correlated",
+      0.25,
+      0.1,
+      0.8076923076923077,
+      0.05
+    ]
+  ],
+  "validation_seed": 202611082202,
+  "validation_trials": 200000,
+  "validation_margins": [
+    0.5,
+    0.75,
+    1.0,
+    1.25
+  ],
+  "margin_125_note": "Exploratory extension after discovery: initial grid through 1.0 failed nominal targets; evaluated on fresh-seed selected settings only",
+  "restoration_criterion": "Both paired-common-success delta upper <=0 and own-population FPR difference upper <=0; population difference uses conservative Cauchy SE bound"
+}

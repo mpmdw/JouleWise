@@ -1,0 +1,48 @@
+{
+  "seed": 202611082201,
+  "trials_per_scenario": 100000,
+  "batch": 2000,
+  "scenarios": 84,
+  "python": "3.14.6",
+  "numpy": "2.2.6",
+  "source_sha256": "f2702b629a4cb1e6bd5f6d13a32c403ced7a51dc79e00cc8eea09cb65cfcb2ce",
+  "helper_sha256": "df4594692ff9551512cfc8a34192e9cd638ab9c6eda4e80adb216b0574b85fa6",
+  "elapsed_seconds": 592.4463473749347,
+  "future_window_positions": [
+    11,
+    12,
+    13
+  ],
+  "tau_rel_prior": 0.0013,
+  "tau_rel_stress": 0.0021,
+  "residual_cv_assumptions": [
+    0.01,
+    0.0026
+  ],
+  "ci": "pointwise 95% MC; Wilson proportions; whole-study normal mean/paired intervals",
+  "design_order": [
+    "oracle8",
+    "fixed8_no_replace",
+    "old_count6",
+    "r22"
+  ],
+  "margin_grid": [
+    0.1,
+    0.2,
+    0.3,
+    0.4,
+    0.5,
+    0.75,
+    1.0
+  ],
+  "slots_per_pair_window": 7,
+  "bar_hot_probability": 0.25,
+  "bar_hot_multiplier": 3,
+  "bar_cool_multiplier": 0.3333333333333333,
+  "member_exclusion": "iid, score/state/bar independent; .1 primary, .2 sensitivity",
+  "output_sha256": {
+    "r22-counts-sol1.csv": "f0c34968849dde3690ea3435d0bc54d6c31ff5a43c9eba964652639a0ff37191",
+    "r22-scores-sol1.csv": "75c5551c8ae2955b7ac8a50a1155033af12baa94ad0e3cd8ad61116ee9e7846e",
+    "r22-fixes-sol1.csv": "54b18b4034bf38195a9060967f89a4d1fdaaafedbeddd11421746ea3759daf1f"
+  }
+}
