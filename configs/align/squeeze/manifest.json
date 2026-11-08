@@ -1,0 +1,19 @@
+{
+  "files": {
+    "hidden-decode-k0.v1.json": "55d22f49ee37a42c2578da906c8d0cf20639fdd359536c399117f075037badb2",
+    "hidden-decode-k1024.v1.json": "74066e5b0107c2f41138e203ba431a4deb4637b2e745ef2ee40859c357df4921",
+    "hidden-decode-k128.v1.json": "0efe7cc8a147e51961b9ee6d45160afdac23e7c2a07078281c9077863e85db43",
+    "hidden-decode-k2048.v1.json": "453f79e20f584df9f7b75341ec15dc42933bf1460ae964a72699e0666548f0bd",
+    "hidden-decode-k256.v1.json": "dc6cb049e8e7340cb61c4299c10ca92d332e632cf271866332bb05bfbdd4f68f",
+    "hidden-decode-k300.v1.json": "44b9ada242c14aef0749c03ddea340c41245c2bdc587d4519dfe66905dcd8072",
+    "hidden-decode-k512.v1.json": "14ee71aec7719793947262064d78260338f348c0567c3ac58f6fb07f1d568448",
+    "meter-aware.v1.json": "162fb8acbedeb17dcff3d65e9f646447d86d1d3845f5bbc2c2c26e282bfd9287",
+    "mixed-adaptive.v1.json": "da974c17d978ad11ad8d8ad146d8afa39672acd98eb19830059d42367db4f0b2",
+    "pad-visible-log.v1.json": "cf9f9dd042bf270bce197ad366b90e8195f090b42b0ae1653bd0bdeeb6799105",
+    "smooth-compute.v1.json": "b819d33febd4eac6ffe11d3d317797736c85a8b3d0e9c8559a182735de8304e7",
+    "tool-compute.v1.json": "6985fb7b601708d4ffd874c43d1f9185bf577bdb45abf5289fbb78765b04daba",
+    "unaware.v1.json": "649f57892a65931e64723bcb68131d793e575c7b53b0a4afd78c4186c34cc3ec"
+  },
+  "schema": "joulewise.align.squeeze.manifest.v1",
+  "status": "DRAFT"
+}

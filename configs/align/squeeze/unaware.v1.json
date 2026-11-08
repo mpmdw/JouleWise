@@ -1,0 +1,11 @@
+{
+  "audit_knowledge": "none",
+  "config_sha256": "3c2e7c72ef01121db1a33e41e182fbbc884388ce0930c77452fd33d3cf040427",
+  "id": "unaware",
+  "instructions": "",
+  "instructions_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "revision": 1,
+  "schema": "joulewise.align.squeeze.variant.v1",
+  "status": "DRAFT",
+  "strategy": "none"
+}

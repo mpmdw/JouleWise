@@ -1,0 +1,15 @@
+{
+  "before_chat_call": 0,
+  "config_sha256": "66498bfef8ec0a858ffc76208237753522a8ff2587addc95579d69abeafd0065",
+  "decode_tokens": 256,
+  "id": "hidden-decode-k256",
+  "max_context_tokens": 4096,
+  "prompt_token_ids": [
+    1,
+    2,
+    3
+  ],
+  "revision": 1,
+  "schema": "joulewise.align.squeeze.control.v1",
+  "status": "DRAFT"
+}
