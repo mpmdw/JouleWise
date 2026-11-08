@@ -103,3 +103,11 @@ Written by the laptop lead (Opus 5.5, session 1544c617) before Ed retired this C
   - The Khiani paper is independent.
   - Interp is his main interest.
 - `tools/launch_b5_dry_run.zsh`: fixed a quoting bug (the tag lookup was in single quotes).
+
+## Update, about 20:40 PST 11-07
+- **R10-4 W1 kit:** `lane/2026-11-07-w1-kit-r10`.
+  - Builder rulings applied (`05bdff797`).
+  - Cold review: ADMIT_WITH_FIXES (`1573c919e`). MEDIUM-1: refuse branch (a) when the 600 s rule fits. MEDIUM-2: the no-receipt path must equal e901eb2a4 exactly. LOWs 1-5.
+  - The dispositions were sent to the builder, which applies them on the same branch. **Verify that the fixes landed** (LEAD-RULINGS-2 "Cold review dispositions 2026-11-07") before merging the branch into the R1 lane, which happens after R1 runs.
+- **dry-m** was still running at 20:40 (at step 3b). Release-check command: see the 19:50 update.
+- **Interp desk:** wave 1 is pushed and wave 2 is chained (see `docs/research/interp-energy-desk-work.md`).
