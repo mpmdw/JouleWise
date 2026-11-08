@@ -15,6 +15,7 @@ records review findings, draft incompatibilities, tests and open decisions.
 | Module / document | Study experiment | Public entry points and limits |
 |---|---|---|
 | `weight_edits` | Stage 0 edit kit; T fixed-token edits; later H1/H2 strength/bound studies | `SparseDelta`, `RankOneUpdate`, `AblationMask`, `MagnitudePruning`, `Scale`, `SignFlip`, `WeightSwap`, `parameter_hashes`, `weights_sha256`. Dense floating-point primitives; no verified Astra diff loader or direction-fitting algorithm. |
+| `ablation_artifact` / `weight_edits.AblationReplacement` | Idea 12, ABLATION-ARTIFACT | Zero/mean/resample/constant replacements of explicit matrix selections; sham control; common activation `where`, traversal statistics, desk grid planner and synthetic demo. [Design and materiality rule](../../docs/registrations/ablation_artifact_v0_draft.md). No native grid runner or acquisition. |
 | `forced_decode` | Stage 0 teacher forcing; Stage 1 T physics channel | `replay`, `MLXBackend`, `NumpyBackend`, `ReplayResult`, `token_sequence_sha256`, `weight_file_identity`. Fixed IDs, fresh model-specific caches, synchronous forwards and diagnostics. |
 | `reference` | Synthetic validation of T | `NumpyReferenceModel`: tiny causal-attention model with real growing K/V arrays; no model files. |
 | `behaviour_channel` | Stage 1 F behaviour channel; later H1 frontier arithmetic | `Answer`, `EnergyModel`, `CapScenario`, `answer_energy`, `summarize_answers`, `compare_answers`, `compare_scenarios`. Count-based predictions only; no free-generation runner, scorer, calibration fitting or measured-energy reducer. |
@@ -58,6 +59,19 @@ stay fixed. Reversion restores saved bytes and checks hashes, including signed
 zero and NaN payloads. A mask's `True` entries are zeroed; head selections require
 an explicit axis and contiguous head size. Dense pruning leaves dense storage.
 A rank-one update applies an already supplied direction; it does not fit ROME.
+
+`AblationReplacement` shares the mask/axis selection and saved-byte restoration
+of `AblationMask`. Mean uses explicit calibration rows' per-feature mean;
+resample takes frozen donor-row indices; constant takes a scalar. All use
+nonempty `[rows, features]` matrices. Weight and activation replacements are
+distinct interventions. `replacement_for(template)` prepares a full runtime
+operand outside timing; `ablation_artifact.replace_activation` uses the same
+shape/dtype-matched `where` for each style and for the clean-residual patch.
+Repeated means tie zero on row-transition statistics, while reduction-axis
+statistics can differ; the proposed energy ordering needs native measurement.
+Run the desk proposal with
+`python3.13 -B -m joulewise.interp_energy.ablation_artifact --plan-only`, or the tiny NumPy demo
+with `python3 -B -m joulewise.interp_energy.ablation_artifact --synthetic`.
 
 ```python
 base_digest = ie.weight_edits.weights_sha256(model.weights)

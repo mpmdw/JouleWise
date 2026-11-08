@@ -394,9 +394,7 @@ class AblationMask(ReversibleEdit):
         self.rows, self.columns, self.neurons, self.heads = rows, columns, neurons, heads
         self.axis, self.head_size = axis, head_size
 
-    def _plans(self, parameters):
-        a = parameters[self.parameter]
-        b = _Backend(a)
+    def _selection_mask(self, a, b):
         xp, shape = b.xp, tuple(a.shape)
         if self.mask is not None:
             if any(s is not None for s in (self.rows, self.columns, self.neurons, self.heads)):
@@ -429,10 +427,93 @@ class AblationMask(ReversibleEdit):
                     slices = [slice(None)] * len(shape)
                     slices[axis] = value
                     mask[tuple(slices)] = True
+        return mask
+
+    def _plans(self, parameters):
+        a = parameters[self.parameter]
+        b = _Backend(a)
+        xp = b.xp
+        mask = self._selection_mask(a, b)
         # Set bytes to +0, including existing -0 values.
         zeroed = xp.where(mask, xp.zeros_like(a), a)
         indices = _different_indices(a, zeroed, b)
         yield self.parameter, indices, b.take(zeroed, indices)
+
+
+class AblationReplacement(AblationMask):
+    """Replace selected entries of a dense [rows, features] matrix.
+
+    Supports weights or saved activations through the existing reversible edit
+    lifecycle. Axis/mask selection is identical to AblationMask. ``mean`` uses
+    an explicit calibration matrix's per-feature mean over rows; ``resample``
+    uses one explicit donor-row index per target row, with repeats permitted.
+    Indices and calibration must be frozen outside timed work. ``constant``
+    fills every selected entry with a supplied finite scalar; ``zero`` writes
+    +0; ``sham`` copies the target. No RNG, model fitting, or file I/O occurs.
+
+    ``replacement_for(template)`` prepares the full unmasked runtime operand.
+    Keep it resident, then use the SAME runtime where(mask, replacement, x)
+    graph for every activation arm, including sham. Do not call apply/revert
+    inside a measured forward: their hash scans/setup are desk operations.
+    A weight-row replacement is not equivalent to an activation intervention.
+    """
+
+    STYLES = ("zero", "mean", "resample", "constant", "sham")
+
+    def __init__(self, parameter: str, style: str, mask: Any = None, *,
+                 calibration: Any = None, donor_indices: Any = None,
+                 constant: float | None = None, **selection):
+        super().__init__(parameter, mask, **selection)
+        if style not in self.STYLES:
+            raise ValueError(f"unknown ablation style: {style!r}")
+        if (style in ("mean", "resample")) != (calibration is not None):
+            raise ValueError("only mean/resample require calibration")
+        if (style == "resample") != (donor_indices is not None):
+            raise ValueError("only resample requires donor_indices")
+        if (style == "constant") != (constant is not None):
+            raise ValueError("only constant requires a scalar")
+        self.style, self.calibration, self.donor_indices = style, calibration, donor_indices
+        self.constant = _finite(constant) if constant is not None else None
+
+    def replacement_for(self, template: Any) -> Any:
+        """Prepare a shape/dtype-matched tensor; no mutation of the template."""
+        a, b = template, _Backend(template)
+        xp = b.xp
+        if len(a.shape) != 2 or not all(a.shape):
+            raise ValueError("replacement requires a nonempty [rows, features] matrix")
+        if self.style == "sham":
+            return b.copy(a)
+        if self.style == "zero":
+            return xp.zeros_like(a)
+        if self.style == "constant":
+            result = xp.full(a.shape, self.constant, dtype=a.dtype)
+        else:
+            donors = xp.array(self.calibration, dtype=b.arithmetic_dtype(a))
+            if len(donors.shape) != 2 or donors.shape[0] < 1 or donors.shape[1] != a.shape[1]:
+                raise ValueError("calibration must have shape [samples, target features]")
+            if not bool(xp.all(xp.isfinite(donors)).item()):
+                raise ValueError("calibration must be finite")
+            if self.style == "mean":
+                result = xp.broadcast_to(xp.mean(donors, axis=0), a.shape).astype(a.dtype)
+            else:
+                indices = tuple(_integer(i) for i in self.donor_indices)
+                if len(indices) != a.shape[0]:
+                    raise ValueError("resample needs one donor index per target row")
+                if any(i < 0 or i >= donors.shape[0] for i in indices):
+                    raise IndexError("donor row outside calibration")
+                dtype = xp.int64 if b.kind == "numpy" else xp.int32
+                result = donors[xp.array(indices, dtype=dtype)].astype(a.dtype)
+        if not bool(xp.all(xp.isfinite(result)).item()):
+            raise ValueError("replacement must remain finite in the target dtype")
+        return b.copy(result)
+
+    def _plans(self, parameters):
+        a = parameters[self.parameter]
+        b = _Backend(a)
+        mask = self._selection_mask(a, b)
+        replaced = b.xp.where(mask, self.replacement_for(a), a)
+        indices = _different_indices(a, replaced, b)
+        yield self.parameter, indices, b.take(replaced, indices)
 
 
 class MagnitudePruning(ReversibleEdit):

@@ -8,7 +8,7 @@ backend and starts no collectors.
 from importlib import import_module
 
 __all__ = (
-    "behaviour_channel", "capture_hooks", "forced_decode", "lockin",
+    "ablation_artifact", "behaviour_channel", "capture_hooks", "forced_decode", "lockin",
     "operand_stats", "power", "rail_data_dependence", "reference", "weight_edits",
 )
 
