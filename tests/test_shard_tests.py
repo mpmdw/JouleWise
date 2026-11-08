@@ -143,6 +143,13 @@ class ShardPartitionInvariantTests(unittest.TestCase):
                 self.assertIsInstance(reason, str)
                 self.assertTrue(reason.strip())
                 self.assertNotIn(module, self.timings)
+                # An exemption expires with its module: deleting the test
+                # module must also delete the exemption entry.
+                self.assertIn(
+                    module,
+                    self.discover_set,
+                    "timing_exemptions names a module that no longer exists",
+                )
         rules = _untimed_allowance_rules(payload)
         self.assertEqual(
             _untimed_allowance_violations(
