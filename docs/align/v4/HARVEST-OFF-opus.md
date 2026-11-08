@@ -397,7 +397,15 @@ python3.13 -B -m unittest tests.test_powermetrics               # 61 OK
 python3.13 -B -m unittest tests.test_adapters_powermetrics      # 3 OK
 python3.13 -B -m unittest tests.test_audit_powermetrics_parser  # 4 OK
 python3.13 -B -m unittest tests.b6.test_session_wrapper         # 6 OK
-python3.13 -B -m unittest tests.test_harvest_b5_window          # see commit note
+python3.13 -B -m unittest tests.test_harvest_b5_window          # STOPPED at 115/187, all passing (see note)
 python3.13 -B -m unittest tests.test_desk_compressed_readers    # 9 OK
 python3.13 -B -m unittest tests.align.test_v4_powermode_record  # 8 OK, 1 FAIL pre-existing on base (P5)
 ```
+
+**Note on `tests.test_harvest_b5_window`.**
+- On this Air, the run reached 115 of 187 tests, all passing. It then blocked reading `~/Library/Mobile Documents/.../JouleWise-backup/window_c_20260726/.../raw/powermetrics.plist`, a **real** iCloud backup capture.
+- The cause appears to be the fixture's historical ledger prefix, whose custody locators point at real paths. The harvest's historical-custody step follows any locator that exists on the host. This is pre-existing and not caused by this branch.
+- I stopped the run rather than read real data.
+- Run the module in CI or on a host without that path.
+- **Recommended fix:** the fixture should rebase the prefix's locators into the temporary tree, or the test should stub `historical_custody`.
+
