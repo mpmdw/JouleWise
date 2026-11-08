@@ -1,8 +1,8 @@
 """Comparator mechanics on the synthetic rehearsal (no real data): coverage, families, R-C1..R-C6, R22-3.
 
-The baseline is the no-zero-capture rehearsal (the engine refuses a zero-capture raw window; see
-test_rehearsal_v4). Its known cross-build disagreements are pinned in KNOWN_DISAGREEMENTS; every other
-recomputed family agrees exactly, so each planted mutation below must turn a named family away from agree.
+The baseline is the full rehearsal (zero-capture retries in C3 and T2, the A37 <= 1 us seam window, the
+W1/B screen fixtures). Both builds agree exactly on it, so each planted mutation below must turn a named
+family away from agree.
 """
 import copy
 import json
@@ -19,15 +19,14 @@ import support  # noqa: E402
 sys.path.insert(0, str(support.REPO / "scripts"))
 import compare_v4_recompute as cmp  # noqa: E402
 
-# Disagreements on the synthetic series, classified in docs/analysis/v4/RELEASE-RUNBOOK-v4.md section 6.
-KNOWN_DISAGREEMENTS = {"anchor_sigma_w", "carrier_curve", "dc_benign", "dc_benign_status", "dc_training_sets"}
+KNOWN_DISAGREEMENTS = set()     # the full rehearsal agrees exactly (RELEASE-RUNBOOK-v4.md section 6)
 
 
 @unittest.skipUnless(support.have_commits(), "pinned build commits unavailable in this clone")
 class ComparatorTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.base = support.rehearsal("no_zero_capture")
+        cls.base = support.rehearsal("full")
         cls.tmp = tempfile.TemporaryDirectory()
         cls.dir = Path(cls.tmp.name)
         cls.fill = json.loads((cls.base / "engine-out" / "fill.json").read_text())
@@ -64,8 +63,8 @@ class ComparatorTests(unittest.TestCase):
         bad = {k for k, v in self.public["families"].items() if v["verdict"] not in
                ("agree", "exempt", "integrity_only", "expected_empty")}
         self.assertEqual(bad, KNOWN_DISAGREEMENTS)
-        self.assertEqual(self.code, 1)
-        self.assertEqual(self.public["verdict"], "hold")
+        self.assertEqual(self.code, 0)
+        self.assertEqual(self.public["verdict"], "agree")
         self.assertRegex(self.public["summary"], r"^\d+ families compared, \d+ expected-empty, 0 unexplained-empty$")
 
     def test_public_line_is_structure_only(self):

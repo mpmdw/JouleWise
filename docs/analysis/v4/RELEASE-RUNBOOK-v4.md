@@ -18,12 +18,11 @@
 
 | Build | Branch | Commit | Output |
 |---|---|---|---|
-| Sol primary engine | `engine-fix` (R21 applied; `align/2026-11-08-v4-analysis-engine-sol` @ `c8da9ee40` carries only its report) | `8eb7982f0` | `fill.json`, `verdict.json`, `thresholds.json` |
-| Opus independent recompute | `align/2026-11-08-v4-recompute-opus` | `c0d1efcae` (program sha256 `28db6c12…`) | one JSON (`RECOMPUTE-opus.md`) |
+| Sol primary engine | `engine-r23d` (R21 + A37 + R23 + R23c/d; Opus delta review ADMITted r23b) | `a2e36bc19` | `fill.json`, `verdict.json`, `thresholds.json` |
+| Opus independent recompute | `align/2026-11-08-v4-recompute-opus` (R23 + R23c/d) | `fdd02a96b` (program sha256 `48d7752b…`) | one JSON (`RECOMPUTE-opus.md`) |
 
-The engine's A37 change is not in yet. `engine-a37` @ `7bdc6cdb6` stopped on a NEEDS_RULING (its base lacked
-`184c37b25`/`8eb7982f0`). When it lands, re-pin `ENGINE_COMMIT` in `tests/v4_release/support.py` and re-run the
-rehearsal.
+History: the first rehearsal (2026-11-08, engine `8eb7982f0` vs recompute `c0d1efcae`) held on five
+families and found engine bug E1; lead ruling R23 and its clarifications (R23b-d) resolved all of them.
 
 Like B5, the verdict carries only agree or hold per family, with pass and fail counts, structure codes and
 counts. It never carries an energy, a difference or an outcome word. Unsealing is a separate step and needs
@@ -153,7 +152,7 @@ closes those holes as follows.
 
 ## 4. Families and bars
 
-There are 61 recomputed families and 21 that are not recomputed. Each family's reason is in
+There are 61 recomputed families and 23 that are not recomputed. Each family's reason is in
 `recompute_bars.json`. Per-row overrides are fixed in the program: margin_relative 1e-9 rel, E_ref 1e-9 rel,
 carrier fractions 1e-12 rel, T member scores 1e-6 abs.
 
@@ -174,7 +173,8 @@ The families that are not recomputed:
 
 - `integrity_only`: `input_echo`, `build_digests`, `engine_inventory`.
 - `exempt`:
-  - with an R21 ruling: `a3_attribution_bounds`, `a9_reason_vocabulary`, `a18_sabotage_bound`, `a27_sealed_counts`,
+  - with an R21 ruling: `a3_attribution_bounds`, `a9_reason_vocabulary`, `a9_class_components`,
+    `a28_not_captured_flags`, `a18_sabotage_bound`, `a27_sealed_counts`,
     `a32_no_rebuild`, `a36_battery_bar`, `u5_intercept_print`, `dc_model_print`, `w1_turn_tables`,
     `known_h_unregistered`, `known_h_dose_residual`, `fit_support_cov`, `a8_curve_diagnostics`;
   - OPEN interpretations: `a7_hstar_grid` and `a8_noncouncil_doses`;
@@ -186,12 +186,20 @@ An `agree` says nothing about these families except integrity.
 ## 5. The synthetic rehearsal
 
 `tests/v4_release/common_series.py` writes ONE series in both layouts. It uses the recompute's own writer
-(`synth.py` at `c0d1efcae`) for members, frames, sidecar and meter. On top of that, it adds the R15 22-member
-allocation, the R20 24-member escalation and a zero-capture attempt with its retry. It writes the engine's
-raw-source manifest over the same bytes, plus the crosswalk.
+(`synth.py` at the pinned recompute commit) for members, frames, sidecar and meter, and adds:
+- the R15 22-member allocation, the R20 24-member escalation (T3);
+- zero-capture first attempts retried in their slots (C3 and T2);
+- the A37 seam fixture: C5's frame elapsed values are 1 s + 333/777 ns, so the A21 float support rule leaves
+  238-256 ns interior gaps (<= 1 us, snapped);
+- screen fixtures: W1 anchor 2 and T1/T2-retry ordinal 6 carry a battery B code (W1 leaves the σ_w table,
+  `W1_anchor_block: excluded:B`; the B run crosses T2's zero-capture attempt);
+- the engine's raw-source manifest over the same bytes, and the structure-only crosswalk, both to the R23
+  export contract (section 6a).
 
-The series is W1 (18), C1-C8, T1-T3 (T3 has 24), and C3 has a zero-capture first attempt that is retried. That
-is 11 windows (12 with W1), 262 captured members, and 419 MB.
+Series: W1 (18), C1-C8, T1-T3 (T3 has 24), plus the two zero-capture attempts: 11 counted windows, 13
+attempts with W1. The PROBE plan (`support.PLANS["probes"]`) adds two hard cases kept apart because each is a
+classified hold (section 6): a G1 timeout on W1 anchor 2, and C6 at a synthetic 9e9 s epoch where the float
+seconds grid is 1.907 us, so its seams are 1-2 us (> 1 us).
 
 ```bash
 for m in test_compare_v4 test_release_v4 test_rehearsal_v4; do
@@ -199,75 +207,83 @@ for m in test_compare_v4 test_release_v4 test_rehearsal_v4; do
 ```
 
 - **Tests need the pinned commits' objects.** A shallow clone skips the tests that need them.
-- **Rehearsal caching.** The first rehearsal is built once (about 150 s, mostly the serial engine) and cached
-  read-only under the system temporary folder, keyed by the commits and the generator bytes.
-- **Per-module run times** (Air, 2026-11-08, load 6-9):
+- **Rehearsal caching.** Each plan is built once (generation, the serial two-stage engine run and the
+  recompute) and cached read-only under the system temporary folder, keyed by the commits and the generator
+  bytes.
+
+- **Per-module run times** (Air, 2026-11-08, load 10-25, rehearsals cached):
 
   | Module | Tests | Time |
   |---|---|---|
-  | `test_compare_v4` | 18 | 18-28 s |
-  | `test_release_v4` | 12 | 11-20 s |
-  | `test_rehearsal_v4` | 6 | 106-113 s, with one engine re-run for its code mutation |
+  | `test_compare_v4` | 18 | 40 s |
+  | `test_release_v4` | 12 | 24 s |
+  | `test_rehearsal_v4` | 7 | about 3 min (one engine re-run for its code mutation; the probe plan cached) |
 
-**Release runtime on the synthetic series.** These are `release_v4.py` wall times, stages (a)-(c):
+  Building a plan cold takes 4.5-7 min, almost all of it the serial engine (C-only stage, then the full run
+  against the freeze); the recompute takes 5 s.
+
+**Release runtime on the synthetic series** (306 roster rows, 262 captured members, 419 MB). These are
+`release_v4.py` wall times, stages (a)-(c), at load average 10-25:
 
 | Workers | Total | Recompute (two stages) | Comparator |
 |---|---|---|---|
-| 4 | 7.0 s and 8.6 s (two runs) | 4.7 s and 5.6 s | 1.2 s and 1.6 s |
-| 1 | 12.6 s | 9.8 s | 1.4 s |
+| 4 | 11.2 s and 10.7 s (two runs) | 7.1 s and 6.8 s | 1.7 s and 1.9 s |
+| 1 | 16.6 s | 12.7 s | 1.7 s |
 
-Stage (a) re-hashes 746 files. The engine's own two-stage run on the same series takes about 108 s serial.
-The engine run is not part of the release: it runs incrementally as windows land.
+Stage (a) re-hashes 748 files; stage (b) confirms 262 members read the same raw bytes. The engine's own run
+is not part of the release: it runs incrementally as windows land.
 
-## 6. Findings on the synthetic series (2026-11-08)
+## 6. Findings on the synthetic series
 
-The comparison ran the engine at `8eb7982f0` against the recompute at `c0d1efcae`, on the series without the
-zero-capture attempt; finding E1 below explains why. 56 of the 61 recomputed families agree exactly, 0 leaves
-are unmapped, and the result is `hold`. The five families that hold are:
+**Final rehearsal, 2026-11-08: exact AGREE.** Engine `a2e36bc19` (engine-r23d) against recompute
+`fdd02a96b`, on the full series (C3 and T2 zero-capture retries, the A37 <= 1 us seam window, the W1/B screen
+fixtures, the 24-member T3): comparator exit 0, `agree`, 61 families compared, 0 expected-empty,
+0 unexplained-empty, **0 unmapped** of 274,099 engine leaves. `release_v4.py` on the same custody exits 0,
+`agree`.
 
-| Family | Leaf paths (engine → recompute) | Classification |
+**Probe plan: two classified holds** (`test_probe_series_holds_only_on_the_classified_findings`). Every
+failing row traces to one of these two members/windows:
+
+| # | Probe | Leaf paths (engine → recompute) | Classification |
+|---|---|---|---|
+| P1 | W1 anchor 2: G1 timeout stops its episode (one turn kept, the timed-out G1 last) | `/fill/W1/checks/qwen3-30b-a3b/U1/thermal_excluded_members` 0 vs `acceptance.U1.W1.30B.x1_x4_members` 1; `/fill/anchor_sigma_w/{K, W1_anchor_block, ms_*, sigma_w2_*}`: K 12 / `included` vs W 10 / `excluded:X2` | **Bug, engine** (provisional): protocol v4 lists X1-X8 with X2 = "thermal gate/hold timeout" and G1: "Timeout stops the episode (X2)"; A9 applies the union of re-derived and recorded classes. Both builds count the timeout in U1(d) (`g1_h_timeouts` 1 = 1); only the recompute re-derives X2 from the timed-out gate. If the lead rules that X2 for a G1/H timeout must come from a recorded flag, it is an interpretation (A9). The fixture has no recorded flag; production may write one. |
+| P2 | C6 at a 9e9 s epoch: every interior seam 1.9-2.0 us (> 1 us) | every C6 member: engine eligible with energies equal to the recompute's own energies under full snapping (difference <= 2e-16 relative), recompute `energy_unavailable` (`pm_turn_span_uncovered`); then `eligible_m_per_pair` 56 vs 49 (REFUSE) and the C6-dependent fits, thresholds, U4/U6, carriers and balance | **Open interpretation, A21 (with A2(4)/A37)**: the restated A21 support rule (end accumulates own elapsed in float seconds, start = end - elapsed, seconds -> ns) leaves > 1 us interior gaps at this magnitude, which A2(4) excludes; the engine's placement leaves none it counts as uncovered. A second probe at 4.3e9 s showed the recompute's `round(x * 1e9)` making 1,024 ns seams where exact rounding makes 954 ns, so the seconds -> ns reading (RECOMPUTE-opus "Still open") is part of it. **No 2026-epoch impact**: at today's epoch both builds' seams are <= 512 ns and A37 snaps them; C5 agrees exactly. Raw bytes cannot place a > 1 us seam at a 2026 epoch under the A21 rule, so the 1.001 us boundary is covered by unit tests only (recompute `test_uncovered_owned_time_excludes_but_rounding_gaps_do_not`; engine-r23 hand tests). |
+
+**Resolved since the first rehearsal** (engine `8eb7982f0` / recompute `c0d1efcae`): E1 (zero-capture raw
+window crashed the engine), anchor σ_w (W1 included, raw and clamped), the honest H = 0 carrier fraction and
+`level_reached_at_h0`, the carrier status word, the W1 DC residual (now: value rows for every captured
+benign member, residual rows mirroring the GPU benign rows), the A2 G0/episode overlap, the A20 dropped-
+sample check and meter rate index, and the export contract (section 6a). Comparator-side corrections in the
+same work: A9 compares the class union only (`a9_class_components` exempt), A28 flags only for captured
+members, attempt-aware member tables for retried slots, and T assignments counted from the roster.
+
+## 6a. Export contract (R23, RUN_STATE lead ruling on the 2026-11-08 report)
+
+The exporter writes one custody in both layouts. Both adapters hold to these rules, and so does the
+synthetic writer (`tests/v4_release/common_series.py`).
+
+| Rule | Engine side (`engine-r23d`) | Recompute side (`independent_recompute_v4.py` @ `fdd02a96b`) |
 |---|---|---|
-| `anchor_sigma_w` | `/fill/anchor_sigma_w/{K,ms_window_j2,ms_error_j2,anchor_sigma_j}` → `acceptance.U4.anchor_sigma_w_print_only.{W,ms_window,ms_interaction,sigma_w2}`: K 11 vs W 12, and σ_w² 0 vs positive | **Open interpretation**, IR §5 (anchor σ_w row) under A14. The engine leaves the W1 anchors out and truncates a negative variance component at 0. The recompute includes W1 (A34: "W1 is a window record"). IR rules only K ≥ 3 and the 1e-6 bar. Print-only. |
-| `carrier_curve` | `/fill/benign_carriers/pairs/{spam,bank}/curve/0/1` → `claim.carrier_curve.<p>.fractions.0.fraction`: 1/56 vs 0 | **Open interpretation**, A7/A8. Can the H = 0 cell count a carrier whose untouched score exceeds the other carriers' threshold? The engine counts it; the recompute forces "H = 0 is never a detection". The engine's own `estimand_notes.known_H` says H = 0 is never a detection, so the lead should rule. |
-| `carrier_curve` | `/fill/benign_carriers/pairs/<p>/status` → `claim.carrier_curve.<p>.status`: `insufficient_calibration` vs `ok` | **Open interpretation**, A8(3): the status word when doses beyond the all-carrier prefix are unreachable. H50, H90, n per dose, both bootstrap intervals and the undefined-replicate counts all agree exactly. The engine word looks like a status-mapping defect; the engine owner should check it. |
-| `dc_benign`, `dc_benign_status`, `dc_training_sets` | `/fill/dc_secondary/<i>/{prediction_j,residual_j,residual_status,training_run_ids}` for the 10 W1 benign members → `dc_in.benign_residual_print_only` (no W1 entry) | **Engine deviation**, A20 read with A34. The engine fits a benign DC LOTO residual in W1, over 30B contrast and anchor members and the D development members. A20 says "the same LOTO structure" as the GPU fit, and A34 says W1 never enters fits. The benign C and T DC rows agree at 1e-3 relative (1,968 rows), as do their training sets. The lead should confirm. |
+| Sensor keys are production `policy.sensors.{s_fast, s_slow}` | production `Episode` layout, unchanged | `thermal_summary` reads `s_fast`/`s_slow` |
+| Anchors are exactly ordinals 1-4 (W1 included) with strictly series-unique ids `"<window_id>:<run_id>"`; bare, mixed, wrong-prefix and duplicate anchor ids refuse, and so does a prefixed non-anchor | engine window name as `window_id` (`C3:` in both C3 attempts); it strips a matching prefix for the R15 check | window RECORD id as `window_id` (`C3-z1:` for the zero-capture record); non-anchor ids repeat only across a retried slot's attempts; two captured members never share an id |
+| W1 is delivered as a window record (A34) | refuses a selection-only W1 in release runs | W1 is a window in `series.json` |
+| The export carries the W1 sentinel ordinals | the reference input keys `w1_sentinel_j` by `"5"`/`"17"` | the W1 record carries `sentinel_ordinals: [5, 17]`; it must equal the R15 W1 roster's sentinels, else `w1_sentinel_ordinals_mismatch` |
+| A G0 that overlaps the episode is custody-invalid (A2: "G0 lies before the episode") | production attribution | `g0_overlaps_episode` → `custody_invalid` |
+| KM003C rate index matches the poll period; a dropped sample inside a span makes that span's DC value unavailable, with a reason (A20) | production `span_has_drops` | `meter_stream` drops from the header `rate_idx`; `unavailable_reasons` |
 
-Other findings. None of these is a cross-build arithmetic disagreement:
-
-- **E1, an engine bug (raw-source path).**
-  - **Symptom.** A zero-capture window, with every member `captured: false` as ENGINE-sol's raw interface
-    requires, refuses the whole analysis: `KeyError 'pm_period_s'` in `thermal_desk.acceptance`, via
-    `acceptance.window_checks`.
-  - **Cause.** `raw.member`'s not-captured record has no `pm_period_s`.
-  - **Consequences.**
-    - The full series, with C3's zero-capture retry, cannot run through the engine.
-    - `test_rehearsal_v4.test_engine_runs_the_full_series` is an expected failure that flips when the bug is
-      fixed.
-    - The recompute handles the retry: 8 counted windows, the zero-capture window final and not counted.
-- **Exporter contract (A0) items.** The fixture resolved each of these; the lead's exporter must resolve them
-  too.
-  - `policy.sensors` is `{s_fast, s_slow}` in production and the engine, but `{fast, slow}` in the
-    recompute's layout.
-  - R15 reuses the four anchor run ids in every window, and a retry reuses its run ids. The recompute requires
-    series-unique run ids, so its layout qualifies repeats with the window id.
-  - The engine takes W1 sentinels 5/17 as reference input, while the recompute derives them.
-  - Production attribution refuses a G0 that overlaps the episode. `synth.py` starts the episode at the G0
-    start, so the fixture starts it 5 s after G0. The recompute does not refuse such an overlap. This is a
-    hard case for A2: an overlapping G0 that meets no owned work gives `custody_invalid` in the engine and an
-    eligible member in the recompute. **Open: A2.**
-  - `synth.write_meter` writes 100 ms polls under `rate_idx` 2 (20 ms in production `STEP_MS`). Production
-    reads that as dropped samples, but the recompute does not check device-counter drops at all. The fixture
-    uses `rate_idx` 1. **Open: A20**, which has no drop rule restated.
-  - **A27 seal scope.** The engine prints realized token counts for the members the recompute seals. Those
-    counts are compared by presence only (`sealed_presence`, exempt `a27_sealed_counts`). **Open.**
-- **A37 is not exercised.** The fixture's supports are whole seconds and no sub-µs seam arises. The engine head
-  has no A37 yet (see the top of this runbook).
+**A27 token-count seal scope, applied as written.** IR A27: "**Not scored; sealed** (hash only). 'Toward
+nothing' plus the v5 seal: a GPU score is as outcome-bearing for v5 as DC is. Only T sabotage is scored, and
+only for known-H" (RS 226 R15: "Sabotage members in C windows count toward nothing. Their DC rows stay sealed
+for v5"). The text seals the C-window sabotage MEMBER (hash only), not only its score. The recompute prints
+nothing but a hash for those members, token counts included; T-window members are outside A27 and print.
+The engine's `realized_counts` still lists token counts for these members. The comparator compares them by
+presence (`sealed_presence`) and names the engine's rows under `a27_sealed_counts`. This is not ambiguous; it
+is an engine-side cleanup that should drop those rows.
 
 ## 7. Before the real release
 
-1. Land A37 in the engine, re-pin `ENGINE_COMMIT`, and fix E1 (owners: Sol engine, Opus recompute).
-2. Lead rulings: anchor σ_w window set; the carrier curve's H = 0 cell and status word; DC residual population
-   in W1; A2 G0/episode overlap; A27 seal scope; and the H* grid (A7).
-3. The exporter writes the engine manifest, the recompute layout and the crosswalk from one custody, with the
-   same raw bytes. Stage (b) refuses otherwise.
-4. Re-run the three test modules, then run the release on the real custody into a new `$OUT`.
+1. Lead rulings on P1 (G1/H-timeout X2 source) and P2 (A21 seconds -> ns and support placement at large
+   magnitude; no 2026-epoch impact), and the still-open A7 H* grid.
+2. The exporter writes the engine manifest, the recompute layout and the crosswalk from one custody, with the
+   same raw bytes, to section 6a. Stage (b) refuses otherwise.
+3. Re-run the three test modules, then run the release on the real custody into a new `$OUT`.

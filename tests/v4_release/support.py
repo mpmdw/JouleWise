@@ -26,8 +26,8 @@ REPO = HERE.parents[1]
 sys.path.insert(0, str(HERE))
 import common_series  # noqa: E402
 
-ENGINE_COMMIT = "8eb7982f09c2d405259ce563f007c392f35f1c04"      # origin/engine-fix (R21 applied)
-RECOMPUTE_COMMIT = "c0d1efcae85d4eae5967b2073ea0213f3a8a4d91"   # align/2026-11-08-v4-recompute-opus (A37)
+ENGINE_COMMIT = "a2e36bc19e7e46de1c21890e884393d6bd06154f"      # origin/engine-r23d (R21 + A37 + R23 + R23c/d contract)
+RECOMPUTE_COMMIT = "fdd02a96bbe1b90817c6c738190c1816e89a06b3"   # align/2026-11-08-v4-recompute-opus (R23 + R23c/d contract)
 PY = sys.executable
 _TREES = {}
 
@@ -106,7 +106,8 @@ def _key(plan_name):
     return h.hexdigest()[:16]
 
 
-PLANS = {"full": dict(zero_capture=True, escalated=True), "no_zero_capture": dict(zero_capture=False, escalated=True)}
+PLANS = {"full": dict(zero_capture=True, escalated=True, a37=True),
+         "probes": dict(zero_capture=True, escalated=True, a37=True, probes=True)}
 
 
 def rehearsal(plan_name):

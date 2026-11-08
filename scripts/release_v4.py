@@ -38,11 +38,11 @@ import time
 SCHEMA = "joulewise.v4_release_verdict.v1"
 ROOT = Path(__file__).resolve().parents[1]
 RELEASE_BARS = ROOT / "configs" / "analysis" / "v4" / "recompute_bars.json"
-RELEASE_BARS_SHA256 = "912518f782f4067e7966b0a6b400301a002cd78b3c0334c456e28f1ba050151a"
+RELEASE_BARS_SHA256 = "0875d452b7b1132e86feab5202035a4ea9960283daf1794084906b7f96406744"
 COMPARATOR = ROOT / "scripts" / "compare_v4_recompute.py"
 RECOMPUTE_PROGRAM_PATH = "scripts/independent_recompute_v4.py"
-# The recompute's own pin (tests/independent_recompute_v4/test_hygiene.py at c0d1efcae).
-RECOMPUTE_PROGRAM_SHA256 = "28db6c12e12aba264c619322790f0b01aeaedf688394f5d7d58a96064a85971c"
+# The recompute's own pin (tests/independent_recompute_v4/test_hygiene.py at fdd02a96b, R23).
+RECOMPUTE_PROGRAM_SHA256 = "48d7752bdecf546d85b1f30d4ef7b0bbc10bba4f630ba90b75020fd595e85fee"
 ENGINE_RECORD_SCHEMA = "joulewise.v4_engine_run_record.v1"
 HEX40, HEX64 = re.compile(r"[0-9a-f]{40}"), re.compile(r"[0-9a-f]{64}")
 FLOAT_TOKEN = re.compile(r"(?<![A-Za-z0-9])(?:\d+\.\d+(?:[eE][+-]?\d+)?|\d+[eE][+-]?\d+)(?![A-Za-z0-9])")

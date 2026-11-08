@@ -40,7 +40,7 @@ class ContractTests(unittest.TestCase):
 class ReleaseTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.base = support.rehearsal("no_zero_capture")
+        cls.base = support.rehearsal("full")
         cls.tmp = tempfile.TemporaryDirectory()
         cls.dir = Path(cls.tmp.name)
         cls.checkout = support.release_checkout(cls.dir / "checkout")
@@ -55,14 +55,14 @@ class ReleaseTests(unittest.TestCase):
         shutil.copytree(self.base, dest, copy_function=os.link)   # hard links: cheap; never write through them
         return dest
 
-    def test_synthetic_release_holds_on_the_classified_disagreements(self):
+    def test_synthetic_release_agrees(self):
         v = self.verdict
-        self.assertEqual((self.code, v["verdict"], v["reason"]), (1, "hold", "comparator_disagreement"))
+        self.assertEqual((self.code, v["verdict"], v["reason"]), (0, "agree", None))
         self.assertEqual(v["stages"]["digests"]["status"], "verified")
         self.assertEqual(v["stages"]["recompute"]["exit"], 0)
         fams = v["stages"]["comparator"]["families"]
         held = {k for k, f in fams.items() if f["verdict"] not in ("agree", "exempt", "integrity_only", "expected_empty")}
-        self.assertEqual(held, {"anchor_sigma_w", "carrier_curve", "dc_benign", "dc_benign_status", "dc_training_sets"})
+        self.assertEqual(held, set())
         self.assertEqual(v["stages"]["comparator"]["unmapped_leaves"], 0)
         (self.dir / "release-wall-s.txt").write_text(str(self.wall))
 

@@ -32,9 +32,10 @@ COHORT = dict(identity=dict(model_source="synthetic/Qwen", model_revision="synth
                             runtime_sha256="a" * 64, execution_policy_sha256="b" * 64),
               configuration=dict(max_episode_decode_tokens=16384, deadman_s=1200.0, max_tokens=4096, max_turns=12))
 EXPORT_NOTES = (
-    "policy.sensors: production and the engine use {s_fast, s_slow}; RECOMPUTE-opus.md's layout reads {fast, slow}",
-    "run ids: R15 reuses the four anchor run ids in every window and a retried slot reuses its run ids; the "
-    "recompute requires series-unique run ids, so its layout qualifies repeated ids with the window id",
+    "R23: the export uses production sensor keys policy.sensors.{s_fast, s_slow} in both layouts",
+    "R23: anchor run ids (and a retried slot's repeated ids) are series-unique '<window_id>:<run_id>' in the "
+    "recompute layout; the engine keeps the R15 ids; the crosswalk maps them",
+    "R23: the W1 window record carries sentinel_ordinals [5, 17]; the recompute checks them against R15",
     "clock stamps: the engine takes ClockStamp seconds, the recompute paired_clock_stamps_ns; every synthetic "
     "stamp is a whole second, so both are exact",
     "U3 pilot evidence: the engine takes energy pairs, the recompute relative differences; pairs are written "
@@ -110,16 +111,87 @@ def w1_roster():
     return rows
 
 
-def default_plan(zero_capture=True, escalated=True):
-    """W1, C1-C8 (C3's first attempt is a zero-capture refusal, retried), T1-T3 (T3 escalated to 24)."""
-    plan = [dict(window="W1", attempt=1, zero_capture=False, escalated=False)]
+A37_EPOCH_S = 9_000_000_000   # float seconds grid 1.907 us: every interior seam > 1 us under either ns conversion
+
+
+def default_plan(zero_capture=True, escalated=True, a37=True, screens=True, probes=False):
+    """W1, C1-C8 and T1-T3. C3's and T2's first attempts are zero-capture refusals, each retried in its slot;
+    T3 is escalated to 24 members.
+
+    Screen fixtures (``screens``, R23 clarifications c-e):
+    - W1 anchor 2 carries a battery B code (a charging flag): it fails the member-eligibility screen, so
+      W1 leaves the anchor sigma_w table (``W1_anchor_block: excluded:B``) like any C/T window (c);
+    - T1 ordinal 6 and T2's retry ordinal 6 carry a battery B code (``battery.member_span``), with T2's
+      zero-capture attempt between them: the B run must skip the zero-capture attempt (d);
+    - the zero-capture attempts' members are not captured; the retry's exclusions come only from the
+      counted attempt (e).
+
+    A37 seam fixture (``a37``): C5 has non-integer sample placement (frame elapsed values of 1 s + 333 ns
+    and 1 s + 777 ns, alternating). At the 2026 epoch the A21 float support rule leaves interior gaps of
+    238-256 ns (<= 1 us: snapped).
+
+    Probe plan (``probes``), kept apart from the AGREE rehearsal because each probe exposes a classified
+    cross-build hold: W1 anchor 2 ALSO has a G1 timeout that stops its episode (P: "Timeout stops the
+    episode (X2)"), and C6 takes the other side of the A37 bar: C6 with the same jitter
+    at a synthetic epoch of 9e9 s, where the float seconds grid is 1.907 us, so its interior gaps are
+    1-2 us (> 1 us: uncovered owned time). Raw bytes cannot place a > 1 us seam at a 2026 epoch under the
+    A21 rule (start = end - own elapsed), hence the epoch. ``seams.json`` counts them."""
+    plan = [dict(window="W1", attempt=1, zero_capture=False, escalated=False,
+                 battery_b=[2] if screens and not probes else [], g1_timeout=[2] if probes else [])]
     for w in ORDER:
-        if w == "C3" and zero_capture:
+        if w in ("C3", "T2") and zero_capture:
             plan.append(dict(window=w, attempt=1, zero_capture=True, escalated=False))
-            plan.append(dict(window=w, attempt=2, zero_capture=False, escalated=False))
+            plan.append(dict(window=w, attempt=2, zero_capture=False, escalated=False,
+                             battery_b=[6] if screens and w == "T2" else []))
         else:
-            plan.append(dict(window=w, attempt=1, zero_capture=False, escalated=escalated and w == "T3"))
+            step = dict(window=w, attempt=1, zero_capture=False, escalated=escalated and w == "T3",
+                        battery_b=[6] if screens and w == "T1" else [])
+            if a37 and w == "C5":
+                step["seams"] = True
+            if probes and w == "C6":
+                step["seams"] = True
+                step["epoch_s"] = A37_EPOCH_S
+            plan.append(step)
     return plan
+
+
+JITTER_NS = (333, 777)
+_ELAPSED = b"\n\t<key>elapsed_ns</key>\n\t<integer>1000000000</integer>"
+
+
+def _jitter_supports(base, stats):
+    """Rewrite each frame's top-level elapsed_ns to 1 s + jitter, then count the
+    interior seams the A21 support rule gives (first sample ends at the anchor, each later end adds its
+    own elapsed in float seconds, start = end - elapsed, seconds -> ns by round)."""
+    raw = base / "raw" / "powermetrics.plist"
+    frames = raw.read_bytes().split(b"\x00")
+    out, elapsed = [], []
+    for i, f in enumerate(frames):
+        if not f:
+            out.append(f)
+            continue
+        e = NS + JITTER_NS[len(elapsed) % len(JITTER_NS)]
+        assert f.count(_ELAPSED) == 1
+        out.append(f.replace(_ELAPSED, _ELAPSED.replace(b"1000000000", str(e).encode())))
+        elapsed.append(e)
+    raw.write_bytes(b"\x00".join(out))
+    anchor = json.loads((base / "metadata.json").read_text())["uncertainty_evidence"]["clock_anchor"][
+        "first_sample_end_point_epoch_s"]
+    stats = stats or {"gap_le_1us": 0, "gap_gt_1us": 0, "overlap_le_1us": 0, "overlap_gt_1us": 0,
+                      "max_abs_seam_ns": 0}
+    cumulative, prev_end = 0.0, None
+    for i, e in enumerate(elapsed):
+        length = e / NS
+        if i:
+            cumulative += length
+        end_s = anchor + cumulative
+        start, end = round((end_s - length) * NS), round(end_s * NS)
+        if prev_end is not None and start != prev_end:
+            d = abs(start - prev_end)
+            stats[("gap" if start > prev_end else "overlap") + ("_le_1us" if d <= 1000 else "_gt_1us")] += 1
+            stats["max_abs_seam_ns"] = max(stats["max_abs_seam_ns"], d)
+        prev_end = end
+    return stats
 
 
 def sha256_bytes(raw):
@@ -140,22 +212,32 @@ def write_series(root, synth, *, plan=None, seed=7, period_ns=NS, saboteur_extra
     plan = plan or default_plan()
     rng = random.Random(seed)
     template = synth.FrameTemplate(n_tasks=0, seed=seed, clusters=0)
-    epoch_offset = synth.EPOCH0_S * NS
     clock = 0
     series = {"schema": "joulewise.v4_recompute_input.series.v1", "windows": []}
     engine_windows, crosswalk, used_rec_runs = [], [], set()
     w1_sentinel_j = {}
+    seam_stats = {}
     for step in plan:
         wid, attempt = step["window"], step["attempt"]
         role = "W1" if wid == "W1" else ("calibration" if wid[0] == "C" else "test")
         rec_wid = wid if not step["zero_capture"] else f"{wid}-z{attempt}"
         slots = w1_roster() if wid == "W1" else r15_roster(wid, escalated=step["escalated"])
+        # R23 export contract, engine layout: anchor run ids are "<window_id>:<run_id>" with the engine's
+        # window name (engine-r23b strips a matching prefix for the R15 roster check).
+        slots = [dict(s, run_id=f"{wid}:{s['run_id']}", local_run_id=s["run_id"]) if s["series_role"] == "anchor"
+                 else dict(s, local_run_id=s["run_id"]) for s in slots]
         series["windows"].append({"window_id": rec_wid, "role": role})
         w_start = clock
-        rec_members, identity, engine_records = [], {}, []
+        rec_members, identity, engine_records, battery_codes = [], {}, [], {}
         for slot in slots:
-            rid = slot["run_id"]
-            rec_rid = rid if rid not in used_rec_runs else f"{rid}~{rec_wid.lower()}"
+            rid = slot["run_id"]                  # engine-layout id
+            local = slot["local_run_id"]          # R15 id
+            # R23 export contract: anchor run ids are strictly series-unique "<window_id>:<run_id>" (in the
+            # recompute layout the window id is the attempt's record id, e.g. "C3-z1"); non-anchor ids are
+            # never prefixed, and repeat only across the attempts of a retried slot.
+            rec_rid = f"{rec_wid}:{local}" if slot["series_role"] == "anchor" else local
+            if slot["series_role"] == "anchor" and rec_rid in used_rec_runs:
+                raise ValueError("anchor run id not series-unique: " + rec_rid)
             used_rec_runs.add(rec_rid)
             short = SHORT[slot["task_pair"]]
             kind = {"supplemental_sentinel": "sentinel"}.get(slot["series_role"], slot["series_role"])
@@ -191,24 +273,35 @@ def write_series(root, synth, *, plan=None, seed=7, period_ns=NS, saboteur_extra
             if "contrast" in slot and slot["contrast"]["arm"] == "S":
                 for t in m.turns:
                     t["_energy"] += 8.0
-            ident = hashlib.sha256((f"traj-{identical}" if identical is not None else rid).encode()).hexdigest()
+            ident = hashlib.sha256((f"traj-{identical}" if identical is not None else local).encode()).hexdigest()
             extra = {"identity_sha256": ident, "seed": slot["expected_episode_seed"],
                      "cohort_sha256": synth.COHORT}
-            synth.write_member(rec, rec_wid, m, epoch_offset, extra=extra)
+            synth.write_member(rec, rec_wid, m, step.get("epoch_s", synth.EPOCH0_S) * NS, extra=extra)
             base = rec / "windows" / rec_wid / "members" / rec_rid
+            if step.get("seams"):
+                seam_stats[f"{wid}#{attempt}"] = _jitter_supports(base, seam_stats.get(f"{wid}#{attempt}"))
             # The recompute layout's episode gets the production gate "reference" too (ignored there).
             ep_path = base / "outputs" / "align_episode.json"
             ep = json.loads(ep_path.read_text())
             g0 = ep["hardware"]["thermal"]["intervals"][0]
             for g in ep["hardware"]["thermal"]["intervals"]:
                 g["reference"] = dict(g0["release"])
-            # Production attribution refuses a G0 that overlaps the episode (G0 precedes it); synth.py
-            # starts the episode at the G0 start. Start the episode 5 s after G0 ends, in both layouts.
-            ep["start_ns"] = g0["end_ns"] + 5 * NS
-            ep["hardware"]["registered_span_ns"] = [ep["start_ns"], ep["end_ns"]]
+            if slot["ordinal"] in step.get("g1_timeout", []):
+                # A G1 timeout stops the episode (P: "Timeout stops the episode (X2)"): the record keeps the
+                # turns before the timed-out gate and ends at the gate's end.
+                ivs = ep["hardware"]["thermal"]["intervals"]
+                g1 = next(g for g in ivs if g["kind"] == "G1")
+                g1["outcome"] = "timeout"
+                ep["turns"] = [t for t in ep["turns"] if t["index"] < g1["turn"]]
+                ep["hardware"]["thermal"]["intervals"] = [g for g in ivs if g["kind"] == "G0" or g["turn"] <= g1["turn"]]
+                ep["end_ns"] = g1["end_ns"]
+                ep["hardware"]["registered_span_ns"] = [ep["start_ns"], ep["end_ns"]]
             ep_path.write_text(json.dumps(ep, indent=1, sort_keys=True) + "\n")
             meta = json.loads((base / "metadata.json").read_text())
             engine_records.append(_engine_member(root, base, slot, ep, meta, ident, step, wid, w_start))
+            if slot["ordinal"] in step.get("battery_b", []):
+                engine_records[-1]["battery"] = dict(engine_records[-1]["battery"], flags=["battery.member_span"])
+                battery_codes[rec_rid] = ["battery.member_span"]
             if wid == "W1" and slot["ordinal"] in (5, 17):
                 w1_sentinel_j[str(slot["ordinal"])] = _owned_gpu_j(m)
             clock = m.end_ns + 60 * NS
@@ -219,10 +312,6 @@ def write_series(root, synth, *, plan=None, seed=7, period_ns=NS, saboteur_extra
         if not step["zero_capture"]:
             mpath = rec / "windows" / rec_wid / "meter" / "km003c-0.jsonl"
             synth.write_meter(mpath, (w_start - 20 * NS, clock))
-            # synth.write_meter writes 100 ms polls under rate_idx 2 (production STEP_MS: 20 ms), which the
-            # production parser reads as dropped samples. Use rate_idx 1 (100 ms), matching the polls.
-            text = mpath.read_text()
-            mpath.write_text(text.replace('"rate_idx": 2', '"rate_idx": 1', 1))
             streams["km003c-0.jsonl"] = synth.sha256_file(mpath)
             meter_rel = dict(path=str(mpath.relative_to(root)), sha256=streams["km003c-0.jsonl"])
             for rec_row, er in zip(rec_members, engine_records):
@@ -231,13 +320,15 @@ def write_series(root, synth, *, plan=None, seed=7, period_ns=NS, saboteur_extra
         synth.dump(rec / "windows" / rec_wid / "window.json", {
             "schema": "joulewise.v4_recompute_input.window.v1", "window_id": rec_wid, "role": role,
             "members": rec_members, "adjudication": {"final": True, "excluded": {}}, "identity": identity,
-            "battery": {}, "meter": {"streams": streams}, "cohort_sha256": synth.COHORT})
+            "battery": battery_codes, "meter": {"streams": streams}, "cohort_sha256": synth.COHORT,
+            **({"sentinel_ordinals": [5, 17]} if wid == "W1" else {})})
         raw_doc = canonical(dict(members=engine_records))
         raw_path = root / "engine" / f"{wid}-a{attempt}.json"
         raw_path.parent.mkdir(parents=True, exist_ok=True)
         raw_path.write_bytes(raw_doc)
         engine_windows.append(dict(window=wid, attempt_id=f"{wid}#{attempt}", status="final",
-                                   roster=[{k: v for k, v in s.items() if k != "contrast"} for s in slots],
+                                   roster=[{k: v for k, v in s.items() if k not in ("contrast", "local_run_id")}
+                                           for s in slots],
                                    raw_source=dict(path=str(raw_path.relative_to(root)),
                                                    sha256=sha256_bytes(raw_doc))))
     synth.dump(rec / "series.json", series)
@@ -266,6 +357,7 @@ def write_series(root, synth, *, plan=None, seed=7, period_ns=NS, saboteur_extra
     doc = dict(schema="joulewise.v4_release.crosswalk.v1", synthetic=True, members=crosswalk,
                export_notes=list(EXPORT_NOTES))
     (root / "crosswalk.json").write_bytes(canonical(doc))
+    (root / "seams.json").write_bytes(canonical(seam_stats))
     return doc
 
 
@@ -286,7 +378,7 @@ def _engine_member(root, base, slot, ep, meta, ident, step, wid, w_start):
     hw = ep["hardware"]
     th = hw["thermal"]
     policy = th["policy"]
-    sensors = {"s_fast": policy["sensors"]["fast"], "s_slow": policy["sensors"]["slow"], "fan_keys": []}
+    sensors = {"s_fast": policy["sensors"]["s_fast"], "s_slow": policy["sensors"]["s_slow"], "fan_keys": []}
     turns = []
     for t in ep["turns"]:
         turns.append(dict(index=t["index"], start_ns=t["start_ns"], end_ns=t["end_ns"],
@@ -303,7 +395,8 @@ def _engine_member(root, base, slot, ep, meta, ident, step, wid, w_start):
                               outcome=g["outcome"], entry_stamp=stamp, exit_stamp=stamp,
                               exit_sample_ns=g["exit_sample_ns"], release=dict(g["release"]),
                               reference=dict(g["reference"])))
-    episode = dict(schema=RECORDS_SCHEMA, episode_id=slot["run_id"], task_pair="shade/" + slot["task_pair"],
+    # A captured anchor Episode keeps its local R15 id (engine-r23b binds it to the exported id).
+    episode = dict(schema=RECORDS_SCHEMA, episode_id=slot["local_run_id"], task_pair="shade/" + slot["task_pair"],
                    condition=slot["condition"], agent_model=slot["model_id"], endpoint="mock",
                    seed=ep["seed"], clock_domain="host", start_ns=ep["start_ns"], end_ns=ep["end_ns"],
                    turns=turns, flags=list(ep["flags"]),

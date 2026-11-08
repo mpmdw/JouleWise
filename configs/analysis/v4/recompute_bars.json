@@ -12,6 +12,12 @@
    "reason": "token counts of members the recompute seals; the engine prints them. OPEN: A27 seal scope",
    "ruling": "R21 A27 (open: seal scope for token counts)"
   },
+  "a28_not_captured_flags": {
+   "classification": "exempt",
+   "kind": "exact",
+   "reason": "A28 flags (battery.unobserved) describe captured members; a not-captured member's flags are not comparable",
+   "ruling": "R21 A28"
+  },
   "a32_no_rebuild": {
    "classification": "exempt",
    "kind": "exact",
@@ -48,6 +54,12 @@
    "reason": "carrier doses 384/768/1536 outside the council grid have no recompute counterpart. OPEN interpretation",
    "ruling": "R21 A7/A8 (open: carrier grid)"
   },
+  "a9_class_components": {
+   "classification": "exempt",
+   "kind": "exact",
+   "reason": "re-derived/recorded split and mismatch flag of a NOT-captured member: nothing is re-derived; the class union is compared",
+   "ruling": "R21 A9 (compare classes)"
+  },
   "a9_reason_vocabulary": {
    "classification": "exempt",
    "kind": "exact",
@@ -63,7 +75,7 @@
    "bar": 1e-06,
    "classification": "recomputed",
    "kind": "rel",
-   "reason": "30B anchor sigma_w moments, print-only (IR section 5: computed by both, K >= 3, compare at 1e-6)"
+   "reason": "30B anchor sigma_w moments, print-only, W1 included (R23-1: raw MoM and max(0, raw); IR section 5: K >= 3, 1e-6)"
   },
   "balance_by_condition": {
    "classification": "recomputed",
