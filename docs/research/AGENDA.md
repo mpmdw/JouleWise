@@ -18,6 +18,30 @@ Started 2026-11-07 by the laptop lead from Ed's decisions. Update it in place; k
 
 - **Critical path:** R0-L3 merge (#699/#700) → R0 → R1 (RUN_STATE 202) → R10 procedure → W1 kit (`lane/2026-11-07-w1-kit-r10`) → close the pre-W1 registration blockers → the blind registration gate → W1 → D windows (Q4) → registration-grade calibration (Q6) → adaptive red team and positive controls, preregistered before data.
 
+## Timeline: next four weeks (set 2026-11-08; the MBP is the bottleneck)
+| When | MBP (measurement) | Desk and analysis | Deadlines and Ed |
+|---|---|---|---|
+| **Week 1 (Nov 8-14)** | R0-L3 merges → R0 re-run 11 → **R1 night** (about 16 h) → the W1 budget decision (R10 procedure) → by day: **BYTES stage 1**, and Flash-Next live tests if the SSD arrives | Block 5: comparator mapping fix → re-check → final Fable look → **Ed's unseal OK**. The v5 design is decided. v4 registration blockers, meter capture and transcript sealing → the blind registration gate → **W1** aimed at late week | BYTES checkpoint **Nov 12**; Paper 1 scope freeze **Nov 15** |
+| **Weeks 2-3 (Nov 15-28)** | W1 → D windows (3 × up to 16.5 h) → v4 registration-grade calibration (about 7 windows), with the meter recording everything | **Paper 1 writing window** (BYTES, known-bytes, what laptop counters cannot see), no redesigns; v5 built and preregistered (Sol builds, Opus and Sol cross-review) | Paper 1 draft to Ed about **Nov 22**; submission **Nov 30** |
+| **Week 4 (Nov 29-Dec 5)** | v4 calibration finishing; v5 adversary and test windows begin in December | v4 tripwire result taking shape; v5 registered | Paper 1 submitted |
+| **Dec 2026-Feb 2027** | v5 windows, red team, positive-control nights | Analysis infrastructure; Flash-Next and interp work when spare | |
+| **Mar-Apr 2027** | Any follow-ups | Analysis, blind release, writing | **NeurIPS 2027** (about mid-May) |
+
+**Slip risks:**
+- W1's budget fallback may need a 4-bit R1 night (+1-2 days).
+- The registration gate may find more to fix.
+- Flash-Next and the SSD compete with v4 for daytime Mac use.
+- The first R0 under R0-L3 is the real test of the macOS-noise fix.
+
+**Ed's items:**
+- the Block 5 unseal OK;
+- SSD plug and unplug;
+- per-window physical setup (Optimized Battery Charging off, an ambient logger);
+- the API monitor budget, and about 10 rented GPU-hours for the behavioural probe;
+- the OSS posts when ready.
+
+Strategy behind this plan: `docs/research/research-strategy.md`.
+
 ## Ed's direction (2026-11-07)
 - **ALIGN claim:** "sabotage leaves an energy signature" (protocol v4). More windows and 30B positive-control nights are approved. Registration grade was ruled under Q6 (RUN_STATE 204).
 - **Paper 1** is led by BYTES and known-bytes (what a laptop's own counters can and cannot resolve). It is accepted, though Ed finds it less exciting than ALIGN. BYTES stage 1 is due 12 Nov.
