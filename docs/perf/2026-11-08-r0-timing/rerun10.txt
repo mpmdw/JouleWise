@@ -1,0 +1,54 @@
+TIMING ONLY — observed records; unavailable fields are not zero
+Zero phase totals mean no interval attributed, not proof of absent work.
+
+Observed envelope: 987.167095 s (observed_envelope_of_named_sources)
+phase             seconds      fraction
+arm                 0.000000    0.000000%
+dwell               0.000000    0.000000%
+idle                0.000000    0.000000%
+scaffold            0.000000    0.000000%
+decode              0.000000    0.000000%
+gates               0.000000    0.000000%
+holds               0.000000    0.000000%
+references          0.000000    0.000000%
+finalize            0.000000    0.000000%
+offload             0.000000    0.000000%
+unattributed      987.167095  100.000000%
+
+R0 DURATION BUDGET (unplaced sequential check totals; separate from epoch ledger)
+format: native_report
+run wall: 987.167096 s (recorded_monotonic_total_seconds)
+epoch envelope: 987.167095 s
+check	model	seconds
+smc	-	956.777365
+checks total: 956.777365 s
+outside timed checks / missing check timing: 30.389732 s
+budget rounding allowance (nearest decimal assumed): +/-0.000000 s
+R0 RUNGS (nested recorded call sums; rung wall is unavailable)
+R0 CALLS (nested diagnostics; do not add to check totals)
+CPU observation windows: 4; union=987.029456 s (NOT wait or guard execution time)
+observed pre-run dwell: unavailable s
+finish-to-agent-resume gap: unavailable s (unattributed; outside run)
+R0 unavailable: arm, quiet_guard_wait, finalize, push, check_placement, rung_wall, dwell
+
+MEMBERS (seconds; phase shares use the member's observed wall)
+member	wall	idle	scaffold	prefill	decode	tool	G0	G1	H	unknown	tail	turns	tokens	unavailable
+
+STAGES (inclusive envelopes; do not add these to the disjoint ledger)
+
+R1 ATTEMPTS (aggregate batch waits are unplaced; never added to wall)
+
+CEILING: unavailable
+  origin-to-terminal=unavailable s; cap=unavailable s
+  unused headroom=unavailable s; after last stage=unavailable s
+  idle-to-ceiling cause: unproven
+Unavailable phase boundaries: arm, dwell, idle, scaffold, decode, gates, holds, references, finalize, offload
+
+WARNINGS
+ledger: unattributed_wall_ns=987167095000
+
+SOURCES (committed bytes; SHA-256)
+commit: ac801585ee512d796d80e1f54e9b3ff8358c8797
+docs/align/r0/2026-11-07-rerun10/report.json 0a8c79351a41bd5db9d7c5628ef8242e2805e285385f436eae429b35012e1e6b
+phase annotations: []
+stage annotations: {}
