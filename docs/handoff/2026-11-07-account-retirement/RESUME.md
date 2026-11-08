@@ -80,3 +80,26 @@ Written by the laptop lead (Opus 5.5, session 1544c617) before Ed retired this C
   - whether the Khiani paper is connected to us;
   - the OSS questions: the license, the "John Davis" alias, and running upstream code in sandboxes;
   - a Paper 1 retitle.
+
+## Update, about 19:50 PST 11-07
+- **Block 5 r4 merged and tagged:** `b5/analysis-r4` = `ab1e0098d` (PR #697; executing review ADMIT, cold Fable ADMIT; dispositions in the PR body). DLE-4 owes one follow-up sentence (exec Low 1).
+- **dry-m is running** (blind; staging `/Users/edr/jw-b5-staging/dryrun-m`, custody `/Users/edr/jw-b5-custody/dry-m`, 8 workers, worktree `jw-wt/b5-r4-run`, started about 19:40 PST). It is expected to take about 1 h 40 min. Read only its exit code; exit 3 (the GAMMA outcome class) is no longer expected, but read it before assuming.
+- **Release check after dry-m:** in `jw-wt/b5-r4-run`, run `TMPDIR=/private/tmp/jwrelchk-m-tmp nice -n 5 /opt/homebrew/bin/python3.13 -B scripts/release_b5.py --custody /Users/edr/jw-b5-custody/dry-m --window-index configs/analysis/b5/analysed_windows.json --pinned-commit ab1e0098dbd0ab839c8f278088221aa8aa4de8d2 --restricted-out /Users/edr/jw-b5-custody/release-check-drym-<UTC> --workers 6 > <out>.stdout-UNREAD 2> <out>.stderr-UNREAD`.
+  - Exit 0 means agree: ask Ed for the unseal OK.
+  - Exit 1 means a hold. Read only `verdict.json` through a float-masking printer, and attribute failing rows by family and contrast id. If GAMMA still holds, check the binding sub-check words with `tools/probe_d5_kinds.py` (cold MEDIUM-1: the order and contiguity checks run on real data for the first time).
+  - The release comparator cannot pass registered null outcomes (`b5-release-to-paper.md`). Rule on that blind if any family is null.
+- **R0:** re-runs 8-10 were refused by routine macOS activity (trustkit, WindowServer/ControlCenter with the display on since 11-05, routined during a dasd wave).
+  - Ruling **R0-L3**: contention is recorded and not fatal; one redo on a sustained ≥ 0.5-core single process, excluding kernel_task; the display sleeps with a 300 s dwell. It is in PRs #699 (lane) and #700 (main). Cloud reviews were launched by the magistrate (RUN_STATE 208), which may merge them if both reviews admit with nothing above LOW.
+  - After that, R0 runs, then R1 (RUN_STATE 202).
+  - #694 (the sampler) conflicts with #699 in QuietGuard; resolve before merging.
+- **OSS fix kits (read-only, UNRUN):** branch `oss/2026-11-07-fix-kits`, `docs/oss/2026-11-07/`. mlx-vlm is now `Neywa-Labs/mlx-vlm` (transferred from Blaizzy).
+- **Interp × energy:** six Sol desk jobs are in flight (`docs/research/interp-energy-desk-work.md`). Study PR #702. Agenda: `docs/research/AGENDA.md`.
+- **Ed, 11-07:**
+  - ALIGN claim "sabotage leaves an energy signature"; more windows OK.
+  - Q4 yes, Q6 registration grade (RUN_STATE 204).
+  - MIT license.
+  - The "John Davis" alias is his.
+  - Ping him before running upstream code (the auto-mode classifier also blocks it; he may add a permission rule).
+  - The Khiani paper is independent.
+  - Interp is his main interest.
+- `tools/launch_b5_dry_run.zsh`: fixed a quoting bug (the tag lookup was in single quotes).
