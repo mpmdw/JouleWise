@@ -200,7 +200,7 @@ of branch `lane/2026-11-06-b5-lean-release`.
 ## Not adopted for now: CARE drafts DLE-3, DLE-4 and DLE-5 (lead, 2026-11-06)
 
 These are CARE §4's drafts. Their numbers are the care audit's draft numbers, not this log's entry numbers; the
-log's own DLE-3 (2026-11-07, below) is a different entry.
+log's own DLE-3 and DLE-5 (2026-11-07, below) are different entries.
 - **DLE-3**: step-1 strict validation by hash binding.
 - **DLE-4**: memoizing or hash-binding the 3b candidate refits.
 - **DLE-5**: dropping the 120 s analysis-path wall deadline.
@@ -487,6 +487,113 @@ set, which is a separate ruling. This note records the gap.
     they are expected to pass, but this is not yet shown. A refusal there would be a new D5 finding, not covered by
     this entry.
   - The r3 dry run is not released.
+
+> The release event has not happened. The lead has seen no Block 5 energy or outcome value. Ed delegated
+> preregistration rulings to the lead.
+
+---
+
+## Signing statement for DLE-5
+
+DLE-5 carries the following statement verbatim, made by the signer at signing:
+
+> The release event has not happened. The lead has seen no Block 5 energy or outcome value. Ed delegated
+> preregistration rulings to the lead.
+
+Signer: the block-5 lead (Opus), 2026-11-07. The gap was found blind, at the r4 release check: the lead read only
+the comparator's public line (per-family pass and fail counts, `step11_unmapped` count) and the unmapped leaf paths,
+with `*` for each list item and each floor cell id as printed. No energy value, interval, outcome word of a real
+contrast or other outcome-bearing content was seen by the lead or by the fixing seat, which read code and the
+registration and worked on synthetic fixtures only.
+
+---
+
+## DLE-5. Release tooling: the comparator maps the GAMMA attribution-floor leaves of the fill
+
+- **Status.** ADOPTED, 2026-11-07, on `lane/2026-11-07-b5-cmp-floor-leaves`. A tooling coverage fix in the
+  comparator (`scripts/compare_b5_recompute.py`, DLE-1 stage (c)). It changes no L9 output and no recompute output:
+  the analysis commit stays `b5/analysis-r4` (`ab1e0098d`) and `scripts/independent_recompute_b5.py` is unchanged
+  (its program digest too). The release script runs the committed comparator at HEAD, so the fix takes effect when
+  the release check re-runs after merge; no analysis pin is rebound.
+- **Source.** The r4 release check. The r4 dry run exits 0; every result family of the comparison is AGREE with no
+  failing row; the comparator refuses `step11_unmapped_fill` with 84 unmapped leaves, all of the attribution-floor
+  metadata, printed now that DLE-4 lets the GAMMA floors resolve. Before r4 those floors were refused, so no fill
+  carried these leaves and no rule had met them.
+
+### The gap
+
+- **Original rule.** DLE-1 stage (c) and the comparator's step-11 coverage (RC-CMP-3 X1, RC-CMP-5 S1, RC-CMP-6 G5):
+  every leaf of the fill and of the disclosure record is either a copy of an agreeing compared row or named by an
+  exemption; a leaf no rule matches refuses the run. That rule is right and is kept.
+- **What the producers print.** When a GAMMA contrast's floor resolves and one of its source cells is
+  attribution-limited (D-078: the admissible-set uncertainty of a form dominates its guarded point floor;
+  `joulewise/detection_floor.py` `_add_attribution_limit_metadata`), the claim verdict, and so the fill that copies
+  it, carries:
+  1. on the floor (`analysis_engine/__init__.py`): `floor_source`, `floor_limit_class`, `single_count_discipline`,
+     and `point_floor_diagnostics` keyed by source cell then form;
+  2. on each limited resolution (`analysis_engine/inputs.py`): the same words and discipline, and the diagnostics
+     keyed by form for an `exact` resolution, by source cell then form for a `transported` one;
+  3. in `claim_evaluation.floor_limit` (`analysis_engine/claims.py` `evaluate_claim`): `floor_limit_class`,
+     `floor_source`, `published_floor_j`, `point_floor_diagnostics` (the floor's, keyed by source cell then form) and
+     `single_count_discipline`.
+
+  Each diagnostic is `detection_floor._point_floor_diagnostic`: `label` (`repeatability_diagnostic`),
+  `published_claim_floor` (false), `unguarded_floor_j`, `guard_factor`, `guarded_floor_j`.
+- **Defect: the comparator is the wrong side.** No rule matched (3). The rules for (1) and (2) named a diagnostic
+  directly under `point_floor_diagnostics` (`(unguarded_floor_j|guard_factor|guarded_floor_j)` as the named
+  exemption `FLOOR_DIAGNOSTICS`, the label and flag as uncovered words), a shape no producer writes, so the
+  producers' nested leaves were unmapped too. The synthetic comparator fixtures carried no attribution-limited
+  floor, and the one test of these rules used the flat shape.
+- **The count.** The leaf shapes the lead read name (3)'s class, source and diagnostics. With
+  `published_floor_j` and the 11 words of the discipline object that (3) also prints, and the floor and resolution
+  copies of (1) and (2), the count is 14 + 10C + 5R (C the cell-and-form pairs carrying a diagnostic, R the
+  resolution diagnostic paths), which can reach 84; (3)'s class, source and diagnostics alone are 2 + 5C, which
+  cannot. So the fix maps every shape the producers can print, not only the three shapes listed.
+
+### The mapping chosen, by leaf
+
+Decided from the code and the registration (structure only). No bar is widened and no number is exempted.
+
+| Leaf | Mapping | Why |
+|---|---|---|
+| `point_floor_diagnostics/<cell>/<form>/unguarded_floor_j` (floor, claim evaluation, transported resolution); `point_floor_diagnostics/<form>/unguarded_floor_j` (exact resolution) | Compared, `floor_j` bar, against the recompute's `point_unguarded_floor_j` of floor key `<model>/<phase>/<form>`, the cell routed through its registered entry and only as one of the contrast's registered floor cells (G3) | PLAN §5, "The D-054 point floor": point floor = max(max \|deviation\|, prediction). The recompute already computes it (`point_floor`), and its two terms and its use as the dominance denominator are already compared |
+| `.../guard_factor` | Compared, `floor_j` bar, against the recompute's `guard` | PLAN §5 guard g(n); the floor cells' `guard_factor` is already compared under `floor_j` (`FLOOR_FIELDS`) |
+| `.../guarded_floor_j` | Compared, `floor_j` bar, against the recompute's guard × point floor (composed from its own terms, as `corner_widened_guarded_floor_j` already is) | PLAN §5: guarded floor = g × unguarded floor. So a printed guarded floor that is not guard × unguarded disagrees |
+| `.../label`, `.../published_claim_floor` | Exact (`outcome_word`) against the engine's words, `repeatability_diagnostic` and false | Fixed by `_point_floor_diagnostic`; the flag asserts the number is not a claim floor, so a true flag disagrees |
+| `claim_evaluation/floor_limit/floor_limit_class`, `.../floor_source` | Exact (`outcome_word`) against `attribution_limited` and `E_clock_anchor_shift_bound_j` | The engine's words (`ATTRIBUTION_LIMIT_CLASS`; `ATTRIBUTION_FLOOR_SOURCE`, the first-kind bound of PLAN §4 step 7). The comparator copies them as literals; `tests/independent_recompute/test_floor_limit.py` pins them to `detection_floor.py` on origin/main |
+| `claim_evaluation/floor_limit/published_floor_j` | Compared, `floor_gate_j` bar, against the recompute's contrast floor gate | `evaluate_claim` prints the active floor it gated on (`artifact.py` requires it to equal `floor.active_floor_j`, itself compared under the same row family) |
+| `claim_evaluation/floor_limit/single_count_discipline/*` | Uncovered words (strings and booleans only; a number there still refuses), by the same rule as the floor's and resolutions' copies | A fixed registered object (rule id, roles, flags, note) with `gating` false: no number, no claim |
+
+- **Unchanged.** The floor's and the resolutions' `floor_source` and `floor_limit_class` words stay uncovered under
+  their existing rule (NEEDS_RULING RC-CMP-8 2).
+- **Not re-derived.** Which forms carry a diagnostic, that is the D-078 classification itself. It is a label beside the
+  floor, never the floor a claim is gated on, and no outcome reads it (`evaluate_claim` uses the metadata only to
+  print it). Every number a printed diagnostic carries is compared. Each printed cell and form gets a `routing_id`
+  row (the union rule, S3): a cell that is not one of the contrast's registered floor cells, or a form other than
+  absolute or comparative, is DISAGREE, and so is every number under it.
+- **Pruned.** The flat-shape rules and the `FLOOR_DIAGNOSTICS` exemption are deleted: a diagnostic printed directly
+  under `point_floor_diagnostics` now refuses (`test_input_gate.py`
+  `test_numbers_under_floor_diagnostics_refuse_sol` updated to say so).
+- **Census.** `tests/test_single_count_discipline_census.py`'s reviewed manifest follows the extended discipline rule
+  and lists the test fixture's discipline object.
+
+### Tests
+
+`tests/independent_recompute/test_floor_limit.py`, 15 tests. At the r4 comparator 13 fail (one of them the pin
+test, an error); the other 2 pin refusals that must survive the fix. All 15 pass after. The fixtures are synthetic
+and shaped as the producers write them: exact and transported resolutions, one form
+per cell, the prefill contrast's own cells. Each of these disagrees and the run does not exit 0: a point floor, a
+guard factor or a guarded floor off the recompute's; an exact resolution's diagnostic off; a class or source word other
+than the engine's; a label or flag other than the engine's; the published floor off the floor gate; a cell of
+another contrast. An unregistered form or an extra number in a diagnostic refuses `step11_unmapped_fill`, and a fill
+copy that differs from the verdict is not coverage.
+
+### Release condition
+
+- The r4 release check re-runs at the merged comparator against the same r4 dry-run custody. The new rows are
+  ordinary comparison rows under the existing bars and are not waivable. If any disagrees, that is a new hold,
+  traced structure only.
+- The r4 dry run is not released by this entry.
 
 > The release event has not happened. The lead has seen no Block 5 energy or outcome value. Ed delegated
 > preregistration rulings to the lead.

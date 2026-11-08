@@ -2165,6 +2165,76 @@ def compare_arms(c, ours, cid, floor, registry):
             entry = registry.entry(source, "floor")
             c.exact("routing_id", f"contrast/{cid}/resolution/{index}/source_cell_ids/{number}",
                     cell_key(entry) if entry else None, own, raw=source)
+        # DLE-5: an attribution-limited resolution's point diagnostics (exact: by form, its cell the one source cell;
+        # transported: by source cell then form).
+        if "point_floor_diagnostics" in resolution:
+            listed_sources = listed(resolution.get("source_cell_ids"))
+            exact = resolution.get("status") == "exact" and len(listed_sources) == 1
+            diagnostics = resolution["point_floor_diagnostics"]
+            compare_point_diagnostics(c, ours, f"{cid}/resolution/{index}/point_floor_diagnostics",
+                                      {listed_sources[0]: diagnostics} if exact else diagnostics, contrast, registry, exact)
+
+
+def compare_floor_limit(c, ours, cid, row, mine, registry):
+    """DLE-5: a contrast's attribution-floor metadata (detection_floor D-078; analysis_engine _floor_row and
+    claims.evaluate_claim's floor_limit), printed only when a source cell's floor is attribution-limited.
+
+    The point diagnostics of the floor and of the claim evaluation (keyed by source cell then form; a resolution's
+    are compared in compare_arms), the claim evaluation's class and source words against the engine's words, and its
+    published floor against the recompute's contrast floor gate (the active floor's own row). The engine prints a
+    diagnostic only for a form whose admissible-set uncertainty dominates its guarded point floor; which forms carry
+    one is not re-derived here (a label beside the floor, never the floor a claim is gated on: published_claim_floor
+    is false), but every number a printed diagnostic carries is compared.
+    """
+    contrast = registry.entry(cid, "contrast")
+    compare_point_diagnostics(c, ours, f"{cid}/floor/point_floor_diagnostics", get(row, "floor", "point_floor_diagnostics"),
+                              contrast, registry)
+    limit = get(row, "claim_evaluation", "floor_limit")
+    if not isinstance(limit, dict):
+        return
+    for field, word in ATTRIBUTION_WORDS.items():
+        c.exact("outcome_word", f"{cid}/claim_evaluation/floor_limit/{field}", limit.get(field), word)
+    c.numeric("floor_gate_j", f"{cid}/claim_evaluation/floor_limit/published_floor_j", limit.get("published_floor_j"),
+              mine.get("floor_gate_j"))
+    compare_point_diagnostics(c, ours, f"{cid}/claim_evaluation/floor_limit/point_floor_diagnostics",
+                              limit.get("point_floor_diagnostics"), contrast, registry)
+
+
+def compare_point_diagnostics(c, ours, scope, diagnostics, contrast, registry, by_form=False):
+    """One printed point_floor_diagnostics object, {cell: {form: diagnostic}} (by_form: an exact resolution's
+    {form: diagnostic}, passed as {its one source cell: ...}). Each printed cell routes only as one of the contrast's
+    registered floor cells, looked up literally (G3), and each form only as absolute or comparative: a routing_id row
+    each (S3), DISAGREE otherwise. The diagnostic's unguarded floor is the recompute's point floor of that cell and
+    form (max of the largest deviation and the prediction term), its guard factor the recompute's guard, its guarded
+    floor their product (composed from the recompute's own terms); its label and flag are the engine's words."""
+    cells = diagnostics if isinstance(diagnostics, dict) else {}
+    for cell, forms, entry in c.pairs(scope + "/cells/", cells, diagnostic_cells(cells, contrast, registry)):
+        forms = forms if isinstance(forms, dict) else {}
+        for form, diagnostic, point in c.pairs(f"{scope}/forms/{cell}/", forms, diagnostic_forms(forms, entry, ours)):
+            key = f"{scope}/{form}" if by_form else f"{scope}/{cell}/{form}"
+            diagnostic = diagnostic if isinstance(diagnostic, dict) else {}
+            unguarded, guard = get(point, "point_unguarded_floor_j"), get(point, "guard")
+            c.numeric("floor_j", key + "/unguarded_floor_j", diagnostic.get("unguarded_floor_j"), unguarded)
+            c.numeric("floor_j", key + "/guard_factor", diagnostic.get("guard_factor"), guard)
+            c.numeric("floor_j", key + "/guarded_floor_j", diagnostic.get("guarded_floor_j"), times(guard, unguarded))
+            for field, word in POINT_DIAGNOSTIC_WORDS.items():
+                c.exact("outcome_word", f"{key}/{field}", diagnostic.get(field), word if point is not None else None)
+
+
+def diagnostic_cells(cells, contrast, registry):
+    """The printed diagnostic cells that are the contrast's registered floor cells -> their registered entry."""
+    registered = (contrast or {}).get("floor_cells", ())
+    return {cell: registry.entry(cell, "floor") for cell in cells if cell in registered and registry.entry(cell, "floor")}
+
+
+def diagnostic_forms(forms, entry, ours):
+    """The printed forms of a registered cell that are registered forms -> the recompute's floor of that cell and form
+    ({} when the recompute has none, so each number is DISAGREE missing_or_null)."""
+    if not entry:
+        return {}
+    floors = ours.get("floors") if isinstance(ours.get("floors"), dict) else {}
+    return {form: floors.get(f"{cell_key(entry)}/{form}") if isinstance(floors.get(f"{cell_key(entry)}/{form}"), dict)
+            else {} for form in forms if form in FLOOR_FORMS}
 
 
 def registered_floor_keys(contrast, registry):
@@ -2250,6 +2320,7 @@ def compare_contrasts(c, custody, ours):
             c.numeric("floor_gate_j", f"{cid}/{field}", get(row, "floor", field),
                       contrast_floor_part(ours.get("floor_cells"), registry.entry(cid, "contrast"), field))
         compare_arms(c, ours, cid, row.get("floor") if isinstance(row.get("floor"), dict) else {}, registry)
+        compare_floor_limit(c, ours, cid, row, mine, registry)
         multiplicity = row.get("multiplicity") or {}
         c.numeric("contrast_p", f"{cid}/raw_p", multiplicity.get("raw_p"), mine.get("p"))
         c.numeric("contrast_p", f"{cid}/adjusted_p", multiplicity.get("adjusted_p"), mine.get("holm_p"))
@@ -2402,6 +2473,13 @@ def compare_contrasts(c, custody, ours):
 
 # The engine's leave-one-out floor-status words (analysis_engine _loo_family; pinned by test_rc_cmp10.py).
 FLOOR_STATUS_WORDS = ("above_floor", "not_above_floor")
+# DLE-5: the engine's attribution-floor words (detection_floor ATTRIBUTION_LIMIT_CLASS and ATTRIBUTION_FLOOR_SOURCE,
+# the plan's section 4 step 7 bound) and the point diagnostic's label and flag (detection_floor
+# _point_floor_diagnostic); tests/independent_recompute/test_floor_limit.py pins each to its source on origin/main.
+ATTRIBUTION_WORDS = {"floor_limit_class": "attribution_limited", "floor_source": "E_clock_anchor_shift_bound_j"}
+POINT_DIAGNOSTIC_WORDS = {"label": "repeatability_diagnostic", "published_claim_floor": False}
+# The two registered floor forms (the recompute's floors are keyed model/phase/form).
+FLOOR_FORMS = ("absolute", "comparative")
 # The v3 claim floor's aggregation word (analysis_engine/artifact.py: a v3 floor's aggregation must be max_never_sum).
 V3_AGGREGATION = "max_never_sum"
 # The ceilings that make a contrast claim-ready (analysis_engine/artifact.py: ready iff the ceiling is L2, L3 or L4).
@@ -3549,7 +3627,10 @@ LOAD_LINE = (NAMED + "load-correlated sensitivity line (PLAN 8.1): never replace
              "not compared here")
 ESTIMATOR_INTERNALS = (NAMED + "registered estimator internals beside SE_total and the metrology-aware interval "
                        "(compared): SE_repeat, SE_metrology, repeat-point interval, variance contributions, exact t")
-FLOOR_DIAGNOSTICS = NAMED + "attribution-floor diagnostics carried beside the resolved floor; the floor values are compared"
+# DLE-5: a point diagnostic's source cell (a key of point_floor_diagnostics), routed by compare_point_diagnostics.
+DIAG_CELL = r"(?P<diag_cell>[a-z0-9][a-z0-9.-]*)"
+DIAG_NUMBER = r"/(?P<form>absolute|comparative)/(?P<field>unguarded_floor_j|guard_factor|guarded_floor_j)"
+DIAG_WORD = r"/(?P<form>absolute|comparative)/(?P<field>label|published_claim_floor)"
 FLOOR_KEPT = NAMED + "kept-unit counts of a floor cell or a contrast's repeat stratum; the floor's n and n_admitted and the contrast's n are compared"
 F = r"fill:gamma/contrasts/\*/"
 D = "disclosure:"
@@ -3604,9 +3685,28 @@ COVERAGE = (
     (F + r"floor/resolutions/\*/transport_group_id", "routing_id", "contrast/{cid}/resolution/{resolution}/transport_group_id"),
     (F + r"floor/arm_gates/\*/floor_gate_j", "floor_gate_j", "{cid}/arm/{arm}/floor_gate_j"),
     (F + r"floor/arm_gates/\*/(?P<field>arm_id|condition_family_id)", "routing_id", "contrast/{cid}/arm/{arm}/{field}"),
-    (F + r"floor/(resolutions/\*/)?point_floor_diagnostics/(unguarded_floor_j|guard_factor|guarded_floor_j)", FLOOR_DIAGNOSTICS),
-    (F + r"floor/(resolutions/\*/)?(point_floor_diagnostics/(label|published_claim_floor)|single_count_discipline/[a-z_]+)",
-     UNCOVERED + "attribution-floor diagnostic label and flag, and the single-count discipline's words"),
+    # DLE-5: the attribution-floor metadata (compare_floor_limit). Each point diagnostic as the producers key it (the
+    # floor's and the claim evaluation's by source cell then form; a transported resolution's likewise; an exact
+    # resolution's by form), against the recompute's point floor of that registered cell and form, and its label and
+    # flag against the engine's; the claim evaluation's class and source words and its published floor.
+    (F + r"(?P<where>floor|claim_evaluation/floor_limit)/point_floor_diagnostics/" + DIAG_CELL + DIAG_NUMBER, "floor_j",
+     "{cid}/{where}/point_floor_diagnostics/{diag_cell}/{form}/{field}"),
+    (F + r"(?P<where>floor|claim_evaluation/floor_limit)/point_floor_diagnostics/" + DIAG_CELL + DIAG_WORD, "outcome_word",
+     "{cid}/{where}/point_floor_diagnostics/{diag_cell}/{form}/{field}"),
+    (F + r"floor/resolutions/\*/point_floor_diagnostics" + DIAG_NUMBER, "floor_j",
+     "{cid}/resolution/{resolution}/point_floor_diagnostics/{form}/{field}"),
+    (F + r"floor/resolutions/\*/point_floor_diagnostics" + DIAG_WORD, "outcome_word",
+     "{cid}/resolution/{resolution}/point_floor_diagnostics/{form}/{field}"),
+    (F + r"floor/resolutions/\*/point_floor_diagnostics/" + DIAG_CELL + DIAG_NUMBER, "floor_j",
+     "{cid}/resolution/{resolution}/point_floor_diagnostics/{diag_cell}/{form}/{field}"),
+    (F + r"floor/resolutions/\*/point_floor_diagnostics/" + DIAG_CELL + DIAG_WORD, "outcome_word",
+     "{cid}/resolution/{resolution}/point_floor_diagnostics/{diag_cell}/{form}/{field}"),
+    (F + r"claim_evaluation/floor_limit/(?P<field>floor_limit_class|floor_source)", "outcome_word",
+     "{cid}/claim_evaluation/floor_limit/{field}"),
+    (F + r"claim_evaluation/floor_limit/published_floor_j", "floor_gate_j", "{cid}/claim_evaluation/floor_limit/published_floor_j"),
+    (F + r"(floor/(resolutions/\*/)?|claim_evaluation/floor_limit/)single_count_discipline/[a-z_]+",
+     UNCOVERED + "the single-count discipline's words (a fixed registered object: rule id, roles, flags, note); "
+     "no number, and it gates nothing (gating false)"),
     (F + r"floor/(status|transport_verdict|floor_source|floor_limit_class|"
      r"arm_gates/\*/status|resolutions/\*/(status|reason_codes(/\*)?|floor_source|floor_limit_class))",
      UNCOVERED + "floor-resolution status and source words: they report how the engine's floor transport resolved "
