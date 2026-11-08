@@ -4,12 +4,9 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-import os
 from pathlib import Path
 import statistics
 import subprocess
-import sys
-import tempfile
 
 REGISTRATION = 'configs/campaigns/align_v4/registration/'
 RECEIPT_SCHEMA = 'joulewise.align_v4.registration_receipt.v1'
@@ -258,13 +255,12 @@ def _local(root, path):
     return target
 
 
-def _git_batch(root, specs, *, metadata=False):
+def _git_batch(root, specs):
     if any('\n' in spec or '\r' in spec or '\0' in spec for spec in specs):
         raise ValueError('Git object specification refused')
     request = ''.join(f'{spec}\n' for spec in specs).encode()
     try:
-        mode = '--batch-check' if metadata else '--batch'
-        out = subprocess.run(['git', 'cat-file', mode], cwd=root, input=request,
+        out = subprocess.run(['git', 'cat-file', '--batch'], cwd=root, input=request,
                              capture_output=True, check=True).stdout
     except (OSError, subprocess.CalledProcessError) as exc:
         raise ValueError('registration_receipt commit unreadable') from exc
@@ -276,13 +272,10 @@ def _git_batch(root, specs, *, metadata=False):
             offset = end+1
             if len(header) == 3 and header[1] == b'blob':
                 size = int(header[2])
-                if metadata:
-                    result[spec] = header[0].decode('ascii')
-                else:
-                    if size < 0 or offset+size >= len(out) or out[offset+size:offset+size+1] != b'\n':
-                        raise ValueError('truncated blob')
-                    result[spec] = out[offset:offset+size]
-                    offset += size+1
+                if size < 0 or offset+size >= len(out) or out[offset+size:offset+size+1] != b'\n':
+                    raise ValueError('truncated blob')
+                result[spec] = out[offset:offset+size]
+                offset += size+1
             elif header[-1:] == [b'missing']:
                 result[spec] = None
             else:
@@ -304,59 +297,7 @@ def _committed_bytes(root, commit, paths):
     return {path: result[f'{commit}:{path}'] for path in paths}
 
 
-def _committed_oids(root, commit, paths):
-    result = _git_batch(root, [f'{commit}:{path}' for path in paths], metadata=True)
-    return {path: result[f'{commit}:{path}'] for path in paths}
-
-
-def _has_git_replacements(root):
-    # cat-file metadata reports the original blob ID even when a replacement
-    # changes its contents. Such repositories must always compare fresh bytes.
-    prefix = os.environ.get('GIT_REPLACE_REF_BASE', 'refs/replace/')
-    try:
-        return bool(subprocess.run(['git', 'for-each-ref', '--count=1', '--format=%(objectname)',
-                                    '--', prefix], cwd=root, capture_output=True, check=True).stdout)
-    except (OSError, subprocess.CalledProcessError) as exc:
-        raise ValueError('registration_receipt commit unreadable') from exc
-
-
-def _cache_key(value):
-    return digest(json.dumps(value, sort_keys=True, separators=(',', ':'), allow_nan=False).encode())
-
-
-def _cache_path(root, kind, key):
-    return _local(root, f'build/align-v4-cache/{kind}/{key}.json')
-
-
-def _cache_load(root, kind, key):
-    """Disposable local acceleration only; corruption/unavailability is a miss."""
-    try:
-        entry = json.loads(_cache_path(root, kind, key).read_bytes())
-        if entry['key'] == key and entry['sha256'] == _cache_key(entry['value']):
-            return entry['value']
-    except (OSError, ValueError, KeyError, TypeError):
-        pass
-    return None
-
-
-def _cache_store(root, kind, key, value):
-    # Atomic publication tolerates concurrent builders and interrupted writes.
-    target = _cache_path(root, kind, key)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    raw = json.dumps(dict(key=key, sha256=_cache_key(value), value=value),
-                     sort_keys=True, separators=(',', ':'), allow_nan=False).encode()
-    temporary = None
-    try:
-        with tempfile.NamedTemporaryFile(dir=target.parent, delete=False) as stream:
-            temporary = Path(stream.name)
-            stream.write(raw)
-        os.replace(temporary, target)
-    finally:
-        if temporary is not None:
-            temporary.unlink(missing_ok=True)
-
-
-def validate_receipt(receipt, root, *, cache=True):
+def validate_receipt(receipt, root):
     """Bind reviewed bytes to one existing Git commit and current working bytes.
 
     Gate judgments and signature are lead-owned assertions, not fabricated by
@@ -390,8 +331,8 @@ def validate_receipt(receipt, root, *, cache=True):
     for path, expected in bindings.items():
         if not is_digest(expected):
             raise ValueError(f'registration_receipt invalid digest: {path}')
-    # Always recheck structure, safe paths and working bytes. In particular a
-    # same-size/same-mtime edit, a deletion or a new symlink cannot hit cache.
+    # Reject working drift before Git I/O; every successful validation still
+    # compares all committed bytes afresh in one batch.
     for path, expected in bindings.items():
         try:
             raw = _local(root, path).read_bytes()
@@ -399,31 +340,12 @@ def validate_receipt(receipt, root, *, cache=True):
             raise ValueError(f'registration_receipt missing committed artifact: {path}') from exc
         if digest(raw) != expected:
             raise ValueError(f'registration_receipt digest drift: {path}')
-    key = None
-    if cache and not _has_git_replacements(root):
-        # Fresh metadata proves the named objects still exist at this commit.
-        # Git's immutable object IDs bind the cached SHA-256 comparisons; no
-        # cached decision can substitute for current filesystem/Git availability.
-        oids = _committed_oids(root, commit, list(bindings))
-        for path, oid in oids.items():
-            if oid is None:
-                raise ValueError(f'registration_receipt missing committed artifact: {path}')
-        key = _cache_key(dict(receipt=receipt, oids=oids, python=sys.version,
-                              validator=digest(Path(__file__).read_bytes()),
-                              kit=digest(Path(sys.modules['scripts.align_v4_kit'].__file__).read_bytes())))
-        if _cache_load(root, 'receipt', key) == bindings:
-            return receipt
     pinned = _committed_bytes(root, commit, list(bindings))
     for path, expected in bindings.items():
         if pinned.get(path) is None:
             raise ValueError(f'registration_receipt missing committed artifact: {path}')
         if digest(pinned[path]) != expected:
             raise ValueError(f'registration_receipt digest drift: {path}')
-    if key is not None:
-        try:
-            _cache_store(root, 'receipt', key, bindings)
-        except (OSError, ValueError):
-            pass
     return receipt
 
 

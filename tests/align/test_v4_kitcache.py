@@ -1,4 +1,4 @@
-"""Content-cache regressions using synthetic files and Git repositories only."""
+"""Fresh kit/receipt validation and batched reads on synthetic Git fixtures."""
 from copy import deepcopy
 import json
 import os
@@ -47,20 +47,22 @@ def generation_fixture(root):
         target.write_bytes(kit.raw_json(value))
     git(root, 'init', '-q')
     # This clone's code objects only. Git may use its allowed shared alternate.
-    (root / '.git/objects/info/alternates').write_text(str(kit.ROOT / '.git/objects') + '\n')
+    common = Path(git(kit.ROOT, 'rev-parse', '--path-format=absolute', '--git-common-dir'))
+    (root / '.git/objects/info/alternates').write_text(str(common / 'objects') + '\n')
     files = kit.build_files(root)
     plan = filled_w1_plan(inputs, slots,
                           collection_plan=json.loads(files[kit.KIT / 'collection_plan.json']))
     (root / kit.W1_PLAN).write_bytes(kit.raw_json(plan))
 
 
-class GenerationCacheTests(unittest.TestCase):
-    def test_warm_generate_skips_builder_but_check_always_rebuilds_and_refuses(self):
+class GenerationTests(unittest.TestCase):
+    def test_repeated_generate_and_check_always_run_builder(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             first = kit.generate(root)
-            with patch.object(kit, 'build_files', side_effect=AssertionError('cache missed')):
+            with patch.object(kit, 'build_files', wraps=kit.build_files) as build:
                 self.assertEqual(kit.generate(root), first)
+                build.assert_called_once_with(kit.ROOT)
             with patch.object(kit, 'build_files', wraps=kit.build_files) as build:
                 for _ in range(2):
                     with self.assertRaisesRegex(ValueError, 'BLOCKED'):
@@ -92,42 +94,7 @@ class GenerationCacheTests(unittest.TestCase):
                     kit.generate(tmp, check=True)
                 self.assertEqual(len(calls.call_args_list), 1)
 
-    def test_input_digests_include_optional_absence_and_bytes_without_mtime(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            for path in (kit.INPUTS, kit.R1_SLOTS):
-                target = root / path
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes((kit.ROOT / path).read_bytes())
-            before = kit.generation_input_digests(root)
-            target = root / kit.INPUTS
-            stamp = target.stat()
-            target.write_bytes(target.read_bytes() + b' ')
-            os.utime(target, ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
-            self.assertNotEqual(kit.generation_input_digests(root), before)
-            absent = kit.generation_input_digests(root)
-            (root / kit.W1_PLAN).write_text('{}')
-            self.assertNotEqual(kit.generation_input_digests(root), absent)
-
-    def test_code_changes_and_new_python_modules_change_the_content_key(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            for path in (kit.INPUTS, kit.R1_SLOTS):
-                target = root / path
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes((kit.ROOT / path).read_bytes())
-            code = root / 'scripts/new_lazy_dependency.py'
-            code.parent.mkdir()
-            (root / 'joulewise').mkdir()
-            with patch.object(kit, 'ROOT', root):
-                absent = kit.generation_input_digests(root)
-                code.write_text('VALUE = 1\n')
-                before = kit.generation_input_digests(root)
-                self.assertNotEqual(before, absent)
-                code.write_text('VALUE = 2\n')
-                self.assertNotEqual(kit.generation_input_digests(root), before)
-
-    def test_changed_input_rebuilds_and_invalid_optional_plan_is_never_cached(self):
+    def test_changed_input_rebuilds_and_invalid_optional_plan_always_refuses(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             for path in (kit.INPUTS, kit.R1_SLOTS):
@@ -166,7 +133,7 @@ class GenerationCacheTests(unittest.TestCase):
             self.assertEqual(kit.build_files(), expected)
             self.assertEqual(batch.call_count, 1)
 
-    def test_filled_synthetic_plan_and_sizing_are_byte_identical_when_cached(self):
+    def test_filled_synthetic_plan_and_sizing_are_byte_identical_on_rebuild(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             generation_fixture(root)
@@ -177,43 +144,69 @@ class GenerationCacheTests(unittest.TestCase):
                 expected = kit.build_files(root)
             self.assertIn(kit.SIZING, expected)
             self.assertEqual(kit.generate(root, source_root=root), expected)
-            with patch.object(kit, 'build_files', side_effect=AssertionError('cache missed')):
+            with patch.object(kit, 'build_files', wraps=kit.build_files) as build:
                 self.assertEqual(kit.generate(root, source_root=root), expected)
-            # Also prove the forced byte comparison succeeds before its fresh
-            # readiness gate. A cached positive cannot suppress a later refusal.
+                build.assert_called_once_with(root)
+            # Byte comparison succeeds before the fresh readiness gate, whose
+            # refusal must still execute on a previously generated output root.
             with patch.object(kit, 'require_w1_ready', side_effect=ValueError('synthetic live gate')) as ready:
                 with self.assertRaisesRegex(ValueError, 'synthetic live gate'):
                     kit.generate(root, source_root=root, check=True)
                 ready.assert_called_once_with(root)
 
-    def test_corrupt_or_unwritable_cache_falls_back_to_regeneration(self):
+    def test_generation_fixture_resolves_common_objects_from_a_worktree(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            expected = kit.generate(root)
-            for path in (root / 'build/align-v4-cache/generation').glob('*.json'):
-                path.write_text('{broken')
-            with patch.object(kit, 'build_files', wraps=kit.build_files) as build:
-                self.assertEqual(kit.generate(root), expected)
-                build.assert_called_once()
-            for path in (root / 'build/align-v4-cache/generation').glob('*.json'):
-                path.unlink()
-            with patch.object(reg, '_cache_store', side_effect=OSError('read only')) as store:
-                self.assertEqual(kit.generate(root), expected)
-                store.assert_called_once()
+            source, worktree, target = (root / name for name in ('source', 'worktree', 'target'))
+            source.mkdir()
+            target.mkdir()
+            generation_fixture(source)
+            git(source, 'add', '.')
+            git(source, '-c', 'user.name=Synthetic', '-c', 'user.email=synthetic@example.invalid',
+                'commit', '-qm', 'Synthetic worktree source')
+            git(source, 'worktree', 'add', '-q', '--detach', str(worktree))
+            self.assertTrue((worktree / '.git').is_file())
+            with patch.object(kit, 'ROOT', worktree):
+                generation_fixture(target)
+            self.assertIn(kit.SIZING, kit.build_files(target))
+            alternate = (target / '.git/objects/info/alternates').read_text().strip()
+            self.assertEqual(Path(alternate), source / '.git/objects')
+
+    def test_output_symlink_components_preserve_legacy_generation_and_check(self):
+        # Both ends are synthetic directories under this test's temporary root.
+        with tempfile.TemporaryDirectory() as tmp:
+            root, destination = Path(tmp) / 'output', Path(tmp) / 'destination'
+            root.mkdir()
+            destination.mkdir()
+            (root / 'configs').symlink_to(destination, target_is_directory=True)
+            files = kit.generate(root)
+            self.assertTrue(all((root / p).read_bytes() == raw for p, raw in files.items()))
+            with self.assertRaisesRegex(ValueError, 'BLOCKED'):
+                kit.generate(root, check=True)
+
+    def test_invocation_snapshot_resets_after_refusal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with patch.object(kit, 'check_window_reference_roles', side_effect=ValueError('synthetic refusal')):
+                with self.assertRaisesRegex(ValueError, 'synthetic refusal'):
+                    kit.generate(root)
+            with patch.object(kit, '_read_frozen_sources', wraps=kit._read_frozen_sources) as read:
+                kit.generate(root)
+                read.assert_called_once_with(kit.ROOT)
 
 
-class ReceiptCacheTests(unittest.TestCase):
+class ReceiptValidationTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
         self.receipt = receipt_fixture(self.root)
 
-    def test_only_success_is_cached_and_warm_hit_checks_current_bytes(self):
+    def test_every_validation_rechecks_committed_and_working_bytes(self):
         with patch.object(reg, '_committed_bytes', wraps=reg._committed_bytes) as blobs:
             self.assertIs(reg.validate_receipt(self.receipt, self.root), self.receipt)
             self.assertIs(reg.validate_receipt(self.receipt, self.root), self.receipt)
-            self.assertEqual(blobs.call_count, 1)
+            self.assertEqual(blobs.call_count, 2)
             path = self.root / reg.ARTIFACTS[-1]
             old, stamp = path.read_bytes(), path.stat()
             path.write_bytes(b'x' * len(old))
@@ -224,7 +217,7 @@ class ReceiptCacheTests(unittest.TestCase):
             path.write_bytes(old)
             self.assertIs(reg.validate_receipt(self.receipt, self.root), self.receipt)
 
-    def test_warm_hit_never_bypasses_signature_gate_commit_or_path_refusals(self):
+    def test_repeated_validation_never_bypasses_signature_gate_commit_or_path_refusals(self):
         reg.validate_receipt(self.receipt, self.root)
         for change in ('signature', 'gate', 'commit', 'symlink', 'missing'):
             bad = deepcopy(self.receipt)
@@ -255,7 +248,7 @@ class ReceiptCacheTests(unittest.TestCase):
         (self.root / path).write_bytes(old)
         self.assertEqual(reg.validate_receipt(self.receipt, self.root), self.receipt)
 
-    def test_blob_replacement_cannot_reuse_a_warm_success(self):
+    def test_blob_replacement_after_success_still_refuses(self):
         reg.validate_receipt(self.receipt, self.root)
         path = reg.ARTIFACTS[0]
         original = git(self.root, 'rev-parse', f'{self.receipt["commit"]}:{path}')
@@ -266,29 +259,19 @@ class ReceiptCacheTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'digest drift'):
             reg.validate_receipt(self.receipt, self.root)
 
-    def test_force_bypasses_cache_and_unavailable_git_still_refuses(self):
+    def test_working_drift_refuses_before_git_and_unavailable_git_refuses(self):
         reg.validate_receipt(self.receipt, self.root)
+        target = self.root / reg.ARTIFACTS[-1]
+        raw = target.read_bytes()
+        target.write_bytes(raw + b'drift')
         with patch.object(reg, '_committed_bytes', wraps=reg._committed_bytes) as blobs:
-            reg.validate_receipt(self.receipt, self.root, cache=False)
-            blobs.assert_called_once()
-        with patch.object(reg, '_committed_oids', side_effect=ValueError('commit unreadable')):
+            with self.assertRaisesRegex(ValueError, 'digest drift'):
+                reg.validate_receipt(self.receipt, self.root)
+            blobs.assert_not_called()
+        target.write_bytes(raw)
+        with patch.object(reg.subprocess, 'run', side_effect=OSError('synthetic Git unavailable')):
             with self.assertRaisesRegex(ValueError, 'commit unreadable'):
                 reg.validate_receipt(self.receipt, self.root)
-
-    def test_refusal_is_not_persisted_and_corruption_is_a_miss(self):
-        bad = deepcopy(self.receipt)
-        bad['gates']['A']['verdict'] = 'REFUSE'
-        with patch.object(reg, '_cache_store', wraps=reg._cache_store) as store:
-            for _ in range(2):
-                with self.assertRaises(ValueError):
-                    reg.validate_receipt(bad, self.root)
-            store.assert_not_called()
-        reg.validate_receipt(self.receipt, self.root)
-        for path in (self.root / 'build/align-v4-cache/receipt').glob('*.json'):
-            path.write_text('{}')
-        with patch.object(reg, '_committed_bytes', wraps=reg._committed_bytes) as blobs:
-            reg.validate_receipt(self.receipt, self.root)
-            blobs.assert_called_once()
 
 
 class GitBatchTests(unittest.TestCase):
