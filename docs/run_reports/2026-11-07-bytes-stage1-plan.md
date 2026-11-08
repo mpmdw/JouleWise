@@ -49,7 +49,7 @@ None of it needs a quiet window. It does load the CPU and disk for one to a few 
   `manifest` is the registered §4 manifest plus a `sessions` list; `run` is the
   `tests/test_bytes_agreement.py` `run_both` order up to the commitment, with the registered
   comparer (`compare_campaign`). Tested on the synthetic twelve-sub-pack campaign
-  (`tests.test_bytes_stage1`, 10 tests, under a minute on the Air).
+  (`tests.test_bytes_stage1`, 16 tests, about a minute on the Air).
 
 ## 3. Magistrate instructions (copy-paste; MBP, by day)
 
@@ -85,7 +85,7 @@ cd "$W"
 git rev-parse HEAD                      # record it; it must be the head the PR body names
 shasum -a 256 joulewise/bytes_analysis.py   # must print 18582818c7e03bad148b54dce8b8d60a62e2ffc5597e701ae3ab0418dffc0a71
 mkdir -p "$S1" /private/tmp/jwbytes-tmp
-TMPDIR=/private/tmp/jwbytes-tmp nice -n 10 $PY -m unittest tests.test_bytes_stage1 2>&1 | tail -3   # OK, 10 tests
+TMPDIR=/private/tmp/jwbytes-tmp nice -n 10 $PY -m unittest tests.test_bytes_stage1 2>&1 | tail -3   # OK, 16 tests
 ```
 
 (If `/Users/edr/code/JouleWise` is not your canonical clone on the MBP, use the one you used
@@ -158,9 +158,12 @@ $PY scripts/bytes_stage1.py census --export $S1/export --out $S1/census.json; ec
 ```
 
 `rc=0` and `"verdict": "OK"`: twelve sessions, one per sub-pack, pass ids agree, blinded in
-group `bytes`, counting, withheld locator present and the store file exists, no clock column,
+group `bytes`, counting, withheld locator present, no clock column,
 and **no held-out row visible** (only `Qwen3-1.7B-4bit`, `Qwen3-4B-4bit`, `Qwen3-8B-4bit` and
 references). Any other result: stop and send the lead `census.json` (it holds no energy).
+A withheld store that is missing at its locator is not a refusal (registration §11 item 4): the census
+prints it under `warnings` as `bytes.withheld_missing`, `run` carries it into `stage1-summary.json`, and
+it goes in the record; explain it before the commit.
 
 ### 3.6 Thermal lines with `--export` (stage-2 inputs; about 10 min)
 
