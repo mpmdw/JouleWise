@@ -1,6 +1,7 @@
 """Lead-only native execution check: tiny MLX arrays, no pretrained weights."""
 from importlib.util import find_spec
 import unittest
+from unittest.mock import patch
 
 from joulewise.align.squeeze.control import HiddenDecode, MlxDecoder
 from tests.align.squeeze_fixtures import control_config
@@ -53,6 +54,32 @@ class NativeDecodeTests(unittest.TestCase):
         self.assertEqual(receipts[0]["output_token_ids"], [0] * 5)
         self.assertEqual(receipts[0]["completed_tokens"], 5)
         self.assertEqual(receipts[0]["status"], "completed")
+
+    def test_native_cache_and_auxiliary_arrays_are_fenced_before_certifying_dose(self):
+        mx = self.mx
+
+        class Cache:
+            state = ()
+
+        cache = Cache()
+
+        def model(tokens, *, cache):
+            # These lazy updates are independent of the returned logits.
+            cache[0].state = (mx.sum(mx.ones((4, 4)), axis=0),)
+            cache[0].auxiliary = mx.sum(mx.ones((3, 3)), axis=0)
+            return mx.zeros((1, tokens.shape[1], 4))
+
+        decoder = MlxDecoder(model, cache_factory=lambda: [cache], identity="tiny-cache-v1",
+                             vocab_size=4, max_context_tokens=64)
+        with patch.object(mx, "eval", wraps=mx.eval) as evaluated:
+            injection = HiddenDecode(control_config(k=1), decoder, clock_domain="native-monotonic")
+            injection.execute()
+        self.assertEqual(evaluated.call_count, 1)
+        args = evaluated.call_args.args
+        for array in (cache.state[0], cache.auxiliary):
+            self.assertTrue(any(value is array for value in args))
+        self.assertEqual(injection.receipt()["H"], 1)
+        self.assertEqual(injection.receipt()["output_token_ids"], [0])
 
 
 if __name__ == "__main__":

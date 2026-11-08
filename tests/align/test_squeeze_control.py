@@ -1,7 +1,10 @@
+import sys
+from types import ModuleType, SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 from joulewise.align.squeeze.config import seal
-from joulewise.align.squeeze.control import ControlEndpoint, HiddenDecode
+from joulewise.align.squeeze.control import ControlEndpoint, HiddenDecode, MlxDecoder
 from tests.align.squeeze_fixtures import TinyDecoder, VirtualClock, control_config, variant
 
 
@@ -148,6 +151,74 @@ class ControlTests(unittest.TestCase):
         control.execute()
         self.assertEqual(control.receipt()["H"], 5)
         self.assertEqual(control.receipt()["prefill_tokens"], 3)
+
+    def test_system_exit_from_control_uses_runner_interruption_path(self):
+        class Exiting(TinyDecoder):
+            def decode(self, prompt, *, max_tokens):
+                yield 1
+                raise SystemExit(23)
+
+        control, _ = self.control(decoder=Exiting())
+        endpoint = SimpleNamespace(identity="synthetic-visible")
+        wrapped = ControlEndpoint(endpoint, variant_sha256=variant()["config_sha256"],
+                                  control=control)
+        # The pinned runner catches KeyboardInterrupt and stops samplers, but
+        # SystemExit would escape before sampler.stop() and lose its run receipt.
+        with self.assertRaises(KeyboardInterrupt):
+            wrapped.chat([], max_tokens=5, temperature=0.0, seed=1)
+        receipt = control.receipt()
+        self.assertEqual(receipt["status"], "interrupted")
+        self.assertEqual(receipt["error_type"], "SystemExit")
+        self.assertEqual(receipt["completed_tokens"], 1)
+        self.assertIsNone(receipt["H"])
+
+    def test_mlx_evaluation_includes_independent_cache_arrays(self):
+        # Interface-level spy only: no MLX import, kernels or native evidence.
+        # These independent cache leaves need not be dependencies of argmax.
+        class Array:
+            nbytes = 4
+
+            def __init__(self, shape=(1, 3)):
+                self.shape = shape
+
+            def __getitem__(self, key):
+                return self
+
+            def item(self):
+                return 1
+
+        class Cache:
+            state = (Array(),)
+
+            def __init__(self):
+                self.auxiliary = Array()
+
+        layer = Cache()
+        evaluated = []
+        forward_lengths = []
+        token = Array((1,))
+
+        def model(inputs, *, cache):
+            forward_lengths.append(inputs.shape[1])
+            return Array((1, inputs.shape[1], 8))
+
+        mx = ModuleType("mlx.core")
+        mx.array = lambda rows, **kwargs: Array((1, len(rows[0])))
+        mx.int32 = object()
+        mx.argmax = lambda *args, **kwargs: token
+        mx.eval = lambda *arrays: evaluated.append(arrays)
+        mlx = ModuleType("mlx")
+        mlx.core = mx
+        decoder = MlxDecoder(model, cache_factory=lambda: [layer], identity="spy-only",
+                             vocab_size=8, max_context_tokens=64)
+        with patch.dict(sys.modules, {"mlx": mlx, "mlx.core": mx}):
+            control, _ = self.control(k=1, decoder=decoder)
+            control.execute()
+        self.assertEqual(forward_lengths, [3])
+        self.assertEqual(len(evaluated), 1)
+        self.assertIn(token, evaluated[0])
+        self.assertIn(layer.state[0], evaluated[0])
+        self.assertIn(layer.auxiliary, evaluated[0])
 
 
 if __name__ == "__main__":

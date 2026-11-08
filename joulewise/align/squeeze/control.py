@@ -8,7 +8,7 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import dataclass
 import time
-from typing import Any, Iterator, Protocol, Sequence
+from typing import Any, Iterator, Mapping, Protocol, Sequence
 
 from .config import canonical, sha256, validate_control
 
@@ -28,13 +28,43 @@ class Decoder(Protocol):
         ...
 
 
+def _cache_arrays(cache: Any) -> list[Any]:
+    """Collect cache arrays, including auxiliary recurrent-cache buffers.
+
+    Match the pinned lane's cache materialization convention: public state and
+    array-valued instance fields can contain lazy work independent of logits.
+    Only cache objects and their built-in containers are visited, never models.
+    """
+    arrays, seen = [], set()
+
+    def visit(value: Any) -> None:
+        if id(value) in seen:
+            return
+        seen.add(id(value))
+        if isinstance(value, Mapping):
+            for child in value.values():
+                visit(child)
+        elif isinstance(value, (list, tuple)):
+            for child in value:
+                visit(child)
+        elif hasattr(value, "nbytes"):
+            arrays.append(value)
+        elif hasattr(value, "state"):
+            visit(value.state)
+            visit(getattr(value, "__dict__", {}))
+
+    visit(cache)
+    return arrays
+
+
 class MlxDecoder:
     """Use an already loaded model; imports MLX lazily, never downloads weights.
 
     cache_factory must return a fresh cache for each request. Production MLX-LM
     models can use lambda: make_prompt_cache(model). Evaluation forces lazy work
-    to complete before yielding an ID. The visible endpoint's cache and sampler
-    are never used. Native tests use a tiny synthetic model.
+    to complete before yielding an ID, including cache state/auxiliary arrays.
+    The visible endpoint's cache and sampler are never used. Native tests use
+    a tiny synthetic model.
     """
 
     def __init__(self, model: Any, *, cache_factory: Any, identity: str,
@@ -53,7 +83,7 @@ class MlxDecoder:
             if logits.shape != (1, inputs.shape[1], self.vocab_size):
                 raise ValueError("unexpected hidden model logits shape")
             token = mx.argmax(logits[:, -1, :], axis=-1)
-            mx.eval(token)
+            mx.eval(token, *_cache_arrays(cache))
             token_id = int(token.item())
             yield token_id
             inputs = mx.array([[token_id]], dtype=mx.int32)
@@ -171,6 +201,12 @@ class ControlEndpoint:
         index = self.calls
         self.calls += 1
         if self.control is not None and index == self.control.config["before_chat_call"]:
-            self.control.execute()
+            try:
+                self.control.execute()
+            except SystemExit as exc:
+                # The pinned runner retains KeyboardInterrupt and stops its
+                # samplers, but SystemExit escapes before its cleanup. Keep the
+                # original interrupted/error_type receipt and use that path.
+                raise KeyboardInterrupt("hidden decode exited") from exc
         return self.endpoint.chat(messages, tools=tools, max_tokens=max_tokens,
                                   temperature=temperature, seed=seed)

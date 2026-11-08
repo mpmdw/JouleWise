@@ -109,7 +109,10 @@ def adapt_episode_spec(spec: Mapping[str, Any], variant: Mapping[str, Any]) -> d
 def load_kit(directory: str | Path) -> dict[str, dict[str, Any]]:
     """Verify raw-file and canonical-config hashes; follow no embedded paths."""
     directory = Path(directory)
-    manifest = json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
+    manifest_path = directory / "manifest.json"
+    if manifest_path.is_symlink():
+        raise ValueError("manifest symlinks are not supported")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     _keys(manifest, {"schema", "status", "files"})
     if manifest["schema"] != MANIFEST_SCHEMA or manifest["status"] != "DRAFT":
         raise ValueError("invalid kit manifest")

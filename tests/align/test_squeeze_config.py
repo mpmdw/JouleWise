@@ -68,6 +68,15 @@ class ConfigTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "local versioned"):
                 load_kit(root)
 
+    def test_manifest_symlink_is_rejected_before_reading_target(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "synthetic-manifest-target.json"
+            target.write_text("this synthetic target must not be parsed")
+            (root / "manifest.json").symlink_to(target)
+            with self.assertRaisesRegex(ValueError, "symlink"):
+                load_kit(root)
+
     def test_episode_overlay_preserves_all_execution_controls_and_treats_paths_as_text(self):
         # This is an inert string, never passed to a file/model API.
         spec = {"schema": "joulewise.align.apple.episode_spec.v1", "condition": "sabotage",

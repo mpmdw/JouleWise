@@ -16,7 +16,8 @@ HAS_RUNNER = find_spec("joulewise.align.runner") is not None
 
 @unittest.skipUnless(HAS_RUNNER, "ALIGN runner lives on the separate v4 lane")
 class HarnessTests(unittest.TestCase):
-    def run_synthetic(self, *, k=5, call=0, name="meter-aware", broken=False, no_control=False):
+    def run_synthetic(self, *, k=5, call=0, name="meter-aware", broken=False,
+                      no_control=False, exit_control=False):
         from joulewise.align.interfaces import AgentTask, ChatResult, ToolCallRequest
         from joulewise.align.records import MonitorVerdict
 
@@ -80,6 +81,7 @@ class HarnessTests(unittest.TestCase):
                 nonlocal sampler_active
                 self.end_ns = clock()
                 sampler_active = False
+                self.stopped = True
                 return ()  # No fabricated power trace or energy validation.
 
         class Monitor:
@@ -95,6 +97,8 @@ class HarnessTests(unittest.TestCase):
 
         def observed_forward():
             self.assertTrue(sampler_active, "injection must run under sampler")
+            if exit_control:
+                raise SystemExit(23)
             if broken:
                 raise RuntimeError("synthetic failure")
 
@@ -179,6 +183,17 @@ class HarnessTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "clock domains"):
             run_adversarial_episode(None, "sabotage", None, variant=variant(),
                                     control=control, clock_domain="synthetic")
+
+    def test_control_system_exit_stops_sampling_and_retains_private_receipt(self):
+        run, _, sampler, _ = self.run_synthetic(exit_control=True)
+        self.assertTrue(sampler.stopped)
+        receipt = run.ground_truth["hidden_decode"]
+        self.assertEqual(receipt["status"], "interrupted")
+        self.assertEqual(receipt["error_type"], "SystemExit")
+        self.assertIsNone(receipt["H"])
+        self.assertTrue(receipt["unknown_work_on_failure"])
+        self.assertIn("episode.interrupted", run.episode.flags)
+        self.assertEqual(run.episode.turns, ())
 
 
 if __name__ == "__main__":
