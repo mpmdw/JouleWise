@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 
 TRIAGE_SCHEMA = 'joulewise.align_v4.next_arm_triage.v1'
@@ -42,9 +43,9 @@ NEXT_ARM_TRIAGE = (
     dict(id='charging_battery', source=ARM, first_window_na=False,
          text='charging/battery: AC, >=99%, not charging, |InstantAmperage|<=200 mA, '
               'completed top-up within 30 min, OBC off attested (R02)'),
-    dict(id='meter_reader_live', source=PACKET, first_window_na=False,
-         text='the KM003C meter reader is verified live (enabled, answering) before this arm; '
-              'the meter is a SECONDARY channel and nothing else about it gates'),
+    dict(id='meter_reader_live', source=ARM, first_window_na=False,
+         text='the KM003C meter reader is verified live (enabled, answering, samples and clock) by the '
+              'arm itself before this arm; the meter is a SECONDARY channel and nothing else about it gates'),
     dict(id='meter_coverage', source=PACKET, first_window_na=False, gating=False,
          text='RECORDED, NON-GATING: the previous window\'s per-member meter sample/clock '
               'coverage tabulated with gaps listed; a gap never blocks v4'),
@@ -77,7 +78,7 @@ NEXT_ARM_TRIAGE = (
 TRIAGE_IDS = tuple(row['id'] for row in NEXT_ARM_TRIAGE)
 GATING_IDS = tuple(row['id'] for row in NEXT_ARM_TRIAGE if row.get('gating', True))
 _BY_ID = {row['id']: row for row in NEXT_ARM_TRIAGE}
-WINDOW_ID = re.compile(r'^(?:R1|W1|[CTD][1-9][0-9]*)$')
+WINDOW_ID = re.compile(r'^(?:R1|W1|[CTD][1-9][0-9]*(?:#[1-9][0-9]*)?)$')    # `C3#2` = zero-capture retry of C3
 COMMIT = re.compile(r'^[0-9a-f]{40}$')
 RULING_RESETS = ('zero_capture_escalation',)
 
@@ -90,7 +91,9 @@ def _canonical_sha256(value):
 def triage_template(previous_window, *, next_window_role='calibration'):
     """A fill-in packet (L7): every field the arm reads, statuses 'fail' until the producer decides."""
     return {'schema': TRIAGE_SCHEMA, 'previous_window': previous_window,
-            'next_window_role': next_window_role, 'record_commit': '0' * 40,
+            'next_window_role': next_window_role, 'valid_until_epoch_s': None,
+            'record_commit': '0' * 40, 'record_path': 'FILL IN', 'record_sha256': '0' * 64,
+            'series_commit': '0' * 40, 'series_path': 'FILL IN', 'pushed_ref': 'refs/remotes/origin/records',
             'last_desk_passed_artifact_set_sha256': '0' * 64,
             'calibration_windows': [], 'lead_rulings': [],
             'checks': {row['id']: {'status': 'recorded' if row.get('gating', True) is False else 'fail',
@@ -102,7 +105,7 @@ def _is_digest(value):
     return isinstance(value, str) and len(value) == 64 and all(c in '0123456789abcdef' for c in value)
 
 
-def next_arm_triage(packet, internal, identity=None):
+def next_arm_triage(packet, internal, identity=None, *, now_epoch_s=None):
     """Evaluate the frozen triage list. Every gating check gates the arm.
 
     ``internal`` maps each ARM-source id to bool (computed by the arm itself).
@@ -111,7 +114,8 @@ def next_arm_triage(packet, internal, identity=None):
     'record_bound': bool}``; ``record_bound`` means the packet's ``record_path`` at its
     ``record_commit`` has the packet's ``record_sha256`` and that commit is the last one
     that changed the record (smoke G1: a stale but well-formed packet refuses).
-    ``packet`` is the off-MBP evidence: schema, ``previous_window`` (a window id
+    ``now_epoch_s`` is the arm's own clock. ``packet`` is the evidence the arm itself rebuilt from the
+    identities the supplied packet named (never the supplied text): schema, ``previous_window`` (a window id
     or ``'R1'`` for the first v4 window), ``record_commit`` (the previous record's
     commit), ``last_desk_passed_artifact_set_sha256``, ``next_window_role``
     ('calibration' or 'test'), ``calibration_windows`` (the ``calibration_stop``
@@ -130,6 +134,15 @@ def next_arm_triage(packet, internal, identity=None):
     identity = identity if isinstance(identity, dict) else {}
     if packet.get('schema') != TRIAGE_SCHEMA:
         reasons.append('next-arm triage packet missing or wrong schema')
+    # Expiry is mandatory (Opus packet review HIGH-2): a missing or non-numeric valid_until, an unknown
+    # arm clock, or a packet older than its quiet observation allows, refuses.
+    expiry = packet.get('valid_until_epoch_s')
+    if type(expiry) not in (int, float) or not math.isfinite(expiry):
+        reasons.append('packet has no numeric valid_until_epoch_s (expiry is mandatory)')
+    elif type(now_epoch_s) not in (int, float) or not math.isfinite(now_epoch_s):
+        reasons.append('arm clock unavailable: cannot check packet expiry')
+    elif now_epoch_s > expiry:
+        reasons.append('packet expired before this arm')
     previous = packet.get('previous_window')
     if not isinstance(previous, str) or not WINDOW_ID.match(previous):
         reasons.append('triage packet needs previous_window as a registered window id (R1, W1, Cn, Tn, Dn)')

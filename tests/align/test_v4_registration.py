@@ -168,7 +168,7 @@ class RegistrationTests(unittest.TestCase):
 
     def test_arm_records_battery_and_refuses_missing_attestation(self):
         from scripts import align_v4_session as session
-        from tests.align.test_v4_cadence import passing_packet, write_battery_log
+        from tests.align.test_v4_cadence import arm_seams, passing_packet, write_battery_log
         packet = passing_packet()
         yes = lambda root, commit: True
         bound = lambda root, packet: True
@@ -184,8 +184,8 @@ class RegistrationTests(unittest.TestCase):
             floated = write_battery_log(Path(tmp) / 'float.jsonl', 5000., completion_age=2400)     # (b) continuous float
             stale = write_battery_log(Path(tmp) / 'stale.jsonl', 5000., completion_age=2400, end_age=900)
             arm = lambda **kw: session.arm_checks('.', {}, obc_off_attested_by=kw.pop('obc', 'synthetic'), runner=run,
-                                                  now=lambda: 5000., commit_check=yes, record_check=bound, **kw)
-            self.assertFalse(session.arm_checks('.', {}, runner=run)['admitted'])
+                                                  now=lambda: 5000., **arm_seams(), **kw)
+            self.assertFalse(session.arm_checks('.', {}, runner=run, meter_probe=lambda root: {'live': False})['admitted'])
             self.assertFalse(arm(obc='', battery_log=log, next_arm_triage=packet)['admitted'])     # no attestation
             self.assertFalse(arm(next_arm_triage=packet)['admitted'])                              # no battery evidence
             record = arm(battery_log=log, next_arm_triage=packet)
@@ -202,7 +202,7 @@ class RegistrationTests(unittest.TestCase):
             # L8: a failing pmset is evidence only
             bad_pmset = lambda argv: subprocess.CompletedProcess(argv, 1, '', 'pmset failed')
             with_bad = session.arm_checks('.', {}, obc_off_attested_by='synthetic', runner=bad_pmset, now=lambda: 5000.,
-                                          commit_check=yes, record_check=bound, battery_log=log, next_arm_triage=packet)
+                                          battery_log=log, next_arm_triage=packet, **arm_seams())
             self.assertTrue(with_bad['admitted'], with_bad['reasons'])
             self.assertTrue(with_bad['battery']['pmset_batt']['evidence_only'])
             self.assertEqual(set(record['next_arm_triage']['checks']), set(__import__(
@@ -210,10 +210,16 @@ class RegistrationTests(unittest.TestCase):
             # R12 B2: the triage list gates the arm itself.
             self.assertFalse(arm(battery_log=log)['admitted'])
             bad = passing_packet()
-            bad['checks']['meter_reader_live']['status'] = 'fail'
+            bad['checks']['capture_faults']['status'] = 'fail'
             refused = arm(battery_log=log, next_arm_triage=bad)
             self.assertFalse(refused['admitted'])
-            self.assertIn('next_arm_triage: triage meter_reader_live failed', refused['reasons'])
+            self.assertIn('next_arm_triage: triage capture_faults failed', refused['reasons'])
+            # the live meter is arm-computed (R12 B2 / lead ruling): a dead one refuses whatever the packet says
+            dead = session.arm_checks('.', {}, obc_off_attested_by='synthetic', runner=run, now=lambda: 5000.,
+                                      battery_log=log, next_arm_triage=packet,
+                                      **{**arm_seams(), 'meter_probe': lambda root: {'live': False}})
+            self.assertFalse(dead['admitted'])
+            self.assertIn('next_arm_triage: triage meter_reader_live failed', dead['reasons'])
             self.assertEqual(record['battery']['raw_ioreg'], 'synthetic raw')
             self.assertEqual(observe.call_args.kwargs['phase'], 'arm_check')
 
@@ -221,7 +227,7 @@ class RegistrationTests(unittest.TestCase):
         # Lead ruling: no sampler during a window; the window's 1 Hz SMC capture carries the float.
         import json as _json
         from scripts import align_v4_session as session
-        from tests.align.test_v4_cadence import passing_packet
+        from tests.align.test_v4_cadence import arm_seams, passing_packet
         from tests.align.test_v4_topup import window_journal
         good = dict(passed=True, probe_error=False, external_connected=True, is_charging=False,
                     current_capacity_pct=100, instant_amperage_ma=0, update_age_s=1)
@@ -245,8 +251,7 @@ class RegistrationTests(unittest.TestCase):
             journal.write_text(''.join(_json.dumps(r) + '\n' for r in window_journal(2000, 45900)))
             arm = lambda **kw: session.arm_checks(
                 '.', {}, obc_off_attested_by='synthetic', runner=run, now=lambda: now,
-                commit_check=lambda root, commit: True, record_check=lambda root, packet: True,
-                next_arm_triage=passing_packet(), **kw)
+                next_arm_triage=passing_packet(), **arm_seams(), **kw)
             record = arm(battery_log=[first, second], window_battery_journal=[journal])
             self.assertTrue(record['admitted'], record['reasons'])
             evidence = record['battery']['topup_evidence']

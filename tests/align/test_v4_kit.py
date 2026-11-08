@@ -32,13 +32,12 @@ def topup():
     a passing triage packet and an always-found record commit. No hand-entered time."""
     import tempfile
     import time
-    from tests.align.test_v4_cadence import passing_packet, write_battery_log
+    from tests.align.test_v4_cadence import arm_seams, passing_packet, write_battery_log
     if not _LOG_DIR:
         _LOG_DIR.append(tempfile.TemporaryDirectory(prefix='v4-kit-battery-'))
     path = Path(_LOG_DIR[0].name) / f'battery-{time.time_ns()}.jsonl'
     write_battery_log(path, time.time())
-    return dict(battery_log=path, next_arm_triage=passing_packet(), commit_check=lambda root, commit: True,
-                record_check=lambda root, packet: True)
+    return dict(battery_log=path, next_arm_triage=passing_packet(), **arm_seams())
 
 
 def independent_seed(value):

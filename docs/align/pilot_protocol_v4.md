@@ -881,8 +881,25 @@ rules above (U1-U3 ladder before the next window, no replacements or top-ups), a
 a failed window is never silently replaced. `not_applicable` is allowed only for
 previous-window checks before W1 (previous window R1). The triage packet is
 `schema joulewise.align_v4.next_arm_triage.v1`, passed to the arm as
-`--next-arm-triage`; the arm retains the packet itself, its digest, the packet file's
-digest and the derived calibration summary in `staging/v4-arm-NNN.json`. A fill-in
+`--next-arm-triage`. **A packet is a pointer, never trusted data** (Opus packet review
+HIGH-1/2/3): the arm rebuilds the packet with `scripts/align_v4_next_arm_packet.py:build_packet`
+(a strict-tier, executed-closure builder) from the identities the packet names
+(`record_commit`/`record_path`, the series commit/path, the pushed ref), with the arm's own clock
+and artifact-set digest, judges its own build, and refuses a supplied packet whose canonical
+form differs from the rebuild in any field, removal, addition or basis text. Only `pushed_tip` and
+`packet_preflight` are ignored. Expiry is mandatory: a missing or non-numeric `valid_until_epoch_s`
+refuses, and so does an arm clock past it. The window records are hash-chained
+(`previous_record` links, canonical series ledger `series/state.json`); the rebuild walks the chain
+back to R1/W1, so an omitted attempt (including a zero-capture one, id `C3#1`) is detected, and a
+packet bound to anything but the ledger's latest window refuses (delta3 G1). The arm computes
+`series_powermode`, `external_volume`, `charging_battery` and `meter_reader_live` (a short live
+KM003C probe: aligned stream, trailer and a consistent offset) itself; `prepared_at`, the live meter
+check and the battery evidence are never entered by the lead. A lead ruling's `text_sha256` is
+computed by the builder from a committed ruling text file. The arm retains the packet it rebuilt
+(`rebuilt_packet`), the packet file's digest, whether the supplied packet matched, the live-meter
+evidence and the derived calibration summary in `staging/v4-arm-NNN.json`. The zero-capture retry
+keeps the window id with an attempt suffix (`C3#2`); the frozen order is unchanged. A U1-U3 failure
+gives that model 0 eligible from that window (R15, RUN_STATE 226). A fill-in
 template: `v4_cadence.triage_template(previous_window)`. A **`lead_ruling` row** (in
 `lead_rulings`: `ruling_id`, `text_sha256`, `resets: zero_capture_escalation`,
 `after_window`, `lead_signature`) resets the zero-capture escalation count after the

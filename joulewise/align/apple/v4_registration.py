@@ -39,6 +39,13 @@ _NAMED_ARTIFACTS = (
     'scripts/align_r1_runtime.py', 'configs/align/v4/r1_runtime.json', 'joulewise/__main__.py',
     'scripts/align_r1_to_w1_chain.py', 'scripts/align_v4_w1_synthetic.py', 'scripts/align_v4_wp18_fixtures.py',
     'scripts/align_v4_dynamic_trace.py', 'docs/align/v4/dynamic_closure_trace.json',
+    # The arm rebuilds the next-arm packet with this builder (a packet is a pointer, never trusted data).
+    'scripts/align_v4_next_arm_packet.py',
+    # Production launch-argument templates (delta3 S1 F02): night_agent_install reads the night and
+    # probe templates to build the job's ProgramArguments/environment; the watchdog and b6-loop
+    # installers read theirs. A changed template changes what runs, so each is strict.
+    'configs/launchd/com.joulewise.night.plist.template', 'configs/launchd/com.joulewise.night-probe.plist.template',
+    'configs/launchd/com.joulewise.magistrate.plist.template', 'configs/launchd/com.joulewise.b6loop.plist.template',
 )
 
 
@@ -313,30 +320,18 @@ EXECUTED_CLOSURE = (
 )
 ARTIFACTS = _NAMED_ARTIFACTS + tuple(p for p in EXECUTED_CLOSURE if p not in _NAMED_ARTIFACTS)
 
-# Two tiers (Opus cold review MED-1; delta2 inverted the default). STRICT is the default:
-# every bound path is strict, and a change is a re-registration (new receipt, signature, both
-# gates). AMENDMENT is a short explicit allowlist of modules proven NOT executed on the
-# W1/D/R1 path: each is classified retired, analysis, mock, other-hardware, acceptance or desk
-# in the reviewed refusal census (configs/gates/hazard_refusals.json scan.not_scanned) and none
-# is executed by the committed dynamic trace (docs/align/v4/dynamic_closure_trace.json). A
-# change to one is admitted only through a lead-signed ``amendments`` row in the receipt.
-AMENDMENT_ALLOWLIST = (
-    # other_hardware: another platform's adapter; never selected on the Mac
-    'joulewise/adapters/node_client.py', 'joulewise/adapters/nvidia_smi.py',
-    # retired: the ARM/T0 and v5 qualification path; block 5 does not run it
-    'joulewise/arm_readiness_evidence.py', 'joulewise/arm_readiness_evidence_t0.py',
-    'joulewise/night_agent_install.py', 'joulewise/quiet_predicate_campaign.py',
-    'joulewise/t0_rehearsal.py', 'joulewise/v5_qualification.py', 'joulewise/zero_capture_facts.py',
-    'scripts/capture_t0_step.py', 'scripts/check_v5_arm_abort.py',
-    'scripts/produce_t0_rehearsal_bundle.py', 'scripts/write_v5_qualification_plan.py',
-    # analysis: desk analysis after the harvest; decides no collection and no window exclusion
-    'joulewise/envelope_gate.py', 'joulewise/floor_extraction.py', 'joulewise/kv_size.py', 'joulewise/report.py',
-    # desk: tooling run before the arm or after the harvest; never inside a window
-    'joulewise/b6/precheck.py', 'joulewise/b6/smoke.py', 'joulewise/session_structure.py',
-    'scripts/advance_b5_ledger_pin.py', 'scripts/bytes_gates.py', 'scripts/install_night_agent.sh',
-    # mock / acceptance: test doubles; desk issuing of instrument acceptances before any window
-    'scripts/fixture_orphan_census.py', 'scripts/issue_calibration_acceptance_generation.py',
-)
+# Two tiers (Opus cold review MED-1; delta2 inverted the default; delta3 emptied the allowlist).
+# STRICT is the default: every bound path is strict, and a change is a re-registration (new
+# receipt, signature, both gates). AMENDMENT is an explicit allowlist, and it may hold only a
+# module absent from BOTH the static closure of every execution entry point AND the full dynamic
+# trace (docs/align/v4/dynamic_closure_trace.json, which includes the production hazard-pack
+# night-runner scenario). Python executes a module body on import, so a statically reachable
+# module is never "not executed"; the refusal census's not-scanned classes describe that
+# census's scope, not execution. Every bound path is statically reachable by construction, so
+# the allowlist is empty: if in doubt, strict; re-registration on such a change is the accepted
+# cost. A change to a listed path is admitted only through a lead-signed ``amendments`` row;
+# an amendment row naming a strict path always refuses.
+AMENDMENT_ALLOWLIST = ()
 # A small independent inventory of the actual W1/D/R1 launch spine (delta2 S2): launched,
 # configured or chain-named programs that must be bound and strict. The tests derive more of
 # them from plan_tree.json, the chain tool table, inputs.json (WP15) and the dynamic trace.
@@ -408,22 +403,34 @@ def _local(root, path):
     return target
 
 
-def artifact_set_digest(root):
-    """One digest over the current bytes of every bound artifact (missing ones marked).
-
-    The arm derives "code or config changed since the last desk-passed state" by
-    comparing this with the digest recorded when that desk passed; the packet's own
-    flag is only cross-checked. ``python3 -m joulewise.align.apple.v4_registration``
-    prints it for the desk-pass record.
-    """
+def artifact_set_digest_from(reader):
+    """One digest over every bound artifact; ``reader(path)`` returns its bytes or None (marked missing)."""
     h = hashlib.sha256()
     for path in sorted(ARTIFACTS):
-        try:
-            value = digest(_local(root, path).read_bytes())
-        except (OSError, ValueError):
-            value = 'missing'
-        h.update(f'{path}\0{value}\n'.encode())
+        raw = reader(path)
+        h.update(f'{path}\0{digest(raw) if raw is not None else "missing"}\n'.encode())
     return h.hexdigest()
+
+
+def artifact_set_digest(root):
+    """The artifact-set digest of the working tree at ``root`` (missing files marked).
+
+    The arm derives "code or config changed since the last desk-passed state" by comparing this
+    with the digest recorded for the last desk pass; the packet's own flag is only cross-checked.
+    ``python3 -m joulewise.align.apple.v4_registration`` prints it.
+    """
+    def reader(path):
+        try:
+            return _local(root, path).read_bytes()
+        except (OSError, ValueError):
+            return None
+    return artifact_set_digest_from(reader)
+
+
+def artifact_set_digest_at(root, commit):
+    """The same digest computed from the committed bytes of ``commit`` (the last desk-passed code state)."""
+    blobs = _committed_bytes(root, commit, list(ARTIFACTS))
+    return artifact_set_digest_from(lambda path: blobs.get(path))
 
 
 def _committed_bytes(root, commit, paths):
