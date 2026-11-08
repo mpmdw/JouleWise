@@ -136,6 +136,8 @@ jobs:
       # ordinary and exclusive jobs.
       SHARD_COUNT: "12"
     strategy:
+      # Preserve coverage and timing observations when another shard fails.
+      fail-fast: false
       matrix:
         # 3.13: production nights (the measurement venv).
         # PRs and main pushes use production 3.13 only. 3.14 is
@@ -201,7 +203,9 @@ jobs:
           # UNIT-atomic, not module-atomic. Modules in split_modules (today
           # test_reduce and test_controller_g2b_attachment, each audited for
           # per-test independence) are spread across shards at test
-          # granularity, so no single module floors the shard time. This edits no test file and
+          # granularity. BYTES and B6 declarations activate when their pending
+          # lanes arrive; see docs/perf/2026-11-08-eng-ci.md for the world split.
+          # A heavy individual test can still floor a shard. Splitting
           # skips nothing: expand_units emits one unit per declared heavy
           # test plus ONE remainder unit holding every other test in that
           # module, and verify_split_declaration fails the build closed if
