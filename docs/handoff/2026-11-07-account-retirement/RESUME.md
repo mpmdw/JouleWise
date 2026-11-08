@@ -126,3 +126,13 @@ Written by the laptop lead (Opus 5.5, session 1544c617) before Ed retired this C
 - the workflow outputs `align/2026-11-07-v4-{v4-registration,squeeze-design,reviewer2}`;
 - part 5, `research/2026-11-07-tripwire-directions`.
 - **Cross-family soundness rule (Ed):** every v4/squeeze step gets at least two independent Sol 6.1 xhigh seats next to the Claude seats, plus an agreement report. For tonight's run, see the agenda's MAIN GOAL section. Start from `align/2026-11-07-squeeze-agreement` (`docs/align/squeeze/AGREEMENT.md`) once it lands. It is the merged, agreement-weighted v4 action list.
+
+## Final notes at account switch (about 21:15 PST 11-07)
+- **Models (Ed):** Opus 5.5 is the Anthropic model to use; use Fable much less. Sol 6.1 xhigh and Opus cross-review each other's products.
+- **R0-L3:** lead dispositions are in RUN_STATE 209. The magistrate merges #699 and #700 and launches R0 re-run 11; then R1 per item 202.
+- **Block 5:** dry-m (r4) was still running at the switch. When `/Users/edr/jw-b5-staging/dryrun-m/exit` exists, run the release check from the 19:50 update. Exit 0 means ask Ed for the unseal OK.
+- **In flight, detached, pushing branches when done:**
+  - Sol interp wave 2 (`/private/tmp/jwsol/interp/wave2.zsh`);
+  - Sol squeeze jobs and seats, and the agreement report (`/private/tmp/jwsol/squeeze/seats.zsh`);
+  - the Claude workflows `v4-squeeze-readiness` and `tripwire-directions`. These may be cut by the account switch; whatever pushed is on `align/2026-11-07-v4-*` and `research/2026-11-07-tripwire-directions`. If they are missing, re-run them with Opus plus Sol seats.
+- **Showcase page:** `docs/research/energy-tripwire.html`. The artifact on the old account may disappear.
