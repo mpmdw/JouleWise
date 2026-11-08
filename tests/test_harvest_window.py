@@ -641,6 +641,71 @@ class HarvestWindowTests(unittest.TestCase):
         with mock.patch.object(harvest.shutil, "copytree", changing_copy):
             self.assert_refuses()
 
+    def test_parallel_hashes_preserve_complete_harvest_bytes(self):
+        # Same synthetic paths and fixed clock: compare the entire delivered
+        # tree against the original serial read_bytes inventory algorithm.
+        from tests.test_finalize_hashes import FinalizeHashesTests
+        self.fixture()
+        legacy = FinalizeHashesTests.legacy_inventory
+        with mock.patch.object(harvest, "inventory", lambda root, **_: legacy(root)):
+            self.run_harvest()
+        expected = {p.relative_to(self.args.custody).as_posix(): p.read_bytes()
+                    for p in self.args.custody.rglob("*") if p.is_file()}
+        for workers in (1, 2, 4, 8):
+            with self.subTest(workers=workers):
+                shutil.rmtree(self.args.custody)  # this test's own synthetic archive
+                self.args.hash_workers = workers
+                self.run_harvest()
+                self.assertEqual(expected, {p.relative_to(self.args.custody).as_posix(): p.read_bytes()
+                                            for p in self.args.custody.rglob("*") if p.is_file()})
+
+    def test_parallel_copy_corruption_missing_and_interruption_preserve_refusal(self):
+        from joulewise import file_hashes
+        self.fixture()
+        original_copy = harvest.shutil.copytree
+        for workers in (1, 2, 4, 8):
+            self.args.hash_workers = workers
+            for damage in ("corrupt", "missing", "source-rewrite", "interrupt"):
+                with self.subTest(workers=workers, damage=damage):
+                    self.calls.clear()
+                    def damaged_copy(source, destination, *a, **kw):
+                        result = original_copy(source, destination, *a, **kw)
+                        if Path(source) == self.night:
+                            path = (self.night if damage == "source-rewrite" else Path(destination)) / "night/chain.exited"
+                            if damage == "interrupt":
+                                raise InterruptedError("synthetic copy interruption")
+                            if damage == "missing":
+                                path.unlink()
+                            else:
+                                st = path.stat()
+                                path.write_bytes(b"!" * st.st_size)
+                                harvest.os.utime(path, ns=(st.st_atime_ns, st.st_mtime_ns))
+                        return result
+                    # Restore only this fixture's file after testing a source
+                    # rewrite, so later cases retain valid timing evidence.
+                    source_path = self.night / "night/chain.exited"
+                    source_raw, source_stat = source_path.read_bytes(), source_path.stat()
+                    try:
+                        with mock.patch.object(harvest.shutil, "copytree", damaged_copy):
+                            error = InterruptedError if damage == "interrupt" else harvest.HarvestRefusal
+                            with self.assertRaises(error) as caught:
+                                self.run_harvest()
+                    finally:
+                        if damage == "source-rewrite":
+                            source_path.write_bytes(source_raw)
+                            harvest.os.utime(source_path, ns=(source_stat.st_atime_ns, source_stat.st_mtime_ns))
+                    if damage != "interrupt":
+                        self.assertEqual(str(caught.exception), "source changed or courier copy disagrees")
+                    self.assertFalse(self.args.custody.exists())
+                    self.assertFalse(self.args.custody.with_name("archive.harvest-lock").exists())
+                    self.assertFalse(any("--uninstall" in argv for argv in self.calls))
+            with mock.patch.object(file_hashes, "_stream_sha256", side_effect=InterruptedError("synthetic hash")):
+                with self.assertRaises(InterruptedError):
+                    self.run_harvest()
+            self.assertFalse(self.args.custody.exists())
+        # A fresh invocation recovers normally; no partial manifest survives.
+        self.assertEqual(self.run_harvest()["valid_captures"], 1)
+
     def test_aborted_window_counts_unused_slots_without_inventing_capture(self):
         self.fixture([build.Slot("0.02", native_frames=True), build.Slot("0.03", native_frames=True)],
                      fill_slots=1, abort_reason="window_exhausted")

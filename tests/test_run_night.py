@@ -6154,14 +6154,15 @@ class CourierDeliveryBoundaryTests(unittest.TestCase):
         self.assertIn(error, '\n'.join(self.packet['reporting_errors']))
         self.assertFalse(self.packet['result_unavailable'])
 
-    def test_unreadable_outcome_read_bytes_cannot_suppress_run_night_delivery(self):
+    def test_unreadable_outcome_open_cannot_suppress_run_night_delivery(self):
         path = self.f.custody / 'night/evidence_outcome.json'
-        read_bytes = Path.read_bytes
-        def denied(candidate):
-            if candidate == path:
+        open_file = Path.open
+        def denied(candidate, *args, **kwargs):
+            mode = args[0] if args else kwargs.get('mode', 'r')
+            if candidate == path and 'r' in mode:
                 raise PermissionError('fixture outcome read denied')
-            return read_bytes(candidate)
-        with mock.patch.object(Path, 'read_bytes', denied):
+            return open_file(candidate, *args, **kwargs)
+        with mock.patch.object(Path, 'open', denied):
             code, _ = self.run_terminated_night()
         self.assertEqual(code, self.driver.EXIT_GO)
         self.assert_artifact_error('PermissionError')
@@ -6234,13 +6235,13 @@ class CourierDeliveryBoundaryTests(unittest.TestCase):
 
     def test_outcome_replaced_after_stat_cannot_abort_inventory_or_delivery(self):
         path = self.f.custody / 'night/evidence_outcome.json'
-        read_bytes = Path.read_bytes
-        def replace_before_read(candidate):
+        open_file = Path.open
+        def replace_before_read(candidate, *args, **kwargs):
             if candidate == path and candidate.is_file():
                 candidate.unlink()
                 candidate.mkdir()
-            return read_bytes(candidate)
-        with mock.patch.object(Path, 'read_bytes', replace_before_read):
+            return open_file(candidate, *args, **kwargs)
+        with mock.patch.object(Path, 'open', replace_before_read):
             self.run_terminated_night()
         self.assert_artifact_error('IsADirectoryError')
 
