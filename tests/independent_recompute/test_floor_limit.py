@@ -53,7 +53,7 @@ def make_dominated(case, diagnostics, widths=(1.0,) * 9, linear=50.0):
     linear bound (30.0) under its guarded point floor (38.0), except the forms in diagnostics, whose bound is
     linear (over it)."""
     for floor in case.ours["floors"].values():
-        floor.update(widths_j=list(widths), linear_deviation_bound_j=30.0, point_unguarded_floor_j=max(
+        floor.update(status="computed", widths_j=list(widths), linear_deviation_bound_j=30.0, point_unguarded_floor_j=max(
             floor["max_abs_deviation_j"], floor["prediction_j"]))
     for cell, forms in diagnostics.items():
         for form in forms:
@@ -292,21 +292,50 @@ class FloorLimitRuleTests(GateCase):
             floor["widths_j"] = [0.0] * 9
         self.exit_nonzero()
 
-    def test_a_bound_within_the_bar_of_the_guarded_floor_accepts_either_presence(self):
-        for printed in (True, False):
-            with self.subTest(printed=printed):
-                self.setUp()
-                verdict, fill = with_floor_limit(self, dominated=False)
-                for floor in self.ours["floors"].values():
-                    floor["linear_deviation_bound_j"] = POINT * (1 + 1e-9)
-                if not printed:
-                    for row in (verdict, fill):
-                        del row["claim_evaluation"]["floor_limit"]
-                        for key in ("point_floor_diagnostics", "floor_source", "floor_limit_class", "single_count_discipline"):
-                            row["floor"].pop(key)
-                            for resolution in row["floor"]["resolutions"]:
-                                resolution.pop(key)
-                self.assertEqual(self.exit_code(CODED)[0], 0)
+    def test_a_bound_within_the_bar_is_decided_only_on_bit_identical_operands(self):
+        # R704-D3 (RC-CMP-11 F1): 1e-9 relative over the guarded point floor is inside the floor_j bar. The printed
+        # diagnostics carry the recompute's point floor, guard and guarded floor exactly, so the strict > decides:
+        # limited, as printed (AGREE, no undetermined row).
+        verdict, fill = with_floor_limit(self, dominated=False)
+        for floor in self.ours["floors"].values():
+            floor["linear_deviation_bound_j"] = POINT * (1 + 1e-9)
+        result = self.shipped()
+        self.assertEqual(self.fails(result), {})
+        # (The prefill contrast prints nothing, so its forms are the undetermined ones.)
+        self.assertFalse([r for r in result["comparisons"]
+                          if r.get("reason") == "within_bar_undetermined" and r["key"].startswith(DECODE)])
+        self.assertEqual(self.exit_code(CODED)[0], 0)
+
+    def test_a_bound_within_the_bar_with_no_label_printed_is_undetermined_and_recorded(self):
+        # Nothing printed to be bit-identical to: neither presence is silently accepted; every undetermined form is a
+        # recorded within_bar_undetermined row (AGREE, since no printed number disagrees), at the floor, on the claim
+        # evaluation and on each resolution.
+        verdict, fill = with_floor_limit(self, dominated=False)
+        for floor in self.ours["floors"].values():
+            floor["linear_deviation_bound_j"] = POINT * (1 + 1e-9)
+        for row in (verdict, fill):
+            del row["claim_evaluation"]["floor_limit"]
+            for key in ("point_floor_diagnostics", "floor_source", "floor_limit_class", "single_count_discipline"):
+                row["floor"].pop(key)
+                for resolution in row["floor"]["resolutions"]:
+                    resolution.pop(key)
+        result = self.shipped()
+        self.assertEqual(self.fails(result), {})
+        rows = [r for r in result["comparisons"]
+                if r.get("reason") == "within_bar_undetermined" and r["key"].startswith(DECODE)]
+        # 2 cells x 2 forms at the floor and at the claim evaluation, and each arm's own cell's 2 forms on its resolution.
+        self.assertEqual(len(rows), 4 + 4 + 2 * 2)
+        self.assertTrue(all(r["l9"] == "absent" and r["verdict"] == "AGREE" for r in rows))
+        self.assertEqual(self.exit_code(CODED)[0], 0)
+
+    def test_a_bound_exactly_at_the_guarded_floor_does_not_pass_a_printed_label(self):
+        # The engine's relation is strict >: equality is not limited, so the printed label fails (R704-D3).
+        with_floor_limit(self, dominated=False)
+        for floor in self.ours["floors"].values():
+            floor["linear_deviation_bound_j"] = floor["guard"] * floor["point_unguarded_floor_j"]
+        result = self.shipped()
+        self.assertIn("outcome_word", self.fails(result))
+        self.assertNotEqual(self.exit_code(CODED)[0], 0)
 
     def test_the_guard_enters_the_comparison(self):
         # A bound above the point floor but under guard x point is not dominated (guard 1.5 here).

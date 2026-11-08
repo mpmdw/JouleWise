@@ -1126,6 +1126,15 @@ MANIFEST += [
  ('tests/independent_recompute/test_floor_limit.py', 'with_floor_limit', 'output', "('Call', (('func', ('Name', (('id', 'dict'), ('ctx', ('Load', ()))))), ('args', (('Name', (('id', 'DISCIPLINE'), ('ctx', ('Load', ())))),))))", 1),
  ('tests/independent_recompute/test_floor_limit.py', 'with_floor_limit', 'output', "('Constant', (('value', 'single_count_discipline'),))", 1),
  ('tests/independent_recompute/test_floor_limit.py', 'with_floor_limit', 'output', "('keyword', (('arg', 'single_count_discipline'), ('value', ('Call', (('func', ('Name', (('id', 'dict'), ('ctx', ('Load', ()))))), ('args', (('Name', (('id', 'DISCIPLINE'), ('ctx', ('Load', ())))),)))))))", 2),
+ ('scripts/compare_b5_recompute.py', '<grep>', 'grep', 'FLOOR_LIMIT_KEYS = ("floor_source", "floor_limit_class", "point_floor_diagnostics", "single_count_discipline")', 1),
+ ('scripts/compare_b5_recompute.py', 'FLOOR_LIMIT_KEYS', 'key-token', "('Constant', (('value', 'single_count_discipline'),))", 1),
+ ('tests/independent_recompute/test_sol_delta_review_704.py', '<grep>', 'grep', '"single_count_discipline": detection_floor.attribution_single_count_discipline()} if printed else None)', 1),
+ ('tests/independent_recompute/test_sol_delta_review_704.py', '<grep>', 'grep', 'single_count_discipline=detection_floor.attribution_single_count_discipline())', 1),
+ ('tests/independent_recompute/test_sol_delta_review_704.py', 'equality_case', 'delegate', "('Call', (('func', ('Attribute', (('value', ('Name', (('id', 'detection_floor'), ('ctx', ('Load', ()))))), ('attr', 'attribution_single_count_discipline'), ('ctx', ('Load', ()))))),))", 1),
+ ('tests/independent_recompute/test_sol_delta_review_704.py', 'equality_case', 'output', "('Call', (('func', ('Attribute', (('value', ('Name', (('id', 'detection_floor'), ('ctx', ('Load', ()))))), ('attr', 'attribution_single_count_discipline'), ('ctx', ('Load', ()))))),))", 1),
+ ('tests/independent_recompute/test_sol_delta_review_704.py', 'equality_case', 'output', "('Constant', (('value', 'single_count_discipline'),))", 1),
+ ('tests/independent_recompute/test_sol_delta_review_704.py', 'mixed_floor', 'delegate', "('Call', (('func', ('Attribute', (('value', ('Name', (('id', 'detection_floor'), ('ctx', ('Load', ()))))), ('attr', 'attribution_single_count_discipline'), ('ctx', ('Load', ()))))),))", 1),
+ ('tests/independent_recompute/test_sol_delta_review_704.py', 'mixed_floor', 'output', "('keyword', (('arg', 'single_count_discipline'), ('value', ('Call', (('func', ('Attribute', (('value', ('Name', (('id', 'detection_floor'), ('ctx', ('Load', ()))))), ('attr', 'attribution_single_count_discipline'), ('ctx', ('Load', ()))))),)))))", 1),
 ]
 
 class SingleCountCensusTests(unittest.TestCase):

@@ -564,8 +564,9 @@ Decided from the code and the registration (structure only). No bar is widened a
 | `claim_evaluation/floor_limit/published_floor_j` | Compared, `floor_gate_j` bar, against the recompute's contrast floor gate | `evaluate_claim` prints the active floor it gated on (`artifact.py` requires it to equal `floor.active_floor_j`, itself compared under the same row family) |
 | `claim_evaluation/floor_limit/single_count_discipline/*` | Uncovered words (strings and booleans only; a number there still refuses), by the same rule as the floor's and resolutions' copies | A fixed registered object (rule id, roles, flags, note) with `gating` false: no number, no claim |
 
-- **Unchanged.** The floor's and the resolutions' `floor_source` and `floor_limit_class` words stay uncovered under
-  their existing rule (NEEDS_RULING RC-CMP-8 2).
+- **Unchanged.** The floor's and the resolutions' `floor_source` and `floor_limit_class` words, and the discipline
+  object's leaves, stay exempt from independent derivation under their existing rule (NEEDS_RULING RC-CMP-8 2); only
+  the equality of their copies is new (below, R704-D1).
 - **Re-derived (cold-pass M1).** Whether each floor is attribution-limited, the D-078 rule, is re-derived from the
   recompute's own terms and compared, not pinned (`limited_forms`; stdlib only, no `joulewise` import, so hash
   independence holds). A form of a registered floor cell is limited when the cell has a nonzero admissible half-width
@@ -575,9 +576,20 @@ Decided from the code and the registration (structure only). No bar is widened a
   floor, on the claim evaluation and on each resolution (the resolution's own registered cell only, L1), is a
   `routing_id` row, so a diagnostic printed for a form the rule does not limit, or dropped for one it does, is DISAGREE;
   the presence of `claim_evaluation/floor_limit` is an `outcome_word` row; and its class and source words are compared
-  against the engine's words only where the rule says limited (missing otherwise: DISAGREE). A bound within the
-  `floor_j` bar of its guarded point floor is undecidable at the bar, so either presence is accepted there (its
-  numbers still compared). The label stays a label beside the floor (no outcome reads it), but a wrong one no longer
+  against the engine's words only where the rule says limited (missing otherwise: DISAGREE). Inside the
+  `floor_j` bar of its guarded point floor (R704-D3, the lead's ruling after Sol's delta review; no broader exemption
+  than RC-CMP-11) the recompute's number is not trusted to decide the engine's strict `>`, so the existing RC-CMP-11 F1
+  treatment applies through `Comparison.atom` and `Comparison.word`: where the recompute's decision operands are
+  bit-identical to the printed ones (the printed diagnostic carries the recompute's point floor, guard and guarded
+  floor exactly; L9 prints no bound, so its bound is taken as the recompute's) the strict `>` decides, so a bound
+  exactly at the guarded floor is not limited and a printed limited label fails; otherwise (nothing printed, or other
+  numbers) the form is undetermined and a `within_bar_undetermined` row (the `limit_decision` rows, one per cell and
+  form at the floor, the claim evaluation and each resolution) records both labels, AGREE only if the printed numbers
+  agree within their bar, and the release is held for lead disclosure of every such row. Neither label is ever
+  accepted silently. A form that is not `computed` (below minimum, or `not_computed` after `make_floors` retained its
+  terms because the drift allowance is unrecorded) has no limit, and a `computed` record without its four terms
+  (`widths_j`, `linear_deviation_bound_j`, `guard`, `point_unguarded_floor_j`) refuses
+  `recompute_floor_terms_missing` instead of meaning "no limit". The label stays a label beside the floor (no outcome reads it), but a wrong one no longer
   passes. The floor's and the resolutions' own `floor_source` and `floor_limit_class` words stay uncovered (RC-CMP-8 2).
   Every number a printed diagnostic carries is compared. A cell that is not one of the contrast's registered floor
   cells, or a form other than absolute or comparative, is DISAGREE, and so is every number under it.
@@ -588,6 +600,19 @@ Decided from the code and the registration (structure only). No bar is widened a
   present in the fill (else `copy_shortened`), with type-preserving equality (`value_differs`), and a fill leaf the
   verdict does not carry has no row (unmapped). The presence row and the cell and form routing rows are not leaves of
   either document and are excluded.
+- **Exempt words and flags: equal copies, both directions (Sol R704-D1).** The words and flags exempt from independent
+  derivation (the floor's and each resolution's `floor_source`, `floor_limit_class` and `single_count_discipline`, and
+  the claim evaluation's discipline) had no comparison row, so the fill could omit, alter or add them independently of
+  the verdict. `floor_limit_copy_defects` compares the complete metadata (every leaf of those keys, of the floor's and
+  resolutions' point diagnostics, and of the whole `claim_evaluation.floor_limit`) between the verdict and the fill,
+  leaf by leaf, type and presence included, in both directions: a verdict leaf the fill lacks is `copy_shortened`, a
+  fill leaf the verdict lacks `copy_extra`, a differing value `value_differs`; each makes the leaf unmapped (exit 2,
+  `step11_unmapped_fill`). The exemption from derivation is unchanged.
+- **Conditional publication (Sol R704-D2).** The aggregate attribution metadata (the floor's, the claim evaluation's)
+  is expected only when every resolution is usable, as the producer publishes it (`analysis_engine/__init__.py`
+  `_floor_row`: `all_usable and limited`); a usable limited resolution keeps its own diagnostic when its partner
+  refuses. Usability is read from the independent recompute (a finite floor gate for the arm's registered cell in
+  `floor_cells`), not from a printed status, so a printed refusal does not suppress a check the recompute says is due.
 - **Pruned.** The flat-shape rules and the `FLOOR_DIAGNOSTICS` exemption are deleted: a diagnostic printed directly
   under `point_floor_diagnostics` now refuses (`test_input_gate.py`
   `test_numbers_under_floor_diagnostics_refuse_sol` updated to say so).
@@ -604,6 +629,9 @@ guard factor or a guarded floor off the recompute's; an exact resolution's diagn
 than the engine's; a label or flag other than the engine's; the published floor off the floor gate; a cell of
 another contrast. An unregistered form or an extra number in a diagnostic refuses `step11_unmapped_fill`, and a fill
 copy that differs from the verdict is not coverage.
+
+`tests/independent_recompute/test_sol_delta_review_704.py` (Sol's delta witnesses, now ordinary tests, with the added
+cases for R704-D1, D2 and D3) and the within-bar tests of `test_floor_limit.py` cover the three dispositions.
 
 ### Release condition
 

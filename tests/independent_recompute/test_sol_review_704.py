@@ -34,8 +34,9 @@ class SolReview704Tests(GateCase):
         for floor in self.ours["floors"].values():
             floor.pop("point_unguarded_floor_j", None)
         code, _, result = self.exit_code(CODED)
-        self.assertNotEqual(code, 0)
-        self.assertGreater(self.fails(result).get("floor_j", 0), 0)
+        # Changed at R704-D2: a computed record that lacks its point floor is a recompute structure refusal (it used
+        # to mean "no limit", which then failed only through the printed diagnostics' numbers).
+        self.assertEqual((code, result["refused"]), (2, "recompute_floor_terms_missing"))
 
     def test_valid_other_arm_source_id_still_rejects(self):
         verdict, fill = with_floor_limit(self)
@@ -151,7 +152,7 @@ class AsymmetricRoutingTests(unittest.TestCase):
                 ours["floors"][f"{cmp.cell_key(entry)}/{form}"] = {
                     "point_unguarded_floor_j": point, "guard": guard,
                     # Changed at e9b24ce74: the D-078 terms the rule (M1) reads; every form is dominated.
-                    "widths_j": [1.0] * 9, "linear_deviation_bound_j": 1000.0}
+                    "status": "computed", "widths_j": [1.0] * 9, "linear_deviation_bound_j": 1000.0}
                 diagnostics[cell][form] = diagnostic(point, guard)
         bars = cmp.load_bars(CODED)
         contrast = registry.entry(PREFILL, "contrast")
