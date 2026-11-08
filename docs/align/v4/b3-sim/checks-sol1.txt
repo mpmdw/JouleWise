@@ -1,0 +1,47 @@
+test_analytic_risk_against_independent_quadrature (__main__.Checks.test_analytic_risk_against_independent_quadrature) ... ok
+test_count_predicate_and_cap (__main__.Checks.test_count_predicate_and_cap) ... ok
+test_exact_discrete_counterexample (__main__.Checks.test_exact_discrete_counterexample) ... ok
+test_exact_iid_reference_and_tail (__main__.Checks.test_exact_iid_reference_and_tail) ... ok
+test_large_array_operands_are_preserved (__main__.Checks.test_large_array_operands_are_preserved) ... ok
+test_rank_boundaries_and_ties (__main__.Checks.test_rank_boundaries_and_ties) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 1.016s
+
+OK
+completed iid p=0.05 tau=0.0 trend=0.0
+completed iid p=0.05 tau=0.0 trend=0.05
+completed iid p=0.05 tau=0.25 trend=0.0
+completed iid p=0.05 tau=0.25 trend=0.05
+completed iid p=0.05 tau=0.5 trend=0.0
+completed iid p=0.05 tau=0.5 trend=0.05
+completed iid p=0.1 tau=0.0 trend=0.0
+completed iid p=0.1 tau=0.0 trend=0.05
+completed iid p=0.1 tau=0.25 trend=0.0
+completed iid p=0.1 tau=0.25 trend=0.05
+completed iid p=0.1 tau=0.5 trend=0.0
+completed iid p=0.1 tau=0.5 trend=0.05
+completed iid p=0.2 tau=0.0 trend=0.0
+completed iid p=0.2 tau=0.0 trend=0.05
+completed iid p=0.2 tau=0.25 trend=0.0
+completed iid p=0.2 tau=0.25 trend=0.05
+completed iid p=0.2 tau=0.5 trend=0.0
+completed iid p=0.2 tau=0.5 trend=0.05
+completed hot p=0.05 tau=0.0 trend=0.0
+completed hot p=0.05 tau=0.0 trend=0.05
+completed hot p=0.05 tau=0.25 trend=0.0
+completed hot p=0.05 tau=0.25 trend=0.05
+completed hot p=0.05 tau=0.5 trend=0.0
+completed hot p=0.05 tau=0.5 trend=0.05
+completed hot p=0.1 tau=0.0 trend=0.0
+completed hot p=0.1 tau=0.0 trend=0.05
+completed hot p=0.1 tau=0.25 trend=0.0
+completed hot p=0.1 tau=0.25 trend=0.05
+completed hot p=0.1 tau=0.5 trend=0.0
+completed hot p=0.1 tau=0.5 trend=0.05
+completed hot p=0.2 tau=0.0 trend=0.0
+completed hot p=0.2 tau=0.0 trend=0.05
+completed hot p=0.2 tau=0.25 trend=0.0
+completed hot p=0.2 tau=0.25 trend=0.05
+completed hot p=0.2 tau=0.5 trend=0.0
+completed hot p=0.2 tau=0.5 trend=0.05

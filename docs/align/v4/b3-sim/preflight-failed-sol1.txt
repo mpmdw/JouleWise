@@ -1,0 +1,22 @@
+nice: setpriority: Operation not permitted
+test_analytic_risk_against_independent_quadrature (__main__.Checks.test_analytic_risk_against_independent_quadrature) ... ok
+test_count_predicate_and_cap (__main__.Checks.test_count_predicate_and_cap) ... ok
+test_exact_discrete_counterexample (__main__.Checks.test_exact_discrete_counterexample) ... ok
+test_exact_iid_reference_and_tail (__main__.Checks.test_exact_iid_reference_and_tail) ... ok
+test_rank_boundaries_and_ties (__main__.Checks.test_rank_boundaries_and_ties) ... ok
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.024s
+
+OK
+Traceback (most recent call last):
+  File "/Users/edr/code/CapstoneProject/jw-wt/sol-b3-sim-sol1/docs/align/v4/b3-sim/simulate_sol1.py", line 360, in <module>
+    raise SystemExit(main())
+                     ~~~~^^
+  File "/Users/edr/code/CapstoneProject/jw-wt/sol-b3-sim-sol1/docs/align/v4/b3-sim/simulate_sol1.py", line 321, in main
+    c, s = simulate_scenario(p, tau, trend, mechanism, args.trials, args.batch)
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/edr/code/CapstoneProject/jw-wt/sol-b3-sim-sol1/docs/align/v4/b3-sim/simulate_sol1.py", line 241, in simulate_scenario
+    assert abs(error.mean()) < 7*error.std(ddof=1)/math.sqrt(len(error)) + 1e-5
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError

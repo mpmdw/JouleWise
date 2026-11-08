@@ -1,0 +1,42 @@
+{
+  "seed": 202611080301,
+  "trials_per_scenario": 100000,
+  "batch": 2000,
+  "python": "3.14.6",
+  "numpy": "2.2.6",
+  "source_sha256": "df4594692ff9551512cfc8a34192e9cd638ab9c6eda4e80adb216b0574b85fa6",
+  "elapsed_seconds": 153.16582691692747,
+  "mc_interval": "pointwise 95%; Wilson proportions, study-level normal mean intervals",
+  "future_windows": [
+    9,
+    10,
+    11
+  ],
+  "hot_probability": 0.25,
+  "hot_exclusion_multiplier": 3,
+  "cool_exclusion_multiplier": 0.3333333333333333,
+  "slots_per_pair_per_window": 7,
+  "two_pairs": [
+    "spam_filter_update",
+    "bank_transfer_2"
+  ],
+  "attempted_cap": 8,
+  "count_target_each_pair": 39,
+  "fit_slot_sensitivity": {
+    "0.05": {
+      "6": 0.0,
+      "7": 0.0,
+      "8": 0.15925212807266573
+    },
+    "0.1": {
+      "6": 0.0,
+      "7": 0.0,
+      "8": 0.006476015750230498
+    },
+    "0.2": {
+      "6": 0.0,
+      "7": 0.0,
+      "8": 2.1378849483818534e-06
+    }
+  }
+}
