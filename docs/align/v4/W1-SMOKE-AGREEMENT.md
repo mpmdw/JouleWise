@@ -238,3 +238,50 @@ and the installer's own pathname writes, and a child's later lookup of TMPDIR. E
 
 A failed main arm now makes `run()` return 1. Packet coverage is unchanged at 358 mutations after the R22-2 merge.
 Merged with v4-r11 @ `f25654e97`. Native behaviour remains unmeasured.
+
+## 10. Delta4 reviews (seat 1 ADMIT-WITH-FIXES, seat 2 HOLD, at 80bbfa2cd) and the ruling
+
+Reviews: `docs/align/v4/W1-SMOKE-DELTA4-sol1.md` and `W1-SMOKE-DELTA4-sol2.md`. Both found the same issue:
+F6's in-process budget patch leaks into lazily imported defaults and into other threads, and a
+half-installed patch is lost when setup is interrupted.
+
+**Lead ruling:** delete the F6 monkeypatching. The production prepare runs in a separate child process,
+through `grouped_run` (process-group kill, proof of exit, TMPDIR check), with the remaining budget as a hard
+wall timeout. Its result comes back through a file under the smoke anchor. The kit is CLI-only.
+
+**Implemented:**
+- `budgeted_subprocess` and `_prepare_budget` are deleted, along with the TMPDIR and `tempfile.tempdir` mutation.
+- `prepare_main` runs `prepare_child`, which calls `align_v4_w1_smoke.py prepare-child` in the clone's venv.
+  - The child gets `pass_fds` with the pinned anchor and writes `prepare-result-NN.json` exclusively beneath it.
+  - The parent reads the result back by descriptor.
+  - On timeout the whole group is killed, proven gone, and the run fails with `BudgetExpired`.
+  - A nonzero child exit is a failed prepare row.
+- In-process `SmokeRunner.run()` warns. In-process production `prepare_smoke` is refused.
+- The one remaining scoped patch is `prepare_smoke`'s existing `h.measurement_view` seam (the reduction). It
+  now runs only inside the dedicated child, or in synthetic test seams.
+
+**Witnesses.** Both modules are on the branch and pass: `test_smoke_delta4_sol1` (12) and `test_smoke_delta4_sol2`
+(11). These pass unchanged because no patching exists: every leakage, cold-import, thread, grouped-run,
+write and caller witness.
+
+**Argued (kit-owner adaptations, named in each module docstring).** Seven tests asserted that the deleted
+patch is active or exercised its deleted API (`smoke_budgeted`, `budgeted_subprocess`, `_prepare_budget`,
+or clipping inside an in-process prepare). They cannot pass under the ruling. Each now asserts the same
+property against the ruled design:
+
+| Test | Now asserts |
+|---|---|
+| delta4-sol1 `test_loaded_defaults_run_and_temp_environment_restore_on_all_body_exits` | Nothing is patched inside prepare; every exit leaves run, defaults, TMPDIR and tempdir unchanged. |
+| delta4-sol1 `test_budget_wrapper_clips_and_preserves_command_options` | The child is launched with timeout = remaining budget, the smoke env (TMPDIR), the clone cwd and the anchor fd. An expired budget refuses before any launch. |
+| delta4-sol2 `test_loaded_defaults_and_environment_restore_on_normal_and_exceptional_exit` | Same as the first row. |
+| delta4-sol2 `test_setup_interruption_restores_already_patched_defaults` | An interrupt during the child launch leaves run/defaults untouched and closes the descriptor pinned for the child. |
+| delta4-sol2 `test_unrelated_thread_does_not_inherit_the_smoke_budget` | Same thread property, with the worker run during `prepare_main` (no scope exists). |
+| delta4-sol2 `test_both_direct_and_default_commands_clip_timeout_and_check_tmp` | A real child whose direct command and 30 s probe outlive a 1.5 s budget is killed whole within it, with TMPDIR checked before and after. |
+| delta3-sol2 `test_production_prepare_capacity_probe_uses_remaining_budget` | A real child calling the production `important_capacity` (own 30 s timeout) is launched with at most the remaining budget and killed at it. |
+
+New controls in `test_w1_smoke.PrepareChildTests`:
+- the real `prepare-child` CLI returns its state through the inherited anchor, with no descriptor leak;
+- in-process production prepare is refused;
+- in-process `run()` warns and logs its entry.
+
+Merged with v4-r11 @ `10d889d12` (R24 reserve cap C14). Native behaviour remains unmeasured.

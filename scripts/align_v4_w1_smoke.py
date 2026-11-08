@@ -6,6 +6,10 @@ MBP only, by the magistrate, in a gap between windows, never during one.
   run    stage and run the labelled, non-registrable smoke (use --detach, then exit the agent)
   parse  turn a smoke directory into a PASS/FAIL table (exit 0 only on PASS)
   faults list the arm fault catalogue with expected refusals
+
+The kit is CLI-only: ``run`` is the supported entry. ``prepare-child`` is internal (the
+runner starts it, bounded by the remaining budget, with the pinned smoke directory's
+descriptor); no in-process API is supported.
 """
 from __future__ import annotations
 
@@ -41,7 +45,16 @@ def main(argv=None):
     parse.add_argument('smoke_dir', type=Path)
     parse.add_argument('--json', type=Path, help='also write the report here')
     sub.add_parser('faults')
+    child = sub.add_parser('prepare-child', help=argparse.SUPPRESS)
+    child.add_argument('--measurement-root', type=Path, required=True)
+    child.add_argument('--session-root', type=Path, required=True)
+    child.add_argument('--smoke-dir', type=Path, required=True)
+    child.add_argument('--anchor-fd', type=int, required=True)
+    child.add_argument('--result', type=Path, required=True)
+    child.add_argument('--keep', required=True)
     args = parser.parse_args(argv)
+    if args.command == 'prepare-child':
+        return prepare_child(args)
     if args.command == 'faults':
         for fault in smoke.ARM_FAULTS:
             print(f'{fault["id"]}: expect {fault["expect"]} {fault["needle"]!r} - {fault["doc"]}')
@@ -82,8 +95,29 @@ def main(argv=None):
         args.measurement_root, args.smoke_dir, packet=json.loads(args.next_arm_triage.read_bytes()),
         battery_log=args.battery_log,
         obc_off_attested_by=args.obc_off_attested_by, w1_disk_config=args.w1_disk_config,
-        prequal_report=args.prequal_report, python=args.python_bin)
+        prequal_report=args.prequal_report, python=args.python_bin, cli=True)
     return runner.run()
+
+
+def prepare_child(args):
+    """The dedicated prepare process: the production prepare with the smoke's reduced view, its
+    state written exclusively beneath the inherited smoke-directory descriptor."""
+    import stat
+    import traceback
+    info = os.fstat(args.anchor_fd)
+    if not stat.S_ISDIR(info.st_mode):
+        print('prepare-child: --anchor-fd is not a directory descriptor', file=sys.stderr)
+        return 2
+    anchor = smoke.Anchor(args.smoke_dir, args.anchor_fd)
+    try:
+        state = smoke.prepare_smoke(args.measurement_root, args.session_root, json.loads(args.keep),
+                                    anchor=anchor, child=True)
+        smoke.safe_write(anchor, args.result, json.dumps(state, indent=2, sort_keys=True, default=str) + '\n',
+                         exclusive=True)
+    except Exception:  # noqa: BLE001 - the parent reads rc and stderr
+        traceback.print_exc()
+        return 1
+    return 0
 
 
 if __name__ == '__main__':

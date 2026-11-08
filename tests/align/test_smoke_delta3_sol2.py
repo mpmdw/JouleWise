@@ -2,6 +2,13 @@
 
 Assertions state required properties; outstanding findings fail visibly. No
 launchd calls, real plists, measurements, model loads, or network are used.
+
+Kit-owner adaptation (lead ruling 2026-11-08, delta4): F6's in-process budget
+patch is deleted; the production prepare runs in a dedicated child process whose
+hard wall timeout is the remaining budget. The capacity witness drove the deleted
+in-process path, so it now drives a REAL prepare child that calls the production
+``important_capacity`` (its own 30 s timeout, an intercepted 30 s command): the
+child is launched with at most the remaining budget and killed whole at it.
 Run this module alone, with Python 3.11/3.13 and -B.
 """
 from __future__ import annotations
@@ -219,44 +226,49 @@ class LifecycleWitnesses(Fixture):
         self.assertEqual(self.host.calls, [])
 
     def test_production_prepare_capacity_probe_uses_remaining_budget(self):
-        from scripts import bytes_h_session as h
-
-        class InterceptedCapacity(RuntimeError):
-            pass
-
-        observed = []
-
-        def intercept(argv, **kwargs):
-            observed.append((argv, kwargs))
-            raise InterceptedCapacity()
-
-        def prepare(measurement, session, keep, **kwargs):
-            return h.prepare(measurement, session, run=kwargs['run'])
-
-        runner = self.runner(prepare=prepare)
+        # Adapted (delta4 ruling): the prepare child is bounded, not patched in-process.
+        runner = self.runner(prepare=None)
+        runner.config['prepare_reserve_s'] = 1
         runner.dir.mkdir()
         runner.make_tmp()
         runner.clone = runner.dir / 'measurement'
         runner.clone.mkdir()
-        runner.deadline = self.clock() + 65  # passes the ordinary 60-second entry reserve
-        # Enter the real prepare and disk_snapshot with minimal synthetic inputs;
-        # stop at the capacity subprocess, before identity/model/plan work. Its
-        # default runner is intercepted so no osascript or host probe executes.
-        sized = {'packs': {h.PACK_ID: {'programmed_span_s': 1}}}
+        runner.deadline = self.clock() + 1.5      # what is left after synthetic preparation work
+        marker = self.tmp / 'capacity.json'
+        source = (
+            'import json, os, subprocess, sys\n'
+            'sys.path.insert(0, sys.argv[2])\n'
+            'from scripts import bytes_h_session as h\n'
+            'def probe(argv, **kw):\n'
+            '    json.dump({"pgid": os.getpgrp(), "timeout": kw["timeout"]}, open(sys.argv[1], "w"))\n'
+            '    return subprocess.run(["/bin/sleep", "30"], timeout=kw["timeout"])\n'
+            'h.important_capacity(sys.argv[1], run=probe)\n')
+        runner.prepare_child_argv = lambda session, result, fd: [sys.executable, '-B', '-c', source,
+                                                                 str(marker), str(ROOT)]
+        observed = []
+        real = smoke.grouped_run
 
-        def load_sizing(_root):
-            self.clock.sleep(60)  # synthetic elapsed preparation before the probe
-            return sized
+        def launch(argv, **kwargs):
+            observed.append(kwargs['timeout'])
+            return real(argv, **kwargs)
 
-        with mock.patch.object(h.registration, 'load_sizing', side_effect=load_sizing), \
-             mock.patch.object(h.registration, 'load_identity_pins', return_value={'units': {}}), \
-             mock.patch.object(h, 'read', return_value={'artifacts': {}}), \
-             mock.patch.dict(h.important_capacity.__kwdefaults__, {'run': intercept}):
-            with self.assertRaises(InterceptedCapacity):
-                runner.prepare_main()
-        self.assertEqual(len(observed), 1)
-        self.assertLessEqual(observed[0][1]['timeout'], 5,
-                             'production prepare capacity bypassed the remaining-budget runner')
+        started = time.monotonic()
+        try:
+            with mock.patch.object(smoke, 'grouped_run', side_effect=launch):
+                with self.assertRaises(smoke.BudgetExpired):
+                    runner.prepare_main()
+            self.assertEqual(len(observed), 1)
+            self.assertLessEqual(observed[0], 5, 'the prepare child outlives the remaining budget')
+            self.assertLess(time.monotonic() - started, 6, 'the capacity probe ran to its own 30 s timeout')
+            self.assertTrue(marker.is_file(), 'the production capacity probe must have started')
+            self.assertEqual(json.loads(marker.read_bytes())['timeout'], 30)
+            self.assertFalse(smoke._group_alive(json.loads(marker.read_bytes())['pgid']))
+        finally:
+            if marker.is_file():
+                try:
+                    os.killpg(json.loads(marker.read_bytes())['pgid'], signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
 
     def test_isolate_timeout_kills_its_descendant(self):
         runner = self.runner()

@@ -206,6 +206,8 @@ def _open_beneath(base, path, flags, mode=0o600):
                 raise IsolationAbort(f'refuses to write {path}: it is a symlink') from exc
             if exc.errno in (errno.ENXIO, errno.EOPNOTSUPP, errno.EISDIR):
                 raise IsolationAbort(f'refuses to write {path}: not a regular file') from exc
+            if exc.errno == errno.EEXIST:
+                raise IsolationAbort(f'refuses to write {path}: it already exists (create-once)') from exc
             raise
     finally:
         os.close(directory)
@@ -297,6 +299,17 @@ def safe_copytree(base, source, destination):
             raise IsolationAbort(f'refuses to copy {entry.path}: not a regular file or directory')
 
 
+def safe_read(base, path):
+    """Read a regular single-link file beneath ``base`` without following any link."""
+    fd = _open_beneath(base, path, os.O_RDONLY)
+    with os.fdopen(fd, 'rb') as handle:
+        return handle.read()
+
+
+IN_PROCESS_WARNING = ('the W1 smoke kit is CLI-only (scripts/align_v4_w1_smoke.py run); SmokeRunner.run() '
+                      'in-process is unsupported and is used only by synthetic tests')
+
+
 def write_json(base, path, value):
     return safe_write(base, path, json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + '\n')
 
@@ -381,13 +394,20 @@ def materialize_kit(view, *, base=None):
     return kit
 
 
-def prepare_smoke(measurement_root, session_root, keep, *, prepare_fn=None, anchor=None, **kwargs):
+def prepare_smoke(measurement_root, session_root, keep, *, prepare_fn=None, anchor=None, child=False, **kwargs):
     """The production v4 prepare with the reduced view; the kit and checkout are untouched.
+
+    CLI-only: the production prepare (``prepare_fn`` None) runs only inside the smoke's
+    dedicated prepare child (``scripts/align_v4_w1_smoke.py prepare-child``, ``child=True``);
+    an in-process call is refused. An injected ``prepare_fn`` is the synthetic test seam.
 
     The session's ``measurement_root`` becomes the isolated clone itself (a real
     checkout: the production install's kit/receipt check and installer paths resolve
     without symlinks); the reduced view stays the plan's measurement root.
     """
+    if prepare_fn is None and not child:
+        raise RuntimeError('the production smoke prepare runs only in its dedicated child process '
+                           '(scripts/align_v4_w1_smoke.py); the in-process API is unsupported')
     from unittest import mock
     from scripts import align_v4_session as session, bytes_h_session as h
     original = h.measurement_view
@@ -840,7 +860,8 @@ class SmokeRunner:
 
     def __init__(self, measurement_root, smoke_dir, *, packet, battery_log, obc_off_attested_by,
                  w1_disk_config, prequal_report, python=None, config=None, run=_run, popen=subprocess.Popen,
-                 sleep=time.sleep, clock=None, wall=None, prepare=prepare_smoke, isolate_fn=isolate, poll_s=5.0):
+                 sleep=time.sleep, clock=None, wall=None, prepare=None, isolate_fn=isolate, poll_s=5.0,
+                 cli=False):
         self.m = Path(measurement_root)
         self.dir = Path(smoke_dir)
         self.packet = packet
@@ -860,6 +881,7 @@ class SmokeRunner:
         self.env = {**os.environ, 'TMPDIR': str(self.dir / 'tmp')}
         self.tmp_identity = None
         self.anchor = None          # the smoke directory, pinned by descriptor in run() (F3)
+        self.cli = cli              # True only when scripts/align_v4_w1_smoke.py constructs the runner
 
     @property
     def base(self):
@@ -922,17 +944,8 @@ class SmokeRunner:
         self.verify_tmp('before ' + Path(argv[0]).name)
         started = self.clock()
         out = self.run_cmd(argv, timeout=timeout, **kw)
-        self.transcripts += 1
-        directory = self.dir / 'transcripts'
-        safe_mkdir(self.base, directory, exist_ok=True)
-        path = directory / f'{self.transcripts:04d}-{Path(argv[0]).name}.json'
-        record = {'argv': argv, 'rc': out.returncode, 'stdout': out.stdout or '', 'stderr': out.stderr or '',
-                  'started': started, 'ended': self.clock(), 'timeout_s': timeout,
-                  'group_survived': getattr(out, 'group_survived', False)}
-        if path.exists() or path.is_symlink():
-            raise IsolationAbort(f'transcript {path} already exists')
-        safe_write(self.base, path, json.dumps(record, indent=2, sort_keys=True, default=str) + '\n',
-                   exclusive=True)
+        self._transcript(argv, out.returncode, out.stdout, out.stderr, started, timeout,
+                         getattr(out, 'group_survived', False))
         self.verify_tmp('after ' + Path(argv[0]).name)
         if getattr(out, 'group_survived', False) is True:
             raise TeardownFailure(f'process group of {argv[0]} survived SIGKILL after its timeout')
@@ -984,56 +997,8 @@ class SmokeRunner:
         finally:
             self.verify_tmp('after isolate command ' + name)
 
-    def budgeted_subprocess(self, inner, what):
-        """A ``subprocess.run`` stand-in for the production prepare's own direct and default
-        runners (F6): requires budget, clips the timeout (none given: the remaining budget) and
-        runs the command in a killed-whole process group."""
-        def run(argv, *args, **kw):
-            name = Path(str(argv[0] if isinstance(argv, (list, tuple)) else argv)).name
-            self.require_budget(1, f'{what} command {name}')
-            self.verify_tmp(f'before {what} command {name}')
-            requested = kw.get('timeout')
-            kw['timeout'] = max(0.001, min(requested if requested else float('inf'), self.remaining()))
-            try:
-                return grouped_run(argv, *args, run=inner, **kw)
-            finally:
-                self.verify_tmp(f'after {what} command {name}')
-        run.smoke_budgeted = True
-        return run
-
-    def _prepare_budget(self):
-        """Every command the production prepare can run outside its ``run=`` argument goes through
-        ``budgeted_subprocess``: module-level ``subprocess.run`` (e.g. ``align_v4_kit.frozen``) and
-        ``run=subprocess.run`` keyword defaults bound at definition time (e.g.
-        ``bytes_h_session.important_capacity``)."""
-        import contextlib
-        stack = contextlib.ExitStack()
-        original = subprocess.run
-        if getattr(original, 'smoke_budgeted', False):
-            return stack
-        from scripts import bytes_h_session as h
-        targets = {id(h.important_capacity): h.important_capacity}
-        for name, module in list(sys.modules.items()):
-            if module is None or not name.startswith(('scripts.', 'joulewise.')) or name == __name__:
-                continue
-            for value in list(vars(module).values()):
-                defaults = getattr(value, '__kwdefaults__', None)
-                if callable(value) and defaults and any(v is original for v in defaults.values()):
-                    targets[id(value)] = value
-        for function in targets.values():
-            defaults = function.__kwdefaults__
-            saved = dict(defaults)
-            for key, value in saved.items():
-                if value is original or (function is h.important_capacity and key == 'run'):
-                    defaults[key] = self.budgeted_subprocess(value, 'prepare')
-            stack.callback(lambda d=defaults, v=saved: (d.clear(), d.update(v)))
-        saved_run = subprocess.run
-        subprocess.run = self.budgeted_subprocess(original, 'prepare')
-        stack.callback(lambda: setattr(subprocess, 'run', saved_run))
-        return stack
-
     def prepare_run(self, argv, *args, **kw):
-        """The production prepare's command runner (h.prepare ``run=``): bounded like every command."""
+        """The ``run=`` an injected (synthetic, in-process) prepare receives: bounded like every command."""
         rc, out, err = self.cmd(argv, timeout=kw.get('timeout') or 600)
         text = kw.get('text') or kw.get('universal_newlines')
         result = subprocess.CompletedProcess(argv, rc, out if text else out.encode(), err if text else err.encode())
@@ -1062,21 +1027,17 @@ class SmokeRunner:
             raise IsolationAbort(f'isolation violations at {step}: {violations[:3]}')
 
     def prepare_main(self):
-        import tempfile
+        """Stage the main session. The production prepare runs in its own child process (lead ruling,
+        delta4): ``prepare_child`` bounds it, and every command it spawns, by the remaining budget as a
+        hard wall timeout, and nothing in this process is patched. An injected ``prepare`` callable
+        is the synthetic test seam only and runs in-process with no patching."""
         session = self.dir / 'main'
         self.require_budget(self.config.get('prepare_reserve_s', 60), 'prepare')
-        saved_env, saved_tempdir = os.environ.get('TMPDIR'), tempfile.tempdir
-        os.environ['TMPDIR'] = tempfile.tempdir = str(self.dir / 'tmp')
-        extra = {'anchor': self.anchor} if _accepts(self.prepare_fn, 'anchor') else {}
-        try:
-            with self._prepare_budget():
-                state = self.prepare_fn(self.clone, session, self.config['keep'], run=self.prepare_run, **extra)
-        finally:
-            tempfile.tempdir = saved_tempdir
-            if saved_env is None:
-                os.environ.pop('TMPDIR', None)
-            else:
-                os.environ['TMPDIR'] = saved_env
+        if self.prepare_fn is None:
+            state = self.prepare_child(session)
+        else:
+            extra = {'anchor': self.anchor} if _accepts(self.prepare_fn, 'anchor') else {}
+            state = self.prepare_fn(self.clone, session, self.config['keep'], run=self.prepare_run, **extra)
         self.require_budget(1, 'after prepare')
         plan_id = json.loads(Path(state['plan_path']).read_bytes()).get('plan_id') if state.get('plan_path') else None
         labelled = str(state.get('session_id', '')).startswith(LABEL_PREFIX)
@@ -1085,6 +1046,60 @@ class SmokeRunner:
                  plan_path=state.get('plan_path'), reduction=state.get('smoke_reduction'),
                  t0_epoch_s=state.get('t0_epoch_s'), window_max_s=state.get('window_max_s'))
         return ok, session, state
+
+    def prepare_child_argv(self, session, result, anchor_fd):
+        """The dedicated prepare child: the CLI's ``prepare-child`` in the isolated clone's venv."""
+        return [self.python, '-B', str(self.code / 'scripts/align_v4_w1_smoke.py'), 'prepare-child',
+                '--measurement-root', str(self.clone), '--session-root', str(session),
+                '--smoke-dir', str(self.dir), '--anchor-fd', str(anchor_fd), '--result', str(result),
+                '--keep', json.dumps(self.config['keep'], sort_keys=True)]
+
+    def prepare_child(self, session):
+        """Run the production prepare in a child process group through ``grouped_run``: the remaining
+        budget is its hard wall timeout; on timeout (or a descendant outliving it) the whole group is
+        SIGKILLed and proven gone; TMPDIR is verified before and after. The child inherits the pinned
+        smoke directory descriptor and writes its result beneath it; nothing is shared in memory."""
+        self.prepare_runs = getattr(self, 'prepare_runs', 0) + 1
+        result = self.dir / f'prepare-result-{self.prepare_runs:02d}.json'
+        owned = None
+        anchor = self.anchor
+        if anchor is None:                  # direct staging (tests): pin the directory for this child
+            anchor = owned = Anchor.establish(self.dir)
+        try:
+            argv = self.prepare_child_argv(session, result, anchor.fd)
+            timeout = max(0.001, self.remaining())
+            self.verify_tmp('before prepare child')
+            started = self.clock()
+            try:
+                done = grouped_run(argv, capture_output=True, text=True, env=self.env, cwd=str(self.clone),
+                                   timeout=timeout, pass_fds=(anchor.fd,))
+            except subprocess.TimeoutExpired as exc:
+                self._transcript(argv, 124, exc.stdout, exc.stderr, started, timeout)
+                raise BudgetExpired(f'the prepare child exceeded the remaining {timeout:.0f} s of the smoke '
+                                    'budget; its process group was killed and proven gone') from exc
+            finally:
+                self.verify_tmp('after prepare child')
+            self._transcript(argv, done.returncode, done.stdout, done.stderr, started, timeout)
+            if done.returncode:
+                self.log('prepare-child', 'fail', rc=done.returncode, stderr=(done.stderr or '')[-1500:])
+                return {'preparation_status': 'PREPARE_CHILD_FAILED', 'prepare_child_rc': done.returncode}
+            return json.loads(safe_read(anchor, result))
+        finally:
+            if owned is not None:
+                owned.close()
+
+    def _transcript(self, argv, rc, stdout, stderr, started, timeout, group_survived=False):
+        self.transcripts += 1
+        directory = self.dir / 'transcripts'
+        safe_mkdir(self.base, directory, exist_ok=True)
+        path = directory / f'{self.transcripts:04d}-{Path(str(argv[0])).name}.json'
+        text = lambda v: v.decode(errors='replace') if isinstance(v, bytes) else (v or '')
+        record = {'argv': [str(a) for a in argv], 'rc': rc, 'stdout': text(stdout), 'stderr': text(stderr),
+                  'started': started, 'ended': self.clock(), 'timeout_s': timeout,
+                  'group_survived': group_survived}
+        safe_write(self.base, path, json.dumps(record, indent=2, sort_keys=True, default=str) + '\n',
+                   exclusive=True)
+        return path
 
     # -- 3 and 4. arm attempts --------------------------------------------------
     def install_argv(self, session, *, packet_path, args=None, drop=()):
@@ -1405,6 +1420,9 @@ class SmokeRunner:
 
     # -- the whole sequence ----------------------------------------------------
     def run(self):
+        if not self.cli:
+            import warnings
+            warnings.warn(IN_PROCESS_WARNING, RuntimeWarning, stacklevel=2)
         violations = destination_violations(self.dir, self.roots)
         if violations:                       # refused before ANY write: no directory, no log
             print(json.dumps({'smoke': 'refused', 'reason': 'destination', 'violations': violations},
@@ -1417,7 +1435,8 @@ class SmokeRunner:
         self.started = self.clock()
         budget = self.config['budget_s']
         self.deadline = self.started + budget
-        self.log('start', 'info', measurement_root=str(self.m), budget_s=budget, label='smoke',
+        self.log('start', 'info', measurement_root=str(self.m), budget_s=budget, label='smoke', entry=
+                 'cli' if self.cli else 'in-process (unsupported)',
                  registrable=False, config_sha256=sha256(self.m / CONFIG) if (self.m / CONFIG).is_file() else None)
         code = 0
         try:

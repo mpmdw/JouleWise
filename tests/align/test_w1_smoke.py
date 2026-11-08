@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest import mock
@@ -533,3 +534,58 @@ class ProductionReaderTests(unittest.TestCase):
         self.assertIn('contention.request_overlap', rows['clean']['findings'])
         self.assertEqual(rows['target']['dc_status'], 'missing')
         self.assertTrue(any(f.startswith('meter.') for f in rows['target']['dc_flags']))
+
+
+class PrepareChildTests(unittest.TestCase):
+    """Delta4 ruling: the production prepare runs in a dedicated child; the kit is CLI-only."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix='w1smoke-child-')).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.clock = Clock()
+
+    def runner(self, **kw):
+        options = dict(packet={}, battery_log='b', obc_off_attested_by='o', w1_disk_config='d',
+                       prequal_report='p', run=lambda argv, **k: subprocess.CompletedProcess(argv, 0, '', ''),
+                       isolate_fn=fake_isolate, clock=self.clock, sleep=self.clock.sleep)
+        options.update(kw)
+        runner = smoke.SmokeRunner(ROOT, self.tmp / 'smoke', **options)
+        runner.config = dict(runner.config, prepare_reserve_s=1)
+        return runner
+
+    def test_the_real_cli_child_returns_its_state_through_the_inherited_anchor(self):
+        runner = self.runner()
+        runner.dir.mkdir()
+        runner.make_tmp()
+        runner.clone = runner.dir / 'measurement'
+        runner.clone.mkdir()
+        runner.deadline = self.clock() + 120
+        # The real CLI subcommand, its descriptor and result handling; only the production prepare
+        # body is the synthetic fake_prepare (in the child), so no model or host work runs.
+        wrapper = ('import sys; sys.path.insert(0, sys.argv[1]); sys.argv = sys.argv[1:]\n'
+                   'from joulewise.align import w1_smoke as smoke\n'
+                   'from tests.align.test_w1_smoke import fake_prepare\n'
+                   'smoke.prepare_smoke = lambda m, s, keep, **kw: fake_prepare(m, s, keep)\n'
+                   'from scripts import align_v4_w1_smoke as cli\n'
+                   'raise SystemExit(cli.main(sys.argv[1:]))\n')
+        real_argv = runner.prepare_child_argv
+        runner.prepare_child_argv = lambda *a: [sys.executable, '-B', '-c', wrapper, str(ROOT)] + real_argv(*a)[3:]
+        before = set(os.listdir('/dev/fd'))
+        ok, session, state = runner.prepare_main()
+        self.assertTrue(ok, state)
+        self.assertEqual(state['session_id'][:len(smoke.LABEL_PREFIX)], smoke.LABEL_PREFIX)
+        self.assertTrue((runner.dir / 'prepare-result-01.json').is_file())
+        self.assertEqual(set(os.listdir('/dev/fd')), before, 'the descriptor pinned for the child leaked')
+        self.assertEqual(subprocess.run.__module__, 'subprocess')
+
+    def test_the_in_process_production_prepare_is_refused(self):
+        with self.assertRaisesRegex(RuntimeError, 'dedicated child'):
+            smoke.prepare_smoke(ROOT, self.tmp / 'session', {})
+
+    def test_an_in_process_run_warns_that_the_kit_is_cli_only(self):
+        runner = self.runner(prepare=fake_prepare)
+        with mock.patch.object(runner, '_sequence', return_value=0), \
+                self.assertWarnsRegex(RuntimeWarning, 'CLI-only'):
+            runner.run()
+        rows = [json.loads(line) for line in (runner.dir / smoke.LOG).read_text().splitlines()]
+        self.assertEqual(rows[0]['entry'], 'in-process (unsupported)')

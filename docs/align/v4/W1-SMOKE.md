@@ -14,7 +14,7 @@ blocks". A fault that a 30-45 min check can catch must never cost a 12 h W1/D wi
   - the series-manifest binding;
   - transcript and process-group discipline.
 
-It lives on `align/2026-11-08-w1-smoke-merged`. That branch merges `align/2026-11-08-v4-r11` @ `f25654e97`,
+It lives on `align/2026-11-08-w1-smoke-merged`. That branch merges `align/2026-11-08-v4-r11` @ `10d889d12`,
 which carries the packet rebuild (`scripts/align_v4_next_arm_packet.py`), the W1 blockers, and the
 delta2 fixes (G2, G3).
 
@@ -171,7 +171,12 @@ replacement aborts. Every path-typed HAZARD_PACK launch binding (`b5.plan._BINDI
 `operator_log_root` and `pre/post_calibration_dir`) is a write locator (D7). The detached CLI validates the
 destination and its log before creating anything (D1).
 
-**Residual trust boundary, for a lead ruling.** Two things are outside this protection. The production
+**CLI-only (lead ruling, delta4).** `scripts/align_v4_w1_smoke.py` is the only supported entry. An
+in-process `SmokeRunner.run()` warns (`RuntimeWarning`, logged as `entry: in-process (unsupported)`), and an
+in-process production `prepare_smoke` is refused. Injected `prepare=`/`run=` callables are the synthetic
+test seams.
+
+**Residual trust boundary (accepted by the lead).** Two things are outside this protection. The production
 `align_v4_session.prepare` and the installer write files inside the session by pathname, and a child
 resolves `TMPDIR` by path after the inode check. So a concurrent same-user writer that renames smoke
 directories in those windows is outside the guarantee. The owner-only directory mode excludes other users.
@@ -182,8 +187,11 @@ directories in those windows is outside the guarantee. The owner-only directory 
   the installer.
 - **Budget.** One **monotonic** deadline (`budget_s` = 2,700 s) clips every command timeout and every
   sleep (D3/D2-2), including isolation's git/venv commands, run with the remaining budget and the smoke
-  `TMPDIR`, and the production prepare's commands, run through the bounded runner. Prepare itself starts
-  only with budget left and runs with the smoke `TMPDIR`. Teardown commands are the exception. Plan t0
+  `TMPDIR` in a process group killed whole (`grouped_run`). The production prepare runs in its own
+  child process (`align_v4_w1_smoke.py prepare-child`, lead ruling delta4) through `grouped_run`, with
+  the remaining budget as a hard wall timeout. That bounds every command it spawns without patching
+  anything in the runner. The child inherits the pinned smoke-directory descriptor and returns its state
+  in `prepare-result-NN.json` beneath it. Teardown commands are the exception. Plan t0
   stays on wall time. Nothing is armed unless `arm_reserve_s` (1,800 s) of budget is left.
 - **Installer ownership.** The main install is recorded as pending before the installer runs (D4/D2-3).
   On any abnormal return (timeout, surviving group, error), the session is reconciled, and an install of
