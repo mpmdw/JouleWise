@@ -491,7 +491,8 @@ def smc_enumeration(repo, output, step=None):
     from joulewise.align.apple.smc_enumeration import CONTENTION_REDO_EXIT
     output = Path(output)
     redone = []
-    # R0-L3: ruling 8 in R0. A sustained episode (>=0.5 cores for 60 s)
+    # R0-L3: ruling 8 in R0. A sustained episode (largest single process,
+    # kernel_task excluded, >=0.5 cores for 60 s)
     # abandons the first capture for ONE redo; the redo records any further
     # episode as `contended` rather than abandoning or refusing.
     for policy in ("redo", "flag"):

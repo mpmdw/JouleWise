@@ -740,7 +740,7 @@ def markdown(report):
         # R0-L3: background CPU contention is recorded and flagged, not fatal.
         lines.extend(["", "## Contention (R0-L3: recorded, not fatal)", "",
                       f"SMC capture contended: **{contention['smc_contended']}**. "
-                      f"SMC redos for sustained contention (>=0.5 cores for 60 s): {contention['smc_redo']}. "
+                      f"SMC redos for sustained contention (largest single process >=0.5 cores for 60 s): {contention['smc_redo']}. "
                       f"SMC intervals flagged: {contention['smc_flagged_intervals']}.",
                       f"Guard flags (contaminant over 0.05 CPU-s/s): {contention['guard_flags']}."])
         lines.extend(f"- {f['check']} ({f.get('model') or 'host'}): {f['flags']} guard flag(s)"
