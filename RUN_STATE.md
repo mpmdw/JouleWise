@@ -1042,6 +1042,27 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+238. **Laptop lead (interactive session 1544c617), 2026-11-08 ~17:10 PST: R24 correction (blind; synthetic); SSD on the Air; v4 rehearsal exact AGREE.**
+- **R24 correction.** Item 236 said that a larger cap lowers gate-admitted FPR under b = .05 drift. That holds only for a fixed common T horizon. The Sol confirmation (`align/2026-11-08-r24-c14-confirm-sol` @ `f5226e11b`) puts T immediately after the stop, the registered calendar. In that case **C14 RAISES gate-admitted FPR versus C10 at every b = .05 setting, by +0.03 to +0.17 pp** (maximum rule). Some pointwise intervals include 0. At b = 0 the cap has no effect.
+  - Example: q = .25, e = .10, hot-correlated, τ/s_r = .81, b = .05, maximum rule, T after the stop.
+    - C13: qualification 91.98%, gate-admitted FPR 4.628%.
+    - C14: qualification 96.17%, gate-admitted FPR 4.650%.
+    - Most of that FPR inflation comes from the drift itself, not the cap.
+  - **Ruling: C14 stands.** A qualification gain of 52.6% → 96.2% at q = 1/4 is worth ≤ 0.17 pp under a drift stress. The drift sensitivity (the effect of b and of T placement after the stop) is a v4 claim DISCLOSURE item alongside item 236's clustering note. It is not a gate.
+  - Reproduction on supported Python 3.11/3.13 + NumPy is still owed.
+- **SSD.** Ed plugged the OWC enclosure with the borrowed WD SN7100 2 TB into the **Air**.
+  - It arrived blank and was formatted APFS `JW-EXT` (GPT). Measured: about 2.6 GB/s write, about 3 GB/s read. Ed turned Spotlight off for the volume.
+  - The Air hosts the "SSD + compressed offload" route. The MBP eject rule does not apply to this drive.
+  - The 2026-11-08 git backup (mirror + bundles, sha `f6f566e6…`) now has a second, physically separate copy at `/Volumes/JW-EXT/backups/` (diff identical). The off-site Dropbox copy is still owed by Ed.
+  - The merged Air-offload build (agreement items 1-9 on the Opus base, landing on JW-EXT, iCloud round-trip as the second copy) is in progress on `ops/2026-11-08-air-offload-merged`.
+- **v4 release rehearsal: exact AGREE.** The comparator (`align/2026-11-08-v4-release-tools` @ `dff411c11`) runs engine-r23d against the recompute (`fdd02a961`, program sha `48d7752b…`) on the full synthetic series. The series has W1, C1-C8 and T1-T3, with C3 and T2 zero-capture retries, an A37 seam window and T3 at 24 members.
+  - Result: 61 families compared, 0 unmapped of 274,099 leaves, `release_v4` exit 0 in 11 s at 4 workers.
+  - The probe plan's two holds were ruled:
+    - **P1** is an engine bug: a G1/H timeout that stops the episode re-derives X2 (A9 union).
+    - **P2**: seconds → ns conversion is EXACT from the raw value in both builds. A37 snaps only ≤ 1,000 ns. Under A2(4), uncovered owned time beyond that excludes the member. There is no 2026-epoch impact; large-epoch fixtures become permanent rehearsal cases.
+  - **A27:** the engine seals C-sabotage token counts. A27 as written: hash only.
+  - These are being fixed on Sol `engine-r23e`, followed by a rehearsal rerun. The A7 H* item is awaiting specifics from the comparator builder.
+
 237. **Laptop lead (interactive session 1544c617), 2026-11-08 ~16:30 PST: checkpoint — v4 engine settled; R24 manifest frozen; review-bound threat-model ruling.**
 - **v4 primary engine settled at `engine-r23d` @ `a2e36bc19`.**
   - Line of fixes: `engine-r23` (A37 + R23), then `engine-r23b`, `engine-r23c` and `engine-r23d`.
