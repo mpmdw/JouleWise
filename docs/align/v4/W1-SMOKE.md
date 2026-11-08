@@ -14,7 +14,7 @@ blocks". A fault that a 30-45 min check can catch must never cost a 12 h W1/D wi
   - the series-manifest binding;
   - transcript and process-group discipline.
 
-It lives on `align/2026-11-08-w1-smoke-merged`. That branch merges `align/2026-11-08-v4-r11` @ `10d889d12`,
+It lives on `align/2026-11-08-w1-smoke-merged`. That branch merges `align/2026-11-08-v4-r11` @ `c742e5722`,
 which carries the packet rebuild (`scripts/align_v4_next_arm_packet.py`), the W1 blockers, and the
 delta2 fixes (G2, G3).
 

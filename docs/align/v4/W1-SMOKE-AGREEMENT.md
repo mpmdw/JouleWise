@@ -284,4 +284,4 @@ New controls in `test_w1_smoke.PrepareChildTests`:
 - in-process production prepare is refused;
 - in-process `run()` warns and logs its entry.
 
-Merged with v4-r11 @ `10d889d12` (R24 reserve cap C14). Native behaviour remains unmeasured.
+Merged with v4-r11 @ `10d889d12` (R24 reserve cap C14), then `c742e5722` (R20 sentinels on U4 only). Native behaviour remains unmeasured.
