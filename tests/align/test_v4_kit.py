@@ -24,12 +24,44 @@ from scripts import validate_align_v4_w1_plan as validator
 ROOT = Path(__file__).resolve().parents[2]
 
 
+_LOG_DIR = []
+
+
 def topup():
-    """Synthetic completed-top-up evidence, one minute before the arm."""
+    """Synthetic arm evidence: a battery log (completed charge 10 min ago, floating since),
+    a passing triage packet and an always-found record commit. No hand-entered time."""
+    import tempfile
     import time
+    from tests.align.test_v4_cadence import arm_seams, passing_packet, write_battery_log
+    if not _LOG_DIR:
+        _LOG_DIR.append(tempfile.TemporaryDirectory(prefix='v4-kit-battery-'))
+    path = Path(_LOG_DIR[0].name) / f'battery-{time.time_ns()}.jsonl'
+    write_battery_log(path, time.time())
+    return dict(battery_log=path, next_arm_triage=w1_bound_packet(), **arm_seams())
+
+
+SERIES_MANIFEST = Path('configs/campaigns/align_v4/series/series_manifest.json')
+
+
+def seed_series(measurement):
+    """RUN_STATE 226 R15: the W1 arm binds the frozen series, so a synthetic
+    measurement root carries the committed series manifest."""
+    target = Path(measurement) / SERIES_MANIFEST
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes((ROOT / SERIES_MANIFEST).read_bytes())
+
+
+def w1_bound_packet():
+    """A passing W1 packet (previous window R1) bound to the committed series manifest."""
     from tests.align.test_v4_cadence import passing_packet
-    return dict(topup_completed_at=time.time()-60, topup_source='synthetic',
-                next_arm_triage=passing_packet())
+    packet = passing_packet(previous_window='R1', next_window_role=None, calibration_windows=[])
+    for check in packet['checks'].values():
+        raw = json.dumps(check['status'])
+        check['evidence'] = {'path': 'inline', 'pointer': '', 'content_utf8': raw,
+                             'sha256': hashlib.sha256(raw.encode()).hexdigest()}
+    packet.update(series_manifest_sha256=hashlib.sha256((ROOT / SERIES_MANIFEST).read_bytes()).hexdigest(),
+                  next_window_id='W1', series_history=[])
+    return packet
 
 
 def independent_seed(value):
@@ -193,7 +225,7 @@ class KitTests(unittest.TestCase):
             for key in ('max_episode_decode_tokens', 'deadman_s'):
                 self.assertIn(key, spec)
                 self.assertIsNone(spec[key])
-            self.assertEqual(spec['chat_template_kwargs'], {'reasoning_effort': None})
+            self.assertEqual(spec['chat_template_kwargs'], {'reasoning_effort': 'medium'})   # R0 re-run 11
             self.assertIs(spec['thermal']['heavy'], True)
             self.assertIs(spec['thermal']['per_turn'], True)
         self.assertEqual(self.plan['runtime_requirements']['D_tools'], 'family-validated XML via qwen3_5')
@@ -298,12 +330,13 @@ class KitTests(unittest.TestCase):
         self.assertEqual(self.tree['draft_status'], 'PROVISIONAL_SKELETON')
 
     def test_placeholders_fail_check_and_cannot_be_hidden_by_status(self):
-        with self.assertRaisesRegex(ValueError, 'BLOCKED.*R0.*R1'):
+        with self.assertRaisesRegex(ValueError, 'BLOCKED.*R1'):
             kit.generate(ROOT, check=True)
         inputs = kit.read_inputs(ROOT)
         inputs['status'] = 'ready'
-        with self.assertRaisesRegex(ValueError, 'BLOCKED.*R0.reasoning_effort'):
+        with self.assertRaisesRegex(ValueError, 'BLOCKED.*R1.B_D'):
             kit.require_ready(inputs)
+        self.assertNotIn('R0.reasoning_effort', kit.pending_inputs(kit.read_inputs(ROOT)))   # filled from R0 re-run 11
         self.assertIn('R1.T_dead', self.plan['pending_inputs'])
         # WP18 is filled; an emptied WP18 leaf still blocks, whatever status says.
         inputs['WP18']['X']['max_turns'] = None
@@ -320,7 +353,7 @@ class KitTests(unittest.TestCase):
         # WP11 (W1-blockers lane) and WP15 (the R1 runtime argv) are supplied;
         # emptying either must still block on its own.
         # WP18 is filled from the committed fixtures; it is checked below with the supplied owners.
-        self.assertEqual(pending_owners, {'R0', 'R1'})
+        self.assertEqual(pending_owners, {'R1'})      # R0 is filled from re-run 11
         for owner, fields in kit.read_inputs(ROOT).items():
             if not isinstance(fields, dict) or owner not in pending_owners | {'WP11', 'WP15', 'WP18'}:
                 continue
@@ -1160,7 +1193,7 @@ class SessionParameterTests(unittest.TestCase):
     def test_v4_prepare_refuses_before_shared_prepare_or_session_creation(self):
         with tempfile.TemporaryDirectory() as tmp, patch.object(pilot, 'prepare') as prepare:
             target = Path(tmp) / 'new-session'
-            with self.assertRaisesRegex(ValueError, 'BLOCKED.*R0.reasoning_effort'):
+            with self.assertRaisesRegex(ValueError, 'BLOCKED.*R1.B_D'):
                 session.prepare(ROOT, target)
             prepare.assert_not_called()
             self.assertFalse(target.exists())
@@ -1180,7 +1213,7 @@ class SessionParameterTests(unittest.TestCase):
 
     def test_v4_install_refuses_before_shared_installer(self):
         with patch.object(pilot.h, 'read', return_value={'measurement_root': str(ROOT)}), patch.object(pilot, 'install') as install:
-            with self.assertRaisesRegex(ValueError, 'BLOCKED.*R0.reasoning_effort'):
+            with self.assertRaisesRegex(ValueError, 'BLOCKED.*R1.B_D'):
                 session.install('synthetic-session', w1_disk_config='/x.json')
             install.assert_not_called()
 
@@ -1191,6 +1224,7 @@ class SessionParameterTests(unittest.TestCase):
         plan = json.loads((ROOT / kit.KIT / 'collection_plan.json').read_text())
         plan['runtime_requirements']['ac_powermode'] = mode_expected
         (measurement / kit.KIT / 'registration').mkdir(parents=True)
+        seed_series(measurement)
         (measurement / kit.KIT / 'collection_plan.json').write_text(json.dumps(plan))
         (measurement / kit.R1_SLOTS).write_text(json.dumps({'ac_powermode': mode_expected}))
         pilot.h.write(session_root / 'session.json', {'measurement_root': str(measurement)})
@@ -1429,8 +1463,8 @@ class PendingMessageTests(unittest.TestCase):
         self.assertNotIn('WP11', text)
         self.assertNotIn('WP15', text)  # the R1 runtime argv is committed in inputs.json
         self.assertNotIn('WP18', text)  # filled from the committed X/Y token fixtures
-        for owner in ('R0', 'R1'):
-            self.assertIn(f'| {owner}: ' + kit.PENDING_REASONS[owner], text)
+        self.assertNotIn('R0.reasoning_effort', text)
+        self.assertIn('| R1: ' + kit.PENDING_REASONS['R1'], text)
 
 
 class W1SizingTests(unittest.TestCase):
@@ -1579,6 +1613,7 @@ class W1HighPowerTests(unittest.TestCase):
         from joulewise.align.apple import powermode
         measurement = Path(tmp) / 'm'
         (measurement / kit.KIT).mkdir(parents=True, exist_ok=True)
+        seed_series(measurement)
         (measurement / kit.KIT / 'collection_plan.json').write_text(json.dumps(
             {'runtime_requirements': {'ac_powermode': ac_powermode}}))
         session_root = Path(tmp) / 's'
@@ -1719,6 +1754,7 @@ class W1HighPowerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             measurement = Path(tmp)
             (measurement / kit.KIT).mkdir(parents=True)
+            seed_series(measurement)
             (measurement / kit.KIT / 'collection_plan.json').write_text(json.dumps(
                 {'runtime_requirements': {'ac_powermode': 2}}))
             with patch.object(kit, 'generate'), patch.object(pilot.h, 'prepare', return_value='ok') as prepare:
@@ -1733,6 +1769,7 @@ class W1DiskGateTests(unittest.TestCase):
         measurement = Path(tmp) / 'm'
         plan = {'runtime_requirements': {'ac_powermode': 0}}
         (measurement / kit.KIT).mkdir(parents=True, exist_ok=True)
+        seed_series(measurement)
         (measurement / kit.KIT / 'collection_plan.json').write_text(json.dumps(plan))
         session_root = Path(tmp) / 's'
         (session_root / 'staging').mkdir(parents=True, exist_ok=True)
@@ -1799,12 +1836,13 @@ class W1DiskGateTests(unittest.TestCase):
         seen.clear()
         with patch.object(session, 'install', fake):
             self.assertEqual(session.main(['install', '--session-root', 's', '--w1-disk-config', '/c.json',
-                                           '--obc-off-attested-by', 'synthetic', '--topup-completed-at', '1700000000',
-                                           '--topup-source', 'synthetic',
+                                           '--obc-off-attested-by', 'synthetic', '--battery-log', '/b.jsonl',
+                                           '--battery-log', '/c.jsonl', '--window-battery-journal', '/w.jsonl',
                                            '--next-arm-triage', '/t.json']), 0)
         self.assertEqual(seen, {'session_root': Path('s'), 'w1_disk_config': Path('/c.json'),
-                                'obc_off_attested_by': 'synthetic', 'topup_completed_at': '1700000000',
-                                'topup_source': 'synthetic', 'next_arm_triage': Path('/t.json')})
+                                'obc_off_attested_by': 'synthetic', 'battery_log': [Path('/b.jsonl'), Path('/c.jsonl')],
+                                'window_battery_journal': [Path('/w.jsonl')],
+                                'next_arm_triage': Path('/t.json')})
 
 
 if __name__ == '__main__':

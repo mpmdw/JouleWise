@@ -70,6 +70,56 @@ class KitBridgeTests(unittest.TestCase):
             dry.build_kit(dry.SYN_INPUTS, {**dry.SYN_R1_SLOTS, 'ac_powermode': None})
 
 
+class MinimalDryRunTests(unittest.TestCase):
+    """The 4 s WP22 dry run runs in the DEFAULT test run (no JW_WP22_FULL opt-in), so CI sees it.
+
+    Opus cold HIGH-1: the full-window classes below skip by default, which hid a red dry run.
+    """
+
+    def test_minimal_synthetic_w1_reaches_the_desk(self):
+        # W1-BLOCKERS merge: the dry run carries a signed SYNTHETIC U3 bar, so the
+        # desk admits it; with only member 5 the 5/17 pair is missing (inconclusive).
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / 'w1'
+            self.assertEqual(dry.main([str(out), '--inject', 'none', '--members', '5']), 0)
+            record = json.loads((out / 'dry_run_record.json').read_text())
+            self.assertEqual(record['desk_status'], 'ok', record.get('desk_error'))
+            desk = json.loads((out / 'desk/PILOT.json').read_text())
+            self.assertFalse(desk['u3_pending'])
+            for window in desk['model_windows'].values():
+                self.assertNotEqual(window['U3']['status'], 'pass')
+            from joulewise.align.apple import v4_registration as registration
+            with self.assertRaises(ValueError):           # a missing bar never admits
+                registration.validate_u3(None)
+            with self.assertRaises(ValueError):           # its sources/gate are not repository custody
+                registration.validate_u3(desk['u3_bar'], root=kit.ROOT)
+
+    def test_pending_u3_bar_is_inconclusive_at_the_desk_not_a_crash(self):
+        from scripts import align_v4_thermal_desk as cli
+        from joulewise.align.apple import v4_registration as registration
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            (directory / 'u3_bar.json').write_text(json.dumps({'schema': registration.U3_SCHEMA, 'status': 'PENDING'}))
+            fixture = {'turns': [{'turn': 0, 'prompt_token_ids': [1], 'output_token_ids': [2]}]}
+            (directory / 'wp19_receipt.json').write_text(json.dumps(registration.wp19_identity(
+                {'X': fixture, 'Y': fixture}, {'X': [[1]], 'Y': [[1]]}, fixture['turns'],
+                live_source_sha256='b'*64)))
+            bar, _ = cli.registration_evidence(directory)
+            self.assertIsNone(bar)
+
+    def test_the_synthetic_contrast_is_rederived_after_the_wp18_update(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / 'w1'
+            dry.main([str(out), '--inject', 'none', '--members', '5'])
+            results = json.loads((out / 'run_results.json').read_text())
+            inputs = results['inputs']
+            slots = {**dry.SYN_R1_SLOTS, 'x_g': {**dry.SYN_R1_SLOTS['x_g'],
+                                                 'admitted_turns': inputs['WP18']['X']['max_turns']}}
+            contrast = kit.w1_contrast_g0_cap(slots, inputs['WP18']['X']['max_turns'])
+            self.assertEqual(inputs['R1']['thermal_policy']['contrast_fit'], contrast)
+            self.assertNotEqual(inputs['WP18']['X']['max_turns'], dry.SYN_INPUTS['WP18']['X']['max_turns'])
+
+
 class _Window(unittest.TestCase):
     ARGS = ()
 
@@ -107,6 +157,13 @@ class CleanWindowTests(_Window):
         self.assertEqual([m['calibration_exclusions'] for m in self.record['desk']['members']],
                          [[]] * len(self.record['desk']['members']))
 
+    def test_clean_window_passes_the_signed_battery_consequence(self):
+        from scripts.align_v4_session import battery_windows_pass
+        windows = self.record['desk']['registration_diagnostics']['battery_windows']
+        self.assertTrue(battery_windows_pass(windows))
+        self.assertTrue(all(w['B_count'] == 0 for w in windows.values()))
+        self.assertTrue(self.record['desk']['registration_diagnostics']['d_cohort']['instrument_ok'])
+
     def test_desk_energy_matches_independent_world_integral(self):
         oracle = {m['run_id']: m['E_oracle_j'] for m in self.record['expected']['members']}
         for m in self.record['desk']['members']:
@@ -125,6 +182,7 @@ class CleanWindowTests(_Window):
         desk = self.record['desk']['deciding_experiment']
         oracle = self.record['expected']['contrast_token_identical_runs']
         self.assertEqual(desk['verdict'], oracle['verdict'])
+        # Both the desk and the oracle fit the stage-adjusted chair-9 model (df=3).
         self.assertAlmostEqual(desk['arm_effect_j'], oracle['delta_j'], places=3)
 
 

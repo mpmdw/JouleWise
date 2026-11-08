@@ -1,0 +1,358 @@
+{
+  "fixture": "tests/align/v4_registration_fixtures.py:export",
+  "label": "SYNTHETIC ONLY / unadopted policy / no live hardware guarantee",
+  "oc": {
+    "limitation": "Model sensitivity only; no hardware validation or D transfer guarantee. Conditional rates for the realized small-sample scale can exceed marginal rates.",
+    "scenarios": [
+      {
+        "monte_carlo_se": 0.001995995991979944,
+        "name": "normal_iid",
+        "pair_failure_rate": 0.0003125,
+        "population_pair_failure_rates": {
+          "30B": 0.00125,
+          "D": 0.0
+        },
+        "series_failure_rate": 0.004,
+        "series_failures": 4,
+        "window_failure_rates": {
+          "C1": 0.0,
+          "C2": 0.0,
+          "C3": 0.0,
+          "C4": 0.0,
+          "C5": 0.0,
+          "C6": 0.0,
+          "C7": 0.0,
+          "C8": 0.0,
+          "T1": 0.0,
+          "T2": 0.0,
+          "T3": 0.0,
+          "W1": 0.004
+        }
+      },
+      {
+        "monte_carlo_se": 0.002442130217658346,
+        "name": "normal_window_rho_0.5",
+        "pair_failure_rate": 0.0005,
+        "population_pair_failure_rates": {
+          "30B": 0.002,
+          "D": 0.0
+        },
+        "series_failure_rate": 0.006,
+        "series_failures": 6,
+        "window_failure_rates": {
+          "C1": 0.0,
+          "C2": 0.0,
+          "C3": 0.0,
+          "C4": 0.0,
+          "C5": 0.0,
+          "C6": 0.0,
+          "C7": 0.0,
+          "C8": 0.0,
+          "T1": 0.0,
+          "T2": 0.0,
+          "T3": 0.0,
+          "W1": 0.006
+        }
+      },
+      {
+        "monte_carlo_se": 0.001729450779872038,
+        "name": "normal_series_rho_0.9",
+        "pair_failure_rate": 0.0001875,
+        "population_pair_failure_rates": {
+          "30B": 0.00075,
+          "D": 0.0
+        },
+        "series_failure_rate": 0.003,
+        "series_failures": 3,
+        "window_failure_rates": {
+          "C1": 0.0,
+          "C2": 0.0,
+          "C3": 0.0,
+          "C4": 0.0,
+          "C5": 0.0,
+          "C6": 0.0,
+          "C7": 0.0,
+          "C8": 0.0,
+          "T1": 0.0,
+          "T2": 0.0,
+          "T3": 0.0,
+          "W1": 0.003
+        }
+      },
+      {
+        "monte_carlo_se": 0.004740358636221525,
+        "name": "normal_correlated_training_rho_0.5",
+        "pair_failure_rate": 0.0015625,
+        "population_pair_failure_rates": {
+          "30B": 0.006,
+          "D": 8.333333333333333e-05
+        },
+        "series_failure_rate": 0.023,
+        "series_failures": 23,
+        "window_failure_rates": {
+          "C1": 0.0,
+          "C2": 0.0,
+          "C3": 0.0,
+          "C4": 0.0,
+          "C5": 0.0,
+          "C6": 0.0,
+          "C7": 0.001,
+          "C8": 0.0,
+          "T1": 0.0,
+          "T2": 0.0,
+          "T3": 0.0,
+          "W1": 0.022
+        }
+      },
+      {
+        "monte_carlo_se": 0.00695693898205238,
+        "name": "student_t3_unit_variance",
+        "pair_failure_rate": 0.0038125,
+        "population_pair_failure_rates": {
+          "30B": 0.01025,
+          "D": 0.0016666666666666668
+        },
+        "series_failure_rate": 0.051,
+        "series_failures": 51,
+        "window_failure_rates": {
+          "C1": 0.001,
+          "C2": 0.002,
+          "C3": 0.001,
+          "C4": 0.002,
+          "C5": 0.001,
+          "C6": 0.001,
+          "C7": 0.001,
+          "C8": 0.002,
+          "T1": 0.001,
+          "T2": 0.003,
+          "T3": 0.001,
+          "W1": 0.04
+        }
+      },
+      {
+        "monte_carlo_se": 0.007739767438366608,
+        "name": "centered_exponential",
+        "pair_failure_rate": 0.004375,
+        "population_pair_failure_rates": {
+          "30B": 0.01425,
+          "D": 0.0010833333333333333
+        },
+        "series_failure_rate": 0.064,
+        "series_failures": 64,
+        "window_failure_rates": {
+          "C1": 0.002,
+          "C2": 0.002,
+          "C3": 0.002,
+          "C4": 0.001,
+          "C5": 0.001,
+          "C6": 0.001,
+          "C7": 0.0,
+          "C8": 0.001,
+          "T1": 0.0,
+          "T2": 0.003,
+          "T3": 0.0,
+          "W1": 0.053
+        }
+      },
+      {
+        "monte_carlo_se": 0.003715373467095872,
+        "name": "D_scale_at_assumed_factor",
+        "pair_failure_rate": 0.0013125,
+        "population_pair_failure_rates": {
+          "30B": 0.00125,
+          "D": 0.0013333333333333333
+        },
+        "series_failure_rate": 0.014,
+        "series_failures": 14,
+        "window_failure_rates": {
+          "C1": 0.002,
+          "C2": 0.001,
+          "C3": 0.001,
+          "C4": 0.001,
+          "C5": 0.001,
+          "C6": 0.0,
+          "C7": 0.004,
+          "C8": 0.001,
+          "T1": 0.002,
+          "T2": 0.001,
+          "T3": 0.0,
+          "W1": 0.006
+        }
+      },
+      {
+        "monte_carlo_se": 0.013267102170406317,
+        "name": "D_scale_twice_assumed_factor",
+        "pair_failure_rate": 0.0258125,
+        "population_pair_failure_rates": {
+          "30B": 0.00125,
+          "D": 0.034
+        },
+        "series_failure_rate": 0.228,
+        "series_failures": 228,
+        "window_failure_rates": {
+          "C1": 0.037,
+          "C2": 0.042,
+          "C3": 0.031,
+          "C4": 0.035,
+          "C5": 0.026,
+          "C6": 0.031,
+          "C7": 0.044,
+          "C8": 0.028,
+          "T1": 0.029,
+          "T2": 0.036,
+          "T3": 0.036,
+          "W1": 0.034
+        }
+      },
+      {
+        "monte_carlo_se": 0.0028170906978654416,
+        "name": "D_drift_two_pilot_sd",
+        "pair_failure_rate": 0.00075,
+        "population_pair_failure_rates": {
+          "30B": 0.00125,
+          "D": 0.0005833333333333334
+        },
+        "series_failure_rate": 0.008,
+        "series_failures": 8,
+        "window_failure_rates": {
+          "C1": 0.0,
+          "C2": 0.002,
+          "C3": 0.0,
+          "C4": 0.0,
+          "C5": 0.002,
+          "C6": 0.0,
+          "C7": 0.001,
+          "C8": 0.001,
+          "T1": 0.0,
+          "T2": 0.0,
+          "T3": 0.001,
+          "W1": 0.004
+        }
+      },
+      {
+        "monte_carlo_se": 0.015622771841129857,
+        "name": "D_drift_eight_pilot_sd",
+        "pair_failure_rate": 0.174125,
+        "population_pair_failure_rates": {
+          "30B": 0.00125,
+          "D": 0.23175
+        },
+        "series_failure_rate": 0.423,
+        "series_failures": 423,
+        "window_failure_rates": {
+          "C1": 0.235,
+          "C2": 0.243,
+          "C3": 0.216,
+          "C4": 0.225,
+          "C5": 0.244,
+          "C6": 0.229,
+          "C7": 0.231,
+          "C8": 0.232,
+          "T1": 0.23,
+          "T2": 0.237,
+          "T3": 0.233,
+          "W1": 0.226
+        }
+      }
+    ],
+    "seed": 2203,
+    "simulations": 1000
+  },
+  "policy": {
+    "checks_by_window": {
+      "C1": {
+        "30B": 0,
+        "D": 1
+      },
+      "C2": {
+        "30B": 0,
+        "D": 1
+      },
+      "C3": {
+        "30B": 0,
+        "D": 1
+      },
+      "C4": {
+        "30B": 0,
+        "D": 1
+      },
+      "C5": {
+        "30B": 0,
+        "D": 1
+      },
+      "C6": {
+        "30B": 0,
+        "D": 1
+      },
+      "C7": {
+        "30B": 0,
+        "D": 1
+      },
+      "C8": {
+        "30B": 0,
+        "D": 1
+      },
+      "T1": {
+        "30B": 0,
+        "D": 1
+      },
+      "T2": {
+        "30B": 0,
+        "D": 1
+      },
+      "T3": {
+        "30B": 0,
+        "D": 1
+      },
+      "W1": {
+        "30B": 4,
+        "D": 1
+      }
+    },
+    "d_configuration_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "d_transfer_factor": 2.0,
+    "method": "session_student_t_predictive_v1",
+    "r1_D_qualification": "adjacent_matched_predecessor_screen_only",
+    "r1_configuration_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "seed": 2203,
+    "selection": "one_prespecified_pair_per_session",
+    "series_alpha": 0.05,
+    "simulations": 1000,
+    "transfer_justification_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+  },
+  "prediction": {
+    "d_qualification_pass": true,
+    "d_qualification_relative": 0.0009995002498750624,
+    "df": 6,
+    "mean_rel": 0.0,
+    "n": 7,
+    "pair_alpha": 0.003125,
+    "predictive_half_width": 0.013464533889904736,
+    "predictive_interval": [
+      -0.013464533889904736,
+      0.013464533889904736
+    ],
+    "relative_bar_30B": 0.013464533889904736,
+    "relative_bar_D": 0.02692906777980947,
+    "s_rel_sample": 0.002645751311064562,
+    "series_comparisons": 16,
+    "t_critical": 4.760431609533912
+  },
+  "sample_size_sensitivity": [
+    {
+      "df": 2,
+      "n": 3,
+      "standardized_predictive_half_width": 20.60746733500953
+    },
+    {
+      "df": 4,
+      "n": 5,
+      "standardized_predictive_half_width": 6.971725352592746
+    },
+    {
+      "df": 6,
+      "n": 7,
+      "standardized_predictive_half_width": 5.089115456012778
+    }
+  ]
+}

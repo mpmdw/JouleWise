@@ -29,29 +29,48 @@ if str(ROOT) not in sys.path:
 from scripts import align_pilot_session as pilot, align_v4_kit as kit
 
 
-def series_ac_powermode(measurement_root):
+def series_ac_powermode(measurement_root, kit_path=kit.KIT):
     """The R1-frozen series AC powermode the generated collection plan carries."""
-    plan = json.loads((Path(measurement_root) / kit.KIT / 'collection_plan.json').read_bytes())
+    plan = json.loads((Path(measurement_root) / kit_path / 'collection_plan.json').read_bytes())
     value = (plan.get('runtime_requirements') or {}).get('ac_powermode')
     if type(value) is not int or value not in (0, 2):
         raise ValueError(f'v4 collection plan freezes no series AC powermode (got {value!r})')
     return value
 
 
-def prepare(measurement_root, session_root, *, power_runner=None, **kwargs):
+def prepare(measurement_root, session_root, *, power_runner=None, window_id=None, extra_sentinels=0, **kwargs):
     # Lead ruling R6-7: at every session start a host-level High Power marker
     # means an Automatic restore is owed. Restore it first (never under a
     # measuring night, which holds the host night lock and restores at its own
     # close) and refuse the session if the restore fails its read-back.
     start = session_start_restore(measurement_root, runner=power_runner)
     kit.generate(measurement_root, check=True, source_root=measurement_root)
+    series_state = None
+    if extra_sentinels not in (0, 2) or (extra_sentinels and window_id in (None, 'W1')):
+        raise ValueError('escalation sentinels (R20) apply to a C/T window after a U4/U5-inconclusive window only')
+    if window_id is not None:
+        from scripts import align_v4_series as series
+        manifest = series.load(measurement_root)
+        selected = series.selected(manifest, window_id)
+        series.require_admission(measurement_root, manifest, post_w1=selected['id'] != 'W1')
+        if selected['id'] != 'W1':
+            series.generate(measurement_root, window_id, check=True, extra_sentinels=extra_sentinels)
+            kwargs.update(kit=series.kit_path(selected['id']), pack_id=series.pack_id(selected['id']))
+        series_state = dict(window_id=selected['id'], role=selected['role'], extra_sentinels=extra_sentinels,
+            manifest_sha256=kit.sha((Path(measurement_root) / series.MANIFEST).read_bytes()),
+            admission_sha256=kit.sha((Path(measurement_root) / series.ADMISSION).read_bytes()))
     # Lead ruling R5-6: the night plan declares the frozen series powermode, so
     # run_night admits a High Power host only for a W1 that adopted it.
-    kwargs.setdefault('ac_powermode', series_ac_powermode(measurement_root))
+    kwargs.setdefault('ac_powermode', series_ac_powermode(measurement_root, kwargs.get('kit', kit.KIT)))
     kwargs.setdefault('kit', kit.KIT)
     kwargs.setdefault('pack_id', kit.PACK_ID)
     kwargs.setdefault('session_prefix', 'align-v4-')
     state = pilot.prepare(measurement_root, session_root, **kwargs)
+    if series_state is not None:
+        if state.get('preparation_status') != 'STAGED':
+            raise ValueError('series prepare produced no armable plan; inspect session flags')
+        state['v4_series'] = series_state
+        pilot.h.write(Path(session_root) / 'session.json', state)
     if start['action'] != 'none':
         try:
             pilot.h.write(Path(session_root) / f'staging/v4-session-start-restore-{time.time_ns()}.json', start)
@@ -138,6 +157,87 @@ def d_member_x2_report(plan_members, runs_root):
             'x2_rate': count / len(rows) if rows else None, 'members': rows}
 
 
+def battery_windows_pass(windows):
+    return bool(windows) and all(w.get('bar_pass') is True for w in windows.values())
+
+
+# Lead ruling 9 (R14; W1-BLOCKERS-AGREEMENT): B is an operational stop with automatic
+# resume. A false v4_B_bar is recorded but does not block the full-desk gate, and a
+# member excluded ONLY for charging (v4_battery.EXCLUDE) is removed from the window
+# without failing the common desk's exclusion-derived checks (Sol2 review S2-01).
+# v4_cadence ``battery_window`` governs the resume.
+FULL_DESK_GATE_EXEMPT = ('v4_B_bar',)
+EXCLUSION_DERIVED = ('no_member_exclusions', 'chain_eligibility')
+
+
+def _exclusion_codes(member):
+    codes = [*(member.get('exclusion_codes') or []), *(member.get('calibration_exclusions') or [])]
+    summary = member.get('summary') or {}
+    codes += list(summary.get('exclusion_codes') or [])
+    return {str(c).split(':')[0] for c in codes}
+
+
+def charging_only_exclusion(member):
+    """True iff the member is excluded and every exclusion code is a charging B code."""
+    from joulewise.align.apple.v4_battery import EXCLUDE
+    codes = _exclusion_codes(member)
+    return bool(member.get('excluded')) and bool(codes) and codes <= set(EXCLUDE)
+
+
+def full_desk_gate_pass(checks, members=None):
+    """The ``full_desk_gate`` verdict.
+
+    Every desk check must be true except ``v4_B_bar``. With the desk's
+    ``members`` (evidence-aware), the exclusion-derived checks are re-derived
+    with charging-only exclusions not counted, so B alone never fails the gate;
+    any other exclusion still does. Without members the checks stand as recorded.
+    """
+    gated = {k: v for k, v in (checks or {}).items() if k not in FULL_DESK_GATE_EXEMPT}
+    if members is not None and any(k in gated for k in EXCLUSION_DERIVED):
+        # Charging-only members stay in the window evidence (readability, prechecks);
+        # only their B exclusion stops counting against the desk.
+        neutral = [{**m, 'excluded': False} if charging_only_exclusion(m) else m for m in members]
+        recomputed, _, _ = pilot.instrument_checks(neutral)
+        others = any(m.get('excluded') for m in neutral)
+        if 'no_member_exclusions' in gated:
+            gated['no_member_exclusions'] = not others
+        if 'chain_eligibility' in gated:
+            gated['chain_eligibility'] = recomputed['chain_eligibility'] is True and not others
+    return bool(gated) and all(v is True for v in gated.values())
+
+
+def assign_work_group(record, row):
+    """The identical-work group of a desk record, from its planned member row.
+
+    R20: a supplemental escalation sentinel joins NO group, so U3's frozen comparison scope and U4's
+    W and W-1 df are unchanged; it is reported descriptively (``supplemental_report``).
+    """
+    if row.get('supplemental'):
+        record.update(supplemental=True, escalation_sentinel=row.get('escalation_sentinel'),
+                      replay_of=row.get('replay_of'))
+    elif row.get('replay_of'):
+        record['identical_work_group'] = row['replay_of']
+    elif row.get('ordinal') == 5 or row.get('role', '').startswith(('X-', 'Y-')):
+        record['identical_work_group'] = row['run_id']
+
+
+def supplemental_report(records):
+    """Descriptive-only report of the two R20 escalation sentinels against their W1:5-replay source."""
+    supplemental = [r for r in records if r.get('supplemental')]
+    if not supplemental:
+        return None
+    by_id = {r['id']: r for r in records}
+    return {'status': 'descriptive_only', 'authority': 'RUN_STATE 226 R20',
+            'note': 'two exact replays of the admitted W1:5 trajectory; no held-out seed; U4 W and W-1 df unchanged',
+            'members': [{'run_id': r['id'], 'escalation_sentinel': r.get('escalation_sentinel'),
+                         'replay_of': r.get('replay_of'),
+                         'tokens_identical_to_replay_of': (r.get('tokens') is not None
+                              and (by_id.get(r.get('replay_of')) or {}).get('tokens') == r.get('tokens')),
+                         'gross_episode_j': r.get('gross_episode_j'),
+                         'replay_of_gross_episode_j': (by_id.get(r.get('replay_of')) or {}).get('gross_episode_j'),
+                         'excluded': bool(r.get('excluded'))} for r in supplemental]}
+
+
 def powermode_desk_check(*, state, members, runs_root, kit_path):
     """Council ruling 7: any member whose bundle-recorded AC powermode differs
     from the frozen series value sets ``instrument_ok`` false. The report also
@@ -147,6 +247,12 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
     verdict = kit.validate_powermode_members(plan, observed)
     checks = {'ac_powermode_members': verdict['instrument_ok']}
     report = {**verdict, 'd_member_x2': d_member_x2_report(plan['members'], runs_root)}
+    if state.get('v4_series'):
+        report['series'] = state['v4_series']
+        report['pool_members'] = {role: [r['run_id'] for r in plan['members'] if r.get('pool_role') == role]
+                                  for role in ('anchor', 'sentinel', 'fit', 'calibration', 'test')}
+        report['calibration_counts_final'] = False
+        report['calibration_counts_note'] = 'Final eligibility receipt required; desk diagnostics never imply pool entry.'
     from joulewise.align.apple import km003c
     try:
         custody = (state.get('inputs') or {}).get('custody_root')
@@ -156,9 +262,16 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
     except Exception as exc:  # secondary diagnostics must never become a rails admission gate
         dc = km003c.unavailable_report(plan['members'], 'meter.desk_failed:' + type(exc).__name__,
                                        detail=str(exc))
+    # MED-4: per-member DC residuals print for BENIGN members only; sabotage (any non-benign)
+    # members' DC rows are sealed (hash only) until the v5 addendum registers.
+    dc = km003c.seal_non_benign(dc, plan['members'])
     for rid, row in dc['members'].items():
-        print(f'{rid} {km003c.LABEL}: ' + json.dumps({k: row[k] for k in
-              ('status', 'dc_in_energy_j', 'dc_in_delta_j', 'dc_in_residual_j', 'flags')}, sort_keys=True))
+        if row.get('sealed'):
+            print(f'{rid} {km003c.LABEL}: ' + json.dumps({k: row[k] for k in
+                  ('status', 'sealed', 'sealed_sha256', 'flags')}, sort_keys=True))
+        else:
+            print(f'{rid} {km003c.LABEL}: ' + json.dumps({k: row[k] for k in
+                  ('status', 'dc_in_energy_j', 'dc_in_delta_j', 'dc_in_residual_j', 'flags')}, sort_keys=True))
     report['km003c'] = dc
     # Keep the common v3 desk unchanged. V4 adds its registered thermal desk.
     from scripts.align_v4_thermal_desk import registration_evidence, enrich_record, r1_soak_c, contrast_predeclaration
@@ -171,6 +284,12 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
         checks['v4_registration_evidence'] = False
         report['registration_error'] = str(exc)
         return checks, report
+    from joulewise.align.apple import v4_battery
+    try:
+        battery_policy = json.loads((registration_dir/'battery_window_policy.json').read_bytes())
+    except (OSError, ValueError):
+        battery_policy = None
+    journal = v4_battery.load_journal(Path(custody)/'hazards/monitor/battery.jsonl') if custody else ([], None, 1)
     records = []
     pilot_members = {m['run_id']: m for m in members}
     for row in plan['members']:
@@ -182,12 +301,11 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
                  'flags': ['member.runtime_failure'], 'tokens': None, 'intervals': [],
                  'turn_observation': [], 'coverage': [], 'releases': [], 'turn_admissions': 0,
                  'pm_period_s': .1, 'calibration_exclusions': ['member.runtime_failure'], 'error': str(exc)}
-        r.update({k: row[k] for k in ('ordinal', 'role') if k in row},
-                 window='W1', stage=row.get('stage_id'))
-        if row.get('replay_of'):
-            r['identical_work_group'] = row['replay_of']
-        elif row.get('ordinal') == 5 or row.get('role', '').startswith(('X-', 'Y-')):
-            r['identical_work_group'] = row['run_id']
+        r.update({k: row[k] for k in ('ordinal', 'role', 'pool_role') if k in row},
+                 window=(state.get('v4_series') or {}).get('window_id', state.get('window_id', 'W1')),
+                 stage=row.get('stage_id'))
+        v4_battery.attach(r, path, journal)
+        assign_work_group(r, row)
         if row.get('role', '').startswith(('X-', 'Y-')):
             r.update(template=row['role'][0], arm=row['role'][-1])
             fixture = json.loads((Path(state['measurement_root'])/kit.WP18_FIXTURES[r['template']]).read_bytes())
@@ -201,45 +319,163 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
     report['thermal'] = window_report(records, v4=True, u3_bar=bar,
         delta_slow_c=policy.get('delta_slow_c'), contrast_predeclared=contrast_predeclaration(wp19, policy))
     report['registration_diagnostics'] = v4_registration.desk_diagnostics(records,
-        r1_soak=r1_soak_c(registration_dir))
+        r1_soak=r1_soak_c(registration_dir), battery_policy=battery_policy)
+    if state.get('v4_series', {}).get('window_id', 'W1') != 'W1':
+        from joulewise.align.apple.v4_estimands import sentinel_admissibility
+        report['registration_diagnostics']['sentinel'] = {
+            'source': 'W1:5 (admitted before this series)',
+            'candidates': {r['ordinal']: sentinel_admissibility(r) for r in records
+                           if r.get('pool_role') == 'sentinel' and not r.get('supplemental')},
+            'reference_status': 'requires authenticated R1/W1 E_ref for cross-window U4'}
+    if supplemental_report(records):
+        report['supplemental_sentinels'] = supplemental_report(records)
     checks.update(light_triage.u_checks(report['thermal']))
-    checks['v4_B_bar'] = all(w['bar_pass'] for w in report['registration_diagnostics']['battery_windows'].values())
+    checks['v4_B_bar'] = battery_windows_pass(report['registration_diagnostics']['battery_windows'])
+    for name, row in report['registration_diagnostics']['battery_windows'].items():
+        print(f'{name} battery: '+json.dumps({k: row[k] for k in
+              ('B_count', 'unobserved_count', 'assist_count', 'bar_pass', 'consequence')}, sort_keys=True))
     checks['v4_D_cohort'] = report['registration_diagnostics']['d_cohort']['instrument_ok']
+    window_id = (state.get('v4_series') or {}).get('window_id', 'W1')
+    if window_id != 'W1':
+        # RUN_STATE 226 R15: the desk's provisional counts. The final adjudication
+        # may lower them, never raise them (align_v4_series.calibration_rows).
+        from scripts import align_v4_series as series
+        d_window = (report['thermal'].get('model_windows') or {}).get(kit.D_TAG) or {}
+        statuses = [(d_window.get(f'U{n}') or {}).get('status') for n in (1, 2, 3)]
+        u_pass = True if statuses == ['pass'] * 3 else False if 'fail' in statuses else None
+        report['series_desk_row'] = series.desk_row(
+            series.load(state['source_measurement_root']), window_id,
+            [{'run_id': r['id'], 'captured': (Path(runs_root) / r['id']).is_dir(), 'excluded': bool(r.get('excluded'))}
+             for r in records], u_pass)
     return checks, report
 
 
 def desk(session_root, **kwargs):
+    state = pilot.h.read(Path(session_root) / 'session.json')
+    if state.get('v4_series', {}).get('window_id', 'W1') != 'W1':
+        from scripts import align_v4_series as series
+        kwargs['kit'] = series.kit_path(state['v4_series']['window_id'])
     kwargs.setdefault('kit', kit.KIT)
     kwargs.setdefault('desk_schema', kit.DESK_SCHEMA)
     kwargs.setdefault('extra_checks', powermode_desk_check)
-    return pilot.desk(session_root, **kwargs)
+    status = pilot.desk(session_root, **kwargs)
+    # Evidence-aware full-desk verdict (ruling 9) beside the common desk status.
+    try:
+        members = pilot.h.read(status['pilot']).get('members', [])
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        members = None
+    removed = [m.get('run_id') for m in members or () if charging_only_exclusion(m)]
+    status['full_desk_gate'] = {'pass': members is not None and full_desk_gate_pass(status.get('checks'), members),
+                                'charging_only_members_removed': removed,
+                                'rule': 'all desk checks except v4_B_bar; charging-only exclusions removed (ruling 9)'}
+    if status.get('pilot'):
+        pilot.h.write(Path(status['pilot']).parent/'desk.json', status)
+    print('full_desk_gate: ' + ('pass' if status['full_desk_gate']['pass'] else 'fail'))
+    return status
+
+
+def validate_series_state(state):
+    """Recheck source kit and exact admission after prepare, before any arm."""
+    from scripts import align_v4_series as series
+    selection = state['v4_series']
+    root = Path(state['source_measurement_root'])
+    manifest = series.load(root)
+    if (selection['manifest_sha256'] != kit.sha((root / series.MANIFEST).read_bytes())
+            or selection['admission_sha256'] != kit.sha((root / series.ADMISSION).read_bytes())):
+        raise ValueError('prepared series/admission changed; prepare a new session')
+    window = series.selected(manifest, selection['window_id'])
+    if window['role'] != selection['role']:
+        raise ValueError('prepared series role changed')
+    series.require_admission(root, manifest, post_w1=window['id'] != 'W1')
+    if window['id'] != 'W1':
+        series.generate(root, window['id'], check=True, extra_sentinels=selection.get('extra_sentinels', 0))
+    directory = kit.KIT if window['id'] == 'W1' else series.kit_path(window['id'])
+    return json.loads((root / directory / 'collection_plan.json').read_bytes())
 
 
 ARM_RECORD_SCHEMA = 'joulewise.align_v4_arm.v1'
 
 
-def parse_topup_completed_at(value):
-    """Epoch seconds, or ISO-8601 with an explicit UTC offset, to epoch seconds."""
-    import datetime
-    import math
-    if value is None:
-        return None
-    if type(value) in (int, float):
-        return float(value) if math.isfinite(value) else None
+def _sha256(raw):
+    import hashlib
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _commit_exists(root, commit):
+    """Whether ``commit`` is a commit object in the repository at ``root`` (L3)."""
+    import re
+    if not isinstance(commit, str) or not re.fullmatch(r'[0-9a-f]{40}', commit):
+        return False
     try:
-        return float(value) if math.isfinite(float(value)) else None
-    except (TypeError, ValueError):
-        pass
+        return subprocess.run(['git', 'cat-file', '-e', f'{commit}^{{commit}}'], cwd=root,
+                              capture_output=True, timeout=20, check=False).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def _probe_meter_live(root, *, runner=subprocess.run, seconds=3):
+    """Verify the KM003C reader live at arm time (never lead-entered): run the monitor briefly.
+
+    Live means: a stream with status streaming, samples, a clock fit, a closing line and a
+    consistent raw offset. Secondary channel: the result gates nothing but this check itself.
+    """
+    import tempfile
+    from joulewise.external import km003c_parse as kp
+    with tempfile.TemporaryDirectory(prefix='v4-meter-probe-') as tmp:
+        out = Path(tmp) / 'probe.jsonl'
+        done = runner([sys.executable, '-B', str(Path(root) / 'scripts/km003c_monitor.py'), '--out', str(out),
+                       '--duration', str(seconds)], cwd=root, capture_output=True, timeout=seconds+60, check=False)
+        if getattr(done, 'returncode', 1) != 0 or not out.is_file():
+            return {'live': False, 'reason': f'monitor probe exit {getattr(done, "returncode", None)}'}
+        stream = kp.parse(out)
+        offset = kp.raw_offset_ns(stream)
+        live = bool(stream.present and stream.aligned and stream.trailer is not None and offset is not None)
+        return {'live': live, 'samples': len(stream.host_ns), 'raw_offset_ns': offset,
+                'stream_sha256': _sha256(out.read_bytes()), 'probe_seconds': seconds,
+                **({} if live else {'reason': 'no aligned samples with a closing line'})}
+
+
+def _record_bound(root, packet):
+    """Whether the packet is bound to the LATEST committed window record (smoke G1, delta3).
+
+    Three facts, all from committed Git objects: ``record_path`` at ``record_commit`` hashes to
+    ``record_sha256`` and that commit is the last one that changed the record path (a re-committed
+    record refuses); and the canonical series ledger (``series/state.json``) at HEAD names exactly
+    this record as its ``previous_record`` and equals the packet's ``series_sha256`` (a newer
+    window, even at a new record path, moves the ledger and stales an older window's packet).
+    Unrelated commits do not stale a packet.
+    """
+    import re
+    if not isinstance(packet, dict):
+        return False
+    commit, path, digest = packet.get('record_commit'), packet.get('record_path'), packet.get('record_sha256')
+    series_path = packet.get('series_path')
+    if (not isinstance(commit, str) or not re.fullmatch(r'[0-9a-f]{40}', commit) or not isinstance(path, str)
+            or not path or Path(path).is_absolute() or '..' in Path(path).parts
+            or not isinstance(digest, str) or not re.fullmatch(r'[0-9a-f]{64}', digest)
+            or not isinstance(series_path, str) or Path(series_path).is_absolute() or '..' in Path(series_path).parts):
+        return False
     try:
-        stamp = datetime.datetime.fromisoformat(str(value))
-    except ValueError:
-        return None
-    return stamp.timestamp() if stamp.tzinfo is not None else None
+        blob = subprocess.run(['git', 'show', f'{commit}:{path}'], cwd=root, capture_output=True,
+                              timeout=30, check=False)
+        latest = subprocess.run(['git', 'log', '-1', '--format=%H', '--', path], cwd=root,
+                                capture_output=True, text=True, timeout=30, check=False)
+        ledger = subprocess.run(['git', 'show', f'HEAD:{series_path}'], cwd=root, capture_output=True,
+                                timeout=30, check=False)
+        state = json.loads(ledger.stdout) if ledger.returncode == 0 else None
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return False
+    return (blob.returncode == 0 and _sha256(blob.stdout) == digest
+            and latest.returncode == 0 and latest.stdout.strip() == commit
+            and isinstance(state, dict)
+            and state.get('previous_record') == {'commit': commit, 'path': path, 'sha256': digest}
+            and packet.get('series_sha256') == _sha256(ledger.stdout))
 
 
 def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=None, owner=None,
-               obc_off_attested_by=None, battery_runner=None, topup_completed_at=None,
-               topup_source=None, now=None, next_arm_triage=None):
+               obc_off_attested_by=None, battery_runner=None, battery_log=None, window_battery_journal=None,
+               now=None, next_arm_triage=None, commit_check=None, record_check=None,
+               packet_builder=None, meter_probe=None, dwell_start=None):
     """W1/D arm evidence: ruling 7 AC powermode and ruling 20 volumes.
 
     Ruling 7: the AC-profile powermode must equal the plan's frozen series
@@ -269,9 +505,17 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
     from joulewise import battery_float
     from joulewise.align.apple.v4_registration import battery_arm
     observed, raw = battery_float.observe(phase='arm_check', runner=battery_runner or runner)
-    topup = {'completed_at_epoch_s': parse_topup_completed_at(topup_completed_at),
-             'source': topup_source} if topup_completed_at is not None or topup_source is not None else None
-    battery = battery_arm(observed, obc_off_attested_by, topup, now_epoch_s=(now or time.time)())
+    # MED-3: top-up evidence is derived from the logged battery record (completed charge
+    # within 1800 s, or continuous float since it); a hand-entered time is not admissible.
+    from joulewise.align.apple import v4_topup
+    now_s = (now or time.time)()
+    as_list = lambda value: [] if value is None else [value] if isinstance(value, (str, Path)) else list(value)
+    logs, journals = as_list(battery_log), as_list(window_battery_journal)
+    evidence = v4_topup.derive_from_sources(logs, journals, now_s) if logs or journals else None
+    topup = ({'completed_at_epoch_s': evidence['completed_at_epoch_s'], 'source': evidence['source']}
+             if evidence and evidence['admissible'] else None)
+    battery = battery_arm(observed, obc_off_attested_by, topup, now_epoch_s=now_s)
+    battery['topup_evidence'] = evidence
     battery['raw_ioreg'] = raw.decode('ascii', errors='backslashreplace')
     # Preserve optional reason fields verbatim without changing the frozen parser.
     battery['charging_reason_lines'] = [line for line in battery['raw_ioreg'].splitlines()
@@ -279,33 +523,84 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
     try:
         batt = (runner or subprocess.run)(['pmset', '-g', 'batt']) if runner else subprocess.run(
             ['pmset', '-g', 'batt'], capture_output=True, text=True, timeout=10, check=False)
-        battery['pmset_batt'] = {'exit_code': batt.returncode, 'stdout': batt.stdout, 'stderr': batt.stderr}
-        if batt.returncode != 0:
-            battery['admitted'] = False
-            battery['reasons'].append('pmset -g batt unavailable')
+        # L8: pmset -g batt is retained evidence only; the ioreg predicate decides.
+        battery['pmset_batt'] = {'exit_code': batt.returncode, 'stdout': batt.stdout, 'stderr': batt.stderr,
+                                 'evidence_only': True}
     except (OSError, subprocess.SubprocessError) as exc:
-        battery['admitted'] = False
-        battery['reasons'].append(f'pmset -g batt unavailable: {exc}')
+        battery['pmset_batt'] = {'exit_code': None, 'error': str(exc), 'evidence_only': True}
     reasons += battery['reasons']
-    # R12 B2: the frozen next-arm triage list gates every arm; the powermode,
-    # volume and battery results above are its arm-computed members and the
-    # off-MBP packet supplies the rest (joulewise.align.apple.v4_cadence).
-    from joulewise.align.apple import v4_cadence
-    packet = next_arm_triage
-    if isinstance(packet, (str, Path)):
+    # R12 B2: the frozen next-arm triage list gates every arm. The supplied packet is a POINTER, never
+    # trusted data (lead ruling 2026-11-08, Opus packet review HIGH-1/2): the arm rebuilds the packet
+    # itself from the identities the supplied one names, with its own clock and artifact-set digest,
+    # judges its own build, and refuses a supplied packet that differs from it. Powermode, volume,
+    # battery and the live meter are computed here from current hardware, never entered.
+    from joulewise.align.apple import v4_cadence, v4_registration
+    supplied, packet_file_sha256 = next_arm_triage, None
+    if isinstance(supplied, (str, Path)):
         try:
-            packet = json.loads(Path(packet).read_bytes())
+            raw_packet = Path(supplied).read_bytes()
+            supplied, packet_file_sha256 = json.loads(raw_packet), _sha256(raw_packet)
         except (OSError, ValueError):
-            packet = None
-    triage = v4_cadence.next_arm_triage(packet, {
-        'series_powermode': bool(power['admitted']),
-        'external_volume': volumes['verdict'] == external_volume.PASS,
-        'charging_battery': bool(battery['admitted'])})
+            supplied = None
+    current_digest = v4_registration.artifact_set_digest(measurement_root)
+    built, matches, rebuild_error = None, False, None
+    try:
+        if packet_builder is not None:
+            built, matches = packet_builder(measurement_root, supplied, now_epoch_s=now_s,
+                                            current_artifact_set_sha256=current_digest)
+        else:
+            from scripts import align_v4_next_arm_packet as builder
+            built, matches = builder.rebuild_and_compare(measurement_root, supplied, now_epoch_s=now_s,
+                                                         current_artifact_set_sha256=current_digest)
+    except (ValueError, KeyError, TypeError, AttributeError, OSError) as exc:
+        rebuild_error = f'{type(exc).__name__}: {exc}'
+    # The 3 s monitor launch is USB and process activity: it runs BEFORE the quiet/display dwell
+    # starts, never during it (lead ruling 2026-11-08). The arm stamps the probe's end and the dwell
+    # start on one monotonic clock and refuses unless the probe ended strictly earlier.
+    probe_started_ns = time.monotonic_ns()
+    try:
+        meter = dict((meter_probe or _probe_meter_live)(measurement_root))
+    except Exception as exc:  # noqa: BLE001 - an unverifiable meter refuses; it never raises out of the arm
+        meter = {'live': False, 'reason': f'{type(exc).__name__}: {exc}'}
+    meter.setdefault('probe_started_ns', probe_started_ns)
+    meter.setdefault('probe_ended_ns', time.monotonic_ns())
+    meter.setdefault('probe_ended_epoch_s', now_s)
+    dwell_start_ns = (dwell_start or time.monotonic_ns)()
+    dwell_ordered = (type(meter['probe_ended_ns']) is int and type(dwell_start_ns) is int
+                     and meter['probe_ended_ns'] < dwell_start_ns)
+    quiet_dwell = {'start_ns': dwell_start_ns, 'start_epoch_s': now_s, 'meter_probe_ended_ns': meter['probe_ended_ns'],
+                   'meter_probe_before_dwell': dwell_ordered}
+    if not dwell_ordered:
+        reasons.append('quiet_dwell: the meter probe did not end before the quiet dwell started '
+                       '(it must run before the dwell, never during it)')
+    internal = {'series_powermode': bool(power['admitted']),
+                'external_volume': volumes['verdict'] == external_volume.PASS,
+                'charging_battery': bool(battery['admitted']),
+                'meter_reader_live': meter.get('live') is True}
+    if built is None:
+        triage = v4_cadence.next_arm_triage(None, internal, None, now_epoch_s=now_s)
+        triage['reasons'].append(f'packet could not be rebuilt from its named sources: {rebuild_error}')
+        triage['admitted'] = False
+    else:
+        commit = built.get('record_commit')
+        identity = {'artifact_set_sha256': current_digest,
+                    'record_commit_exists': (commit_check or _commit_exists)(measurement_root, commit),
+                    'record_bound': bool((record_check or _record_bound)(measurement_root, built))}
+        triage = v4_cadence.next_arm_triage(built, internal, identity, now_epoch_s=now_s)
+        if not matches:
+            triage['admitted'] = False
+            triage['reasons'].append('packet does not match its committed sources (the supplied packet '
+                                     'differs from the arm\'s own build)')
+    triage.update(packet_file_sha256=packet_file_sha256, supplied_packet_matches_rebuild=matches,
+                  rebuilt_packet=built, rebuilt_packet_sha256=(v4_cadence._canonical_sha256(built) if built else None),
+                  meter_live_evidence=meter, rebuild_error=rebuild_error)
     reasons += ['next_arm_triage: ' + reason for reason in triage['reasons']
                 if not reason.startswith(('triage series_powermode', 'triage external_volume',
-                                          'triage charging_battery'))]
+                                          'triage charging_battery', 'triage meter_reader_live'))]
+    reasons += ([] if internal['meter_reader_live'] else
+                ['next_arm_triage: triage meter_reader_live failed'])
     return {'schema': ARM_RECORD_SCHEMA, 'admitted': not reasons, 'reasons': reasons,
-            'next_arm_triage': triage,
+            'next_arm_triage': triage, 'quiet_dwell': quiet_dwell,
             'ac_powermode': power, 'external_volumes': volumes, 'battery': battery,
             # Lead ruling R7-10: the host state directory this arm used.
             'host_state_dir': powermode.host_state_dir()}
@@ -425,8 +720,10 @@ def install(session_root, *, runner=None, volume_runner=None, now=None, w1_disk_
     measurement_root = state['measurement_root']
     # Council ruling 7: the frozen series powermode comes from the measurement
     # checkout's r1_slots, and arm refuses on a mismatch with the host.
-    kit.generate(measurement_root, check=True, source_root=measurement_root)
-    plan = json.loads((Path(measurement_root) / kit.KIT / 'collection_plan.json').read_bytes())
+    source_root = state['source_measurement_root'] if state.get('v4_series') else measurement_root
+    kit.generate(source_root, check=True, source_root=source_root)
+    plan = (validate_series_state(state) if state.get('v4_series') else
+            json.loads((Path(measurement_root) / kit.KIT / 'collection_plan.json').read_bytes()))
     from joulewise.align.apple import powermode
     high = None
     # Lead ruling R6-7: the High Power marker is host-level, so every later
@@ -533,12 +830,35 @@ def _termination_handlers():
 
 def _arm_and_install(session, state, measurement_root, plan, high, *, runner, volume_runner, now,
                      w1_disk_config, disk_gate, lock=None, owner=None,
-                     obc_off_attested_by=None, battery_runner=None, topup_completed_at=None,
-                     topup_source=None, next_arm_triage=None, **kwargs):
+                     obc_off_attested_by=None, battery_runner=None, battery_log=None,
+                     window_battery_journal=None, next_arm_triage=None, commit_check=None, record_check=None,
+                     packet_builder=None, meter_probe=None, dwell_start=None, **kwargs):
     record = arm_checks(measurement_root, plan, runner=runner, volume_runner=volume_runner, lock=lock,
                         owner=owner, obc_off_attested_by=obc_off_attested_by, battery_runner=battery_runner,
-                        topup_completed_at=topup_completed_at, topup_source=topup_source, now=now,
-                        next_arm_triage=next_arm_triage)
+                        battery_log=battery_log, window_battery_journal=window_battery_journal, now=now,
+                        next_arm_triage=next_arm_triage, commit_check=commit_check,
+                        record_check=record_check, packet_builder=packet_builder, meter_probe=meter_probe,
+                        dwell_start=dwell_start)
+    # RUN_STATE 226 R15: every arm, W1 included, binds the frozen series. W1 binds an empty history after
+    # R1; a C/T window the next frozen window. The packet bound is the arm's OWN rebuild (a supplied
+    # packet is only a pointer), whose history is derived from the hash-chained, authenticated records.
+    from scripts import align_v4_series as series
+    built = (record.get('next_arm_triage') or {}).get('rebuilt_packet')
+    window_id = (state.get('v4_series') or {}).get('window_id', 'W1')
+    binding_root = state.get('source_measurement_root') or measurement_root
+    try:
+        if not isinstance(built, dict):
+            raise ValueError('the arm could not rebuild the packet')
+        series.bind_packet(binding_root, window_id, built, authenticated_by_rebuild=True)
+        binding = []
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        binding = [f'series_binding: {window_id}: {exc}']
+    record['series_window'] = window_id
+    record['series_binding'] = binding
+    record['series_packet'] = built
+    if binding:
+        record['admitted'] = False
+        record['reasons'] = binding + record['reasons']
     if high is not None:
         record['high_power_enter'] = high
         if not high['ok']:
@@ -563,23 +883,29 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
     kit.arm_powermode_check(plan, record['ac_powermode']['observed'])
     receipt = w1_disk_check(w1_disk_config, gate=disk_gate)
     pilot.h.write(session / 'staging/w1_disk_gate.json', receipt)
-    return pilot.install(session, **kwargs)
+    return pilot.install(session, now=now or time.time, **kwargs)
 
 
 def main(argv=None):
     return pilot.main(argv, kit=kit.KIT, pack_id=kit.PACK_ID, desk_schema=kit.DESK_SCHEMA,
                       session_prefix='align-v4-', prepare_fn=prepare, install_fn=install,
+                      desk_fn=desk,
+                      prepare_options=(('--window-id', dict(help='frozen series window or D alias; requires series admission')),
+                                       ('--extra-sentinels', dict(type=int, default=0, choices=(0, 2),
+                                           help='R20: two supplemental escalation sentinels (ordinals 23, 24) '
+                                                'after a U4/U5-inconclusive window; ceiling 62,400 s'))),
                       desk_extra_checks=powermode_desk_check,
                       install_options=(('--w1-disk-config', dict(
                           type=Path, required=True,
                           help='validated R0 desk config (disk_path, W1 offloads) for the W1 disk gate')),
                                        ('--obc-off-attested-by', dict(required=True,
                           help='operator attesting Optimized Battery Charging is off')),
-                                       ('--topup-completed-at', dict(required=True,
-                          help='when the battery top-up completed: epoch seconds or ISO-8601 with UTC offset; '
-                               'arm refuses if it is future-dated or more than 30 min old')),
-                                       ('--topup-source', dict(required=True,
-                          help='who/what attests that completion time (operator name or log)')),
+                                       ('--battery-log', dict(type=Path, required=True, action='append',
+                          help='JSONL between-window battery log (scripts/align_v4_battery_log.py sample --loop, '
+                               'run only between windows); repeatable; the arm derives top-up evidence from it')),
+                                       ('--window-battery-journal', dict(type=Path, action='append',
+                          help='a window hazard battery journal (the 1 Hz SMC B0AC lines and ioreg lines) merged '
+                               'in time order with the between-window log; repeatable')),
                                        ('--next-arm-triage', dict(type=Path, required=True,
                           help='R12 B2 next-arm triage packet (JSON) built off the MBP from the committed record'))))
 

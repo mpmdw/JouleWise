@@ -82,14 +82,26 @@ class MemberTests(unittest.TestCase):
         row = self.capture(fake_stream(self.path, omit=(400,)))
         self.assertEqual(row['status'], 'available')
 
-    def test_absent_short_or_unclosed_stream_is_never_silent(self):
-        for stream in (fake_stream(self.path, status='absent'),
-                       fake_stream(self.path, end=3000),
-                       replace(fake_stream(self.path), trailer=None)):
+    def test_absent_or_short_stream_is_never_silent(self):
+        for stream in (fake_stream(self.path, status='absent'), fake_stream(self.path, end=3000)):
             row = self.capture(stream)
             self.assertEqual(row['status'], 'missing')
             self.assertTrue(row['flags'])
             self.assertIsNone(row['dc_in_residual_j'])
+
+    def test_unclosed_stream_salvages_members_it_fully_covers_and_flags_the_rest(self):
+        # Smoke G3: the reader died, so the stream has no closing line. A member inside the
+        # complete records keeps DC (disclosed); one past the last valid record is missing.
+        covered = self.capture(replace(fake_stream(self.path), trailer=None))
+        self.assertEqual(covered['status'], 'available')
+        self.assertIn('meter.stream_unclosed', covered['flags'])
+        self.assertEqual(covered['dc_in_energy_j'], 84)
+        truncated = replace(fake_stream(self.path, end=3000), trailer=None)
+        row = self.capture(truncated)
+        self.assertEqual(row['status'], 'missing')
+        self.assertIn('meter.member_uncovered', row['flags'])
+        self.assertIn('meter.stream_unclosed', row['flags'])
+        self.assertIsNone(row['dc_in_energy_j'])
 
     def test_protocol_error_inside_member_is_missing_even_with_contiguous_samples(self):
         stream = fake_stream(self.path)
@@ -170,6 +182,124 @@ class DeskTests(unittest.TestCase):
             self.assertIsNone(row['dc_in_residual_j'])
             self.assertNotIn('instrument_ok', report)
             stream.write_text(stream.read_text() + '\n')
+            row = meter.session_report(custody, plan, runs, summaries)['members']['member']
+            self.assertEqual(row['status'], 'missing')
+            self.assertIn('meter.custody_hash_mismatch', row['flags'])
+
+    def crashed_fixture(self, root, *, record_hash):
+        """A stream cut mid-line after 3.4 s with no closing line; two members at 1-3 s and 3-4.5 s."""
+        custody, runs, stream, plan, summaries = self.fixture(root)
+        fake_stream(stream)
+        lines = stream.read_text().split('\n')
+        cut = next(i for i, line in enumerate(lines) if '"rx": %d' % (OFFSET + 3_400_000_000) in line)
+        stream.write_text('\n'.join(lines[:cut]) + '\n' + lines[cut][:25])      # half a line, no trailer
+        record = json.loads((custody / 'night/hazard_result.json').read_text())
+        record['meter']['streams'][0]['sha256'] = hashlib.sha256(stream.read_bytes()).hexdigest() if record_hash else None
+        if not record_hash:
+            del record['meter']['streams'][0]['sha256']
+        (custody / 'night/hazard_result.json').write_text(json.dumps(record))
+        # the first member ends at 3 s, inside the complete records (last valid sample is about 3.38 s)
+        early = json.loads((runs / 'member/metadata.json').read_text())
+        for key in ('sampling_stopped', 'post_parse'):
+            stamps = early['uncertainty_evidence']['clock_anchor']['clock_stamps']
+            stamps[key] = {**stamps[key], 'monotonic_before_s': 3, 'monotonic_after_s': 3}
+        (runs / 'member/metadata.json').write_text(json.dumps(early))
+        shortened = replace(episode(), end_ns=3*NS, turns=(Turn(0, 2*NS, 3*NS, 10, 2, 3),))
+        (runs / 'member/outputs/align_episode.json').write_text(json.dumps(to_jsonable(shortened)))
+        # a second member, later than the last valid record
+        late = runs / 'late'
+        late.mkdir()
+        for name in ('metadata.json', 'events.jsonl'):
+            (late / name).write_text((runs / 'member' / name).read_text())
+        (late / 'outputs').mkdir()
+        shifted = replace(episode(), start_ns=3*NS, end_ns=4*NS, turns=(Turn(0, 3*NS, 4*NS, 10, 2, 3),))
+        (late / 'outputs/align_episode.json').write_text(json.dumps(to_jsonable(shifted)))
+        late_meta = json.loads((late / 'metadata.json').read_text())
+        stamps = late_meta['uncertainty_evidence']['clock_anchor']['clock_stamps']
+        for key in ('sampling_stopped', 'post_parse'):
+            stamps[key] = {**stamps[key], 'monotonic_before_s': 5, 'monotonic_after_s': 5}
+        (late / 'metadata.json').write_text(json.dumps(late_meta))
+        plan.append({**plan[0], 'run_id': 'late', 'seed_index': 2})
+        summaries.append({**summaries[0], 'run_id': 'late'})
+        return custody, runs, stream, plan, summaries
+
+    def test_crashed_reader_with_a_recorded_digest_keeps_dc_before_the_gap_and_never_fabricates_samples(self):
+        # Smoke G3: a listed, supervised stream whose recorded digest matches its (truncated) bytes.
+        with tempfile.TemporaryDirectory() as tmp:
+            custody, runs, stream, plan, summaries = self.crashed_fixture(Path(tmp), record_hash=True)
+            parsed = kp.parse(stream)
+            self.assertIsNone(parsed.trailer)
+            self.assertLess(parsed.host_ns[-1], OFFSET + 3_400_000_000)           # only complete records survive
+            report = meter.session_report(custody, plan, runs, summaries)
+            before, after = report['members']['member'], report['members']['late']
+            self.assertEqual(before['status'], 'available', before['flags'])
+            self.assertEqual(before['dc_in_energy_j'], 56)                       # 28 W over its 2 s, as recorded
+            self.assertIn('meter.stream_unclosed', before['flags'])
+            self.assertEqual(after['status'], 'missing')
+            self.assertIn('meter.member_uncovered', after['flags'])
+            self.assertIsNone(after['dc_in_energy_j'])
+            self.assertIsNone(after['dc_in_residual_j'])
+
+    def test_unrecorded_digest_means_exclude_not_salvage(self):
+        # A listed stream whose digest the supervisor never recorded: not authenticated, so excluded.
+        with tempfile.TemporaryDirectory() as tmp:
+            custody, runs, stream, plan, summaries = self.crashed_fixture(Path(tmp), record_hash=False)
+            row = meter.session_report(custody, plan, runs, summaries)['members']['member']
+            self.assertEqual(row['status'], 'missing')
+            self.assertIn('meter.custody_digest_unrecorded', row['flags'])
+            self.assertNotIn('meter.stream_unlisted', row['flags'])
+            self.assertIsNone(row['dc_in_energy_j'])
+
+    def test_unrecorded_stream_means_never_available_dc(self):
+        # A file the custody manifest never names (a stray or copied stream): separate case, own flag.
+        with tempfile.TemporaryDirectory() as tmp:
+            custody, runs, stream, plan, summaries = self.crashed_fixture(Path(tmp), record_hash=True)
+            stream.rename(stream.with_name('stream-099.jsonl'))
+            row = meter.session_report(custody, plan, runs, summaries)['members']['member']
+            self.assertEqual(row['status'], 'missing')
+            self.assertIn('meter.stream_unlisted', row['flags'])
+            self.assertNotIn('meter.custody_digest_unrecorded', row['flags'])
+            self.assertIsNone(row['dc_in_energy_j'])
+
+    def test_a_stray_stream_cannot_preempt_the_authenticated_one(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            custody, runs, stream, plan, summaries = self.fixture(Path(tmp))
+            stray = stream.with_name('stream-000.jsonl')                          # sorts first, never listed
+            rows = [json.loads(line) for line in stream.read_text().splitlines()]
+            for row in rows:
+                if row['k'] == 'b':
+                    fields = list(kp.SAMPLE.unpack(bytes.fromhex(row['p'])))
+                    fields[3] *= 2
+                    row['p'] = kp.SAMPLE.pack(*fields).hex()
+            stray.write_text(''.join(json.dumps(r) + '\n' for r in rows if r['k'] != 't'))
+            result = meter.session_report(custody, plan, runs, summaries)['members']['member']
+            self.assertEqual((result['status'], result['dc_in_energy_j']), ('available', 84.))
+            self.assertEqual(result['stream'], 'hazards/meter/stream-001.jsonl')
+            self.assertIn('meter.stream_unlisted', result['flags'])               # disclosed, never used
+
+    def test_no_supervisor_record_means_no_stream_has_provenance(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            custody, runs, stream, plan, summaries = self.crashed_fixture(Path(tmp), record_hash=True)
+            (custody / 'night/hazard_result.json').unlink()
+            row = meter.session_report(custody, plan, runs, summaries)['members']['member']
+            self.assertEqual(row['status'], 'missing')
+            self.assertIn('meter.unsupervised', row['flags'])
+            self.assertIsNone(row['dc_in_energy_j'])
+
+    def test_closed_streams_with_a_missing_or_wrong_hash_are_excluded_with_their_own_flags(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            custody, runs, stream, plan, summaries = self.fixture(Path(tmp))
+            record = json.loads((custody / 'night/hazard_result.json').read_text())
+            del record['meter']['streams'][0]['sha256']
+            (custody / 'night/hazard_result.json').write_text(json.dumps(record))
+            row = meter.session_report(custody, plan, runs, summaries)['members']['member']
+            self.assertEqual(row['status'], 'missing')
+            self.assertIn('meter.custody_digest_unrecorded', row['flags'])
+        with tempfile.TemporaryDirectory() as tmp:
+            custody, runs, stream, plan, summaries = self.crashed_fixture(Path(tmp), record_hash=True)
+            record = json.loads((custody / 'night/hazard_result.json').read_text())
+            record['meter']['streams'][0]['sha256'] = '0' * 64            # recorded, but not these bytes
+            (custody / 'night/hazard_result.json').write_text(json.dumps(record))
             row = meter.session_report(custody, plan, runs, summaries)['members']['member']
             self.assertEqual(row['status'], 'missing')
             self.assertIn('meter.custody_hash_mismatch', row['flags'])

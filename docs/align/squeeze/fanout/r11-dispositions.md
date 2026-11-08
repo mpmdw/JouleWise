@@ -47,7 +47,7 @@ Cross-checks: `perf/2026-11-08-r12-review-sol1`, `-sol2`. Protocol section
 | Item | Change | Where |
 |---|---|---|
 | B1 | A window ends at authenticated terminal completion; 59,520 s is a ceiling, not a reservation; custody, quiet admission and ceiling kept | protocol R12 B1 and the Sizing line; kit README text |
-| B2 | Frozen 14-entry next-arm triage list, all gating; arm evaluates it (`--next-arm-triage`); full desk gating after W1 and after code/config change | `v4_cadence.NEXT_ARM_TRIAGE`, `next_arm_triage`; `align_v4_session.arm_checks` |
+| B2 | Frozen 16-entry next-arm triage list (15 gating, after `battery_window`; `meter_coverage` is recorded, non-gating); arm evaluates it (`--next-arm-triage`); full desk gating after W1 and after code/config change | `v4_cadence.NEXT_ARM_TRIAGE`, `next_arm_triage`; `align_v4_session.arm_checks` |
 | B3 | Fixed 8 counted calibration windows (RUN_STATE 217 reverted the count stop), both pairs >=39 after 8, cap accounting, insufficient-calibration outcome | `v4_cadence.calibration_stop`; protocol R12 B3 |
 | R1 sizing | 61,607 s marked stale; 67,371 s one-encounter no-redo subtotal plus bracket/close/harvest; 96,427 s redo floor (RUN_STATE 216 corrected 215's 90,663 s) | `docs/align/r1_runtime_contract.md`, `LEAD-RULINGS-2.md` correction note |
 
@@ -76,3 +76,89 @@ read scores, so blinding was not at risk. Cost of fixed 8: about 13 MBP hours.
 - **Open statistics item (before W1 registration, not adopted):** sol1's candidate of a
   minimum of 7 windows plus a frozen 0.5 s_r threshold margin. It is model-dependent and
   needs a scale/scorer qualification and a power assessment.
+
+## Delta-HOLD round (Sol delta reviews sol1/sol2 on 353446ad6)
+
+Witnesses: `tests/align/test_r11_delta_sol1.py`, `test_r11_delta_sol2.py` (the review-era
+six-window and `stop_complete` expectations were updated to the fixed-8 predicate of
+RUN_STATE 217, and the arm-call witnesses to the battery-log API).
+
+| Finding | Change | Where |
+|---|---|---|
+| H01 / DELTA-S2-H1 scripts outside the receipt | Execution closure now follows script launch edges (exact `scripts/...` string constants outside docstrings, shell tokens) from endpoint, run_night, session, kit, budget procedure and the night_chains wrappers; 292 bound paths, scripts included. Strict/amendment tiers (below) keep the cost proportionate | `v4_registration.py` (`EXECUTED_CLOSURE`, `STRICT_*`), `tests/align/test_v4_executed_closure.py` |
+| H02 / DELTA-S2-M1 impossible counts | `calibration_stop` refuses rows with eligible benign > captured, captured > 22, bool/non-integer/negative counts, a wrong `eligible_total`; the triage refuses `calibration_totals` that do not sum | `v4_cadence.py` |
+| M01 unfinished zero-capture window | A provisional zero-capture window is unfinished, not a refusal: `pending_final_eligibility` until final | `v4_cadence.py` |
+| M02 / DELTA-S2-M2 packet flags | Previous-window-is-W1 is derived from the registered window id; code/config-changed from the artifact-set digest vs the digest recorded at the last desk pass; a contradictory flag refuses | `v4_cadence.py`, `v4_registration.artifact_set_digest` |
+| M03 retention | The arm record keeps the packet, its digest, the packet file digest and the derived calibration summary | `v4_cadence.py`, `align_v4_session.py` |
+
+## Opus cold review round (v4-opus-cold-review.md @ 33d0bc89f)
+
+| Finding | Change | Where |
+|---|---|---|
+| HIGH-1 WP22 dry run red | Contrast re-derived after the WP18 update (with the matching X-G stand-in), delta_slow_c and stage in the synthetic manifest, a synthetic registration directory with a PENDING U3; the desk takes a PENDING U3 as inconclusive and keeps running; the minimal run is in the default tests; the full `JW_WP22_FULL=1` run passes; both are in the Stage A checklist | `align_v4_w1_synthetic.py`, `align_v4_thermal_desk.py`, `test_v4_w1_synthetic.py` |
+| MED-1 receipt brittleness | Strict tier (re-register) and amendment tier (lead-signed `amendments` row: path, old/new sha, reason, signature; chained; never for strict paths) | `v4_registration.py`, `tests/align/test_v4_receipt_tiers.py` |
+| MED-2a deadlock | `lead_rulings` row (id, text digest, resets, after_window, signature) resets the zero-capture escalation count, retained in the arm record | `v4_cadence.py` |
+| MED-2b meter | `meter_samples_clock` replaced by gating `meter_reader_live` and non-gating `meter_coverage` (gaps listed) | `v4_cadence.py` |
+| MED-3 top-up | Evidence derived from a battery log (completed charge within 1800 s, or continuous float since); hand-entered time removed (`--battery-log`); sampler/derive script | `v4_topup.py`, `scripts/align_v4_battery_log.py`, `align_v4_session.py` |
+| MED-4 v5 blinding | DC residual printed for benign members only; non-benign DC rows sealed (hash only) | `km003c.seal_non_benign` |
+| L2/L3 | Raw packet retained; `record_commit` must be a commit the arm finds | `align_v4_session.py` |
+| L5 | Window id from the session state (default W1) | `align_v4_session.py` |
+| L7 | Packet template and `--emit-triage-template` | `v4_cadence.py` |
+| L8 | `pmset -g batt` is evidence only | `align_v4_session.py` |
+| L9 | H* refuses bool and non-numeric scores | `v4_estimands.py` |
+| L1, L4 | L1 is covered by the R1 exporter. L4 (note only): U6's trajectory-clustered SE is CR0 with z = 1.645, anti-conservative at about 14 trajectories; CR1 with t(G-1) is a candidate, not changed here (U6 is reported, never a gate) | n/a |
+
+## Delta2 round (Sol delta2 reviews on f993b784f) and the smoke-kit findings
+
+| Finding | Change | Where |
+|---|---|---|
+| S1 F01 / S2 H1, H2 receipt completeness | Strict is now the default tier; the amendment tier is a 25-module allowlist justified by the reviewed refusal census and never traced; the walker follows `-m` launches; `WP15` runtime script and its config, `joulewise/__main__.py` and the registration helpers are bound; a dynamic closure (audit-hook trace of the synthetic WP22 chain, R1 arm with the real runtime child, R1-to-W1 chain and arm/install session) is committed as evidence and asserted inside the strict receipt | `v4_registration.py`, `scripts/align_v4_dynamic_trace.py`, `docs/align/v4/dynamic_closure_trace.json`, `tests/align/test_v4_dynamic_closure.py` |
+| S1 F02 / S2 M3 stranded back-to-back arms | Basis (a) has no continuity rule; basis (b) unchanged; the sampler runs continuously (`sample --loop`) from the initial charge acquisition through windows and turnarounds | `v4_topup.py`, `align_v4_battery_log.py`, protocol section 4 |
+| S1 F03 / S2 M2 filtered rows | Raw-order evaluation: a transition needs consecutive valid timed rows; invalid, untimed, off-AC or out-of-order rows break the interval | `v4_topup.py` |
+| S2 M1 two-sentinel roster | Captured ceiling 24 (22 plus the two sentinels a U4/U5-inconclusive window may add); calibrators stay 7 per pair | `v4_cadence.py` (`CAPTURED_MAX`) |
+| G1 stale packet | The packet carries `record_path` and `record_sha256`; the arm checks the blob at `record_commit` and that it is the last commit changing the path | `align_v4_session.py` (`_record_bound`), `tests/align/test_v4_record_binding.py` |
+| G2 chain doc | Kit regeneration inserted between installing the slots and `--check`; the doc block is a tested script | `scripts/align_r1_to_w1_chain.py`, `tests/align/test_r1_to_w1_chain.py` |
+| G3 KM003C crash radius | An unclosed stream is salvaged up to its last valid record (start offset, no fabricated samples); only members overlapping the gap are DC-missing | `km003c.py`, `km003c_parse.py`, `tests/align/test_km003c.py` |
+
+## Ruling: no battery sampler during a window
+
+An ioreg spawn every 120 s on the measuring Mac is out-of-tree activity the quiet guard exists to
+catch. `sample --loop` now runs only between windows (start at terminal completion, `stop`
+before the arm dwell; `--pidfile`), and across a window the float evidence is the window's own
+1 Hz SMC battery journal, converted by `v4_topup.window_records` and merged in time order with
+the between-window logs (`--window-battery-journal`). A boundary gap above 300 s, or a missing
+window journal, breaks continuity as before. Amendment allowlist unchanged.
+
+## Packet-builder integration (Opus HOLD on the triage-packet builder) and delta3 (Sol1, Sol2)
+
+| Finding | Change | Where |
+|---|---|---|
+| Opus HIGH-1 packet is trusted text | A packet is a pointer. The arm rebuilds it with `build_packet` from the identities the packet names (own clock, own artifact-set digest) and requires canonical equality ignoring only `pushed_tip` and `packet_preflight`; a rebuild error refuses | `align_v4_session.arm_checks`, `align_v4_next_arm_packet.rebuild_and_compare` |
+| Opus HIGH-2 expiry optional | `valid_until_epoch_s` is mandatory and numeric; the arm clock must be before it | `v4_cadence.next_arm_triage` |
+| Opus HIGH-3 wire compatibility | `meter_reader_live` (ARM, gating) and `meter_coverage` (non-gating) split; `last_desk_passed_artifact_set_sha256` computed from committed bytes (`artifact_set_digest_at`); window ids validated; 16 entries (battery_window added by ruling 9), "14" text fixed | builder, `v4_cadence.py`, `v4_registration.py` |
+| Opus MED-1..4 | Quiet state, live meter, `prepared_at` and battery evidence are computed at the arm (meter by a short monitor probe); the quiet start state keeps the committed observation until the condition-waits evaluator lands; hash-chained window records (omitted attempt detected); `text_sha256` of a lead ruling computed from a committed text file | builder, `align_v4_session._probe_meter_live` |
+| Opus L1 | A U1-U3 fail gives that model 0 eligible from that window (R15, RUN_STATE 226) | builder |
+| Zero-capture retry | Same window id with an attempt suffix: `C3#2`; `WINDOW_ID` accepts `#k`; the frozen order is unchanged | `v4_cadence.WINDOW_ID` |
+| S1 F01 / S2 H1 amendment allowlist | The production hazard-pack night runner is back in the dynamic trace (`night_driver_hazard_pack`). The allowlist may hold only a module absent from BOTH the static closure and the trace; every bound path is statically reachable, so it is empty (strict if in doubt) | `v4_registration.AMENDMENT_ALLOWLIST`, `align_v4_dynamic_trace.py` |
+| S1 F02 launch templates | The four `configs/launchd/*.plist.template` files are bound and strict | `v4_registration._NAMED_ARTIFACTS` |
+| S1 F03 / S2 M1 (G1) stale record | The record is bound to the series ledger's latest window (`previous_record` + `series_sha256` at HEAD) through the hash-chained records the arm rebuilds | `align_v4_session._record_bound` |
+| S1 F04 / S2 H2 (G3) salvage | Salvage only for a stream listed in the window's custody manifest AND supervised by the shared driver, with a recorded matching digest. An unlisted or unsupervised stream is never available DC and is not parsed; an unrecorded digest excludes. Separate flags: `meter.unsupervised`, `meter.stream_unlisted`, `meter.custody_digest_unrecorded` (mismatch: `meter.custody_hash_mismatch`) | `km003c.session_report` |
+
+## Delta4 (Sol1 HOLD, Sol2 ADMIT_WITH_FIXES on 48a4d1d76)
+
+| Finding | Change | Where |
+|---|---|---|
+| S1 F1 source sorting defeats the raw-order refusal | Each battery source (log or converted window journal) is checked in its own raw order for strictly increasing timestamps BEFORE merging; a regression or duplicate refuses with a structured reason. No new threshold or continuity rule | `v4_topup.derive_from_sources` |
+| S2 F1 `Cn#k` loses its U3 scope | A validated retry id is normalized to its counted slot for the `checks_by_window` lookup; records keep the full attempt id; no slot is added | `thermal_desk.window_report` |
+| S2 F2 `lru_cache` on U3 admission | All caches removed from `v4_u3` (decision cache and the pure-math memos): admission recomputes (about 0.2 s) | `v4_u3.py`, `v4_registration.validate_u3` |
+| S1 L1 / S2 F3 nested pushed tip | `canonical` also drops `checks.record_committed.pushed_tip`; reachability is re-proved by the rebuild | `align_v4_next_arm_packet.canonical` |
+| S1 stale R0 tests / S2 F4 | `test_r1_runtime` uses explicit temporary pending fixtures; the shipped templates carry `medium` | `tests/align/test_r1_runtime.py` |
+
+## Integration item 4: D/C/T series (dct-series-merged @ 25860dcaf) and R20
+
+| Item | Change | Where |
+|---|---|---|
+| Merge | `origin/align/2026-11-08-dct-series-merged` merged (not rebased). Seed check: MATCH (`align/2026-11-08-series-seed-check-sol`), so the manifest bytes are unchanged | `configs/campaigns/align_v4/series/series_manifest.json` |
+| Arm binds the series with the arm-rebuild design | The arm binds its OWN rebuild of the packet (`bind_packet(..., authenticated_by_rebuild=True)`); the builder derives `next_window_id`, `series_manifest_sha256` and a chronological `series_history` (lead releases from `lead_rulings`) from the hash-chained records. `make_packet` is a dev/test producer needing an explicit expiry and arm clock | `align_v4_series.py`, `align_v4_session._arm_and_install`, builder |
+| R15 text | Protocol section "R15 - the frozen D/C/T series" | `docs/align/pilot_protocol_v4.md` |
+| R20 escalation sentinels | Ordinals 23 and 24 after the late sentinel, exact replays of W1:5, supplemental diagnostics (no identical-work group, no held-out seed, never counted), ceiling 62,400 s (R15); `--extra-sentinels 2`; protocol text | `align_v4_series.escalation_allocations`, `build_files`, `align_v4_session.assign_work_group`, `supplemental_report` |
