@@ -1,0 +1,1529 @@
+{
+  "code_commit": "95e5ec8b7",
+  "environment": {
+    "native_hardware_validation": false,
+    "python": "3.13.18",
+    "zstd_version": "1.5.7"
+  },
+  "full_harvest_final": {
+    "files": 177,
+    "raw_bytes": 74183193,
+    "stages": [
+      {
+        "failed": false,
+        "parent_cpu_s": 0.00030900000000011474,
+        "stage": "thresholds",
+        "wall_s": 0.00032604101579636335
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 5.600000000027805e-05,
+        "stage": "runs_roots",
+        "wall_s": 5.520891863852739e-05
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.00702999999999987,
+        "stage": "desk",
+        "wall_s": 0.030778166954405606
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 2.9999999999752447e-06,
+        "stage": "desk",
+        "wall_s": 3.833905793726444e-06
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.07742899999999997,
+        "source": "night-custody",
+        "stage": "archive.source_hash",
+        "wall_s": 0.08678554091602564
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.00395700000000021,
+        "source": "night-custody",
+        "stage": "archive.copy",
+        "wall_s": 0.05012929206714034
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.07958100000000012,
+        "source": "night-custody",
+        "stage": "archive.copy_hash",
+        "wall_s": 0.11837270797695965
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 7.00000000000145e-05,
+        "source": "ledger/calibration_observation_ledger.jsonl",
+        "stage": "archive.source_hash",
+        "wall_s": 7.095793262124062e-05
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.005001000000000033,
+        "source": "ledger/calibration_observation_ledger.jsonl",
+        "stage": "archive.copy",
+        "wall_s": 0.008060832973569632
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.00021700000000013375,
+        "source": "ledger/calibration_observation_ledger.jsonl",
+        "stage": "archive.copy_hash",
+        "wall_s": 0.00045854190830141306
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 9.599999999965192e-05,
+        "source": "ledger/calibration_ledger_head.json",
+        "stage": "archive.source_hash",
+        "wall_s": 9.562494233250618e-05
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0029680000000000817,
+        "source": "ledger/calibration_ledger_head.json",
+        "stage": "archive.copy",
+        "wall_s": 0.00683004199527204
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.00032500000000013074,
+        "source": "ledger/calibration_ledger_head.json",
+        "stage": "archive.copy_hash",
+        "wall_s": 0.00045662501361221075
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.00027700000000008274,
+        "source": "inputs/acceptance.json",
+        "stage": "archive.source_hash",
+        "wall_s": 0.0003208749694749713
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.003267000000000131,
+        "source": "inputs/acceptance.json",
+        "stage": "archive.copy",
+        "wall_s": 0.0063007090939208865
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.00042500000000034177,
+        "source": "inputs/acceptance.json",
+        "stage": "archive.copy_hash",
+        "wall_s": 0.0006223749369382858
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.00013599999999991397,
+        "source": "inputs/sealed_inventory.json",
+        "stage": "archive.source_hash",
+        "wall_s": 0.00013516598846763372
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0032170000000002474,
+        "source": "inputs/sealed_inventory.json",
+        "stage": "archive.copy",
+        "wall_s": 0.006224542041309178
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.00036199999999997345,
+        "source": "inputs/sealed_inventory.json",
+        "stage": "archive.copy_hash",
+        "wall_s": 0.0005340420175343752
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.00022999999999973042,
+        "source": "inputs/flag_catalog.json",
+        "stage": "archive.source_hash",
+        "wall_s": 0.0002300828928127885
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.003721999999999781,
+        "source": "inputs/flag_catalog.json",
+        "stage": "archive.copy",
+        "wall_s": 0.00920258299447596
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.000360000000000138,
+        "source": "inputs/flag_catalog.json",
+        "stage": "archive.copy_hash",
+        "wall_s": 0.0005370000144466758
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 8.700000000017027e-05,
+        "source": "inputs/registration.md",
+        "stage": "archive.source_hash",
+        "wall_s": 8.670799434185028e-05
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.003241999999999745,
+        "source": "inputs/registration.md",
+        "stage": "archive.copy",
+        "wall_s": 0.006725374958477914
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.000220000000000109,
+        "source": "inputs/registration.md",
+        "stage": "archive.copy_hash",
+        "wall_s": 0.00035179208498448133
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0011920000000000819,
+        "source": "repo/configs/campaigns/b5test_floor_v5",
+        "stage": "archive.source_hash",
+        "wall_s": 0.0012104170164093375
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0032370000000003785,
+        "source": "repo/configs/campaigns/b5test_floor_v5",
+        "stage": "archive.copy",
+        "wall_s": 0.011521290987730026
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0016999999999995907,
+        "source": "repo/configs/campaigns/b5test_floor_v5",
+        "stage": "archive.copy_hash",
+        "wall_s": 0.00267083290964365
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.00024900000000016576,
+        "source": "repo/configs/calibration/calibration_acceptance_d079_v2_n24_25g83_r2.json",
+        "stage": "archive.source_hash",
+        "wall_s": 0.0002492079511284828
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.003598000000000212,
+        "source": "repo/configs/calibration/calibration_acceptance_d079_v2_n24_25g83_r2.json",
+        "stage": "archive.copy",
+        "wall_s": 0.007282582926563919
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.00035699999999971865,
+        "source": "repo/configs/calibration/calibration_acceptance_d079_v2_n24_25g83_r2.json",
+        "stage": "archive.copy_hash",
+        "wall_s": 0.001141292043030262
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 9.000000000014552e-05,
+        "source": "repo/configs/campaign_policies/quiet_mac_p2_production.json",
+        "stage": "archive.source_hash",
+        "wall_s": 9.079102892428637e-05
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0033400000000001207,
+        "source": "repo/configs/campaign_policies/quiet_mac_p2_production.json",
+        "stage": "archive.copy",
+        "wall_s": 0.008254957967437804
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.00035700000000016274,
+        "source": "repo/configs/campaign_policies/quiet_mac_p2_production.json",
+        "stage": "archive.copy_hash",
+        "wall_s": 0.0007969160797074437
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 7.599999999996498e-05,
+        "source": "repo/configs/campaigns/neg8_reference_corpus_v5/derivation/settled_corpus.json",
+        "stage": "archive.source_hash",
+        "wall_s": 7.554097101092339e-05
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.003662999999999972,
+        "source": "repo/configs/campaigns/neg8_reference_corpus_v5/derivation/settled_corpus.json",
+        "stage": "archive.copy",
+        "wall_s": 0.008687583962455392
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0003589999999999982,
+        "source": "repo/configs/campaigns/neg8_reference_corpus_v5/derivation/settled_corpus.json",
+        "stage": "archive.copy_hash",
+        "wall_s": 0.0004666249733418226
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.20682800000000023,
+        "stage": "archive",
+        "wall_s": 0.3501150000374764
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0007039999999998159,
+        "stage": "arm_records",
+        "wall_s": 0.0007048749830573797
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0007850000000000357,
+        "stage": "roster",
+        "wall_s": 0.0007847079541534185
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.020340000000000025,
+        "stage": "roster_dispatch",
+        "wall_s": 0.022930874954909086
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 9.799999999993148e-05,
+        "stage": "collection",
+        "wall_s": 9.808398317545652e-05
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 29.584177999999998,
+        "stage": "members",
+        "wall_s": 34.03200445789844
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0008470000000002642,
+        "stage": "member_flags",
+        "wall_s": 0.0028006250504404306
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0003659999999996444,
+        "stage": "yield",
+        "wall_s": 0.00037825002800673246
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 2.9999999995311555e-05,
+        "stage": "failure_histogram",
+        "wall_s": 2.9916991479694843e-05
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 3.500000000400405e-05,
+        "stage": "thermistor",
+        "wall_s": 3.483297768980265e-05
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0003450000000029263,
+        "stage": "roster_checks",
+        "wall_s": 0.0008733340073376894
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0004139999999992483,
+        "stage": "cooldown",
+        "wall_s": 0.00041325006168335676
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.6932469999999995,
+        "stage": "calibration",
+        "wall_s": 0.7586892920080572
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.001487000000004457,
+        "stage": "historical_custody",
+        "wall_s": 0.0015101659810170531
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.00022400000000288856,
+        "stage": "neg8_bound",
+        "wall_s": 0.00025308295153081417
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 4.500000000007276e-05,
+        "stage": "whole_window",
+        "wall_s": 4.437495954334736e-05
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 9.999999996068709e-06,
+        "stage": "clock_systematic",
+        "wall_s": 9.333016350865364e-06
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.006182000000002574,
+        "stage": "pack_identity",
+        "wall_s": 0.014859874965623021
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.001049000000001854,
+        "stage": "code_identity",
+        "wall_s": 0.0011734580621123314
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0002080000000006521,
+        "stage": "model_identity",
+        "wall_s": 0.00020812510047107935
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 1.0000000003174137e-05,
+        "stage": "identity_supersession",
+        "wall_s": 9.875046089291573e-06
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 2.9999999995311555e-06,
+        "stage": "binary_identity",
+        "wall_s": 3.374996595084667e-06
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0010060000000038372,
+        "stage": "lineage",
+        "wall_s": 0.00191837502643466
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.09000400000000042,
+        "stage": "monitor",
+        "wall_s": 0.10292262502480298
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.002765000000003681,
+        "stage": "meter",
+        "wall_s": 0.005774082965217531
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 9.999999996068709e-06,
+        "stage": "neg8_corpus_physics",
+        "wall_s": 1.0207993909716606e-05
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 2.0000000020559128e-06,
+        "stage": "neg8_screen",
+        "wall_s": 1.4579854905605316e-06
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 4.600000000465343e-05,
+        "stage": "g10",
+        "wall_s": 4.5332941226661205e-05
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.002158999999998912,
+        "stage": "exclusion_inputs",
+        "wall_s": 0.004748207982629538
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 7.80000000020209e-05,
+        "stage": "g3",
+        "wall_s": 7.850001566112041e-05
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.00011400000000350019,
+        "stage": "diagnostics",
+        "wall_s": 0.00011462508700788021
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.07884200000000163,
+        "stage": "sources_unchanged",
+        "wall_s": 0.1242662500590086
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.006880999999999915,
+        "stage": "finish",
+        "wall_s": 0.008371915901079774
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.00028100000000108594,
+        "stage": "thresholds",
+        "wall_s": 0.0002909590257331729
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 5.800000000277805e-05,
+        "stage": "runs_roots",
+        "wall_s": 5.7541998103260994e-05
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.009653999999997609,
+        "stage": "desk",
+        "wall_s": 0.03086358297150582
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 5.999999999062311e-06,
+        "stage": "desk",
+        "wall_s": 5.749985575675964e-06
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.09273999999999916,
+        "source": "night-custody",
+        "stage": "archive.source_hash",
+        "wall_s": 0.06368391599971801
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.006047000000002356,
+        "source": "night-custody",
+        "stage": "archive.copy",
+        "wall_s": 0.07896691700443625
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.1041579999999982,
+        "source": "night-custody",
+        "stage": "archive.copy_hash",
+        "wall_s": 0.1962229999480769
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 8.400000000108321e-05,
+        "source": "ledger/calibration_observation_ledger.jsonl",
+        "stage": "archive.source_hash",
+        "wall_s": 8.37499974295497e-05
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0052789999999944826,
+        "source": "ledger/calibration_observation_ledger.jsonl",
+        "stage": "archive.copy",
+        "wall_s": 0.010741875041276217
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.00026199999999931833,
+        "source": "ledger/calibration_observation_ledger.jsonl",
+        "stage": "archive.copy_hash",
+        "wall_s": 0.0010759999277070165
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0001889999999988845,
+        "source": "ledger/calibration_ledger_head.json",
+        "stage": "archive.source_hash",
+        "wall_s": 0.0001928340643644333
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.005358999999998559,
+        "source": "ledger/calibration_ledger_head.json",
+        "stage": "archive.copy",
+        "wall_s": 0.01090374996419996
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.00029699999999621696,
+        "source": "ledger/calibration_ledger_head.json",
+        "stage": "archive.copy_hash",
+        "wall_s": 0.0033337920904159546
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.00027199999999538704,
+        "source": "inputs/acceptance.json",
+        "stage": "archive.source_hash",
+        "wall_s": 0.0002720420015975833
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.004927999999999599,
+        "source": "inputs/acceptance.json",
+        "stage": "archive.copy",
+        "wall_s": 0.007623375044204295
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.00041299999999466763,
+        "source": "inputs/acceptance.json",
+        "stage": "archive.copy_hash",
+        "wall_s": 0.0028247919399291277
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0001790000000028158,
+        "source": "inputs/sealed_inventory.json",
+        "stage": "archive.source_hash",
+        "wall_s": 0.00017841695807874203
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.005046999999997581,
+        "source": "inputs/sealed_inventory.json",
+        "stage": "archive.copy",
+        "wall_s": 0.009802166954614222
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0004220000000003665,
+        "source": "inputs/sealed_inventory.json",
+        "stage": "archive.copy_hash",
+        "wall_s": 0.000857542036101222
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0002749999999949182,
+        "source": "inputs/flag_catalog.json",
+        "stage": "archive.source_hash",
+        "wall_s": 0.0002867920557036996
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.005032000000007031,
+        "source": "inputs/flag_catalog.json",
+        "stage": "archive.copy",
+        "wall_s": 0.008754957932978868
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0002459999999970819,
+        "source": "inputs/flag_catalog.json",
+        "stage": "archive.copy_hash",
+        "wall_s": 0.0006339589599519968
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0001239999999995689,
+        "source": "inputs/registration.md",
+        "stage": "archive.source_hash",
+        "wall_s": 0.00014166603796184063
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0052329999999969345,
+        "source": "inputs/registration.md",
+        "stage": "archive.copy",
+        "wall_s": 0.011543666012585163
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0003759999999957131,
+        "source": "inputs/registration.md",
+        "stage": "archive.copy_hash",
+        "wall_s": 0.0006653749151155353
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.004202999999996848,
+        "source": "repo/configs/campaigns/b5test_floor_v5",
+        "stage": "archive.source_hash",
+        "wall_s": 0.005394125008024275
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.006146000000001095,
+        "source": "repo/configs/campaigns/b5test_floor_v5",
+        "stage": "archive.copy",
+        "wall_s": 0.014218832948245108
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0051289999999966085,
+        "source": "repo/configs/campaigns/b5test_floor_v5",
+        "stage": "archive.copy_hash",
+        "wall_s": 0.01375916600227356
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0002040000000036457,
+        "source": "repo/configs/calibration/calibration_acceptance_d079_v2_n24_25g83_r2.json",
+        "stage": "archive.source_hash",
+        "wall_s": 0.00021512492094188929
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.005257000000000289,
+        "source": "repo/configs/calibration/calibration_acceptance_d079_v2_n24_25g83_r2.json",
+        "stage": "archive.copy",
+        "wall_s": 0.010647209011949599
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.00041099999999971715,
+        "source": "repo/configs/calibration/calibration_acceptance_d079_v2_n24_25g83_r2.json",
+        "stage": "archive.copy_hash",
+        "wall_s": 0.0014045409625396132
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 9.500000000173259e-05,
+        "source": "repo/configs/campaign_policies/quiet_mac_p2_production.json",
+        "stage": "archive.source_hash",
+        "wall_s": 0.00011637492571026087
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.005735000000001378,
+        "source": "repo/configs/campaign_policies/quiet_mac_p2_production.json",
+        "stage": "archive.copy",
+        "wall_s": 0.01496216596569866
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0003989999999944871,
+        "source": "repo/configs/campaign_policies/quiet_mac_p2_production.json",
+        "stage": "archive.copy_hash",
+        "wall_s": 0.0013952079461887479
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0001239999999995689,
+        "source": "repo/configs/campaigns/neg8_reference_corpus_v5/derivation/settled_corpus.json",
+        "stage": "archive.source_hash",
+        "wall_s": 0.00014216697309166193
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.007521000000004108,
+        "source": "repo/configs/campaigns/neg8_reference_corpus_v5/derivation/settled_corpus.json",
+        "stage": "archive.copy",
+        "wall_s": 0.012631208053790033
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0003990000000015925,
+        "source": "repo/configs/campaigns/neg8_reference_corpus_v5/derivation/settled_corpus.json",
+        "stage": "archive.copy_hash",
+        "wall_s": 0.00044529198203235865
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.27671399999999835,
+        "stage": "archive",
+        "wall_s": 0.49105841701384634
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0005379999999988172,
+        "stage": "arm_records",
+        "wall_s": 0.0005647910293191671
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.000740000000000407,
+        "stage": "roster",
+        "wall_s": 0.0007397918961942196
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 9.500000000173259e-05,
+        "stage": "roster_dispatch",
+        "wall_s": 9.529199451208115e-05
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 2.2999999998774e-05,
+        "stage": "collection",
+        "wall_s": 2.3792032152414322e-05
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 26.801873999999998,
+        "stage": "members",
+        "wall_s": 30.62714524997864
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0009720000000044138,
+        "stage": "member_flags",
+        "wall_s": 0.009526124922558665
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0008580000000009136,
+        "stage": "yield",
+        "wall_s": 0.0011319579789415002
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 4.700000000212867e-05,
+        "stage": "failure_histogram",
+        "wall_s": 4.7166948206722736e-05
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 6.599999999679085e-05,
+        "stage": "thermistor",
+        "wall_s": 6.949994713068008e-05
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0005870000000030018,
+        "stage": "roster_checks",
+        "wall_s": 0.000980124925263226
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0007880000000000109,
+        "stage": "cooldown",
+        "wall_s": 0.0008589159697294235
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.6307180000000017,
+        "stage": "calibration",
+        "wall_s": 0.6713377920677885
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.001439000000004853,
+        "stage": "historical_custody",
+        "wall_s": 0.0015240421053022146
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.00022799999999989495,
+        "stage": "neg8_bound",
+        "wall_s": 0.00023891706950962543
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 4.6999999995023245e-05,
+        "stage": "whole_window",
+        "wall_s": 4.75000124424696e-05
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 8.000000001118224e-06,
+        "stage": "clock_systematic",
+        "wall_s": 8.333008736371994e-06
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0036230000000045948,
+        "stage": "pack_identity",
+        "wall_s": 0.004912332980893552
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0006540000000043733,
+        "stage": "code_identity",
+        "wall_s": 0.0010142909595742822
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.00016099999999852344,
+        "stage": "model_identity",
+        "wall_s": 0.00015991588588804007
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 8.999999998593466e-06,
+        "stage": "identity_supersession",
+        "wall_s": 8.209026418626308e-06
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 5.000000001587068e-06,
+        "stage": "binary_identity",
+        "wall_s": 5.08397351950407e-06
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.00018599999999935335,
+        "stage": "lineage",
+        "wall_s": 0.0001853749854490161
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.08041200000000259,
+        "stage": "monitor",
+        "wall_s": 0.08677933400031179
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 8.600000000313912e-05,
+        "stage": "meter",
+        "wall_s": 8.479098323732615e-05
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 9.000000005698894e-06,
+        "stage": "neg8_corpus_physics",
+        "wall_s": 9.375042282044888e-06
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 1.00000000458067e-06,
+        "stage": "neg8_screen",
+        "wall_s": 1.459033228456974e-06
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 5.000000000165983e-05,
+        "stage": "g10",
+        "wall_s": 5.004194099456072e-05
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0031269999999992137,
+        "stage": "exclusion_inputs",
+        "wall_s": 0.005781290936283767
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.00010799999999733245,
+        "stage": "g3",
+        "wall_s": 0.00010829197708517313
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.00013600000000479895,
+        "stage": "diagnostics",
+        "wall_s": 0.00013579102233052254
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.09832800000000219,
+        "stage": "sources_unchanged",
+        "wall_s": 0.09976166696287692
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.004100999999998578,
+        "stage": "finish",
+        "wall_s": 0.004626834066584706
+      }
+    ]
+  },
+  "full_harvest_initial": {
+    "files": 177,
+    "stages": [
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0006509999999999572,
+        "stage": "thresholds",
+        "wall_s": 0.007675917004235089
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 7.00000000000145e-05,
+        "stage": "runs_roots",
+        "wall_s": 7.016595918685198e-05
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.00935499999999978,
+        "stage": "desk",
+        "wall_s": 0.04092920804396272
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 3.9999999996709334e-06,
+        "stage": "desk",
+        "wall_s": 5.124951712787151e-06
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.21918999999999977,
+        "stage": "archive",
+        "wall_s": 1.1099240420153365
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0007280000000000619,
+        "stage": "arm_records",
+        "wall_s": 0.0007276670075953007
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0010330000000000616,
+        "stage": "roster",
+        "wall_s": 0.0025559590430930257
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.06643099999999968,
+        "stage": "roster_dispatch",
+        "wall_s": 0.09191704203840345
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 8.00000000005241e-05,
+        "stage": "collection",
+        "wall_s": 8.020794484764338e-05
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 33.423564,
+        "stage": "members",
+        "wall_s": 72.33478137501515
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0008679999999969823,
+        "stage": "member_flags",
+        "wall_s": 0.004463499994017184
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.00035199999999946385,
+        "stage": "yield",
+        "wall_s": 0.00041699991561472416
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 3.0000000002416982e-05,
+        "stage": "failure_histogram",
+        "wall_s": 3.0459021218121052e-05
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 3.300000000194814e-05,
+        "stage": "thermistor",
+        "wall_s": 3.170908894389868e-05
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.000332000000000221,
+        "stage": "roster_checks",
+        "wall_s": 0.003335791057907045
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0006929999999982783,
+        "stage": "cooldown",
+        "wall_s": 0.0007067079422995448
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.8166939999999983,
+        "stage": "calibration",
+        "wall_s": 1.93303587497212
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.002290999999999599,
+        "stage": "historical_custody",
+        "wall_s": 0.0028532909927889705
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0002970000000033224,
+        "stage": "neg8_bound",
+        "wall_s": 0.0028878339799121022
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 6.100000000230921e-05,
+        "stage": "whole_window",
+        "wall_s": 6.062502507120371e-05
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 8.999999998593466e-06,
+        "stage": "clock_systematic",
+        "wall_s": 9.791925549507141e-06
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.006222999999998535,
+        "stage": "pack_identity",
+        "wall_s": 0.02381775004323572
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.001173000000001423,
+        "stage": "code_identity",
+        "wall_s": 0.012259334092959762
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.00028100000000108594,
+        "stage": "model_identity",
+        "wall_s": 0.00115537503734231
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 1.4999999997655777e-05,
+        "stage": "identity_supersession",
+        "wall_s": 1.4459015801548958e-05
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 1.100000000064938e-05,
+        "stage": "binary_identity",
+        "wall_s": 1.029099803417921e-05
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0013190000000022906,
+        "stage": "lineage",
+        "wall_s": 0.003832833026535809
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.09515000000000384,
+        "stage": "monitor",
+        "wall_s": 0.2512658330379054
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.002481000000003064,
+        "stage": "meter",
+        "wall_s": 0.005814000032842159
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 5.000000001587068e-06,
+        "stage": "neg8_corpus_physics",
+        "wall_s": 5.083042196929455e-06
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 1.00000000458067e-06,
+        "stage": "neg8_screen",
+        "wall_s": 1.3330718502402306e-06
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 4.899999999707916e-05,
+        "stage": "g10",
+        "wall_s": 4.8749963752925396e-05
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0038459999999957972,
+        "stage": "exclusion_inputs",
+        "wall_s": 0.026981041999533772
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 9.1999999995096e-05,
+        "stage": "g3",
+        "wall_s": 9.112490806728601e-05
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.00011700000000303135,
+        "stage": "diagnostics",
+        "wall_s": 0.00011720799375325441
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.08943600000000629,
+        "stage": "sources_unchanged",
+        "wall_s": 0.38748120807576925
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.00030600000000191585,
+        "stage": "thresholds",
+        "wall_s": 0.015491042053326964
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 7.399999999790907e-05,
+        "stage": "runs_roots",
+        "wall_s": 7.416598964482546e-05
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.009370000000004097,
+        "stage": "desk",
+        "wall_s": 0.07038754096720368
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 2.1000000003823516e-05,
+        "stage": "desk",
+        "wall_s": 1.9708997569978237e-05
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.2748419999999996,
+        "stage": "archive",
+        "wall_s": 0.5878324579680339
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.00043200000000354066,
+        "stage": "arm_records",
+        "wall_s": 0.0004317921120673418
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0006929999999982783,
+        "stage": "roster",
+        "wall_s": 0.0006931249517947435
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 8.900000000267028e-05,
+        "stage": "roster_dispatch",
+        "wall_s": 8.875003550201654e-05
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 2.3999999996249244e-05,
+        "stage": "collection",
+        "wall_s": 2.3250002413988113e-05
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 30.356993000000003,
+        "stage": "members",
+        "wall_s": 50.63639266695827
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0011920000000031905,
+        "stage": "member_flags",
+        "wall_s": 0.012117707985453308
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.00032800000001032004,
+        "stage": "yield",
+        "wall_s": 0.00034187501296401024
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 1.699999999971169e-05,
+        "stage": "failure_histogram",
+        "wall_s": 1.6499892808496952e-05
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 2.6000000005410584e-05,
+        "stage": "thermistor",
+        "wall_s": 2.5209039449691772e-05
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.000423999999995317,
+        "stage": "roster_checks",
+        "wall_s": 0.0024050410138443112
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0006829999999951042,
+        "stage": "cooldown",
+        "wall_s": 0.0007119579240679741
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.7561589999999967,
+        "stage": "calibration",
+        "wall_s": 1.0565208749612793
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0024399999999928923,
+        "stage": "historical_custody",
+        "wall_s": 0.0027495829854160547
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0004619999999988522,
+        "stage": "neg8_bound",
+        "wall_s": 0.0005553329829126596
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 5.400000000577165e-05,
+        "stage": "whole_window",
+        "wall_s": 5.41249755769968e-05
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 9.000000005698894e-06,
+        "stage": "clock_systematic",
+        "wall_s": 1.0167015716433525e-05
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.006163999999998282,
+        "stage": "pack_identity",
+        "wall_s": 0.01001474994700402
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0012660000000010996,
+        "stage": "code_identity",
+        "wall_s": 0.0026288749650120735
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.00020399999999654028,
+        "stage": "model_identity",
+        "wall_s": 0.0002039159880951047
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 8.999999991488039e-06,
+        "stage": "identity_supersession",
+        "wall_s": 9.16607677936554e-06
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 7.000000010748408e-06,
+        "stage": "binary_identity",
+        "wall_s": 6.459071300923824e-06
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0002800000000036107,
+        "stage": "lineage",
+        "wall_s": 0.0003110829275101423
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.09597399999999823,
+        "stage": "monitor",
+        "wall_s": 0.149152374942787
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 8.199999999192187e-05,
+        "stage": "meter",
+        "wall_s": 8.287501987069845e-05
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 5.000000001587068e-06,
+        "stage": "neg8_corpus_physics",
+        "wall_s": 5.166046321392059e-06
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 9.999999974752427e-07,
+        "stage": "neg8_screen",
+        "wall_s": 1.084059476852417e-06
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 4.500000000007276e-05,
+        "stage": "g10",
+        "wall_s": 4.416599404066801e-05
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0032489999999967267,
+        "stage": "exclusion_inputs",
+        "wall_s": 0.008764500031247735
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.0001010000000007949,
+        "stage": "g3",
+        "wall_s": 0.00010091601870954037
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.00013599999999769352,
+        "stage": "diagnostics",
+        "wall_s": 0.00013633293565362692
+      },
+      {
+        "failed": false,
+        "parent_cpu_s": 0.09935999999999012,
+        "stage": "sources_unchanged",
+        "wall_s": 0.10005845909472555
+      }
+    ]
+  },
+  "io": [
+    {
+      "byte_equality": true,
+      "files": 1112,
+      "limits": [
+        "low-entropy XML-shaped bytes, not complete valid PM records",
+        "bounded resident stripes; warm filesystem cache; loaded host",
+        "no full-window reducer, eligibility or native measurement timing"
+      ],
+      "nice_applied": false,
+      "payload_bytes": 2046857414,
+      "powermetrics_bytes": 16554000000,
+      "schema": "joulewise.synthetic_harvest_io.v1",
+      "stage_calls": {
+        "archive_parallel_hash_copy_verify": 139,
+        "archive_serial_hash_copy_verify": 139,
+        "decompress_hash_write_verify": 139,
+        "final_source_rehash": 139,
+        "generate": 139,
+        "stream_hash_compress": 139
+      },
+      "stage_wall_s": {
+        "archive_parallel_hash_copy_verify": 26.179470550036058,
+        "archive_serial_hash_copy_verify": 55.357373954262584,
+        "decompress_hash_write_verify": 83.08041849243455,
+        "final_source_rehash": 7.766790586989373,
+        "generate": 34.438413919182494,
+        "stream_hash_compress": 36.53148753778078
+      },
+      "stripe_mib": 128,
+      "stripes": 139,
+      "synthetic": true,
+      "total_bytes": 18600000000,
+      "workers": 2
+    },
+    {
+      "byte_equality": true,
+      "files": 1576,
+      "limits": [
+        "low-entropy XML-shaped bytes, not complete valid PM records",
+        "bounded resident stripes; warm filesystem cache; loaded host",
+        "no full-window reducer, eligibility or native measurement timing"
+      ],
+      "nice_applied": false,
+      "payload_bytes": 2905214808,
+      "powermetrics_bytes": 23496000000,
+      "schema": "joulewise.synthetic_harvest_io.v1",
+      "stage_calls": {
+        "archive_parallel_hash_copy_verify": 197,
+        "archive_serial_hash_copy_verify": 197,
+        "decompress_hash_write_verify": 197,
+        "final_source_rehash": 197,
+        "generate": 197,
+        "stream_hash_compress": 197
+      },
+      "stage_wall_s": {
+        "archive_parallel_hash_copy_verify": 38.182387422421016,
+        "archive_serial_hash_copy_verify": 68.18970229616389,
+        "decompress_hash_write_verify": 130.9955463326769,
+        "final_source_rehash": 11.34877758170478,
+        "generate": 48.02235404145904,
+        "stream_hash_compress": 46.56955936981831
+      },
+      "stripe_mib": 128,
+      "stripes": 197,
+      "synthetic": true,
+      "total_bytes": 26400000000,
+      "workers": 2
+    }
+  ],
+  "parse": {
+    "equal": true,
+    "limits": "one small committed seed, cProfile enabled; not a whole harvest speedup",
+    "parses_per_case": 3,
+    "raw_bytes": 5783144,
+    "records": 75,
+    "results": {
+      "original": {
+        "top_cumulative": [
+          {
+            "calls": 3,
+            "cumulative_s": 6.6771402900000005,
+            "function": "parse_powermetrics_records"
+          },
+          {
+            "calls": 3,
+            "cumulative_s": 6.677129209,
+            "function": "_parse_powermetrics_records"
+          },
+          {
+            "calls": 3,
+            "cumulative_s": 6.661860918,
+            "function": "_parse_powermetrics_records_uncached"
+          },
+          {
+            "calls": 3,
+            "cumulative_s": 6.64773075,
+            "function": "_powermetrics_documents"
+          },
+          {
+            "calls": 225,
+            "cumulative_s": 6.630917921,
+            "function": "__call__"
+          },
+          {
+            "calls": 225,
+            "cumulative_s": 6.616976751,
+            "function": "_mock_call"
+          },
+          {
+            "calls": 225,
+            "cumulative_s": 6.616568258,
+            "function": "_execute_mock_call"
+          },
+          {
+            "calls": 225,
+            "cumulative_s": 6.61567766,
+            "function": "loads"
+          }
+        ],
+        "wall_s": 6.685247082961723,
+        "xml_decodes": 225
+      },
+      "reuse": {
+        "top_cumulative": [
+          {
+            "calls": 3,
+            "cumulative_s": 1.752439458,
+            "function": "parse_powermetrics_records"
+          },
+          {
+            "calls": 3,
+            "cumulative_s": 1.752431416,
+            "function": "_parse_powermetrics_records"
+          },
+          {
+            "calls": 1,
+            "cumulative_s": 1.6914707080000002,
+            "function": "_parse_powermetrics_records_uncached"
+          },
+          {
+            "calls": 1,
+            "cumulative_s": 1.689048625,
+            "function": "_powermetrics_documents"
+          },
+          {
+            "calls": 75,
+            "cumulative_s": 1.682882205,
+            "function": "__call__"
+          },
+          {
+            "calls": 75,
+            "cumulative_s": 1.6791837920000001,
+            "function": "_mock_call"
+          },
+          {
+            "calls": 75,
+            "cumulative_s": 1.679028629,
+            "function": "_execute_mock_call"
+          },
+          {
+            "calls": 75,
+            "cumulative_s": 1.6786885870000001,
+            "function": "loads"
+          }
+        ],
+        "wall_s": 1.762625457951799,
+        "xml_decodes": 75
+      }
+    },
+    "synthetic": true
+  }
+}
