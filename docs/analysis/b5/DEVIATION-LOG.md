@@ -408,27 +408,36 @@ the fixing seat, which worked on synthetic data only.
        the binder refused: two readers in the analysis chain (the step-5 mint and the step-9 binder) disagreed on
        the same registered bytes. The floor members did not fail
        registered authentication, so this is an L9 fix, not an R3 producer cure.
-   - **Why the tests missed it.** The synthetic S10 chain's floors bind, so its floor logs carry no campaign-level
-     row that names the members. The binder's unit fixtures hold only member rows. So no test covered a log with
-     this evaluation row.
-   - **Change.** In the campaign-log branch, `_order_member_ids` now skips every row that has a `record_type`.
+   - **Why the tests missed it.** The synthetic S10 chain's logs have the other shape. Its windows' members are
+     cloned, not run by the runner, so its claim-window logs hold no per-member row at all: only provenance
+     attestations and the whole-window evaluation. There the evaluation's `bundle_ids` is the only row naming the
+     members, each once, so the old parse bound them. The binder's unit fixtures hold only member rows. No test had
+     both kinds of row in one log, as the runner writes it.
+   - **Change.** In the campaign-log branch, `_order_member_ids` now reads the executed order from the log's
+     executed-member rows whenever the log has any: rows with no `record_type` that name an id (`bundle_ids`, or else
+     `bundle_id` or `run_id`, extracted as before). Every row with a `record_type` is then ignored.
+     - **A log with no member row keeps the previous parse of every row, unchanged.** That is the synthetic S10
+       shape. The first version of this fix (`cf42f2a98`) skipped `record_type` rows unconditionally. The full
+       synthetic chain then refused all four synthetic GAMMA floor resolutions (`artifact_schema_invalid`; step 9b
+       `outcome_class`, exit 3), so the fallback was added in `7e6ba73b2`.
      - **Why `record_type` and not a structural rule.** In the writer's schema, every campaign-level record carries
        a `record_type`: the evaluation row, `campaign_verdict`, `campaign_stop`, `shakedown_gate`, the provenance
        attestation and `campaign_occurrence_supersession`. No member row carries one. So the field decides it
        exactly.
        - A structural rule (rows with `run_id`, `run_index` and `executed_order`) would also drop member rows the
          runner writes without an order entry (`config_error` rows, `block_order_warning` rows).
-       - It would also drop the synthetic S10 chain's member rows, which carry no `run_index`.
      - **What is unchanged.**
        - Failed, refused, timed-out, blocked and drained member rows still count as executed attempts. They are
          `log_row` rows.
-       - The "exactly once", order and contiguous A/B/B/A checks are as strict as before.
+       - The "exactly once", order and contiguous A/B/B/A checks are as strict as before, in both modes.
        - The order-manifest branch is unchanged.
-     - **Commits and tests.** Commit `cf42f2a98`, with failing-first tests in commit `cb2498c2a`:
+     - **Commits and tests.** Commits `cf42f2a98` and `7e6ba73b2`, with failing-first tests in commit `cb2498c2a`:
        - `tests/test_analysis_engine_campaign_log_members.py`, on a synthetic log of the probed shape. It binds after
          the fix. Before the fix it refused with the probed problem words, one per component.
          - A duplicate executed-member row still refuses.
          - A failed attempt on a cell member still counts.
+         - An attestations-plus-evaluation log (the S10 shape) binds both before and after the fix. A second
+           evaluation row in it still refuses.
        - The CLI binding fixture in `tests/test_analysis_integration.py`, whose evidence-root logs gain the
          campaign-level rows. With production identity, every cell binds after the fix; before it, none did.
    - **Effect on estimands.** None. No estimand, estimator, decision rule or threshold changes.
@@ -442,7 +451,8 @@ the fixing seat, which worked on synthetic data only.
      block-5 claim replay in `joulewise/paper_custody.py` and the dry run's step 9. The mint's own
      `bind_floor_artifact_evidence` (`scripts/mint_floor_artifact.py`) is a separate function: it checks the log's
      sha256 and reads no member order from it.
-     - A log whose campaign-level rows carry no `bundle_ids`, `bundle_id` or `run_id` parses exactly as before.
+     - Two kinds of log parse exactly as before: a log with no executed-member row, and a log whose
+       campaign-level rows name no id (no `bundle_ids`, `bundle_id` or `run_id`).
      - A log in the probed shape used to refuse every floor cell and now binds. No tracked claim-verdicts record
        carries a refused floor resolution (DLE-3's consumer check), so no published or frozen result changes.
      - The one real-data output it changes is the unreleased r3 dry run's GAMMA claim verdicts, which the r4 dry
