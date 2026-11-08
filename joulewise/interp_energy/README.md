@@ -18,6 +18,7 @@ records review findings, draft incompatibilities, tests and open decisions.
 | `forced_decode` | Stage 0 teacher forcing; Stage 1 T physics channel | `replay`, `MLXBackend`, `NumpyBackend`, `ReplayResult`, `token_sequence_sha256`, `weight_file_identity`. Fixed IDs, fresh model-specific caches, synchronous forwards and diagnostics. |
 | `reference` | Synthetic validation of T | `NumpyReferenceModel`: tiny causal-attention model with real growing K/V arrays; no model files. |
 | `behaviour_channel` | Stage 1 F behaviour channel; later H1 frontier arithmetic | `Answer`, `EnergyModel`, `CapScenario`, `answer_energy`, `summarize_answers`, `compare_answers`, `compare_scenarios`. Count-based predictions only; no free-generation runner, scorer, calibration fitting or measured-energy reducer. |
+| `edit_frontier` | Ranked ideas 2–3; cap-conditional energy/capability frontier | `Variant`, `analyze_variants`, `pareto_frontier`. Matched-item bootstrap coordinates and frontier stability; optional supplied gross-energy comparison against the behaviour law. No measurement-file reader or claim gate. |
 | `lockin` | LOCKIN-SWAP / PRBS instrument proposal | `Schedule`, `NoiseModel`, `make_schedule`, `simulate_trace`, `demodulate`, `abba_differences`, `estimate_abba`. Synthetic traces, exploratory block inference; no hardware acquisition or promised lock-in gain. |
 | `power` | Study §2.2 sizing / PSD-gated lock-in feasibility | `plan_power`, `study_reference`. Independent-unit normal planning; no TOST or registered claim decision. |
 | `rail_data_dependence` | S1 Apple-GPU data dependence; Stage 1 P instrument ladder | `Settings`, `make_plan`, `synthetic_weight`, `abba_schedule`, `execute_plan`, `MLXBackend`, `NumpyDryBackend`. Fixed dispatch counts within a geometry/dtype; dry mode is a tiny float32 CPU surrogate. |
@@ -197,6 +198,40 @@ This model's d/context convention and null-ratio policy differ from the draft's
 D−1 decode model and infinite EPC endpoints. It predicts energy from counts;
 it does not implement the draft's measured-energy bootstrap, calibration
 uncertainty, Clopper–Pearson, t intervals, floors or TOST.
+
+## Energy/capability frontiers
+
+`edit_frontier` reuses the behaviour channel's energy law and denominator
+policy across multiple variants. It minimizes gross J/answer (or J/correct)
+and maximizes accuracy, with a raw-token frontier as a diagnostic. Coordinate
+CIs and paired contrasts share the same whole-problem bootstrap across all
+variants. It also reports frontier inclusion frequencies; these are stability
+diagnostics, not simultaneous confidence bands or probabilities of optimality.
+Zero-correct draws withhold ratio CIs and affected frontier frequencies.
+
+The input is one explicit JSON with `model_id`, `evaluation_id`, `boundary`,
+`baseline`, and `variants`. Each variant supplies `name`, `cap_tokens`, `model`
+(the existing `EnergyModel` fields), and `answers` (the existing `Answer`
+fields). Optional `observed_gross_j` maps each problem ID to gross joules and
+requires `observation_source`. Observations must cover all variants and items.
+The report compares their deltas with law predictions and reports the paired
+residual CI. Source strings are opaque; provenance and measurement validity
+are caller assertions. This is not the ASTRA measured-energy claim reducer.
+
+```sh
+python3.13 -B scripts/interp_energy/edit_frontier.py --demo --seed 0
+python3.13 -B scripts/interp_energy/edit_frontier.py synthetic-frontier.json --bootstrap-samples 2000
+python3.13 -B -m unittest tests.interp_energy.test_edit_frontier
+python3.13 -B -m unittest tests.interp_energy.test_edit_frontier_cli
+```
+
+There is exactly one attempt per independent problem per variant. Roster
+mismatches and repeated IDs are refused; repeated seeds require a future
+cluster analysis. One report describes one model/runtime/dtype, evaluation
+and physical boundary. Caps stay explicit treatment settings. The
+[frontier design and experiment plan](../../docs/design/interp_energy_edit_frontier.md)
+gives estimands, the Wu et al. citation, sample JSON, limitations and window
+cost estimates. This component is stdlib-only and introduces no MLX tests.
 
 ## Lock-in, power planning and operand ladder
 
