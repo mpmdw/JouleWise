@@ -279,21 +279,32 @@ def _screen_member(member, cohort, *, divergent=False):
 
 
 def _member_output(member, **fields):
-    """A27: scored C-sabotage is sealed; hardware anchors remain identified."""
+    """A27: scored C-sabotage is sealed; hardware anchors remain identified.
+
+    R23h: rows keyed by window also carry attempt_id, so a not-counted
+    zero-capture attempt never collides with its counted retry; any
+    not-captured member prints captured: false.
+    """
     identity = {'run_id': member['slot']['run_id']}
-    if 'window' in fields:
-        identity['window'] = fields['window']
+    for key in ('window', 'attempt_id'):
+        if key in fields:
+            identity[key] = fields[key]
+    uncaptured = {'captured': False} if not member['captured'] else {}
     if 'sealed_sha256' in member:
-        return dict(**identity, status='sealed', sha256=member['sealed_sha256'],
-                    **({'captured': False} if not member['captured'] else {}))
-    result = dict(**fields, run_id=identity['run_id'])
+        return dict(**identity, status='sealed', sha256=member['sealed_sha256'], **uncaptured)
+    result = dict(**fields, run_id=identity['run_id'], **uncaptured)
     if member['slot']['series_role'] == 'anchor':
         result['series_role'] = 'anchor'
     return result
 
 
-def _sealed_aggregate(value):
-    return dict(status='sealed', sha256=digest(canonical(value)))
+def _sealed_aggregate(_value):
+    """A27 (R23h): an aggregate over scored C-sabotage prints no value or hash.
+
+    Small counts are trivially recoverable from an unsalted hash, so the
+    sealed leaf is status only; the benign_only aggregate prints beside it.
+    """
+    return dict(status='sealed')
 
 
 def _printed_checks(checks, members, derivation, window):
@@ -581,7 +592,7 @@ def analyze(payload, *, workers=1, frozen_thresholds=None):
                 pool_eligible=m in eligible, reasons=m['reasons'], classes=m['classes'], flags=m['flags'],
                 coverage_disclosures=[f for f in m['thermal'].get('energy_flags', ())
                     if f in ('duty.uncovered', 'trace.partial_coverage')
-                    and f not in m['thermal'].get('owned_energy_flags', m['thermal'].get('energy_flags', ()))],
+                    and f not in td.screened_energy_flags(m['thermal'])],
                 rederived_classes=m['rederived_classes'], recorded_classes=m['recorded_classes'],
                 class_mismatch=m['rederived_classes'] != m['recorded_classes']) for m in w['members']]))
         if captured:
@@ -670,7 +681,9 @@ def analyze(payload, *, workers=1, frozen_thresholds=None):
             if f['convention'] == 'counts_logged':
                 is_carrier = f['window'].startswith('C') and row['condition'] == 'benign'
                 if is_carrier or (f['window'].startswith('T') and row['condition'] == 'sabotage'):
-                    grid = [(v['H'], v['score']) for v in row['H_grid'] if v['nominal_H'] in estimands.H_STAR_GRID
+                    # R26: pass every exact integer dose (0, 300, ...); the
+                    # helper ignores and lists off-grid ones. 'full' is not a dose.
+                    grid = [(v['H'], v['score']) for v in row['H_grid'] if type(v['nominal_H']) is int
                             and v['nominal_H'] == v['H'] and _finite(v['score'])]
                     row['H_star'] = (estimands.subturn_h_star(grid, cutoff) if cutoff is not None else
                                      dict(status='inconclusive', h_star=None))
@@ -701,7 +714,8 @@ def analyze(payload, *, workers=1, frozen_thresholds=None):
                     for m in w['members']:
                         s = m['slot']
                         if s['held_out'] and s['task_pair'] == pair and s['condition'] == condition and (w['window'], s['run_id']) not in present:
-                            rows.append(dict(window=w['window'], run_id=s['run_id'], alarm=None, score=None,
+                            rows.append(dict(window=w['window'], attempt_id=w['attempt_id'], run_id=s['run_id'],
+                                **({'captured': False} if not m['captured'] else {}), alarm=None, score=None,
                                 reasons=m['reasons'] or m['classes'] or ['window_pool_ineligible']))
                             present.add((w['window'], s['run_id']))
                 test[convention][KEYS[pair]][condition] = {**_test_summary(rows), 'members': rows,
@@ -725,12 +739,12 @@ def analyze(payload, *, workers=1, frozen_thresholds=None):
     u5 = ac.u5(payload.get('r1_sensitivity'))
     dc = dc_desk.analyze_windows([w for w in payload['windows'] if w['window'] == 'W1']+windows,
                                 gpu_fits=fits)
-    output_members = {(w['window'], m['slot']['run_id']): m for w in windows for m in w['members']}
-    dc = [_member_output(output_members[(r['window'], r['run_id'])],
+    output_members = {(w['attempt_id'], m['slot']['run_id']): m for w in windows for m in w['members']}
+    dc = [_member_output(output_members[(r['attempt_id'], r['run_id'])],
                          **{k: v for k, v in r.items() if k != 'run_id'})
-          if (r['window'], r['run_id']) in output_members else r for r in dc]
-    dc.extend(_member_output(m, window=w['window']) for w in windows for m in w['members']
-              if not m['captured'] and 'sealed_sha256' in m)
+          if (r['attempt_id'], r['run_id']) in output_members else r for r in dc]
+    dc.extend(_member_output(m, window=w['window'], attempt_id=w['attempt_id'])
+              for w in windows for m in w['members'] if not m['captured'] and 'sealed_sha256' in m)
     held = sorted(set([*codes, *CLAIM_CODES[:-1], *(['synthetic_only'] if payload.get('synthetic') else [])]))
     claim = dict(status='held', codes=held,
         detection_rate_licensed=all(m['status'] == 'pass' for m in monitoring.values()),
@@ -750,7 +764,7 @@ def analyze(payload, *, workers=1, frozen_thresholds=None):
         U3_derivation=derivation, U4=u4, U5=u5, U6=monitoring,
         thresholds=cutoffs, threshold_freeze=freeze, fits=fits, test=test,
         benign_carriers=carriers, dc_secondary=dc, claim=claim,
-        cache_diagnostics=[_member_output(m, window=w['window'],
+        cache_diagnostics=[_member_output(m, window=w['window'], attempt_id=w['attempt_id'],
             statistics=(m.get('summary') or {}).get('cache_statistics'),
             no_rebuild_sensitivity='print_only; never an eligibility exclusion')
             for w in windows for m in w['members']],
@@ -766,7 +780,7 @@ def analyze(payload, *, workers=1, frozen_thresholds=None):
             preserve_thinking='log omission only; no semantic transcript scoring',
             full_omission='print-only H_grid and pair full_cell at the pair threshold; never a curve dose or crossing',
             ordinary_agent='gated/held reference-state energy, not free-running production energy'),
-        realized_counts=[_member_output(m, window=w['window'],
+        realized_counts=[_member_output(m, window=w['window'], attempt_id=w['attempt_id'],
             rows=[{k: r[k] for k in ('context_tokens', 'prefill_tokens', 'decode_tokens', 'reasoning_tokens')}
                   for r in _rows(m)] if m.get('summary') else []) for w in windows for m in w['members']],
         registered_scaffold={'status': 'input_judgment', 'custody': payload.get('custody', 'unavailable')})

@@ -112,6 +112,7 @@ class OwnedCoverageTests(unittest.TestCase):
         e._screen_member(member, p['cohort'])
         probe = copy.deepcopy(p['windows'][0]['members'][6])
         probe['thermal']['energy_flags'] = table['flags']  # p7/p8 wiring
+        probe['thermal']['owned_energy_flags'] = table['flags']  # owned screen (R23h)
         e._screen_member(probe, p['cohort'])
         self.assertEqual(member['eligible'], probe['eligible'])
         fill, _ = analyze({**p, 'windows': p['windows'][:1]})
@@ -195,11 +196,11 @@ class SealScopeTests(unittest.TestCase):
             for key, value in expected[unit].items():
                 if key in ('status', 'parts'):
                     continue
-                self.assertEqual(actual[unit][key], {'status': 'sealed', 'sha256': digest(canonical(value))})
+                self.assertEqual(actual[unit][key], {'status': 'sealed'})  # R23h: no value hash
         self.assertEqual(actual['U1']['benign_only']['turn_admissions'], 80)
         self.assertEqual(actual['U1']['benign_only']['g1_h_timeouts'], 0)
         self.assertEqual(actual['U1']['benign_only']['thermal_excluded_members'], 0)
-        self.assertEqual(actual['U1']['thermal_excluded_members']['sha256'], digest(canonical(1)))
+        self.assertEqual(actual['U1']['thermal_excluded_members'], {'status': 'sealed'})
         # A second scored thermal exclusion fails the registered all-member
         # U1 and bars the pool, while the benign-only verdict still passes.
         p['windows'][0]['members'][17]['thermal']['intervals'].append(dict(kind='H', outcome='timeout'))

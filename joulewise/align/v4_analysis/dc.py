@@ -72,7 +72,8 @@ def analyze_windows(windows, *, gpu_fits):
             if not m['captured']:
                 continue
             slot = m['slot']
-            identity = dict(window=window['window'], run_id=slot['run_id'])
+            identity = dict(window=window['window'], attempt_id=window.get('attempt_id'),
+                            run_id=slot['run_id'])
             if slot['condition'] != 'benign':
                 # Never open raw DC for sabotage. A presence seal is enough for
                 # comparison; a pre-existing desk hash may also be supplied.

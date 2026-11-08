@@ -15,6 +15,21 @@ from . import residual, dc
 from .io import input_path, local_path, read_blob, strict_json
 
 
+STAMP_SECOND_FIELDS = ('epoch_s', 'monotonic_before_s', 'monotonic_after_s',
+                      'wall_resolution_s', 'monotonic_resolution_s')
+
+
+def _recorded_seconds(source):
+    """The harness records these seconds as floats (P2, A21); refuse text."""
+    def check(value, name):
+        if type(value) not in (int, float):
+            raise ValueError(f'{name} must be a recorded number, not {type(value).__name__}')
+    check(source.get('first_record_endpoint_s'), 'first_record_endpoint_s')
+    for stamp in source.get('stamps', []):
+        for name in STAMP_SECOND_FIELDS:
+            check(stamp.get(name), 'stamp '+name)
+
+
 def member(root, slot, source, *, cache_dir=None):
     if type(source.get('captured')) is not bool:
         raise ValueError('captured must be explicit bool in raw export')
@@ -23,6 +38,7 @@ def member(root, slot, source, *, cache_dir=None):
             gated=slot['model_id']=='qwen3.8-27b', status='incomplete', flags=[], intervals=[],
             turn_observation=[], releases=[], coverage=[]), summary=None,
             source_flags=source.get('exclusion_codes', []))
+    _recorded_seconds(source)
     root = input_path(root)
     episode = from_json(Episode, read_blob(root, source['episode']).decode())
     if episode.episode_id != slot['run_id']:

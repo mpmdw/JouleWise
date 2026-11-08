@@ -152,7 +152,9 @@ class ExactTimeTests(unittest.TestCase):
                                               nominal_interval_ns=NS)['gpu_power']
                 p = series(turns=4)
                 for member in p['windows'][0]['members'][5:7]:
+                    # R23h: the table's flags are the owned screen (A2(4)).
                     member['thermal']['energy_flags'] = table['attribution']['flags']
+                    member['thermal']['owned_energy_flags'] = table['attribution']['flags']
                     e._screen_member(member, p['cohort'])
                     self.assertFalse(member['eligible'])
                     self.assertIn('energy_unavailable', member['classes'])
@@ -172,9 +174,10 @@ class ExactTimeTests(unittest.TestCase):
                     turns=(turn(0, 0, 2*NS+1900, 1),), power_traces=(), clock_mappings=())
                 ep = replace(ep, episode_id=slot['run_id'], seed=slot['expected_episode_seed'])
                 source = dict(captured=True, episode=write('synthetic-episode.json', to_json(ep).encode()),
-                    powermetrics=pm, first_record_endpoint_s='9000000001', nominal_interval_ns=NS,
-                    stamps=[dict(epoch_s='9000000000', monotonic_before_s='0', monotonic_after_s='0',
-                                 wall_resolution_s='0', monotonic_resolution_s='0')],
+                    powermetrics=pm, first_record_endpoint_s=9000000001, nominal_interval_ns=NS,
+                    # R23h: recorded numbers only; text seconds refuse.
+                    stamps=[dict(epoch_s=9000000000, monotonic_before_s=0, monotonic_after_s=0,
+                                 wall_resolution_s=0, monotonic_resolution_s=0)],
                     registered_span_ns=[0, 2*NS+1900], journal=[], exclusion_codes=[],
                     cohort_identity=p['cohort']['identity'], configuration=p['cohort']['configuration'])
                 source = strict_json(canonical(source), exact_seconds=True)
@@ -211,7 +214,7 @@ class SealTests(unittest.TestCase):
             if isinstance(value, dict):
                 if value.get('run_id') in targets:
                     found.add(value['run_id'])
-                    self.assertEqual(set(value)-{'window', 'run_id'}, {'status', 'sha256'})
+                    self.assertEqual(set(value)-{'window', 'attempt_id', 'run_id'}, {'status', 'sha256'})
                     self.assertEqual(value['status'], 'sealed')
                     self.assertEqual(len(value['sha256']), 64)
                 for child in value.values():

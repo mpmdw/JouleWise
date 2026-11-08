@@ -42,7 +42,7 @@ def series(*, turns=12, identity_tokens=8):
             d = slot['model_id'] == D_MODEL
             thermal = dict(id=run, model=slot['model_id'], gated=d, pair=slot['task_pair'],
                 condition=slot['condition'], status='completed', start_ns=(wi*100000+slot['ordinal']*2000)*10**9,
-                flags=[], calibration_exclusions=[], energy_flags=[], registered_os_nonzero=False,
+                flags=[], calibration_exclusions=[], energy_flags=[], owned_energy_flags=[], registered_os_nonzero=False,
                 registered_os_observed=True, coverage=[dict(sample_fraction=1., max_interval_ns=10**9)],
                 turn_observation=[dict(os_nominal=True, pm_nominal=True, pm_max_gap_s=.1) for _ in rows],
                 pm_period_s=.1, pm_max_gap_s=.1, turn_admissions=turns,

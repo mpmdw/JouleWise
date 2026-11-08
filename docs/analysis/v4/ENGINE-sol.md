@@ -1,4 +1,4 @@
-# V4 primary engine (Sol), R23g
+# V4 primary engine (Sol), R23g + R23h
 
 2026-11-08. **PROVISIONAL: synthetic qualification, no live study validation.**
 Authority: the lead's engine-r23 brief (A37 and R23-E1/R23-1–4), on
@@ -224,6 +224,23 @@ with full member records (`slot`, `captured`, `thermal`, `summary`, and any
 `selection_desk.anchor_members` does not restore that retired compatibility
 route. There is no legacy selection-only input API. If a redundant snapshot is
 present with a W1 window, the window supplies all W1 analysis evidence.
+
+R23h (lead rulings on the Opus review of r23g, 2026-11-08):
+(1) A27 sealed aggregates print `{status: sealed}` only. Unsalted hashes of
+small counts were invertible, so no value or hash is printed. The `benign_only`
+aggregates stay beside them, and per-member seals keep their whole-record hash.
+(2) DC, `cache_diagnostics`, `realized_counts` and T missing-assignment rows
+carry `attempt_id`, and any not-captured member prints `captured: false`, so
+a not-counted zero-capture attempt never collides with its counted retry.
+(3) H* receives every exact integer dose, so R26 `off_grid_doses` lists 0,
+300 and any other off-grid dose without changing H*.
+(4) The raw release adapter refuses string or bool `first_record_endpoint_s`
+and ClockStamp seconds, before any source read. The harness records floats,
+and `strict_json` decodes them with float(lexeme).
+(5) `io.load` refuses a captured `thermal_source` member without
+`owned_energy_flags`. The episode-level fallback survives only as the named
+non-release seam `thermal_desk.legacy_episode_energy_flags`. Synthetic desk
+records now carry `owned_energy_flags`. Witnesses: `tests.align.test_v4_r23h_engine`.
 
 R23d (lead ruling on the Opus cold review, 2026-11-08): W1 has no engine
 roster, so in strict (non-synthetic, and always in `io.load`) mode

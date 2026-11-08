@@ -290,8 +290,24 @@ def member_record(episode, journal, *, os_readings, pm_samples, pm_period_s,
             'energy_flags': energy_flags, 'owned_energy_flags': list(owned_energy_flags(attributed))}
 
 
+def legacy_episode_energy_flags(member):
+    """NON-RELEASE seam: desk records predating owned_energy_flags (A2(4)).
+
+    Episode-level flags over-scope coverage defects to unowned time. The v4
+    release loader (io.load) refuses captured thermal_source members without
+    owned_energy_flags, so only the trusted/synthetic API reaches this.
+    """
+    return member.get('energy_flags', ())
+
+
+def screened_energy_flags(member):
+    if 'owned_energy_flags' in member:
+        return member['owned_energy_flags']
+    return legacy_episode_energy_flags(member)
+
+
 def energy_exclusions(member):
-    reasons = [f for f in member.get('owned_energy_flags', member.get('energy_flags', ())) if f.startswith((
+    reasons = [f for f in screened_energy_flags(member) if f.startswith((
         'trace.missing', 'trace.ambiguous', 'clock.', 'clock_anchor_unresolved',
         'trace.partial_coverage', 'duty.uncovered', 'energy.'))]
     for key in ('turn_owned_half_width_j', 'gross_episode_half_width_j'):

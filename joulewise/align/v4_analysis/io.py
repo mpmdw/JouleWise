@@ -18,11 +18,12 @@ def digest(raw):
 def strict_json(raw, *, exact_seconds=False):
     """Reject duplicate/nonfinite JSON; preserve the recorded numeric type.
 
-    Harness JSON reals record binary floats, recovered by float(lexeme).
-    Exact decimal seconds must be exported as strings; integers stay exact.
-    exact_seconds remains an accepted loader option for older callers: exact
-    rational conversion happens after decoding the recorded value, not its
-    decimal spelling.
+    The harness records seconds as binary floats. A JSON real is decoded to
+    that float with float(lexeme); exact rational conversion to ns happens
+    afterwards (P2 corrected, A21), never from the decimal spelling. Integers
+    stay exact. String-valued endpoint/stamp seconds are not a recording and
+    are refused by the raw release adapter. exact_seconds is accepted and
+    ignored, for older callers.
     """
     def pairs(items):
         result = {}
@@ -152,8 +153,12 @@ def load(path, *, calibration_only=False, through_window=None, cache_dir=None, w
         for slot in slots:
             run = slot['run_id']
             native = summaries[run]
+            captured = native.get('captured', native.get('summary') is not None)
+            if captured and 'owned_energy_flags' not in thermals[run]:
+                # A2(4) release rule: no fallback to episode-level coverage flags.
+                raise ValueError('release desk export lacks owned_energy_flags')
             window.setdefault('members', []).append(dict(slot=slot, thermal=thermals[run],
-                summary=native.get('summary'), captured=native.get('captured', native.get('summary') is not None),
+                summary=native.get('summary'), captured=captured,
                 dc=native.get('dc_secondary'), source_flags=native.get('exclusion_codes', [])))
         window.pop('roster')
     if calibration_only:
