@@ -1,0 +1,36 @@
+
+## 8-bit, optimistic thermal
+branch: STEP1+3-4BIT-S6
+ - 1(f) at B_D 6,144: worst 1626 s vs T_dead 1207 s (slack -419 s); largest fitting B_D None.
+ - 1(e) steps 1-2 cannot cure 1(f): even with zero G1/H and G0_cap_W1 at the 600 s floor the floor needs r >= 18.4 tok/s; R1 measured 12.40. Record both as "still failing (arithmetic)" and go to step 3.
+ - Step 3 fails at 4-bit on R1's measured gate seconds: worst 1224 s vs T_dead4 1207 s.
+ - Steps 1+3 (cumulative) fit on the S6 estimate (scale 0.45): worst 1175 s. Rule them provisionally; admission needs an R1-4bit night whose gated block runs at the tuned S6 (<= 2.0 C), so the kit re-derives 1(f) from measured rows. If that night still refuses, go to step 4.
+
+## 8-bit, central (R7 physics)
+branch: STEP4-COUNCIL
+ - 1(f) at B_D 6,144: worst 2163 s vs T_dead 1171 s (slack -991 s); largest fitting B_D None.
+ - 1(e) steps 1-2 cannot cure 1(f): even with zero G1/H and G0_cap_W1 at the 600 s floor the floor needs r >= 20.8 tok/s; R1 measured 11.60. Record both as "still failing (arithmetic)" and go to step 3.
+ - Step 3 fails at 4-bit on R1's measured gate seconds: worst 1676 s vs T_dead4 1171 s.
+ - Steps 1+3 fail on the S6 estimate too (worst 1579 s); idealised best case (zero holds, G0 at 600 s) slack -28 s.
+ - 1(e) step 4: D screen-only and return to council (the kit refuses step 4 as a W1 admission, R5-10). Council option S1 (8-bit, plan-declared D member cap): C_D = 3540 s; S2 (4-bit + cap): C_D = 2760 s. Holds are projected to the full floor budget from R1's worst hold-seconds per decoded token.
+   sizing: {"8-bit": {"D_member_cap_s": 3540, "W1_window_18": 55080, "W1_window_drop18": 51540, "W1_fits_44640": false, "W1_fits_59520": true, "Dk_D_members": 9, "Dk_held_out": 7, "Dk_windows_for_48": 7, "within_runner_envelope": false}, "8-bit+S6 (estimate)": {"D_member_cap_s": 3000, "W1_window_18": 51840, "W1_window_drop18": 48840, "W1_fits_44640": false, "W1_fits_59520": true, "Dk_D_members": 11, "Dk_held_out": 9, "Dk_windows_for_48": 6, "within_runner_envelope": true}, "4-bit": {"D_member_cap_s": 2760, "W1_window_18": 50400, "W1_window_drop18": 47640, "W1_fits_44640": false, "W1_fits_59520": true, "Dk_D_members": 12, "Dk_held_out": 10, "Dk_windows_for_48": 5, "within_runner_envelope": true}}
+
+## 8-bit, G0 censored
+branch: STEP4-COUNCIL
+ - 1(f) at B_D 6,144: worst 2324 s vs T_dead 1145 s (slack -1179 s); largest fitting B_D None.
+ - G0_cap_W1 1200 s >= T_dead 1145 s: no decode rate or B_D can fit, and a W1 G0 could never time out before the deadman (X7 before X2).
+ - 1(e) steps 1-2 cannot cure 1(f): even with zero G1/H and G0_cap_W1 at the 600 s floor the floor needs r >= 22.5 tok/s; R1 measured 11.20. Record both as "still failing (arithmetic)" and go to step 3.
+ - Step 3 fails at 4-bit on R1's measured gate seconds: worst 1898 s vs T_dead4 1145 s.
+ - Steps 1+3 fail on the S6 estimate too (worst 1860 s); idealised best case (zero holds, G0 at 600 s) slack -83 s.
+ - 1(e) step 4: D screen-only and return to council (the kit refuses step 4 as a W1 admission, R5-10). Council option S1 (8-bit, plan-declared D member cap): C_D = 3360 s; S2 (4-bit + cap): C_D = 2820 s. Holds are projected to the full floor budget from R1's worst hold-seconds per decoded token.
+   sizing: {"8-bit": {"D_member_cap_s": 3360, "W1_window_18": 54000, "W1_window_drop18": 50640, "W1_fits_44640": false, "W1_fits_59520": true, "Dk_D_members": 10, "Dk_held_out": 8, "Dk_windows_for_48": 6, "within_runner_envelope": false}, "8-bit+S6 (estimate)": {"D_member_cap_s": 3180, "W1_window_18": 52920, "W1_window_drop18": 49740, "W1_fits_44640": false, "W1_fits_59520": true, "Dk_D_members": 10, "Dk_held_out": 8, "Dk_windows_for_48": 6, "within_runner_envelope": true}, "4-bit": {"D_member_cap_s": 2820, "W1_window_18": 50760, "W1_window_drop18": 47940, "W1_fits_44640": false, "W1_fits_59520": true, "Dk_D_members": 11, "Dk_held_out": 9, "Dk_windows_for_48": 6, "within_runner_envelope": true}}
+
+## hypothetical 20 tok/s, G0 at floor, small holds
+branch: A-ADMIT-8BIT
+ - 1(f) at B_D 6,144: worst 1182 s vs T_dead 1207 s (slack 25 s); largest fitting B_D 6144.
+ - Admit 8-bit at inputs.R1.B_D = 6144 (then kit.fit_roster for the span). If the duty bar is not pass, 1(e) still applies to the duty bar itself.
+
+## hypothetical 25 tok/s, G0 at floor, small holds
+branch: A-ADMIT-8BIT
+ - 1(f) at B_D 6,144: worst 1080 s vs T_dead 1207 s (slack 127 s); largest fitting B_D 9216.
+ - Admit 8-bit at inputs.R1.B_D = 9216 (then kit.fit_roster for the span). If the duty bar is not pass, 1(e) still applies to the duty bar itself.
