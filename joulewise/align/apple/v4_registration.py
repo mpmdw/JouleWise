@@ -252,6 +252,7 @@ EXECUTED_CLOSURE = (
     'joulewise/session_structure.py',
     'joulewise/suite.py',
     'joulewise/t0_rehearsal.py',
+    'joulewise/timing_receipts.py',
     'joulewise/tolerances.py',
     'joulewise/uncertainty_evidence.py',
     'joulewise/v5_qualification.py',

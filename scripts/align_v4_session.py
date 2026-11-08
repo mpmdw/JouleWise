@@ -14,6 +14,7 @@ declares 2 and restores Automatic when that night closes. Every session start
 (prepare, install) first restores a marker it does not own, never while a
 measuring night holds the host night lock.
 """
+from functools import wraps
 import json
 import os
 from pathlib import Path
@@ -26,6 +27,7 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+from joulewise import timing_receipts
 from scripts import align_pilot_session as pilot, align_v4_kit as kit
 
 
@@ -476,6 +478,7 @@ def _record_bound(root, packet):
             and packet.get('series_sha256') == _sha256(ledger.stdout))
 
 
+@timing_receipts.timed("arm", "v4_arm_checks")
 def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=None, owner=None,
                obc_off_attested_by=None, battery_runner=None, battery_log=None, window_battery_journal=None,
                now=None, next_arm_triage=None, commit_check=None, record_check=None,
@@ -548,24 +551,26 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
             supplied = None
     current_digest = v4_registration.artifact_set_digest(measurement_root)
     built, matches, rebuild_error = None, False, None
-    try:
-        if packet_builder is not None:
-            built, matches = packet_builder(measurement_root, supplied, now_epoch_s=now_s,
-                                            current_artifact_set_sha256=current_digest)
-        else:
-            from scripts import align_v4_next_arm_packet as builder
-            built, matches = builder.rebuild_and_compare(measurement_root, supplied, now_epoch_s=now_s,
-                                                         current_artifact_set_sha256=current_digest)
-    except (ValueError, KeyError, TypeError, AttributeError, OSError) as exc:
-        rebuild_error = f'{type(exc).__name__}: {exc}'
+    with timing_receipts.span("arm", "v4_packet_rebuild"):
+        try:
+            if packet_builder is not None:
+                built, matches = packet_builder(measurement_root, supplied, now_epoch_s=now_s,
+                                                current_artifact_set_sha256=current_digest)
+            else:
+                from scripts import align_v4_next_arm_packet as builder
+                built, matches = builder.rebuild_and_compare(measurement_root, supplied, now_epoch_s=now_s,
+                                                             current_artifact_set_sha256=current_digest)
+        except (ValueError, KeyError, TypeError, AttributeError, OSError) as exc:
+            rebuild_error = f'{type(exc).__name__}: {exc}'
     # The 3 s monitor launch is USB and process activity: it runs BEFORE the quiet/display dwell
     # starts, never during it (lead ruling 2026-11-08). The arm stamps the probe's end and the dwell
     # start on one monotonic clock and refuses unless the probe ended strictly earlier.
-    probe_started_ns = time.monotonic_ns()
-    try:
-        meter = dict((meter_probe or _probe_meter_live)(measurement_root))
-    except Exception as exc:  # noqa: BLE001 - an unverifiable meter refuses; it never raises out of the arm
-        meter = {'live': False, 'reason': f'{type(exc).__name__}: {exc}'}
+    with timing_receipts.span("arm", "v4_meter_probe"):
+        probe_started_ns = time.monotonic_ns()
+        try:
+            meter = dict((meter_probe or _probe_meter_live)(measurement_root))
+        except Exception as exc:  # noqa: BLE001 - an unverifiable meter refuses; it never raises out of the arm
+            meter = {'live': False, 'reason': f'{type(exc).__name__}: {exc}'}
     meter.setdefault('probe_started_ns', probe_started_ns)
     meter.setdefault('probe_ended_ns', time.monotonic_ns())
     meter.setdefault('probe_ended_epoch_s', now_s)
@@ -717,6 +722,27 @@ def _require_night_job_absent(runner=None):
         raise ValueError('v4 install refused: launchd job state unavailable')
 
 
+def _install_timing(operation):
+    @wraps(operation)
+    def wrapped(*args, **kwargs):
+        # The session CLI already owns stdout. Buffer throughout arm/install,
+        # then append there after the unmeasured operation. No sidecar, file
+        # open, or marker write can enter the quiet start-state preparation.
+        rows = []
+        try:
+            with timing_receipts.bind(timing_receipts.Writer(rows.append, producer="v4_arm")), \
+                 timing_receipts.span("arm", "v4_install"):
+                return operation(*args, **kwargs)
+        finally:
+            for row in rows:
+                try:
+                    sys.stdout.write(json.dumps(row, sort_keys=True) + "\n")
+                except OSError as error:
+                    sys.stderr.write(f"timing receipt missing: {error}\n")
+    return wrapped
+
+
+@_install_timing
 def install(session_root, *, runner=None, volume_runner=None, now=None, w1_disk_config=None,
             disk_gate=None, **kwargs):
     session = Path(session_root)
@@ -885,9 +911,11 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
     if not record['admitted']:
         raise ValueError('v4 arm refused: ' + '; '.join(record['reasons']))
     kit.arm_powermode_check(plan, record['ac_powermode']['observed'])
-    receipt = w1_disk_check(w1_disk_config, gate=disk_gate)
+    with timing_receipts.span("arm", "v4_disk_gate"):
+        receipt = w1_disk_check(w1_disk_config, gate=disk_gate)
     pilot.h.write(session / 'staging/w1_disk_gate.json', receipt)
-    return pilot.install(session, now=now or time.time, **kwargs)
+    with timing_receipts.span("arm", "v4_installer_handoff"):
+        return pilot.install(session, now=now or time.time, **kwargs)
 
 
 def main(argv=None):

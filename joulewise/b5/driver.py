@@ -59,7 +59,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
-from joulewise import night_gate
+from joulewise import night_gate, timing_receipts
 from joulewise.b5 import chain as b5_chain
 from joulewise.b6 import agent_pause, sleep_guard
 
@@ -2007,6 +2007,7 @@ class _Window:
 
     # --- arm -------------------------------------------------------------
 
+    @timing_receipts.timed("arm", "arm_dispatch")
     def run_arm(self, census: Mapping[str, Any]) -> dict[str, Any]:
         self.record_root.mkdir(parents=True, exist_ok=True)
         thresholds = self.window["thresholds"]
@@ -2037,7 +2038,7 @@ class _Window:
             except BaseException as error:  # noqa: BLE001 - UNMEASURED, never a crash
                 outcome["error"] = _error_text(error)
 
-        thread = threading.Thread(target=target, name="hazard-arm", daemon=True)
+        thread = threading.Thread(target=timing_receipts.worker_target(target), name="hazard-arm", daemon=True)
         thread.start()
         thread.join(float(self.window["t0_stage_cap_s"]) + ARM_RETURN_GRACE_S)
         ended = stamp()
@@ -2830,6 +2831,7 @@ def _run_hazard_night_body(rt: Any, plan_path: Path, plan: Any, probes: Any,
                                 courier_bin_substitution=substitution, allow_courier=courier is not None)
 
 
+@timing_receipts.timed("gates", "post_chain_monitor_hold")
 def hold_monitors_after_chain(chain_returned: Mapping[str, Any], poll: Callable[[], Any], *,
                               hold_s: float | None = None) -> dict[str, Any]:
     """Wait until ``hold_s`` (MONITOR_POST_CHAIN_HOLD_S) has passed since the chain returned.

@@ -934,6 +934,7 @@ class RunBundleWriter:
         self._suite_manifest_written = False
         self._staged_summary: dict[str, Any] | None = None
         self._closed = False
+        self.timing = None  # The controller owns the in-memory receipt sink.
 
     @classmethod
     def create(cls, runs_root: Path, config: BenchmarkConfig, clock: Clock) -> "RunBundleWriter":

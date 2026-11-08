@@ -224,6 +224,7 @@
     "joulewise/session_structure.py": null,
     "joulewise/suite.py": null,
     "joulewise/t0_rehearsal.py": null,
+    "joulewise/timing_receipts.py": null,
     "joulewise/tolerances.py": null,
     "joulewise/uncertainty_evidence.py": null,
     "joulewise/v5_qualification.py": null,

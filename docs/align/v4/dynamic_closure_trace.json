@@ -161,6 +161,7 @@
    "joulewise/schemas.py",
    "joulewise/suite.py",
    "joulewise/t0_rehearsal.py",
+   "joulewise/timing_receipts.py",
    "joulewise/tolerances.py",
    "joulewise/uncertainty_evidence.py",
    "joulewise/validation.py",
@@ -340,6 +341,7 @@
    "joulewise/schemas.py",
    "joulewise/suite.py",
    "joulewise/t0_rehearsal.py",
+   "joulewise/timing_receipts.py",
    "joulewise/tolerances.py",
    "joulewise/uncertainty_evidence.py",
    "joulewise/validation.py",
@@ -469,6 +471,7 @@
    "joulewise/align/shade/upstream.py",
    "joulewise/align/stats.py",
    "joulewise/align/tamper.py",
+   "joulewise/align/window_timing.py",
    "joulewise/analysis_engine/__init__.py",
    "joulewise/analysis_engine/artifact.py",
    "joulewise/analysis_engine/claim_side_bound.py",
@@ -633,6 +636,7 @@
    "joulewise/session_structure.py",
    "joulewise/suite.py",
    "joulewise/t0_rehearsal.py",
+   "joulewise/timing_receipts.py",
    "joulewise/tolerances.py",
    "joulewise/twins/__init__.py",
    "joulewise/twins/engine_twin.py",
@@ -1136,6 +1140,7 @@
   "joulewise/schemas.py",
   "joulewise/suite.py",
   "joulewise/t0_rehearsal.py",
+  "joulewise/timing_receipts.py",
   "joulewise/tolerances.py",
   "joulewise/uncertainty_evidence.py",
   "joulewise/validation.py",
@@ -1195,6 +1200,11 @@
    "new_paths": 2,
    "ok": true,
    "tests_run": 47
+  },
+  "timing_receipts_delta": {
+   "new_paths": 139,
+   "ok": true,
+   "tests_run": 3
   },
   "wp22_synthetic_w1_chain": {
    "new_paths": 30,
