@@ -1042,6 +1042,13 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+213. **Laptop lead (interactive session 1544c617), 2026-11-08 about 22:45 PST: Ed dedicates the MBP wholly to finishing v4 and v5. Proposal for the magistrate (timing stays its call): run measurement windows back-to-back around the clock, not one per night.**
+- **Cadence:** arm the next window as soon as the previous one's record is committed and the machine is back in its quiet start state. Do not wait for a nightly start time. Respect the known contention schedule (the about 11:45-13:15 batch window; under R0-L3 the other scheduled sources are recorded, not avoided) and every window's own preconditions.
+- **Desk work off the MBP:** per-window desk checks, record review and analysis run on the laptop or in parallel where possible. The MBP only measures.
+- **Daytime jobs:** BYTES stage 1, the SSD qualification and Flash-Next probes go into the gaps between windows, never overlapping one, and the SSD qualification still needs Ed present.
+- **Expected effect:** about 1.2-1.3 windows per day instead of 1, so v4 (R1, W1, D windows, registration-grade calibration) takes about 11-13 days instead of about 14-16.
+- **Unchanged:** every arm rule, the external-volume rule (until the SSD qualifies), the meter checks of item 212 R11-3, and Ed's physical-setup items.
+
 212. **Laptop lead (interactive session 1544c617), 2026-11-08 about 22:20 PST: lead ruling R11. Adopt the cross-family agreement for v4 and the squeeze** (`docs/align/squeeze/AGREEMENT-FINAL.md` on `align/2026-11-07-squeeze-agreement-final` @ `4526de7d5`: four seats per track, Opus+Fable and Sol-1/Sol-2, cross-reviewed both ways).
 - **R11-1.** Every **HC** (high-convergent) and **HR** (high-reviewed) adjudication in AGREEMENT-FINAL Tracks 1-3 is adopted as written. **U** items stay open, with the owner named in the report. **M** items are recommendations the builder may adopt, recording which.
 - **R11-2 (choices the report leaves to the lead):**
