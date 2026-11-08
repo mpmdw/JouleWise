@@ -200,13 +200,14 @@ def write_member(root, wid, m, epoch_offset_ns, delta=(1.0, 1.0), big=False, ful
                           "release": {"fast_c": 50.0, "slow_c": 40.0}, "exit_sample_ns": t["start_ns"] - NS})
     episode = {"episode_id": m.run_id, "task_pair": "shade/" + ("spam_filter_update" if m.pair == "spam"
                                                                 else "bank_transfer_2"),
-               "condition": m.condition, "start_ns": m.start_ns, "end_ns": m.end_ns,
+               # R21 A2 / R23: G0 lies before the episode, so the episode starts after the G0 window.
+               "condition": m.condition, "start_ns": g0["end_ns"] + 5 * NS, "end_ns": m.end_ns,
                "turns": [dict({k: v for k, v in t.items() if not k.startswith("_")},
                               first_token_ns=t["start_ns"] + NS) for t in m.turns],
                "flags": [],
                "hardware": {"paired_clock_stamps_ns": [stamp, stamp],
-                            "registered_span_ns": [m.start_ns, m.end_ns],
-                            "thermal": {"policy": {"sensors": {"fast": "Tg0f", "slow": "Th0x"},
+                            "registered_span_ns": [g0["end_ns"] + 5 * NS, m.end_ns],
+                            "thermal": {"policy": {"sensors": {"s_fast": "Tg0f", "s_slow": "Th0x"},
                                                    "delta_fast_c": delta[0], "delta_slow_c": delta[1]},
                                         "episode_reference": {"fast_c": 50.0, "slow_c": 40.0},
                                         "intervals": intervals},
@@ -243,6 +244,8 @@ def window_roster(wid, role, index):
                            "condition": "benign"})
     for r in roster:
         r["run_id"] = f"align-v4-{wid.lower()}-e{r['ordinal']:02d}"
+        if r["kind"] == "anchor":   # R23 export contract: anchor run ids are series-unique "<window_id>:<run_id>"
+            r["run_id"] = f"{wid}:{r['run_id']}"
     return roster
 
 
@@ -262,7 +265,7 @@ def w1_roster():
     out = []
     for o, kind, model, pair, cond, contrast in W1_ROSTER:
         row = {"ordinal": o, "kind": kind, "model": model, "pair": pair, "condition": cond,
-               "run_id": f"align-v4-w1-e{o:02d}"}
+               "run_id": (f"W1:align-v4-w1-e{o:02d}" if kind == "anchor" else f"align-v4-w1-e{o:02d}")}
         if contrast:
             row["contrast"] = {"template": contrast[0], "arm": contrast[1], "stage": 0 if o <= 11 else 1}
         if model == "D":
@@ -274,7 +277,10 @@ def w1_roster():
 def write_meter(path, spans_ns, raw_minus_mono=5000, watts=30.0, period_ms=100, per_poll=10, close=True):
     """KM003C-shaped stream: 20 V, current = watts / 20 V, device ms counter wrapping at 65536."""
     start, end = spans_ns
-    lines = [json.dumps({"k": "h", "schema": "joulewise.km003c_stream.v1", "rate_idx": 2, "status": "streaming",
+    # KM003C rate index for the poll period (production STEP_MS {0: 500, 1: 100, 2: 20, 3: 1} ms); R23 fix:
+    # this writer used rate_idx 2 (20 ms) for 100 ms polls, which a drop check reads as dropped samples.
+    rate_idx = {500: 0, 100: 1, 20: 2, 1: 3}[period_ms]
+    lines = [json.dumps({"k": "h", "schema": "joulewise.km003c_stream.v1", "rate_idx": rate_idx, "status": "streaming",
                          "start_raw_ns": start + raw_minus_mono, "start_mono_ns": start})]
     ua = round(watts / 20.0 * 1e6)
     t, dev = start, 0
@@ -351,7 +357,8 @@ def write_series(root, windows=None, members_per_window=None, period_ns=100_000_
         dump(root / "windows" / wid / "window.json", {
             "schema": "joulewise.v4_recompute_input.window.v1", "window_id": wid, "role": role,
             "members": roster, "adjudication": {"final": True, "excluded": {}},
-            "identity": identity, "battery": {}, "meter": {"streams": streams}, "cohort_sha256": COHORT})
+            "identity": identity, "battery": {}, "meter": {"streams": streams}, "cohort_sha256": COHORT,
+            **({"sentinel_ordinals": [5, 17]} if wid == "W1" else {})})
     dump(root / "series.json", series)
     if u3:
         dump(root / "u3_bar.json", {"signed": True, "beta": 0.05, "N": 16, "f": 1.5, "r1_d_screen": 0.004,

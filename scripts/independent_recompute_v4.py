@@ -56,6 +56,7 @@ DESIGN_NAMES = ("intercept", "prefill", "decode", "decode_attention", "prefill_a
 MIN_FIT_ROWS = 6
 REGISTRATION_M = 39
 CALIBRATION_WINDOWS = 8
+W1_SENTINEL_ORDINALS = (5, 17)   # R15 W1 roster: the replay sentinels
 H_GRID = (0, 128, 256, 300, 512, 1024, 2048, "full")
 CARRIER_ALPHA = 0.025
 BOOTSTRAP_REPLICATES = 1000
@@ -607,10 +608,19 @@ def load_series(root):
                  f"{wid}: duplicate member")
             ordinals.add(m["ordinal"])
             seen_runs.add(m["run_id"])
+            # R23 export contract: anchor run ids are series-unique as "<window_id>:<run_id>".
+            need(m["kind"] != "anchor" or (m["run_id"].startswith(wid + ":") and len(m["run_id"]) > len(wid) + 1),
+                 "window_malformed", f"{wid}: anchor run id not '<window_id>:<run_id>'")
             if m["kind"] == "contrast":
                 c = m.get("contrast")
                 need(isinstance(c, dict) and c.get("template") in ("X", "Y") and c.get("arm") in ("S", "G")
                      and is_int(c.get("stage")), "window_malformed", f"{wid}: contrast fields")
+        if entry["role"] == "W1":
+            # R23 export contract: the export carries the W1 sentinel ordinals; the recompute derives them from
+            # the R15 W1 roster and refuses on a mismatch.
+            sentinels = sorted(m["ordinal"] for m in members if m.get("kind") == "sentinel")
+            need(record.get("sentinel_ordinals") == list(W1_SENTINEL_ORDINALS)
+                 and sentinels == list(W1_SENTINEL_ORDINALS), "w1_sentinel_ordinals_mismatch", wid)
         adj = record.get("adjudication")
         need(isinstance(adj, dict) and type(adj.get("final")) is bool
              and isinstance(adj.get("excluded", {}), dict), "window_malformed", wid + ": adjudication")
@@ -803,6 +813,11 @@ def ownership(ep, intervals):
             problems.append("hold_without_turn")
     all_owned = intervals_union([s for o in owned for s in o])
     for iv in intervals:
+        # R21 A2 (2) "G0 lies before the episode"; R23: a G0 overlapping the episode is custody-invalid.
+        if iv.get("kind") == "G0" and is_int(iv.get("start_ns")) and is_int(iv.get("end_ns")):
+            if intervals_meet([(iv["start_ns"], iv["end_ns"])], [(e0, e1)]):
+                problems.append("g0_overlaps_episode")
+    for iv in intervals:
         if iv.get("kind") in ("G0", "G1") and is_int(iv.get("start_ns")) and is_int(iv.get("end_ns")):
             if intervals_meet([(iv["start_ns"], iv["end_ns"])], all_owned):
                 problems.append(f"{iv['kind'].lower()}_meets_owned_work")
@@ -919,7 +934,8 @@ def process_member(task):
 def thermal_summary(ep, thermal, intervals, samples, walls, registered):
     policy = thermal.get("policy") or {}
     sensors = policy.get("sensors") or {}
-    fast_key, slow_key = sensors.get("fast"), sensors.get("slow")
+    # R23 export contract: production sensor keys {s_fast, s_slow} (records.py / thermal_desk layout).
+    fast_key, slow_key = sensors.get("s_fast"), sensors.get("s_slow")
     all_times = [s["monotonic_ns"] for s in samples]
     by_time = {s["monotonic_ns"]: s for s in samples}
 
@@ -1656,7 +1672,8 @@ def u4_series(windows, results, eligibility, references):
 
 
 def anchor_sigma_w(windows, results):
-    """Print-only balanced crossed-anchor moments: sigma_w^2 = max(0, (MS_window - MS_interaction)/4), K >= 3."""
+    """Print-only balanced crossed-anchor moments over every window with four usable anchors, W1 included
+    (R23-1): raw MoM sigma_w^2 = (MS_window - MS_interaction)/4 and its clamp max(0, raw); K >= 3 (IR section 5)."""
     table = []
     for w in windows:
         anchors = sorted((m for m in w["members"] if m["kind"] == "anchor"), key=lambda m: m["ordinal"])
@@ -1672,7 +1689,8 @@ def anchor_sigma_w(windows, results):
     ms_w = 4 * math.fsum((x - grand) ** 2 for x in wmeans) / (W - 1)
     ms_i = math.fsum((table[i][j] - wmeans[i] - amean[j] + grand) ** 2
                      for i in range(W) for j in range(4)) / ((W - 1) * 3)
-    return {"W": W, "ms_window": ms_w, "ms_interaction": ms_i, "sigma_w2": max(0.0, (ms_w - ms_i) / 4)}
+    raw = (ms_w - ms_i) / 4
+    return {"W": W, "ms_window": ms_w, "ms_interaction": ms_i, "sigma_w2_raw": raw, "sigma_w2": max(0.0, raw)}
 
 
 def u5(references):
@@ -1827,7 +1845,9 @@ def carrier_curve(carriers):
             if p is None or thr is None or p["score"] is None:
                 hits[g] = None
             else:
-                hits[g] = bool(p["H"] > 0 and p["score"] > thr)
+                # R23-2: the honest fraction, H = 0 included: untouched score above the OTHER carriers'
+                # threshold. (Known-H detection for a scored member still never counts H = 0, A7.)
+                hits[g] = bool(p["score"] > thr)
         detail.append({"run_id": c["run_id"], "window_id": c["window_id"], "threshold": thr, "rank": rank, "m": m,
                        "council": c["known_h"]["council"], "detected": hits})
     fractions = curve_fractions(detail)
@@ -1847,7 +1867,11 @@ def curve_fractions(detail):
 
 
 def crossing(fractions, level):
-    """Smallest nominal dose (> 0) on the prefix reached by EVERY carrier whose fraction reaches level."""
+    """Smallest nominal dose (> 0) on the prefix reached by EVERY carrier whose fraction reaches level.
+    R23-2: if the H = 0 fraction already reaches the level, the crossing is undefined and flagged."""
+    h0 = fractions["0"]["fraction"]
+    if h0 is not None and h0 >= level:
+        return {"dose": None, "status": "undefined: level reached at H = 0", "level_reached_at_h0": True}
     prefix = []
     for g in NUMERIC_GRID:
         if fractions[str(g)]["missing"]:
@@ -1856,10 +1880,11 @@ def crossing(fractions, level):
     hit = next((g for g in prefix if g != 0 and fractions[str(g)]["fraction"] >= level), None)
     if hit is None:
         return {"dose": None, "status": "undefined: dose unreachable" if len(prefix) < len(NUMERIC_GRID)
-                else "undefined"}
+                else "undefined", "level_reached_at_h0": False}
     after = [fractions[str(g)]["fraction"] for g in NUMERIC_GRID[NUMERIC_GRID.index(hit):]
              if fractions[str(g)]["fraction"] is not None]
-    return {"dose": hit, "status": "ok" if all(f >= level for f in after) else "nonmonotone"}
+    return {"dose": hit, "status": "ok" if all(f >= level for f in after) else "nonmonotone",
+            "level_reached_at_h0": False}
 
 
 def window_bootstrap(detail):
@@ -1894,6 +1919,7 @@ def window_bootstrap(detail):
 # ---------------------------------------------------------------- DC-in (SECONDARY, print-only)
 
 METER_SAMPLE = struct.Struct("<HHiiHHHH")
+METER_STEP_MS = {0: 500, 1: 100, 2: 20, 3: 1}   # KM003C rate index -> device ms per sample
 
 
 def meter_stream(path, recorded_sha):
@@ -1914,6 +1940,9 @@ def meter_stream(path, recorded_sha):
     if not tails:
         flags.append("meter.stream_unclosed")
     head = heads[0]
+    step_ms = METER_STEP_MS.get(head.get("rate_idx"))
+    if step_ms is None:
+        return {"status": "excluded", "flags": flags + ["meter.rate_unknown"], "sha256": digest}
     polls = sorted(((r["rx"], r["tx"], r) for r in rows if r.get("k") == "b" and is_int(r.get("rx"))
                     and is_int(r.get("tx"))), key=lambda p: p[0])
     device, powers, points, battery = [], [], [], []
@@ -1960,7 +1989,16 @@ def meter_stream(path, recorded_sha):
             flags.append("meter.raw_mono_drift")
     a, b = fit
     times = [round(a + b * x) - offset for x in device]
-    return {"status": "ok", "flags": flags, "sha256": digest, "times": times, "powers": powers,
+    # R23 / A20: dropped samples. A device-counter step longer than the rate's step leaves missing samples
+    # at prev + step ... prev + missing*step device ms; their host instants are kept as [first, last].
+    drops = []
+    for x0, x1 in zip(device, device[1:]):
+        missing = (x1 - x0 - 1) // step_ms
+        if missing > 0:
+            drops.append((round(a + b * (x0 + step_ms)) - offset, round(a + b * (x0 + missing * step_ms)) - offset))
+    if drops:
+        flags.append("meter.dropped_samples")
+    return {"status": "ok", "flags": flags, "sha256": digest, "times": times, "powers": powers, "drops": drops,
             "battery_times": [t - offset for t, _ in battery], "battery_powers": [p for _, p in battery],
             "fit": {"intercept_ns": a, "slope_ns_per_ms": b, "points": len(points)}}
 
@@ -2018,6 +2056,11 @@ def dc_member(stream, spans):
     return rectangle(stream["times"], stream["powers"], spans)
 
 
+def dropped_in(stream, spans):
+    """True if a dropped sample's instant falls inside any span [a, b)."""
+    return any(lo < b and hi >= a for lo, hi in stream.get("drops", []) for a, b in spans)
+
+
 def dc_window(task):
     """Per-member DC-in integrals (whole member and turn-owned, per turn) and the battery disclosure."""
     wid, wdir, meter, members = task
@@ -2040,9 +2083,20 @@ def dc_window(task):
         for s in ok:
             e = dc_member(s, [span])
             if e is not None:
-                per_turn = [dc_member(s, own) if own else 0.0 for own in by_turn]
+                # A dropped sample inside a span makes that span's DC value unavailable, with a reason (R23).
+                reasons = []
+                if dropped_in(s, [span]):
+                    e = None
+                    reasons.append("meter.dropped_sample_in_span:member")
+                per_turn = []
+                for k, own in enumerate(by_turn):
+                    if own and dropped_in(s, own):
+                        per_turn.append(None)
+                        reasons.append(f"meter.dropped_sample_in_span:turn:{k}")
+                    else:
+                        per_turn.append(dc_member(s, own) if own else 0.0)
                 bat = rectangle(s["battery_times"], s["battery_powers"], [span])
-                row = {"status": "ok", "stream": s["name"], "dc_in_episode_j": e,
+                row = {"status": "ok", "stream": s["name"], "dc_in_episode_j": e, "unavailable_reasons": reasons,
                        "dc_in_turn_owned_j": math.fsum(per_turn) if None not in per_turn else None,
                        "dc_turn_j": per_turn, "episode_s": (span[1] - span[0]) / NS,
                        "battery_power_integral_j": bat,

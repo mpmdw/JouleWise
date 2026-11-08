@@ -1,6 +1,8 @@
 """Hand-computed small cases for every stage, under lead ruling R21 (RUN_STATE 230). Synthetic values
 only; each expected number is worked in the comment beside it, not taken from a run of the program."""
 import hashlib
+import json
+import shutil
 import math
 import unittest
 
@@ -92,6 +94,15 @@ class OwnershipTests(unittest.TestCase):
         owned, _, _, problems = rc.ownership(ep, [])
         self.assertEqual(owned[0], [(10 * NS, 30 * NS)])
         self.assertEqual(owned[1], [(30 * NS, 100 * NS)])
+        self.assertEqual(problems, [])
+
+    def test_g0_overlapping_the_episode_is_custody_invalid(self):
+        # R21 A2 (2) "G0 lies before the episode"; R23-3: an overlapping G0 excludes the member even when it
+        # meets no owned work. A G0 ending exactly at the episode start does not overlap.
+        ep = self.episode([self.turn(0, 10, 20)], start=5 * NS)
+        _, _, _, problems = rc.ownership(ep, [{"kind": "G0", "turn": 0, "start_ns": 0, "end_ns": 6 * NS}])
+        self.assertEqual(problems, ["g0_overlaps_episode"])
+        _, _, _, problems = rc.ownership(ep, [{"kind": "G0", "turn": 0, "start_ns": 0, "end_ns": 5 * NS}])
         self.assertEqual(problems, [])
 
     def test_custody_problems(self):
@@ -377,6 +388,26 @@ class U4Tests(unittest.TestCase):
         self.assertEqual(rc.u4_series(windows, results, elig, None)["status"], "unavailable")
 
 
+class AnchorSigmaTests(unittest.TestCase):
+    def test_raw_and_clamped_with_w1_included(self):
+        # R23-1: every window with four usable anchors counts, W1 included; raw MoM printed beside max(0, raw).
+        rows = [[10.0, 20.0, 30.0, 40.0], [11.0, 19.0, 31.0, 39.0], [9.0, 21.0, 29.0, 41.0]]
+        windows, results = [], {}
+        for i, (wid, vals) in enumerate(zip(("W1", "C1", "C2"), rows)):
+            members = []
+            for o, v in enumerate(vals, 1):
+                rid = f"{wid}:a{o}"
+                members.append({"ordinal": o, "kind": "anchor", "run_id": rid})
+                results[rid] = {"usable": True, "energy": {"turn_owned_gpu_j": v}}
+            windows.append({"window_id": wid, "members": members})
+        out = rc.anchor_sigma_w(windows, results)
+        self.assertEqual(out["W"], 3)
+        self.assertAlmostEqual(out["sigma_w2_raw"], (out["ms_window"] - out["ms_interaction"]) / 4, places=12)
+        self.assertLess(out["sigma_w2_raw"], 0)          # identical window means: negative raw estimate
+        self.assertEqual(out["sigma_w2"], 0.0)
+        self.assertIsNone(rc.anchor_sigma_w(windows[:2], results))   # K >= 3
+
+
 class U3Tests(unittest.TestCase):
     def window(self, late_classes=(), late_digest="traj5"):
         a, ea = member("a", 1000.0)
@@ -495,10 +526,12 @@ class CarrierTests(unittest.TestCase):
         out = rc.carrier_curve(self.carriers(40))
         first = out["carriers"][0]
         self.assertEqual((first["m"], first["rank"], first["threshold"]), (39, 39, 3.9))
-        self.assertEqual(out["fractions"]["0"]["detected"], 0)
+        # R23-2: the honest H = 0 fraction. Carrier r39 (score 3.9) exceeds the others' threshold 3.8.
+        self.assertEqual(out["fractions"]["0"]["detected"], 1)
+        self.assertEqual(out["carriers"][39]["detected"]["0"], True)
         self.assertEqual((out["fractions"]["1024"]["n"], out["fractions"]["1024"]["missing"]), (0, 40))
         # Every carrier reaches 128..512 and detects there: H50 = H90 = 128; the prefix stops at 1024.
-        self.assertEqual(out["H50"], {"dose": 128, "status": "ok"})
+        self.assertEqual(out["H50"], {"dose": 128, "status": "ok", "level_reached_at_h0": False})
         self.assertEqual(out["bootstrap"]["H50_interval_90"], [128, 128])
         self.assertEqual((out["bootstrap"]["seed"], out["bootstrap"]["undefined"]), (0, {"H50": 0, "H90": 0}))
 
@@ -533,7 +566,12 @@ class CarrierTests(unittest.TestCase):
     def test_crossing_prefix_and_nonmonotone(self):
         def fr(values, missing=()):
             return {str(g): {"fraction": f, "missing": 1 if g in missing else 0} for g, f in zip(rc.H_GRID, values)}
-        self.assertEqual(rc.crossing(fr((0, .6, .4, .7, .8, .9, 1, 1)), 0.5), {"dose": 128, "status": "nonmonotone"})
+        self.assertEqual(rc.crossing(fr((0, .6, .4, .7, .8, .9, 1, 1)), 0.5),
+                         {"dose": 128, "status": "nonmonotone", "level_reached_at_h0": False})
+        # R23-2: crossings search doses > 0 only; a level already reached at H = 0 is flagged, undefined.
+        self.assertEqual(rc.crossing(fr((.55, .6, .7, .8, .9, .95, 1, 1)), 0.5),
+                         {"dose": None, "status": "undefined: level reached at H = 0", "level_reached_at_h0": True})
+        self.assertEqual(rc.crossing(fr((.55, .6, .7, .8, .9, .95, 1, 1)), 0.9)["dose"], 512)
         self.assertEqual(rc.crossing(fr((0, .1, .2, .3, .6, .9, 1, 1), missing=(512,)), 0.5)["status"],
                          "undefined: dose unreachable")
         self.assertEqual(rc.crossing(fr((0, .1, .1, .1, .1, .1, .1, 1)), 0.5)["status"], "undefined")
@@ -548,7 +586,7 @@ class ThermalSummaryTests(unittest.TestCase):
         ep = {"start_ns": 0, "end_ns": 20 * NS,
               "turns": [{"start_ns": 10 * NS + NS // 2, "end_ns": 12 * NS}, {"start_ns": 15 * NS, "end_ns": 16 * NS},
                         {"start_ns": 11 * NS - 1, "end_ns": 11 * NS}]}
-        thermal = {"policy": {"sensors": {"fast": "f", "slow": "s"}, "delta_fast_c": 1.0, "delta_slow_c": 1.0},
+        thermal = {"policy": {"sensors": {"s_fast": "f", "s_slow": "s"}, "delta_fast_c": 1.0, "delta_slow_c": 1.0},
                    "episode_reference": {"fast_c": 50.0, "slow_c": 40.0}}
         out = rc.thermal_summary(ep, thermal, [], samples, [(t["start_ns"], t["end_ns"]) for t in ep["turns"]],
                                  [5 * NS, 20 * NS])
@@ -620,6 +658,48 @@ class MeterTests(unittest.TestCase):
         self.assertIn("meter.custody_hash_unrecorded", rc.meter_stream(path, None)["flags"])
         synth.write_meter(path, (0, 100 * NS), close=False)
         self.assertIn("meter.stream_unclosed", rc.meter_stream(path, None)["flags"])
+
+    def test_rate_index_matches_the_poll_period(self):
+        # R23: synth.write_meter used rate_idx 2 (20 ms) for 100 ms polls.
+        d = temp_dir(self)
+        for ms, idx in ((100, 1), (20, 2), (500, 0)):
+            synth.write_meter(d / "m.jsonl", (0, 20 * NS), period_ms=ms)
+            self.assertEqual(json.loads((d / "m.jsonl").read_text().splitlines()[0])["rate_idx"], idx)
+            self.assertEqual(rc.meter_stream(d / "m.jsonl", None)["drops"], [])
+
+    def test_dropped_sample_makes_the_span_value_unavailable(self):
+        # R23 / A20: one dropped 100 ms sample at about 50 s. Its member span and the turn span holding it lose
+        # their DC value, with a reason; a turn span elsewhere keeps its value.
+        d = temp_dir(self)
+        path = d / "m.jsonl"
+        synth.write_meter(path, (0, 200 * NS), watts=30.0)
+        lines = path.read_text().splitlines()
+        row = json.loads(lines[51])                      # line k >= 1 holds poll k-1: samples at 50.0-50.9 s
+        payload = bytes.fromhex(row["p"])
+        size = rc.METER_SAMPLE.size
+        row["p"] = (payload[:3 * size] + payload[4 * size:]).hex()
+        row["n"] -= 1
+        lines[51] = json.dumps(row)
+        path.write_text("\n".join(lines) + "\n")
+        s = rc.meter_stream(path, None)
+        self.assertIn("meter.dropped_samples", s["flags"])
+        self.assertEqual(len(s["drops"]), 1)
+        self.assertTrue(rc.dropped_in(s, [(40 * NS, 60 * NS)]))
+        self.assertFalse(rc.dropped_in(s, [(100 * NS, 120 * NS)]))
+        out = rc.dc_window(("C1", str(d), None, []))
+        self.assertEqual(out["members"], {})
+        (d / "meter").mkdir()
+        shutil.copy(path, d / "meter" / "km003c-0.jsonl")
+        meter = {"streams": {"km003c-0.jsonl": None}}
+        out = rc.dc_window(("C1", str(d), meter, [("r", (10 * NS, 150 * NS),
+                                                   [[(40 * NS, 60 * NS)], [(100 * NS, 120 * NS)]])]))
+        row = out["members"]["r"]
+        self.assertIsNone(row["dc_in_episode_j"])
+        self.assertIsNone(row["dc_turn_j"][0])
+        self.assertAlmostEqual(row["dc_turn_j"][1], 600.0, places=6)
+        self.assertIsNone(row["dc_in_turn_owned_j"])
+        self.assertEqual(row["unavailable_reasons"], ["meter.dropped_sample_in_span:member",
+                                                      "meter.dropped_sample_in_span:turn:0"])
 
 
 if __name__ == "__main__":

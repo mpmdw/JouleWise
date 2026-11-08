@@ -18,6 +18,28 @@ this recompute.
 @ `a3465eda8`, cited **IR**, with one change: an INCONCLUSIVE U5 does **not** trigger the R20
 escalation sentinels (U4 only). This revision applies every recompute-side item of IR §7 and its rows.
 
+**Revision 3 (R23).** Lead ruling R23 (blind, on the synthetic comparator report of
+`align/2026-11-08-v4-release-tools` @ `698a3f490`) changes the recompute in five places. The engine code
+was not read.
+
+| Item | Rule | Change | Function | Test |
+|---|---|---|---|---|
+| R23-1 | Anchor σ_w keeps W1 (K = 12 on the full series); K ≥ 3 (IR §5) | prints raw MoM `sigma_w2_raw` = (MS_window − MS_interaction)/4 beside `sigma_w2` = max(0, raw) | `anchor_sigma_w` | `AnchorSigmaTests` |
+| R23-2 | Honest H = 0 carrier fraction; crossings over doses > 0 only | a carrier's H = 0 cell counts when its untouched score exceeds the OTHER carriers' threshold; if the H = 0 fraction already reaches a level, that crossing is undefined with `level_reached_at_h0: true` (every crossing prints the flag) | `carrier_curve`, `crossing` | `CarrierTests` |
+| R23-3 (A2) | "G0 lies before the episode" | a G0 overlapping the episode span is `g0_overlaps_episode` → `custody_invalid` (excluded), even when it meets no owned work; gates still must sit outside owned work | `ownership` | `test_g0_overlapping_the_episode_is_custody_invalid` |
+| R23-4 (A20) | Dropped KM003C samples | the device-ms step comes from the header `rate_idx` (500/100/20/1 ms; unknown → `meter.rate_unknown`); a counter step over one rate step leaves dropped samples; a dropped sample inside a span makes THAT span's DC value null with a reason in `unavailable_reasons` (`meter.dropped_sample_in_span:member` or `:turn:<k>`); `synth.write_meter` now writes the rate index of its poll period (it wrote 2 for 100 ms polls) | `meter_stream`, `dropped_in`, `dc_window`; `synth.write_meter` | `test_dropped_sample_makes_the_span_value_unavailable`, `test_rate_index_matches_the_poll_period` |
+| R23-5 | Export contract (also in `RELEASE-RUNBOOK-v4.md` §6) | (a) sensor keys are production `policy.sensors.{s_fast, s_slow}`; (b) anchor run ids must be `"<window_id>:<run_id>"`, else `window_malformed`; (c) the W1 record carries `sentinel_ordinals`, which must equal the R15 W1 roster's (5, 17) and the members of kind `sentinel`, else `w1_sentinel_ordinals_mismatch` | `thermal_summary`, `load_series` | `test_window_record_defects`, `test_w1_sentinel_ordinals_must_match_the_r15_roster` |
+
+Every new test failed against `c0d1efcae` and passes here. `synth.write_member` now starts the episode 5 s
+after its G0 window, as production places G0 before the episode.
+
+**A27 seal scope, as written.** IR A27: "**Not scored; sealed** (hash only). 'Toward nothing' plus the v5
+seal: a GPU score is as outcome-bearing for v5 as DC is. Only T sabotage is scored, and only for known-H",
+from RS 226 R15: "Sabotage members in C windows count toward nothing. Their DC rows stay sealed for v5".
+Applied as written: every sabotage member of a C window (D and 30B anchor) is hash-only in this output,
+energies, turns (token counts included), PM summary and reduction rails alike. T-window members are not
+covered by A27 and are printed.
+
 Independence held. Only the rulings **text** was read. Where IR names production code (ATTR, TD,
 `sampler.py`, `temperature.Coverage`, `EST`), the recompute implements the rule IR restates in words,
 never the code. Where IR leaves a rule as "the owner writes it as text", the recompute's own reading
@@ -82,7 +104,8 @@ SERIES/references.json  {"r1_replay_pair_j": [a, b], "delta_slow_c",
                          "r1_designed_start_states": [{"designed_slow_c", "g0_release_slow_c", "energy_j"} x3]}
 SERIES/windows/<W>/window.json
     {"window_id", "role", "cohort_sha256",
-     "members": [{"ordinal" (1-24), "run_id", "kind", "model", "pair", "condition", "seed_index"?,
+     "sentinel_ordinals"? (W1 only, required: [5, 17]),
+     "members": [{"ordinal" (1-24), "run_id" (anchors: "<window_id>:<run_id>"), "kind", "model", "pair", "condition", "seed_index"?,
                   "expected_episode_seed"?, "captured"?, "contrast"?: {"template", "arm", "stage"}}],
      "adjudication": {"final", "excluded": {run_id: [codes]}}, "identity": {run_id: "identical"|"divergent"},
      "battery": {run_id: [codes, incl. "battery.unobserved"]}, "meter": {"streams": {name: sha256|null}}}
@@ -95,7 +118,7 @@ SERIES/windows/<W>/members/<run_id>/outputs/align_episode.json
      turns: [{index, start_ns, end_ns, first_token_ns, context_tokens, prefill_tokens, decode_tokens,
               reasoning_tokens, tool_calls: [{start_ns, end_ns}]}],
      hardware: {paired_clock_stamps_ns: [ALL stamps], registered_span_ns: [a, b], production_offset_ns?,
-                thermal: {policy: {sensors: {fast, slow}, delta_fast_c, delta_slow_c}, episode_reference,
+                thermal: {policy: {sensors: {s_fast, s_slow}, delta_fast_c, delta_slow_c}, episode_reference,
                           intervals: [{kind, turn, start_ns, end_ns, outcome, release, exit_sample_ns}]}, cache}}
 SERIES/windows/<W>/members/<run_id>/outputs/align_thermal.jsonl                sidecar sample rows
 ```
@@ -215,8 +238,9 @@ should treat a mismatch here as a request for the restated text, not as a bug.
 | `acceptance.U3_bar.{q, s0, s0_leave_one_out, beta_used, beta_halved, r1_screen}` | q 1e-6 relative; others exact or 1e-12 |
 | `claim.w1_contrast.{verdict, reason, templates, delta}` | exact verdict; numbers 1e-6 |
 | `claim.known_h.<pair>.<run>.{first_k, council, h_star}` | exact k/H; scores 1e-6 |
-| `claim.carrier_curve.<pair>.{total, fractions, H50, H90, carriers[*].threshold, bootstrap}` | exact, **including the bootstrap** (registered recipe; `*_replicate_counts` printed) |
-| `dc_in.windows.<W>.members.<run>` (benign); `dc_in.benign_residual_print_only` | print-only, 1e-3 relative; sealed rows by presence |
+| `claim.carrier_curve.<pair>.{total, fractions, H50, H90, carriers[*].threshold, bootstrap}` | exact, **including the bootstrap** (registered recipe; `*_replicate_counts` printed); `H50/H90.level_reached_at_h0` exact (R23-2) |
+| `acceptance.U4.anchor_sigma_w_print_only.{W, ms_window, ms_interaction, sigma_w2_raw, sigma_w2}` | W exact; others 1e-6 relative (R23-1) |
+| `dc_in.windows.<W>.members.<run>` (benign); `dc_in.benign_residual_print_only` | print-only, 1e-3 relative; sealed rows by presence; `unavailable_reasons` (R23-4) |
 
 ## Speed (REDUCE-ONCE; unchanged by R21)
 
@@ -285,8 +309,8 @@ for m in test_reducer test_stages test_refusals test_hygiene test_end_to_end; do
 | Module | Tests | Covers |
 |---|---:|---|
 | `test_reducer` | 10 | fast == plistlib on 150 randomized frames; fallbacks; NUL framing; cache binding |
-| `test_stages` | 34 | Hand cases for every R21 row in the table above, plus the fit, rank, quantile, CP, meter and seed-law cases |
-| `test_refusals` | 3 | exit 2 on missing or malformed inputs; member defects exclude; a PM gap bars the window (A24) |
+| `test_stages` | 38 | Hand cases for every R21 row in the table above, plus the fit, rank, quantile, CP, meter and seed-law cases |
+| `test_refusals` | 4 | exit 2 on missing or malformed inputs; member defects exclude; a PM gap bars the window (A24) |
 | `test_hygiene` | 4 | AST stdlib-only, no `joulewise`; pinned digest; serial == parallel == cache-miss == cache-hit bytes; structure-only stdout |
 | `test_end_to_end` | 11 | W1 + C1-C8 + T1-T3 with: a re-derived X2; a U2-failed barred window; an INCONCLUSIVE-U3 window that still pools; 24-member T3; the two-stage freeze, including a tampered freeze refused; incomplete calibration withholding T |
 

@@ -64,10 +64,32 @@ class RefusalTests(unittest.TestCase):
         noadj = {k: v for k, v in record.items() if k != "adjudication"}
         path.write_text(json.dumps(noadj))
         self.refused(root, "window_malformed")
+        # R23 export contract: anchor run ids are series-unique "<window_id>:<run_id>".
+        anchor = next(i for i, m in enumerate(record["members"]) if m["kind"] == "anchor")
+        bare = dict(record, members=[dict(m, run_id=m["run_id"].split(":", 1)[1]) if i == anchor else m
+                                     for i, m in enumerate(record["members"])])
+        path.write_text(json.dumps(bare))
+        self.refused(root, "window_malformed")
         path.write_text(json.dumps(record))
         u3 = root / "u3_bar.json"
         u3.write_text("[")
         self.refused(root, "u3_bar_malformed")
+
+    def test_w1_sentinel_ordinals_must_match_the_r15_roster(self):
+        # R23 export contract: the export carries the W1 sentinel ordinals (5/17); a mismatch refuses.
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name) / "w1"
+        synth.write_series(root, windows=["C1"], w1=True, **SMALL)
+        path = root / "windows/W1/window.json"
+        record = json.loads(path.read_text())
+        self.assertEqual(record["sentinel_ordinals"], [5, 17])
+        for bad in ({k: v for k, v in record.items() if k != "sentinel_ordinals"},
+                    dict(record, sentinel_ordinals=[5, 18]),
+                    dict(record, members=[dict(m, kind="development") if m["ordinal"] == 17 else m
+                                          for m in record["members"]])):
+            path.write_text(json.dumps(bad))
+            self.refused(root, "w1_sentinel_ordinals_mismatch")
 
     def test_member_defects_exclude_without_refusing(self):
         root = self.copy()

@@ -13,7 +13,7 @@ from .support import SCRIPT, SMALL, rc, run_cli, synth
 
 # Pinned program digest. A change to the program changes this pin in the same commit, so a reviewer
 # sees every program change; the recompute JSON records program_sha256 for the comparator.
-PROGRAM_SHA256 = "28db6c12e12aba264c619322790f0b01aeaedf688394f5d7d58a96064a85971c"
+PROGRAM_SHA256 = "73aee949b100fa1a0a8e0f30a08869c7f89b73b0168c9e2c017756fb08626f2f"
 
 
 class IndependenceTests(unittest.TestCase):
