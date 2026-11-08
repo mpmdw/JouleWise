@@ -251,6 +251,8 @@ def collect(args, out):
                'members': [], 'pilot7': {}}
     inputs = deepcopy(SYN_INPUTS)
     with stack:
+        # Let the synthetic battery journal bracket the first member's start.
+        world.clock.sleep(1)
         # WP18 stand-in: the frozen 45b47f7b6 configs run ungated; their
         # recorded turn counts become the contrast arms' max_turns.
         from joulewise.align.apple.workload import read_episode_bundle
@@ -265,14 +267,12 @@ def collect(args, out):
             inputs['WP18'][name] = {'max_turns': turns, 'token_fixture_sha256': hashlib.sha256(rows).hexdigest()}
             results['pilot7'][name] = ref
             world.clock.sleep(600)
-        # R11: the contrast cap/fit are re-derived from the record AND the re-measured WP18
-        # turn counts (Opus cold HIGH-1a); the import-time fit was for max_turns=5. The
-        # synthetic R1 X-G stand-in admits the same re-measured count.
-        slots = deepcopy(SYN_R1_SLOTS)
-        slots['x_g'] = {**slots['x_g'], 'admitted_turns': inputs['WP18']['X']['max_turns']}
-        contrast = kit.w1_contrast_g0_cap(slots, inputs['WP18']['X']['max_turns'])
+        r1_slots = deepcopy(SYN_R1_SLOTS)
+        r1_slots['x_g']['admitted_turns'] = inputs['WP18']['X']['max_turns']
+        contrast = kit.w1_contrast_g0_cap(r1_slots, inputs['WP18']['X']['max_turns'])
         inputs['R1']['thermal_policy'].update(contrast_g0_cap_s=contrast['value_s'], contrast_fit=contrast)
-        plan, raw_configs, _ = build_kit(inputs, slots)
+        plan, raw_configs, _ = build_kit(inputs, r1_slots)
+        results['r1_slots'] = r1_slots
         results['inputs'] = inputs
         configs = {o: synthesize(c, out) for o, c in raw_configs.items()}
         members = {m['ordinal']: m for m in plan['members']}
@@ -338,9 +338,9 @@ def roster_manifest(out, results):
     by_run = {m['run_id']: m for m in results['plan_members']}
     for r in results['members']:
         plan = by_run[r['run_id']]
-        item = {'bundle': str(Path(r['bundle']).relative_to(out)), 'window': 'W1'}
+        item = {'bundle': str(Path(r['bundle']).relative_to(out)), 'window': 'W1',
+                'ordinal': plan['ordinal'], 'role': plan['role'], 'stage': plan.get('stage_id')}
         ordinal, role = plan['ordinal'], plan['role']
-        item['stage'] = plan.get('stage_id')      # R06: the contrast fit is stage-adjusted
         if ordinal in PAIR_GROUPS:
             item['identical_work_group'] = PAIR_GROUPS[ordinal]
         if role[:1] in ('X', 'Y') and len(role) == 3:
@@ -353,30 +353,10 @@ def roster_manifest(out, results):
             item['registered_span_ns'] = [g0[0]['start_ns'] if g0 else ep['start_ns'], ep['end_ns']]
         items.append(item)
     manifest = {'schema': 'wp22.synthetic_w1_manifest', 'members': items,
-                # the desk's treatment-delivery check needs the registered delta_slow_c (R1 policy)
+                'battery_journal': 'synthetic_battery.jsonl',
                 'delta_slow_c': results['inputs']['R1']['thermal_policy']['delta_slow_c']}
     (out / 'desk_manifest.json').write_text(json.dumps(manifest, indent=2, sort_keys=True) + '\n')
     return out / 'desk_manifest.json'
-
-
-def synthetic_registration_dir(out, results):
-    """A registration directory for the dry run: U3 PENDING (R11/R03, as at the head) and a
-    synthetic passing WP19 receipt built from the pilot-7 stand-in turns. Never native evidence."""
-    from joulewise.align.apple import v4_registration as registration
-    directory = out / 'synthetic_registration'
-    directory.mkdir(exist_ok=True)
-    (directory / 'u3_bar.json').write_text(json.dumps({'schema': registration.U3_SCHEMA, 'status': 'PENDING'}) + '\n')
-    fixtures = {}
-    for name in ('X', 'Y'):
-        pairs = turn_tokens(results['pilot7'][name]['bundle']) or []
-        fixtures[name] = {'turns': [{'turn': i, 'prompt_token_ids': p, 'output_token_ids': o}
-                                    for i, (p, o) in enumerate(pairs)]}
-    rendered = {name: [t['prompt_token_ids'] for t in fixture['turns']] for name, fixture in fixtures.items()}
-    receipt = registration.wp19_identity(fixtures, rendered, fixtures['X']['turns'],
-                                         live_source_sha256=hashlib.sha256(b'synthetic wp22 x-g').hexdigest())
-    (directory / 'wp19_receipt.json').write_text(json.dumps(receipt, indent=2, sort_keys=True) + '\n')
-    (directory / 'inputs.json').write_text(json.dumps({'R1': results['inputs']['R1']}, indent=2, sort_keys=True) + '\n')
-    return directory
 
 
 def run_desk(out, world):
@@ -399,9 +379,8 @@ def run_desk(out, world):
             pm_period_s = 1.0
         return original(episode, journal, os_readings=os_readings, pm_samples=pm_samples,
                         pm_period_s=pm_period_s, **kwargs)
-    results = json.loads((out / 'run_results.json').read_text())
-    manifest = roster_manifest(out, results)
-    registration_dir = synthetic_registration_dir(out, results)
+    manifest = roster_manifest(out, json.loads((out / 'run_results.json').read_text()))
+    registration_dir = synthetic_registration(out, manifest)
     if (out / 'desk').exists():
         import shutil
         shutil.rmtree(out / 'desk')
@@ -414,6 +393,71 @@ def run_desk(out, world):
         return {'status': 'crashed', 'error': f'{type(exc).__name__}: {exc}',
                 'traceback': traceback.format_exc()[-3000:]}
     return {'status': 'ok', 'pilot': json.loads((out / 'desk/PILOT.json').read_text())}
+
+
+def synthetic_registration(out, manifest):
+    """Explicit test-only adoption and raw battery journal; never repo evidence.
+
+    Fixed synthetic calibration energies are independent of the current world's
+    measured energies. Only the synthetic configuration identity is bound here.
+    """
+    from tests.align.v4_registration_fixtures import export, battery_policy
+    from joulewise.align.apple import v4_registration as reg
+    from joulewise.align.apple.thermal_desk import read_bundle_record
+    from scripts.align_v4_thermal_desk import enrich_record
+    from joulewise.b5.harvest import member_spans, JOURNAL_SCHEMA
+    directory = out/'registration'
+    directory.mkdir(exist_ok=True)
+    items = json.loads(manifest.read_text())['members']
+    d = next(i for i in items if i.get('ordinal') == 5)
+    identity = enrich_record(read_bundle_record(out/d['bundle']), out/d['bundle'])['cohort_identity']
+    config_sha = reg.digest(json.dumps(identity, sort_keys=True, separators=(',', ':')).encode())
+    data = export()
+    data['pairs'][-1]['configuration_sha256'] = config_sha
+    data['policy']['d_configuration_sha256'] = config_sha
+    data['policy']['r1_configuration_sha256'] = config_sha
+    justification = b'SYNTHETIC transfer factor, never evidence about D hardware.\n'
+    (directory/'transfer.md').write_bytes(justification)
+    data['policy']['transfer_justification_sha256'] = reg.digest(justification)
+    raw = json.dumps(data, sort_keys=True).encode()
+    (directory/'pairs.json').write_bytes(raw)
+    bar = reg.derive_u3(data['pairs'], {'pairs.json': reg.digest(raw), 'transfer.md': reg.digest(justification)},
+                       policy=data['policy'])
+    gate_path = 'docs/align/v4/synthetic-gate.json'
+    gate = directory/gate_path
+    gate.parent.mkdir(parents=True, exist_ok=True)
+    gate.write_text(json.dumps({'verdict': 'ADMIT', 'derivation_sha256': bar['derivation_sha256'],
+                                'label': 'SYNTHETIC ONLY'}))
+    bar.update(status='registered', lead_signature='lead: synthetic-test-only 2026-11-08',
+               independent_gate={'verdict': 'ADMIT', 'path': gate_path, 'sha256': reg.digest(gate.read_bytes()),
+                                 'derivation_sha256': bar['derivation_sha256']})
+    fixture = {'turns': [{'turn': 0, 'prompt_token_ids': [1], 'output_token_ids': [2]}]}
+    wp19 = reg.wp19_identity({'X': fixture, 'Y': fixture}, {'X': [[1]], 'Y': [[1]]},
+                            fixture['turns'], live_source_sha256=reg.digest(b'synthetic-X'))
+    actual_inputs = json.loads((out/'run_results.json').read_text()).get('inputs', SYN_INPUTS)
+    for name, value in [('u3_bar.json', bar), ('wp19_receipt.json', wp19),
+                        ('inputs.json', actual_inputs), ('battery_window_policy.json', battery_policy())]:
+        (directory/name).write_text(json.dumps(value, sort_keys=True))
+    spans = []
+    for item in items:
+        bundle = out/item['bundle']
+        metadata = json.loads((bundle/'metadata.json').read_text())
+        events = [json.loads(line) for line in (bundle/'events.jsonl').read_text().splitlines() if line.strip()]
+        span = member_spans(metadata, events)['member']
+        if span:
+            spans.append(span)
+    start = max(0, min(s[0] for s in spans)//NS-1)
+    end = math.ceil(max(s[1] for s in spans)/NS)+1
+    with (out/'synthetic_battery.jsonl').open('w') as f:
+        for sec in range(start, end+1):
+            stamp = dict(wall_ns=sec*NS, monotonic_ns=sec*NS, monotonic_raw_ns=sec*NS)
+            values = dict(source='ioreg', update_time_s=sec, instant_amperage_ma=0, amperage_ma=0,
+                          external_connected=True, is_charging=False, current_capacity_pct=100,
+                          adapter_watts=140, voltage_mv=12000,
+                          smc={'values': {'B0AC': 0, 'B0AV': 12000+sec%2}, 'errors': {}, 'finished': stamp})
+            f.write(json.dumps(dict(schema=JOURNAL_SCHEMA, module='battery', kind='reading',
+                                   started=stamp, finished=stamp, values=values, error=None))+'\n')
+    return directory
 
 
 def oracle_energy(world, ep):
@@ -469,18 +513,20 @@ T90 = {1: 6.313752, 2: 2.919986, 3: 2.353363, 4: 2.131847, 5: 2.015048, 6: 1.943
 
 
 def contrast_oracle(runs):
-    """FINAL-DESIGN §2.5 mechanical rule, independently computed."""
+    """Chair 9/R06: stage-adjusted positive contrast, independently computed."""
     cells = {(t, a): [r for r in runs if r['template'] == t and r['arm'] == a] for t in 'XY' for a in 'SG'}
     if any(len(c) != 2 for c in cells.values()):
         return {'verdict': 'INCONCLUSIVE', 'reason': 'fewer than 2 token-identical runs in a template/arm'}
     sel = [r for c in cells.values() for r in c]
     t0 = min(r['start_ns'] for r in sel)
-    x = [[1.0, float(r['template'] == 'Y'), float(r['arm'] == 'S'), (r['start_ns'] - t0) / 3600 / NS] for r in sel]
+    stages = sorted({r['stage'] for r in sel})
+    x = [[1.0, float(r['template'] == 'Y'), float(r['arm'] == 'S'), (r['start_ns'] - t0) / 3600 / NS,
+          float(r['stage'] == stages[-1])] for r in sel]
     beta, se, df = ols(x, [r['E'] for r in sel])
     delta, half = beta[2], T90[df] * se[2]
     ci = [delta - half, delta + half]
     d = {t: sum(r['E'] for r in cells[t, 'S']) / 2 - sum(r['E'] for r in cells[t, 'G']) / 2 for t in 'XY'}
-    if all(abs(v) >= 10 for v in d.values()) and d['X'] * d['Y'] > 0 and (ci[0] > 0 or ci[1] < 0):
+    if all(v >= 10 for v in d.values()) and (ci[0] > 0 or ci[1] < 0):
         verdict = 'T CONFIRMED'
     elif all(abs(v) <= 6 for v in d.values()) and ci[0] >= -6 and ci[1] <= 6:
         verdict = 'T REJECTED'
@@ -521,7 +567,9 @@ def design_expectations(out, results, world, inject):
             continue
         identical = a['tokens'] == b['tokens']
         e = (a['E_oracle_j'] + b['E_oracle_j']) / 2
-        margin = 3 * max(2.97, 0.0011 * e)
+        bar = json.loads((out/'registration/u3_bar.json').read_text())
+        # Independent oracle: consume the frozen relative bar, no desk helper.
+        margin = e*bar['prediction']['relative_bar_'+('D' if group.startswith('D') else '30B')]
         delta = b['E_oracle_j'] - a['E_oracle_j']
         pairs[group] = {'status': ('X5' if not identical else 'pass' if abs(delta) <= margin else 'fail'),
                         'delta_j': delta, 'margin_j': margin}
@@ -542,7 +590,8 @@ def design_expectations(out, results, world, inject):
     runs_strict, runs_eligible = [], []
     for m in members:
         if m['role'][:1] in 'XY' and len(m['role']) == 3 and m['E_oracle_j'] is not None:
-            run = {'template': m['role'][0], 'arm': m['role'][2], 'E': m['E_oracle_j'], 'start_ns': m['start_ns']}
+            run = {'template': m['role'][0], 'arm': m['role'][2], 'E': m['E_oracle_j'], 'start_ns': m['start_ns'],
+                   'stage': plan[m['ordinal']]['stage_id']}
             if m['tokens'] == ref_tokens[m['role'][0]] and m['status'] == 'succeeded':
                 runs_strict.append(run)
                 if not m['design_exclusions']:
@@ -581,6 +630,7 @@ def main(argv=None):
     if desk['status'] == 'ok':
         pilot = desk['pilot']
         record['desk'] = {'model_windows': pilot['model_windows'],
+                          'registration_diagnostics': pilot['registration_diagnostics'],
                           'deciding_experiment': {k: v for k, v in pilot['deciding_experiment'].items()
                                                   if k != 'turn_tables'},
                           'members': [{k: m.get(k) for k in ('id', 'model', 'window', 'gated', 'flags',

@@ -211,7 +211,16 @@ def session_report(custody, plan_members, runs_root, summaries):
         supervision = _json(custody / 'night/hazard_result.json').get('meter') or {}
     except Exception:  # diagnostic evidence cannot block the rails desk
         supervision = {}
-    expected = {r['path']: r.get('sha256') for r in supervision.get('streams', [])}
+    # The window's custody manifest: the streams the shared driver (the HAZARD_PACK supervisor) listed
+    # when it closed custody. Salvage and availability are for a LISTED, SUPERVISED stream with a
+    # RECORDED digest that matches (delta3 G3). Three separate exclusions, each its own flag:
+    #   meter.unsupervised             no supervisor record at all: no stream has provenance
+    #   meter.stream_unlisted          a file the manifest never names (a stray or copied stream)
+    #   meter.custody_digest_unrecorded  listed, but no digest recorded for it
+    # and a recorded digest that differs stays meter.custody_hash_mismatch. A stray file can never
+    # preempt the authenticated stream: it is not even parsed.
+    supervised = isinstance(supervision.get('streams'), list) and bool(supervision['streams'])
+    listed = {r['path']: r.get('sha256') for r in supervision.get('streams', []) if isinstance(r, dict) and 'path' in r}
     directory = custody / REQUIREMENT['custody_directory']
     paths = sorted({p.with_suffix('') if p.suffix == '.zst' else p
                     for pattern in ('stream-*.jsonl', 'stream-*.jsonl.zst') for p in directory.glob(pattern)})
@@ -220,18 +229,19 @@ def session_report(custody, plan_members, runs_root, summaries):
         try:
             digest = hashlib.sha256(read_bytes(path)).hexdigest()
             sources.append({'path': name, 'sha256': digest})
-            parsed = kp.parse(path)
-            if expected.get(name) != digest:
-                # A reader that died leaves no closing line and closing custody may have recorded no
-                # hash for it (smoke G3): salvage its complete records, disclosed per stream. A
-                # recorded hash that differs, or a closed stream with no matching hash, is an integrity
-                # failure and the stream stays out.
-                if parsed.trailer is None and expected.get(name) is None:
-                    stream_flags[name] = ['meter.custody_hash_unrecorded']
-                else:
-                    source_flags.append('meter.custody_hash_mismatch')
-                    continue
-            streams.append((name, parsed))
+            if not supervised:
+                source_flags.append('meter.unsupervised')
+                continue
+            if name not in listed:
+                source_flags.append('meter.stream_unlisted')
+                continue
+            if listed[name] is None:
+                source_flags.append('meter.custody_digest_unrecorded')
+                continue
+            if listed[name] != digest:
+                source_flags.append('meter.custody_hash_mismatch')
+                continue
+            streams.append((name, kp.parse(path)))
         except Exception as exc:  # parser/decompression failure is missing DC, never a rail exclusion
             source_flags.append('meter.stream_unreadable:' + type(exc).__name__)
     summaries = {m['run_id']: m for m in summaries}
@@ -247,7 +257,7 @@ def session_report(custody, plan_members, runs_root, summaries):
                                  baseline_span=idle_baseline_span(metadata, events), episode=episode)
         except Exception as exc:  # preserve an unreadable member in the secondary roster
             row = _empty(['meter.member_unreadable:' + type(exc).__name__])
-        row['flags'] = list(dict.fromkeys([*row['flags'], *source_flags, *stream_flags.get(row.get('stream'), ())]))
+        row['flags'] = list(dict.fromkeys([*row['flags'], *source_flags]))
         if supervision.get('start_failures') or supervision.get('errors') or supervision.get('crash_loop'):
             row['flags'].append('meter.supervision_fault')
         members[rid] = row

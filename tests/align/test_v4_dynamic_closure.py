@@ -25,7 +25,7 @@ class CommittedTraceTests(unittest.TestCase):
     def test_the_trace_covers_the_synthetic_w1_r1_and_arm_paths_and_all_passed(self):
         self.assertEqual(self.trace['schema'], 'joulewise.align_v4.dynamic_closure_trace.v1')
         self.assertTrue({'wp22_synthetic_w1_chain', 'r1_synthetic_arm', 'r1_to_w1_chain',
-                         'arm_install_session'} <= set(self.trace['scenarios']))
+                         'arm_install_session', 'night_driver_hazard_pack'} <= set(self.trace['scenarios']))
         for name, scenario in self.trace['scenarios'].items():
             self.assertTrue(scenario['ok'], name)
             self.assertGreater(scenario['tests_run'], 0)
@@ -57,6 +57,15 @@ class AllowlistTests(unittest.TestCase):
                 self.assertIn(census.get(path), ALLOWED_CENSUS, 'not classified as not-run by the refusal census')
                 self.assertNotIn(path, executed)
         self.assertEqual(len(registration.AMENDMENT_ALLOWLIST), len(set(registration.AMENDMENT_ALLOWLIST)))
+
+    def test_an_amendable_path_is_absent_from_the_static_closure_and_the_full_trace(self):
+        # delta3: the allowlist may hold only a module in NEITHER the static closure of every entry
+        # point NOR the dynamic trace (which includes the production hazard-pack night runner).
+        trace = json.loads(TRACE.read_text())
+        self.assertIn('night_driver_hazard_pack', trace['scenarios'])
+        for path in registration.AMENDMENT_ALLOWLIST:
+            self.assertNotIn(path, registration.EXECUTED_CLOSURE)
+            self.assertNotIn(path, trace['executed'])
 
 
 class IndependentSpineTests(unittest.TestCase):

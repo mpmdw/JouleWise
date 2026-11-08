@@ -10,6 +10,7 @@ from collections import defaultdict
 import math
 from statistics import fmean, stdev
 import json
+import re
 from pathlib import Path
 
 from joulewise.align.attribution import attribute_episode
@@ -290,6 +291,10 @@ def energy_exclusions(member):
 
 
 def identical_pair(a, b, *, u3_bar=None):
+    if u3_bar is not None and any(str(c).startswith('battery.') and c in (
+            'battery.member_span', 'battery.accumulator_excursion', 'battery.unmeasured')
+            for r in (a, b) for c in r.get('calibration_exclusions', [])):
+        return {'status': 'inconclusive', 'reason': 'battery-excluded replay evidence'}
     if any(energy_exclusions(r) for r in (a, b)):
         return {'status': 'inconclusive', 'reason': 'energy evidence unavailable'}
     if a.get('tokens') is None or b.get('tokens') is None:
@@ -308,7 +313,14 @@ def identical_pair(a, b, *, u3_bar=None):
     if u3_bar is not None:
         from joulewise.align.apple.v4_registration import u3_margin
         try:
-            margin = u3_margin(energy, u3_bar)
+            population = 'D' if any(r.get('role') == 'D' for r in (a, b)) else '30B'
+            if population == 'D' and a.get('role') != b.get('role'):
+                raise ValueError('U3 D replay role identity unavailable or divergent')
+            if population == 'D' and (not a.get('u3_configuration_sha256') or
+                                     a.get('u3_configuration_sha256') != b.get('u3_configuration_sha256')):
+                raise ValueError('U3 D configuration identity unavailable or divergent')
+            margin = u3_margin(energy, u3_bar, population=population,
+                               configuration_sha256=a.get('u3_configuration_sha256'))
         except ValueError as exc:
             return {'status': 'inconclusive', 'token_identical': True,
                     'delta_j': delta, 'margin_j': None, 'reason': str(exc)}
@@ -872,6 +884,16 @@ def window_report(members, *, cross_windows=None, sensitivity=None, monitoring=N
             result = acceptance(selected, pairs=pairs, u4=(cross_windows or {}).get(model),
                                 u5=(sensitivity or {}).get(model), u6=(monitoring or {}).get(model),
                                 u3_bar=u3_bar, v4=v4)
+            if v4 and u3_bar and pairs:
+                population = 'D' if any(m.get('role') == 'D' for m in selected) else '30B'
+                # A zero-capture retry (`C3#2`) keeps its counted slot's registered U3 scope (delta4 S2 F1);
+                # records and reports keep the full attempt id. No comparison or calibration slot is added.
+                retry = re.fullmatch(r'([CTD][1-9][0-9]*)#[1-9][0-9]*', window) if isinstance(window, str) else None
+                scope = retry.group(1) if retry else window
+                allowed = u3_bar.get('policy', {}).get('checks_by_window', {}).get(scope, {}).get(population)
+                if type(allowed) is not int or len(pairs) > allowed:
+                    result['U3'].update(status='inconclusive', reason='U3 comparisons exceed the frozen series scope')
+                    result['hardware_control'] = 'inconclusive'
             if window == 'W1':
                 for k in (4, 5, 6):
                     result[f'U{k}'] = {'status': 'inconclusive', 'reason': 'not evaluable in W1 (FINAL-DESIGN §2.3)'}

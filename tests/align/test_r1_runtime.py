@@ -184,8 +184,14 @@ class ConformanceTests(unittest.TestCase):
     def test_pending_inputs_refuse_before_work_with_a_terminal_record(self):
         with tempfile.TemporaryDirectory(dir=TMP) as td:
             root = Path(td)
-            production = REPO / "configs/align/v4/r1_runtime.json"
-            code, _ = call(production, root / "idle", "idle", "--duration-s", "5")
+            # R0 re-run 11 filled the production sensors; the negative case uses an explicit temporary
+            # config whose sensors are still pending, and must refuse before any host command.
+            pending = json.loads((REPO / "configs/align/v4/r1_runtime.json").read_text())
+            pending["sensors"] = None
+            pending["templates"] = {k: str(REPO / v) for k, v in pending["templates"].items()}
+            pending_config = root / "pending-sensors.json"
+            pending_config.write_text(json.dumps(pending))
+            code, _ = call(pending_config, root / "idle", "idle", "--duration-s", "5")
             self.assertEqual(code, rt.EXIT_REFUSED)
             self.assertIn("PENDING R0", custody(root / "idle")["error"])
             config = rs.synthetic_config(root / "cfg")
@@ -200,14 +206,17 @@ class ConformanceTests(unittest.TestCase):
             self.assertEqual(code, rt.EXIT_REFUSED)
             self.assertFalse((root / "exists" / rt.CUSTODY_NAME).exists())
 
-    def test_production_templates_refuse_pending_r0_effort_and_wp18_turns(self):
+    def test_templates_refuse_pending_r0_effort_and_wp18_turns(self):
         with tempfile.TemporaryDirectory(dir=TMP) as td:
             root = Path(td)
             production = json.loads((REPO / "configs/align/v4/r1_runtime.json").read_text())
             for key in ("d_spam", "d_bank"):
                 _, spec = rt.read_template(production["templates"][key])
+                rt.require_effort(spec, key)                       # filled: R0 re-run 11 selected medium
+                self.assertEqual(spec["chat_template_kwargs"]["reasoning_effort"], "medium")
+                pending_spec = dict(spec, chat_template_kwargs={"reasoning_effort": None})
                 with self.assertRaisesRegex(rt.Refused, "PENDING R0"):
-                    rt.require_effort(spec, key)
+                    rt.require_effort(pending_spec, key)
             # WP18 is filled (fixtures merged): the production X-G template
             # carries an integer max_turns. A template whose max_turns is still
             # pending (the pre-WP18 kit) is refused by the runtime.

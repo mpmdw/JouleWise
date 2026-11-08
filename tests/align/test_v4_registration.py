@@ -168,7 +168,7 @@ class RegistrationTests(unittest.TestCase):
 
     def test_arm_records_battery_and_refuses_missing_attestation(self):
         from scripts import align_v4_session as session
-        from tests.align.test_v4_cadence import passing_packet, write_battery_log
+        from tests.align.test_v4_cadence import arm_seams, passing_packet, write_battery_log
         packet = passing_packet()
         yes = lambda root, commit: True
         bound = lambda root, packet: True
@@ -184,8 +184,8 @@ class RegistrationTests(unittest.TestCase):
             floated = write_battery_log(Path(tmp) / 'float.jsonl', 5000., completion_age=2400)     # (b) continuous float
             stale = write_battery_log(Path(tmp) / 'stale.jsonl', 5000., completion_age=2400, end_age=900)
             arm = lambda **kw: session.arm_checks('.', {}, obc_off_attested_by=kw.pop('obc', 'synthetic'), runner=run,
-                                                  now=lambda: 5000., commit_check=yes, record_check=bound, **kw)
-            self.assertFalse(session.arm_checks('.', {}, runner=run)['admitted'])
+                                                  now=lambda: 5000., **arm_seams(), **kw)
+            self.assertFalse(session.arm_checks('.', {}, runner=run, meter_probe=lambda root: {'live': False})['admitted'])
             self.assertFalse(arm(obc='', battery_log=log, next_arm_triage=packet)['admitted'])     # no attestation
             self.assertFalse(arm(next_arm_triage=packet)['admitted'])                              # no battery evidence
             record = arm(battery_log=log, next_arm_triage=packet)
@@ -202,7 +202,7 @@ class RegistrationTests(unittest.TestCase):
             # L8: a failing pmset is evidence only
             bad_pmset = lambda argv: subprocess.CompletedProcess(argv, 1, '', 'pmset failed')
             with_bad = session.arm_checks('.', {}, obc_off_attested_by='synthetic', runner=bad_pmset, now=lambda: 5000.,
-                                          commit_check=yes, record_check=bound, battery_log=log, next_arm_triage=packet)
+                                          battery_log=log, next_arm_triage=packet, **arm_seams())
             self.assertTrue(with_bad['admitted'], with_bad['reasons'])
             self.assertTrue(with_bad['battery']['pmset_batt']['evidence_only'])
             self.assertEqual(set(record['next_arm_triage']['checks']), set(__import__(
@@ -210,10 +210,16 @@ class RegistrationTests(unittest.TestCase):
             # R12 B2: the triage list gates the arm itself.
             self.assertFalse(arm(battery_log=log)['admitted'])
             bad = passing_packet()
-            bad['checks']['meter_reader_live']['status'] = 'fail'
+            bad['checks']['capture_faults']['status'] = 'fail'
             refused = arm(battery_log=log, next_arm_triage=bad)
             self.assertFalse(refused['admitted'])
-            self.assertIn('next_arm_triage: triage meter_reader_live failed', refused['reasons'])
+            self.assertIn('next_arm_triage: triage capture_faults failed', refused['reasons'])
+            # the live meter is arm-computed (R12 B2 / lead ruling): a dead one refuses whatever the packet says
+            dead = session.arm_checks('.', {}, obc_off_attested_by='synthetic', runner=run, now=lambda: 5000.,
+                                      battery_log=log, next_arm_triage=packet,
+                                      **{**arm_seams(), 'meter_probe': lambda root: {'live': False}})
+            self.assertFalse(dead['admitted'])
+            self.assertIn('next_arm_triage: triage meter_reader_live failed', dead['reasons'])
             self.assertEqual(record['battery']['raw_ioreg'], 'synthetic raw')
             self.assertEqual(observe.call_args.kwargs['phase'], 'arm_check')
 
@@ -221,7 +227,7 @@ class RegistrationTests(unittest.TestCase):
         # Lead ruling: no sampler during a window; the window's 1 Hz SMC capture carries the float.
         import json as _json
         from scripts import align_v4_session as session
-        from tests.align.test_v4_cadence import passing_packet
+        from tests.align.test_v4_cadence import arm_seams, passing_packet
         from tests.align.test_v4_topup import window_journal
         good = dict(passed=True, probe_error=False, external_connected=True, is_charging=False,
                     current_capacity_pct=100, instant_amperage_ma=0, update_age_s=1)
@@ -245,8 +251,7 @@ class RegistrationTests(unittest.TestCase):
             journal.write_text(''.join(_json.dumps(r) + '\n' for r in window_journal(2000, 45900)))
             arm = lambda **kw: session.arm_checks(
                 '.', {}, obc_off_attested_by='synthetic', runner=run, now=lambda: now,
-                commit_check=lambda root, commit: True, record_check=lambda root, packet: True,
-                next_arm_triage=passing_packet(), **kw)
+                next_arm_triage=passing_packet(), **arm_seams(), **kw)
             record = arm(battery_log=[first, second], window_battery_journal=[journal])
             self.assertTrue(record['admitted'], record['reasons'])
             evidence = record['battery']['topup_evidence']
@@ -358,7 +363,7 @@ class RegistrationTests(unittest.TestCase):
         self.assertIsNone(reg.desk_diagnostics(records)['sentinel']['ordinal'])
         records[0]['flags'] = ['battery.member_span']
         records[1]['flags'] = ['battery.member_span']
-        self.assertFalse(reg.desk_diagnostics(records)['battery_windows']['synthetic']['bar_pass'])
+        self.assertFalse(reg.desk_diagnostics(records)['battery_windows']['synthetic/W1']['bar_pass'])
 
     def test_v4_thermal_cli_refuses_missing_registered_bar(self):
         from scripts import align_v4_thermal_desk as script
@@ -394,30 +399,36 @@ class RegistrationTests(unittest.TestCase):
 
     def test_session_desk_applies_relative_u3_and_frozen_d_cohort(self):
         from scripts import align_v4_session as session
-        from joulewise.align.apple.v4_registration import derive_u3
-        bar = derive_u3([dict(session='p4', ordinals=[i, i+3], token_identical=True,
-            energies_j=[1000, 1000+i*2]) for i in range(1, 7)], {'synthetic': 'a'*64})
+        from tests.align.v4_registration_fixtures import signed_bar, battery_policy
+        bar = signed_bar()
         rows = [{'run_id': str(i), 'role': 'D', 'ordinal': i, 'ac_powermode': 0,
                  **({'replay_of': '5'} if i == 17 else {})} for i in (5, 17)]
         records = [member(str(i), energy=30000+(200 if i==17 else 0)) for i in (5, 17)]
         for record in records:
             record.update(configuration=dict(max_tokens=4096, max_turns=12, deadman_s=1000,
                                               max_episode_decode_tokens=6144),
-                          cache_statistics={'rebuilds': 0}, cohort_identity=dict(model_source='tiny', model_revision='synthetic',
+                          cache_statistics={'rebuilds': 0}, u3_configuration_sha256='b'*64,
+                          battery={'status': 'observed', 'source_sha256': 'a'*64, 'flags': []},
+                          cohort_identity=dict(model_source='tiny', model_revision='synthetic',
                           runtime_sha256='a'*64, execution_policy_sha256='b'*64))
         with tempfile.TemporaryDirectory() as tmp, \
              patch.object(session.pilot, '_member_rows', return_value=rows), \
              patch.object(session, 'bundle_ac_powermode', return_value=0), \
              patch('scripts.align_v4_thermal_desk.registration_evidence', return_value=(bar, {})), \
              patch('scripts.align_v4_thermal_desk.enrich_record', side_effect=lambda r, p: r), \
+             patch('joulewise.align.apple.v4_battery.attach', side_effect=lambda r, p, j: r), \
              patch('scripts.align_v4_thermal_desk.r1_soak_c', return_value={}), \
              patch('joulewise.align.apple.thermal_desk.read_bundle_record', side_effect=lambda p: deepcopy(records[0 if p.name=='5' else 1])), \
              patch.object(kit, 'read_inputs', return_value={'R1': {'thermal_policy': {'delta_slow_c': 2}}}):
+            registration_dir = Path(tmp)/kit.KIT/'registration'
+            registration_dir.mkdir(parents=True)
+            (registration_dir/'battery_window_policy.json').write_text(json.dumps(battery_policy()))
             def check():
                 return session.powermode_desk_check(state={'measurement_root': tmp}, members=[],
                                                    runs_root=tmp, kit_path=kit.KIT)[0]
             result = check()
-            self.assertFalse(result['v4_synthetic/W1_U3'])  # R11 leaves U3 pending; no historical constant
+            self.assertTrue(result['v4_synthetic/W1_U3'])
+            self.assertTrue(result['v4_B_bar'])
             self.assertTrue(result['v4_D_cohort'])
             records[1]['configuration']['max_turns'] = 11
             self.assertFalse(check()['v4_D_cohort'])

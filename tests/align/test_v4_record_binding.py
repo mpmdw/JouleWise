@@ -3,6 +3,7 @@
 Real temporary Git repositories, synthetic record bytes only.
 """
 import hashlib
+import json
 from pathlib import Path
 import subprocess
 import tempfile
@@ -31,11 +32,19 @@ class RecordBindingTests(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text)
         self.git('add', '.')
-        self.git('-c', 'user.name=S', '-c', 'user.email=s@example.invalid', 'commit', '-qm', f'record {text[:8]}')
+        self.git('-c', 'user.name=S', '-c', 'user.email=s@example.invalid', 'commit', '-qm', f'record {text[:8]}', '--allow-empty')
         return self.git('rev-parse', 'HEAD'), hashlib.sha256(text.encode()).hexdigest()
 
+    def ledger(self, commit, digest, path=RECORD):
+        """Commit the canonical series ledger naming this record; return the packet fields that bind to it."""
+        _commit, _digest = self.commit('series/state.json', json.dumps(
+            {'schema': 'ledger', 'previous_record': {'commit': commit, 'path': path, 'sha256': digest}}, sort_keys=True) + '\n')
+        return {'series_commit': _commit, 'series_path': 'series/state.json', 'series_sha256': _digest}
+
     def packet(self, commit, digest, **kw):
-        return passing_packet(record_commit=commit, record_path=RECORD, record_sha256=digest, **kw)
+        path = kw.pop('record_path', RECORD)
+        bound = self.ledger(commit, digest, path)
+        return passing_packet(record_commit=commit, record_path=path, record_sha256=digest, **bound, **kw)
 
     def arm_identity(self, packet):
         return {**IDENTITY, 'record_commit_exists': session._commit_exists(self.root, packet['record_commit']),
@@ -44,7 +53,7 @@ class RecordBindingTests(unittest.TestCase):
     def test_a_packet_for_the_last_committed_record_is_admitted(self):
         commit, digest = self.commit(RECORD, '{"window": "C2", "v": 1}\n')
         packet = self.packet(commit, digest)
-        result = cad.next_arm_triage(packet, INTERNAL, self.arm_identity(packet))
+        result = cad.next_arm_triage(packet, INTERNAL, self.arm_identity(packet), now_epoch_s=500.0)
         self.assertTrue(result['admitted'], result['reasons'])
         self.assertTrue(result['derived']['record_bound'])
 
@@ -54,7 +63,7 @@ class RecordBindingTests(unittest.TestCase):
         stale = self.packet(old_commit, old_digest)
         self.assertTrue(session._commit_exists(self.root, old_commit))          # well formed and findable
         self.assertFalse(session._record_bound(self.root, stale))
-        result = cad.next_arm_triage(stale, INTERNAL, self.arm_identity(stale))
+        result = cad.next_arm_triage(stale, INTERNAL, self.arm_identity(stale), now_epoch_s=500.0)
         self.assertFalse(result['admitted'])
         self.assertIn('triage record_committed failed', result['reasons'])
 
@@ -67,7 +76,22 @@ class RecordBindingTests(unittest.TestCase):
             packet.update(change)
             with self.subTest(change=change):
                 self.assertFalse(session._record_bound(self.root, packet))
-                self.assertFalse(cad.next_arm_triage(packet, INTERNAL, self.arm_identity(packet))['admitted'])
+                self.assertFalse(cad.next_arm_triage(packet, INTERNAL, self.arm_identity(packet), now_epoch_s=500.0)['admitted'])
+
+    def test_a_packet_for_an_older_window_refuses_after_a_new_record_at_a_new_path(self):
+        # delta3 S1 F03 / S2 M1: C3 closes at its own record path and moves the series ledger.
+        commit, digest = self.commit(RECORD, '{"window": "C2"}\n')
+        packet = self.packet(commit, digest)
+        self.assertTrue(session._record_bound(self.root, packet))
+        new_commit, new_digest = self.commit('staging/window-C3-record.json', '{"window": "C3", "thermal": "fail"}\n')
+        self.ledger(new_commit, new_digest, 'staging/window-C3-record.json')
+        self.assertEqual(self.git('status', '--porcelain'), '')
+        self.assertFalse(session._record_bound(self.root, packet))
+        result = cad.next_arm_triage(packet, INTERNAL, self.arm_identity(packet), now_epoch_s=500.0)
+        self.assertFalse(result['admitted'])
+        self.assertIn('triage record_committed failed', result['reasons'])
+        newest = self.packet(new_commit, new_digest, record_path='staging/window-C3-record.json')
+        self.assertTrue(session._record_bound(self.root, newest))
 
     def test_a_later_unrelated_commit_does_not_make_the_packet_stale(self):
         commit, digest = self.commit(RECORD, '{"window": "C2"}\n')
@@ -89,10 +113,12 @@ class RecordBindingTests(unittest.TestCase):
             run = lambda argv: subprocess.CompletedProcess(argv, 0, 'pmset', '')
             log = write_battery_log(self.root / 'battery.jsonl', 5000.)
             record = session.arm_checks(self.root, {}, runner=run, now=lambda: 5000., obc_off_attested_by='synthetic',
-                                        battery_log=log, next_arm_triage=self.packet(commit, digest))
+                                        battery_log=log, next_arm_triage=self.packet(commit, digest),
+                                        packet_builder=lambda root, supplied, **kw: (supplied, True),
+                                        meter_probe=lambda root: {'live': True})
         self.assertFalse(record['admitted'])
         self.assertIn('next_arm_triage: triage record_committed failed', record['reasons'])
-        self.assertFalse(record['next_arm_triage']['derived']['record_bound'])
+        self.assertFalse(record['next_arm_triage']['derived']['record_bound'])        # the ledger moved on
         self.assertTrue(record['next_arm_triage']['derived']['record_commit_exists'])
 
 

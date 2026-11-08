@@ -43,7 +43,8 @@ SCENARIOS = (
                             'tests.align.test_w1_kit_r10']),
     ('desk_dc_session', {}, ['tests.align.test_km003c.MemberTests', 'tests.align.test_km003c.DeskTests',
                              'tests.align.test_v4_topup', 'tests.align.test_v4_record_binding']),
-    ('arm_install_session', {}, ['tests.align.test_v4_kit']),
+    ('arm_install_session', {}, ['tests.align.test_v4_kit', 'tests.align.test_v4_next_arm_packet']),
+    ('night_driver_hazard_pack', {}, ['tests.align.test_km003c.NightChainTests']),
 )
 
 
