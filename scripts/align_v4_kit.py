@@ -8,9 +8,13 @@ selected policies. This builder never hashes or opens a model/data directory.
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
+from contextvars import ContextVar
 from copy import deepcopy
 import json
 import math
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -82,8 +86,50 @@ ROSTER = (
 )
 
 
+_FROZEN = ContextVar('align_v4_frozen', default=None)
+
+
+def _frozen_specs():
+    anchor_paths = [SOURCE_KIT / 'plan_tree.json',
+                    SOURCE_KIT / 'registration/identity_pins.json',
+                    SOURCE_KIT / 'registration/model_artifact_inventory.json',
+                    SOURCE_KIT / 'registration/sizing_b5.json']
+    anchor_paths += [SOURCE_KIT / 'stages/episodes-a' / f'align-pilot-v3-episodes-a-e{i:02}.json'
+                     for i in range(1, 5)]
+    return ([f'{ANCHOR_COMMIT}:{p}' for p in anchor_paths]
+            + [f'{CONTRAST_COMMIT}:{SOURCE_KIT}/stages/episodes-b/align-pilot-v3-episodes-b-e{i}.json'
+               for i in (18, 25)])
+
+
+def _read_frozen_sources(root):
+    from joulewise.align.apple.v4_registration import _git_blobs
+    sources = _git_blobs(root, _frozen_specs())
+    if any(raw is None for raw in sources.values()):
+        raise ValueError('v4 kit historical source object missing')
+    return sources
+
+
+@contextmanager
+def _frozen_sources(root, sources=None):
+    identity = str(Path(root).absolute())
+    active = _FROZEN.get()
+    if active is not None and active[0] == identity:
+        yield
+        return
+    token = _FROZEN.set((identity, _read_frozen_sources(root) if sources is None else sources))
+    try:
+        yield
+    finally:
+        _FROZEN.reset(token)
+
+
 def frozen(root, commit, path):
     """Read repository code/config objects only, never a cited filesystem path."""
+    active = _FROZEN.get()
+    if active is not None and active[0] == str(Path(root).absolute()):
+        spec = f'{commit}:{path}'
+        if spec in active[1]:
+            return active[1][spec]
     return subprocess.run(['git', 'show', f'{commit}:{path}'], cwd=root,
                           check=True, capture_output=True).stdout
 
@@ -1372,6 +1418,13 @@ def thermal_policy(inputs, *, heavy, per_turn, window_reference, role='D'):
 
 
 def build_files(root=ROOT):
+    # Invocation-local snapshot only: refs are resolved anew on every build,
+    # including every --check. Repeated roster references share the same bytes.
+    with _frozen_sources(root):
+        return _build_files(root)
+
+
+def _build_files(root):
     root = Path(root)
     inputs = read_inputs(root)
     files = {INPUTS: (root / INPUTS).read_bytes(), R1_SLOTS: (root / R1_SLOTS).read_bytes()}
@@ -1637,16 +1690,94 @@ def arm_powermode_check(plan, observed_ac_powermode):
         raise ValueError(f'AC powermode mismatch: expected {expected}, observed {observed_ac_powermode}')
 
 
-def generate(output_root=ROOT, *, check=False, source_root=ROOT):
-    files = build_files(source_root)
+def generation_input_digests(root=ROOT):
+    """Complete content key, including optional-input absence and implementation.
+
+    Hash all first-party Python source conservatively so a new/lazy import
+    cannot silently escape a manually maintained dependency list. Never follow
+    a model/data locator, symlink or restricted directory. No mtime is used.
+    """
+    from joulewise.align.apple.v4_registration import _local
+    def unreadable(exc):
+        raise exc
+    result = {}
+    for path in (INPUTS, R1_SLOTS, W1_PLAN):
+        try:
+            result[str(path)] = sha(_local(root, path).read_bytes())
+        except FileNotFoundError:
+            if path != W1_PLAN:
+                raise
+            result[str(path)] = None
+    for directory in ('joulewise', 'scripts'):
+        for parent, dirs, names in os.walk(_local(ROOT, directory), followlinks=False, onerror=unreadable):
+            dirs[:] = sorted(d for d in dirs if d not in
+                             ('restricted', 'night-custody', 'night-archive', '__pycache__'))
+            if any((Path(parent) / d).is_symlink() for d in dirs):
+                raise ValueError('generation code symlink refused')
+            for name in sorted(names):
+                if name.endswith('.py'):
+                    path = (Path(parent) / name).relative_to(ROOT)
+                    result['code:' + path.as_posix()] = sha(_local(ROOT, path).read_bytes())
+    return result
+
+
+def _generation_files(output_root, source_root, *, cache):
+    from joulewise.align.apple import v4_registration as reg
+    # Git I/O and working-source hashing are independent; at most two workers.
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        pending = pool.submit(_read_frozen_sources, source_root)
+        inputs = generation_input_digests(source_root)
+        sources = pending.result()
+    key = reg._cache_key(dict(inputs=inputs, sources={p: sha(raw) for p, raw in sources.items()},
+                              python=sys.version))
+    if cache:
+        saved = reg._cache_load(output_root, 'generation', key)
+        if isinstance(saved, dict) and saved:
+            try:
+                files = {Path(path): bytes.fromhex(raw) for path, raw in saved.items()}
+                for path in files:
+                    reg._local(output_root, path)
+                    if not path.is_relative_to(KIT):
+                        raise ValueError('cached output path refused')
+                return files
+            except (TypeError, ValueError):
+                pass
+    with _frozen_sources(source_root, sources):
+        files = build_files(source_root)
+    # A concurrent edit must not publish results under an earlier input key.
+    if cache and generation_input_digests(source_root) == inputs:
+        try:
+            reg._cache_store(output_root, 'generation', key,
+                             {p.as_posix(): raw.hex() for p, raw in files.items()})
+        except (OSError, ValueError):
+            pass
+    return files
+
+
+def generate(output_root=ROOT, *, check=False, source_root=ROOT, cache=True):
+    if check:
+        # Readiness reuses historical code/config bytes from this fresh check,
+        # while all mutable inputs and admission predicates remain live reads.
+        with _frozen_sources(source_root):
+            return _generate(output_root, check=True, source_root=source_root, cache=cache)
+    return _generate(output_root, check=False, source_root=source_root, cache=cache)
+
+
+def _generate(output_root, *, check, source_root, cache):
+    # --check always regenerates independently; admission/refusals are never
+    # cached. Normal generation may reuse only successful build bytes.
+    files = build_files(source_root) if check or not cache else _generation_files(
+        output_root, source_root, cache=cache)
+    from joulewise.align.apple.v4_registration import _local
     for path, raw in files.items():
-        target = Path(output_root) / path
+        target = _local(output_root, path)
         if check:
             if not target.is_file() or target.read_bytes() != raw:
                 raise ValueError('generated v4 kit drifted: ' + str(path))
         else:
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(raw)
+            if not target.is_file() or target.read_bytes() != raw:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(raw)
     if check:
         require_w1_ready(source_root)
     return files
@@ -1764,9 +1895,10 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output-root', type=Path, default=ROOT)
     parser.add_argument('--check', action='store_true')
+    parser.add_argument('--no-cache', action='store_true', help='rebuild without reading or writing the generation cache')
     args = parser.parse_args(argv)
     try:
-        generate(args.output_root, check=args.check)
+        generate(args.output_root, check=args.check, cache=not args.no_cache)
     except (OSError, ValueError, subprocess.CalledProcessError) as exc:
         print('align_v4_kit: ' + str(exc), file=sys.stderr)
         return 1
