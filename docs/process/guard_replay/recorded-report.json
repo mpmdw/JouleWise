@@ -1,0 +1,2087 @@
+{
+  "corpus_sha256": "1fe6396239aca3498be48e6d3050ff808738a4a6603f5910f4938af0ebd61b11",
+  "guards": [
+    {
+      "decisions": [
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 20.635991541901603,
+          "evaluated": 13,
+          "label": "unknown",
+          "reason": "CPU predicate only; other censuses neutral",
+          "run": "2026-11-06",
+          "status": "PASS",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 75.30726850009523,
+          "evaluated": 23,
+          "label": "unknown",
+          "reason": "CPU predicate only; other censuses neutral",
+          "run": "2026-11-06-rerun",
+          "status": "PASS",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 159.71045295801014,
+          "evaluated": 44,
+          "label": "unknown",
+          "reason": "CPU predicate only; other censuses neutral",
+          "run": "2026-11-06-rerun2",
+          "status": "PASS",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 987.0220399589743,
+          "evaluated": 4,
+          "label": "benign",
+          "reason": "CPU predicate only; other censuses neutral",
+          "run": "2026-11-07-rerun10",
+          "status": "PASS",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 157.91870095790364,
+          "evaluated": 49,
+          "label": "benign",
+          "reason": "historical QuietGuard CPU refusal (other censuses neutral)",
+          "run": "2026-11-07-rerun3",
+          "status": "REFUSE",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 904.9629063329194,
+          "evaluated": 101,
+          "label": "benign",
+          "reason": "historical QuietGuard CPU refusal (other censuses neutral)",
+          "run": "2026-11-07-rerun4",
+          "status": "REFUSE",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 2245.5476348330267,
+          "evaluated": 101,
+          "label": "unknown",
+          "reason": "historical QuietGuard CPU refusal (other censuses neutral)",
+          "run": "2026-11-07-rerun5",
+          "status": "REFUSE",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 2469.5739509591367,
+          "evaluated": 102,
+          "label": "unknown",
+          "reason": "historical QuietGuard CPU refusal (other censuses neutral)",
+          "run": "2026-11-07-rerun6",
+          "status": "REFUSE",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 2788.5654457909986,
+          "evaluated": 101,
+          "label": "unknown",
+          "reason": "CPU predicate only; other censuses neutral",
+          "run": "2026-11-07-rerun7",
+          "status": "PASS",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 883.9908436669502,
+          "evaluated": 4,
+          "label": "benign",
+          "reason": "CPU predicate only; other censuses neutral",
+          "run": "2026-11-07-rerun8",
+          "status": "PASS",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 91.91676416597329,
+          "evaluated": 4,
+          "label": "benign",
+          "reason": "CPU predicate only; other censuses neutral",
+          "run": "2026-11-07-rerun9",
+          "status": "PASS",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": true,
+          "coverage_complete": false,
+          "duration_s": 414.9999946000753,
+          "evaluated": 0,
+          "label": "contended",
+          "reason": "missing channel: pcpu_busy",
+          "run": "fakemac-monitor-journals",
+          "status": "UNSUPPORTED",
+          "stratum": "synthetic_fixture"
+        }
+      ],
+      "guard": "quiet-pre691",
+      "sources": [
+        {
+          "blob": "bf44abf35c3f904de509bd50017fe18f2053128d",
+          "commit": "165e1287290794bf4e3854997d2291651c784134",
+          "path": "joulewise/align/r0_host.py",
+          "sha256": "16dcc6d837f05187d4ce5d113e23ba15d2ee765feb22c5ec5f84ccac0035a1b3"
+        },
+        {
+          "blob": "d0639fe16b34450fd2eda0aff560d762f3350c2c",
+          "commit": "165e1287290794bf4e3854997d2291651c784134",
+          "historical_dependency_ast_matches_current": true,
+          "path": "joulewise/hazards/contention.py",
+          "sha256": "48c2471ce0963f857b923b82ec32cba35b7dbf894a71a688d90afb8334f1d6d5"
+        },
+        {
+          "blob": "7c82e7812b02c2ca197facfb7edde71af5d3bded",
+          "commit": "165e1287290794bf4e3854997d2291651c784134",
+          "historical_dependency_ast_matches_current": true,
+          "path": "joulewise/prewindow.py",
+          "sha256": "5dede36975a7882e135e84c9cff41e1f13af07e67110c244b65dca9a6ccf3d15"
+        }
+      ],
+      "strata": [
+        {
+          "assessment": "ABOVE_BOUND",
+          "complete_run_refused": 0,
+          "complete_run_trials": 0,
+          "complete_run_wilson_95": null,
+          "label": "benign",
+          "measured": 5,
+          "metric": "false_refusal",
+          "refusal_rate": 0.4,
+          "refused": 2,
+          "stratum": "recorded_incident",
+          "total": 5,
+          "unmeasured": 0,
+          "unsupported": 0,
+          "wilson_95": [
+            0.11762077423264783,
+            0.769275718723987
+          ]
+        },
+        {
+          "assessment": "DESCRIPTIVE",
+          "complete_run_refused": 0,
+          "complete_run_trials": 0,
+          "complete_run_wilson_95": null,
+          "label": "unknown",
+          "measured": 6,
+          "metric": "unlabelled_refusal",
+          "refusal_rate": 0.3333333333333333,
+          "refused": 2,
+          "stratum": "recorded_incident",
+          "total": 6,
+          "unmeasured": 0,
+          "unsupported": 0,
+          "wilson_95": [
+            0.09677141110578041,
+            0.700006684861608
+          ]
+        },
+        {
+          "assessment": "DESCRIPTIVE",
+          "complete_run_refused": 0,
+          "complete_run_trials": 0,
+          "complete_run_wilson_95": null,
+          "label": "contended",
+          "measured": 0,
+          "metric": "true_refusal",
+          "refusal_rate": null,
+          "refused": 0,
+          "stratum": "synthetic_fixture",
+          "total": 1,
+          "unmeasured": 0,
+          "unsupported": 1,
+          "wilson_95": null
+        }
+      ]
+    },
+    {
+      "decisions": [
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 20.635991541901603,
+          "evaluated": 0,
+          "label": "unknown",
+          "reason": "missing channel: quiet_busy",
+          "run": "2026-11-06",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 75.30726850009523,
+          "evaluated": 0,
+          "label": "unknown",
+          "reason": "missing channel: quiet_busy",
+          "run": "2026-11-06-rerun",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 159.71045295801014,
+          "evaluated": 0,
+          "label": "unknown",
+          "reason": "missing channel: quiet_busy",
+          "run": "2026-11-06-rerun2",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 987.0220399589743,
+          "evaluated": 4,
+          "label": "benign",
+          "reason": "CPU predicate only; other censuses neutral",
+          "run": "2026-11-07-rerun10",
+          "status": "PASS",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 157.91870095790364,
+          "evaluated": 0,
+          "label": "benign",
+          "reason": "missing channel: quiet_busy",
+          "run": "2026-11-07-rerun3",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 904.9629063329194,
+          "evaluated": 0,
+          "label": "benign",
+          "reason": "missing channel: quiet_busy",
+          "run": "2026-11-07-rerun4",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 2245.5476348330267,
+          "evaluated": 101,
+          "label": "unknown",
+          "reason": "CPU predicate only; other censuses neutral",
+          "run": "2026-11-07-rerun5",
+          "status": "PASS",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 2469.5739509591367,
+          "evaluated": 102,
+          "label": "unknown",
+          "reason": "CPU predicate only; other censuses neutral",
+          "run": "2026-11-07-rerun6",
+          "status": "PASS",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 2788.5654457909986,
+          "evaluated": 101,
+          "label": "unknown",
+          "reason": "CPU predicate only; other censuses neutral",
+          "run": "2026-11-07-rerun7",
+          "status": "PASS",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 883.9908436669502,
+          "evaluated": 4,
+          "label": "benign",
+          "reason": "CPU predicate only; other censuses neutral",
+          "run": "2026-11-07-rerun8",
+          "status": "PASS",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 91.91676416597329,
+          "evaluated": 4,
+          "label": "benign",
+          "reason": "CPU predicate only; other censuses neutral",
+          "run": "2026-11-07-rerun9",
+          "status": "PASS",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": true,
+          "coverage_complete": false,
+          "duration_s": 414.9999946000753,
+          "evaluated": 0,
+          "label": "contended",
+          "reason": "missing channel: quiet_busy",
+          "run": "fakemac-monitor-journals",
+          "status": "UNSUPPORTED",
+          "stratum": "synthetic_fixture"
+        }
+      ],
+      "guard": "quiet-prel3",
+      "sources": [
+        {
+          "blob": "a1c6e9b69406f4d8d5fc45dd14a491e6729b3b32",
+          "commit": "5f817856b33f65b269a44ea52811dbbed28d02a8",
+          "path": "joulewise/align/r0_host.py",
+          "sha256": "d7581647ea39a18151bf0c2b25475512595ec2aabfaa3ffa0c7d1e2a88fafe8d"
+        },
+        {
+          "blob": "d0639fe16b34450fd2eda0aff560d762f3350c2c",
+          "commit": "5f817856b33f65b269a44ea52811dbbed28d02a8",
+          "historical_dependency_ast_matches_current": true,
+          "path": "joulewise/hazards/contention.py",
+          "sha256": "48c2471ce0963f857b923b82ec32cba35b7dbf894a71a688d90afb8334f1d6d5"
+        },
+        {
+          "blob": "7c82e7812b02c2ca197facfb7edde71af5d3bded",
+          "commit": "5f817856b33f65b269a44ea52811dbbed28d02a8",
+          "historical_dependency_ast_matches_current": true,
+          "path": "joulewise/prewindow.py",
+          "sha256": "5dede36975a7882e135e84c9cff41e1f13af07e67110c244b65dca9a6ccf3d15"
+        }
+      ],
+      "strata": [
+        {
+          "assessment": "INSUFFICIENT",
+          "complete_run_refused": 0,
+          "complete_run_trials": 0,
+          "complete_run_wilson_95": null,
+          "label": "benign",
+          "measured": 3,
+          "metric": "false_refusal",
+          "refusal_rate": 0.0,
+          "refused": 0,
+          "stratum": "recorded_incident",
+          "total": 5,
+          "unmeasured": 0,
+          "unsupported": 2,
+          "wilson_95": [
+            5.551115123125783e-17,
+            0.5614970317550454
+          ]
+        },
+        {
+          "assessment": "DESCRIPTIVE",
+          "complete_run_refused": 0,
+          "complete_run_trials": 0,
+          "complete_run_wilson_95": null,
+          "label": "unknown",
+          "measured": 3,
+          "metric": "unlabelled_refusal",
+          "refusal_rate": 0.0,
+          "refused": 0,
+          "stratum": "recorded_incident",
+          "total": 6,
+          "unmeasured": 0,
+          "unsupported": 3,
+          "wilson_95": [
+            5.551115123125783e-17,
+            0.5614970317550454
+          ]
+        },
+        {
+          "assessment": "DESCRIPTIVE",
+          "complete_run_refused": 0,
+          "complete_run_trials": 0,
+          "complete_run_wilson_95": null,
+          "label": "contended",
+          "measured": 0,
+          "metric": "true_refusal",
+          "refusal_rate": null,
+          "refused": 0,
+          "stratum": "synthetic_fixture",
+          "total": 1,
+          "unmeasured": 0,
+          "unsupported": 1,
+          "wilson_95": null
+        }
+      ]
+    },
+    {
+      "decisions": [
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 20.635991541901603,
+          "evaluated": 0,
+          "label": "unknown",
+          "reason": "missing channel: quiet_busy",
+          "run": "2026-11-06",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 75.30726850009523,
+          "evaluated": 0,
+          "label": "unknown",
+          "reason": "missing channel: quiet_busy",
+          "run": "2026-11-06-rerun",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 159.71045295801014,
+          "evaluated": 0,
+          "label": "unknown",
+          "reason": "missing channel: quiet_busy",
+          "run": "2026-11-06-rerun2",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 987.0220399589743,
+          "evaluated": 4,
+          "label": "benign",
+          "reason": "CPU predicate only; other censuses neutral",
+          "run": "2026-11-07-rerun10",
+          "status": "PASS",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 157.91870095790364,
+          "evaluated": 0,
+          "label": "benign",
+          "reason": "missing channel: quiet_busy",
+          "run": "2026-11-07-rerun3",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 904.9629063329194,
+          "evaluated": 0,
+          "label": "benign",
+          "reason": "missing channel: quiet_busy",
+          "run": "2026-11-07-rerun4",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 2245.5476348330267,
+          "evaluated": 101,
+          "label": "unknown",
+          "reason": "CPU predicate only; other censuses neutral",
+          "run": "2026-11-07-rerun5",
+          "status": "PASS",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 2469.5739509591367,
+          "evaluated": 102,
+          "label": "unknown",
+          "reason": "CPU predicate only; other censuses neutral",
+          "run": "2026-11-07-rerun6",
+          "status": "PASS",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 2788.5654457909986,
+          "evaluated": 101,
+          "label": "unknown",
+          "reason": "CPU predicate only; other censuses neutral",
+          "run": "2026-11-07-rerun7",
+          "status": "PASS",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 883.9908436669502,
+          "evaluated": 4,
+          "label": "benign",
+          "reason": "CPU predicate only; other censuses neutral",
+          "run": "2026-11-07-rerun8",
+          "status": "PASS",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 91.91676416597329,
+          "evaluated": 4,
+          "label": "benign",
+          "reason": "CPU predicate only; other censuses neutral",
+          "run": "2026-11-07-rerun9",
+          "status": "PASS",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": true,
+          "coverage_complete": false,
+          "duration_s": 414.9999946000753,
+          "evaluated": 0,
+          "label": "contended",
+          "reason": "missing channel: quiet_busy",
+          "run": "fakemac-monitor-journals",
+          "status": "UNSUPPORTED",
+          "stratum": "synthetic_fixture"
+        }
+      ],
+      "guard": "quiet-l3",
+      "sources": [
+        {
+          "blob": "6f7e4ffeb546622410354ee837273e3f2ebf2fe4",
+          "commit": "9c40e4e5d9fa453cce3c70984e11fa382b7d4591",
+          "path": "joulewise/align/r0_host.py",
+          "sha256": "d1116e375e3e2b197c25920954112da501b8d573b50ea7780020a47b07c4b441"
+        },
+        {
+          "blob": "d0639fe16b34450fd2eda0aff560d762f3350c2c",
+          "commit": "9c40e4e5d9fa453cce3c70984e11fa382b7d4591",
+          "historical_dependency_ast_matches_current": true,
+          "path": "joulewise/hazards/contention.py",
+          "sha256": "48c2471ce0963f857b923b82ec32cba35b7dbf894a71a688d90afb8334f1d6d5"
+        },
+        {
+          "blob": "7c82e7812b02c2ca197facfb7edde71af5d3bded",
+          "commit": "9c40e4e5d9fa453cce3c70984e11fa382b7d4591",
+          "historical_dependency_ast_matches_current": true,
+          "path": "joulewise/prewindow.py",
+          "sha256": "5dede36975a7882e135e84c9cff41e1f13af07e67110c244b65dca9a6ccf3d15"
+        }
+      ],
+      "strata": [
+        {
+          "assessment": "INSUFFICIENT",
+          "complete_run_refused": 0,
+          "complete_run_trials": 0,
+          "complete_run_wilson_95": null,
+          "label": "benign",
+          "measured": 3,
+          "metric": "false_refusal",
+          "refusal_rate": 0.0,
+          "refused": 0,
+          "stratum": "recorded_incident",
+          "total": 5,
+          "unmeasured": 0,
+          "unsupported": 2,
+          "wilson_95": [
+            5.551115123125783e-17,
+            0.5614970317550454
+          ]
+        },
+        {
+          "assessment": "DESCRIPTIVE",
+          "complete_run_refused": 0,
+          "complete_run_trials": 0,
+          "complete_run_wilson_95": null,
+          "label": "unknown",
+          "measured": 3,
+          "metric": "unlabelled_refusal",
+          "refusal_rate": 0.0,
+          "refused": 0,
+          "stratum": "recorded_incident",
+          "total": 6,
+          "unmeasured": 0,
+          "unsupported": 3,
+          "wilson_95": [
+            5.551115123125783e-17,
+            0.5614970317550454
+          ]
+        },
+        {
+          "assessment": "DESCRIPTIVE",
+          "complete_run_refused": 0,
+          "complete_run_trials": 0,
+          "complete_run_wilson_95": null,
+          "label": "contended",
+          "measured": 0,
+          "metric": "true_refusal",
+          "refusal_rate": null,
+          "refused": 0,
+          "stratum": "synthetic_fixture",
+          "total": 1,
+          "unmeasured": 0,
+          "unsupported": 1,
+          "wilson_95": null
+        }
+      ]
+    },
+    {
+      "decisions": [
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 20.635991541901603,
+          "evaluated": 0,
+          "label": "unknown",
+          "reason": "missing channel: smc_cpu",
+          "run": "2026-11-06",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 75.30726850009523,
+          "evaluated": 0,
+          "label": "unknown",
+          "reason": "missing channel: smc_cpu",
+          "run": "2026-11-06-rerun",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 159.71045295801014,
+          "evaluated": 0,
+          "label": "unknown",
+          "reason": "missing channel: smc_cpu",
+          "run": "2026-11-06-rerun2",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 987.0220399589743,
+          "evaluated": 0,
+          "label": "benign",
+          "reason": "old 1 s/aggregate probe requires matching receipt or raw counters",
+          "run": "2026-11-07-rerun10",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 157.91870095790364,
+          "evaluated": 0,
+          "label": "benign",
+          "reason": "missing channel: smc_cpu",
+          "run": "2026-11-07-rerun3",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 904.9629063329194,
+          "evaluated": 1,
+          "label": "benign",
+          "reason": "historical SMC admission refusal",
+          "run": "2026-11-07-rerun4",
+          "status": "REFUSE",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 2245.5476348330267,
+          "evaluated": 0,
+          "label": "unknown",
+          "reason": "old 1 s/aggregate probe requires matching receipt or raw counters",
+          "run": "2026-11-07-rerun5",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 2469.5739509591367,
+          "evaluated": 0,
+          "label": "unknown",
+          "reason": "old 1 s/aggregate probe requires matching receipt or raw counters",
+          "run": "2026-11-07-rerun6",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 2788.5654457909986,
+          "evaluated": 0,
+          "label": "unknown",
+          "reason": "missing channel: smc_cpu",
+          "run": "2026-11-07-rerun7",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 883.9908436669502,
+          "evaluated": 0,
+          "label": "benign",
+          "reason": "old 1 s/aggregate probe requires matching receipt or raw counters",
+          "run": "2026-11-07-rerun8",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 91.91676416597329,
+          "evaluated": 0,
+          "label": "benign",
+          "reason": "old 1 s/aggregate probe requires matching receipt or raw counters",
+          "run": "2026-11-07-rerun9",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": true,
+          "coverage_complete": false,
+          "duration_s": 414.9999946000753,
+          "evaluated": 0,
+          "label": "contended",
+          "reason": "missing channel: smc_cpu",
+          "run": "fakemac-monitor-journals",
+          "status": "UNSUPPORTED",
+          "stratum": "synthetic_fixture"
+        }
+      ],
+      "guard": "smc-pre691",
+      "sources": [
+        {
+          "blob": "c0c0028a377bbb8c225322ffdfe74222e04dc145",
+          "commit": "165e1287290794bf4e3854997d2291651c784134",
+          "path": "joulewise/align/apple/smc_enumeration.py",
+          "sha256": "7853e63745d69424d1c3868a75dddcb9ec79e19a25667d66b03239866fc16821"
+        },
+        {
+          "blob": "d0639fe16b34450fd2eda0aff560d762f3350c2c",
+          "commit": "165e1287290794bf4e3854997d2291651c784134",
+          "historical_dependency_ast_matches_current": true,
+          "path": "joulewise/hazards/contention.py",
+          "sha256": "48c2471ce0963f857b923b82ec32cba35b7dbf894a71a688d90afb8334f1d6d5"
+        },
+        {
+          "blob": "7c82e7812b02c2ca197facfb7edde71af5d3bded",
+          "commit": "165e1287290794bf4e3854997d2291651c784134",
+          "historical_dependency_ast_matches_current": true,
+          "path": "joulewise/prewindow.py",
+          "sha256": "5dede36975a7882e135e84c9cff41e1f13af07e67110c244b65dca9a6ccf3d15"
+        }
+      ],
+      "strata": [
+        {
+          "assessment": "ABOVE_BOUND",
+          "complete_run_refused": 0,
+          "complete_run_trials": 0,
+          "complete_run_wilson_95": null,
+          "label": "benign",
+          "measured": 1,
+          "metric": "false_refusal",
+          "refusal_rate": 1.0,
+          "refused": 1,
+          "stratum": "recorded_incident",
+          "total": 5,
+          "unmeasured": 0,
+          "unsupported": 4,
+          "wilson_95": [
+            0.20654931437723745,
+            1.0
+          ]
+        },
+        {
+          "assessment": "DESCRIPTIVE",
+          "complete_run_refused": 0,
+          "complete_run_trials": 0,
+          "complete_run_wilson_95": null,
+          "label": "unknown",
+          "measured": 0,
+          "metric": "unlabelled_refusal",
+          "refusal_rate": null,
+          "refused": 0,
+          "stratum": "recorded_incident",
+          "total": 6,
+          "unmeasured": 0,
+          "unsupported": 6,
+          "wilson_95": null
+        },
+        {
+          "assessment": "DESCRIPTIVE",
+          "complete_run_refused": 0,
+          "complete_run_trials": 0,
+          "complete_run_wilson_95": null,
+          "label": "contended",
+          "measured": 0,
+          "metric": "true_refusal",
+          "refusal_rate": null,
+          "refused": 0,
+          "stratum": "synthetic_fixture",
+          "total": 1,
+          "unmeasured": 0,
+          "unsupported": 1,
+          "wilson_95": null
+        }
+      ]
+    },
+    {
+      "decisions": [
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 20.635991541901603,
+          "evaluated": 0,
+          "label": "unknown",
+          "reason": "missing channel: smc_cpu",
+          "run": "2026-11-06",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 75.30726850009523,
+          "evaluated": 0,
+          "label": "unknown",
+          "reason": "missing channel: smc_cpu",
+          "run": "2026-11-06-rerun",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 159.71045295801014,
+          "evaluated": 0,
+          "label": "unknown",
+          "reason": "missing channel: smc_cpu",
+          "run": "2026-11-06-rerun2",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 987.0220399589743,
+          "evaluated": 1,
+          "label": "benign",
+          "reason": "historical SMC admission refusal",
+          "run": "2026-11-07-rerun10",
+          "status": "REFUSE",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 157.91870095790364,
+          "evaluated": 0,
+          "label": "benign",
+          "reason": "missing channel: smc_cpu",
+          "run": "2026-11-07-rerun3",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 904.9629063329194,
+          "evaluated": 0,
+          "label": "benign",
+          "reason": "30 s baseline absent in old receipt",
+          "run": "2026-11-07-rerun4",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 2245.5476348330267,
+          "evaluated": 1,
+          "label": "unknown",
+          "reason": "historical SMC admission refusal",
+          "run": "2026-11-07-rerun5",
+          "status": "REFUSE",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 2469.5739509591367,
+          "evaluated": 1,
+          "label": "unknown",
+          "reason": "historical SMC admission refusal",
+          "run": "2026-11-07-rerun6",
+          "status": "REFUSE",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 2788.5654457909986,
+          "evaluated": 0,
+          "label": "unknown",
+          "reason": "missing channel: smc_cpu",
+          "run": "2026-11-07-rerun7",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 883.9908436669502,
+          "evaluated": 1,
+          "label": "benign",
+          "reason": "historical SMC admission refusal",
+          "run": "2026-11-07-rerun8",
+          "status": "REFUSE",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 91.91676416597329,
+          "evaluated": 1,
+          "label": "benign",
+          "reason": "historical SMC admission refusal",
+          "run": "2026-11-07-rerun9",
+          "status": "REFUSE",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": true,
+          "coverage_complete": false,
+          "duration_s": 414.9999946000753,
+          "evaluated": 0,
+          "label": "contended",
+          "reason": "missing channel: smc_cpu",
+          "run": "fakemac-monitor-journals",
+          "status": "UNSUPPORTED",
+          "stratum": "synthetic_fixture"
+        }
+      ],
+      "guard": "smc-prel3",
+      "sources": [
+        {
+          "blob": "6a4f866a5df859cc81f73c3f514a9792780b1d48",
+          "commit": "5f817856b33f65b269a44ea52811dbbed28d02a8",
+          "path": "joulewise/align/apple/smc_enumeration.py",
+          "sha256": "001c8171de48a4edc9a1fb63ab45ef9010e5a08ebcced81aefd69b8e1303132a"
+        },
+        {
+          "blob": "d0639fe16b34450fd2eda0aff560d762f3350c2c",
+          "commit": "5f817856b33f65b269a44ea52811dbbed28d02a8",
+          "historical_dependency_ast_matches_current": true,
+          "path": "joulewise/hazards/contention.py",
+          "sha256": "48c2471ce0963f857b923b82ec32cba35b7dbf894a71a688d90afb8334f1d6d5"
+        },
+        {
+          "blob": "7c82e7812b02c2ca197facfb7edde71af5d3bded",
+          "commit": "5f817856b33f65b269a44ea52811dbbed28d02a8",
+          "historical_dependency_ast_matches_current": true,
+          "path": "joulewise/prewindow.py",
+          "sha256": "5dede36975a7882e135e84c9cff41e1f13af07e67110c244b65dca9a6ccf3d15"
+        }
+      ],
+      "strata": [
+        {
+          "assessment": "ABOVE_BOUND",
+          "complete_run_refused": 0,
+          "complete_run_trials": 0,
+          "complete_run_wilson_95": null,
+          "label": "benign",
+          "measured": 3,
+          "metric": "false_refusal",
+          "refusal_rate": 1.0,
+          "refused": 3,
+          "stratum": "recorded_incident",
+          "total": 5,
+          "unmeasured": 0,
+          "unsupported": 2,
+          "wilson_95": [
+            0.4385029682449546,
+            1.0
+          ]
+        },
+        {
+          "assessment": "DESCRIPTIVE",
+          "complete_run_refused": 0,
+          "complete_run_trials": 0,
+          "complete_run_wilson_95": null,
+          "label": "unknown",
+          "measured": 2,
+          "metric": "unlabelled_refusal",
+          "refusal_rate": 1.0,
+          "refused": 2,
+          "stratum": "recorded_incident",
+          "total": 6,
+          "unmeasured": 0,
+          "unsupported": 4,
+          "wilson_95": [
+            0.34238022750665303,
+            1.0
+          ]
+        },
+        {
+          "assessment": "DESCRIPTIVE",
+          "complete_run_refused": 0,
+          "complete_run_trials": 0,
+          "complete_run_wilson_95": null,
+          "label": "contended",
+          "measured": 0,
+          "metric": "true_refusal",
+          "refusal_rate": null,
+          "refused": 0,
+          "stratum": "synthetic_fixture",
+          "total": 1,
+          "unmeasured": 0,
+          "unsupported": 1,
+          "wilson_95": null
+        }
+      ]
+    },
+    {
+      "decisions": [
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 20.635991541901603,
+          "evaluated": 0,
+          "label": "unknown",
+          "reason": "missing channel: smc_cpu",
+          "run": "2026-11-06",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 75.30726850009523,
+          "evaluated": 0,
+          "label": "unknown",
+          "reason": "missing channel: smc_cpu",
+          "run": "2026-11-06-rerun",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 159.71045295801014,
+          "evaluated": 0,
+          "label": "unknown",
+          "reason": "missing channel: smc_cpu",
+          "run": "2026-11-06-rerun2",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 987.0220399589743,
+          "evaluated": 1,
+          "label": "benign",
+          "reason": "SMC CPU predicate; other censuses neutral",
+          "run": "2026-11-07-rerun10",
+          "status": "PASS",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 157.91870095790364,
+          "evaluated": 0,
+          "label": "benign",
+          "reason": "missing channel: smc_cpu",
+          "run": "2026-11-07-rerun3",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 904.9629063329194,
+          "evaluated": 0,
+          "label": "benign",
+          "reason": "30 s baseline absent in old receipt",
+          "run": "2026-11-07-rerun4",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 2245.5476348330267,
+          "evaluated": 1,
+          "label": "unknown",
+          "reason": "SMC CPU predicate; other censuses neutral",
+          "run": "2026-11-07-rerun5",
+          "status": "PASS",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 2469.5739509591367,
+          "evaluated": 1,
+          "label": "unknown",
+          "reason": "SMC CPU predicate; other censuses neutral",
+          "run": "2026-11-07-rerun6",
+          "status": "PASS",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 2788.5654457909986,
+          "evaluated": 0,
+          "label": "unknown",
+          "reason": "missing channel: smc_cpu",
+          "run": "2026-11-07-rerun7",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 883.9908436669502,
+          "evaluated": 1,
+          "label": "benign",
+          "reason": "SMC CPU predicate; other censuses neutral",
+          "run": "2026-11-07-rerun8",
+          "status": "PASS",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 91.91676416597329,
+          "evaluated": 1,
+          "label": "benign",
+          "reason": "SMC CPU predicate; other censuses neutral",
+          "run": "2026-11-07-rerun9",
+          "status": "PASS",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": true,
+          "coverage_complete": false,
+          "duration_s": 414.9999946000753,
+          "evaluated": 0,
+          "label": "contended",
+          "reason": "missing channel: smc_cpu",
+          "run": "fakemac-monitor-journals",
+          "status": "UNSUPPORTED",
+          "stratum": "synthetic_fixture"
+        }
+      ],
+      "guard": "smc-l3-redo",
+      "sources": [
+        {
+          "blob": "8a1a96dcb10ebb16809717af15918d5366b0d31c",
+          "commit": "9c40e4e5d9fa453cce3c70984e11fa382b7d4591",
+          "path": "joulewise/align/apple/smc_enumeration.py",
+          "sha256": "0132579cc33f8a997cdfd5f3dd84466352cdeeeebf9ca7de8dc1ec7990cea0a9"
+        },
+        {
+          "blob": "d0639fe16b34450fd2eda0aff560d762f3350c2c",
+          "commit": "9c40e4e5d9fa453cce3c70984e11fa382b7d4591",
+          "historical_dependency_ast_matches_current": true,
+          "path": "joulewise/hazards/contention.py",
+          "sha256": "48c2471ce0963f857b923b82ec32cba35b7dbf894a71a688d90afb8334f1d6d5"
+        },
+        {
+          "blob": "7c82e7812b02c2ca197facfb7edde71af5d3bded",
+          "commit": "9c40e4e5d9fa453cce3c70984e11fa382b7d4591",
+          "historical_dependency_ast_matches_current": true,
+          "path": "joulewise/prewindow.py",
+          "sha256": "5dede36975a7882e135e84c9cff41e1f13af07e67110c244b65dca9a6ccf3d15"
+        }
+      ],
+      "strata": [
+        {
+          "assessment": "INSUFFICIENT",
+          "complete_run_refused": 0,
+          "complete_run_trials": 0,
+          "complete_run_wilson_95": null,
+          "label": "benign",
+          "measured": 3,
+          "metric": "false_refusal",
+          "refusal_rate": 0.0,
+          "refused": 0,
+          "stratum": "recorded_incident",
+          "total": 5,
+          "unmeasured": 0,
+          "unsupported": 2,
+          "wilson_95": [
+            5.551115123125783e-17,
+            0.5614970317550454
+          ]
+        },
+        {
+          "assessment": "DESCRIPTIVE",
+          "complete_run_refused": 0,
+          "complete_run_trials": 0,
+          "complete_run_wilson_95": null,
+          "label": "unknown",
+          "measured": 2,
+          "metric": "unlabelled_refusal",
+          "refusal_rate": 0.0,
+          "refused": 0,
+          "stratum": "recorded_incident",
+          "total": 6,
+          "unmeasured": 0,
+          "unsupported": 4,
+          "wilson_95": [
+            0.0,
+            0.6576197724933469
+          ]
+        },
+        {
+          "assessment": "DESCRIPTIVE",
+          "complete_run_refused": 0,
+          "complete_run_trials": 0,
+          "complete_run_wilson_95": null,
+          "label": "contended",
+          "measured": 0,
+          "metric": "true_refusal",
+          "refusal_rate": null,
+          "refused": 0,
+          "stratum": "synthetic_fixture",
+          "total": 1,
+          "unmeasured": 0,
+          "unsupported": 1,
+          "wilson_95": null
+        }
+      ]
+    },
+    {
+      "decisions": [
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 20.635991541901603,
+          "evaluated": 0,
+          "label": "unknown",
+          "reason": "missing channel: snapshot",
+          "run": "2026-11-06",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 75.30726850009523,
+          "evaluated": 0,
+          "label": "unknown",
+          "reason": "missing channel: snapshot",
+          "run": "2026-11-06-rerun",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 159.71045295801014,
+          "evaluated": 0,
+          "label": "unknown",
+          "reason": "missing channel: snapshot",
+          "run": "2026-11-06-rerun2",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 987.0220399589743,
+          "evaluated": 0,
+          "label": "benign",
+          "reason": "missing channel: snapshot",
+          "run": "2026-11-07-rerun10",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 157.91870095790364,
+          "evaluated": 0,
+          "label": "benign",
+          "reason": "missing channel: snapshot",
+          "run": "2026-11-07-rerun3",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 904.9629063329194,
+          "evaluated": 0,
+          "label": "benign",
+          "reason": "missing channel: snapshot",
+          "run": "2026-11-07-rerun4",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 2245.5476348330267,
+          "evaluated": 0,
+          "label": "unknown",
+          "reason": "missing channel: snapshot",
+          "run": "2026-11-07-rerun5",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 2469.5739509591367,
+          "evaluated": 0,
+          "label": "unknown",
+          "reason": "missing channel: snapshot",
+          "run": "2026-11-07-rerun6",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 2788.5654457909986,
+          "evaluated": 0,
+          "label": "unknown",
+          "reason": "missing channel: snapshot",
+          "run": "2026-11-07-rerun7",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 883.9908436669502,
+          "evaluated": 0,
+          "label": "benign",
+          "reason": "missing channel: snapshot",
+          "run": "2026-11-07-rerun8",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 91.91676416597329,
+          "evaluated": 0,
+          "label": "benign",
+          "reason": "missing channel: snapshot",
+          "run": "2026-11-07-rerun9",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": true,
+          "coverage_complete": false,
+          "duration_s": 414.9999946000753,
+          "evaluated": 0,
+          "label": "contended",
+          "reason": "missing channel: snapshot",
+          "run": "fakemac-monitor-journals",
+          "status": "UNSUPPORTED",
+          "stratum": "synthetic_fixture"
+        }
+      ],
+      "guard": "contention-arm",
+      "sources": [
+        {
+          "path": "joulewise/hazards/contention.py",
+          "sha256": "59fc119f4cff70e042ff69557c90fe7fa8cc715406a475b57e9b3f7529b105b2"
+        }
+      ],
+      "strata": [
+        {
+          "assessment": "INSUFFICIENT",
+          "complete_run_refused": 0,
+          "complete_run_trials": 0,
+          "complete_run_wilson_95": null,
+          "label": "benign",
+          "measured": 0,
+          "metric": "false_refusal",
+          "refusal_rate": null,
+          "refused": 0,
+          "stratum": "recorded_incident",
+          "total": 5,
+          "unmeasured": 0,
+          "unsupported": 5,
+          "wilson_95": null
+        },
+        {
+          "assessment": "DESCRIPTIVE",
+          "complete_run_refused": 0,
+          "complete_run_trials": 0,
+          "complete_run_wilson_95": null,
+          "label": "unknown",
+          "measured": 0,
+          "metric": "unlabelled_refusal",
+          "refusal_rate": null,
+          "refused": 0,
+          "stratum": "recorded_incident",
+          "total": 6,
+          "unmeasured": 0,
+          "unsupported": 6,
+          "wilson_95": null
+        },
+        {
+          "assessment": "DESCRIPTIVE",
+          "complete_run_refused": 0,
+          "complete_run_trials": 0,
+          "complete_run_wilson_95": null,
+          "label": "contended",
+          "measured": 0,
+          "metric": "true_refusal",
+          "refusal_rate": null,
+          "refused": 0,
+          "stratum": "synthetic_fixture",
+          "total": 1,
+          "unmeasured": 0,
+          "unsupported": 1,
+          "wilson_95": null
+        }
+      ]
+    },
+    {
+      "decisions": [
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 20.635991541901603,
+          "evaluated": 0,
+          "label": "unknown",
+          "reason": "missing channel: contention_interval",
+          "run": "2026-11-06",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 75.30726850009523,
+          "evaluated": 0,
+          "label": "unknown",
+          "reason": "missing channel: contention_interval",
+          "run": "2026-11-06-rerun",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 159.71045295801014,
+          "evaluated": 0,
+          "label": "unknown",
+          "reason": "missing channel: contention_interval",
+          "run": "2026-11-06-rerun2",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 987.0220399589743,
+          "evaluated": 0,
+          "label": "benign",
+          "reason": "missing channel: contention_interval",
+          "run": "2026-11-07-rerun10",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 157.91870095790364,
+          "evaluated": 0,
+          "label": "benign",
+          "reason": "missing channel: contention_interval",
+          "run": "2026-11-07-rerun3",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 904.9629063329194,
+          "evaluated": 0,
+          "label": "benign",
+          "reason": "missing channel: contention_interval",
+          "run": "2026-11-07-rerun4",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 2245.5476348330267,
+          "evaluated": 0,
+          "label": "unknown",
+          "reason": "missing channel: contention_interval",
+          "run": "2026-11-07-rerun5",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 2469.5739509591367,
+          "evaluated": 0,
+          "label": "unknown",
+          "reason": "missing channel: contention_interval",
+          "run": "2026-11-07-rerun6",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 2788.5654457909986,
+          "evaluated": 0,
+          "label": "unknown",
+          "reason": "missing channel: contention_interval",
+          "run": "2026-11-07-rerun7",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 883.9908436669502,
+          "evaluated": 0,
+          "label": "benign",
+          "reason": "missing channel: contention_interval",
+          "run": "2026-11-07-rerun8",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 91.91676416597329,
+          "evaluated": 0,
+          "label": "benign",
+          "reason": "missing channel: contention_interval",
+          "run": "2026-11-07-rerun9",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": true,
+          "coverage_complete": false,
+          "duration_s": 414.9999946000753,
+          "evaluated": 41,
+          "label": "contended",
+          "reason": "request predicate: contention.request_overlap, contention.request_overlap",
+          "run": "fakemac-monitor-journals",
+          "status": "REFUSE",
+          "stratum": "synthetic_fixture"
+        }
+      ],
+      "guard": "contention-request",
+      "sources": [
+        {
+          "path": "joulewise/hazards/contention.py",
+          "sha256": "59fc119f4cff70e042ff69557c90fe7fa8cc715406a475b57e9b3f7529b105b2"
+        }
+      ],
+      "strata": [
+        {
+          "assessment": "INSUFFICIENT",
+          "complete_run_refused": 0,
+          "complete_run_trials": 0,
+          "complete_run_wilson_95": null,
+          "label": "benign",
+          "measured": 0,
+          "metric": "false_refusal",
+          "refusal_rate": null,
+          "refused": 0,
+          "stratum": "recorded_incident",
+          "total": 5,
+          "unmeasured": 0,
+          "unsupported": 5,
+          "wilson_95": null
+        },
+        {
+          "assessment": "DESCRIPTIVE",
+          "complete_run_refused": 0,
+          "complete_run_trials": 0,
+          "complete_run_wilson_95": null,
+          "label": "unknown",
+          "measured": 0,
+          "metric": "unlabelled_refusal",
+          "refusal_rate": null,
+          "refused": 0,
+          "stratum": "recorded_incident",
+          "total": 6,
+          "unmeasured": 0,
+          "unsupported": 6,
+          "wilson_95": null
+        },
+        {
+          "assessment": "DESCRIPTIVE",
+          "complete_run_refused": 0,
+          "complete_run_trials": 0,
+          "complete_run_wilson_95": null,
+          "label": "contended",
+          "measured": 1,
+          "metric": "true_refusal",
+          "refusal_rate": 1.0,
+          "refused": 1,
+          "stratum": "synthetic_fixture",
+          "total": 1,
+          "unmeasured": 0,
+          "unsupported": 0,
+          "wilson_95": [
+            0.20654931437723745,
+            1.0
+          ]
+        }
+      ]
+    },
+    {
+      "decisions": [
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 20.635991541901603,
+          "evaluated": 0,
+          "label": "unknown",
+          "reason": "missing channel: environment",
+          "run": "2026-11-06",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 75.30726850009523,
+          "evaluated": 0,
+          "label": "unknown",
+          "reason": "missing channel: environment",
+          "run": "2026-11-06-rerun",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 159.71045295801014,
+          "evaluated": 0,
+          "label": "unknown",
+          "reason": "missing channel: environment",
+          "run": "2026-11-06-rerun2",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 987.0220399589743,
+          "evaluated": 0,
+          "label": "benign",
+          "reason": "missing channel: environment",
+          "run": "2026-11-07-rerun10",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 157.91870095790364,
+          "evaluated": 0,
+          "label": "benign",
+          "reason": "missing channel: environment",
+          "run": "2026-11-07-rerun3",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 904.9629063329194,
+          "evaluated": 0,
+          "label": "benign",
+          "reason": "missing channel: environment",
+          "run": "2026-11-07-rerun4",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 2245.5476348330267,
+          "evaluated": 0,
+          "label": "unknown",
+          "reason": "missing channel: environment",
+          "run": "2026-11-07-rerun5",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 2469.5739509591367,
+          "evaluated": 0,
+          "label": "unknown",
+          "reason": "missing channel: environment",
+          "run": "2026-11-07-rerun6",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 2788.5654457909986,
+          "evaluated": 0,
+          "label": "unknown",
+          "reason": "missing channel: environment",
+          "run": "2026-11-07-rerun7",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 883.9908436669502,
+          "evaluated": 0,
+          "label": "benign",
+          "reason": "missing channel: environment",
+          "run": "2026-11-07-rerun8",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 91.91676416597329,
+          "evaluated": 0,
+          "label": "benign",
+          "reason": "missing channel: environment",
+          "run": "2026-11-07-rerun9",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": true,
+          "coverage_complete": false,
+          "duration_s": 414.9999946000753,
+          "evaluated": 0,
+          "label": "contended",
+          "reason": "missing channel: environment",
+          "run": "fakemac-monitor-journals",
+          "status": "UNSUPPORTED",
+          "stratum": "synthetic_fixture"
+        }
+      ],
+      "guard": "display",
+      "sources": [
+        {
+          "path": "joulewise/environment_admission.py",
+          "sha256": "bc770b1072499527b5a030232a9c67bd84ea835d9d15ab105967d2bc71000aed"
+        }
+      ],
+      "strata": [
+        {
+          "assessment": "INSUFFICIENT",
+          "complete_run_refused": 0,
+          "complete_run_trials": 0,
+          "complete_run_wilson_95": null,
+          "label": "benign",
+          "measured": 0,
+          "metric": "false_refusal",
+          "refusal_rate": null,
+          "refused": 0,
+          "stratum": "recorded_incident",
+          "total": 5,
+          "unmeasured": 0,
+          "unsupported": 5,
+          "wilson_95": null
+        },
+        {
+          "assessment": "DESCRIPTIVE",
+          "complete_run_refused": 0,
+          "complete_run_trials": 0,
+          "complete_run_wilson_95": null,
+          "label": "unknown",
+          "measured": 0,
+          "metric": "unlabelled_refusal",
+          "refusal_rate": null,
+          "refused": 0,
+          "stratum": "recorded_incident",
+          "total": 6,
+          "unmeasured": 0,
+          "unsupported": 6,
+          "wilson_95": null
+        },
+        {
+          "assessment": "DESCRIPTIVE",
+          "complete_run_refused": 0,
+          "complete_run_trials": 0,
+          "complete_run_wilson_95": null,
+          "label": "contended",
+          "measured": 0,
+          "metric": "true_refusal",
+          "refusal_rate": null,
+          "refused": 0,
+          "stratum": "synthetic_fixture",
+          "total": 1,
+          "unmeasured": 0,
+          "unsupported": 1,
+          "wilson_95": null
+        }
+      ]
+    },
+    {
+      "decisions": [
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 20.635991541901603,
+          "evaluated": 0,
+          "label": "unknown",
+          "reason": "missing channel: thermal",
+          "run": "2026-11-06",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 75.30726850009523,
+          "evaluated": 0,
+          "label": "unknown",
+          "reason": "missing channel: thermal",
+          "run": "2026-11-06-rerun",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 159.71045295801014,
+          "evaluated": 0,
+          "label": "unknown",
+          "reason": "missing channel: thermal",
+          "run": "2026-11-06-rerun2",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 987.0220399589743,
+          "evaluated": 0,
+          "label": "benign",
+          "reason": "missing channel: thermal",
+          "run": "2026-11-07-rerun10",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 157.91870095790364,
+          "evaluated": 0,
+          "label": "benign",
+          "reason": "missing channel: thermal",
+          "run": "2026-11-07-rerun3",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 904.9629063329194,
+          "evaluated": 0,
+          "label": "benign",
+          "reason": "missing channel: thermal",
+          "run": "2026-11-07-rerun4",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 2245.5476348330267,
+          "evaluated": 0,
+          "label": "unknown",
+          "reason": "missing channel: thermal",
+          "run": "2026-11-07-rerun5",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 2469.5739509591367,
+          "evaluated": 0,
+          "label": "unknown",
+          "reason": "missing channel: thermal",
+          "run": "2026-11-07-rerun6",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 2788.5654457909986,
+          "evaluated": 0,
+          "label": "unknown",
+          "reason": "missing channel: thermal",
+          "run": "2026-11-07-rerun7",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 883.9908436669502,
+          "evaluated": 0,
+          "label": "benign",
+          "reason": "missing channel: thermal",
+          "run": "2026-11-07-rerun8",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": false,
+          "coverage_complete": false,
+          "duration_s": 91.91676416597329,
+          "evaluated": 0,
+          "label": "benign",
+          "reason": "missing channel: thermal",
+          "run": "2026-11-07-rerun9",
+          "status": "UNSUPPORTED",
+          "stratum": "recorded_incident"
+        },
+        {
+          "complete": true,
+          "coverage_complete": true,
+          "duration_s": 414.9999946000753,
+          "evaluated": 41,
+          "label": "contended",
+          "reason": "OS thermal pressure level 1 is not nominal (limit 0)",
+          "run": "fakemac-monitor-journals",
+          "status": "REFUSE",
+          "stratum": "synthetic_fixture"
+        }
+      ],
+      "guard": "thermal",
+      "sources": [
+        {
+          "path": "joulewise/hazards/thermal.py",
+          "sha256": "586ede094ee2b80b703c434fe4915c0b7cd00b1a5005976aeb0a77e494b5b73b"
+        }
+      ],
+      "strata": [
+        {
+          "assessment": "INSUFFICIENT",
+          "complete_run_refused": 0,
+          "complete_run_trials": 0,
+          "complete_run_wilson_95": null,
+          "label": "benign",
+          "measured": 0,
+          "metric": "false_refusal",
+          "refusal_rate": null,
+          "refused": 0,
+          "stratum": "recorded_incident",
+          "total": 5,
+          "unmeasured": 0,
+          "unsupported": 5,
+          "wilson_95": null
+        },
+        {
+          "assessment": "DESCRIPTIVE",
+          "complete_run_refused": 0,
+          "complete_run_trials": 0,
+          "complete_run_wilson_95": null,
+          "label": "unknown",
+          "measured": 0,
+          "metric": "unlabelled_refusal",
+          "refusal_rate": null,
+          "refused": 0,
+          "stratum": "recorded_incident",
+          "total": 6,
+          "unmeasured": 0,
+          "unsupported": 6,
+          "wilson_95": null
+        },
+        {
+          "assessment": "DESCRIPTIVE",
+          "complete_run_refused": 0,
+          "complete_run_trials": 0,
+          "complete_run_wilson_95": null,
+          "label": "contended",
+          "measured": 1,
+          "metric": "true_refusal",
+          "refusal_rate": 1.0,
+          "refused": 1,
+          "stratum": "synthetic_fixture",
+          "total": 1,
+          "unmeasured": 0,
+          "unsupported": 0,
+          "wilson_95": [
+            0.20654931437723745,
+            1.0
+          ]
+        }
+      ]
+    }
+  ],
+  "idle_bound": 0.05,
+  "implementation_sha256": {
+    "joulewise/guard_replay.py": "54fa251a1b0b1c47e7dde864b5a6d255a210dbf5e9f0b2be539694fbe786a1bf",
+    "joulewise/guard_replay_corpus.py": "a8920d88111c21a674e39e764851e85737505fc8e27d3d345b610990bc07af6d",
+    "joulewise/hazards/base.py": "0ee28a9764fd84eba1210d143fd5193dace4cbef5b991d06043df94184bdaba9",
+    "joulewise/hazards/contention.py": "59fc119f4cff70e042ff69557c90fe7fa8cc715406a475b57e9b3f7529b105b2",
+    "joulewise/prewindow.py": "5dede36975a7882e135e84c9cff41e1f13af07e67110c244b65dca9a6ccf3d15",
+    "scripts/guard_replay.py": "a509cbe673a08176a425be114ed8b812adaa1b22750f78464362c57c883ebf01"
+  },
+  "interval": "two-sided 95% Wilson, run as trial; selected incidents descriptive only",
+  "limitations": [
+    "No live host validation; CPU-only historical replay neutralises other censuses.",
+    "Unknown labels, missing channels and incomplete runs cannot establish safety.",
+    "Serial/correlated windows violate binomial independence; report host/day clusters separately."
+  ],
+  "run_seconds": 23400.0,
+  "schema": "joulewise.guard_replay.report.v1"
+}

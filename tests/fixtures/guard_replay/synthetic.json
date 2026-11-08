@@ -1,0 +1,316 @@
+{
+  "runs": [
+    {
+      "complete": true,
+      "duration_s": 30,
+      "frames": [
+        {
+          "cpu_era": "prel3",
+          "environment": {
+            "display_power_state": "all_asleep",
+            "screensaver_engaged": false
+          },
+          "pcpu_busy": [
+            [
+              7,
+              34.0,
+              "photoanalysisd"
+            ]
+          ],
+          "quiet_busy": [],
+          "smc_cpu": {
+            "clean": false,
+            "elapsed_s": 30,
+            "error": null,
+            "interval": {
+              "monotonic_ns": [
+                0,
+                30000000000
+              ]
+            },
+            "kernel_task_cpu_s_per_s": 0.0,
+            "max_outside": {
+              "command": "routined",
+              "cpu_s_per_s": 0.06,
+              "pid": 7,
+              "start": "synthetic"
+            },
+            "outside_aggregate_cpu_s_per_s": 0.2,
+            "outside_listed": [
+              {
+                "command": "routined",
+                "cpu_s_per_s": 0.06,
+                "pid": 7,
+                "start": "synthetic"
+              }
+            ],
+            "outside_over_limit": [
+              {
+                "command": "routined",
+                "cpu_s_per_s": 0.06,
+                "pid": 7,
+                "start": "synthetic"
+              }
+            ]
+          },
+          "t": 0,
+          "thermal": {
+            "level": 0
+          }
+        },
+        {
+          "cpu_era": "prel3",
+          "environment": {
+            "display_power_state": "all_asleep",
+            "screensaver_engaged": false
+          },
+          "pcpu_busy": [],
+          "quiet_busy": [],
+          "smc_cpu": {
+            "clean": true,
+            "elapsed_s": 30,
+            "error": null,
+            "interval": {
+              "monotonic_ns": [
+                30000000000,
+                60000000000
+              ]
+            },
+            "kernel_task_cpu_s_per_s": 0.0,
+            "max_outside": {
+              "command": "routined",
+              "cpu_s_per_s": 0.01,
+              "pid": 7,
+              "start": "synthetic"
+            },
+            "outside_aggregate_cpu_s_per_s": 0.2,
+            "outside_listed": [
+              {
+                "command": "routined",
+                "cpu_s_per_s": 0.01,
+                "pid": 7,
+                "start": "synthetic"
+              }
+            ],
+            "outside_over_limit": []
+          },
+          "t": 30,
+          "thermal": {
+            "level": 0
+          }
+        }
+      ],
+      "id": "decayed-pcpu-and-routine-daemon",
+      "label": "benign",
+      "label_basis": "synthetic control with a defined injected hazard",
+      "stratum": "synthetic"
+    },
+    {
+      "complete": true,
+      "duration_s": 30,
+      "frames": [
+        {
+          "cpu_era": "prel3",
+          "smc_cpu": {
+            "clean": false,
+            "elapsed_s": 30,
+            "error": null,
+            "interval": {
+              "monotonic_ns": [
+                0,
+                30000000000
+              ]
+            },
+            "kernel_task_cpu_s_per_s": 0.0,
+            "max_outside": {
+              "command": "routined",
+              "cpu_s_per_s": 0.6,
+              "pid": 7,
+              "start": "synthetic"
+            },
+            "outside_aggregate_cpu_s_per_s": 0.2,
+            "outside_listed": [
+              {
+                "command": "routined",
+                "cpu_s_per_s": 0.6,
+                "pid": 7,
+                "start": "synthetic"
+              }
+            ],
+            "outside_over_limit": [
+              {
+                "command": "routined",
+                "cpu_s_per_s": 0.6,
+                "pid": 7,
+                "start": "synthetic"
+              }
+            ]
+          },
+          "t": 0
+        },
+        {
+          "cpu_era": "prel3",
+          "smc_cpu": {
+            "clean": false,
+            "elapsed_s": 30,
+            "error": null,
+            "interval": {
+              "monotonic_ns": [
+                30000000000,
+                60000000000
+              ]
+            },
+            "kernel_task_cpu_s_per_s": 0.0,
+            "max_outside": {
+              "command": "routined",
+              "cpu_s_per_s": 0.6,
+              "pid": 7,
+              "start": "synthetic"
+            },
+            "outside_aggregate_cpu_s_per_s": 0.2,
+            "outside_listed": [
+              {
+                "command": "routined",
+                "cpu_s_per_s": 0.6,
+                "pid": 7,
+                "start": "synthetic"
+              }
+            ],
+            "outside_over_limit": [
+              {
+                "command": "routined",
+                "cpu_s_per_s": 0.6,
+                "pid": 7,
+                "start": "synthetic"
+              }
+            ]
+          },
+          "t": 30
+        }
+      ],
+      "id": "sustained-single-process",
+      "label": "contended",
+      "label_basis": "synthetic control with a defined injected hazard",
+      "stratum": "synthetic"
+    },
+    {
+      "complete": false,
+      "duration_s": 0,
+      "frames": [
+        {
+          "environment": {
+            "display_power_state": "any_awake",
+            "screensaver_engaged": false
+          },
+          "t": 0
+        }
+      ],
+      "id": "display-wake",
+      "label": "contended",
+      "label_basis": "synthetic control with a defined injected hazard",
+      "stratum": "synthetic"
+    },
+    {
+      "complete": false,
+      "duration_s": 0,
+      "frames": [
+        {
+          "t": 0,
+          "thermal": {
+            "level": 1
+          }
+        }
+      ],
+      "id": "thermal-pressure",
+      "label": "contended",
+      "label_basis": "synthetic control with a defined injected hazard",
+      "stratum": "synthetic"
+    },
+    {
+      "complete": false,
+      "duration_s": 30,
+      "frames": [
+        {
+          "snapshot": {
+            "error": null,
+            "host_ticks": [
+              [
+                0,
+                0,
+                0,
+                0
+              ]
+            ],
+            "processes": [
+              {
+                "command": "routined",
+                "cpu_s": 0,
+                "pid": 7,
+                "ppid": 1,
+                "start": "born",
+                "start_epoch_s": 0
+              }
+            ],
+            "wall_s": 1000
+          },
+          "t": 0
+        },
+        {
+          "snapshot": {
+            "error": null,
+            "host_ticks": [
+              [
+                30,
+                0,
+                70,
+                0
+              ]
+            ],
+            "processes": [
+              {
+                "command": "routined",
+                "cpu_s": 0.01,
+                "pid": 7,
+                "ppid": 1,
+                "start": "born",
+                "start_epoch_s": 0
+              }
+            ],
+            "wall_s": 1001
+          },
+          "t": 1
+        },
+        {
+          "snapshot": {
+            "error": null,
+            "host_ticks": [
+              [
+                900,
+                0,
+                2100,
+                0
+              ]
+            ],
+            "processes": [
+              {
+                "command": "routined",
+                "cpu_s": 0.3,
+                "pid": 7,
+                "ppid": 1,
+                "start": "born",
+                "start_epoch_s": 0
+              }
+            ],
+            "wall_s": 1030
+          },
+          "t": 30
+        }
+      ],
+      "id": "idle-host-aggregate-only",
+      "label": "benign",
+      "label_basis": "synthetic control with a defined injected hazard",
+      "stratum": "synthetic"
+    }
+  ],
+  "schema": "joulewise.guard_replay.corpus.v1"
+}
