@@ -44,6 +44,19 @@ was not read.
 - `consecutive_B_failures` and the zero-capture exclusion-reason rule are engine-side (the B bar is arm-
   enforced, A36; the recompute keys each attempt as its own window record).
 
+**R23c/R23d contract (strict ids, W1 block):**
+- Anchors are exactly ordinals 1-4 in every window, W1 included, and their run ids are strictly
+  series-unique `"<window_id>:<run_id>"` (`window_id` is the window RECORD id, so a zero-capture attempt
+  `C3-z1` prefixes its own anchors). A bare, wrong-prefix or duplicate anchor id refuses; so does a
+  prefixed non-anchor. Non-anchor ids repeat only across the attempts of a retried slot; two CAPTURED
+  members never share an id. Member results are therefore keyed per window record.
+- `acceptance.U4.anchor_sigma_w_print_only.W1_anchor_block` is always printed: `included`,
+  `excluded:<classes>` (the union of the ineligible W1 anchors' class names, comma-joined) or
+  `unavailable:<missing evidence>`. Below K = 3 the object still prints with
+  `status: insufficient_windows`.
+- W1 U3 replay pairs already used the screened classes: an ineligible member gives `inconclusive`
+  (`replay_member_ineligible`), X5 gives `excluded_x5`.
+
 Every new test failed against `c0d1efcae` and passes here. `synth.write_member` now starts the episode 5 s
 after its G0 window, as production places G0 before the episode.
 

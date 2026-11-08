@@ -361,7 +361,7 @@ class U4Tests(unittest.TestCase):
             windows.append({"window_id": wid, "role": role, "members": ms})
             elig[wid] = {}
             for m, e in zip(ms, (a, b)):
-                results[m["run_id"]], elig[wid][m["run_id"]] = member(m["run_id"], e, **extra)
+                results.setdefault(wid, {})[m["run_id"]], elig[wid][m["run_id"]] = member(m["run_id"], e, **extra)
         return windows, results, elig
 
     def test_u4_hand(self):
@@ -398,19 +398,23 @@ class AnchorSigmaTests(unittest.TestCase):
             for o, v in enumerate(vals, 1):
                 rid = f"{wid}:a{o}"
                 members.append({"ordinal": o, "kind": "anchor", "run_id": rid})
-                results[rid] = {"usable": True, "energy": {"turn_owned_gpu_j": v}}
-            windows.append({"window_id": wid, "members": members})
+                results.setdefault(wid, {})[rid] = {"usable": True, "energy": {"turn_owned_gpu_j": v}}
+            windows.append({"window_id": wid, "role": "W1" if wid == "W1" else "calibration", "members": members})
         elig = {w["window_id"]: {m["run_id"]: {"eligible": True} for m in w["members"]} for w in windows}
         out = rc.anchor_sigma_w(windows, results, elig)
         self.assertEqual(out["W"], 3)
         self.assertAlmostEqual(out["sigma_w2_raw"], (out["ms_window"] - out["ms_interaction"]) / 4, places=12)
         self.assertLess(out["sigma_w2_raw"], 0)          # identical window means: negative raw estimate
         self.assertEqual(out["sigma_w2"], 0.0)
-        self.assertIsNone(rc.anchor_sigma_w(windows[:2], results, elig))   # K >= 3
+        self.assertEqual(out["W1_anchor_block"], "included")
+        self.assertEqual(rc.anchor_sigma_w(windows[:2], results, elig)["status"], "insufficient_windows")  # K >= 3
+        self.assertEqual(rc.anchor_sigma_w(windows[1:], results, elig)["W1_anchor_block"],
+                         "unavailable:no W1 window record")
         # R23 (c): a W1 anchor failing the member-eligibility screen drops W1 from the table, as for C/T.
-        elig["W1"]["W1:a2"] = {"eligible": False}
-        self.assertIsNone(rc.anchor_sigma_w(windows, results, elig))
-        self.assertIsNone(rc.anchor_sigma_w(windows, results))             # no screen, no anchors
+        elig["W1"]["W1:a2"] = {"eligible": False, "classes": ["X2"]}
+        out = rc.anchor_sigma_w(windows, results, elig)
+        self.assertEqual((out["W"], out["W1_anchor_block"]), (2, "excluded:X2"))
+        self.assertEqual(rc.anchor_sigma_w(windows, results)["W"], 0)      # no screen, no anchors
 
 
 class DCResidualTests(unittest.TestCase):
@@ -428,7 +432,7 @@ class DCResidualTests(unittest.TestCase):
         dc_rows = {rid: {"status": "ok", "dc_turn_j": [10.0 + 0.01 * t["prefill"] + 0.2 * t["decode"]
                                                        for t in ts]} for rid, ts in turns.items()}
         dc_rows["r7"] = {"status": "missing_dc"}
-        results = {rid: {"turns": ts} for rid, ts in turns.items()}
+        results = {"C1": {rid: {"turns": ts} for rid, ts in turns.items()}}
         fitted = {"C1": {"spam": {"variants": {"logged": {"loto": {f"r{i}": {} for i in range(8)}}}}}}
         windows = [{"window_id": "C1", "members": []}]
         out = rc.dc_residuals(windows, fitted, results, {"C1": {"members": dc_rows}}, {})

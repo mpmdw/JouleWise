@@ -587,7 +587,7 @@ def load_series(root):
     series, series_sha = read_json(root / "series.json", "series")
     need(isinstance(series, dict) and isinstance(series.get("windows"), list) and series["windows"],
          "series_malformed", "windows list required")
-    windows, seen_runs = [], set()
+    windows, anchor_runs = [], set()
     for entry in series["windows"]:
         need(isinstance(entry, dict) and isinstance(entry.get("window_id"), str)
              and entry.get("role") in ("W1", "calibration", "test"), "series_malformed", "window entry")
@@ -597,7 +597,7 @@ def load_series(root):
              "window_malformed", wid)
         members = record.get("members")
         need(isinstance(members, list) and members, "window_malformed", wid + ": members")
-        ordinals = set()
+        ordinals, seen_runs = set(), set()
         for m in members:
             need(isinstance(m, dict) and is_int(m.get("ordinal")) and isinstance(m.get("run_id"), str)
                  and m.get("kind") in ("anchor", "sentinel", "benign", "sabotage", "contrast", "development",
@@ -606,11 +606,22 @@ def load_series(root):
                  and m.get("condition") in ("benign", "sabotage"), "window_malformed", f"{wid}: member")
             need(m["ordinal"] not in ordinals and m["run_id"] not in seen_runs, "window_malformed",
                  f"{wid}: duplicate member")
+            # R23 export contract: a "<window_id>:" prefix is for anchors only (a prefixed non-anchor
+            # refuses); non-anchor ids repeat across windows only in a retried slot, and two CAPTURED
+            # members may never share an id (checked after the member stage).
             ordinals.add(m["ordinal"])
             seen_runs.add(m["run_id"])
-            # R23 export contract: anchor run ids are series-unique as "<window_id>:<run_id>".
-            need(m["kind"] != "anchor" or (m["run_id"].startswith(wid + ":") and len(m["run_id"]) > len(wid) + 1),
-                 "window_malformed", f"{wid}: anchor run id not '<window_id>:<run_id>'")
+            # R23 export contract: anchors are exactly ordinals 1-4 (W1 included, R23d), and their run ids
+            # are strictly series-unique "<window_id>:<run_id>".
+            need((m["kind"] == "anchor") == (1 <= m["ordinal"] <= 4), "window_malformed",
+                 f"{wid}: anchors must be exactly ordinals 1-4")
+            if m["kind"] == "anchor":
+                need(m["run_id"].startswith(wid + ":") and len(m["run_id"]) > len(wid) + 1
+                     and m["run_id"] not in anchor_runs, "window_malformed",
+                     f"{wid}: anchor run id not '<window_id>:<run_id>'")
+                anchor_runs.add(m["run_id"])
+            else:
+                need(":" not in m["run_id"], "window_malformed", f"{wid}: prefixed non-anchor run id")
             if m["kind"] == "contrast":
                 c = m.get("contrast")
                 need(isinstance(c, dict) and c.get("template") in ("X", "Y") and c.get("arm") in ("S", "G")
@@ -1625,7 +1636,7 @@ def u4_series(windows, results, eligibility, references):
     w1m = {m["ordinal"]: m for m in w1["members"]}
     if 5 not in w1m or 17 not in w1m:
         return {"status": "unavailable", "reason": "W1 ordinals 5/17 missing", "per_window": {}}
-    reference_identity = results[w1m[5]["run_id"]].get("episode", {}).get("identity_sha256")
+    reference_identity = results[w1["window_id"]][w1m[5]["run_id"]].get("episode", {}).get("identity_sha256")
     per, shifts, e_ref = {}, [], None
     for w in windows:
         members = {m["ordinal"]: m for m in w["members"]}
@@ -1635,7 +1646,8 @@ def u4_series(windows, results, eligibility, references):
             if o not in members:
                 reasons.append(f"ordinal_{o}_missing")
             else:
-                why = sentinel_admissible(members[o], results, eligibility[w["window_id"]], reference_identity)
+                why = sentinel_admissible(members[o], results[w["window_id"]], eligibility[w["window_id"]],
+                                          reference_identity)
                 if why:
                     reasons.append(f"ordinal_{o}_{why}")
         if reasons:
@@ -1644,7 +1656,7 @@ def u4_series(windows, results, eligibility, references):
                         "skipped": reasons}
             per[w["window_id"]] = {"status": "skipped", "reasons": reasons}
             continue
-        vals = [results[members[o]["run_id"]]["energy"]["turn_owned_gpu_j"] for o in pair]
+        vals = [results[w["window_id"]][members[o]["run_id"]]["energy"]["turn_owned_gpu_j"] for o in pair]
         if w["role"] == "W1":
             e_ref = mean(list(refs) + vals)
         e = mean(vals)
@@ -1675,17 +1687,31 @@ def anchor_sigma_w(windows, results, eligibility=None):
     """Print-only balanced crossed-anchor moments over every window with four usable anchors, W1 included
     (R23-1): raw MoM sigma_w^2 = (MS_window - MS_interaction)/4 and its clamp max(0, raw); K >= 3 (IR section 5)."""
     table = []
+    w1_block = "unavailable:no W1 window record"
     for w in windows:
         anchors = sorted((m for m in w["members"] if m["kind"] == "anchor"), key=lambda m: m["ordinal"])
         # R23 (c): W1 anchors pass the same full member-eligibility screen as C/T anchors.
         elig = (eligibility or {}).get(w["window_id"], {})
-        vals = [results[m["run_id"]]["energy"]["turn_owned_gpu_j"] for m in anchors
-                if results[m["run_id"]].get("usable") and elig.get(m["run_id"], {}).get("eligible") is True]
+        rw = results.get(w["window_id"], {})
+        vals = [rw[m["run_id"]]["energy"]["turn_owned_gpu_j"] for m in anchors
+                if rw.get(m["run_id"], {}).get("usable") and elig.get(m["run_id"], {}).get("eligible") is True]
         if len(anchors) == 4 and len(vals) == 4:
             table.append(vals)
+        if w.get("role") == "W1":
+            # R23c: the W1 anchor block is always disclosed: included, excluded:<classes> (the union of the
+            # ineligible anchors' class names), or unavailable:<missing evidence>.
+            classes = sorted({c for m in anchors for c in elig.get(m["run_id"], {}).get("classes", [])})
+            if len(anchors) != 4:
+                w1_block = "unavailable:W1 anchors missing"
+            elif len(vals) == 4:
+                w1_block = "included"
+            elif classes:
+                w1_block = "excluded:" + ",".join(classes)
+            else:
+                w1_block = "unavailable:W1 anchor energy missing"
     W = len(table)
     if W < 3:
-        return None
+        return {"W": W, "status": "insufficient_windows", "W1_anchor_block": w1_block}
     grand = mean([v for row in table for v in row])
     wmeans = [mean(row) for row in table]
     amean = [mean([row[j] for row in table]) for j in range(4)]
@@ -1693,7 +1719,8 @@ def anchor_sigma_w(windows, results, eligibility=None):
     ms_i = math.fsum((table[i][j] - wmeans[i] - amean[j] + grand) ** 2
                      for i in range(W) for j in range(4)) / ((W - 1) * 3)
     raw = (ms_w - ms_i) / 4
-    return {"W": W, "ms_window": ms_w, "ms_interaction": ms_i, "sigma_w2_raw": raw, "sigma_w2": max(0.0, raw)}
+    return {"W": W, "ms_window": ms_w, "ms_interaction": ms_i, "sigma_w2_raw": raw, "sigma_w2": max(0.0, raw),
+            "W1_anchor_block": w1_block, "status": "ok"}
 
 
 def u5(references):
@@ -2130,7 +2157,7 @@ def dc_residuals(windows, fitted, results, dc, eligibility):
             for rid in sorted(gpu):
                 row = dc[wid]["members"].get(rid, {})
                 if row.get("status") == "ok" and None not in row["dc_turn_j"]:
-                    rows[rid] = [dict(t, dc_j=e) for t, e in zip(results[rid]["turns"], row["dc_turn_j"])]
+                    rows[rid] = [dict(t, dc_j=e) for t, e in zip(results[wid][rid]["turns"], row["dc_turn_j"])]
             scores = {}
             for rid in sorted(gpu):
                 if rid not in rows:
@@ -2199,7 +2226,13 @@ def recompute(root, workers=1, cache_dir=None, timings=None, stage="full", freez
         member_list = run_map(pool, process_member, tasks)
         timings["member_stage_s"] = time.perf_counter() - t1
         timings["reduce_cache"] = {k: sum(1 for r in member_list if r.get("cache") == k) for k in ("none", "miss", "hit")}
-        results = {r["run_id"]: r for r in member_list}
+        # Member results are keyed per window record: a retried slot may repeat its non-anchor run ids
+        # across attempts (R23 export contract), but two CAPTURED members may not share an id.
+        results = {}
+        for r in member_list:
+            results.setdefault(r["window_id"], {})[r["run_id"]] = r
+        captured_ids = [r["run_id"] for r in member_list if r.get("captured")]
+        need(len(captured_ids) == len(set(captured_ids)), "window_malformed", "captured run id not series-unique")
         digests = {}
         for r in member_list:
             d = r.get("inputs", {}).get("raw_sha256")
@@ -2207,7 +2240,7 @@ def recompute(root, workers=1, cache_dir=None, timings=None, stage="full", freez
                 digests.setdefault(d, []).append(r["run_id"])
         global_flags = [{"code": "raw_duplicate_digest", "scope": ",".join(v)} for v in digests.values() if len(v) > 1]
         t2 = time.perf_counter()
-        eligibility = {w["window_id"]: derive_exclusions(w, results) for w in windows}
+        eligibility = {w["window_id"]: derive_exclusions(w, results[w["window_id"]]) for w in windows}
         bar = u3_bar(series["u3_bar"])
         acceptance = {"U1": {}, "U2": {}, "U3": {}, "U4": None, "U5": u5(series["references"]), "U6": {},
                       "U3_bar": bar}
@@ -2219,9 +2252,9 @@ def recompute(root, workers=1, cache_dir=None, timings=None, stage="full", freez
             for model in ("D", "30B"):
                 members = [m for m in w["members"] if m["model"] == model]
                 if members:
-                    acceptance["U1"][wid][model] = u1_model_window(members, results, elig)
-                    acceptance["U2"][wid][model] = u2_model_window(members, results, elig)
-            acceptance["U3"][wid] = u3_window(w, results, elig, bar)
+                    acceptance["U1"][wid][model] = u1_model_window(members, results[wid], elig)
+                    acceptance["U2"][wid][model] = u2_model_window(members, results[wid], elig)
+            acceptance["U3"][wid] = u3_window(w, results[wid], elig, bar)
             verdicts = (acceptance["U1"][wid].get("D", {}).get("verdict"),
                         acceptance["U2"][wid].get("D", {}).get("verdict"), acceptance["U3"][wid]["verdict"])
             pool_barred[wid] = "fail" in verdicts                       # A23: only FAIL bars
@@ -2237,7 +2270,7 @@ def recompute(root, workers=1, cache_dir=None, timings=None, stage="full", freez
                 continue
             elig = eligibility[wid]
             for pair in PAIRS:
-                pick = lambda kind: [(m["run_id"], results[m["run_id"]]["turns"]) for m in w["members"]
+                pick = lambda kind: [(m["run_id"], results[wid][m["run_id"]]["turns"]) for m in w["members"]
                                      if m["kind"] == kind and m["model"] == "D" and m["pair"] == pair
                                      and elig[m["run_id"]]["eligible"]]
                 fit_tasks.append((wid, pair, pick("benign"), pick("sabotage") if w["role"] == "test" else [],
@@ -2251,7 +2284,7 @@ def recompute(root, workers=1, cache_dir=None, timings=None, stage="full", freez
         for w in windows:
             members = []
             for m in w["members"]:
-                r = results[m["run_id"]]
+                r = results[w["window_id"]][m["run_id"]]
                 # R23-4: DC-in VALUE rows print for every captured member with an episode record, eligible or
                 # not (W1, anchors, sentinels, barred windows, T before calibration_complete). Only the
                 # residual rows mirror the GPU benign rows.
@@ -2279,7 +2312,7 @@ def recompute(root, workers=1, cache_dir=None, timings=None, stage="full", freez
                 rss.append(lv["full"]["rss"])
                 df += lv["full"]["df"]
             for rid, res in lv["turn_residuals"].items():
-                trajectories.append((results[rid]["episode"]["start_ns"], rid, res))
+                trajectories.append((results[w["window_id"]][rid]["episode"]["start_ns"], rid, res))
         trajectories.sort()
         s_r = math.sqrt(math.fsum(rss) / df) if df else None
         acceptance["U6"][pair] = u6_pair([(rid, res) for _, rid, res in trajectories], s_r)
@@ -2311,7 +2344,7 @@ def recompute(root, workers=1, cache_dir=None, timings=None, stage="full", freez
     if freeze_in is not None:
         need(freeze_in == calibration["freeze"], "threshold_freeze_mismatch")
     w1 = next((w for w in windows if w["role"] == "W1"), None)
-    claim["w1_contrast"] = w1_contrast(w1, results, eligibility[w1["window_id"]]) if w1 else None
+    claim["w1_contrast"] = w1_contrast(w1, results[w1["window_id"]], eligibility[w1["window_id"]]) if w1 else None
     claim["status"] = claim_status(stop, calibration, test, score_t)
     dc_res = dc_residuals(windows, fits, results, dc, eligibility)
     for w in windows:          # R23-4: each benign DC value row names its residual status
@@ -2337,11 +2370,12 @@ def recompute(root, workers=1, cache_dir=None, timings=None, stage="full", freez
            "inputs": {"series_sha256": series["series_sha256"], "u3_bar_sha256": series["u3_bar_sha256"],
                       "references_sha256": series["references_sha256"],
                       "windows": {w["window_id"]: {"window_sha256": w["sha256"],
-                                                   "members": {m["run_id"]: results[m["run_id"]].get("inputs", {})
+                                                   "members": {m["run_id"]: results[w["window_id"]][m["run_id"]].get("inputs", {})
                                                                for m in w["members"]}} for w in windows}},
            "reduction": {r["run_id"]: reduction_public(r, r["run_id"] in sealed_members)
                          for r in member_list if "reduction" in r},
-           "members": {w["window_id"]: {m["run_id"]: member_public(results[m["run_id"]], m, is_c_sabotage(w, m))
+           "members": {w["window_id"]: {m["run_id"]: member_public(results[w["window_id"]][m["run_id"]], m,
+                                                                   is_c_sabotage(w, m))
                                         for m in w["members"]} for w in windows},
            "exclusions": eligibility,
            "fits": {wid: {pair: {variant: {k: v for k, v in body.items() if k in ("full", "loto")}

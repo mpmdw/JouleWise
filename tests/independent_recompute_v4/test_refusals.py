@@ -70,10 +70,50 @@ class RefusalTests(unittest.TestCase):
                                      for i, m in enumerate(record["members"])])
         path.write_text(json.dumps(bare))
         self.refused(root, "window_malformed")
+        # ... a wrong prefix and a prefixed non-anchor refuse too.
+        wrong = dict(record, members=[dict(m, run_id="T1:" + m["run_id"].split(":", 1)[1]) if i == anchor else m
+                                      for i, m in enumerate(record["members"])])
+        path.write_text(json.dumps(wrong))
+        self.refused(root, "window_malformed")
+        other = next(i for i, m in enumerate(record["members"]) if m["kind"] != "anchor")
+        prefixed = dict(record, members=[dict(m, run_id="C1:" + m["run_id"]) if i == other else m
+                                         for i, m in enumerate(record["members"])])
+        path.write_text(json.dumps(prefixed))
+        self.refused(root, "window_malformed")
+        # Anchors are exactly ordinals 1-4 (R23d).
+        demoted = dict(record, members=[dict(m, kind="benign", run_id=m["run_id"].split(":", 1)[1])
+                                        if i == anchor else m for i, m in enumerate(record["members"])])
+        path.write_text(json.dumps(demoted))
+        self.refused(root, "window_malformed")
         path.write_text(json.dumps(record))
         u3 = root / "u3_bar.json"
         u3.write_text("[")
         self.refused(root, "u3_bar_malformed")
+
+    def test_retried_slot_may_repeat_non_anchor_ids_but_captured_ids_are_unique(self):
+        # R23 export contract: a zero-capture attempt and its retry share the slot's non-anchor ids; only
+        # anchors carry the window prefix. Two captured members with one id refuse.
+        root = self.copy()
+        c1 = json.loads((root / "windows/C1/window.json").read_text())
+        zc = dict(c1, window_id="C1-z1", members=[dict(m, run_id=("C1-z1:" + m["run_id"].split(":", 1)[1])
+                                                         if m["kind"] == "anchor" else m["run_id"])
+                                                    for m in c1["members"]])
+        (root / "windows/C1-z1").mkdir()
+        (root / "windows/C1-z1/window.json").write_text(json.dumps(zc))
+        series = json.loads((root / "series.json").read_text())
+        series["windows"].insert(0, {"window_id": "C1-z1", "role": "calibration"})
+        (root / "series.json").write_text(json.dumps(series))
+        out = root.parent / "ok.json"
+        rc_, stdout, stderr = run_cli("--root", root, "--out", out, "--workers", 1)
+        self.assertEqual(rc_, 0, stderr)
+        doc = json.loads(out.read_text())
+        self.assertFalse(any(e["captured"] for e in doc["exclusions"]["C1-z1"].values()))
+        self.assertTrue(all(e["captured"] for e in doc["exclusions"]["C1"].values()))
+        shutil.copytree(root / "windows/C1/members", root / "windows/C1-z1/members")
+        for d in (root / "windows/C1-z1/members").iterdir():
+            if ":" in d.name:
+                d.rename(d.parent / ("C1-z1:" + d.name.split(":", 1)[1]))
+        self.refused(root, "window_malformed")
 
     def test_w1_sentinel_ordinals_must_match_the_r15_roster(self):
         # R23 export contract: the export carries the W1 sentinel ordinals (5/17); a mismatch refuses.
