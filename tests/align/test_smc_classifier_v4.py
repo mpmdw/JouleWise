@@ -506,18 +506,23 @@ class R0L3ContentionFlagTests(unittest.TestCase):
         # light flag in idle; R0-L3 item 4 adds no classifier rule.
         contention = {"contended": True, "policy": "flag",
                       "flags": [{"interval_monotonic_ns": [100 * thermal.NS, 130 * thermal.NS],
-                                 "outside_cpu_cores": 0.12, "heavy": False},
+                                 "largest_process_cores": 0.12, "outside_aggregate_cpu_s_per_s": 0.3,
+                                 "heavy": False},
                                 {"interval_monotonic_ns": [400 * thermal.NS, 430 * thermal.NS],
-                                 "outside_cpu_cores": 0.8, "heavy": True}],
+                                 "largest_process_cores": 0.8, "outside_aggregate_cpu_s_per_s": 1.1,
+                                 "heavy": True}],
                       "episodes": [{"start_ns": 400 * thermal.NS, "end_ns": 470 * thermal.NS, "seconds": 70}]}
         flagged = rank({**data, "contention": contention})
         self.assertEqual(flagged["contention"], contention)
         self.assertEqual(flagged["contention_by_phase"], {
-            "idle": {"flagged_intervals": 1, "heavy_intervals": 0, "max_outside_cpu_cores": 0.12,
+            "idle": {"flagged_intervals": 1, "heavy_intervals": 0, "max_largest_process_cores": 0.12,
+                     "max_outside_aggregate_cpu_s_per_s": 0.3,
                      "sustained_episodes": 0},
-            "load": {"flagged_intervals": 1, "heavy_intervals": 1, "max_outside_cpu_cores": 0.8,
+            "load": {"flagged_intervals": 1, "heavy_intervals": 1, "max_largest_process_cores": 0.8,
+                     "max_outside_aggregate_cpu_s_per_s": 1.1,
                      "sustained_episodes": 1},
-            "recovery": {"flagged_intervals": 0, "heavy_intervals": 0, "max_outside_cpu_cores": None,
+            "recovery": {"flagged_intervals": 0, "heavy_intervals": 0, "max_largest_process_cores": None,
+                         "max_outside_aggregate_cpu_s_per_s": None,
                          "sustained_episodes": 0}})
         for field in ("selection", "status", "ranking", "readability_bar_met"):
             self.assertEqual(flagged[field], plain[field])

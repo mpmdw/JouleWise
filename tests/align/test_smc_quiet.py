@@ -551,10 +551,19 @@ class CpuQuietProbeTests(unittest.TestCase):
         self.assertIn("logical CPU count changed", result["error"])
 
 
-def r0l3_interval(start_s, end_s, cores, *, over=()):
-    """One CpuQuietProbe-shaped interval: outside aggregate cores, 0.05 bar rows."""
+def r0l3_interval(start_s, end_s, cores, *, over=(), processes=None, aggregate=None, kernel=None):
+    """One CpuQuietProbe-shaped interval.
+
+    ``cores`` is one outside process (pid 777 busyd) unless ``processes``
+    lists (pid, command, rate) rows; ``aggregate`` defaults to their sum.
+    """
+    rows = [(777, "busyd", cores)] if processes is None else list(processes)
+    rows += [(pid, name, rate) for pid, name, rate in over if pid not in {r[0] for r in rows}]
+    listed = [{"pid": pid, "command": name, "start": "s", "cpu_s_per_s": rate} for pid, name, rate in rows]
     return {"contention": {"interval": {"monotonic_ns": [round(start_s * 1e9), round(end_s * 1e9)]},
-                           "elapsed_s": end_s - start_s, "outside_aggregate_cpu_s_per_s": cores,
+                           "elapsed_s": end_s - start_s,
+                           "outside_aggregate_cpu_s_per_s": sum(r[2] for r in rows) if aggregate is None else aggregate,
+                           "kernel_task_cpu_s_per_s": kernel, "outside_listed": listed,
                            "clean": not over, "error": None,
                            "outside_over_limit": [{"pid": pid, "command": name, "cpu_s_per_s": rate}
                                                   for pid, name, rate in over]}}
@@ -598,7 +607,8 @@ class R0L3ContentionTests(unittest.TestCase):
             # 55 s at 0.5 cores: one 5 s cadence short of ruling 8.
             "55 s at 0.5": self.windows(30, 55, 0.5),
             # Re-run 8: frauddefensed 0.092 CPU-s/s for 30-60 s, aggregate well below 0.5.
-            "frauddefensed": self.windows(30, 60, 0.15, over=[(61967, "frauddefensed", 0.092)]),
+            "frauddefensed": self.windows(30, 60, 0.05, over=[(61967, "frauddefensed", 0.092)],
+                                          processes=[(61967, "frauddefensed", 0.092), (88, "WindowServer", 0.05)]),
             # 0.49 cores for 10 min, no process over 0.05.
             "0.49 for 600 s": self.windows(30, 600, 0.49),
         }
@@ -617,6 +627,41 @@ class R0L3ContentionTests(unittest.TestCase):
         self.assertEqual(len(flags), len(cases["frauddefensed"]))
         self.assertEqual(flags[0]["over_0_05"][0]["command"], "frauddefensed")
         self.assertFalse(flags[0]["heavy"])
+
+    def test_follow_up_ruling_1_judges_largest_single_process_not_aggregate_or_kernel_task(self):
+        # Ten processes at 0.2 each: aggregate 2.0 cores, no single one >= 0.5.
+        spread = [(100 + i, f"worker{i}", 0.2) for i in range(10)]
+        # kernel_task (pid 0) at 0.9 cores, driven by our own GPU load step.
+        kernel_rows = [(0, "kernel_task", 0.9), (88, "WindowServer", 0.1)]
+        cases = {
+            "aggregate only": (self.windows(30, 120, 0, processes=spread), False),
+            "kernel_task": (self.windows(30, 120, 0, processes=kernel_rows, kernel=0.9), False),
+            "single process": (self.windows(30, 60, 0.5), True),
+        }
+        for name, (intervals, redo) in cases.items():
+            with self.subTest(name):
+                quiet = r0.Ruling8Quiet("redo", census=r0l3_census(intervals))
+                if redo:
+                    for _ in intervals[:-1]:
+                        quiet()
+                    with self.assertRaises(r0.ContentionRedo) as caught:
+                        quiet()
+                    self.assertEqual(caught.exception.summary["episodes"][0]["processes"],
+                                     [{"pid": 777, "command": "busyd"}])
+                    continue
+                for _ in intervals:
+                    quiet()
+                summary = quiet.summary()
+                self.assertEqual(summary["episodes"], [])
+                # Recorded, never judged.
+                self.assertTrue(summary["flags"])
+                self.assertFalse(any(f["heavy"] for f in summary["flags"]))
+                if name == "aggregate only":
+                    self.assertAlmostEqual(summary["flags"][0]["outside_aggregate_cpu_s_per_s"], 2.0)
+                    self.assertEqual(summary["flags"][0]["largest_process_cores"], 0.2)
+                else:
+                    self.assertEqual(summary["flags"][0]["kernel_task_cpu_s_per_s"], 0.9)
+                    self.assertEqual(summary["flags"][0]["largest_process"]["command"], "WindowServer")
 
     def test_a_light_interval_breaks_the_sustained_run(self):
         intervals = (self.windows(30, 50, 0.6) + [r0l3_interval(25, 55, 0.1)]

@@ -233,13 +233,15 @@ class CaptureTests(unittest.TestCase):
             end = self.clock.monotonic_ns()
             return {"contention": {"interval": {"monotonic_ns": [end - 30 * 10**9, end]}, "elapsed_s": 30.0,
                                    "outside_aggregate_cpu_s_per_s": cores, "clean": True, "error": None,
+                                   "outside_listed": [{"pid": 777, "command": "busyd", "start": "s",
+                                                       "cpu_s_per_s": cores}],
                                    "outside_over_limit": []}}
         return quiet
 
     def test_cli_r0l3_redo_policy_abandons_capture_with_exit_4_and_receipt(self):
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary) / "r0"
-            # 0.5 cores outside the tree for the whole 70 s capture.
+            # One outside process at 0.5 cores for the whole 70 s capture.
             result = cli.main(["--output", str(output), "--seconds", "70", "--contention-policy", "redo"],
                               reader_factory=lambda: self.reader, quiet_check=self.r0l3_quiet(0.5),
                               ctx_factory=lambda: self.ctx, metadata=lambda: {})

@@ -225,8 +225,9 @@ def require_quiet(*, agent_probe=None, measurement_probe=None, process_probe=Non
 
 # R0-L3 (docs/align/r0/R0-L3-contention-rule.md): R0's SMC capture uses R1's
 # ruling 8 bar (scripts/align_r1_rehearsal.py CPU_BUSY_CORES_LIMIT and
-# CPU_BUSY_SUSTAINED_S on lane/2026-11-06-v4-r1-integrated): background CPU
-# outside this process tree at >= 0.5 cores, sustained for 60 s.
+# CPU_BUSY_SUSTAINED_S on lane/2026-11-06-v4-r1-integrated), judged per the
+# lead's follow-up ruling (1) on the LARGEST SINGLE PROCESS outside this tree,
+# kernel_task excluded: >= 0.5 cores, sustained for 60 s.
 SUSTAINED_CORES = 0.5
 SUSTAINED_S = 60
 CONTENTION_REDO_EXIT = 4
@@ -245,9 +246,11 @@ class Ruling8Quiet:
     """R0-L3: record CPU contention; apply ruling 8 to sustained episodes.
 
     Each census returns one CPU interval of at least 30 s (CpuQuietProbe).
-    An interval is heavy when the host's busy CPU outside this tree is
-    >= SUSTAINED_CORES. Consecutive heavy intervals that touch or overlap form
-    a run; a run whose union spans >= SUSTAINED_S is a sustained episode.
+    An interval is heavy when the largest single process outside this tree,
+    excluding kernel_task (our own GPU load step drives it), is
+    >= SUSTAINED_CORES. kernel_task and the outside-tree aggregate are
+    recorded, never judged. Consecutive heavy intervals that touch or overlap
+    form a run; a run whose union spans >= SUSTAINED_S is a sustained episode.
     Under ``redo`` the first episode raises ContentionRedo; under ``flag``
     episodes are recorded and the capture is ``contended``. Intervals over
     the 0.05 CPU-s/s per-process bar, or heavy, are flags. The agent, custody,
@@ -267,14 +270,22 @@ class Ruling8Quiet:
         result = self.census()
         cpu = result["contention"]
         start_ns, end_ns = cpu["interval"]["monotonic_ns"]
-        cores = cpu.get("outside_aggregate_cpu_s_per_s")
-        if cores is None:
-            cores = cpu.get("outside_total_cpu_s_per_s") or 0.0
+        listed = [row for row in cpu.get("outside_listed") or ()
+                  if not (row.get("pid") == 0 and row.get("command") == "kernel_task")]
+        largest = max(listed, key=lambda row: (row["cpu_s_per_s"], -row["pid"]), default=None)
+        cores = largest["cpu_s_per_s"] if largest else 0.0
+        aggregate = cpu.get("outside_aggregate_cpu_s_per_s")
+        kernel = cpu.get("kernel_task_cpu_s_per_s")
         heavy = cores >= SUSTAINED_CORES
-        if heavy or cpu.get("clean") is not True:
+        if (heavy or cpu.get("clean") is not True
+                or any(v is not None and v >= SUSTAINED_CORES for v in (aggregate, kernel))):
             self.flags.append({
                 "interval_monotonic_ns": [start_ns, end_ns], "elapsed_s": cpu.get("elapsed_s"),
-                "outside_cpu_cores": cores, "heavy": heavy,
+                "largest_process": ({k: largest.get(k) for k in ("pid", "command", "cpu_s_per_s")}
+                                    if largest else None),
+                "largest_process_cores": cores, "heavy": heavy,
+                # Recorded, never judged (follow-up ruling 1).
+                "outside_aggregate_cpu_s_per_s": aggregate, "kernel_task_cpu_s_per_s": kernel,
                 "over_0_05": [{k: row.get(k) for k in ("pid", "command", "cpu_s_per_s")}
                               for row in cpu.get("outside_over_limit") or ()]})
         if not heavy:
@@ -284,7 +295,12 @@ class Ruling8Quiet:
             self._run["intervals"] += 1
             self._run["max_cores"] = max(self._run["max_cores"], cores)
         else:
-            self._run = {"start_ns": start_ns, "end_ns": end_ns, "intervals": 1, "max_cores": cores}
+            self._run = {"start_ns": start_ns, "end_ns": end_ns, "intervals": 1, "max_cores": cores,
+                         "processes": []}
+        if heavy:
+            process = {k: largest.get(k) for k in ("pid", "command")}
+            if process not in self._run["processes"]:
+                self._run["processes"].append(process)
         run = self._run
         if run is not None:
             run["seconds"] = (run["end_ns"] - run["start_ns"]) / 1e9
@@ -295,8 +311,8 @@ class Ruling8Quiet:
         return result
 
     def summary(self):
-        return {"rule": "R0-L3 / ruling 8: >= 0.5 cores outside this tree sustained >= 60 s; "
-                        "one redo, then contended (a flag)",
+        return {"rule": "R0-L3 / ruling 8: largest single process outside this tree (kernel_task "
+                        "excluded) >= 0.5 cores sustained >= 60 s; one redo, then contended (a flag)",
                 "policy": self.policy, "sustained_cores": SUSTAINED_CORES, "sustained_s": SUSTAINED_S,
                 "flags": list(self.flags), "episodes": [dict(e) for e in self.episodes],
                 "contended": self.policy == "flag" and bool(self.episodes)}
@@ -736,7 +752,11 @@ def _contention_by_phase(capture, phases, origin):
                 if f["interval_monotonic_ns"][0] < end and f["interval_monotonic_ns"][1] > begin]
         episodes = [e for e in contention.get("episodes", ()) if e["start_ns"] < end and e["end_ns"] > begin]
         by_phase[name] = {"flagged_intervals": len(hits), "heavy_intervals": sum(f["heavy"] for f in hits),
-                          "max_outside_cpu_cores": max((f["outside_cpu_cores"] for f in hits), default=None),
+                          "max_largest_process_cores": max((f["largest_process_cores"] for f in hits),
+                                                           default=None),
+                          "max_outside_aggregate_cpu_s_per_s": max(
+                              (f["outside_aggregate_cpu_s_per_s"] for f in hits
+                               if f.get("outside_aggregate_cpu_s_per_s") is not None), default=None),
                           "sustained_episodes": len(episodes)}
     return {"contention": contention, "contention_by_phase": by_phase}
 

@@ -15,6 +15,19 @@ and 205.
 
 Why: R0's capture is selection data, not a reported number (R0 picks are PROVISIONAL; R1 makes the final selection). Its strict 0.05 CPU-s/s abort has caused most of R0's refusals, from routine macOS jobs that the blocks tolerated under their dwell/redo rules. Chasing daemons does not converge.
 
+## Follow-up rulings on the implementation choices (verbatim)
+
+The lead ruled on the eight questions raised in PR #699 (2026-11-07):
+
+(1) A contaminant is the LARGEST SINGLE PROCESS outside the capture's process tree, at ≥ 0.5 cores (CPU-s/s) sustained over consecutive census windows spanning ≥ 60 s. Exclude kernel_task from the judgement, because our own GPU load step drives it, but record it in the receipts. The aggregate outside-tree figure stays recorded, never judged. Add a failing-first test (an aggregate-only heavy load with no single process ≥ 0.5 must not redo; a single process ≥ 0.5 for 60 s must redo; kernel_task ≥ 0.5 must not).
+(2) Keep ≥ 0.5 as ruled.
+(3) Accepted.
+(4) Accepted.
+(5) Accepted: unmeasurable CPU stays an indeterminate refusal (a tooling fault).
+(6) Accepted; say in R0_HEADLESS_LAUNCH.md that the deadline must leave room for one redo capture (about 55 min).
+(7) After merge, the clean-gap scheduling rule for R0 is dropped; the lead delivers that in RUN_STATE. Mention it in the doc.
+(8) #700 is tooling under gate policy rule 2: CI plus its regression test satisfy it. Fill #700's ledger accordingly once CI is green.
+
 ## What the code does
 
 ### SMC capture (items 1 and 4)
@@ -39,15 +52,21 @@ Why: R0's capture is selection data, not a reported number (R0 picks are PROVISI
   - `Ruling8Quiet` wraps that census and applies ruling 8.
     - It reads each `CpuQuietProbe` interval: at least 30 s, at the capture's
       5 s census cadence.
-    - An interval is heavy when the host's busy CPU outside this process tree
-      (`outside_aggregate_cpu_s_per_s`) is ≥ 0.5 cores.
+    - An interval is heavy when the largest single process outside this
+      process tree, excluding `kernel_task`, is at ≥ 0.5 CPU-s/s (follow-up
+      ruling 1).
     - Consecutive heavy intervals that touch or overlap form a run. A run
-      whose union spans ≥ 60 s is a sustained episode.
-    - Every heavy interval, and every interval over the 0.05 CPU-s/s
-      per-process bar, is a flag with its top processes.
+      whose union spans ≥ 60 s is a sustained episode. The episode lists the
+      processes that made each window heavy.
+    - A flag is recorded for every heavy interval, every interval over the
+      0.05 CPU-s/s per-process bar, and every interval whose outside-tree
+      aggregate or `kernel_task` is ≥ 0.5. Each flag carries the largest
+      process, the aggregate and `kernel_task`. The aggregate and
+      `kernel_task` are recorded, never judged.
   - `rank` (#692's classifier) returns the capture's `contention` unchanged,
-    and `contention_by_phase`: flagged intervals, heavy intervals, maximum
-    outside cores and sustained episodes overlapping idle, load and recovery.
+    and `contention_by_phase`: flagged intervals, heavy intervals, the
+    maximum largest-process cores, the maximum outside aggregate and the
+    sustained episodes overlapping idle, load and recovery.
     No rule reads them, and the picks are unchanged (regression test).
 - The agent, custody, measurement-process and LaunchAgent censuses still
   raise `NotQuiet`. So does an unmeasured CPU interval (host CPU unread or a
@@ -72,28 +91,34 @@ from the canonical checkout against the measurement checkout's runner), so
 that change is a separate PR into `main`. The runner on this lane already
 accepts `--checks` and `--keep-going`.
 
-## Implementation choices for the lead to confirm
+## Implementation choices, as ruled
 
-- **Quantity.** "A contaminant sustained at ≥ 0.5 cores" is implemented as
-  ruling 8's own quantity: all busy CPU outside the measured tree, as R1's
-  `busy_cores` sums it (`joulewise/align/apple/r1_runtime_contract.py` on
-  `lane/2026-11-06-v4-r1-integrated`). It is not limited to one named
-  process. This is at least as strict as any single process. It includes
-  `kernel_task` and `WindowServer`, which the GPU load step itself may raise.
-  The worst case is one redo and a `contended` flag, never a refusal.
-- **Boundary.** The ruling says ≥ 0.5; R1's code uses `> 0.5`
-  (`_sustained_busy`). The code follows the ruling, ≥.
-- **Resolution.** R1 judges one sample per second. R0's census gives
-  windows of at least 30 s every 5 s, so "60 s" is the union of consecutive
-  heavy windows. A 30 s burst at one full core averages 0.5 over that 60 s
-  union and counts. The bias is toward a redo.
-- **Abort timing.** The first episode abandons the capture as soon as it is
-  detected, not at the end of the capture. The redo starts at once. Its
+- **Quantity (ruling 1).** The largest single process outside the capture's
+  tree, `kernel_task` excluded. On this Mac `ps` may not list `kernel_task`
+  at all (`joulewise/hazards/contention.py`); when it is listed, its rate is
+  recorded. This differs from R1's ruling 8 quantity, which sums all
+  background CPU (`busy_cores`).
+- **Boundary (ruling 2).** ≥ 0.5, as ruled. R1's `_sustained_busy` uses
+  `> 0.5`.
+- **Resolution (ruling 3, accepted).** R1 judges one sample per second. R0's
+  census gives windows of at least 30 s every 5 s, so "60 s" is the union of
+  consecutive heavy windows. A 30 s burst at one full core counts. The bias
+  is toward a redo.
+- **Abort timing (ruling 4, accepted).** The first episode abandons the
+  capture as soon as it is detected. The redo starts at once, and its
   adaptive idle (300 s minimum, up to the 1,200 s settle cap) is its release.
   R1 inserts a G0 release before a heavy redo; R0 has no G0.
-- **Time budget.** Each attempt keeps the 3,300 s subprocess timeout. Two
-  attempts fit inside the runner's 7,200 s per-check deadline. A desk deadline
-  should leave room for one extra capture (at most about 55 min).
+- **Unmeasured CPU (ruling 5, accepted).** An unmeasurable CPU interval
+  (host CPU unread, a failed snapshot) stays an indeterminate refusal, a
+  tooling fault.
+- **Time budget (ruling 6, accepted).** Each attempt keeps the 3,300 s
+  subprocess timeout. Two attempts fit inside the runner's 7,200 s per-check
+  deadline. The desk deadline must leave room for one redo capture, about
+  55 min (`docs/process/R0_HEADLESS_LAUNCH.md` on `main`, PR #700).
+- **Clean-gap rule (ruling 7).** After this merges, the clean-gap scheduling
+  rule for R0 is dropped. The lead delivers that change in `RUN_STATE.md`.
+- **Launcher tier (ruling 8).** #700 is tooling under gate policy rule 2: CI
+  plus its regression test satisfy its gates.
 
 ## Not changed
 
