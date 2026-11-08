@@ -103,10 +103,24 @@ def allocation_run_id(run_id, window):
     return local if sep else run_id
 
 
+W1_ANCHOR_ORDINALS = (1, 2, 3, 4)  # registered W1 anchors (pilot protocol v4)
+
+
 def slot_run_id(slot, window, *, strict=False):
-    """Release anchors are series-unique; other R15 IDs remain local."""
+    """Release anchors are series-unique; other R15 IDs remain local.
+
+    W1 has no engine roster, so in strict (native/release) mode its anchor
+    role is bound to the registered ordinals 1-4 rather than trusted from the
+    export: exactly those ordinals must carry series_role 'anchor'.
+    """
     run = slot.get('run_id')
     local = allocation_run_id(run, window)
+    if strict and window == 'W1':
+        ordinal = slot.get('ordinal')
+        if type(ordinal) is not int:
+            raise ValueError('W1 slot ordinal required')
+        if (ordinal in W1_ANCHOR_ORDINALS) != (slot.get('series_role') == 'anchor'):
+            raise ValueError('W1 anchor role must be exactly ordinals 1-4')
     if slot.get('series_role') == 'anchor':
         if strict and run == local:
             raise ValueError('anchor run_id requires window prefix')

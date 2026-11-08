@@ -1,4 +1,4 @@
-# V4 primary engine (Sol), R23c
+# V4 primary engine (Sol), R23c + R23d
 
 2026-11-08. **PROVISIONAL: synthetic qualification, no live study validation.**
 Authority: the lead's engine-r23 brief (A37 and R23-E1/R23-1–4), on
@@ -118,6 +118,19 @@ with full member records (`slot`, `captured`, `thermal`, `summary`, and any
 `selection_desk.anchor_members` does not restore that retired compatibility
 route. There is no legacy selection-only input API. If a redundant snapshot is
 present with a W1 window, the window supplies all W1 analysis evidence.
+
+R23d (lead ruling on the Opus cold review, 2026-11-08): W1 has no engine
+roster, so in strict (non-synthetic, and always in `io.load`) mode
+`engine.slot_run_id` binds the W1 anchor role to the registered ordinals 1-4:
+exactly those slots must carry `series_role: anchor` and the `W1:<run_id>`
+prefix. A missing or mismatched role, an anchor role on any other ordinal, a
+missing ordinal or a bare anchor ID refuses. The same function serves the
+analyze manifest and W1 loops, the `io.load` manifest and roster loops and
+`raw.window`. The synthetic API stays lenient. The dead selection seam is
+deleted: `io.load` no longer reads or census-records `selection_source` and
+no longer writes a thermal-only `selection_desk`, and the CLI no longer copies
+one. Selection-only input still refuses. Witnesses:
+`tests.align.test_v4_r23d_engine`, including the reviewer's p1-p6 outcomes.
 
 Behaviour change: W1 U1–U3 checks and contrast now see the screened thermal
 fields, the same as C/T: `captured`, `analysis_ineligible`, `analysis_classes`

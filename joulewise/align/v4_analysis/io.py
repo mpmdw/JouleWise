@@ -103,13 +103,6 @@ def load(path, *, calibration_only=False, through_window=None, cache_dir=None, w
             sources[identity] = read_source(root, ref)
         payload['series_manifest'] = sources[identity]
         census.append(dict(path=ref['path'], sha256=ref['sha256']))
-    if 'selection_source' in payload:
-        ref = payload['selection_source']
-        identity = (ref['path'], ref['sha256'])
-        if identity not in sources:
-            sources[identity] = read_source(root, ref)
-        payload['selection_desk'] = sources[identity]
-        census.append(dict(path=ref['path'], sha256=ref['sha256']))
     from .engine import slot_run_id
     for window in (payload.get('series_manifest') or {}).get('windows', []):
         for slot in window['members']:
@@ -157,6 +150,4 @@ def load(path, *, calibration_only=False, through_window=None, cache_dir=None, w
     if calibration_only:
         payload['windows'] = [w for w in payload['windows'] if not w['window'].startswith('T')]
     payload['input_census'] = census
-    if any(w['window'] == 'W1' for w in payload['windows']):
-        payload['selection_desk'] = dict(members=[m['thermal'] for w in payload['windows'] if w['window'] == 'W1' for m in w['members']])
     return payload

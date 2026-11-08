@@ -36,8 +36,9 @@ def run(args):
             # C records are already verified/materialized in this invocation.
             # Open only T now; do not rehash or reduce C a second time.
             test_document = {**document, 'windows': [w for w in document['windows'] if w['window'].startswith('T')]}
-            # W1 was loaded with C above. Do not create a selection-only
-            # internal document while loading the remaining T sources.
+            # W1 was loaded with C above. Dropping any redundant selection
+            # field keeps the T-only document from tripping the selection-only
+            # refusal; the field is never read.
             for key in ('selection_source', 'selection_desk'):
                 test_document.pop(key, None)
             payload = load(args.input, through_window=args.through_window, cache_dir=args.cache,
@@ -46,8 +47,6 @@ def run(args):
             seen = set()
             payload['input_census'] = [r for r in [*calibration['input_census'], *payload['input_census']]
                 if (r['path'],r['sha256']) not in seen and not seen.add((r['path'],r['sha256']))]
-            if 'selection_desk' in calibration:
-                payload['selection_desk'] = calibration['selection_desk']
             fill, verdict = analyze(payload, workers=args.workers, frozen_thresholds=frozen)
         (output/'fill.json').write_bytes(canonical(fill))
         (output/'thresholds.json').write_bytes(canonical(fill['threshold_freeze']))
