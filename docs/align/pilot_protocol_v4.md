@@ -1007,7 +1007,7 @@ under the seed law), sampler, budgets, cache policy and stack. Each is a separat
 the normal idle and thermal gates. They are **supplemental diagnostics**: U4's W and W-1 df are
 unchanged, they join no identical-work group (U3's frozen comparison scope is unchanged), they use no
 held-out seed, they never count toward the window's captured members or any calibration count, and the
-desk reports them descriptively (`supplemental_sentinels`). The frozen manifest bytes do not change; the
+desk reports them descriptively (`supplemental_sentinels`). The committed-record reader likewise counts them toward nothing anywhere: not in `captured_members` (so the count-only ceiling is 22 and a window holding only supplemental captures consumes no calibration slot), not in the eligible counts (only the frozen calibration pool enters m), while their captures stay authenticated in custody. The desk's committed provisional counts (`series_desk_row`) are an upper bound the final counts may lower, never raise; the arm's rebuild carries and enforces it. The frozen manifest bytes do not change; the
 24-member plan is derived from it at materialization. The packet's `sentinel_roster` check requires the
 roster to include them after a U4/U5-inconclusive window.
 

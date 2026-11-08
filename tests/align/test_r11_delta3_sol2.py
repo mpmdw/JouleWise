@@ -212,12 +212,12 @@ class TopupAndRosterControls(unittest.TestCase):
             with self.subTest(rows=rows):
                 self.assertFalse(topup.derive(rows, NOW)['admissible'])
 
-    def test_24_captures_do_not_expand_the_calibrator_pool(self):
-        rows = [window(f'C{i}', 7, 7, captured=24) for i in range(1, 9)]
+    def test_22_captures_do_not_expand_the_calibrator_pool(self):
+        rows = [window(f'C{i}', 7, 7, captured=22) for i in range(1, 9)]    # R20 / delta5 S2 F5: the ceiling is 22; ordinals 23/24 count toward nothing
         result = cadence.calibration_stop(rows)
         self.assertEqual(result['decision'], 'calibration_complete')
         self.assertEqual(result['eligible_by_pair'], {'spam': 56, 'bank': 56})
-        for change in ({'captured_members': 25}, {'eligible_benign': {'spam': 8, 'bank': 7}}):
+        for change in ({'captured_members': 23}, {'eligible_benign': {'spam': 8, 'bank': 7}}):
             with self.subTest(change=change), self.assertRaises(ValueError):
                 cadence.calibration_stop([dict(rows[0], **change), *rows[1:]])
 

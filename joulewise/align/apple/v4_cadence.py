@@ -261,8 +261,10 @@ CAL_WINDOWS = 8
 CAL_TARGET_PER_PAIR = 39
 BENIGN_PER_PAIR_PER_WINDOW = 7    # protocol default roster: 14 benign (7/pair) per window
 WINDOW_MEMBERS = 22               # 4 anchors + 2 sentinels + 14 benign + 2 sabotage
-ADDED_SENTINELS_MAX = 2           # protocol U4/U5 inconclusive: two sentinels added to remaining windows
-CAPTURED_MAX = WINDOW_MEMBERS + ADDED_SENTINELS_MAX    # the real captured maximum (24); sentinels are not calibrators
+ADDED_SENTINELS_MAX = 2           # R20: U4/U5 inconclusive adds two SUPPLEMENTAL sentinels (ordinals 23, 24)
+# R20 (delta5 S2 F5): the supplemental sentinels count toward nothing, not even captured_members, so the
+# count-only ceiling is the 22 ordinary members (it was 24 under the delta2 reading, now superseded).
+CAPTURED_MAX = WINDOW_MEMBERS
 
 
 def _battery_ruled(rulings, previous):
