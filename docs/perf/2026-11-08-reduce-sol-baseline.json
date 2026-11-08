@@ -1,0 +1,47 @@
+{
+  "synthetic_only": true,
+  "python": "3.13.18 (main, Oct 25 2026, 18:31:23) [Clang 17.0.0 (clang-1700.6.4.2)]",
+  "unprofiled": {
+    "bytes": 16327969,
+    "samples": 300,
+    "parse_records": {
+      "wall_s": 0.9683052919572219,
+      "cpu_s": 0.9475129999999998
+    },
+    "decode_rich": {
+      "wall_s": 1.0996701250551268,
+      "cpu_s": 1.0904179999999988
+    },
+    "clock_mapping": {
+      "wall_s": 4.1207997128367424e-05,
+      "cpu_s": 4.099999999951365e-05
+    },
+    "integration": {
+      "wall_s": 9.437499102205038e-05,
+      "cpu_s": 9.499999999995623e-05
+    },
+    "plistlib_MB_per_cpu_s": 17.23244852577221
+  },
+  "profiled": {
+    "bytes": 16327969,
+    "samples": 300,
+    "parse_records": {
+      "wall_s": 2.882219500024803,
+      "cpu_s": 2.854712
+    },
+    "decode_rich": {
+      "wall_s": 3.086819874937646,
+      "cpu_s": 3.028575
+    },
+    "clock_mapping": {
+      "wall_s": 6.708304863423109e-05,
+      "cpu_s": 6.799999999973494e-05
+    },
+    "integration": {
+      "wall_s": 0.0001594159984961152,
+      "cpu_s": 0.00015900000000002024
+    },
+    "plistlib_MB_per_cpu_s": 5.719655432842262
+  },
+  "profile": "         22993262 function calls in 5.969 seconds\n\n   Ordered by: cumulative time\n   List reduced from 75 to 25 due to restriction <25>\n\n   ncalls  tottime  percall  cumtime  percall filename:lineno(function)\n        1    0.000    0.000    5.969    5.969 bench_reduce_sol.py:68(baseline)\n        4    0.011    0.003    5.969    1.492 bench_reduce_sol.py:62(timed)\n        2    0.001    0.001    5.817    2.908 powermetrics.py:2056(_powermetrics_documents)\n      600    0.001    0.000    5.797    0.010 plistlib.py:923(loads)\n      600    0.002    0.000    5.796    0.010 plistlib.py:901(load)\n      600    0.001    0.000    5.793    0.010 plistlib.py:207(parse)\n      600    1.666    0.003    5.791    0.010 {method 'ParseFile' of 'pyexpat.xmlparser' objects}\n        1    0.002    0.002    3.076    3.076 powermetrics.py:1863(decode_rich_telemetry)\n        1    0.009    0.009    2.882    2.882 powermetrics.py:1703(parse_powermetrics_records)\n        1    0.002    0.002    2.873    2.873 powermetrics.py:1753(_parse_powermetrics_records)\n  1678800    0.606    0.000    2.360    0.000 plistlib.py:228(handle_end_element)\n  1678800    0.421    0.000    0.901    0.000 plistlib.py:222(handle_begin_element)\n  3358202    0.555    0.000    0.864    0.000 plistlib.py:233(handle_data)\n   439800    0.299    0.000    0.665    0.000 plistlib.py:290(end_integer)\n   728400    0.231    0.000    0.491    0.000 plistlib.py:270(end_key)\n  3357600    0.450    0.000    0.450    0.000 {built-in method builtins.getattr}\n  1437600    0.282    0.000    0.413    0.000 plistlib.py:252(get_data)\n   949800    0.297    0.000    0.387    0.000 plistlib.py:236(add_object)\n  3853202    0.359    0.000    0.359    0.000 {method 'append' of 'list' objects}\n   222600    0.095    0.000    0.258    0.000 plistlib.py:259(begin_dict)\n   249000    0.104    0.000    0.256    0.000 plistlib.py:297(end_real)\n  1945804    0.136    0.000    0.136    0.000 {built-in method builtins.isinstance}\n  1437600    0.131    0.000    0.131    0.000 {method 'join' of 'str' objects}\n   879600    0.089    0.000    0.089    0.000 {method 'startswith' of 'str' objects}\n     1800    0.031    0.000    0.089    0.000 powermetrics.py:2157(_state_entries)\n\n\n"
+}
