@@ -436,7 +436,13 @@ class RunnerTests(unittest.TestCase):
                                                           'measurement_root': str(session / 'measurement'),
                                                           'source_measurement_root': str(checkout)}))
         with contextlib.redirect_stdout(io.StringIO()) as out:
-            self.assertEqual(runner.main(['pack', '--session-root', str(session), '--out', str(root / 'o')],
+            self.assertEqual(runner.main(['finalize-manifest', '--session-root', str(session),
+                                          '--out', str(root / 'M.json')], run=self.fake_run('a' * 40)), 0)
+        finalized = json.loads(out.getvalue())
+        self.assertEqual(hashlib.sha256((root / 'M.json').read_bytes()).hexdigest(), finalized['sha256'])
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(runner.main(['pack', '--session-root', str(session), '--out', str(root / 'o'),
+                                          '--finalized-manifest', str(root / 'M.json')],
                                          run=self.fake_run('a' * 40)), 0)
         packed = json.loads(out.getvalue())
         self.assertEqual(packed['external'], [str(ledger)])
@@ -445,8 +451,15 @@ class RunnerTests(unittest.TestCase):
             self.assertEqual(runner.main(['unpack', '--offload', str(root / 'o')], run=self.fake_run('b' * 40)), 1)
         self.assertIn('mirror differs', err.getvalue())
         self.assertFalse(session.exists())
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(runner.main(['unpack', '--offload', str(root / 'o'), '--finalized-manifest',
+                                          str(root / 'M.json'), '--finalized-sha256', '0' * 64],
+                                         run=self.fake_run('a' * 40)), 1)
+        self.assertIn('committed digest', err.getvalue())
         with contextlib.redirect_stdout(io.StringIO()):
-            self.assertEqual(runner.main(['unpack', '--offload', str(root / 'o')], run=self.fake_run('a' * 40)), 0)
+            self.assertEqual(runner.main(['unpack', '--offload', str(root / 'o'), '--finalized-manifest',
+                                          str(root / 'M.json'), '--finalized-sha256', finalized['sha256']],
+                                         run=self.fake_run('a' * 40)), 0)
         self.assertEqual(inventory(session), inventory(root / 'session.mbp'))
 
 

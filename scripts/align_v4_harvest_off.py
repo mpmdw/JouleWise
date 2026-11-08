@@ -255,8 +255,10 @@ def cmd_finalize_manifest(args, run=subprocess.run):
     if not (Path(plan['custody_root']) / 'night/result.json').is_file():
         raise harvest_offload.OffloadRefused('terminal record absent; finalize only a terminal window')
     manifest = harvest_offload.finalized_manifest(session.absolute())
-    with Path(args.out).open('x', encoding='utf-8') as sink:
-        sink.write(json.dumps(manifest, indent=2, sort_keys=True) + '\n')
+    # Canonical bytes, so the file's own SHA-256 (the record's raw_evidence descriptor) IS the
+    # digest unpack checks (manifest_sha256): one number in the record, not two.
+    with Path(args.out).open('xb') as sink:
+        sink.write(json.dumps(manifest, sort_keys=True, separators=(',', ':')).encode())
     return {'finalized_manifest': str(args.out), 'sha256': harvest_offload.manifest_sha256(manifest),
             'entries': len(manifest)}
 

@@ -102,14 +102,10 @@ The full list of modules run:
 
 ## 7. Open items for the Sol review and the lead
 
-1. **The light B bar.**
+1. **The light B bar** (accepted by the lead as disclosed; runbook §8).
    - For a provisional record, `battery_window` reads `v4_B_bar` from the light triage. That is the desk's own check without harvest battery codes, using the desk's journal join.
    - A harvest-only `battery.member_span` (registered-threshold join) can turn it false later. The k+2 final then recounts the streak.
    - A first non-pass resumes automatically anyway (ruling 9), so the exposure is one window.
-2. **Who commits what.**
-   - The magistrate's record step must commit `light_triage.json` (from `triage --out`) and the finalize-manifest sha256 with record k.
-   - Record k+1 must carry `previous_final` for k once the Air desk passes.
-   - The series ledger's `last_passed_record` gets `final_record` when the desk passed off the MBP.
-   - The runbook text for the magistrate is not written here.
+2. **Who commits what:** now written as `docs/align/v4/HARVEST-OFF-MAGISTRATE-RUNBOOK.md`, with exact commands.
 3. **The sweep runs on the restored session** and writes separate archives under its `--out`. It needs the disk headroom (the Air now has 49 GB free; one real window is 18.6-26.4 GB).
 4. **`gpu_active_mhz`** in the columnar file is still diagnostic, as in the Opus doc §10.
