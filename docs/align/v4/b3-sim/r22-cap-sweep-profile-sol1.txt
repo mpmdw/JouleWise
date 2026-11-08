@@ -1,0 +1,1 @@
+PILOT 10000 studies 1.061s; one process/thread; no speed optimization

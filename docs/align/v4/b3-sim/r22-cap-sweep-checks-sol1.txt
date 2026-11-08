@@ -1,0 +1,11 @@
+test_deterministic_serialized_replay (__main__.Checks.test_deterministic_serialized_replay) ... ok
+test_every_bar_tape_all_caps (__main__.Checks.test_every_bar_tape_all_caps) ... ok
+test_exact_probabilities_and_reserve_attempts (__main__.Checks.test_exact_probabilities_and_reserve_attempts) ... ok
+test_future_horizon_and_populations (__main__.Checks.test_future_horizon_and_populations) ... ok
+test_no_top_up_and_failed_late_reserves (__main__.Checks.test_no_top_up_and_failed_late_reserves) ... ok
+test_original_prefix_selection_thresholds_and_draws (__main__.Checks.test_original_prefix_selection_thresholds_and_draws) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.260s
+
+OK

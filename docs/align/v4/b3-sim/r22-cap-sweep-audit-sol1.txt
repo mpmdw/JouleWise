@@ -1,0 +1,17 @@
+{
+  "count_rows": 288,
+  "score_rows": 5184,
+  "joined_rows": 864,
+  "checked_intervals": 52992,
+  "original_replay": {
+    "equal_numeric_fields": 17568,
+    "new_serialized_sha256": "d6a0e5c5e1406feb1404552a2960b6d06ed8f2ee113058f50b3a1ea75f7bdca9",
+    "original_serialized_sha256": "d6a0e5c5e1406feb1404552a2960b6d06ed8f2ee113058f50b3a1ea75f7bdca9"
+  },
+  "scope": "Synthetic artifact validation only; all 72 settings and both pairs; no hardware validation.",
+  "source_sha256": "636f8b32c67d00fd65a78313f058134d13f466b2db74a801e9bdb98a0ff5f7f3",
+  "derived_sha256": {
+    "r22-cap-sweep-table-sol1.csv": "2c2f05742c1521ef35fd55a26573f84f65855606980a6bf1564bb3b536529943",
+    "r22-cap-sweep-availability-sol1.csv": "69cf325c56c33a59ae4f9339340991a907f72198bb2dd2c43646259ff0387d2a"
+  }
+}
