@@ -126,10 +126,12 @@ def capture_member(streams, *, member_span, baseline_span, episode, model=None):
         return _empty(['meter.episode_outside_member'])
     rejected = []
     for name, stream in streams:
+        if stream.trailer is None and stream.present:
+            rejected.append('meter.stream_unclosed')    # disclosed with any rejection by this stream
         if not stream.present:
             rejected.append('meter.absent')
             continue
-        offset = kp.raw_offset_ns(stream)
+        offset = kp.raw_offset_ns(stream, allow_unclosed=True)
         if offset is None or not stream.aligned:
             rejected.append('meter.clock_unresolved')
             continue
@@ -173,12 +175,13 @@ def capture_member(streams, *, member_span, baseline_span, episode, model=None):
             turn_energy[turn.index] = (active, 0.0)
         rows = er.turn_rows_from_episode(episode, turn_energy, hidden_token_counts_logged=True,
                                          uncertainty_kind='diagnostic_equal_weights')
+        unclosed = ['meter.stream_unclosed'] if stream.trailer is None else []
         row = {**_empty(), 'status': 'available', 'stream': name,
                'raw_offset_ns': offset, 'member_span_ns': list(member_span),
                'baseline_span_ns': list(baseline_span), 'dc_in_energy_j': energy,
                'episode_dc_in_energy_j': episode_j, 'baseline_w': base_w,
                'dc_in_delta_j': energy - base_w * ((window[1] - window[0]) / 1e9),
-               'flags': list(dict.fromkeys([*(f['code'] for f in disclosures), *rows.flags])),
+               'flags': list(dict.fromkeys([*unclosed, *(f['code'] for f in disclosures), *rows.flags])),
                'turn_rows': [asdict(r) for r in rows], 'residual_status': 'dc_fit_not_supplied'}
         if model is not None:
             _predict(row, model)
@@ -203,12 +206,21 @@ def session_report(custody, plan_members, runs_root, summaries):
     if custody is None:
         return unavailable_report(plan_members, 'meter.custody_unavailable')
     custody, runs_root = Path(custody), Path(runs_root)
-    sources, streams, source_flags = [], [], []
+    sources, streams, source_flags, stream_flags = [], [], [], {}
     try:
         supervision = _json(custody / 'night/hazard_result.json').get('meter') or {}
     except Exception:  # diagnostic evidence cannot block the rails desk
         supervision = {}
-    expected = {r['path']: r.get('sha256') for r in supervision.get('streams', [])}
+    # The window's custody manifest: the streams the shared driver (the HAZARD_PACK supervisor) listed
+    # when it closed custody. Salvage and availability are for a LISTED, SUPERVISED stream with a
+    # RECORDED digest that matches (delta3 G3). Three separate exclusions, each its own flag:
+    #   meter.unsupervised             no supervisor record at all: no stream has provenance
+    #   meter.stream_unlisted          a file the manifest never names (a stray or copied stream)
+    #   meter.custody_digest_unrecorded  listed, but no digest recorded for it
+    # and a recorded digest that differs stays meter.custody_hash_mismatch. A stray file can never
+    # preempt the authenticated stream: it is not even parsed.
+    supervised = isinstance(supervision.get('streams'), list) and bool(supervision['streams'])
+    listed = {r['path']: r.get('sha256') for r in supervision.get('streams', []) if isinstance(r, dict) and 'path' in r}
     directory = custody / REQUIREMENT['custody_directory']
     paths = sorted({p.with_suffix('') if p.suffix == '.zst' else p
                     for pattern in ('stream-*.jsonl', 'stream-*.jsonl.zst') for p in directory.glob(pattern)})
@@ -217,7 +229,16 @@ def session_report(custody, plan_members, runs_root, summaries):
         try:
             digest = hashlib.sha256(read_bytes(path)).hexdigest()
             sources.append({'path': name, 'sha256': digest})
-            if expected.get(name) != digest:
+            if not supervised:
+                source_flags.append('meter.unsupervised')
+                continue
+            if name not in listed:
+                source_flags.append('meter.stream_unlisted')
+                continue
+            if listed[name] is None:
+                source_flags.append('meter.custody_digest_unrecorded')
+                continue
+            if listed[name] != digest:
                 source_flags.append('meter.custody_hash_mismatch')
                 continue
             streams.append((name, kp.parse(path)))

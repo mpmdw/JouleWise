@@ -76,21 +76,36 @@ class MinimalDryRunTests(unittest.TestCase):
     Opus cold HIGH-1: the full-window classes below skip by default, which hid a red dry run.
     """
 
-    def test_minimal_synthetic_w1_reaches_the_desk_with_u3_pending_inconclusive(self):
+    def test_minimal_synthetic_w1_reaches_the_desk(self):
+        # W1-BLOCKERS merge: the dry run carries a signed SYNTHETIC U3 bar, so the
+        # desk admits it; with only member 5 the 5/17 pair is missing (inconclusive).
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / 'w1'
             self.assertEqual(dry.main([str(out), '--inject', 'none', '--members', '5']), 0)
             record = json.loads((out / 'dry_run_record.json').read_text())
             self.assertEqual(record['desk_status'], 'ok', record.get('desk_error'))
-            pilot = (out / 'desk/PILOT.json')
-            desk = json.loads(pilot.read_text())
-            self.assertTrue(desk['u3_pending'])            # a PENDING U3 is an input, not a crash
-            self.assertIsNone(desk['u3_bar'])
+            desk = json.loads((out / 'desk/PILOT.json').read_text())
+            self.assertFalse(desk['u3_pending'])
             for window in desk['model_windows'].values():
                 self.assertNotEqual(window['U3']['status'], 'pass')
             from joulewise.align.apple import v4_registration as registration
-            with self.assertRaises(ValueError):           # arming stays refused
+            with self.assertRaises(ValueError):           # a missing bar never admits
                 registration.validate_u3(None)
+            with self.assertRaises(ValueError):           # its sources/gate are not repository custody
+                registration.validate_u3(desk['u3_bar'], root=kit.ROOT)
+
+    def test_pending_u3_bar_is_inconclusive_at_the_desk_not_a_crash(self):
+        from scripts import align_v4_thermal_desk as cli
+        from joulewise.align.apple import v4_registration as registration
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            (directory / 'u3_bar.json').write_text(json.dumps({'schema': registration.U3_SCHEMA, 'status': 'PENDING'}))
+            fixture = {'turns': [{'turn': 0, 'prompt_token_ids': [1], 'output_token_ids': [2]}]}
+            (directory / 'wp19_receipt.json').write_text(json.dumps(registration.wp19_identity(
+                {'X': fixture, 'Y': fixture}, {'X': [[1]], 'Y': [[1]]}, fixture['turns'],
+                live_source_sha256='b'*64)))
+            bar, _ = cli.registration_evidence(directory)
+            self.assertIsNone(bar)
 
     def test_the_synthetic_contrast_is_rederived_after_the_wp18_update(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -142,6 +157,13 @@ class CleanWindowTests(_Window):
         self.assertEqual([m['calibration_exclusions'] for m in self.record['desk']['members']],
                          [[]] * len(self.record['desk']['members']))
 
+    def test_clean_window_passes_the_signed_battery_consequence(self):
+        from scripts.align_v4_session import battery_windows_pass
+        windows = self.record['desk']['registration_diagnostics']['battery_windows']
+        self.assertTrue(battery_windows_pass(windows))
+        self.assertTrue(all(w['B_count'] == 0 for w in windows.values()))
+        self.assertTrue(self.record['desk']['registration_diagnostics']['d_cohort']['instrument_ok'])
+
     def test_desk_energy_matches_independent_world_integral(self):
         oracle = {m['run_id']: m['E_oracle_j'] for m in self.record['expected']['members']}
         for m in self.record['desk']['members']:
@@ -155,17 +177,13 @@ class CleanWindowTests(_Window):
         for prefix, model in (('Qwen3.8', 'D'), ('Qwen3-30B', '30B')):
             desk, expected = self.desk_model(prefix), self.record['expected']['models'][model]
             for u in ('U1', 'U3', 'U4', 'U5', 'U6'):
-                # R11/R03: no U3 bar is installed (pending), so the desk reports U3 inconclusive
-                # instead of the oracle's pass; every other check is unchanged.
-                want = 'inconclusive' if u == 'U3' else expected[u]
-                self.assertEqual(desk[u]['status'], want, (model, u))
+                self.assertEqual(desk[u]['status'], expected[u], (model, u))
             self.assertEqual(desk['consequence'], expected['consequence'])
         desk = self.record['desk']['deciding_experiment']
         oracle = self.record['expected']['contrast_token_identical_runs']
         self.assertEqual(desk['verdict'], oracle['verdict'])
-        # R06: the desk's stage-adjusted eight-row fit differs from the oracle's plain
-        # difference by a fraction of a joule; the verdict above is the contract.
-        self.assertAlmostEqual(desk['arm_effect_j'], oracle['delta_j'], delta=0.1)
+        # Both the desk and the oracle fit the stage-adjusted chair-9 model (df=3).
+        self.assertAlmostEqual(desk['arm_effect_j'], oracle['delta_j'], places=3)
 
 
 @unittest.skipUnless(FULL, 'set JW_WP22_FULL=1 for the full synthetic window')

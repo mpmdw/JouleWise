@@ -5,17 +5,24 @@ Synthetic temporary Git repositories only.
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 from joulewise.align.apple import v4_registration as registration
 from tests.align import test_r11_delta_sol1 as delta
 
 SIGNATURE = 'lead: synthetic-amendment 2026-11-08'
-AMENDABLE = 'joulewise/b6/idle_wait.py'
+AMENDABLE = 'joulewise/kv_size.py'          # delta3: nothing is amendable in the real registration; the mechanism is exercised
+                                            # by patching one analysis-only path into the allowlist
 STRICT_EXAMPLES = ('docs/align/pilot_protocol_v4.md', 'scripts/align_v4_kit.py', 'joulewise/align/apple/endpoint.py',
                    'joulewise/align/apple/prompt_cache.py', 'scripts/run_night.py', 'scripts/launch_window.py',
                    'scripts/km003c_monitor.py', 'joulewise/external/km003c_usb.py', 'scripts/hazard_monitor.py',
                    'scripts/bytes_h_session.py', 'scripts/run_campaign.py', 'joulewise/adapters/mlx_runtime.py',
-                   'scripts/night_chains/align_r1_rehearsal.zsh', 'joulewise/align/apple/v4_topup.py')
+                   'scripts/night_chains/align_r1_rehearsal.zsh', 'joulewise/align/apple/v4_topup.py',
+                   # strict by default (delta2): shared B5/B6 code and the calibration spine are strict too
+                   'joulewise/b6/idle_wait.py', 'joulewise/b5/driver.py', 'joulewise/b6/courier.py',
+                   'scripts/reserve_calibration_window_bracket.py', 'scripts/validate_powermetrics_fiducial.py',
+                   'scripts/b5_window_calibration_verdict.py', 'scripts/align_r1_runtime.py',
+                   'configs/align/v4/r1_runtime.json', 'joulewise/__main__.py')
 
 
 def amendment(candidate, path, new_text, *, reason='infrastructure fix', signature=SIGNATURE, old=None):
@@ -27,27 +34,40 @@ def amendment(candidate, path, new_text, *, reason='infrastructure fix', signatu
 
 
 class TierClassificationTests(unittest.TestCase):
-    def test_strict_and_amendment_paths(self):
-        for path in STRICT_EXAMPLES:
+    def test_every_bound_path_is_strict_and_the_allowlist_is_empty(self):
+        # delta3 S1 F01 / S2 H1: every bound path is statically reachable (a module body runs on
+        # import), so none is "absent from both the static closure and the dynamic trace".
+        self.assertEqual(registration.AMENDMENT_ALLOWLIST, ())
+        for path in STRICT_EXAMPLES + (AMENDABLE,):
             with self.subTest(path=path):
                 self.assertIn(path, registration.ARTIFACTS)
                 self.assertTrue(registration.is_strict(path))
-        self.assertIn(AMENDABLE, registration.ARTIFACTS)
-        self.assertFalse(registration.is_strict(AMENDABLE))
-        amendable = [p for p in registration.ARTIFACTS if not registration.is_strict(p)]
-        self.assertTrue(amendable)
-        self.assertTrue(all(p.startswith(('joulewise/', 'scripts/')) for p in amendable))
+        self.assertTrue(all(registration.is_strict(p) for p in registration.ARTIFACTS))
         self.assertFalse([p for p in registration.STRICT_SCRIPTS if p not in registration.ARTIFACTS])
+        self.assertTrue(all(registration.is_strict(p) for p in registration.STRICT_SCRIPTS))
+
+    def test_a_listed_path_would_be_the_only_amendable_one(self):
+        with mock.patch.object(registration, 'AMENDMENT_ALLOWLIST', (AMENDABLE,)):
+            self.assertFalse(registration.is_strict(AMENDABLE))
+            amendable = [p for p in registration.ARTIFACTS if not registration.is_strict(p)]
+            self.assertEqual(amendable, [AMENDABLE])
 
 
 class ReceiptTierTests(unittest.TestCase):
+    def setUp(self):
+        # exercise the amendment mechanism on one synthetic allowlist entry
+        patcher = mock.patch.object(registration, 'AMENDMENT_ALLOWLIST', (AMENDABLE,))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def candidate(self):
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
         return delta.TemporaryCandidate(Path(self._tmp.name))
 
     def test_strict_tier_change_needs_a_new_receipt_even_with_an_amendment_row(self):
-        for path in ('joulewise/align/apple/endpoint.py', 'scripts/launch_window.py', 'docs/align/pilot_protocol_v4.md'):
+        for path in ('joulewise/align/apple/endpoint.py', 'scripts/launch_window.py', 'docs/align/pilot_protocol_v4.md',
+                     'joulewise/b6/idle_wait.py', 'scripts/b5_window_calibration_verdict.py'):
             with self.subTest(path=path):
                 candidate = self.candidate()
                 row = amendment(candidate, path, 'changed strict-tier bytes\n')

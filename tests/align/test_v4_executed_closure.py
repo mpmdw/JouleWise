@@ -64,6 +64,13 @@ def _edges(relative):
             elif (isinstance(node, ast.Constant) and isinstance(node.value, str)
                   and id(node) not in docstrings and SCRIPT_EXACT.match(node.value)):
                 scripts.add(node.value)
+            elif isinstance(node, (ast.List, ast.Tuple)):
+                # `python -m pkg` runs pkg/__main__.py: an argv sequence naming '-m' then a module.
+                items = [e.value if isinstance(e, ast.Constant) and isinstance(e.value, str) else None
+                         for e in node.elts]
+                for flag, module in zip(items, items[1:]):
+                    if flag == '-m' and module and module.split('.')[0] in FIRST_PARTY:
+                        names.add(module + '.__main__')
     else:
         for line in text.splitlines():
             if not line.lstrip().startswith('#'):

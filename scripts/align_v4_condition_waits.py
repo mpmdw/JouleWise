@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""R16 offline kit/replay/parser. No native run is started by this CLI.
+"""R16 kit/replay/parser and explicit magistrate-only preliminary attempt.
 
 The magistrate uses condition_waits_native.run_attempt / cw1.execute_kit with
 qualified native final checks. This tool only reads explicitly named exports.
@@ -60,6 +60,14 @@ def main(argv=None):
             child.add_argument('--run', required=True)
     standin = sub.add_parser('finalize-standin')
     standin.add_argument('--output', required=True)
+    export = sub.add_parser('export-idle')
+    export.add_argument('--source', choices=kit.IDLE_SOURCES, required=True)
+    export.add_argument('--evidence', required=True)
+    attempt = sub.add_parser('attempt', help='QUIET-MAC: operator only, outside every agent session')
+    for name in ('policy', 'inputs', 'output', 'window', 'series-ledger'):
+        attempt.add_argument('--'+name, required=True)
+    account = sub.add_parser('observer-parse')
+    account.add_argument('--evidence', required=True)
     args = p.parse_args(argv)
     if args.command == 'kit':
         result = kit.run_kit(python=args.python, r0_config=args.r0_config, output=args.output,
@@ -69,6 +77,15 @@ def main(argv=None):
     elif args.command == 'replay':
         evidence = read(args.evidence)
         result = cw.replay(read(args.policy), evidence['header'], evidence['rows'])
+    elif args.command == 'export-idle':
+        result = kit.export_idle(args.source, read(args.evidence))
+    elif args.command == 'attempt':
+        from joulewise.align.apple.condition_waits_native import preliminary_attempt
+        result = preliminary_attempt(cw.validate_policy(read(args.policy)), read(args.inputs), args.output,
+                                     window=args.window, series_ledger=args.series_ledger)
+    elif args.command == 'observer-parse':
+        from joulewise.align.apple.condition_waits_native import observer_accounting
+        result = observer_accounting(**read(args.evidence))
     elif args.command == 'cw1-parse':
         result = kit.parse_run(read(args.policy), read(args.run), read(args.idle_traces))
     else:

@@ -58,28 +58,33 @@ pilot-3 disk law (two copies). Until then --check and prepare refuse with
 that reason. Use fit_roster with R1 measured cost estimates:
 drop only 18 first, then decrease B_D by 1024 down to 6144; otherwise return
 to lead. Preserve anchors, contrasts and 5/17. Requalify/freeze changed budgets.
-W1 arm requires --obc-off-attested-by, --battery-log, --next-arm-triage and --w1-disk-config. By-day
+W1 arm requires --obc-off-attested-by, --battery-log (and --window-battery-journal), --next-arm-triage and --w1-disk-config. By-day
 scripts/align_v4_offloads.py verifies configured inventories; the disk config
 names daytime_offload_receipt and an explicit lead-signed
 daytime_offload_freshness policy (max_age_s, lead_signature); no default duration. Arm checks >=80 decimal GB
 free without remounting/re-hashing the SSD. Empty offloads require explicit
 offloads_owed: none. Battery arm requires fresh AC, >=99%, not charging and
 |InstantAmperage| <=200 mA, retaining raw ioreg and pmset evidence (pmset is evidence only).
-Top-up evidence is derived from the logged battery record (--battery-log; a completed charge within
-30 min or continuous float since), never typed. DC residuals print for benign members only.
+Top-up evidence is derived from the logged battery record, never typed: a completed charge within
+30 min, or continuous float since one. --battery-log is the between-window sampler log (stopped before
+the arm dwell; none runs during a window) and --window-battery-journal the window's own 1 Hz SMC capture. DC residuals print for benign members only.
 R12: a window ends at authenticated terminal completion (the 59,520 s maximum is a
 ceiling, not a reservation). W1/D arm also requires --next-arm-triage, the frozen
 B2 list (joulewise/align/apple/v4_cadence.NEXT_ARM_TRIAGE), every entry gating.
+The packet is a pointer: the arm rebuilds it (scripts/align_v4_next_arm_packet.py) from the identities it
+names, requires equality ignoring only pushed_tip/packet_preflight, requires an unexpired valid_until_epoch_s
+and computes the live meter (before the quiet dwell, never during it), powermode, volume and battery
+checks itself; nothing is lead-entered.
 Calibration is a fixed 8 counted windows (v4_cadence.calibration_stop, RUN_STATE 217): no
 early stop, 39 eligible benign per pair after 8, else insufficient_calibration.
 require_w1_ready also requires registration_receipt.json, bound to current and
 committed protocol/kit/desk/estimand/deviation/U3/WP19 bytes, two admitted gate
 reports and the lead signature. The committed pending template never admits.
-U3 is PENDING frozen predictive derivation/OC sensitivity: explicit replay
-summaries install no k or energy bar. Historical k=3 receipts cannot admit W1.
+U3 needs a lead-signed u3_bar.json (session_zero_rms_series_exact_v1, N=16) with an
+independent gate; no k or fixed energy bar exists. Historical k=3 receipts cannot admit W1.
 Generate wp19_receipt.json from all-turn X/Y rendering plus complete native X-G.
-The numeric B window consequence and qualified full-span mount audit remain
-lead-owned pending gates. R0.record_sha256 must bind sensor provenance.
+The B window rule needs a lead-signed battery_window_policy.json (zero_B_auto_resume_v1);
+the qualified full-span mount audit remains a lead-owned pending gate. R0.record_sha256 must bind sensor provenance.
 R16 checks actual per-turn opportunity at the chosen B_D, never a capability guarantee.
 The additive align_v4_session.py refuses prepare/install while inputs are pending.
 Its desk is the parameterized pilot instrument desk; WP21 owns full U4–U6,

@@ -35,6 +35,9 @@ class PowerStream:
         self.lock = threading.Lock()
         self.error = self.pm = self.pm_ns = None
         self.last_end = None
+        self.sequence = 0
+        self.elapsed = 0
+        self.date_bounds = None
 
     def start(self):
         self.anchor = self.ctx.stamp()
@@ -54,10 +57,21 @@ class PowerStream:
             raise ValueError('invalid native power duration/watts')
         # D-078 endpoint/cumulative-elapsed convention; native timestamp drift
         # remains checked rather than replacing a stalled source with arrival.
-        end = native_end if self.last_end is None else self.last_end+duration
-        if abs(end-native_end) > cw.NS//10:
+        # Plist dates censor the endpoint to [date,date+1s). Intersect
+        # constraints on the first endpoint, allowing 100 ppm wall rate.
+        # Endpoints themselves advance solely on the sampler sequence clock.
+        if self.last_end is not None:
+            self.elapsed += duration
+        tolerance = round(self.elapsed*.0001)
+        bounds = (native_end-self.elapsed-tolerance, native_end+cw.NS-self.elapsed+tolerance)
+        lo, hi = bounds if self.date_bounds is None else (max(bounds[0], self.date_bounds[0]),
+                                                         min(bounds[1], self.date_bounds[1]))
+        if lo >= hi:
             raise ValueError('native power timestamp discontinuity')
+        self.date_bounds = lo, hi
+        end = native_end if self.last_end is None else self.last_end+duration
         self.last_end = end
+        self.sequence += 1
         with self.lock:
             if len(self.pending) == self.pending.maxlen:
                 raise ValueError('power delivery queue overflow')
@@ -92,17 +106,47 @@ class PowerStream:
     def close(self):
         if self.process is not None:
             import signal
+            from joulewise.align.apple.r1_runtime import stop_powermetrics_descendants
+            def processes():
+                taken = subprocess.run(['/bin/ps', '-axo', 'pid=,ppid=,command='],
+                    capture_output=True, text=True, timeout=2, check=True)
+                table = {}
+                for line in taken.stdout.splitlines():
+                    pid, parent, *command = line.split(None, 2)
+                    table[int(pid)] = (int(parent), command[0] if command else '')
+                return table
+            census_error = None
+            descendants = {}
+            try:
+                table = processes()
+                roots = {self.process.pid}
+                while True:
+                    children = {pid for pid, (parent, _) in table.items() if parent in roots}
+                    if children <= roots:
+                        break
+                    roots |= children
+                descendants = {pid: table[pid][1] for pid in roots if pid in table
+                               and 'powermetrics' in table[pid][1]}
+            except Exception as exc:
+                census_error = exc
+            stop_powermetrics_descendants(self.process.pid, wait_s=0)
             try:
                 os.killpg(self.process.pid, signal.SIGTERM)
                 self.process.wait(timeout=5)
             except subprocess.TimeoutExpired:
-                os.killpg(self.process.pid, signal.SIGKILL)
-                self.process.wait(timeout=5)
+                # Keep sudo alive to relay TERM; killing it can orphan root PM.
+                raise RuntimeError('powermetrics did not terminate; native GO prohibited')
             except ProcessLookupError:
                 pass
             if self.thread is not None:
                 self.thread.join(timeout=5)
             self.process.stdout.close()
+            remaining = processes()
+            if census_error is not None:
+                raise RuntimeError('powermetrics cleanup census unavailable; native GO prohibited') from census_error
+            if any(pid in remaining and remaining[pid][1] == name for pid, name in descendants.items()):
+                raise RuntimeError('powermetrics descendant still alive; native GO prohibited')
+            self.process = None
 
 
 def command(argv):
@@ -131,7 +175,8 @@ class NativeSampler:
     """
     def __init__(self, policy, *, ctx=None, smc=None, notify=None, power=None,
                  run=command, topup_reader, setup_check, obc_off_attested_by,
-                 battery_reader=None, guard_reader=None, boot_reader=None, channel_template=None):
+                 battery_reader=None, guard_reader=None, boot_reader=None, channel_template=None,
+                 status_reader=None):
         self.policy = cw.validate_policy(policy)
         # A prospectively approved CW-1 reference capture may select channels
         # before numeric Q exists. It supplies candidates, never an active Q.
@@ -144,11 +189,24 @@ class NativeSampler:
         self.previous = None
         self.previous_over, self.root_identities = {}, {}
         self.index = 0
+        self.status_reader = status_reader
+        self._boot = None
+        self.arm_setup = self.arm_topup = self.topup_evidence = None
+        self.float_continuity = True
+        self.last_battery_ns = None
 
     def start(self):
         from joulewise.align.apple.smc_reader import Reader
         from joulewise.hazards.thermal import NotifyReader
         try:
+            if self.status_reader is None and self.run is command:
+                from joulewise.align.apple.condition_waits_status import StatusReader
+                self.status_reader = StatusReader()
+            self._boot = self.boot_id()
+            self.arm_setup = self.setup_check()
+            now = self.ctx.stamp().wall_ns/cw.NS
+            self.topup_evidence = self.topup_reader(now)
+            self.arm_topup = {'admitted_at_epoch_s': now}
             if self.smc is None:
                 self.smc = Reader()
             if self.notify is None:
@@ -162,6 +220,10 @@ class NativeSampler:
         return self
 
     def boot_id(self):
+        if self._boot is not None:
+            return self._boot
+        if self.status_reader is not None:
+            return self.status_reader.boot
         if self.boot_reader:
             return self.boot_reader()
         result = self.run(('/usr/sbin/sysctl', '-n', 'kern.bootsessionuuid'))
@@ -203,16 +265,25 @@ class NativeSampler:
         decoder_ok = all(smc['readings'][k].get('data_type') == c['decoder']
                          for k, c in ([(c['key'], c) for c in q['temperatures'].values()]
                                       + list(q['fans'].items()))) if q else True
-        battery, _raw = (self.battery_reader() if self.battery_reader else battery_float.observe(
+        status = self.status_reader.sample(a.wall_ns/cw.NS) if self.status_reader else None
+        battery, _raw = ((status['battery'], b'') if status else self.battery_reader() if self.battery_reader else battery_float.observe(
             phase='arm_check', runner=self.run, wall_time_s=a.wall_ns/cw.NS,
             monotonic_ns=self.ctx.clocks.monotonic_ns))
         batt_ns = self.ctx.clocks.monotonic_ns()
-        custom = self.run(('/usr/bin/pmset', '-g', 'custom'))
-        mode = powermode.parse_ac_powermode(custom.stdout.decode('ascii')) if not custom.returncode else None
-        asleep = display_state(self.run)
-        saver = self.run(('/usr/bin/pgrep', '-x', 'ScreenSaverEngine'))
-        screensaver = False if saver.returncode == 1 and not saver.stdout.strip() else True if saver.returncode == 0 else None
-        setup = self.setup_check()
+        if (not cw.battery_arm(battery, self.obc, self.topup_evidence,
+                now_epoch_s=(self.arm_topup or {}).get('admitted_at_epoch_s'))['admitted']
+                or self.last_battery_ns is not None and batt_ns-self.last_battery_ns > 2*cw.NS):
+            self.float_continuity = False
+        self.last_battery_ns = batt_ns
+        if status:
+            mode, asleep, screensaver = (status[k] for k in ('ac_powermode', 'display_asleep', 'screensaver_engaged'))
+        else:  # injected legacy command seam for synthetic fixtures only
+            custom = self.run(('/usr/bin/pmset', '-g', 'custom'))
+            mode = powermode.parse_ac_powermode(custom.stdout.decode('ascii')) if not custom.returncode else None
+            asleep = display_state(self.run)
+            saver = self.run(('/usr/bin/pgrep', '-x', 'ScreenSaverEngine'))
+            screensaver = False if saver.returncode == 1 and not saver.stdout.strip() else True if saver.returncode == 0 else None
+        setup = self.arm_setup or {'passed': False}
         power = self.power.sample()
         intervals = self._guard()
         os_level = self.notify.read()
@@ -221,18 +292,23 @@ class NativeSampler:
         return {'schema': cw.SAMPLE, 'attempt_id': attempt_id, 'boot_id': self.boot_id(),
                 'started': a.to_json(), 'finished': b.to_json(), 'sensors': smc['sensors'],
                 'smc_readings': smc['readings'], 'smc_units': smc['units'],
-                'raw_ioreg': _raw.decode('ascii', errors='backslashreplace'),
                 'source_errors': smc['errors'], 'ac_powermode': mode, 'display_asleep': asleep,
                 'screensaver_engaged': screensaver, 'os_level': os_level, **power,
                 'battery': battery, 'battery_observed_ns': batt_ns,
-                'topup': self.topup_reader(b.wall_ns/cw.NS), 'obc_off_attested_by': self.obc,
+                'topup': self.topup_evidence, 'arm_topup': self.arm_topup, 'obc_off_attested_by': self.obc,
+                'float_continuity_passed': self.float_continuity,
                 'setup_sha256': setup.get('setup_sha256'),
                 'final_checks_passed': setup.get('passed') is True and decoder_ok,
                 'guard_intervals': intervals}
 
+    def release_check(self):
+        """Second and final physical census, outside the 1 Hz sampler."""
+        setup = self.setup_check()
+        return setup.get('passed') is True and setup.get('setup_sha256') == (self.arm_setup or {}).get('setup_sha256')
+
     def close(self):
         errors = []
-        for source in (self.power, self.notify, self.smc):
+        for source in (self.power, self.notify, self.smc, self.status_reader):
             if source is not None:
                 try:
                     source.close()
@@ -269,7 +345,10 @@ def run_attempt(policy, header, sampler, *, journal, trace, final_checks,
             row['incumbent_ready'] = incumbent
             trace.write(cw.canonical(row).decode()+'\n')
             result = attempt.feed(row, incumbent_ready=incumbent)
-            if result['status'] == 'not_ready':
+            if (policy['mode'] == 'incumbent_shadow' and result['status'] != 'released'
+                    and sampler.ctx.clocks.monotonic_ns()-attempt.start >= cw.CEILING_S*cw.NS):
+                result.update(status='shadow_censored', go=False)
+            if result['status'] in ('not_ready', 'shadow_censored'):
                 cw.marker(journal, 'not_ready', result['finished'])
                 on_receipt(result)
                 return result
@@ -277,6 +356,8 @@ def run_attempt(policy, header, sampler, *, journal, trace, final_checks,
                 # Final native reads may disturb readiness. Always re-sample;
                 # the final row remains in the same stamped trace/attempt.
                 final_ok = final_checks() is True
+                if hasattr(sampler, 'release_check'):
+                    final_ok = sampler.release_check() and final_ok
                 row = observation(sampler, header)
                 row['final_checks_passed'] = row.get('final_checks_passed') is True and final_ok
                 row['incumbent_ready'] = incumbent_ready() is True
@@ -350,7 +431,16 @@ class ArmWait:
         # Cadence/collectors and all heavy arm preparation precede this point.
         # Their completion is a disruptive boundary, not part of a quiet suffix.
         self.header['started'] = self.sampler.ctx.stamp().to_json()
-        self.header['quiet_start_ns'] = self.header['started']['monotonic_ns']
+        # The owner may hand over a continuous raw cooldown trace and its last
+        # disruptive boundary. Never inherit a PASS or a fixed wait duration.
+        # With no continuous trace the safe acquisition floor starts here.
+        history = getattr(self.sampler, 'cooldown_rows', None)
+        boundary = getattr(self.sampler, 'last_disruptive_ns', None)
+        if history and type(boundary) is int and boundary <= self.header['started']['monotonic_ns']:
+            self.header['cooldown_rows'] = list(history)
+            self.header['quiet_start_ns'] = boundary
+        else:
+            self.header['quiet_start_ns'] = self.header['started']['monotonic_ns']
         self.attempt = cw.Attempt(self.policy, **self.header)
         cw.marker(self.journal, 'quiet_start', {**self.header['started'],
             'monotonic_ns': self.header['quiet_start_ns'],
@@ -361,6 +451,8 @@ class ArmWait:
         self.pending.append(result)
 
     def tick(self, *, go=False):
+        if self.attempt.closed and self.policy['mode'] == 'incumbent_shadow':
+            return self.receipt
         row = observation(self.sampler, self.header)
         row['guard_intervals'], self.pending = self.pending, []
         row['power_intervals'] = [p for p in row.get('power_intervals', [])
@@ -371,6 +463,8 @@ class ArmWait:
         return self.receipt
 
     def ready(self):
+        if self.policy['mode'] == 'incumbent_shadow':
+            return True
         return self.receipt is not None and self.receipt['status'] == 'released'
 
     def binding(self):
@@ -380,19 +474,27 @@ class ArmWait:
                 'boot_id': self.header['boot_id']}
 
     def stop(self):
-        return self.receipt is not None and self.receipt['status'] == 'not_ready'
+        return self.policy['mode'] == 'condition' and self.receipt is not None and self.receipt['status'] == 'not_ready'
 
     def at_go(self):
+        if self.policy['mode'] == 'incumbent_shadow':
+            return True
+        if self.policy['mode'] == 'condition' and hasattr(self.sampler, 'release_check'):
+            if not self.sampler.release_check():
+                return False
         result = self.tick(go=True)
         if result['go']:
             cw.marker(self.journal, 'release', result['finished'])
-        return result['go']
+        return self.policy['mode'] == 'incumbent_shadow' or result['go']
 
     def close(self):
         if not self.closed:
             self.closed = True
             try:
                 self.sampler.close()
+            except Exception:
+                if self.policy['mode'] == 'condition':
+                    raise
             finally:
                 if self.receipt is not None:
                     if self.receipt['status'] == 'not_ready':
@@ -409,7 +511,7 @@ def arm_with_start_state(config, policy, header, sampler, *, journal, trace,
     """
     import dataclasses
     from joulewise.hazards import arm
-    if any(config.thresholds['contention'].get(k) != v for k, v in policy['guard'].items()):
+    if policy['mode'] == 'condition' and any(config.thresholds['contention'].get(k) != v for k, v in policy['guard'].items()):
         raise ValueError('R16 shared native guard differs from the frozen policy thresholds')
     gate = ArmWait(policy, header, sampler, journal=journal, trace=trace,
                    incumbent_ready=incumbent_ready, on_receipt=on_receipt)
@@ -434,20 +536,27 @@ def registered_arm(config, policy, *, attempt_id, seams=None):
     policy = cw.validate_policy(policy)
     custody = Path(config.custody_dir)
     inputs = json.loads((custody/'condition_waits_inputs.json').read_bytes())
+    if inputs.get('measurement_root'):
+        cw.require_install_enabled(inputs['measurement_root'], policy)
     if (inputs.get('schema') != 'joulewise.align.condition_waits.native_inputs.v1'
             or inputs.get('policy_sha256') != cw.digest(policy) or inputs.get('attempt_id') != attempt_id):
         raise ValueError('R16 installed inputs do not bind this plan/policy')
-    if policy['q'] is not None and not inputs.get('setup_attested_by'):
+    if policy['mode'] == 'condition' and policy['q'] is not None and not inputs.get('setup_attested_by'):
         raise ValueError('R16 registered support/cooler/setup attestation missing')
     directory = custody/'hazards'
     directory.mkdir(parents=True, exist_ok=True)
     ctx = Context(raw_dir=directory/'condition-waits-raw', custody_root=custody)
 
+    topup_observation = []
     def topup(now):
-        observed = v4_topup.derive_from_file(inputs['battery_log'], now)
-        if observed and observed['admissible']:
-            return {'completed_at_epoch_s': observed['completed_at_epoch_s'], 'source': observed['source']}
-        return None
+        # Arm-time evidence, read once per *fresh* attempt, never a cached GO.
+        if not topup_observation:
+            logs = inputs.get('battery_logs', inputs.get('battery_log', []))
+            logs = [logs] if isinstance(logs, str) else logs
+            observed = v4_topup.derive_from_sources(logs, inputs.get('window_battery_journals', []), now)
+            topup_observation.append({'completed_at_epoch_s': observed['completed_at_epoch_s'],
+                                      'source': observed['source']} if observed['admissible'] else None)
+        return topup_observation[0]
 
     def setup():
         census = external_volume.census(external_volume.run_command)
@@ -456,8 +565,21 @@ def registered_arm(config, policy, *, attempt_id, seams=None):
         return {'passed': result['verdict'] == external_volume.PASS,
                 'setup_sha256': policy['q']['setup_sha256'] if policy['q'] else None}
 
-    sampler = NativeSampler(policy, ctx=ctx, topup_reader=topup, setup_check=setup,
+    arm_setup = []
+    def initial_setup():
+        if not arm_setup:
+            arm_setup.append(setup())
+        return arm_setup[0]
+    sampler = NativeSampler(policy, ctx=ctx, topup_reader=topup, setup_check=initial_setup,
                             obc_off_attested_by=inputs['obc_off_attested_by'])
+    if inputs.get('cooldown_evidence'):
+        history = json.loads(Path(inputs['cooldown_evidence']).read_bytes())
+        sampler.cooldown_rows = history['rows']
+        sampler.last_disruptive_ns = history['last_disruptive_ns']
+    def release_check():
+        result = setup()
+        return result['passed'] and result['setup_sha256'] == initial_setup()['setup_sha256']
+    sampler.release_check = release_check
     # Retry is never automatic: the magistrate provides a fresh ambient check
     # and the first failure's digest through a new install after disposal.
     try:
@@ -471,14 +593,108 @@ def registered_arm(config, policy, *, attempt_id, seams=None):
              attempt_number=inputs.get('attempt_number', 1), ambient_check=inputs.get('ambient_check'))
     # Keep first construction ordered: quiet_start is no later than started.
     h['quiet_start_ns'] = h['started']['monotonic_ns']
+    if policy['mode'] == 'condition':
+        from joulewise.align.apple import condition_waits_ledger as ledger
+        series = json.loads(Path(inputs['series_ledger']).read_bytes())
+        if not ledger.verify(series, series['condition_waits_window'], h):
+            raise ValueError('R16 installed attempt does not match the series ledger')
     def save(receipt):
         with (directory/'condition-waits-receipt.json').open('x') as handle:
             json.dump({'header': h, 'receipt': receipt}, handle, sort_keys=True, allow_nan=False)
             handle.write('\n')
-    timing = custody/'night'/'chain-stages.jsonl'
-    timing.parent.mkdir(parents=True, exist_ok=True)
-    with timing.open('a') as journal, (directory/'condition-waits-trace.jsonl').open('x') as trace:
+        if policy['mode'] == 'condition':
+            from joulewise.align.apple import condition_waits_ledger as ledger
+            state = json.loads(Path(inputs['series_ledger']).read_bytes())
+            ledger.finish(inputs['series_ledger'], state['condition_waits_window'], receipt)
+    # Arm-owned boundary log: never pre-create the chain's collection journal.
+    with (directory/'condition-waits-arm.jsonl').open('x') as journal, (directory/'condition-waits-trace.jsonl').open('x') as trace:
         return arm_with_start_state(config, policy, h, sampler, journal=journal, trace=trace,
                                     # Incumbent setup/cooldown was admitted at install;
                                     # the unchanged native arm still owns its clean run.
                                     incumbent_ready=lambda: True, on_receipt=save, seams=seams)
+
+
+def observer_accounting(*, cpu_before, cpu_after, elapsed_s, baseline, observed, all_children_reaped):
+    """Offline observer accounting using the monitor's SELF+reaped CHILDREN basis.
+
+    ``baseline``/``observed`` are native contention snapshots/interval exports.
+    The complete per-process rows must be exported, including sub-threshold
+    daemons; an over-limit-only list cannot establish absence. This diagnostic
+    runs with the sampler alone, never with CW-1's D/finalize workload children.
+    """
+    names = ('storagekitd', 'diskarbitrationd')
+    def rates(records):
+        result = {}
+        for interval in records:
+            if interval.get('error') or 'outside_processes' not in interval:
+                raise ValueError('observer accounting needs complete outside-tree process exports')
+            for row in interval['outside_processes']:
+                key = (row['pid'], row['start'], row['command'])
+                result[key] = max(result.get(key, 0), row['cpu_s_per_s'])
+        return result
+    before, during = rates(baseline), rates(observed)
+    daemons = [{'pid': pid, 'start': start, 'command': command, 'cpu_s_per_s': rate}
+               for (pid, start, command), rate in during.items()
+               if rate > before.get((pid, start, command), 0)
+               and (any(n in command for n in names) or (pid, start, command) not in before)]
+    cpu = cpu_after-cpu_before
+    value = {'schema': 'joulewise.align.condition_waits.observer.v1',
+             'cpu_s_per_s': cpu/elapsed_s if elapsed_s > 0 else None,
+             'cpu_s': cpu, 'elapsed_s': elapsed_s, 'all_children_reaped': all_children_reaped,
+             'outside_tree_daemons': daemons, 'outside_tree_accounted': bool(baseline and observed),
+             'evidence_sha256': cw.digest({'baseline': baseline, 'observed': observed,
+                 'cpu_before': cpu_before, 'cpu_after': cpu_after, 'elapsed_s': elapsed_s})}
+    value['qualified'] = cw.observer_qualified(value)
+    return value
+
+
+def observer_interval(before, after, *, roots):
+    """Complete outside-tree native accounting export, including zero CPU rows."""
+    value = contention.interval(before, after, tree_roots=roots, include_kernel_task=True,
+                                limit=.05, report_floor_cpu_s_per_s=0)
+    return {**value, 'outside_processes': value.get('outside_listed', [])}
+
+
+def cpu_total():
+    """Same observer basis as hazards.monitor and sample_quiet_predicate_evidence."""
+    import resource
+    return sum(u.ru_utime+u.ru_stime for u in (
+        resource.getrusage(resource.RUSAGE_SELF), resource.getrusage(resource.RUSAGE_CHILDREN)))
+
+
+def preliminary_attempt(policy, inputs, output, *, window, series_ledger):
+    """Magistrate entry for a fresh, bounded preliminary receipt (never GO)."""
+    from pathlib import Path
+    from joulewise.align.apple import external_volume, v4_topup, condition_waits_ledger as ledger
+    output = Path(output)
+    output.mkdir(parents=True, exist_ok=False)
+    ctx = Context(raw_dir=output/'raw')
+    def setup():
+        census = external_volume.census(external_volume.run_command)
+        result = external_volume.arm_check(external_volume.validate_config(None), census,
+                                          run=external_volume.run_command)
+        return {'passed': result['verdict'] == external_volume.PASS,
+                'setup_sha256': policy['q']['setup_sha256'] if policy['q'] else None}
+    def topup(now):
+        result = v4_topup.derive_from_sources(inputs['battery_logs'], inputs.get('window_battery_journals', []), now)
+        return {k: result[k] for k in ('completed_at_epoch_s', 'source')} if result['admissible'] else None
+    sampler = NativeSampler(policy, ctx=ctx, topup_reader=topup, setup_check=setup,
+                            obc_off_attested_by=inputs['obc_off_attested_by'])
+    started = ctx.stamp().to_json()
+    h = {'attempt_id': inputs['attempt_id'], 'boot_id': sampler.boot_id(), 'started': started,
+         'quiet_start_ns': started['monotonic_ns'], 'ambient_check': inputs.get('ambient_check')}
+    if policy['mode'] == 'condition':
+        h['attempt_number'] = ledger.reserve(series_ledger, window=window, attempt_id=h['attempt_id'],
+                                             ambient_check=h['ambient_check'], started=started)
+    def save(receipt):
+        (output/'receipt.json').write_bytes(cw.canonical({'header': h, 'receipt': receipt})+b'\n')
+        trace.flush()
+        evidence = {'schema': 'joulewise.align.condition_waits.evidence.v1', 'header': h,
+                    'rows': [json.loads(line) for line in (output/'trace.jsonl').read_text().splitlines()],
+                    'receipt': receipt}
+        (output/'evidence.json').write_bytes(cw.canonical(evidence)+b'\n')
+        if policy['mode'] == 'condition':
+            ledger.finish(series_ledger, window, receipt)
+    with (output/'boundaries.jsonl').open('x') as journal, (output/'trace.jsonl').open('x') as trace:
+        return run_attempt(policy, h, sampler, journal=journal, trace=trace,
+                           final_checks=lambda: True, on_receipt=save)

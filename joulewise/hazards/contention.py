@@ -355,7 +355,8 @@ def interval(before: Snapshot, after: Snapshot, *, tree_roots: Iterable[int],
              include_kernel_task: bool, limit: float,
              previous_over: Mapping[tuple[int, str], float] | None = None,
              aggregate_limit: float | None = None,
-             root_identities: Mapping[int, tuple[int, str]] | None = None) -> dict[str, Any]:
+             root_identities: Mapping[int, tuple[int, str]] | None = None,
+             report_floor_cpu_s_per_s: float = REPORT_FLOOR_CPU_S_PER_S) -> dict[str, Any]:
     """CPU-s/s of every process between two snapshots, split by tree membership.
 
     Ported from ``quiet_admission.interval_metrics``: a process present in both
@@ -487,7 +488,7 @@ def interval(before: Snapshot, after: Snapshot, *, tree_roots: Iterable[int],
         max_outside=worst,
         outside_over_limit=over + exited_over,
         exited_over_limit=exited_over,
-        outside_listed=[item for item in outside if item["cpu_s_per_s"] >= REPORT_FLOOR_CPU_S_PER_S],
+        outside_listed=[item for item in outside if item["cpu_s_per_s"] >= report_floor_cpu_s_per_s],
         outside_total_cpu_s_per_s=outside_total,
         outside_process_count=len(outside),
         tree_cpu_s_per_s=tree_cpu,
@@ -657,6 +658,7 @@ def run_dwell(ctx: Context, thresholds: Mapping[str, Any], *, tree_roots: Iterab
     pin_roots(previous, roots, root_identities)
     previous_over: dict[tuple[int, str], float] = {}
     next_snapshot_ns = previous.midpoint_ns + int(limits["interval_s"] * 1e9)
+    next_tick_ns = ctx.clocks.monotonic_ns()
     while True:
         now = ctx.clocks.monotonic_ns()
         if now >= next_snapshot_ns:
@@ -683,6 +685,16 @@ def run_dwell(ctx: Context, thresholds: Mapping[str, Any], *, tree_roots: Iterab
             break
         if joint_stop is not None and joint_stop():
             break
+        if joint_ready is not None:
+            # Fixed grid: source work consumes this tick's budget. Skip missed
+            # deadlines instead of spinning through synthetic catch-up samples.
+            step = max(1, round(tick_s * 1e9))
+            next_tick_ns += step
+            now = ctx.clocks.monotonic_ns()
+            if next_tick_ns <= now:
+                next_tick_ns += ((now-next_tick_ns)//step+1)*step
+            ctx.clocks.sleep(max(0.0, (next_tick_ns-now)/1e9))
+            continue
         remaining = (next_snapshot_ns - ctx.clocks.monotonic_ns()) / 1e9
         ctx.clocks.sleep(max(0.0, min(tick_s, remaining)))
     return dwell.measurement(started=started, finished=ctx.stamp())

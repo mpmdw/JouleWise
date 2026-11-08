@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 
 TRIAGE_SCHEMA = 'joulewise.align_v4.next_arm_triage.v1'
@@ -32,7 +33,8 @@ NEXT_ARM_TRIAGE = (
               'delivery and the watchdog empty-process latch (B1; not a direct-child exit)'),
     dict(id='quiet_start_state', source=PACKET, first_window_na=False,
          text='machine back in the quiet start state: cool-down and display/quiet dwell, '
-              'no desk, hashing or evidence traffic on the MBP'),
+              'no desk, hashing or evidence traffic on the MBP; the between-window battery '
+              'sampler is stopped before the dwell'),
     dict(id='series_powermode', source=ARM, first_window_na=False,
          text='AC powermode equals the plan-frozen series value (High Power if adopted), '
               'stale R1 marker restored first; not an Automatic-only check'),
@@ -41,9 +43,9 @@ NEXT_ARM_TRIAGE = (
     dict(id='charging_battery', source=ARM, first_window_na=False,
          text='charging/battery: AC, >=99%, not charging, |InstantAmperage|<=200 mA, '
               'completed top-up within 30 min, OBC off attested (R02)'),
-    dict(id='meter_reader_live', source=PACKET, first_window_na=False,
-         text='the KM003C meter reader is verified live (enabled, answering) before this arm; '
-              'the meter is a SECONDARY channel and nothing else about it gates'),
+    dict(id='meter_reader_live', source=ARM, first_window_na=False,
+         text='the KM003C meter reader is verified live (enabled, answering, samples and clock) by the '
+              'arm itself before this arm; the meter is a SECONDARY channel and nothing else about it gates'),
     dict(id='meter_coverage', source=PACKET, first_window_na=False, gating=False,
          text='RECORDED, NON-GATING: the previous window\'s per-member meter sample/clock '
               'coverage tabulated with gaps listed; a gap never blocks v4'),
@@ -68,15 +70,21 @@ NEXT_ARM_TRIAGE = (
               'until 8 counted windows, '
               'calibration_complete for a test arm; pending_final_eligibility, '
               'insufficient_calibration and escalate_to_lead refuse'),
+    dict(id='battery_window', source=PACKET, first_window_na=True,
+         text='previous window B bar (rule zero_B_auto_resume_v1, lead ruling 9): pass; or the '
+              'first non-passing window in a row resumes automatically (B members excluded, '
+              'others kept; fresh admissible top-up + OBC attestation are charging_battery); '
+              'a second consecutive non-passing window needs a signed battery_rulings row'),
     dict(id='full_desk_gate', source=PACKET, first_window_na=False,
          text='full desk completed and passing before arm when the previous window is W1 or '
               'code/config changed since the last desk-passed state; otherwise it may run '
-              'off the MBP while the next window measures'),
+              'off the MBP while the next window measures. A false v4_B_bar alone does not '
+              'fail this gate: battery_window governs it (align_v4_session.full_desk_gate_pass)'),
 )
 TRIAGE_IDS = tuple(row['id'] for row in NEXT_ARM_TRIAGE)
 GATING_IDS = tuple(row['id'] for row in NEXT_ARM_TRIAGE if row.get('gating', True))
 _BY_ID = {row['id']: row for row in NEXT_ARM_TRIAGE}
-WINDOW_ID = re.compile(r'^(?:R1|W1|[CTD][1-9][0-9]*)$')
+WINDOW_ID = re.compile(r'^(?:R1|W1|[CTD][1-9][0-9]*(?:#[1-9][0-9]*)?)$')    # `C3#2` = zero-capture retry of C3
 COMMIT = re.compile(r'^[0-9a-f]{40}$')
 RULING_RESETS = ('zero_capture_escalation',)
 
@@ -89,7 +97,9 @@ def _canonical_sha256(value):
 def triage_template(previous_window, *, next_window_role='calibration'):
     """A fill-in packet (L7): every field the arm reads, statuses 'fail' until the producer decides."""
     return {'schema': TRIAGE_SCHEMA, 'previous_window': previous_window,
-            'next_window_role': next_window_role, 'record_commit': '0' * 40,
+            'next_window_role': next_window_role, 'valid_until_epoch_s': None,
+            'record_commit': '0' * 40, 'record_path': 'FILL IN', 'record_sha256': '0' * 64,
+            'series_commit': '0' * 40, 'series_path': 'FILL IN', 'pushed_ref': 'refs/remotes/origin/records',
             'last_desk_passed_artifact_set_sha256': '0' * 64,
             'calibration_windows': [], 'lead_rulings': [],
             'checks': {row['id']: {'status': 'recorded' if row.get('gating', True) is False else 'fail',
@@ -101,13 +111,17 @@ def _is_digest(value):
     return isinstance(value, str) and len(value) == 64 and all(c in '0123456789abcdef' for c in value)
 
 
-def next_arm_triage(packet, internal, identity=None):
+def next_arm_triage(packet, internal, identity=None, *, now_epoch_s=None):
     """Evaluate the frozen triage list. Every gating check gates the arm.
 
     ``internal`` maps each ARM-source id to bool (computed by the arm itself).
     ``identity`` is what the arm derives itself, never from the packet:
-    ``{'artifact_set_sha256': <current bound-artifact digest>, 'record_commit_exists': bool}``.
-    ``packet`` is the off-MBP evidence: schema, ``previous_window`` (a window id
+    ``{'artifact_set_sha256': <current bound-artifact digest>, 'record_commit_exists': bool,
+    'record_bound': bool}``; ``record_bound`` means the packet's ``record_path`` at its
+    ``record_commit`` has the packet's ``record_sha256`` and that commit is the last one
+    that changed the record (smoke G1: a stale but well-formed packet refuses).
+    ``now_epoch_s`` is the arm's own clock. ``packet`` is the evidence the arm itself rebuilt from the
+    identities the supplied packet named (never the supplied text): schema, ``previous_window`` (a window id
     or ``'R1'`` for the first v4 window), ``record_commit`` (the previous record's
     commit), ``last_desk_passed_artifact_set_sha256``, ``next_window_role``
     ('calibration' or 'test'), ``calibration_windows`` (the ``calibration_stop``
@@ -126,6 +140,15 @@ def next_arm_triage(packet, internal, identity=None):
     identity = identity if isinstance(identity, dict) else {}
     if packet.get('schema') != TRIAGE_SCHEMA:
         reasons.append('next-arm triage packet missing or wrong schema')
+    # Expiry is mandatory (Opus packet review HIGH-2): a missing or non-numeric valid_until, an unknown
+    # arm clock, or a packet older than its quiet observation allows, refuses.
+    expiry = packet.get('valid_until_epoch_s')
+    if type(expiry) not in (int, float) or not math.isfinite(expiry):
+        reasons.append('packet has no numeric valid_until_epoch_s (expiry is mandatory)')
+    elif type(now_epoch_s) not in (int, float) or not math.isfinite(now_epoch_s):
+        reasons.append('arm clock unavailable: cannot check packet expiry')
+    elif now_epoch_s > expiry:
+        reasons.append('packet expired before this arm')
     previous = packet.get('previous_window')
     if not isinstance(previous, str) or not WINDOW_ID.match(previous):
         reasons.append('triage packet needs previous_window as a registered window id (R1, W1, Cn, Tn, Dn)')
@@ -152,7 +175,10 @@ def next_arm_triage(packet, internal, identity=None):
         stop, stop_error = None, str(exc)
         reasons.append(f'calibration evidence contradictory or malformed: {stop_error}')
     commit = packet.get('record_commit')
-    record_ok = isinstance(commit, str) and bool(COMMIT.match(commit)) and identity.get('record_commit_exists') is True
+    record_ok = (isinstance(commit, str) and bool(COMMIT.match(commit))
+                 and identity.get('record_commit_exists') is True
+                 and isinstance(packet.get('record_path'), str) and _is_digest(packet.get('record_sha256'))
+                 and identity.get('record_bound') is True)
     for row in NEXT_ARM_TRIAGE:
         name, gating = row['id'], row.get('gating', True)
         if row['source'] == ARM:
@@ -192,9 +218,21 @@ def next_arm_triage(packet, internal, identity=None):
         if status == 'not_applicable' and not (first and row['first_window_na']):
             status = 'fail'
             basis = 'not_applicable is allowed only for a previous-window check before W1: ' + basis
+        if name == 'battery_window' and status == 'fail':
+            streak = entry.get('consecutive_non_pass')
+            ruled = _battery_ruled(packet.get('battery_rulings'), previous)
+            if type(streak) is not int or streak < 1:
+                basis = 'a failed B window needs consecutive_non_pass >= 1: ' + basis
+            elif streak == 1:
+                status, basis = 'automatic_resume', 'first non-passing B window resumes automatically: ' + basis
+            elif ruled:
+                status, basis = 'resumed_by_lead', f'lead disposition {ruled}: ' + basis
+            else:
+                basis = f'{streak} consecutive non-passing B windows need a lead disposition: ' + basis
         if name == 'record_committed' and status == 'pass' and not record_ok:
             status = 'fail'
-            basis = 'record_commit is missing, malformed or not a commit in the repository: ' + basis
+            basis = ('record_commit/record_path/record_sha256 is missing, malformed, not found, or not the last committed '
+                     'window record (a stale packet refuses): ' + basis)
         if name == 'quiet_start_state' and identity.get('condition_waits_policy_sha256') is not None:
             # R16: static packet prose cannot certify the measurement host.
             # The arm replays native evidence, then supplies this binding.
@@ -222,7 +260,8 @@ def next_arm_triage(packet, internal, identity=None):
     return {'admitted': not reasons, 'reasons': reasons, 'checks': results,
             'previous_window': previous, 'full_desk_required': desk_required,
             'derived': {'previous_window_is_w1': derived_w1, 'code_or_config_changed': derived_changed,
-                        'artifact_set_sha256': current, 'record_commit_exists': identity.get('record_commit_exists')},
+                        'artifact_set_sha256': current, 'record_commit_exists': identity.get('record_commit_exists'),
+                        'record_bound': identity.get('record_bound')},
             'list': list(TRIAGE_IDS), 'gating': list(GATING_IDS),
             'calibration': stop, 'lead_rulings': retained.get('lead_rulings', []),
             'packet': retained, 'packet_sha256': _canonical_sha256(retained)}
@@ -236,6 +275,20 @@ CAL_WINDOWS = 8
 CAL_TARGET_PER_PAIR = 39
 BENIGN_PER_PAIR_PER_WINDOW = 7    # protocol default roster: 14 benign (7/pair) per window
 WINDOW_MEMBERS = 22               # 4 anchors + 2 sentinels + 14 benign + 2 sabotage
+ADDED_SENTINELS_MAX = 2           # protocol U4/U5 inconclusive: two sentinels added to remaining windows
+CAPTURED_MAX = WINDOW_MEMBERS + ADDED_SENTINELS_MAX    # the real captured maximum (24); sentinels are not calibrators
+
+
+def _battery_ruled(rulings, previous):
+    """The ruling_id of a signed battery disposition after ``previous``, else None."""
+    from scripts.align_v4_kit import valid_lead_signature
+    for row in rulings if isinstance(rulings, (list, tuple)) else ():
+        if (isinstance(row, dict) and set(row) == {'ruling_id', 'text_sha256', 'after_window', 'lead_signature'}
+                and isinstance(row['ruling_id'], str) and row['ruling_id'].strip()
+                and _is_digest(row['text_sha256']) and row['after_window'] == previous
+                and valid_lead_signature(row['lead_signature'])):
+            return row['ruling_id']
+    return None
 
 
 def _validated_rulings(rulings, window_ids):
@@ -259,8 +312,8 @@ def calibration_stop(windows, lead_rulings=()):
     Each entry: ``{'window': unique id, 'status': 'final'|'provisional',
     'captured_members': int >= 0, 'eligible_benign': {'spam': n, 'bank': n}}``
     (optionally ``eligible_total``, which must equal their sum). Rows must be
-    internally consistent: integers (no bool), ``captured_members`` at most the 22-member
-    window roster, and the eligible benign members (spam + bank) no more than
+    internally consistent: integers (no bool), ``captured_members`` at most the registered
+    roster maximum (22, plus the two sentinels a U4/U5-inconclusive window may add), and the eligible benign members (spam + bank) no more than
     were captured; a contradictory row raises and can never authorize completion.
 
     Calibration is exactly 8 counted windows; there is no early stop. A **final**
@@ -294,7 +347,7 @@ def calibration_stop(windows, lead_rulings=()):
         counts = row.get('eligible_benign') if isinstance(row, dict) else None
         if (not isinstance(row, dict) or not isinstance(row.get('window'), str) or row['window'] in seen
                 or row.get('status') not in ('final', 'provisional')
-                or type(row.get('captured_members')) is not int or not 0 <= row['captured_members'] <= WINDOW_MEMBERS
+                or type(row.get('captured_members')) is not int or not 0 <= row['captured_members'] <= CAPTURED_MAX
                 or not isinstance(counts, dict) or set(counts) != set(CAL_PAIRS)
                 or any(type(n) is not int or not 0 <= n <= BENIGN_PER_PAIR_PER_WINDOW for n in counts.values())
                 or sum(counts.values()) > row['captured_members']

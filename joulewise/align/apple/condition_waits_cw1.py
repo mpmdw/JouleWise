@@ -11,6 +11,122 @@ CW1 = 'joulewise.align.condition_waits.cw1.v1'
 IDLE_SOURCES = ('r0_rerun11_idle', 'r1_soak', 'cw1_soak')
 
 
+class KM003CCapture:
+    """Concrete bounded wrapper around the existing supervised meter reader."""
+    def __init__(self, python, output, *, popen=None):
+        import subprocess
+        from pathlib import Path
+        self.python, self.output = python, Path(output)
+        self.popen = popen or subprocess.Popen
+        self.process = None
+
+    def start(self):
+        import subprocess
+        self.process = self.popen([self.python, '-B', 'scripts/km003c_monitor.py',
+            '--out', str(self.output), '--duration', '7200'], start_new_session=True,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    def close(self):
+        import os
+        import signal
+        import subprocess
+        from joulewise.external import km003c_parse
+        if self.process is None:
+            return None
+        if self.process.poll() is None:
+            os.killpg(self.process.pid, signal.SIGTERM)
+            try:
+                self.process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                os.killpg(self.process.pid, signal.SIGKILL)
+                self.process.wait(timeout=5)
+        stream = km003c_parse.parse(self.output)
+        import hashlib
+        return {'complete': stream.present and stream.aligned and stream.trailer is not None,
+                'host_ns': stream.host_ns, 'watts': stream.watts,
+                'source_sha256': hashlib.sha256(self.output.read_bytes()).hexdigest()}
+
+
+def export_idle(source, evidence):
+    """Join explicitly exported R0/R1 channels; absent channels stay unknown.
+
+    Input channels are stamped ``smc`` ({sensors}), ``status`` (battery,
+    display, setup/OBC/top-up, mode/PM), power averaging intervals and native
+    guard intervals. No path discovery, interpolation or invented attestations.
+    The caller exports only the permitted idle/soak span, never task outcomes.
+    """
+    if source not in IDLE_SOURCES:
+        raise ValueError('unknown idle source')
+    h = deepcopy(evidence['header'])
+    start = h['started']['monotonic_ns']
+    end = evidence['ended_ns']
+    if type(end) is not int or not start < end <= start+1800*cw.NS:
+        raise ValueError('idle export needs an explicit bounded span')
+    channels = {}
+    for name in ('smc', 'status'):
+        rows = deepcopy(evidence.get(name, []))
+        if name == 'smc':
+            for row in rows:
+                # R1 InventoryJournal / R0 full-inventory capture use values.
+                values = row.get('values') or {}
+                if 'sensors' not in row and 'sensors' in values:
+                    row['sensors'] = values['sensors']
+        times = [r['finished']['monotonic_ns'] for r in rows]
+        if any(b <= a for a, b in zip(times, times[1:])):
+            raise ValueError('idle source is not ordered: '+name)
+        channels[name] = list(rows)
+    power = sorted(evidence.get('power_intervals', []), key=lambda r: r['end_ns'])
+    guards = sorted(evidence.get('guard_intervals', []), key=lambda r: r['interval']['monotonic_ns'][1])
+    rows, indexes, pi, gi = [], {'smc': 0, 'status': 0}, 0, 0
+    for t in range(start, end+1, cw.NS):
+        stamp = {k: v+t-start for k, v in h['started'].items()}
+        row = {'schema': cw.SAMPLE, 'attempt_id': h['attempt_id'], 'boot_id': h['boot_id'],
+               'started': stamp, 'finished': stamp, 'source': source}
+        for name, values in channels.items():
+            i = indexes[name]
+            while i+1 < len(values) and values[i+1]['finished']['monotonic_ns'] <= t:
+                i += 1
+            indexes[name] = i
+            if values and 0 <= t-values[i]['finished']['monotonic_ns'] <= 2*cw.NS:
+                value = values[i]
+                for key in ('sensors', 'battery', 'battery_observed_ns', 'topup', 'arm_topup', 'float_continuity_passed',
+                            'obc_off_attested_by', 'setup_sha256', 'final_checks_passed',
+                            'ac_powermode', 'display_asleep', 'screensaver_engaged',
+                            'os_level', 'pm_state', 'pm_observed_ns'):
+                    if key in value:
+                        row[key] = deepcopy(value[key])
+        row['power_intervals'], row['guard_intervals'] = [], []
+        while pi < len(power) and power[pi]['end_ns'] <= t:
+            if power[pi]['start_ns'] >= start:
+                row['power_intervals'].append(deepcopy(power[pi]))
+            pi += 1
+        while gi < len(guards) and guards[gi]['interval']['monotonic_ns'][1] <= t:
+            if guards[gi]['interval']['monotonic_ns'][0] >= start:
+                row['guard_intervals'].append(deepcopy(guards[gi]))
+            gi += 1
+        rows.append(row)
+    return {'header': h, 'rows': rows, 'source': source, 'source_sha256': cw.digest(evidence),
+            'unobserved_fields_are_holds': True}
+
+
+def dc_in_report(export):
+    """Secondary CW-1 DC-in summary; never supplies the Q power predicate."""
+    from joulewise.external.km003c_parse import integrate
+    missing = {'status': 'missing', 'print_only': True, 'mean_w': None, 'dc_in_energy_j': None}
+    if not isinstance(export, dict):
+        return missing
+    times, watts = export.get('host_ns', []), export.get('watts', [])
+    if (not export.get('complete') or not cw.is_digest(export.get('source_sha256'))
+            or len(times) != len(watts) or len(times) < 2
+            or any(type(t) is not int for t in times) or any(b <= a for a, b in zip(times, times[1:]))
+            or any(not cw.finite(w) or w < 0 for w in watts)):
+        return missing
+    energy, count = integrate(times, watts, times[0], times[-1])
+    return {'status': 'available', 'print_only': True, 'dc_in_energy_j': energy,
+            'mean_w': energy/((times[-1]-times[0])/cw.NS), 'source_sha256': export['source_sha256'],
+            'span_ns': [times[0], times[-1]], 'samples': count}
+
+
 def run_kit(*, python, r0_config, output, r1_sha256, reference_authority):
     """A concrete, reviewable plan. Creating it never probes the machine."""
     if not cw.is_digest(r1_sha256) or not reference_authority.strip():
@@ -152,30 +268,37 @@ def parse_run(policy, run, idle_traces):
     """Off-MBP only. Each recovery uses its actual disruptive-end boundary."""
     if run.get('schema') != CW1:
         raise ValueError('CW-1 schema required')
+    if run.get('band_sha256') != policy['band_sha256']:
+        raise ValueError('CW-1 requires a separately frozen Q/band before capture; same-run Q is forbidden')
     phases = run.get('recoveries', {})
     reports = {name: recovery(policy, phases[name]['header'], phases[name]['rows'])
                for name in ('recovery_d', 'recovery_finalize') if name in phases}
     replay = guard_replay(policy, idle_traces)
     budget = run.get('observer_cpu_s_per_s')
     wall = run.get('elapsed_s')
+    dc = dc_in_report(run.get('km003c'))
     qualified = (set(reports) == {'recovery_d', 'recovery_finalize'}
         and all(r['qualified'] for r in reports.values()) and replay['qualified']
         and cw.finite(budget) and 0 <= budget <= .005 and cw.finite(wall) and 0 < wall <= 7200
         and run.get('final_reads_undisturbed') is True and run.get('pulse_d_r0_passed') is True
         and run.get('display_transition_observed') is True
         and run.get('r1_sha256') == (policy.get('q') or {}).get('r1_sha256')
-        and run.get('band_sha256') == policy['band_sha256'])
+        and cw.observer_qualified(run.get('observer_accounting'))
+        and budget == run['observer_accounting']['cpu_s_per_s']
+        and dc['status'] == 'available')
     return {'schema': CW1, 'qualified': qualified, 'band_sha256': policy['band_sha256'],
             'evidence_sha256': cw.digest(run), 'guard_replay': replay, 'recoveries': reports,
             'q_candidates': q_candidates(policy['q'] or run.get('reference_template'), run.get('soak', []))
                 if policy['q'] or run.get('reference_template') else None,
             'observer_cpu_s_per_s': budget, 'planning_credit_minutes': 0,
+            'dc_in': dc,
             'limitations': ['two recoveries do not establish a recovery tail quantile or residual equivalence',
                             'Q/delta candidates require prospective lead approval; never auto-adopted']}
 
 
 def execute_kit(kit, policy, sampler, *, pulse, preflight, display_transition,
-                final_checks, journal, save, cancelled=lambda: False, observer_cost=lambda: None):
+                final_checks, journal, save, cancelled=lambda: False, observer_cost=lambda: None,
+                meter=None):
     """Magistrate-only orchestration with bounded, injected pulse handles.
 
     pulse(phase) returns a handle with poll()/terminate()/wait(); it must enforce
@@ -189,6 +312,10 @@ def execute_kit(kit, policy, sampler, *, pulse, preflight, display_transition,
     template = getattr(sampler, 'channels', None) or policy.get('q') or {}
     if kit.get('r1_sha256') != template.get('r1_sha256'):
         raise ValueError('CW-1 must follow the Q-linked final R1')
+    if policy.get('q') is None:
+        raise ValueError('freeze a separate reference Q before the single CW-1')
+    if meter is None:
+        raise ValueError('CW-1 requires the supervised KM003C capture')
     ctx = sampler.ctx
     start = ctx.clocks.monotonic_ns()
     cpu_start = time.process_time()
@@ -217,6 +344,7 @@ def execute_kit(kit, policy, sampler, *, pulse, preflight, display_transition,
         check()
         if ctx.clocks.monotonic_ns()-start > 300*cw.NS:
             raise TimeoutError('CW-1 preflight exceeded 300 s')
+        meter.start()
         sampler.start()
         boot = sampler.boot_id()
         for phase in kit['phases'][1:-1]:
@@ -238,7 +366,8 @@ def execute_kit(kit, policy, sampler, *, pulse, preflight, display_transition,
             while True:
                 check()
                 tick = ctx.clocks.monotonic_ns()
-                row = sampler.sample(attempt_id=header['attempt_id'], boot_id=boot)
+                from joulewise.align.apple.condition_waits_native import observation
+                row = observation(sampler, header)
                 row['power_intervals'] = [p for p in row.get('power_intervals', []) if p['start_ns'] >= phase_start]
                 rows.append(row)
                 elapsed = (ctx.clocks.monotonic_ns()-phase_start)/cw.NS
@@ -291,7 +420,18 @@ def execute_kit(kit, policy, sampler, *, pulse, preflight, display_transition,
             finally:
                 report['elapsed_s'] = (ctx.clocks.monotonic_ns()-start)/cw.NS
                 report['observer_self_cpu_s_per_s'] = (time.process_time()-cpu_start)/max(1e-9, report['elapsed_s'])
-                report['observer_cpu_s_per_s'] = observer_cost()
+                try:
+                    report['km003c'] = meter.close()
+                except Exception as exc:
+                    report['km003c'] = None
+                    report['status'], report['meter_error'] = 'inconclusive', f'{type(exc).__name__}:{exc}'
+                try:
+                    accounting = observer_cost()
+                except Exception as exc:
+                    accounting = None
+                    report['observer_error'] = f'{type(exc).__name__}:{exc}'
+                report['observer_accounting'] = accounting if isinstance(accounting, dict) else None
+                report['observer_cpu_s_per_s'] = accounting.get('cpu_s_per_s') if isinstance(accounting, dict) else accounting
                 report['observer_cost_note'] = 'total observer tree cost required; self diagnostic alone never qualifies'
                 save(report)
     return report

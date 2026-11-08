@@ -47,7 +47,7 @@ Cross-checks: `perf/2026-11-08-r12-review-sol1`, `-sol2`. Protocol section
 | Item | Change | Where |
 |---|---|---|
 | B1 | A window ends at authenticated terminal completion; 59,520 s is a ceiling, not a reservation; custody, quiet admission and ceiling kept | protocol R12 B1 and the Sizing line; kit README text |
-| B2 | Frozen 14-entry next-arm triage list, all gating; arm evaluates it (`--next-arm-triage`); full desk gating after W1 and after code/config change | `v4_cadence.NEXT_ARM_TRIAGE`, `next_arm_triage`; `align_v4_session.arm_checks` |
+| B2 | Frozen 16-entry next-arm triage list (15 gating, after `battery_window`; `meter_coverage` is recorded, non-gating); arm evaluates it (`--next-arm-triage`); full desk gating after W1 and after code/config change | `v4_cadence.NEXT_ARM_TRIAGE`, `next_arm_triage`; `align_v4_session.arm_checks` |
 | B3 | Fixed 8 counted calibration windows (RUN_STATE 217 reverted the count stop), both pairs >=39 after 8, cap accounting, insufficient-calibration outcome | `v4_cadence.calibration_stop`; protocol R12 B3 |
 | R1 sizing | 61,607 s marked stale; 67,371 s one-encounter no-redo subtotal plus bracket/close/harvest; 96,427 s redo floor (RUN_STATE 216 corrected 215's 90,663 s) | `docs/align/r1_runtime_contract.md`, `LEAD-RULINGS-2.md` correction note |
 
@@ -107,3 +107,39 @@ RUN_STATE 217, and the arm-call witnesses to the battery-log API).
 | L8 | `pmset -g batt` is evidence only | `align_v4_session.py` |
 | L9 | H* refuses bool and non-numeric scores | `v4_estimands.py` |
 | L1, L4 | L1 is covered by the R1 exporter. L4 (note only): U6's trajectory-clustered SE is CR0 with z = 1.645, anti-conservative at about 14 trajectories; CR1 with t(G-1) is a candidate, not changed here (U6 is reported, never a gate) | n/a |
+
+## Delta2 round (Sol delta2 reviews on f993b784f) and the smoke-kit findings
+
+| Finding | Change | Where |
+|---|---|---|
+| S1 F01 / S2 H1, H2 receipt completeness | Strict is now the default tier; the amendment tier is a 25-module allowlist justified by the reviewed refusal census and never traced; the walker follows `-m` launches; `WP15` runtime script and its config, `joulewise/__main__.py` and the registration helpers are bound; a dynamic closure (audit-hook trace of the synthetic WP22 chain, R1 arm with the real runtime child, R1-to-W1 chain and arm/install session) is committed as evidence and asserted inside the strict receipt | `v4_registration.py`, `scripts/align_v4_dynamic_trace.py`, `docs/align/v4/dynamic_closure_trace.json`, `tests/align/test_v4_dynamic_closure.py` |
+| S1 F02 / S2 M3 stranded back-to-back arms | Basis (a) has no continuity rule; basis (b) unchanged; the sampler runs continuously (`sample --loop`) from the initial charge acquisition through windows and turnarounds | `v4_topup.py`, `align_v4_battery_log.py`, protocol section 4 |
+| S1 F03 / S2 M2 filtered rows | Raw-order evaluation: a transition needs consecutive valid timed rows; invalid, untimed, off-AC or out-of-order rows break the interval | `v4_topup.py` |
+| S2 M1 two-sentinel roster | Captured ceiling 24 (22 plus the two sentinels a U4/U5-inconclusive window may add); calibrators stay 7 per pair | `v4_cadence.py` (`CAPTURED_MAX`) |
+| G1 stale packet | The packet carries `record_path` and `record_sha256`; the arm checks the blob at `record_commit` and that it is the last commit changing the path | `align_v4_session.py` (`_record_bound`), `tests/align/test_v4_record_binding.py` |
+| G2 chain doc | Kit regeneration inserted between installing the slots and `--check`; the doc block is a tested script | `scripts/align_r1_to_w1_chain.py`, `tests/align/test_r1_to_w1_chain.py` |
+| G3 KM003C crash radius | An unclosed stream is salvaged up to its last valid record (start offset, no fabricated samples); only members overlapping the gap are DC-missing | `km003c.py`, `km003c_parse.py`, `tests/align/test_km003c.py` |
+
+## Ruling: no battery sampler during a window
+
+An ioreg spawn every 120 s on the measuring Mac is out-of-tree activity the quiet guard exists to
+catch. `sample --loop` now runs only between windows (start at terminal completion, `stop`
+before the arm dwell; `--pidfile`), and across a window the float evidence is the window's own
+1 Hz SMC battery journal, converted by `v4_topup.window_records` and merged in time order with
+the between-window logs (`--window-battery-journal`). A boundary gap above 300 s, or a missing
+window journal, breaks continuity as before. Amendment allowlist unchanged.
+
+## Packet-builder integration (Opus HOLD on the triage-packet builder) and delta3 (Sol1, Sol2)
+
+| Finding | Change | Where |
+|---|---|---|
+| Opus HIGH-1 packet is trusted text | A packet is a pointer. The arm rebuilds it with `build_packet` from the identities the packet names (own clock, own artifact-set digest) and requires canonical equality ignoring only `pushed_tip` and `packet_preflight`; a rebuild error refuses | `align_v4_session.arm_checks`, `align_v4_next_arm_packet.rebuild_and_compare` |
+| Opus HIGH-2 expiry optional | `valid_until_epoch_s` is mandatory and numeric; the arm clock must be before it | `v4_cadence.next_arm_triage` |
+| Opus HIGH-3 wire compatibility | `meter_reader_live` (ARM, gating) and `meter_coverage` (non-gating) split; `last_desk_passed_artifact_set_sha256` computed from committed bytes (`artifact_set_digest_at`); window ids validated; 16 entries (battery_window added by ruling 9), "14" text fixed | builder, `v4_cadence.py`, `v4_registration.py` |
+| Opus MED-1..4 | Quiet state, live meter, `prepared_at` and battery evidence are computed at the arm (meter by a short monitor probe); the quiet start state keeps the committed observation until the condition-waits evaluator lands; hash-chained window records (omitted attempt detected); `text_sha256` of a lead ruling computed from a committed text file | builder, `align_v4_session._probe_meter_live` |
+| Opus L1 | A U1-U3 fail gives that model 0 eligible from that window (R15, RUN_STATE 226) | builder |
+| Zero-capture retry | Same window id with an attempt suffix: `C3#2`; `WINDOW_ID` accepts `#k`; the frozen order is unchanged | `v4_cadence.WINDOW_ID` |
+| S1 F01 / S2 H1 amendment allowlist | The production hazard-pack night runner is back in the dynamic trace (`night_driver_hazard_pack`). The allowlist may hold only a module absent from BOTH the static closure and the trace; every bound path is statically reachable, so it is empty (strict if in doubt) | `v4_registration.AMENDMENT_ALLOWLIST`, `align_v4_dynamic_trace.py` |
+| S1 F02 launch templates | The four `configs/launchd/*.plist.template` files are bound and strict | `v4_registration._NAMED_ARTIFACTS` |
+| S1 F03 / S2 M1 (G1) stale record | The record is bound to the series ledger's latest window (`previous_record` + `series_sha256` at HEAD) through the hash-chained records the arm rebuilds | `align_v4_session._record_bound` |
+| S1 F04 / S2 H2 (G3) salvage | Salvage only for a stream listed in the window's custody manifest AND supervised by the shared driver, with a recorded matching digest. An unlisted or unsupervised stream is never available DC and is not parsed; an unrecorded digest excludes. Separate flags: `meter.unsupervised`, `meter.stream_unlisted`, `meter.custody_digest_unrecorded` (mismatch: `meter.custody_hash_mismatch`) | `km003c.session_report` |

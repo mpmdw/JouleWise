@@ -1,197 +1,219 @@
-# R16 condition waits implementation
+# R16 condition waits: inert implementation and native release gates
 
-2026-11-08. **PROVISIONAL: synthetic verification only. No native CW-1,
-hardware qualification, registration, arm or utilization saving is asserted.**
+**PROVISIONAL. W1 runs today's cool-down. Do not add, copy, generate for
+installation, or install any `registration/condition_waits_policy.json` on the
+v4 line until the lead has reviewed H1–H7 and a native dry arm passes. This
+ban includes `incumbent_shadow` policies.** No policy or enabling ruling is
+shipped here. No hardware validation or saved MBP minutes is claimed.
 
-Authority: `origin/main:RUN_STATE.md` item 226 (R16), the agreement at
-`origin/align/2026-11-08-condition-waits-opus:docs/align/v4/CONDITION-WAITS-AGREEMENT.md`,
-and both independent designs on the corresponding `-sol` / `-opus` branches.
-R16 adopts Sol's P1/P2; the withdrawn Opus ceiling release is not implemented.
-`origin/main:docs/perf/SPEED-TOOLBOX.md` owns timing and throughput rules.
+The implementation incorporates the [Opus cold review](condition-waits-impl-opus-review.md)
+and v4-r11 `1a2574b49fe86eaffa722fb106d851c8e3e1eebc`. The policy-free path
+retains that head's rebuilt next-arm packet, battery-log lists/window journals,
+R12/R15 cadence and incumbent native guard. Measured episodes stay batch 1.
+No observer runs inside a member. No Block 5 analysis or outcome is an input.
 
-## Release and evidence
+## Mechanical install ban and eventual activation
 
-`joulewise.align.apple.condition_waits.Attempt` is a pure evaluator. It consumes
-1 Hz observations from `condition_waits_native.NativeSampler`; tests inject SMC,
-pmset, ioreg, notify, power and process measurements. Nothing starts on import.
-No task, transcript, outcome, residual or integrated-energy field is an input.
+`scripts/align_v4_session.py:install` checks the ban before kit checks, power
+changes, meter probes or installer work. `_arm_and_install` also checks embedded
+policies, so omitting the policy file cannot bypass it. The registered native
+entry repeats the check against the installed measurement root.
 
-An active policy requires all of the following:
+An eventual lead-authored, committed
+`configs/campaigns/align_v4/registration/condition_waits_lead_ruling.json` must
+have schema `joulewise.align.condition_waits.lead_ruling.v1`, `enabled: true`,
+`h1_h7_fixed: true`, `native_dry_arm_passed: true`,
+`r18_shadow_exposure_passed: true`, `ruled_by`, the exact `policy_sha256`, a
+`native_evidence_sha256`, and qualified `observer_accounting`. There is no
+example enabling file to accidentally copy into registration. A future ruling
+is a lead authority decision, not something the kit or a fixture can issue.
 
-- Two-sided fast/slow Q ± the frozen R1 delta; actual-time trailing 60 s slow
-  OLS slope within ±0.2 °C/min, with G0's 90% slope coverage rule.
-- Every qualified fan within Q ± max(100 rpm, 3 SD); a stopped reference fan
-  must be exactly stopped. Missing fans cannot be omitted.
-- A complete, duration-weighted trailing 30 s powermetrics
-  `processor.combined_power / 1000` mean in watts, within
-  Q ± max(0.25 W, 10% Q, 3 SD), under the frozen idle upper limit. The last
-  native power endpoint must be at most 2 s old. Missing intervals, overlapping
-  intervals and stale delivery do not count as measured power. This is not DC-in.
-- OS level 0, fresh PM Nominal, display observed asleep, screensaver disengaged,
-  final R1 AC power mode and unchanged registered physical setup.
-- Fresh AC/float battery, ≥99%, |current| ≤200 mA, UpdateTime age 0–180 s,
-  OBC-off attestation and derived, source-bound top-up completion ≤1800 s old
-  **at the current read**, using the existing `battery_arm` predicate.
-- At least 180 s of physical stability overlapping the native guard's clean
-  run, at least 300 s of observed display sleep, and at least 300 s since the
-  last disruptive operation. Finalize, harvest, offload, top-up, display wake
-  and arm cadence/collector work are disruptive. New disruption resets the
-  floor and stable suffix, but never extends the attempt deadline.
+The lead must check the underlying evidence, including the helper modules
+listed as `inert_r16_dependency` in the refusal census. The flags are a wire
+format for that ruling, not substitute hardware evidence. Bind the ruling and
+its evidence in the prospective registration before installation. Promotion
+also needs R18 exposure of the new guards, not just CW-1 replay.
 
-Joint observations require ≥99% coverage of nominal one-second cells, no gap
-over 2 s, valid native read brackets and monotonic/raw/wall continuity. Cells
-use a fixed attempt grid and nearest nominal tick; they do not move with each
-evaluation endpoint. This avoids false gaps from tiny probe jitter at the
-guard's 30 s boundaries. Actual stamps still determine all elapsed durations.
-Failed observations reset stability. Read failures are retained, not replaced
-with the last successful value.
+## Native sampling and clocks
 
-The attempt stops at **t ≥1800 s**, including equality; it never releases at
-that ceiling. First failure requests an ambient check and one retry. Attempt 2
-requires a fresh ambient-check digest, checker/time, and the prior not-ready
-receipt digest. Attempt 3 refuses. The magistrate owns the cross-session
-attempt count and must take a second failure to the lead; the tool never
-automatically retries or changes Q. Failed/cancelled attempts keep evidence.
+`NativeSampler` uses an in-process `StatusReader`: IOKit/CoreFoundation for
+battery, aggregate display state and the AC power profile; libproc/CoreGraphics
+for screensaver/session state; the existing SMC reader and notify reader for
+thermal channels. Framework bindings load only at native start. The old command
+reader remains an explicit synthetic injection seam. Boot identity is read once
+per sampler. No `ioreg`, `pmset`, `pgrep`, `sysctl`, `mount` or `diskutil` runs
+in the 1 Hz production status path. The native contention guard still takes its
+own registered 30 s process snapshots.
 
-`ArmWait` plugs into `hazards.arm.ArmConfig.start_state`. The arm supplies its
-actual `contention.interval` results to the adapter and ticks it during the
-**same** dwell. Native `Dwell` retains its 180/30/2700 s thresholds, aggregate
-predicate and counter-regression semantics. A regressed interval earns no
-joint quiet time even when native Dwell preserves its existing clean count.
-No second display dwell or 180 s sleep is added after READY. Final native
-clock, battery, thermal and census reads remain in the arm. R16 samples again
-at GO; a disturbance refuses that GO. Cleanup taking over 2 s also refuses a
-stale GO. A final failure in this arm returns NULL with the trace; a standalone
-`run_attempt` can re-establish stability within its original deadline.
+External-volume census runs once at arm and once at release. The arm observation
+is retained as source evidence; it is never re-censused by a sample. Release
+checks observe the physical setup again. Raw battery plist text is not repeated
+in every trace row. Unknown sources yield stamped unobserved rows and reset
+stability; a transient read is retried on the next tick.
 
-Only ALIGN packs with a prospective `runtime_requirements.condition_waits`
-policy take the new driver route. Other packs use the existing arm. The
-registered entry reads explicit installed source inputs and the bound pack's
-policy, constructs a **fresh** native attempt after disruptive pre-arm work,
-and closes all observers before returning to the chain. It never reads an
-old PASS as its native GO decision. No computation, collector or hook is added
-inside a measured member. Member idle 300 s, G0/G1/H, settles, countdowns,
-tails, measured batch size and ownership boundaries remain unchanged.
+`PowerStream` keeps one pre-GO powermetrics process. Intervals advance by the
+source sequence's `elapsed_ns`, mapped through a single wall/monotonic anchor.
+Native plist dates constrain the first endpoint to censored whole-second
+intervals; their intersection allows 100 ppm rate drift. Dates are not matched
+to a point with a 0.1 s tolerance. Delivery time never makes delayed power fresh.
+This is a pre-GO watts diagnostic, not an energy-attribution clock replacement.
+Its subsecond phase uncertainty must be checked in the native stream gate.
 
-## Registration and triage
+When a joint gate is present, `contention.run_dwell` sleeps to the next fixed
+tick boundary. Source work uses that tick's budget; overruns skip deadlines and
+remain coverage failures. The policy-free scheduler is unchanged. Synthetic
+50 ms and 150 ms sample work both release. Disabled-hook quiet/burst/persistent
+fixtures compare canonical output byte for byte against the pinned v4-r11
+commit, not a moving branch name.
 
-The lead supplies a prospective `registration/condition_waits_policy.json` in
-the v4 kit. Build it with `registration_policy(cohort=..., q=..., cw1=...,
-incumbent_policy_sha256=...)`. The incumbent digest identifies the existing
-approved cooldown procedure; there is deliberately no invented 900/1500 s
-fixed timer. Kit generation validates and embeds the policy in the bound
-collection plan and checks Q against the final R1 mode and sensor/fan picks.
-The policy is frozen for the whole cohort, not upgraded after a later pass.
+Powermetrics closes before GO. Cleanup snapshots descendants, uses the existing
+TERM relay procedure, waits for sudo, then confirms the observed PM identities
+are gone even if reparented. A timeout does not SIGKILL sudo and orphan its root
+child. An unverifiable condition-mode cleanup prohibits GO. Verify this natively;
+the branch has not exercised root process shutdown in the sandbox.
 
-Q's schema is `joulewise.align.condition_waits.q.v1`. See the synthetic
-`q_reference()` fixture in `tests/align/test_condition_waits.py` for the exact
-shape, **not hardware values**. Q binds source, R1, classification and setup
-SHA-256 values, prospective reference authority, 1200 s of qualified reference,
-final mode, temperature keys/aliases/decoders/units/noise/deltas, qualified fan
-channels and contemporaneous power. Aliases cannot stand in for two independent
-temperature sensors. An initial R1 soak in another mode is not automatically Q.
-The lead must verify those provenance receipts, not just copy their digests.
+## Battery continuity, floors and fallback
 
-If Q or a qualified CW-1 receipt (including all three guard replays) is missing
-at registration, the builder selects **`incumbent_shadow`**. The band is print-only:
-its missing channels, failed predicates, floor and 1800 s ceiling cannot delay
-or authorize incumbent release. Existing native arm predicates still apply.
-An absent policy preserves older, already-built kits; it does not register R16.
+Top-up logs are read/derived once at native arm, including repeated
+`battery_logs` and `window_battery_journals`. That evidence must be admissible at
+arm time. Each R16 battery read then independently proves fresh AC, >=99%, not
+charging, current within +/-200 mA, UpdateTime age 0–180 s, and the OBC-off
+attestation. The top-up source and admission timestamp stay immutable. R16's
+own stamped float observations carry continuity after the between-window
+sampler stops. A measured float break or a gap over 2 s breaks that chain;
+there is no timestamp refresh from a stopped log. This source change needs the
+lead's prospective note at activation.
 
-The `quiet_start_state` triage entry carries `receipt_sha256`, `policy_sha256`,
-`attempt_id` and `boot_id`, in addition to its status. For an R16 plan,
-`align_v4_session.arm_checks` replays explicitly supplied `{header, rows,
-receipt}` evidence, compares the current session/boot, and refuses prose-only,
-changed or mismatched evidence. Install accepts it via `--start-state-evidence`
-and requires `--start-state-setup-attested-by` when Q exists. The install writes
-source inputs (battery-log locator, OBC/setup attestation, policy/session
-binding) into custody; it does not store a GO decision for later reuse.
+Display sleep and quiet acquisition may overlap cool-down. The native adapter
+can take an explicit `cooldown_evidence` export containing same-boot raw R16
+`rows` and `last_disruptive_ns`; install carries its explicit locator. The
+attempt checks brackets/order and continuity through handoff (latest row within
+2 s), and uses raw display history rather than a previous PASS. Physical
+stability still overlaps this arm's own guard. A wake advances the quiet floor
+without making an unchanged earlier owner marker permanently fatal.
 
-Native GO writes a new receipt and trace under `hazards/condition-waits-*` and
-embeds the receipt in `arm.json`. Reconstruct its evidence header from the
-adjacent receipt file and its rows from the trace. The triage binding for the
-actual GO is the digest of this **new** receipt, not the preliminary install
-receipt. `verify_binding(..., at_ns=...)` recomputes admission and enforces a
-≤2 s old GO observation. Existing exact-candidate registration binds the new
-modules and CLI; its committed receipt remains a pending template.
+**Owner ordering matters:** do heavy cadence/collector/setup work before the
+cool-down being handed over, and include every later disruptive operation in
+the last-disruptive boundary. Never run an incumbent fixed cool-down and then
+start another R16 floor as the condition-mode procedure. If no continuous
+handoff exists, or native preparation leaves a gap, the safe fallback acquires
+fresh floors at the dwell: at least 300 s, with no claimed overlap saving.
+The installed owner must demonstrate the continuous handoff on the MBP before
+promotion; the synthetic overlap test is not evidence that the current operator
+sequence supplies it.
 
-Install's preliminary receipt and the later native guard are separate reads.
-They are not advertised as a single uninterrupted interval across install.
-The native interval itself overlaps P1/P2 and restarts after its own heavy
-preparation. Its additional cost belongs in the eventual before/after timing.
+In `incumbent_shadow`, the band is print-only: missing Q, failed readings, the
+band ceiling, stale-GO cleanup and the extra R16 clock re-judgment cannot refuse
+or authorize incumbent release. The existing arm still owns its clean run and
+2700 s cap. Install requires no R16 preliminary receipt or setup attestation in
+this mode (the independent inert-merge ban still applies to every policy).
+The standalone preliminary diagnostic terminates at 1800 s as
+`shadow_censored` if no incumbent release callback has fired; this censoring
+never becomes a new live-arm deadline.
 
-Timing writes are only phase-boundary lines containing phase, monotonic_ns and
-wall_ns on the open canonical `night/chain-stages.jsonl` journal. No durations, ledger, fsync or member
-markers are added. The separate 1 Hz trace is admission evidence, not a timing
-receipt. Terminal completion and last finalize/harvest/offload boundaries come
-from their owners via `marker`; later duration attribution runs off the MBP.
+## Receipts, packet rebuild and retry ledger
 
-## CW-1 kit and parser
-
-Generate a reviewable plan without probing any host:
+The preliminary entry is explicit and operator-only:
 
 ```sh
-python3.13 -B scripts/align_v4_condition_waits.py kit \
-  --python python3.13 --r0-config <approved-local-R0-config> \
-  --output <new-diagnostic-directory> --r1-sha256 <final-R1-digest> \
-  --reference-authority '<prospective Q-capture ruling>'
+python3.13 -B scripts/align_v4_condition_waits.py attempt \
+  --policy <frozen-policy.json> --inputs <explicit-native-inputs.json> \
+  --output <new-attempt-directory> --window C1 --series-ledger <repo>/series/state.json
 ```
 
-The plan reserves ≤7200 s: preflight ≤300, reference soak 1200, one real D
-long-decode pulse ≤900 through the R0 harness (one attempt, no scoring), recovery
-1800, finalize/hash/compress/local-offload stand-in ≤900 with an observed display
-wake/sleep transition, recovery 1800, cleanup ≤300. Each recovery starts at
-actual disruptive completion and runs for all 1800 s even after a shadow pass.
-Pulse 1 uses only already-resident weights, offline, batch 1. Pulse 2 writes a
-new 64 MiB synthetic tree; it never scans real input directories. It represents
-the operations, not a demonstrated equivalent heat dose.
+Never invoke it from an active agent or while another job is measuring. Inputs
+name the prepared `attempt_id` (session id), battery-log list, optional window
+journals, OBC attestation and optional ambient-check evidence. The runner writes
+raw trace, boundary markers, receipt and combined `evidence.json`, retaining
+failures. It never starts a measured member or downloads weights.
 
-`condition_waits_cw1.execute_kit` is the magistrate-side orchestrator. Its
-preflight, bounded pulse handles, display transitions, final native checks and
-observer-tree CPU measurement are explicit injected callbacks. The lead must
-supply/review these host bindings and enforce their command/process-group
-deadlines before the quiet gap. There is no auto-launch from this CLI.
-Source cleanup, child termination and saving an inconclusive report happen on
-failure/cancellation. The default total-observer-cost field stays unknown;
-self CPU alone cannot qualify the run. Record total observer tree cost ≤0.005
-CPU-s/s, including the native readers, using `observer_cost`; don't edit the
-raw report afterwards to manufacture qualification.
+For condition mode, `condition_waits_ledger` reserves attempts in canonical
+`series/state.json`, under `condition_waits_attempts[window]`. The fixed window
+identity is `condition_waits_window`; changing session ids or reinstalling does
+not reset its count. A reservation with no terminal receipt is unresolved.
+After one `not_ready`, the next attempt requires a fresh ambient check binding
+that exact receipt; after two, return to the lead. The lead must disposition an
+interrupted reservation or any further retry, never silently delete history.
+Install checks the committed ledger used by the rebuilt packet; the native arm
+checks it again and records its terminal receipt there.
 
-For an authorized reference capture before Q exists, `NativeSampler` accepts
-an explicit final-R1 `channel_template`; it cannot make that template an active
-Q. The parser emits numeric Q/delta candidates and their source digest. A lead
-reference ruling and frozen Q remain necessary before band qualification.
+Order: prepare the session; collect the preliminary attempt with that session
+id; commit its evidence and updated series ledger; have the lead publish those
+sources through the existing workflow; build the next-arm packet; then install.
+This branch itself is local only and publishes nothing. `series.quiet` names
+the combined evidence; `series.condition_waits_policy` names the frozen policy
+through the builder's ordinary committed `{path, sha256}` source descriptor.
+The builder's `quiet()` replays it and emits `receipt_sha256`, `policy_sha256`,
+`attempt_id`, `boot_id`. Install checks those fields on its **own rebuild**.
+The native arm constructs and rechecks a fresh attempt for GO; it does not reuse
+the preliminary PASS. No extra sleep follows READY.
 
-Run parsers only on explicit, permitted new diagnostic exports off the MBP:
+Timing markers contain only phase, monotonic_ns, wall_ns. Native-arm markers
+use the arm-owned hazards journal; a refused arm never pre-creates
+`night/chain-stages.jsonl` and masquerades as collection.
 
-```sh
-python3.13 -B scripts/align_v4_condition_waits.py replay \
-  --policy policy.json --evidence evidence.json
-python3.13 -B scripts/align_v4_condition_waits.py guard-replay \
-  --policy policy.json --idle-traces idle-exports.json
-python3.13 -B scripts/align_v4_condition_waits.py cw1-parse \
-  --policy policy.json --run cw1-export.json --idle-traces idle-exports.json
-```
+## CW-1, fixed Q, export and observer qualification
 
-Idle exports must include named R0 rerun-11 idle, R1 soak and CW-1 soak records,
-each `{header, rows}`. Empty/missing sources never pass. Every eligible native
-guard boundary after acquisition floors and strictly before the attempt ceiling
-is replayed; the required hold count is **zero** for each source. Reports include
-eligible counts, all holds and evidence digests. This is a guard compatibility
-check, not an estimated universal false-hold probability.
+Q must be frozen from a separate qualified reference **before CW-1 starts**,
+for example R1's final-mode soak. This implements H7 option 2 in the cw-fix
+brief. Same-run Q is explicitly refused rather than rewriting the captured band.
+Kit generation also checks Q's R1 digest against the actual final `r1_slots.json`
+bytes, mode and selected sensors/fans. If R1's soak is in another mode, a
+separately authorized reference capture and ruling must precede CW-1. The single
+CW-1 is not authorized to bootstrap a new band from its own soak.
 
-CW-1 qualifies only with both full recoveries, valid fixed bands, release before
-the ceiling, no later band re-exits, ≥180 s of remaining post-release evidence,
-undisturbed final reads, observed pulse-2 display transition, the R1/source
-bindings, total observer cost within budget and zero idle-trace holds. Missing
-or short recoveries are right-censored/inconclusive, never successes at their
-last sample. R1's post-D recovery export still belongs in lead load-transfer
-review. Two recoveries establish neither a tail quantile nor residual equivalence.
+The kit keeps its <=7200 s bound, full 1800 s recoveries after both actual pulse
+ends, one resident/offline batch-1 D pulse, synthetic finalize stand-in, and the
+observed wake/sleep transition. Use `KM003CCapture(python, output)` (or an
+explicit supervised equivalent) with `execute_kit(..., meter=...)`. It wraps the
+existing `scripts/km003c_monitor.py`, closes the capture on every path, exports
+its source hash and aligned DC-in samples. The parser reports DC-in energy and
+mean watts as SECONDARY/print-only; Q continues to use powermetrics. Missing DC
+capture cannot qualify this characterization. Final meter/accounting errors
+retain an inconclusive saved report. Transient source errors remain rows and
+are retried, not fatal to the two-hour run.
 
-Before enabling: native SMC decoder/fan checks, actual PM units/endpoint/freshness,
-IODisplayWrangler against all online displays/screensaver, source overhead,
-existing final checks/census and cleanup, both CW-1 recoveries, idle guard replay,
-and a native dry arm. No MLX native test or real D decode ran in this sandbox.
-The lead must execute the R0 D pulse with its pinned native MLX stack outside it.
-Keep the 30–45 min planning turnaround and **zero credited minutes** until a
-measured before/after, including preliminary-install and native-arm costs, exists.
+`export-idle --source r0_rerun11_idle|r1_soak|cw1_soak --evidence <export.json>`
+converts explicitly permitted channel exports into `{header, rows}` for guard
+replay. The export has an explicit `ended_ns`, stamped `smc` rows (R0/R1
+`values.sensors` or `sensors`), `status` rows, power averaging intervals and
+native guard intervals. Header clocks select the explicit idle/soak span.
+No directory search, interpolation, copied PASS, inferred display state or
+invented battery/top-up/setup evidence fills a missing channel. Missing legacy
+channels remain unknown and hold; if the historical exports do not establish
+them, the lead must rule an additional permitted evidence source, not claim a
+zero-hold replay. All three sources must have eligible boundaries and zero holds.
+
+The budget is **strictly <0.005 CPU-s/s**, total observer cost, not Python self
+CPU. Use `cpu_total()` (the same SELF + reaped CHILDREN basis as the monitor),
+`observer_interval()` for complete outside-tree native process rows including
+sub-threshold daemons, and offline `observer-parse --evidence <accounting.json>`.
+Include baseline/during intervals, elapsed time, before/after CPU totals and
+confirmed child reaping. `observer_accounting` checks storagekitd/
+diskarbitrationd activation and new outside-tree processes, binding the evidence
+hash. Never count the D or finalize workload as observer CPU: run the dedicated
+observer-only diagnostic, including both census boundaries and cleanup.
+A bare CPU number or truncated over-limit process list cannot qualify.
+
+## Native gates still owed to the lead
+
+No native gate ran in this sandbox. On an otherwise quiet MBP, with no agent or
+blinded job active, the lead must:
+
+1. Compare every in-process status read with the native reference commands;
+   validate SMC decoders, fan units, AC-mode mapping, all displays/screensaver,
+   battery freshness, power intervals and monotonic/raw/wall continuity.
+2. Run observer-only baseline/during/after accounting; prove <0.005 CPU-s/s and
+   no observer-induced outside-tree daemon work. Retain complete process rows,
+   both boundary censuses, cleanup evidence and source hashes.
+3. Run one full 1800 s shadow attempt with continuous real powermetrics output.
+4. Demonstrate continuous cooldown handoff, battery-log stop/float continuity,
+   one-retry persistence and a native shadow dry arm whose incumbent READY time
+   is unchanged, with no surviving observer processes before any launch.
+5. Freeze the separate Q, run the one authorized CW-1 with KM003C, replay all
+   three permitted idle sources, and satisfy R18 shadow exposure before ruling.
+
+Native MLX/resident D pulse tests must run outside this sandbox with the pinned
+stack; no MLX test, weight download, real-data read or measurement was performed
+here. Keep the 30–45 min planning turnaround and zero credited minutes until a
+measured before/after includes preliminary, install, native-arm and cleanup cost.

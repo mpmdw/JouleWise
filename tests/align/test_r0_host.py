@@ -353,6 +353,51 @@ class R0HostTest(unittest.TestCase):
                 # The capture-wide block is diagnostic; D6 reads the classifier rows.
                 self.assertEqual(smc_enumeration(root, output)["status"], "pass")
 
+    def test_r0l3_sustained_contention_redoes_smc_once_then_records_contended(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "scripts").mkdir()
+            (root / "scripts/align_smc_enumerate.py").write_text("# fake hook")
+            output = root / "smc"
+            episode = {"start_ns": 0, "end_ns": 60 * 10**9, "seconds": 60.0, "intervals": 7, "max_cores": 0.6}
+            policies = []
+            def run(argv, **kwargs):
+                policies.append(argv[argv.index("--contention-policy") + 1])
+                output.mkdir()
+                if len(policies) == 1:
+                    (output / "contention.json").write_text(json.dumps({"episodes": [episode], "contended": False}))
+                    return subprocess.CompletedProcess(argv, 4, "", "R0 capture abandoned for one redo")
+                payload = write_capture(output, **WP14A_STEP)
+                payload["contention"] = {"policy": "flag", "flags": [], "episodes": [episode], "contended": True}
+                (output / "r0.json").write_text(json.dumps(payload))
+                return subprocess.CompletedProcess(argv, 0, "", "")
+            with patch("subprocess.run", side_effect=run):
+                result = smc_enumeration(root, output)
+            self.assertEqual(policies, ["redo", "flag"])
+            # The redo capture is selection data with a flag, not a refusal.
+            self.assertEqual(result["status"], "pass")
+            self.assertTrue(result["contended"])
+            self.assertEqual(result["contention"]["episodes"], [episode])
+            self.assertIn("contention_by_phase", result)
+            [rejected] = result["contention_redo"]
+            self.assertEqual(rejected["exit_code"], 4)
+            self.assertEqual(rejected["contention"]["episodes"], [episode])
+            self.assertEqual(Path(rejected["output_dir"]), root / "smc.rejected1")
+            self.assertTrue((root / "smc.rejected1" / "contention.json").is_file())
+
+    def test_r0l3_census_failure_is_not_redone(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "scripts").mkdir()
+            (root / "scripts/align_smc_enumerate.py").write_text("# fake hook")
+            with patch("subprocess.run", return_value=subprocess.CompletedProcess(
+                    [], 3, "", "R0 refused/failed: NotQuiet: measurement process active")) as call:
+                result = smc_enumeration(root, root / "smc")
+            self.assertEqual(call.call_count, 1)
+            argv = call.call_args.args[0]
+            self.assertEqual(argv[argv.index("--contention-policy") + 1], "redo")
+            self.assertEqual((result["status"], result["contention_redo"], result["contended"]), ("fail", [], False))
+
     def test_smc_configured_durations_and_timeout_reach_capture(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -582,6 +627,57 @@ class R0HostTest(unittest.TestCase):
                     self.assertEqual(row['phase_max_empty_cells']['load'], 2 if hole else 0)
 
 
+def fake_pmset(displaysleep="0", log="", *, fail=False):
+    """A fake pmset: `-g` settings and `-g log` (RUN_STATE 206 shapes)."""
+    calls = []
+    def run(argv, **kwargs):
+        calls.append(tuple(argv))
+        if fail:
+            raise FileNotFoundError("pmset")
+        if tuple(argv[1:]) == ("-g",):
+            return subprocess.CompletedProcess(argv, 0, f"System-wide power settings:\n displaysleep         {displaysleep}\n", "")
+        if tuple(argv[1:]) == ("-g", "log"):
+            return subprocess.CompletedProcess(argv, 0, log, "")
+        raise AssertionError(argv)
+    return run, calls
+
+
+PMSET_LOG = (
+    "2026-11-05 23:41:00 -0800 Notification        \tDisplay is turned on                \t\n"
+    "2026-11-07 18:08:12 -0800 Notification        \tDisplay is turned off               \t\n"
+    "2026-11-07 18:40:00 -0800 Sleep               \tEntering Sleep state                 \t\n"
+    "2026-11-07 18:50:00 -0800 Notification        \tDisplay is turned on                \t\n"
+    "2026-11-07 18:50:30 -0800 Notification        \tDisplay is turned off               \t\n"
+    "2026-11-07 22:00:00 -0800 Notification        \tDisplay is turned on                \t\n")
+
+
+class R0DisplayCensusTest(unittest.TestCase):
+    def epoch(self, text):
+        from datetime import datetime
+        return datetime.strptime(text, "%Y-%m-%d %H:%M:%S %z").timestamp()
+
+    def test_display_census_records_setting_state_and_transitions_in_the_run(self):
+        from joulewise.align.r0_host import display_census
+        run, calls = fake_pmset("0", PMSET_LOG)
+        start, end = self.epoch("2026-11-07 18:30:00 -0800"), self.epoch("2026-11-07 19:30:00 -0800")
+        record = display_census(start, end, run=run)
+        self.assertEqual(calls, [("/usr/bin/pmset", "-g"), ("/usr/bin/pmset", "-g", "log")])
+        self.assertEqual(record["displaysleep_minutes"], 0)
+        self.assertEqual(record["display_at_start"], "off")
+        self.assertEqual([(t["state"], t["epoch_s"]) for t in record["transitions"]],
+                         [("on", self.epoch("2026-11-07 18:50:00 -0800")),
+                          ("off", self.epoch("2026-11-07 18:50:30 -0800"))])
+        self.assertTrue(record["display_woke_during_run"])
+
+    def test_unavailable_pmset_is_recorded_never_raised(self):
+        from joulewise.align.r0_host import display_census
+        run, _ = fake_pmset(fail=True)
+        record = display_census(0, 1, run=run)
+        self.assertIn("FileNotFoundError", record["pmset_g_error"])
+        self.assertIn("FileNotFoundError", record["pmset_log_error"])
+        self.assertIsNone(record["display_woke_during_run"])
+
+
 class R0QuietIntervalTest(unittest.TestCase):
     # CPU fixtures derive from the 0.05 CPU-s/s bar and 30 s interval:
     # 0.06 / 0.04 straddle the bar by 0.01; 1.80 / 1.20 are their
@@ -615,6 +711,13 @@ class R0QuietIntervalTest(unittest.TestCase):
         guard = QuietGuard([], run=run, inspect_custody=lambda **kw: Census(),
                            clock=clock, sleep=clock.sleep)
         return guard, clock, calls
+
+    def assert_flagged(self, guard, pattern):
+        """R0-L3: contaminant contention is a receipt flag, never a refusal."""
+        guard.check(force=True)
+        self.assertRegex(guard.receipts[-1]["contention_flag"], pattern)
+        self.assertRegex(guard.contention_flags[-1]["flag"], pattern)
+        self.assertIsNone(guard.failure)
 
     def assert_rate(self, actual, expected, elapsed):
         # One ps TIME quantum over the measured interval bounds the
@@ -667,19 +770,17 @@ class R0QuietIntervalTest(unittest.TestCase):
 
     def test_startup_waits_full_interval_and_sustained_cpu_straddles_bar(self):
         # 0.05 +/- 0.01 CPU-s/s over 30 s gives 1.80 / 1.20 CPU-s.
-        for cpu, rate, refuses in (("0:01.80", 0.06, True), ("0:01.20", 0.04, False)):
+        for cpu, rate, flags in (("0:01.80", 0.06, True), ("0:01.20", 0.04, False)):
             with self.subTest(rate=rate):
                 guard, clock, calls = self.guard([
                     cpu_table((42, OLD_START, "0:00.00", "mdworker_shared")),
                     cpu_table((42, OLD_START, cpu, "mdworker_shared"))])
-                if refuses:
-                    with self.assertRaisesRegex(Refused, "42 mdworker_shared 0.06 CPU-s/s"):
-                        guard.check(force=True)
-                    # Busy refusals latch even when subsequent CPU would be quiet.
-                    with self.assertRaises(Refused):
-                        guard.check(force=True)
+                if flags:
+                    self.assert_flagged(guard, "42 mdworker_shared 0.06 CPU-s/s")
                 else:
                     guard.check(force=True)
+                    self.assertNotIn("contention_flag", guard.receipts[-1])
+                    self.assertEqual(guard.contention_flags, [])
                 self.assertEqual(len(calls), 2)
                 self.assertGreaterEqual(calls[1] - calls[0], prewindow.INTERVAL_S)
                 self.assertEqual(len(clock.sleeps), 1)
@@ -687,14 +788,29 @@ class R0QuietIntervalTest(unittest.TestCase):
                 self.assertGreaterEqual(interval["elapsed_s"], prewindow.INTERVAL_S)
                 self.assert_rate(interval["contaminants"][0]["cpu_s_per_s"], rate, interval["elapsed_s"])
 
-    def test_burst_above_interval_budget_refuses(self):
+    def test_r0l3_flagged_contention_never_latches_and_census_refusals_still_refuse(self):
+        guard, clock, _ = self.guard([
+            cpu_table((42, OLD_START, "0:00.00", "softwareupdated")),
+            cpu_table((42, OLD_START, "0:02.10", "softwareupdated")),
+            cpu_table((42, OLD_START, "0:02.10", "softwareupdated"))])
+        # Re-run 5's softwareupdated scan, 0.07 CPU-s/s: a flag, not a refusal.
+        self.assert_flagged(guard, "42 softwareupdated 0.07 CPU-s/s")
+        clock.now = 60
+        guard.check(force=True)  # the next quiet interval passes: no latch
+        self.assertNotIn("contention_flag", guard.receipts[-1])
+        agents = self.default_parent / "Library/LaunchAgents"
+        agents.mkdir(parents=True)
+        (agents / "com.joulewise.night.plist").write_text("armed")
+        with self.assertRaisesRegex(Refused, "measurement window armed"):
+            guard.check(force=True)
+
+    def test_burst_above_interval_budget_is_flagged(self):
         # 1.60 CPU-s exceeds 0.05 * 30 = 1.50 by ten TIME quanta.
         guard, _, _ = self.guard([cpu_table(), cpu_table((42, NEW_START, "0:01.60", "photoanalysisd"))])
         from datetime import datetime
         with patch("joulewise.align.r0_host.time.time_ns",
                    return_value=int(datetime(2026, 11, 6, 18, 5, 15).timestamp() * 1e9)):
-            with self.assertRaisesRegex(Refused, "photoanalysisd.*CPU-s/s"):
-                guard.check(force=True)
+            self.assert_flagged(guard, "photoanalysisd.*CPU-s/s")
 
     def test_forced_calls_use_newest_30_second_opening_and_prune_history(self):
         def snapshot(cpu):
@@ -728,9 +844,8 @@ class R0QuietIntervalTest(unittest.TestCase):
                     cpu_table((42, NEW_START, cpu, "mdworker_shared"))])
                 with patch("joulewise.align.r0_host.time.time_ns", side_effect=lambda: int(
                         (datetime(2026, 11, 6, 18, 5, 0).timestamp() + clock()) * 1e9)):
-                    if refuses:
-                        with self.assertRaisesRegex(Refused, "mdworker_shared.*CPU-s/s"):
-                            guard.check(force=True)
+                    if refuses:  # R0-L3: flagged, not refused
+                        self.assert_flagged(guard, "mdworker_shared.*CPU-s/s")
                     else:
                         guard.check(force=True)
                         self.assert_rate(guard.receipts[-1]["cpu_interval"]["contaminants"][0]["cpu_s_per_s"],
@@ -770,9 +885,8 @@ class R0QuietIntervalTest(unittest.TestCase):
                 guard, _, _ = self.guard([
                     cpu_table((42, OLD_START, "0:00.00", name)),
                     cpu_table((42, OLD_START, "0:03.00", name))], diagnostic=diagnostic)
-                if refuses:
-                    with self.assertRaisesRegex(Refused, "python.*CPU-s/s"):
-                        guard.check(force=True)
+                if refuses:  # R0-L3: flagged, not refused
+                    self.assert_flagged(guard, "python.*CPU-s/s")
                 else:
                     guard.check(force=True)
                     self.assertFalse(guard.receipts[-1]["busy"])
@@ -789,13 +903,11 @@ class R0QuietIntervalTest(unittest.TestCase):
         self.assertEqual(interval["unaccounted"][0]["reason"], "exited")
 
     def test_exited_over_limit_rule_uses_contention_previous_interval_evidence(self):
-        # The public check latches before a second busy interval. Exercise
-        # accounting directly to prove the retained exit rule independently.
+        # Exercise accounting directly to prove the retained exit rule.
         guard, clock, _ = self.guard([
             cpu_table((42, OLD_START, "0:00.00", "mdworker_shared")),
             cpu_table((42, OLD_START, "0:01.80", "mdworker_shared")), cpu_table()])
-        with self.assertRaises(Refused):
-            guard.check(force=True)
+        self.assert_flagged(guard, "mdworker_shared")
         clock.now = 60
         receipt = {}
         busy = guard._cpu_interval(receipt)
@@ -825,9 +937,8 @@ class R0QuietIntervalTest(unittest.TestCase):
                               (43, OLD_START, "0:00.00", "mdworker_shared")),
                     cpu_table((42, OLD_START, "0:00.00", "Safari"),
                               (43, OLD_START, cpu, "mdworker_shared"))])
-                if refuses:
-                    with self.assertRaisesRegex(Refused, "43 mdworker_shared.*CPU-s/s"):
-                        guard.check(force=True)
+                if refuses:  # R0-L3: flagged, not refused
+                    self.assert_flagged(guard, "43 mdworker_shared.*CPU-s/s")
                 else:
                     guard.check(force=True)
                 recorded = guard.receipts[-1]["cpu_interval"]["regressed_noncontaminant"]
@@ -862,24 +973,20 @@ class R0QuietIntervalTest(unittest.TestCase):
                 self.assertEqual([(row["pid"], row["contaminant"]) for row in interval["regressed_counters"]],
                                  [(42, contaminant)])
 
-    def test_contaminant_regression_with_previous_over_limit_still_refuses(self):
-        # (0.05 + 0.01) * 30 = 1.80 CPU-s, then TIME -> zero.
-        # check() latches on the first interval, so inspect the next interval
-        # directly to verify the module's exited_over_limit rule too.
+    def test_contaminant_regression_with_previous_over_limit_is_still_flagged(self):
+        # (0.05 + 0.01) * 30 = 1.80 CPU-s, then TIME -> zero. Under R0-L3
+        # the next public check judges the regressed interval and flags it.
         guard, clock, _ = self.guard([
             cpu_table((42, OLD_START, "0:00.00", "mdworker_shared")),
             cpu_table((42, OLD_START, "0:01.80", "mdworker_shared")),
             cpu_table((42, OLD_START, "0:00.00", "mdworker_shared"))])
-        with self.assertRaisesRegex(Refused, "mdworker_shared 0.06 CPU-s/s"):
-            guard.check(force=True)
+        self.assert_flagged(guard, "mdworker_shared 0.06 CPU-s/s")
         clock.now += prewindow.INTERVAL_S
-        receipt = {}
-        self.assertEqual(guard._cpu_interval(receipt)[0]["pid"], 42)
-        interval = receipt["cpu_interval"]
+        self.assert_flagged(guard, "42 mdworker_shared")
+        interval = guard.receipts[-1]["cpu_interval"]
         self.assertEqual(interval["exited_over_limit"][0]["pid"], 42)
         self.assertTrue(interval["regressed_counters"][0]["contaminant"])
-        with self.assertRaises(Refused):
-            guard.check(force=True)
+        self.assertEqual(len(guard.contention_flags), 2)
 
     def test_interval_regression_after_missing_snapshot_is_recorded_for_every_identity(self):
         # Opening at 30 s, missing at 1.5 * 30, reappearing at 2 * 30:
@@ -919,19 +1026,16 @@ class R0QuietIntervalTest(unittest.TestCase):
         clock.now += prewindow.INTERVAL_S / 2
         guard.check(force=True)  # 22.50 / 615 < 0.05; still uses the pre-gap opening.
         clock.now += prewindow.INTERVAL_S / 2
-        with self.assertRaisesRegex(Refused, "mdworker_shared 0.5 CPU-s/s"):
-            guard.check(force=True)
+        self.assert_flagged(guard, "mdworker_shared 0.5 CPU-s/s")
         self.assertEqual(clock.sleeps, [prewindow.INTERVAL_S])
         interval = guard.receipts[-1]["cpu_interval"]
         self.assertEqual(interval["elapsed_s"], prewindow.INTERVAL_S)
         self.assertEqual(len(guard._snapshots), 3)
         self.assertEqual(calls[-1] - calls[-2], prewindow.INTERVAL_S / 2)
-        with self.assertRaises(Refused):
-            guard.check(force=True)
 
-    def test_gap_contention_refuses_on_the_long_judged_interval(self):
+    def test_gap_contention_is_flagged_on_the_long_judged_interval(self):
         # (0.05 + 0.01) * (20 * 30) = 36 CPU-s across the gap;
-        # the long judged interval alone must refuse without another sleep.
+        # the long judged interval alone is flagged without another sleep.
         def snapshot(cpu):
             return cpu_table((42, OLD_START, cpu, "mdworker_shared"))
         guard, clock, _ = self.guard([
@@ -940,8 +1044,7 @@ class R0QuietIntervalTest(unittest.TestCase):
         guard.check(force=True)
         guard.sleep = lambda seconds: self.fail("slept after first admission")
         clock.now += 20 * prewindow.INTERVAL_S
-        with self.assertRaisesRegex(Refused, "mdworker_shared 0.06 CPU-s/s"):
-            guard.check(force=True)
+        self.assert_flagged(guard, "mdworker_shared 0.06 CPU-s/s")
         self.assertTrue(guard.receipts[-1]["cpu_interval"]["long_interval"])
 
     def test_no_sleep_after_first_admission_at_cadence_or_after_gaps(self):
@@ -986,8 +1089,7 @@ class R0QuietIntervalTest(unittest.TestCase):
             diagnostic=lambda now: "42 0.0 python mdworker_task.py\n" if now else "")
         with patch("joulewise.align.r0_host.time.time_ns",
                    side_effect=lambda: int((wall + clock()) * 1e9)):
-            with self.assertRaisesRegex(Refused, "python.*CPU-s/s"):
-                guard.check(force=True)
+            self.assert_flagged(guard, "python.*CPU-s/s")
         self.assertEqual(guard.receipts[-1]["cpu_interval"]["contaminants"][0]["matched_on"], ["args"])
 
     def test_backwards_wall_step_is_flagged_without_changing_monotonic_rate(self):

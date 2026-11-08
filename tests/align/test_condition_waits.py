@@ -39,6 +39,16 @@ def q_reference():
         'display_decoder': 'IODisplayWrangler.CurrentPowerState<=1'}
 
 
+def observer_proof(cost=.004):
+    return {'schema': 'joulewise.align.condition_waits.observer.v1', 'cpu_s_per_s': cost,
+            'all_children_reaped': True, 'outside_tree_daemons': [], 'outside_tree_accounted': True,
+            'evidence_sha256': 'c'*64}
+
+
+def meter_export():
+    return {'complete': True, 'source_sha256': 'd'*64, 'host_ns': [0, cw.NS], 'watts': [5, 5]}
+
+
 def policy(active=True, q=True):
     p = cw.registration_policy(cohort='synthetic-v4', q=q_reference() if q else None,
                                 cw1=None, incumbent_policy_sha256='a'*64)
@@ -344,6 +354,8 @@ class CharacterizationTests(unittest.TestCase):
             def boot_id(self):
                 return 'synthetic-boot'
             def sample(self, *, attempt_id, boot_id):
+                if clock.t == 100:
+                    raise OSError('synthetic transient read failure')
                 r = sample(clock.t)
                 r.update(attempt_id=attempt_id, boot_id=boot_id, display_asleep=asleep[0])
                 return r
@@ -360,11 +372,13 @@ class CharacterizationTests(unittest.TestCase):
             return True
         result = char.execute_kit(k, policy(), s, pulse=pulse, preflight=lambda: True,
             display_transition=transition, final_checks=lambda: True, journal=StringIO(), save=saved.append,
-            observer_cost=lambda: .001)
+            observer_cost=lambda: observer_proof(.001),
+            meter=SimpleNamespace(start=lambda: None, close=lambda: meter_export()))
         self.assertTrue(s.closed)
         self.assertEqual(pulses, ['pulse_d', 'pulse_finalize'])
         self.assertEqual(result['status'], 'complete')
         self.assertTrue(result['display_transition_observed'])
+        self.assertTrue(any('source_error' in r for r in result['soak']))
         for record in result['recoveries'].values():
             self.assertEqual((record['rows'][-1]['finished']['monotonic_ns']-
                               record['header']['quiet_start_ns'])/cw.NS, 1800)
@@ -416,6 +430,7 @@ class CharacterizationTests(unittest.TestCase):
         record = {'header': header(), 'rows': rows(1800)}
         run = {'schema': char.CW1, 'r1_sha256': '2'*64, 'band_sha256': p['band_sha256'],
                'elapsed_s': 6900, 'observer_cpu_s_per_s': .004,
+               'observer_accounting': observer_proof(.004), 'km003c': meter_export(),
                'final_reads_undisturbed': True, 'pulse_d_r0_passed': True,
                'display_transition_observed': True, 'recoveries': {
                    'recovery_d': record, 'recovery_finalize': record}, 'soak': []}
@@ -509,18 +524,18 @@ class NativeSourceTests(unittest.TestCase):
 
 class TriageBindingTests(unittest.TestCase):
     def test_r16_requires_replayed_receipt_for_exact_policy_attempt_and_boot(self):
-        from tests.align.test_v4_cadence import passing_packet, INTERNAL, IDENTITY
+        from tests.align.test_v4_cadence import passing_packet, INTERNAL, IDENTITY, NOW_EPOCH
         from joulewise.align.apple import v4_cadence as cad
         packet = passing_packet()
         identity = {**IDENTITY, 'condition_waits_policy_sha256': 'a'*64}
-        self.assertFalse(cad.next_arm_triage(packet, INTERNAL, identity)['admitted'])
+        self.assertFalse(cad.next_arm_triage(packet, INTERNAL, identity, now_epoch_s=NOW_EPOCH)['admitted'])
         entry = {'receipt_sha256': 'b'*64, 'policy_sha256': 'a'*64,
                  'attempt_id': 'synthetic-attempt', 'boot_id': 'synthetic-boot'}
         packet['checks']['quiet_start_state'].update(entry)
         identity['quiet_start_state_binding'] = {'verified': True, **entry}
-        self.assertTrue(cad.next_arm_triage(packet, INTERNAL, identity)['admitted'])
+        self.assertTrue(cad.next_arm_triage(packet, INTERNAL, identity, now_epoch_s=NOW_EPOCH)['admitted'])
         packet['checks']['quiet_start_state']['receipt_sha256'] = 'c'*64
-        self.assertFalse(cad.next_arm_triage(packet, INTERNAL, identity)['admitted'])
+        self.assertFalse(cad.next_arm_triage(packet, INTERNAL, identity, now_epoch_s=NOW_EPOCH)['admitted'])
 
 
 if __name__ == '__main__':

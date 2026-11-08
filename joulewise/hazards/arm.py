@@ -216,7 +216,7 @@ def run(config: ArmConfig, seams: Seams | None = None) -> ArmResult:
                 record['condition_waits'] = config.start_state.receipt
             finally:
                 config.start_state.close()
-            if decision == GO:
+            if decision == GO and config.start_state.policy['mode'] == 'condition':
                 receipt = record['condition_waits'] or {}
                 age = ctx.stamp().monotonic_ns-(receipt.get('finished') or {}).get('monotonic_ns', 0)
                 if not receipt.get('go') or not 0 <= age <= 2_000_000_000:
@@ -336,7 +336,7 @@ def run(config: ArmConfig, seams: Seams | None = None) -> ArmResult:
 
     if joint is not None and not joint.at_go():
         return finish(NULL, 'condition_waits', ['R16 final native start-state recheck failed'])
-    if joint is not None:
+    if joint is not None and joint.policy['mode'] == 'condition':
         # Include R16's final source reads in the native clock proof as well.
         samples.append(clock_sample())
         go_series = clock.series(samples, boot_start=boot_start, boot_end=_boot(seams, ctx),

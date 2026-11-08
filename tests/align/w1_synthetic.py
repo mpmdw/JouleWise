@@ -453,6 +453,7 @@ def patches(world):
     fake_random = FakeRandom()
     mlx = ModuleType('mlx')
     core = ModuleType('mlx.core')
+    mlx.__version__ = core.__version__ = '0.0-synthetic'
     mlx.core, core.random = core, fake_random
     native = native_module(world, fake_random)
 

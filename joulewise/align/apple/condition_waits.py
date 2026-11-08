@@ -24,6 +24,44 @@ RECEIPT = 'joulewise.align.condition_waits.receipt.v1'
 FLOOR_S, STABLE_S, DISPLAY_S, CEILING_S = 300, 180, 300, 1800
 
 
+def require_install_enabled(root, policy=None):
+    """Lead's inert-merge ban, including print-only policies. No default ruling."""
+    from pathlib import Path
+    directory = Path(root)/'configs/campaigns/align_v4/registration'
+    path = directory/'condition_waits_policy.json'
+    present = path.exists() or path.is_symlink()
+    if not present and policy is None:
+        return
+    try:
+        frozen = validate_policy(json.loads(path.read_bytes())) if present else validate_policy(policy)
+        if policy is not None and frozen != validate_policy(policy):
+            raise ValueError('installed plan differs from the ruled policy file')
+        ruling = json.loads((directory/'condition_waits_lead_ruling.json').read_bytes())
+        cost = ruling['observer_accounting']
+        if (ruling.get('schema') != 'joulewise.align.condition_waits.lead_ruling.v1'
+                or ruling.get('enabled') is not True or ruling.get('h1_h7_fixed') is not True
+                or ruling.get('native_dry_arm_passed') is not True
+                or ruling.get('r18_shadow_exposure_passed') is not True
+                or ruling.get('policy_sha256') != digest(frozen)
+                or not isinstance(ruling.get('ruled_by'), str) or not ruling['ruled_by'].strip()
+                or not is_digest(ruling.get('native_evidence_sha256'))
+                or not observer_qualified(cost)):
+            raise ValueError('lead ruling lacks the native release gates')
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise ValueError('R16 INERT: any condition_waits_policy.json is banned at install until '
+                         'a bound lead ruling enables it after H1-H7 and the native dry arm') from exc
+
+
+def observer_qualified(value):
+    """Total process-tree cost plus the outside-tree daemon contamination check."""
+    return (isinstance(value, dict) and value.get('schema') == 'joulewise.align.condition_waits.observer.v1'
+            and finite(value.get('cpu_s_per_s')) and 0 <= value['cpu_s_per_s'] < .005
+            and value.get('all_children_reaped') is True
+            and value.get('outside_tree_daemons') == []
+            and value.get('outside_tree_accounted') is True
+            and is_digest(value.get('evidence_sha256')))
+
+
 def canonical(value):
     return json.dumps(value, sort_keys=True, separators=(',', ':'), allow_nan=False).encode()
 
@@ -182,7 +220,7 @@ class Attempt:
     *joint* interval additionally needs continuous measured clean time.
     """
     def __init__(self, policy, *, attempt_id, boot_id, started, quiet_start_ns,
-                 attempt_number=1, ambient_check=None):
+                 attempt_number=1, ambient_check=None, cooldown_rows=None):
         self.policy = validate_policy(policy)
         self.started = Stamp.from_json(started).to_json()
         self.start = self.started['monotonic_ns']
@@ -201,7 +239,7 @@ class Attempt:
             raise ValueError('retry requires fresh ambient check and previous not_ready receipt')
         self.identity = dict(attempt_id=attempt_id, boot_id=boot_id, attempt_number=attempt_number,
                              ambient_check=deepcopy(ambient_check))
-        self.quiet = quiet_start_ns
+        self.quiet = self.last_disruption = quiet_start_ns
         self.temperatures, self.good_times, self.display_times = deque(), deque(), deque()
         self.power = deque()
         self.guard = contention.Dwell(self.policy['guard'], started_ns=self.start)
@@ -214,6 +252,36 @@ class Attempt:
         self.fatal = None
         self.closed = False
         self.last_result = None
+        # Raw observations from the same live cooldown, never an earlier PASS.
+        # Only display history crosses the arm boundary; physical stability
+        # still has to overlap this arm's own native guard.
+        previous = None
+        for row in cooldown_rows or ():
+            a, b = Stamp.from_json(row['started']), Stamp.from_json(row['finished'])
+            t = b.monotonic_ns
+            valid = not (row.get('boot_id') != boot_id or row.get('schema') != SAMPLE
+                    or not a.monotonic_ns <= t <= self.start or t-a.monotonic_ns > 2*NS
+                    or abs((b.wall_ns-a.wall_ns)-(t-a.monotonic_ns)) > NS//10
+                    or abs((b.monotonic_raw_ns-a.monotonic_raw_ns)-(t-a.monotonic_ns)) > NS//10
+                    or previous is not None and not 0 < t-previous <= 2*NS)
+            if not valid:
+                self.display_times.clear()
+                self.display_from = None
+                self.quiet = self.start
+            if valid and row.get('display_asleep') is True and row.get('screensaver_engaged') is False:
+                if self.display_from is None:
+                    self.display_from = t
+                self.display_times.append(t)
+            else:
+                self.display_times.clear()
+                self.display_from = None
+            previous = t
+        if previous is not None and (self.start-previous > 2*NS
+                or abs(self.started['wall_ns']-(cooldown_rows[-1]['finished']['wall_ns'])
+                       -(self.start-previous)) > NS//10):
+            self.display_times.clear()
+            self.display_from = None
+            self.quiet = self.start
 
     def feed(self, row, *, go=False, incumbent_ready=False):
         if self.closed:
@@ -248,10 +316,11 @@ class Attempt:
         self.samples += 1
         disruption = row.get('last_disruptive_ns')
         if disruption is not None:
-            if type(disruption) is not int or disruption > now or disruption < self.quiet:
+            if type(disruption) is not int or disruption > now or disruption < self.last_disruption:
                 self.fatal = 'disruptive_boundary'
-            elif disruption > self.quiet:
-                self.quiet = disruption
+            elif disruption > self.last_disruption:
+                self.last_disruption = disruption
+                self.quiet = max(self.quiet, disruption)
                 self.stable_from = None
                 self.good_times.clear()
         for interval in row.get('guard_intervals', []):
@@ -326,10 +395,32 @@ class Attempt:
         if (row.get('os_level') != 0 or type(row.get('os_level')) is not int
                 or row.get('pm_state') != 'Nominal' or type(pm) is not int or not 0 <= now-pm <= 2*NS):
             physical.append('os_or_pm')
+        # A source-bound top-up is admitted once at arm. Every subsequent
+        # stamped row must still prove float; a failure breaks this continuity.
+        topup = row.get('topup')
+        arm_topup = row.get('arm_topup')
+        if arm_topup is not None:
+            binding = digest({'topup': topup, 'arm_topup': arm_topup})
+            if getattr(self, 'topup_binding', binding) != binding:
+                self.float_broken = True
+            self.topup_binding = binding
+            arm_at = arm_topup.get('admitted_at_epoch_s')
+            admission = battery_arm(row.get('battery') or {}, row.get('obc_off_attested_by'),
+                                    topup, now_epoch_s=arm_at)
+            if (not admission['admitted'] or not finite(arm_at) or self.previous is None
+                    or not arm_at <= self.started['wall_ns']/NS
+                    or row.get('float_continuity_passed') is not True):
+                self.float_broken = True
+            topup = {'completed_at_epoch_s': self.previous.wall_ns/NS if self.previous else None,
+                     'source': 'R16 live float continuity from arm-time top-up'}
         battery = battery_arm(row.get('battery') or {}, row.get('obc_off_attested_by'),
-                              row.get('topup'), now_epoch_s=self.previous.wall_ns/NS if self.previous else None)
+                              topup, now_epoch_s=self.previous.wall_ns/NS if self.previous else None)
         if not battery['admitted']:
             physical.append('battery')
+            if row.get('battery'):
+                self.float_broken = True
+        if arm_topup is not None and getattr(self, 'float_broken', False):
+            physical.append('float_continuity_broken')
         observed = row.get('battery_observed_ns')
         if type(observed) is not int or not 0 <= now-observed <= 2*NS:
             physical.append('battery_stale')

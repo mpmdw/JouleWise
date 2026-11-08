@@ -141,7 +141,7 @@ class NativeArmTests(unittest.TestCase):
         from joulewise.hazards import contention
         # Read code objects only from the allowed Git store, never telemetry.
         source = subprocess.run(['git', 'show',
-            'origin/align/2026-11-08-v4-r11:joulewise/hazards/contention.py'],
+            '1a2574b49fe86eaffa722fb106d851c8e3e1eebc:joulewise/hazards/contention.py'],
             cwd=Path(__file__).resolve().parents[2], check=True, capture_output=True).stdout
         reference = types.ModuleType('synthetic_cw_reference_contention')
         sys.modules[reference.__name__] = reference
