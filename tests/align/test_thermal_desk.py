@@ -36,6 +36,16 @@ def contrast(effect=12, noise=0):
 
 
 class DeskTests(unittest.TestCase):
+    def synthetic_registration(self, root):
+        from joulewise.align.apple.v4_registration import derive_u3, wp19_identity
+        bar = derive_u3([dict(session='synthetic', ordinals=[i, i+3], token_identical=True,
+                             energies_j=[1000, 1000+i]) for i in (1, 2, 3)], {'synthetic': 'a'*64})
+        fixture = {'turns': [{'turn': 0, 'prompt_token_ids': [1], 'output_token_ids': [2]}]}
+        wp19 = wp19_identity({'X': fixture, 'Y': fixture}, {'X': [[1]], 'Y': [[1]]},
+                            fixture['turns'], live_source_sha256='b'*64)
+        (root/'u3_bar.json').write_text(json.dumps(bar))
+        (root/'wp19_receipt.json').write_text(json.dumps(wp19))
+        return ['--registration-dir', str(root)]
     def test_dead_collector_counts_as_x4_even_with_runtime_failure(self):
         reasons = desk.calibration_exclusions({
             'flags': ['episode_error:RuntimeError:thermal.collector_thread_dead'],
@@ -333,7 +343,8 @@ class DeskTests(unittest.TestCase):
             manifest.write_text(json.dumps({'members': [{'bundle': str(bundle), 'window': 'W1',
                                                         'turn_owned_j': 123456}]}))
             output = root/'desk'
-            self.assertEqual(main(['--manifest', str(manifest), '--output', str(output)]), 0)
+            self.assertEqual(main(['--manifest', str(manifest), '--output', str(output)]+
+                                  self.synthetic_registration(root)), 0)
             report = json.loads((output/'PILOT.json').read_text())
             self.assertNotEqual(report['members'][0]['turn_owned_j'], 123456)
             # This mock runtime has no GPU meter/PM evidence. Never call it live.
@@ -354,7 +365,8 @@ class DeskTests(unittest.TestCase):
                        'model': 'qwen3-30b-a3b'}
             manifest = root/'manifest.json'
             manifest.write_text(json.dumps({'members': [present, missing]}))
-            self.assertEqual(main(['--manifest', str(manifest), '--output', str(root/'desk')]), 0)
+            reg_args = self.synthetic_registration(root)
+            self.assertEqual(main(['--manifest', str(manifest), '--output', str(root/'desk')]+reg_args), 0)
             rows = {m['id']: m for m in json.loads((root/'desk'/'PILOT.json').read_text())['members']}
             self.assertIn('member.artifact_missing', rows['failed-member']['flags'])
             self.assertTrue(rows['failed-member']['excluded'])
@@ -362,7 +374,7 @@ class DeskTests(unittest.TestCase):
             for key in ('pilot7_reference_id', 'compare_reference_id'):
                 manifest.write_text(json.dumps({'members': [{**present, key: 'nobody'}]}))
                 with self.assertRaisesRegex(ValueError, f'unresolved {key}: nobody'):
-                    main(['--manifest', str(manifest), '--output', str(root/f'desk-{key}')])
+                    main(['--manifest', str(manifest), '--output', str(root/f'desk-{key}')]+reg_args)
 
     def test_k_session_reader_u4_pass_fail_and_inconclusive(self):
         def write(root, index, offset=0, complete=True):

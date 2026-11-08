@@ -3,7 +3,7 @@
     "D": "WP11",
     "anchor_commit": "83e2dac59",
     "tree_path": "configs/campaigns/align_v4/plan_tree.json",
-    "tree_sha256": "e8b8e0805b4865311f47632849cd88b03a6c6c4da948df67979524c3ee7b4cb4"
+    "tree_sha256": "ff268ec04ea2b6d5dfe473d6d157902cc7f7120c661e0093a7218856e87f26b3"
   },
   "non_claim": true,
   "runtime_versions": {

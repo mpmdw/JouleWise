@@ -158,6 +158,8 @@ class CacheTests(unittest.TestCase):
             self.assertTrue(g['cache_rebuilt'])
             self.assertEqual(g['cache_fallback_reason'], 'untrimmable_rewrite')
             self.assertEqual(g['cached_prompt_tokens'], 0)
+            self.assertEqual(g['prefill_tokens'], 3)  # every re-fed ID is P
+            self.assertEqual(g['prompt_tokens'], 3)   # C + P, with C = 0
             self.assertIn('cache.rebuilt_untrimmable:2', endpoint.flags)
             with self.assertRaisesRegex(ValueError, 'empty_prompt'):
                 endpoint._episode_cache.prepare([])

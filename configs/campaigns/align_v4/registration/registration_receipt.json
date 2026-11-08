@@ -1,0 +1,56 @@
+{
+  "artifacts": {
+    "configs/campaigns/align_v4/collection_plan.json": null,
+    "configs/campaigns/align_v4/plan_tree.json": null,
+    "configs/campaigns/align_v4/registration/inputs.json": null,
+    "configs/campaigns/align_v4/registration/r1_slots.json": null,
+    "configs/campaigns/align_v4/registration/r1_soak_reference.json": null,
+    "configs/campaigns/align_v4/registration/u3_bar.json": null,
+    "configs/campaigns/align_v4/registration/w1_plan.json": null,
+    "configs/campaigns/align_v4/registration/wp19_receipt.json": null,
+    "docs/align/pilot_protocol_v4.md": null,
+    "docs/align/v4/DEVIATIONS.md": null,
+    "joulewise/align/apple/endpoint.py": null,
+    "joulewise/align/apple/thermal_desk.py": null,
+    "joulewise/align/apple/thermal_gates.py": null,
+    "joulewise/align/apple/v4_estimands.py": null,
+    "joulewise/align/apple/v4_registration.py": null,
+    "joulewise/align/apple/workload.py": null,
+    "scripts/align_pilot_session.py": null,
+    "scripts/align_v4_kit.py": null,
+    "scripts/align_v4_offloads.py": null,
+    "scripts/align_v4_session.py": null,
+    "scripts/align_v4_thermal_desk.py": null,
+    "scripts/align_v4_u3_bar.py": null,
+    "scripts/align_v4_wp19.py": null,
+    "scripts/run_night.py": null
+  },
+  "commit": null,
+  "gates": {
+    "A": {
+      "path": null,
+      "sha256": null,
+      "verdict": "PENDING"
+    },
+    "B": {
+      "path": null,
+      "sha256": null,
+      "verdict": "PENDING"
+    }
+  },
+  "lead_signature": "PENDING_LEAD_SIGNATURE",
+  "note": "Template only. U3 pilot bar, WP19 native identity receipt, R1/plan fields, both gate reports and final lead signature are absent. W1 cannot arm.",
+  "rulings": {
+    "11": "installed_pending_native_evidence",
+    "15": "installed_pending_native_evidence",
+    "17": "installed_pending_native_evidence",
+    "18": "installed_pending_native_evidence",
+    "20": "installed_pending_native_evidence",
+    "4": "installed_pending_native_evidence",
+    "5": "installed_pending_native_evidence",
+    "6": "installed_pending_native_evidence",
+    "9": "installed_pending_native_evidence"
+  },
+  "schema": "joulewise.align_v4.registration_receipt.v1",
+  "status": "PENDING_LEAD_REGISTRATION"
+}

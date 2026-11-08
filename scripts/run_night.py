@@ -2575,7 +2575,7 @@ def _qualification_observe(night, producer, operation):
 
     Round-8 disposition D8-1 (R1 round-8 exec MEDIUM-1): an interrupt
     (KeyboardInterrupt, which the R7-4/R8-1 handler raises for TERM/HUP/INT)
-    or a SystemExit is not an observation failure. The fault is recorded and
+    is not an observation failure. The fault is recorded and
     the exception re-raised, so the R8-1 latch sees the first signal."""
     try:
         return operation()
@@ -2586,7 +2586,7 @@ def _qualification_observe(night, producer, operation):
                 "producer": producer, "status": "REFUSED"})
         except BaseException:
             pass
-        if isinstance(error, (KeyboardInterrupt, SystemExit)):
+        if isinstance(error, KeyboardInterrupt):
             raise
         return None
 

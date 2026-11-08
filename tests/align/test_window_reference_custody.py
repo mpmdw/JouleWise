@@ -18,6 +18,32 @@ from scripts import align_v4_kit as kit
 
 
 class WindowReferenceCustodyTests(unittest.TestCase):
+    def test_unobserved_capture_refuses_consumer_before_runtime_prepare(self):
+        from joulewise.align.apple.workload import EpisodeRuntimeAdapter
+        from tests.align.test_apple_campaign import as_config, episode_spec
+        from dataclasses import replace
+        from unittest.mock import Mock
+        with tempfile.TemporaryDirectory() as tmp:
+            source = self.context(tmp, 'source')
+            clock = FakeClock()
+            capture = ThermalSession(policy(), clock, source, reader=Reader(Transport(clock)))
+            capture.start()
+            capture.capture_reference('source')  # no 60 s history: authenticated unobserved
+            capture.close()
+            context = self.context(tmp, 'consumer')
+            digest = hashlib.sha256((source.bundle_path/'config.json').read_bytes()).hexdigest()
+            consume = policy(window_reference={'role': 'consume', 'source_run_id': 'source',
+                                              'source_config_sha256': digest})
+            runtime = Mock()
+            adapter = EpisodeRuntimeAdapter(runtime, clock=clock)
+            config = as_config(replace(episode_spec(hidden=False), thermal=consume,
+                                       warmup_condition='benign', max_episode_seconds=None,
+                                       deadman_s=1000), 'consumer')
+            result = adapter.prepare(config, context)
+            self.assertFalse(result.ok)
+            self.assertIn('thermal.window_reference_unobserved', adapter.flags)
+            runtime.prepare.assert_not_called()
+
     def context(self, root, run_id):
         bundle = Path(root)/run_id
         outputs = bundle/'outputs'

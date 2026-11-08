@@ -145,17 +145,26 @@ def u6_stability(rows, *, cell_residual_sd):
 def d_turn_position_means(rows):
     """Registered D replacement for the underpowered turn-index slope."""
     groups = defaultdict(list)
+    trajectories = defaultdict(set)
     for row in rows:
         groups[int(row["turn_position"])].append(float(row["residual_j"]))
+        if row.get('trajectory') is not None:
+            trajectories[int(row['turn_position'])].add(row['trajectory'])
     return {"status": "registered_acceptance", "estimand": "per_turn_position_residual_means",
-            "means_j": {position: fmean(values) for position, values in sorted(groups.items())}}
+            "means_j": {position: fmean(values) for position, values in sorted(groups.items())},
+            "trajectory_counts": {p: len(trajectories[p]) for p in groups},
+            "evaluable": {p: len(trajectories[p]) >= 6 for p in groups}}
 
 
 def u4_reference(r1_replay_pair, w1_sentinels, d_window_energies):
     """U4 inputs with W1 counted as a window and the ruled multi-run E_ref."""
+    if isinstance(w1_sentinels, dict):
+        if set(w1_sentinels) != {5, 17}:
+            raise ValueError('E_ref requires W1 ordinals 5 and 17')
+        w1_sentinels = [w1_sentinels[5], w1_sentinels[17]]
     reference_runs = [*map(float, r1_replay_pair), *map(float, w1_sentinels)]
     if len(reference_runs) != 4:
-        raise ValueError("E_ref requires the R1 replay pair and W1 ordinals 5 and 18")
+        raise ValueError("E_ref requires the R1 replay pair and W1 ordinals 5 and 17")
     windows = {"W1": list(map(float, w1_sentinels))}
     windows.update({str(name): list(map(float, values)) for name, values in d_window_energies.items()})
     return {"status": "registered_acceptance", "E_ref_j": fmean(reference_runs),

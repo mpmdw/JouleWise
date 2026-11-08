@@ -51,6 +51,17 @@ class ProtocolV4DocTests(unittest.TestCase):
                      "episode.g0_unreleased", "lead\nruling L1", "external volume"):
             self.assertIn(text, self.text)
 
+    def test_registration_blockers_and_pending_amendments_are_explicit(self):
+        from joulewise.align.apple.smc_enumeration import RULE
+        self.assertIn(RULE, self.text)
+        section = self._section('## W1 registration installation')
+        for n in (4, 5, 6, 9, 11, 15, 17, 18, 20):
+            self.assertIn(f'**{n} —', section)
+        for phrase in ('**WP19', 'PENDING LEAD RULING — contrast-cap',
+                       'PENDING LEAD RULING — U5', 'registration_receipt.json',
+                       'k=3', '5 and 17', 'sealed and\nunscored'):
+            self.assertIn(phrase, section)
+
 
 if __name__ == "__main__":
     unittest.main()

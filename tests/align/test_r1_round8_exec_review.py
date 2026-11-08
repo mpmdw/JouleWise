@@ -234,8 +234,8 @@ class SwallowedSignalLatchTests(unittest.TestCase):
     (the s1 HID observation inside the chain loop) caught BaseException, so a
     first signal landing there was swallowed and every later TERM/HUP/INT was
     then swallowed by the latch: the night could no longer be interrupted.
-    D8-1: the observation records its fault and re-raises KeyboardInterrupt
-    and SystemExit, so the first signal reaches run_night's R8-1 handling.
+    D8-1 scope correction: the observation records its fault and re-raises
+    KeyboardInterrupt only, so the first signal reaches R8-1 handling.
     (The original body called the observation outside ``assertRaises``,
     expecting the swallow; with the fix the first signal itself escapes, and
     the latch rightly swallows any later one.)"""
@@ -253,13 +253,12 @@ class SwallowedSignalLatchTests(unittest.TestCase):
             faults = [json.loads(line) for line in (Path(tmp) / "producer-faults.jsonl").read_text().splitlines()]
             self.assertEqual([(f["producer"], f["status"]) for f in faults], [("hid", "REFUSED")])  # still recorded
 
-    def test_system_exit_is_not_an_observation_failure(self):
+    def test_system_exit_is_absorbed_as_an_observation_failure(self):
         from scripts import run_night
         with tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR")) as tmp:
             def observation():
                 raise SystemExit(3)
-            with self.assertRaises(SystemExit):
-                run_night._qualification_observe(Path(tmp), "hid", observation)
+            self.assertIsNone(run_night._qualification_observe(Path(tmp), "hid", observation))
             self.assertIsNone(run_night._qualification_observe(Path(tmp), "hid", lambda: 1 / 0))
 
 

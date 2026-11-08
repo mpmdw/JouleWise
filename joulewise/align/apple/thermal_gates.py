@@ -234,7 +234,9 @@ def load_window_reference(policy, context):
         value = {'fast_c': record['fast_c'], 'slow_c': record['slow_c'],
                  'source_member': source_id, 'span_ns': record['span_ns']}
     else:
-        value = None
+        # D-14b-1: authenticated loss at member 5 is not a new reference.
+        # Refuse before the consumer's runtime.prepare/model load.
+        raise WindowReferenceRefused('thermal.window_reference_unobserved')
     custody = {'record_sha256': digest, 'source_run_id': source_id,
                'source_config_sha256': ref['source_config_sha256'],
                'source_journal_sha256': journal_digest}

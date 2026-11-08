@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Guarded v4 session skeleton; full thermal/desk integration remains WP15/21.
+"""Guarded v4 session with prospective registration and thermal desk checks.
 
 prepare refuses until the kit is W1-ready (inputs, D identity, R1-derived
-sizing_b5.json, WP18 fixtures) and writes the frozen series AC powermode into
+sizing_b5.json, WP18 fixtures, signed registration receipt) and writes the frozen series AC powermode into
 the night plan. install additionally requires the AC powermode to equal the
-frozen series value and the R0 host's w1_disk_gate to pass. Under an adopted
+frozen series value, completed battery top-up/OBC attestation, current disk
+floor and a fresh daytime offload receipt. Under an adopted
 High Power (r1_slots ac_powermode 2, lead ruling R5-6) install sets
 powermode 2 through the narrow sudo rule after writing the host-level High
 Power marker (lead ruling R6-7), and restores Automatic if the arm refuses or
@@ -144,8 +145,58 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
     plan = {'members': pilot._member_rows(state, kit=kit_path)}
     observed = {m['run_id']: bundle_ac_powermode(Path(runs_root) / m['run_id']) for m in plan['members']}
     verdict = kit.validate_powermode_members(plan, observed)
-    return {'ac_powermode_members': verdict['instrument_ok']}, {
-        **verdict, 'd_member_x2': d_member_x2_report(plan['members'], runs_root)}
+    checks = {'ac_powermode_members': verdict['instrument_ok']}
+    report = {**verdict, 'd_member_x2': d_member_x2_report(plan['members'], runs_root)}
+    # Keep the common v3 desk unchanged. V4 adds its registered thermal desk.
+    from scripts.align_v4_thermal_desk import registration_evidence, enrich_record, r1_soak_c
+    from joulewise.align.apple.thermal_desk import read_bundle_record, window_report
+    from joulewise.align.apple import v4_registration
+    registration_dir = Path(state.get('registration_dir', Path(state['measurement_root'])/kit.KIT/'registration'))
+    try:
+        bar, wp19 = registration_evidence(registration_dir)
+    except (OSError, ValueError) as exc:
+        checks['v4_registration_evidence'] = False
+        report['registration_error'] = str(exc)
+        return checks, report
+    records = []
+    pilot_members = {m['run_id']: m for m in members}
+    for row in plan['members']:
+        path = Path(runs_root)/row['run_id']
+        try:
+            r = enrich_record(read_bundle_record(path), path)
+        except (OSError, ValueError) as exc:
+            r = {'id': row['run_id'], 'gated': row['ordinal'] >= 5, 'model': row.get('model_id'),
+                 'flags': ['member.runtime_failure'], 'tokens': None, 'intervals': [],
+                 'turn_observation': [], 'coverage': [], 'releases': [], 'turn_admissions': 0,
+                 'pm_period_s': .1, 'calibration_exclusions': ['member.runtime_failure'], 'error': str(exc)}
+        r.update({k: row[k] for k in ('ordinal', 'role') if k in row},
+                 window='W1', stage=row.get('stage_id'))
+        if row.get('replay_of'):
+            r['identical_work_group'] = row['replay_of']
+        elif row.get('ordinal') == 5 or row.get('role', '').startswith(('X-', 'Y-')):
+            r['identical_work_group'] = row['run_id']
+        if row.get('role', '').startswith(('X-', 'Y-')):
+            r.update(template=row['role'][0], arm=row['role'][-1])
+            fixture = json.loads((Path(state['measurement_root'])/kit.WP18_FIXTURES[r['template']]).read_bytes())
+            expected = [{k: t[k] for k in ('prompt_token_ids', 'output_token_ids')} for t in fixture['turns']]
+            r['pilot7_token_identical'] = r.get('tokens') == expected
+        p = pilot_members.get(row['run_id'], {})
+        codes = p.get('exclusion_codes', [])
+        if any(str(c).startswith('battery.member_span') for c in codes):
+            r['flags'].append('battery.member_span')
+        r['excluded'] = bool(codes) or bool(r.get('calibration_exclusions'))
+        records.append(r)
+    policy = (kit.read_inputs(state['measurement_root']).get('R1') or {}).get('thermal_policy') or {}
+    report['thermal'] = window_report(records, v4=True, u3_bar=bar,
+        delta_slow_c=policy.get('delta_slow_c'), contrast_predeclared=wp19.get('contrast_predeclared'))
+    report['registration_diagnostics'] = v4_registration.desk_diagnostics(records,
+        r1_soak=r1_soak_c(registration_dir))
+    for model, result in report['thermal']['model_windows'].items():
+        for n in (1, 2, 3):
+            checks[f'v4_{model}_U{n}'] = result[f'U{n}']['status'] == 'pass'
+    checks['v4_B_bar'] = all(w['bar_pass'] for w in report['registration_diagnostics']['battery_windows'].values())
+    checks['v4_D_cohort'] = report['registration_diagnostics']['d_cohort']['instrument_ok']
+    return checks, report
 
 
 def desk(session_root, **kwargs):
@@ -158,7 +209,8 @@ def desk(session_root, **kwargs):
 ARM_RECORD_SCHEMA = 'joulewise.align_v4_arm.v1'
 
 
-def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=None, owner=None):
+def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=None, owner=None,
+               obc_off_attested_by=None, battery_runner=None):
     """W1/D arm evidence: ruling 7 AC powermode and ruling 20 volumes.
 
     Ruling 7: the AC-profile powermode must equal the plan's frozen series
@@ -185,26 +237,95 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
         volumes = {'verdict': external_volume.REFUSE, 'reasons': [f'census_failed:{type(exc).__name__}:{exc}']}
     if volumes['verdict'] != external_volume.PASS:
         reasons += ['external_volume: ' + reason for reason in volumes['reasons']]
+    from joulewise import battery_float
+    from joulewise.align.apple.v4_registration import battery_arm
+    observed, raw = battery_float.observe(phase='arm_check', runner=battery_runner or runner)
+    battery = battery_arm(observed, obc_off_attested_by)
+    battery['raw_ioreg'] = raw.decode('ascii', errors='backslashreplace')
+    # Preserve optional reason fields verbatim without changing the frozen parser.
+    battery['charging_reason_lines'] = [line for line in battery['raw_ioreg'].splitlines()
+                                       if '"NotChargingReason"' in line or '"ChargerInhibitReason"' in line]
+    try:
+        batt = (runner or subprocess.run)(['pmset', '-g', 'batt']) if runner else subprocess.run(
+            ['pmset', '-g', 'batt'], capture_output=True, text=True, timeout=10, check=False)
+        battery['pmset_batt'] = {'exit_code': batt.returncode, 'stdout': batt.stdout, 'stderr': batt.stderr}
+        if batt.returncode != 0:
+            battery['admitted'] = False
+            battery['reasons'].append('pmset -g batt unavailable')
+    except (OSError, subprocess.SubprocessError) as exc:
+        battery['admitted'] = False
+        battery['reasons'].append(f'pmset -g batt unavailable: {exc}')
+    reasons += battery['reasons']
     return {'schema': ARM_RECORD_SCHEMA, 'admitted': not reasons, 'reasons': reasons,
-            'ac_powermode': power, 'external_volumes': volumes,
+            'ac_powermode': power, 'external_volumes': volumes, 'battery': battery,
             # Lead ruling R7-10: the host state directory this arm used.
             'host_state_dir': powermode.host_state_dir()}
 
 
-def w1_disk_check(config_path, *, gate=None):
-    """The W1 arm's storage gate (CHAIR ruling 20; R0 runbook): r0_host.w1_disk_gate.
+def _disk_config_digest(config):
+    import hashlib
+    return hashlib.sha256(json.dumps(config, sort_keys=True, separators=(',', ':'),
+                                     allow_nan=False).encode()).hexdigest()
 
-    It reads the validated R0 desk config (disk_path and the configured W1 offload
-    receipts), requires >= 80 decimal GB free after R0 and re-hashes every
-    configured offload. Anything but ``pass`` refuses the arm. Read-only.
+
+def daytime_offload_receipt(config, *, now=None, gate=None):
+    """By-day only: hash configured offloads while the SSD is available.
+
+    The caller validates the R0 config first. No arm/capture is started here.
+    """
+    from joulewise.align.r0_host import w1_disk_gate
+    result = (gate or w1_disk_gate)(config)
+    rows = result.get('offloads', [])
+    if (result.get('status') != 'pass' or not rows or len(rows) != len(config.get('offloads', []))
+            or any(r.get('pass') is not True or not r.get('observed') for r in rows)):
+        raise ValueError('daytime offloads not verified')
+    return {'schema': 'joulewise.align_v4.daytime_offloads.v1', 'epoch_s': (now or time.time)(),
+            'config_sha256': _disk_config_digest(config), 'offloads': rows}
+
+
+def w1_disk_check(config_path, *, gate=None, now=None):
+    """Require current free disk plus a fresh bound daytime offload receipt.
+
+    The arm never remounts or re-hashes an SSD. The by-day writer uses the
+    original R0 inventory verifier. Empty offloads require an explicit waiver
+    that none are owed. ``gate`` is the synthetic command-boundary seam.
     """
     if config_path is None:
         raise ValueError('W1 arm requires --w1-disk-config: the validated R0 desk config whose '
                          'disk_path and offloads the W1 disk gate checks')
     from joulewise.align.r0_host import w1_disk_gate
     from joulewise.align.r0_runner import validate_config
-    config = validate_config(json.loads(Path(config_path).read_text()))
-    receipt = (gate or w1_disk_gate)(config)
+    raw_config = json.loads(Path(config_path).read_text())
+    offloads_owed = raw_config.pop('offloads_owed', None)
+    daytime_path = raw_config.pop('daytime_offload_receipt', None)
+    config = validate_config(raw_config)
+    if not config.get('offloads') and offloads_owed != 'none':
+        raise ValueError('W1 offloads: [] requires explicit offloads_owed: none; empty receipts do not pass')
+    if daytime_path is not None:
+        import shutil
+        import math
+        saved = json.loads(Path(daytime_path).read_bytes())
+        if (saved.get('schema') != 'joulewise.align_v4.daytime_offloads.v1'
+                or saved.get('config_sha256') != _disk_config_digest(config)):
+            raise ValueError('daytime offload receipt binding mismatch')
+        epoch = saved.get('epoch_s')
+        age = (now or time.time)()-epoch if type(epoch) in (int, float) else None
+        if age is None or not math.isfinite(age) or not 0 <= age <= 86400:
+            raise ValueError('daytime offload receipt stale or future-dated')
+        rows = saved.get('offloads', [])
+        if (not rows or [r.get('label') for r in rows] != [r['label'] for r in config['offloads']]
+                or any(r.get('pass') is not True or not r.get('observed') for r in rows)):
+            raise ValueError('daytime offload receipt lacks verified offloads')
+        free = shutil.disk_usage(config['disk_path']).free
+        receipt = {'status': 'pass' if free >= 80_000_000_000 else 'fail',
+                   'free_bytes_after_present_weights': free, 'required_free_bytes_after_r0': 80_000_000_000,
+                   'offloads': rows, 'daytime_receipt': saved, 'receipt_age_s': age}
+    elif gate is not None:
+        receipt = gate(config)  # synthetic command-boundary seam
+    elif not config.get('offloads') and offloads_owed == 'none':
+        receipt = w1_disk_gate(config)
+    else:
+        raise ValueError('W1 requires daytime_offload_receipt; do not mount/re-hash the SSD at arm')
     if not isinstance(receipt, dict) or receipt.get('status') != 'pass':
         rows = [{k: row.get(k) for k in ('label', 'pass', 'error')} for row in (receipt or {}).get('offloads', [])]
         raise ValueError('W1 disk gate refused the arm: '
@@ -243,7 +364,7 @@ def install(session_root, *, runner=None, volume_runner=None, now=None, w1_disk_
     measurement_root = state['measurement_root']
     # Council ruling 7: the frozen series powermode comes from the measurement
     # checkout's r1_slots, and arm refuses on a mismatch with the host.
-    kit.require_w1_ready(measurement_root)
+    kit.generate(measurement_root, check=True, source_root=measurement_root)
     plan = json.loads((Path(measurement_root) / kit.KIT / 'collection_plan.json').read_bytes())
     from joulewise.align.apple import powermode
     high = None
@@ -350,9 +471,10 @@ def _termination_handlers():
 
 
 def _arm_and_install(session, state, measurement_root, plan, high, *, runner, volume_runner, now,
-                     w1_disk_config, disk_gate, lock=None, owner=None, **kwargs):
+                     w1_disk_config, disk_gate, lock=None, owner=None,
+                     obc_off_attested_by=None, battery_runner=None, **kwargs):
     record = arm_checks(measurement_root, plan, runner=runner, volume_runner=volume_runner, lock=lock,
-                        owner=owner)
+                        owner=owner, obc_off_attested_by=obc_off_attested_by, battery_runner=battery_runner)
     if high is not None:
         record['high_power_enter'] = high
         if not high['ok']:
@@ -386,7 +508,9 @@ def main(argv=None):
                       desk_extra_checks=powermode_desk_check,
                       install_options=(('--w1-disk-config', dict(
                           type=Path, required=True,
-                          help='validated R0 desk config (disk_path, W1 offloads) for the W1 disk gate')),))
+                          help='validated R0 desk config (disk_path, W1 offloads) for the W1 disk gate')),
+                                       ('--obc-off-attested-by', dict(required=True,
+                          help='operator attesting Optimized Battery Charging is off'))))
 
 
 if __name__ == '__main__':

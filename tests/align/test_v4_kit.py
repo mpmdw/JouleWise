@@ -465,6 +465,20 @@ class FakeArmHost:
         import plistlib
         argv = tuple(argv)
         self.calls.append(argv)
+        if argv == ('/usr/sbin/ioreg', '-r', '-c', 'AppleSmartBattery'):
+            import time
+            raw = ('+-o AppleSmartBattery  <class AppleSmartBattery, id 0x1, registered, matched, active, busy 0 (0 ms), retain 1>\n'
+                   '    {\n'
+                   '      "ExternalConnected" = Yes\n'
+                   '      "IsCharging" = No\n'
+                   '      "InstantAmperage" = 0\n'
+                   '      "Amperage" = 0\n'
+                   '      "CurrentCapacity" = 100\n'
+                   f'      "UpdateTime" = {int(time.time())}\n'
+                   '    }\n').encode()
+            return subprocess.CompletedProcess(argv, 0, raw, b'')
+        if argv == ('pmset', '-g', 'batt'):
+            return subprocess.CompletedProcess(argv, 0, 'synthetic: 100%; AC; not charging', '')
         if argv == ('launchctl', 'print', f'gui/{os.getuid()}/com.joulewise.night'):
             absent = f'Could not find service "com.joulewise.night" in domain for user gui: {os.getuid()}'
             return subprocess.CompletedProcess(argv, 0 if self.night_job_loaded else 113, '',
@@ -1170,16 +1184,16 @@ class SessionParameterTests(unittest.TestCase):
             host = FakeArmHost(mode=0, fail_high=True)
             seen = []
             with patch.object(kit, 'read_inputs', return_value={}), \
-                    patch.object(kit, 'require_w1_ready', side_effect=seen.append), \
+                    patch.object(kit, 'generate', side_effect=lambda root, **kw: seen.append(root)), \
                     patch.object(session, 'w1_disk_check', return_value={'status': 'pass'}), \
                     patch.object(pilot, 'install', return_value={'exit_code': 0}) as install:
                 with self.assertRaisesRegex(ValueError, 'set High Power failed.*AC powermode 0 != expected 2'):
-                    session.install(session_root, runner=host, volume_runner=host)
+                    session.install(session_root, runner=host, volume_runner=host, obc_off_attested_by='synthetic')
                 install.assert_not_called()
                 self.assertEqual(seen, [str(measurement)])
                 self.assertEqual(host.mode, 0)
                 host.fail_high = False
-                session.install(session_root, runner=host, volume_runner=host)
+                session.install(session_root, runner=host, volume_runner=host, obc_off_attested_by='synthetic')
                 install.assert_called_once()
                 self.assertEqual(host.mode, 2)
 
@@ -1189,10 +1203,10 @@ class SessionParameterTests(unittest.TestCase):
             measurement, session_root = self._arm_fixture(tmp, mode_expected=0)
             host = FakeArmHost(mode=0)
             with patch.object(kit, 'read_inputs', return_value={}), \
-                    patch.object(kit, 'require_w1_ready'), \
+                    patch.object(kit, 'generate'), \
                     patch.object(session, 'w1_disk_check', return_value={'status': 'pass'}), \
                     patch.object(pilot, 'install'):
-                session.install(session_root, runner=host, volume_runner=host)
+                session.install(session_root, runner=host, volume_runner=host, obc_off_attested_by='synthetic')
             record = json.loads((session_root / 'staging/v4-arm-001.json').read_text())
             self.assertTrue(record['admitted'])
             self.assertEqual(record['ac_powermode']['observed'], 0)
@@ -1208,11 +1222,11 @@ class SessionParameterTests(unittest.TestCase):
             measurement, session_root = self._arm_fixture(tmp, mode_expected=0)
             host = FakeArmHost(mode=0, ssd=True)
             with patch.object(kit, 'read_inputs', return_value={}), \
-                    patch.object(kit, 'require_w1_ready'), \
+                    patch.object(kit, 'generate'), \
                     patch.object(session, 'w1_disk_check', return_value={'status': 'pass'}), \
                     patch.object(pilot, 'install') as install:
                 with self.assertRaisesRegex(ValueError, 'external_volume_mounted:/Volumes/JW-EXT'):
-                    session.install(session_root, runner=host, volume_runner=host)
+                    session.install(session_root, runner=host, volume_runner=host, obc_off_attested_by='synthetic')
                 install.assert_not_called()
             record = json.loads((session_root / 'staging/v4-arm-001.json').read_text())
             self.assertFalse(record['admitted'])
@@ -1227,10 +1241,10 @@ class SessionParameterTests(unittest.TestCase):
             marker.write_text('high-power restoration required\n')
             host = FakeArmHost(mode=2)
             with patch.object(kit, 'read_inputs', return_value={}), \
-                    patch.object(kit, 'require_w1_ready'), \
+                    patch.object(kit, 'generate'), \
                     patch.object(session, 'w1_disk_check', return_value={'status': 'pass'}), \
                     patch.object(pilot, 'install') as install:
-                session.install(session_root, runner=host, volume_runner=host)
+                session.install(session_root, runner=host, volume_runner=host, obc_off_attested_by='synthetic')
                 install.assert_called_once()
             self.assertEqual(host.mode, 0)
             self.assertFalse(marker.exists())
@@ -1305,6 +1319,7 @@ class WP11IdentityTests(unittest.TestCase):
     def test_w1_readiness_reads_the_pin_bytes(self):
         with patch.object(kit, 'require_ready'), patch.object(kit, 'require_sizing'), \
                 patch.object(kit, 'validate_wp18_fixtures'), \
+                patch('joulewise.align.apple.v4_registration.require_registration'), \
                 patch.object(kit, 'validate_d_identity', wraps=kit.validate_d_identity) as validate:
             kit.require_w1_ready(ROOT)
         self.assertEqual(validate.call_args.kwargs['pins_raw'], (ROOT / kit.D_PINS).read_bytes())
@@ -1554,10 +1569,10 @@ class W1HighPowerTests(unittest.TestCase):
         self.marker = Path(powermode.host_marker_path())
         self.host = FakeArmHost(mode=start_mode, marker=self.marker)
         config = W1DiskGateTests.config(self, tmp)
-        with patch.object(kit, 'require_w1_ready'), \
+        with patch.object(kit, 'generate'), \
                 patch.object(pilot, 'install', return_value={'exit_code': 0}) as install:
             try:
-                session.install(session_root, runner=self.host, volume_runner=self.host, w1_disk_config=config,
+                session.install(session_root, runner=self.host, volume_runner=self.host, obc_off_attested_by='synthetic', w1_disk_config=config,
                                 disk_gate=lambda c: {'status': gate_status, 'offloads': []})
             finally:
                 self.called = install.called
@@ -1625,8 +1640,8 @@ class W1HighPowerTests(unittest.TestCase):
             sets = self.host.calls.count(('sudo', '-n', '/usr/bin/pmset', '-c', 'powermode', '2'))
             host = self.host
             measurement = Path(tmp) / 'm'
-            with patch.object(kit, 'require_w1_ready'), patch.object(pilot, 'install'):
-                session.install(Path(tmp) / 's', runner=host, volume_runner=host,
+            with patch.object(kit, 'generate'), patch.object(pilot, 'install'):
+                session.install(Path(tmp) / 's', runner=host, volume_runner=host, obc_off_attested_by='synthetic',
                                 w1_disk_config=W1DiskGateTests.config(self, tmp),
                                 disk_gate=lambda c: {'status': 'pass', 'offloads': []})
             self.assertEqual(host.calls.count(('sudo', '-n', '/usr/bin/pmset', '-c', 'powermode', '2')), sets)
@@ -1635,8 +1650,8 @@ class W1HighPowerTests(unittest.TestCase):
             (custody / 'night/result.json').write_text('{}')
             state['inputs'] = {'custody_root': str(custody)}
             (Path(tmp) / 's/session.json').write_text(json.dumps(state))
-            with patch.object(kit, 'require_w1_ready'), self.assertRaisesRegex(ValueError, 'session is terminal'):
-                session.install(Path(tmp) / 's', runner=host, volume_runner=host)
+            with patch.object(kit, 'generate'), self.assertRaisesRegex(ValueError, 'session is terminal'):
+                session.install(Path(tmp) / 's', runner=host, volume_runner=host, obc_off_attested_by='synthetic')
             self.assertEqual(host.calls.count(('sudo', '-n', '/usr/bin/pmset', '-c', 'powermode', '2')), sets)
 
     def test_an_r1_crash_marker_is_never_taken_for_the_w1_marker(self):
@@ -1702,10 +1717,10 @@ class W1DiskGateTests(unittest.TestCase):
         session_root = Path(tmp) / 's'
         (session_root / 'staging').mkdir(parents=True, exist_ok=True)
         (session_root / 'session.json').write_text(json.dumps({'measurement_root': str(measurement)}))
-        with patch.object(kit, 'require_w1_ready'), patch.object(pilot, 'install') as install:
+        with patch.object(kit, 'generate'), patch.object(pilot, 'install') as install:
             try:
                 host = FakeArmHost(mode=0)
-                session.install(session_root, runner=host, volume_runner=host, **kwargs)
+                session.install(session_root, runner=host, volume_runner=host, obc_off_attested_by='synthetic', **kwargs)
             finally:
                 self.called = install.called
         return session_root
@@ -1736,9 +1751,8 @@ class W1DiskGateTests(unittest.TestCase):
                 self.install(tmp, w1_disk_config=self.config(tmp), disk_gate=failing)
             self.assertFalse(self.called)
             self.assertEqual(seen[0]['offloads'][0]['label'], 'pilot10')
-            # Without an injected gate the real r0_host.w1_disk_gate runs: the
-            # configured offload does not exist here, so the arm is refused.
-            with self.assertRaisesRegex(ValueError, 'W1 disk gate refused the arm'):
+            # Production arm requires a by-day receipt and never rehashes SSD.
+            with self.assertRaisesRegex(ValueError, 'requires daytime_offload_receipt'):
                 self.install(tmp, w1_disk_config=self.config(tmp))
             self.assertFalse(self.called)
 
@@ -1764,8 +1778,10 @@ class W1DiskGateTests(unittest.TestCase):
         self.assertEqual(seen, {'session_root': Path('s'), 'w1_disk_config': Path('/c.json')})
         seen.clear()
         with patch.object(session, 'install', fake):
-            self.assertEqual(session.main(['install', '--session-root', 's', '--w1-disk-config', '/c.json']), 0)
-        self.assertEqual(seen, {'session_root': Path('s'), 'w1_disk_config': Path('/c.json')})
+            self.assertEqual(session.main(['install', '--session-root', 's', '--w1-disk-config', '/c.json',
+                                           '--obc-off-attested-by', 'synthetic']), 0)
+        self.assertEqual(seen, {'session_root': Path('s'), 'w1_disk_config': Path('/c.json'),
+                                'obc_off_attested_by': 'synthetic'})
 
 
 if __name__ == '__main__':

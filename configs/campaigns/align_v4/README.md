@@ -56,9 +56,17 @@ pilot-3 disk law (two copies). Until then --check and prepare refuse with
 that reason. Use fit_roster with R1 measured cost estimates:
 drop only 18 first, then decrease B_D by 1024 down to 6144; otherwise return
 to lead. Preserve anchors, contrasts and 5/17. Requalify/freeze changed budgets.
-W1 arm (align_v4_session.py install --w1-disk-config) runs the R0 host
-w1_disk_gate: >=80 decimal GB free after R0 and every configured offload
-re-hashed; anything but pass refuses the arm.
+W1 arm requires --obc-off-attested-by and --w1-disk-config. By-day
+scripts/align_v4_offloads.py verifies configured inventories; the disk config
+names daytime_offload_receipt, no older than 24 h. Arm checks >=80 decimal GB
+free without remounting/re-hashing the SSD. Empty offloads require explicit
+offloads_owed: none. Battery arm requires fresh AC, >=99%, not charging and
+|Amperage| <=200 mA, retaining raw ioreg and pmset evidence.
+require_w1_ready also requires registration_receipt.json, bound to current and
+committed protocol/kit/desk/estimand/deviation/U3/WP19 bytes, two admitted gate
+reports and the lead signature. The committed pending template never admits.
+Generate u3_bar.json from explicit pilot replay pairs (k=3 relative form), and
+wp19_receipt.json from tokenizer-only all-turn X/Y rendering plus R1 X-G.
 The additive align_v4_session.py refuses prepare/install while inputs are pending.
 Its desk is the parameterized pilot instrument desk; WP21 owns full U4–U6,
 K-session and contrast reporting. This kit grants no arm or hardware approval.

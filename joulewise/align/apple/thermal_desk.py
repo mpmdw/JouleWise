@@ -289,7 +289,7 @@ def energy_exclusions(member):
     return sorted(set(reasons))
 
 
-def identical_pair(a, b):
+def identical_pair(a, b, *, u3_bar=None):
     if any(energy_exclusions(r) for r in (a, b)):
         return {'status': 'inconclusive', 'reason': 'energy evidence unavailable'}
     if a.get('tokens') is None or b.get('tokens') is None:
@@ -305,13 +305,16 @@ def identical_pair(a, b):
     difference = abs(bc-ac)/((ac+bc)/2) if ac is not None and bc is not None and ac+bc > 0 else None
     clock_status = ('pass' if difference <= .005 else 'fail') if difference is not None else 'inconclusive'
     margin = 3*max(2.97, .0011*energy)
+    if u3_bar is not None:
+        from joulewise.align.apple.v4_registration import u3_margin
+        margin = u3_margin(energy, u3_bar)
     return {'status': combine(['pass' if abs(delta) <= margin else 'fail', clock_status]),
             'token_identical': True, 'delta_j': delta, 'margin_j': margin,
             'decode_clock_difference_fraction': difference,
             'max_decode_clock_difference_fraction': max(differences) if differences else None}
 
 
-def deciding_experiment(runs):
+def deciding_experiment(runs, *, v4=False, delta_slow_c=None, predeclared=None):
     """Exactly 2 runs/template/arm; OLS template + arm S + start-hour drift."""
     result = {'verdict': 'INCONCLUSIVE', 'branch': 'G1 stays for every cell',
               'rule': ('FINAL-DESIGN §2.5: T CONFIRMED iff |d_X| and |d_Y| >= 10 J, same sign, '
@@ -319,6 +322,20 @@ def deciding_experiment(runs):
                        '|d| <= 6 J and that CI is contained in [-6,+6] J. Otherwise INCONCLUSIVE, '
                        'including fewer than 2 eligible token-identical runs per template/arm. '
                        'Heavy cells always keep G1 and holds')}
+    if v4:
+        result['rule'] = ('CHAIR 9: treatment delivered; template + arm S + start-hour drift + stage (df=3); '
+                          'T CONFIRMED iff d_X,d_Y >=10 J and delta CI excludes zero; '
+                          'T REJECTED iff both |d| <=6 J and CI inside [-6,+6] J. '
+                          'The contrast governs no D cell; D always retains G1 and holds.')
+        if predeclared:
+            return {**result, 'reason': predeclared}
+        from joulewise.align.apple.v4_estimands import contrast_delivery
+        if delta_slow_c is None or delta_slow_c <= 0:
+            return {**result, 'reason': 'missing registered delta_slow_c'}
+        delivery = contrast_delivery(runs, delta_slow_c=delta_slow_c)
+        result['delivery'] = delivery
+        if not delivery['delivered']:
+            return {**result, 'reason': 'treatment not delivered'}
     cells = {(t, a): [r for r in runs if r.get('template') == t and r.get('arm') == a
                      and r.get('pilot7_token_identical') is True and not r.get('excluded', False)
                      and not calibration_exclusions(r)]
@@ -334,12 +351,18 @@ def deciding_experiment(runs):
             return {**result, 'reason': 'within-template token identity unavailable or divergent'}
     t0 = min(r['start_ns'] for r in selected)
     x = [[1., float(r['template'] == 'Y'), float(r['arm'] == 'S'), (r['start_ns']-t0)/(3600*NS)] for r in selected]
+    if v4:
+        stages = sorted({r.get('stage') for r in selected if r.get('stage') is not None})
+        if len(stages) != 2 or any(r.get('stage') not in stages for r in selected):
+            return {**result, 'reason': 'requires two recorded campaign stages'}
+        x = [row + [float(r['stage'] == stages[1])] for row, r in zip(x, selected)]
     fit = regression(x, [r['turn_owned_j'] for r in selected])
     d = {t: fmean(r['turn_owned_j'] for r in cells[t, 'S'])-fmean(r['turn_owned_j'] for r in cells[t, 'G']) for t in ('X', 'Y')}
     if fit is None:
         return {**result, 'd_template_j': d, 'reason': 'singular contrast design'}
     delta, ci = fit['coef'][2], fit['ci90'][2]
-    if all(abs(v) >= 10 for v in d.values()) and d['X']*d['Y'] > 0 and (ci[0] > 0 or ci[1] < 0):
+    positive = all(v >= 10 for v in d.values()) if v4 else all(abs(v) >= 10 for v in d.values()) and d['X']*d['Y'] > 0
+    if positive and (ci[0] > 0 or ci[1] < 0):
         result['verdict'] = 'T CONFIRMED'
     elif all(abs(v) <= 6 for v in d.values()) and ci[0] >= -6 and ci[1] <= 6:
         result.update(verdict='T REJECTED', branch='light cells use G0 only; heavy cells keep G1 and holds')
@@ -569,7 +592,7 @@ def thermal_exclusions(member):
     return sorted(set(reasons))
 
 
-def acceptance(members, *, pairs=(), u4=None, u5=None, u6=None):
+def acceptance(members, *, pairs=(), u4=None, u5=None, u6=None, u3_bar=None, v4=False):
     """One model/window; only included members supply U1(a)/U2 values."""
     model_ids = {r.get('model') for r in members if r.get('gated')}
     if len(model_ids) > 1:
@@ -603,14 +626,14 @@ def acceptance(members, *, pairs=(), u4=None, u5=None, u6=None):
     u2 = combine(['pass' if range_c is not None and range_c <= 3 else 'fail' if range_c is not None else 'inconclusive',
                   combine(['inconclusive' if v is None else 'pass' if v else 'fail' for v in release_checks])
                   if release_checks else 'inconclusive'])
-    pair_results = [identical_pair(a, b) for a, b in pairs
+    pair_results = [identical_pair(a, b, u3_bar=u3_bar) for a, b in pairs
                     if not state_unobserved(a) and not state_unobserved(b)]
     eligible_pairs = [p['status'] for p in pair_results if p['status'] != 'excluded']
     results = {'U1': {'status': combine(checks), 'thermal_excluded_members': excluded,
                       'turn_admissions': admissions, 'g1_h_timeouts': timeouts, 'g0_timeouts': g0_timeouts},
                'U2': {'status': u2, 'g0_slow_range_c': range_c},
                'U3': {'status': combine(eligible_pairs) if eligible_pairs else 'inconclusive', 'pairs': pair_results},
-               'U4': _combined_u4(u4),
+               'U4': ((u4 or {}).get('sentinels', {'status': 'inconclusive'}) if v4 else _combined_u4(u4)),
                'U5': u5 or {'status': 'inconclusive', 'reason': 'requires pair s_r and state sensitivity evidence'},
                'U6': u6 or {'status': 'inconclusive', 'reason': 'requires frozen-fit benign residuals'}}
     hardware = combine([results[f'U{k}']['status'] for k in range(1, 6)])
@@ -744,7 +767,8 @@ def tool_call_table(members):
             'not_excluding': ['malformed_json_turns', 'unsupported_xml_turns']}
 
 
-def window_report(members, *, cross_windows=None, sensitivity=None, monitoring=None):
+def window_report(members, *, cross_windows=None, sensitivity=None, monitoring=None,
+                  u3_bar=None, v4=False, delta_slow_c=None, contrast_predeclared=None):
     """Additive PILOT.json thermal section; keep v3 desk bytes unchanged.
 
     Group metadata comes from the sealed v4 roster: window, identical_work_group,
@@ -774,7 +798,8 @@ def window_report(members, *, cross_windows=None, sensitivity=None, monitoring=N
                     else:
                         missing_pair = True
             result = acceptance(selected, pairs=pairs, u4=(cross_windows or {}).get(model),
-                                u5=(sensitivity or {}).get(model), u6=(monitoring or {}).get(model))
+                                u5=(sensitivity or {}).get(model), u6=(monitoring or {}).get(model),
+                                u3_bar=u3_bar, v4=v4)
             if window == 'W1':
                 for k in (4, 5, 6):
                     result[f'U{k}'] = {'status': 'inconclusive', 'reason': 'not evaluable in W1 (FINAL-DESIGN §2.3)'}
@@ -791,7 +816,8 @@ def window_report(members, *, cross_windows=None, sensitivity=None, monitoring=N
             reports[f'{model}/{window}'] = result
     contrast_runs = [m for m in members if m.get('template') in ('X', 'Y') and m.get('arm') in ('S', 'G')]
     return {'schema': 'joulewise.align.thermal_desk.v1', 'model_windows': reports,
-            'deciding_experiment': deciding_experiment(contrast_runs), 'members': members,
+            'deciding_experiment': deciding_experiment(contrast_runs, v4=v4, delta_slow_c=delta_slow_c,
+                                                     predeclared=contrast_predeclared), 'members': members,
             'tool_call_flags': tool_call_table(members)}
 
 

@@ -702,7 +702,9 @@ class W1D2ReportTests(unittest.TestCase):
             state = {'registration_dir': str(registration), 'measurement_root': str(root)}
             added, report = session.powermode_desk_check(state=state, members=[], runs_root=root / 'runs',
                                                          kit_path=kit.KIT)
-        self.assertEqual(set(added), {'ac_powermode_members'})          # print-only: no instrument check added
+        self.assertEqual(set(added), {'ac_powermode_members', 'v4_registration_evidence'})
+        self.assertFalse(added['v4_registration_evidence'])  # no signed/native registration in this fixture
+        # X2 remains print-only; the independent missing-registration gate is new.
         x2 = report['d_member_x2']
         self.assertIs(x2['print_only'], True)
         self.assertEqual((x2['d_members'], x2['read'], x2['x2_count'], x2['g0_timeout_x2_count']), (5, 4, 2, 1))

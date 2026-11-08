@@ -15,15 +15,57 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from joulewise.align.apple.thermal_desk import (read_bundle_record, window_report,
                                                 markdown_report, session_desk_evidence)
+from joulewise.align.apple import v4_registration as registration
+
+
+def registration_evidence(directory):
+    try:
+        bar = json.loads((directory/'u3_bar.json').read_bytes())
+    except (OSError, ValueError) as exc:
+        raise ValueError('v4 desk requires registered u3_bar.json') from exc
+    registration.validate_u3(bar)
+    wp19 = json.loads((directory/'wp19_receipt.json').read_bytes())
+    registration.validate_wp19(wp19)
+    return bar, wp19
+
+
+def r1_soak_c(directory):
+    from joulewise.align.apple.r1_runtime import read_soak_reference, reference_c
+    inputs = json.loads((directory/'inputs.json').read_bytes())
+    return reference_c(read_soak_reference(directory/'r1_soak_reference.json'),
+                       inputs['R1']['thermal_policy']['sensors'])
+
+
+def enrich_record(record, bundle):
+    """V4-only metadata from immutable bundle bytes, never manifest overrides."""
+    from joulewise.align.apple.workload import read_episode_bundle, EpisodeSpec
+    from joulewise.align.apple.diagnostics import cache_statistics
+    from joulewise.desk_compress import read_bytes
+    ep = read_episode_bundle(bundle)
+    config = json.loads(read_bytes(Path(bundle)/'config.json'))
+    spec = EpisodeSpec.from_text(config['workload_profile']['prompt_text'])
+    turns = [json.loads(line) for line in read_bytes(Path(bundle)/'outputs/align_turns.jsonl').splitlines() if line.strip()]
+    thermal = ep.hardware.get('thermal') or {}
+    record.update(configuration={k: getattr(spec, k) for k in
+        ('max_episode_decode_tokens', 'deadman_s', 'max_tokens', 'max_turns')},
+        status='incomplete' if ep.hardware.get('token_budget', {}).get('incomplete', True) else 'completed',
+        turns=len(ep.turns), x_flags=list(record.get('calibration_exclusions', [])),
+        cache_statistics=cache_statistics(turns), window_reference=thermal.get('window_reference'),
+        admission_slow_c=record.get('g0_slow_c'),
+        g1_wait_s_by_turn=[sum(i.get('duration_s', 0) for i in record['intervals']
+                             if i['kind'] == 'G1' and i.get('turn') == t.index) for t in ep.turns])
+    return record
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--manifest', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True, help='new desk directory')
+    parser.add_argument('--registration-dir', type=Path, default=ROOT/registration.REGISTRATION)
     parser.add_argument('--compare-session', type=Path, action='append', default=[],
                         metavar='PILOT.json', help='repeat for the K-session desk read')
     args = parser.parse_args(argv)
+    bar, wp19 = registration_evidence(args.registration_dir)
     manifest = json.loads(args.manifest.read_text())
     root = args.manifest.resolve().parent
     members = []
@@ -35,6 +77,7 @@ def main(argv=None):
             kwargs['registered_span_ns'] = item['registered_span_ns']
         try:
             record = read_bundle_record(root/item['bundle'], **kwargs)
+            enrich_record(record, root/item['bundle'])
         except FileNotFoundError as exc:
             # A refused/failed member may legally have no episode artifact.
             # Keep the registered roster row visible instead of losing the
@@ -45,7 +88,8 @@ def main(argv=None):
                       'calibration_exclusions': ['member.runtime_failure'],
                       'intervals': [], 'tokens': None}
         # Scientific measurements and verdicts cannot be overridden by roster tags.
-        record.update({k: item[k] for k in ('window', 'identical_work_group', 'compare_reference_id', 'template', 'arm') if k in item})
+        record.update({k: item[k] for k in ('window', 'identical_work_group', 'compare_reference_id', 'template', 'arm',
+                                          'ordinal', 'role', 'stage') if k in item})
         members.append(record)
     by_id = {m['id']: m for m in members}
     for item, record in zip(manifest['members'], members):
@@ -62,7 +106,13 @@ def main(argv=None):
     compared = session_desk_evidence(args.compare_session) if args.compare_session else None
     inputs = compared if compared and compared.get('status') == 'pass' else {}
     result = window_report(members, cross_windows=inputs.get('cross_windows'),
-                           sensitivity=inputs.get('sensitivity'), monitoring=inputs.get('monitoring'))
+                           sensitivity=inputs.get('sensitivity'), monitoring=inputs.get('monitoring'),
+                           u3_bar=bar, v4=True, delta_slow_c=manifest.get('delta_slow_c'),
+                           contrast_predeclared=wp19.get('contrast_predeclared'))
+    soak = r1_soak_c(args.registration_dir) if (args.registration_dir/'r1_soak_reference.json').is_file() else None
+    result['registration_diagnostics'] = registration.desk_diagnostics(members, r1_soak=soak)
+    result['u3_bar'] = bar
+    result['wp19'] = wp19
     result['K_session_read'] = compared or {'status': 'inconclusive', 'reason': 'no --compare-session inputs'}
     args.output.mkdir(parents=True, exist_ok=False)
     (args.output/'PILOT.json').write_text(json.dumps(result, indent=2, sort_keys=True, allow_nan=False)+'\n')
