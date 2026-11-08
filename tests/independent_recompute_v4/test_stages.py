@@ -48,8 +48,9 @@ class ClockTests(unittest.TestCase):
         self.assertEqual(trace.ends[0], 0)
         self.assertEqual(trace.starts[0], rc.seconds_ns(anchor - 0.1) - rc.seconds_ns(anchor))
         self.assertEqual(trace.ends[2], rc.seconds_ns(anchor + (0.1 + 0.1)) - rc.seconds_ns(anchor))  # anchor + cumulative
-        # Resolution: two ulps of an epoch second near 1.8e9 s (2 x 2^-22 s = 476.8 ns, rounded up).
-        self.assertEqual(trace.resolution_ns, 477)
+        # Float placement leaves sub-microsecond seams between neighbours; A37 snaps them shut.
+        self.assertEqual(trace.starts[1], trace.ends[0])
+        self.assertEqual(trace.starts[2], trace.ends[1])
 
 
 def plain_trace(n=100, gpu=1000.0, **kw):
@@ -109,12 +110,22 @@ class OwnershipTests(unittest.TestCase):
         flags = []
         self.assertIsNone(rc.turn_energies(trace, ep, owned, decode, walls, flags)[1])
         self.assertEqual(flags, ["pm_turn_span_uncovered"])
-        # A gap of 400 ns (< 477 ns resolution) between two supports is not uncovered time; 600 ns is.
-        trace.resolution_ns = 477
-        trace.starts[5] += 400
+        # A37 (fixed 1 us): gaps and overlaps of <= 1,000 ns are snapped contiguous; 1,001 ns is not.
+        ends = [NS, 2 * NS, 3 * NS, 4 * NS]
+        starts = [0, NS + 1000, 2 * NS - 1000, 3 * NS + 1001]
+        self.assertEqual(rc.snap_contiguous(starts, ends), [0, NS, 2 * NS, 3 * NS + 1001])
+        self.assertEqual(rc.snap_contiguous([0, NS - 1001], ends[:2]), [0, NS - 1001])     # overlap kept
+        trace.starts = rc.snap_contiguous([s + (1000 if i == 5 else 0) for i, s in enumerate(trace.starts)],
+                                          trace.ends)
         self.assertEqual(trace.gaps(2 * NS, 8 * NS), [])
-        trace.starts[5] += 200
-        self.assertEqual(trace.gaps(2 * NS, 8 * NS), [(4 * NS, 4 * NS + 600)])
+        trace.starts[5] += 1001
+        self.assertEqual(trace.gaps(2 * NS, 8 * NS), [(4 * NS, 4 * NS + 1001)])
+        # Edge gaps always count, however small.
+        self.assertEqual(trace.gaps(-NS - 1, -NS + 5), [(-NS - 1, -NS)])
+        # A snapped 1 us overlap is not counted twice: 1 W over [2, 4) s is exactly 2 J.
+        t2 = plain_trace(n=10)
+        t2.starts = rc.snap_contiguous([s - (1000 if i == 4 else 0) for i, s in enumerate(t2.starts)], t2.ends)
+        self.assertEqual(math.fsum(t2.energy_terms("gpu_mw", [(2 * NS, 4 * NS)])), 2.0)
 
     def test_decode_clock_and_pm_states(self):
         # Sample i covers [i-1, i) s with clock 1000 + i MHz and active = elapsed. Decode [11, 20) s

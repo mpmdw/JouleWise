@@ -694,6 +694,21 @@ def stamp_mapping(ep, meta):
             "anchor_widened": widened}
 
 
+CONTIGUITY_NS = 1_000  # lead ruling A37: a fixed 1 us, the same in both builds
+
+
+def snap_contiguous(starts, ends, tolerance=CONTIGUITY_NS):
+    """Lead ruling A37: an interior gap OR overlap of at most 1 us between consecutive samples is
+    contiguous, so that sample starts exactly where the previous one ended (no uncovered time, no double
+    count). Larger gaps stay uncovered and larger overlaps stay overlapping. Edges are untouched."""
+    out = list(starts)
+    for i in range(1, len(out)):
+        d = out[i] - ends[i - 1]
+        if d and abs(d) <= tolerance:
+            out[i] = ends[i - 1]
+    return out
+
+
 class Trace:
     """Native PM supports on the monotonic clock (R21 A21).
 
@@ -706,7 +721,7 @@ class Trace:
     def __init__(self, cols, anchor_epoch_s, offset_ns):
         self.cols = cols
         self.starts, self.ends = [], []
-        cumulative, last_end_s = 0.0, anchor_epoch_s
+        cumulative = 0.0
         for i, elapsed in enumerate(cols["elapsed_ns"]):
             length = elapsed / NS
             if i:
@@ -714,10 +729,7 @@ class Trace:
             end_s = anchor_epoch_s + cumulative
             self.starts.append(seconds_ns(end_s - length) + offset_ns)
             self.ends.append(seconds_ns(end_s) + offset_ns)
-            last_end_s = end_s
-        # Two adjacent supports may miss or overlap by the placement resolution (epoch-second doubles);
-        # a gap no wider than two ulps of the latest epoch second is not uncovered time (A37).
-        self.resolution_ns = math.ceil(2 * math.ulp(last_end_s) * NS)
+        self.starts = snap_contiguous(self.starts, self.ends)
 
     def overlaps(self, a, b):
         i = bisect.bisect_right(self.ends, a)
@@ -730,13 +742,12 @@ class Trace:
         return out
 
     def gaps(self, a, b):
-        """Uncovered sub-spans of [a, b): edges exactly, interior gaps above the placement resolution."""
-        out, cur, first = [], a, True
+        """Uncovered sub-spans of [a, b), after A37 snapping; edge gaps always count."""
+        out, cur = [], a
         for i, _ in self.overlaps(a, b):
             s = max(a, self.starts[i])
-            if s > cur and (first or s - cur > self.resolution_ns):
+            if s > cur:
                 out.append((cur, s))
-            first = False
             cur = max(cur, min(b, self.ends[i]))
         if cur < b:
             out.append((cur, b))

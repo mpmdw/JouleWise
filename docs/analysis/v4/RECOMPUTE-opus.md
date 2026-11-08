@@ -136,6 +136,7 @@ The comparator can also read it from `members.*.clock`.
 | A19/A31 | Exactly 8 identical eligible runs or INCONCLUSIVE; stage = second-stage indicator; admission within 2 s; recorded-wait rule; always compute; verdict words | all | `w1_contrast`, `thermal_summary` | `ContrastTests`, `test_registered_span_and_admission_window` |
 | A20 | Benign DC analysed, residual (five-term on DC turn-owned J, same LOTO, h=0), battery assist disclosed; sealed rows by presence | residual + disclosure | `dc_window`, `dc_residuals` | `test_dc_in` |
 | A21 | Production `stamp_mapping` as text: all stamps, anchor-widened, float midpoint, `seconds_ns`; native supports by float elapsed accumulation | rewritten | `stamp_mapping`, `Trace` | `ClockTests` |
+| A37 (lead) | Interior gaps or overlaps ≤ 1 µs between consecutive samples are contiguous; edges always count | fixed 1,000 ns snap | `snap_contiguous`, `Trace` | `OwnershipTests`, `ClockTests` |
 | A22 | Leave-one-out heavy-tail trigger | `s0_leave_one_out` | `u3_bar` | `test_u3_bar_leave_one_out_heavy_tail_and_r1_screen` |
 | A23 | Only FAIL bars | unchanged (already) | `recompute` | `test_inconclusive_u3_does_not_bar` |
 | A24 | Barred windows never fitted or scored | done | `recompute` | `test_barred_window_and_c_sabotage_are_never_scored` |
@@ -156,12 +157,17 @@ These are not new interpretations of the protocol. They are places where IR says
 restated as text" but the text is not yet complete enough to fix a bit-exact result. The comparator
 should treat a mismatch here as a request for the restated text, not as a bug.
 
-- **A37, placement resolution.** Float epoch-second supports are spaced at about 238 ns resolution, so
-  neighbouring supports miss or overlap by a few hundred ns. The recompute treats an interior gap of up
-  to two ulps of the latest epoch second (477 ns near 1.8e9 s) as covered, never as uncovered owned
-  time; edge gaps always count. IR (3)-(4) says "idle = 0; uncovered owned time excludes" without a
-  resolution, and read literally that would exclude every member. Overlaps are counted twice, as
-  "Σ over supports × overlap" says (about 1e-8 relative per boundary).
+- **A37, RULED (lead, blind, after R21).** An interior gap **or overlap** of at most a fixed
+  **1 µs (1,000 ns)** between consecutive power samples is contiguous; edge gaps always count. Both
+  builds use the same constant, not an ulp-derived tolerance.
+  - Implementation (`snap_contiguous`, `CONTIGUITY_NS`): when the start of sample i lies within
+    1,000 ns of the end of sample i−1 (either side), it is set to that end. Such a seam therefore
+    leaves no uncovered time and counts no energy twice.
+  - A gap above 1 µs stays uncovered and excludes the member if it falls in owned time. An overlap
+    above 1 µs stays an overlap and is counted per sample, as "Σ over supports × overlap" says.
+  - Snapping is applied before any integral, gap or coverage check.
+  - Tests: `test_uncovered_owned_time_excludes_but_rounding_gaps_do_not` and
+    `test_float_support_placement`. Mutations to 477 ns, or to gap-only snapping, turn them red.
 - **`seconds_ns`.** Read as `round(x * 1e9)`, half to even, with the midpoint in float seconds
   (`ClockTests`). The exporter's `production_offset_ns` settles it exactly.
 - **A11(c) collector grid.** IR says the `temperature.Coverage` definition will be written as text by
@@ -291,7 +297,7 @@ program was restored byte for byte afterwards.
 - **Caught on the first run (27):**
   - **A1, A2, A21:** gross total scored; overlap given to the later segment; holds owned; first
     stamp only.
-  - **A37:** no resolution tolerance.
+  - **A37:** no contiguity tolerance (revision 3: also a 477 ns tolerance, and gap-only snapping).
   - **A29, A30:** seed unchecked; Unknown treated as X3.
   - **A12:** journal match ignored; a timed-out G0 counted in the range.
   - **A11(d):** H left out of the denominator.
