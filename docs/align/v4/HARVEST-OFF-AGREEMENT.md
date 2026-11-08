@@ -38,6 +38,7 @@
 | D8 | MBP minutes saved / turnaround | 95-102 MBP min/window. Turnaround 33-63 min, or 75-115 min in scenario B at B2 barriers. | 88-100 MBP min. Turnaround 37-89 min, or 41-99 min at barriers. | Both are planning estimates. Under ruling D1, **about 95-100 MBP min/window and 33-63 min turnaround** off-barrier. |
 | D9 | Desk PASS reachability | **P5:** `v4_B_bar = all(bar_pass)` with every `bar_pass = None`, so the full desk can never PASS, and the B2 gate after W1 cannot be met. | Not raised. | **Blocker for the lead,** independent of this design (section 4). |
 | D10 | Scenario B (the whole-window verdict child) | It strict-validates serially without dedupe. After the speed-up it becomes the critical path; fix F1 opens the memo in the child. | Notes the child is not parallelized. | **Agree.** N1 decides whether it runs for ALIGN. If it does, land F1 before relying on the Air desk at the B2 barriers. |
+| D11 | Reduce once (Ed's directive, after both builds) | Built: `pm_reduce`, a targeted extractor (cut `processor.clusters`, `plistlib` on the rest, run-time verify-64). Equal to `plistlib` on all 1,735 fixture documents. Columns equal `parse_powermetrics_records` bit for bit. 5.4-6.5× parse speed; files about 960× smaller; about 1-2 min per window on the Air with 2-3 workers. Writes a sibling of the archive. The per-turn table is specified (registered `member_record` output plus input digests, equal to `PILOT.json`), not built. | Not in Sol's build (it predates the directive). Sol's one-entry record cache is the nearest piece. | **Adopt Opus's `pm_reduce`** into the integration branch. Sol's seat builds the per-turn table independently, and both prove it equal to `PILOT.json`: a paired build under RUN_STATE 220, because the analysis engine will read it. The engine switches to reduced artifacts only after D-188 result equivalence on a synthetic window and on N9. |
 
 ## 3. Recommended ruling (Opus, final say)
 
@@ -68,7 +69,13 @@ Then rerun both test sets, one module per process, and the whole-archive equalit
 - **Native smoke:** Sol's injection list (missing or corrupt file, worker death) through arm → finalize → pack → Air → packet.
 - **N1/N2** on the first real window: the stage profile and the MBP-versus-Air `archive_projection` equality.
 
-**5. No arm may use this route until** the integration candidate, its native smoke and N2 have passed.
+**5. Reduce once (Ed, D11).**
+- Run `reduce` on the Air after `unpack`, in parallel with `triage`.
+- The reduced files are restricted like `withheld/`, and the raw plists stay the custody evidence.
+- The analysis engine reads only reduced artifacts once the per-turn table's equality is proven.
+- Estimated reduction is about 1-2 min per window. The engine's I/O and parse step is about 300-1,000× faster, and the desk remainder about 5-10× faster.
+
+**6. No arm may use this route until** the integration candidate, its native smoke and N2 have passed.
 
 ## 4. Open items for the lead
 

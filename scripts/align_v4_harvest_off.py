@@ -6,6 +6,7 @@ Air, during cool-down: unpack  --offload O                    (same absolute pat
                        triage  --session-root S --window-id W (light: thermal_escalation, member_eligibility)
 Air, next window:      desk    --session-root S --workers N   (unchanged harvest + full desk, timed)
                        final   --session-root S --window-id W (final eligibility row from the desk's PILOT.json)
+                       reduce  --session-root S --out R --workers N (reduce-once columnar PM files, digest-bound)
 
 Every subcommand prints one JSON line. Exit 0 on success, 1 on refusal.
 """
@@ -142,6 +143,26 @@ def cmd_desk(args, run=subprocess.run):
     return {'desk_exit': result.returncode, 'workers': args.workers, 'elapsed_s': round(time.time() - started, 3)}
 
 
+def cmd_reduce(args, run=subprocess.run):
+    """Reduce each member's raw plists once into a sibling directory (never into the archive)."""
+    from joulewise.align.apple import pm_reduce
+    session, state, plan = _session(args.session_root)
+    runs_root = _runs_root(state)
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=False)
+    tasks = [{'run_id': row['run_id'], 'bundle_path': str(runs_root / row['run_id']), 'out_dir': str(out)}
+             for row in _plan_rows(state) if (runs_root / row['run_id']).is_dir()]
+    started = time.time()
+    members = pm_reduce.reduce_members(tasks, workers=args.workers)
+    manifest = {'schema': 'joulewise.align_v4.reduced_pm.v1', 'extractor': pm_reduce.EXTRACTOR_VERSION,
+                'session_id': state.get('session_id'), 'members': members}
+    (out / 'MANIFEST.json').write_text(json.dumps(manifest, indent=2, sort_keys=True) + '\n')
+    return {'reduced_members': len(members), 'files': sum(len(m['files']) for m in members),
+            'raw_bytes': sum(f['raw_size'] for m in members for f in m['files']),
+            'reduced_bytes': sum(f['reduced_size'] for m in members for f in m['files']),
+            'elapsed_s': round(time.time() - started, 3), 'workers': args.workers}
+
+
 def _runs_root(state):
     claim = (state.get('runs_roots') or {}).get('claim')
     if not claim:
@@ -165,12 +186,16 @@ def main(argv=None, run=subprocess.run):
         p.add_argument('--window-id', required=True)
     sub.choices['triage'].add_argument('--ladder-recorded', action='store_true')
     sub.choices['final'].add_argument('--pilot', type=Path)
+    p = sub.add_parser('reduce')
+    p.add_argument('--session-root', type=Path, required=True)
+    p.add_argument('--out', type=Path, required=True)
+    p.add_argument('--workers', type=int, default=2)
     p = sub.add_parser('desk')
     p.add_argument('--session-root', type=Path, required=True)
     p.add_argument('--workers', type=int, default=3)
     args = parser.parse_args(argv)
     handler = {'pack': cmd_pack, 'unpack': cmd_unpack, 'triage': cmd_triage, 'final': cmd_final,
-               'desk': cmd_desk}[args.command]
+               'desk': cmd_desk, 'reduce': cmd_reduce}[args.command]
     try:
         print(json.dumps(handler(args, run=run), sort_keys=True))
     except (OSError, ValueError, KeyError) as exc:

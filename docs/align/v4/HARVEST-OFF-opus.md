@@ -15,10 +15,11 @@
 
 **The ALIGN desk runs the harvest with one worker.** `align_pilot_session.desk` never passes `--workers`, so `harvest_b6_session.py` assesses members serially.
 
-**Three changes, all byte-identical on synthetic windows:**
+**Four changes, each proven equal on synthetic data:**
 1. **Dedupe.** One member's raw plist is parsed once, not 18 times. A scoped memo keyed on the SHA-256 of the input bytes. Measured 2.6-4.3× on the members step.
 2. **Parallel.** `--harvest-workers N` reaches the existing order-preserving pool. Dedupe plus 6 workers: 7.7-10.5× on the members step, 5.3-6.5× on the whole harvest.
-3. **Off the MBP.** A verified, compressed raw copy is restored on the Air at the same absolute path. The Air's harvest output then equals the MBP's byte for byte (with the clock and boot seams pinned). With real clocks, it differs only in five declared provenance fields.
+3. **Reduce once (section 10).** A targeted extractor, proven equal to `plistlib` on all 1,735 fixture documents, runs 5.4-6.5× faster. It writes digest-bound columnar files about 960× smaller than the XML, at about 1-2 min per window on the Air.
+4. **Off the MBP.** A verified, compressed raw copy is restored on the Air at the same absolute path. The Air's harvest output then equals the MBP's byte for byte (with the clock and boot seams pinned). With real clocks, it differs only in five declared provenance fields.
 
 **MBP minutes saved per window:** about **95-102 min**.
 - The MBP keeps finalize, a 1-3 min pack/offload, cool-down, pre-arm and dwell.
@@ -119,6 +120,7 @@ Nothing in the harvest needs the MBP's hardware. It needs the same bytes at the 
 MBP:  terminal ─ finalize/hash/push ─ PACK (1-3 min) ─ cool-down (15-25, physics) ─ pre-arm ─ dwell ─ ARM next
                                          │ offload (pull, ~0.3-2.6 GB)
 Air:                                     └─ UNPACK+verify (1-3) ─ LIGHT TRIAGE (3-8) ─► packet before arm
+                                                             ├─ REDUCE once (1-2 min, section 10)
                                                              └─ FULL DESK: harvest + desk (12-34 min*) ─ FINAL rows
                                                                 (in parallel with the next window, unless B2 requires it before the arm)
 ```
@@ -304,10 +306,87 @@ All new figures are estimates from synthetic ratios and recorded totals. None is
 - **N7:** light-triage wall time on the Air.
 - **N8:** the transfer path and rate (Thunderbolt bridge, Wi-Fi or SSD).
 
+## 10. Reduce once (Ed's directive, 2026-11-08)
+
+**Directive.** Windows should give outputs that are easier to analyze. The harvest on the Air reduces each member once:
+- the raw powermetrics XML becomes a compact columnar per-sample file plus a per-turn energy table;
+- every reduced file is digest-bound to its raw plist, and the raw plist stays the custody evidence;
+- the extractor is a targeted fast one, proven equal to `plistlib`, run in parallel across members;
+- the in-window instrument does not change (only boundary markers are allowed, per SPEED-TOOLBOX).
+
+### 10.1 Built: targeted extractor and columnar samples (`joulewise/align/apple/pm_reduce.py`)
+
+**The extractor.**
+- About 87% of every powermetrics document is the per-CPU `processor.clusters` subtree. In the seed, that is 66.9 KB of 77 KB, and no energy or thermal consumer reads it.
+- `strip_clusters` cuts exactly that subtree out of the document bytes, by `<array>` depth matching, and passes the rest to **`plistlib` itself**. So every retained value comes from the registered parser's own semantics: dates, reals, integers, booleans and strings.
+- A document is cut only when `<key>clusters</key>` occurs exactly once and a balanced array follows it. Otherwise the whole document is parsed.
+- At run time, `verify_every=64` re-parses the first document, the last, and every 64th in full and **refuses** on any difference.
+
+**The columns.** One row per sample, written as NumPy `.npy` v1.0 by the standard library alone. Columns:
+- `elapsed_ns`, `plist_timestamp_s`;
+- `cpu_w`, `gpu_w`, `ane_w`;
+- `cpu_mj`, `gpu_mj`, `ane_mj`;
+- `thermal` (a code);
+- `gpu_active_mhz` (diagnostic only; see the gaps below).
+
+The header binds the raw SHA-256, the raw size and the extractor version. About 80 B per sample against about 77 KB of XML: **about 960× smaller**.
+
+**Where it runs.** `scripts/align_v4_harvest_off.py reduce --session-root S --out R --workers N` runs on the Air after `unpack`. It is order-preserving and parallel across members. It writes a **sibling** directory, never into the harvest archive, so the archive byte-identity proof in section 4 is untouched. It also writes `MANIFEST.json` with every raw and reduced digest.
+
+**Proven** (`tests/align/test_harvest_off.py::PmReduceTests`, 5 tests, failing first):
+- **Extractor equals plistlib.** It equals `plistlib` minus `clusters` on **every one of 1,735 documents** in all seven powermetrics fixtures in the repo: production seed main/idle/idle_post, d078, g2b 1,577 frames, replay and sample.
+- **Columns equal the registered parser.** Every column equals `parse_powermetrics_records`' fields bit for bit: elapsed, plist timestamp, rails in W, rail energies in mJ, thermal pressure.
+- **Edge cases.** Awkward documents (escaped strings, a self-closing clusters array) fall back to the whole parse and stay equal.
+- **Refusal.** A fast path that would differ refuses at the verified document.
+- **Pool.** The member pool equals serial byte for byte.
+
+**Measured speed** (Air at load about 7-9, 116 MB real-format stream):
+
+| Path | Throughput | vs plistlib |
+|---|---:|---:|
+| plistlib | 20.2 MB/s | 1.0× |
+| fast extractor | 130.4 MB/s | 6.5× |
+| fast extractor plus verify-64 plus columns | about 108 MB/s | 5.4× |
+
+**Gaps (not yet built):**
+- `gpu_active_mhz` follows `native_pm_samples`' formula but is not yet proven equal to its rich-telemetry path. Treat it as diagnostic until it is.
+- Monotonic time is not in the file. The mapping to the episode clock stays with the registered episode code (`clock_mappings`), as in 10.2.
+- `fast_documents` holds one stream's reduced documents in memory, about 1 GB per GB of plist. Make it streaming before using 3 or more workers.
+
+### 10.2 Specified, not built: the per-turn energy table
+
+The per-turn table must not be a new integral.
+- It is the output of the **registered** per-member code, run once on the Air: `read_bundle_record` → `member_record`, with turn-owned and gross energy, half-widths, decode clocks and turn observations. The boundaries are the existing turn stamps; no window-side change is needed.
+- It is stored per member with the SHA-256 of every input: `power_trace.csv`, `outputs/align_episode.json`, `outputs/align_turns.jsonl`, `rich_telemetry.jsonl`, the raw plist, and the reduced `.npy`.
+- **Equality gate before any analysis reads it:** the table equals the full desk's `PILOT.json` per-turn values for every member of a synthetic window, bit for bit. That is the same code on the same inputs, under the D-188 result-equivalence rule.
+
+### 10.3 Blinding
+
+The sample columns and the per-turn table carry energy, which is outcome-bearing. They live under the same restriction as `withheld/`, and only the blinded engine reads them. The `MANIFEST.json` digests and row counts are structure-only.
+
+### 10.4 Estimates
+
+**Reduction time per window on the Air:**
+- Plist bytes per window: 16.5-23.5 GB (89% of 18.6-26.4 GB). With Ed's 507 MB per member, 22 members' main streams come to about 11 GB.
+- At about 108 MB/s per core: **2.5-3.6 min on one core, about 1.3-1.8 min with 2 workers, about 0.9-1.3 min with 3**.
+- It fits inside the Air timeline after `unpack` and in parallel with `triage`.
+
+**Analysis speedup when the engine reads only reduced artifacts:**
+- **Per window:** about 17-25 MB of columns plus the per-turn tables. A raw pass is 16.5-23.5 GB through `plistlib`, about 5-20 min per window per pass at 20-60 MB/s. Reading the columns takes well under 1 s. The **I/O and parse step is about 300-1,000× faster**.
+- **Desk:** the 10-15 min non-harvest remainder (mostly `episode_summary` and the thermal desk's `native_pm_samples` re-reading plists) falls to an estimated 1-2 min, about 5-10×, once it reads the reduced files.
+- **Multi-window engine** (8 calibration plus 3-6 test windows): today each analysis pass re-reads about 11-14 windows of XML, 1-4.5 h. Reduced, it is seconds per pass, so the engine is bound by its own arithmetic.
+- **Harvest-only effect** (the harvest's own 18 parses): about another 5-6× on top of the memo. This needs F5 (below) and its own equality proof.
+
+None of these is native. Add **N9:** reduce one real window on the Air; check wall time, RSS and reduced-to-raw ratio, plus the per-turn table's equality to that window's `PILOT.json`.
+
+**F5 (follow-up):** route the harvest's own document parse through the cut-and-`plistlib` path wherever its callers do not read `clusters`. Per caller, prove equality of the whole assessment, as in section 4.
+
+**Not applicable:** batching (no inference). No reduced value is cached as a decision: each reduced file is recomputed from bytes it is bound to by digest.
+
 ## 9. Test commands (one module per process)
 
 ```
-python3.13 -B -m unittest tests.align.test_harvest_off          # 19 OK (failing-first: 17 errored on 05b6d04cb)
+python3.13 -B -m unittest tests.align.test_harvest_off          # 24 OK (failing-first: 17 errored on 05b6d04cb; the 5 PmReduceTests errored before pm_reduce existed)
 python3.13 -B -m unittest tests.align.test_v4_executed_closure  # 2 OK
 python3.13 -B -m unittest tests.align.test_v4_registration      # 20 OK
 python3.13 -B -m unittest tests.align.test_v4_kit               # 116 OK

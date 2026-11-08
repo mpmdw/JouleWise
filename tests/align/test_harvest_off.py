@@ -425,5 +425,88 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(inventory(session), inventory(root / 'session.mbp'))
 
 
+PM_FIXTURES = ('powermetrics_sample.plist', 'replay/envelope-01/raw/powermetrics-idle-1.plist',
+               'controller_g2b/block3-pre/raw/powermetrics.plist.gz', 'd078_r01/raw/powermetrics.plist',
+               'd117_v2_production/strict_seed_bundle/raw/powermetrics_idle.plist',
+               'd117_v2_production/strict_seed_bundle/raw/powermetrics_idle_post.plist',
+               'd117_v2_production/strict_seed_bundle/raw/powermetrics.plist')
+
+
+def fixture_plist(relative):
+    import gzip
+    raw = (Path(__file__).resolve().parents[1] / 'fixtures' / relative).read_bytes()
+    return gzip.decompress(raw) if relative.endswith('.gz') else raw
+
+
+class PmReduceTests(unittest.TestCase):
+    """Reduce-once: the targeted extractor equals plistlib, and the columns equal the registered parser."""
+
+    def setUp(self):
+        from joulewise.align.apple import pm_reduce
+        self.r = pm_reduce
+
+    def test_fast_extractor_equals_plistlib_on_every_fixture_document(self):
+        total = 0
+        for relative in PM_FIXTURES:
+            with self.subTest(fixture=relative):
+                data = fixture_plist(relative)
+                parts = [p for p in data.split(b'\0') if p.strip()]
+                expected = [self.r._without_clusters(plistlib.loads(p)) for p in parts]
+                self.assertTrue(all(self.r.strip_clusters(p) is not None for p in parts))  # fast path taken
+                self.assertEqual(self.r.fast_documents(data, verify_every=1), expected)
+                total += len(parts)
+        self.assertGreater(total, 1700)
+
+    def test_columns_equal_the_registered_parser(self):
+        for relative in PM_FIXTURES:
+            with self.subTest(fixture=relative):
+                data = fixture_plist(relative)
+                records = pm.parse_powermetrics_records(data)
+                binding, rows = self.r.read_npy(self.r.reduce_plist(data))
+                self.assertEqual(binding['raw_sha256'], hashlib.sha256(data).hexdigest())
+                self.assertEqual(binding['raw_size'], len(data))
+                self.assertEqual(len(rows), len(records))
+                for row, rec in zip(rows, records):
+                    self.assertEqual(row[0], rec.elapsed_ns)
+                    self.assertEqual(row[1], rec.metadata['plist_timestamp_s'])
+                    self.assertEqual(row[2:5], tuple(rec.rail_power_w[k] for k in pm.RAIL_MANIFEST))
+                    self.assertEqual(row[5:8], tuple(rec.rail_energy_mj[k] for k in
+                                                     ('cpu_energy', 'gpu_energy', 'ane_energy')))
+                    self.assertEqual(row[8], self.r.THERMAL_CODES[rec.thermal_pressure])
+
+    def test_awkward_documents_fall_back_to_whole_parse_and_stay_equal(self):
+        data = fixture_plist(PM_FIXTURES[-1])
+        part = [p for p in data.split(b'\0') if p.strip()][0]
+        doubled = part.replace(b'<key>kern_bootargs</key>\n\t<string></string>',
+                               b'<key>kern_bootargs</key>\n\t<string>&lt;key&gt;clusters&lt;/key&gt;</string>', 1)
+        empty = part.replace(b'<key>clusters</key>', b'<key>clusters</key><array/><key>x</key>', 1)
+        for document in (doubled, empty):
+            self.assertEqual(self.r.fast_documents(document, verify_every=1),
+                             [self.r._without_clusters(plistlib.loads(document))])
+
+    def test_refuses_when_the_fast_path_would_differ(self):
+        data = fixture_plist(PM_FIXTURES[-1])
+        wrong = lambda part: part.replace(b'<key>thermal_pressure</key>', b'<key>thermal_pressure_x</key>', 1)  # noqa: E731
+        with mock.patch.object(self.r, 'strip_clusters', side_effect=lambda p: wrong(p)):
+            with self.assertRaisesRegex(self.r.ReduceRefused, 'differs from plistlib at document 0'):
+                self.r.fast_documents(data)
+
+    def test_member_pool_equals_serial_and_binds_every_raw_file(self):
+        root = Path(tempfile.mkdtemp(prefix='reduce-', dir=REAL_TMP))
+        self.addCleanup(shutil.rmtree, root, True)
+        tasks = lambda out: [{'run_id': rid, 'bundle_path': str(w.template() / rid), 'out_dir': str(root / out)}  # noqa: E731
+                             for rid, *_ in w.MEMBERS[:3]]
+        serial = self.r.reduce_members(tasks('serial'), workers=1)
+        pooled = self.r.reduce_members(tasks('pooled'), workers=3)
+        self.assertEqual(pooled, serial)
+        self.assertEqual(inventory(root / 'pooled'), inventory(root / 'serial'))
+        for member in serial:
+            self.assertEqual(len(member['files']), 3)
+            for row in member['files']:
+                raw = (w.template() / row['raw']).read_bytes()
+                self.assertEqual(row['raw_sha256'], hashlib.sha256(raw).hexdigest())
+                self.assertLess(row['reduced_size'] * 50, row['raw_size'])
+
+
 if __name__ == '__main__':
     unittest.main()
