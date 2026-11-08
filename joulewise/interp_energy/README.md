@@ -231,6 +231,17 @@ active agent must never run `--execute` or actual capture hooks.
 
 ## Verification and native handoff
 
+`toggle_model` adds the ideas 5–6/H4 desk kit: affine 4/8-bit code/scale/bias
+re-encodings with exact host dequantized-byte checks, compensating input-group
+permutations, stride-resolved packed/metadata descriptors and conditional
+J/proxy-transition estimates using the existing rail schedule and lock-in
+intervals. Full code complement changes Hamming weight but leaves XOR distances
+unchanged. Native output equality remains a separate gate. The
+[H4 plan](../../docs/research-audits/2026-11-07/toggle-model-run-plan.md) documents
+the API, limitations, proposed KM003C-arbitrated window and native handoff.
+Run `tests.interp_energy.test_toggle_model` for synthetic desk checks and
+`tests.interp_energy.test_toggle_model_mlx` only outside this sandbox on Metal.
+
 Run unittest modules individually, one process at a time. All tests use tiny
 synthetic arrays/configs; capture tests mock collectors. The integration module
 checks edit/revert identities and logits, scheduled swaps with fixed tokens,
