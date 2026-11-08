@@ -1,0 +1,25 @@
+# UNRUN. Prepared 2026-11-07 by an agent from git objects only; never applied
+# to a checkout, never executed.
+# Target: ml-explore/mlx-lm @ 56230fa02b8ff8330daf26dc95c28480423ed5fe (main, 2026-11-05)
+# The fix: in process_message_content, copy an assistant message's "reasoning"
+# string to "reasoning_content" when "reasoning_content" is missing or null.
+# Apply after 01-test.patch, from the mlx-lm repo root:
+#   git apply /private/tmp/jwoss-ro/mlx-lm-reasoning-content/kit/02-fix.patch
+# Then the test passes:  python -m unittest -v tests.test_server.TestProcessMessageContent
+# Not an upstream commit message. Ed writes any commit message himself.
+#
+--- a/mlx_lm/server.py
++++ b/mlx_lm/server.py
+@@ -256,6 +256,12 @@
+                     if args := func.get("arguments"):
+                         if isinstance(args, str):
+                             func["arguments"] = json.loads(args)
++
++        # Chat templates read "reasoning_content", but responses use "reasoning".
++        reasoning = message.get("reasoning")
++        if message.get("role") == "assistant" and isinstance(reasoning, str):
++            if message.get("reasoning_content") is None:
++                message["reasoning_content"] = reasoning
+     return urls
+ 
+ 

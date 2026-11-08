@@ -1,0 +1,54 @@
+# UNRUN. Prepared 2026-11-07 by an agent from git objects only; never applied
+# to a checkout, never executed.
+# Target: ml-explore/mlx-lm @ 56230fa02b8ff8330daf26dc95c28480423ed5fe (main, 2026-11-05)
+# Adds the regression test only. On the pinned commit the first test FAILS
+# (AssertionError: None != 'Call f.'); the second test passes.
+# Apply from the mlx-lm repo root:  git apply /private/tmp/jwoss-ro/mlx-lm-reasoning-content/kit/01-test.patch
+# Run:  python -m unittest -v tests.test_server.TestProcessMessageContent
+# Not an upstream commit message. Ed writes any commit message himself.
+#
+--- a/tests/test_server.py
++++ b/tests/test_server.py
+@@ -25,6 +25,7 @@
+     ToolCallFormatter,
+     _apply_stop_words,
+     _make_sampler,
++    process_message_content,
+ )
+ from mlx_lm.tool_parsers import json_tools, pythonic
+ from mlx_lm.utils import load
+@@ -299,6 +300,34 @@
+         )
+ 
+ 
++class TestProcessMessageContent(unittest.TestCase):
++    def test_reasoning_is_copied_to_reasoning_content(self):
++        # An assistant message as the server returns it.
++        tool_call = {"type": "function", "function": {"name": "f", "arguments": "{}"}}
++        message = {
++            "role": "assistant",
++            "content": None,
++            "reasoning": "Call f.",
++            "tool_calls": [tool_call],
++        }
++        other = {"role": "assistant", "reasoning": "a", "reasoning_content": None}
++        process_message_content([message, other])
++        self.assertEqual(message.get("reasoning_content"), "Call f.")
++        self.assertEqual(message["reasoning"], "Call f.")
++        self.assertEqual(other.get("reasoning_content"), "a")
++
++    def test_other_messages_are_not_changed(self):
++        messages = [
++            {"role": "user", "content": "Hi", "reasoning": "a"},
++            {"role": "assistant", "content": "Hello"},
++            {"role": "assistant", "reasoning": "a", "reasoning_content": "b"},
++        ]
++        process_message_content(messages)
++        self.assertNotIn("reasoning_content", messages[0])
++        self.assertNotIn("reasoning_content", messages[1])
++        self.assertEqual(messages[2]["reasoning_content"], "b")
++
++
+ class TestServer(unittest.TestCase):
+     @classmethod
+     def setUpClass(cls):

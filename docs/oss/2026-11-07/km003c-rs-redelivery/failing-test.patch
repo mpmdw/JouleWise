@@ -1,0 +1,52 @@
+--- a/km003c-lib/src/measurement.rs
++++ b/km003c-lib/src/measurement.rs
+@@ -460,4 +460,49 @@
+         assert!((zero_crossing.charge_throughput_uah - 0.277_777).abs() < 0.000_001);
+         assert!((zero_crossing.energy_throughput_uwh - 1.388_888).abs() < 0.000_001);
+     }
++
++    #[test]
++    fn a_redelivery_longer_than_the_restart_threshold_is_not_integrated_twice() {
++        // The meter can send samples again that it has already sent. A run of
++        // them longer than the restart threshold must still be rejected whole.
++        let rate = GraphSampleRate::Sps1000;
++        let mut accumulator = MeasurementAccumulator::default();
++        for sequence in 49_790..=49_816 {
++            accumulator.push(sample(sequence, 5.0, 1.0), rate).unwrap();
++        }
++
++        let accepted_again: Vec<u16> = (49_790..=49_816)
++            .filter_map(|sequence| accumulator.push(sample(sequence, 5.0, 1.0), rate))
++            .map(|measurement| measurement.sequence)
++            .collect();
++        let next = accumulator.push(sample(49_817, 5.0, 1.0), rate).unwrap();
++
++        assert_eq!(next.elapsed_us, 27_000, "49790 to 49817 is 27 ms of device time");
++        assert!((next.energy_uwh - 37.5).abs() < 0.000_001, "5 W for 27 ms");
++        assert!(
++            accepted_again.is_empty(),
++            "re-delivered samples were accepted: {accepted_again:?}"
++        );
++        assert_eq!(next.discarded_sequence_samples, 27);
++    }
++
++    #[test]
++    fn an_observed_1000_sps_redelivery_keeps_device_time() {
++        // Sequence numbers from a real 1000 SPS capture: after 49816 the next
++        // transfer started again at 49790 and ran on to 50449. That is 1227
++        // samples, of which 1200 are unique, spanning 1199 ms.
++        let rate = GraphSampleRate::Sps1000;
++        let mut accumulator = MeasurementAccumulator::default();
++        let mut last = None;
++        for sequence in (49_250..=49_816).chain(49_790..=50_449) {
++            if let Some(measurement) = accumulator.push(sample(sequence, 5.0, 1.0), rate) {
++                last = Some(measurement);
++            }
++        }
++        let last = last.unwrap();
++
++        assert_eq!(last.elapsed_us, 1_199_000);
++        assert_eq!(last.cumulative_discarded_sequence_samples, 27);
++        assert_eq!(last.sample_index, 1_199);
++    }
+ }

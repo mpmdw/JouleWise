@@ -1,0 +1,23 @@
+# UNRUN: written 2026-11-07 by an agent; never applied to a working tree, built or tested.
+# Fix option (a), the minimal one: QSA = every layer that is not linear_attention. Apply after 01-test.patch.
+# Unified diff against ggml-org/llama.cpp f477f795cb071baf5b8af6488378366a72034ac4 (master, 2026-11-08 01:29 +0100).
+# Checked only with `git apply --cached` on a throwaway index of that commit (no checkout).
+# Ed, from the root of his llama.cpp checkout:
+#     git apply --check /private/tmp/jwoss-ro/llama-cpp-qsa-convert/kit/02-fix-option-a.patch && git apply /private/tmp/jwoss-ro/llama-cpp-qsa-convert/kit/02-fix-option-a.patch
+# git apply skips these leading comment lines.
+
+diff --git a/conversion/qwen4exp.py b/conversion/qwen4exp.py
+--- a/conversion/qwen4exp.py
++++ b/conversion/qwen4exp.py
+@@ -84,9 +84,10 @@
+         self.gguf_writer.add_indexer_top_k(hp["indexer_budget"])
+         ratio = hp["indexer_compress_ratio"]
+         layer_types = hp["layer_types"]
++        # any non-linear layer is QSA: newer transformers saves "full_attention" as "indexed_attention"
+         # the MTP block is a full-attention QSA layer too
+         self.gguf_writer.add_attention_compress_ratios(
+-            [ratio if layer_types[i] == "full_attention" else 0 for i in range(n_layer)]
++            [ratio if layer_types[i] != "linear_attention" else 0 for i in range(n_layer)]
+             + [ratio] * (self.block_count - n_layer)
+         )
+ 

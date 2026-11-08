@@ -1,0 +1,55 @@
+diff --git a/mlx_vlm/models/qwen4_exp/language.py b/mlx_vlm/models/qwen4_exp/language.py
+index 9a9bee24fef808655bcb5826d9877fa0e4cb8e0e..2f6bc280e10476bd6f0b922008145a6edaf138e7 100644
+--- a/mlx_vlm/models/qwen4_exp/language.py
++++ b/mlx_vlm/models/qwen4_exp/language.py
+@@ -1109,21 +1109,14 @@ class Qwen4ExpAttention(Qwen3_5Attention):
+         standard_causal_mask = mask is None or (
+             isinstance(mask, str) and mask == "causal"
+         )
+-        if isinstance(mask, str) and not standard_causal_mask:
+-            # Qwen3.5 owns specialized string modes such as
+-            # ``left_padded_decode``. The indexer state is already updated;
+-            # delegate only the Q/K/V attention path to the parent.
+-            return super().__call__(
+-                x,
+-                mask=mask,
+-                cache=cache,
+-                position_ids=position_ids,
+-                position_embeddings=position_embeddings,
+-            )
++        # The parent's ``left_padded_decode`` path is dense and ignores masks.
++        # build_mask() already offsets each row's blocks by its left padding
++        # and hides the pad columns, so it is the whole mask for that step.
++        left_padded_decode = isinstance(mask, str) and mask == "left_padded_decode"
+         sparse_candidate = selection.zero_padding and standard_causal_mask
+         qsa_mask = None if sparse_candidate else self.indexer.build_mask(selection)
+         if qsa_mask is not None:
+-            if standard_causal_mask:
++            if standard_causal_mask or left_padded_decode:
+                 mask = qsa_mask
+             elif isinstance(mask, mx.array):
+                 if mask.dtype == mx.bool_:
+@@ -1868,9 +1861,9 @@ class Qwen4ExpBatchInvariantForward(Qwen3_5BatchInvariantForward):
+                 axis=1,
+             )
+         projected = self._linear(attention.indexer.index_qk_proj, hidden_states)
+-        if hidden_states.shape[1] > 2 or (
+-            isinstance(mask, str) and mask == "left_padded_decode"
+-        ):
++        # Batches with any left padding skip this branch: _attention() would
++        # send them to the dense ragged helper, which ignores the QSA mask.
++        if hidden_states.shape[1] > 2 and standard_causal:
+             qsa_mask = attention.indexer.from_projected(projected, cache, position_ids)
+             if qsa_mask is not None:
+                 if mask is None or (isinstance(mask, str) and mask == "causal"):
+@@ -1916,7 +1909,9 @@ class Qwen4ExpBatchInvariantForward(Qwen3_5BatchInvariantForward):
+         sparse_candidate = standard_causal
+         qsa_mask = None if sparse_candidate else attention.indexer.build_mask(selection)
+         if qsa_mask is not None:
+-            if standard_causal:
++            if standard_causal or (
++                isinstance(mask, str) and mask == "left_padded_decode"
++            ):
+                 mask = qsa_mask
+             elif isinstance(mask, mx.array):
+                 if mask.dtype == mx.bool_:

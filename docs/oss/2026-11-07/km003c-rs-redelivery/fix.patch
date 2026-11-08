@@ -1,0 +1,55 @@
+--- a/km003c-lib/src/measurement.rs
++++ b/km003c-lib/src/measurement.rs
+@@ -23,6 +23,17 @@
+ /// following sample forever, the accumulator restarts its continuity run.
+ const MAX_CONSECUTIVE_REJECTED_SAMPLES: u32 = 8;
+ 
++/// How far back, in samples, a rejected sample still counts as re-delivered.
++///
++/// The device sometimes sends samples again that it has already sent; at
++/// 1000 SPS a transfer has been seen to open with the last 27 samples of the
++/// previous one. A re-delivered sample lies on the sample grid at or just
++/// behind the last accepted one. It is rejected without counting toward
++/// [`MAX_CONSECUTIVE_REJECTED_SAMPLES`]; otherwise a re-delivered run longer
++/// than that threshold restarted continuity, and its remainder was
++/// integrated a second time.
++const MAX_REDELIVERED_SAMPLES: u16 = 64;
++
+ /// Largest forward sequence delta accepted as a real gap at a given rate.
+ ///
+ /// Half of the counter range is the theoretical limit, but a gap can only ever
+@@ -32,6 +43,19 @@
+ fn max_forward_sequence_ticks(rate: GraphSampleRate) -> u16 {
+     let step = rate.sequence_step();
+     (u16::MAX / 2 / step) * step
++}
++
++/// Whether a rejected sample lies on the sample grid at most
++/// [`MAX_REDELIVERED_SAMPLES`] behind the previous one, as a re-delivered
++/// sample does.
++///
++/// A stall past half the counter range lands here only if it ends within
++/// that many samples of a whole number of counter wraps. Below 1000 SPS the
++/// step does not divide the counter range, so that takes several wraps.
++fn is_redelivered(previous: u16, current: u16, rate: GraphSampleRate) -> bool {
++    let step = rate.sequence_step();
++    let behind_ticks = previous.wrapping_sub(current);
++    behind_ticks.is_multiple_of(step) && behind_ticks / step <= MAX_REDELIVERED_SAMPLES
+ }
+ 
+ /// One accepted AdcQueue sample placed on the device timeline.
+@@ -124,6 +148,14 @@
+                     self.cumulative_discarded_sequence_samples =
+                         self.cumulative_discarded_sequence_samples.saturating_add(1);
+                     self.pending_discarded_sequence_samples = self.pending_discarded_sequence_samples.saturating_add(1);
++
++                    // A re-delivered sample is not evidence of a stall.
++                    // Counting it would let a long re-delivered run restart
++                    // continuity and be integrated a second time.
++                    if is_redelivered(previous.sequence, sample.sequence, rate) {
++                        return None;
++                    }
++
+                     self.consecutive_rejected_samples = self.consecutive_rejected_samples.saturating_add(1);
+ 
+                     // The counter wraps every 65.5 s, so a long stall looks
