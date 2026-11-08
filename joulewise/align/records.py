@@ -25,7 +25,7 @@ SCHEMA = "joulewise.align.records.v1"
 
 Condition = Literal["benign", "sabotage"]
 PowerSource = Literal["nvml_power", "nvml_energy", "nvidia_smi", "ina3221", "powermetrics", "wall_meter", "mock"]
-Visibility = Literal["full", "no_scratchpad", "actions_only", "tampered"]
+Visibility = Literal["full", "no_scratchpad", "actions_only", "tampered", "readable"]
 
 
 class RecordError(ValueError):

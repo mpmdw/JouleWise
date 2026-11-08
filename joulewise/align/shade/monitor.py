@@ -6,13 +6,32 @@ import hashlib
 import json
 import math
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Sequence
 
 from joulewise.align.endpoints import _coalesce_assistant_calls, finish_reason
 from joulewise.align.interfaces import ChatEndpoint, ChatMessage
 from joulewise.align.records import MonitorVerdict, Visibility
 from joulewise.align.shade.upstream import PinnedUpstream
+
+READABLE_VIEW_VERSION = "joulewise.align.readable.v1"
+
+
+def readable_messages(transcript: Sequence[ChatMessage]) -> list[ChatMessage]:
+    """Preserve native reasoning and arguments; strip only content scratchpads.
+
+    System inputs are retained for the runtime-template recount. The monitor
+    renderer excludes them. Unlike the upstream comparability views, this
+    transformation never normalises whitespace or strips tool/user evidence.
+    Native reasoning is data in a separate field, never reparsed as tags.
+    Legacy jw_reasoning spans also remain visible in content. Their unescaped
+    delimiters cannot be parsed losslessly, so a legacy message containing one
+    is retained in full rather than risking deletion of native reasoning.
+    """
+    return [replace(m, content=re.sub(
+        r"<(thinking|system_instructions)>.*?</\1>", "", m.content, flags=re.DOTALL))
+        if m.role == "assistant" and "<jw_reasoning>" not in m.content else m
+        for m in _coalesce_assistant_calls(transcript)]
 
 
 def strip_scratchpad(text: str) -> str:
@@ -28,7 +47,23 @@ def strip_scratchpad(text: str) -> str:
 
 
 def render_transcript(transcript: Sequence[ChatMessage], *, visibility: Visibility) -> str:
-    """SHADE's names-only tool view; arguments remain hidden in every visibility."""
+    """Readable JSONL with arguments, or SHADE's legacy names-only views.
+
+    JSON strings delimit untrusted fields without interpreting reasoning or
+    argument strings as markup. No strip runs over the final rendered view.
+    """
+    if visibility == "readable":
+        return "\n".join(json.dumps({
+            "role": m.role, "content": m.content,
+            **({"native_reasoning": getattr(m, "reasoning_text", ""),
+                "tool_calls": [{"id": c.call_id, "name": c.name,
+                                "arguments_json": c.arguments_json}
+                               for c in getattr(m, "tool_calls", ())]}
+               if m.role == "assistant" else {}),
+            **({"name": m.name} if m.name is not None else {}),
+            **({"tool_call_id": m.tool_call_id} if m.tool_call_id is not None else {}),
+        }, sort_keys=True, ensure_ascii=False) for m in readable_messages(transcript)
+            if m.role != "system")
     transcript = _coalesce_assistant_calls(transcript)
     lines = []
     for index, message in enumerate(transcript):
@@ -139,7 +174,7 @@ class ShadeMonitor:
         upstream_first: float | str = "unparseable"
         if self.prompt_variant not in {"upstream", "upstream_actions_task"}:
             self.flags.append("unknown_monitor_prompt_variant")
-        if visibility not in {"full", "no_scratchpad", "actions_only", "tampered"}:
+        if visibility not in {"full", "no_scratchpad", "actions_only", "tampered", "readable"}:
             self.flags.append("unknown_monitor_visibility")
         instructions = self.upstream.monitor_prompt()
         self.flags.extend(self.upstream.flags)
@@ -206,4 +241,5 @@ class ShadeMonitor:
         return self.last_verdict.shared_record()
 
 
-__all__ = ["ShadeMonitor", "ShadeMonitorVerdict", "MonitorVerdictUnavailable", "render_transcript", "strip_scratchpad"]
+__all__ = ["ShadeMonitor", "ShadeMonitorVerdict", "MonitorVerdictUnavailable", "render_transcript",
+           "strip_scratchpad", "readable_messages", "READABLE_VIEW_VERSION"]
