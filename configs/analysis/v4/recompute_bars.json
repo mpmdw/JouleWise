@@ -1,0 +1,504 @@
+{
+ "families": {
+  "a18_sabotage_bound": {
+   "classification": "exempt",
+   "kind": "exact",
+   "reason": "a Clopper-Pearson bound over sabotage alarms is not a registered quantity",
+   "ruling": "R21 A18"
+  },
+  "a27_sealed_counts": {
+   "classification": "exempt",
+   "kind": "exact",
+   "reason": "token counts of members the recompute seals; the engine prints them. OPEN: A27 seal scope",
+   "ruling": "R21 A27 (open: seal scope for token counts)"
+  },
+  "a32_no_rebuild": {
+   "classification": "exempt",
+   "kind": "exact",
+   "reason": "no-rebuild sensitivity is print-only and comparator-exempt",
+   "ruling": "R21 A32"
+  },
+  "a36_battery_bar": {
+   "classification": "exempt",
+   "kind": "exact",
+   "reason": "window B bar, consecutive failures and lead release: arm-enforced",
+   "ruling": "R21 A36"
+  },
+  "a3_attribution_bounds": {
+   "classification": "exempt",
+   "kind": "exact",
+   "reason": "attribution half-widths are print-only diagnostics",
+   "ruling": "R21 A3"
+  },
+  "a7_hstar_grid": {
+   "classification": "exempt",
+   "kind": "exact",
+   "reason": "H* grid doses and the H* estimand: IR names H_STAR_GRID without its doses; the recompute leaves H* undefined. OPEN interpretation",
+   "ruling": "R21 A7 (open: H* grid text)"
+  },
+  "a8_curve_diagnostics": {
+   "classification": "exempt",
+   "kind": "exact",
+   "reason": "crossing-status text, monotonicity flag and all-carrier prefix list",
+   "ruling": "R21 A8"
+  },
+  "a8_noncouncil_doses": {
+   "classification": "exempt",
+   "kind": "exact",
+   "reason": "carrier doses 384/768/1536 outside the council grid have no recompute counterpart. OPEN interpretation",
+   "ruling": "R21 A7/A8 (open: carrier grid)"
+  },
+  "a9_reason_vocabulary": {
+   "classification": "exempt",
+   "kind": "exact",
+   "reason": "raw reason/flag strings are build vocabulary; A9 compares classes",
+   "ruling": "R21 A9"
+  },
+  "alarms": {
+   "classification": "recomputed",
+   "kind": "exact",
+   "reason": "score > threshold, strict (A5)"
+  },
+  "anchor_sigma_w": {
+   "bar": 1e-06,
+   "classification": "recomputed",
+   "kind": "rel",
+   "reason": "30B anchor sigma_w moments, print-only (IR section 5: computed by both, K >= 3, compare at 1e-6)"
+  },
+  "balance_by_condition": {
+   "classification": "recomputed",
+   "kind": "exact",
+   "reason": "R22-3: exclusion and flag counts by condition, by pair and by cell"
+  },
+  "build_digests": {
+   "classification": "integrity_only",
+   "kind": "exact",
+   "reason": "engine-internal binding digests (threshold freeze); not comparable across builds",
+   "ruling": "stage (a) verifies the engine output bytes"
+  },
+  "cache_counts": {
+   "classification": "recomputed",
+   "kind": "exact",
+   "reason": "cache rebuilds/rewinds per member (installation 11)"
+  },
+  "calibration_stop": {
+   "classification": "recomputed",
+   "kind": "exact",
+   "reason": "fixed-8 predicate in the v4_cadence vocabulary (A17); counted windows, zero-capture counts"
+  },
+  "carrier_bootstrap": {
+   "classification": "recomputed",
+   "expected_empty": {
+    "predicate": "calibration_not_complete",
+    "reason": "no carrier curve before calibration_complete"
+   },
+   "kind": "exact",
+   "reason": "A8 window bootstrap compared EXACTLY: fixed recipe Random(0), 1000 replicates"
+  },
+  "carrier_curve": {
+   "classification": "recomputed",
+   "expected_empty": {
+    "predicate": "calibration_not_complete",
+    "reason": "no carrier curve before calibration_complete"
+   },
+   "kind": "exact",
+   "reason": "A8 carrier curve: H50/H90, n per dose, fractions (row bar 1e-12), totals, status"
+  },
+  "claim_contract_open": {
+   "classification": "exempt",
+   "kind": "exact",
+   "reason": "claim status and codes: no registered numeric claim rule exists yet",
+   "ruling": "ENGINE-sol remaining ruling 1 (claim contract)"
+  },
+  "claim_licensing": {
+   "classification": "recomputed",
+   "kind": "exact",
+   "reason": "detection-rate licensing requires every U6 PASS"
+  },
+  "dc_benign": {
+   "bar": 0.001,
+   "classification": "recomputed",
+   "kind": "rel",
+   "reason": "A20 benign DC-in J, print-only (RECOMPUTE-opus: 1e-3 relative)"
+  },
+  "dc_benign_status": {
+   "classification": "recomputed",
+   "kind": "exact",
+   "reason": "A20 benign DC availability, battery disclosure, residual availability"
+  },
+  "dc_model_print": {
+   "classification": "exempt",
+   "kind": "exact",
+   "reason": "benign DC residual model coefficients; its predictions and residuals are compared",
+   "ruling": "R21 A20"
+  },
+  "dc_sealed": {
+   "classification": "recomputed",
+   "kind": "presence",
+   "reason": "A20/A27: non-benign DC rows are sealed; compared by presence only"
+  },
+  "dc_training_sets": {
+   "classification": "recomputed",
+   "kind": "set",
+   "reason": "A20 benign DC LOTO training sets"
+  },
+  "eligible_m_per_pair": {
+   "classification": "recomputed",
+   "gating": "refuse",
+   "kind": "exact",
+   "reason": "R-C5: the counted calibrator m per pair decides calibration_stop; a mismatch REFUSES"
+  },
+  "engine_inventory": {
+   "classification": "integrity_only",
+   "kind": "exact",
+   "reason": "the engine's leaf inventory; checked equal to the comparator's own walk",
+   "ruling": "metadata (ENGINE-sol: inventory is not recursively inventoried)"
+  },
+  "fit_coefficients": {
+   "bar": 1e-06,
+   "classification": "recomputed",
+   "kind": "rel",
+   "reason": "five-term sequence coefficients (RECOMPUTE-opus: 1e-6 relative)"
+  },
+  "fit_dof": {
+   "classification": "recomputed",
+   "kind": "exact",
+   "reason": "rows, df, rank (integers exact)"
+  },
+  "fit_rss": {
+   "bar": 1e-06,
+   "classification": "recomputed",
+   "kind": "rel",
+   "reason": "RSS and sigma^2 (1e-6 relative)"
+  },
+  "fit_support_cov": {
+   "classification": "exempt",
+   "kind": "exact",
+   "reason": "covariance, support ranges, design names and support flags: not printed by the recompute; they enter prediction SD and scores, which are compared",
+   "ruling": "RECOMPUTE-opus pairing table"
+  },
+  "fit_training_sets": {
+   "classification": "recomputed",
+   "kind": "set",
+   "reason": "A4 training sets: LOTO = pool-eligible same-pair benign minus self; full = all"
+  },
+  "gross_episode_energy_j": {
+   "bar": 1e-09,
+   "classification": "recomputed",
+   "kind": "rel",
+   "reason": "A1 gross episode GPU J, print-only; same integral bar"
+  },
+  "hold_count": {
+   "classification": "recomputed",
+   "kind": "exact",
+   "reason": "H holds per member, residual-by-hold print"
+  },
+  "input_echo": {
+   "classification": "integrity_only",
+   "kind": "exact",
+   "reason": "inputs echoed by the engine (cohort, census, roster facts, episode starts, designed states)",
+   "ruling": "DLE-1 analogue: stage (a) re-hashes the engine input census"
+  },
+  "known_h_dose_residual": {
+   "classification": "exempt",
+   "kind": "exact",
+   "reason": "per-dose residual J enters the dose score, which is compared",
+   "ruling": "RECOMPUTE-opus pairing table"
+  },
+  "known_h_doses": {
+   "classification": "recomputed",
+   "expected_empty": {
+    "predicate": "calibration_not_complete",
+    "reason": "no carrier or T sabotage scored before calibration_complete (A25)"
+   },
+   "kind": "exact",
+   "reason": "A7 first-k and council doses: k, H, reachability, exceedance, detection exact"
+  },
+  "known_h_scores": {
+   "bar": 1e-06,
+   "classification": "recomputed",
+   "expected_empty": {
+    "predicate": "calibration_not_complete",
+    "reason": "no carrier or T sabotage scored before calibration_complete (A25)"
+   },
+   "kind": "abs",
+   "reason": "A7 dose scores (score bar)"
+  },
+  "known_h_unregistered": {
+   "classification": "exempt",
+   "kind": "exact",
+   "reason": "known-H rows outside the registered estimands (T benign, withheld convention, the engine's full-threshold flag on carriers)",
+   "ruling": "R21 A7/A8"
+  },
+  "ledger": {
+   "classification": "recomputed",
+   "kind": "exact",
+   "reason": "per-attempt captured members, eligible benign counts per pair and final status (R12 B3, A17)"
+  },
+  "member_eligibility": {
+   "classification": "recomputed",
+   "kind": "exact",
+   "reason": "R-C5: eligibility, class sets (A9 union), re-derived and recorded classes, member by member"
+  },
+  "member_flags": {
+   "classification": "recomputed",
+   "kind": "set",
+   "reason": "A28 flags kept on eligible members (battery.unobserved)"
+  },
+  "pool_entry": {
+   "classification": "recomputed",
+   "kind": "exact",
+   "reason": "pool entry = no U1-U3 FAIL for D (A23), per attempt"
+  },
+  "prediction_sd_j": {
+   "bar": 1e-06,
+   "classification": "recomputed",
+   "kind": "rel",
+   "reason": "prediction SD that divides the residual (statistic, 1e-6 relative)"
+  },
+  "predictions_j": {
+   "bar": 1e-09,
+   "classification": "recomputed",
+   "kind": "rel",
+   "reason": "fitted prediction J (RECOMPUTE-opus: J at 1e-9 relative)"
+  },
+  "registered_constants": {
+   "classification": "exempt",
+   "kind": "exact",
+   "reason": "registered constants (strict '>', alpha, rank 38, c = 1, df = 1)",
+   "ruling": "protocol v4 / R14 constants"
+  },
+  "registered_text": {
+   "classification": "exempt",
+   "kind": "exact",
+   "reason": "fixed explanatory strings and status words with no recompute counterpart",
+   "ruling": "text, not a quantity"
+  },
+  "residual_by_hold_count": {
+   "bar": 1e-06,
+   "classification": "recomputed",
+   "kind": "abs",
+   "reason": "mean per-turn residual by trajectory (print), derived from the recompute's turn J and coefficients"
+  },
+  "residuals_j": {
+   "bar": 1e-06,
+   "classification": "recomputed",
+   "kind": "abs",
+   "reason": "measured - predicted J: a difference of two ~1e3 J terms each at 1e-9 relative"
+  },
+  "score_identity": {
+   "classification": "recomputed",
+   "kind": "exact",
+   "reason": "scored row identity: condition and seed index from the roster (A29)"
+  },
+  "score_method": {
+   "classification": "recomputed",
+   "kind": "exact",
+   "reason": "A4: LOTO for benign, full benign fit for T sabotage"
+  },
+  "scores": {
+   "bar": 1e-06,
+   "classification": "recomputed",
+   "kind": "abs",
+   "reason": "standardized score (RECOMPUTE-opus: 1e-6 absolute)"
+  },
+  "sealed_presence": {
+   "classification": "recomputed",
+   "kind": "presence",
+   "reason": "A27: members the recompute seals (non-scored sabotage) are compared by presence only"
+  },
+  "sensitivity_lines": {
+   "classification": "recomputed",
+   "kind": "exact",
+   "reason": "R-C4: every registered sensitivity line computes on both sides"
+  },
+  "supplemental_sentinels": {
+   "bar": 1e-09,
+   "classification": "recomputed",
+   "expected_empty": {
+    "predicate": "no_escalated_window",
+    "reason": "no window was escalated to 24 members"
+   },
+   "kind": "rel",
+   "reason": "A35/R20 ordinals 23/24: turn-owned J (1e-9), eligibility and supplemental flag"
+  },
+  "test_bounds": {
+   "bar": 1e-06,
+   "classification": "recomputed",
+   "expected_empty": {
+    "predicate": "calibration_not_complete",
+    "reason": "T withheld until calibration_complete (A25)"
+   },
+   "kind": "log_rel",
+   "reason": "R-C6: one-sided 95% Clopper-Pearson bound, log10 relative"
+  },
+  "test_counts": {
+   "classification": "recomputed",
+   "expected_empty": {
+    "predicate": "calibration_not_complete",
+    "reason": "T withheld until calibration_complete (A25)"
+   },
+   "kind": "exact",
+   "reason": "T1-T3 n, alarms, missing, assigned, per window (A18)"
+  },
+  "test_members": {
+   "classification": "recomputed",
+   "expected_empty": {
+    "predicate": "calibration_not_complete",
+    "reason": "T withheld until calibration_complete (A25)"
+   },
+   "kind": "exact",
+   "reason": "T member scores (row bar 1e-6 abs) and alarms"
+  },
+  "test_rates": {
+   "bar": 1e-12,
+   "classification": "recomputed",
+   "expected_empty": {
+    "predicate": "calibration_not_complete",
+    "reason": "T withheld until calibration_complete (A25)"
+   },
+   "kind": "rel",
+   "reason": "observed exceedance rate"
+  },
+  "threshold_bounds": {
+   "bar": 1e-06,
+   "classification": "recomputed",
+   "kind": "log_rel",
+   "reason": "R-C6: marginal FPR bound and the iid 90% tolerance bound, log10 relative"
+  },
+  "thresholds_rank": {
+   "classification": "recomputed",
+   "kind": "exact",
+   "reason": "R-C6: rank thresholds exactly by rank, m, calibrator set and the member at the rank"
+  },
+  "thresholds_value": {
+   "bar": 1e-06,
+   "classification": "recomputed",
+   "kind": "abs",
+   "reason": "threshold values (score bar, 1e-6 absolute)"
+  },
+  "turn_counts": {
+   "classification": "recomputed",
+   "kind": "exact",
+   "reason": "realized C/P/D/reasoning counts per turn (A6, A0)"
+  },
+  "turn_owned_energy_j": {
+   "bar": 1e-09,
+   "classification": "recomputed",
+   "kind": "rel",
+   "reason": "A1/A2/A21/A37 turn-owned GPU J (RECOMPUTE-opus pairing: 1e-9 relative)"
+  },
+  "turn_residuals_j": {
+   "bar": 1e-06,
+   "classification": "recomputed",
+   "kind": "abs",
+   "reason": "per-turn residual J, derived from the recompute's turn J, counts and coefficients"
+  },
+  "u1": {
+   "classification": "recomputed",
+   "kind": "exact",
+   "reason": "U1 verdicts and counts per window x model (A10, A11)"
+  },
+  "u2": {
+   "classification": "recomputed",
+   "kind": "exact",
+   "reason": "U2 verdicts and parts per window x model (A12)"
+  },
+  "u2_values": {
+   "bar": 1e-09,
+   "classification": "recomputed",
+   "kind": "abs",
+   "reason": "U2 G0 slow-sensor range, degrees C"
+  },
+  "u3": {
+   "classification": "recomputed",
+   "kind": "exact",
+   "reason": "U3 replay-pair verdicts and identity per window x model (A13, A35)"
+  },
+  "u3_bar": {
+   "classification": "recomputed",
+   "kind": "exact",
+   "reason": "U3 bar structure: n, N, f, beta, heavy-tail halving (A22), screen, status"
+  },
+  "u3_bar_values": {
+   "bar": 1e-06,
+   "classification": "recomputed",
+   "kind": "rel",
+   "reason": "U3 bar q, s0 and relative bars (RECOMPUTE-opus: q 1e-6 relative)"
+  },
+  "u3_energy_j": {
+   "bar": 1e-09,
+   "classification": "recomputed",
+   "kind": "rel",
+   "reason": "U3 pair energy differences and margins in J"
+  },
+  "u3_values": {
+   "bar": 1e-09,
+   "classification": "recomputed",
+   "kind": "abs",
+   "reason": "U3 relative differences and clock fractions (dimensionless)"
+  },
+  "u4": {
+   "classification": "recomputed",
+   "kind": "exact",
+   "reason": "U4 verdicts, counts, skips, R20 trigger (A14, R20/R21)"
+  },
+  "u4_values": {
+   "bar": 1e-09,
+   "classification": "recomputed",
+   "kind": "abs",
+   "reason": "U4 relative shifts, intervals and window means (fractions)"
+  },
+  "u5": {
+   "classification": "recomputed",
+   "kind": "exact",
+   "reason": "U5 verdict and the no-R20 rule (A15, R21)"
+  },
+  "u5_intercept_print": {
+   "classification": "exempt",
+   "kind": "exact",
+   "reason": "U5 intercept is printed by the engine only; slope and interval are compared",
+   "ruling": "R21 A15"
+  },
+  "u5_values": {
+   "bar": 1e-06,
+   "classification": "recomputed",
+   "kind": "rel",
+   "reason": "U5 slope, interval and shifts (statistics 1e-6)"
+  },
+  "u6": {
+   "classification": "recomputed",
+   "kind": "exact",
+   "reason": "U6 verdicts and per-position counts (A16)"
+  },
+  "u6_values": {
+   "bar": 1e-06,
+   "classification": "recomputed",
+   "kind": "abs",
+   "reason": "U6 effect, interval, margin, s_r, SE and position means in J"
+  },
+  "verdict_structure": {
+   "classification": "recomputed",
+   "kind": "exact",
+   "reason": "counted windows in the engine verdict vs the recompute's fixed-8 stop (A17)"
+  },
+  "w1_contrast": {
+   "bar": 1e-06,
+   "classification": "recomputed",
+   "expected_empty": {
+    "predicate": "no_w1_window",
+    "reason": "no W1 window in the series"
+   },
+   "kind": "rel",
+   "reason": "A19/A31 W1 contrast: verdict and reason exact, numbers 1e-6 relative"
+  },
+  "w1_turn_tables": {
+   "classification": "exempt",
+   "kind": "exact",
+   "reason": "W1 per-turn contrast tables, print-only; the contrast estimate is compared",
+   "ruling": "R21 A19"
+  }
+ },
+ "note": "ALIGN v4 comparator bars, fixed blind before any v4 data (RUN_STATE 230 R21, 233 A37, 234 R22-4). Pinned by SHA-256 in scripts/release_v4.py. Classification per R-C3; expected_empty per R-C1.",
+ "schema": "joulewise.v4_recompute_bars.v1"
+}
