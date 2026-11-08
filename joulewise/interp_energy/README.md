@@ -229,6 +229,35 @@ matching dispatch time/frequency, meter cadence and real window sizing remain
 unverified. Collection requires a separate lead-controlled quiet session; an
 active agent must never run `--execute` or actual capture hooks.
 
+## JOULE-MAP component marginals (desk / banked)
+
+`component_intervention.ComponentGate` exposes full, retained-compute/clamped,
+and removed-compute arms at explicit array-output seams. Retained and removed
+arms return the same resident tape; retained outputs are evaluated before
+discarding them, including under lazy MLX. `wrap_mlx_component` is lazily imported
+and keeps original weights registered/resident. Use the existing forced replay
+and reversible weight edits; zeroing dense weights does not skip computation.
+
+`joule_map` turns randomized six-member palindromes into gross and above-idle
+J/token marginals, with a downstream control shift, actual-midpoint linear-drift
+correction, matched moving-block bootstrap CIs, non-averaging systematic bounds,
+and paired additivity audits. It keeps context/boundary strata separate and
+always labels results PROVISIONAL. See the [design and run plan](../../docs/design/interp_joule_map.md)
+for assumptions, CLEAR/HYMELL positioning, cache/mask limitations, cost and gates.
+
+```sh
+python3.13 -B scripts/interp_energy/joule_map.py --plan-only
+python3.13 -B scripts/interp_energy/joule_map.py --demo
+python3.13 -B -m unittest tests.interp_energy.test_joule_map -v
+python3 -B -m unittest tests.interp_energy.test_component_intervention -v
+```
+
+The native addition is `tests.interp_energy.test_joule_map_mlx`: four tiny random
+Llama tests (attention, MLP, embedding, LM head), for the lead to run outside
+this sandbox on an authorized Metal-capable desk machine. No weights are
+downloaded. Native parity and production architecture adapters remain open;
+the generic seam does not certify a hardware map.
+
 ## Verification and native handoff
 
 Run unittest modules individually, one process at a time. All tests use tiny
