@@ -830,29 +830,11 @@ class PhysicalAuthenticationTests(unittest.TestCase):
                 authenticate_physical(instance, fixture, report_path=path)
 
 
-def isolated_indexed_fixture():
-    """Build a private S4 indexed fixture, never the one another module shares.
-
-    indexed_fixture() and s2.build_named() cache one window per process, and
-    governed_case() rewrites that window in place (plan identity, allowance,
-    index). scripts/shard_tests.py imports each module as b5_analysis.<name>
-    while this module imports test_floor_kept_units as tests.b5_analysis.<name>,
-    so a shard that ran the floor module first held two copies of it, each
-    re-running the one-shot rebinding on the same cached window: the second
-    pass broke the roster and every later case failed. Build against empty
-    caches and restore the originals on exit, so this module neither reuses
-    nor disturbs the floor module's fixture, whichever runs first.
-    """
-    with mock.patch.dict(indexed_fixture.__globals__["_CACHE"], {}, clear=True), \
-         mock.patch.dict(s2._CACHE, {}, clear=True):
-        return indexed_fixture()
-
-
 def governed_case():
     if "governed" in _CACHE:
         return _CACHE["governed"]
     import shutil
-    fixture = isolated_indexed_fixture()
+    fixture = indexed_fixture()
     pack = fixture.window.archive / "sources/repo/configs/campaigns" / fixture.window.entry.pack_id
     plan = pack / "calibration_plan.json"
     # S0's small synthetic pack never supplied these two mint inputs. Extend

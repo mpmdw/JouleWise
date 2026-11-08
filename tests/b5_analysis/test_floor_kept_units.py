@@ -826,6 +826,21 @@ def indexed_fixture():
     """One cached S2 bracket + S3 roster projection, with explicit rebindings."""
     if "indexed" in _CACHE:
         return _CACHE["indexed"]
+    # scripts/shard_tests.py imports a module as b5_analysis.<name> while its
+    # siblings import it as tests.b5_analysis.<name>: two module objects, two
+    # _CACHE dicts, ONE process-wide window in s2._CACHE. The rebinding below
+    # rewrites that window in place and is not idempotent, so a second copy
+    # re-running it broke every later consumer (test_mint_kept_units failed
+    # with exclusions_roster_mismatch / window_index_pack_mismatch whenever
+    # this module had run first in its shard). The fixture is therefore
+    # remembered on the window itself, which both copies see: a copy reuses it
+    # for as long as that window stays cached, and a fixture built after a
+    # caller dropped the window starts clean, as before.
+    cached_window = s2._CACHE.get("BETA_STD_S3B_ROSTER")
+    peer = getattr(cached_window, "indexed_fixture_for_window", None)
+    if peer is not None:
+        _CACHE["indexed"] = peer
+        return peer
     from joulewise.b5 import harvest
     from joulewise.flags.catalog import load_catalog
     from joulewise.flags.exclusions import compute
@@ -918,6 +933,7 @@ def indexed_fixture():
     shutil.copyfile(spec_path, local_spec)
     _CACHE["indexed"] = SimpleNamespace(window=window, index=index, spec=spec, row=row, local_repo=local_repo,
         local_spec=local_spec, directory=directory)
+    window.indexed_fixture_for_window = _CACHE["indexed"]
     return _CACHE["indexed"]
 
 
