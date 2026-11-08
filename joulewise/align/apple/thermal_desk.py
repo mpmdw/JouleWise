@@ -308,7 +308,7 @@ def identical_pair(a, b, *, u3_bar=None):
     if u3_bar is not None:
         from joulewise.align.apple.v4_registration import u3_margin
         try:
-            margin = u3_margin(energy, u3_bar)
+            margin = u3_margin(energy, u3_bar, model=a.get('model'))
         except ValueError as exc:
             return {'status': 'inconclusive', 'token_identical': True,
                     'delta_j': delta, 'margin_j': None, 'reason': str(exc)}

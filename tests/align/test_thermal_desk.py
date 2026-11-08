@@ -39,8 +39,9 @@ def contrast(effect=12, noise=0):
 class DeskTests(unittest.TestCase):
     def synthetic_registration(self, root):
         from joulewise.align.apple.v4_registration import derive_u3, wp19_identity
-        bar = derive_u3([dict(session='synthetic', ordinals=[i, i+3], token_identical=True,
-                             energies_j=[1000, 1000+i]) for i in (1, 2, 3)], {'synthetic': 'a'*64})
+        bar = derive_u3([dict(session='synthetic', family='synthetic', ordinals=[i, i+3], token_identical=True,
+                             energies_j=[1000, 1000+i]) for i in (1, 2, 3)], {'synthetic': 'a'*64},
+                        parameters=dict(series_pair_tests=16, series_false_fail_budget=.05, min_pairs=3, oc_seed=1, oc_reps=100))
         fixture = {'turns': [{'turn': 0, 'prompt_token_ids': [1], 'output_token_ids': [2]}]}
         wp19 = wp19_identity({'X': fixture, 'Y': fixture}, {'X': [[1]], 'Y': [[1]]},
                             fixture['turns'], live_source_sha256='b'*64)

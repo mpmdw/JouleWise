@@ -99,6 +99,41 @@ SYN_INPUTS = {
 _SYN_CONTRAST = kit.w1_contrast_g0_cap(SYN_R1_SLOTS, SYN_INPUTS['WP18']['X']['max_turns'])
 SYN_INPUTS['R1']['thermal_policy'].update(contrast_g0_cap_s=_SYN_CONTRAST['value_s'], contrast_fit=_SYN_CONTRAST)
 
+# Synthetic U3 bar through the real derivation/sign/validate path (W1-BLOCKERS
+# Opus build): 12 30B pilot-shaped replay pairs at ~0.15% relative spread and one
+# adjacent D transfer pair. Labelled synthetic, so registration refuses it; the
+# dry-run desk admits it only through allow_synthetic. Never native evidence.
+SYN_U3_PARAMETERS = {'series_pair_tests': 16, 'series_false_fail_budget': 0.05, 'min_pairs': 5,
+                     'oc_seed': 20261108, 'oc_reps': 200}
+SYN_U3_RELATIVE = (-.0021, .0012, -.0004, .0018, -.0015, .0007, .0001, -.0011, .0024, -.0006, .0013, -.0017)
+
+
+def synthetic_u3_bar():
+    from joulewise.align.apple import v4_registration as reg
+    pairs = [{'session': f'syn-p{4 + i % 4}', 'family': '30B', 'ordinals': [1 + i, 5 + i], 'token_identical': True,
+              'energies_j': [2000 * (1 - r / 2), 2000 * (1 + r / 2)]} for i, r in enumerate(SYN_U3_RELATIVE)]
+    transfer = [{'session': 'syn-R1', 'family': 'D', 'ordinals': [2, 3], 'token_identical': True,
+                 'energies_j': [30000.0, 30030.0]}]
+    bar = reg.derive_u3(pairs, {'synthetic-u3-pairs': hashlib.sha256(b'synthetic-u3-pairs').hexdigest()},
+                        parameters=dict(SYN_U3_PARAMETERS), transfer_pairs=transfer, synthetic=True)
+    return reg.sign_u3(bar, lead_signature='lead: synthetic-wp22 2026-11-08',
+                       gate={'verdict': 'ADMIT', 'path': 'docs/align/v4/SYNTHETIC-WP22-U3-GATE.md',
+                             'sha256': hashlib.sha256(b'synthetic-wp22-u3-gate').hexdigest()})
+
+
+def synthetic_registration(out, inputs):
+    """Dry-run registration dir: inputs, the synthetic signed U3 bar and a WP19 pass."""
+    from joulewise.align.apple import v4_registration as reg
+    directory = out / 'registration'
+    directory.mkdir(exist_ok=True)
+    fixture = {'turns': [{'turn': 0, 'prompt_token_ids': [1], 'output_token_ids': [2]}]}
+    wp19 = reg.wp19_identity({'X': fixture, 'Y': fixture}, {'X': [[1]], 'Y': [[1]]}, fixture['turns'],
+                             live_source_sha256=hashlib.sha256(b'synthetic-wp19').hexdigest())
+    for name, value in (('inputs.json', inputs), ('u3_bar.json', synthetic_u3_bar()), ('wp19_receipt.json', wp19)):
+        (directory / name).write_text(json.dumps(value, indent=2, sort_keys=True) + '\n')
+    return directory
+
+
 # One of each injected event, on distinct members (ordinal -> event).
 # Council ruling 1(g) swapped W1 ordinals 17 and 18: the replay of 5 is 17 and
 # development index 93 is 18, so the collector death stays on the development D.
@@ -260,7 +295,13 @@ def collect(args, out):
             inputs['WP18'][name] = {'max_turns': turns, 'token_fixture_sha256': hashlib.sha256(rows).hexdigest()}
             results['pilot7'][name] = ref
             world.clock.sleep(600)
-        plan, raw_configs, _ = build_kit(inputs)
+        # The contrast cap's fit binds WP18 X max_turns, re-measured just above. A
+        # clean synthetic R1 X-G runs that same fixture, so it admits every X turn.
+        r1_slots = deepcopy(SYN_R1_SLOTS)
+        r1_slots['x_g']['admitted_turns'] = inputs['WP18']['X']['max_turns']
+        fit = kit.w1_contrast_g0_cap(r1_slots, inputs['WP18']['X']['max_turns'])
+        inputs['R1']['thermal_policy'].update(contrast_g0_cap_s=fit['value_s'], contrast_fit=fit)
+        plan, raw_configs, _ = build_kit(inputs, r1_slots)
         results['inputs'] = inputs
         configs = {o: synthesize(c, out) for o, c in raw_configs.items()}
         members = {m['ordinal']: m for m in plan['members']}
@@ -326,7 +367,7 @@ def roster_manifest(out, results):
     by_run = {m['run_id']: m for m in results['plan_members']}
     for r in results['members']:
         plan = by_run[r['run_id']]
-        item = {'bundle': str(Path(r['bundle']).relative_to(out)), 'window': 'W1'}
+        item = {'bundle': str(Path(r['bundle']).relative_to(out)), 'window': 'W1', 'stage': plan['stage_id']}
         ordinal, role = plan['ordinal'], plan['role']
         if ordinal in PAIR_GROUPS:
             item['identical_work_group'] = PAIR_GROUPS[ordinal]
@@ -339,7 +380,8 @@ def roster_manifest(out, results):
             g0 = [i for i in (ep['hardware'].get('thermal') or {}).get('intervals', []) if i['kind'] == 'G0']
             item['registered_span_ns'] = [g0[0]['start_ns'] if g0 else ep['start_ns'], ep['end_ns']]
         items.append(item)
-    manifest = {'schema': 'wp22.synthetic_w1_manifest', 'members': items}
+    manifest = {'schema': 'wp22.synthetic_w1_manifest', 'members': items,
+                'delta_slow_c': results['inputs']['R1']['thermal_policy']['delta_slow_c']}
     (out / 'desk_manifest.json').write_text(json.dumps(manifest, indent=2, sort_keys=True) + '\n')
     return out / 'desk_manifest.json'
 
@@ -364,13 +406,19 @@ def run_desk(out, world):
             pm_period_s = 1.0
         return original(episode, journal, os_readings=os_readings, pm_samples=pm_samples,
                         pm_period_s=pm_period_s, **kwargs)
-    manifest = roster_manifest(out, json.loads((out / 'run_results.json').read_text()))
+    from functools import partial
+    from joulewise.align.apple import v4_registration as reg
+    results = json.loads((out / 'run_results.json').read_text())
+    manifest = roster_manifest(out, results)
+    registration = synthetic_registration(out, results['inputs'])
     if (out / 'desk').exists():
         import shutil
         shutil.rmtree(out / 'desk')
     try:
-        with patch.object(thermal_desk, 'member_record', member_record):
-            cli.main(['--manifest', str(manifest), '--output', str(out / 'desk')])
+        with patch.object(thermal_desk, 'member_record', member_record), \
+                patch.object(reg, 'validate_u3', partial(reg.validate_u3, allow_synthetic=True)):
+            cli.main(['--manifest', str(manifest), '--output', str(out / 'desk'),
+                      '--registration-dir', str(registration)])
     except Exception as exc:  # noqa: BLE001 - a desk crash is itself a finding
         import traceback
         return {'status': 'crashed', 'error': f'{type(exc).__name__}: {exc}',
@@ -430,19 +478,33 @@ def ols(x, y):
 T90 = {1: 6.313752, 2: 2.919986, 3: 2.353363, 4: 2.131847, 5: 2.015048, 6: 1.943180}
 
 
-def contrast_oracle(runs):
-    """FINAL-DESIGN §2.5 mechanical rule, independently computed."""
+def contrast_oracle(runs, delta_slow_c):
+    """Protocol v4 chair-9 mechanical rule, independently computed.
+
+    Delivery: per template, mean admission slow S-G >= delta_slow/2, or arm-G
+    G1 waiting on >= 50% of turns. Fit: template + arm S + start hours + stage (df=3).
+    """
+    for t in 'XY':
+        rows = [r for r in runs if r['template'] == t]
+        s = [r['admission_slow_c'] for r in rows if r['arm'] == 'S' and r['admission_slow_c'] is not None]
+        g = [r['admission_slow_c'] for r in rows if r['arm'] == 'G' and r['admission_slow_c'] is not None]
+        waits = [w for r in rows if r['arm'] == 'G' for w in r['g1_waits']]
+        hot = s and g and sum(s) / len(s) - sum(g) / len(g) >= delta_slow_c / 2
+        if not (hot or (waits and sum(w > 0 for w in waits) / len(waits) >= .5)):
+            return {'verdict': 'INCONCLUSIVE', 'reason': f'treatment not delivered ({t})'}
     cells = {(t, a): [r for r in runs if r['template'] == t and r['arm'] == a] for t in 'XY' for a in 'SG'}
     if any(len(c) != 2 for c in cells.values()):
         return {'verdict': 'INCONCLUSIVE', 'reason': 'fewer than 2 token-identical runs in a template/arm'}
     sel = [r for c in cells.values() for r in c]
     t0 = min(r['start_ns'] for r in sel)
-    x = [[1.0, float(r['template'] == 'Y'), float(r['arm'] == 'S'), (r['start_ns'] - t0) / 3600 / NS] for r in sel]
+    late = max(r['stage'] for r in sel)
+    x = [[1.0, float(r['template'] == 'Y'), float(r['arm'] == 'S'), (r['start_ns'] - t0) / 3600 / NS,
+          float(r['stage'] == late)] for r in sel]
     beta, se, df = ols(x, [r['E'] for r in sel])
     delta, half = beta[2], T90[df] * se[2]
     ci = [delta - half, delta + half]
     d = {t: sum(r['E'] for r in cells[t, 'S']) / 2 - sum(r['E'] for r in cells[t, 'G']) / 2 for t in 'XY'}
-    if all(abs(v) >= 10 for v in d.values()) and d['X'] * d['Y'] > 0 and (ci[0] > 0 or ci[1] < 0):
+    if all(v >= 10 for v in d.values()) and (ci[0] > 0 or ci[1] < 0):
         verdict = 'T CONFIRMED'
     elif all(abs(v) <= 6 for v in d.values()) and ci[0] >= -6 and ci[1] <= 6:
         verdict = 'T REJECTED'
@@ -453,6 +515,13 @@ def contrast_oracle(runs):
 
 def design_expectations(out, results, world, inject):
     """What FINAL-DESIGN + A1 say each member/model/contrast should yield."""
+    # U3: |dE| <= relative_bar x mean(E) from the dry run's own signed synthetic bar
+    # (its D transfer is not refuted), recomputed here without the desk's u3_margin.
+    delta_slow = results['inputs']['R1']['thermal_policy']['delta_slow_c']
+    bar = json.loads((out / 'registration/u3_bar.json').read_text())
+    assert bar['scope'] == {'30B': 'source', 'D': 'not_refuted'}, bar['scope']
+    bar_relative = bar['series_quantile_q'] * math.sqrt(
+        math.fsum(r * r for r in bar['signed_relative_differences']) / len(bar['signed_relative_differences']))
     members = []
     by_ord = {r['ordinal']: r for r in results['members']}
     plan = {m['ordinal']: m for m in results['plan_members']}
@@ -483,7 +552,7 @@ def design_expectations(out, results, world, inject):
             continue
         identical = a['tokens'] == b['tokens']
         e = (a['E_oracle_j'] + b['E_oracle_j']) / 2
-        margin = 3 * max(2.97, 0.0011 * e)
+        margin = bar_relative * e
         delta = b['E_oracle_j'] - a['E_oracle_j']
         pairs[group] = {'status': ('X5' if not identical else 'pass' if abs(delta) <= margin else 'fail'),
                         'delta_j': delta, 'margin_j': margin}
@@ -504,15 +573,22 @@ def design_expectations(out, results, world, inject):
     runs_strict, runs_eligible = [], []
     for m in members:
         if m['role'][:1] in 'XY' and len(m['role']) == 3 and m['E_oracle_j'] is not None:
-            run = {'template': m['role'][0], 'arm': m['role'][2], 'E': m['E_oracle_j'], 'start_ns': m['start_ns']}
+            ep = episode_json(by_ord[m['ordinal']]['bundle'])
+            thermal = (ep['hardware'].get('thermal') or {}) if ep else {}
+            g0 = [i for i in thermal.get('intervals', []) if i['kind'] == 'G0']
+            run = {'template': m['role'][0], 'arm': m['role'][2], 'E': m['E_oracle_j'], 'start_ns': m['start_ns'],
+                   'stage': plan[m['ordinal']]['stage_id'],
+                   'admission_slow_c': g0[0]['release']['slow_c'] if g0 and g0[0].get('release') else None,
+                   'g1_waits': [sum(i.get('duration_s', 0) for i in thermal.get('intervals', [])
+                                    if i['kind'] == 'G1' and i.get('turn') == t['index']) for t in ep['turns']]}
             if m['tokens'] == ref_tokens[m['role'][0]] and m['status'] == 'succeeded':
                 runs_strict.append(run)
                 if not m['design_exclusions']:
                     runs_eligible.append(run)
     return {'members': [{k: v for k, v in m.items() if k != 'tokens'} for m in members],
             'pairs': pairs, 'models': expected,
-            'contrast_token_identical_runs': contrast_oracle(runs_strict),
-            'contrast_excluding_X_codes': contrast_oracle(runs_eligible)}
+            'contrast_token_identical_runs': contrast_oracle(runs_strict, delta_slow),
+            'contrast_excluding_X_codes': contrast_oracle(runs_eligible, delta_slow)}
 
 
 def main(argv=None):

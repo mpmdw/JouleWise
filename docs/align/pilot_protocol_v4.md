@@ -450,7 +450,7 @@ counts W1 when later sentinel windows make it evaluable. `F:364–409; A:94–99
 |---|---|
 | U1 | Included turns: OS level 0 / Nominal PM; ≤1 X1–X4 member per model-window; ≥99% sidecar coverage through episodes/gates, no gap >2 s; PM gaps ≤max(1 s, 5 periods); G1/H timeouts ≤2% of admissions, G0 ≤1/model-window |
 | U2 | G0 slow-temperature range ≤3 °C; every G1/H release verified within δ of its own episode's E |
-| U3 | **PENDING derivation, R11/R03.** No k=3, 2.576, fixed floor or numerical energy bar installed. Exact-token and active-clock ≤0.5% checks remain; a missing energy bar is INCONCLUSIVE, never a v3 fallback |
+| U3 | **Derived bar, R11/R03** (§5 below): \|ΔE\| ≤ q·s₀·mean(E), s₀ the zero-centred RMS of separated 30B pilot replay differences, q the series-predictive t quantile at lead-frozen N and β; D only if R1's transfer pair does not refute it. No k=3, 2.576 or fixed floor. Exact-token and active-clock ≤0.5% checks remain; an unsigned or missing bar is INCONCLUSIVE, never a v3 fallback |
 | U4 | Sentinel window-mean relative shift ≤0.25% in magnitude and its 90% t interval within ±0.5%, df W−1; count W1 (W=4 at D3). E_ref = mean of R1 replay pair and W1 ordinals 5 and 17. Four-anchor 30B σ_w is print-only |
 | U5 | R1 three designed start states estimate D β_T; \|β_T\|₉₀·δ_slow ≤c·σ_pair, c=1.0; σ_pair=max(R1 replay-pair SD, 2.97 J). Point inside/upper bound outside means INCONCLUSIVE. Consequence amendment remains PENDING LEAD RULING below |
 | U6 | Early/late margins ±0.5·s_r with trajectory-clustered SEs; imprecise intervals say “calibration unresolved: imprecise”. D prints per-turn-position means, judging a position only if ≥6 trajectories reach it; no turn-index slope gate |
@@ -612,16 +612,27 @@ OBC assertion. Require `--topup-completed-at` (epoch s or ISO-8601 with offset) 
 evidence, if it is future-dated or older than 30 minutes (UpdateTime dates the
 observation, not the end of charging). R1 drain remains a required print; Ed's charge hold gates D1.
 Charging is named exclusion **B** (`battery.member_span`). Print B counts, SoC
-and charger watts per member. **PENDING lead:** the separate numeric B window
-bar/consequence (R02 U); `bar_pass` stays unavailable. Arm float does not prove
-zero battery flow through the member. Missing observations remain unavailable.
+and charger watts per member. **B window rule (W1-BLOCKERS Opus build; binding
+only once the W1-blockers agreement is ruled):** per model-window, B = members
+with `battery.member_span`; possible B = members with `battery.unmeasured` or
+`battery.accumulator_excursion`, or with no harvest battery evaluation. The
+window passes iff B + possible B ≤ 1, fails iff B ≥ 2, else is unavailable
+(not a pass). Fail consequence: B members stay excluded, non-B members are not
+removed, and the desk fails `v4_B_bar`, so the next arm (D1 after W1) waits for
+a fresh completed top-up, OBC attestation and a lead disposition of the cause.
+Battery assist is printed only. See `docs/align/v4/W1-BLOCKERS-opus.md` §2.
+Arm float does not prove zero battery flow through the member. Missing observations remain unavailable.
 
-**5 — U3: PENDING derivation (R11/R03; RUN_STATE 212 R11-2).**
-`scripts/align_v4_u3_bar.py` accepts explicit separated-ordinal, within-session,
-token-identical pilot pairs and emits descriptive signed relative differences,
-sample SD, source digests and a **PENDING** block. It emits no multiplier,
-margin or fitted-normal false-fail guarantee. Historical k=3 receipts are refused;
-the v4 desk never falls back to v3's bar. The lead/statistics owner must freeze:
+**5 — U3: derivation procedure built (W1-BLOCKERS Opus build; binding only once
+the W1-blockers agreement is ruled and the lead signs a bar).**
+`scripts/align_v4_u3_bar.py derive` takes explicit separated-ordinal, within-session,
+token-identical 30B pilot pairs plus R1's D transfer pair and lead-frozen
+parameters (series pair-test count N, series false-fail budget β), and emits
+the zero-centred RMS scale, the series-predictive t quantile, the relative bar,
+the D transfer status and a seeded OC/sensitivity table; `sign` attaches the
+lead signature and the independent gate. `validate_u3` admits only a signed bar
+that recomputes exactly from its embedded inputs. No k=3, 2.576 or fixed floor
+is installed: there is no multiplier outside the recomputed derivation. Procedure: `docs/align/v4/W1-BLOCKERS-opus.md` §1. The derivation answers:
 
 - the predictive distribution for a new replay, including mean drift, scale
   estimation and small-sample uncertainty;
@@ -630,8 +641,8 @@ the v4 desk never falls back to v3's bar. The lead/statistics owner must freeze:
 - the limits of transferring 30B pilot variation to D, and D-specific qualification;
 - the chosen energy bar, derivation/source bytes and independent gate receipt.
 
-No pilot or R1 record is read here. U3 remains unresolved and registration
-cannot pass until this scientific derivation and its scoped implementation are admitted.
+No pilot or R1 record is read here. Registration cannot pass until the lead
+freezes N and β, exports the pairs, signs the derived bar and its independent gate admits it.
 Failed U3 windows stay retained; no smaller m or unauthorized replacement is allowed.
 
 **6 — acceptance.** The U table above supersedes the old U4–U6 bars. U4 counts

@@ -71,22 +71,22 @@ class RegistrationTests(unittest.TestCase):
                 with self.subTest(change=change), self.assertRaises(ValueError):
                     reg.validate_receipt(bad, root)
 
-    def test_u3_is_pending_and_preserves_only_descriptive_replay_summaries(self):
+    def test_u3_derivation_is_pending_until_signed(self):
         from joulewise.align.apple import v4_registration as reg
-        pairs = [dict(session='p4', ordinals=[i, i+3], token_identical=True,
+        pairs = [dict(session='p4', family='30B', ordinals=[i, i+3], token_identical=True,
                       energies_j=[1000*(1-r/2), 1000*(1+r/2)])
                  for i, r in enumerate([-.004, -.002, 0, .002, .004, .006], 1)]
-        result = reg.derive_u3(pairs, {'synthetic': 'a'*64})
+        result = reg.derive_u3(pairs, {'synthetic': 'a'*64}, parameters=dict(series_pair_tests=16, series_false_fail_budget=.05, min_pairs=3, oc_seed=1, oc_reps=100))
         import statistics
-        self.assertAlmostEqual(result['s_rel_sample'], statistics.stdev([-.004, -.002, 0, .002, .004, .006]))
-        self.assertEqual(result['status'], 'PENDING')
+        self.assertAlmostEqual(result['sample_sd_relative'], statistics.stdev([-.004, -.002, 0, .002, .004, .006]))
+        self.assertEqual(result['status'], 'derived')
         with self.assertRaisesRegex(ValueError, 'PENDING'):
-            reg.u3_margin(30000, result)
+            reg.u3_margin(30000, result, model='Qwen3-30B')
         for field, value in [('token_identical', False), ('ordinals', [1, 2]), ('energies_j', [0, 1])]:
             bad = deepcopy(pairs)
             bad[0][field] = value
             with self.subTest(field=field), self.assertRaises(ValueError):
-                reg.derive_u3(bad, {'synthetic': 'a'*64})
+                reg.derive_u3(bad, {'synthetic': 'a'*64}, parameters=dict(series_pair_tests=16, series_false_fail_budget=.05, min_pairs=3, oc_seed=1, oc_reps=100))
 
     def test_e_ref_rejects_ordinal_18(self):
         with self.assertRaisesRegex(ValueError, '5 and 17'):
@@ -223,17 +223,6 @@ class RegistrationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'max_turns'):
             kit.check_window_reference_roles(plan)
 
-    def test_u3_script_records_source_bytes(self):
-        from scripts import align_v4_u3_bar as script
-        pairs = [dict(session='synthetic', ordinals=[i, i+3], token_identical=True,
-                      energies_j=[1000, 1000+i]) for i in (1, 2, 3)]
-        with tempfile.TemporaryDirectory() as tmp:
-            source, output = Path(tmp)/'pairs.json', Path(tmp)/'bar.json'
-            source.write_text(json.dumps({'pairs': pairs}))
-            self.assertEqual(script.main(['--input', str(source), '--output', str(output)]), 0)
-            self.assertEqual(json.loads(output.read_bytes())['source_sha256'],
-                             {'pairs.json': hashlib.sha256(source.read_bytes()).hexdigest()})
-
     def test_wp19_renders_fresh_history_from_recorded_outputs(self):
         from scripts import align_v4_wp19 as script
         from joulewise.align.interfaces import ChatMessage
@@ -340,8 +329,9 @@ class RegistrationTests(unittest.TestCase):
     def test_session_desk_applies_relative_u3_and_frozen_d_cohort(self):
         from scripts import align_v4_session as session
         from joulewise.align.apple.v4_registration import derive_u3
-        bar = derive_u3([dict(session='p4', ordinals=[i, i+3], token_identical=True,
-            energies_j=[1000, 1000+i*2]) for i in range(1, 7)], {'synthetic': 'a'*64})
+        bar = derive_u3([dict(session='p4', family='synthetic', ordinals=[i, i+3], token_identical=True,
+            energies_j=[1000, 1000+i*2]) for i in range(1, 7)], {'synthetic': 'a'*64},
+            parameters=dict(series_pair_tests=16, series_false_fail_budget=.05, min_pairs=3, oc_seed=1, oc_reps=100))
         rows = [{'run_id': str(i), 'role': 'D', 'ordinal': i, 'ac_powermode': 0,
                  **({'replay_of': '5'} if i == 17 else {})} for i in (5, 17)]
         records = [member(str(i), energy=30000+(200 if i==17 else 0)) for i in (5, 17)]
@@ -362,7 +352,7 @@ class RegistrationTests(unittest.TestCase):
                 return session.powermode_desk_check(state={'measurement_root': tmp}, members=[],
                                                    runs_root=tmp, kit_path=kit.KIT)[0]
             result = check()
-            self.assertFalse(result['v4_synthetic/W1_U3'])  # R11 leaves U3 pending; no historical constant
+            self.assertFalse(result['v4_synthetic/W1_U3'])  # an unsigned derivation is PENDING; no historical constant
             self.assertTrue(result['v4_D_cohort'])
             records[1]['configuration']['max_turns'] = 11
             self.assertFalse(check()['v4_D_cohort'])

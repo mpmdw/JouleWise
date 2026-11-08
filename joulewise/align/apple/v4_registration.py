@@ -1,6 +1,7 @@
 """V4 registration evidence. Pure stdlib; no probes, data discovery or weights."""
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 import math
@@ -10,7 +11,6 @@ import subprocess
 
 REGISTRATION = 'configs/campaigns/align_v4/registration/'
 RECEIPT_SCHEMA = 'joulewise.align_v4.registration_receipt.v1'
-U3_SCHEMA = 'joulewise.align_v4.u3_bar.v1'
 WP19_SCHEMA = 'joulewise.align_v4.wp19_identity.v1'
 RULINGS = (4, 5, 6, 9, 11, 15, 17, 18, 20)
 _NAMED_ARTIFACTS = (
@@ -336,51 +336,310 @@ def require_registration(root):
         raise ValueError('registration_receipt.json missing or unreadable; W1 is not registered') from exc
     validate_receipt(receipt, root)
     bar = json.loads(_local(root, REGISTRATION+'u3_bar.json').read_bytes())
-    validate_u3(bar)
+    validate_u3(bar, root=root)
     wp19 = json.loads(_local(root, REGISTRATION+'wp19_receipt.json').read_bytes())
     validate_wp19(wp19)
     return receipt
 
 
-def derive_u3(pairs, source_sha256):
+# ---------------------------------------------------------------------------
+# U3 (R03; RUN_STATE 212 R11-2): a frozen derivation, never an installed constant.
+#
+# Procedure U3_PROCEDURE (docs/align/v4/W1-BLOCKERS-opus.md section 1):
+#   unit      r = (E_late - E_early) / mean(E_early, E_late) per token-identical,
+#             within-session replay pair whose ordinals are >= 3 apart;
+#   scale     s0 = sqrt(mean(r^2)), the RMS about ZERO with n degrees of freedom:
+#             mean drift between early and late replays inflates the scale; no
+#             fitted drift is ever subtracted or credited;
+#   quantile  q solves E_U[1 - (1 - P(|Z| > q U))^N] = beta, U^2 ~ chi2_n / n:
+#             the probability, under the fitted model and including the
+#             small-sample uncertainty of s0 shared by every later test, that ANY
+#             of the series' N registered pair tests fails falsely is beta;
+#   bar       a pair fails U3 iff |E_b - E_a| > (q s0) mean(E_a, E_b).
+# N and beta are lead-frozen parameters. A bar is valid only for the source
+# model family; another family needs its own replay evidence (transfer pairs,
+# e.g. R1's D_spam a/b), which can refute but never qualify the transfer.
+# validate_u3 recomputes everything from the embedded inputs, so a hand-typed
+# multiplier, k=3, 2.576 or a fitted-normal guarantee cannot pass.
+# ---------------------------------------------------------------------------
+U3_SCHEMA = 'joulewise.align_v4.u3_bar.v2'
+U3_PROCEDURE = 'u3.zero_centred_rms.series_predictive_t.v1'
+U3_MIN_SEPARATION = 3
+U3_PARAMETERS = ('series_pair_tests', 'series_false_fail_budget', 'min_pairs', 'oc_seed', 'oc_reps')
+U3_N_GRID = (5, 8, 12, 20, 40)
+_U3_DERIVED_KEYS = ('schema', 'procedure', 'parameters', 'source_sha256', 'pairs', 'transfer_pairs',
+                    'synthetic', 'source_family', 'n', 'df', 'signed_relative_differences',
+                    'mean_relative_difference', 'sample_sd_relative', 'rms_relative_scale',
+                    'series_quantile_q', 'per_pair_false_fail', 'series_false_fail', 'relative_bar',
+                    'transfer', 'scope', 'operating_characteristics', 'limitations')
+
+
+def _u3_parameters(parameters):
+    p = parameters if isinstance(parameters, dict) else {}
+    if (set(p) != set(U3_PARAMETERS)
+            or type(p['series_pair_tests']) is not int or p['series_pair_tests'] < 1
+            or type(p['series_false_fail_budget']) is not float
+            or not 0 < p['series_false_fail_budget'] < .5
+            or type(p['min_pairs']) is not int or p['min_pairs'] < 3
+            or type(p['oc_seed']) is not int or type(p['oc_reps']) is not int or p['oc_reps'] < 100):
+        raise ValueError('U3 requires lead-frozen parameters: series_pair_tests (int>=1), '
+                         'series_false_fail_budget (float in (0,.5)), min_pairs (int>=3), oc_seed, oc_reps>=100')
+    return p
+
+
+def _u3_relative(pair, *, transfer):
+    ordinals = pair.get('ordinals') if isinstance(pair, dict) else None
+    values = pair.get('energies_j') if isinstance(pair, dict) else None
+    if (not isinstance(pair, dict) or pair.get('token_identical') is not True
+            or not isinstance(ordinals, list) or len(ordinals) != 2 or any(type(v) is not int for v in ordinals)
+            or ordinals[1] - ordinals[0] < (1 if transfer else U3_MIN_SEPARATION)
+            or not isinstance(values, list) or len(values) != 2
+            or any(type(v) not in (int, float) or not math.isfinite(v) or v <= 0 for v in values)
+            or not isinstance(pair.get('session'), str) or not pair['session']
+            or not isinstance(pair.get('family'), str) or not pair['family']):
+        raise ValueError('U3 requires separated-ordinal, within-session token-identical positive-energy pairs '
+                         'with session and model family' if not transfer else
+                         'U3 transfer pairs must be ordered, token-identical, positive-energy replays with family')
+    return (values[1] - values[0]) / statistics.fmean(values)
+
+
+def _chi_expect(n, fn, steps=2000):
+    """E[fn(U)] for U = sqrt(X/n), X ~ chi-square(n), n >= 3 (composite Simpson)."""
+    hi = n + 14 * math.sqrt(2 * n) + 40
+    h = hi / steps
+    log_c = -(n / 2) * math.log(2) - math.lgamma(n / 2)
+    total = 0.0
+    for i in range(1, steps + 1):
+        x = i * h
+        weight = 1 if i == steps else 4 if i % 2 else 2
+        total += weight * math.exp(log_c + (n / 2 - 1) * math.log(x) - x / 2) * fn(math.sqrt(x / n))
+    return total * h / 3
+
+
+def _u3_tail(z):
+    return math.erfc(z / math.sqrt(2))
+
+
+@functools.lru_cache(maxsize=4096)
+def u3_series_false_fail(q, n, tests):
+    return _chi_expect(n, lambda u: -math.expm1(tests * math.log1p(-min(_u3_tail(q * u), 1 - 1e-16))))
+
+
+@functools.lru_cache(maxsize=4096)
+def u3_per_pair_false_fail(q, n):
+    """P(|T_n| > q): the exact predictive false-fail of one new null pair."""
+    return _chi_expect(n, lambda u: _u3_tail(q * u))
+
+
+@functools.lru_cache(maxsize=256)
+def u3_quantile(n, tests, beta):
+    lo, hi = 0.0, 200.0
+    for _ in range(64):
+        mid = (lo + hi) / 2
+        lo, hi = (mid, hi) if u3_series_false_fail(mid, n, tests) > beta else (lo, mid)
+    return hi
+
+
+def u3_operating_characteristics(parameters, n):
+    """Seeded Monte Carlo OC of the frozen rule; depends on (parameters, n) only, never on data.
+
+    Every scenario re-derives s0 from n fresh pilot-like pairs and applies the
+    bar to the series' N future pair tests. Rates are fractions of oc_reps.
+    """
+    import random
+    p = _u3_parameters(parameters)
+    tests, beta, reps = p['series_pair_tests'], p['series_false_fail_budget'], p['oc_reps']
+    q = u3_quantile(n, tests, beta)
+    rng = random.Random(p['oc_seed'])
+    gauss = rng.gauss
+
+    def t4():
+        return gauss(0, 1) / math.sqrt(sum(gauss(0, 1) ** 2 for _ in range(4)) / 4) / math.sqrt(2)
+
+    def clustered(count, size, rho):
+        out = []
+        while len(out) < count:
+            shared = gauss(0, 1) * math.sqrt(rho)
+            out.extend(shared + gauss(0, 1) * math.sqrt(1 - rho) for _ in range(min(size, count - len(out))))
+        return out
+
+    def w1_clustered(count, rho):
+        # W1 shape: one model-window of up to 4 pairs (30B), then singletons (D windows).
+        head = clustered(min(4, count), 4, rho)
+        return head + [gauss(0, 1) for _ in range(count - len(head))]
+
+    scenarios = {
+        'null_normal': (lambda: [gauss(0, 1) for _ in range(n)], lambda: [gauss(0, 1) for _ in range(tests)]),
+        'drift_0.5_sigma': (lambda: [gauss(.5, 1) for _ in range(n)], lambda: [gauss(.5, 1) for _ in range(tests)]),
+        'drift_1.0_sigma': (lambda: [gauss(1, 1) for _ in range(n)], lambda: [gauss(1, 1) for _ in range(tests)]),
+        'heavy_tail_t4': (lambda: [t4() for _ in range(n)], lambda: [t4() for _ in range(tests)]),
+        'dependence_rho_0.3': (lambda: clustered(n, 3, .3), lambda: w1_clustered(tests, .3)),
+        'transfer_scale_0.5': (lambda: [gauss(0, 1) for _ in range(n)], lambda: [gauss(0, .5) for _ in range(tests)]),
+        'transfer_scale_1.5': (lambda: [gauss(0, 1) for _ in range(n)], lambda: [gauss(0, 1.5) for _ in range(tests)]),
+        'transfer_scale_2.0': (lambda: [gauss(0, 1) for _ in range(n)], lambda: [gauss(0, 2) for _ in range(tests)]),
+    }
+    oc = {'q': q, 'n': n, 'series_pair_tests': tests, 'reps': reps,
+          'exact_series_false_fail': u3_series_false_fail(q, n, tests),
+          'exact_per_pair_false_fail': u3_per_pair_false_fail(q, n),
+          'series_false_fail': {}, 'per_pair_detection': {},
+          'q_by_n': {str(k): u3_quantile(k, tests, beta) for k in sorted({*U3_N_GRID, n})}}
+    for name, (derive, future) in scenarios.items():
+        hits = 0
+        for _ in range(reps):
+            s0 = math.sqrt(math.fsum(r * r for r in derive()) / n)
+            hits += any(abs(r) > q * s0 for r in future())
+        oc['series_false_fail'][name] = hits / reps
+    for shift in (3, 5, 8):
+        hits = 0
+        for _ in range(reps):
+            s0 = math.sqrt(math.fsum(gauss(0, 1) ** 2 for _ in range(n)) / n)
+            hits += abs(gauss(shift, 1)) > q * s0
+        oc['per_pair_detection'][f'shift_{shift}_sigma'] = hits / reps
+    return oc
+
+
+def derive_u3(pairs, source_sha256, *, parameters, transfer_pairs=(), synthetic=False):
+    """Frozen U3 derivation (unsigned). Inputs are explicit exports; nothing is discovered."""
+    p = _u3_parameters(parameters)
     if not isinstance(source_sha256, dict) or not source_sha256 or not all(is_digest(v) for v in source_sha256.values()):
         raise ValueError('U3 requires input sha256 digests')
-    relative = []
-    seen = set()
+    pairs, transfer_pairs = list(pairs), list(transfer_pairs)
+    relative, seen = [], set()
     for pair in pairs:
-        ordinals = pair.get('ordinals', [])
-        values = pair.get('energies_j', [])
-        if (pair.get('token_identical') is not True or len(ordinals) != 2
-                or any(type(v) is not int for v in ordinals) or ordinals[1]-ordinals[0] < 3
-                or len(values) != 2 or any(type(v) not in (int, float) or not math.isfinite(v) or v <= 0 for v in values)
-                or not pair.get('session')):
-            raise ValueError('U3 requires separated-ordinal, within-session token-identical positive-energy pairs')
-        key = (pair['session'], *ordinals)
+        relative.append(_u3_relative(pair, transfer=False))
+        key = (pair['session'], *pair['ordinals'])
         if key in seen:
             raise ValueError('duplicate U3 replay pair')
         seen.add(key)
-        relative.append((values[1]-values[0])/statistics.fmean(values))
-    if len(relative) < 2:
-        raise ValueError('U3 requires at least two eligible replay pairs')
-    return {'schema': U3_SCHEMA, 'status': 'PENDING', 'n': len(relative),
-            's_rel_sample': statistics.stdev(relative), 'signed_relative_differences': relative,
-            'source_sha256': source_sha256, 'pairs': pairs,
-            'derivation_required': ['frozen predictive distribution and small-sample uncertainty',
-                                    'operating-characteristic and series/dependence sensitivity',
-                                    'explicit limitation of 30B-to-D transfer',
-                                    'lead-adopted bar and independent registration gate'],
-            'limitations': 'Descriptive pilot summary only; no multiplier, margin or false-fail guarantee.'}
+    families = {pair['family'] for pair in pairs}
+    if len(families) != 1:
+        raise ValueError('U3 derivation pairs must come from exactly one model family')
+    n = len(relative)
+    if n < p['min_pairs']:
+        raise ValueError(f'U3 requires at least min_pairs={p["min_pairs"]} eligible replay pairs, got {n}')
+    s0 = math.sqrt(math.fsum(r * r for r in relative) / n)
+    if not s0 > 0:
+        raise ValueError('U3 scale is degenerate (all replay differences zero)')
+    q = u3_quantile(n, p['series_pair_tests'], p['series_false_fail_budget'])
+    bar = q * s0
+    source = families.pop()
+    transfer = {}
+    for pair in transfer_pairs:
+        r = _u3_relative(pair, transfer=True)
+        if pair['family'] == source:
+            raise ValueError('U3 transfer pairs must be from another model family')
+        row = transfer.setdefault(pair['family'], {'pairs': [], 'status': 'not_refuted'})
+        row['pairs'].append({'session': pair['session'], 'ordinals': pair['ordinals'], 'relative_difference': r,
+                             'within_bar': abs(r) <= bar,
+                             'predictive_tail': u3_per_pair_false_fail(abs(r) / s0, n)})
+        if abs(r) > bar:
+            row['status'] = 'refuted'
+    return {'schema': U3_SCHEMA, 'procedure': U3_PROCEDURE, 'status': 'derived', 'parameters': p,
+            'source_sha256': source_sha256, 'pairs': pairs, 'transfer_pairs': transfer_pairs,
+            'synthetic': bool(synthetic), 'source_family': source, 'n': n, 'df': n,
+            'signed_relative_differences': relative,
+            'mean_relative_difference': statistics.fmean(relative),
+            'sample_sd_relative': statistics.stdev(relative),
+            'rms_relative_scale': s0, 'series_quantile_q': q,
+            'per_pair_false_fail': u3_per_pair_false_fail(q, n),
+            'series_false_fail': u3_series_false_fail(q, n, p['series_pair_tests']),
+            'relative_bar': bar, 'transfer': transfer,
+            'scope': {source: 'source', **{family: row['status'] for family, row in transfer.items()}},
+            'operating_characteristics': u3_operating_characteristics(p, n),
+            'limitations': [
+                'Model: exchangeable zero-centred normal replay differences; drift inflates s0 and is never credited.',
+                'False-fail rates are conditional on that model; OC sensitivities show drift, heavy-tail, '
+                'dependence and scale-transfer departures.',
+                'A transfer pair can refute, never qualify, use of the bar on another model family.',
+                'One bar for the whole registered series; no re-derivation from windows it judges.']}
 
 
-def validate_u3(bar):
-    # RUN_STATE 212 R11-2/R03: neither k=3 nor 2.576 is an installed rule.
-    # A later scientific derivation and scoped implementation/gate must replace
-    # this stop. A historical v1 k=3 artifact cannot bypass it.
-    raise ValueError('U3 PENDING frozen predictive derivation and operating-characteristic sensitivity (R11/R03)')
+def sign_u3(bar, *, lead_signature, gate):
+    """Attach the lead signature and the independent gate receipt; validate the result."""
+    signed = {**bar, 'status': 'registered', 'lead_signature': lead_signature, 'independent_gate': gate}
+    return validate_u3(signed, allow_synthetic=bool(bar.get('synthetic')))
 
 
-def u3_margin(mean_energy_j, bar):
+def _close(a, b):
+    if isinstance(a, float) or isinstance(b, float):
+        return (type(a) in (int, float) and type(b) in (int, float)
+                and math.isclose(a, b, rel_tol=1e-9, abs_tol=1e-12))
+    if isinstance(a, dict) and isinstance(b, dict):
+        return set(a) == set(b) and all(_close(a[k], b[k]) for k in a)
+    if isinstance(a, (list, tuple)) and isinstance(b, (list, tuple)):
+        return len(a) == len(b) and all(_close(x, y) for x, y in zip(a, b))
+    return type(a) is type(b) and a == b
+
+
+_U3_VALIDATED = {}
+
+
+def validate_u3(bar, *, root=None, allow_synthetic=False):
+    """Admit only a signed bar whose every derived value recomputes from its embedded inputs.
+
+    A pending/v1/historical k=3 artifact, an unsigned derivation, a synthetic
+    bar (unless the caller is a dry run), a missing independent gate or any
+    edited number refuses. ``root`` also binds the gate report bytes.
+    """
+    from scripts.align_v4_kit import valid_lead_signature
+    if not isinstance(bar, dict) or bar.get('schema') != U3_SCHEMA or bar.get('procedure') != U3_PROCEDURE:
+        raise ValueError('U3 PENDING frozen predictive derivation and operating-characteristic sensitivity '
+                         '(R11/R03): u3_bar.json is not a v2 derivation')
+    if bar.get('status') != 'registered':
+        raise ValueError('U3 PENDING: u3_bar.json is derived but not registered (lead signature + gate)')
+    if bar.get('synthetic') is not False and not allow_synthetic:
+        raise ValueError('U3 synthetic bar refused outside a dry run')
+    if not valid_lead_signature(bar.get('lead_signature')):
+        raise ValueError('U3 bar requires a lead signature')
+    gate = bar.get('independent_gate')
+    if (not isinstance(gate, dict) or gate.get('verdict') != 'ADMIT' or not is_digest(gate.get('sha256'))
+            or not isinstance(gate.get('path'), str) or not gate['path'].startswith('docs/align/v4/')):
+        raise ValueError('U3 bar requires an ADMIT independent gate receipt under docs/align/v4/')
+    if root is not None:
+        try:
+            raw = _local(root, gate['path']).read_bytes()
+        except OSError as exc:
+            raise ValueError('U3 gate report missing') from exc
+        if digest(raw) != gate['sha256']:
+            raise ValueError('U3 gate report digest drift')
+    key = json.dumps({k: bar.get(k) for k in _U3_DERIVED_KEYS}, sort_keys=True, allow_nan=False)
+    if key not in _U3_VALIDATED:
+        try:
+            expected = derive_u3(bar.get('pairs') or [], bar.get('source_sha256'), parameters=bar.get('parameters'),
+                                 transfer_pairs=bar.get('transfer_pairs') or [],
+                                 synthetic=bar.get('synthetic') is True)
+        except (TypeError, KeyError, AttributeError) as exc:
+            raise ValueError('U3 bar inputs malformed') from exc
+        drift = [k for k in _U3_DERIVED_KEYS if k != 'operating_characteristics' and not _close(bar.get(k), expected[k])]
+        oc, ref = bar.get('operating_characteristics'), expected['operating_characteristics']
+        tolerance = 3 / bar['parameters']['oc_reps']
+        if not (isinstance(oc, dict) and set(oc) == set(ref) and all(
+                _close(oc[k], ref[k]) if k not in ('series_false_fail', 'per_pair_detection') else
+                isinstance(oc[k], dict) and set(oc[k]) == set(ref[k])
+                and all(type(oc[k][s]) in (int, float) and abs(oc[k][s] - ref[k][s]) <= tolerance for s in ref[k])
+                for k in ref)):
+            drift.append('operating_characteristics')
+        if drift:
+            raise ValueError(f'U3 bar does not recompute from its inputs: {", ".join(drift)}')
+        _U3_VALIDATED[key] = True
+    return bar
+
+
+def u3_family(model, scope):
+    """Model string -> the bar's family key; None when unmapped (the pair is then inconclusive)."""
+    if model in scope:
+        return model
+    text = str(model or '').lower()
+    return '30B' if '30b' in text else 'D' if ('qwen3.8' in text or '27b' in text) else None
+
+
+def u3_margin(mean_energy_j, bar, *, model=None):
     validate_u3(bar)
+    family = u3_family(model, bar['scope'])
+    status = bar['scope'].get(family)
+    if status not in ('source', 'not_refuted'):
+        raise ValueError(f'U3 bar does not apply to model {model!r} (family {family}: {status or "no transfer evidence"})')
+    return bar['relative_bar'] * mean_energy_j
 
 
 # Protocol section 4 / AGREEMENT-FINAL R02: arm within about 30 minutes of a
@@ -488,6 +747,54 @@ def cohort_identity(config, spec, runtime):
             'execution_policy_sha256': canonical(policy)}
 
 
+# Chair ruling 4 / R02 battery window rule (docs/align/v4/W1-BLOCKERS-opus.md section 2).
+# B = battery.member_span (charging or AC loss read inside the member span):
+# a member exclusion. Missing or ambiguous battery evidence (battery.unmeasured,
+# battery.accumulator_excursion) is a POSSIBLE B. Tolerance mirrors U1's
+# ">=2 X1-X4 members per model-window fails": with B the known B members and U
+# the possible ones, a model-window passes iff B+U <= 1 (true under every
+# resolution of U), fails iff B >= 2, and is otherwise unavailable. Battery
+# assist (discharge on AC) is printed only: v4's registered residual is GPU
+# energy, and the KM003C DC-in channel is SECONDARY in v4.
+B_WINDOW_TOLERANCE = 1
+B_CODE = 'battery.member_span'
+B_POSSIBLE_CODES = ('battery.unmeasured', 'battery.accumulator_excursion')
+B_ASSIST_CODES = ('battery.assist',)
+B_FAIL_CONSEQUENCE = ('battery float not maintained: B members stay excluded; the window desk fails '
+                      'v4_B_bar, so no next arm (D1 after W1) until a fresh completed top-up, OBC attestation '
+                      'and a lead disposition of the cause are recorded; non-B members are not removed')
+
+
+def battery_window(selected):
+    """One model-window's B verdict from harvest battery codes; never infers absent evidence."""
+    rows, b, possible, unevaluated, assist = [], [], [], [], []
+    for r in selected:
+        codes = [str(c) for c in (*r.get('flags', []), *r.get('battery_codes', []))]
+        rid = r.get('id')
+        if any(c.startswith(B_CODE) for c in codes):
+            b.append(rid)
+        elif any(c.startswith(B_POSSIBLE_CODES) for c in codes):
+            possible.append(rid)
+        elif r.get('battery_evaluated') is not True:
+            unevaluated.append(rid)
+        if any(c.startswith(B_ASSIST_CODES) for c in codes):
+            assist.append(rid)
+        rows.append({'id': rid, **r.get('battery', {'soc_pct': None, 'charger_w': None})})
+    unknown = len(possible) + len(unevaluated)
+    if len(b) > B_WINDOW_TOLERANCE:
+        verdict, consequence = False, B_FAIL_CONSEQUENCE
+    elif len(b) + unknown <= B_WINDOW_TOLERANCE:
+        verdict, consequence = True, 'B within tolerance; B members (if any) stay excluded'
+    else:
+        verdict, consequence = None, ('battery evidence unavailable for the window bar: '
+                                      'not a pass; lead disposition required before the next arm')
+    return {'B_count': len(b), 'B_members': b, 'possible_B_members': possible,
+            'battery_unevaluated_members': unevaluated, 'assist_members_print_only': assist,
+            'tolerance': B_WINDOW_TOLERANCE, 'bar_pass': verdict,
+            'status': 'pass' if verdict else 'fail' if verdict is False else 'unavailable',
+            'consequence': consequence, 'members': rows}
+
+
 def desk_diagnostics(members, *, r1_soak=None):
     """Rulings 11/15/17/18 and B printouts; missing evidence stays unavailable."""
     from joulewise.align.apple import v4_estimands as v4
@@ -506,13 +813,8 @@ def desk_diagnostics(members, *, r1_soak=None):
               'G0_wait_s': sum(i.get('duration_s', 0) for i in r.get('intervals', []) if i['kind'] == 'G0'),
               'G1_wait_s': sum(i.get('duration_s', 0) for i in r.get('intervals', []) if i['kind'] == 'G1')}
              for r in members if r.get('ordinal') is not None]
-    windows = {}
-    for model in {r.get('model') for r in members}:
-        selected = [r for r in members if r.get('model') == model]
-        count = sum(any(str(f).startswith('battery.member_span') for f in r.get('flags', [])) for r in selected)
-        windows[model] = {'B_count': count, 'bar_pass': None, 'status': 'PENDING lead window consequence',
-                          'members': [{'id': r['id'], **r.get('battery', {'soc_pct': None, 'charger_w': None})}
-                                      for r in selected]}
+    windows = {model: battery_window([r for r in members if r.get('model') == model])
+               for model in {r.get('model') for r in members}}
     return {'sentinel': sentinel, 'battery_windows': windows,
             'warm_reference': v4.warm_reference_diagnostic(reference, r1_soak or {}, waits),
             'd_cohort': v4.d_configuration_assertion(d),

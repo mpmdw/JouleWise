@@ -173,6 +173,8 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
         return checks, report
     records = []
     pilot_members = {m['run_id']: m for m in members}
+    battery_evaluated = bool(state.get('session_root')) and (
+        Path(state['session_root'])/'archive/derived/exclusions.json').is_file()
     for row in plan['members']:
         path = Path(runs_root)/row['run_id']
         try:
@@ -197,6 +199,12 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
         codes = p.get('exclusion_codes', [])
         if any(str(c).startswith('battery.member_span') for c in codes):
             r['flags'].append('battery.member_span')
+        # B window rule: battery codes come only from the harvest's exclusion
+        # record; without that record no member's battery state was evaluated.
+        r['battery_codes'] = sorted({str(c) for c in codes if str(c).startswith('battery.')}
+                                    | {str(f.get('code')) for f in p.get('harvest_flags', [])
+                                       if isinstance(f, dict) and str(f.get('code', '')).startswith('battery.')})
+        r['battery_evaluated'] = battery_evaluated and row['run_id'] in pilot_members
         r['excluded'] = bool(codes) or bool(r.get('calibration_exclusions'))
         records.append(r)
     policy = (kit.read_inputs(state['measurement_root']).get('R1') or {}).get('thermal_policy') or {}
@@ -207,7 +215,9 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
     for model, result in report['thermal']['model_windows'].items():
         for n in (1, 2, 3):
             checks[f'v4_{model}_U{n}'] = result[f'U{n}']['status'] == 'pass'
-    checks['v4_B_bar'] = all(w['bar_pass'] for w in report['registration_diagnostics']['battery_windows'].values())
+    # Only a True verdict passes: False (B >= 2) and None (evidence unavailable) both fail the desk.
+    checks['v4_B_bar'] = all(w['bar_pass'] is True
+                             for w in report['registration_diagnostics']['battery_windows'].values())
     checks['v4_D_cohort'] = report['registration_diagnostics']['d_cohort']['instrument_ok']
     return checks, report
 

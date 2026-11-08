@@ -29,10 +29,12 @@ class R11Tests(unittest.TestCase):
                                          'synthetic', topup, now_epoch_s=1060.)['admitted'])
 
     def test_u3_diagnostics_do_not_install_a_constant_or_a_bar(self):
-        pairs = [dict(session='synthetic', ordinals=[i, i+3], token_identical=True,
+        # W1-BLOCKERS (Opus): a derivation is unsigned until the lead signs it
+        # with an independent gate; no k or fitted-normal constant is emitted.
+        pairs = [dict(session='synthetic', family='synthetic', ordinals=[i, i+3], token_identical=True,
                       energies_j=[1000, 1000+i]) for i in (1, 2, 3)]
-        pending = reg.derive_u3(pairs, {'synthetic': 'a'*64})
-        self.assertEqual(pending['status'], 'PENDING')
+        pending = reg.derive_u3(pairs, {'synthetic': 'a'*64}, parameters=dict(series_pair_tests=16, series_false_fail_budget=.05, min_pairs=3, oc_seed=1, oc_reps=100))
+        self.assertEqual(pending['status'], 'derived')
         self.assertNotIn('k', pending)
         self.assertNotIn('normal_theory_false_fail_per_pair', pending)
         with self.assertRaisesRegex(ValueError, 'PENDING'):
@@ -211,11 +213,12 @@ class R11Tests(unittest.TestCase):
         self.assertIn('identity', desk.contrast_predeclaration({'contrast_predeclared': 'INCONCLUSIVE: identity broken'},
                                                               {'contrast_fit': {'predeclared': 'INCONCLUSIVE: cap'}}))
 
-    def test_battery_window_bar_remains_unruled(self):
-        r = member('battery')
-        result = reg.desk_diagnostics([r])['battery_windows']['synthetic']
+    def test_battery_window_without_battery_evidence_is_unavailable(self):
+        # W1-BLOCKERS (Opus) B rule: missing observations remain unavailable, never a pass.
+        r, other = member('battery'), member('other')
+        result = reg.desk_diagnostics([r, other])['battery_windows']['synthetic']
         self.assertIsNone(result['bar_pass'])
-        self.assertEqual(result['status'], 'PENDING lead window consequence')
+        self.assertEqual(result['status'], 'unavailable')
 
     def test_template_has_contrast_fit_on_every_path(self):
         from scripts import validate_align_v4_w1_plan as validator
