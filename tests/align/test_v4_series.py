@@ -90,7 +90,10 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(m['order'], ['W1'] + [f'C{i}' for i in range(1, 11)] + ['T1', 'T2', 'T3'])   # R22-2: C9, C10
         per_pair = {pair: [] for pair in s.PAIRS}
         ranges = {'calibration': set(), 'known_h': set(), 'test': set()}
-        for number, window in enumerate(m['windows'][1:], 1):
+        by_id = {w['id']: w for w in m['windows']}
+        kit_order = [by_id[n] for n in [*(f'C{i}' for i in range(1, 9)), 'T1', 'T2', 'T3',
+                                        *(f'C{i}' for i in range(9, 13))]]     # seed-consumption order
+        for number, window in enumerate(kit_order, 1):
             members = window['members']
             self.assertEqual(len(members), 22)
             self.assertEqual([r['pool'] for r in members[:5] + members[21:]], ['anchor'] * 4 + ['sentinel'] * 2)
@@ -113,16 +116,16 @@ class ManifestTests(unittest.TestCase):
         for pair, seeds in per_pair.items():
             self.assertEqual(seeds, sorted(seeds))                      # kit order
             self.assertEqual(len(seeds), len(set(seeds)))               # distinct: no condition reuse
-            self.assertEqual((seeds[0], seeds[-1]), (2, 114))
+            self.assertEqual((seeds[0], seeds[-1]), (2, 131))
             self.assertFalse(set(seeds) & s.RESERVED_INDICES)
-        self.assertEqual((min(ranges['calibration'] | ranges['known_h']), max(ranges['calibration'] | ranges['known_h'])), (2, 81))
-        self.assertEqual((min(ranges['test']), max(ranges['test'])), (82, 114))      # C9-C10 66-81; T2 skips 91-99
+        self.assertEqual((min(ranges['calibration'] | ranges['known_h']), max(ranges['calibration'] | ranges['known_h'])), (2, 131))
+        self.assertEqual((min(ranges['test']), max(ranges['test'])), (66, 89))      # exactly R15; the reserve pool is 100-131
 
     def test_alias_mapping_three_tests_and_frozen_bytes(self):
         m = self.manifest
         for k in range(1, 9):
             self.assertEqual(s.selected(m, f'D{k}')['id'], f'C{k}')
-        self.assertEqual(len([w for w in m['windows'] if w['role'] == 'calibration']), 10)     # 8 + C9, C10 (R22-2)
+        self.assertEqual(len([w for w in m['windows'] if w['role'] == 'calibration']), 12)     # 8 + C9-C12 (R22-2 reserve)
         self.assertEqual(len([w for w in m['windows'] if w['role'] == 'test']), 3)
         self.assertEqual((m['d_mapping'], m['test_windows']), ('alias_calibration', 3))
         bad = deepcopy(self.manifest)

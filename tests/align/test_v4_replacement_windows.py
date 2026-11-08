@@ -113,31 +113,61 @@ class ManifestTests(unittest.TestCase):
         by_id = {w['id']: w for w in self.manifest['windows']}
         for name in ('C9', 'C10'):
             self.assertIs(by_id[name]['replacement'], True)
+            self.assertNotIn('armable', by_id[name])
             self.assertEqual((by_id[name]['role'], by_id[name]['aliases']), ('calibration', []))
             self.assertEqual(len(by_id[name]['members']), 22)
+        for name in ('C11', 'C12'):                       # seeds fixed, never armable (cap C10)
+            self.assertIs(by_id[name]['replacement'], True)
+            self.assertIs(by_id[name]['armable'], False)
+            self.assertNotIn(name, self.manifest['order'])
         self.assertTrue(all('replacement' not in by_id[f'C{i}'] for i in range(1, 9)))
-        self.assertEqual(self.manifest['calibration']['counted_windows'], 8)
-        self.assertEqual(self.manifest['calibration']['replacement_windows'], ['C9', 'C10'])
+        calibration = self.manifest['calibration']
+        self.assertEqual((calibration['counted_windows'], calibration['replacement_cap']), (8, 2))
+        self.assertEqual(calibration['replacement_windows'], ['C9', 'C10'])
+        self.assertEqual(calibration['reserve_windows_not_armable'], ['C11', 'C12'])
         series.validate(self.manifest)                                       # the frozen executable design
 
-    def test_seeds_are_pre_allocated_in_kit_order_after_c8_skipping_1_and_91_to_99(self):
+    def test_t_seeds_are_exactly_r15_and_the_reserve_pool_is_contiguous_after_the_reserved_range(self):
         by_id = {w['id']: w for w in self.manifest['windows']}
         fresh = lambda name: sorted({r['seed_index'] for r in by_id[name]['members'] if r['ordinal'] in range(6, 22)})
         self.assertEqual((fresh('C8')[0], fresh('C8')[-1]), (58, 65))
-        self.assertEqual((fresh('C9')[0], fresh('C9')[-1]), (66, 73))
-        self.assertEqual((fresh('C10')[0], fresh('C10')[-1]), (74, 81))
-        self.assertEqual((fresh('T1')[0], fresh('T1')[-1]), (82, 89))
+        for name, (low, high) in {'T1': (66, 73), 'T2': (74, 81), 'T3': (82, 89)}.items():
+            self.assertEqual((fresh(name)[0], fresh(name)[-1]), (low, high))     # unchanged from R15
+        pool = {}
+        for name, (low, high) in {'C9': (100, 107), 'C10': (108, 115), 'C11': (116, 123), 'C12': (124, 131)}.items():
+            self.assertEqual((fresh(name)[0], fresh(name)[-1]), (low, high))
+            pool[name] = fresh(name)
+        every = sorted(i for seeds in pool.values() for i in seeds)
+        self.assertEqual(every, list(range(100, 132)))                           # one contiguous pool, 8 per pair per window
+        self.assertFalse(set(every) & series.RESERVED_INDICES)                    # 91-99 are reserved development indices
+        self.assertEqual(self.manifest['seed_allocation']['reserve_pool']['start'], 100)
         per_pair = {pair: [] for pair in series.PAIRS}
-        for window_ in self.manifest['windows'][1:]:
-            for r in window_['members']:
+        for name in [*(f'C{i}' for i in range(1, 9)), 'T1', 'T2', 'T3', 'C9', 'C10', 'C11', 'C12']:
+            for r in by_id[name]['members']:
                 if r['ordinal'] in range(6, 22):
                     per_pair[r['pair']].append(r['seed_index'])
         for pair, seeds in per_pair.items():
-            self.assertEqual(seeds, sorted(seeds))                           # kit order
-            self.assertEqual(len(seeds), len(set(seeds)))                    # distinct
-            self.assertFalse(set(seeds) & series.RESERVED_INDICES)           # never 1 or 91-99
-            self.assertEqual((seeds[0], seeds[-1]), (2, 114))
-            self.assertEqual(len(seeds), 104)                                # 13 windows (C1-C10, T1-T3) x 8 per pair
+            self.assertEqual(seeds, sorted(seeds))                                # kit order
+            self.assertEqual(len(seeds), len(set(seeds)))                         # distinct across all 15 windows
+            self.assertFalse(set(seeds) & series.RESERVED_INDICES)
+            self.assertEqual((seeds[0], seeds[-1], len(seeds)), (2, 131, 120))
+
+    def test_reserve_windows_beyond_the_cap_cannot_be_materialized_or_armed(self):
+        for name in ('C11', 'C12'):
+            with self.assertRaisesRegex(ValueError, 'reserve window beyond the R22-2 cap'):
+                series.build_files(__import__('pathlib').Path(__file__).resolve().parents[2], self.manifest, name)
+        # even with every primary and both armable replacements barred, nothing arms C11
+        barred = [dict(window_id=f'C{i}', attempt_id=f'C{i}', status='final', captured_members=22,
+                       eligible_benign=dict(spam=0, bank=0), barred='u1_u3_fail') for i in range(1, 11)]
+        with self.assertRaises(ValueError):
+            series.calibration_rows(self.manifest, barred)                        # the third bar already escalates/refuses
+        two = barred[:2] + [dict(window_id=f'C{i}', attempt_id=f'C{i}', status='final', captured_members=22,
+                                 eligible_benign=dict(spam=7, bank=7)) for i in range(3, 9)]
+        with self.assertRaisesRegex(ValueError, 'skips/reorders'):
+            series.calibration_rows(self.manifest, [*two, dict(window_id='C9', attempt_id='C9', status='final',
+                captured_members=22, eligible_benign=dict(spam=7, bank=7)),
+                dict(window_id='C11', attempt_id='C11', status='final', captured_members=22,
+                     eligible_benign=dict(spam=7, bank=7))])
 
 
 class SeriesLedgerTests(unittest.TestCase):
@@ -251,6 +281,17 @@ class BuilderTests(unittest.TestCase):
         self.assertEqual([r.get('barred') for r in packet['calibration_windows']],
                          [None, None, 'whole_window_capture_failure'])
         self.assertEqual(packet['calibration_decision']['replacements_used'], 1)
+        # a barred window contributes NOTHING to calibration, including the members it did capture (no partial
+        # use); its capture count stays disclosed and its records stay in custody (the hash-linked chain)
+        rows = packet['calibration_windows']
+        self.assertEqual(sum(rows[0]['eligible_benign'].values()), 2)
+        self.assertEqual(rows[2]['eligible_benign'], {'spam': 0, 'bank': 0})
+        self.assertGreater(rows[2]['captured_members'], 0)
+        self.assertEqual(packet['calibration_decision']['eligible_by_pair'],
+                         {pair: rows[0]['eligible_benign'][pair] + rows[1]['eligible_benign'][pair]
+                          for pair in rows[0]['eligible_benign']})
+        self.assertEqual(packet['calibration_decision']['barred_windows'], ['C3'])
+        self.assertEqual(packet['window_chain'][-1]['window'], 'C3')
 
     def test_the_series_binds_the_arms_own_rebuild_with_a_bar_and_arms_the_next_primary_window(self):
         packet = self.series_with(fail_at=2).build()

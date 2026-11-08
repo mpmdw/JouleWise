@@ -53,10 +53,53 @@ def write_bundles(run, *, finish='stop', last_finish='stop', mutate=None, compre
     return counts
 
 
+class OsBatchWindowClockTests(unittest.TestCase):
+    """The synthetic rehearsal never reads the real wall clock: the OS-batch window is injected."""
+
+    def run_at(self, hour, minute):
+        from datetime import datetime, timedelta
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, True)
+        start = datetime(2026, 11, 7, hour, minute, tzinfo=rehearsal.PACIFIC)
+        state, slept = {'elapsed': 0.0}, []
+        original = r1.wait_outside_os_batch
+
+        def now():
+            return start + timedelta(seconds=state['elapsed'])
+
+        def sleep(delay):
+            slept.append(delay)
+            state['elapsed'] += delay            # simulated: no real sleeping
+        with patch.object(r1, '_run', rehearsal.FakeWorld(step_d_rate=40.0, gated_decode_tokens=28000,
+                                                gated_admitted_turns=TURNS)), \
+             patch.object(r1, '_now_local', now), \
+             patch.object(r1, 'wait_outside_os_batch', lambda expected_s, **_: original(expected_s, now=now, sleep=sleep)):
+            self.assertEqual(r1.run(rehearsal.R1Tests.args(None, str(tmp), synthetic=True)), 0)
+        result = json.loads((tmp / 'run/r1_result.json').read_text())
+        return result, slept
+
+    def test_a_rehearsal_pinned_inside_the_batch_window_waits_to_13_15_without_sleeping(self):
+        result, slept = self.run_at(12, 0)
+        first_quiet = next(p for p in result['phases'] if p.get('os_batch_wait_s'))
+        self.assertGreaterEqual(first_quiet['os_batch_wait_s'], 75 * 60)       # 12:00 -> 13:15
+        self.assertGreaterEqual(sum(slept), 75 * 60)
+        self.assertTrue(all(p.get('os_batch_wait_s', 0) >= 0 for p in result['phases']))
+
+    def test_a_rehearsal_pinned_outside_the_window_never_waits_on_the_batch(self):
+        result, slept = self.run_at(2, 0)
+        self.assertEqual(slept, [])
+        self.assertTrue(all(p.get('os_batch_wait_s', 0) == 0 for p in result['phases']))
+
+
 class ExportTests(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.tmp, True)
+        # The rehearsal waits out the 11:45-13:15 Pacific OS-batch window (ruling 8): pin the wall clock so this
+        # fixture passes at any hour (it failed inside the window). The pinned-inside case is below.
+        clock = patch.object(r1, '_now_local', lambda: rehearsal.NOON_SAFE)
+        clock.start()
+        self.addCleanup(clock.stop)
         # 28,000 decode tokens over 7 admitted turns, as a lane-shaped gated record.
         with patch.object(r1, '_run', rehearsal.FakeWorld(step_d_rate=40.0, gated_decode_tokens=28000,
                                                 gated_admitted_turns=TURNS)):

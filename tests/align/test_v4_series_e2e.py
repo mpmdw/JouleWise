@@ -72,7 +72,8 @@ class SeriesCadenceEndToEnd(unittest.TestCase):
         with cls.synthetic_inputs():
             kit.generate(m, source_root=m)                       # synthetic-ready W1 kit (ac_powermode 0)
             for window in s.load(m)['windows'][1:]:
-                s.generate(m, window['id'])                      # materialize every C/T kit
+                if window.get('armable') is not False:           # C11/C12 hold reserve seeds only (cap C10)
+                    s.generate(m, window['id'])                  # materialize every armable C/T kit
         passed = write(cls.shared, 'synthetic-clearance.json', 'pass')
         manifest = s.load(m)
         write(m, s.ADMISSION, dict(

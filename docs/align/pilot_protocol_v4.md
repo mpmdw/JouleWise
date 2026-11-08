@@ -989,7 +989,7 @@ shape and no v5 content. Every C/T window has 22 members: anchors 1-4 (original 
 sentinel at ordinal 5, sixteen fresh held-out D members at 6-21 alternating pair by pair (odd windows
 start with spam, even windows with bank), sabotage at ordinals 9 and 18, and the late sentinel at 22;
 the midpoint follows ordinal 11. Held-out seed indices are distinct and consumed per pair in kit order
-from 2, skipping 1 and 91-99 (C1-C8 use 2-65, C9-C10 66-81, T1-T3 82-90 and 100-114); a zero-capture
+from 2, skipping 1 and 91-99 (C1-C8 use 2-65 and T1-T3 66-89, exactly as paired-seed checked; the reserve windows use 100-131, see R22-2); a zero-capture
 re-arm reuses the same seeds. A C-window sabotage member is pool `known_h` and counts toward nothing. A
 U1-U3 fail bars the window from the pool (R22-2: and the window is then replaced, not counted). Final adjudication may lower the
 desk's provisional counts, never raise them. The manifest is
@@ -1027,8 +1027,15 @@ roster to include them after a U4/U5-inconclusive window.
   is not a completed GO chain), or a zero-capture refusal beyond the retry (the retry `C3#2` is also a zero
   capture). A replacement never depends on scores or on eligible counts. A barred window enters no pool and is
   not counted: it is replaced, not added (this supersedes R15's rule that a U1-U3-failed window still counts
-  toward the eight). Their seeds are pre-allocated in kit order after C8 (C9 66-73 and C10 74-81 per pair),
-  skipping 1 and 91-99; the test windows' seeds follow (T1-T3 82-90 and 100-114). The window order is
+  toward the eight). A barred window contributes **nothing** to calibration, including the members it did
+  capture (no partial use); its records stay in custody (the hash-linked chain) and are disclosed
+  (`barred_windows`, `replacements_used`). **Seeds:** T1-T3 keep exactly their R15 seeds (66-89 per pair, already
+  MATCHed by the Sol seed check). The reserve seeds are one contiguous pool allocated after the T range and
+  after the reserved development indices: indices 91-99 are skipped because the protocol reserves them (W1
+  uses 1 and 93, R0 uses 91-92, and 94-99 are held in reserve), so the pool is **100-131**, sized for FOUR
+  reserve windows, 8 seeds per pair each (C9 100-107, C10 108-115, C11 116-123, C12 124-131). The cap stays
+  **C10** pending a lead ruling on the reserve-cap sweep: C11 and C12 only have their seed positions fixed, and
+  the ledger refuses to arm (or even materialize) them. The window order is
   C1-C8, then C9 and C10 only as owed, then T1-T3. If both replacements are used and a pair still has fewer
   than 39 eligible benign, or more than two windows are barred so that 8 counted windows are out of reach, the
   outcome is `insufficient_calibration`. The rule is **not a count stop**: a window with few eligible members
