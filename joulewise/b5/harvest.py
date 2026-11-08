@@ -2206,10 +2206,13 @@ def strict_problems(bundle: Path, cache: dict[str, float]) -> list[str]:
 
 def assess_member(task: Mapping[str, Any]) -> dict[str, Any]:
     """Strict validation, re-reduction, anchor recompute and identity for one bundle."""
+    from joulewise.adapters.powermetrics import document_memo
     from joulewise.desk_restore import readable_run
 
     bundle = Path(task["bundle_path"])
-    with readable_run(bundle, compression_records=task.get("compression_records")) as readable:
+    # One member's raw plists are parsed once, not about 18 times (HARVEST-OFF-opus
+    # dedupe; the scope ends with the member, so nothing outlives it).
+    with readable_run(bundle, compression_records=task.get("compression_records")) as readable, document_memo():
         return _assess_plain_member(task, readable)
 
 

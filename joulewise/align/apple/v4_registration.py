@@ -43,6 +43,7 @@ _NAMED_ARTIFACTS = (
 # Not seen by a static walk: importlib string imports and third-party modules.
 EXECUTED_CLOSURE = (
     'joulewise/align/apple/v4_cadence.py',
+    'joulewise/align/apple/light_triage.py',
     'joulewise/align/apple/prompt_cache.py',
     'joulewise/__init__.py',
     'joulewise/adapters/__init__.py',

@@ -163,7 +163,7 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
     # Keep the common v3 desk unchanged. V4 adds its registered thermal desk.
     from scripts.align_v4_thermal_desk import registration_evidence, enrich_record, r1_soak_c, contrast_predeclaration
     from joulewise.align.apple.thermal_desk import read_bundle_record, window_report
-    from joulewise.align.apple import v4_registration
+    from joulewise.align.apple import v4_registration, light_triage
     registration_dir = Path(state.get('registration_dir', Path(state['measurement_root'])/kit.KIT/'registration'))
     try:
         bar, wp19 = registration_evidence(registration_dir)
@@ -194,19 +194,15 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
             expected = [{k: t[k] for k in ('prompt_token_ids', 'output_token_ids')} for t in fixture['turns']]
             r['pilot7_token_identical'] = r.get('tokens') == expected
         p = pilot_members.get(row['run_id'], {})
-        codes = p.get('exclusion_codes', [])
-        if any(str(c).startswith('battery.member_span') for c in codes):
-            r['flags'].append('battery.member_span')
-        r['excluded'] = bool(codes) or bool(r.get('calibration_exclusions'))
+        # The only harvest input of the thermal section (light_triage proves U1-U3 ignore it).
+        light_triage.apply_harvest_codes(r, p.get('exclusion_codes', []))
         records.append(r)
     policy = (kit.read_inputs(state['measurement_root']).get('R1') or {}).get('thermal_policy') or {}
     report['thermal'] = window_report(records, v4=True, u3_bar=bar,
         delta_slow_c=policy.get('delta_slow_c'), contrast_predeclared=contrast_predeclaration(wp19, policy))
     report['registration_diagnostics'] = v4_registration.desk_diagnostics(records,
         r1_soak=r1_soak_c(registration_dir))
-    for model, result in report['thermal']['model_windows'].items():
-        for n in (1, 2, 3):
-            checks[f'v4_{model}_U{n}'] = result[f'U{n}']['status'] == 'pass'
+    checks.update(light_triage.u_checks(report['thermal']))
     checks['v4_B_bar'] = all(w['bar_pass'] for w in report['registration_diagnostics']['battery_windows'].values())
     checks['v4_D_cohort'] = report['registration_diagnostics']['d_cohort']['instrument_ok']
     return checks, report

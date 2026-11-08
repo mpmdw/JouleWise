@@ -267,7 +267,7 @@ def cross_pilot_identity(members, compare_session):
 
 
 def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None,
-         kit=KIT, desk_schema=SCHEMA, extra_checks=None):
+         kit=KIT, desk_schema=SCHEMA, extra_checks=None, harvest_workers=None):
     session = Path(session_root).resolve()
     state = h.read(session / 'session.json')
     plan = h.read(state['plan_path'])
@@ -312,6 +312,12 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
             '--plan', state['plan_path'], '--archive-root', str(session / 'archive'),
             '--registration-dir', state['registration_dir'], '--pack-records-root', str(session / 'private'),
             '--export-dir', str(session / 'export'), '--non-claim']
+    if harvest_workers is not None:
+        # Member assessment pool (HARVEST-OFF-opus): order-preserving, byte-identical
+        # to one worker; absent keeps the recorded argv of a one-worker desk.
+        if type(harvest_workers) is not int or harvest_workers < 1:
+            raise ValueError('harvest_workers must be a positive integer')
+        argv += ['--workers', str(harvest_workers)]
     if harvest:
         result = run(argv, check=False, capture_output=True, text=True, timeout=h.HARVEST_TIMEOUT_S)
         (session / 'staging/harvest.stdout').write_text(result.stdout or '')
@@ -447,6 +453,8 @@ def main(argv=None, *, kit=KIT, pack_id=PACK_ID, desk_schema=SCHEMA,
         commands.add_parser(name).add_argument('--session-root', type=Path, required=True)
     commands.choices['desk'].add_argument('--no-harvest', action='store_true', help='Extract to session/inspection/<utc>-<unique>/; preserve harvest files and skip archive/compression.')
     commands.choices['desk'].add_argument('--compare-session', type=Path)
+    commands.choices['desk'].add_argument('--harvest-workers', type=int,
+                                          help='harvest member-assessment workers (off-MBP desk; default one)')
     # Kit-specific install arguments (flag, argparse options), forwarded as keywords.
     for flag, options in install_options:
         commands.choices['install'].add_argument(flag, **options)
@@ -462,6 +470,7 @@ def main(argv=None, *, kit=KIT, pack_id=PACK_ID, desk_schema=SCHEMA,
         else:
             status = desk(args.session_root, harvest=not args.no_harvest, compare_session=args.compare_session,
                           kit=kit, desk_schema=desk_schema,
+                          **({'harvest_workers': args.harvest_workers} if args.harvest_workers is not None else {}),
                           **({'extra_checks': desk_extra_checks} if desk_extra_checks is not None else {}))
             return 0 if status['harvest_status'] in ('ok', 'not_run') and status['pilot_status'] == 'instrument_ok' else 2
         return 0
