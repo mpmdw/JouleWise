@@ -52,3 +52,31 @@ Written by the laptop lead (Opus 5.5, session 1544c617) before Ed retired this C
 ## Ops
 - `scripts/ops/mbp_quiet_os.zsh` is on branch `ops/2026-11-07-mbp-quiet-os`; Ed ran it 11-07 15:42.
 - `tools/` here also holds the dry-run launcher and the blinded D-188 comparator wrapper example.
+
+## Update, about 18:00 PST 11-07 (later the same session)
+- **Research outputs** (draft PRs, docs only, model-written; triage them, do not adopt them wholesale):
+  - **#695**, seven audits: W1 pre-arm gate, W1 budget fallback, Block 6 design, B5 release-to-paper, literature, research program, proportionality.
+  - **#696**, the open-source contribution plan: 22 items, 11 decisions for Ed.
+  - **#698**, methodology vs literature, giving ten new experiments with novelty checks; plus the Qwen-Next port and upstream plan.
+  - All of it lives under `docs/research-audits/2026-11-07/`.
+- **RUN_STATE 202:** R1 kit delivered, plus ruling R0-L2 (slow pick = the default band-hold rule, decided before the capture). The magistrate may fill the R0 rung and regenerate the kit on `lane/2026-11-07-r1-kit-r0fill`, then arm R1. The lead reviews that branch afterwards.
+- **RUN_STATE 203:** ruling R10, the W1 budget fallback, declared blind before R1. 8-bit D runs at about 11.9 tok/s, so it fails 1(f) at every B_D. The order of fallbacks: (a) a budget-sized D G0 cap G0*; (b) 4-bit with its own R1 night; (c) the window council. The kit work for it (R10-4) is on `lane/2026-11-07-w1-kit-r10`, which needs a review before any W1 arm.
+- **Pre-W1 blockers** (`w1-prearm-gate.md`):
+  - protocol v4 is missing nine chair rulings (4, 5, 6, 9, 11, 15, 17, 18, 20) and WP19;
+  - the battery 4(a) arm rule;
+  - the 30B contrast deadman fit;
+  - the duty-bar fallback;
+  - the Ruling 76 test, red at the R1 lane head since D8-1.
+- **BYTES stage 1 is due 12 Nov** and now has an owner (an agent PR plus magistrate instructions in `docs/run_reports/2026-11-07-bytes-stage1-plan.md`). It is Paper 1's strongest material.
+- **Block 6** was collected on 10-21 and is sealed. Its REG §17 amendments (R0-R12 in `block6-design.md`) should land before the Block 5 unseal.
+- **B5 release-to-paper** (`b5-release-to-paper.md`):
+  - The release comparator cannot pass a registered null outcome (compare_b5_recompute.py:211-222). This needs a blind rule before any null-carrying release.
+  - Nothing fills Paper 1's 219 FILL ids yet.
+  - The "Release event" section of SEAL_RECORD is empty.
+- **Gold L3 run backup:** copied to `/Users/edr/Dropbox/JouleWise-offload/2026-11-07-air/jwgold-run-l3` with a `.sha256` manifest; all 605 files verified.
+- **Ed decisions outstanding:**
+  - the ALIGN paper claim, and whether to allow 30B inject nights;
+  - FINAL-DESIGN Q4 and Q6;
+  - whether the Khiani paper is connected to us;
+  - the OSS questions: the license, the "John Davis" alias, and running upstream code in sandboxes;
+  - a Paper 1 retitle.
