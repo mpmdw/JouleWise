@@ -55,7 +55,7 @@ signatures are lead-owned.
 ## What the exporter does and refuses
 
 It reads `r1_result.json` and, for each of the three gated D runs, one file:
-`RUN/<run name>/<result.bundle>/outputs/align_turns.jsonl` (or its `.zst`). From each
+`RUN/<run name>/<result.bundle>/outputs/align_turns.jsonl` (or its `.zst`). If the result has no `bundle` key (the lane's `r1_result.json` may not carry it), the one `outputs/align_turns.jsonl` (or `.zst`) found under `RUN/<run name>/` is used; zero or several matches refuse, and the export records `source.found_by` as `result_key` or `discovered`. From each
 turn row it takes only the turn index, the `turn_token_budget_reached` flag, the
 LENGTH of `generation.output_token_ids` and `generation.finish_reason`; no energy,
 power, thermal or score file is opened and no token content is kept. A turn is

@@ -20,7 +20,7 @@ from tests.align import test_r1_rehearsal as rehearsal
 TURNS = 7
 
 
-def write_bundles(run, *, finish='stop', last_finish='stop', mutate=None, compress=False):
+def write_bundles(run, *, finish='stop', last_finish='stop', mutate=None, compress=False, drop_bundle_key=False):
     """Synthetic align_turns.jsonl per gated run, shaped like endpoint.turn_provenance."""
     result = json.loads((run / 'r1_result.json').read_text())
     for phase in result['phases']:
@@ -36,7 +36,9 @@ def write_bundles(run, *, finish='stop', last_finish='stop', mutate=None, compre
                                         'finish_reason': reason, 'sampler': {'per_turn_seed': i}}})
         if mutate:
             mutate(phase['name'], rows)
-        path = run / phase['name'] / phase['result']['bundle'] / exporter.TURNS_FILE
+        path = run / phase['name'] / phase['result'].get('bundle', 'runs/synthetic-bundle') / exporter.TURNS_FILE
+        if drop_bundle_key:
+            phase['result'].pop('bundle', None)
         path.parent.mkdir(parents=True, exist_ok=True)
         body = ''.join(json.dumps(row, sort_keys=True) + '\n' for row in rows).encode()
         if compress:
@@ -46,6 +48,8 @@ def write_bundles(run, *, finish='stop', last_finish='stop', mutate=None, compre
             plain.unlink()
         else:
             path.write_bytes(body)
+    if drop_bundle_key:      # a lane-shaped result: the phase result has no `bundle` key
+        (run / 'r1_result.json').write_text(json.dumps(result))
     return counts
 
 
@@ -101,6 +105,62 @@ class ExportTests(unittest.TestCase):
         done = json.loads((self.tmp / 'out.json').read_text())
         self.assertEqual({r['turn_counts_source_sha256'] for r in done['deadman_budget']},
                          {hashlib.sha256(raw).hexdigest()})
+
+    def test_bundle_is_discovered_when_the_lane_result_has_no_bundle_key(self):
+        counts = write_bundles(self.run_dir, drop_bundle_key=True)
+        result = json.loads((self.run_dir / 'r1_result.json').read_text())
+        self.assertTrue(all('bundle' not in p['result'] for p in result['phases']
+                            if p['name'] in exporter.GATED_D_RUN_NAMES))
+        data = exporter.export(self.run_dir)
+        for name, entry in data.items():
+            self.assertEqual(entry['turn_decode_counts'], counts)
+            self.assertEqual(entry['source']['found_by'], 'discovered')
+            self.assertEqual(entry['source']['align_turns_path'],
+                             f'{name}/runs/synthetic-bundle/outputs/align_turns.jsonl')
+        # with the key present the path comes from the result
+        result = json.loads((self.run_dir / 'r1_result.json').read_text())
+        for phase in result['phases']:
+            if phase['name'] in exporter.GATED_D_RUN_NAMES:
+                phase['result']['bundle'] = 'runs/synthetic-bundle'
+        (self.run_dir / 'r1_result.json').write_text(json.dumps(result))
+        self.assertEqual({e['source']['found_by'] for e in exporter.export(self.run_dir).values()}, {'result_key'})
+
+    def test_discovery_finds_a_compressed_file_and_refuses_zero_or_several(self):
+        if shutil.which('zstd'):
+            write_bundles(self.run_dir, compress=True, drop_bundle_key=True)
+            entry = exporter.export(self.run_dir)['D_spam_benign_s1_gated_held_b']
+            self.assertEqual(entry['source']['found_by'], 'discovered')
+        # zero matches
+        fresh = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, fresh, True)
+        shutil.copytree(self.run_dir, fresh / 'run')
+        write_bundles(fresh / 'run', drop_bundle_key=True)
+        shutil.rmtree(fresh / 'run/D_bank_benign_s1_gated_held/runs')
+        with self.assertRaisesRegex(ValueError, 'found 0'):
+            exporter.export(fresh / 'run')
+        # two distinct matches (a second bundle directory)
+        write_bundles(fresh / 'run', drop_bundle_key=True)
+        phase = fresh / 'run/D_spam_benign_s1_gated_held_a'
+        shutil.copytree(phase / 'runs/synthetic-bundle', phase / 'runs/other-bundle')
+        with self.assertRaisesRegex(ValueError, 'found 2'):
+            exporter.export(fresh / 'run')
+        # a plain file and a .zst sibling of the SAME logical file are one match
+        shutil.rmtree(phase / 'runs/other-bundle')
+        plain = phase / 'runs/synthetic-bundle' / exporter.TURNS_FILE
+        if shutil.which('zstd'):
+            subprocess.run(['zstd', '-q', '-f', str(plain), '-o', str(plain) + '.zst'], check=True)
+        self.assertEqual(exporter.export(fresh / 'run')['D_spam_benign_s1_gated_held_a']['source']['found_by'],
+                         'discovered')
+
+    def test_a_present_but_unusable_bundle_key_never_falls_back_to_discovery(self):
+        write_bundles(self.run_dir, drop_bundle_key=True)
+        result = json.loads((self.run_dir / 'r1_result.json').read_text())
+        for phase in result['phases']:
+            if phase['name'] == 'D_bank_benign_s1_gated_held':
+                phase['result']['bundle'] = '/abs/path'
+        (self.run_dir / 'r1_result.json').write_text(json.dumps(result))
+        with self.assertRaisesRegex(ValueError, 'relative path'):
+            exporter.export(self.run_dir)
 
     def test_derive_contrast_prints_the_kits_own_rederivation(self):
         slots = json.loads((self.tmp / 'registration/r1_slots.json').read_text())

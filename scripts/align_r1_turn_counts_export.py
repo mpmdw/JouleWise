@@ -4,7 +4,9 @@
 The R1 lane driver records only each gated run's total ``decode_tokens`` and
 ``admitted_turns``. This reads, per gated D run, exactly one turn-record file of
 the run's bundle, ``<RUN>/<run name>/<result.bundle>/outputs/align_turns.jsonl``
-(or its ``.zst`` sibling), and from each row only: ``turn``, ``flags`` (the
+(or its ``.zst`` sibling; when the result has no ``bundle`` key, the one such file
+found under ``<RUN>/<run name>/``, refusing zero or several; ``source.found_by`` is
+``result_key`` or ``discovered``), and from each row only: ``turn``, ``flags`` (the
 ``turn_token_budget_reached`` marker), and ``generation.output_token_ids`` (its
 LENGTH) and ``generation.finish_reason``. No energy, power, thermal, residual or
 score file is opened, and no token content is kept.
@@ -26,6 +28,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import sys
 
@@ -62,6 +65,25 @@ def _stored(path):
     raise FileNotFoundError(f'{path} (or .zst) not found')
 
 
+def discover_turns_file(phase_dir):
+    """The one ``outputs/align_turns.jsonl`` (or ``.zst``) under ``phase_dir``.
+
+    Used only when the result carries no ``bundle`` key. Symlinks are not followed.
+    Zero or several distinct logical matches refuse.
+    """
+    found = set()
+    for root, dirs, files in os.walk(phase_dir, followlinks=False):
+        dirs[:] = [d for d in dirs if not (Path(root) / d).is_symlink()]
+        if Path(root).name != 'outputs':
+            continue
+        for name in files:
+            if name in ('align_turns.jsonl', 'align_turns.jsonl.zst') and not (Path(root) / name).is_symlink():
+                found.add(Path(root) / 'align_turns.jsonl')    # .jsonl and .zst are one logical file
+    if len(found) != 1:
+        raise ValueError(f'{phase_dir}: expected exactly one {TURNS_FILE} under the run directory, found {len(found)}')
+    return found.pop()
+
+
 def turn_counts(rows):
     """Counts and completion flags from align_turns rows (see module docstring)."""
     counts, completed = [], []
@@ -90,8 +112,14 @@ def export(run_dir):
         if len(matches) != 1 or not isinstance(matches[0].get('result'), dict):
             raise ValueError(f'r1_result.json must hold exactly one {name} phase with a result')
         result = matches[0]['result']
-        turns_path = (run_dir / _safe_relative(name, 'run name') / _safe_relative(result.get('bundle'), f'{name} bundle')
-                      / TURNS_FILE)
+        phase_dir = run_dir / _safe_relative(name, 'run name')
+        if 'bundle' in result and result['bundle'] is not None:
+            found_by = 'result_key'
+            turns_path = phase_dir / _safe_relative(result['bundle'], f'{name} bundle') / TURNS_FILE
+        else:
+            # The lane's r1_result.json may not carry the bundle path: discover it.
+            found_by = 'discovered'
+            turns_path = discover_turns_file(phase_dir)
         stored, logical = _stored(turns_path)
         rows = [json.loads(line) for line in logical.splitlines() if line.strip()]
         counts, completed = turn_counts(rows)
@@ -101,6 +129,7 @@ def export(run_dir):
         out[name] = {'turn_decode_counts': counts, 'turn_completed': completed,
                      'source': {'r1_result_sha256': _digest(result_raw),
                                 'align_turns_path': str(turns_path.relative_to(run_dir)),
+                                'found_by': found_by,
                                 'align_turns_stored_sha256': _digest(stored),
                                 'align_turns_logical_sha256': _digest(logical)}}
     return out
