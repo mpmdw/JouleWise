@@ -19,12 +19,25 @@ from joulewise.align.apple import v4_registration as registration
 
 
 def registration_evidence(directory):
+    """(u3 bar or None, wp19 receipt).
+
+    A present ``u3_bar.json`` whose bar is still PENDING (R11/R03: no constant is
+    installed, ``validate_u3`` refuses) yields ``None``: the desk then reports U3
+    inconclusive and keeps running every other check. Arming stays refused through
+    ``require_registration``. A missing or unreadable bar file, or an invalid WP19
+    receipt, still raises (Opus cold HIGH-1).
+    """
     try:
         bar = json.loads((directory/'u3_bar.json').read_bytes())
     except (OSError, ValueError) as exc:
         raise ValueError('v4 desk requires registered u3_bar.json') from exc
     source_root = ROOT if directory.absolute().is_relative_to(ROOT) else directory
-    registration.validate_u3(bar, root=source_root)
+    try:
+        registration.validate_u3(bar, root=source_root)
+    except ValueError:
+        # Cold-review HIGH (b): a pending/invalid bar makes U3 inconclusive at
+        # the desk; registration (arm) still refuses through require_registration.
+        bar = None
     wp19 = json.loads((directory/'wp19_receipt.json').read_bytes())
     registration.validate_wp19(wp19)
     return bar, wp19
@@ -132,6 +145,7 @@ def main(argv=None):
     result['registration_diagnostics'] = registration.desk_diagnostics(members, r1_soak=soak,
                                                                     battery_policy=battery_policy)
     result['u3_bar'] = bar
+    result['u3_pending'] = bar is None
     result['wp19'] = wp19
     result['K_session_read'] = compared or {'status': 'inconclusive', 'reason': 'no --compare-session inputs'}
     args.output.mkdir(parents=True, exist_ok=False)

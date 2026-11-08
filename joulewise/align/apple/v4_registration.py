@@ -22,8 +22,9 @@ _NAMED_ARTIFACTS = (
     'joulewise/align/energy_residual.py',
     'scripts/align_v4_kit.py', 'scripts/align_v4_session.py',
     'scripts/align_v4_thermal_desk.py', 'scripts/align_pilot_session.py',
-    'scripts/align_v4_u3_bar.py', 'scripts/align_v4_wp19.py', 'scripts/align_v4_offloads.py',
+    'scripts/align_v4_u3_bar.py', 'scripts/align_v4_u3_export.py', 'scripts/align_v4_wp19.py', 'scripts/align_v4_offloads.py',
     'joulewise/align/apple/v4_u3.py', 'joulewise/align/apple/v4_battery.py',
+    'scripts/align_v4_battery_log.py',
     'joulewise/align/apple/v4_registration.py', 'joulewise/align/apple/v4_estimands.py',
     'joulewise/align/apple/thermal_desk.py', 'joulewise/align/apple/thermal_gates.py',
     'joulewise/align/apple/endpoint.py', 'joulewise/align/apple/workload.py',
@@ -37,18 +38,18 @@ _NAMED_ARTIFACTS = (
 )
 
 
-# Static import closure (stdlib ``ast``; module- and function-level imports,
-# parent packages included) of the episode path and the W1/D night entry points
-# (endpoint.py, scripts/run_night.py, scripts/align_v4_session.py), restricted to
-# joulewise/. R11 lead ruling 3 (Sol2 F01): the exact-candidate receipt binds the
-# executed code, not a hand-picked subset. tests/align/test_v4_executed_closure.py
-# recomputes this closure and fails if it is not a subset of ARTIFACTS.
-# Not seen by a static walk: importlib string imports and third-party modules.
+# Static execution closure (stdlib ``ast``; imports at module and function level, parent
+# packages included, plus script launch edges: exact ``scripts/<name>`` string constants
+# and shell tokens) of the episode path and the W1/D/R1 entry points (endpoint.py,
+# scripts/run_night.py, align_v4_session.py, align_v4_kit.py, align_w1_budget_procedure.py,
+# the night_chains wrappers). R11 lead ruling 3 and delta H01 / DELTA-S2-H1: the
+# exact-candidate receipt binds the executed code, scripts included.
+# tests/align/test_v4_executed_closure.py recomputes the closure and fails if it is not a
+# subset of ARTIFACTS. Not seen by a static walk: importlib string imports, computed
+# paths and third-party modules (declared separately).
 EXECUTED_CLOSURE = (
     'joulewise/align/apple/v4_u3.py',
     'joulewise/align/apple/v4_battery.py',
-    'joulewise/align/apple/v4_cadence.py',
-    'joulewise/align/apple/prompt_cache.py',
     'joulewise/__init__.py',
     'joulewise/adapters/__init__.py',
     'joulewise/adapters/local_transport.py',
@@ -71,6 +72,7 @@ EXECUTED_CLOSURE = (
     'joulewise/align/apple/generation.py',
     'joulewise/align/apple/pilot.py',
     'joulewise/align/apple/powermode.py',
+    'joulewise/align/apple/prompt_cache.py',
     'joulewise/align/apple/r1_runtime.py',
     'joulewise/align/apple/r1_runtime_contract.py',
     'joulewise/align/apple/registry_select.py',
@@ -80,6 +82,8 @@ EXECUTED_CLOSURE = (
     'joulewise/align/apple/smc_reader.py',
     'joulewise/align/apple/stop_precedence.py',
     'joulewise/align/apple/thermal.py',
+    'joulewise/align/apple/v4_cadence.py',
+    'joulewise/align/apple/v4_topup.py',
     'joulewise/align/apple/xml_tool_calls.py',
     'joulewise/align/attribution.py',
     'joulewise/align/endpoints.py',
@@ -127,6 +131,7 @@ EXECUTED_CLOSURE = (
     'joulewise/b6/agent_pause.py',
     'joulewise/b6/analysis_lane.py',
     'joulewise/b6/archive.py',
+    'joulewise/b6/blinding.py',
     'joulewise/b6/calibration.py',
     'joulewise/b6/capture_list.py',
     'joulewise/b6/capture_screen.py',
@@ -136,6 +141,7 @@ EXECUTED_CLOSURE = (
     'joulewise/b6/desk_identity.py',
     'joulewise/b6/desk_lane.py',
     'joulewise/b6/driver_lane.py',
+    'joulewise/b6/export_runs.py',
     'joulewise/b6/fingerprint.py',
     'joulewise/b6/idle_wait.py',
     'joulewise/b6/lanes.py',
@@ -146,6 +152,7 @@ EXECUTED_CLOSURE = (
     'joulewise/b6/precheck_lane.py',
     'joulewise/b6/queue.py',
     'joulewise/b6/registration.py',
+    'joulewise/b6/session.py',
     'joulewise/b6/session_paths.py',
     'joulewise/b6/sleep_guard.py',
     'joulewise/b6/smoke.py',
@@ -181,13 +188,16 @@ EXECUTED_CLOSURE = (
     'joulewise/environment_admission.py',
     'joulewise/external/__init__.py',
     'joulewise/external/km003c_parse.py',
+    'joulewise/external/km003c_usb.py',
     'joulewise/flags/__init__.py',
     'joulewise/flags/catalog.py',
+    'joulewise/flags/collect.py',
     'joulewise/flags/core.py',
     'joulewise/flags/exclusions.py',
     'joulewise/flags/schema.py',
     'joulewise/flags/sink.py',
     'joulewise/floor_extraction.py',
+    'joulewise/floor_mint_estimator.py',
     'joulewise/hazards/__init__.py',
     'joulewise/hazards/arm.py',
     'joulewise/hazards/base.py',
@@ -235,8 +245,125 @@ EXECUTED_CLOSURE = (
     'joulewise/whole_window.py',
     'joulewise/window_lineage.py',
     'joulewise/zero_capture_facts.py',
+    'scripts/advance_b5_ledger_pin.py',
+    'scripts/align_pilot_kit.py',
+    'scripts/align_r0_checks.py',
+    'scripts/align_r1_rehearsal.py',
+    'scripts/align_r1_turn_counts_export.py',
+    'scripts/align_smc_enumerate.py',
+    'scripts/author_arm_evidence_t0.py',
+    'scripts/author_arm_readiness_evidence.py',
+    'scripts/b5_window_calibration_verdict.py',
+    'scripts/b6_courier.sh',
+    'scripts/backup_runs.sh',
+    'scripts/build_bracket_binding.py',
+    'scripts/build_family_marker.py',
+    'scripts/bytes_gates.py',
+    'scripts/bytes_h_session.py',
+    'scripts/calibration_cadence_report.py',
+    'scripts/cap_replay_harness.py',
+    'scripts/capture_t0_step.py',
+    'scripts/check_v5_arm_abort.py',
+    'scripts/check_window_provenance.py',
+    'scripts/collect_clock_reference.py',
+    'scripts/collect_window_flags.py',
+    'scripts/ed_session/capture_t0_anchor_positive_control.py',
+    'scripts/fixture_orphan_census.py',
+    'scripts/g10_clock_step_control.py',
+    'scripts/gen_derivation_night.py',
+    'scripts/gen_evidence_night.py',
+    'scripts/gen_g2_phase_d.py',
+    'scripts/generate_g2a_probe_inputs.py',
+    'scripts/generate_matrix.py',
+    'scripts/harvest_b5_window.py',
+    'scripts/harvest_b6_session.py',
+    'scripts/harvest_g2a_window.py',
+    'scripts/harvest_v5_g2b_window.py',
+    'scripts/harvest_v5_qualification.py',
+    'scripts/harvest_window.py',
+    'scripts/hazard_monitor.py',
+    'scripts/install_night_agent.sh',
+    'scripts/issue_calibration_acceptance_generation.py',
+    'scripts/km003c_monitor.py',
+    'scripts/launch_window.py',
+    'scripts/magistrate_watchdog.py',
+    'scripts/mint_floor_artifact_generalized.py',
+    'scripts/night_chains/align_r1_rehearsal.zsh',
+    'scripts/night_chains/calibration_derivation_only.zsh',
+    'scripts/night_chains/quiet_predicate_evidence.zsh',
+    'scripts/prewindow_check.sh',
+    'scripts/produce_t0_rehearsal_bundle.py',
+    'scripts/quiet_mac_prep.sh',
+    'scripts/recover_calibration_ledger.py',
+    'scripts/rehearse_t0_unattended.py',
+    'scripts/replay_powermetrics_frames.py',
+    'scripts/reserve_calibration_window_bracket.py',
+    'scripts/restore_v5_null_reservation.py',
+    'scripts/run_campaign.py',
+    'scripts/sample_quiet_predicate_evidence.py',
+    'scripts/select_g2a_prefill_length.py',
+    'scripts/summarize_g2a_prefill_probe.py',
+    'scripts/v5_s1_desk_closeout.py',
+    'scripts/validate_powermetrics_fiducial.py',
+    'scripts/verify_family_marker.py',
+    'scripts/write_derivation_night_inputs.py',
+    'scripts/write_v5_qualification_plan.py',
 )
 ARTIFACTS = _NAMED_ARTIFACTS + tuple(p for p in EXECUTED_CLOSURE if p not in _NAMED_ARTIFACTS)
+
+# Two tiers (Opus cold review MED-1, lead disposition). STRICT: any change is a
+# re-registration (new receipt, signature, both gates): the protocol, deviations,
+# rulings, estimands, desk, kit, registration inputs, the whole episode/execution path
+# joulewise/align/**, the generation adapter, the KM003C reader and the W1/D/R1 script
+# spine (scripts launched by the night runner, subprocess-launched scripts included).
+# AMENDMENT: every other bound path (b5/b6 modules, hazards, flags, other scripts):
+# a change is admitted only through a lead-signed ``amendments`` row in the receipt.
+STRICT_SCRIPTS = (
+    'scripts/run_night.py', 'scripts/align_pilot_kit.py', 'scripts/align_pilot_session.py',
+    'scripts/align_r1_rehearsal.py', 'scripts/align_r1_turn_counts_export.py', 'scripts/align_v4_kit.py',
+    'scripts/align_v4_offloads.py', 'scripts/align_v4_session.py', 'scripts/align_v4_thermal_desk.py',
+    'scripts/align_v4_u3_bar.py', 'scripts/align_v4_wp19.py', 'scripts/align_w1_budget_procedure.py',
+    'scripts/align_v4_battery_log.py', 'scripts/validate_align_v4_w1_plan.py', 'scripts/bytes_h_session.py', 'scripts/launch_window.py',
+    'scripts/hazard_monitor.py', 'scripts/km003c_monitor.py', 'scripts/collect_window_flags.py',
+    'scripts/collect_clock_reference.py', 'scripts/g10_clock_step_control.py', 'scripts/run_campaign.py',
+    'scripts/magistrate_watchdog.py', 'scripts/install_night_agent.sh', 'scripts/prewindow_check.sh',
+    'scripts/quiet_mac_prep.sh', 'scripts/backup_runs.sh', 'scripts/b6_courier.sh',
+)
+STRICT_PREFIXES = ('joulewise/align/', 'scripts/night_chains/')
+STRICT_FILES = ('joulewise/adapters/mlx_runtime.py', 'joulewise/external/km003c_usb.py',
+                'joulewise/external/km003c_parse.py')
+
+
+def is_strict(path):
+    return (path in _NAMED_ARTIFACTS or path in STRICT_SCRIPTS or path in STRICT_FILES
+            or path.startswith(STRICT_PREFIXES))
+
+
+AMENDMENT_FIELDS = ('path', 'old_sha256', 'new_sha256', 'reason', 'lead_signature')
+
+
+def _amendment_chains(receipt, bindings):
+    """Validate the lead-signed amendment rows; return {path: final new_sha256}."""
+    from scripts.align_v4_kit import valid_lead_signature
+    rows = receipt.get('amendments', [])
+    if not isinstance(rows, list):
+        raise ValueError('registration_receipt amendments malformed')
+    final = {}
+    for row in rows:
+        if (not isinstance(row, dict) or set(row) != set(AMENDMENT_FIELDS)
+                or not is_digest(row['old_sha256']) or not is_digest(row['new_sha256'])
+                or not isinstance(row['reason'], str) or not row['reason'].strip()
+                or not valid_lead_signature(row['lead_signature'])):
+            raise ValueError('registration_receipt amendment row malformed')
+        path = row['path']
+        if path not in bindings or path not in ARTIFACTS:
+            raise ValueError(f'registration_receipt amendment names an unbound path: {path}')
+        if is_strict(path):
+            raise ValueError(f'registration_receipt amendment refused for a strict-tier path: {path} (re-register)')
+        if row['old_sha256'] != final.get(path, bindings[path]):
+            raise ValueError(f'registration_receipt amendment chain broken: {path}')
+        final[path] = row['new_sha256']
+    return final
 
 
 def digest(raw):
@@ -258,6 +385,24 @@ def _local(root, path):
         if target.is_symlink():
             raise ValueError('registration receipt symlink refused')
     return target
+
+
+def artifact_set_digest(root):
+    """One digest over the current bytes of every bound artifact (missing ones marked).
+
+    The arm derives "code or config changed since the last desk-passed state" by
+    comparing this with the digest recorded when that desk passed; the packet's own
+    flag is only cross-checked. ``python3 -m joulewise.align.apple.v4_registration``
+    prints it for the desk-pass record.
+    """
+    h = hashlib.sha256()
+    for path in sorted(ARTIFACTS):
+        try:
+            value = digest(_local(root, path).read_bytes())
+        except (OSError, ValueError):
+            value = 'missing'
+        h.update(f'{path}\0{value}\n'.encode())
+    return h.hexdigest()
 
 
 def _committed_bytes(root, commit, paths):
@@ -321,6 +466,7 @@ def validate_receipt(receipt, root):
         if not is_digest(expected):
             raise ValueError(f'registration_receipt invalid digest: {path}')
     pinned = _committed_bytes(root, commit, list(bindings))
+    amended = _amendment_chains(receipt, bindings)
     for path, expected in bindings.items():
         try:
             raw = _local(root, path).read_bytes()
@@ -328,8 +474,11 @@ def validate_receipt(receipt, root):
             raise ValueError(f'registration_receipt missing committed artifact: {path}') from exc
         if pinned.get(path) is None:
             raise ValueError(f'registration_receipt missing committed artifact: {path}')
-        if digest(raw) != expected or digest(pinned[path]) != expected:
+        if digest(pinned[path]) != expected:
             raise ValueError(f'registration_receipt digest drift: {path}')
+        if digest(raw) != expected and digest(raw) != amended.get(path):
+            tier = 'strict tier: re-register' if is_strict(path) else 'amendment tier: needs a lead-signed amendment'
+            raise ValueError(f'registration_receipt digest drift: {path} ({tier})')
     return receipt
 
 
@@ -415,6 +564,8 @@ def u3_margin(mean_energy_j, bar, *, population='30B', configuration_sha256=None
     if (type(mean_energy_j) not in (int, float) or not math.isfinite(mean_energy_j) or mean_energy_j <= 0
             or population not in ('30B', 'D')):
         raise ValueError('U3 requires positive finite energy and a qualified population')
+    if population == 'D' and bar['prediction'].get('d_screen') != 'not_refuted':
+        raise ValueError(f"U3 D transfer screen {bar['prediction'].get('d_screen')}: D U3 inconclusive (ruling 6)")
     if population == 'D' and configuration_sha256 is not None and configuration_sha256 != bar['policy']['d_configuration_sha256']:
         raise ValueError('U3 D configuration changed; new prospective qualification required')
     return mean_energy_j*bar['prediction']['relative_bar_'+population]
@@ -448,7 +599,7 @@ def battery_arm(observation, attested_by, topup=None, *, now_epoch_s=None):
     completed = topup.get('completed_at_epoch_s') if isinstance(topup, dict) else None
     source = topup.get('source') if isinstance(topup, dict) else None
     if not finite(completed) or not isinstance(source, str) or not source.strip():
-        reasons.append('completed top-up evidence missing: require --topup-completed-at and --topup-source')
+        reasons.append('completed top-up evidence missing or inadmissible: require --battery-log showing a completed charge within 30 min or continuous float since')
     elif not finite(now_epoch_s):
         reasons.append('completed top-up cannot be timed: arm time unavailable')
     else:
@@ -552,3 +703,8 @@ def desk_diagnostics(members, *, r1_soak=None, battery_policy=None):
                           'cache_statistics': r.get('cache_statistics', {'status': 'not_recorded'})} for r in members],
             'no_rebuild_sensitivity': {'status': 'print_only', 'member_ids': [r['id'] for r in members
                 if r.get('cache_statistics', {}).get('rebuilds') == 0]}}
+
+
+if __name__ == '__main__':
+    import sys
+    print(artifact_set_digest(sys.argv[1] if len(sys.argv) > 1 else Path(__file__).resolve().parents[3]))

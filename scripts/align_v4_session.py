@@ -142,6 +142,17 @@ def battery_windows_pass(windows):
     return bool(windows) and all(w.get('bar_pass') is True for w in windows.values())
 
 
+# Lead ruling 9 (W1-BLOCKERS-AGREEMENT): a false v4_B_bar is recorded but does not
+# block the full-desk gate; v4_cadence ``battery_window`` governs the resume.
+FULL_DESK_GATE_EXEMPT = ('v4_B_bar',)
+
+
+def full_desk_gate_pass(checks):
+    """The ``full_desk_gate`` verdict from a desk's checks: every check true except the exempt ones."""
+    gated = {k: v for k, v in (checks or {}).items() if k not in FULL_DESK_GATE_EXEMPT}
+    return bool(gated) and all(v is True for v in gated.values())
+
+
 def powermode_desk_check(*, state, members, runs_root, kit_path):
     """Council ruling 7: any member whose bundle-recorded AC powermode differs
     from the frozen series value sets ``instrument_ok`` false. The report also
@@ -160,9 +171,16 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
     except Exception as exc:  # secondary diagnostics must never become a rails admission gate
         dc = km003c.unavailable_report(plan['members'], 'meter.desk_failed:' + type(exc).__name__,
                                        detail=str(exc))
+    # MED-4: per-member DC residuals print for BENIGN members only; sabotage (any non-benign)
+    # members' DC rows are sealed (hash only) until the v5 addendum registers.
+    dc = km003c.seal_non_benign(dc, plan['members'])
     for rid, row in dc['members'].items():
-        print(f'{rid} {km003c.LABEL}: ' + json.dumps({k: row[k] for k in
-              ('status', 'dc_in_energy_j', 'dc_in_delta_j', 'dc_in_residual_j', 'flags')}, sort_keys=True))
+        if row.get('sealed'):
+            print(f'{rid} {km003c.LABEL}: ' + json.dumps({k: row[k] for k in
+                  ('status', 'sealed', 'sealed_sha256', 'flags')}, sort_keys=True))
+        else:
+            print(f'{rid} {km003c.LABEL}: ' + json.dumps({k: row[k] for k in
+                  ('status', 'dc_in_energy_j', 'dc_in_delta_j', 'dc_in_residual_j', 'flags')}, sort_keys=True))
     report['km003c'] = dc
     # Keep the common v3 desk unchanged. V4 adds its registered thermal desk.
     from scripts.align_v4_thermal_desk import registration_evidence, enrich_record, r1_soak_c, contrast_predeclaration
@@ -193,7 +211,7 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
                  'turn_observation': [], 'coverage': [], 'releases': [], 'turn_admissions': 0,
                  'pm_period_s': .1, 'calibration_exclusions': ['member.runtime_failure'], 'error': str(exc)}
         r.update({k: row[k] for k in ('ordinal', 'role') if k in row},
-                 window='W1', stage=row.get('stage_id'))
+                 window=state.get('window_id', 'W1'), stage=row.get('stage_id'))
         v4_battery.attach(r, path, journal)
         if row.get('replay_of'):
             r['identical_work_group'] = row['replay_of']
@@ -236,28 +254,26 @@ def desk(session_root, **kwargs):
 ARM_RECORD_SCHEMA = 'joulewise.align_v4_arm.v1'
 
 
-def parse_topup_completed_at(value):
-    """Epoch seconds, or ISO-8601 with an explicit UTC offset, to epoch seconds."""
-    import datetime
-    import math
-    if value is None:
-        return None
-    if type(value) in (int, float):
-        return float(value) if math.isfinite(value) else None
+def _sha256(raw):
+    import hashlib
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _commit_exists(root, commit):
+    """Whether ``commit`` is a commit object in the repository at ``root`` (L3)."""
+    import re
+    if not isinstance(commit, str) or not re.fullmatch(r'[0-9a-f]{40}', commit):
+        return False
     try:
-        return float(value) if math.isfinite(float(value)) else None
-    except (TypeError, ValueError):
-        pass
-    try:
-        stamp = datetime.datetime.fromisoformat(str(value))
-    except ValueError:
-        return None
-    return stamp.timestamp() if stamp.tzinfo is not None else None
+        return subprocess.run(['git', 'cat-file', '-e', f'{commit}^{{commit}}'], cwd=root,
+                              capture_output=True, timeout=20, check=False).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
 
 
 def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=None, owner=None,
-               obc_off_attested_by=None, battery_runner=None, topup_completed_at=None,
-               topup_source=None, now=None, next_arm_triage=None):
+               obc_off_attested_by=None, battery_runner=None, battery_log=None,
+               now=None, next_arm_triage=None, commit_check=None):
     """W1/D arm evidence: ruling 7 AC powermode and ruling 20 volumes.
 
     Ruling 7: the AC-profile powermode must equal the plan's frozen series
@@ -287,9 +303,15 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
     from joulewise import battery_float
     from joulewise.align.apple.v4_registration import battery_arm
     observed, raw = battery_float.observe(phase='arm_check', runner=battery_runner or runner)
-    topup = {'completed_at_epoch_s': parse_topup_completed_at(topup_completed_at),
-             'source': topup_source} if topup_completed_at is not None or topup_source is not None else None
-    battery = battery_arm(observed, obc_off_attested_by, topup, now_epoch_s=(now or time.time)())
+    # MED-3: top-up evidence is derived from the logged battery record (completed charge
+    # within 1800 s, or continuous float since it); a hand-entered time is not admissible.
+    from joulewise.align.apple import v4_topup
+    now_s = (now or time.time)()
+    evidence = v4_topup.derive_from_file(battery_log, now_s) if battery_log is not None else None
+    topup = ({'completed_at_epoch_s': evidence['completed_at_epoch_s'], 'source': evidence['source']}
+             if evidence and evidence['admissible'] else None)
+    battery = battery_arm(observed, obc_off_attested_by, topup, now_epoch_s=now_s)
+    battery['topup_evidence'] = evidence
     battery['raw_ioreg'] = raw.decode('ascii', errors='backslashreplace')
     # Preserve optional reason fields verbatim without changing the frozen parser.
     battery['charging_reason_lines'] = [line for line in battery['raw_ioreg'].splitlines()
@@ -297,28 +319,31 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
     try:
         batt = (runner or subprocess.run)(['pmset', '-g', 'batt']) if runner else subprocess.run(
             ['pmset', '-g', 'batt'], capture_output=True, text=True, timeout=10, check=False)
-        battery['pmset_batt'] = {'exit_code': batt.returncode, 'stdout': batt.stdout, 'stderr': batt.stderr}
-        if batt.returncode != 0:
-            battery['admitted'] = False
-            battery['reasons'].append('pmset -g batt unavailable')
+        # L8: pmset -g batt is retained evidence only; the ioreg predicate decides.
+        battery['pmset_batt'] = {'exit_code': batt.returncode, 'stdout': batt.stdout, 'stderr': batt.stderr,
+                                 'evidence_only': True}
     except (OSError, subprocess.SubprocessError) as exc:
-        battery['admitted'] = False
-        battery['reasons'].append(f'pmset -g batt unavailable: {exc}')
+        battery['pmset_batt'] = {'exit_code': None, 'error': str(exc), 'evidence_only': True}
     reasons += battery['reasons']
     # R12 B2: the frozen next-arm triage list gates every arm; the powermode,
     # volume and battery results above are its arm-computed members and the
     # off-MBP packet supplies the rest (joulewise.align.apple.v4_cadence).
-    from joulewise.align.apple import v4_cadence
-    packet = next_arm_triage
+    from joulewise.align.apple import v4_cadence, v4_registration
+    packet, packet_file_sha256 = next_arm_triage, None
     if isinstance(packet, (str, Path)):
         try:
-            packet = json.loads(Path(packet).read_bytes())
+            raw_packet = Path(packet).read_bytes()
+            packet, packet_file_sha256 = json.loads(raw_packet), _sha256(raw_packet)
         except (OSError, ValueError):
             packet = None
+    commit = packet.get('record_commit') if isinstance(packet, dict) else None
+    identity = {'artifact_set_sha256': v4_registration.artifact_set_digest(measurement_root),
+                'record_commit_exists': (commit_check or _commit_exists)(measurement_root, commit)}
     triage = v4_cadence.next_arm_triage(packet, {
         'series_powermode': bool(power['admitted']),
         'external_volume': volumes['verdict'] == external_volume.PASS,
-        'charging_battery': bool(battery['admitted'])})
+        'charging_battery': bool(battery['admitted'])}, identity)
+    triage['packet_file_sha256'] = packet_file_sha256
     reasons += ['next_arm_triage: ' + reason for reason in triage['reasons']
                 if not reason.startswith(('triage series_powermode', 'triage external_volume',
                                           'triage charging_battery'))]
@@ -551,12 +576,12 @@ def _termination_handlers():
 
 def _arm_and_install(session, state, measurement_root, plan, high, *, runner, volume_runner, now,
                      w1_disk_config, disk_gate, lock=None, owner=None,
-                     obc_off_attested_by=None, battery_runner=None, topup_completed_at=None,
-                     topup_source=None, next_arm_triage=None, **kwargs):
+                     obc_off_attested_by=None, battery_runner=None, battery_log=None,
+                     next_arm_triage=None, commit_check=None, **kwargs):
     record = arm_checks(measurement_root, plan, runner=runner, volume_runner=volume_runner, lock=lock,
                         owner=owner, obc_off_attested_by=obc_off_attested_by, battery_runner=battery_runner,
-                        topup_completed_at=topup_completed_at, topup_source=topup_source, now=now,
-                        next_arm_triage=next_arm_triage)
+                        battery_log=battery_log, now=now,
+                        next_arm_triage=next_arm_triage, commit_check=commit_check)
     if high is not None:
         record['high_power_enter'] = high
         if not high['ok']:
@@ -593,11 +618,9 @@ def main(argv=None):
                           help='validated R0 desk config (disk_path, W1 offloads) for the W1 disk gate')),
                                        ('--obc-off-attested-by', dict(required=True,
                           help='operator attesting Optimized Battery Charging is off')),
-                                       ('--topup-completed-at', dict(required=True,
-                          help='when the battery top-up completed: epoch seconds or ISO-8601 with UTC offset; '
-                               'arm refuses if it is future-dated or more than 30 min old')),
-                                       ('--topup-source', dict(required=True,
-                          help='who/what attests that completion time (operator name or log)')),
+                                       ('--battery-log', dict(type=Path, required=True,
+                          help='JSONL battery log (scripts/align_v4_battery_log.py sample); the arm derives '
+                               'top-up evidence from it: a completed charge within 30 min, or continuous float since')),
                                        ('--next-arm-triage', dict(type=Path, required=True,
                           help='R12 B2 next-arm triage packet (JSON) built off the MBP from the committed record'))))
 

@@ -1,7 +1,7 @@
 {
   "schema": "joulewise.align_v4.battery_window.v1",
   "status": "PENDING",
-  "rule": "zero_B_disclose_assist_v1",
+  "rule": "zero_B_auto_resume_v1",
   "lead_signature": null,
-  "proposal": "SOL recommendation only. Zero charging/AC-loss B members per model-window; missing span evidence is inconclusive; discharge on AC is disclosed and retained for GPU rails. Lead must adopt prospectively after independent review."
+  "proposal": "Lead rulings 8-10 (W1-BLOCKERS-AGREEMENT): zero charging/AC-loss/accumulator-excursion B members per model-window; B members excluded, others kept; automatic resume on fresh admissible top-up + OBC attestation; two consecutive non-passing B windows need a lead disposition; assist disclosed and retained. Lead signs to adopt."
 }

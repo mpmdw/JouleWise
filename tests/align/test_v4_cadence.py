@@ -11,16 +11,38 @@ from joulewise.align.apple import v4_cadence as cad
 PAIRS = cad.CAL_PAIRS
 
 
+ARTIFACT_SET = 'a' * 64
+RECORD_COMMIT = 'b' * 40
+# What the arm derives itself (artifact-set digest, commit existence); never taken from the packet.
+IDENTITY = {'artifact_set_sha256': ARTIFACT_SET, 'record_commit_exists': True}
+
+
 def passing_packet(**overrides):
     """A complete passing packet for a calibration arm after window C2."""
     packet = {'schema': cad.TRIAGE_SCHEMA, 'previous_window': 'C2',
-              'previous_window_is_w1': False, 'code_or_config_changed': False,
+              'record_commit': RECORD_COMMIT, 'last_desk_passed_artifact_set_sha256': ARTIFACT_SET,
               'next_window_role': 'calibration',
               'calibration_windows': [window('C1', 7, 7), window('C2', 7, 7)],
-              'checks': {row['id']: {'status': 'pass', 'basis': 'synthetic'}
+              'checks': {row['id']: {'status': 'recorded' if row.get('gating', True) is False else 'pass',
+                                     'basis': 'synthetic'}
                          for row in cad.NEXT_ARM_TRIAGE if row['source'] == cad.PACKET}}
     packet.update(overrides)
     return packet
+
+
+def write_battery_log(path, now, *, completion_age=600, step=100, end_age=30):
+    """A synthetic battery log: charging, then a completed charge ``completion_age`` s ago, then float."""
+    import json
+    start = now-completion_age-2*step
+    rows, t = [], start
+    while t <= now-end_age:
+        charging = t < now-completion_age
+        rows.append({'schema': 'joulewise.battery_float.v1', 'probe_error': False, 'wall_time_s': t,
+                     'external_connected': True, 'is_charging': charging,
+                     'current_capacity_pct': 97 if charging else 100, 'passed': not charging})
+        t += step
+    Path(path).write_text(''.join(json.dumps(r) + '\n' for r in rows))
+    return path
 
 
 def window(name, spam, bank, status='final', captured=18):
@@ -36,15 +58,16 @@ class TriageListTests(unittest.TestCase):
         # The frozen list enumerates the next-arm-dependent checks named by R12/R215.
         self.assertEqual(set(cad.TRIAGE_IDS), {
             'record_committed', 'terminal_completion', 'quiet_start_state', 'series_powermode',
-            'external_volume', 'charging_battery', 'meter_samples_clock', 'capture_faults',
+            'external_volume', 'charging_battery', 'meter_reader_live', 'meter_coverage', 'capture_faults',
             'thermal_escalation', 'cohort_pool_rules', 'sentinel_roster', 'member_eligibility',
-            'calibration_stop', 'full_desk_gate'})
+            'calibration_stop', 'battery_window', 'full_desk_gate'})
         self.assertEqual(len(cad.TRIAGE_IDS), len(set(cad.TRIAGE_IDS)))
-        ok = cad.next_arm_triage(passing_packet(), INTERNAL)
+        ok = cad.next_arm_triage(passing_packet(), INTERNAL, IDENTITY)
         self.assertTrue(ok['admitted'], ok['reasons'])
         self.assertEqual(set(ok['checks']), set(cad.TRIAGE_IDS))
-        # Each check gates: failing, or removing, any one refuses the arm.
-        for name in cad.TRIAGE_IDS:
+        # Each GATING check gates: failing, or removing, any one refuses the arm.
+        self.assertEqual(set(cad.TRIAGE_IDS)-set(cad.GATING_IDS), {'meter_coverage'})
+        for name in cad.GATING_IDS:
             with self.subTest(failing=name):
                 internal, packet = dict(INTERNAL), passing_packet()
                 if name in internal:
@@ -53,63 +76,150 @@ class TriageListTests(unittest.TestCase):
                     packet['next_window_role'] = 'test'      # still 'continue' after two windows
                 else:
                     packet['checks'][name]['status'] = 'fail'
-                self.assertFalse(cad.next_arm_triage(packet, internal)['admitted'])
+                self.assertFalse(cad.next_arm_triage(packet, internal, IDENTITY)['admitted'])
             if name in passing_packet()['checks']:
                 with self.subTest(missing=name):
                     packet = passing_packet()
                     del packet['checks'][name]
-                    self.assertFalse(cad.next_arm_triage(packet, INTERNAL)['admitted'])
+                    self.assertFalse(cad.next_arm_triage(packet, INTERNAL, IDENTITY)['admitted'])
             if name in INTERNAL:
                 with self.subTest(unevaluated=name):
                     internal = dict(INTERNAL)
                     del internal[name]
-                    self.assertFalse(cad.next_arm_triage(passing_packet(), internal)['admitted'])
+                    self.assertFalse(cad.next_arm_triage(passing_packet(), internal, IDENTITY)['admitted'])
+
+    def test_battery_window_resumes_automatically_once_then_needs_the_lead(self):
+        # Lead ruling 9 (W1-BLOCKERS-AGREEMENT): anti-idle automatic resume after one
+        # non-passing B window; two in a row need a signed battery disposition.
+        packet = passing_packet()
+        packet['checks']['battery_window'] = {'status': 'fail', 'basis': 'C2 B=1', 'consecutive_non_pass': 1}
+        result = cad.next_arm_triage(packet, INTERNAL, IDENTITY)
+        self.assertTrue(result['admitted'], result['reasons'])
+        self.assertEqual(result['checks']['battery_window']['status'], 'automatic_resume')
+        # The resume still needs the arm-computed top-up/OBC check.
+        self.assertFalse(cad.next_arm_triage(packet, {**INTERNAL, 'charging_battery': False}, IDENTITY)['admitted'])
+        packet['checks']['battery_window']['consecutive_non_pass'] = 2
+        refused = cad.next_arm_triage(packet, INTERNAL, IDENTITY)
+        self.assertFalse(refused['admitted'])
+        ruling = {'ruling_id': 'RUN_STATE-B', 'text_sha256': 'd'*64, 'after_window': 'C2',
+                  'lead_signature': 'lead: synthetic 2026-11-08'}
+        for bad in ({**ruling, 'after_window': 'C1'}, {**ruling, 'lead_signature': ''}, {**ruling, 'extra': 1}):
+            with self.subTest(bad=bad):
+                self.assertFalse(cad.next_arm_triage({**packet, 'battery_rulings': [bad]}, INTERNAL, IDENTITY)['admitted'])
+        resumed = cad.next_arm_triage({**packet, 'battery_rulings': [ruling]}, INTERNAL, IDENTITY)
+        self.assertTrue(resumed['admitted'], resumed['reasons'])
+        self.assertEqual(resumed['checks']['battery_window']['status'], 'resumed_by_lead')
+        for streak in (None, 0, True):
+            packet['checks']['battery_window']['consecutive_non_pass'] = streak
+            self.assertFalse(cad.next_arm_triage(packet, INTERNAL, IDENTITY)['admitted'])
 
     def test_packet_cannot_supply_or_override_arm_computed_checks(self):
         packet = passing_packet()
         packet['checks']['series_powermode'] = {'status': 'pass', 'basis': 'forged'}
-        self.assertFalse(cad.next_arm_triage(packet, {**INTERNAL, 'series_powermode': False})['admitted'])
+        self.assertFalse(cad.next_arm_triage(packet, {**INTERNAL, 'series_powermode': False}, IDENTITY)['admitted'])
         packet = passing_packet()
         packet['checks']['extra_check'] = {'status': 'pass', 'basis': 'unlisted'}
-        self.assertFalse(cad.next_arm_triage(packet, INTERNAL)['admitted'])
+        self.assertFalse(cad.next_arm_triage(packet, INTERNAL, IDENTITY)['admitted'])
 
     def test_malformed_packet_refuses(self):
         for packet in (None, {}, passing_packet(schema='x'), passing_packet(previous_window=''),
-                       passing_packet(previous_window_is_w1=None), passing_packet(code_or_config_changed='no')):
+                       passing_packet(previous_window='W9x'), passing_packet(previous_window_is_w1=None),
+                       passing_packet(code_or_config_changed='no')):
             with self.subTest(packet=packet):
-                self.assertFalse(cad.next_arm_triage(packet, INTERNAL)['admitted'])
+                self.assertFalse(cad.next_arm_triage(packet, INTERNAL, IDENTITY)['admitted'])
         blank = passing_packet()
         blank['checks']['record_committed']['basis'] = ' '
-        self.assertFalse(cad.next_arm_triage(blank, INTERNAL)['admitted'])
+        self.assertFalse(cad.next_arm_triage(blank, INTERNAL, IDENTITY)['admitted'])
 
     def test_full_desk_gate_is_required_after_w1_and_after_code_or_config_change(self):
-        for flags in ({'previous_window_is_w1': True}, {'code_or_config_changed': True}):
-            packet = passing_packet(**flags)
+        # Both conditions are DERIVED: the window id, and the artifact-set digest vs the last desk pass.
+        for case in ({'previous_window': 'W1', 'calibration_windows': []},
+                     {'last_desk_passed_artifact_set_sha256': 'c' * 64},
+                     {'last_desk_passed_artifact_set_sha256': None}):
+            packet = passing_packet(**case)
             packet['checks']['full_desk_gate'] = {'status': 'deferred', 'basis': 'desk running off MBP'}
-            with self.subTest(flags=flags):
-                self.assertFalse(cad.next_arm_triage(packet, INTERNAL)['admitted'])
+            with self.subTest(case=case):
+                refused = cad.next_arm_triage(packet, INTERNAL, IDENTITY)
+                self.assertFalse(refused['admitted'])
+                self.assertTrue(refused['full_desk_required'])
                 packet['checks']['full_desk_gate'] = {'status': 'pass', 'basis': 'desk complete'}
-                self.assertTrue(cad.next_arm_triage(packet, INTERNAL)['admitted'])
+                self.assertTrue(cad.next_arm_triage(packet, INTERNAL, IDENTITY)['admitted'])
         # An unchanged later window need not wait for the desk's pass, but must report it.
         later = passing_packet()
         later['checks']['full_desk_gate'] = {'status': 'deferred', 'basis': 'running on laptop'}
-        self.assertTrue(cad.next_arm_triage(later, INTERNAL)['admitted'])
+        self.assertTrue(cad.next_arm_triage(later, INTERNAL, IDENTITY)['admitted'])
         later['checks']['full_desk_gate'] = {'status': 'not_applicable', 'basis': 'running on laptop'}
-        self.assertFalse(cad.next_arm_triage(later, INTERNAL)['admitted'])
+        self.assertFalse(cad.next_arm_triage(later, INTERNAL, IDENTITY)['admitted'])
         other = passing_packet()
         other['checks']['record_committed'] = {'status': 'deferred', 'basis': 'commit running'}
-        self.assertFalse(cad.next_arm_triage(other, INTERNAL)['admitted'])
+        self.assertFalse(cad.next_arm_triage(other, INTERNAL, IDENTITY)['admitted'])
+        # No identity from the arm: nothing is assumed unchanged.
+        unknown = passing_packet()
+        unknown['checks']['full_desk_gate'] = {'status': 'deferred', 'basis': 'running'}
+        self.assertFalse(cad.next_arm_triage(unknown, INTERNAL)['admitted'])
+
+    def test_a_contradictory_packet_flag_refuses_and_agreeing_flags_are_accepted(self):
+        # DELTA-S2-M2: a stale flag can never waive the post-W1 desk or the code-change desk.
+        packet = passing_packet(previous_window='W1', previous_window_is_w1=False, calibration_windows=[])
+        packet['checks']['full_desk_gate'] = {'status': 'deferred', 'basis': 'running'}
+        result = cad.next_arm_triage(packet, INTERNAL, IDENTITY)
+        self.assertFalse(result['admitted'])
+        self.assertTrue(any('contradicts' in r for r in result['reasons']))
+        stale = passing_packet(code_or_config_changed=False, last_desk_passed_artifact_set_sha256='c' * 64)
+        stale['checks']['full_desk_gate'] = {'status': 'deferred', 'basis': 'running'}
+        self.assertFalse(cad.next_arm_triage(stale, INTERNAL, IDENTITY)['admitted'])
+        agreeing = passing_packet(previous_window_is_w1=False, code_or_config_changed=False)
+        self.assertTrue(cad.next_arm_triage(agreeing, INTERNAL, IDENTITY)['admitted'])
+        derived = cad.next_arm_triage(passing_packet(previous_window='W1', previous_window_is_w1=True,
+                                                     calibration_windows=[]), INTERNAL, IDENTITY)
+        self.assertTrue(derived['derived']['previous_window_is_w1'])
+
+    def test_record_commit_must_name_a_commit_the_arm_found(self):
+        self.assertTrue(cad.next_arm_triage(passing_packet(), INTERNAL, IDENTITY)['admitted'])
+        self.assertFalse(cad.next_arm_triage(passing_packet(), INTERNAL,
+                                             {**IDENTITY, 'record_commit_exists': False})['admitted'])
+        for bad in (None, 'abc', 'B' * 40):
+            self.assertFalse(cad.next_arm_triage(passing_packet(record_commit=bad), INTERNAL, IDENTITY)['admitted'])
+
+    def test_meter_coverage_is_recorded_with_gaps_and_never_gates(self):
+        packet = passing_packet()
+        packet['checks']['meter_coverage'] = {'status': 'recorded', 'basis': 'two members had a dropped counter',
+                                              'gaps': ['D_spam_benign_s1_gated_held_a: counter drop']}
+        result = cad.next_arm_triage(packet, INTERNAL, IDENTITY)
+        self.assertTrue(result['admitted'], result['reasons'])
+        self.assertEqual(result['checks']['meter_coverage']['gaps'], ['D_spam_benign_s1_gated_held_a: counter drop'])
+        del packet['checks']['meter_coverage']                       # even an absent tabulation never blocks v4
+        absent = cad.next_arm_triage(packet, INTERNAL, IDENTITY)
+        self.assertTrue(absent['admitted'])
+        self.assertEqual(absent['checks']['meter_coverage']['status'], 'missing')
+        # only a meter reader that is not verified live gates
+        packet = passing_packet()
+        packet['checks']['meter_reader_live']['status'] = 'fail'
+        self.assertFalse(cad.next_arm_triage(packet, INTERNAL, IDENTITY)['admitted'])
+
+    def test_arm_result_retains_the_packet_its_digest_and_the_calibration_summary(self):
+        a = cad.next_arm_triage(passing_packet(), INTERNAL, IDENTITY)
+        b = cad.next_arm_triage(passing_packet(calibration_windows=[window('C1', 6, 6), window('C2', 7, 7)]),
+                                INTERNAL, IDENTITY)
+        self.assertEqual(a['packet'], passing_packet())
+        self.assertNotEqual(a['packet_sha256'], b['packet_sha256'])
+        self.assertEqual(b['calibration']['eligible_by_pair'], {'spam': 13, 'bank': 13})
+
+    def test_template_lists_every_packet_check_and_fails_closed_until_filled(self):
+        template = cad.triage_template('C2')
+        self.assertEqual(set(template['checks']), {r['id'] for r in cad.NEXT_ARM_TRIAGE if r['source'] == cad.PACKET})
+        self.assertFalse(cad.next_arm_triage(template, INTERNAL, IDENTITY)['admitted'])
 
     def test_not_applicable_is_only_for_previous_window_checks_before_w1(self):
         first = passing_packet(previous_window='R1', calibration_windows=[], next_window_role=None)
         for name in ('thermal_escalation', 'cohort_pool_rules', 'sentinel_roster', 'member_eligibility'):
             first['checks'][name] = {'status': 'not_applicable', 'basis': 'previous window is R1'}
-        self.assertTrue(cad.next_arm_triage(first, INTERNAL)['admitted'], cad.next_arm_triage(first, INTERNAL)['reasons'])
+        self.assertTrue(cad.next_arm_triage(first, INTERNAL, IDENTITY)['admitted'], cad.next_arm_triage(first, INTERNAL, IDENTITY)['reasons'])
         first['checks']['record_committed'] = {'status': 'not_applicable', 'basis': 'skip'}
-        self.assertFalse(cad.next_arm_triage(first, INTERNAL)['admitted'])
+        self.assertFalse(cad.next_arm_triage(first, INTERNAL, IDENTITY)['admitted'])
         later = passing_packet()
         later['checks']['thermal_escalation'] = {'status': 'not_applicable', 'basis': 'skip'}
-        self.assertFalse(cad.next_arm_triage(later, INTERNAL)['admitted'])
+        self.assertFalse(cad.next_arm_triage(later, INTERNAL, IDENTITY)['admitted'])
 
 
 class CalibrationStopTests(unittest.TestCase):
@@ -168,7 +278,7 @@ class CalibrationStopTests(unittest.TestCase):
         self.assertEqual(cad.calibration_stop([refused('R1'), window('C1', 7, 7), refused('R2')])['decision'], 'continue')
         for role in ('calibration', 'test'):
             self.assertFalse(cad.next_arm_triage(passing_packet(calibration_windows=two, next_window_role=role),
-                                                 INTERNAL)['admitted'])
+                                                 INTERNAL, IDENTITY)['admitted'])
         with self.assertRaises(ValueError):
             cad.calibration_stop([window('C1', 3, 0, captured=0)])         # zero-capture cannot carry eligible members
         with self.assertRaises(ValueError):
@@ -185,20 +295,87 @@ class CalibrationStopTests(unittest.TestCase):
             with self.subTest(bad=bad[-1]), self.assertRaises(ValueError):
                 cad.calibration_stop(bad)
 
+    def test_contradictory_count_rows_never_authorize_completion_or_test_entry(self):
+        # DELTA H02: eligible benign members cannot outnumber the members captured.
+        impossible = [window(f'C{i}', 7, 7, captured=1) for i in range(1, 9)]
+        with self.assertRaises(ValueError):
+            cad.calibration_stop(impossible)
+        result = cad.next_arm_triage(passing_packet(calibration_windows=impossible, next_window_role='test'),
+                                     INTERNAL, IDENTITY)
+        self.assertFalse(result['admitted'])
+        self.assertTrue(any('contradictory' in r for r in result['reasons']))
+        # boundary: exactly the captured members eligible is fine; one more is not
+        ok = [window(f'C{i}', 7, 7, captured=14) for i in range(1, 9)]
+        self.assertEqual(cad.calibration_stop(ok)['decision'], 'calibration_complete')
+        for bad in (window('C1', 7, 7, captured=13), window('C1', 7, 7, captured=23), window('C1', -1, 7),
+                    window('C1', 7.0, 7), window('C1', True, 7),
+                    dict(window('C1', 3, 3), eligible_total=7)):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                cad.calibration_stop([bad])
+        self.assertEqual(cad.calibration_stop([dict(window('C1', 3, 3), eligible_total=6)])['attempted'], 1)
+
+    def test_calibration_totals_in_the_packet_must_sum_from_the_rows(self):
+        rows = [window(f'C{i}', 7, 7) for i in range(1, 9)]
+        good = cad.next_arm_triage(passing_packet(calibration_windows=rows, next_window_role='test',
+                                                  calibration_totals={'spam': 56, 'bank': 56}), INTERNAL, IDENTITY)
+        self.assertTrue(good['admitted'], good['reasons'])
+        bad = cad.next_arm_triage(passing_packet(calibration_windows=rows, next_window_role='test',
+                                                 calibration_totals={'spam': 56, 'bank': 40}), INTERNAL, IDENTITY)
+        self.assertFalse(bad['admitted'])
+
+    def test_an_unfinished_zero_capture_window_holds_the_gate_pending(self):
+        # DELTA M01: provisional + zero captures is in flight, not a terminal refusal.
+        rows = [window(f'C{i}', 6, 6) for i in range(1, 7)]
+        rows.append(window('C7', 0, 0, status='provisional', captured=0))
+        result = cad.calibration_stop(rows)
+        self.assertEqual(result['decision'], 'pending_final_eligibility')
+        self.assertFalse(result['counts_are_final'])
+        self.assertEqual(result['unfinished_zero_capture_windows'], 1)
+        # once it is final it is a refusal (not counted) and the gate continues
+        rows[-1] = window('C7', 0, 0, status='final', captured=0)
+        self.assertEqual(cad.calibration_stop(rows)['decision'], 'continue')
+        # an unfinished window never lets two refusals around it escalate
+        chain = [window('R1', 0, 0, captured=0), window('R2', 0, 0, status='provisional', captured=0)]
+        self.assertEqual(cad.calibration_stop(chain)['decision'], 'pending_final_eligibility')
+
+    def test_a_signed_lead_ruling_resets_the_zero_capture_escalation_and_is_retained(self):
+        refused = lambda name: window(name, 0, 0, captured=0)
+        rows = [window('C1', 7, 7), refused('R1'), refused('R2')]
+        ruling = {'ruling_id': 'RUN_STATE-218', 'text_sha256': 'd' * 64, 'resets': 'zero_capture_escalation',
+                  'after_window': 'R2', 'lead_signature': 'lead: synthetic-ruling 2026-11-08'}
+        self.assertEqual(cad.calibration_stop(rows)['decision'], 'escalate_to_lead')
+        result = cad.calibration_stop(rows, [ruling])
+        self.assertEqual((result['decision'], result['lead_rulings_applied']), ('continue', ['RUN_STATE-218']))
+        self.assertEqual(result['zero_capture_refusals'], 2)         # the history is kept
+        # another refusal pair after the ruling escalates again
+        again = rows + [refused('R3'), refused('R4')]
+        self.assertEqual(cad.calibration_stop(again, [ruling])['decision'], 'escalate_to_lead')
+        # through the triage: admitted with the ruling, refused without; the ruling is retained
+        packet = passing_packet(calibration_windows=rows, lead_rulings=[ruling])
+        admitted = cad.next_arm_triage(packet, INTERNAL, IDENTITY)
+        self.assertTrue(admitted['admitted'], admitted['reasons'])
+        self.assertEqual(admitted['lead_rulings'], [ruling])
+        self.assertFalse(cad.next_arm_triage(passing_packet(calibration_windows=rows), INTERNAL, IDENTITY)['admitted'])
+        for bad in ({**ruling, 'lead_signature': 'PENDING_LEAD_SIGNATURE'}, {**ruling, 'after_window': 'nope'},
+                    {**ruling, 'resets': 'anything'}, {**ruling, 'text_sha256': 'x'}, {**ruling, 'ruling_id': ' '},
+                    {k: v for k, v in ruling.items() if k != 'text_sha256'}):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                cad.calibration_stop(rows, [bad])
+
     def test_triage_role_follows_the_fixed_8_decision(self):
         done = [window(f'C{i}', 7, 7) for i in range(1, 9)]
-        self.assertFalse(cad.next_arm_triage(passing_packet(calibration_windows=done), INTERNAL)['admitted'])
-        test = cad.next_arm_triage(passing_packet(calibration_windows=done, next_window_role='test'), INTERNAL)
+        self.assertFalse(cad.next_arm_triage(passing_packet(calibration_windows=done), INTERNAL, IDENTITY)['admitted'])
+        test = cad.next_arm_triage(passing_packet(calibration_windows=done, next_window_role='test'), INTERNAL, IDENTITY)
         self.assertTrue(test['admitted'], test['reasons'])
         # Seven windows: a test arm is refused (no early stop), a calibration arm is allowed.
         seven = done[:7]
-        self.assertTrue(cad.next_arm_triage(passing_packet(calibration_windows=seven), INTERNAL)['admitted'])
+        self.assertTrue(cad.next_arm_triage(passing_packet(calibration_windows=seven), INTERNAL, IDENTITY)['admitted'])
         self.assertFalse(cad.next_arm_triage(passing_packet(calibration_windows=seven, next_window_role='test'),
-                                             INTERNAL)['admitted'])
+                                             INTERNAL, IDENTITY)['admitted'])
         failed = [window(f'C{i}', 0, 0) for i in range(1, 9)]
         for role in ('calibration', 'test'):
             self.assertFalse(cad.next_arm_triage(passing_packet(calibration_windows=failed,
-                                                                next_window_role=role), INTERNAL)['admitted'])
+                                                                next_window_role=role), INTERNAL, IDENTITY)['admitted'])
 
 
 class RegistrationTextTests(unittest.TestCase):
@@ -215,8 +392,16 @@ class RegistrationTextTests(unittest.TestCase):
             self.assertIn(f'`{name}`', self.section)
         for phrase in ('ceiling, not a reservation', 'authenticated terminal completion', 'RUN_STATE 217',
                        'insufficient_calibration', 'calibration_complete', 'fixed 8', 'not satisfied by counts alone',
-                       'Open statistics item', 'minimum of 7', '0.5 s_r', 'zero-capture', 'escalate to the lead', '67,371 s', '96,427 s', '--next-arm-triage'):
+                       'Open statistics item', 'minimum of 7', '0.5 s_r', 'zero-capture', 'escalate to the lead',
+                       'lead_ruling', 'meter_reader_live', 'NON-GATING', 'derived by the arm', '67,371 s', '96,427 s', '--next-arm-triage'):
             self.assertIn(phrase, self.section)
+
+    def test_protocol_states_tiers_stage_a_checklist_topup_evidence_and_dc_sealing(self):
+        text = ' '.join((Path(__file__).resolve().parents[2] / 'docs/align/pilot_protocol_v4.md').read_text().split())
+        for phrase in ('Stage A checklist additions', 'JW_WP22_FULL=1', '**Strict:**', '**Amendment:**', '`amendments` row',
+                       '--battery-log', 'derived from a logged battery record', 'continuous float',
+                       'BENIGN members only', 'sealed (hash only)', 'U3 inconclusive'):
+            self.assertIn(phrase, text)
 
     def test_stale_r1_sizing_is_marked_and_corrected(self):
         self.assertIn('STALE', self.r1)

@@ -349,7 +349,7 @@ def roster_manifest(out, results):
         items.append(item)
     manifest = {'schema': 'wp22.synthetic_w1_manifest', 'members': items,
                 'battery_journal': 'synthetic_battery.jsonl',
-                'delta_slow_c': SYN_INPUTS['R1']['thermal_policy']['delta_slow_c']}
+                'delta_slow_c': results['inputs']['R1']['thermal_policy']['delta_slow_c']}
     (out / 'desk_manifest.json').write_text(json.dumps(manifest, indent=2, sort_keys=True) + '\n')
     return out / 'desk_manifest.json'
 

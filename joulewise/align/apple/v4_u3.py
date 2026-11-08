@@ -1,7 +1,22 @@
 """Prospective R03 procedure; no installed alpha, transfer factor or energy floor.
 
-See docs/align/v4/W1-BLOCKERS-sol.md. All numerical policy inputs require lead
-adoption. A descriptive export without that policy remains PENDING.
+Merged build (docs/align/v4/W1-BLOCKERS-AGREEMENT.md, lead rulings 1-11):
+Sol's inputs, custody and scope (one prespecified 30B pilot pair per session,
+digest-bound transfer justification, per-window comparison roster), with the
+Opus arithmetic:
+
+  r_i  = (E_late - E_early) / mean(E_early, E_late), one pair per pilot session
+  s0   = sqrt(mean(r_i^2))         RMS about zero, df = n; drift is never credited
+  beta = series_alpha, halved if any |r_i| > 3 x leave-one-out RMS (ruling 7, fixed blind)
+  q    solves E_U[1 - (1 - P(|Z| > q U))^N] = beta, U^2 ~ chi2_n/n, N = sum of
+       the frozen roster: the series false-fail under the model, integrating
+       the shared small-sample uncertainty of s0 once
+  30B margin = q s0 mean(E);  D margin = f q s0 mean(E), f = d_transfer_factor
+  R1 D screen (optional, adjacent pair): not_refuted iff |r_D| <= f q s0;
+       refuted or missing makes D pairs inconclusive (ruling 6), never the bar invalid
+
+All numerical policy inputs require lead adoption. A descriptive export without
+that policy remains PENDING.
 """
 from functools import lru_cache
 import json
@@ -9,29 +24,51 @@ import math
 import random
 import statistics
 
-METHOD = 'session_student_t_predictive_v1'
+METHOD = 'session_zero_rms_series_exact_v1'
+MIN_SESSIONS = 5
+HEAVY_TAIL_RATIO = 3.0
 
 
 def canonical(value):
     return json.dumps(value, sort_keys=True, separators=(',', ':'), allow_nan=False)
 
 
-@lru_cache(maxsize=128)
-def critical(alpha, df):
-    """Two-sided Student-t quantile by incomplete-beta tail inversion."""
-    from joulewise.align.apple.thermal_desk import _ibeta
-    lo, hi = 0., 1.
-    def tail(x):
-        return _ibeta(df/2, .5, df/(df+x*x))
-    while tail(hi) > alpha:
-        hi *= 2
-    for _ in range(80):
+def _chi_expect(n, fn, steps=2000):
+    """E[fn(U)] for U = sqrt(X/n), X ~ chi-square(n), n >= 3 (composite Simpson)."""
+    hi = n + 14*math.sqrt(2*n) + 40
+    h = hi/steps
+    log_c = -(n/2)*math.log(2) - math.lgamma(n/2)
+    total = 0.0
+    for i in range(1, steps+1):
+        x = i*h
+        weight = 1 if i == steps else 4 if i % 2 else 2
+        total += weight*math.exp(log_c + (n/2-1)*math.log(x) - x/2)*fn(math.sqrt(x/n))
+    return total*h/3
+
+
+def _tail(z):
+    return math.erfc(z/math.sqrt(2))
+
+
+@lru_cache(maxsize=4096)
+def series_false_fail(q, n, tests):
+    """Model series false-fail of N null tests sharing one RMS scale with n df."""
+    return _chi_expect(n, lambda u: -math.expm1(tests*math.log1p(-min(_tail(q*u), 1-1e-16))))
+
+
+@lru_cache(maxsize=4096)
+def per_pair_false_fail(q, n):
+    """P(|T_n| > q): the exact predictive false-fail of one new null pair."""
+    return _chi_expect(n, lambda u: _tail(q*u))
+
+
+@lru_cache(maxsize=256)
+def series_quantile(n, tests, beta):
+    lo, hi = 0.0, 200.0
+    for _ in range(64):
         mid = (lo+hi)/2
-        if tail(mid) > alpha:
-            lo = mid
-        else:
-            hi = mid
-    return (lo+hi)/2
+        lo, hi = (mid, hi) if series_false_fail(mid, n, tests) > beta else (lo, mid)
+    return hi
 
 
 def policy_checks(policy):
@@ -115,22 +152,30 @@ def prediction(pairs, policy):
             d.append(value)
         else:
             raise ValueError('U3 training permits only 30B pilots and R1 D qualification; never W1')
-    if len(pilot) < 3 or len(d) != 1:
-        raise ValueError('U3 requires >=3 independent pilot sessions and exactly one R1 D replay pair')
-    sd, mean = statistics.stdev(pilot), statistics.fmean(pilot)
-    if sd <= 0:
+    if len(pilot) < MIN_SESSIONS or len(d) > 1:
+        raise ValueError(f'U3 requires >={MIN_SESSIONS} independent pilot sessions and at most one R1 D screen pair')
+    n = len(pilot)
+    s0 = math.sqrt(math.fsum(r*r for r in pilot)/n)
+    if not s0 > 0:
         raise ValueError('U3 zero observed scale cannot qualify a finite predictive bar')
-    alpha = policy['series_alpha']/sum(counts.values())
-    t = critical(alpha, len(pilot)-1)
-    width = t*sd*math.sqrt(1+1/len(pilot))
-    bar = abs(mean)+width
-    return dict(n=len(pilot), df=len(pilot)-1, mean_rel=mean, s_rel_sample=sd,
-                series_comparisons=sum(counts.values()), pair_alpha=alpha,
-                t_critical=t, predictive_half_width=width,
-                predictive_interval=[mean-width, mean+width], relative_bar_30B=bar,
-                relative_bar_D=bar*policy['d_transfer_factor'],
-                d_qualification_relative=d[0],
-                d_qualification_pass=abs(d[0]) <= bar*policy['d_transfer_factor'])
+    tests = sum(counts.values())
+    # Ruling 7, fixed blind: any pilot difference beyond 3x the RMS of the OTHER
+    # sessions halves beta. (With s0 itself the ratio can never exceed sqrt(n), so
+    # the rule would be vacuous at n <= 9; leave-one-out keeps its intent.)
+    heavy = any(abs(r) > HEAVY_TAIL_RATIO*math.sqrt(math.fsum(x*x for j, x in enumerate(pilot) if j != i)/(n-1))
+                for i, r in enumerate(pilot))
+    beta = policy['series_alpha']/2 if heavy else policy['series_alpha']
+    q = series_quantile(n, tests, beta)
+    bar = q*s0
+    factor = policy['d_transfer_factor']
+    screen = 'missing' if not d else 'not_refuted' if abs(d[0]) <= factor*bar else 'refuted'
+    return dict(n=n, df=n, mean_rel=statistics.fmean(pilot), s_rel_sample=statistics.stdev(pilot),
+                rms_rel=s0, series_comparisons=tests, heavy_tail_rule_applied=heavy, series_beta=beta,
+                series_quantile_q=q, pair_false_fail=per_pair_false_fail(q, n),
+                series_false_fail=series_false_fail(q, n, tests),
+                relative_bar_30B=bar, relative_bar_D=factor*bar,
+                d_qualification_relative=d[0] if d else None, d_screen=screen,
+                d_qualification_pass=screen == 'not_refuted')
 
 
 def operating_characteristics(policy, pred):
@@ -140,7 +185,7 @@ def operating_characteristics(policy, pred):
     D scale transfer. Rates are diagnostics, never a simulated admission bit.
     """
     policy_checks(policy)
-    return json.loads(_oc_cached(canonical(policy), pred['n'], pred['t_critical']))
+    return json.loads(_oc_cached(canonical(policy), pred['n'], pred['series_quantile_q']))
 
 
 @lru_cache(maxsize=16)
@@ -157,8 +202,10 @@ def _oc_cached(serialized_policy, n, k):
             ('normal_correlated_training_rho_0.5', 'normal', 0., 1., 0.),
             ('student_t3_unit_variance', 't3', 0., 1., 0.),
             ('centered_exponential', 'skew', 0., 1., 0.),
-            ('D_scale_at_assumed_factor', 'normal', 0., factor, 0.),
-            ('D_scale_twice_assumed_factor', 'normal', 0., 2*factor, 0.),
+            ('D_true_scale_1.0', 'normal', 0., 1., 0.),
+            ('D_true_scale_1.5', 'normal', 0., 1.5, 0.),
+            ('D_true_scale_2.0', 'normal', 0., 2., 0.),
+            ('D_true_scale_3.0', 'normal', 0., 3., 0.),
             ('D_drift_two_pilot_sd', 'normal', 0., 1., 2.),
             ('D_drift_eight_pilot_sd', 'normal', 0., 1., 8.)):
         rng = random.Random(policy['seed'])
@@ -173,7 +220,7 @@ def _oc_cached(serialized_policy, n, k):
             training_common = draw()
             sample = [(training_common+draw())/math.sqrt(2) if name == 'normal_correlated_training_rho_0.5'
                       else draw() for _ in range(n)]
-            bound = abs(statistics.fmean(sample))+k*statistics.stdev(sample)*math.sqrt(1+1/n)
+            bound = k*math.sqrt(math.fsum(x*x for x in sample)/n)
             common = draw()
             any_fail = False
             for window, roster in policy['checks_by_window'].items():
@@ -235,6 +282,6 @@ def validate_cached(serialized):
             or not isinstance(gate.get('path'), str) or not gate['path'].startswith('docs/align/v4/')
             or gate.get('derivation_sha256') != bar['derivation_sha256']):
         raise ValueError('U3 requires independent ADMIT bound to the exact derivation')
-    if not bar['prediction']['d_qualification_pass']:
-        raise ValueError('U3 R1 D transfer qualification failed; no W1 admission')
+    # Ruling 6: a refuted or missing R1 D screen leaves the bar valid for 30B and
+    # makes D pairs inconclusive at the desk (u3_margin), never a whole-bar refusal.
     return True

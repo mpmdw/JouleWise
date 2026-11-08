@@ -1,15 +1,30 @@
-"""R02 window consequence proposal; existing battery physics are unchanged."""
+"""R02 battery window rule (lead rulings 8-10 on W1-BLOCKERS-AGREEMENT); battery physics unchanged.
+
+Rule ``zero_B_auto_resume_v1``: any member with charging/AC loss
+(``battery.member_span``) or a charge-accumulator excursion fails the
+model-window B bar. Consequence (ruling 9, anti-idle): the B members are
+excluded, every other member is kept, the desk's ``v4_B_bar`` is false and is
+NOT a full-desk blocker; the next arm waits only for fresh admissible top-up
+evidence (``v4_topup``) and the OBC attestation, both already arm-computed
+(``charging_battery``). Two consecutive windows without a passing B bar
+escalate to the lead (``v4_cadence`` ``battery_window``). Missing evidence is
+unavailable, never a pass. Assist (discharge on AC) is disclosed and retained.
+"""
 import json
 from pathlib import Path
 
+RULE = 'zero_B_auto_resume_v1'
 EXCLUDE = ('battery.member_span', 'battery.accumulator_excursion')
+RESUME = ('automatic resume: B members excluded, all other members kept; next arm needs only fresh '
+          'admissible top-up evidence (v4_topup) and the OBC attestation; a second consecutive '
+          'non-passing B window needs a lead disposition (ruling 9)')
 MISSING = ('battery.unmeasured', 'battery.capture_pair_missing', 'battery.capture_pair_failed')
 
 
 def validate_policy(policy):
     from scripts.align_v4_kit import valid_lead_signature
     if (not isinstance(policy, dict) or policy.get('schema') != 'joulewise.align_v4.battery_window.v1'
-            or policy.get('status') != 'registered' or policy.get('rule') != 'zero_B_disclose_assist_v1'
+            or policy.get('status') != 'registered' or policy.get('rule') != RULE
             or not valid_lead_signature(policy.get('lead_signature'))):
         raise ValueError('B window consequence PENDING lead adoption')
     return policy
@@ -105,8 +120,8 @@ def window_consequences(members, policy):
             no_assist_sensitivity={'status': 'print_only', 'member_ids': unassisted},
             status='pass' if passed is True else 'fail' if passed is False else 'inconclusive',
             consequence=('B window consequence PENDING lead adoption' if not adopted else
-                         'battery window invalid; retain/exclude B members; no pool entry; remedy before next arm' if count else
-                         'battery evidence unavailable; no pool entry until adjudicated' if missing else
+                         'B window failed; ' + RESUME if count else
+                         'battery evidence unavailable (counts as non-passing); unobserved members excluded; ' + RESUME if missing else
                          'retain GPU members; disclose assist; print no-assist sensitivity; DC-in remains secondary'),
             members=[{'id': r['id'], **r.get('battery', {})} for r in rows])
     return reports

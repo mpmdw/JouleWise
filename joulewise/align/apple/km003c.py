@@ -49,6 +49,29 @@ def _empty(flags=()):
             'residual_status': 'missing_dc'}
 
 
+def seal_non_benign(report, plan_members):
+    """Seal the DC rows of non-benign members (Opus cold MED-4).
+
+    Until the v5 addendum registers, the desk prints the per-member DC residual for
+    BENIGN members only. A sabotage (or any non-benign-condition) member keeps its
+    status and flags, but every DC value is replaced by the sha256 of the row's
+    canonical JSON, so nothing about its effect is visible and the row stays auditable.
+    """
+    conditions = {m['run_id']: m.get('condition') for m in plan_members}
+    members = {}
+    for run_id, row in report['members'].items():
+        if conditions.get(run_id) == 'benign':
+            members[run_id] = row
+            continue
+        sealed = hashlib.sha256(json.dumps(row, sort_keys=True, separators=(',', ':'),
+                                           default=str).encode()).hexdigest()
+        members[run_id] = {'label': LABEL, 'print_only': True, 'sealed': True, 'sealed_sha256': sealed,
+                           'condition': conditions.get(run_id), 'status': row.get('status'),
+                           'flags': list(row.get('flags', ())),
+                           'sealed_until': 'v5 addendum registration'}
+    return {**report, 'members': members}
+
+
 def unavailable_report(plan_members, flag, *, detail=None):
     return {'schema': 'joulewise.align_v4.km003c_secondary.v1', 'label': LABEL, 'print_only': True,
             'members': {m['run_id']: _empty([flag]) for m in plan_members}, 'detail': detail}
