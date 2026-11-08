@@ -303,6 +303,21 @@ fi
   exit 2
 }
 launchctl_bin="${launchctl_bin:A}"
+# WatchPaths has an existing file before bootstrap. Never replace a real
+# terminal event on reinstall; this inert seed carries no release authority.
+"$python_bin" - "$custody_root/terminal-wake.json" <<'PY'
+import json
+import os
+import sys
+
+try:
+    with open(sys.argv[1], "x", encoding="utf-8") as stream:
+        json.dump({"schema": "joulewise.terminal_wake.v1", "issued_epoch_s": 0}, stream)
+        stream.flush()
+        os.fsync(stream.fileno())
+except FileExistsError:
+    pass
+PY
 "$launchctl_bin" bootout "gui/$uid/$label" 2>/dev/null || true
 if ! "$launchctl_bin" bootstrap "gui/$uid" "$plist"; then
   print "failed to bootstrap $label" >&2

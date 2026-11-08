@@ -3160,6 +3160,43 @@ def tick(storage: Storage, deps: Dependencies, *, dry_run: bool = False) -> Deci
         os._exit(0)
 
 
+def tick_on_terminal_event(storage: Storage, deps: Dependencies) -> Decision:
+    """Use the same gates with at most 30 one-second writer-exit retries.
+
+    WatchPaths can fire before the writer exits. Dedupe under service_lock and
+    retry only ordinary process/span holds; backoff, stop and clock/network
+    uncertainty are never overridden. A lost edge retains StartInterval.
+    """
+    from joulewise.terminal_wake import MARKER, read_event
+    observed = read_event(storage.root / MARKER)
+    retry = False
+    if observed is not None:
+        raw, event = observed
+        digest = hashlib.sha256(raw).hexdigest()
+        seen_path = storage.root / "terminal-wake-seen.json"
+        try:
+            seen = json.loads(storage.read_text(seen_path))
+        except (OSError, ValueError):
+            seen = None
+        if seen != digest:
+            try:
+                storage.atomic_json(seen_path, digest)
+            except OSError:
+                # Advisory notification custody cannot disable the ordinary
+                # watchdog tick (including its 300 s recovery path).
+                return tick(storage, deps)
+            age = deps.wall_now().timestamp() - event["issued_epoch_s"]
+            retry = 0 <= age <= 60
+    for attempt in range(31 if retry else 1):
+        decision = tick(storage, deps)
+        if (decision.launch or decision.adopt
+                or decision.state not in {"FENCED", "HOLD_CENSUS"}
+                or attempt == 30 or not retry):
+            return decision
+        deps.sleep(1)
+    return decision
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -3244,7 +3281,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     with service_lock(storage) as descriptor:
         if descriptor is None:
             return 0
-        tick(storage, deps)
+        tick_on_terminal_event(storage, deps)
     return 0
 
 

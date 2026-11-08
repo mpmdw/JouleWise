@@ -234,6 +234,10 @@ class InstallMagistrateWatchdogTests(unittest.TestCase):
         plist_path = self.home / "Library/LaunchAgents/com.joulewise.magistrate.plist"
         plist = plistlib.loads(plist_path.read_bytes())
         self.assertEqual(str(self.shadow_repo.resolve()), plist["WorkingDirectory"])
+        marker = lock_path.parent / "terminal-wake.json"
+        self.assertEqual([str(marker)], plist["WatchPaths"])
+        self.assertEqual(300, plist["StartInterval"])
+        self.assertEqual(0, json.loads(marker.read_bytes())["issued_epoch_s"])
         calls = self.launch_log.read_text(encoding="utf-8").splitlines()
         self.assertEqual(3, len(calls))
         self.assertTrue(any(" bootstrap " in f" {call} " for call in calls))

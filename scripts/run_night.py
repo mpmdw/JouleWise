@@ -2259,6 +2259,13 @@ def _write_courier_outcome(night_dir: Path, outcome: Mapping[str, Any]) -> None:
     _write_json(night_dir / "courier.json", document)
 
 
+def _notify_terminal(plan):
+    from joulewise.terminal_wake import DESTINATION_ENV, publish
+    destination = os.environ.get(DESTINATION_ENV)
+    if destination:
+        return publish(Path(destination), plan.plan_id, plan.receipt_class)
+
+
 def _finish_reporting(
     custody_root: Path,
     night_dir: Path,
@@ -2306,6 +2313,9 @@ def _finish_reporting(
     late = report["diagnostics"][issued:]
     if late:  # re-audit 81 R2: a post-delivery failure must survive somewhere durable
         optional("night log after courier", lambda: _append_log(custody_root, "\n".join(late)))
+    # Notification is advisory. The watchdog re-reads the ordinary terminal
+    # records, courier proof and all live censuses before it can release.
+    optional("terminal wake", lambda: _notify_terminal(plan))
     return report["base_exit_code"] if outcome["sent"] else EXIT_COURIER_FAILED
 
 

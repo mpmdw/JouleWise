@@ -660,6 +660,8 @@ class Prepared:
             values = {"com.joulewise.night": label, "@@PYTHON@@": self.python,
                       "@@MODE@@": mode, "@@REPO@@": str(self.repo), "@@PLAN@@": str(plan_path),
                       "@@CUSTODY_ROOT@@": self.plan.custody_root, "@@COURIER_BIN@@": self.courier,
+                      "@@MAGISTRATE_CUSTODY_ROOT@@": (os.environ.get("MAGISTRATE_WATCHDOG_CUSTODY_ROOT")
+                          or str(Path.home() / "night-custody" / "magistrate")),
                       "@@PATH@@": self.courier_path,
                       "@@LOG_STEM@@": "launchd.deadman" if index else "launchd.night"}
             values.update({"@@{}@@".format(key.upper()): str(value) for key, value in calendar.items()})
