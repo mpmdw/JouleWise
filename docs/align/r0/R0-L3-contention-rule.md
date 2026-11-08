@@ -28,6 +28,17 @@ The lead ruled on the eight questions raised in PR #699 (2026-11-07):
 (7) After merge, the clean-gap scheduling rule for R0 is dropped; the lead delivers that in RUN_STATE. Mention it in the doc.
 (8) #700 is tooling under gate policy rule 2: CI plus its regression test satisfy it. Fill #700's ledger accordingly once CI is green.
 
+## Display ruling (verbatim)
+
+From the magistrate's investigation in `RUN_STATE.md` item 206 (commit
+`20413903b` on `main`): the MBP display had been on since 11-05 with
+`displaysleep 0`. With the display on, ControlCenter's menu-bar redraws
+every 3-4 min wake WindowServer and trip the census; after
+`pmset displaysleepnow` those bursts stopped. macOS also starts about 650
+background dasd activities per hour on an idle AC Mac. The lead ruled:
+
+(a) before any census-checked segment, the R0 launcher runs `pmset displaysleepnow` (no sudo) and dwells 300 s (one constant), then records the display state in the report (`pmset -g` displaysleep value, `pmset -g log` display transitions during the run, i.e. any display wake). A display wake during the SMC capture is recorded as a flag, never a refusal. (b) The R0-L3 redo rule stays as ruled (one capture redo on a sustained single-process ≥ 0.5-core episode; flag otherwise).
+
 ## What the code does
 
 ### SMC capture (items 1 and 4)
@@ -83,6 +94,25 @@ The lead ruled on the eight questions raised in PR #699 (2026-11-07):
   `contention_flags`. The report gets a `contention` summary: guard flags,
   flagged checks, SMC `contended`, SMC redos and SMC flagged intervals.
 - `report.md` gets a "Contention (R0-L3: recorded, not fatal)" section.
+
+### Display (display ruling, RUN_STATE 206)
+
+- The launcher (`scripts/launch_align_r0.py` `run`, on `main`, PR #700)
+  runs `pmset displaysleepnow` after Spotlight is paused, then dwells
+  `DISPLAY_SLEEP_DWELL_S` = 300 s before it starts the runner, whose first
+  act is a census. A failed `displaysleepnow` is recorded, not refused. It
+  hands its record to the runner in `JOULEWISE_R0_DISPLAY_PREP`.
+- The runner (`r0_runner.display_summary`, `r0_host.display_census`)
+  writes `display` into the report when the run ends: the launcher's record,
+  `pmset -g`'s `displaysleep`, the display state at the run's start, every
+  `pmset -g log` display transition during the run and
+  `display_woke_during_run`.
+- A display wake whose time falls inside the SMC check's wall window
+  (`wall_window_epoch_s` on the SMC row) sets `smc_display_wake_flag` and
+  lists the wake in `smc_display_wakes`. It is a flag, never a refusal.
+- `report.md` gets a "Display (R0-L3, RUN_STATE 206)" section.
+- An unavailable or failing `pmset` is recorded in `display` and never
+  changes a check's outcome.
 
 ### Launcher (item 3)
 

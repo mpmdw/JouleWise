@@ -609,6 +609,57 @@ class R0HostTest(unittest.TestCase):
                     self.assertEqual(row['phase_max_empty_cells']['load'], 2 if hole else 0)
 
 
+def fake_pmset(displaysleep="0", log="", *, fail=False):
+    """A fake pmset: `-g` settings and `-g log` (RUN_STATE 206 shapes)."""
+    calls = []
+    def run(argv, **kwargs):
+        calls.append(tuple(argv))
+        if fail:
+            raise FileNotFoundError("pmset")
+        if tuple(argv[1:]) == ("-g",):
+            return subprocess.CompletedProcess(argv, 0, f"System-wide power settings:\n displaysleep         {displaysleep}\n", "")
+        if tuple(argv[1:]) == ("-g", "log"):
+            return subprocess.CompletedProcess(argv, 0, log, "")
+        raise AssertionError(argv)
+    return run, calls
+
+
+PMSET_LOG = (
+    "2026-11-05 23:41:00 -0800 Notification        \tDisplay is turned on                \t\n"
+    "2026-11-07 18:08:12 -0800 Notification        \tDisplay is turned off               \t\n"
+    "2026-11-07 18:40:00 -0800 Sleep               \tEntering Sleep state                 \t\n"
+    "2026-11-07 18:50:00 -0800 Notification        \tDisplay is turned on                \t\n"
+    "2026-11-07 18:50:30 -0800 Notification        \tDisplay is turned off               \t\n"
+    "2026-11-07 22:00:00 -0800 Notification        \tDisplay is turned on                \t\n")
+
+
+class R0DisplayCensusTest(unittest.TestCase):
+    def epoch(self, text):
+        from datetime import datetime
+        return datetime.strptime(text, "%Y-%m-%d %H:%M:%S %z").timestamp()
+
+    def test_display_census_records_setting_state_and_transitions_in_the_run(self):
+        from joulewise.align.r0_host import display_census
+        run, calls = fake_pmset("0", PMSET_LOG)
+        start, end = self.epoch("2026-11-07 18:30:00 -0800"), self.epoch("2026-11-07 19:30:00 -0800")
+        record = display_census(start, end, run=run)
+        self.assertEqual(calls, [("/usr/bin/pmset", "-g"), ("/usr/bin/pmset", "-g", "log")])
+        self.assertEqual(record["displaysleep_minutes"], 0)
+        self.assertEqual(record["display_at_start"], "off")
+        self.assertEqual([(t["state"], t["epoch_s"]) for t in record["transitions"]],
+                         [("on", self.epoch("2026-11-07 18:50:00 -0800")),
+                          ("off", self.epoch("2026-11-07 18:50:30 -0800"))])
+        self.assertTrue(record["display_woke_during_run"])
+
+    def test_unavailable_pmset_is_recorded_never_raised(self):
+        from joulewise.align.r0_host import display_census
+        run, _ = fake_pmset(fail=True)
+        record = display_census(0, 1, run=run)
+        self.assertIn("FileNotFoundError", record["pmset_g_error"])
+        self.assertIn("FileNotFoundError", record["pmset_log_error"])
+        self.assertIsNone(record["display_woke_during_run"])
+
+
 class R0QuietIntervalTest(unittest.TestCase):
     # CPU fixtures derive from the 0.05 CPU-s/s bar and 30 s interval:
     # 0.06 / 0.04 straddle the bar by 0.01; 1.80 / 1.20 are their

@@ -438,6 +438,49 @@ class R0ChecksTest(unittest.TestCase):
             self.assertIn("SMC capture contended: **True**", markdown)
             self.assertIn("- template (D): 1 guard flag(s)", markdown)
 
+    def test_r0l3_display_wake_during_smc_is_a_flag_never_a_refusal(self):
+        import time as clock
+        moments = {}
+        def smc(*args, **kwargs):
+            moments["smc"] = clock.time()
+            return {"status": "pass"}
+        probes = []
+        def display_probe(started, finished):
+            probes.append((started, finished))
+            wake = moments["smc"]
+            return {"displaysleep_minutes": 0, "display_at_start": "off", "display_woke_during_run": True,
+                    "transitions": [{"state": "on", "epoch_s": wake, "line": "Display is turned on"},
+                                    {"state": "on", "epoch_s": finished + 3600, "line": "after"}]}
+        prep = {"displaysleepnow": {"exit_code": 0}, "dwell_s": 300, "dwell_constant_s": 300}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with patch("joulewise.align.r0_runner.smc_enumeration", side_effect=smc), \
+                    patch.dict("os.environ", {"JOULEWISE_R0_DISPLAY_PREP": json.dumps(prep)}):
+                report = execute(config_at(root), root, ["smc"], ["D"], guard=FakeGuard(),
+                                 backend_factory=FakeBackend, display_probe=display_probe)
+            self.assertEqual(report["status"], "pass")
+            self.assertEqual(len(probes), 1)
+            display = report["display"]
+            self.assertEqual(display["launcher_prep"], prep)
+            self.assertEqual(display["displaysleep_minutes"], 0)
+            self.assertTrue(display["smc_display_wake_flag"])
+            self.assertEqual([w["epoch_s"] for w in display["smc_display_wakes"]], [moments["smc"]])
+            markdown = (root / "report.md").read_text()
+            self.assertIn("## Display (R0-L3, RUN_STATE 206)", markdown)
+            self.assertIn("Display wake during the SMC capture: **True** (a flag, not a refusal)", markdown)
+
+    def test_display_probe_failure_never_changes_the_outcome(self):
+        def broken(started, finished):
+            raise RuntimeError("pmset exploded")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with patch("joulewise.align.r0_runner.smc_enumeration", return_value={"status": "pass"}):
+                report = execute(config_at(root), root, ["smc"], ["D"], guard=FakeGuard(),
+                                 backend_factory=FakeBackend, display_probe=broken)
+            self.assertEqual(report["status"], "pass")
+            self.assertIn("pmset exploded", report["display"]["error"])
+            self.assertIsNone(report["display"]["smc_display_wake_flag"])
+
     def test_unattended_fake_cli_writes_both_outputs_and_never_claims_live(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

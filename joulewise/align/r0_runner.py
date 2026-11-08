@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 import fcntl
 import hashlib
 import json
+import os
 from pathlib import Path
 import signal
 import sys
@@ -14,7 +15,8 @@ import time
 
 from joulewise.align import r0
 from joulewise.align.r0_host import (
-    QuietGuard, Refused, command, disk_census, host_snapshot, host_identity, inventory, smc_enumeration,
+    QuietGuard, Refused, command, disk_census, display_census, host_snapshot, host_identity, inventory,
+    smc_enumeration,
     ProfileRefused, profile_config, step_budget,
 )
 
@@ -105,9 +107,39 @@ def save_report(output, report):
         temp.replace(output / name)
 
 
+DISPLAY_PREP_ENV = "JOULEWISE_R0_DISPLAY_PREP"
+
+
+def display_summary(report, probe, started_epoch, finished_epoch):
+    """R0-L3 display ruling (RUN_STATE 206): record display state; a wake
+    during the SMC capture is a flag, never a refusal."""
+    raw = os.environ.get(DISPLAY_PREP_ENV)
+    try:
+        prep = json.loads(raw) if raw else None
+    except ValueError:
+        prep = {"unparsed": raw}
+    display = {"rule": "docs/align/r0/R0-L3-contention-rule.md (RUN_STATE 206)", "launcher_prep": prep,
+               "smc_display_wakes": None, "smc_display_wake_flag": None}
+    if probe is None:
+        display["probed"] = False
+    else:
+        try:
+            display.update(probe(started_epoch, finished_epoch), probed=True)
+            windows = [r["wall_window_epoch_s"] for r in report["checks"]
+                       if r["check"] == "smc" and r.get("wall_window_epoch_s")]
+            wakes = [t for t in display.get("transitions", ()) if t["state"] == "on"
+                     and any(begin <= t["epoch_s"] <= end for begin, end in windows)]
+            if "pmset_log_error" not in display:
+                display.update(smc_display_wakes=wakes, smc_display_wake_flag=bool(wakes))
+        except Exception as exc:
+            display.update(probed=True, error=f"{type(exc).__name__}: {exc}")
+    report["display"] = display
+
+
 def execute(config, output, checks, models, *, guard, backend_factory, per_check_timeout=7200,
-            keep_going=False, long_decode_attempts=2):
+            keep_going=False, long_decode_attempts=2, display_probe=None):
     started_run = time.monotonic()
+    started_epoch = time.time()
     # --checks selects a subset, never overrides the fail-fast phase order.
     checks = (["smc"] if "smc" in checks else []) + [name for name in CHECKS if name in checks and name != "smc"]
     report = {"schema": "joulewise.align.r0.report.v1", "status": "running",
@@ -148,6 +180,7 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
         report["checks"].append(row)
         unserializable = []
         flags_before = len(getattr(guard, "contention_flags", []))
+        wall_start = time.time()
         def progress(data):
             row.update(data)
             row["check_seconds"] = time.monotonic() - started
@@ -197,6 +230,8 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
             interrupt(row)
             row.update(status="fail", error=f"{type(exc).__name__}: {exc}")
         finally:
+            if name == "smc":
+                row["wall_window_epoch_s"] = [wall_start, time.time()]
             progress({})
         if name == "smc":
             report["smc_selection_missing"] = row["status"] != "pass"
@@ -292,6 +327,7 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
             for row in report["checks"] if row["status"] in {"required", "fallback"}]
         report["census"] = guard.receipts
         contention_summary()
+        display_summary(report, display_probe, started_epoch, time.time())
         report["total_seconds"] = time.monotonic() - started_run
         report["finished_utc"] = datetime.now(timezone.utc).isoformat()
         save_report(output, report)
@@ -301,7 +337,8 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
 MACHINE_LOCK = Path("/private/tmp/joulewise-align-r0.lock")
 
 
-def main(argv=None, *, backend_factory=None, guard_factory=QuietGuard, lock_path=None):
+def main(argv=None, *, backend_factory=None, guard_factory=QuietGuard, lock_path=None,
+         display_probe=display_census):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True, help="new exclusive record directory")
@@ -346,7 +383,8 @@ def main(argv=None, *, backend_factory=None, guard_factory=QuietGuard, lock_path
             backend_factory = MlxBackend
         report = execute(config, args.output, checks, models, guard=guard,
                          backend_factory=backend_factory, per_check_timeout=args.timeout,
-                         keep_going=args.keep_going, long_decode_attempts=args.long_decode_attempts)
+                         keep_going=args.keep_going, long_decode_attempts=args.long_decode_attempts,
+                         display_probe=display_probe)
         print(f"{report['status']}: {args.output / 'report.json'}; complete_r0={report['complete_r0']}")
         return 0 if report["status"] == "pass" else 2
 

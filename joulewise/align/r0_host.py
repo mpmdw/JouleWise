@@ -478,6 +478,41 @@ def host_snapshot(run=command):
             "note": "Read-only desk readiness; R1 lever adoption and arm readiness require their own gates."}
 
 
+DISPLAY_TRANSITION = re.compile(
+    r"^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d [+-]\d{4})\s.*?\bDisplay is turned (on|off)\b", re.M)
+
+
+def display_census(started_epoch, finished_epoch, run=subprocess.run):
+    """R0-L3 display ruling (RUN_STATE 206): record, never refuse.
+
+    Records `pmset -g`'s displaysleep value, the display state at the run's
+    start (the last transition before it) and every `pmset -g log` display
+    transition inside [started_epoch, finished_epoch].
+    """
+    from datetime import datetime
+    record = {"displaysleep_minutes": None, "display_at_start": None, "transitions": [],
+              "display_woke_during_run": None}
+    env = {**os.environ, "LC_ALL": "C"}
+    try:
+        settings = run(("/usr/bin/pmset", "-g"), capture_output=True, text=True, timeout=15, env=env)
+        match = re.search(r"(?m)^\s*displaysleep\s+(\d+)", settings.stdout)
+        record["displaysleep_minutes"] = int(match[1]) if match else None
+    except Exception as exc:
+        record["pmset_g_error"] = f"{type(exc).__name__}: {exc}"
+    try:
+        log = run(("/usr/bin/pmset", "-g", "log"), capture_output=True, text=True, timeout=60, env=env)
+        for match in DISPLAY_TRANSITION.finditer(log.stdout):
+            when = datetime.strptime(match[1], "%Y-%m-%d %H:%M:%S %z").timestamp()
+            if when < started_epoch:
+                record["display_at_start"] = match[2]
+            elif when <= finished_epoch:
+                record["transitions"].append({"state": match[2], "epoch_s": when, "line": match[0].strip()})
+        record["display_woke_during_run"] = any(t["state"] == "on" for t in record["transitions"])
+    except Exception as exc:
+        record["pmset_log_error"] = f"{type(exc).__name__}: {exc}"
+    return record
+
+
 def smc_enumeration(repo, output, step=None):
     try:
         profile = profile_config(step)

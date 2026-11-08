@@ -748,6 +748,21 @@ def markdown(report):
         if contention["smc_contended"]:
             lines.append("- SMC picks were selected under sustained contention; read them with "
                          "`contention_by_phase` in the JSON. Picks stay PROVISIONAL; R1 re-selects.")
+    display = report.get("display")
+    if display and display.get("probed"):
+        # R0-L3 display ruling (RUN_STATE 206): recorded and flagged, not fatal.
+        prep = display.get("launcher_prep") or {}
+        lines.extend(["", "## Display (R0-L3, RUN_STATE 206)", "",
+                      f"Display wake during the SMC capture: **{display.get('smc_display_wake_flag')}** "
+                      "(a flag, not a refusal).",
+                      f"displaysleep (pmset -g): {display.get('displaysleep_minutes')}; display at start: "
+                      f"{display.get('display_at_start')}; transitions during the run: "
+                      f"{len(display.get('transitions') or ())}.",
+                      f"Launcher displaysleepnow exit: {(prep.get('displaysleepnow') or {}).get('exit_code')}; "
+                      f"dwell: {prep.get('dwell_s')} s."])
+        lines.extend(f"- {t.get('line', t['state'])}" for t in display.get("transitions") or ())
+        lines.extend(f"- display probe error: {display[k]}" for k in ("error", "pmset_g_error", "pmset_log_error")
+                     if display.get(k))
     for row in report["checks"]:
         lines.extend(["", f"## {row['check']} ({row.get('model', 'host')})", ""])
         if row["check"] in ("template", "generated") and "transitions" in row:
