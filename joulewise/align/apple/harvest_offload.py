@@ -100,8 +100,12 @@ MAX_LINK_HOPS = 16
 # entry whose consumed files are exactly the declared ``inputs`` (the ledger, plus whatever the
 # lead-owned native N1 census finds). Anything else is ``undeclared``: the production CLI refuses
 # it; the library default binds its bytes (within the bounds) so a change on the Air refuses.
+# ``declared_directory_mode`` (delta2, lead ruling 1): a declared directory is NOT an exemption. With
+# ``consumed`` the caller has enumerated every file the harvest selects there and declared each as an
+# input (bound by bytes); with ``bind`` (when that selection cannot be enumerated) the whole directory
+# is bound by bytes and membership within the closure bounds, or finalize refuses.
 DEFAULT_IGNORED_POLICY = {'identity_bound': ['.venv/'], 'regenerated': ['__pycache__', '*.pyc', '.DS_Store'],
-                          'declared_directories': [], 'undeclared': 'bind'}
+                          'declared_directories': [], 'undeclared': 'bind', 'declared_directory_mode': 'bind'}
 
 
 def _canonical_bytes(value: Any) -> bytes:
@@ -197,13 +201,18 @@ def _directory_listing(target: Path, collected: _ClosureFiles | None = None, *, 
     return names
 
 
-def _link_chain(path: Path) -> tuple[list[str], Path]:
-    """Follow a link hop by hop with lstat, never collapsing a hop first (D2). Returns hop texts and the end."""
-    hops, current = [], path
+def _link_chain(path: Path, session_reals) -> tuple[list[str], str, bool]:
+    """Follow a link hop by hop as the kernel does (D2, delta2).
+
+    Each hop is joined to its link's directory WITHOUT lexical normalization, and inspected with
+    lstat, so ``..`` after a symlinked parent selects what the OS opens. Returns the hop texts, the
+    end path and whether any intermediate link lies outside the session (an external hop).
+    """
+    hops, current, external = [], str(path), False
     while True:
         text = os.readlink(current)
         hops.append(text)
-        following = Path(os.path.normpath(os.path.join(os.path.dirname(current), text)))
+        following = os.path.join(os.path.dirname(current), text)
         try:
             is_link = stat.S_ISLNK(os.lstat(following).st_mode)
         except FileNotFoundError:
@@ -211,21 +220,36 @@ def _link_chain(path: Path) -> tuple[list[str], Path]:
         except OSError as exc:
             raise OffloadRefused(f'cannot inspect link target {following}: {exc}') from None
         if not is_link:
-            return hops, following
+            return hops, following, external
+        location = Path(os.path.realpath(os.path.dirname(following))) / os.path.basename(following)
+        if not any(_under(location, root) for root in session_reals):
+            external = True
         if len(hops) >= MAX_LINK_HOPS:
             raise OffloadRefused(f'link chain longer than {MAX_LINK_HOPS} hops: {path}')
         current = following
 
 
-def _classify_link(path: Path, root_real: Path, mirror_real: Path | None):
-    """``(class, real target, hops)``: internal, mirror, absent or bytes."""
-    if _under(Path(os.path.realpath(path)), root_real):
-        return 'internal', None, None
-    hops, end = _link_chain(path)
+def _classify_link(path: Path, root_real: Path, mirror_real: Path | None, session_reals=None):
+    """``(class, real target, hops)``: internal, mirror, session, absent or bytes.
+
+    The hop chain is classified BEFORE the end is resolved (delta2, lead ruling 2): a chain with an
+    external hop is external even when it ends back inside the session (class ``session``).
+    """
+    session_reals = (root_real,) if session_reals is None else session_reals
+    hops, end, external_hop = _link_chain(path, session_reals)
     target = Path(os.path.realpath(end))
+    inside = any(_under(target, root) for root in session_reals)
+    if inside and not external_hop:
+        return 'internal', None, None
     if mirror_real is not None and _under(target, mirror_real):
         return 'mirror', target, hops
+    if inside:
+        return 'session', target, hops
     return ('absent' if not os.path.lexists(target) else 'bytes'), target, hops
+
+
+def _has_dotdot(text) -> bool:
+    return '..' in Path(os.fspath(text)).parts
 
 
 def _policy_match(entry: str, patterns) -> bool:
@@ -252,10 +276,33 @@ def _git_ignored(mirror_real: Path, relative: str) -> list[str]:
     return sorted(p for p in result.stdout.decode().split('\0') if p)
 
 
+def _membership(directory: Path, skip: set[str]) -> list[list[Any]]:
+    """Sorted relative names and sizes below a byte-bound directory (delta2, lead ruling 3).
+
+    Declared inputs (``skip``) carry no size: their bytes are bound separately and a transported
+    ledger may be a shorter prefix on the receiver before placement.
+    """
+    rows = []
+    for name in _directory_listing(directory):
+        path = directory / name
+        rows.append([name, None if os.path.realpath(path) in skip else os.lstat(path).st_size])
+    return rows
+
+
 def _mirror_ignored(target: Path, mirror_real: Path, policy: dict[str, Any], declared_real: set[str],
                     collected: _ClosureFiles | None, link: str) -> list[dict[str, Any]]:
     """Classify every ignored path a mirror link reaches (D3); bind or refuse the undeclared ones."""
     relative = target.relative_to(mirror_real).as_posix() if target != mirror_real else ''
+
+    def bind(path, row):
+        if path.is_dir() and not path.is_symlink():
+            if collected is not None:
+                _directory_listing(path, collected, why=link, into='ignored')
+            row['members'] = _membership(path, declared_real)
+        elif collected is not None and str(path) not in declared_real:
+            collected.add(path, link, into='ignored')
+        return row
+
     rows = []
     for entry in _git_ignored(mirror_real, relative):
         # A file inside an ignored directory is listed as that directory: classify the file itself.
@@ -269,14 +316,12 @@ def _mirror_ignored(target: Path, mirror_real: Path, policy: dict[str, Any], dec
         elif target.is_file() and str(target) in declared_real:
             rows.append({'path': entry, 'class': 'declared_input'})
         elif not target.is_file() and any(entry.startswith(d) for d in policy['declared_directories']):
-            rows.append({'path': entry, 'class': 'declared_directory'})
+            row = {'path': entry, 'class': 'declared_directory'}
+            # Not an exemption: either the consumed files are declared inputs (``consumed``), or the
+            # whole directory is bound by bytes and membership (``bind``).
+            rows.append(row if policy['declared_directory_mode'] == 'consumed' else bind(path, row))
         elif policy['undeclared'] == 'bind':
-            if collected is not None:
-                if path.is_dir() and not path.is_symlink():
-                    _directory_listing(path, collected, why=link, into='ignored')
-                else:
-                    collected.add(path, link, into='ignored')
-            rows.append({'path': entry, 'class': 'bound'})
+            rows.append(bind(path, {'path': entry, 'class': 'bound'}))
         else:
             raise OffloadRefused(f'mirror link {link} reaches an undeclared ignored input {entry}: declare it '
                                  '(ledger or N1 census) or remove the dependency')
@@ -290,7 +335,10 @@ def _external_row(path: Path, relative: str, root_real: Path, mirror_real: Path 
     kind, target, hops = _classify_link(path, root_real, mirror_real)
     if kind == 'internal':
         return None
-    if len(hops) > 1 and kind != 'mirror':
+    if any(_has_dotdot(hop) for hop in hops):
+        # delta2: never resolve '..' on the dependency's behalf; the link must name its target plainly.
+        raise OffloadRefused(f'external link {relative} contains a ".." component ({hops}); link the target directly')
+    if len(hops) > 1 and kind not in ('mirror', 'session'):
         # D2: a link whose immediate target is another link refuses before anything behind it is read.
         raise OffloadRefused(f'external link {relative} points at a further link ({hops[0]}); link the target directly')
     row: dict[str, Any] = {'class': kind, 'target': str(target), 'hops': hops}
@@ -313,16 +361,19 @@ def _closure(root: Path, *, mirror: dict[str, Any] | None, inputs: tuple[Path | 
                                or not isinstance(mirror['identity'], dict)):
         raise OffloadRefused('mirror must be {root, identity}')
     policy = dict(DEFAULT_IGNORED_POLICY if ignored_policy is None else ignored_policy)
-    if set(policy) != set(DEFAULT_IGNORED_POLICY) or policy['undeclared'] not in ('bind', 'refuse'):
-        raise OffloadRefused('ignored_policy must name identity_bound, regenerated, declared_directories, undeclared')
+    if (set(policy) != set(DEFAULT_IGNORED_POLICY) or policy['undeclared'] not in ('bind', 'refuse')
+            or policy['declared_directory_mode'] not in ('bind', 'consumed')):
+        raise OffloadRefused('ignored_policy must name identity_bound, regenerated, declared_directories, '
+                             'undeclared and declared_directory_mode')
     root_real = Path(os.path.realpath(root))
     mirror_real = Path(os.path.realpath(mirror['root'])) if mirror is not None else None
     collected = _ClosureFiles()
     declared: dict[str, dict[str, str]] = {}
     for value in inputs:
         path = Path(value)
-        if not path.is_absolute() or path.is_symlink() or not path.is_file() or _under(path, root):
-            raise OffloadRefused(f'declared input must be an absolute regular file outside the root: {path}')
+        if (not path.is_absolute() or _has_dotdot(path) or path.is_symlink() or not path.is_file()
+                or _under(path, root)):
+            raise OffloadRefused(f'declared input must be an absolute regular file outside the root, without "..": {path}')
         # D1: the destination's real ancestry is bound and re-checked before any placement.
         declared[str(path)] = {'real': os.path.realpath(path)}
         collected.add(path, 'declared input')
@@ -406,8 +457,12 @@ def _same_bytes(path: Path, row: dict[str, Any]) -> bool:
 
 
 def _verify_closure(closure: dict[str, Any], root: Path, *, mirror_identity: dict[str, Any] | None,
-                    transported: frozenset[str] = frozenset(), where: str) -> None:
-    """Re-verify the closure against this host's bytes; ``root`` is where the tree is now (or staged)."""
+                    transported: frozenset[str] = frozenset(), where: str, namespace: str | None = None) -> None:
+    """Re-verify the closure against this host's bytes.
+
+    ``root`` is where the tree is now (or staged); ``namespace`` the restore path it will be published
+    at, so a ``session``-class chain back into the session resolves as it did at finalize.
+    """
     mirror = closure['mirror']
     if mirror is not None and mirror_identity != mirror['identity']:
         raise OffloadRefused(f'{where}: measurement checkout mirror differs from the finalized record manifest: '
@@ -417,12 +472,13 @@ def _verify_closure(closure: dict[str, Any], root: Path, *, mirror_identity: dic
             raise OffloadRefused(f'{where}: declared input {name} resolves to {os.path.realpath(name)}, '
                                  f'not the finalized {row["real"]}')
     root_real = Path(os.path.realpath(root))
+    session_reals = (root_real,) + ((Path(os.path.realpath(namespace)),) if namespace is not None else ())
     mirror_real = Path(os.path.realpath(mirror['root'])) if mirror is not None else None
     policy = closure['ignored_policy']
     declared_real = {row['real'] for row in closure['inputs'].values()}
     transported_real = {os.path.realpath(name) for name in transported} | set(transported)
     for relative, row in sorted(closure['links'].items()):
-        kind, target, hops = _classify_link(root / relative, root_real, mirror_real)
+        kind, target, hops = _classify_link(root / relative, root_real, mirror_real, session_reals)
         if kind != row['class'] or str(target) != row['target'] or hops != row['hops']:
             raise OffloadRefused(f'{where}: external link {relative} resolves differently from the finalized '
                                  f'record manifest ({kind} {target} via {hops})')
@@ -733,7 +789,8 @@ def _unpack(offload: Path, dest_root, *, finalized, mirror_identity) -> dict[str
         if finalized is not None:
             # The external closure must hold on THIS host before the tree is published (R17 review F1).
             _verify_closure(finalized['closure'], staging, mirror_identity=mirror_identity,
-                            transported=frozenset(row['path'] for row in externals.values()), where='unpack')
+                            transported=frozenset(row['path'] for row in externals.values()), where='unpack',
+                            namespace=finalized['source_root'])
         for name, row in sorted(externals.items()):
             real = finalized['closure']['inputs'][row['path']]['real'] if finalized is not None else None
             _place_external(staging / EXTERNAL_STAGING / name.rsplit('/', 1)[1], Path(row['path']), real=real)

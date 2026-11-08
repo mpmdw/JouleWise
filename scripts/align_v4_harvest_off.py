@@ -86,6 +86,47 @@ def _ledger_input(session, plan):
     return (ledger,) if ledger.is_file() and session_real not in ledger.parents else ()
 
 
+def _consumed_inputs(session, plan_path, mirror):
+    """Every file the harvest selects for this plan that the mirror identity does not cover (delta2, ruling 1).
+
+    ``harvest.resolve_inputs`` is the harvest's own selector. A selected file outside the session is
+    returned (to be declared and bound by bytes) when it lies outside the mirror, or inside it but
+    ignored by Git. A selected directory outside the session that the identity does not cover refuses:
+    its consumed files cannot be enumerated here. ``None`` when the plan cannot be resolved.
+    """
+    import dataclasses
+    import os
+    from joulewise.b5 import harvest
+    try:
+        selected = harvest.resolve_inputs(plan_path)
+    except Exception:  # noqa: BLE001 - an unresolvable plan: the caller binds declared directories whole
+        return None
+    session_real = Path(os.path.realpath(session))
+    mirror_real = Path(os.path.realpath(mirror))
+    consumed = []
+    for field in dataclasses.fields(selected):
+        value = getattr(selected, field.name)
+        if not isinstance(value, Path) or not os.path.lexists(value):
+            continue
+        real = Path(os.path.realpath(value))
+        if real == session_real or session_real in real.parents:
+            continue
+        under_mirror = real == mirror_real or mirror_real in real.parents
+        relative = real.relative_to(mirror_real).as_posix() if under_mirror and real != mirror_real else ''
+        # Ignored itself (or below an ignored ancestor), not merely containing ignored content.
+        ignored = under_mirror and any((relative + '/').startswith(entry if entry.endswith('/') else entry + '/')
+                                       for entry in harvest_offload._git_ignored(mirror_real, relative))
+        if real.is_dir():
+            if not under_mirror or ignored:
+                raise harvest_offload.OffloadRefused(
+                    f'the harvest consumes the directory {value} ({field.name}) outside the session and the '
+                    'mirror identity; its files cannot be bound')
+            continue
+        if not under_mirror or ignored:
+            consumed.append(real)
+    return sorted(set(consumed))
+
+
 def _require(args, *names):
     missing = [name for name in names if getattr(args, name.replace('-', '_'), None) in (None, '')]
     if missing:
@@ -387,9 +428,18 @@ def cmd_finalize_manifest(args, run=subprocess.run):
         raise harvest_offload.OffloadRefused('measurement checkout is not a clean, identified mirror source: '
                                              + json.dumps(identity, sort_keys=True))
     declared = _read(IGNORED_INPUTS)
-    policy = {key: declared[key] for key in harvest_offload.DEFAULT_IGNORED_POLICY}
+    policy = {key: declared[key] for key in harvest_offload.DEFAULT_IGNORED_POLICY if key in declared}
+    inputs = list(_ledger_input(session, plan))
+    consumed = _consumed_inputs(session, state['plan_path'], mirror)
+    if consumed is None:
+        # The harvest's selection cannot be enumerated from this plan: nothing below a declared directory is
+        # assumed unconsumed; each is bound by bytes and membership within the bounds (delta2, ruling 1).
+        policy['declared_directory_mode'] = 'bind'
+    else:
+        policy['declared_directory_mode'] = 'consumed'
+        inputs += [path for path in consumed if path not in inputs]
     manifest = harvest_offload.finalized_manifest(session.absolute(), mirror={'root': mirror, 'identity': identity},
-                                                  inputs=_ledger_input(session, plan), ignored_policy=policy)
+                                                  inputs=tuple(inputs), ignored_policy=policy)
     # Canonical bytes, so the file's own SHA-256 (the record's raw_evidence descriptor) IS the
     # digest unpack checks (manifest_sha256): one number in the record, not two.
     with Path(args.out).open('xb') as sink:

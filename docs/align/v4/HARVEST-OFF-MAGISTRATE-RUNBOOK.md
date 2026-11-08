@@ -33,15 +33,22 @@ shasum -a 256 "$OUT/finalized_manifest.json"     # == H: the file is canonical b
 ```
 
 What it binds (R17 review F1 and delta D1-D4), besides every tree entry and the restore namespace `$S`:
-- **Every external link is followed hop by hop** (lstat, nothing collapsed first). A link whose immediate target is another link refuses, unless the chain ends inside `M`; then every hop's text is bound.
+- **Every link is followed hop by hop as the kernel does**, with lstat, before anything is resolved.
+  - `..` is never normalized lexically. An external link or declared input containing a `..` component refuses (delta2).
+  - A chain with an external hop is external, even when it ends back inside `$S`; every hop's text is then bound.
+  - A link whose immediate target is another link refuses, unless the chain ends inside `M` or inside `$S`; then every hop is bound.
 - **Links into `M`** (the measurement view): the checkout identity of `M` (head, clean incl. untracked, interpreter and packages) plus the mirror-relative target each link selects. The Air must reproduce both exactly. `M` must be clean and identified, or finalize refuses.
 - **What Git identity does NOT cover: ignored checkout content.** Every ignored path a link into `M` reaches is classified by `configs/align/v4/harvest_off_ignored_inputs.json`:
   - covered by the interpreter identity (`.venv/`);
   - a regenerated cache (`__pycache__`, `*.pyc`, `.DS_Store`);
-  - inside a declared directory (`runs/`), whose consumed files are exactly the declared inputs.
+  - inside a declared directory (`runs/`). **This is not an exemption** (delta2, lead ruling 1).
+    - finalize-manifest enumerates what `harvest.resolve_inputs` selects for the plan. Every selected file outside `$S` that the identity does not cover (ignored in `M`, or outside `M`) becomes a declared input, bound by bytes and real path and re-verified on the Air. The ledger is one of them.
+    - A selected directory outside `$S` that the identity does not cover refuses.
+    - If the plan cannot be resolved, each declared directory is bound whole, by bytes and membership within the bounds, or finalize refuses.
 
   Anything else **refuses at finalize**. The declared inputs are the calibration ledger plus whatever the **native N1 census** finds. That census is a lead-owned gate and has not run yet. Until it lands, a real session that links other ignored content refuses (fail closed). This is the exact scope of the guarantee: tracked and untracked-not-ignored files by identity, declared ignored inputs by bytes, nothing else assumed.
 - **The calibration ledger** the window appended (a declared input): its bytes and its real path. Its resolved parent directories must be the same on the Air immediately before it is placed, or the restore refuses (D1).
+- **Byte-bound ignored directories** also bind their membership: the sorted relative names and sizes. The Air re-enumerates them, and an added or removed file refuses (delta2, lead ruling 3).
 - **Any other link that leaves `$S`**: the bytes it reaches (a file, or every regular file below a directory), at most 4,096 files, 4,096 directories, 1 GiB and 256 MiB per file. The bounds apply during the walk, before the offending file is hashed, and a directory linked many times is enumerated once. A target past those bounds, an unreadable directory (D4), or one that reaches a further link, refuses. Bind it through `M` instead. Model weights are never hashed or copied.
 - **A link to a missing path** stays bound as missing.
 - **The name `.external-staged`** is reserved; a session containing it refuses.

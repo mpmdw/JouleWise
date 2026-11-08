@@ -179,3 +179,16 @@ The full list of modules run:
 3. **D3 deviation (library default only):** undeclared ignored content is byte-bound rather than refused, so the witnesses' finalize-then-unpack flow holds. The production CLI refuses.
 4. **D2 interpretation:** link-to-link is refused except for chains ending in the mirror (every hop bound). Seat 2's mirror witness requires that exception.
 5. **N1 census, native finalize timing, and the cost of `git ls-files` per mirror link on a real checkout** are not measured here.
+
+## 10. Final round (Sol delta2 seats 1 and 2 on `2cfafa198`; lead rulings 2026-11-08)
+
+- **Inputs:** `docs/align/v4/HARVEST-OFF-DELTA2-sol{1,2}.md`. `tests/align/test_hoff_delta2_sol{1,2}.py` are brought in unmodified.
+- **Results:** both modules are fully green. All earlier witness modules stay green, except seat 1 delta's ruled-wrong raise-in-hook test.
+- **`installer_end_ns`:** in `865c51161`.
+
+| Finding | Fix |
+|---|---|
+| **runs/ declaration exempted descendants** (both seats) | `declared_directory_mode`. The CLI enumerates `harvest.resolve_inputs` and declares every selected file outside the session that the identity does not cover; it refuses a selected uncovered directory. With an unresolvable plan, declared directories are bound whole (bytes and membership). |
+| **External alias ending inside the session** (both seats) | The hop chain is classified before the end is resolved. An external hop makes the link external (class `session`, every hop bound, verified against the restore namespace). |
+| **Byte-bound ignored directory membership** (seat 1) | Bound directories record `members` (sorted names and sizes). Declared inputs carry no size: their bytes are bound separately. Verification re-enumerates. |
+| **Symlink parent plus `..`** (seat 2) | No lexical normalization: hops are joined to the link's directory and inspected with lstat (kernel semantics). Any `..` in an external hop or a declared input refuses. |
