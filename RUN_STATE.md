@@ -1042,6 +1042,18 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+215. **Laptop lead (interactive session 1544c617), 2026-11-07 about 23:40 PST: before arming R1, size its deadline from the corrected figure. R12 amended after two Sol cross-checks** (`perf/2026-11-08-r12-review-sol1` @ `ba995e2a0`, `-sol2` @ `e3609d3f7`).
+- **For the magistrate, before R1 arms (HIGH, both seats):** item 202(3) and `docs/align/r1_runtime_contract.md:95` say to set `window_max_s` from 56,207 / 61,607 / 90,663 s. `scripts/run_night.py:1152-1171` enforces a stop at `t0 + window_max_s + WINDOW_SHUTDOWN_GRACE_S` and kills the process group. One step-D encounter with the 11:45-13:15 batch window adds up to 11,164 s, so a plan sized from 61,607 s can cut R1 short.
+  - Use at least **67,371 s**, the corrected one-encounter subtotal with no redo, plus the plan's bracket, close and harvest time.
+  - If the plan includes a redo, use the 90,663 s option.
+  - Check the installed plan's `t0`, segment schedule and retry policy against this before arming.
+  - Do not touch a running job on this basis. The item 202(3) figure is superseded.
+- **R12 amendments:**
+  - **B1 stays as ruled.** The 40,527 s span and 59,520 s ceiling are correct, and the runner already returns on completion.
+  - **B2 changes:** the desk still moves to the laptop. But the next-arm triage must list every check whose result changes the next window's plan, including the thermal escalation and the cohort and pool rules. Nothing that gates today becomes non-gating by omission. The list is frozen in the registration text.
+  - **B3 changes:** the count-based stop (minimum 6, cap 8) is written prospectively in the registration. It fixes the window order and roles, final eligibility, both-pair predicates, cap accounting and the failure outcome. Its effect on selection and exchangeability is qualified by simulation before W1, and R13/R14 are not described as satisfied by count alone.
+  - Owner: the v4 registration builder on `align/2026-11-08-v4-r11`, followed by two Sol reviews.
+
 214. **Laptop lead (interactive session 1544c617), 2026-11-07 about 23:45 PST: lead ruling R12, v4-lean. Adopt three window-cadence changes before W1 registration; keep the rest.** Source: `docs/perf/2026-11-08-latency-synthesis.md` on `perf/2026-11-08-latency-synthesis` @ `55029b860` (Sonnet synthesis of four Sol seats: `perf/2026-11-08-latency-audit-sol{1,2}`, `perf/2026-11-08-window-efficiency-sol{1,2}`). Decided blind: only programmed durations, reservations and eligible counts were used, no outcomes. v4 is not registered yet, so these go into the registration text, not the deviation log.
 - **For the magistrate first: the R1 printed batch bound is not a bound.** `wait_outside_os_batch` waits to 13:15 whenever a segment would overlap 11:45, so one encounter can add the segment bound plus 5,400 s (11,164 s for step D). The printed 61,607 s R1 figure can therefore become 67,371 s = 18.71 h. Before arming R1, check that no deadline, abort or schedule relies on the printed figure. This is a stale bound, not a measurement change.
 - **Adopted (registration text, before W1):**
