@@ -1344,6 +1344,20 @@ def _calibration_order_tags(raw_config: Mapping[str, Any] | None) -> Mapping[str
 
 
 def _order_member_ids(value: object, *, campaign_log: bool) -> list[str] | None:
+    """Return the executed member ids, in order, of an order manifest or campaign log.
+
+    In a campaign log only the runner's per-member rows name executed members.
+    ``scripts/run_campaign.py`` writes them with ``log_row``, which never sets
+    ``record_type`` (ok, failed, timeout, drained, blocked, skipped and
+    config_error members alike). Every campaign-level record carries one: the
+    whole-window evaluation ``idle_admission_whole_window_verdict``, whose
+    ``bundle_ids`` lists the campaign's members, ``campaign_verdict``,
+    ``campaign_stop``, ``shakedown_gate``, the provenance attestation and
+    ``campaign_occurrence_supersession``. Counting one would name its members a
+    second time, so the campaign-log parse skips every row that has a
+    ``record_type`` (DLE-4, block-5 defect D5). The order-manifest parse is
+    unchanged.
+    """
     rows: object
     if campaign_log:
         rows = value
@@ -1354,6 +1368,8 @@ def _order_member_ids(value: object, *, campaign_log: bool) -> list[str] | None:
     result: list[str] = []
     for row in rows:
         if not isinstance(row, Mapping):
+            continue
+        if campaign_log and "record_type" in row:
             continue
         bundle_ids = row.get("bundle_ids")
         if isinstance(bundle_ids, list):
