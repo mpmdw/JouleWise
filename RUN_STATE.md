@@ -1042,6 +1042,21 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+229. **Laptop lead (interactive session 1544c617), 2026-11-08 03:10 PST: Block 5 release check AGREE; ruling R20; integration plan updates.**
+- **Block 5 release check: exit 0, verdict `agree`.** It ran on main `02ef89f5c`, which includes #704's comparator, with the analysis pinned to `b5/analysis-r4` = `ab1e0098d` and dry-m custody. The independent recompute sha256 is `d49103e8…`. Wall time 523 s. Output is in `/Users/edr/jw-b5-custody/release-check-final-20261108T0942Z` and was not read.
+  - A structure-only masked read shows: digests `verified`; recompute `ok`; comparator `agree` across 24 families; 0 undetermined holds; 0 absent sources; release checkout clean.
+  - #704 merged at `02ef89f5c` with a complete gate ledger. Reviews: Opus cold, Sol, two rounds of two Sol delta seats each, and Fable final (ADMIT).
+  - Block 5 stays sealed until Ed's explicit unseal OK.
+- **R20, escalation sentinels:** the Sol seed check (`align/2026-11-08-series-seed-check-sol` @ `79777d261`, MATCH) recommended this placement, and it is adopted.
+  - When a window's U4/U5 is inconclusive, the two extra sentinels are appended at ordinals 23 and 24, after the late sentinel at 22 and before the closing reference/scaffold.
+  - Both replay the admitted W1:5 trajectory exactly. Each is a separate batch-1 member with the normal gates.
+  - They are SUPPLEMENTAL diagnostics, reported descriptively. U4's W and its W−1 df are unchanged, and no held-out seeds are consumed. The ceiling is 62,400 s (R15).
+- **Integration plan (item 228) updates:**
+  - Item 5, condition waits, is OUT of the W1 line. The Opus review HOLDs it: the sampler's 1 Hz disk census perturbs the start state it measures, and there are seven HIGH findings. W1 runs on today's cool-down. Fixes for the C windows are on `align/2026-11-08-condition-waits-impl`. Any `condition_waits_policy.json` stays banned until a delta review and a native dry arm pass.
+  - Item 4, the series, is cleared: seed check MATCH.
+  - Item 8, the smoke kit, is on HOLD pending fixes.
+  - Items 1-3 are merged on `align/2026-11-08-v4-r11` (`48a4d1d76` → `1a2574b49`). The arm now rebuilds the triage packet, so a forged packet refuses.
+
 228. **Laptop lead (interactive session 1544c617), 2026-11-08 01:45 PST: lead rulings R17-R19 and the W1 integration plan.** All are decided blind; none concerns data.
 - **R17, harvest off the MBP.** Paired builds on `align/2026-11-08-harvest-off-{sol,opus}`, agreement `docs/align/v4/HARVEST-OFF-AGREEMENT.md` @ `ea5612686`. Opus has the final say.
   - **Adopted:** the MBP does finalize, light triage and pack. The Air restores the verified raw copy at the same path, then runs the harvest, the full desk and reduce-once while the next window measures. Archive byte-identity between the MBP and the Air is proven (177 files). Parse dedupe plus workers give 5-6.5× on the whole harvest. `pm_reduce` equals plistlib on 1,735 documents.
