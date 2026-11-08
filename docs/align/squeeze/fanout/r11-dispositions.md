@@ -76,3 +76,34 @@ read scores, so blinding was not at risk. Cost of fixed 8: about 13 MBP hours.
 - **Open statistics item (before W1 registration, not adopted):** sol1's candidate of a
   minimum of 7 windows plus a frozen 0.5 s_r threshold margin. It is model-dependent and
   needs a scale/scorer qualification and a power assessment.
+
+## Delta-HOLD round (Sol delta reviews sol1/sol2 on 353446ad6)
+
+Witnesses: `tests/align/test_r11_delta_sol1.py`, `test_r11_delta_sol2.py` (the review-era
+six-window and `stop_complete` expectations were updated to the fixed-8 predicate of
+RUN_STATE 217, and the arm-call witnesses to the battery-log API).
+
+| Finding | Change | Where |
+|---|---|---|
+| H01 / DELTA-S2-H1 scripts outside the receipt | Execution closure now follows script launch edges (exact `scripts/...` string constants outside docstrings, shell tokens) from endpoint, run_night, session, kit, budget procedure and the night_chains wrappers; 292 bound paths, scripts included. Strict/amendment tiers (below) keep the cost proportionate | `v4_registration.py` (`EXECUTED_CLOSURE`, `STRICT_*`), `tests/align/test_v4_executed_closure.py` |
+| H02 / DELTA-S2-M1 impossible counts | `calibration_stop` refuses rows with eligible benign > captured, captured > 22, bool/non-integer/negative counts, a wrong `eligible_total`; the triage refuses `calibration_totals` that do not sum | `v4_cadence.py` |
+| M01 unfinished zero-capture window | A provisional zero-capture window is unfinished, not a refusal: `pending_final_eligibility` until final | `v4_cadence.py` |
+| M02 / DELTA-S2-M2 packet flags | Previous-window-is-W1 is derived from the registered window id; code/config-changed from the artifact-set digest vs the digest recorded at the last desk pass; a contradictory flag refuses | `v4_cadence.py`, `v4_registration.artifact_set_digest` |
+| M03 retention | The arm record keeps the packet, its digest, the packet file digest and the derived calibration summary | `v4_cadence.py`, `align_v4_session.py` |
+
+## Opus cold review round (v4-opus-cold-review.md @ 33d0bc89f)
+
+| Finding | Change | Where |
+|---|---|---|
+| HIGH-1 WP22 dry run red | Contrast re-derived after the WP18 update (with the matching X-G stand-in), delta_slow_c and stage in the synthetic manifest, a synthetic registration directory with a PENDING U3; the desk takes a PENDING U3 as inconclusive and keeps running; the minimal run is in the default tests; the full `JW_WP22_FULL=1` run passes; both are in the Stage A checklist | `align_v4_w1_synthetic.py`, `align_v4_thermal_desk.py`, `test_v4_w1_synthetic.py` |
+| MED-1 receipt brittleness | Strict tier (re-register) and amendment tier (lead-signed `amendments` row: path, old/new sha, reason, signature; chained; never for strict paths) | `v4_registration.py`, `tests/align/test_v4_receipt_tiers.py` |
+| MED-2a deadlock | `lead_rulings` row (id, text digest, resets, after_window, signature) resets the zero-capture escalation count, retained in the arm record | `v4_cadence.py` |
+| MED-2b meter | `meter_samples_clock` replaced by gating `meter_reader_live` and non-gating `meter_coverage` (gaps listed) | `v4_cadence.py` |
+| MED-3 top-up | Evidence derived from a battery log (completed charge within 1800 s, or continuous float since); hand-entered time removed (`--battery-log`); sampler/derive script | `v4_topup.py`, `scripts/align_v4_battery_log.py`, `align_v4_session.py` |
+| MED-4 v5 blinding | DC residual printed for benign members only; non-benign DC rows sealed (hash only) | `km003c.seal_non_benign` |
+| L2/L3 | Raw packet retained; `record_commit` must be a commit the arm finds | `align_v4_session.py` |
+| L5 | Window id from the session state (default W1) | `align_v4_session.py` |
+| L7 | Packet template and `--emit-triage-template` | `v4_cadence.py` |
+| L8 | `pmset -g batt` is evidence only | `align_v4_session.py` |
+| L9 | H* refuses bool and non-numeric scores | `v4_estimands.py` |
+| L1, L4 | L1 is covered by the R1 exporter. L4 (note only): U6's trajectory-clustered SE is CR0 with z = 1.645, anti-conservative at about 14 trajectories; CR1 with t(G-1) is a candidate, not changed here (U6 is reported, never a gate) | n/a |

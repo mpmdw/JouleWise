@@ -24,12 +24,20 @@ from scripts import validate_align_v4_w1_plan as validator
 ROOT = Path(__file__).resolve().parents[2]
 
 
+_LOG_DIR = []
+
+
 def topup():
-    """Synthetic completed-top-up evidence, one minute before the arm."""
+    """Synthetic arm evidence: a battery log (completed charge 10 min ago, floating since),
+    a passing triage packet and an always-found record commit. No hand-entered time."""
+    import tempfile
     import time
-    from tests.align.test_v4_cadence import passing_packet
-    return dict(topup_completed_at=time.time()-60, topup_source='synthetic',
-                next_arm_triage=passing_packet())
+    from tests.align.test_v4_cadence import passing_packet, write_battery_log
+    if not _LOG_DIR:
+        _LOG_DIR.append(tempfile.TemporaryDirectory(prefix='v4-kit-battery-'))
+    path = Path(_LOG_DIR[0].name) / f'battery-{time.time_ns()}.jsonl'
+    write_battery_log(path, time.time())
+    return dict(battery_log=path, next_arm_triage=passing_packet(), commit_check=lambda root, commit: True)
 
 
 def independent_seed(value):
@@ -1799,12 +1807,11 @@ class W1DiskGateTests(unittest.TestCase):
         seen.clear()
         with patch.object(session, 'install', fake):
             self.assertEqual(session.main(['install', '--session-root', 's', '--w1-disk-config', '/c.json',
-                                           '--obc-off-attested-by', 'synthetic', '--topup-completed-at', '1700000000',
-                                           '--topup-source', 'synthetic',
+                                           '--obc-off-attested-by', 'synthetic', '--battery-log', '/b.jsonl',
                                            '--next-arm-triage', '/t.json']), 0)
         self.assertEqual(seen, {'session_root': Path('s'), 'w1_disk_config': Path('/c.json'),
-                                'obc_off_attested_by': 'synthetic', 'topup_completed_at': '1700000000',
-                                'topup_source': 'synthetic', 'next_arm_triage': Path('/t.json')})
+                                'obc_off_attested_by': 'synthetic', 'battery_log': Path('/b.jsonl'),
+                                'next_arm_triage': Path('/t.json')})
 
 
 if __name__ == '__main__':

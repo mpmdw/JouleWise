@@ -468,8 +468,11 @@ U1(a) and U2(b) are implementation checks, not independent evidence of control. 
 offers balanced crossed-anchor moments
 `sigma_w²=max(0,(MS_window−MS_interaction)/4)`, heavy-cell paired
 energy/temperature differences fitted through the origin, and U6 chronological
-episode halves within pair with equal pair weighting and Welch uncertainty
-(`split_rule="within_pair_episode_order"`). These are proposed conventions,
+episode halves within pair (`split_rule="within_pair_episode_order"`). For v4 the U6
+route (`monitoring_stability_v4`) pools per-turn residual rows with trajectory-clustered
+uncertainty (cluster = pair and trajectory) against the registered half-s_r margin; the
+earlier equal-pair-weighting and Welch convention is the legacy library rule
+(`monitoring_stability`), kept for historical callers only. These are proposed conventions,
 not newly settled council rulings. Freeze their exact unit, formula, interval
 and missing-data treatment against the full desk before registration; do not
 silently promote library defaults into scientific authority. `G:172–194`
@@ -607,10 +610,17 @@ parser and refuses unless AC is connected, charging is false, CurrentCapacity
 NotChargingReason/ChargerInhibitReason lines if present, and `pmset -g batt`
 in `staging/v4-arm-NNN.json`. Require `--obc-off-attested-by`: OBC has no
 supported mechanical read here. This is operator attestation, not a parsed
-OBC assertion. Require `--topup-completed-at` (epoch s or ISO-8601 with offset) and
-`--topup-source`: the arm refuses without source/time-bound completed-top-up
-evidence, if it is future-dated or older than 30 minutes (UpdateTime dates the
-observation, not the end of charging). R1 drain remains a required print; Ed's charge hold gates D1.
+OBC assertion. The 30-minute bound is hard (1800 s), and the evidence is
+**derived from a logged battery record, never hand-entered** (Opus cold MED-3): the
+arm takes `--battery-log` (JSONL of `battery_float.observe` records written by
+`scripts/align_v4_battery_log.py sample` between windows) and
+`joulewise/align/apple/v4_topup.py` admits either (a) a completed charge (a charging
+observation followed by a not-charging one at or above 99 % on AC) within 1800 s of the
+arm, or (b) continuous float (AC, not charging, at or above 99 %, no gap above 300 s)
+since the last completed charge with a fresh latest observation, whose evidence time is
+the latest qualifying observation. The arm reads its own clock; a typed "now" is not
+accepted. `pmset -g batt` is retained evidence only (a nonzero exit does not refuse).
+UpdateTime dates the observation, not the end of charging. R1 drain remains a required print; Ed's charge hold gates D1.
 Charging is named exclusion **B** (`battery.member_span`). Print B counts, SoC
 and charger watts per member. **PENDING lead:** the separate numeric B window
 bar/consequence (R02 U); `bar_pass` stays unavailable. Arm float does not prove
@@ -734,8 +744,27 @@ retains its existing U5 verdict handling pending the lead's ruling.
 estimands, deviations, U3, WP19, plan/slots and relevant runtime code to both
 current bytes and one immutable commit; it lists installed rulings, Stage A
 (R1-independent) and Stage B (post-R1 delta) gate reports/verdicts/digests,
-and `lead: <name/session> <ISO date>`. A changed bound artifact voids it;
-the lead obtains the scoped delta review and re-signs. `install` rechecks
+and `lead: <name/session> <ISO date>`. Bound artifacts have two tiers. **Strict:**
+the protocol, deviations, rulings, estimands, desk, kit, registration inputs, all of
+`joulewise/align/**`, the generation adapter, the KM003C reader and the W1/D/R1 script
+spine (every script the night runner launches, including subprocess-launched ones such
+as `launch_window.py`, `hazard_monitor.py` and `km003c_monitor.py`, and the night_chains
+wrappers): a change voids the receipt and the lead obtains the scoped delta review and
+re-signs. **Amendment:** every other bound path (b5/b6 modules, hazards, flags and the
+remaining scripts of the static closure): a change is admitted only through a
+lead-signed `amendments` row in the receipt (`path`, `old_sha256`, `new_sha256`,
+`reason`, `lead_signature`; chained, never for a strict path), checked by
+`validate_receipt`, and the R12 full-desk gate runs after it. The closure is the static
+import and script-launch closure (stdlib `ast`; `importlib` string imports, computed
+paths and third-party packages are a declared separate boundary).
+
+**Stage A checklist additions (Opus cold HIGH-1).** Before the receipt is generated,
+(1) the minimal WP22 synthetic W1 dry run, now part of the default test run
+(`tests.align.test_v4_w1_synthetic.MinimalDryRunTests` and
+`tests.align.test_v4_opus_cold_witnesses`, about 4 s each), must pass, and
+(2) the full window `JW_WP22_FULL=1 python3.13 -B -m unittest tests.align.test_v4_w1_synthetic`
+must pass. The desk takes a PENDING U3 as "U3 inconclusive" and still runs every other
+check; arming stays refused through `require_registration`. `install` rechecks
 generated bytes before host operations. The checked-in pending receipt
 cannot authorize W1. Stage B must review R1-dependent fields and an
 anti-hindsight list of analysis-rule commits after the R1 record commit.
@@ -744,7 +773,9 @@ anti-hindsight list of analysis-rule commits after the R1 record commit.
 and analyse its DC-in channel beside the rails; between the wall brick and
 MagSafe cable it measures all wall-to-machine input. The whole-member DC-in
 integral is authority for small effects, retaining battery-assist accounting.
-Retain full transcripts including reasoning with SHA-256 custody, sealed and
+Until the v5 addendum registers, the desk prints the per-member DC residual for
+BENIGN members only; sabotage (any non-benign) members' DC rows are sealed (hash
+only). Retain full transcripts including reasoning with SHA-256 custody, sealed and
 unscored. No transcript monitor runs or scores any v4 transcript before v5
 registration. These additions do not change v4's model, sampler, thermal
 policy, roster or primary GPU residual. The separate capture fan-out owns
@@ -792,7 +823,8 @@ from the committed record before the arm; the arm waits for them.
 | `series_powermode` | AC powermode equals the plan-frozen series value (arm-computed; not Automatic-only) |
 | `external_volume` | no external/network/FUSE volume mounted (ruling 20; arm-computed) |
 | `charging_battery` | AC, >=99%, not charging, |InstantAmperage|<=200 mA, completed top-up within 30 min, OBC attested (R02; arm-computed) |
-| `meter_samples_clock` | KM003C samples and clock coverage for the previous window's members |
+| `meter_reader_live` | the KM003C reader is verified live before this arm; the meter is SECONDARY and nothing else about it gates |
+| `meter_coverage` | RECORDED, NON-GATING: the previous window's per-member meter sample/clock coverage, gaps listed |
 | `capture_faults` | sidecar/powermetrics coverage, collector, OOM/Metal, deadman, unobserved-state faults (X1-X8) |
 | `thermal_escalation` | U1-U3 result and the registered escalation ladder, recorded before use, never in place |
 | `cohort_pool_rules` | U1-U3 failure bars pool entry; one frozen cohort; no pooling across a changed configuration |
@@ -803,14 +835,29 @@ from the committed record before the arm; the arm waits for them.
 
 The full desk **must have completed and passed before the arm** when the previous
 window is W1 or any code or configuration changed since the last desk-passed
-state; otherwise it may be `deferred` and run while the next window measures. A
+state; otherwise it may be `deferred` and run while the next window measures. Both
+conditions are **derived by the arm, never taken from the packet**: "previous window
+is W1" from the registered window id (`R1`, `W1`, `Cn`, `Tn`, `Dn`), and "changed"
+from the digest of all bound artifacts' current bytes
+(`python3 -m joulewise.align.apple.v4_registration`) against the digest the packet
+records at the last desk pass (`last_desk_passed_artifact_set_sha256`); the optional
+packet flags `previous_window_is_w1` / `code_or_config_changed` must agree or the
+packet is refused. `record_committed` also needs the packet's `record_commit` to be a
+commit object in the repository (the arm checks; B1 arms from the committed record).
+`meter_coverage` is a recorded tabulation (gaps listed) and never gates: a KM003C
+dropout cannot halt v4, and only `meter_reader_live` is a gate. A
 desk-only finding on a window already running costs at most that window: it
 changes no roster, policy or eligibility retrospectively except through the frozen
 rules above (U1-U3 ladder before the next window, no replacements or top-ups), and
 a failed window is never silently replaced. `not_applicable` is allowed only for
 previous-window checks before W1 (previous window R1). The triage packet is
 `schema joulewise.align_v4.next_arm_triage.v1`, passed to the arm as
-`--next-arm-triage`; the arm retains it in `staging/v4-arm-NNN.json`. Whether the
+`--next-arm-triage`; the arm retains the packet itself, its digest, the packet file's
+digest and the derived calibration summary in `staging/v4-arm-NNN.json`. A fill-in
+template: `v4_cadence.triage_template(previous_window)`. A **`lead_ruling` row** (in
+`lead_rulings`: `ruling_id`, `text_sha256`, `resets: zero_capture_escalation`,
+`after_window`, `lead_signature`) resets the zero-capture escalation count after the
+named window row; it is validated, applied by `calibration_stop` and retained. Whether the
 triage fits in five minutes, and the 30-45 minute turnaround, are targets, not
 measurements.
 
@@ -838,8 +885,14 @@ residual or energy field (`v4_cadence.calibration_stop`):
    members (a zero-capture refusal) does not count toward the 8 and carries no
    eligible members; a window with at least one captured member counts, whether lost,
    failed or in flight. Two consecutive zero-capture refusals escalate to the lead
-   (`escalate_to_lead`; nothing is armed until the lead rules). There is no ninth
-   counted attempt, and no refusal path reorders, adds or drops a window.
+   (`escalate_to_lead`; nothing is armed until a signed `lead_ruling` row resets the
+   count). A zero-capture window that is still provisional is unfinished, not a
+   refusal: it holds the gate at `pending_final_eligibility`. Count rows are checked
+   for consistency (integers, at most the 22-member roster captured, eligible benign
+   members no more than captured, `eligible_total` and any `calibration_totals` equal
+   to the sums); a contradictory row refuses and never authorizes completion or test
+   entry. There is no ninth counted attempt, and no refusal path reorders, adds or
+   drops a window.
 4. Failure outcome: after 8 final windows with either pair below 39 the result is
    `insufficient_calibration`; no extension, no D7/D8, no relaxed target.
 5. A window launched as calibration stays calibration.

@@ -260,7 +260,14 @@ def collect(args, out):
             inputs['WP18'][name] = {'max_turns': turns, 'token_fixture_sha256': hashlib.sha256(rows).hexdigest()}
             results['pilot7'][name] = ref
             world.clock.sleep(600)
-        plan, raw_configs, _ = build_kit(inputs)
+        # R11: the contrast cap/fit are re-derived from the record AND the re-measured WP18
+        # turn counts (Opus cold HIGH-1a); the import-time fit was for max_turns=5. The
+        # synthetic R1 X-G stand-in admits the same re-measured count.
+        slots = deepcopy(SYN_R1_SLOTS)
+        slots['x_g'] = {**slots['x_g'], 'admitted_turns': inputs['WP18']['X']['max_turns']}
+        contrast = kit.w1_contrast_g0_cap(slots, inputs['WP18']['X']['max_turns'])
+        inputs['R1']['thermal_policy'].update(contrast_g0_cap_s=contrast['value_s'], contrast_fit=contrast)
+        plan, raw_configs, _ = build_kit(inputs, slots)
         results['inputs'] = inputs
         configs = {o: synthesize(c, out) for o, c in raw_configs.items()}
         members = {m['ordinal']: m for m in plan['members']}
@@ -328,6 +335,7 @@ def roster_manifest(out, results):
         plan = by_run[r['run_id']]
         item = {'bundle': str(Path(r['bundle']).relative_to(out)), 'window': 'W1'}
         ordinal, role = plan['ordinal'], plan['role']
+        item['stage'] = plan.get('stage_id')      # R06: the contrast fit is stage-adjusted
         if ordinal in PAIR_GROUPS:
             item['identical_work_group'] = PAIR_GROUPS[ordinal]
         if role[:1] in ('X', 'Y') and len(role) == 3:
@@ -339,9 +347,31 @@ def roster_manifest(out, results):
             g0 = [i for i in (ep['hardware'].get('thermal') or {}).get('intervals', []) if i['kind'] == 'G0']
             item['registered_span_ns'] = [g0[0]['start_ns'] if g0 else ep['start_ns'], ep['end_ns']]
         items.append(item)
-    manifest = {'schema': 'wp22.synthetic_w1_manifest', 'members': items}
+    manifest = {'schema': 'wp22.synthetic_w1_manifest', 'members': items,
+                # the desk's treatment-delivery check needs the registered delta_slow_c (R1 policy)
+                'delta_slow_c': results['inputs']['R1']['thermal_policy']['delta_slow_c']}
     (out / 'desk_manifest.json').write_text(json.dumps(manifest, indent=2, sort_keys=True) + '\n')
     return out / 'desk_manifest.json'
+
+
+def synthetic_registration_dir(out, results):
+    """A registration directory for the dry run: U3 PENDING (R11/R03, as at the head) and a
+    synthetic passing WP19 receipt built from the pilot-7 stand-in turns. Never native evidence."""
+    from joulewise.align.apple import v4_registration as registration
+    directory = out / 'synthetic_registration'
+    directory.mkdir(exist_ok=True)
+    (directory / 'u3_bar.json').write_text(json.dumps({'schema': registration.U3_SCHEMA, 'status': 'PENDING'}) + '\n')
+    fixtures = {}
+    for name in ('X', 'Y'):
+        pairs = turn_tokens(results['pilot7'][name]['bundle']) or []
+        fixtures[name] = {'turns': [{'turn': i, 'prompt_token_ids': p, 'output_token_ids': o}
+                                    for i, (p, o) in enumerate(pairs)]}
+    rendered = {name: [t['prompt_token_ids'] for t in fixture['turns']] for name, fixture in fixtures.items()}
+    receipt = registration.wp19_identity(fixtures, rendered, fixtures['X']['turns'],
+                                         live_source_sha256=hashlib.sha256(b'synthetic wp22 x-g').hexdigest())
+    (directory / 'wp19_receipt.json').write_text(json.dumps(receipt, indent=2, sort_keys=True) + '\n')
+    (directory / 'inputs.json').write_text(json.dumps({'R1': results['inputs']['R1']}, indent=2, sort_keys=True) + '\n')
+    return directory
 
 
 def run_desk(out, world):
@@ -364,13 +394,16 @@ def run_desk(out, world):
             pm_period_s = 1.0
         return original(episode, journal, os_readings=os_readings, pm_samples=pm_samples,
                         pm_period_s=pm_period_s, **kwargs)
-    manifest = roster_manifest(out, json.loads((out / 'run_results.json').read_text()))
+    results = json.loads((out / 'run_results.json').read_text())
+    manifest = roster_manifest(out, results)
+    registration_dir = synthetic_registration_dir(out, results)
     if (out / 'desk').exists():
         import shutil
         shutil.rmtree(out / 'desk')
     try:
         with patch.object(thermal_desk, 'member_record', member_record):
-            cli.main(['--manifest', str(manifest), '--output', str(out / 'desk')])
+            cli.main(['--manifest', str(manifest), '--output', str(out / 'desk'),
+                      '--registration-dir', str(registration_dir)])
     except Exception as exc:  # noqa: BLE001 - a desk crash is itself a finding
         import traceback
         return {'status': 'crashed', 'error': f'{type(exc).__name__}: {exc}',
