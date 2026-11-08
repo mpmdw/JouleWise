@@ -1042,6 +1042,18 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+217. **Laptop lead (interactive session 1544c617), 2026-11-08 about 01:15 PST: R12 B3 reverted to a FIXED 8 calibration windows.** Two independent synthetic simulations (`align/2026-11-08-b3-sim-sol1` @ `09d7b3c7f`, `-sol2` @ `95d43c054`) agree. Stopping on counts saves about one window, but under window-level drift it lowers the threshold and raises future benign FPR against fixed 8:
+- sol1, clustered/hot state: maximum rule 2.84 % vs 2.14 %; 5 % rank 5.38 % vs 4.13 %;
+- sol2, hot10, tau .5: 2.73 % vs 2.22 %.
+
+Counts never read scores, so blinding was never at risk. The cost of fixed 8 is about 13 MBP hours, which is cheap for a cleaner FPR claim.
+- **Ruling:**
+  - Calibration is exactly 8 windows in the frozen order. If either pair is below 39 eligible after 8, the outcome is `insufficient_calibration`.
+  - The zero-capture rule (item 216) stays: a window with zero captured members does not consume a slot, and two in a row escalate.
+  - `calibration_stop` becomes a fixed-8 predicate.
+- **Not adopted now:** sol1's candidate "minimum 7 plus a frozen 0.5 s_r threshold margin". It is model-dependent and needs a scale/scorer qualification and a power assessment. It is recorded as an open statistics item before W1 registration.
+- **Disclosure stands:** both designs exceed nominal FPR under a forward drift trend. R14's FPR statement stays conditional on exchangeability, and the held-out test cohort is the empirical FPR evidence. Public text must say so.
+
 216. **Laptop lead (interactive session 1544c617), 2026-11-08 about 00:30 PST: correction to item 215. The 90,663 s "redo" figure is stale too.**
 - **For the magistrate, before R1 arms:** the 90,663 s figure in item 215 still contains the old 5,400 s batch wait. With the corrected 11,164 s step-D encounter, the same sum is **96,427 s**. Each retry segment can also meet its own encounter.
   - Plan has a redo: size `window_max_s` from your installed plan's actual segments, at 11,164 s per segment that can touch 11:45-13:15, plus bracket, close and harvest. The floor is 96,427 s.
