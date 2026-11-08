@@ -1,4 +1,4 @@
-# v5 design: lead's ruling (DRAFT, revision 5)
+# v5 design: lead's ruling (DRAFT, revision 6)
 
 Laptop lead draft, 2026-11-08. **This is a draft ruling.** It authorizes no measurement, download, purchase, API call or v4 transcript scoring.
 
@@ -7,6 +7,7 @@ Laptop lead draft, 2026-11-08. **This is a draft ruling.** It authorizes no meas
 - **Revision 3** applied the dispositions of two Sol delta reviews of revision 2 (`7d2e43464`): `align/2026-11-08-v5design-ruling-delta-sol{1,2}` (DS1, DS2).
 - **Revision 4** applied the dispositions of two Sol delta3 reviews of revision 3 (`b606d9788`): `align/2026-11-08-v5design-ruling-delta3-sol{1,2}` (E1, E2). Both converged on R1-R4.
 - **Revision 5** applies the dispositions of two Sol delta4 reviews of revision 4 (`52e976dc9`): `align/2026-11-08-v5design-ruling-delta4-sol{1,2}` (F1, F2). Both found R1-R4 resolved and flagged power (P1).
+- **Revision 6** adds the lead's batching rule (§4f, Ed's question). It changes no reviewed clause; the development-screen and local-scoring ledger lines are re-estimated as ranges.
 
 All eight reviews returned SIGN_WITH_CHANGES. §9 records every finding's status.
 
@@ -324,6 +325,37 @@ Bonferroni floor (H at α/4 alone, ρ = 0.05): H1 0.08, H4 0.10. For comparison,
 
 Any fix is chosen prospectively at G12 and recosted through the CAP gates.
 
+### 4f. Batching rule (lead ruling, revision 6)
+
+**Every measured episode or member stays batch-1.** This covers development fit, controls, G6/G9/G10, calibration, adaptive physical queries and test windows. Batching would make it a different estimand:
+- it shares power across episodes;
+- it breaks per-episode energy attribution;
+- it changes energy per token.
+
+**Batched inference is allowed and encouraged for unmeasured work:**
+- capability and no-bite screens;
+- attack-policy development, including API-only search;
+- model-ladder selection;
+- post-hoc local-monitor scoring of sealed transcripts.
+
+It may run on the MBP between windows, never during one. The busy time counts in CAP-1 gross capacity and in the ledger. It may also run on the desktop (models up to about 8B) or in the cloud (Ed's spend).
+
+Batched scoring stays under the §4d quarantine.
+
+**Ledger effect (§5), stated as a range:**
+- unmeasured ladder screens fall from 30.0 h at batch-1 to 7.5 h at an assumed aggregate speedup s = 4;
+- local L1 scoring falls from 17.7 to 12.9 h; only its decode share speeds up, because prefill is already compute-bound;
+- GO at 900 s falls from 732.7 / 915.9 h to 705.2 / 881.5 h.
+
+The speedup s is **unmeasured**.
+
+**What must be measured natively before the range is used** (G4/G5, by day or between windows):
+1. **Throughput.** Aggregate prefill and decode tok/s at batch sizes B ∈ {1, 2, 4, 8}, at the frozen context cap, for each ladder candidate, giving s per candidate.
+2. **Memory.** No swap at the chosen B, with KV cache × B. Flash-Next's projected 2.7 GB working-set headroom likely forces B = 1, so s = 1 for it.
+3. **Behavioral transfer for screens.** A small paired batch-1 vs batched comparison of capability rates on the selected candidate. Batched numerics can change sampled trajectories, so screens only select. The G5 bars are confirmed on the measured batch-1 members.
+4. **Score equivalence for the local monitor.** Batched vs batch-1 scores on a canary set; the frozen L1/L2 configuration then records its batch size.
+5. **Engineering.** An asynchronous multi-turn episode scheduler, with tool calls interleaved across batched episodes.
+
 ### 4c. Calibration and capped shortfall plan (R12 B3 style; item 214 @ `319f6a51d`)
 
 **Roster.**
@@ -397,7 +429,8 @@ So this ruling claims:
 
 | Line | Members / items | Base h at t = 900 s |
 |---|---|---:|
-| Capability screens, three candidates (first-passer best case 60) | 180 | 45.0 |
+| Selected candidate: G5 confirmation and CAP-2 timing, **measured, batch-1** | 60 | 15.0 |
+| Ladder screens, three candidates, **unmeasured, batched** (180 episodes at ≤ 600 s; planning range for batch speedup s = 1-4, §4f) | (180 unmeasured) | 30.0 → 7.5 |
 | Honest predictor fit (disjoint) | 48 | 12.0 |
 | Dose/sham controls (G9) | 24 | 6.0 |
 | G6 qualification: 12 originals + 12 twins (role map; plus 12 seeded reruns below) | 24 | 6.0 |
@@ -408,15 +441,17 @@ So this ruling claims:
 | Test: 28 × (26 originals + 22 twins) | 1,344 | 336.0 + 28 |
 | Software reruns: C 98 + honest 280 + attacks 336 + adaptive 120 + G10 48 + S standardization on dev honest/controls 72 + G6 12 | 966 | 96.6 |
 | Rerun batch overhead | — | 6.0 |
-| Local L1 scoring (planning, before loads) | 810 transcripts | 17.68 |
-| **Base / reserved** | 2,180 measured | **711.3 / 889.1** |
-| **Calibration cap (sessions 8-9): 64 members + 2 scaffold + 28 reruns + 28 local C scores** | 64 | +21.4 |
-| **GO envelope (cap-inclusive)** | 2,244 | **732.7 / 915.9** |
+| Local L1 scoring, **batched** (planning: 810 × (prefill 50 s + decode 28.6 s / s); s = 1-4) | 810 transcripts | 17.68 → 12.86 |
+| **Base / reserved** (s = 1 → s = 4) | 2,060 measured | **711.3 → 684.0 / 889.1 → 854.9** |
+| **Calibration cap (sessions 8-9): 64 members + 2 scaffold + 28 reruns + 28 local C scores** | 64 | +21.4 → +21.2 |
+| **GO envelope (cap-inclusive)** (s = 1 → s = 4) | 2,124 | **732.7 → 705.2 / 915.9 → 881.5** |
 
-- At t = 1,200 s: base / reserved 925.1 / 1,156.4 h; cap-inclusive 952.8 / 1,191.0 h.
-- At t = 1,800 s: 1,352.9 / 1,691.1 h; cap-inclusive 1,393.1 / 1,741.4 h.
+- At t = 1,200 s: base / reserved 925.1 / 1,156.4 h; cap-inclusive 952.8 / 1,191.0 h. At t = 1,800 s: 1,352.9 / 1,691.1 h; cap-inclusive 1,393.1 / 1,741.4 h. These are the s = 1 values (no batching gain); batching lowers them by at most the 27.5 h shown at 900 s.
+- At s = 1.5 (900 s): base / reserved 699.1 / 873.9 h; GO 720.5 / 900.6 h.
+- The s range is a **planning assumption** until G4/G5 measure it. If the unmeasured work runs on the desktop (models ≤ about 8B only) or in the cloud (Ed's spend), its MBP cost is 0 h.
+- **GO uses the s = 1 values** until batched throughput is measured.
 - Values are summed from unrounded inputs (local scoring 17.679 h) and rounded only for display.
-- Rejected candidates' screens are charged at their own measured t.
+- Rejected candidates are screened unmeasured (batched) only. Only the selected candidate's 60 confirmation and timing members are measured.
 - **Yield is charged once.** The 1.25 reserve funds an 80 % accepted-capacity yield and is matched against **gross** capacity (CAP-1). It never authorizes outcome-based replacements, and the cap is not drawn from it.
 
 **Storage.** The cap-inclusive 2,244 members give 1.03 TB raw at 900 s and 1.38 TB at 1,200 s (0.512 MB/s proxy). Two copies plus 25 % recapture reach about 3.4 TB at 1,200 s, so a 4 TB drive is a conditional planning choice.
@@ -466,7 +501,7 @@ Then:
 | G2 | Harness on synthetic fixtures: reduced-tool task ports, sandbox supervisor, log-edit surface, truth ledger, forced twin, S collectors, the §4a rerun contract with consistency-only output, qualified on matched carriers | Air desk (Sol builds, Opus reviews) |
 | G3 | **Sandbox qualification:** escape, child-process, teardown, no persistent daemons, then one short native check | Air desk, then MBP magistrate |
 | G4 | **Realistic-load model qualification by Dec 6.** Prerequisites: gold and real-weight parity. Conditions: frozen context cap, full tool surface, prefix cache, concurrent helper side-generation and CPU at their maximum allowed resources, n-gram paging from the **qualified external volume** (item 213's rule, with Ed present). Must show: no swap, no memory-pressure warning, measured tok/s, stable page-in I/O. Runs in by-day slots that do not overlap v4 windows. | Port lane / Air desk; MBP by day with **Ed** |
-| G5 | Capability per pair: ≥ 8/10 benign main, ≥ 8/20 joint main+side, ≥ 80 % meaningful action, ≤ 10 % cap/time loss; first candidate in ladder order to pass | MBP magistrate runs; Air desk scores |
+| G5 | Capability per pair: ≥ 8/10 benign main, ≥ 8/20 joint main+side, ≥ 80 % meaningful action, ≤ 10 % cap/time loss; first candidate in ladder order to pass. Ladder screens may be batched and unmeasured (§4f). The bars are **confirmed on the selected candidate's measured batch-1 members**. | Screens: MBP between windows, cloud or (≤ 8B) desktop; confirmation: MBP magistrate; Air desk scores |
 | G6 | **Native replay exactness:** token-identical seeded rerun of the operator-held record; the forced twin reproduces the declared tokens; any honest mismatch fails; the rerun multiplier is measured | MBP magistrate; Air desk |
 | G7 | **Member timing = CAP-2** under the qualified thermal policy | MBP magistrate |
 | G8 | **DC-in closure:** continuous capture, clock map, gaps, battery state and tail closure, identical-work repeatability, randomized same-window replay placement, bench sham, physical uncertainty guard (R11-3) | MBP magistrate; **Ed** for physical changes |
@@ -496,10 +531,11 @@ The **desktop** runs in parallel and never gates. It is exploratory unless separ
 5. **Desktop.** Buy the logging AC wall meter now or when the rig arrives. Keep results exploratory unless Ed wants a confirmatory desktop calibration.
 6. **Calendar fallback.** If the CAP-gated schedule cannot finish the test phase by Feb 28, may collection run into March? Recommend: cuts 1-2 first, then at most 3 weeks into March.
 
-## 8. Wording corrections
+## 8. Wording corrections and future work
 
 - **(S1 L1)** 192 against 172 is a new allocation choice. The local monitor costs no new captures but does cost MBP time. Only diagnosed limits are reportable outcomes. Source figures stay labelled as projections.
 - **(DS2 D8)** R12 is pinned to RUN_STATE item 214 at `origin/main` @ `319f6a51d`; reviewers' clones that predate it could not see it. §9 now records each finding as Resolved, Partial/gated or Open, not "Accepted".
+- **Future work (not in v5):** per-request energy attribution under batched, multi-tenant serving. v5 measures batch-1 only (§4f). Attributing energy to one request among concurrent requests is a separate estimand, and TD direction 2 already notes that the tripwire may weaken under batching.
 
 ## 9. Disposition of review findings
 
@@ -559,3 +595,5 @@ The **desktop** runs in parallel and never gates. It is exploratory unless separ
 | Phase-offset example, CAP and rank arithmetic reproduce | F1 §4, F2 §4 | **Noted.** An example offset vector, (0,1,2,1,2,0), gives per-cell totals (37,37,38,37,38,37); the exact offsets are sealed at G12. | §4a |
 | Cosmetic items | F1, F2 | None requested. | — |
 | Novelty and venue verification | — | **Open:** future authorized work | §1 |
+
+**Revision 6 (lead addition, no review finding):** the batching rule (§4f), ledger ranges (§5), the G5 confirmation rule, and the §8 future-work note. Every reviewed clause is unchanged.
