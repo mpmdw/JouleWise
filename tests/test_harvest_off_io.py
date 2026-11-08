@@ -14,7 +14,10 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from tests.align import synthetic_custody  # noqa: I001 (synthetic custody by default: no home locator probe)
 from joulewise.b5 import harvest as h
+
+setUpModule, tearDownModule = synthetic_custody.setUpModule, synthetic_custody.tearDownModule
 
 
 def manifest(root):

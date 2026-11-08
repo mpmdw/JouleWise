@@ -95,6 +95,23 @@ do not enter triage pass/fail values or eligible totals in the index:
   `pilot_status`, `harvest_status`. A later off-machine desk may instead record
   `status: running_off_mbp` while deferred. `sources.exclusions` is the final
   harvest `exclusions.json`, with `members_excluded[].run_id` and `codes`.
+* **Final adjudication (R17 review F4).** `pilot`, `desk` and `exclusions` (the
+  record's own, or the successor's `previous_final`) count as final only when
+  they evidence a completed, plan-bound harvest: `desk.harvest_status` is `ok` or
+  `members_excluded` (never the `running_off_mbp` placeholder), `desk.plan_id` and
+  `PILOT.json`'s `plan_id` equal this record's `sources.plan.plan_id`,
+  `PILOT.json`'s `status` is `instrument_ok` or `instrument_incomplete`, and any
+  `members_excluded` the desk or PILOT recorded equals the exclusions source.
+  A completed desk that did not pass stays final. Window binding is the thermal
+  section's `model/window` keys and roster. Otherwise the record is provisional
+  (it needs `sources.light_triage`), and every window of the hash chain other than
+  the previous one, test windows included, must be final (R17: k final before
+  the arm of k+2), or `member_eligibility` fails.
+* `finalized_manifest` (required after R1, R17 review F2): descriptor of the
+  record-bound tree manifest `harvest_offload.finalized_manifest` wrote at
+  finalize (`joulewise.align_v4.finalized_manifest.v2`, canonical JSON bytes, so
+  its SHA-256 is the digest `unpack --finalized-sha256` checks). It binds the
+  restore namespace, every tree entry and the finite external-input closure.
 * `captures`: an exhaustive map from every planned run id to a descriptor for
   its captured measurement artifact, or null for no capture. A nonempty captured
   artifact counts even if its member later fails; eligibility is separate.

@@ -50,17 +50,20 @@ def u_checks(thermal_report):
 def thermal_escalation(thermal_report, *, ladder_recorded=False):
     """U1-U3 verdict per model/window and whether the registered ladder is owed.
 
-    ``status`` is the triage status: ``pass`` when no U1-U3 failed, or when one
-    failed and the escalation ladder step is already recorded for the next plan
-    (applied before use, never in place); otherwise ``fail``.
+    ``status`` is the triage status: ``pass`` when every U1-U3 passed, or when one did
+    not and the escalation ladder step is already recorded for the next plan (applied
+    before use, never in place); otherwise ``fail``. A status that is not ``pass``
+    (``fail`` or ``inconclusive``) owes the registered consequence, exactly as the
+    packet builder's ``thermal_escalation`` check reads it (R17 review F6).
     """
     models = {key: {f'U{n}': result[f'U{n}']['status'] for n in (1, 2, 3)}
               for key, result in sorted(thermal_report['model_windows'].items())}
     failed = sorted(key for key, row in models.items() if 'fail' in row.values())
+    non_pass = sorted(key for key, row in models.items() if any(v != 'pass' for v in row.values()))
     return {'schema': SCHEMA, 'check': 'thermal_escalation', 'models': models,
-            'escalation_required': bool(failed), 'failed_model_windows': failed,
-            'checks': u_checks(thermal_report),
-            'status': 'pass' if not failed or ladder_recorded is True else 'fail'}
+            'escalation_required': bool(non_pass), 'failed_model_windows': failed,
+            'non_pass_model_windows': non_pass, 'checks': u_checks(thermal_report),
+            'status': 'pass' if not non_pass or ladder_recorded is True else 'fail'}
 
 
 def _eligible(record):

@@ -18,6 +18,7 @@ import tempfile
 import unittest
 from unittest import mock
 
+from tests.align import synthetic_custody  # noqa: I001 (BEFORE the B5 fixture: synthetic custody is the default)
 from joulewise.adapters import powermetrics as pm
 from joulewise.b5 import harvest as h
 from tests import test_harvest_b5_window as w
@@ -26,8 +27,13 @@ REAL_TMP = os.path.realpath(tempfile.gettempdir())
 SEED_PLIST = Path(__file__).resolve().parents[1] / 'fixtures/d117_v2_production/strict_seed_bundle/raw/powermetrics.plist'
 
 
+def setUpModule():  # noqa: N802 (unittest hook): no test probes a home custody locator
+    synthetic_custody.setUpModule()
+
+
 def tearDownModule():  # noqa: N802 (unittest hook): the shared member template
     w.tearDownModule()
+    synthetic_custody.tearDownModule()
 
 
 def inventory(root: Path) -> dict[str, str]:
@@ -147,14 +153,14 @@ class OffloadTests(unittest.TestCase):
         self.ledger.write_bytes(b'{"row": 1}\n{"row": 2}\n')
 
     def pack(self, name='out'):
-        return self.off.pack(self.src, self.root / name, external=(self.ledger,))
+        return self.off.pack_unbound(self.src, self.root / name, external=(self.ledger,))
 
     def test_round_trip_restores_every_byte_link_mode_and_ledger_at_the_same_path(self):
         manifest = self.pack()
         before = inventory(self.src)
         shutil.move(self.src, self.root / 'moved')
         self.ledger.write_bytes(b'{"row": 1}\n')       # the Air mirror holds an older prefix
-        self.off.unpack(self.root / 'out', self.src)
+        self.off.unpack_unbound(self.root / 'out', self.src)
         self.assertEqual(inventory(self.src), before)
         self.assertEqual(self.off.verify_tree(self.src, manifest), [])
         self.assertEqual(os.stat(self.src / 'runs/m1/run.sh').st_mode & 0o777, 0o755)
@@ -166,16 +172,16 @@ class OffloadTests(unittest.TestCase):
     def test_refuses_relocation_existing_destination_and_tampering(self):
         self.pack()
         with self.assertRaisesRegex(self.off.OffloadRefused, 'differs from the recorded source root'):
-            self.off.unpack(self.root / 'out', self.root / 'elsewhere')
+            self.off.unpack_unbound(self.root / 'out', self.root / 'elsewhere')
         with self.assertRaisesRegex(self.off.OffloadRefused, 'already exists'):
-            self.off.unpack(self.root / 'out')
+            self.off.unpack_unbound(self.root / 'out')
         shutil.move(self.src, self.root / 'moved')
         payload = self.root / 'out' / self.off.PAYLOAD
         raw = bytearray(payload.read_bytes())
         raw[len(raw) // 2] ^= 0xFF
         payload.write_bytes(bytes(raw))
         with self.assertRaisesRegex(self.off.OffloadRefused, 'payload digest mismatch'):
-            self.off.unpack(self.root / 'out')
+            self.off.unpack_unbound(self.root / 'out')
         self.assertFalse(self.src.exists())
 
     def test_refuses_a_manifest_mismatch_and_leaves_nothing_behind(self):
@@ -184,7 +190,7 @@ class OffloadTests(unittest.TestCase):
         (self.root / 'out' / self.off.MANIFEST).write_text(json.dumps(manifest))
         shutil.move(self.src, self.root / 'moved')
         with self.assertRaisesRegex(self.off.OffloadRefused, 'differs from manifest'):
-            self.off.unpack(self.root / 'out')
+            self.off.unpack_unbound(self.root / 'out')
         self.assertFalse(self.src.exists())
         self.assertFalse(self.src.with_name('session.restoring').exists())
 
@@ -193,7 +199,7 @@ class OffloadTests(unittest.TestCase):
         shutil.move(self.src, self.root / 'moved')
         self.ledger.write_bytes(b'{"row": 9}\n')
         with self.assertRaisesRegex(self.off.OffloadRefused, 'append-only'):
-            self.off.unpack(self.root / 'out')
+            self.off.unpack_unbound(self.root / 'out')
         self.assertFalse(self.src.exists())
 
     def test_record_bound_manifest_chains_committed_digest_to_restored_bytes(self):
@@ -209,8 +215,8 @@ class OffloadTests(unittest.TestCase):
         shutil.move(self.src, self.root / 'moved')
         with self.assertRaisesRegex(self.off.OffloadRefused, 'committed digest'):
             self.off.unpack(self.root / 'bound', finalized=finalized, finalized_sha256='0' * 64)
-        forged = dict(finalized)
-        forged['runs/m1/run.sh'] = {'sha256': '1' * 64, 'size': 10}
+        forged = deepcopy(finalized)
+        forged['entries']['runs/m1/run.sh'] = {'sha256': '1' * 64, 'size': 10}
         with self.assertRaisesRegex(self.off.OffloadRefused, 'offload manifest differs'):
             self.off.unpack(self.root / 'bound', finalized=forged, finalized_sha256=self.off.manifest_sha256(forged))
         self.assertFalse(self.src.exists())
@@ -223,6 +229,145 @@ class OffloadTests(unittest.TestCase):
             self.pack('out2')
 
 
+@unittest.skipUnless(shutil.which('zstd'), 'zstd CLI required')
+class R17ReviewCustodyTests(unittest.TestCase):
+    """R17 review F1/F2 and the Sol seat-2 custody findings: the finite external closure."""
+
+    def setUp(self):
+        from joulewise.align.apple import harvest_offload as off
+        self.off = off
+        self.root = Path(tempfile.mkdtemp(prefix='offload-closure-', dir=REAL_TMP))
+        self.addCleanup(shutil.rmtree, self.root, True)
+        self.src = self.root / 'session'
+        (self.src / 'runs').mkdir(parents=True)
+        (self.src / 'runs/raw.txt').write_bytes(b'raw\n')
+        self.checkout = self.root / 'checkout'
+        (self.checkout / 'runs').mkdir(parents=True)
+        (self.checkout / 'joulewise.py').write_bytes(b'code\n')
+        self.ledger = self.checkout / 'runs/ledger.jsonl'
+        self.ledger.write_bytes(b'{"row": 1}\n')
+        (self.src / 'measurement').symlink_to(self.checkout, target_is_directory=True)
+        self.identity = {'head': 'a' * 40, 'tracked_clean': True}
+        self.mirror = {'root': str(self.checkout), 'identity': self.identity}
+
+    def finalize(self, **kwargs):
+        return self.off.finalized_manifest(self.src, **kwargs)
+
+    def test_library_route_requires_the_record_binding(self):
+        with self.assertRaisesRegex(self.off.OffloadRefused, 'requires the finalized record manifest'):
+            self.off.pack(self.src, self.root / 'o', finalized=None)
+        self.assertFalse((self.root / 'o').exists())
+        self.off.pack_unbound(self.src, self.root / 'o')
+        shutil.move(self.src, self.root / 'kept')
+        with self.assertRaisesRegex(self.off.OffloadRefused, 'committed digest'):
+            self.off.unpack(self.root / 'o', finalized=None, finalized_sha256=None)
+        self.assertFalse(self.src.exists())
+
+    def test_mirror_links_bind_the_checkout_identity_and_declared_inputs_their_bytes(self):
+        final = self.finalize(mirror=self.mirror, inputs=(self.ledger,))
+        self.assertEqual(final['closure']['links']['measurement']['class'], 'mirror')
+        self.assertEqual(set(final['closure']['files']), {str(self.ledger)})   # the checkout is never traversed
+        with self.assertRaisesRegex(self.off.OffloadRefused, 'mirror differs'):
+            self.off.pack(self.src, self.root / 'o', finalized=final, mirror_identity={'head': 'b' * 40})
+        self.off.pack(self.src, self.root / 'o', finalized=final, external=(self.ledger,),
+                      mirror_identity=self.identity)
+        shutil.move(self.src, self.root / 'kept')
+        digest = self.off.manifest_sha256(final)
+        with self.assertRaisesRegex(self.off.OffloadRefused, 'mirror differs'):
+            self.off.unpack(self.root / 'o', finalized=final, finalized_sha256=digest)
+        self.assertFalse(self.src.exists())
+        self.off.unpack(self.root / 'o', finalized=final, finalized_sha256=digest, mirror_identity=self.identity)
+        self.assertEqual(self.finalize(mirror=self.mirror, inputs=(self.ledger,)), final)   # same closure on the Air
+
+    def test_a_retargeted_external_destination_refuses_and_writes_nothing(self):
+        # Sol seat 2: the payload names its own destinations; only the record-bound closure may.
+        final = self.finalize(mirror=self.mirror, inputs=(self.ledger,))
+        manifest = self.off.pack(self.src, self.root / 'o', finalized=final, external=(self.ledger,),
+                                 mirror_identity=self.identity)
+        code = self.checkout / 'collector.py'
+        code.write_bytes(b'')
+        next(iter(manifest['external'].values()))['path'] = str(code)
+        (self.root / 'o' / self.off.MANIFEST).write_text(json.dumps(manifest))
+        shutil.move(self.src, self.root / 'kept')
+        with self.assertRaisesRegex(self.off.OffloadRefused, 'not bound by the finalized record manifest'):
+            self.off.unpack(self.root / 'o', finalized=final, finalized_sha256=self.off.manifest_sha256(final),
+                            mirror_identity=self.identity)
+        self.assertEqual(code.read_bytes(), b'')
+        self.assertEqual(self.ledger.read_bytes(), b'{"row": 1}\n')
+        self.assertFalse(self.src.exists())
+
+    def test_byte_closure_is_reverified_on_the_air_before_publication(self):
+        final = self.finalize()           # no mirror: the linked directory is bound by its bytes
+        self.assertEqual(set(final['closure']['files']), {str(self.checkout / 'joulewise.py'), str(self.ledger)})
+        self.off.pack(self.src, self.root / 'o', finalized=final)
+        shutil.move(self.src, self.root / 'kept')
+        digest = self.off.manifest_sha256(final)
+        for change, undo in ((lambda: (self.checkout / 'joulewise.py').write_bytes(b'Air code\n'),
+                              lambda: (self.checkout / 'joulewise.py').write_bytes(b'code\n')),
+                             (lambda: (self.checkout / 'extra.py').write_bytes(b''),
+                              lambda: (self.checkout / 'extra.py').unlink())):
+            change()
+            with self.assertRaisesRegex(self.off.OffloadRefused, 'differs from the finalized record manifest'):
+                self.off.unpack(self.root / 'o', finalized=final, finalized_sha256=digest)
+            self.assertFalse(self.src.exists())
+            undo()
+        self.off.unpack(self.root / 'o', finalized=final, finalized_sha256=digest)
+
+    def test_an_absent_link_target_stays_absent(self):
+        missing = self.root / 'never-created'
+        (self.src / 'dangling').symlink_to(missing)
+        final = self.finalize(mirror=self.mirror)
+        self.assertEqual(final['closure']['links']['dangling']['class'], 'absent')
+        self.off.pack(self.src, self.root / 'o', finalized=final, mirror_identity=self.identity)
+        shutil.move(self.src, self.root / 'kept')
+        missing.write_bytes(b'appeared on the Air')
+        with self.assertRaisesRegex(self.off.OffloadRefused, 'resolves differently'):
+            self.off.unpack(self.root / 'o', finalized=final, finalized_sha256=self.off.manifest_sha256(final),
+                            mirror_identity=self.identity)
+
+    def test_the_byte_closure_is_finite_and_never_follows_further_links(self):
+        weights = self.root / 'weights'
+        weights.mkdir()
+        (weights / 'model.safetensors').write_bytes(b'w' * 64)
+        (self.src / 'model').symlink_to(weights, target_is_directory=True)
+        with mock.patch.object(self.off, 'CLOSURE_MAX_FILE_BYTES', 32):
+            with self.assertRaisesRegex(self.off.OffloadRefused, 'never bound or copied'):
+                self.finalize(mirror=self.mirror)
+        with mock.patch.object(self.off, 'CLOSURE_MAX_FILES', 1):
+            (weights / 'other.bin').write_bytes(b'x')
+            with self.assertRaisesRegex(self.off.OffloadRefused, 'not finite'):
+                self.finalize(mirror=self.mirror)
+        (weights / 'nested').symlink_to(self.root)
+        with self.assertRaisesRegex(self.off.OffloadRefused, 'further link'):
+            self.finalize(mirror=self.mirror)
+
+    def test_transport_manifest_cannot_choose_the_namespace(self):
+        final = self.finalize(mirror=self.mirror)
+        manifest = self.off.pack(self.src, self.root / 'o', finalized=final, mirror_identity=self.identity)
+        manifest['source_root'] = str(self.root / 'elsewhere')
+        (self.root / 'o' / self.off.MANIFEST).write_text(json.dumps(manifest))
+        with self.assertRaisesRegex(self.off.OffloadRefused, 'restore namespace differs'):
+            self.off.unpack(self.root / 'o', finalized=final, finalized_sha256=self.off.manifest_sha256(final),
+                            mirror_identity=self.identity)
+        self.assertFalse((self.root / 'elsewhere').exists())
+
+
+class SyntheticCustodyFenceTests(unittest.TestCase):
+    """Test hygiene: inside these modules a home custody locator is never probed."""
+
+    def test_home_locators_are_answered_absent_before_any_probe(self):
+        from joulewise import calibration_ledger as ledger
+        self.assertEqual(os.environ.get('JW_B5_SYNTHETIC_ONLY'), '1')
+        locator = synthetic_custody.HOME / 'night-custody' / 'synthetic-never-probed'
+        before = len(synthetic_custody.REFUSED)
+        with mock.patch('pathlib.Path.exists', side_effect=AssertionError('probed')):
+            self.assertEqual(ledger._custody_probe_paths(locator, mode='read_replay'), ())
+        self.assertEqual(synthetic_custody.REFUSED[before:], [str(locator)])
+        self.assertTrue(synthetic_custody.outside_synthetic_custody(locator))
+        self.assertFalse(synthetic_custody.outside_synthetic_custody(Path(REAL_TMP) / 'x'))
+        self.assertFalse(synthetic_custody.outside_synthetic_custody(synthetic_custody.REPO / 'tests'))
+
+
 class SamePathHarvestEqualityTests(unittest.TestCase):
     """MBP harvest on the live record == Air harvest on the verified copy at the same path."""
 
@@ -232,7 +377,8 @@ class SamePathHarvestEqualityTests(unittest.TestCase):
         self.tmp = Path(tempfile.mkdtemp(prefix='harvest-off-', dir=REAL_TMP))
         self.addCleanup(shutil.rmtree, self.tmp, True)
         self.window = w.Window(self.tmp / 'w', catalog_overrides={'member.cooldown_evidence_unverified': 'DISCLOSE'})
-        self.manifest = self.off.pack(self.tmp / 'w', self.tmp / 'offload')
+        self.finalized = self.off.finalized_manifest(self.tmp / 'w')       # record-bound, as in production
+        self.manifest = self.off.pack(self.tmp / 'w', self.tmp / 'offload', finalized=self.finalized)
 
     def seams(self, workers, boot, pinned):
         clocks = {'now': lambda: 1786300000.0, 'monotonic_ns': lambda: 123} if pinned else {}
@@ -250,7 +396,8 @@ class SamePathHarvestEqualityTests(unittest.TestCase):
                             seams=self.seams(1, boots[0], pinned), prepare_desk=True)
         os.rename(self.tmp / 'w', self.tmp / 'w.mbp')
         # Air: restore the verified copy at the SAME path; three workers, dedupe on.
-        self.off.unpack(self.tmp / 'offload', self.tmp / 'w')
+        self.off.unpack(self.tmp / 'offload', self.tmp / 'w', finalized=self.finalized,
+                        finalized_sha256=self.off.manifest_sha256(self.finalized))
         air = h.harvest(h.resolve_inputs(self.window.plan_path), self.window.archive,
                         seams=self.seams(3, boots[1], pinned), prepare_desk=True)
         return mbp, air, self.tmp / 'w.mbp/archive', self.tmp / 'w/archive'
@@ -447,8 +594,13 @@ class RunnerTests(unittest.TestCase):
         packed = json.loads(out.getvalue())
         self.assertEqual(packed['external'], [str(ledger)])
         shutil.move(session, root / 'session.mbp')
+        with contextlib.redirect_stderr(io.StringIO()) as err:      # R17 review F2: the binding is required
+            self.assertEqual(runner.main(['unpack', '--offload', str(root / 'o')], run=self.fake_run('a' * 40)), 1)
+        self.assertIn('requires the record binding', err.getvalue())
         with contextlib.redirect_stderr(io.StringIO()) as err:
-            self.assertEqual(runner.main(['unpack', '--offload', str(root / 'o')], run=self.fake_run('b' * 40)), 1)
+            self.assertEqual(runner.main(['unpack', '--offload', str(root / 'o'), '--finalized-manifest',
+                                          str(root / 'M.json'), '--finalized-sha256', finalized['sha256']],
+                                         run=self.fake_run('b' * 40)), 1)
         self.assertIn('mirror differs', err.getvalue())
         self.assertFalse(session.exists())
         with contextlib.redirect_stderr(io.StringIO()) as err:
@@ -670,6 +822,30 @@ class SyntheticV4SessionE2ETests(unittest.TestCase):
                 binding, _rows = pm_reduce.read_npy((self.root / 'reduced' / row['reduced']).read_bytes())
                 self.assertEqual(binding['raw_sha256'], row['raw_sha256'])
 
+    def test_turn_table_binds_every_file_the_projection_opens(self):
+        # R17 review F8: every bundle file opened while the table is computed is digest-bound.
+        import sys
+        from joulewise.align.apple import turn_table
+        for row in self.rows:
+            rid = row['run_id']
+            bundle = (self.runs / rid).resolve()
+            opened, state = set(), {'on': True}
+
+            def hook(event, args, bundle=bundle, opened=opened, state=state):
+                if state['on'] and event == 'open' and args and isinstance(args[0], (str, Path)):
+                    path = Path(os.path.abspath(args[0]))
+                    if path.is_relative_to(bundle):
+                        name = path.relative_to(bundle).as_posix()
+                        opened.add(name[:-4] if name.endswith('.zst') else name)
+            sys.addaudithook(hook)
+            try:
+                table = turn_table.member_table(bundle, rid)
+            finally:
+                state['on'] = False
+            self.assertIn('metadata.json', opened)
+            self.assertLessEqual(opened, set(table['inputs']), rid)
+            self.assertEqual(set(table['inputs']), set(turn_table.INPUT_FILES))
+
     def test_turn_table_differs_from_a_tampered_pilot(self):
         from joulewise.align.apple import turn_table
         rid = self.rows[0]['run_id']
@@ -688,14 +864,42 @@ class SyntheticV4SessionE2ETests(unittest.TestCase):
 class WorkerSizingTests(unittest.TestCase):
     """R17: workers = min(free cores, free memory / measured peak per worker)."""
 
-    def test_auto_workers_takes_the_binding_limit_and_never_zero(self):
+    def test_auto_workers_takes_the_binding_limit_and_postpones_at_zero(self):
         from scripts import align_v4_harvest_off as runner
         gib = 1 << 30
         self.assertEqual(runner.auto_workers(peak_bytes=4 * gib, memory=28 * gib, cores=10)['workers'], 6)
         self.assertEqual(runner.auto_workers(peak_bytes=1 * gib, memory=64 * gib, cores=3)['workers'], 3)
-        self.assertEqual(runner.auto_workers(peak_bytes=64 * gib, memory=8 * gib, cores=10)['workers'], 1)
+        # R17 review F5: no worker fits -> postpone (refuse), never one worker over the memory budget.
+        with self.assertRaisesRegex(ValueError, 'postpone the desk'):
+            runner.auto_workers(peak_bytes=64 * gib, memory=8 * gib, cores=10)
+        for bad in (0, -1, 1.5):
+            with self.assertRaises(ValueError):
+                runner.auto_workers(peak_bytes=bad, memory=64 * gib, cores=10)
         self.assertEqual(runner.free_cores(load_average=7.6, cpu_count=10), 2)
         self.assertEqual(runner.free_cores(load_average=30.0, cpu_count=10), 1)
+
+    def test_sweep_is_used_only_when_bound_to_this_code_and_scaled_to_this_input(self):
+        from scripts import align_v4_harvest_off as runner
+        root = Path(tempfile.mkdtemp(prefix='sweep-bind-', dir=REAL_TMP))
+        self.addCleanup(shutil.rmtree, root, True)
+        code = {'head': 'a' * 40, 'python': ['3.13', 'pkgs']}
+
+        def receipt(**fields):
+            path = root / 'SWEEP.json'
+            path.write_text(json.dumps({'schema': runner.SWEEP_SCHEMA, 'largest_plist_bytes': 500, 'code': code,
+                                        'runs': [{'workers': 2, 'exit': 0, 'peak_child_rss_bytes': 1000}], **fields}))
+            return path
+        with mock.patch.object(runner, 'largest_plist_bytes', return_value=1000), \
+             mock.patch.object(runner, 'sweep_code_identity', return_value=code):
+            peak, basis = runner.sweep_basis(receipt(), root)
+            self.assertEqual((peak, basis['reason']), (2000, 'bound'))            # twice the input: twice the peak
+            self.assertEqual(runner.sweep_basis(receipt(largest_plist_bytes=5000), root)[0], 1000)  # never scaled down
+            self.assertIsNone(runner.sweep_basis(receipt(code={'head': 'b' * 40, 'python': code['python']}), root)[0])
+            self.assertIsNone(runner.sweep_basis(receipt(schema='joulewise.align_v4.harvest_sweep.v1'), root)[0])
+            for bad in ({'exit': 1, 'peak_child_rss_bytes': 1000}, {'exit': 0, 'peak_child_rss_bytes': 0},
+                        {'exit': 0}):
+                with self.assertRaises(ValueError):
+                    runner.sweep_basis(receipt(runs=[bad]), root)
 
     def test_free_memory_reads_vm_stat_pages(self):
         import subprocess
@@ -711,8 +915,11 @@ class WorkerSizingTests(unittest.TestCase):
         root = Path(tempfile.mkdtemp(prefix='sweep-', dir=REAL_TMP))
         self.addCleanup(shutil.rmtree, root, True)
         (root / 'plan.json').write_text(json.dumps({'custody_root': str(root / 'custody')}))
+        (root / 'runs/m1/raw').mkdir(parents=True)
+        (root / 'runs/m1/raw/powermetrics.plist').write_bytes(b'x' * 1000)
         (root / 'session.json').write_text(json.dumps({'plan_path': str(root / 'plan.json'), 'session_id': 's',
-            'measurement_root': str(root), 'registration_dir': str(root / 'reg')}))
+            'measurement_root': str(root), 'registration_dir': str(root / 'reg'),
+            'runs_roots': {'claim': str(root / 'runs')}}))
         calls = []
         run = lambda argv, **_: calls.append(argv) or subprocess.CompletedProcess(argv, 0)  # noqa: E731
         receipt = runner.cmd_sweep(type('A', (), {'session_root': root, 'out': root / 'sweep',
@@ -722,6 +929,10 @@ class WorkerSizingTests(unittest.TestCase):
         self.assertEqual(len({c[c.index('--archive-root') + 1] for c in calls}), 5)
         self.assertTrue(all('--profile' in c for c in calls))
         self.assertTrue((root / 'sweep/SWEEP.json').is_file())
+        # R17 review F5: the receipt is bound to the input size and the harvest code it measured.
+        self.assertEqual(receipt['schema'], runner.SWEEP_SCHEMA)
+        self.assertEqual(receipt['largest_plist_bytes'], 1000)
+        self.assertEqual(set(receipt['code']), {'head', 'python'})
 
 
 if __name__ == '__main__':

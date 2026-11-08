@@ -4,6 +4,7 @@
 MBP, at finalize:      finalize-manifest --session-root S --out M.json (commit M.json's sha256 with the record)
 MBP, after finalize:   pack    --session-root S --out O --finalized-manifest M.json (verified compressed raw copy)
 Air, during cool-down: unpack  --offload O --finalized-manifest M.json --finalized-sha256 H (same path, record-bound)
+The record binding is REQUIRED on pack and unpack (R17 review F2): without it they refuse.
                        triage  --session-root S --window-id W (light: thermal_escalation, member_eligibility)
 Air, next window:      desk    --session-root S --workers auto|N (unchanged harvest + full desk, timed)
                        sweep   --session-root S --out D       (harvest at 2/4/6/8/10 workers: wall, peak RSS)
@@ -27,7 +28,6 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from joulewise.align.apple import harvest_offload, light_triage  # noqa: E402
 
-IDENTITY = 'IDENTITY.json'
 PY_IDENTITY = ('import sys, hashlib, importlib.metadata as m; print(sys.version); '
                'print(hashlib.sha256("\\n".join(sorted(f"{d.metadata[\'Name\']}=={d.version}" '
                'for d in m.distributions())).encode()).hexdigest())')
@@ -62,34 +62,61 @@ def _session(session_root):
     return session, state, plan
 
 
+def _mirror_root(state):
+    """The measurement checkout the session's links point into (absolute text; never resolved)."""
+    return str(Path(state.get('source_measurement_root', state['measurement_root'])).absolute())
+
+
+def _usable_identity(identity):
+    return bool(identity.get('tracked_clean')) and identity.get('head') is not None and identity.get('python') is not None
+
+
+def _ledger_input(session, plan):
+    """The calibration ledger the window appended (outside the session): bound by bytes and transported."""
+    ledger = Path(((plan.get('hazard_window') or {}).get('bindings') or {}).get('ledger_path') or '')
+    return (ledger,) if ledger.is_absolute() and ledger.is_file() and session not in ledger.parents else ()
+
+
+def _require(args, *names):
+    missing = [name for name in names if getattr(args, name.replace('-', '_'), None) in (None, '')]
+    if missing:
+        raise harvest_offload.OffloadRefused(args.command + ' requires the record binding: '
+                                             + ', '.join('--' + name for name in missing)
+                                             + ' (R17 review F2: no unbound transfer on the production route)')
+
+
 def cmd_pack(args, run=subprocess.run):
+    _require(args, 'finalized-manifest')
     session, state, plan = _session(args.session_root)
     if not (Path(plan['custody_root']) / 'night/result.json').is_file():
         raise harvest_offload.OffloadRefused('terminal record absent; pack only a finalized window')
-    ledger = Path(((plan.get('hazard_window') or {}).get('bindings') or {}).get('ledger_path') or '')
-    external = (ledger,) if ledger.is_absolute() and ledger.is_file() and session not in ledger.parents else ()
-    finalized = _read(args.finalized_manifest) if args.finalized_manifest else None
+    finalized = _read(args.finalized_manifest)
+    identity = checkout_identity(_mirror_root(state), run=run)
     started = time.time()
     manifest = harvest_offload.pack(session.absolute(), args.out, level=args.level, threads=args.threads,
-                                    external=external, finalized=finalized)
-    identity = checkout_identity(state.get('source_measurement_root', state['measurement_root']), run=run)
-    (Path(args.out) / IDENTITY).write_text(json.dumps(identity, indent=2, sort_keys=True) + '\n')
+                                    external=_ledger_input(session, plan), finalized=finalized,
+                                    mirror_identity=identity)
     return {'packed': manifest['source_root'], 'files': manifest['files'], 'bytes': manifest['bytes'],
             'payload_bytes': manifest['payload']['size'], 'payload_sha256': manifest['payload']['sha256'],
             'external': [row['path'] for row in manifest['external'].values()],
+            'finalized_manifest_sha256': manifest['finalized_manifest_sha256'],
             'elapsed_s': round(time.time() - started, 3), 'identity': identity}
 
 
 def cmd_unpack(args, run=subprocess.run):
+    _require(args, 'finalized-manifest', 'finalized-sha256')
     offload = Path(args.offload)
-    recorded = _read(offload / IDENTITY)
-    here = checkout_identity(recorded['measurement_root'], run=run)
-    if here != recorded or not here['tracked_clean'] or here['head'] is None or here['python'] is None:
+    finalized = _read(args.finalized_manifest)
+    mirror = ((finalized.get('closure') or {}).get('mirror') if isinstance(finalized, dict) else None)
+    if not isinstance(mirror, dict) or not isinstance(mirror.get('root'), str):
+        raise harvest_offload.OffloadRefused('finalized record manifest binds no measurement checkout mirror')
+    here = checkout_identity(mirror['root'], run=run)
+    if here != mirror.get('identity') or not _usable_identity(here):
         raise harvest_offload.OffloadRefused('measurement checkout mirror differs from the MBP: '
-                                             + json.dumps({'mbp': recorded, 'here': here}, sort_keys=True))
-    finalized = _read(args.finalized_manifest) if args.finalized_manifest else None
+                                             + json.dumps({'mbp': mirror.get('identity'), 'here': here}, sort_keys=True))
     started = time.time()
-    manifest = harvest_offload.unpack(offload, finalized=finalized, finalized_sha256=args.finalized_sha256)
+    manifest = harvest_offload.unpack(offload, finalized=finalized, finalized_sha256=args.finalized_sha256,
+                                      mirror_identity=here)
     return {'restored': manifest['source_root'], 'files': manifest['files'], 'bytes': manifest['bytes'],
             'elapsed_s': round(time.time() - started, 3)}
 
@@ -131,14 +158,23 @@ def cmd_triage(args, run=subprocess.run):
     return {k: v for k, v in result.items() if k not in ('thermal', 'km003c')}
 
 
+# A completed harvest whose exclusions the desk recorded (= align_v4_next_arm_packet.COMPLETED_HARVEST,
+# tested equal). Any other status (not_run, program_fault, exclusions_unavailable) is not final.
+COMPLETED_HARVEST = ('ok', 'members_excluded')
+
+
 def cmd_final(args, run=subprocess.run):
     """Final eligibility row from the full desk's PILOT.json on the verified copy."""
     session, state, plan = _session(args.session_root)
     pilot = _read(args.pilot or session / 'PILOT.json')
     desk = _read(session / 'desk.json')
-    if desk.get('harvest_status') in (None, 'not_run', 'program_fault'):
+    if desk.get('harvest_status') not in COMPLETED_HARVEST:
         raise ValueError('final eligibility needs a completed harvest (harvest_status '
                          + str(desk.get('harvest_status')) + ')')
+    plan_id = state.get('session_id')
+    if desk.get('plan_id') != plan_id or pilot.get('plan_id') != plan_id:
+        raise ValueError('final eligibility needs the desk and PILOT.json of this session (plan_id '
+                         + json.dumps([desk.get('plan_id'), pilot.get('plan_id'), plan_id]) + ')')
     thermal = pilot['extra_checks']['thermal']
     rows = _plan_rows(state)
     runs_root = _runs_root(state)
@@ -156,10 +192,16 @@ def cmd_desk(args, run=subprocess.run):
     sizing = None
     workers = args.workers
     if workers == 'auto':
-        sizing = auto_workers(peak_bytes=_sweep_peak(args.sweep) if args.sweep else None,
-                              session_root=args.session_root)
+        peak, basis = sweep_basis(args.sweep, args.session_root) if args.sweep else (None, None)
+        sizing = auto_workers(peak_bytes=peak, session_root=args.session_root)   # refuses when no worker fits
+        if basis is not None:
+            sizing['sweep'] = basis
+            if peak is None:
+                sizing['peak_basis'] += ' (sweep not used: ' + basis['reason'] + ')'
         workers = sizing['workers']
     workers = int(workers)
+    if workers < 1:
+        raise ValueError('desk workers must be a positive integer')
     started = time.time()
     result = run([sys.executable, str(ROOT / 'scripts/align_v4_session.py'), 'desk', '--session-root',
                   str(args.session_root), '--harvest-workers', str(workers)], check=False)
@@ -196,24 +238,74 @@ def largest_plist_bytes(session_root):
 
 
 def auto_workers(*, peak_bytes=None, session_root=None, memory=None, cores=None, reserve_bytes=4 << 30):
-    """Workers = max(1, min(free cores, (free memory - reserve) // peak per worker)).
+    """Workers = min(free cores, (free memory - reserve) // peak per worker); refuses (postpone) at zero.
 
-    ``peak_bytes`` is the measured per-worker peak from a sweep receipt; without one it is the
-    conservative 8x the window's largest raw plist (recorded as ``peak_basis``).
+    ``peak_bytes`` is the measured per-worker peak from a bound sweep receipt (:func:`sweep_basis`);
+    without one it is the conservative 8x the window's largest raw plist (recorded as ``peak_basis``).
+    R17 review F5: when not even one worker fits after the reserve, the desk is POSTPONED (ValueError,
+    exit 1), never launched over the memory budget.
     """
     basis = 'sweep'
     if peak_bytes is None:
         peak_bytes, basis = PEAK_PER_PLIST_BYTE * max(largest_plist_bytes(session_root), 1 << 20), '8x_largest_plist'
+    if type(peak_bytes) is not int or peak_bytes <= 0:
+        raise ValueError(f'per-worker peak must be a positive byte count, got {peak_bytes!r}')
     memory = free_memory_bytes() if memory is None else memory
     cores = free_cores() if cores is None else cores
-    by_memory = max(1, (memory - reserve_bytes) // max(peak_bytes, 1))
-    return {'workers': int(max(1, min(cores, by_memory))), 'free_cores': cores, 'free_memory_bytes': memory,
+    by_memory = (memory - reserve_bytes) // peak_bytes
+    workers = int(min(cores, by_memory))
+    if workers < 1:
+        raise ValueError(f'postpone the desk: no harvest worker fits (free {memory} B - reserve {reserve_bytes} B '
+                         f'< one worker peak {peak_bytes} B, basis {basis})')
+    return {'workers': workers, 'free_cores': cores, 'free_memory_bytes': memory,
             'peak_bytes_per_worker': peak_bytes, 'peak_basis': basis, 'reserve_bytes': reserve_bytes}
 
 
+SWEEP_SCHEMA = 'joulewise.align_v4.harvest_sweep.v2'
+
+
 def _sweep_peak(path):
-    rows = _read(path)['runs']
+    """The largest successful per-worker peak of a sweep receipt; refuses a failed or nonpositive run."""
+    receipt = _read(path)
+    rows = receipt.get('runs') if isinstance(receipt, dict) else None
+    if not isinstance(rows, list) or not rows:
+        raise ValueError('sweep receipt has no runs')
+    for row in rows:
+        if not isinstance(row, dict) or row.get('exit') != 0:
+            raise ValueError(f'sweep run failed ({row!r}); a failed run is not a measured worker peak')
+        peak = row.get('peak_child_rss_bytes')
+        if type(peak) is not int or peak <= 0:
+            raise ValueError(f'sweep run has a nonpositive or missing peak ({peak!r})')
     return max(row['peak_child_rss_bytes'] for row in rows)
+
+
+def sweep_code_identity(session_root, run=subprocess.run):  # run: the git/interpreter probe, never a harvest runner
+    """The harvest program a sweep measures: the session's measurement checkout head and interpreter."""
+    _session_dir, state, _plan = _session(session_root)
+    identity = checkout_identity(state['measurement_root'], run=run)
+    return {'head': identity['head'], 'python': identity['python']}
+
+
+def sweep_basis(path, session_root):
+    """``(peak_bytes or None, basis)`` for auto sizing from a sweep receipt (R17 review F5).
+
+    The receipt must be a successful v2 sweep bound to the SAME harvest code (checkout head and
+    interpreter) as this desk, and to an input size: its peak is scaled up linearly when this
+    window's largest raw plist exceeds the swept one (never scaled down). A receipt without that
+    binding, or for other code, is not used (``None``: the conservative 8x fallback applies).
+    """
+    peak = _sweep_peak(path)
+    receipt = _read(path)
+    swept, code = receipt.get('largest_plist_bytes'), receipt.get('code')
+    if receipt.get('schema') != SWEEP_SCHEMA or type(swept) is not int or swept <= 0 or not isinstance(code, dict):
+        return None, {'reason': 'receipt not bound to an input size and code', 'path': str(path)}
+    current_code = sweep_code_identity(session_root)
+    if code != current_code or current_code['head'] is None:
+        return None, {'reason': 'receipt measured other harvest code', 'path': str(path)}
+    current = largest_plist_bytes(session_root)
+    scaled = peak if current <= swept else -(-peak * current // swept)
+    return scaled, {'reason': 'bound', 'path': str(path), 'measured_peak_bytes': peak,
+                    'swept_largest_plist_bytes': swept, 'largest_plist_bytes': current}
 
 
 def measure_harvest(argv, *, run=subprocess.run):
@@ -234,6 +326,8 @@ def cmd_sweep(args, run=subprocess.run):
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=False)
     measurement = Path(state['measurement_root'])
+    largest = largest_plist_bytes(args.session_root)
+    code = sweep_code_identity(args.session_root)
     rows = []
     for workers in args.workers:
         target = out / f'w{workers:02d}'
@@ -244,17 +338,28 @@ def cmd_sweep(args, run=subprocess.run):
                 '--io-workers', '2', '--profile', str(target / 'profile.jsonl')]
         target.mkdir()
         rows.append({'workers': workers, **measure_harvest(argv, run=run)})
-    receipt = {'schema': 'joulewise.align_v4.harvest_sweep.v1', 'session_id': state.get('session_id'), 'runs': rows,
-               'note': 'peak_child_rss_bytes is the largest single descendant, i.e. the per-worker peak'}
+    receipt = {'schema': SWEEP_SCHEMA, 'session_id': state.get('session_id'), 'runs': rows,
+               'largest_plist_bytes': largest, 'code': code,
+               'note': 'peak_child_rss_bytes is the largest single descendant, i.e. the per-worker peak; '
+                       'bound to largest_plist_bytes and the harvest code (sweep_basis)'}
     (out / 'SWEEP.json').write_text(json.dumps(receipt, indent=2, sort_keys=True) + '\n')
     return receipt
 
 
 def cmd_finalize_manifest(args, run=subprocess.run):
-    session, _state, plan = _session(args.session_root)
+    session, state, plan = _session(args.session_root)
     if not (Path(plan['custody_root']) / 'night/result.json').is_file():
         raise harvest_offload.OffloadRefused('terminal record absent; finalize only a terminal window')
-    manifest = harvest_offload.finalized_manifest(session.absolute())
+    # The external closure (R17 review F1): links into the measurement checkout are bound by its
+    # identity (the mirror the Air must reproduce); the calibration ledger by its bytes; any other
+    # external link target by the bytes it reaches, within the finite bounds, or the finalize refuses.
+    mirror = _mirror_root(state)
+    identity = checkout_identity(mirror, run=run)
+    if not _usable_identity(identity):
+        raise harvest_offload.OffloadRefused('measurement checkout is not a clean, identified mirror source: '
+                                             + json.dumps(identity, sort_keys=True))
+    manifest = harvest_offload.finalized_manifest(session.absolute(), mirror={'root': mirror, 'identity': identity},
+                                                  inputs=_ledger_input(session, plan))
     # Canonical bytes, so the file's own SHA-256 (the record's raw_evidence descriptor) IS the
     # digest unpack checks (manifest_sha256): one number in the record, not two.
     with Path(args.out).open('xb') as sink:

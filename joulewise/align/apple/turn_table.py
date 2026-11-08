@@ -18,9 +18,13 @@ from pathlib import Path
 from typing import Any
 
 SCHEMA = 'joulewise.align_v4.turn_table.v1'
-INPUT_FILES = ('config.json', 'outputs/align_episode.json', 'outputs/align_turns.jsonl',
-               'outputs/align_thermal.jsonl', 'power_trace.csv', 'rich_telemetry.jsonl',
-               'raw/powermetrics.plist')
+# Every bundle file the energy projection opens (R17 review F8), including metadata.json, whose
+# clock-anchor and trace-uncertainty evidence both desk energy readers use. Proven complete by
+# tests/align/test_harvest_off.py (an audit of every open() during member_table); an absent
+# file is bound as null.
+INPUT_FILES = ('config.json', 'metadata.json', 'summary_metrics.json', 'outputs/align_episode.json',
+               'outputs/align_turns.jsonl', 'outputs/align_transcript.jsonl', 'outputs/align_thermal.jsonl',
+               'power_trace.csv', 'rich_telemetry.jsonl', 'raw/powermetrics.plist')
 THERMAL_KEYS = ('turn_owned_j', 'turn_owned_half_width_j', 'gross_episode_j', 'gross_episode_half_width_j',
                 'turn_owned_basis', 'per_turn')
 

@@ -24,7 +24,7 @@ This runbook covers one window k, from terminal completion to the arm of k+1. It
 
 **1a. Finalize as today** (custody hashes, record artifacts). Unchanged.
 
-**1b. Write the record-bound tree manifest.** Its SHA-256 goes into record k.
+**1b. Write the record-bound tree manifest.** Its SHA-256 goes into record k (`finalized_manifest`, §3).
 
 ```sh
 $RUN finalize-manifest --session-root "$S" --out "$OUT/finalized_manifest.json"
@@ -32,12 +32,20 @@ $RUN finalize-manifest --session-root "$S" --out "$OUT/finalized_manifest.json"
 shasum -a 256 "$OUT/finalized_manifest.json"     # == H: the file is canonical bytes
 ```
 
-**1c. Pack the verified compressed copy.** The calibration ledger the window appended travels with it.
+What it binds (R17 review F1), besides every tree entry and the restore namespace `$S`:
+- **Links into `M`** (the measurement view): the checkout identity of `M` (head, clean incl. untracked, interpreter and packages). The Air must reproduce it exactly. `M` must be clean and identified, or finalize refuses.
+- **The calibration ledger** the window appended: its bytes.
+- **Any other link that leaves `$S`**: the bytes it reaches (a file, or every regular file below a directory), at most 4,096 files, 1 GiB, and 256 MiB per file. A target past those bounds, or one that reaches a further link, refuses. Bind it through `M` instead. Model weights are never hashed or copied.
+- **A link to a missing path** stays bound as missing.
+
+**1c. Pack the verified compressed copy.** The calibration ledger the window appended travels with it. `--finalized-manifest` is required: without it, pack refuses.
 
 ```sh
 $RUN pack --session-root "$S" --out "$OUT/offload" --finalized-manifest "$OUT/finalized_manifest.json"
 cp "$OUT/finalized_manifest.json" "$OUT/offload/"
 ```
+
+Pack re-verifies the closure on the MBP (checkout identity, ledger and other closure bytes) before it writes anything.
 
 **1d. Offload** `$OUT/offload/` to the Air during cool-down. Use the air-offload lane's authenticated route (`ops/2026-11-08-air-offload`, under its cool-down lease). The payload is about 0.3-2.6 GB.
 - The transfer must finish before the dwell starts.
@@ -45,12 +53,20 @@ cp "$OUT/finalized_manifest.json" "$OUT/offload/"
 
 ## 2. Air, during the MBP cool-down
 
-**2a. Restore** at the same path, record-bound. `H` is the digest from 1b:
+**2a. Restore** at the same path, record-bound. `H` is the digest from 1b. Both binding arguments are required:
 
 ```sh
 $RUN unpack --offload "$OUT/offload" --finalized-manifest "$OUT/offload/finalized_manifest.json" \
             --finalized-sha256 "$H"
 ```
+
+Nothing is published at `$S` until all of these hold:
+- the chain `H` → finalized manifest → transport manifest → restored bytes;
+- the Air's `M` identity equals the one in the finalized manifest;
+- the closure bytes on the Air equal the MBP's;
+- every external destination (the ledger) is one the finalized manifest names.
+
+A payload member outside the manifest refuses before anything is written. Nothing is ever written through a restored link.
 
 **2b. Run the light triage** and write the record source:
 
@@ -65,6 +81,8 @@ $RUN triage --session-root "$S" --window-id "$K" --out "$OUT/light_triage.json"
 
 Record k is the index `records/$K/record.json` (schema `joulewise.align_v4.window_record.v1`), committed and pushed as today. The full field list is in `next_arm_packet.md` (Committed inputs). R17 changes only the following.
 
+**Every record after R1 (R17 review F2):** the record carries the top-level field `finalized_manifest` → `{"path": "records/$K/evidence/finalized_manifest.json", "sha256": H}`, the file from 1b byte for byte. The packet builder refuses a record without it, or with a non-canonical one.
+
 **Full desk NOT due** (the previous window is not W1, and the arm's artifact-set digest equals the last desk-passed one):
 - `sources.light_triage` → `records/$K/evidence/light_triage.json`, the file from 2b, byte for byte.
 - `sources.desk` → a placeholder that marks the desk as running off the MBP:
@@ -73,13 +91,14 @@ Record k is the index `records/$K/record.json` (schema `joulewise.align_v4.windo
   $PY -c 'import json,sys; print(json.dumps({"plan_id": sys.argv[1], "status": "running_off_mbp"}, sort_keys=True))' \
       "$PLAN_ID" > "$DESK_REPO/records/$K/evidence/desk.json"
   ```
-- `sources.pilot` and `sources.exclusions` are **omitted**.
-- Add `records/$K/evidence/finalized_manifest.json` (from 1b) to `raw_evidence`, as `{"path": ..., "sha256": H}`.
+- `sources.pilot` and `sources.exclusions` are **omitted**. If they were present beside the placeholder, the record would still be provisional (R17 review F4): final means a completed harvest.
 - Series ledger: `last_passed_record` stays on the last record whose desk passed (see §4).
 
 **Full desk DUE** (previous window W1, or code/config changed since the last desk-passed state): **do not arm on the light triage.**
 - Wait for the Air's `desk` and `final` (§5).
 - Commit record k with its own `sources.pilot` (`$S/PILOT.json`), `sources.desk` (`$S/desk.json`) and `sources.exclusions` (`$S/archive/derived/exclusions.json`).
+- These count as final only if `desk.harvest_status` is `ok` or `members_excluded`, and the desk's and PILOT's `plan_id` are this window's.
+- A completed desk that did not pass is still final. It just is not a desk pass.
 - `light_triage` is optional in that case.
 
 Then build the packet as today:
@@ -112,7 +131,9 @@ When the Air's full desk for k has finished (§5), record **k+1** gets `previous
 
 - The files are `$S/PILOT.json`, `$S/desk.json` and `$S/archive/derived/exclusions.json` from the Air desk on window k, byte for byte.
 - If k's desk passed, the series ledger's `last_passed_record` becomes `{commit, path, sha256}` of record k plus `"final_record": {commit, path, sha256}` of record k+1.
-- If k's desk is not finished by record k+1, commit k+1 without `previous_final`. The arm of k+1's successor then refuses (§6) until a later record carries it. **R17's bound:** window k must be final before the arm of k+2.
+- The same evidence rule as §3 applies: `previous_final` naming a running, faulted or other-plan desk does not make k final.
+- If k's desk is not finished by record k+1, commit k+1 without `previous_final`. The arm of k+1's successor then refuses (§6) until a later record carries it.
+- **R17's bound:** window k must be final before the arm of k+2. This holds for **every** window in the chain, test windows included. They still contribute zero calibration.
 
 ## 5. Air, during window k+1: restore → harvest → desk → final → reduce
 
@@ -125,9 +146,11 @@ $RUN reduce --session-root "$S" --out "$OUT/reduced" --workers 2              # 
 ```
 
 - **`desk`** writes `$S/PILOT.json`, `$S/desk.json` and `$S/archive/`.
-  - `--workers auto` uses min(free cores, free memory ÷ the measured per-worker peak).
+  - `--workers auto` uses min(free cores, (free memory − 4 GiB reserve) ÷ the per-worker peak).
+  - **If not even one worker fits, it refuses: postpone the desk** until memory is free. It never launches over budget.
   - Pass the sweep receipt once it exists (§7). Without it the peak defaults to 8× the window's largest raw plist.
-- **`final`** refuses unless the harvest completed. Its rows must be a subset of the light triage's provisional rows. If not, stop and escalate to the lead: the proof says this cannot happen.
+  - A sweep receipt is used only if it is bound to the same harvest code (checkout head and interpreter) and records its input size. Its peak scales up with this window's largest plist and never down. A receipt for other code, or with no binding, falls back to 8×. A receipt with a failed or nonpositive run refuses.
+- **`final`** refuses unless the harvest completed (`harvest_status` `ok` or `members_excluded`) and the desk and PILOT.json are this session's. Its rows must be a subset of the light triage's provisional rows. If not, stop and escalate to the lead: the proof says this cannot happen.
 - **`reduced/`** is outcome-bearing (energies) and is restricted like `withheld/`. Its `MANIFEST.json` digests and row counts are structure-only. Each `<run_id>/turns.json` equals PILOT.json (`turn_table.equal_to_pilot`); check this before any analysis reads tables instead of bundles.
 - Hand the three final files to the magistrate for record k+1 (§4).
 - Prune the restored `$S` on the Air only after record k+1 (or k) with the final sources is pushed. The MBP originals follow the air-offload lane's retention rule.
@@ -137,16 +160,24 @@ $RUN reduce --session-root "$S" --out "$OUT/reduced" --workers 2              # 
 | Where | Refusal | Meaning and action |
 |---|---|---|
 | `finalize-manifest`, `pack` | `terminal record absent` | Not terminal. Wait for B1 completion. |
+| `finalize-manifest` | `not a clean, identified mirror source` | `M` is dirty, or has no head or `.venv`. Fix the checkout, then finalize. |
+| `finalize-manifest` | `external closure ... not finite` / `over ... bytes` / `further link` | A link leaves `$S` towards something large or linked. Bind it through `M`, or escalate. |
+| `pack`, `unpack` | `requires the record binding` | `--finalized-manifest` (and on unpack `--finalized-sha256`) missing. There is no unbound route. |
+| `pack`, `unpack` | `external closure input differs` / `external link ... resolves differently` / `closure directory differs` | Bytes a link points at changed since finalize, or differ on the Air. Fix the mirror, or do not restore. |
+| `unpack` | `restore namespace differs` / `external file is not bound` | The transport manifest was edited. Re-transfer. |
 | `pack` | `packed tree differs from the finalized record manifest` | Something changed the session after finalize. Find it; do not repack over it. |
 | `pack` | `unsupported file type` | A FIFO or device in the session. Investigate. |
-| `unpack` | `measurement checkout mirror differs` | The Air checkout (head, clean incl. untracked, interpreter and packages) is not the MBP's. Fix the mirror. |
+| `unpack` | `measurement checkout mirror differs` | The Air checkout (head, clean incl. untracked, interpreter and packages) is not the one in the finalized manifest. Fix the mirror. |
 | `unpack` | `committed digest` / `offload manifest differs` / `payload digest mismatch` / `restored tree differs` | The copy is not the finalized record. Re-transfer. |
 | `unpack` | `already exists` / `differs from the recorded source root` | Byte identity needs the same, empty path. |
 | `unpack` | `append-only` | The Air ledger is not a prefix of the window's. Do not restore. Escalate. |
 | `triage` | `light triage refused: ...` | Registration evidence (U3 bar, WP19) is missing. The full desk would refuse too. |
 | `desk` (harvest) | exit 3 `NotReady chain_process_group_alive` | The MBP chain's pgid collides with an Air process (about 1%). Re-run. |
-| `final` | `needs a completed harvest` | The desk did not finish its harvest. |
-| packet / arm | `R17: final eligibility of K must be recorded before the arm of the window after next` | k is still provisional at the arm of k+2. Commit `previous_final` (§4). |
+| `desk` | `postpone the desk: no harvest worker fits` | Free memory first, or wait. The desk was not launched. |
+| `desk` | `sweep run failed` / `nonpositive or missing peak` | The sweep receipt is not a measurement. Re-run the sweep, or drop `--sweep`. |
+| `final` | `needs a completed harvest` / `desk and PILOT.json of this session` | The desk did not finish its harvest, or the files are another session's. |
+| packet / arm | `R17: final eligibility of K must be recorded before the arm of the window after next` | k is still provisional at the arm of k+2, or its final sources record no completed, plan-bound harvest. For a test window, `member_eligibility` fails. Commit `previous_final` (§4). |
+| packet / arm | `must bind the finalized tree manifest` / `not a canonical` | Record k lacks `finalized_manifest` (§3), or the file is not the canonical bytes from 1b. |
 | packet / arm | `member_eligibility` failed with no final sources | The full desk is due (after W1 or a code/config change). Wait for §5 and commit the final sources in record k. |
 | packet / arm | `previous_final must name this record ...` | `record_sha256` or the source set is wrong. |
 | packet / arm | `a finally excluded member of K is in the pool` | Correct `pool_members` in the series ledger. |
@@ -165,6 +196,8 @@ $RUN sweep --session-root "$S" --out "$OUT/sweep" --workers 2,4,6,8,10
 ```
 
 Then use it for every later desk: `--workers auto --sweep "$OUT/sweep/SWEEP.json"`.
+- `SWEEP.json` (schema `harvest_sweep.v2`) records the swept window's largest plist and the harvest code identity.
+- After a code change, re-run the sweep. Until then, the desk uses the 8× fallback.
 - Record the knee (the fastest count whose peak fits) in RUN_STATE.
 - Keep `SWEEP.json`. It is structure only (times, bytes), with no outcome values.
 - The sweep's five archives are engineering copies. Delete them after; they are never record sources.
@@ -177,7 +210,13 @@ a,b=p(sys.argv[1]),p(sys.argv[2]); print(json.dumps({"equal": a==b, "differ": so
   "$MBP_ARCHIVE" "$S/archive"
 ```
 
-## 8. Accepted disclosure: battery streak exposure (R17)
+## 8. Arm-side notes
+
+- **Light triage `thermal_escalation`** reads `status: pass` only when every U1–U3 passed. An `inconclusive` result, like a `fail`, owes the registered consequence unless `--ladder-recorded` (R17 review F6). This is what the packet builder applies.
+- **The arm's Git checks and the frozen-series binding** finish before the meter probe and before `quiet_dwell.start_ns` is recorded. The arm record says so in `quiet_dwell.git_and_series_binding_before_dwell` (R17 review F7).
+- The arm record write, the powermode check and the W1 disk gate still follow the recorded dwell start. They are file reads and one `disk_usage`; there is no Git work and no subprocess. The night job's own clean dwell (`clean_dwell.json`) starts after install.
+
+## 9. Accepted disclosure: battery streak exposure (R17)
 
 For a provisional record, the arm's `battery_window` row reads `v4_B_bar` from the light triage, that is, the desk's own battery join without the harvest's battery codes.
 - A harvest-only `battery.member_span` (from the harvest's registered-threshold join) can turn that bar false once the final desk lands.

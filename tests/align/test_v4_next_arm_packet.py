@@ -53,7 +53,7 @@ class Scenario:
             'chain_started': {'pgid': 123}, 'chain_exited': {'exit_code': 0},
             'courier': {'sent': True}, 'courier_sent': b'',
             'watchdog_state': {},
-            'pilot': {'status': 'instrument_ok', 'checks': {'synthetic_check': True}, 'extra_checks': {
+            'pilot': {'plan_id': plan_id, 'status': 'instrument_ok', 'checks': {'synthetic_check': True}, 'extra_checks': {
                 'thermal': {'schema': 'joulewise.align.thermal_desk.v1',
                     'model_windows': {f'tiny/{window}': {f'U{k}': {'status': 'pass' if k < 4 else 'inconclusive'}
                                                         for k in range(1, 6)}},
@@ -147,6 +147,14 @@ class Scenario:
             if self.raw_custody else self.write(f'{d}/captures/{i}.jsonl', b'{"monotonic_ns":1,"power_w":1}\n'))
             for i in pairs}
         self.record['raw_evidence'] = [self.write(f'{d}/raw/sidecar.jsonl', b'{"temperature_c":30}\n')]
+        if self.window != 'R1' and not getattr(self, 'omit_finalized_manifest', False):
+            # R17 review F2: the record binds the finalized (record-bound) tree manifest, canonical bytes.
+            finalized = {'schema': builder.FINALIZED_MANIFEST_SCHEMA, 'source_root': '/DO-NOT-FOLLOW/session-' + d,
+                         'entries': {'raw/sidecar.jsonl': {'sha256': 'f' * 64, 'size': 21}},
+                         'closure': {'links': {}, 'files': {}, 'inputs': [], 'mirror': None}}
+            self.record['finalized_manifest'] = self.write(
+                f'{d}/evidence/finalized_manifest.json',
+                json.dumps(finalized, sort_keys=True, separators=(',', ':')).encode())
         if self.raw_custody:
             self.record['raw_evidence'].extend(self.record['captures'].values())
         self.record_path = f'{d}/record.json'
@@ -799,6 +807,113 @@ class R17ProvisionalTests(Base):
     def test_schema_constants_match_the_light_triage_module(self):
         from joulewise.align.apple import light_triage
         self.assertEqual(builder.LIGHT_TRIAGE_SCHEMA, light_triage.SCHEMA)
+
+
+class R17ReviewFinalityTests(Base):
+    """R17 review (Sol seats 1 and 2): what counts as final, and the record-bound manifest."""
+
+    def root(self):
+        temp = tempfile.TemporaryDirectory(prefix='jw-triage-r17r-')
+        self.addCleanup(temp.cleanup)
+        return temp.name
+
+    def test_constants_match_the_runner_and_the_offload_module(self):
+        from joulewise.align.apple import harvest_offload
+        from scripts import align_v4_harvest_off as runner
+        self.assertEqual(builder.COMPLETED_HARVEST, runner.COMPLETED_HARVEST)
+        self.assertEqual(builder.FINALIZED_MANIFEST_SCHEMA, harvest_offload.FINALIZED_SCHEMA)
+
+    def light_with_stale_final_sources(self, root, w1):
+        # F4: PILOT/exclusions present, desk still running off the MBP, honest light triage.
+        c1 = Scenario(root, 'C1', previous=w1)
+        light = copy.deepcopy(c1.thermal)
+        for m in light['members']:
+            m['excluded'] = bool(m['calibration_exclusions'])
+        c1.sources['light_triage'] = {'schema': builder.LIGHT_TRIAGE_SCHEMA, 'window': 'C1', 'thermal': light,
+            'checks': {'v4_B_bar': True}, 'km003c': c1.sources['pilot']['extra_checks']['km003c'],
+            'series_desk_row': c1.sources['pilot']['extra_checks']['series_desk_row']}
+        c1.sources['desk'] = {'plan_id': c1.sources['plan']['plan_id'], 'status': 'running_off_mbp'}
+        c1.finish()
+        c1.series['last_passed_record'] = dict(w1.passed_ref)
+        c1.passed_ref = dict(w1.passed_ref)
+        c1.write(c1.series_path, c1.series)
+        c1.series_commit = c1.commit()
+        return c1
+
+    def test_stale_final_sources_with_a_running_desk_are_provisional_not_final(self):
+        root = self.root()
+        w1 = Scenario(root, 'W1').finish()
+        c1 = self.light_with_stale_final_sources(root, w1)
+        first = c1.build()
+        self.assertEqual(first['calibration_windows'][-1]['status'], 'provisional')
+        self.assertTrue(evaluate(c1, first)['admitted'])          # the one allowed unfinished window
+        c2 = Scenario(root, 'C2', previous=c1).finish()
+        packet = c2.build()
+        self.assertIn('R17: final eligibility of C1', packet['calibration_error'])
+        self.assertIn('no completed harvest', packet['calibration_error'])
+        self.assertFalse(evaluate(c2, packet)['admitted'])
+
+    def test_a_completed_non_passing_desk_is_final(self):
+        root = self.root()
+        w1 = Scenario(root, 'W1').finish()
+        c1 = Scenario(root, 'C1', previous=w1)
+        c1.sources['pilot']['status'] = 'instrument_incomplete'
+        c1.sources['desk'].update(pilot_status='instrument_incomplete', checks={'synthetic_check': False})
+        c1.finish()
+        c1.series['last_passed_record'] = dict(w1.passed_ref)
+        c1.write(c1.series_path, c1.series)
+        c1.series_commit = c1.commit()
+        c2 = Scenario(root, 'C2', previous=c1).finish()
+        packet = c2.build()
+        self.assertNotIn('calibration_error', packet)
+        self.assertEqual([r['status'] for r in packet['calibration_windows']], ['final', 'final'])
+
+    def test_a_zero_capture_attempt_needs_no_harvest_to_be_final(self):
+        root = self.root()
+        w1 = Scenario(root, 'W1').finish()
+        c1 = Scenario(root, 'C1', previous=w1, captured=False)
+        c1.sources['desk']['harvest_status'] = 'not_run'        # nothing was captured, so nothing harvested
+        c1.finish()
+        c1.series['last_passed_record'] = dict(w1.passed_ref)
+        c1.write(c1.series_path, c1.series)
+        c1.series_commit = c1.commit()
+        c2 = Scenario(root, 'C1#2', previous=c1).finish()
+        packet = c2.build()
+        self.assertNotIn('calibration_error', packet)
+        self.assertNotEqual(packet['checks']['member_eligibility']['status'], 'fail')
+        self.assertEqual([r['status'] for r in packet['calibration_windows']], ['final', 'final'])
+
+    def test_previous_final_sources_must_evidence_a_completed_plan_bound_harvest(self):
+        for label, change in (('running desk', lambda c: c.final_sources.__setitem__(
+                                   'desk', {'plan_id': c.sources['plan']['plan_id'], 'status': 'running_off_mbp'})),
+                              ('program fault', lambda c: c.final_sources['desk'].update(harvest_status='program_fault')),
+                              ('other plan', lambda c: c.final_sources['desk'].update(plan_id='synthetic-other')),
+                              ('other pilot', lambda c: c.final_sources['pilot'].update(plan_id='synthetic-other'))):
+            with self.subTest(label):
+                root = self.root()
+                w1 = Scenario(root, 'W1').finish()
+                c1 = Scenario(root, 'C1', previous=w1, provisional=True).finish()
+                change(c1)
+                c2 = Scenario(root, 'C2', previous=c1, previous_final=True).finish()
+                packet = c2.build()
+                self.assertIn('R17: final eligibility of C1', packet['calibration_error'])
+                self.assertFalse(evaluate(c2, packet)['admitted'])
+
+    def test_record_must_bind_a_canonical_finalized_manifest(self):
+        root = self.root()
+        w1 = Scenario(root, 'W1').finish()
+        c1 = Scenario(root, 'C1', previous=w1)
+        c1.omit_finalized_manifest = True
+        c1.finish()
+        with self.assertRaisesRegex(ValueError, 'must bind the finalized tree manifest'):
+            c1.build()
+        c1b = Scenario(self.root(), 'W1')
+        c1b.omit_finalized_manifest = True
+        c1b.record['finalized_manifest'] = c1b.write('w-W1/evidence/finalized_manifest.json', {
+            'schema': builder.FINALIZED_MANIFEST_SCHEMA, 'source_root': '/x', 'entries': {}, 'closure': {}})
+        c1b.finish()
+        with self.assertRaisesRegex(ValueError, 'not a canonical'):
+            c1b.build()
 
 
 if __name__ == '__main__':

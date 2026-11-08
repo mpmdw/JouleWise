@@ -475,8 +475,12 @@ def _record_bound(root, packet):
 def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=None, owner=None,
                obc_off_attested_by=None, battery_runner=None, battery_log=None, window_battery_journal=None,
                now=None, next_arm_triage=None, commit_check=None, record_check=None,
-               packet_builder=None, meter_probe=None, dwell_start=None):
+               packet_builder=None, meter_probe=None, dwell_start=None, series_bind=None):
     """W1/D arm evidence: ruling 7 AC powermode and ruling 20 volumes.
+
+    R17 review F7: every Git check (record commit, record binding) and the frozen-series binding
+    (``series_bind(built) -> [reasons]``, from ``_arm_and_install``) run BEFORE the meter probe and
+    before ``dwell_start_ns`` is recorded, so no Git or binding work falls inside the quiet dwell.
 
     Ruling 7: the AC-profile powermode must equal the plan's frozen series
     value; an R1 High Power marker under the measurement root is restored to
@@ -554,6 +558,14 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
                                                          current_artifact_set_sha256=current_digest)
     except (ValueError, KeyError, TypeError, AttributeError, OSError) as exc:
         rebuild_error = f'{type(exc).__name__}: {exc}'
+    # R17 review F7: the Git subprocesses and the series binding finish here, before the probe and dwell.
+    identity = None
+    if built is not None:
+        commit = built.get('record_commit')
+        identity = {'artifact_set_sha256': current_digest,
+                    'record_commit_exists': (commit_check or _commit_exists)(measurement_root, commit),
+                    'record_bound': bool((record_check or _record_bound)(measurement_root, built))}
+    series_binding = list(series_bind(built)) if series_bind is not None else None
     # The 3 s monitor launch is USB and process activity: it runs BEFORE the quiet/display dwell
     # starts, never during it (lead ruling 2026-11-08). The arm stamps the probe's end and the dwell
     # start on one monotonic clock and refuses unless the probe ended strictly earlier.
@@ -569,7 +581,7 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
     dwell_ordered = (type(meter['probe_ended_ns']) is int and type(dwell_start_ns) is int
                      and meter['probe_ended_ns'] < dwell_start_ns)
     quiet_dwell = {'start_ns': dwell_start_ns, 'start_epoch_s': now_s, 'meter_probe_ended_ns': meter['probe_ended_ns'],
-                   'meter_probe_before_dwell': dwell_ordered}
+                   'meter_probe_before_dwell': dwell_ordered, 'git_and_series_binding_before_dwell': True}
     if not dwell_ordered:
         reasons.append('quiet_dwell: the meter probe did not end before the quiet dwell started '
                        '(it must run before the dwell, never during it)')
@@ -582,10 +594,6 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
         triage['reasons'].append(f'packet could not be rebuilt from its named sources: {rebuild_error}')
         triage['admitted'] = False
     else:
-        commit = built.get('record_commit')
-        identity = {'artifact_set_sha256': current_digest,
-                    'record_commit_exists': (commit_check or _commit_exists)(measurement_root, commit),
-                    'record_bound': bool((record_check or _record_bound)(measurement_root, built))}
         triage = v4_cadence.next_arm_triage(built, internal, identity, now_epoch_s=now_s)
         if not matches:
             triage['admitted'] = False
@@ -599,11 +607,14 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
                                           'triage charging_battery', 'triage meter_reader_live'))]
     reasons += ([] if internal['meter_reader_live'] else
                 ['next_arm_triage: triage meter_reader_live failed'])
-    return {'schema': ARM_RECORD_SCHEMA, 'admitted': not reasons, 'reasons': reasons,
+    record = {'schema': ARM_RECORD_SCHEMA, 'admitted': not reasons, 'reasons': reasons,
             'next_arm_triage': triage, 'quiet_dwell': quiet_dwell,
             'ac_powermode': power, 'external_volumes': volumes, 'battery': battery,
             # Lead ruling R7-10: the host state directory this arm used.
             'host_state_dir': powermode.host_state_dir()}
+    if series_binding is not None:
+        record['series_binding'] = series_binding
+    return record
 
 
 def _disk_config_digest(config):
@@ -833,26 +844,33 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
                      obc_off_attested_by=None, battery_runner=None, battery_log=None,
                      window_battery_journal=None, next_arm_triage=None, commit_check=None, record_check=None,
                      packet_builder=None, meter_probe=None, dwell_start=None, **kwargs):
+    # RUN_STATE 226 R15: every arm, W1 included, binds the frozen series. W1 binds an empty history after
+    # R1; a C/T window the next frozen window. The packet bound is the arm's OWN rebuild (a supplied
+    # packet is only a pointer), whose history is derived from the hash-chained, authenticated records.
+    # R17 review F7: arm_checks runs this binding before the meter probe and the recorded dwell start.
+    from scripts import align_v4_series as series
+    window_id = (state.get('v4_series') or {}).get('window_id', 'W1')
+    binding_root = state.get('source_measurement_root') or measurement_root
+
+    def series_bind(built):
+        try:
+            if not isinstance(built, dict):
+                raise ValueError('the arm could not rebuild the packet')
+            series.bind_packet(binding_root, window_id, built, authenticated_by_rebuild=True)
+            return []
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            return [f'series_binding: {window_id}: {exc}']
+
     record = arm_checks(measurement_root, plan, runner=runner, volume_runner=volume_runner, lock=lock,
                         owner=owner, obc_off_attested_by=obc_off_attested_by, battery_runner=battery_runner,
                         battery_log=battery_log, window_battery_journal=window_battery_journal, now=now,
                         next_arm_triage=next_arm_triage, commit_check=commit_check,
                         record_check=record_check, packet_builder=packet_builder, meter_probe=meter_probe,
-                        dwell_start=dwell_start)
-    # RUN_STATE 226 R15: every arm, W1 included, binds the frozen series. W1 binds an empty history after
-    # R1; a C/T window the next frozen window. The packet bound is the arm's OWN rebuild (a supplied
-    # packet is only a pointer), whose history is derived from the hash-chained, authenticated records.
-    from scripts import align_v4_series as series
+                        dwell_start=dwell_start, series_bind=series_bind)
     built = (record.get('next_arm_triage') or {}).get('rebuilt_packet')
-    window_id = (state.get('v4_series') or {}).get('window_id', 'W1')
-    binding_root = state.get('source_measurement_root') or measurement_root
-    try:
-        if not isinstance(built, dict):
-            raise ValueError('the arm could not rebuild the packet')
-        series.bind_packet(binding_root, window_id, built, authenticated_by_rebuild=True)
-        binding = []
-    except (OSError, ValueError, KeyError, TypeError) as exc:
-        binding = [f'series_binding: {window_id}: {exc}']
+    binding = record.pop('series_binding', None)
+    if binding is None:            # an arm_checks stand-in that did not run the hook
+        binding = series_bind(built)
     record['series_window'] = window_id
     record['series_binding'] = binding
     record['series_packet'] = built
