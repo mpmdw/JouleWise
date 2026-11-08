@@ -621,7 +621,19 @@ def _production_arm(context: ArmContext) -> dict[str, Any]:
         record_only=[{"name": "flags.arm", "argv": list(context.record_only_argv),
                       "timeout_s": COLLECTOR_TIMEOUT_S}] if context.record_only_argv else [],
         expected_epochs=expected_epochs)
-    result = hazard_arm.run(config)
+    # R16 is prospective and ALIGN-only. An absent registration leaves the
+    # sealed default arm unchanged; a present policy cannot silently fall back
+    # when its installed native inputs fail to load.
+    wait_policy = None
+    pack = context.hazard_window.get('pack') or {}
+    if pack.get('pack_id') == 'align-v4':
+        collection = json.loads((Path(pack['pack_root'])/'collection_plan.json').read_bytes())
+        wait_policy = (collection.get('runtime_requirements') or {}).get('condition_waits')
+    if wait_policy is not None:
+        from joulewise.align.apple.condition_waits_native import registered_arm
+        result = registered_arm(config, wait_policy, attempt_id=context.plan.plan_id)
+    else:
+        result = hazard_arm.run(config)
     document = result.document if isinstance(result.document, Mapping) else {}
     verdicts: dict[str, str] = {}
     for module, entries in (document.get("hazards") or {}).items():
@@ -633,6 +645,7 @@ def _production_arm(context: ArmContext) -> dict[str, Any]:
         verdicts.setdefault(module, "NOT_EVALUATED")
     return {"go": bool(result.go), "verdicts": verdicts, "reasons": list(result.reasons),
             "refused_at": result.refused_at, "record_path": str(result.path),
+            **({'quiet_start_state': document['quiet_start_state']} if 'quiet_start_state' in document else {}),
             "network_time_off": document.get("network_time_off"),
             "record_only": document.get("record_only"), "arm_unmeasured": document.get("unmeasured")}
 

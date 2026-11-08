@@ -233,7 +233,21 @@ def next_arm_triage(packet, internal, identity=None, *, now_epoch_s=None):
             status = 'fail'
             basis = ('record_commit/record_path/record_sha256 is missing, malformed, not found, or not the last committed '
                      'window record (a stale packet refuses): ' + basis)
+        if name == 'quiet_start_state' and identity.get('condition_waits_policy_sha256') is not None:
+            # R16: static packet prose cannot certify the measurement host.
+            # The arm replays native evidence, then supplies this binding.
+            binding = identity.get('quiet_start_state_binding') or {}
+            fields = ('receipt_sha256', 'policy_sha256', 'attempt_id', 'boot_id')
+            if (binding.get('verified') is not True
+                    or entry.get('policy_sha256') != identity['condition_waits_policy_sha256']
+                    or not _is_digest(entry.get('receipt_sha256'))
+                    or any(entry.get(k) != binding.get(k) for k in fields)):
+                status = 'fail'
+                basis = 'R16 quiet_start_state requires the native receipt digest for this policy/attempt/boot'
         results[name] = {'status': status, 'source': PACKET, 'basis': basis}
+        if name == 'quiet_start_state':
+            results[name].update({k: entry[k] for k in ('receipt_sha256', 'policy_sha256', 'attempt_id', 'boot_id')
+                                  if k in entry})
         if status == 'fail':
             reasons.append(f'triage {name} failed')
         elif name == 'full_desk_gate' and desk_required and status != 'pass':

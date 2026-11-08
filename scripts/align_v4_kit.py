@@ -92,6 +92,17 @@ def read_inputs(root=ROOT):
     return json.loads((Path(root) / INPUTS).read_bytes())
 
 
+def read_condition_waits_policy(root=ROOT):
+    """Optional prospective R16 registration; absent preserves earlier kits.
+
+    At new-cohort registration the lead writes this file with registration_policy;
+    missing Q/CW-1 selects incumbent_shadow for the entire cohort.
+    """
+    from joulewise.align.apple.condition_waits import validate_policy
+    path = Path(root) / KIT / 'registration/condition_waits_policy.json'
+    return validate_policy(json.loads(path.read_bytes())) if path.is_file() else None
+
+
 def pending_inputs(inputs):
     """Required leaves have no plausible numeric/digest fallback."""
     required = {
@@ -1379,6 +1390,17 @@ def build_files(root=ROOT):
     if w1_plan_raw is not None:
         files[W1_PLAN] = w1_plan_raw
     ac_powermode = read_r1_slots(root).get("ac_powermode")
+    wait_policy = read_condition_waits_policy(root)
+    if wait_policy is not None:
+        if wait_policy['q'] is not None and wait_policy['q']['ac_powermode'] != ac_powermode:
+            raise ValueError('R16 Q must use the final R1 series AC powermode')
+        if wait_policy['q'] is not None:
+            sensors = ((inputs.get('R1') or {}).get('thermal_policy') or {}).get('sensors') or {}
+            if any(wait_policy['q']['temperatures'][role]['key'] != sensors.get('s_'+role)
+                   for role in ('fast', 'slow')) or not set(sensors.get('fan_keys', [])) <= set(wait_policy['q']['fans']):
+                raise ValueError('R16 Q must use final R1 temperature picks and qualified fans')
+        wait_path = KIT / 'registration/condition_waits_policy.json'
+        files[wait_path] = (root / wait_path).read_bytes()
     old_tree = json.loads(frozen(root, ANCHOR_COMMIT, SOURCE_KIT / 'plan_tree.json'))
     tree = _rewrite(old_tree)
     stages = [s for s in tree['stage_graph'] if '-episodes-' in s['stage_id']]
@@ -1517,6 +1539,9 @@ def build_files(root=ROOT):
         seed_table[tag] = {pair: {str(index): episode_seed(tag, 'thinking_on', 'shade/' + pair, index)
                                  for index in indices}
                            for pair in ('spam_filter_update', 'bank_transfer_2')}
+    if wait_policy is not None:
+        plan['runtime_requirements']['condition_waits'] = wait_policy
+        files[KIT / 'collection_plan.json'] = raw_json(plan)
     files[KIT / 'registration/seed_manifest.json'] = raw_json(dict(
         seed_law='align-p4-v1', turn_seed_law='align-p4-turn-v1', seed_bits=64,
         non_claim=True, seeds=seed_table,

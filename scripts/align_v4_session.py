@@ -380,7 +380,8 @@ def _record_bound(root, packet):
 def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=None, owner=None,
                obc_off_attested_by=None, battery_runner=None, battery_log=None, window_battery_journal=None,
                now=None, next_arm_triage=None, commit_check=None, record_check=None,
-               packet_builder=None, meter_probe=None):
+               packet_builder=None, meter_probe=None, start_state_evidence=None,
+               start_state_attempt_id=None, start_state_boot_reader=None):
     """W1/D arm evidence: ruling 7 AC powermode and ruling 20 volumes.
 
     Ruling 7: the AC-profile powermode must equal the plan's frozen series
@@ -448,6 +449,7 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
         except (OSError, ValueError):
             supplied = None
     current_digest = v4_registration.artifact_set_digest(measurement_root)
+    start_state = None
     built, matches, rebuild_error = None, False, None
     try:
         if packet_builder is not None:
@@ -476,6 +478,34 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
         identity = {'artifact_set_sha256': current_digest,
                     'record_commit_exists': (commit_check or _commit_exists)(measurement_root, commit),
                     'record_bound': bool((record_check or _record_bound)(measurement_root, built))}
+        # Prospective R16 registration: no implicit switch for existing cohorts.
+        # The native GO caller must evaluate again; an install receipt is not GO.
+        wait_policy = (plan.get('runtime_requirements') or {}).get('condition_waits')
+        start_state = None
+        if wait_policy is not None:
+            from joulewise.align.apple import condition_waits as cw
+            identity['condition_waits_policy_sha256'] = cw.digest(wait_policy)
+            try:
+                cw.validate_policy(wait_policy)
+                evidence = start_state_evidence
+                if isinstance(evidence, (str, Path)):
+                    evidence = json.loads(Path(evidence).read_bytes())
+                entry = (built.get('checks') or {}).get('quiet_start_state', {}) if isinstance(built, dict) else {}
+                verified = cw.verify_binding(wait_policy, evidence['header'], evidence['rows'], evidence['receipt'], entry)
+                def native_boot():
+                    taken = (runner(['sysctl', '-n', 'kern.bootsessionuuid']) if runner else subprocess.run(
+                        ['sysctl', '-n', 'kern.bootsessionuuid'], capture_output=True, text=True, timeout=2, check=False))
+                    value = taken.stdout.decode('ascii') if isinstance(taken.stdout, bytes) else taken.stdout
+                    return value.strip() if taken.returncode == 0 else None
+                current_boot = (start_state_boot_reader or native_boot)()
+                verified = (verified and isinstance(start_state_attempt_id, str)
+                            and entry.get('attempt_id') == start_state_attempt_id
+                            and entry.get('boot_id') == current_boot)
+                start_state = {'verified': verified, **{k: entry.get(k) for k in
+                               ('receipt_sha256', 'policy_sha256', 'attempt_id', 'boot_id')}}
+            except (OSError, ValueError, KeyError, TypeError, AttributeError, subprocess.SubprocessError) as exc:
+                start_state = {'verified': False, 'error': str(exc)}
+            identity['quiet_start_state_binding'] = start_state
         triage = v4_cadence.next_arm_triage(built, internal, identity, now_epoch_s=now_s)
         if not matches:
             triage['admitted'] = False
@@ -490,6 +520,7 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
     reasons += ([] if internal['meter_reader_live'] else
                 ['next_arm_triage: triage meter_reader_live failed'])
     return {'schema': ARM_RECORD_SCHEMA, 'admitted': not reasons, 'reasons': reasons,
+            'condition_waits': start_state,
             'next_arm_triage': triage,
             'ac_powermode': power, 'external_volumes': volumes, 'battery': battery,
             # Lead ruling R7-10: the host state directory this arm used.
@@ -720,12 +751,14 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
                      w1_disk_config, disk_gate, lock=None, owner=None,
                      obc_off_attested_by=None, battery_runner=None, battery_log=None,
                      window_battery_journal=None, next_arm_triage=None, commit_check=None, record_check=None,
-                     packet_builder=None, meter_probe=None, **kwargs):
+                     packet_builder=None, meter_probe=None, start_state_evidence=None,
+                     start_state_setup_attested_by=None, **kwargs):
     record = arm_checks(measurement_root, plan, runner=runner, volume_runner=volume_runner, lock=lock,
                         owner=owner, obc_off_attested_by=obc_off_attested_by, battery_runner=battery_runner,
                         battery_log=battery_log, window_battery_journal=window_battery_journal, now=now,
                         next_arm_triage=next_arm_triage, commit_check=commit_check,
-                        record_check=record_check, packet_builder=packet_builder, meter_probe=meter_probe)
+                        record_check=record_check, packet_builder=packet_builder, meter_probe=meter_probe,
+                        start_state_evidence=start_state_evidence, start_state_attempt_id=state.get('session_id'))
     if high is not None:
         record['high_power_enter'] = high
         if not high['ok']:
@@ -750,6 +783,25 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
     kit.arm_powermode_check(plan, record['ac_powermode']['observed'])
     receipt = w1_disk_check(w1_disk_config, gate=disk_gate)
     pilot.h.write(session / 'staging/w1_disk_gate.json', receipt)
+    wait_policy = (plan.get('runtime_requirements') or {}).get('condition_waits')
+    if wait_policy is not None:
+        if wait_policy['q'] is not None and not (isinstance(start_state_setup_attested_by, str)
+                                                and start_state_setup_attested_by.strip()):
+            raise ValueError('R16 requires current support/cooler/setup attestation before native GO')
+        # Inputs only, never a stored GO decision. The launchd arm constructs a
+        # fresh attempt after its disruptive cadence/collector work completes.
+        custody = Path(state['inputs']['custody_root'])
+        from joulewise.align.apple import condition_waits
+        source_evidence = (json.loads(Path(start_state_evidence).read_bytes())
+                           if isinstance(start_state_evidence, (str, Path)) else start_state_evidence)
+        wait_header = source_evidence['header']
+        pilot.h.write(custody / 'condition_waits_inputs.json', {
+            'schema': 'joulewise.align.condition_waits.native_inputs.v1',
+            'policy_sha256': condition_waits.digest(wait_policy),
+            'attempt_id': state['session_id'], 'battery_log': str(Path(battery_log).resolve()),
+            'attempt_number': wait_header.get('attempt_number', 1),
+            'ambient_check': wait_header.get('ambient_check'),
+            'obc_off_attested_by': obc_off_attested_by, 'setup_attested_by': start_state_setup_attested_by})
     return pilot.install(session, **kwargs)
 
 
@@ -769,7 +821,11 @@ def main(argv=None):
                           help='a window hazard battery journal (the 1 Hz SMC B0AC lines and ioreg lines) merged '
                                'in time order with the between-window log; repeatable')),
                                        ('--next-arm-triage', dict(type=Path, required=True,
-                          help='R12 B2 next-arm triage packet (JSON) built off the MBP from the committed record'))))
+                          help='R12 B2 next-arm triage packet (JSON) built off the MBP from the committed record')),
+                                       ('--start-state-evidence', dict(type=Path,
+                          help='R16 native header/rows/receipt JSON; required when the plan freezes condition_waits')),
+                                       ('--start-state-setup-attested-by', dict(
+                          help='operator attesting unchanged registered support/cooler/setup (R16)'))))
 
 
 if __name__ == '__main__':
