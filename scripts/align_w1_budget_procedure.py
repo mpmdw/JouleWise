@@ -13,6 +13,9 @@ functions, so it cannot disagree with ``--check``.
   backfill-x-g  copy X-G's admitted turns, deadman flag and phase seconds from
                 r1_result.json into r1_slots.x_g, for an R1 record written
                 before the driver recorded them (R10-4)
+  derive-contrast
+                print inputs.R1.thermal_policy.contrast_g0_cap_s and contrast_fit,
+                the kit's own re-derivation from the (backfilled) r1_slots record
   backfill-turn-counts
                 copy the lead's explicit per-turn count export (R11/R16) into
                 the three gated D deadman_budget rows, binding its sha256; the
@@ -290,13 +293,20 @@ def main(argv=None):
     p.add_argument('--r1-slots', type=Path, default=ROOT / kit.R1_SLOTS)
     p.add_argument('--r1-result', type=Path, required=True)
     p.add_argument('--out', type=Path, required=True)
+    p = sub.add_parser('derive-contrast')
+    p.add_argument('--r1-slots', type=Path, default=ROOT / kit.R1_SLOTS)
+    p.add_argument('--inputs', type=Path, default=ROOT / kit.INPUTS, help='read for WP18.X.max_turns only')
     p = sub.add_parser('backfill-turn-counts')
     p.add_argument('--r1-slots', type=Path, default=ROOT / kit.R1_SLOTS)
     p.add_argument('--counts-export', type=Path, required=True)
     p.add_argument('--out', type=Path, required=True)
     args = parser.parse_args(argv)
     try:
-        if args.command == 'backfill-turn-counts':
+        if args.command == 'derive-contrast':
+            contrast = kit.w1_contrast_g0_cap(_load(args.r1_slots), _load(args.inputs)['WP18']['X']['max_turns'])
+            print(json.dumps({'contrast_g0_cap_s': contrast['value_s'], 'contrast_fit': contrast},
+                             indent=2, sort_keys=True))
+        elif args.command == 'backfill-turn-counts':
             raw = args.counts_export.read_bytes()
             out = backfill_turn_counts(_load(args.r1_slots), json.loads(raw), hashlib.sha256(raw).hexdigest())
             args.out.write_text(json.dumps(out, indent=2, sort_keys=True) + '\n')

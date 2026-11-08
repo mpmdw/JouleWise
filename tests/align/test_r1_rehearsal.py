@@ -200,6 +200,8 @@ class FakeWorld:
             payload.update(energy_j={"d-spam-benign-s1-a": 30000.0, "d-spam-benign-s1-b": 30036.0,
                                      "d-bank-benign-s1": 32000.0}[kind],
                            admitted_turns=self.gated_admitted_turns, x7=False, turn_cap_tokens=4096,
+                           # as the lane runtime: the bundle, relative to the phase output directory
+                           bundle="runs/synthetic-bundle",
                            # R6-3: 12,600 tokens in 700 s = 18 tok/s (step-d: 20).
                            decode_tokens=self.gated_decode_tokens,
                            deadman={"T_dead_s": 1451.018, "phases_s": {
