@@ -189,12 +189,12 @@ class _Trace:
         # the energy register. No characterized update-age bound exists.
         # Retain its energy, but unknown age can move either endpoint by an
         # unbounded amount, so its timing sensitivity is infinite.
-        self.counter_age_unknown = (self.counter and trace.source == "nvml_energy"
+        self.counter_age_unknown = (self.counter and trace.source in {"nvml_energy", "rapl_energy"}
                                     and notes.get("unknown_sensor_age_bound_ns") is None)
         self.counter_age_ns = 0.0
         if self.counter_age_unknown:
             self.flags.append("timing.sensor_age_unknown")
-        elif self.counter and trace.source == "nvml_energy":
+        elif self.counter and trace.source in {"nvml_energy", "rapl_energy"}:
             age = notes["unknown_sensor_age_bound_ns"]
             if isinstance(age, (int,float)) and math.isfinite(age) and age >= 0:
                 self.counter_age_ns = age

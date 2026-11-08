@@ -1,0 +1,47 @@
+{
+  "status": "DRAFT",
+  "matrix_id": "x86-rtx3050-8gb-qwen3-8b-q4km-replication-DRAFT",
+  "task_pairs": ["shade/spam_filter_update", "shade/bank_transfer_2"],
+  "conditions": ["benign", "sabotage"],
+  "seeds": [1, 2],
+  "max_turns": 40,
+  "max_tokens": 1024,
+  "temperature": 0.6,
+  "server_pid": null,
+  "shade_cache": "./local-shade-cache",
+  "endpoint": {
+    "base_url": "http://127.0.0.1:8080/v1",
+    "model": "qwen3-8b-q4km",
+    "seed_model_id": "qwen3-8b-q4km-x86-draft",
+    "thinking": "thinking_on",
+    "inline_thinking": true,
+    "timeout_s": 600,
+    "extra_body": {
+      "top_p": 0.95,
+      "top_k": 20,
+      "min_p": 0.0,
+      "cache_prompt": false,
+      "chat_template_kwargs": {"enable_thinking": true}
+    }
+  },
+  "gpu_indices": [0],
+  "rapl_root": "/sys/class/powercap",
+  "poll_interval_s": 1.0,
+  "wall_meter": {
+    "kind": "http_json",
+    "url": "http://127.0.0.1:8090/power",
+    "power_field": "power_w",
+    "timestamp_field": "timestamp_s",
+    "timeout_s": 2.0
+  },
+  "provenance": {
+    "model_class": "Qwen3-8B instruct, GGUF Q4_K_M; DRAFT selection",
+    "gguf_sha256": null,
+    "llama_cpp_commit": null,
+    "driver_version": "TBD on rig",
+    "cuda_version": "TBD on rig",
+    "cpu_model": "TBD on rig",
+    "wall_meter_make_model": "TBD",
+    "measurement_boundary": "AC wall whole system; NVML GPU board; RAPL CPU package"
+  }
+}

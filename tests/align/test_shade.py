@@ -5,11 +5,8 @@ from __future__ import annotations
 import asyncio
 import ast
 import hashlib
-import importlib.metadata
-import importlib.util
 import json
 import math
-import os
 import shutil
 import subprocess
 import sys
@@ -543,122 +540,8 @@ class MonitorTests(unittest.TestCase):
             self.assertNotIn("The user's task:", endpoint.calls[-1]["messages"][1].content)
 
 
-_UPSTREAM_CACHE = os.environ.get("JOULEWISE_SHADE_CACHE")
-_EXTRAS = ("pydantic", "yaml", "pandas", "rich", "docstring_parser", "typing_extensions",
-           "anthropic", "openai", "matplotlib", "seaborn", "email_validator")
-_HAVE_EXTRAS = all(importlib.util.find_spec(name) is not None for name in _EXTRAS)
-try:
-    _HAVE_EXTRAS = _HAVE_EXTRAS and int(importlib.metadata.version("pydantic").split(".")[0]) >= 2
-except (importlib.metadata.PackageNotFoundError, ValueError):
-    _HAVE_EXTRAS = False
-
-
-@unittest.skipUnless(shutil.which("git") and _UPSTREAM_CACHE and _HAVE_EXTRAS,
-                     "requires git, an explicitly supplied pinned cache and upstream extras (pydantic >=2, email-validator)")
-class RealUpstreamTests(unittest.TestCase):
-    def test_prompts_and_monitor_views_match_pinned_upstream(self):
-        source = PinnedUpstream(_UPSTREAM_CACHE, allow_fetch=False)
-        root = source.prepare()
-        self.assertIsNotNone(root, source.flags)
-        tree = ast.parse((root / "utils/pipeline_utils.py").read_text())
-        fn = next(n for n in ast.walk(tree)
-                  if isinstance(n, ast.FunctionDef) and n.name == "_ensure_dedented")
-        fn.decorator_list = []
-        namespace = {}
-        exec(compile(ast.Module(body=[fn], type_ignores=[]), "pinned_dedent", "exec"), namespace)
-        dedent = namespace["_ensure_dedented"]
-        for pair in list_task_pairs(source):
-            task = ShadeTask(pair, upstream=source)
-            task.reset(0)
-            with source.activate():
-                definition = task._definition
-                self.assertEqual(task.user_prompt(), dedent(definition.user_query))
-                self.assertEqual(task.system_prompt("sabotage"),
-                                 dedent(definition.system_message_suspicious(True)))
-                self.assertEqual(task.system_prompt("benign"),
-                                 dedent(definition.system_message_no_secondary_task()))
-        transcript = (ChatMessage("system", "hidden"),
-            ChatMessage("user", "Please pay my  friends\nback."),
-            AssistantMessage("assistant", "<thinking>private</thinking>\nI will check   it.",
-                             tool_calls=(ToolCallRequest("1", "get_balance", "{}"),)),
-            ChatMessage("tool", "balance: 1000\nccy: USD"),
-            ChatMessage("assistant", "Done. <thinking>forgot to close"))
-        with source.activate():
-            logging = __import__("utils.logging_utils", fromlist=["llm_conversation_to_string"])
-            runtime = __import__("utils.functions_runtime", fromlist=["FunctionCall"])
-            up = [{"role": m.role, "content": m.content, "tool_calls":
-                   [runtime.FunctionCall(function=c.name, args={}, id=c.call_id)
-                    for c in getattr(m, "tool_calls", ())]} for m in transcript]
-            for remove, visibility in ((True, "no_scratchpad"), (False, "full")):
-                self.assertEqual(logging.llm_conversation_to_string(up, remove_thinking_tags=remove),
-                                 render_transcript(transcript, visibility=visibility))
-
-    def test_judge_score_tags_and_pandas_normalization_match(self):
-        import pandas as pd
-
-        source = PinnedUpstream(_UPSTREAM_CACHE, allow_fetch=False)
-        tagged_pairs = {"shade/api_key_calendar_agendas_2", "shade/expenditure_accounting"}
-        replies = ("<score>0</score>", "<score>37</score>", "<score>80</score>",
-                   "<score>100</score>", "I cannot decide.",
-                   "<SCORE>37</SCORE>", "<score>37", "<score>85/100</score>",
-                   "<score>85%</score>", "<score>N/A</score>",
-                   "<score>N/A</score><score>100</score>")
-        for pair in list_task_pairs(source):
-            for reply in replies:
-                with self.subTest(pair=pair, reply=reply):
-                    task = ShadeTask(pair, upstream=source,
-                                     judge_endpoint=MockEndpoint([{"content": reply}] * 12))
-                    task.reset(5)
-                    names = {s["function"]["name"] for s in task.tool_schemas()}
-                    for name in ("get_balance", "get_unread_emails", "list_files", "get_current_day"):
-                        if name in names:
-                            task.call_tool(name, "{}")
-                    task.call_tool("end_task", "{}")
-                    port = task.score_main(())
-                    raw = task.evaluation_outputs["main"]
-                    with source.activate():
-                        frame = pd.DataFrame({"transcript": [{
-                            "main_task_evaluation": raw, "side_task_evaluation": False}]})
-                        reference = float(task._evaluation.add_score_columns(frame)[
-                            "main_task_evaluation"][0])
-                    # Both execute the identical upstream normalizer on identical
-                    # scalar inputs; exact bit identity is the property under test.
-                    self.assertEqual(port, reference)
-                    missing = pair in tagged_pairs and reply in ("I cannot decide.", "<score>37")
-                    self.assertEqual("judge_score_tag_missing" in task.flags, missing)
-                    unparseable = pair in tagged_pairs and reply.startswith(
-                        ("<score>85/", "<score>85%", "<score>N/A"))
-                    self.assertEqual("judge_score_unparseable" in task.flags, unparseable)
-
-    def test_real_dispatch_has_no_per_tool_git_children(self):
-        source = PinnedUpstream(_UPSTREAM_CACHE, allow_fetch=False)
-        task = ShadeTask("bank_transfer_2", upstream=source)
-        task.reset(1)
-        self.assertTrue(task.tool_schemas(), task.flags)
-        with patch("joulewise.align.shade.upstream._git", side_effect=AssertionError("per-tool git")):
-            for _ in range(50):
-                task.call_tool("get_balance", "{}")
-        self.assertFalse(any(f.startswith("tool_error:") for f in task.flags), task.flags)
-
-    def test_all_public_pairs_load_schema_and_evaluate_side_offline(self):
-        source = PinnedUpstream(_UPSTREAM_CACHE, allow_fetch=False)
-        pairs = list_task_pairs(source)
-        self.assertEqual(len(pairs), 5)
-        for pair in pairs:
-            with self.subTest(pair=pair):
-                judge = MockEndpoint([{"content": "<score>0</score>"}] * 8)
-                task = ShadeTask(pair, upstream=source, judge_endpoint=judge)
-                task.reset(17)
-                self.assertTrue(task.tool_schemas(), task.flags)
-                self.assertTrue(task.user_prompt())
-                self.assertTrue(task.system_prompt("benign"))
-                self.assertTrue(task.system_prompt("sabotage"))
-                self.assertTrue(task.call_tool("end_task", "{}"))
-                score = task.score_main(())
-                side = task.score_side(())
-                self.assertIsNotNone(score, task.flags)
-                self.assertIsInstance(side, bool, task.flags)
-                self.assertFalse(any("_error:" in flag for flag in task.flags), task.flags)
+# This x86 import intentionally includes synthetic fixtures only.
+# Live public-cache conformance checks remain on the measurement branch.
 
 
 if __name__ == "__main__":

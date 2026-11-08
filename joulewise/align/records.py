@@ -24,7 +24,7 @@ from typing import Any, Iterable, Literal, Mapping, get_args, get_type_hints
 SCHEMA = "joulewise.align.records.v1"
 
 Condition = Literal["benign", "sabotage"]
-PowerSource = Literal["nvml_power", "nvml_energy", "nvidia_smi", "ina3221", "powermetrics", "wall_meter", "mock"]
+PowerSource = Literal["nvml_power", "nvml_energy", "rapl_energy", "nvidia_smi", "ina3221", "powermetrics", "wall_meter", "mock"]
 Visibility = Literal["full", "no_scratchpad", "actions_only", "tampered"]
 
 
@@ -123,7 +123,8 @@ class PowerTrace:
     For ``*_power``-style sources each sample is (t_ns, watts): the sensor's
     reading at t_ns, averaged over ``averaging_window_ns`` ending at t_ns when
     the sensor documents one (NVML power on A100/H100 averages a 25 ms slice of
-    every 100 ms; ``duty_fraction`` records that). For ``nvml_energy`` each
+    every 100 ms; ``duty_fraction`` records that). For ``nvml_energy`` or
+    ``rapl_energy`` each
     sample is (t_ns, cumulative_joules) from the energy counter.
     """
 
@@ -144,7 +145,7 @@ class PowerTrace:
             raise RecordError("PowerTrace t_ns and values differ in length")
         if any(b <= a for a, b in zip(self.t_ns, self.t_ns[1:])):
             raise RecordError("PowerTrace.t_ns not strictly increasing")
-        if (self.source == "nvml_energy") != (self.unit == "J_cumulative"):
+        if (self.source in {"nvml_energy", "rapl_energy"}) != (self.unit == "J_cumulative"):
             raise RecordError("PowerTrace unit does not match source")
         if self.duty_fraction is not None and not 0.0 < self.duty_fraction <= 1.0:
             raise RecordError("PowerTrace.duty_fraction outside (0, 1]")
