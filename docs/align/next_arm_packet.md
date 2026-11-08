@@ -29,7 +29,7 @@ Pass the resulting JSON to `align_v4_session.py install --next-arm-triage`.
 `build_packet` from the identities the supplied packet names (`record_commit`, `record_path`,
 the series commit and path, the pushed ref), using the arm's own clock and its own
 artifact-set digest (`rebuild_and_compare`). It requires canonical equality with the supplied
-packet, ignoring only `pushed_tip` and `packet_preflight`; any other changed, removed or added
+packet, ignoring only `pushed_tip` (top level and the nested copy in `checks.record_committed`) and `packet_preflight`; any other changed, removed or added
 field, or edited basis text, refuses. A rebuild that fails (a bad hash, a broken chain) refuses.
 The arm judges its own build and retains it in the arm record as `rebuilt_packet`
 (`rebuilt_packet_sha256`), with `supplied_packet_matches_rebuild`, the packet file digest and the

@@ -33,7 +33,7 @@ RECORD_SCHEMA = 'joulewise.align_v4.window_record.v1'
 SERIES_SCHEMA = 'joulewise.align_v4.series_state.v1'
 SHA = re.compile(r'[0-9a-f]{64}\Z')
 ATTEMPT = re.compile(r'^([CTD])([1-9][0-9]*)(?:#([1-9][0-9]*))?$')
-IGNORED_FOR_EQUALITY = ('pushed_tip', 'packet_preflight')
+IGNORED_FOR_EQUALITY = ('pushed_tip', 'packet_preflight')    # top level; also checks.record_committed.pushed_tip (canonical)
 IDENTITY_FIELDS = ('record_commit', 'record_path', 'series_commit', 'series_path', 'pushed_ref')
 # The series ledger is ONE canonical append-only file, rewritten by each window's commit. Its latest
 # committed version names the latest window record (delta3 G1), so an older packet cannot stay current.
@@ -293,8 +293,15 @@ def identities(packet):
 
 def canonical(packet):
     """The packet without the fields the arm ignores when comparing a supplied packet with its own build."""
-    return json.dumps({k: v for k, v in packet.items() if k not in IGNORED_FOR_EQUALITY},
-                      sort_keys=True, separators=(',', ':'), allow_nan=False)
+    kept = {k: v for k, v in packet.items() if k not in IGNORED_FOR_EQUALITY}
+    # The builder emits the informational pushed tip inside the record_committed check; that exact field is
+    # the same volatile pointer as the top-level one (delta4 S1 L1 / S2 F3). Reachability from the named
+    # remote-tracking ref is still re-proved by the rebuild itself.
+    checks = kept.get('checks')
+    entry = checks.get('record_committed') if isinstance(checks, dict) else None
+    if isinstance(entry, dict) and 'pushed_tip' in entry:
+        kept = {**kept, 'checks': {**checks, 'record_committed': {k: v for k, v in entry.items() if k != 'pushed_tip'}}}
+    return json.dumps(kept, sort_keys=True, separators=(',', ':'), allow_nan=False)
 
 
 def rebuild_and_compare(repo, supplied, *, now_epoch_s, current_artifact_set_sha256):

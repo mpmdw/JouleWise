@@ -211,6 +211,33 @@ class WindowJournalTests(unittest.TestCase):
             self.assertFalse(missing['admissible'])
             self.assertIn('gap above', missing['reasons'][0])
 
+    def test_a_regressed_source_is_refused_in_raw_order_before_merging(self):
+        # delta4 S1 F1: sorting must never repair a clock regression into a completed charge. Each source
+        # is checked in its own raw order; a regressed log, a regressed window journal and a duplicated
+        # stamp all refuse, while the same rows in order admit.
+        with tempfile.TemporaryDirectory() as tmp:
+            def write(name, rows):
+                path = Path(tmp)/name
+                path.write_text(''.join(json.dumps(r) + '\n' for r in rows))
+                return path
+            charging_then_floating = [obs(11, charging=True, pct=97), obs(61, charging=False, pct=100)]
+            ok = topup.derive_from_sources([write('ok.jsonl', charging_then_floating)], [], 111.0)
+            self.assertTrue(ok['admissible'], ok['reasons'])
+            regressed = topup.derive_from_sources([write('bad.jsonl', charging_then_floating[::-1])], [], 111.0)
+            self.assertFalse(regressed['admissible'])
+            self.assertIn('not strictly increasing', regressed['reasons'][0])
+            self.assertIn('raw order', regressed['reasons'][0])
+            duplicate = topup.derive_from_sources([write('dup.jsonl', [obs(11, charging=True, pct=97), obs(11)])], [], 111.0)
+            self.assertFalse(duplicate['admissible'])
+            window_start, window_end = int(NOW)-5000, int(NOW)-2000
+            log = write('log.jsonl', self.log(window_start-1500, window_start-100, charge_at=window_start-1300))
+            journal = window_journal(window_start, window_end)
+            bad_journal = write('jbad.jsonl', journal[:100] + journal[200:300] + journal[100:200] + journal[300:])
+            refused = topup.derive_from_sources([log], [bad_journal], NOW)
+            self.assertFalse(refused['admissible'])
+            self.assertIn('window journal', refused['reasons'][0])
+            self.assertIn('not strictly increasing', refused['reasons'][0])
+
     def test_a_missing_window_journal_or_a_boundary_gap_breaks_continuity(self):
         window_start, window_end = int(NOW)-5000, int(NOW)-2000
         before = self.log(window_start-1500, window_start-100, charge_at=window_start-1300)

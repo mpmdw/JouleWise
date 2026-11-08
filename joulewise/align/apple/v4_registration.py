@@ -558,7 +558,7 @@ def validate_u3(bar, *, root=None, commit=None):
         if (not isinstance(bar, dict) or not isinstance(bar.get('source_sha256'), dict)
                 or not bar['source_sha256'] or not all(is_digest(v) for v in bar['source_sha256'].values())):
             raise ValueError('U3 PENDING source digests')
-        v4_u3.validate_cached(v4_u3.canonical(bar))
+        v4_u3.validate(v4_u3.canonical(bar))
         for path in (*bar['source_sha256'], bar['independent_gate']['path']):
             # Lexical path policy also applies to a detached desk artifact.
             if not isinstance(path, str) or any(c in path for c in ('\n', '\r', '\0')):
