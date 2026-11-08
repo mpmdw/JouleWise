@@ -30,6 +30,11 @@ Optional runner arguments (lead ruling R0-L3, item 3,
   failed check, and its prerequisite gates (host identity, model load) still
   apply. `--no-keep-going` restores stop-at-first-failure.
 
+The deadline must leave room for one redo capture, about 55 min (R0-L3
+follow-up ruling 6). Under R0-L3 a sustained contaminant (the largest single
+process outside the capture's tree, `kernel_task` excluded, at ≥ 0.5 CPU-s/s
+for ≥ 60 s) abandons the first SMC capture and runs it once more.
+
 The custody root must be the installed watchdog's custody root. All file
 arguments are resolved to absolute paths before rendering. The interpreter
 must be the measurement environment's executable. No model files or config
