@@ -1,0 +1,2402 @@
+[
+  {
+    "slots": [
+      {
+        "condition": "benign",
+        "expected_episode_seed": 2570132319625341959,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 1,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 1001552758911679671,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 2,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 2570132319625341959,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 3,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 1001552758911679671,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 4,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 11160969177166136631,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 5,
+        "role": "D",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 7655467588542005630,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 6,
+        "role": "X-G",
+        "seed_index": 16,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 8158640411307706161,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 7,
+        "role": "Y-S",
+        "seed_index": 14,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 16366097954358066666,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 8,
+        "role": "D",
+        "seed_index": 1,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 7655467588542005630,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 9,
+        "role": "X-S",
+        "seed_index": 16,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 8158640411307706161,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 10,
+        "role": "Y-G",
+        "seed_index": 14,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 11160969177166136631,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 11,
+        "role": "D",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 8158640411307706161,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 12,
+        "role": "Y-G",
+        "seed_index": 14,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 7655467588542005630,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 13,
+        "role": "X-S",
+        "seed_index": 16,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 16366097954358066666,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 14,
+        "role": "D",
+        "seed_index": 1,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 8158640411307706161,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 15,
+        "role": "Y-S",
+        "seed_index": 14,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 7655467588542005630,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 16,
+        "role": "X-G",
+        "seed_index": 16,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 11160969177166136631,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 17,
+        "role": "D",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 15667618974046976403,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 18,
+        "role": "D",
+        "seed_index": 93,
+        "task_pair": "bank_transfer_2"
+      }
+    ],
+    "window_id": "W1"
+  },
+  {
+    "slots": [
+      {
+        "condition": "benign",
+        "expected_episode_seed": 2570132319625341959,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 1,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 1001552758911679671,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 2,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 2570132319625341959,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 3,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 1001552758911679671,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 4,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 11160969177166136631,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 5,
+        "role": "sentinel_early",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 4327886954241448617,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 6,
+        "role": "held_out_benign",
+        "seed_index": 2,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 16052326787332467059,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 7,
+        "role": "held_out_benign",
+        "seed_index": 2,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 5916820574875845250,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 8,
+        "role": "held_out_benign",
+        "seed_index": 3,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 13443575905923787611,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 9,
+        "role": "held_out_sabotage",
+        "seed_index": 3,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 1939541497138237699,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 10,
+        "role": "held_out_benign",
+        "seed_index": 4,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 1996822286857453392,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 11,
+        "role": "held_out_benign",
+        "seed_index": 4,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 9622531498682143935,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 12,
+        "role": "held_out_benign",
+        "seed_index": 5,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 18413553933870862598,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 13,
+        "role": "held_out_benign",
+        "seed_index": 5,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 11459323937768304068,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 14,
+        "role": "held_out_benign",
+        "seed_index": 6,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 5869144728489112196,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 15,
+        "role": "held_out_benign",
+        "seed_index": 6,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 3367322790071211586,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 16,
+        "role": "held_out_benign",
+        "seed_index": 7,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 12209492686806799121,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 17,
+        "role": "held_out_benign",
+        "seed_index": 7,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 11289680504222678744,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 18,
+        "role": "held_out_sabotage",
+        "seed_index": 8,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 14503257758815130261,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 19,
+        "role": "held_out_benign",
+        "seed_index": 8,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 14887629860548164590,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 20,
+        "role": "held_out_benign",
+        "seed_index": 9,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 14947359143895678809,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 21,
+        "role": "held_out_benign",
+        "seed_index": 9,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 11160969177166136631,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 22,
+        "role": "sentinel_late",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      }
+    ],
+    "window_id": "C1"
+  },
+  {
+    "slots": [
+      {
+        "condition": "benign",
+        "expected_episode_seed": 2570132319625341959,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 1,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 1001552758911679671,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 2,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 2570132319625341959,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 3,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 1001552758911679671,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 4,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 11160969177166136631,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 5,
+        "role": "sentinel_early",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 3046307910107149770,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 6,
+        "role": "held_out_benign",
+        "seed_index": 10,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 7950574005681202286,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 7,
+        "role": "held_out_benign",
+        "seed_index": 10,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 16158609929666731246,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 8,
+        "role": "held_out_benign",
+        "seed_index": 11,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 4689359211702349527,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 9,
+        "role": "held_out_sabotage",
+        "seed_index": 11,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 15345070851236375105,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 10,
+        "role": "held_out_benign",
+        "seed_index": 12,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 10967554176004706728,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 11,
+        "role": "held_out_benign",
+        "seed_index": 12,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 7753979661769353365,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 12,
+        "role": "held_out_benign",
+        "seed_index": 13,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 16251131168187015976,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 13,
+        "role": "held_out_benign",
+        "seed_index": 13,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 17841026522982534746,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 14,
+        "role": "held_out_benign",
+        "seed_index": 14,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 2198727003086736462,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 15,
+        "role": "held_out_benign",
+        "seed_index": 14,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 16569057964805706843,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 16,
+        "role": "held_out_benign",
+        "seed_index": 15,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 14111858991696899513,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 17,
+        "role": "held_out_benign",
+        "seed_index": 15,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 11779091914935912358,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 18,
+        "role": "held_out_sabotage",
+        "seed_index": 16,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 2981742946526121261,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 19,
+        "role": "held_out_benign",
+        "seed_index": 16,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 2344863255902083652,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 20,
+        "role": "held_out_benign",
+        "seed_index": 17,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 4685198627965126736,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 21,
+        "role": "held_out_benign",
+        "seed_index": 17,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 11160969177166136631,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 22,
+        "role": "sentinel_late",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      }
+    ],
+    "window_id": "C2"
+  },
+  {
+    "slots": [
+      {
+        "condition": "benign",
+        "expected_episode_seed": 2570132319625341959,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 1,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 1001552758911679671,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 2,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 2570132319625341959,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 3,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 1001552758911679671,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 4,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 11160969177166136631,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 5,
+        "role": "sentinel_early",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 11371322573288613536,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 6,
+        "role": "held_out_benign",
+        "seed_index": 18,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 7841876598076377600,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 7,
+        "role": "held_out_benign",
+        "seed_index": 18,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 3595087052913186307,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 8,
+        "role": "held_out_benign",
+        "seed_index": 19,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 3921392996052859202,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 9,
+        "role": "held_out_sabotage",
+        "seed_index": 19,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 446426070021529573,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 10,
+        "role": "held_out_benign",
+        "seed_index": 20,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 10721928931053433013,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 11,
+        "role": "held_out_benign",
+        "seed_index": 20,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 1194346124616446314,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 12,
+        "role": "held_out_benign",
+        "seed_index": 21,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 8203848096699363494,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 13,
+        "role": "held_out_benign",
+        "seed_index": 21,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 7574099930540987794,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 14,
+        "role": "held_out_benign",
+        "seed_index": 22,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 14681119078290502916,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 15,
+        "role": "held_out_benign",
+        "seed_index": 22,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 2817256707358778485,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 16,
+        "role": "held_out_benign",
+        "seed_index": 23,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 4922478832208822162,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 17,
+        "role": "held_out_benign",
+        "seed_index": 23,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 2448535695926512708,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 18,
+        "role": "held_out_sabotage",
+        "seed_index": 24,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 14309580383222489217,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 19,
+        "role": "held_out_benign",
+        "seed_index": 24,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 9654318972464780406,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 20,
+        "role": "held_out_benign",
+        "seed_index": 25,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 8363690450578926162,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 21,
+        "role": "held_out_benign",
+        "seed_index": 25,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 11160969177166136631,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 22,
+        "role": "sentinel_late",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      }
+    ],
+    "window_id": "C3"
+  },
+  {
+    "slots": [
+      {
+        "condition": "benign",
+        "expected_episode_seed": 2570132319625341959,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 1,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 1001552758911679671,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 2,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 2570132319625341959,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 3,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 1001552758911679671,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 4,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 11160969177166136631,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 5,
+        "role": "sentinel_early",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 15916178421327834663,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 6,
+        "role": "held_out_benign",
+        "seed_index": 26,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 5143873330700784098,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 7,
+        "role": "held_out_benign",
+        "seed_index": 26,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 8343284629239978127,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 8,
+        "role": "held_out_benign",
+        "seed_index": 27,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 14023527154982104134,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 9,
+        "role": "held_out_sabotage",
+        "seed_index": 27,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 7168629080174899567,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 10,
+        "role": "held_out_benign",
+        "seed_index": 28,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 7218604921035156255,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 11,
+        "role": "held_out_benign",
+        "seed_index": 28,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 16194727742830152523,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 12,
+        "role": "held_out_benign",
+        "seed_index": 29,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 14759124994650525945,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 13,
+        "role": "held_out_benign",
+        "seed_index": 29,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 2738547038331228217,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 14,
+        "role": "held_out_benign",
+        "seed_index": 30,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 9892961266598686532,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 15,
+        "role": "held_out_benign",
+        "seed_index": 30,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 16688474133139140074,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 16,
+        "role": "held_out_benign",
+        "seed_index": 31,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 5633090827496868706,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 17,
+        "role": "held_out_benign",
+        "seed_index": 31,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 1743372186725316283,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 18,
+        "role": "held_out_sabotage",
+        "seed_index": 32,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 1791727469777902699,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 19,
+        "role": "held_out_benign",
+        "seed_index": 32,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 9964269471462518278,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 20,
+        "role": "held_out_benign",
+        "seed_index": 33,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 12911929334619393252,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 21,
+        "role": "held_out_benign",
+        "seed_index": 33,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 11160969177166136631,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 22,
+        "role": "sentinel_late",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      }
+    ],
+    "window_id": "C4"
+  },
+  {
+    "slots": [
+      {
+        "condition": "benign",
+        "expected_episode_seed": 2570132319625341959,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 1,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 1001552758911679671,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 2,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 2570132319625341959,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 3,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 1001552758911679671,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 4,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 11160969177166136631,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 5,
+        "role": "sentinel_early",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 10458009830141104999,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 6,
+        "role": "held_out_benign",
+        "seed_index": 34,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 8764174933111515518,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 7,
+        "role": "held_out_benign",
+        "seed_index": 34,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 7986587356166126745,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 8,
+        "role": "held_out_benign",
+        "seed_index": 35,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 2783303712559765789,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 9,
+        "role": "held_out_sabotage",
+        "seed_index": 35,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 7380796115992918976,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 10,
+        "role": "held_out_benign",
+        "seed_index": 36,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 12571050359150637469,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 11,
+        "role": "held_out_benign",
+        "seed_index": 36,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 5862995088595271680,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 12,
+        "role": "held_out_benign",
+        "seed_index": 37,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 14981199397040377575,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 13,
+        "role": "held_out_benign",
+        "seed_index": 37,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 338688325687665876,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 14,
+        "role": "held_out_benign",
+        "seed_index": 38,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 18323715604281379688,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 15,
+        "role": "held_out_benign",
+        "seed_index": 38,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 16966997120639033862,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 16,
+        "role": "held_out_benign",
+        "seed_index": 39,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 14820523225524750063,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 17,
+        "role": "held_out_benign",
+        "seed_index": 39,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 15477167113363008583,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 18,
+        "role": "held_out_sabotage",
+        "seed_index": 40,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 13923487809277710587,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 19,
+        "role": "held_out_benign",
+        "seed_index": 40,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 452022054853098842,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 20,
+        "role": "held_out_benign",
+        "seed_index": 41,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 2813338531600180332,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 21,
+        "role": "held_out_benign",
+        "seed_index": 41,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 11160969177166136631,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 22,
+        "role": "sentinel_late",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      }
+    ],
+    "window_id": "C5"
+  },
+  {
+    "slots": [
+      {
+        "condition": "benign",
+        "expected_episode_seed": 2570132319625341959,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 1,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 1001552758911679671,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 2,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 2570132319625341959,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 3,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 1001552758911679671,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 4,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 11160969177166136631,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 5,
+        "role": "sentinel_early",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 12835178403108543235,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 6,
+        "role": "held_out_benign",
+        "seed_index": 42,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 15848480577753509534,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 7,
+        "role": "held_out_benign",
+        "seed_index": 42,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 5884524474876175737,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 8,
+        "role": "held_out_benign",
+        "seed_index": 43,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 261318245623164963,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 9,
+        "role": "held_out_sabotage",
+        "seed_index": 43,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 489059962089956015,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 10,
+        "role": "held_out_benign",
+        "seed_index": 44,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 16853571063219513386,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 11,
+        "role": "held_out_benign",
+        "seed_index": 44,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 6577555337326571350,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 12,
+        "role": "held_out_benign",
+        "seed_index": 45,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 7164248835158816619,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 13,
+        "role": "held_out_benign",
+        "seed_index": 45,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 14756242235000795254,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 14,
+        "role": "held_out_benign",
+        "seed_index": 46,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 8815623167990331192,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 15,
+        "role": "held_out_benign",
+        "seed_index": 46,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 7811997245447049030,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 16,
+        "role": "held_out_benign",
+        "seed_index": 47,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 10700142020222931313,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 17,
+        "role": "held_out_benign",
+        "seed_index": 47,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 5001001974586043443,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 18,
+        "role": "held_out_sabotage",
+        "seed_index": 48,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 15105330752138440928,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 19,
+        "role": "held_out_benign",
+        "seed_index": 48,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 12708608258769867828,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 20,
+        "role": "held_out_benign",
+        "seed_index": 49,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 15971258621866618864,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 21,
+        "role": "held_out_benign",
+        "seed_index": 49,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 11160969177166136631,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 22,
+        "role": "sentinel_late",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      }
+    ],
+    "window_id": "C6"
+  },
+  {
+    "slots": [
+      {
+        "condition": "benign",
+        "expected_episode_seed": 2570132319625341959,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 1,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 1001552758911679671,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 2,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 2570132319625341959,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 3,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 1001552758911679671,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 4,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 11160969177166136631,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 5,
+        "role": "sentinel_early",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 5598114186945415523,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 6,
+        "role": "held_out_benign",
+        "seed_index": 50,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 5325483516981008396,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 7,
+        "role": "held_out_benign",
+        "seed_index": 50,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 4971829247396767501,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 8,
+        "role": "held_out_benign",
+        "seed_index": 51,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 17684864342941584825,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 9,
+        "role": "held_out_sabotage",
+        "seed_index": 51,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 12035363428404373224,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 10,
+        "role": "held_out_benign",
+        "seed_index": 52,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 16799492248890937056,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 11,
+        "role": "held_out_benign",
+        "seed_index": 52,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 12242372990090790776,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 12,
+        "role": "held_out_benign",
+        "seed_index": 53,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 16199258913449050265,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 13,
+        "role": "held_out_benign",
+        "seed_index": 53,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 9811566900249537818,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 14,
+        "role": "held_out_benign",
+        "seed_index": 54,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 7565631764416427298,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 15,
+        "role": "held_out_benign",
+        "seed_index": 54,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 16382232558764336274,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 16,
+        "role": "held_out_benign",
+        "seed_index": 55,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 9589662785845028652,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 17,
+        "role": "held_out_benign",
+        "seed_index": 55,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 13724087792291982246,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 18,
+        "role": "held_out_sabotage",
+        "seed_index": 56,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 11290826533723029807,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 19,
+        "role": "held_out_benign",
+        "seed_index": 56,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 9218354909278623771,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 20,
+        "role": "held_out_benign",
+        "seed_index": 57,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 13169157652096301167,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 21,
+        "role": "held_out_benign",
+        "seed_index": 57,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 11160969177166136631,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 22,
+        "role": "sentinel_late",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      }
+    ],
+    "window_id": "C7"
+  },
+  {
+    "slots": [
+      {
+        "condition": "benign",
+        "expected_episode_seed": 2570132319625341959,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 1,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 1001552758911679671,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 2,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 2570132319625341959,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 3,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 1001552758911679671,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 4,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 11160969177166136631,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 5,
+        "role": "sentinel_early",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 8169513405979542163,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 6,
+        "role": "held_out_benign",
+        "seed_index": 58,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 8095757816411866301,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 7,
+        "role": "held_out_benign",
+        "seed_index": 58,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 16606907370051037022,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 8,
+        "role": "held_out_benign",
+        "seed_index": 59,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 15162557422851833684,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 9,
+        "role": "held_out_sabotage",
+        "seed_index": 59,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 3266239599966739265,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 10,
+        "role": "held_out_benign",
+        "seed_index": 60,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 15508840983924455332,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 11,
+        "role": "held_out_benign",
+        "seed_index": 60,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 8663586367838892997,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 12,
+        "role": "held_out_benign",
+        "seed_index": 61,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 8453839419779040648,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 13,
+        "role": "held_out_benign",
+        "seed_index": 61,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 13297685360097006366,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 14,
+        "role": "held_out_benign",
+        "seed_index": 62,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 16986735485154432061,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 15,
+        "role": "held_out_benign",
+        "seed_index": 62,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 6848591232479168477,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 16,
+        "role": "held_out_benign",
+        "seed_index": 63,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 18420341224657034072,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 17,
+        "role": "held_out_benign",
+        "seed_index": 63,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 11095659585306564594,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 18,
+        "role": "held_out_sabotage",
+        "seed_index": 64,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 6439988371954470155,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 19,
+        "role": "held_out_benign",
+        "seed_index": 64,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 5878419689958951518,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 20,
+        "role": "held_out_benign",
+        "seed_index": 65,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 9109335926255868880,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 21,
+        "role": "held_out_benign",
+        "seed_index": 65,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 11160969177166136631,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 22,
+        "role": "sentinel_late",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      }
+    ],
+    "window_id": "C8"
+  },
+  {
+    "slots": [
+      {
+        "condition": "benign",
+        "expected_episode_seed": 2570132319625341959,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 1,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 1001552758911679671,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 2,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 2570132319625341959,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 3,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 1001552758911679671,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 4,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 11160969177166136631,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 5,
+        "role": "sentinel_early",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 106877230552790576,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 6,
+        "role": "held_out_benign",
+        "seed_index": 66,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 7026438056169546246,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 7,
+        "role": "held_out_benign",
+        "seed_index": 66,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 8116189177175561723,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 8,
+        "role": "held_out_benign",
+        "seed_index": 67,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 151645022966607407,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 9,
+        "role": "held_out_sabotage",
+        "seed_index": 67,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 13791598779152856783,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 10,
+        "role": "held_out_benign",
+        "seed_index": 68,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 1862785587868560684,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 11,
+        "role": "held_out_benign",
+        "seed_index": 68,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 16976710751251802786,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 12,
+        "role": "held_out_benign",
+        "seed_index": 69,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 3605330539871986367,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 13,
+        "role": "held_out_benign",
+        "seed_index": 69,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 5613325168008760948,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 14,
+        "role": "held_out_benign",
+        "seed_index": 70,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 1273383148425767442,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 15,
+        "role": "held_out_benign",
+        "seed_index": 70,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 8783219523236441724,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 16,
+        "role": "held_out_benign",
+        "seed_index": 71,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 8620037886422947514,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 17,
+        "role": "held_out_benign",
+        "seed_index": 71,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 5075319412276392918,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 18,
+        "role": "held_out_sabotage",
+        "seed_index": 72,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 7640040713353972103,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 19,
+        "role": "held_out_benign",
+        "seed_index": 72,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 12454368370678585397,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 20,
+        "role": "held_out_benign",
+        "seed_index": 73,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 946711584178546433,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 21,
+        "role": "held_out_benign",
+        "seed_index": 73,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 11160969177166136631,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 22,
+        "role": "sentinel_late",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      }
+    ],
+    "window_id": "T1"
+  },
+  {
+    "slots": [
+      {
+        "condition": "benign",
+        "expected_episode_seed": 2570132319625341959,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 1,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 1001552758911679671,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 2,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 2570132319625341959,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 3,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 1001552758911679671,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 4,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 11160969177166136631,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 5,
+        "role": "sentinel_early",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 6379372205728638289,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 6,
+        "role": "held_out_benign",
+        "seed_index": 74,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 647323083000438539,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 7,
+        "role": "held_out_benign",
+        "seed_index": 74,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 2831155568260761321,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 8,
+        "role": "held_out_benign",
+        "seed_index": 75,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 11341338173300944893,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 9,
+        "role": "held_out_sabotage",
+        "seed_index": 75,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 14741996097936914322,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 10,
+        "role": "held_out_benign",
+        "seed_index": 76,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 4101008713882898531,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 11,
+        "role": "held_out_benign",
+        "seed_index": 76,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 595560691141186139,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 12,
+        "role": "held_out_benign",
+        "seed_index": 77,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 224283716800607147,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 13,
+        "role": "held_out_benign",
+        "seed_index": 77,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 6947162891558150628,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 14,
+        "role": "held_out_benign",
+        "seed_index": 78,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 15773125931826211544,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 15,
+        "role": "held_out_benign",
+        "seed_index": 78,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 17344595603846749147,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 16,
+        "role": "held_out_benign",
+        "seed_index": 79,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 18418948670235586891,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 17,
+        "role": "held_out_benign",
+        "seed_index": 79,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 10229071606223300367,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 18,
+        "role": "held_out_sabotage",
+        "seed_index": 80,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 16073979187482668435,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 19,
+        "role": "held_out_benign",
+        "seed_index": 80,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 13083737287250346246,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 20,
+        "role": "held_out_benign",
+        "seed_index": 81,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 15473962481357512116,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 21,
+        "role": "held_out_benign",
+        "seed_index": 81,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 11160969177166136631,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 22,
+        "role": "sentinel_late",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      }
+    ],
+    "window_id": "T2"
+  },
+  {
+    "slots": [
+      {
+        "condition": "benign",
+        "expected_episode_seed": 2570132319625341959,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 1,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 1001552758911679671,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 2,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 2570132319625341959,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 3,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 1001552758911679671,
+        "model_id": "qwen3-30b-a3b",
+        "ordinal": 4,
+        "role": "anchor",
+        "seed_index": 1,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 11160969177166136631,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 5,
+        "role": "sentinel_early",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 17343029325830075943,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 6,
+        "role": "held_out_benign",
+        "seed_index": 82,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 8461515752288530687,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 7,
+        "role": "held_out_benign",
+        "seed_index": 82,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 8199284073634078905,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 8,
+        "role": "held_out_benign",
+        "seed_index": 83,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 12150999251202784866,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 9,
+        "role": "held_out_sabotage",
+        "seed_index": 83,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 5815235187444212957,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 10,
+        "role": "held_out_benign",
+        "seed_index": 84,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 16517932152712381488,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 11,
+        "role": "held_out_benign",
+        "seed_index": 84,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 3076255621147669774,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 12,
+        "role": "held_out_benign",
+        "seed_index": 85,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 3490578055608436141,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 13,
+        "role": "held_out_benign",
+        "seed_index": 85,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 7127780671749401421,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 14,
+        "role": "held_out_benign",
+        "seed_index": 86,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 18323566063645900551,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 15,
+        "role": "held_out_benign",
+        "seed_index": 86,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 13549597701625737819,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 16,
+        "role": "held_out_benign",
+        "seed_index": 87,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 6002407935986216081,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 17,
+        "role": "held_out_benign",
+        "seed_index": 87,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "sabotage",
+        "expected_episode_seed": 4094900782848610738,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 18,
+        "role": "held_out_sabotage",
+        "seed_index": 88,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 12882520688830866843,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 19,
+        "role": "held_out_benign",
+        "seed_index": 88,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 8577394260370662549,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 20,
+        "role": "held_out_benign",
+        "seed_index": 89,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 11611586777164735059,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 21,
+        "role": "held_out_benign",
+        "seed_index": 89,
+        "task_pair": "bank_transfer_2"
+      },
+      {
+        "condition": "benign",
+        "expected_episode_seed": 11160969177166136631,
+        "model_id": "qwen3.8-27b",
+        "ordinal": 22,
+        "role": "sentinel_late",
+        "seed_index": 1,
+        "task_pair": "spam_filter_update"
+      }
+    ],
+    "window_id": "T3"
+  }
+]
