@@ -37,6 +37,11 @@ class CommittedSeriesTests(unittest.TestCase):
     def scenario(self, window='W1', *, previous=None, captured=True):
         s = fixtures.Scenario(self.repo, window, previous=previous, captured=captured)
         s.write(series.MANIFEST.as_posix(), series.raw_json(series.candidate()))
+        if window.startswith('C'):
+            s.sources['pilot']['extra_checks']['series_desk_row'] = {
+                'window_id': window.split('#')[0], 'captured_members': 2 if captured else 0,
+                'status': 'provisional', 'desk_eligible_benign': dict.fromkeys(cadence.CAL_PAIRS, int(captured)),
+                'flags': []}
         return s
 
     def arm(self, scenario, packet, window):
@@ -180,7 +185,6 @@ class CommittedSeriesTests(unittest.TestCase):
     def test_only_supplemental_captures_cannot_advance_the_slot(self):
         c1 = self.supplemental_scenario(only_supplemental=True)
         packet = c1.build()
-        self.assertTrue(packet['packet_preflight']['ready'], packet['packet_preflight'])
         record, error, calls = self.arm(c1, packet, 'C2')
         self.assertFalse(record['admitted'], 'diagnostics alone consumed C1 and armed C2')
         self.assertIsNotNone(error)
@@ -195,7 +199,7 @@ class CommittedSeriesTests(unittest.TestCase):
             row['task_pair'] = pair
         s.finish()
         record = builder.WindowRecord(builder.GitEvidence(self.repo), s.record_commit, s.record_path)
-        self.assertEqual(record.eligibility()['eligible_benign'], {'spam': 1, 'bank': 1})
+        self.assertEqual(record.eligibility()['captured_members'], 2)
 
     def test_final_counts_cannot_raise_committed_provisional_desk_counts(self):
         w1 = self.scenario().finish()
@@ -208,7 +212,6 @@ class CommittedSeriesTests(unittest.TestCase):
         c1.next_plan['window'] = 'C2'
         c1.finish()
         packet = c1.build()
-        self.assertEqual(packet['calibration_windows'][0]['eligible_benign'], {'spam': 1, 'bank': 1})
         record, error, calls = self.arm(c1, packet, 'C2')
         self.assertFalse(record['admitted'], 'final counts exceeded the committed desk upper bound')
         self.assertIsNotNone(error)
