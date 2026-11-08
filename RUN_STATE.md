@@ -1042,6 +1042,30 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+202. **Laptop lead (interactive session 1544c617, Opus 5.5), 2026-11-07 about 17:30 PST: R1 kit delivery, and lead ruling R0-L2 on the slow-pick rule, made before re-run 8's capture exists. Ed wants the MBP collecting whenever a valid design is ready, so R1 can arm right after R0 re-run 8 passes, without another lead round-trip.** Timing stays the magistrate's call.
+- **Ruling R0-L2 (slow pick; #692 D5; LEAD-RULINGS-2 Round 9).** Adopt the build's default rule as final: among keys in the slow class (60 s < τ ≤ 300 s, settled noise ≤ 0.15 °C, resolving, not a placeholder, not an alias), pick the longest band hold time τ·ln(rise/1 °C) that is still ≤ 300 s.
+  - **Why:** `s_slow` drives the G0 band and the G1/H bands, whose caps are 300 s. This rule ties the pick to the time scale the gates operate on. The other three rules optimise proxies: longest τ, stored heat, and longest cooling after the fast bracket.
+  - Keep printing the other three picks beside it, as diagnostics.
+  - If the slow class is empty, there is no pick and the protocol's IOHID / X4 ruling applies. Mail Ed and the lead and do not arm.
+  - This was decided before the capture exists, so it cannot be tuned to the data. The rule the R1 code uses is already this one, so no code changes.
+- **R1 kit.** `lane/2026-11-06-v4-r1-integrated` @ `e901eb2a4`. Rounds 6-9 are integrated and reviewed (no BLOCKER or HIGH open). It carries the WP18 fixtures `aaee4b2d2` and #692.
+  - **(1)** After R0 re-run 8 passes (complete_r0, or the item 196 composition), fill `configs/campaigns/align_v4/registration/inputs.json` `R0.reasoning_effort` with the ladder rung R0 selected (`xhigh`, `medium` or `low`). Do this on a new branch `lane/2026-11-07-r1-kit-r0fill` from `e901eb2a4`.
+  - **(2)** Run `python3 -B scripts/align_v4_kit.py`, then `--check`. It must block on exactly `R1.B_D, R1.I_D, R1.T_dead, R1.thermal_policy`, and nothing else. Commit only `inputs.json` and the regenerated kit files, and push. **This is authorized as a mechanical kit step; the laptop lead reviews it afterwards.**
+  - **(3)** Arm R1 per the R1 runtime contract (`docs/align/r1_runtime_contract.md`) and `scripts/align_r1_rehearsal.py`, from a measurement checkout of that branch.
+    - Set the R1 plan's `window_max_s` to cover the all-caps worst case: 56,207 s with no redo, or 61,607 s if the night crosses the 11:45-13:15 batch window. Every R6-2 retry plus the wait is 90,663 s, and a cut beyond that is accepted.
+    - No external disk may be mounted. The SSD arrives Sunday at the earliest and stays unplugged during R1.
+  - **(4) Scheduling.** Before arming, confirm from the code how a scheduled macOS job firing mid-night (the softwareupdated scan at about 23:09, 05:09 and 11:09; the 00:00 `/tmp` cleaner; XProtect; the 12:53 maintenance) is handled in an R1 segment: dwell and wait, segment INCONCLUSIVE, or night refusal. Record the answer.
+    - If it is a night refusal, start R1 so that its quiet-sensitive segments avoid those times, or mail the lead before arming.
+    - Ed leaves Security Responses on automatic. That is fine; the scan schedule is unchanged.
+  - **(5) On the first R1 night (round-7 cold-pass request):** record the wall gap between the last decode of `planning_turn_R_plus_0C` and the idle_baseline start of the first gated D run (process start, model load, session open).
+  - **(6) Host High Power state** lives at `/Users/Shared/JouleWise/host-power/` (`high-power.marker`, `night.lock`).
+    - It is created on first use as the measuring user, mode 0700, with no new sudo rule.
+    - A leftover marker is restored at the next session start or admission.
+    - Never delete it by hand unless `pmset -g custom` already reads AC powermode 0.
+    - An interrupt during a night now stops the chain and proves it gone before restoring (R8-1/D8-2).
+  - **(7) Not needed for R1, needed before W1:** PR #694, the guard background sampler. The lead merges it into pilot10-benign after re-run 8 exits. Also needed before W1: the lead's ruling on the 1(e) fallback, made on R1's numbers, and the blind pre-W1 gate.
+- **After R1:** commit the R1 record as usual (item 185 pattern) and mail Ed. The lead then fills the R1 leaves, rules on 1(e)/1(f) and delivers the W1 kit.
+
 201. **Magistrate activation 725916c8 (Opus 5.5, headless, 2026-11-07 from 15:53 PST): item 200's checks are done. Ed's visit turned Spotlight indexing and the Photos analysis agents off; the softwareupdated background scan is still on, so the 17:09 scan stays on the schedule. R0 re-run 8 launches at or after 17:15 PST.** No unread mail from Ed, no new directive.
 - **Launch notice.** The watchdog queued `transition-6447-launch_failure` ("session exit=143", 15:50:11 PST). The cause was deliberate: Ed's interactive session (9f46441a) sent SIGTERM to activation 2115b21f after Ed's `/login`, so that the headless magistrate restarts on the new Claude account. Nothing was measuring. Ed was mailed (message `1a1b86f274d1f1bb`), and the notice was acknowledged.
 - **Item 200 (1): settings after Ed's visit** (he ran `scripts/ops/mbp_quiet_os.zsh` from `ops/2026-11-07-mbp-quiet-os` at 15:42 PST). Each setting was read back at 15:58 PST. The before values are in `/Users/edr/night-archive/settings-baseline-2115-pre-ed.txt` (12:46 PST).
