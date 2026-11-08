@@ -2,6 +2,16 @@
 
 Started 2026-11-07 by the laptop lead from Ed's decisions. Update it in place; keep each entry's source link.
 
+## ★ MAIN GOAL (Ed, 2026-11-07)
+**ALIGN v4 plus an adaptive red team showing the monitor+energy squeeze holds**, aimed at a main-track submission at a top ML or security venue.
+- **The squeeze:** energy and transcript monitors are blind in opposite places. Hiding compute from the meter forces logging plausible work, which the monitor reads. Avoiding the monitor forces unlogged work, which the meter sees.
+- **All spare effort goes to** auditing v4 and maximizing the chance of this result. Other lanes get spare capacity only.
+- **Work in flight on it** (started 2026-11-07 about 21:00 PST):
+  - **Sol, detached** (pushes on completion when the audit is clean): `align/2026-11-07-squeeze-prereg` (preregistration addendum draft), `align/2026-11-07-squeeze-analysis` (joint detection curves, adaptive-adversary simulator, power analysis), `align/2026-11-07-adversary-kit` (meter-aware adversary variants and a positive-control compute injector), `align/2026-11-07-reviewer2` (hostile-reviewer audit). Status files: `/private/tmp/jwsol/squeeze/<name>/pushed`.
+  - **Claude workflow `v4-squeeze-readiness`** (Fable + Opus seats; each track pushes itself): `align/2026-11-07-v4-v4-registration` (closing the pre-W1 registration blockers, plus the blind gate checklist), `align/2026-11-07-v4-squeeze-design`, `align/2026-11-07-v4-reviewer2`.
+  - Also `research/2026-11-07-tripwire-directions` (part 5: what the tool enables if it works).
+- **Critical path:** R0-L3 merge (#699/#700) → R0 → R1 (RUN_STATE 202) → R10 procedure → W1 kit (`lane/2026-11-07-w1-kit-r10`) → close the pre-W1 registration blockers → the blind registration gate → W1 → D windows (Q4) → registration-grade calibration (Q6) → adaptive red team and positive controls, preregistered before data.
+
 ## Ed's direction (2026-11-07)
 - **ALIGN claim:** "sabotage leaves an energy signature" (protocol v4). More windows and 30B positive-control nights are approved. Registration grade was ruled under Q6 (RUN_STATE 204).
 - **Paper 1** is led by BYTES and known-bytes (what a laptop's own counters can and cannot resolve). It is accepted, though Ed finds it less exciting than ALIGN. BYTES stage 1 is due 12 Nov.

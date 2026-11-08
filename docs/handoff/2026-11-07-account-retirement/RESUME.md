@@ -119,3 +119,9 @@ Written by the laptop lead (Opus 5.5, session 1544c617) before Ed retired this C
   - The new "lead" derivation branch: G0* ≥ 600 while the e901 rule misses because of a long X-G wait. The kit refuses the receipt and returns to the lead.
 - **Still open:** the duty-bar fallback step under R10-2(a), ruled after R1.
 - **Merge timing:** merge `w1-kit-r10` into the R1 lane after the R1 night (so it never changes code under R1), then run R1's numbers through `scripts/align_w1_budget_procedure.py decide`.
+
+## ★ MAIN GOAL (Ed, about 20:55 PST 11-07). Read this first
+**ALIGN v4 plus an adaptive red team showing the monitor+energy squeeze holds**, aimed at a top-venue main-track paper. All spare effort goes to auditing v4 and maximizing that chance; other lanes take spare capacity only. The memory file is `main-goal-v4-squeeze`, and `docs/research/AGENDA.md` has the in-flight branches and the critical path. Review and act on these as they land:
+- the Sol drafts `align/2026-11-07-{squeeze-prereg,squeeze-analysis,adversary-kit,reviewer2}`;
+- the workflow outputs `align/2026-11-07-v4-{v4-registration,squeeze-design,reviewer2}`;
+- part 5, `research/2026-11-07-tripwire-directions`.
