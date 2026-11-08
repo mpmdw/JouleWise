@@ -241,7 +241,8 @@ anything the Air can stand in for.
 `scripts/align_v4_prequal.py --w1-next {r1,w1}` (module `joulewise/align/w1_prequal.py`) runs every code
 path the next window executes, off the Mac, with a fake host. It covers:
 - the production arm CLI and its required evidence;
-- the next-arm triage, including staleness and edited packet bytes;
+- the next-arm triage, including the packet-as-pointer rebuild (G1: `packet-rebuild`, G1b:
+  `packet-tamper`);
 - the fixed-8 calibration stop and its lead-ruling exit;
 - the receipt: executed-closure coverage and the candidate commit;
 - the series projection;

@@ -146,7 +146,8 @@ def default_fault(name):
         return 1, 'align_pilot_session: registration_receipt digest drift: docs/x.md', None
     if fault['expect'] == 'usage':
         return 2, 'error: the following arguments are required: --battery-log', None
-    return 1, 'v4 arm refused', {'admitted': False, 'reasons': ['next_arm_triage: ' + fault['needle']]}
+    needle = fault['needle'] if isinstance(fault['needle'], str) else fault['needle'][0]
+    return 1, 'v4 arm refused', {'admitted': False, 'reasons': ['next_arm_triage: ' + needle]}
 
 
 def fake_prepare(measurement_root, session_root, keep, **kwargs):

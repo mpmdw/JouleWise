@@ -299,9 +299,10 @@ def _stale(packet):
 ARM_FAULTS = (
     {'id': 'arm-control', 'expect': 'admit', 'needle': 'plan t0 has passed',
      'doc': 'no fault: the arm admits, the W1 disk gate passes, the installer guard refuses the past t0'},
-    {'id': 'triage-edited', 'packet': _edited, 'expect': 'refuse', 'needle': 'triage capture_faults failed',
+    # Needles name today's refusal and the packet-as-pointer design's (the arm's rebuild differs).
+    {'id': 'triage-edited', 'packet': _edited, 'expect': 'refuse', 'needle': ('triage capture_faults failed', 'rebuil'),
      'doc': 'a gating packet entry edited to fail'},
-    {'id': 'triage-stale', 'packet': _stale, 'expect': 'refuse', 'needle': 'missing or wrong schema',
+    {'id': 'triage-stale', 'packet': _stale, 'expect': 'refuse', 'needle': ('missing or wrong schema', 'rebuil'),
      'doc': 'a pre-R12 packet (no schema, no full_desk_gate)'},
     {'id': 'receipt-digest-mismatch', 'setup': 'receipt_clone', 'expect': 'refuse_before_arm',
      'needle': 'digest drift', 'doc': 'one receipt-bound file differs by one byte in a disposable clone'},
@@ -697,16 +698,17 @@ def find_bundle(state, run_id):
 def judge_arm_fault(fault, rc, text, arm, state):
     installed = bool((state.get('install') or {}).get('argv'))
     expect = fault['expect']
-    needle = fault['needle']
+    needles = fault['needle'] if isinstance(fault['needle'], (tuple, list)) else (fault['needle'],)
+    found = lambda haystack: any(n in haystack for n in needles)
     if expect == 'admit':
-        ok = rc != 0 and bool(arm and arm.get('admitted')) and needle in text and not installed
+        ok = rc != 0 and bool(arm and arm.get('admitted')) and found(text) and not installed
     elif expect == 'refuse':
         ok = (rc != 0 and arm is not None and arm.get('admitted') is False and not installed
-              and needle in json.dumps(arm.get('reasons') or []) + text)
+              and found(json.dumps(arm.get('reasons') or []) + text))
     elif expect == 'refuse_before_arm':
-        ok = rc != 0 and arm is None and not installed and needle in text
+        ok = rc != 0 and arm is None and not installed and found(text)
     elif expect == 'usage':
-        ok = rc == 2 and arm is None and not installed and needle in text
+        ok = rc == 2 and arm is None and not installed and found(text)
     else:
         ok = False
     return {'outcome': 'pass' if ok else 'fail', 'installer_called': installed}

@@ -26,6 +26,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -44,8 +45,8 @@ REQUIRED_INSTALL_FLAGS = ('--w1-disk-config', '--obc-off-attested-by', '--batter
 PENDING_MARKERS = ('PENDING', 'BLOCKED', 'not derivable yet', 'registration_receipt', 'is still pending',
                    'U3 ', 'WP19', 'source must be', 'lead signature')
 GAP_REFS = {
-    'triage-staleness': 'G1 (v4 fixer): the next-arm packet is not bound to the LATEST committed window record',
-    'triage-edited-bytes': 'G1b (Sol, v4 fixer): the packet bytes are not bound to the committed packet',
+    'packet-rebuild': 'G1 (v4 fixer, lead ruling): the arm must rebuild the packet and require canonical equality',
+    'packet-tamper': 'G1b (v4 fixer, lead ruling): any field differing from the rebuild, or a chain hole, must refuse',
     'r1-w1-chain': 'G2 (v4 fixer): R1-TO-W1-CHAIN.md runs kit --check without regenerating the kit',
     'km003c-crash-radius': 'G3 (v4 fixer): a killed reader voids DC for every earlier member of its stream',
     'cal-escalation-exit': 'Opus cold review MED-2(a): escalate_to_lead needs a lead-ruling input',
@@ -192,7 +193,8 @@ def triage_packet(*, previous='R1', role=None, windows=None, overrides=None, rec
         na = previous == 'R1' and row['first_window_na']
         checks[row['id']] = {'status': 'not_applicable' if na else 'pass', 'basis': 'w1-prequal synthetic'}
     packet = {'schema': cad.TRIAGE_SCHEMA, 'previous_window': previous, 'next_window_role': role,
-              'record_commit': record_commit, 'last_desk_passed_artifact_set_sha256': desk_digest,
+              'record_commit': record_commit, 'record_path': 'records/synthetic/record.json',
+              'record_sha256': 'c' * 64, 'last_desk_passed_artifact_set_sha256': desk_digest,
               'calibration_windows': list(windows or ()), 'lead_rulings': list(rulings or ()), 'checks': checks}
     for key, value in (overrides or {}).items():
         packet[key] = value
@@ -270,9 +272,24 @@ def arm_fixture(ctx, name, *, now, t0_offset_s=3600):
 
 
 def fixture_packet(base, **kwargs):
-    """The passing W1 packet bound to the fixture's committed R1 record and desk digest."""
-    return triage_packet(record_commit=(Path(base) / 'record_commit').read_text(),
-                         desk_digest=(Path(base) / 'desk_digest').read_text(), **kwargs)
+    """The W1 pointer packet naming the fixture's committed R1 record (path, sha256, commit) and desk digest."""
+    record = Path(base) / 'measurement/records/2026-11-08-align-v4-R1/NOTE.md'
+    commit = (Path(base) / 'record_commit').read_text()
+    packet = triage_packet(record_commit=commit, desk_digest=(Path(base) / 'desk_digest').read_text(), **kwargs)
+    packet.update(record_path='records/2026-11-08-align-v4-R1/NOTE.md',
+                  record_sha256=hashlib.sha256(record.read_bytes()).hexdigest(),
+                  expires_at_epoch_s=int(time.time()) + 1800, pushed_tip=commit,
+                  packet_preflight={'producer': 'w1-prequal synthetic'})
+    return packet
+
+
+def valid_packet(ctx, base, now):
+    """The packet the production arm accepts for the fixture: its own rebuild when it rebuilds, else the pointer."""
+    pointer = fixture_packet(base)
+    rebuilt = _find_rebuilt(_arm_file(ctx, Path(base) / 'measurement', pointer, now=now))
+    if rebuilt is None:
+        return pointer
+    return {**rebuilt, **{k: pointer[k] for k in PACKET_IGNORED if k in pointer}}
 
 
 def run_install(ctx, session, disk, packet, *, host, args_override=None, drop=(), now=None, kind='completed'):
@@ -335,7 +352,7 @@ def check_arm_cli(ctx):
     now = time.time()
 
     def packet(base, mutate=None):
-        value = fixture_packet(base)
+        value = valid_packet(ctx, base, now)
         if mutate:
             mutate(value)
         return value
@@ -403,70 +420,198 @@ def _arm_on_records(ctx, measurement, packet_or_path, *, now):
                                       battery_log=log, now=lambda: now, next_arm_triage=packet_or_path)
 
 
-def _series_repo(ctx, name):
+# --- Packet-as-pointer design (lead ruling, 2026-11-08): the ARM REBUILDS the next-arm packet
+# deterministically from the identities it names (record path and commit, series ledger, kit,
+# receipt, lead rulings) and requires canonical equality, ignoring only these fields. Expiry is
+# mandatory; window records are hash-chained to their predecessor; zero-capture retries are C3#2.
+PACKET_IGNORED = ('pushed_tip', 'packet_preflight')
+SERIES = (('C1', 22), ('C2', 22), ('C3#1', 0), ('C3#2', 22))     # (attempt id, captured members)
+
+
+def _series_records(ctx, name):
+    """A git measurement root holding a hash-chained window-record series with a zero-capture retry."""
     from joulewise.align.apple import v4_registration as reg
     os.environ.setdefault('JOULEWISE_HOST_STATE_DIR', str(ctx.work / 'host-state'))
     Path(os.environ['JOULEWISE_HOST_STATE_DIR']).mkdir(parents=True, exist_ok=True)
-    measurement = ctx.work / f'{name}-{time.monotonic_ns()}'
-    commits = _git_record_repo(measurement, ['C1', 'C2', 'C3'])
-    return measurement, commits, reg.artifact_set_digest(measurement)
+    root = ctx.work / f'{name}-{time.monotonic_ns()}'
+    root.mkdir(parents=True)
+    env = {**os.environ, 'GIT_AUTHOR_NAME': 'prequal', 'GIT_AUTHOR_EMAIL': 'prequal@invalid',
+           'GIT_COMMITTER_NAME': 'prequal', 'GIT_COMMITTER_EMAIL': 'prequal@invalid'}
+    run = lambda *a: subprocess.run(['git', '-C', str(root), *a], capture_output=True, text=True, check=True,
+                                    env=env, timeout=60)
+    run('init', '-q')
+    run('config', 'commit.gpgsign', 'false')
+    previous, records = None, []
+    for attempt, captured in SERIES:
+        window = attempt.split('#')[0]
+        rows = {'spam': 7, 'bank': 7} if captured else {'spam': 0, 'bank': 0}
+        record = {'schema': 'joulewise.align_v4.window_record.v1', 'window': window, 'attempt': attempt,
+                  'role': 'calibration', 'status': 'final', 'captured_members': captured, 'eligible_benign': rows,
+                  'predecessor_sha256': previous}
+        path = Path('records') / f'2026-11-08-align-v4-{attempt.replace("#", "-attempt")}' / 'record.json'
+        (root / path).parent.mkdir(parents=True)
+        raw = (json.dumps(record, indent=2, sort_keys=True) + '\n').encode()
+        (root / path).write_bytes(raw)
+        run('add', '-A')
+        run('commit', '-q', '-m', f'record {attempt}')
+        previous = hashlib.sha256(raw).hexdigest()
+        records.append({'attempt': attempt, 'path': path.as_posix(), 'sha256': previous,
+                        'commit': run('rev-parse', 'HEAD').stdout.strip(), 'row': record})
+    return root, records, reg.artifact_set_digest(root)
 
 
-@check('triage-staleness', 'G1: a well-formed next-arm packet for an EARLIER window (its record committed, but '
-       'not the latest window record) is refused by the production arm', gates='w1')
-def check_triage_staleness(ctx):
-    """Property for the fixer: with records C1-C3 committed, the C3 packet admits and the C2 packet refuses."""
-    measurement, commits, digest = _series_repo(ctx, 'staleness-repo')
-    now = time.time()
-    rows = [_window(f'C{i}') for i in (1, 2, 3)]
-    fresh = triage_packet(previous='C3', role='calibration', windows=rows, record_commit=commits['C3'],
-                          desk_digest=digest)
-    stale = triage_packet(previous='C2', role='calibration', windows=rows[:2], record_commit=commits['C2'],
-                          desk_digest=digest)
-    verdicts = {}
-    for name, value in (('fresh', fresh), ('stale', stale)):
-        arm = _arm_on_records(ctx, measurement, value, now=now)
-        verdicts[name] = {'admitted': arm['admitted'], 'reasons': arm['reasons']}
-    if not verdicts['fresh']['admitted']:
-        return result(FAIL, 'the fresh packet for the latest record is refused: '
-                      + '; '.join(verdicts['fresh']['reasons']), verdicts=verdicts)
-    if verdicts['stale']['admitted']:
-        return result(FAIL, 'a well-formed packet for the earlier window C2 (record_commit exists) admits after C3 '
-                      'was committed: record_commit is checked for existence only. ' + GAP_REFS['triage-staleness'],
-                      verdicts=verdicts)
-    return result(PASS, 'the stale C2 packet is refused; the fresh C3 packet admits', verdicts=verdicts)
-
-
-@check('triage-edited-bytes', 'G1b (Sol): a copy of the committed packet with edited basis text (all statuses '
-       'still valid) is refused, while the committed packet itself admits', gates='w1')
-def check_triage_edited_bytes(ctx):
-    """Property for the fixer: the packet committed with the record admits; any byte edit refuses."""
-    measurement, commits, digest = _series_repo(ctx, 'edited-repo')
-    rows = [_window(f'C{i}') for i in (1, 2, 3)]
-    packet = triage_packet(previous='C3', role='calibration', windows=rows, record_commit=commits['C3'],
+def _pointer(records, digest, now):
+    """The best packet a producer can build: it names the last record; the arm's rebuild is the authority."""
+    last = records[-1]
+    windows = [{'window': r['attempt'], 'status': 'final', 'captured_members': r['row']['captured_members'],
+                'eligible_benign': r['row']['eligible_benign']} for r in records]
+    packet = triage_packet(previous='C3', role='calibration', windows=windows, record_commit=last['commit'],
                            desk_digest=digest)
-    committed = measurement / 'records/2026-11-08-align-v4-C3/next_arm_triage.json'
-    committed.write_text(json.dumps(packet, indent=2, sort_keys=True) + '\n')
-    env = {**os.environ, 'GIT_AUTHOR_NAME': 'p', 'GIT_AUTHOR_EMAIL': 'p@invalid', 'GIT_COMMITTER_NAME': 'p',
-           'GIT_COMMITTER_EMAIL': 'p@invalid'}
-    subprocess.run(['git', '-C', str(measurement), 'add', '-A'], check=True, capture_output=True, env=env)
-    subprocess.run(['git', '-C', str(measurement), 'commit', '-q', '-m', 'C3 packet'], check=True,
-                   capture_output=True, env=env)
-    edited = json.loads(committed.read_text())
-    edited['checks']['capture_faults']['basis'] = 'edited after commit: X4 collector death omitted'
-    copy_path = ctx.work / 'edited-packet.json'
-    copy_path.write_text(json.dumps(edited, indent=2, sort_keys=True) + '\n')
+    packet.update(record_path=last['path'], record_sha256=last['sha256'], expires_at_epoch_s=int(now) + 1800,
+                  pushed_tip=last['commit'], packet_preflight={'producer': 'w1-prequal synthetic'})
+    return packet
+
+
+def _find_rebuilt(value, depth=0):
+    """The packet the arm rebuilt, as retained in its arm record (any key naming a rebuild)."""
+    if depth > 6:
+        return None
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if 'rebuil' in str(key).lower():
+                if isinstance(item, dict) and ('schema' in item or 'checks' in item):
+                    return item
+                if isinstance(item, dict) and isinstance(item.get('packet'), dict):
+                    return item['packet']
+        for item in value.values():
+            found = _find_rebuilt(item, depth + 1)
+            if found is not None:
+                return found
+    return None
+
+
+def _arm_file(ctx, measurement, packet, *, now):
+    path = ctx.work / f'packet-{time.monotonic_ns()}.json'
+    path.write_text(json.dumps(packet, indent=2, sort_keys=True) + '\n')
+    return _arm_on_records(ctx, measurement, path, now=now)
+
+
+def _rebuild(ctx, name):
+    """Series records, the pointer packet, the arm's verdict on it and the packet the arm rebuilt."""
     now = time.time()
-    verdicts = {name: _arm_on_records(ctx, measurement, path, now=now)
-                for name, path in (('committed', committed), ('edited', copy_path))}
-    verdicts = {k: {'admitted': v['admitted'], 'reasons': v['reasons']} for k, v in verdicts.items()}
-    if not verdicts['committed']['admitted']:
-        return result(FAIL, 'the committed packet is refused: ' + '; '.join(verdicts['committed']['reasons']),
-                      verdicts=verdicts)
-    if verdicts['edited']['admitted']:
-        return result(FAIL, 'a packet whose basis text was edited after commit (statuses valid) admits. '
-                      + GAP_REFS['triage-edited-bytes'], verdicts=verdicts)
-    return result(PASS, 'the edited packet is refused; the committed packet admits', verdicts=verdicts)
+    root, records, digest = _series_records(ctx, name)
+    pointer = _pointer(records, digest, now)
+    arm = _arm_file(ctx, root, pointer, now=now)
+    return root, records, now, pointer, arm, _find_rebuilt(arm)
+
+
+def _mutations(packet):
+    """Every single-field change to a packet (ignored fields excluded), plus additions and removals."""
+    def bump(value):
+        if isinstance(value, bool):
+            return not value
+        if isinstance(value, (int, float)):
+            return value + 1
+        if isinstance(value, str):
+            return value + 'x' if not re.fullmatch(r'[0-9a-f]{40,64}', value) else ('f' if value[0] != 'f' else 'e') + value[1:]
+        if isinstance(value, list):
+            return value[:-1] if value else [{'injected': True}]
+        if isinstance(value, dict):
+            return {**value, 'injected': True}
+        return 'injected' if value is None else None
+    for key in sorted(packet):
+        if key in PACKET_IGNORED:
+            continue
+        yield f'changed {key}', {**packet, key: bump(packet[key])}
+        yield f'removed {key}', {k: v for k, v in packet.items() if k != key}
+    yield 'added field', {**packet, 'injected_field': 'x'}
+    checks = packet.get('checks')
+    if isinstance(checks, dict) and checks:
+        name = sorted(checks)[0]
+        edited = copy.deepcopy(packet)
+        if isinstance(edited['checks'][name], dict):
+            edited['checks'][name]['basis'] = str(edited['checks'][name].get('basis')) + ' (edited)'
+            yield f'edited basis text of {name}', edited
+
+
+def _omit_attempt(packet, attempt='C3#1'):
+    """The packet with every list element naming ``attempt`` removed (a chain with a hole)."""
+    removed = [0]
+
+    def walk(value):
+        if isinstance(value, dict):
+            return {k: walk(v) for k, v in value.items()}
+        if isinstance(value, list):
+            kept = [walk(v) for v in value if attempt not in json.dumps(v)]
+            removed[0] += len(value) - len(kept)
+            return kept
+        return value
+    out = walk(packet)
+    return out, removed[0]
+
+
+
+@check('packet-rebuild', 'G1 (packet as pointer): the arm rebuilds the next-arm packet from the identities it names '
+       'and a valid rebuild admits; ignored fields (pushed_tip, packet_preflight) may differ; an expired packet '
+       'is refused', gates='w1')
+def check_packet_rebuild(ctx):
+    root, records, now, pointer, arm, rebuilt = _rebuild(ctx, 'rebuild')
+    evidence = {'pointer_verdict': {'admitted': arm['admitted'], 'reasons': arm['reasons']},
+                'series': [r['attempt'] for r in records]}
+    if rebuilt is None:
+        return result(FAIL, 'the arm record carries no rebuilt packet: the arm does not rebuild the next-arm '
+                      'packet from the identities it names (lead ruling: the packet is only a pointer). '
+                      + GAP_REFS['packet-rebuild'], **evidence)
+    valid = {**rebuilt, **{k: pointer[k] for k in PACKET_IGNORED if k in pointer}}
+    verdicts = {'rebuild': _arm_file(ctx, root, valid, now=now)}
+    verdicts['ignored-fields-differ'] = _arm_file(ctx, root, {**valid, 'pushed_tip': '0' * 40,
+                                                                  'packet_preflight': {'other': True}}, now=now)
+    verdicts['expired'] = _arm_file(ctx, root, valid, now=now + 30 * 86400)
+    evidence['verdicts'] = {k: {'admitted': v['admitted'], 'reasons': v['reasons']} for k, v in verdicts.items()}
+    failures = []
+    if not verdicts['rebuild']['admitted']:
+        failures.append('the arm refuses its own rebuild: ' + '; '.join(verdicts['rebuild']['reasons'])[:400])
+    if not verdicts['ignored-fields-differ']['admitted']:
+        failures.append('a difference only in pushed_tip/packet_preflight is refused')
+    if verdicts['expired']['admitted']:
+        failures.append('the same packet admits 30 days later: expiry is not enforced')
+    if failures:
+        return result(FAIL, '; '.join(failures), **evidence)
+    return result(PASS, 'the arm rebuilds the packet; a valid rebuild admits, ignored fields may differ, an '
+                  'expired packet refuses', **evidence)
+
+
+@check('packet-tamper', 'G1b (packet as pointer): a packet that differs from the arm\'s rebuild in ANY field '
+       '(changed, removed, added, edited basis text) is refused, and so is a chain that omits an attempt '
+       '(zero-capture C3#1 before C3#2)', gates='w1')
+def check_packet_tamper(ctx):
+    root, records, now, pointer, arm, rebuilt = _rebuild(ctx, 'tamper')
+    if rebuilt is None:
+        return result(FAIL, 'the arm record carries no rebuilt packet, so no packet can be compared with the arm\'s '
+                      'rebuild; today a field the arm does not re-derive is trusted as supplied. '
+                      + GAP_REFS['packet-tamper'], pointer_verdict={'admitted': arm['admitted'],
+                                                                   'reasons': arm['reasons']})
+    valid = {**rebuilt, **{k: pointer[k] for k in PACKET_IGNORED if k in pointer}}
+    admitted_mutations = []
+    tried = 0
+    for label, mutated in _mutations(valid):
+        tried += 1
+        if _arm_file(ctx, root, mutated, now=now)['admitted']:
+            admitted_mutations.append(label)
+    holed, removed = _omit_attempt(valid)
+    hole = _arm_file(ctx, root, holed, now=now) if removed else None
+    evidence = {'mutations_tried': tried, 'admitted_mutations': admitted_mutations, 'omitted_elements': removed,
+                'omitted_attempt_admitted': hole['admitted'] if hole else None}
+    failures = []
+    if admitted_mutations:
+        failures.append(f'{len(admitted_mutations)} of {tried} single-field changes admit: {admitted_mutations[:8]}')
+    if not removed:
+        failures.append('the rebuilt packet names no C3#1 attempt: the chain does not list zero-capture attempts')
+    elif hole['admitted']:
+        failures.append('a packet whose chain omits attempt C3#1 admits')
+    if failures:
+        return result(FAIL, '; '.join(failures), **evidence)
+    return result(PASS, f'all {tried} single-field changes and the omitted attempt are refused', **evidence)
 
 
 def _window(name, spam=7, bank=7, status='final', captured=22):
@@ -513,7 +658,7 @@ def check_calibration_stop(ctx):
         pass
     internal = {'series_powermode': True, 'external_volume': True, 'charging_battery': True}
     bound = dict(record_commit='a' * 40, desk_digest='b' * 64)
-    identity = {'artifact_set_sha256': 'b' * 64, 'record_commit_exists': True}
+    identity = {'artifact_set_sha256': 'b' * 64, 'record_commit_exists': True, 'record_bound': True}
     arm_cases = {
         'W1 arm (previous R1)': (triage_packet(**bound), True),
         'C1 arm after W1': (triage_packet(previous='W1', role='calibration', windows=[], **bound), True),
@@ -550,7 +695,7 @@ def check_cal_escalation_exit(ctx):
                                record_commit='a' * 40, desk_digest='b' * 64)
         arm = cad.next_arm_triage(packet, {'series_powermode': True, 'external_volume': True,
                                            'charging_battery': True},
-                                  {'artifact_set_sha256': 'b' * 64, 'record_commit_exists': True})
+                                  {'artifact_set_sha256': 'b' * 64, 'record_commit_exists': True, 'record_bound': True})
         trace['triage_admitted'] = arm['admitted']
         trace['triage_reasons'] = arm['reasons']
     except (ValueError, TypeError, AttributeError) as exc:
@@ -1353,7 +1498,7 @@ def check_smoke_kit(ctx):
             rows.append({'fault': fault['id'], 'checked': 'native only (needs a registered receipt)'})
             continue
         base, session, disk = arm_fixture(ctx, 'smoke-' + fault['id'], now=now, t0_offset_s=-600)
-        packet = (fault.get('packet') or copy.deepcopy)(fixture_packet(base))
+        packet = (fault.get('packet') or copy.deepcopy)(valid_packet(ctx, base, now))
         host = FakeHost(extra_mount=fault.get('setup') == 'dmg')
         out = run_install(ctx, session, disk, packet, host=host, args_override=fault.get('args'),
                           drop=fault.get('drop', ()), now=now, kind=fault.get('battery', 'completed'))
@@ -1417,30 +1562,56 @@ def check_arm_route(ctx):
         return result(FAIL, f'no arm route declared for {ctx.next}' + (f': {why}' if why else '')
                       + ' (RUN_STATE 218: this is the fault that blocked R1)')
     failures, steps = [], []
+    base, pinned = ctx.repo, route.get('commit')
+    clone = None
+    if pinned and pinned != ctx.commit:
+        # A pinned route (the R1 route lives on its own armed commit): verify there, never on the candidate.
+        present = ctx.run(['git', '-C', str(ctx.repo), 'cat-file', '-e', f'{pinned}^{{commit}}'], timeout=60)
+        if present.returncode:
+            return result(FAIL, f'{ctx.next} route is pinned at {pinned} ({route.get("ref")}), which is not in this '
+                          f'repository: git fetch origin {pinned}')
+        saved = ctx.commit
+        ctx.commit = pinned
+        try:
+            clone = base = scratch_clone(ctx, f'route-{ctx.next}')
+        finally:
+            ctx.commit = saved
+    try:
+        failures, steps = _route_steps(ctx, route, base)
+    finally:
+        if clone is not None:
+            shutil.rmtree(clone, ignore_errors=True)
+    kind = route.get('receipt_class')
+    if kind:
+        from joulewise import night_gate
+        if getattr(night_gate, kind, None) != kind:
+            failures.append(f'run_night does not know receipt class {kind}')
+    where = f' (pinned at {pinned[:12]}, {route.get("ref")})' if pinned else ''
+    armed = route.get('armed') or {}
+    if failures:
+        return result(FAIL, '; '.join(failures), steps=steps)
+    return result(PASS, f'{ctx.next} route declared{where}; {len(route.get("steps", []))} steps present and '
+                  f'answering' + (f'; armed as {armed.get("plan_id")}' if armed else ''), steps=steps, armed=armed)
+
+
+def _route_steps(ctx, route, base):
+    failures, steps = [], []
     for step in route.get('steps', []):
         for rel in step.get('requires', []):
-            if not (ctx.repo / rel).exists():
+            if not (base / rel).exists():
                 failures.append(f'{step["id"]}: missing {rel}')
         probe = step.get('probe')
         if probe:
-            argv = [ctx.python if a == '{python}' else str(ctx.repo / a) if a.startswith(('scripts/', 'joulewise/'))
+            argv = [ctx.python if a == '{python}' else str(base / a) if a.startswith(('scripts/', 'joulewise/'))
                     else a for a in probe['argv']]
-            out = ctx.run(argv, cwd=ctx.repo, timeout=120)
+            out = ctx.run(argv, cwd=base, timeout=120)
             text = (out.stdout or '') + (out.stderr or '')
             missing = [n for n in probe.get('expect_text', []) if n not in text]
             ok = out.returncode in probe.get('expect_rc', [0]) and not missing
             steps.append({'step': step['id'], 'rc': out.returncode, 'missing': missing})
             if not ok:
                 failures.append(f'{step["id"]}: rc={out.returncode} missing={missing} {tail(text, 200)}')
-    kind = route.get('receipt_class')
-    if kind:
-        from joulewise import night_gate
-        if getattr(night_gate, kind, None) != kind:
-            failures.append(f'run_night does not know receipt class {kind}')
-    if failures:
-        return result(FAIL, '; '.join(failures), steps=steps)
-    return result(PASS, f'{ctx.next} route declared; {len(route.get("steps", []))} steps present and answering',
-                  steps=steps)
+    return failures, steps
 
 
 # ---------------------------------------------------------------------------

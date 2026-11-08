@@ -136,3 +136,18 @@ strict-tier receipt work.
 | Contender | Sol's dry-arm refusal is dropped. The in-window `contention.request_overlap` is required. |
 | G1/G1b/G2/G3 | Handed to the v4 fixer. The checks are written as behavioural properties, so they go green on the fix: G1 (C2 packet refused after C3), G1b (an edited copy of the committed packet refused), G2 (the runbook's shell block regenerates before `--check`), G3 (a pre-kill member keeps DC). |
 | Opt-in audit | The base launcher check is semantic (green against `origin/main`). The `optin-required` WARN row lists 134 opt-in-only required tests; 14 are run here (WP22). |
+
+### 6a. Corrections (2026-11-08, later)
+
+- **R1 is armed** (RUN_STATE 225/227). Its route is pinned in `arm_routes.json` at `20e9edbc4`, and
+  `arm-route` verifies it there. The next measurement is W1.
+- **Packet as pointer.** G1 and G1b are rewritten as behaviour checks for the lead's design: the arm
+  rebuilds the packet, requires canonical equality (ignoring only `pushed_tip` and `packet_preflight`),
+  requires an expiry, and requires a hash-chained record series with `C3#2`-style retries.
+  - `packet-rebuild` replaces `triage-staleness`. A valid rebuild must admit, ignored fields may differ,
+    and an expired packet must refuse.
+  - `packet-tamper` replaces `triage-edited-bytes`. Any field differing from the rebuild must refuse, and
+    so must a chain that omits `C3#1`.
+  - Neither check assumes committed packet files. Tests prove both go green on a stand-in rebuilding arm
+    and catch a lenient one.
+- **v4-r11 merged again at `8d0dabc73`.** G2 (`r1-w1-chain`) and G3 (`km003c-crash-radius`) are now green.

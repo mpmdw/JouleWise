@@ -14,7 +14,8 @@ blocks". A fault that a 30-45 min check can catch must never cost a 12 h W1/D wi
   - the series-manifest binding;
   - transcript and process-group discipline.
 
-It lives on `align/2026-11-08-w1-smoke-merged`, merged onto `align/2026-11-08-v4-r11` @ `2cce80ede`.
+It lives on `align/2026-11-08-w1-smoke-merged`, merged onto `align/2026-11-08-v4-r11` @ `8d0dabc73`. That head
+carries the delta2 fixes: strict-by-default receipt, interim G1 record binding, G2, G3 and top-up.
 
 **Lead rulings applied:**
 1. Opus owns the single merged kit, and the command folds into `scripts/align_v4_prequal.py`.
@@ -23,7 +24,20 @@ It lives on `align/2026-11-08-w1-smoke-merged`, merged onto `align/2026-11-08-v4
    `runs/` and custody roots. A test fails if any smoke path resolves inside production.
 4. Sol's dry-arm contention expectation is dropped. Contention is tested by an in-window contender that
    must produce the flag.
-5. G1, G2 and G3 go to the v4 fixer. Their PREQUAL checks go green when the fixes land.
+5. G1, G2 and G3 go to the v4 fixer. Their PREQUAL checks go green when the fixes land. G2 and G3 are
+   green on `8d0dabc73`.
+7. **Packet as pointer (lead ruling, 2026-11-08).**
+   - The arm rebuilds the next-arm packet deterministically from the identities it names: record path and
+     commit, series ledger, kit, receipt and lead rulings.
+   - The arm requires canonical equality, ignoring only `pushed_tip` and `packet_preflight`.
+   - Expiry is mandatory.
+   - Window records are hash-chained to their predecessor, and zero-capture retries take ids such as
+     `C3#2`.
+   - G1 and G1b are rewritten as behaviour checks for this design. They do not assume that packets are
+     committed files.
+8. **The next measurement is W1.** R1 is armed (RUN_STATE 225/227: `lane/2026-11-08-r1-arm-fixes` @
+   `20e9edbc4`, plan `align-r1-20261108T0917Z`). Its route is pinned in `arm_routes.json`.
+   `--w1-next w1` is the gate that matters now.
 6. PREQUAL's base launcher check compares `runner.json` semantically, and a WARN row lists the required
    tests that only run behind an opt-in (opt-in audit 2026-11-08).
 
@@ -73,22 +87,22 @@ the launcher's own dwell test seam (`JOULEWISE_R0_TEST_DISPLAY_DWELL_S=0.1`) and
 | Check | Gates | What it runs | Goes green when |
 |---|---|---|---|
 | `arm-cli` | w1 | `align_v4_session.py install --help`, then `install` without evidence (argparse must name every required flag: `--w1-disk-config`, `--obc-off-attested-by`, `--battery-log`, `--next-arm-triage`). Then the production `main(['install', …])` through `h.install` against a fake host, in 12 cases. The measurement root is a git repo with a committed R1 record. The battery log is synthetic. The cases: control; triage missing, edited or pre-R12; `record_commit` unknown; top-up with no charge, stale or future-dated; OBC unattested; a disk image mounted; battery charging; powermode mismatch. | The control admits and calls the installer exactly once. The 11 faults each refuse with their documented reason before the installer. |
-| `triage-staleness` | w1 | **G1 property for the fixer.** Records C1-C3 committed in a git measurement root. The production `arm_checks` gets the C3 packet (`record_commit` = C3) and the C2 packet (`record_commit` = C2, a real commit). | The C3 packet admits and the stale C2 packet is refused. |
-| `triage-edited-bytes` | w1 | **G1b (Sol), for the fixer.** The C3 packet is committed at `records/<C3 record>/next_arm_triage.json`. The arm reads that committed file, and then a copy whose `basis` text was edited (all statuses still valid). | The committed packet admits and the edited copy is refused. |
+| `packet-rebuild` | w1 | **G1, packet as pointer.** The fixture is a git measurement root holding a hash-chained window-record series: C1, C2, a zero-capture `C3#1`, then `C3#2`. A producer-style pointer packet names the last record (path, sha256, commit) and carries an expiry, `pushed_tip` and `packet_preflight`. The production `arm_checks` runs on it, and the packet the arm rebuilt is read from its arm record (any key naming a rebuild). Then three runs: the rebuild itself (must admit); the rebuild with only `pushed_tip` and `packet_preflight` changed (must admit); the rebuild 30 days later (must refuse, because expiry is mandatory). | The arm rebuilds the packet and retains the rebuild in its record. |
+| `packet-tamper` | w1 | **G1b, packet as pointer.** Every single-field change to the arm's rebuild must refuse: each key changed, each key removed, an added key, and edited basis text. The ignored fields are excluded. A chain with a hole must also refuse: the rebuild with every element naming `C3#1` removed. | Canonical equality with the rebuild is enforced, and the chain lists every attempt, `C3#1` included. |
 | `calibration-stop` | w1 | `calibration_stop` over the planned C1-C8 (7/7 per pair, 22 members): the 8 prefixes, zero-capture, escalation, provisional, insufficient, a ninth window, loss of two whole windows (completes) and of three (insufficient). Then 5 triage-integrated arms, with the arm-derived identity. | It is green now. |
 | `cal-escalation-exit` | w1 | MED-2(a): two final zero-capture refusals escalate. Then a signed `lead_rulings` row (`resets: zero_capture_escalation`) resets the count, and the triage admits the next calibration arm. | It is green now. |
 | `kit-ready` | w1 | `align_v4_kit.py --check` on a clean clone of the candidate | The kit is W1-ready (R0 and R1 values filled). |
 | `receipt` | w1 | Three parts. **(Sol)** The static import closure of `endpoint.py`, `run_night.py` and `align_v4_session.py` must be covered by `ARTIFACTS`. A validator self-test: an exact receipt is admitted; a digest mismatch and a working-bytes drift are refused. Then the committed receipt via `require_registration`, whose bound commit must be an ancestor of the candidate, with a clean checkout. | The receipt is registered. A receipt cannot contain its own commit, so the merged kit requires the bound commit to be an *ancestor* of the candidate rather than Sol's literal `receipt.commit == candidate`. |
 | `series-manifest` | w1 | **(Sol)** `--series-projection`: one W1, then C1-C8 in order, then tests, with 7/7 benign. It is bound by sha256 to its source manifest, and fixed-8 is checked on it. | The lead freezes and projects the series. |
 | `deadline` | r1 | **(Sol)** `--deadline-projection` of the installed plan: segments × attempts, plus 11,164 s per possible batch encounter, plus bracket/close/harvest. The R1 floors (67,371 s, or 96,427 s with a redo) apply to R1 only. The projection's kind must match `--w1-next`. | The magistrate supplies the projection for the next window's installed plan. |
-| `r1-w1-chain` | w1 | `R1-TO-W1-CHAIN.md` as written, on a lane-shaped synthetic R1 record in a clean clone: exporter, `backfill-x-g`, `backfill-turn-counts`, `derive-contrast` (equal to the kit's re-derivation), `decide`, `kit.require_ready`, then the kit steps the runbook's shell block documents. | **G2.** The runbook adds `python3 scripts/align_v4_kit.py` before `--check`. The check parses the shell block, so it goes green on that doc change alone. |
+| `r1-w1-chain` | w1 | `R1-TO-W1-CHAIN.md` as written, on a lane-shaped synthetic R1 record in a clean clone: exporter, `backfill-x-g`, `backfill-turn-counts`, `derive-contrast` (equal to the kit's re-derivation), `decide`, `kit.require_ready`, then the kit steps the runbook's shell block documents. | **G2.** It is green on `8d0dabc73`: the runbook now regenerates the kit (step 7) before `--check`. |
 | `km003c-launch` | r1 | The real HAZARD_PACK driver with a live sample-writing stand-in meter, run clean and with the reader SIGKILLed mid-chain. Custody hashes and the SIGTERM stop are checked; the reader must restart into `stream-002`; the straddling member must read DC `missing` with `meter.*` flags; the other members must read `available` with rails unchanged. Also the production argv and `require_enabled`. | It is green now. |
-| `km003c-crash-radius` | w1 | **G3.** A member that ended *before* the reader was killed | That member keeps its DC: `km003c.capture_member` gets the monitor-journal offset fallback, or the killed stream keeps a resolvable offset. |
+| `km003c-crash-radius` | w1 | **G3.** A member that ended *before* the reader was killed | It is green on `8d0dabc73` (unclosed-stream salvage). |
 | `w1-window-max` | w1 | The W1 template filled at the planning worst case. Validator = `plan_inputs.window_max_s` = b5 formula. Caps and L1 fit. An AST scan for a `wait_outside_os_batch` call in the W1 entry points' import closure. Then the committed `w1_plan.json`. | The R1-filled `w1_plan.json` is committed. |
 | `wp22-dry-run` | w1 | `JW_WP22_FULL=1 python -m unittest tests.align.test_v4_w1_synthetic` plus the minimal witness | It is green now: HIGH-1 is fixed on `v4-r11`, and the run reports 20 tests OK with 1 expected failure. |
 | `smoke-kit` | w1 | Part B pre-qualified. `isolate()` runs on a stand-in production checkout with a synthetic ledger. Then the production `measurement_view` of the isolated clone, `reduce_view`, `isolation_violations` (must be empty), a planted symlink into production `runs/` (must be caught), the production ledger unchanged, and 6 of 7 arm-fault expectations against the production arm. | It is green now. |
 | `optin-required` | WARN | The opt-in audit ledger (`docs/perf/2026-11-08-optin-audit-results.json`). Every test whose recommendation names PREQUAL and that exists at the candidate runs only behind an opt-in: 134 today. The row names which ones this kit runs (14: WP22, via `wp22-dry-run`). The other 120 need the native MBP, the base PREQUAL or a provisioned fixture. | It never blocks; it keeps that debt visible. |
-| `arm-route` | r1 | `configs/align/v4/arm_routes.json` for `--w1-next`: every step's files exist, its entry point answers, and the receipt class is known | The route is declared. For R1, the ruled R1 route adds its entry (item 218). |
+| `arm-route` | r1 | `configs/align/v4/arm_routes.json` for `--w1-next`: every step's files exist, its entry point answers, and the receipt class is known. A route with a `commit` is *pinned*: its files are verified at that commit and its probes run in a scratch clone of it. R1 is pinned at `20e9edbc4` (armed as `align-r1-20261108T0917Z`). | It is green for both R1 and W1. |
 
 ## Part B: native MBP smoke
 

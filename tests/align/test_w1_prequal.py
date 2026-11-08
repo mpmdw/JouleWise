@@ -94,36 +94,65 @@ class CadenceTests(_Ctx):
         self.assertEqual(row['status'], wp.FAIL)
         self.assertIn('MED-2', row['detail'])
 
-    def test_staleness_gap_is_reported_and_goes_green_when_the_arm_binds_the_latest_record(self):
-        row = self.probe('triage-staleness')
+    def test_packet_rebuild_and_tamper_are_red_until_the_arm_rebuilds(self):
+        for name in ('packet-rebuild', 'packet-tamper'):
+            row = self.probe(name)
+            self.assertEqual(row['status'], wp.FAIL, name)
+            self.assertIn('no rebuilt packet', row['detail'])
+
+    def test_packet_checks_go_green_on_a_rebuilding_arm_and_catch_a_lenient_one(self):
+        from scripts import align_v4_session as session
+        with mock.patch.object(session, 'arm_checks', RebuildingArm()):
+            rebuild, tamper = self.probe('packet-rebuild'), self.probe('packet-tamper')
+        self.assertEqual(rebuild['status'], wp.PASS, rebuild['detail'])
+        self.assertEqual(tamper['status'], wp.PASS, tamper['detail'])
+        self.assertGreater(tamper['evidence']['mutations_tried'], 10)
+        with mock.patch.object(session, 'arm_checks', RebuildingArm(ignore={'record_commit'})):
+            row = self.probe('packet-tamper')
         self.assertEqual(row['status'], wp.FAIL)
-        self.assertTrue(row['evidence']['verdicts']['fresh']['admitted'])
-        self.assertTrue(row['evidence']['verdicts']['stale']['admitted'])
-        from joulewise.align.apple import v4_cadence as cad
-        real = cad.next_arm_triage
-
-        def latest_only(packet, internal, identity=None):      # a stand-in for the G1 fix
-            verdict = real(packet, internal, identity)
-            if packet.get('previous_window') == 'C2':
-                verdict = {**verdict, 'admitted': False, 'reasons': verdict['reasons'] + ['stale record']}
-            return verdict
-        with mock.patch.object(cad, 'next_arm_triage', latest_only):
-            self.assertEqual(self.probe('triage-staleness')['status'], wp.PASS)
-
-    def test_edited_packet_bytes_gap_and_green_on_a_digest_binding(self):
-        row = self.probe('triage-edited-bytes')
+        self.assertTrue(any('record_commit' in m for m in row['evidence']['admitted_mutations']))
+        with mock.patch.object(session, 'arm_checks', RebuildingArm(chain_strict=False)):
+            row = self.probe('packet-tamper')
         self.assertEqual(row['status'], wp.FAIL)
-        self.assertTrue(row['evidence']['verdicts']['committed']['admitted'])
-        from joulewise.align.apple import v4_cadence as cad
-        real = cad.next_arm_triage
+        self.assertIn('omits attempt C3#1', row['detail'])
+        with mock.patch.object(session, 'arm_checks', RebuildingArm(expiry=False)):
+            self.assertIn('expiry is not enforced', self.probe('packet-rebuild')['detail'])
 
-        def digest_bound(packet, internal, identity=None):     # a stand-in for the G1b fix
-            verdict = real(packet, internal, identity)
-            if 'edited after commit' in json.dumps(packet):
-                verdict = {**verdict, 'admitted': False, 'reasons': ['packet bytes differ from the committed packet']}
-            return verdict
-        with mock.patch.object(cad, 'next_arm_triage', digest_bound):
-            self.assertEqual(self.probe('triage-edited-bytes')['status'], wp.PASS)
+
+class RebuildingArm:
+    """A stand-in for the lead-ruled design: rebuild the packet from the repository, canonical equality."""
+
+    def __init__(self, ignore=(), chain_strict=True, expiry=True):
+        self.ignore, self.chain_strict, self.expiry = set(ignore), chain_strict, expiry
+
+    def rebuild(self, root):
+        log = subprocess.run(['git', '-C', str(root), 'log', '--reverse', '--format=%H %ct', '--name-only'],
+                             capture_output=True, text=True, check=True).stdout.split()
+        chain, head, stamp = [], None, None
+        for token in log:
+            if len(token) == 40:
+                head = token
+            elif token.isdigit():
+                stamp = int(token)
+            elif token.endswith('record.json'):
+                chain.append(json.loads((Path(root) / token).read_text())['attempt'])
+        return {'schema': 'joulewise.align_v4.next_arm_triage.v2', 'record_commit': head, 'chain': chain,
+                'expires_at_epoch_s': stamp + 3600, 'checks': {'capture_faults': {'status': 'pass', 'basis': 'b'}}}
+
+    def __call__(self, measurement_root, plan, *, next_arm_triage=None, now=None, **kw):
+        rebuilt = self.rebuild(measurement_root)
+        try:
+            packet = json.loads(Path(next_arm_triage).read_text())
+        except (OSError, ValueError, TypeError):
+            packet = {}
+        strip = lambda p: {k: v for k, v in p.items() if k not in ('pushed_tip', 'packet_preflight') and k not in self.ignore}
+        same = strip(packet) == strip(rebuilt)
+        if not self.chain_strict and packet.get('chain') and set(packet['chain']) <= set(rebuilt['chain']):
+            same = strip({**packet, 'chain': rebuilt['chain']}) == strip(rebuilt)
+        fresh = not self.expiry or (now or __import__('time').time)() < rebuilt['expires_at_epoch_s']
+        ok = same and fresh
+        return {'admitted': ok, 'reasons': [] if ok else ['packet differs from the rebuild or expired'],
+                'next_arm_triage': {'rebuilt_packet': rebuilt}}
 
 
 class PortedSolTests(_Ctx):
@@ -221,10 +250,19 @@ class RouteTests(_Ctx):
         row = self.probe('arm-route')
         self.assertEqual(row['status'], wp.PASS, row['detail'])
 
-    def test_no_r1_route_fails_naming_item_218(self):
+    def test_r1_route_is_pinned_at_its_armed_commit(self):
         row = self.probe('arm-route', next='r1')
-        self.assertEqual(row['status'], wp.FAIL)
-        self.assertIn('218', row['detail'])
+        self.assertEqual(row['status'], wp.PASS, row['detail'])
+        self.assertIn('align-r1-20261108T0917Z', row['detail'])
+        fake = self.tmp / 'repo'
+        (fake / 'configs/align/v4').mkdir(parents=True)
+        (fake / wp.ARM_ROUTES).write_text(json.dumps({'routes': {'r1': {'status': 'declared', 'commit': 'f' * 40,
+                                                                        'steps': []}}}))
+        missing = self.probe('arm-route', next='r1', repo=fake)
+        self.assertEqual(missing['status'], wp.FAIL)
+        self.assertIn('git fetch origin', missing['detail'])
+        (fake / wp.ARM_ROUTES).write_text(json.dumps({'routes': {'r1': {'status': 'none', 'note': 'x'}}}))
+        self.assertIn('218', self.probe('arm-route', next='r1', repo=fake)['detail'])
 
     def test_missing_manifest_or_broken_step_fails(self):
         fake = self.tmp / 'repo'
@@ -373,8 +411,8 @@ class OrchestratorTests(unittest.TestCase):
         self.assertIn('| optin-required | WARN |', wp.table(report))
 
     def test_waivers_and_subsets(self):
-        report = wp.run_all(self.ctx('w1'), spawn=self.rows({'triage-staleness': wp.FAIL}),
-                            waivers={'triage-staleness': 'lead ruling X'})
+        report = wp.run_all(self.ctx('w1'), spawn=self.rows({'packet-rebuild': wp.FAIL}),
+                            waivers={'packet-rebuild': 'lead ruling X'})
         self.assertEqual(report['status'], 'PASS')
         report = wp.run_all(self.ctx('w1'), only={'arm-route'}, spawn=self.rows({}))
         self.assertEqual(report['status'], 'INCOMPLETE')
