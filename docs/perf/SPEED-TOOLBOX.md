@@ -47,6 +47,14 @@ Estimates made from code alone have been 10× off. The finalize and pre-arm buil
    - Witness tests go straight to the fixer.
    - Critical-path jobs get CPU priority on the Air (renice the others).
 
+## Timing receipts: markers only (Ed, 2026-11-08)
+A timing receipt is one appended line at a phase boundary: phase name, `time.monotonic_ns()` and wall-clock time. That is all.
+- **No computation inside a window.** The ledger, durations and attribution are computed afterwards, off the MBP, by `joulewise.align.window_timing`.
+- **Append to journals that are already open.** Use `chain-stages.jsonl` and `events.jsonl`. Create no new files, threads or processes.
+- **No extra fsync inside measured segments.** Markers that fall inside a member are buffered and flushed with the existing stage-boundary sync. Turnaround markers (arm, cool-down, dwell, finalize, offload, push) sit outside measured time.
+- **Keep the marker count to tens per window.** Never emit at sample rate. For scale, the powermetrics stream already writes 10 samples a second.
+- **Within-member phases are already stamped** by the episode code (prefill, decode, tools, gates). Add markers only where the reader reports a gap.
+
 ## Never traded for speed
 - Blinding and preregistration fidelity.
 - Custody digests.
