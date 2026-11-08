@@ -184,7 +184,7 @@ def main(argv=None):
     _write_new(args.output, result)
     if args.command in ('pilot', 'r1'):
         print(json.dumps({'pairs': len(result['pairs']),
-                          'unavailable': result.get('unavailable_sessions', result.get('unavailable'))}, default=str))
+                          'unavailable': len(result.get('unavailable_sessions', result.get('unavailable')))}))
     return 0
 
 

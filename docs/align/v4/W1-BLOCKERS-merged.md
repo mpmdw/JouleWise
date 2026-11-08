@@ -65,8 +65,14 @@ A Sol executing review follows.
 - **Assist** is disclosed and the member is retained.
 - **Consequence.**
   1. The B (or unobserved) members are excluded and every other member is kept.
-  2. `v4_B_bar` is false, but `full_desk_gate_pass(checks)` ignores it. That
-     function defines what the `full_desk_gate` packet status means.
+  2. `v4_B_bar` is false. The full-desk verdict is evidence-aware (Sol2 review
+     S2-01): `full_desk_gate_pass(checks, members)` ignores `v4_B_bar`, and it
+     re-derives `no_member_exclusions` and `chain_eligibility` with
+     charging-only exclusions (`battery.member_span`, `battery.accumulator_excursion`)
+     not counted. Any other exclusion, including `battery.unmeasured`, still
+     fails the gate. `align_v4_session.desk` writes the verdict as
+     `full_desk_gate` in `desk.json`. That verdict is what the `full_desk_gate`
+     packet status means.
   3. The next arm waits only for the existing arm-computed `charging_battery`
      check: fresh admissible `v4_topup` evidence from `--battery-log`, plus
      `--obc-off-attested-by`.
@@ -99,12 +105,19 @@ placeholders that the lead or magistrate fills in. No agent opens them.
 | 12. Commit and receipt | Air | after steps 10 and 11 | Commit everything above, then regenerate the registration receipt at that commit. It binds `u3_bar.json`, the sources, the gate and the policy. |
 
 Paths under `u3_sources/` are relative to `configs/campaigns/align_v4/registration/`.
-Steps 4-5 print counts and unavailable sessions only.
+Steps 4-5 print two integers to stdout, `pairs` and `unavailable`, and nothing else. The values and reasons go only to the named output file (Sol1 `abe2d4164`, Sol2 S2-02).
 
 Steps 1-3 and 11 can be done during R1. Steps 4-10 fit in the R1→W1 gap. Only
 steps 4-5 touch measurement bundles.
 
-## 5. Verification
+## 5. Compressed bundles
+
+`read_episode_bundle` refuses a bundle whose `outputs/align_episode.json` exists
+only as `.zst`: `BundleReader` raises `CompressedBundleRequiresRestore`. Restore
+first; there is no silent fallback. `CompressedEpisodeTests` checks the refusal
+and that the bundle reads again after restore.
+
+## 6. Verification
 
 The final results are in the commit message: every related module was run one
 per process, followed by `JW_WP22_FULL=1 test_v4_w1_synthetic`.

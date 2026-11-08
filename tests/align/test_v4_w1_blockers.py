@@ -212,6 +212,27 @@ class ExportTests(unittest.TestCase):
         self.assertEqual(result['unavailable_sessions'][0]['session'], 'p5')
 
 
+class CompressedEpisodeTests(unittest.TestCase):
+    @unittest.skipUnless(__import__('shutil').which('zstd') or Path('/opt/homebrew/bin/zstd').exists(), 'zstd CLI')
+    def test_zstd_compressed_episode_is_refused_explicitly_then_reads_after_restore(self):
+        from joulewise.align.apple.workload import read_episode_bundle
+        from joulewise.authentication_io import CompressedBundleRequiresRestore
+        from joulewise.desk_compress import zstd_path
+        from tests.align.test_thermal_gate import NativeIntegrationTests
+        helper = NativeIntegrationTests('test_real_workload_endpoint_budget_and_held_stream_keep_exact_tokens')
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle, status, _ = helper.held_run(Path(tmp)/'member')
+            plain = Path(bundle)/'outputs/align_episode.json'
+            before = read_episode_bundle(bundle)
+            subprocess.run([zstd_path(), '-q', '--rm', str(plain)], check=True)
+            self.assertFalse(plain.exists())
+            self.assertTrue(Path(str(plain)+'.zst').exists())
+            with self.assertRaises(CompressedBundleRequiresRestore):
+                read_episode_bundle(bundle)
+            subprocess.run([zstd_path(), '-q', '-d', '--rm', str(plain)+'.zst'], check=True)
+            self.assertEqual(read_episode_bundle(bundle).episode_id, before.episode_id)
+
+
 class BatteryTests(unittest.TestCase):
     def test_raw_span_join_observes_idle_charging_assist_missing_and_malformed(self):
         from joulewise.align.apple import v4_battery as battery

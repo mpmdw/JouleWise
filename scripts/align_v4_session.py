@@ -142,14 +142,48 @@ def battery_windows_pass(windows):
     return bool(windows) and all(w.get('bar_pass') is True for w in windows.values())
 
 
-# Lead ruling 9 (W1-BLOCKERS-AGREEMENT): a false v4_B_bar is recorded but does not
-# block the full-desk gate; v4_cadence ``battery_window`` governs the resume.
+# Lead ruling 9 (R14; W1-BLOCKERS-AGREEMENT): B is an operational stop with automatic
+# resume. A false v4_B_bar is recorded but does not block the full-desk gate, and a
+# member excluded ONLY for charging (v4_battery.EXCLUDE) is removed from the window
+# without failing the common desk's exclusion-derived checks (Sol2 review S2-01).
+# v4_cadence ``battery_window`` governs the resume.
 FULL_DESK_GATE_EXEMPT = ('v4_B_bar',)
+EXCLUSION_DERIVED = ('no_member_exclusions', 'chain_eligibility')
 
 
-def full_desk_gate_pass(checks):
-    """The ``full_desk_gate`` verdict from a desk's checks: every check true except the exempt ones."""
+def _exclusion_codes(member):
+    codes = [*(member.get('exclusion_codes') or []), *(member.get('calibration_exclusions') or [])]
+    summary = member.get('summary') or {}
+    codes += list(summary.get('exclusion_codes') or [])
+    return {str(c).split(':')[0] for c in codes}
+
+
+def charging_only_exclusion(member):
+    """True iff the member is excluded and every exclusion code is a charging B code."""
+    from joulewise.align.apple.v4_battery import EXCLUDE
+    codes = _exclusion_codes(member)
+    return bool(member.get('excluded')) and bool(codes) and codes <= set(EXCLUDE)
+
+
+def full_desk_gate_pass(checks, members=None):
+    """The ``full_desk_gate`` verdict.
+
+    Every desk check must be true except ``v4_B_bar``. With the desk's
+    ``members`` (evidence-aware), the exclusion-derived checks are re-derived
+    with charging-only exclusions not counted, so B alone never fails the gate;
+    any other exclusion still does. Without members the checks stand as recorded.
+    """
     gated = {k: v for k, v in (checks or {}).items() if k not in FULL_DESK_GATE_EXEMPT}
+    if members is not None and any(k in gated for k in EXCLUSION_DERIVED):
+        # Charging-only members stay in the window evidence (readability, prechecks);
+        # only their B exclusion stops counting against the desk.
+        neutral = [{**m, 'excluded': False} if charging_only_exclusion(m) else m for m in members]
+        recomputed, _, _ = pilot.instrument_checks(neutral)
+        others = any(m.get('excluded') for m in neutral)
+        if 'no_member_exclusions' in gated:
+            gated['no_member_exclusions'] = not others
+        if 'chain_eligibility' in gated:
+            gated['chain_eligibility'] = recomputed['chain_eligibility'] is True and not others
     return bool(gated) and all(v is True for v in gated.values())
 
 
@@ -248,7 +282,19 @@ def desk(session_root, **kwargs):
     kwargs.setdefault('kit', kit.KIT)
     kwargs.setdefault('desk_schema', kit.DESK_SCHEMA)
     kwargs.setdefault('extra_checks', powermode_desk_check)
-    return pilot.desk(session_root, **kwargs)
+    status = pilot.desk(session_root, **kwargs)
+    # Evidence-aware full-desk verdict (ruling 9) beside the common desk status.
+    try:
+        members = pilot.h.read(status['pilot']).get('members', [])
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        members = None
+    removed = [m.get('run_id') for m in members or () if charging_only_exclusion(m)]
+    status['full_desk_gate'] = {'pass': members is not None and full_desk_gate_pass(status.get('checks'), members),
+                                'charging_only_members_removed': removed,
+                                'rule': 'all desk checks except v4_B_bar; charging-only exclusions removed (ruling 9)'}
+    pilot.h.write(Path(status['pilot']).parent/'desk.json', status)
+    print('full_desk_gate: ' + ('pass' if status['full_desk_gate']['pass'] else 'fail'))
+    return status
 
 
 ARM_RECORD_SCHEMA = 'joulewise.align_v4_arm.v1'
