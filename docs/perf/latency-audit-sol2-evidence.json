@@ -1,0 +1,561 @@
+{
+  "schema": "joulewise.latency_audit_sol2.source_metadata.v1",
+  "source_commits": {
+    "audit_base": "4e7e878a151d919faf56bb9131af1fcca4b7be75",
+    "align": "9c40e4e5d9fa453cce3c70984e11fa382b7d4591",
+    "r1": "e901eb2a480d51377a494be9d797733dfcd0220b",
+    "ci": "87d9b445c9b3b5e9fb7f76a07230e3399821b3fb"
+  },
+  "ci_projection": {
+    "type": "ESTIMATED (static LPT scheduling projection, not executed tests)",
+    "source_tree": "9c40e4e5d9fa453cce3c70984e11fa382b7d4591",
+    "timing_map": "87d9b445c9b3b5e9fb7f76a07230e3399821b3fb",
+    "discovered_modules": 571,
+    "ordinary_modules": 569,
+    "unweighed_modules": [
+      "tests.align.test_external_volume",
+      "tests.align.test_r0_load_reference",
+      "tests.align.test_r0_load_reference_adversarial",
+      "tests.align.test_ssd_qualification"
+    ],
+    "ordinary_weight_sum_s": 35409.86,
+    "module_atomic_12_shards_s": [
+      9121.794,
+      4032.784,
+      2787.918,
+      2163.041,
+      2163.041,
+      2163.041,
+      2163.04,
+      2163.04,
+      2163.041,
+      2163.04,
+      2163.04,
+      2163.04
+    ],
+    "declared_splits_12_shards_s": [
+      5741.949,
+      3379.853,
+      2787.918,
+      2611.116,
+      2611.115,
+      2611.116,
+      2611.115,
+      2611.115,
+      2611.116,
+      2611.115,
+      2611.115,
+      2611.116
+    ],
+    "declared_splits_8_workers_s": [
+      5741.949,
+      4238.259,
+      4238.258,
+      4238.259,
+      4238.258,
+      4238.259,
+      4238.258,
+      4238.259
+    ],
+    "top_modules_s": {
+      "tests.test_bytes_analysis": 9121.794,
+      "tests.b6.test_cold_pass_fixes": 4032.784,
+      "tests.test_bytes_coverage_map": 2787.918,
+      "tests.test_bytes_h_session": 1601.667,
+      "tests.align.test_moe_calibration": 1376.959,
+      "tests.test_bytes_agreement": 1132.724,
+      "tests.test_controller_g2b_attachment": 874.571,
+      "tests.test_calibration_exits": 820.019,
+      "tests.test_calibration_writer_crash_matrix": 700.346,
+      "tests.b6.test_capture_screen_reachability": 578.366,
+      "tests.test_night_agent_install": 568.336,
+      "tests.test_reduce": 503.259,
+      "tests.test_p2038_production_path": 493.167,
+      "tests.test_receipt_histsem": 464.792,
+      "tests.test_validate_powermetrics_fiducial_derivation_only": 374.72
+    },
+    "bytes_three_world_methods_12_shards_s": [
+      3379.853,
+      2911.81,
+      2911.809,
+      2911.81,
+      2911.81,
+      2911.81,
+      2911.809,
+      2911.81,
+      2911.809,
+      2911.809,
+      2911.81,
+      2911.81
+    ]
+  },
+  "r0_measured_records": [
+    {
+      "ref": "origin/records/2026-11-06-align-r0-v4",
+      "commit": "b3834257e8cc431aa3520b6dea4a20862b8203f2",
+      "path": "docs/align/r0/2026-11-06/report.json",
+      "total_s": 20.788397041149437,
+      "started_utc": "2026-11-06T16:03:59.080217+00:00",
+      "ended_utc": "2026-11-06T16:04:19.868614+00:00",
+      "checks": [
+        {
+          "check": "host",
+          "seconds": 0.3221592919435352,
+          "status": "pass"
+        },
+        {
+          "check": "disk",
+          "seconds": 19.77572162519209,
+          "status": "diagnostic"
+        },
+        {
+          "check": "host-identity",
+          "seconds": 0.30446658306755126,
+          "status": "pass"
+        },
+        {
+          "check": "model-load",
+          "seconds": 0.2527303749229759,
+          "status": "fail"
+        }
+      ]
+    },
+    {
+      "ref": "origin/records/2026-11-06-align-r0-v4-rerun",
+      "commit": "bc4eb61e5a54f1dd023cdcf2bc4435538ffc4b48",
+      "path": "docs/align/r0/2026-11-06-rerun/report.json",
+      "total_s": 75.54630241612904,
+      "started_utc": "2026-11-06T17:03:29.440418+00:00",
+      "ended_utc": "2026-11-06T17:04:44.986726+00:00",
+      "checks": [
+        {
+          "check": "host",
+          "seconds": 0.3200990839395672,
+          "status": "pass"
+        },
+        {
+          "check": "disk",
+          "seconds": 18.83713166695088,
+          "status": "diagnostic"
+        },
+        {
+          "check": "host-identity",
+          "seconds": 0.30178045807406306,
+          "status": "pass"
+        },
+        {
+          "check": "model-load",
+          "seconds": 13.538043584208935,
+          "status": "pass"
+        },
+        {
+          "check": "load",
+          "seconds": 42.35838962509297,
+          "status": "fail"
+        }
+      ]
+    },
+    {
+      "ref": "origin/records/2026-11-06-align-r0-v4-rerun2",
+      "commit": "2776a3cbe221aba0bcd6ccc6a7aadde51089dcae",
+      "path": "docs/align/r0/2026-11-06-rerun2/report.json",
+      "total_s": 159.95632916595787,
+      "started_utc": "2026-11-06T22:35:05.928963+00:00",
+      "ended_utc": "2026-11-06T22:37:45.885296+00:00",
+      "checks": [
+        {
+          "check": "host",
+          "seconds": 0.3221397080924362,
+          "status": "pass"
+        },
+        {
+          "check": "disk",
+          "seconds": 19.125119541073218,
+          "status": "diagnostic"
+        },
+        {
+          "check": "host-identity",
+          "seconds": 0.3046417918521911,
+          "status": "pass"
+        },
+        {
+          "check": "model-load",
+          "seconds": 13.645378457847983,
+          "status": "pass"
+        },
+        {
+          "check": "load",
+          "seconds": 82.04256008286029,
+          "status": "pass"
+        },
+        {
+          "check": "template",
+          "seconds": 0.5289913329761475,
+          "status": "diagnostic"
+        },
+        {
+          "check": "generated",
+          "seconds": 43.776687166886404,
+          "status": "inconclusive"
+        }
+      ]
+    },
+    {
+      "ref": "origin/records/2026-11-07-align-r0-v4-rerun3",
+      "commit": "42949e11cf745657844b7b5db53d8bc4feab7ff4",
+      "path": "docs/align/r0/2026-11-07-rerun3/report.json",
+      "total_s": 158.15660883300006,
+      "started_utc": "2026-11-07T01:33:50.964853+00:00",
+      "ended_utc": "2026-11-07T01:36:29.121466+00:00",
+      "checks": [
+        {
+          "check": "host",
+          "seconds": 0.32026658300310373,
+          "status": "pass"
+        },
+        {
+          "check": "disk",
+          "seconds": 18.87616329197772,
+          "status": "diagnostic"
+        },
+        {
+          "check": "host-identity",
+          "seconds": 0.30281125009059906,
+          "status": "pass"
+        },
+        {
+          "check": "model-load",
+          "seconds": 13.527375041972846,
+          "status": "pass"
+        },
+        {
+          "check": "load",
+          "seconds": 86.45661412505433,
+          "status": "pass"
+        },
+        {
+          "check": "template",
+          "seconds": 0.520207165973261,
+          "status": "diagnostic"
+        },
+        {
+          "check": "generated",
+          "seconds": 37.9499166670721,
+          "status": "refused"
+        }
+      ]
+    },
+    {
+      "ref": "origin/records/2026-11-07-align-r0-v4-rerun4",
+      "commit": "035544b25381e11bf4b1364fecd7a78769cad6fd",
+      "path": "docs/align/r0/2026-11-07-rerun4/report.json",
+      "total_s": 905.1419201670215,
+      "started_utc": "2026-11-07T01:50:10.748588+00:00",
+      "ended_utc": "2026-11-07T02:05:15.890511+00:00",
+      "checks": [
+        {
+          "check": "host",
+          "seconds": 0.31789762480184436,
+          "status": "pass"
+        },
+        {
+          "check": "disk",
+          "seconds": 18.474470166955143,
+          "status": "diagnostic"
+        },
+        {
+          "check": "host-identity",
+          "seconds": 0.3001242920290679,
+          "status": "pass"
+        },
+        {
+          "check": "model-load",
+          "seconds": 13.533690584124997,
+          "status": "pass"
+        },
+        {
+          "check": "load",
+          "seconds": 86.5219319590833,
+          "status": "pass"
+        },
+        {
+          "check": "template",
+          "seconds": 0.5201012091711164,
+          "status": "diagnostic"
+        },
+        {
+          "check": "generated",
+          "seconds": 49.8187424170319,
+          "status": "pass"
+        },
+        {
+          "check": "checkpoint",
+          "seconds": 0.49502366594970226,
+          "status": "not_required"
+        },
+        {
+          "check": "memory",
+          "seconds": 733.004888625117,
+          "status": "pass"
+        },
+        {
+          "check": "smc",
+          "seconds": 1.9248591249343008,
+          "status": "refused"
+        }
+      ]
+    },
+    {
+      "ref": "origin/records/2026-11-07-align-r0-v4-rerun5",
+      "commit": "ea89c4d3f4707df03f8ab4e7b11cf8a5114b7697",
+      "path": "docs/align/r0/2026-11-07-rerun5/report.json",
+      "total_s": 2245.751096957829,
+      "started_utc": "2026-11-07T06:32:18.568246+00:00",
+      "ended_utc": "2026-11-07T07:09:44.319343+00:00",
+      "checks": [
+        {
+          "check": "host",
+          "seconds": 0.4253480830229819,
+          "status": "pass"
+        },
+        {
+          "check": "disk",
+          "seconds": 19.578320916043594,
+          "status": "diagnostic"
+        },
+        {
+          "check": "host-identity",
+          "seconds": 0.4094000419136137,
+          "status": "pass"
+        },
+        {
+          "check": "model-load",
+          "seconds": 13.659107041079551,
+          "status": "pass"
+        },
+        {
+          "check": "load",
+          "seconds": 86.72013625013642,
+          "status": "pass"
+        },
+        {
+          "check": "template",
+          "seconds": 0.6548669999465346,
+          "status": "diagnostic"
+        },
+        {
+          "check": "generated",
+          "seconds": 50.96073029190302,
+          "status": "pass"
+        },
+        {
+          "check": "checkpoint",
+          "seconds": 0.6344441671390086,
+          "status": "not_required"
+        },
+        {
+          "check": "memory",
+          "seconds": 731.8849780829623,
+          "status": "pass"
+        },
+        {
+          "check": "smc",
+          "seconds": 1310.3192920838483,
+          "status": "fail"
+        }
+      ]
+    },
+    {
+      "ref": "origin/records/2026-11-07-align-r0-v4-rerun6",
+      "commit": "744d17a517bef0f0cec14dd416db2c2b7512e920",
+      "path": "docs/align/r0/2026-11-07-rerun6/report.json",
+      "total_s": 2469.832894125022,
+      "started_utc": "2026-11-07T07:18:54.760312+00:00",
+      "ended_utc": "2026-11-07T08:00:04.593208+00:00",
+      "checks": [
+        {
+          "check": "host",
+          "seconds": 0.42122033308260143,
+          "status": "pass"
+        },
+        {
+          "check": "disk",
+          "seconds": 18.54903508303687,
+          "status": "diagnostic"
+        },
+        {
+          "check": "host-identity",
+          "seconds": 0.4050255420152098,
+          "status": "pass"
+        },
+        {
+          "check": "model-load",
+          "seconds": 13.656274625100195,
+          "status": "pass"
+        },
+        {
+          "check": "load",
+          "seconds": 87.43655116599984,
+          "status": "pass"
+        },
+        {
+          "check": "template",
+          "seconds": 0.6482279999181628,
+          "status": "diagnostic"
+        },
+        {
+          "check": "generated",
+          "seconds": 50.90605845791288,
+          "status": "pass"
+        },
+        {
+          "check": "checkpoint",
+          "seconds": 0.6300309998914599,
+          "status": "not_required"
+        },
+        {
+          "check": "memory",
+          "seconds": 746.5850658330601,
+          "status": "pass"
+        },
+        {
+          "check": "smc",
+          "seconds": 1520.051685417071,
+          "status": "fail"
+        }
+      ]
+    },
+    {
+      "ref": "origin/records/2026-11-07-align-r0-v4-rerun7",
+      "commit": "7bdfdae6e6b1444b3533a5afffc991a3728f99d5",
+      "path": "docs/align/r0/2026-11-07-rerun7/report.json",
+      "total_s": 2788.8310669998173,
+      "started_utc": "2026-11-07T08:11:30.996843+00:00",
+      "ended_utc": "2026-11-07T08:57:59.827910+00:00",
+      "checks": [
+        {
+          "check": "host",
+          "seconds": 0.42681491700932384,
+          "status": "pass"
+        },
+        {
+          "check": "disk",
+          "seconds": 18.767597291152924,
+          "status": "diagnostic"
+        },
+        {
+          "check": "host-identity",
+          "seconds": 0.41002958291210234,
+          "status": "pass"
+        },
+        {
+          "check": "model-load",
+          "seconds": 13.68844383303076,
+          "status": "pass"
+        },
+        {
+          "check": "load",
+          "seconds": 87.37202999996953,
+          "status": "pass"
+        },
+        {
+          "check": "template",
+          "seconds": 0.6543128751218319,
+          "status": "diagnostic"
+        },
+        {
+          "check": "generated",
+          "seconds": 50.90195950004272,
+          "status": "pass"
+        },
+        {
+          "check": "checkpoint",
+          "seconds": 0.6225989579688758,
+          "status": "not_required"
+        },
+        {
+          "check": "memory",
+          "seconds": 739.8702077909838,
+          "status": "pass"
+        },
+        {
+          "check": "smc",
+          "seconds": 1845.6004231248517,
+          "status": "inconclusive"
+        }
+      ]
+    },
+    {
+      "ref": "origin/records/2026-11-07-align-r0-v4-rerun8",
+      "commit": "8410dc410af86d71811313599ff1916332a0d297",
+      "path": "docs/align/r0/2026-11-07-rerun8/report.json",
+      "total_s": 884.1336052920669,
+      "started_utc": "2026-11-08T01:16:15.959635+00:00",
+      "ended_utc": "2026-11-08T01:31:00.093238+00:00",
+      "checks": [
+        {
+          "check": "smc",
+          "seconds": 853.7253174169455,
+          "status": "fail"
+        }
+      ]
+    },
+    {
+      "ref": "origin/records/2026-11-07-align-r0-v4-rerun9",
+      "commit": "954a93b1124ba138f632c68055755b472e83b259",
+      "path": "docs/align/r0/2026-11-07-rerun9/report.json",
+      "total_s": 92.05258229188621,
+      "started_utc": "2026-11-08T01:37:33.748682+00:00",
+      "ended_utc": "2026-11-08T01:39:05.801262+00:00",
+      "checks": [
+        {
+          "check": "smc",
+          "seconds": 61.66350070782937,
+          "status": "fail"
+        }
+      ]
+    },
+    {
+      "ref": "origin/records/2026-11-07-align-r0-v4-rerun10",
+      "commit": "ac801585ee512d796d80e1f54e9b3ff8358c8797",
+      "path": "docs/align/r0/2026-11-07-rerun10/report.json",
+      "total_s": 987.1670963340439,
+      "started_utc": "2026-11-08T02:25:18.517390+00:00",
+      "ended_utc": "2026-11-08T02:41:45.684485+00:00",
+      "checks": [
+        {
+          "check": "smc",
+          "seconds": 956.7773645839188,
+          "status": "fail"
+        }
+      ]
+    }
+  ],
+  "r0_aggregate": {
+    "active_s": 10787.357899623923,
+    "calendar_span_s": 124666.604268,
+    "between_record_gap_s": 113879.24636837607,
+    "interpretation": "gaps include repairs, reviews, schedules and idle; not all are recoverable"
+  },
+  "r1_static_caps": {
+    "type": "ESTIMATED design caps, not measured; no calibration or harvest bound",
+    "phase_rows_s": {
+      "idle_soak": 1800,
+      "step_30b": 5163.9952,
+      "A_B_A_legs_x3": 12986.9856,
+      "step_D_precool": 1500,
+      "step_D": 5763.9952,
+      "post_D_cooldown": 1500,
+      "designed_state_precools_x2": 3000,
+      "designed_state_turns_x3": 17291.9856,
+      "D_gated_x3_plus_X_G": 7200
+    },
+    "no_redo_s": 56206.9616,
+    "one_batch_wait_s": 5400,
+    "with_one_batch_wait_s": 61606.9616,
+    "r6_2_retry_allowance_s": 29055.9808,
+    "with_r6_2_retries_and_one_batch_s": 90662.9424,
+    "note": "Ruling-8 contention redos are additional; RUN_STATE item 202 rounds baseline upward to 56,207 s."
+  },
+  "probe_wall_s": 0.2947
+}
