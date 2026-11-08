@@ -2165,14 +2165,52 @@ def compare_arms(c, ours, cid, floor, registry):
             entry = registry.entry(source, "floor")
             c.exact("routing_id", f"contrast/{cid}/resolution/{index}/source_cell_ids/{number}",
                     cell_key(entry) if entry else None, own, raw=source)
-        # DLE-5: an attribution-limited resolution's point diagnostics (exact: by form, its cell the one source cell;
-        # transported: by source cell then form).
-        if "point_floor_diagnostics" in resolution:
-            listed_sources = listed(resolution.get("source_cell_ids"))
-            exact = resolution.get("status") == "exact" and len(listed_sources) == 1
-            diagnostics = resolution["point_floor_diagnostics"]
-            compare_point_diagnostics(c, ours, f"{cid}/resolution/{index}/point_floor_diagnostics",
-                                      {listed_sources[0]: diagnostics} if exact else diagnostics, contrast, registry, exact)
+        # DLE-5: a resolution's point diagnostics, present exactly when the D-078 rule (limited_forms) makes its
+        # own source cell attribution-limited, and keyed only by that cell (L1: the registered floor cell of this
+        # arm, never the other arm's). Exact: by form, its cell the one source cell; transported: by cell then form.
+        own_cell = (contrast.get("floor_cells") or (None, None))[index] if pack else None
+        listed_sources = listed(resolution.get("source_cell_ids"))
+        exact = resolution.get("status") == "exact" and len(listed_sources) == 1
+        diagnostics = resolution.get("point_floor_diagnostics")
+        if exact and "point_floor_diagnostics" in resolution:
+            diagnostics = {listed_sources[0]: diagnostics}
+        compare_point_diagnostics(c, ours, f"{cid}/resolution/{index}/point_floor_diagnostics", diagnostics,
+                                  contrast, registry, exact, allowed=(own_cell,) if own_cell else ())
+
+
+def limited_forms(c, ours, contrast, registry, key="", allowed=None):
+    """The D-078 rule, re-derived from the recompute's own terms (detection_floor.
+    admissible_set_uncertainty_dominates_point_floor; plan section 5): a form of a registered floor cell is
+    attribution-limited when its admissible-set uncertainty (linear_deviation_bound_j: the largest linear residual
+    or contrast the member anchor envelopes admit) exceeds its guarded point-only floor (guard x point_unguarded_floor_j),
+    and the cell has some nonzero admissible half-width. -> {registered cell id: {form: True | None}}, only the
+    limited forms; None marks a form whose bound lies within the floor_j bar of its guarded point floor (the
+    producer's exact comparison cannot be decided at the bar: either presence is accepted, its numbers still compared)."""
+    floors = ours.get("floors") if isinstance(ours.get("floors"), dict) else {}
+    result = {}
+    for cell_id in (contrast or {}).get("floor_cells", ()):
+        entry = registry.entry(cell_id, "floor")
+        if not entry or (allowed is not None and cell_id not in allowed):
+            continue
+        for form in FLOOR_FORMS:
+            record = floors.get(f"{cell_key(entry)}/{form}")
+            record = record if isinstance(record, dict) else {}
+            widths = record.get("widths_j")
+            linear, guard, point = record.get("linear_deviation_bound_j"), record.get("guard"), record.get("point_unguarded_floor_j")
+            if not (isinstance(widths, list) and widths and all(finite(w) for w in widths) and any(widths)
+                    and finite(linear) and finite(guard) and finite(point)):
+                continue
+            gate = guard * point
+            if abs(linear - gate) <= c.bar("floor_j", f"{key}{cell_id}/{form}", gate):
+                result.setdefault(cell_id, {})[form] = None
+            elif linear > gate:
+                result.setdefault(cell_id, {})[form] = True
+    return result
+
+
+def decided_limited(derived):
+    """Whether the rule makes some form limited beyond the bar (limited_forms' True, not None)."""
+    return any(v for forms in derived.values() for v in forms.values())
 
 
 def compare_floor_limit(c, ours, cid, row, mine, registry):
@@ -2182,35 +2220,48 @@ def compare_floor_limit(c, ours, cid, row, mine, registry):
     The point diagnostics of the floor and of the claim evaluation (keyed by source cell then form; a resolution's
     are compared in compare_arms), the claim evaluation's class and source words against the engine's words, and its
     published floor against the recompute's contrast floor gate (the active floor's own row). The engine prints a
-    diagnostic only for a form whose admissible-set uncertainty dominates its guarded point floor; which forms carry
-    one is not re-derived here (a label beside the floor, never the floor a claim is gated on: published_claim_floor
-    is false), but every number a printed diagnostic carries is compared.
+    diagnostic only for a form whose admissible-set uncertainty dominates its guarded point floor; which forms (and so
+    whether floor_limit, its class and source words, and each resolution's diagnostics are printed at all) is
+    re-derived here from the recompute's own terms (limited_forms), and every number a printed diagnostic carries is
+    compared. It is a label beside the floor, never the floor a claim is gated on (published_claim_floor is false).
     """
     contrast = registry.entry(cid, "contrast")
+    derived = limited_forms(c, ours, contrast, registry, f"{cid}/")
     compare_point_diagnostics(c, ours, f"{cid}/floor/point_floor_diagnostics", get(row, "floor", "point_floor_diagnostics"),
                               contrast, registry)
     limit = get(row, "claim_evaluation", "floor_limit")
-    if not isinstance(limit, dict):
+    printed = isinstance(limit, dict)
+    surely = decided_limited(derived)
+    if surely or not derived:
+        # The rule's presence, against the producer's: the claim evaluation carries floor_limit exactly when some
+        # source cell's floor is attribution-limited (M1).
+        c.exact("outcome_word", f"{cid}/claim_evaluation/floor_limit/presence",
+                "present" if printed else "absent", "present" if surely else "absent")
+    compare_point_diagnostics(c, ours, f"{cid}/claim_evaluation/floor_limit/point_floor_diagnostics",
+                              limit.get("point_floor_diagnostics") if printed else None, contrast, registry)
+    if not printed:
         return
     for field, word in ATTRIBUTION_WORDS.items():
-        c.exact("outcome_word", f"{cid}/claim_evaluation/floor_limit/{field}", limit.get(field), word)
+        c.exact("outcome_word", f"{cid}/claim_evaluation/floor_limit/{field}", limit.get(field), word if derived else None)
     c.numeric("floor_gate_j", f"{cid}/claim_evaluation/floor_limit/published_floor_j", limit.get("published_floor_j"),
               mine.get("floor_gate_j"))
-    compare_point_diagnostics(c, ours, f"{cid}/claim_evaluation/floor_limit/point_floor_diagnostics",
-                              limit.get("point_floor_diagnostics"), contrast, registry)
 
 
-def compare_point_diagnostics(c, ours, scope, diagnostics, contrast, registry, by_form=False):
+def compare_point_diagnostics(c, ours, scope, diagnostics, contrast, registry, by_form=False, allowed=None):
     """One printed point_floor_diagnostics object, {cell: {form: diagnostic}} (by_form: an exact resolution's
-    {form: diagnostic}, passed as {its one source cell: ...}). Each printed cell routes only as one of the contrast's
-    registered floor cells, looked up literally (G3), and each form only as absolute or comparative: a routing_id row
-    each (S3), DISAGREE otherwise. The diagnostic's unguarded floor is the recompute's point floor of that cell and
-    form (max of the largest deviation and the prediction term), its guard factor the recompute's guard, its guarded
-    floor their product (composed from the recompute's own terms); its label and flag are the engine's words."""
+    {form: diagnostic}, passed as {its one source cell: ...}). The cells and forms that carry a diagnostic are the
+    ones the D-078 rule makes attribution-limited (limited_forms) among the allowed registered floor cells (the
+    contrast's both, or one resolution's own); a printed cell or form outside them, or a limited one not printed,
+    is a routing_id row DISAGREE (S3), looked up literally (G3). The diagnostic's unguarded floor is the recompute's
+    point floor of that cell and form (max of the largest deviation and the prediction term), its guard factor the
+    recompute's guard, its guarded floor their product (composed from the recompute's own terms); its label and
+    flag are the engine's words."""
     cells = diagnostics if isinstance(diagnostics, dict) else {}
-    for cell, forms, entry in c.pairs(scope + "/cells/", cells, diagnostic_cells(cells, contrast, registry)):
+    derived = limited_forms(c, ours, contrast, registry, scope + "/", allowed)
+    for cell, forms, entry in c.pairs(scope + "/cells/", cells, diagnostic_cells(cells, derived, registry)):
         forms = forms if isinstance(forms, dict) else {}
-        for form, diagnostic, point in c.pairs(f"{scope}/forms/{cell}/", forms, diagnostic_forms(forms, entry, ours)):
+        for form, diagnostic, point in c.pairs(f"{scope}/forms/{cell}/", forms,
+                                               diagnostic_forms(forms, entry, ours, derived.get(cell, {}))):
             key = f"{scope}/{form}" if by_form else f"{scope}/{cell}/{form}"
             diagnostic = diagnostic if isinstance(diagnostic, dict) else {}
             unguarded, guard = get(point, "point_unguarded_floor_j"), get(point, "guard")
@@ -2221,20 +2272,21 @@ def compare_point_diagnostics(c, ours, scope, diagnostics, contrast, registry, b
                 c.exact("outcome_word", f"{key}/{field}", diagnostic.get(field), word if point is not None else None)
 
 
-def diagnostic_cells(cells, contrast, registry):
-    """The printed diagnostic cells that are the contrast's registered floor cells -> their registered entry."""
-    registered = (contrast or {}).get("floor_cells", ())
-    return {cell: registry.entry(cell, "floor") for cell in cells if cell in registered and registry.entry(cell, "floor")}
+def diagnostic_cells(cells, derived, registry):
+    """The cells the rule makes limited (or undetermined at the bar and printed) -> their registered floor entry."""
+    return {cell: registry.entry(cell, "floor") for cell, forms in derived.items()
+            if any(forms.values()) or cell in cells}
 
 
-def diagnostic_forms(forms, entry, ours):
-    """The printed forms of a registered cell that are registered forms -> the recompute's floor of that cell and form
-    ({} when the recompute has none, so each number is DISAGREE missing_or_null)."""
+def diagnostic_forms(forms, entry, ours, derived_forms):
+    """The limited forms of a cell (or undetermined ones that are printed) -> the recompute's floor of that cell and
+    form ({} when the recompute has none, so each number is DISAGREE missing_or_null). A printed form that is not
+    limited gets rows of its own against nothing."""
     if not entry:
         return {}
     floors = ours.get("floors") if isinstance(ours.get("floors"), dict) else {}
     return {form: floors.get(f"{cell_key(entry)}/{form}") if isinstance(floors.get(f"{cell_key(entry)}/{form}"), dict)
-            else {} for form in forms if form in FLOOR_FORMS}
+            else {} for form, sure in derived_forms.items() if sure or form in forms}
 
 
 def registered_floor_keys(contrast, registry):

@@ -43,13 +43,32 @@ def by_cell(forms=("absolute", "comparative")):
     return {cell: {form: diagnostic() for form in forms} for cell in (CELL_A, CELL_B)}
 
 
-def with_floor_limit(case, cid=DECODE, transported=False, diagnostics=None):
+def floor_prefix(cell):
+    """A registered floor cell id -> the recompute's model/phase key."""
+    return ("Qwen3-1.7B-4bit" if "1p7b" in cell else "Qwen3-8B-4bit") + "/" + ("decode" if "decode" in cell else "prefill")
+
+
+def make_dominated(case, diagnostics, widths=(1.0,) * 9, linear=50.0):
+    """The recompute side of the D-078 rule (limited_forms): every floor has nonzero admissible half-widths and a
+    linear bound (30.0) under its guarded point floor (38.0), except the forms in diagnostics, whose bound is
+    linear (over it)."""
+    for floor in case.ours["floors"].values():
+        floor.update(widths_j=list(widths), linear_deviation_bound_j=30.0, point_unguarded_floor_j=max(
+            floor["max_abs_deviation_j"], floor["prediction_j"]))
+    for cell, forms in diagnostics.items():
+        for form in forms:
+            if form in ("absolute", "comparative"):
+                case.ours["floors"][f"{floor_prefix(cell)}/{form}"]["linear_deviation_bound_j"] = linear
+
+
+def with_floor_limit(case, cid=DECODE, transported=False, diagnostics=None, dominated=True):
+    """dominated=False leaves the recompute's terms making no form attribution-limited (the printed metadata is
+    then the producer's error)."""
     """Attribution-limited metadata on one contrast's verdict floor, its resolutions and its claim evaluation,
     copied into the fill row (results_fill_adapter copies floor and claim_evaluation verbatim). Returns the
     verdict row and the fill row."""
     diagnostics = by_cell() if diagnostics is None else diagnostics
-    for floor in case.ours["floors"].values():
-        floor["point_unguarded_floor_j"] = max(floor["max_abs_deviation_j"], floor["prediction_j"])
+    make_dominated(case, diagnostics if dominated else {})
     verdict = next(row for row in case.files[VERDICTS]["contrasts"] if row["contrast_id"] == cid)
     floor = verdict["floor"]
     words = {"floor_source": "E_clock_anchor_shift_bound_j", "floor_limit_class": "attribution_limited"}
@@ -207,6 +226,115 @@ class FloorLimitCoverageTests(GateCase):
         self.assertIn(leaf("claim_evaluation/floor_limit", CELL_A, "absolute", "unguarded_floor_j"), cover["unmapped"])
 
 
+class FloorLimitRuleTests(GateCase):
+    """M1 (cold pass on #704): the D-078 rule re-derived from the recompute's own terms. Each test here fails at
+    337e74b59, where the class and source words were a vocabulary pin and presence was never derived."""
+    def exit_nonzero(self):
+        self.assertNotEqual(self.exit_code(CODED)[0], 0)
+
+    def test_the_rule_agrees_when_the_producer_follows_it(self):
+        with_floor_limit(self)
+        self.assertEqual(self.exit_code(CODED)[0], 0)
+
+    def test_label_on_a_floor_the_recompute_says_is_not_dominated_exits_nonzero(self):
+        with_floor_limit(self, dominated=False)
+        result = self.shipped()
+        self.assertIn("outcome_word", self.fails(result))
+        self.assertTrue(any(row["key"].endswith("claim_evaluation/floor_limit/presence") and row["verdict"] != "AGREE"
+                            for row in result["comparisons"]))
+        self.exit_nonzero()
+
+    def test_dropped_diagnostics_exit_nonzero(self):
+        # The recompute says both forms of both cells are dominated; L9 prints one form per cell.
+        verdict, fill = with_floor_limit(self)
+        kept = {cell: {"absolute": diagnostic()} for cell in (CELL_A, CELL_B)}
+        for row in (verdict, fill):
+            row["floor"]["point_floor_diagnostics"] = copy.deepcopy(kept)
+            row["claim_evaluation"]["floor_limit"]["point_floor_diagnostics"] = copy.deepcopy(kept)
+            for resolution, cell in zip(row["floor"]["resolutions"], (CELL_A, CELL_B)):
+                resolution["point_floor_diagnostics"] = {"absolute": diagnostic()}
+        self.exit_nonzero()
+
+    def test_no_floor_limit_at_all_on_a_dominated_floor_exits_nonzero(self):
+        verdict, fill = with_floor_limit(self)
+        for row in (verdict, fill):
+            del row["claim_evaluation"]["floor_limit"]
+            for key in ("point_floor_diagnostics", "floor_source", "floor_limit_class", "single_count_discipline"):
+                row["floor"].pop(key)
+                for resolution in row["floor"]["resolutions"]:
+                    resolution.pop(key)
+        self.exit_nonzero()
+
+    def test_a_resolution_without_its_diagnostics_exits_nonzero(self):
+        verdict, fill = with_floor_limit(self)
+        for row in (verdict, fill):
+            del row["floor"]["resolutions"][0]["point_floor_diagnostics"]
+        self.exit_nonzero()
+
+    def test_floor_limit_printed_on_the_wrong_contrast_exits_nonzero(self):
+        # Dominated on the decode contrast's cells only; L9 prints the whole floor_limit on the prefill contrast.
+        cells = FLOOR_CELLS[PREFILL]
+        diagnostics = {cell: {"absolute": diagnostic()} for cell in cells}
+        with_floor_limit(self, cid=PREFILL, diagnostics=diagnostics, dominated=False)
+        make_dominated(self, {CELL_A: {"absolute": 1}})
+        self.exit_nonzero()
+
+    def test_a_form_the_recompute_says_is_not_dominated_exits_nonzero(self):
+        # Both forms printed; only the absolute form is dominated in the recompute's terms.
+        verdict, fill = with_floor_limit(self)
+        make_dominated(self, {cell: {"absolute": 1} for cell in (CELL_A, CELL_B)})
+        self.exit_nonzero()
+
+    def test_zero_admissible_widths_are_never_dominated(self):
+        # detection_floor: no nonzero half-width, no classification (the bound is then the point floor's own).
+        with_floor_limit(self)
+        for floor in self.ours["floors"].values():
+            floor["widths_j"] = [0.0] * 9
+        self.exit_nonzero()
+
+    def test_a_bound_within_the_bar_of_the_guarded_floor_accepts_either_presence(self):
+        for printed in (True, False):
+            with self.subTest(printed=printed):
+                self.setUp()
+                verdict, fill = with_floor_limit(self, dominated=False)
+                for floor in self.ours["floors"].values():
+                    floor["linear_deviation_bound_j"] = POINT * (1 + 1e-9)
+                if not printed:
+                    for row in (verdict, fill):
+                        del row["claim_evaluation"]["floor_limit"]
+                        for key in ("point_floor_diagnostics", "floor_source", "floor_limit_class", "single_count_discipline"):
+                            row["floor"].pop(key)
+                            for resolution in row["floor"]["resolutions"]:
+                                resolution.pop(key)
+                self.assertEqual(self.exit_code(CODED)[0], 0)
+
+    def test_the_guard_enters_the_comparison(self):
+        # A bound above the point floor but under guard x point is not dominated (guard 1.5 here).
+        with_floor_limit(self, diagnostics=by_cell(("absolute",)))
+        for floor in self.ours["floors"].values():
+            floor["guard"] = 1.5
+        for floor_row in self.ours["floors"].values():
+            floor_row["linear_deviation_bound_j"] = 50.0
+        self.exit_nonzero()
+
+
+class ResolutionCellBindingTests(GateCase):
+    """L1: a transported resolution's diagnostic cells are its own source cells."""
+    def test_resolutions_carrying_each_others_cells_exit_nonzero(self):
+        verdict, fill = with_floor_limit(self, transported=True)
+        for row in (verdict, fill):
+            first, second = row["floor"]["resolutions"]
+            first["point_floor_diagnostics"], second["point_floor_diagnostics"] = (
+                second["point_floor_diagnostics"], first["point_floor_diagnostics"])
+        result = self.shipped()
+        self.assertIn("routing_id", self.fails(result))
+        self.assertNotEqual(self.exit_code(CODED)[0], 0)
+
+    def test_each_resolution_with_its_own_cell_is_clean(self):
+        with_floor_limit(self, transported=True)
+        self.assertEqual(self.exit_code(CODED)[0], 0)
+
+
 class FloorLimitPinTests(unittest.TestCase):
     """The comparator's attribution-floor words, pinned to detection_floor on origin/main (read as text)."""
     def test_words_and_point_floor_rule(self):
@@ -225,6 +353,12 @@ class FloorLimitPinTests(unittest.TestCase):
         self.assertIn("estimate.guard_factor * point_unguarded", body)
         self.assertIn("'label': 'repeatability_diagnostic'", body)
         self.assertIn("'published_claim_floor': False", body)
+        # The D-078 rule (limited_forms) as the engine states it, read as text.
+        rule = ast.unparse(next(node for node in tree.body if isinstance(node, ast.FunctionDef)
+                                and node.name == "admissible_set_uncertainty_dominates_point_floor"))
+        for text in ("if not widths or not any(widths):", "point_gate = diagnostic['guarded_floor_j']",
+                     "return uncertainty_max > point_gate", "abs(residual) + width * (n - 1) / n + (width_sum - width) / n"):
+            self.assertIn(text, rule)
         self.assertEqual(cmp.POINT_DIAGNOSTIC_WORDS, {"label": "repeatability_diagnostic", "published_claim_floor": False})
 
 

@@ -200,7 +200,7 @@ of branch `lane/2026-11-06-b5-lean-release`.
 ## Not adopted for now: CARE drafts DLE-3, DLE-4 and DLE-5 (lead, 2026-11-06)
 
 These are CARE §4's drafts. Their numbers are the care audit's draft numbers, not this log's entry numbers; the
-log's own DLE-3 and DLE-5 (2026-11-07, below) are different entries.
+log's own DLE-3, DLE-4 and DLE-5 (2026-11-07, below) are different entries.
 - **DLE-3**: step-1 strict validation by hash binding.
 - **DLE-4**: memoizing or hash-binding the 3b candidate refits.
 - **DLE-5**: dropping the 120 s analysis-path wall deadline.
@@ -560,17 +560,27 @@ Decided from the code and the registration (structure only). No bar is widened a
 | `.../guard_factor` | Compared, `floor_j` bar, against the recompute's `guard` | PLAN §5 guard g(n); the floor cells' `guard_factor` is already compared under `floor_j` (`FLOOR_FIELDS`) |
 | `.../guarded_floor_j` | Compared, `floor_j` bar, against the recompute's guard × point floor (composed from its own terms, as `corner_widened_guarded_floor_j` already is) | PLAN §5: guarded floor = g × unguarded floor. So a printed guarded floor that is not guard × unguarded disagrees |
 | `.../label`, `.../published_claim_floor` | Exact (`outcome_word`) against the engine's words, `repeatability_diagnostic` and false | Fixed by `_point_floor_diagnostic`; the flag asserts the number is not a claim floor, so a true flag disagrees |
-| `claim_evaluation/floor_limit/floor_limit_class`, `.../floor_source` | Exact (`outcome_word`) against `attribution_limited` and `E_clock_anchor_shift_bound_j` | The engine's words (`ATTRIBUTION_LIMIT_CLASS`; `ATTRIBUTION_FLOOR_SOURCE`, the first-kind bound of PLAN §4 step 7). The comparator copies them as literals; `tests/independent_recompute/test_floor_limit.py` pins them to `detection_floor.py` on origin/main |
+| `claim_evaluation/floor_limit/floor_limit_class`, `.../floor_source` | Exact (`outcome_word`) against `attribution_limited` and `E_clock_anchor_shift_bound_j`, where the re-derived D-078 rule (below) says some source cell is limited; absent otherwise | The engine's words (`ATTRIBUTION_LIMIT_CLASS`; `ATTRIBUTION_FLOOR_SOURCE`, the first-kind bound of PLAN §4 step 7). The comparator copies them as literals; `tests/independent_recompute/test_floor_limit.py` pins them to `detection_floor.py` on origin/main |
 | `claim_evaluation/floor_limit/published_floor_j` | Compared, `floor_gate_j` bar, against the recompute's contrast floor gate | `evaluate_claim` prints the active floor it gated on (`artifact.py` requires it to equal `floor.active_floor_j`, itself compared under the same row family) |
 | `claim_evaluation/floor_limit/single_count_discipline/*` | Uncovered words (strings and booleans only; a number there still refuses), by the same rule as the floor's and resolutions' copies | A fixed registered object (rule id, roles, flags, note) with `gating` false: no number, no claim |
 
 - **Unchanged.** The floor's and the resolutions' `floor_source` and `floor_limit_class` words stay uncovered under
   their existing rule (NEEDS_RULING RC-CMP-8 2).
-- **Not re-derived.** Which forms carry a diagnostic, that is the D-078 classification itself. It is a label beside the
-  floor, never the floor a claim is gated on, and no outcome reads it (`evaluate_claim` uses the metadata only to
-  print it). Every number a printed diagnostic carries is compared. Each printed cell and form gets a `routing_id`
-  row (the union rule, S3): a cell that is not one of the contrast's registered floor cells, or a form other than
-  absolute or comparative, is DISAGREE, and so is every number under it.
+- **Re-derived (cold-pass M1).** Whether each floor is attribution-limited, the D-078 rule, is re-derived from the
+  recompute's own terms and compared, not pinned (`limited_forms`; stdlib only, no `joulewise` import, so hash
+  independence holds). A form of a registered floor cell is limited when the cell has a nonzero admissible half-width
+  (`widths_j`) and the recompute's `linear_deviation_bound_j` exceeds its guarded point floor, `guard` ×
+  `point_unguarded_floor_j` (`detection_floor.admissible_set_uncertainty_dominates_point_floor`, pinned as text by
+  `test_floor_limit.py`; PLAN §5). Then, against that derivation: each cell and form that carries a diagnostic, on the
+  floor, on the claim evaluation and on each resolution (the resolution's own registered cell only, L1), is a
+  `routing_id` row, so a diagnostic printed for a form the rule does not limit, or dropped for one it does, is DISAGREE;
+  the presence of `claim_evaluation/floor_limit` is an `outcome_word` row; and its class and source words are compared
+  against the engine's words only where the rule says limited (missing otherwise: DISAGREE). A bound within the
+  `floor_j` bar of its guarded point floor is undecidable at the bar, so either presence is accepted there (its
+  numbers still compared). The label stays a label beside the floor (no outcome reads it), but a wrong one no longer
+  passes. The floor's and the resolutions' own `floor_source` and `floor_limit_class` words stay uncovered (RC-CMP-8 2).
+  Every number a printed diagnostic carries is compared. A cell that is not one of the contrast's registered floor
+  cells, or a form other than absolute or comparative, is DISAGREE, and so is every number under it.
 - **Pruned.** The flat-shape rules and the `FLOOR_DIAGNOSTICS` exemption are deleted: a diagnostic printed directly
   under `point_floor_diagnostics` now refuses (`test_input_gate.py`
   `test_numbers_under_floor_diagnostics_refuse_sol` updated to say so).
