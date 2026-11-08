@@ -69,7 +69,7 @@ class StatisticalReviewTests(unittest.TestCase):
         tail = 1 - rng.uniform(size=(trials, m)).max(axis=1)
         bound = max_threshold(range(m)).realized_fpr_upper(.9)
         coverage = np.mean(tail <= bound)
-        self.assertLess(abs(coverage-.9), 5*math.sqrt(.9*.1/trials))
+        self.assertLess(abs(coverage-.9), 4*math.sqrt(.9*.1/trials))
 
     def test_tied_joint_scores_are_conservative(self):
         rule = JointScore(1)
@@ -91,7 +91,7 @@ class StatisticalReviewTests(unittest.TestCase):
             expected = normal_energy_max_power(shift, sd, m)
             observed = np.mean(future + shift/sd > maxima)
             self.assertLess(abs(observed-expected),
-                            5*math.sqrt(expected*(1-expected)/n))
+                            4*math.sqrt(expected*(1-expected)/n))
 
     def test_null_cohort_fraction_matches_beta_binomial_tail(self):
         m, n, trials, cut = 20, 100, 8192, 7
@@ -108,14 +108,14 @@ class StatisticalReviewTests(unittest.TestCase):
             attacks=(Attack("null"),), trials=trials, selection_size=1,
             target_fraction=.07, seed=7203)
         self.assertLess(abs(result.cohort_target_probability-expected),
-                        5*math.sqrt(expected*(1-expected)/trials))
+                        4*math.sqrt(expected*(1-expected)/trials))
 
     def test_heavy_tail_dependent_channels_preserve_joint_null_rank(self):
         result = estimate_power(
             self.model, m=39, heldout_size=4, hidden_work_tokens=0,
             attacks=(Attack("null"),), noise=Noise(58, correlation=-.7, student_df=3),
             trials=8192, selection_size=1, seed=7204)
-        self.assertLess(abs(result.joint_probability-.025), 5*result.joint_mc_se)
+        self.assertLess(abs(result.joint_probability-.025), 4*result.joint_mc_se)
 
     def test_grid_selection_against_analytic_gaussian_oracle(self):
         threshold, h, sd = 2.1, 256, 38
@@ -132,7 +132,7 @@ class StatisticalReviewTests(unittest.TestCase):
         self.assertEqual(chosen, [int(np.argmin(expected))])
         for row, probability in zip(rows, expected):
             self.assertLess(abs(row["joint_probability"]-probability),
-                            5*math.sqrt(probability*(1-probability)/50000))
+                            4*math.sqrt(probability*(1-probability)/50000))
 
     def test_cohort_size_cannot_change_search_choices(self):
         args = dict(m=39, hidden_work_tokens=256,
