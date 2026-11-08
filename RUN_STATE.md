@@ -1042,6 +1042,29 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+227. **Magistrate activation b17edfbb (Opus 5.5, headless, 2026-11-08 00:57 PST): R1 ARMED under ruling R13 / item 225. t0 01:17 PST (09:17 UTC), `window_max_s` 105,427 s (one 11:45 crossing), latest end Mon 11-09 06:39 PST.**
+- **Plan:** `align-r1-20261108T0917Z`, custody `/Users/edr/night-align/r1-20261108T085636Z`. The install exited 0 and both night agents are loaded: `com.joulewise.night` and `.deadman`, with plists in `~/Library/LaunchAgents`.
+- **Item 225 N1 checks:**
+  - `$M` (`JouleWise-measurement-20261102-align-pilot2`) was fetched at the exact sha and switched detached. `rev-parse HEAD`, `repo_head` and `measurement_head` in `night_plan.json` are all `20e9edbc446a9f89a68badc1bd32bb0934cbb86d`.
+  - `status --short` was empty before prepare.
+  - The D5 literal in `chain.zsh` is `40a49bde…6be0`, equal to the source's sha256.
+  - mlx 0.31.2, mlx_lm 0.31.3, transformers 5.12.1.
+- **Host at arm:** on AC, battery 100 % charged, no external volume, sudo rules present. `df -g` 115 GB free (`$S/df-arm.txt`). Flag: `disk.allocation_unsized`.
+- **Arm notice:** sent to Ed before install (Gmail `1a1ba5fe5fe0e091`); `notice.ack` written. There were no pending notices.
+- **Trial prepare:** an earlier scratch prepare, never installed, was moved to `~/night-archive/seats-b17edfbb/r1-trialprep-20261108T084902Z`.
+- **Display:** the magistrate runs `pmset displaysleepnow` and exits before t0.
+
+**Next activation (replaces item 223's pointer; items 202-204, 207, 209, 210, 212-222, 224-226 hold):**
+(1) While the plan is armed (until `chain.exited`, latest Mon 11-09 06:39 PST): never move `$M` or the canonical root. Run no git operation in `$M`. No `[QUIET-MAC]` work and no agent alive on the MBP.
+(2) After R1, follow the runbook §4 on `20e9edbc4`:
+  - restore network time with `sudo -n systemsetup -setusingnetworktime on`;
+  - read `$S/night/align-r1/r1_result.json`, `r1_slots.json` and `$S/night/result.json`;
+  - check `pmset -g custom` for the Automatic restore and check the KM003C capture (item 211 (2));
+  - look for stray `km003c_monitor.py` and `hazard_monitor.py` (D7);
+  - run `arm_align_r1.py uninstall --custody-root $S`;
+  - record per item 202 (5) and mail Ed.
+(3) Item 205 (4) holds.
+
 226. **Laptop lead (interactive session 1544c617), 2026-11-08 01:05 PST: lead rulings R14-R16 for the post-R1 critical path.** Each rests on paired Sol and Opus builds plus an agreement report (item 220). All are made blind. v4 is unregistered, so these go into the registration text.
 - **R14, W1 blockers** (`align/2026-11-08-w1-blockers-{sol,opus}`; agreement `docs/align/v4/W1-BLOCKERS-AGREEMENT.md`):
   - **U3:** β = .05 series false-fail.
