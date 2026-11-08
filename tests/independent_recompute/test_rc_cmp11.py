@@ -200,7 +200,8 @@ class LiteralPinTests(Case):
         text = source(self, "joulewise/b5_analysis/sensitivity.py")
         for word in ("mean_and_half_width_equal_primary", "bound_independent_values_equal_primary"):
             with self.subTest(word):
-                self.assertRegex(text, rf'"{word}": True,')
+                # Either quote style: the parallel sensitivity derivation (2b659f71b) writes single quotes.
+                self.assertRegex(text, rf'["\']{word}["\']: True,')
                 script = Path(cmp.__file__).read_text()
                 self.assertRegex(script, rf'{word}",\n\s+[a-z]+\.get\("{word}"\), True\)')
 
