@@ -84,5 +84,3 @@ class CampaignWordRates(NumericTestCase):
                 "word_rates":word_rows,"H2_coverage":[{"boundary":b,"fit":f,**rate(coverage[b,f])}
                     for b in ba.BOUNDARIES for f in ("two_term","resident_extended")]})
         print("BYTES_SIMULATION_REPORT="+json.dumps(report,sort_keys=True),flush=True)
-
-
