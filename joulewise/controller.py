@@ -52,6 +52,8 @@ on-disk artifacts (D-002): events are never handed to it in memory.
 
 from __future__ import annotations
 
+from joulewise import timing_receipts
+
 import hashlib
 import json
 import math
@@ -1613,6 +1615,7 @@ class _Execution:
     # ------------------------------------------------------------------
     # Top level
 
+    @timing_receipts.bound(lambda self: self._writer.timing)
     def execute(self) -> tuple[Path, SummaryMetrics]:
         try:
             try:

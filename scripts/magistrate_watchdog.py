@@ -51,6 +51,7 @@ from joulewise.arm_retry import (  # noqa: E402
     terminal_zero_capture_refusal,
 )
 from joulewise.zero_capture_facts import zero_capture_facts  # noqa: E402
+from joulewise import timing_receipts  # noqa: E402
 from scripts.run_night import (  # noqa: E402
     COURIER_DEADLINE_S,
     COURIER_LOCK_FRESH_S,
@@ -371,9 +372,10 @@ class Storage:
             os.close(descriptor)
         self._fsync_dir(path.parent)
 
-    def append_jsonl(self, path: Path, value: Mapping[str, Any]) -> None:
+    def append_jsonl(self, path: Path, value: Mapping[str, Any] | list, *, sync: bool = True) -> None:
         path = self._write_path(path)
-        data = (json.dumps(value, sort_keys=True) + "\n").encode("utf-8")
+        values = value if isinstance(value, list) else [value]
+        data = "".join(json.dumps(row, sort_keys=True) + "\n" for row in values).encode("utf-8")
         if self.dry_run:
             self.would_write.append(f"append {path} ({len(data)} bytes)")
             return
@@ -384,7 +386,8 @@ class Storage:
             while view:
                 written = os.write(descriptor, view)
                 view = view[written:]
-            os.fsync(descriptor)
+            if sync:
+                os.fsync(descriptor)
         finally:
             os.close(descriptor)
 
@@ -1787,6 +1790,43 @@ def clock_uncertain(state: dict[str, Any], wall: dt.datetime, monotonic: float) 
     return False
 
 
+def _hold_boundaries(state, new_state, reason, *, stamp=None):
+    """Observed watchdog holds only; never infer thermal/measurement idle."""
+    hold_states = {"FENCED", "HOLD_CENSUS", "HOLD_UNSAFE", "CLOCK_UNCERTAIN",
+                   "NETWORK_UNCERTAIN", "BACKOFF", "BACKOFF_USAGE", "STOPPED"}
+    plans = [row[0] for row in state.get("fenced_checkouts", [])]
+    signature = [new_state, reason, plans, state.get("activation_id"), state.get("backoff_boot_id")]
+    previous = state.get("timing_hold")
+    if previous is not None and previous["signature"] == signature:
+        return []
+    if previous is None and new_state not in hold_states:
+        return []
+    rows = []
+    writer = timing_receipts.Writer(rows.append, producer="magistrate",
+        plan_id=plans[0] if len(plans) == 1 else None,
+        boot_session_id=state.get("backoff_boot_id"))
+    writer.sequence = state.get("timing_sequence", 0)
+    writer.identity["producer_id"] = state.setdefault("timing_producer_id", writer.identity["producer_id"])
+    stamp = stamp or writer.stamp()
+    if previous is not None:
+        start = previous["start"]
+        if not (start["boot_session_id"] and writer.identity["boot_session_id"]
+                and start["boot_session_id"] != writer.identity["boot_session_id"]):
+            identity = writer.identity.copy()
+            writer.identity.update({key: start[key] for key in identity})
+            writer.emit("end", start["span_id"], "holds", start["activity"], status="complete", stamp=stamp)
+            writer.identity = identity
+        # A known reboot leaves the previous boot's hold open/unmeasured.
+        state.pop("timing_hold", None)
+    if new_state in hold_states:
+        start = writer.emit("start", f"{writer.identity['producer_id']}:{writer.sequence + 1}",
+                            "holds", new_state, stamp=stamp)
+        start.update(reason=reason, plans=plans, activation_id=state.get("activation_id"))
+        state["timing_hold"] = dict(signature=signature, start=start)
+    state["timing_sequence"] = writer.sequence
+    return rows
+
+
 def transition(
     storage: Storage,
     state: dict[str, Any],
@@ -1797,7 +1837,17 @@ def transition(
     notice: str | None = None,
 ) -> None:
     old_state = str(state.get("state", "BOOT"))
+    try:
+        boundaries = _hold_boundaries(state, new_state, reason)
+    except Exception as error:
+        sys.stderr.write(f"timing receipt missing: {error}\n")
+        boundaries = []
     if old_state == new_state:
+        if boundaries:
+            try:
+                storage.append_jsonl(storage.root / "events.jsonl", boundaries, sync=False)
+            except Exception as error:
+                sys.stderr.write(f"timing receipt missing: {error}\n")
         return
     sequence = int(state.get("transition_seq", 0)) + 1
     state["state"] = new_state
@@ -1813,7 +1863,7 @@ def transition(
         "reason": reason,
         "epoch_s": now.timestamp(),
     }
-    storage.append_jsonl(storage.root / "events.jsonl", event)
+    storage.append_jsonl(storage.root / "events.jsonl", [*boundaries, event])
     if notice is not None:
         pending = state.setdefault("notice_pending", [])
         notice_id = f"transition-{sequence}-{notice}"
@@ -2097,10 +2147,19 @@ def decide(
                     newly.append((plan, key, "launch_abandoned"))
             for plan, key, kind in newly:
                 terminal_released = sorted(set(terminal_released) | {key})
-                storage.append_jsonl(storage.root / "events.jsonl", {
+                release_stamp = timing_receipts.paired_stamp()
+                boundaries = []
+                try:
+                    hold = state.get("timing_hold")
+                    if hold and hold["start"]["activity"] == "FENCED" and plan.plan_id in hold["start"]["plans"]:
+                        boundaries = _hold_boundaries(state, "RELEASED", "terminal_release", stamp=release_stamp)
+                except Exception as error:
+                    sys.stderr.write(f"timing receipt missing: {error}\n")
+                storage.append_jsonl(storage.root / "events.jsonl", [*boundaries, {
                     "schema": EVENT_SCHEMA, "kind": "terminal_release", "release_kind": kind,
                     "plan_id": plan.plan_id, "key": key, "epoch_s": wall.timestamp(),
-                })
+                    "paired_stamp": release_stamp,
+                }])
                 if kind == "launch_abandoned":
                     _restore_abandoned_high_power(plan, storage, deps, wall)
                     notices = state.setdefault("notice_pending", [])

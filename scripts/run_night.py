@@ -20,7 +20,7 @@ import math
 import queue
 import resource
 import socket
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
 from contextvars import copy_context
 from dataclasses import asdict, replace
 from datetime import date, datetime, time as wall_time, timedelta, timezone
@@ -49,6 +49,7 @@ sys.path.insert(0, str(REPO_ROOT))
 from joulewise import arm_readiness as readiness
 from joulewise import arm_readiness_evidence_t0 as t0_author
 from joulewise import battery_float, night_gate, t0_rehearsal, quiet_admission, network_time_off
+from joulewise import timing_receipts
 from joulewise.measurement_liveness import (  # noqa: E402
     observe_identity, pending_launch_closed, _start_token,
 )
@@ -1520,6 +1521,7 @@ def _artifact_list(custody_root: Path, night_dir: Path) -> list[dict[str, Any]]:
     return artifacts
 
 
+@timing_receipts.timed("offload", "publication", outcome=lambda error: "error" if error else "complete")
 def _durable_record(custody_root: Path, night_dir: Path, plan: NightPlan) -> str | None:
     """Best-effort results-branch publish; return any failure diagnostic.
 
@@ -1564,19 +1566,24 @@ def _durable_record(custody_root: Path, night_dir: Path, plan: NightPlan) -> str
         if not allow_raw_logs:
             for name in ("chain.stdout.log", "chain.stderr.log"):
                 (destination / name).unlink(missing_ok=True)
-        for artifact in _artifact_list(custody_root, night_dir):
-            if not allow_raw_logs and Path(artifact["path"]).name in {"chain.stdout.log", "chain.stderr.log"}:
-                continue
-            if "error" in artifact:
-                omitted.append(f"{artifact['path']} ({artifact['error']})")
-                continue
-            source = custody_root / artifact["path"]
-            # Preserve repeated envelope basenames; flattening loses all but
-            # the final rounds/session/raw-power file.
-            relative = source.relative_to(night_dir) if source.is_relative_to(night_dir / "evidence") else Path(source.name)
-            target = destination / relative
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source, target)
+        with timing_receipts.span("offload", "results_copy"):
+            for artifact in _artifact_list(custody_root, night_dir):
+                if not allow_raw_logs and Path(artifact["path"]).name in {"chain.stdout.log", "chain.stderr.log"}:
+                    continue
+                if "error" in artifact:
+                    omitted.append(f"{artifact['path']} ({artifact['error']})")
+                    continue
+                source = custody_root / artifact["path"]
+                # Preserve repeated envelope basenames; flattening loses all but
+                # the final rounds/session/raw-power file.
+                relative = source.relative_to(night_dir) if source.is_relative_to(night_dir / "evidence") else Path(source.name)
+                target = destination / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, target)
+        # Timing stays in the existing local journal, outside the immutable
+        # result inventory and the structure-only courier export. A custodian
+        # exports it only for an authorized unblinded window. Push completion
+        # is local evidence for the next such export, never a recursive push.
         t0_rehearsal.observed_run(
             ["git", "-C", str(clone), "add", str(destination.relative_to(clone))],
             capture_output=True,
@@ -1584,20 +1591,14 @@ def _durable_record(custody_root: Path, night_dir: Path, plan: NightPlan) -> str
             timeout=30,
             check=True,
         )
-        t0_rehearsal.observed_run(
-            ["git", "-C", str(clone), "commit", "-m", f"record night {plan.plan_id}"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            check=True,
-        )
-        t0_rehearsal.observed_run(
-            ["git", "-C", str(clone), "push", "origin", f"HEAD:{branch}"],
-            capture_output=True,
-            text=True,
-            timeout=120,
-            check=True,
-        )
+        with timing_receipts.span("offload", "local_commit"):
+            t0_rehearsal.observed_run(
+                ["git", "-C", str(clone), "commit", "-m", f"record night {plan.plan_id}"],
+                capture_output=True, text=True, timeout=30, check=True)
+        with timing_receipts.span("offload", "push"):
+            t0_rehearsal.observed_run(
+                ["git", "-C", str(clone), "push", "origin", f"HEAD:{branch}"],
+                capture_output=True, text=True, timeout=120, check=True)
         _append_log(custody_root, f"durable record pushed branch={branch}")
     except Exception as error:
         try:
@@ -2104,6 +2105,7 @@ def run_courier(
         optional("courier lock removal", lambda: (night_dir / "courier.lock").unlink(missing_ok=True))
 
 
+@timing_receipts.timed("finalize", "night_result")
 def _write_result(
     custody_root: Path,
     night_dir: Path,
@@ -2342,6 +2344,7 @@ def _write_courier_outcome(night_dir: Path, outcome: Mapping[str, Any]) -> None:
     _write_json(night_dir / "courier.json", document)
 
 
+@timing_receipts.timed("offload", "reporting_handoff")
 def _finish_reporting(
     custody_root: Path,
     night_dir: Path,
@@ -2496,6 +2499,7 @@ def _prepare_pack_night(plan: NightPlan, plan_path: Path, plan_raw: bytes):
     return night_gate._authenticate_pack_records(plan)
 
 
+@timing_receipts.timed("arm", "author_pack_arm")
 def _author_pack_arm(plan: NightPlan, prepared):
     root = prepared["root"]
     custody = Path(plan.custody_root)
@@ -2506,27 +2510,28 @@ def _author_pack_arm(plan: NightPlan, prepared):
     before = {p.resolve() for p in namespace.glob("arm-*.json")}
     night_gate.authenticate_arm_context(plan,
         legacy_rehearsal=prepared["authorization_record"]["purpose"] == "T0_REHEARSAL")
-    authored = t0_author.author_arm_readiness_evidence_t0(root, custody)
+    with timing_receipts.span("arm", "arm_evidence_authoring"):
+        authored = t0_author.author_arm_readiness_evidence_t0(root, custody)
     if authored.get("status") != "PASS":
         raise PackNightRefusal("t0_evidence: author refused")
     context = _pack_object(pack_custody / "arm_readiness.t0.inputs/arm-context.json", "arm_context")
     confirmation = prepared["confirmation_record"]
-    result = readiness.generate_arm_receipt(
-        root, context, custody,
-        step6_confirmation_table=confirmation["table_path"],
-        expected_confirmation_digest=confirmation["table_sha256"],
-    )
+    with timing_receipts.span("arm", "arm_receipt_authoring"):
+        result = readiness.generate_arm_receipt(
+            root, context, custody,
+            step6_confirmation_table=confirmation["table_path"],
+            expected_confirmation_digest=confirmation["table_sha256"])
     if result.get("arm_disposition") != "GO" or result.get("status") != "PASS":
         raise PackNightRefusal("arm_receipt: NO_GO")
     path = Path(result["receipt_path"])
     if (path.parent != namespace or not re.fullmatch(r"arm-[0-9]{4,}\.json", path.name)
             or path.resolve() in before):
         raise PackNightRefusal("arm_receipt: must be the driver's self-written receipt")
-    verification = readiness._verify_arm_receipt(
-        root, path, require_unconsumed=True,
-        step6_confirmation_table=confirmation["table_path"],
-        expected_confirmation_digest=confirmation["table_sha256"],
-    )
+    with timing_receipts.span("arm", "arm_receipt_verification"):
+        verification = readiness._verify_arm_receipt(
+            root, path, require_unconsumed=True,
+            step6_confirmation_table=confirmation["table_path"],
+            expected_confirmation_digest=confirmation["table_sha256"])
     arm = _pack_object(path, "arm_receipt", result["receipt_sha256"])
     if verification.get("receipt_sha256") != result["receipt_sha256"]:
         raise PackNightRefusal("arm_receipt.sha256")
@@ -2534,9 +2539,32 @@ def _author_pack_arm(plan: NightPlan, prepared):
     return {"path": path, "arm": arm, "sha256": result["receipt_sha256"], "authored": authored}
 
 
+@contextmanager
+def _timing_journal(night, plan):
+    """Own the existing stage-journal handle for this driver invocation."""
+    scope = ExitStack()
+    try:
+        try:
+            handle = scope.enter_context((night / "chain-stages.jsonl").open("a"))
+            def append_boundary(row):
+                handle.write(json.dumps(row, sort_keys=True) + "\n")
+                handle.flush()  # turnaround only; no added fsync
+            scope.enter_context(timing_receipts.bind(timing_receipts.Writer(
+                append_boundary, producer="night_driver", plan_id=plan.plan_id,
+                attempt=(getattr(plan, "hazard_window", None) or {}).get("attempt"))))
+        except Exception as error:
+            sys.stderr.write(f"timing journal unavailable: {error}\n")
+        yield
+    finally:
+        try:
+            scope.close()
+        except Exception as error:
+            sys.stderr.write(f"timing journal close failed: {error}\n")
+
+
 def arm_only(context_path: Path) -> dict[str, Any]:
     """Author and verify one ARM, then persist a GO-less no-launch record."""
-    from scripts.check_v5_arm_abort import context_at, absence
+    from scripts.check_v5_arm_abort import context_at
     context, plan, prepared = context_at(context_path)
     custody = Path(plan.custody_root)
     night = custody / "night"
@@ -2544,6 +2572,13 @@ def arm_only(context_path: Path) -> dict[str, Any]:
     output = night / "arm-only.json"
     if output.exists() or _existing_record(night, plan) is not None:
         raise PackNightRefusal("arm-only custody already used")
+    with _timing_journal(night, plan):
+        return _arm_only_admission(context_path, context, plan, prepared, custody, night, output)
+
+
+@timing_receipts.timed("arm", "arm_only_admission")
+def _arm_only_admission(context_path, context, plan, prepared, custody, night, output):
+    from scripts.check_v5_arm_abort import absence
     absence(plan, context["arm_context"])
     input_path = custody / plan.pack_night["pack_id"] / "arm_readiness.t0.inputs/arm-context.json"
     input_path.parent.mkdir(parents=True, exist_ok=True)
@@ -3574,6 +3609,7 @@ def smoke_observation_round(interval_s):
     return observation, cost
 
 
+@timing_receipts.timed("gates", "network_time_off_settle")
 def _admit_network_time_off(plan, night_dir, *, during_settle=None, budget=None):
     from joulewise import v5_qualification
     off_path = v5_qualification.off_receipt_path(plan, night_dir)
@@ -3591,7 +3627,8 @@ def _admit_network_time_off(plan, night_dir, *, during_settle=None, budget=None)
     if budget is not None and remaining > _derivation_budget_remaining(budget):
         raise ValueError("OFF settle exceeds derivation start deadline")
     if remaining and plan.receipt_class != "TRANSACTION_PACK":
-        time.sleep(remaining)
+        with timing_receipts.span("gates", "network_time_off_sleep", requested_s=remaining):
+            time.sleep(remaining)
     network_time_off.seconds_since_receipt(
         network_time_off.read_receipt(off_path, plan_id=off["plan_id"], window_id=off["window_id"]),
         {**network_time_off._clock(), "boot_id": network_time_off.boot_id()})
@@ -3858,6 +3895,7 @@ def _write_refused_start_conditions(plan, night_dir, reason):
     _write_start_conditions(plan, night_dir, refusal_reason=reason)
 
 
+@timing_receipts.timed("dwell", "clean_dwell")
 def _admit_derivation_clean_dwell(plan, night_dir, budget):
     """Revision 6 §6.2(g): retain the complete unattended dwell evidence."""
     script = Path(plan.measurement_root) / "scripts/prewindow_check.sh"
@@ -3938,7 +3976,10 @@ def _admit_qualification_clean_dwell(plan, night_dir, budget):
         "schema": "joulewise.v5_qualification_clean_dwell.v1", "plan_id": plan.plan_id,
         "source": {"path": str(path), "sha256": _sha256_path(path)},
         "required_clean_dwell_s": 600, "timeout_s": 2700,
-        "reused_native_t0_capture": True, "budget": budget}))
+        "reused_native_t0_capture": True, "budget": budget,
+        "started_monotonic_ns": capture["started_monotonic_ns"],
+        "ended_monotonic_ns": capture["finished_monotonic_ns"],
+        "boot_session_id": capture["boot_session_id"]}))
 
 
 def _admit_qualification_control_order(plan, record):
@@ -4470,6 +4511,12 @@ def _run_night(
         return EXIT_REFUSED
 
     _append_census(night_dir / "censuses.jsonl", initial_probe, initial_refusal)
+    # Open the existing stage journal before arm/capture. Parent boundaries
+    # occur before/after the shell chain; the child retains stage ownership.
+    # Receipt rows have no stage_id, so stage consumers continue to ignore them.
+    timing_scope = ExitStack()
+    closers.append(timing_scope.close)
+    timing_scope.enter_context(_timing_journal(night_dir, plan))
     started_epoch_s = time.time()
     started_monotonic_ns = time.monotonic_ns()
     _append_log(custody_root, "night driver started")
@@ -4873,6 +4920,7 @@ def _run_night(
     }
     optional = lambda label, op: _courier_optional(report, label, op)
 
+    @timing_receipts.timed("finalize", "prepare_result")
     def prepare_result():
         calibration_refusal = _calibration_refusal(
             night_dir, plan, chain_exit_code if abort is None else None)

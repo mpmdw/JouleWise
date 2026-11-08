@@ -6,6 +6,7 @@ legacy hazards.temperature alias retain their isolated import boundary.
 from __future__ import annotations
 from collections.abc import Mapping
 from contextlib import nullcontext
+from joulewise import timing_receipts
 import hashlib
 import json
 import math
@@ -501,6 +502,17 @@ class ThermalSession:
                         'source_journal_sha256': None}
 
     def wait(self, kind, *, turn=0, token_count=None, deadman=None, defer_resume=False):
+        # G1/H already have native entry/exit receipts, including H's later
+        # dispatch endpoint. Do not duplicate their per-turn boundaries. G0
+        # needs a persisted start even when admission faults before an interval.
+        with (timing_receipts.span("gates", "G0") if kind == 'G0' else nullcontext()) as receipt:
+            row = self._wait(kind, turn=turn, token_count=token_count, deadman=deadman,
+                             defer_resume=defer_resume)
+            if receipt is not None and row['outcome'] != 'released':
+                receipt.status = 'timeout' if row['outcome'] in ('timeout', 'deadman') else 'refused'
+            return row
+
+    def _wait(self, kind, *, turn=0, token_count=None, deadman=None, defer_resume=False):
         """G0 proceeds on timeout; unobserved gates wait then proceed with X4.
 
         G1/H stop only on an actual timeout or the member deadman.

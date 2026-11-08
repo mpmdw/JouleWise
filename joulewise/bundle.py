@@ -934,6 +934,30 @@ class RunBundleWriter:
         self._suite_manifest_written = False
         self._staged_summary: dict[str, Any] | None = None
         self._closed = False
+        # Keep the existing journal open before capture. Timing boundaries use
+        # this handle without flush/fsync; ordinary event flushes retain their
+        # previous visibility and drain any buffered boundaries as well.
+        self._event_stream = None
+        self.timing = None
+        if config.workload_profile.name == "align_episode":
+            from joulewise import timing_receipts
+            from joulewise.clock import SystemClock
+            self._event_stream = (self._path / "events.jsonl").open("a")
+            clock_info = clock.stamp()
+            lineage = launch_lineage or {}
+            self.timing = timing_receipts.Writer(
+                self._append_timing_boundary, producer="bundle", member=run_id,
+                plan_id=lineage.get("plan_id"), boot_session_id=lineage.get("boot_session_id"),
+                stamp=(timing_receipts.paired_stamp if isinstance(clock, SystemClock) else
+                       lambda: timing_receipts.clock_stamp(clock)),
+                clock_domain="host-monotonic" if isinstance(clock, SystemClock) else "synthetic-controller",
+                wall_resolution_s=clock_info.wall_resolution_s,
+                monotonic_resolution_s=clock_info.monotonic_resolution_s)
+
+    def __del__(self):
+        stream = getattr(self, "_event_stream", None)
+        if stream is not None:
+            stream.close()
 
     @classmethod
     def create(cls, runs_root: Path, config: BenchmarkConfig, clock: Clock) -> "RunBundleWriter":
@@ -1006,8 +1030,18 @@ class RunBundleWriter:
             "message": event.message,
             "metadata": event.metadata,
         }
-        with (self._path / "events.jsonl").open("a") as handle:
-            handle.write(json.dumps(record) + "\n")
+        if self._event_stream is None:
+            with (self._path / "events.jsonl").open("a") as handle:
+                handle.write(json.dumps(record) + "\n")
+        else:
+            self._event_stream.write(json.dumps(record) + "\n")
+            self._event_stream.flush()
+
+    def _append_timing_boundary(self, row) -> None:
+        self._event_stream.write(json.dumps({
+            "timestamp_s": row["epoch_ns"] / 1e9,
+            "event_type": "timing_boundary", "phase": row["phase"],
+            "message": row["activity"], "metadata": row}) + "\n")
 
     def write_power_trace(self, samples: list[PowerSample]) -> None:
         """Write ``power_trace.csv`` (D-018). A second call is an error."""
@@ -1194,16 +1228,22 @@ class RunBundleWriter:
         self._require_open("finalize")
         if self._staged_summary is None:
             raise BundleError("cannot finalize: no summary staged (call write_summary first)")
-        self._append_event_record(
-            RuntimeEvent(
-                timestamp_s=self._clock.now(),
-                event_type="run_finalized",
-                phase="run",
-                message="bundle finalized",
-            )
-        )
-        (self._path / "summary_metrics.json").write_text(
-            json.dumps(self._staged_summary, indent=2, sort_keys=True) + "\n"
-        )
-        self._closed = True
+        from joulewise import timing_receipts
+        try:
+            with timing_receipts.bind(self.timing), timing_receipts.span("finalize", "bundle_finalize"):
+                self._append_event_record(
+                    RuntimeEvent(
+                        timestamp_s=self._clock.now(),
+                        event_type="run_finalized",
+                        phase="run",
+                        message="bundle finalized",
+                    )
+                )
+                (self._path / "summary_metrics.json").write_text(
+                    json.dumps(self._staged_summary, indent=2, sort_keys=True) + "\n"
+                )
+                self._closed = True
+        finally:
+            if self._event_stream is not None and self._closed:
+                self._event_stream.close()
         return self._path

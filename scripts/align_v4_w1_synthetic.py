@@ -214,6 +214,8 @@ def run_member(world, config_map, runs_root, *, label):
     from joulewise.controller import run_benchmark
     from joulewise.schemas import BenchmarkConfig
     from joulewise.align.apple.registry_select import registry_for_config
+    from tests.battery_float_fixture import fresh_ioreg
+    import subprocess
     config = BenchmarkConfig.from_mapping(config_map)
     registry = registry_for_config(config)
     gated = registry is not None
@@ -229,7 +231,10 @@ def run_member(world, config_map, runs_root, *, label):
     world.turn = 0
     start = world.clock.now()
     with patch('joulewise.bundle._writer_launch_lineage', return_value=None):
-        bundle, summary = run_benchmark(config, runs_root, world.clock, registry=registry)
+        bundle, summary = run_benchmark(config, runs_root, world.clock, registry=registry,
+            battery_clock=world.clock,
+            battery_runner=lambda argv: subprocess.CompletedProcess(
+                argv, 0, fresh_ioreg(now_s=world.clock.now()), b''))
     return {'label': label, 'run_id': config.run_id, 'bundle': str(bundle), 'gated': gated,
             'status': summary.status.value,
             'failure_reason': getattr(summary.failure_reason, 'value', None),
