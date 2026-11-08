@@ -367,13 +367,15 @@ class CalibrationStopTests(unittest.TestCase):
                 cad.calibration_stop([bad])
         self.assertEqual(cad.calibration_stop([dict(window('C1', 3, 3), eligible_total=6)])['attempted'], 1)
 
-    def test_two_added_sentinels_do_not_make_capture_counts_impossible(self):
-        # delta2 S2 M1: 22 + 2 added sentinels = 24 captured, still 7 eligible benign per pair.
-        rows = [window(f'C{i}', 7, 7, captured=24) for i in range(1, 9)]
+    def test_supplemental_sentinels_are_not_counted_so_the_ceiling_is_22(self):
+        # R20 supersedes the delta2 reading (22 + 2 added sentinels = 24 captured): ordinals 23/24 are
+        # supplemental diagnostics that count toward nothing, not even captured_members.
+        rows = [window(f'C{i}', 7, 7, captured=22) for i in range(1, 9)]
         self.assertEqual(cad.calibration_stop(rows)['decision'], 'calibration_complete')
-        self.assertEqual(cad.CAPTURED_MAX, 24)
-        with self.assertRaises(ValueError):
-            cad.calibration_stop([window('C1', 7, 7, captured=25)])      # beyond any authorized roster
+        self.assertEqual(cad.CAPTURED_MAX, cad.WINDOW_MEMBERS)
+        for captured in (23, 24, 25):
+            with self.subTest(captured=captured), self.assertRaises(ValueError):
+                cad.calibration_stop([window('C1', 7, 7, captured=captured)])
 
     def test_calibration_totals_in_the_packet_must_sum_from_the_rows(self):
         rows = [window(f'C{i}', 7, 7) for i in range(1, 9)]

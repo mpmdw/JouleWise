@@ -246,15 +246,15 @@ class TopupAndRosterControls(unittest.TestCase):
                 self.assertFalse(topup.derive([*rows[:2], bad, *rows[2:]], NOW)['admissible'])
         self.assertFalse(topup.derive(rows[:3]+rows[4:], NOW)['admissible'])
 
-    def test_twenty_four_capture_roster_keeps_the_seven_per_pair_and_fixed_eight_limits(self):
-        rows = [window(f'C{i}', 7, 7, captured=24) for i in range(1, 9)]
+    def test_twenty_two_capture_roster_keeps_the_seven_per_pair_and_fixed_eight_limits(self):
+        rows = [window(f'C{i}', 7, 7, captured=22) for i in range(1, 9)]    # R20 / delta5 S2 F5: the ceiling is 22; ordinals 23/24 count toward nothing
         result = cadence.calibration_stop(rows)
         self.assertEqual(result['decision'], 'calibration_complete')
         self.assertEqual(result['eligible_by_pair'], {'spam': 56, 'bank': 56})
         with self.assertRaises(ValueError):
-            cadence.calibration_stop([*rows[:-1], window('C8', 7, 7, captured=25)])
+            cadence.calibration_stop([*rows[:-1], window('C8', 7, 7, captured=24)])
         with self.assertRaises(ValueError):
-            cadence.calibration_stop([*rows[:-1], window('C8', 8, 7, captured=24)])
+            cadence.calibration_stop([*rows[:-1], window('C8', 8, 7, captured=22)])
         self.assertEqual(cadence.calibration_stop(rows[:-1])['decision'], 'continue')
 
 

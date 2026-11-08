@@ -213,3 +213,14 @@ names a committed ruling text file at the series commit. The builder emits
 consumer admits it only when `after_window` is the previous window. A false `v4_B_bar` alone does
 not fail the full desk (`full_desk_gate.pass` from the native desk, else the recorded checks minus
 the exempt key); `battery_window` governs it.
+
+## Series history, supplemental sentinels and the desk ceiling (delta5)
+
+The packet's `series_history` is derived from the hash-linked records. For a calibration attempt the
+counts come from the frozen calibration pool only (ordinary and supplemental sentinels, anchors, known-H
+and test members never enter the eligible counts); `captured_members` counts authenticated captures
+minus the supplemental diagnostics (R20), so a window with only supplemental captures counts zero. Each
+calibration record must commit the desk's provisional `series_desk_row` (`pilot.extra_checks`); its
+`desk_eligible_benign` is carried into the history as an upper bound that the final counts may lower,
+never raise. A retry's previous window (`C1#2`) is compared with the series by its slot (`C1`), while
+the full attempt id stays in the chain, the records and any ruling.

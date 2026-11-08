@@ -3,7 +3,7 @@
   "calibration": {
     "benign_per_pair_per_window": 7,
     "counted_windows": 8,
-    "final_eligibility": "R17: window k final before the arm of k+2 and before any full-desk-gated arm",
+    "fence_from": "C6",
     "minimum_eligible_per_pair": 39,
     "replacements": 0
   },

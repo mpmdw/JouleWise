@@ -99,8 +99,9 @@ def candidate():
                 d_mapping='alias_calibration', test_windows=TEST_WINDOWS, order=[r['id'] for r in windows],
                 windows=windows,
                 calibration=dict(counted_windows=CALIBRATION_WINDOWS, benign_per_pair_per_window=7,
-                                 minimum_eligible_per_pair=39, replacements=0,
-                                 final_eligibility='R17: window k final before the arm of k+2 and before any full-desk-gated arm'),
+                                 minimum_eligible_per_pair=39, replacements=0, fence_from='C6'),
+    # NOTE (R17, RUN_STATE 228): ``fence_from`` stays in the seed-checked frozen bytes, but the
+    # RUN_STATE 216 fence it records is WITHDRAWN; bind_packet enforces R17's k+2 rule instead.
                 seed_allocation=dict(held_out_start=HELD_OUT_START, reserved=sorted(RESERVED_INDICES),
                                      order='per pair, kit order: window order then ordinal; distinct indices',
                                      zero_capture_rearm='reuses the same seeds'),
@@ -497,6 +498,17 @@ def _attempts(history):
     return [entry for entry in history if 'lead_release' not in entry]
 
 
+def slot_of(window_id):
+    """The frozen slot of an attempt id: ``C3#2`` (a validated zero-capture retry) is slot ``C3``.
+
+    Only the registered ``<slot>#<k>`` form is normalized; anything else is returned unchanged and
+    therefore fails to match a slot. Full attempt ids stay in records, chain and ruling references.
+    """
+    import re
+    match = re.fullmatch(r'([CTD][1-9][0-9]*)#[1-9][0-9]*', window_id) if isinstance(window_id, str) else None
+    return match.group(1) if match else window_id
+
+
 def bind_packet(root, name, packet, *, authenticated_by_rebuild=False):
     """Bind a packet to the frozen series window.
 
@@ -516,7 +528,7 @@ def bind_packet(root, name, packet, *, authenticated_by_rebuild=False):
     if target['id'] == 'W1':
         if history or packet.get('previous_window') != 'R1':
             raise ValueError('W1 must follow R1 with no series history')
-    elif target['id'] != next_id or packet.get('previous_window') != previous:
+    elif target['id'] != next_id or slot_of(packet.get('previous_window')) != previous:
         raise ValueError(f'triage does not arm the next frozen window ({next_id})')
     if 'previous_window_is_w1' in packet and packet['previous_window_is_w1'] is not (previous == 'W1' and target['id'] != 'W1'):
         raise ValueError('previous W1 flag disagrees with series history')

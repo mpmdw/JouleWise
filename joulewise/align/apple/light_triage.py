@@ -24,7 +24,7 @@ codes and capture presence only.
 from __future__ import annotations
 
 SCHEMA = 'joulewise.align_v4.light_triage.v1'
-PAIR_OF_TASK = {'spam_filter_update': 'spam', 'bank_transfer_2': 'bank'}
+PAIR_OF_TASK = {'spam_filter_update': 'spam', 'bank_transfer_2': 'bank', 'spam': 'spam', 'bank': 'bank'}
 
 
 def apply_harvest_codes(record, codes):
@@ -98,8 +98,11 @@ def member_eligibility(records, plan_rows, *, captured, final):
 
 
 def is_calibrator(row):
-    """Default fresh-benign calibrator predicate (the D series manifest may override)."""
-    return row.get('role') == 'D' and row.get('condition') == 'benign' and row.get('task_pair') in PAIR_OF_TASK
+    """Fresh-benign calibrator, as the packet builder counts it (delta5): only the frozen calibration
+    pool (``pool_role``) when the roster carries pool metadata, never a supplemental sentinel."""
+    in_pool = row.get('pool_role') == 'calibration' if 'pool_role' in row else True
+    return (in_pool and not row.get('supplemental') and row.get('role') == 'D'
+            and row.get('condition') == 'benign' and row.get('task_pair') in PAIR_OF_TASK)
 
 
 def calibration_row(window_id, plan_rows, eligibility, *, calibrator=is_calibrator):

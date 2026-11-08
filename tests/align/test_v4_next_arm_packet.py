@@ -66,6 +66,11 @@ class Scenario:
             'desk': {'plan_id': plan_id, 'pilot_status': 'instrument_ok',
                      'checks': {'synthetic_check': True, 'v4_B_bar': b_bar}, 'harvest_status': 'ok'},
             'exclusions': {'members_excluded': []}}
+        if window not in ('W1', 'R1'):
+            # The desk's committed provisional counts: a permissive upper bound by default (7 per pair).
+            self.sources['pilot']['extra_checks']['series_desk_row'] = {
+                'window_id': window.split('#')[0], 'status': 'provisional', 'flags': [],
+                'captured_members': 0, 'desk_eligible_benign': dict.fromkeys(cad.CAL_PAIRS, 7)}
         self.record = {'schema': builder.RECORD_SCHEMA, 'window': window,
                        'role': 'development' if window in ('W1', 'R1') else 'calibration',
                        'finalized_at_epoch_s': 101, 'previous_record': previous.link if previous else None}
@@ -126,7 +131,8 @@ class Scenario:
                 m['excluded'] = bool(m['calibration_exclusions'])
             self.sources['light_triage'] = {'schema': builder.LIGHT_TRIAGE_SCHEMA, 'window': self.window,
                 'thermal': light_thermal, 'checks': {'v4_B_bar': self.sources['desk']['checks']['v4_B_bar']},
-                'km003c': self.sources['pilot']['extra_checks']['km003c']}
+                'km003c': self.sources['pilot']['extra_checks']['km003c'],
+                'series_desk_row': self.sources['pilot']['extra_checks'].get('series_desk_row')}
             self.sources['desk'] = {'plan_id': self.sources['plan']['plan_id'], 'status': 'running_off_mbp'}
             self.omit_sources.update(('pilot', 'exclusions'))
         if self.previous_final:
