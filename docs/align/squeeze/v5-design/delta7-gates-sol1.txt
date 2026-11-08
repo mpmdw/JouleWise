@@ -1,0 +1,15 @@
+mode=gates reps=20000
+EXACT IID honest-member rates; arbitrary across-rule dependence bounded by union
+cutoff=14 per_rule_false_fail=0.42954005 six_independent_fail=0.96553717 six_independent_pass=0.03446283 six_union_bound=1.00000000
+cutoff=22 per_rule_false_fail=0.01432719 six_independent_fail=0.08294231 six_independent_pass=0.91705769 six_union_bound=0.08596314
+true_FPR=0.050 per_rule_gate_pass=0.98567281
+true_FPR=0.075 per_rule_gate_pass=0.64378811
+true_FPR=0.080 per_rule_gate_pass=0.52113326
+true_FPR=0.100 per_rule_gate_pass=0.13509284
+true_FPR=0.125 per_rule_gate_pass=0.00884819
+true_FPR=0.150 per_rule_gate_pass=0.00022518
+Hoeffding width=0.07314043 U(14/280)=0.12314043 U(22/280)=0.15171185
+COUPLED_NOMINAL per-rule false-fail=0.0135[0.0120,0.0152] 0.0146[0.0130,0.0163] 0.0142[0.0127,0.0159] 0.0147[0.0132,0.0165] 0.0149[0.0133,0.0167] 0.0152[0.0136,0.0170]
+COUPLED_NOMINAL six_rule old_pass=0.1068[0.1026,0.1112] new_pass=0.9281[0.9244,0.9316]
+DATE_CONSTANT_5 nominal per-rule false_fail=0.14744374 six_independent_fail=0.61599376
+elapsed_s=13.81
