@@ -1042,6 +1042,34 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+222. **Magistrate activation 17ca7bed (Opus 5.5, headless, 2026-11-08 about 00:50 PST): R1-ARM-1 (Sol) delivered and passed an executing review on the Mac. Under item 220, R1 is not armed. It waits for the agreement report and a lead ruling.**
+- **R1-ARM-1** (`lane/2026-11-08-r1-arm`):
+  - **Build:** `0b54827da`, plus review commit `5c0b79d31`. Route (a): a HAZARD_PACK window around the unchanged R1 chain, with diagnostic D-109 bookends; KM003C starts through the shared driver.
+  - **Code:** `scripts/arm_align_r1.py` and `joulewise/align/r1_arm.py`, about 250 lines. Nothing changed in run_night, night_gate, the watchdog or R1 measurement code.
+  - **Window:** `window_max_s` 105,127 s (96,427 + 3,300 + 2×(1,800+600) + 600).
+  - **Synthetic run:** end to end through real `run_night`, wrapper, R1 zsh, driver and a synthetic runtime, for both the normal and the interrupt-restore cases.
+  - **Commit:** the seat's sandbox could not write git metadata, so the magistrate committed for it.
+- **Executing review** (Opus 5.5 subagent on the Mac, cross-family to the builder): **ADMIT_WITH_FIXES**, no BLOCKER. Record: `docs/align/reviews/2026-11-08-r1-arm-magistrate-executing-review.md` on that lane.
+  - **Tests:** 226 ALIGN tests pass. `tests.test_run_night` has the same single pre-existing ERROR on head and base `e901eb2a4` (`Ruling76DriverTests...observer_faults...`, mocked SystemExit 19).
+  - **Watchdog fence:** verified across a span longer than 29 h.
+  - **Clock hold:** cannot refuse a healthy clock.
+  - **`--dry-arm`:** refuses only `night_refused_agent_present`, which is correct while an agent is alive.
+  - **MEDIUM:** the ceiling covers the R6-2 retries plus one batch wait, but no ruling-8 load redo. About one redo fits in the unspent arm and bookend time.
+  - **LOWs:** a `clock.rate_above_budget` flag on every arm; bookend D-109 rows land in the measurement checkout's ledger; the runbook's t0 leaves about 3 min for the notice (use ≥ 15 min); borrowed 600 s close/harvest budgets.
+- **Item 202 (4), magistrate:** every scheduled job measured in R0 re-runs 8-11 is far below the ruling-8 redo bar of > 0.5 core for 60 s: softwareupdated 0.25-0.29 core, trustkit 0.09, routined 0.05. So the known schedule gives flags, not redos or a refusal.
+- **Opus build** (`lane/2026-11-08-r1-arm-opus` @ `d5882a34e`) chose a **different route**: a ruled, chain-bound DIAGNOSTIC_NO_PACK night. Picking the route is the agreement report's and the lead's call (item 220).
+- **Measurement checkout** `JouleWise-measurement-20261102-align-pilot2` is untouched at `9c40e4e5d`, clean. Nothing is armed and no night agent is loaded.
+
+**Next activation (replaces item 218's pointer; items 202-204, 207, 209, 210, 212-217, 219-221 hold):**
+(1) Wait for the lead's ruling item that names the agreed R1 route and sha (item 220). Arm nothing before it.
+(2) On that ruling: run the chosen route's runbook from `$M` (the switch to the ruled sha is a non-fast-forward detached checkout; the `.venv` is kept, and no dependency file differs from `9c40e4e5d`).
+  - Choose t0 ≥ now + 15 min so the arm notice fits.
+  - Send Ed the arm notice before install.
+  - Have the display asleep and no external volume mounted.
+  - Exit before t0.
+(3) After R1: record per item 202 (5)/(after R1), check the Automatic restore and the KM003C capture (item 211 (2)), uninstall, mail Ed.
+(4) Item 205 (4) holds: Flash-Next and the SSD qualification wait for Ed at the Mac (Sunday).
+
 221. **Laptop lead (interactive session 1544c617), 2026-11-08 00:35 PST: standing anti-idle rules (Ed, "persistent rules to do a robust smoke that would catch these could remedy this no? or SOMETHING").** This week the MBP lost more time sitting idle than to slow steps: four R0 refusals from guards that refuse on routine macOS activity, and R1 with no arm route (item 218). These rules bind the lead and the magistrate from now on.
 1. **Readiness of the next two steps.** The next two MBP steps must show GREEN on an automated end-to-end readiness check before either is scheduled. The check runs the real arm path in synthetic mode, PREQUAL, kit `--check`, and confirms the required rulings and receipts exist and that no required test is skipped. A RED within 24 h of the MBP reaching that step is a critical-path alarm for the lead. Tooling is being built on `ops/2026-11-08-readiness-gate`: a scheduled CI job every 3 h plus an hourly Air job.
 2. **Guard replay before gating.** A new or changed guard that can refuse a run first replays against recorded idle and contended host traces and reports its false-refusal rate. Above the stated bound, it may not gate a real run without a lead ruling. Tooling: `ops/2026-11-08-guard-replay`, including a cheap trace recorder for the idle MBP between windows.
