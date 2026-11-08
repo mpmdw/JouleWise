@@ -400,12 +400,46 @@ class AnchorSigmaTests(unittest.TestCase):
                 members.append({"ordinal": o, "kind": "anchor", "run_id": rid})
                 results[rid] = {"usable": True, "energy": {"turn_owned_gpu_j": v}}
             windows.append({"window_id": wid, "members": members})
-        out = rc.anchor_sigma_w(windows, results)
+        elig = {w["window_id"]: {m["run_id"]: {"eligible": True} for m in w["members"]} for w in windows}
+        out = rc.anchor_sigma_w(windows, results, elig)
         self.assertEqual(out["W"], 3)
         self.assertAlmostEqual(out["sigma_w2_raw"], (out["ms_window"] - out["ms_interaction"]) / 4, places=12)
         self.assertLess(out["sigma_w2_raw"], 0)          # identical window means: negative raw estimate
         self.assertEqual(out["sigma_w2"], 0.0)
-        self.assertIsNone(rc.anchor_sigma_w(windows[:2], results))   # K >= 3
+        self.assertIsNone(rc.anchor_sigma_w(windows[:2], results, elig))   # K >= 3
+        # R23 (c): a W1 anchor failing the member-eligibility screen drops W1 from the table, as for C/T.
+        elig["W1"]["W1:a2"] = {"eligible": False}
+        self.assertIsNone(rc.anchor_sigma_w(windows, results, elig))
+        self.assertIsNone(rc.anchor_sigma_w(windows, results))             # no screen, no anchors
+
+
+class DCResidualTests(unittest.TestCase):
+    def test_rows_mirror_the_gpu_benign_rows(self):
+        # R23-4: residual rows = the GPU benign LOTO rows; a trainer without DC gives dc_training_unavailable
+        # (never a smaller training set); a row without its own DC is dc_unavailable.
+        rng = rc.random.Random(3)
+        turns = {}
+        for i in range(8):
+            ts = []
+            for k in range(6):
+                c, p, d = rng.randrange(0, 5000), rng.randrange(100, 2000), rng.randrange(100, 1000)
+                ts.append({"context": c, "prefill": p, "decode": d, "reasoning": 0, "gpu_j": 1.0})
+            turns[f"r{i}"] = ts
+        dc_rows = {rid: {"status": "ok", "dc_turn_j": [10.0 + 0.01 * t["prefill"] + 0.2 * t["decode"]
+                                                       for t in ts]} for rid, ts in turns.items()}
+        dc_rows["r7"] = {"status": "missing_dc"}
+        results = {rid: {"turns": ts} for rid, ts in turns.items()}
+        fitted = {"C1": {"spam": {"variants": {"logged": {"loto": {f"r{i}": {} for i in range(8)}}}}}}
+        windows = [{"window_id": "C1", "members": []}]
+        out = rc.dc_residuals(windows, fitted, results, {"C1": {"members": dc_rows}}, {})
+        sc = out["C1"]["spam"]["scores"]
+        self.assertEqual(sorted(sc), [f"r{i}" for i in range(8)])
+        self.assertEqual(sc["r7"]["status"], "dc_unavailable")
+        self.assertTrue(all(sc[f"r{i}"]["status"] == "dc_training_unavailable" for i in range(7)))
+        dc_rows["r7"] = {"status": "ok", "dc_turn_j": [1.0] * 6}
+        out = rc.dc_residuals(windows, fitted, results, {"C1": {"members": dc_rows}}, {})
+        self.assertEqual(out["C1"]["spam"]["scores"]["r0"]["status"], "ok")
+        self.assertEqual(out["C1"]["spam"]["scores"]["r0"]["training_run_ids"], [f"r{i}" for i in range(1, 8)])
 
 
 class U3Tests(unittest.TestCase):
@@ -570,11 +604,11 @@ class CarrierTests(unittest.TestCase):
                          {"dose": 128, "status": "nonmonotone", "level_reached_at_h0": False})
         # R23-2: crossings search doses > 0 only; a level already reached at H = 0 is flagged, undefined.
         self.assertEqual(rc.crossing(fr((.55, .6, .7, .8, .9, .95, 1, 1)), 0.5),
-                         {"dose": None, "status": "undefined: level reached at H = 0", "level_reached_at_h0": True})
+                         {"dose": None, "status": "undefined: level reached at h0", "level_reached_at_h0": True})
         self.assertEqual(rc.crossing(fr((.55, .6, .7, .8, .9, .95, 1, 1)), 0.9)["dose"], 512)
         self.assertEqual(rc.crossing(fr((0, .1, .2, .3, .6, .9, 1, 1), missing=(512,)), 0.5)["status"],
                          "undefined: dose unreachable")
-        self.assertEqual(rc.crossing(fr((0, .1, .1, .1, .1, .1, .1, 1)), 0.5)["status"], "undefined")
+        self.assertEqual(rc.crossing(fr((0, .1, .1, .1, .1, .1, .1, 1)), 0.5)["status"], "undefined: level not reached")
 
 
 class ThermalSummaryTests(unittest.TestCase):

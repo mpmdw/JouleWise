@@ -30,6 +30,20 @@ was not read.
 | R23-4 (A20) | Dropped KM003C samples | the device-ms step comes from the header `rate_idx` (500/100/20/1 ms; unknown → `meter.rate_unknown`); a counter step over one rate step leaves dropped samples; a dropped sample inside a span makes THAT span's DC value null with a reason in `unavailable_reasons` (`meter.dropped_sample_in_span:member` or `:turn:<k>`); `synth.write_meter` now writes the rate index of its poll period (it wrote 2 for 100 ms polls) | `meter_stream`, `dropped_in`, `dc_window`; `synth.write_meter` | `test_dropped_sample_makes_the_span_value_unavailable`, `test_rate_index_matches_the_poll_period` |
 | R23-5 | Export contract (also in `RELEASE-RUNBOOK-v4.md` §6) | (a) sensor keys are production `policy.sensors.{s_fast, s_slow}`; (b) anchor run ids must be `"<window_id>:<run_id>"`, else `window_malformed`; (c) the W1 record carries `sentinel_ordinals`, which must equal the R15 W1 roster's (5, 17) and the members of kind `sentinel`, else `w1_sentinel_ordinals_mismatch` | `thermal_summary`, `load_series` | `test_window_record_defects`, `test_w1_sentinel_ordinals_must_match_the_r15_roster` |
 
+**R23 clarifications (Opus cold review of engine-r23), applied in the same revision:**
+- R23-4: only the DC RESIDUAL row set mirrors the GPU benign rows (the benign LOTO rows of each fitted
+  window × pair), with training sets copied from them; a trainer without DC gives
+  `dc_training_unavailable`, a row without its own DC `dc_unavailable`. DC-in VALUE rows print for EVERY
+  captured member with an episode record (W1, anchors, sentinels, ineligible members, barred windows, T
+  before `calibration_complete`); each benign value row carries `residual_status` (`available`,
+  `no_gpu_row`, `dc_unavailable`, `dc_training_unavailable`). Test `DCResidualTests`, `test_dc_in`.
+- Crossing statuses for an undefined crossing are exactly `undefined: dose unreachable`,
+  `undefined: level not reached` and `undefined: level reached at h0`.
+- W1 anchors in σ_w pass the same member-eligibility screen as C/T anchors (`anchor_sigma_w(…,
+  eligibility)`).
+- `consecutive_B_failures` and the zero-capture exclusion-reason rule are engine-side (the B bar is arm-
+  enforced, A36; the recompute keys each attempt as its own window record).
+
 Every new test failed against `c0d1efcae` and passes here. `synth.write_member` now starts the episode 5 s
 after its G0 window, as production places G0 before the episode.
 

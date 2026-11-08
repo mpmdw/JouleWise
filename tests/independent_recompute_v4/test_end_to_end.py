@@ -135,6 +135,18 @@ class SeriesTests(unittest.TestCase):
         self.assertEqual(list(dc["members"]["align-v4-c3-e09"]), ["sealed_sha256"])
         res = self.out["dc_in"]["benign_residual_print_only"]["C3"]
         self.assertEqual(sum(v["n_benign"] for v in res.values()), 14)
+        # R23-4: value rows for EVERY captured benign member; only the residual rows mirror the GPU rows.
+        self.assertEqual(row["residual_status"], "available")
+        for wid, rid in (("C3", "C3:align-v4-c3-e01"), ("C3", "align-v4-c3-e05"), ("C1", "align-v4-c1-e06"),
+                         ("C2", "align-v4-c2-e06"), ("W1", "W1:align-v4-w1-e01"), ("W1", "align-v4-w1-e17")):
+            r = self.out["dc_in"]["windows"][wid]["members"][rid]
+            self.assertEqual((r["status"], r["residual_status"]), ("ok", "no_gpu_row"), rid)
+        gpu = self.out["fits"]["C3"]
+        for pair, body in res.items():
+            self.assertEqual(sorted(body["scores"]), sorted(gpu[pair]["logged"]["loto"]))
+            for rid, sc in body["scores"].items():
+                self.assertEqual(sc["training_run_ids"], sorted(r for r in body["scores"] if r != rid))
+        self.assertNotIn("C2", self.out["dc_in"]["benign_residual_print_only"])     # barred: no GPU rows
 
     def test_turn_energies_match_the_power_record(self):
         # Re-derive one member's gross episode energy from raw frames with the A21 placement rule.

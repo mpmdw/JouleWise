@@ -1668,16 +1668,19 @@ def u4_series(windows, results, eligibility, references):
     verdicts = [r for r in per.values() if r.get("verdict") not in (None, "unevaluable")]
     return {"status": "ok", "E_ref_j": e_ref, "per_window": per,
             "series_verdict": verdicts[-1]["verdict"] if verdicts else "unevaluable",
-            "anchor_sigma_w_print_only": anchor_sigma_w(windows, results)}
+            "anchor_sigma_w_print_only": anchor_sigma_w(windows, results, eligibility)}
 
 
-def anchor_sigma_w(windows, results):
+def anchor_sigma_w(windows, results, eligibility=None):
     """Print-only balanced crossed-anchor moments over every window with four usable anchors, W1 included
     (R23-1): raw MoM sigma_w^2 = (MS_window - MS_interaction)/4 and its clamp max(0, raw); K >= 3 (IR section 5)."""
     table = []
     for w in windows:
         anchors = sorted((m for m in w["members"] if m["kind"] == "anchor"), key=lambda m: m["ordinal"])
-        vals = [results[m["run_id"]]["energy"]["turn_owned_gpu_j"] for m in anchors if results[m["run_id"]].get("usable")]
+        # R23 (c): W1 anchors pass the same full member-eligibility screen as C/T anchors.
+        elig = (eligibility or {}).get(w["window_id"], {})
+        vals = [results[m["run_id"]]["energy"]["turn_owned_gpu_j"] for m in anchors
+                if results[m["run_id"]].get("usable") and elig.get(m["run_id"], {}).get("eligible") is True]
         if len(anchors) == 4 and len(vals) == 4:
             table.append(vals)
     W = len(table)
@@ -1871,7 +1874,7 @@ def crossing(fractions, level):
     R23-2: if the H = 0 fraction already reaches the level, the crossing is undefined and flagged."""
     h0 = fractions["0"]["fraction"]
     if h0 is not None and h0 >= level:
-        return {"dose": None, "status": "undefined: level reached at H = 0", "level_reached_at_h0": True}
+        return {"dose": None, "status": "undefined: level reached at h0", "level_reached_at_h0": True}
     prefix = []
     for g in NUMERIC_GRID:
         if fractions[str(g)]["missing"]:
@@ -1880,7 +1883,7 @@ def crossing(fractions, level):
     hit = next((g for g in prefix if g != 0 and fractions[str(g)]["fraction"] >= level), None)
     if hit is None:
         return {"dose": None, "status": "undefined: dose unreachable" if len(prefix) < len(NUMERIC_GRID)
-                else "undefined", "level_reached_at_h0": False}
+                else "undefined: level not reached", "level_reached_at_h0": False}
     after = [fractions[str(g)]["fraction"] for g in NUMERIC_GRID[NUMERIC_GRID.index(hit):]
              if fractions[str(g)]["fraction"] is not None]
     return {"dose": hit, "status": "ok" if all(f >= level for f in after) else "nonmonotone",
@@ -2110,8 +2113,11 @@ def dc_window(task):
 
 
 def dc_residuals(windows, fitted, results, dc, eligibility):
-    """R21 A20: the five-term fit refitted on DC-in turn-owned energies, same LOTO structure, h = 0,
-    benign only, print-only. GPU coefficients are never transferred."""
+    """R21 A20 with R23-4: the five-term fit refitted on DC-in turn-owned energies, h = 0, print-only. The
+    residual row set and every LOTO training set MIRROR the GPU benign rows exactly (the benign members of
+    each fitted window x pair, logged). A row whose own DC is unavailable is ``dc_unavailable``; a row with
+    a training member lacking DC is ``dc_training_unavailable`` (never a smaller training set). GPU
+    coefficients are never transferred."""
     out = {}
     for w in windows:
         wid = w["window_id"]
@@ -2119,19 +2125,23 @@ def dc_residuals(windows, fitted, results, dc, eligibility):
             continue
         out[wid] = {}
         for pair in PAIRS:
-            benign = []
-            for m in w["members"]:
-                row = dc[wid]["members"].get(m["run_id"], {})
-                if (m["kind"] == "benign" and m["model"] == "D" and m["pair"] == pair
-                        and eligibility[wid][m["run_id"]]["eligible"] and row.get("status") == "ok"
-                        and None not in row["dc_turn_j"]):
-                    turns = [dict(t, dc_j=e) for t, e in zip(results[m["run_id"]]["turns"], row["dc_turn_j"])]
-                    benign.append((m["run_id"], turns))
+            gpu = fitted[wid].get(pair, {}).get("variants", {}).get("logged", {}).get("loto", {})
+            rows = {}
+            for rid in sorted(gpu):
+                row = dc[wid]["members"].get(rid, {})
+                if row.get("status") == "ok" and None not in row["dc_turn_j"]:
+                    rows[rid] = [dict(t, dc_j=e) for t, e in zip(results[rid]["turns"], row["dc_turn_j"])]
             scores = {}
-            for rid, turns in benign:
-                fit = fit_members([t for r, t in benign if r != rid], "logged", key="dc_j")
-                scores[rid] = score_episode(fit, turns, "logged", key="dc_j")
-            out[wid][pair] = {"n_benign": len(benign), "scores": scores}
+            for rid in sorted(gpu):
+                if rid not in rows:
+                    scores[rid] = {"status": "dc_unavailable"}
+                elif any(r not in rows for r in gpu if r != rid):
+                    scores[rid] = {"status": "dc_training_unavailable"}
+                else:
+                    fit = fit_members([rows[r] for r in sorted(gpu) if r != rid], "logged", key="dc_j")
+                    scores[rid] = score_episode(fit, rows[rid], "logged", key="dc_j")
+                scores[rid]["training_run_ids"] = [r for r in sorted(gpu) if r != rid]
+            out[wid][pair] = {"n_benign": len(gpu), "scores": scores}
     return out
 
 
@@ -2242,7 +2252,10 @@ def recompute(root, workers=1, cache_dir=None, timings=None, stage="full", freez
             members = []
             for m in w["members"]:
                 r = results[m["run_id"]]
-                if r.get("usable"):
+                # R23-4: DC-in VALUE rows print for every captured member with an episode record, eligible or
+                # not (W1, anchors, sentinels, barred windows, T before calibration_complete). Only the
+                # residual rows mirror the GPU benign rows.
+                if r.get("captured") and "owned_by_turn" in r:
                     members.append((m["run_id"], (r["episode"]["start_ns"], r["episode"]["end_ns"]),
                                     r["owned_by_turn"]))
             dc_tasks.append((w["window_id"], str(series["root"] / "windows" / w["window_id"]),
@@ -2301,6 +2314,14 @@ def recompute(root, workers=1, cache_dir=None, timings=None, stage="full", freez
     claim["w1_contrast"] = w1_contrast(w1, results, eligibility[w1["window_id"]]) if w1 else None
     claim["status"] = claim_status(stop, calibration, test, score_t)
     dc_res = dc_residuals(windows, fits, results, dc, eligibility)
+    for w in windows:          # R23-4: each benign DC value row names its residual status
+        res_w = dc_res.get(w["window_id"], {})
+        for m in w["members"]:
+            row = dc[w["window_id"]]["members"].get(m["run_id"])
+            if row is not None and m["condition"] == "benign":
+                res = res_w.get(m["pair"], {}).get("scores", {}).get(m["run_id"])
+                row["residual_status"] = ("no_gpu_row" if res is None else
+                                          "available" if res.get("status") == "ok" else res.get("status"))
     timings["decision_stage_s"] = time.perf_counter() - t3
     t4 = time.perf_counter()
     sealed_members = set()
