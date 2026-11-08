@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -725,6 +726,114 @@ class ArmRebuildTests(Base):
                 return subprocess.CompletedProcess(argv, 0, b'', b'')
             self.assertFalse(session._probe_meter_live(tmp, runner=absent)['live'])
             self.assertFalse(session._probe_meter_live(tmp, runner=lambda argv, **k: subprocess.CompletedProcess(argv, 2, b'', b''))['live'])
+
+
+class ArmOrderWitness(Base):
+    """Lead ruling on R17 review open item 5: the full order of one real arm through _arm_and_install.
+
+    Every subprocess, file write and disk_usage of the arm precedes the dwell stamp. After it come
+    only the single dwell-record write (the stamp value) and the installer handoff. Recorded with a
+    Python audit hook (subprocess.Popen, open-for-write, os.rename/replace/remove/mkdir) plus the
+    host-observation seams, which stand for subprocesses on the MBP.
+    """
+
+    def test_every_subprocess_write_and_disk_usage_precedes_the_dwell_stamp(self):
+        import shutil
+        import sys
+        from scripts import align_v4_session as session, align_v4_kit as kit
+        from tests.align.test_v4_cadence import write_battery_log
+        from scripts import align_v4_series as series
+        s = self.scenario()
+        s.write(series.MANIFEST.as_posix(), series.raw_json(series.candidate()))   # W1 -> C1 binds the frozen series
+        s.finish()
+        packet = s.build()
+        target = Path(tempfile.mkdtemp(dir=s.root.parent)) / 'session'
+        target.mkdir()
+        log = write_battery_log(target.parent / 'battery.jsonl', NOW)
+        events, state = [], {'on': False}
+        write_flags = os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_APPEND | os.O_TRUNC
+
+        def hook(event, args):
+            if not state['on']:
+                return
+            if event == 'subprocess.Popen':
+                events.append(('subprocess', ' '.join(map(str, args[1] or [args[0]]))[:60]))
+            elif event == 'open' and len(args) >= 3:
+                mode, flags = args[1], args[2]
+                if (isinstance(mode, str) and any(c in mode for c in 'wxa+')) or (
+                        mode is None and isinstance(flags, int) and flags & write_flags):
+                    events.append(('write', str(args[0])))
+            elif event in ('os.rename', 'os.replace', 'os.remove', 'os.mkdir', 'shutil.copyfile'):
+                events.append(('write', f'{event}:{args[0]}'))
+        sys.addaudithook(hook)
+        real_usage = shutil.disk_usage
+
+        def usage(path):
+            events.append(('disk_usage', str(path)))
+            return real_usage(path)
+
+        def seam(name, value):
+            def call(*_args, **_kwargs):
+                events.append(('subprocess', 'seam:' + name))
+                return value
+            return call
+
+        def disk_gate(config, gate=None):
+            Path(log).read_bytes()                       # the gate's reads
+            shutil.disk_usage(target)
+            return {'status': 'pass'}
+
+        def stamp():
+            events.append(('DWELL', 'stamp'))
+            return time.monotonic_ns()
+        good = dict(passed=True, probe_error=False, external_connected=True, is_charging=False,
+                    current_capacity_pct=100, instant_amperage_ma=0, update_age_s=1)
+        arm_state = {'v4_series': {'window_id': 'C1'}, 'source_measurement_root': str(s.root)}
+        with patch.dict(os.environ, {'JOULEWISE_HOST_STATE_DIR': str(target.parent / 'host')}), \
+             patch('joulewise.align.apple.powermode.admit_ac_powermode',
+                   side_effect=seam('powermode', {'admitted': True, 'observed': 0})), \
+             patch('joulewise.align.apple.external_volume.census', side_effect=seam('volumes', {})), \
+             patch('joulewise.align.apple.external_volume.arm_check',
+                   return_value={'verdict': 'PASS', 'reasons': []}), \
+             patch('joulewise.battery_float.observe', side_effect=seam('battery', (good, b'synthetic'))), \
+             patch.object(kit, 'arm_powermode_check', side_effect=seam('powermode_check', None)), \
+             patch.object(session, 'w1_disk_check', side_effect=disk_gate), \
+             patch('shutil.disk_usage', side_effect=usage), \
+             patch.object(session.pilot, 'install', side_effect=seam('INSTALL', {'synthetic': True})):
+            state['on'] = True
+            try:
+                session._arm_and_install(target, arm_state, s.root, s.next_plan, None,
+                    runner=lambda argv: subprocess.CompletedProcess(argv, 0, '', ''), volume_runner=None,
+                    now=lambda: NOW, w1_disk_config=None, disk_gate=None, battery_log=log,
+                    obc_off_attested_by='synthetic', next_arm_triage=packet,
+                    meter_probe=seam('meter_probe', {'live': True, 'samples': 40}), dwell_start=stamp)
+            finally:
+                state['on'] = False
+        kinds = [kind for kind, _ in events]
+        self.assertEqual(kinds.count('DWELL'), 1, events)
+        cut = kinds.index('DWELL')
+        before, after = events[:cut], events[cut + 1:]
+        dwell_record = str(target / 'staging/v4-arm-001.dwell.json')
+        # After the stamp: exactly the one dwell-record write, then the installer handoff.
+        self.assertEqual([e for e in after if e[0] != 'write' or e[1] != dwell_record],
+                         [('subprocess', 'seam:INSTALL')], after)
+        self.assertEqual(sum(e == ('write', dwell_record) for e in after), 1, after)
+        # Before it: the Git work, every host seam, the disk gate's disk_usage and every record write.
+        self.assertTrue(any(k == 'subprocess' and 'git' in v for k, v in before), before)
+        for name in ('powermode', 'volumes', 'battery', 'meter_probe', 'powermode_check'):
+            self.assertIn(('subprocess', 'seam:' + name), before)
+        self.assertIn(('disk_usage', str(target)), before)
+        written = {v for k, v in before if k == 'write'}
+        for name in ('staging/v4-arm-001.json', 'session.json', 'staging/w1_disk_gate.json'):
+            # pilot.h.write publishes through a hidden temporary and a rename
+            self.assertTrue(any(name.rsplit('/', 1)[-1] in v for v in written), (name, sorted(written)))
+        dwell = json.loads(Path(dwell_record).read_bytes())
+        self.assertTrue(dwell['admitted'])
+        self.assertTrue(dwell['quiet_dwell']['meter_probe_before_dwell'])
+        self.assertTrue(dwell['quiet_dwell']['record_checks_and_writes_before_dwell'])
+        record = json.loads((target / 'staging/v4-arm-001.json').read_bytes())
+        self.assertIsNone(record['quiet_dwell']['start_ns'])
+        self.assertEqual(record['quiet_dwell']['dwell_record'], dwell_record)
 
 
 class R17ProvisionalTests(Base):

@@ -214,7 +214,13 @@ a,b=p(sys.argv[1]),p(sys.argv[2]); print(json.dumps({"equal": a==b, "differ": so
 
 - **Light triage `thermal_escalation`** reads `status: pass` only when every U1–U3 passed. An `inconclusive` result, like a `fail`, owes the registered consequence unless `--ladder-recorded` (R17 review F6). This is what the packet builder applies.
 - **The arm's Git checks and the frozen-series binding** finish before the meter probe and before `quiet_dwell.start_ns` is recorded. The arm record says so in `quiet_dwell.git_and_series_binding_before_dwell` (R17 review F7).
-- The arm record write, the powermode check and the W1 disk gate still follow the recorded dwell start. They are file reads and one `disk_usage`; there is no Git work and no subprocess. The night job's own clean dwell (`clean_dwell.json`) starts after install.
+- **Lead ruling on R17 review open item 5:** the arm record write (`staging/v4-arm-NNN.json`), the powermode check, the W1 disk gate's reads and `disk_usage`, the `session.json` write and `staging/w1_disk_gate.json` now all run BEFORE the dwell stamp. A failing powermode check or disk gate is now recorded in the arm record as a refusal reason.
+- The stamp is the arm's last step. After it come only:
+  1. the in-memory probe-before-dwell order;
+  2. one write of that single dwell value, `staging/v4-arm-NNN.dwell.json` (`quiet_dwell.start_ns`, `meter_probe_before_dwell`, final `admitted`);
+  3. the installer handoff, or the refusal.
+- The arm record's `quiet_dwell` names that file and carries `start_ns: null`. Read the dwell from the `.dwell.json` file.
+- Witness: `tests.align.test_v4_next_arm_packet.ArmOrderWitness`.
 
 ## 9. Accepted disclosure: battery streak exposure (R17)
 

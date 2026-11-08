@@ -76,6 +76,9 @@ class CommittedSeriesTests(unittest.TestCase):
             except ValueError as exc:
                 error = str(exc)
             record = json.loads((target / 'staging/v4-arm-001.json').read_bytes())
+            # Lead ruling (R17 review open item 5): the arm record is written before the dwell stamp;
+            # the stamp and the order it proves are written alone, after it, to the dwell record.
+            record['quiet_dwell'] = json.loads((target / 'staging/v4-arm-001.dwell.json').read_bytes())['quiet_dwell']
             return record, error, install.call_count
 
     def test_honest_r1_to_w1_and_w1_to_c1_reach_installer(self):
