@@ -59,9 +59,7 @@ def _quantile(values, probability):
     values = sorted(values)
     if not values:
         return None
-    index = (len(values) - 1) * probability
-    lo, hi = math.floor(index), math.ceil(index)
-    return values[lo] if lo == hi else values[lo] + (index-lo)*(values[hi]-values[lo])
+    return values[max(0, math.ceil(len(values)*probability)-1)]
 
 
 def _crossing(points, probability):
@@ -95,7 +93,7 @@ def calibration_cutoff(scores, *, alpha=.025):
             'alarm_comparison': '>', 'assumption': 'exchangeable scores from the same frozen scorer'}
 
 
-def benign_carrier_curve(rows, *, bootstrap_replicates=1000, seed=0):
+def benign_carrier_curve(rows, *, bootstrap_replicates=1000, seed=0, grid=None):
     """Untouched H=0 leave-one-source-carrier calibration, strict .025 ranks.
 
     Each carrier has one H=0 score; doses are actual integers, not nominal
@@ -141,19 +139,28 @@ def benign_carrier_curve(rows, *, bootstrap_replicates=1000, seed=0):
             if row['h'] == 0:
                 expected[row['pair']] += 1
         curves = defaultdict(list)
+        if grid is not None:
+            for pair in expected:
+                for h in grid:
+                    cells[pair, h]  # retain doses no carrier can reach
         for (pair, h), values in sorted(cells.items()):
-            curves[pair].append((h, sum(values)/len(values)
-                                if None not in values and len(values) == expected[pair] else None))
+            curves[pair].append((h, sum(values)/len(values) if values and None not in values else None))
         result = {}
         for pair, points in curves.items():
             complete = all(p is not None for _, p in points)
             monotone = complete and all(a[1] <= b[1] for a, b in zip(points, points[1:]))
-            result[pair] = {'curve': points, 'H50': _crossing(points, .5) if monotone else None,
-                            'H90': _crossing(points, .9) if monotone else None,
+            prefix = []
+            for h, p in points:
+                if p is None or len(cells[pair, h]) != expected[pair]:
+                    break
+                prefix.append((h, p))
+            result[pair] = {'curve': points, 'H50': _crossing(prefix, .5),
+                            'H90': _crossing(prefix, .9),
                             'n_by_h': {h: len(cells[pair, h]) for h, _ in points},
                             'expected_carriers': expected[pair],
                             'status': 'available' if complete else 'insufficient_calibration',
-                            'crossing_status': 'grid_only' if monotone else 'undefined',
+                            'all_carrier_prefix': [h for h, _ in prefix],
+                            'crossing_status': 'grid_only' if len(prefix) == len(points) else 'undefined: dose unreachable beyond prefix',
                             'monotone': monotone}
         return result
 
@@ -175,9 +182,11 @@ def benign_carrier_curve(rows, *, bootstrap_replicates=1000, seed=0):
             values = draws[pair][name]
             missing = sum(v is None for v in values)
             result['bootstrap_undefined_replicates'][name] = missing
-            result['window_cluster_bootstrap'][name] = ([None, None] if missing or not values else
-                                                       [_quantile(values, .05), _quantile(values, .95)])
+            defined = [v for v in values if v is not None]
+            result['window_cluster_bootstrap'][name] = [_quantile(defined, .05), _quantile(defined, .95)]
     return {'estimand': 'benign_carrier_detection', 'status': 'registered_secondary',
+            'bootstrap_recipe': dict(seed=seed, replicates=bootstrap_replicates,
+                resample='Random.choices(sorted_window_ids, k=number_of_windows)', interval='type-1 5/95 percentiles of defined replicates'),
             'pairs': point, 'bootstrap_unit': 'window', 'calibration_reference': 'untouched H=0',
             'bootstrap_scope': 'conditional on fixed leave-one-carrier thresholds; duplicated windows retain multiplicity',
             'validity': 'exchangeability/common frozen scorer and window dependence remain separate qualifications'}
@@ -268,11 +277,14 @@ def acceptance_labels():
 
 def contrast_delivery(rows, *, delta_slow_c):
     """Manipulation check on admitted temperature or actual G1 waiting."""
-    s = [float(r["admission_slow_c"]) for r in rows if r["arm"] == "S" and r.get("admission_slow_c") is not None]
-    g = [float(r["admission_slow_c"]) for r in rows if r["arm"] == "G" and r.get("admission_slow_c") is not None]
-    g_turns = [wait for r in rows if r["arm"] == "G" for wait in r.get("g1_wait_s_by_turn", [])]
+    def admission(arm):
+        return [float(v) for r in rows if r['arm'] == arm for v in
+                (r.get('admission_slow_c') if isinstance(r.get('admission_slow_c'), list) else
+                 [r.get('admission_slow_c')]) if v is not None]
+    s, g = admission('S'), admission('G')
+    g_turns = [wait for r in rows if r['arm'] == 'G' for wait in r.get('g1_waited_by_turn', [])]
     temperature_effect = fmean(s) - fmean(g) if s and g else None
-    waited_fraction = sum(wait > 0 for wait in g_turns)/len(g_turns) if g_turns else None
+    waited_fraction = sum(g_turns)/len(g_turns) if g_turns and None not in g_turns else None
     delivered = ((temperature_effect is not None and temperature_effect >= delta_slow_c/2)
                  or (waited_fraction is not None and waited_fraction >= .5))
     return {"status": "implementation_check", "delivered": delivered,

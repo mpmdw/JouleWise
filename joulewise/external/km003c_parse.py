@@ -114,10 +114,15 @@ def load(path: str | Path) -> tuple[dict | None, dict | None, list[dict], list[d
     protocol error; the samples it carried show up as dropped samples.
     """
 
+    return load_bytes(read_bytes(Path(path)))
+
+
+def load_bytes(raw: bytes) -> tuple[dict | None, dict | None, list[dict], list[dict]]:
+    """The same record decoder for an already digest-verified explicit export."""
     header = trailer = None
     batches: list[dict] = []
     errors: list[dict] = []
-    lines = read_bytes(Path(path)).decode("utf-8").split("\n")
+    lines = raw.decode("utf-8").split("\n")
     for number, line in enumerate(lines, 1):
         if not line.strip():
             continue
@@ -338,7 +343,14 @@ class Stream:
 
 
 def parse(path: str | Path) -> Stream:
-    header, trailer, batches, errors = load(path)
+    return parse_records(*load(path))
+
+
+def parse_bytes(raw: bytes) -> Stream:
+    return parse_records(*load_bytes(raw))
+
+
+def parse_records(header, trailer, batches, errors) -> Stream:
     if header is not None and "status" not in header:
         header = {**header, "status": "streaming"}  # the probe's streams predate the field
     if header is None or header.get("status") != "streaming":

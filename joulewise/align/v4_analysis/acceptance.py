@@ -9,19 +9,21 @@ from statistics import fmean, stdev
 
 from joulewise.align.apple import thermal_desk as td
 from joulewise.align.apple import v4_estimands as estimands
+from . import exclusions as ex
 
 
 def _series_tail(q, n, tests):
-    hi, steps = n+14*math.sqrt(2*n)+40, 2000
+    # w=sqrt(v) removes the chi-square density's origin singularity.
+    hi, steps = math.sqrt(n+14*math.sqrt(2*n)+40), 4000
     h = hi/steps
     log_c = -(n/2)*math.log(2)-math.lgamma(n/2)
     total = 0.
     for i in range(1, steps+1):
-        x = i*h
-        tail = min(math.erfc(q*math.sqrt(x/n)/math.sqrt(2)), 1-1e-16)
+        w = i*h
+        tail = min(math.erfc(q*w/math.sqrt(n)/math.sqrt(2)), 1-1e-16)
         value = -math.expm1(tests*math.log1p(-tail))
         total += (1 if i == steps else 4 if i%2 else 2)*math.exp(
-            log_c+(n/2-1)*math.log(x)-x/2)*value
+            log_c+math.log(2)+(n-1)*math.log(w)-w*w/2)*value
     return total*h/3
 
 
@@ -44,7 +46,8 @@ def u3_derivation(evidence):
     s0 = math.sqrt(math.fsum(v*v for v in r)/len(r))
     if s0 <= 0:
         return {'status': 'inconclusive', 'reason': 'U3 scale is zero'}
-    heavy = any(abs(v)/s0 > 3 for v in r)
+    heavy = any(abs(v) > 3*math.sqrt(math.fsum(x*x for j, x in enumerate(r) if j != i)/(len(r)-1))
+                for i, v in enumerate(r))
     beta = .025 if heavy else .05
     lo, hi = 0., 200.
     for _ in range(64):
@@ -57,7 +60,7 @@ def u3_derivation(evidence):
                        and abs(screen['relative_difference']) <= 1.5*bar)
     return dict(status='available', n=len(r), rms_relative=s0, q=hi, beta=beta,
                 comparisons=16, d_transfer_factor=1.5, heavy_tail_rule_applied=heavy,
-                heavy_tail_rule='RUN_STATE 226: abs(r)/s0 > 3',
+                heavy_tail_rule='R21 A22: abs(r_i) > 3 * zero-centred leave-one-out RMS',
                 relative_bar_30B=bar, relative_bar_D=1.5*bar,
                 d_screen='not_refuted' if screen_pass else 'missing_or_refuted',
                 qualified=evidence.get('frozen_before_W1') is True,
@@ -65,17 +68,19 @@ def u3_derivation(evidence):
 
 
 def u3_pair(a, b, derivation, population):
-    if any(td.calibration_exclusions(m) or m.get('status') != 'completed'
-           or set((m.get('battery') or {}).get('flags', [])) &
-              {'battery.member_span', 'battery.accumulator_excursion'} for m in (a, b)):
-        return dict(status='inconclusive', reason='ineligible replay member')
-    if a.get('tokens') is None or b.get('tokens') is None:
-        return dict(status='inconclusive', reason='identity missing')
-    if a['tokens'] != b['tokens']:
+    if any('X5' in m.get('analysis_classes', []) for m in (a,b)):
         return dict(status='excluded', reason='X5', token_identical=False)
-    if a.get('identity_evidence') is None or b.get('identity_evidence') is None:
-        return dict(status='inconclusive', reason='transcript/cache/seed identity unavailable')
-    if a['identity_evidence'] != b['identity_evidence']:
+    if any(ex.classes(td.calibration_exclusions(m)) or m.get('status') != 'completed'
+           or set((m.get('battery') or {}).get('flags', [])) &
+              {'battery.member_span', 'battery.accumulator_excursion'} or m.get('analysis_ineligible', False) for m in (a, b)):
+        return dict(status='inconclusive', reason='ineligible replay member')
+    if not a.get('identity_sha256') or not b.get('identity_sha256'):
+        return dict(status='inconclusive', reason='identity missing')
+    if a['identity_sha256'] != b['identity_sha256']:
+        return dict(status='excluded', reason='X5', token_identical=False)
+    if a.get('turn_counts') is None or b.get('turn_counts') is None:
+        return dict(status='inconclusive', reason='per-turn counts missing')
+    if a['turn_counts'] != b['turn_counts']:
         return dict(status='excluded', reason='X5', token_identical=False)
     values = [m.get('turn_owned_j') for m in (a, b)]
     if any(type(v) not in (int, float) or not math.isfinite(v) or v <= 0 for v in values):
@@ -95,18 +100,27 @@ def u3_pair(a, b, derivation, population):
                 active_clock_difference_fraction=clock, token_identical=True)
 
 
-def window_checks(members, derivation):
+def window_checks(members, derivation, *, window=None):
     result = {}
     for model in sorted({m['slot']['model_id'] for m in members}):
         rows = [m['thermal'] for m in members if m['slot']['model_id'] == model]
-        # Replays are explicitly tagged; no search for an outcome-favorable pair.
+        by_ordinal = {m['slot'].get('ordinal', m['thermal'].get('ordinal')): m['thermal']
+                      for m in members if m['slot']['model_id'] == model}
+        fixed = ([(5, 17)] if model == 'qwen3.8-27b' else [(6, 16), (9, 13), (7, 15), (10, 12)]) if window == 'W1' else (
+            [(5, 22)] if model == 'qwen3.8-27b' else [])
+        # Tags are a custody assertion, never a pair selector.
         groups = {}
-        for m in rows:
-            if m.get('identical_work_group'):
-                groups.setdefault(m['identical_work_group'], []).append(m)
-        pairs = [u3_pair(v[0], v[1], derivation, 'D' if model == 'qwen3.8-27b' else '30B')
-                 if len(v) == 2 else dict(status='inconclusive', reason='replay cardinality')
-                 for v in groups.values()]
+        for ordinal, row in by_ordinal.items():
+            if row.get('identical_work_group'):
+                groups.setdefault(row['identical_work_group'], []).append(ordinal)
+        if groups and sorted(sorted(v) for v in groups.values()) != sorted(sorted(v) for v in fixed):
+            raise ValueError('desk replay tags differ from fixed ordinal pairs')
+        pairs = []
+        for a, b in fixed:
+            p = (u3_pair(by_ordinal[a], by_ordinal[b], derivation,
+                        'D' if model == 'qwen3.8-27b' else '30B') if a in by_ordinal and b in by_ordinal else
+                 dict(status='inconclusive', reason='fixed replay missing'))
+            pairs.append(dict(ordinals=[a, b], **p))
         # Anchors in C/T are bridge diagnostics, not extra U3 tests (N=16).
         check = td.acceptance(rows, v4=True)
         check['U3'] = dict(status=td.combine([p['status'] for p in pairs if p['status'] != 'excluded'])
@@ -123,7 +137,7 @@ def battery(members):
         charge += bool(flags & {'battery.member_span', 'battery.accumulator_excursion'})
         missing += b.get('status') != 'observed'
         assist += 'battery.assist' in flags
-    return dict(status='fail' if charge else 'inconclusive' if missing else 'pass',
+    return dict(status='fail' if charge else 'unavailable' if missing else 'pass',
                 charging_members=charge, unobserved_members=missing, assist_members=assist,
                 next_action='fresh_topup_and_obc' if charge else 'none', assist='disclosure_only',
                 members=[dict(run_id=m['slot']['run_id'],
@@ -153,43 +167,56 @@ def u4(reference, windows):
     if not ref > 0:
         return dict(status='inconclusive', reason='positive E_ref required')
     values = {'W1': list(reference['w1_sentinel_j'].values())}
+    per_window = {'W1': dict(status='unevaluable', window_count=1, skipped=False)}
     for window in windows:
-        sentinels = [m for m in window['members'] if m['slot']['series_role'] == 'sentinel']
-        if any(not m['eligible'] or m['thermal'].get('tokens') is None
-               or len(m.get('summary', {}).get('residual_rows', {}).get('True', [])) < 3 for m in sentinels):
-            return dict(status='inconclusive', reason='sentinel incomplete or ineligible')
-        if len(sentinels) < 2 or any(m['thermal']['tokens'] != sentinels[0]['thermal']['tokens'] for m in sentinels):
-            return dict(status='inconclusive', reason='sentinel identity unavailable/divergent')
-        values[window['window']] = [m['thermal']['turn_owned_j'] for m in sentinels]
-    result = td._sentinel_equivalence(values, ref)
+        name = window['window']
+        sentinels = [m for m in window['members'] if m['slot']['ordinal'] in (5, 22)]
+        reason = None
+        if len(sentinels) != 2 or any(not m['eligible'] or not m['thermal'].get('identity_sha256')
+               or len((m.get('summary') or {}).get('residual_rows', {}).get('True', [])) < 3 for m in sentinels):
+            reason = 'sentinel incomplete or ineligible'
+        elif (len({m['thermal']['identity_sha256'] for m in sentinels}) != 1 or
+              sentinels[0]['thermal'].get('turn_counts') != sentinels[1]['thermal'].get('turn_counts')):
+            reason = 'sentinel identity unavailable/divergent'
+        if reason:
+            per_window[name] = dict(status='inconclusive', skipped=True, reason=reason, window_count=len(values))
+            continue
+        values[name] = [m['thermal']['turn_owned_j'] for m in sentinels]
+        result = td._sentinel_equivalence(values, ref) if len(values) >= 3 else dict(status='unevaluable')
+        per_window[name] = {**result, 'window_count': len(values), 'skipped': False}
+    evaluated = [r for r in per_window.values() if not r['skipped']]
+    result = evaluated[-1]
     return {**result, 'E_ref_j': ref, 'window_count': len(values),
+            'per_window': per_window, 'R20_trigger': result['status'] in ('fail', 'inconclusive'),
             'sigma_w_30b': {'status': 'print_only', 'reason': 'requires balanced crossed anchors'}}
 
 
 def u5(evidence):
     if not evidence:
-        return dict(status='inconclusive', reason='R1 three designed start states missing')
-    pairs = evidence['pairs']
-    if len(pairs) < 3 or any(p.get('token_identical') is not True for p in pairs):
-        return dict(status='inconclusive', reason='three identical-work state pairs required')
-    fit = td.regression([[p['delta_slow_c']] for p in pairs], [p['delta_j'] for p in pairs])
+        return dict(status='inconclusive', reason='R1 three designed start states missing', triggers_R20=False)
+    states = evidence.get('states', [])
+    if len(states) != 3 or any(p.get('token_identical') is not True or
+        any(type(p.get(k)) not in (int,float) or not math.isfinite(p[k]) for k in ('g0_slow_c','turn_owned_j')) for p in states):
+        return dict(status='inconclusive', reason='three identical-work designed-state members required', triggers_R20=False)
+    fit = td.regression([[1., p['g0_slow_c']] for p in states], [p['turn_owned_j'] for p in states])
     if fit is None:
-        return dict(status='inconclusive', reason='state sensitivity rank deficient')
+        return dict(status='inconclusive', reason='state sensitivity rank deficient', triggers_R20=False)
     sigma = max(stdev(evidence['r1_replay_j']), 2.97)
     delta = evidence['delta_slow_c']
-    point = abs(fit['coef'][0])*delta
-    upper = max(map(abs, fit['ci90'][0]))*delta
+    point = abs(fit['coef'][1])*delta
+    upper = max(map(abs, fit['ci90'][1]))*delta
     return dict(status='fail' if point > sigma else 'pass' if upper <= sigma else 'inconclusive',
-                beta_T_j_per_c=fit['coef'][0], beta_T_ci90=fit['ci90'][0], c=1.,
+                beta_T_j_per_c=fit['coef'][1], beta_T_ci90=fit['ci90'][1], c=1.,
+                intercept_j=fit['coef'][0], df=fit['df'], designed_states=states, triggers_R20=False,
                 sigma_pair_j=sigma, delta_slow_c=delta, point_shift_j=point, upper90_shift_j=upper)
 
 
-def u6(records, split_rule):
+def u6(records, split_rule, *, pooled_rss=None, pooled_df=None):
     if split_rule != 'within_pair_episode_order' or len(records) < 2:
         return dict(status='inconclusive', reason='frozen U6 split/unit missing')
     turns = [v for r in records for v in r['residual_j']]
     # The owning contract must explicitly adopt this per-turn s_r definition.
-    if len(turns) < 2:
+    if len(turns) < 2 or pooled_df is None or pooled_df <= 0 or pooled_rss is None or pooled_rss < 0:
         return dict(status='inconclusive', reason='no residual degrees of freedom')
     ordered = sorted(records, key=lambda r: (r['start_ns'], r['trajectory']))
     middle = len(ordered)//2
@@ -220,12 +247,13 @@ def u6(records, split_rule):
                 meat[i][j] += score[i]*score[j]
     variance = sum(inv[1][i]*meat[i][j]*inv[j][1] for i in range(2) for j in range(2))
     se = math.sqrt(max(0., variance))
-    effect, margin = means[1]-means[0], .5*stdev(turns)
+    sr = math.sqrt(pooled_rss/pooled_df)
+    effect, margin = means[1]-means[0], .5*sr
     ci = [effect-1.645*se, effect+1.645*se]
     status = 'fail' if abs(effect) > margin else 'pass' if ci[0] >= -margin and ci[1] <= margin else 'inconclusive'
     return dict(status=status, effect_j=effect, ci90_j=ci, margin_j=margin,
                 trajectory_clustered_se_j=se, se_kind='trajectory_clustered',
                 imprecise=status == 'inconclusive',
                 turn_position_residual_means=estimands.d_turn_position_means(positions),
-                s_r_unit='per_turn_J', s_r_definition='sample SD of frozen-fit benign turn residuals',
-                s_r_j=stdev(turns), split_rule=split_rule)
+                s_r_unit='per_turn_J', s_r_definition='sqrt(sum C-window full-fit RSS / sum full-fit df)',
+                pooled_rss=pooled_rss, pooled_df=pooled_df, s_r_j=sr, split_rule=split_rule)

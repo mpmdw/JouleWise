@@ -223,12 +223,12 @@ class R11Tests(unittest.TestCase):
         self.assertIn('every path', policy['contrast_fit'])
         self.assertNotIn('delete', policy['contrast_g0_cap_s'])
 
-    def test_incomplete_actual_dose_grid_never_shrinks_the_denominator(self):
+    def test_r21_partial_dose_denominator_does_not_license_a_crossing(self):
         rows = [dict(pair='spam', window=f'D{i//8}', carrier=str(i), h=h, score=h)
                 for i in range(40) for h in (0, 128)]
         rows.pop()
         result = est.benign_carrier_curve(rows, bootstrap_replicates=4)['pairs']['spam']
-        self.assertIsNone(dict(result['curve'])[128])
+        self.assertEqual(dict(result['curve'])[128], 1.)
         self.assertIsNone(result['H50'])
         self.assertEqual(result['n_by_h'][128], 39)
         self.assertGreater(result['bootstrap_undefined_replicates']['H50'], 0)

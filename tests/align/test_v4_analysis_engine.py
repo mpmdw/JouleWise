@@ -136,9 +136,10 @@ class SeriesTests(unittest.TestCase):
 
     def test_nonfinite_score_cannot_silently_lower_m(self):
         payload = self.payload_copy()
-        payload['windows'][0]['members'][5]['summary']['energy']['powermetrics:gpu_power']['joules'] = None
+        for key in ('True','False'):
+            payload['windows'][0]['members'][5]['summary']['residual_rows'][key][0]['energy_j'] = None
         fill, _ = analyze(payload)
-        self.assertIn('energy_unavailable', fill['windows'][0]['eligibility'][5]['reasons'])
+        self.assertIn('turn_energy_unavailable', fill['windows'][0]['eligibility'][5]['reasons'])
         self.assertEqual(sum(fill['ledger'][0]['eligible_benign'].values()), 13)
 
     def test_adjudication_may_only_lower_counts(self):
@@ -171,7 +172,8 @@ class SeriesTests(unittest.TestCase):
         from joulewise.align.v4_analysis.engine import selection_report
         result = selection_report({'members': []}, {}, 1., 'INCONCLUSIVE: identity broken')
         self.assertEqual(result['contrast']['verdict'], 'INCONCLUSIVE')
-        self.assertEqual(result['contrast']['reason'], 'INCONCLUSIVE: identity broken')
+        self.assertEqual(result['contrast']['predeclared'], 'INCONCLUSIVE: identity broken')
+        self.assertEqual(result['contrast']['consequence'], 'non_veto')
         self.assertEqual(result['U6']['status'], 'inconclusive')
 
     def test_input_digest_and_path_boundary(self):
@@ -192,10 +194,10 @@ class SeriesTests(unittest.TestCase):
             if missing == 'screen':
                 payload['u3_evidence'].pop('r1_d_screen')
             else:
-                payload['windows'][0]['members'][4]['thermal'].pop('identity_evidence')
+                payload['windows'][0]['members'][4]['thermal'].pop('identity_sha256')
             fill, _ = analyze(payload)
             self.assertEqual(fill['windows'][0]['checks']['qwen3.8-27b']['U3']['status'], 'inconclusive')
-            self.assertEqual(fill['ledger'][0]['eligible_benign'], {'spam': 0, 'bank': 0})
+            self.assertEqual(fill['ledger'][0]['eligible_benign'], {'spam': 7, 'bank': 7})
 
     def test_three_lost_windows_do_not_license_test_scoring(self):
         payload = self.payload_copy()
@@ -209,11 +211,12 @@ class SeriesTests(unittest.TestCase):
         self.assertFalse(any(f['window'].startswith('T') for f in fill['fits']))
         self.assertIn('test_entry_not_authorized', verdict['codes'])
 
-    def test_c6_requires_prior_final_eligibility(self):
+    def test_provisional_eligibility_holds_without_c6_refusal(self):
         payload = self.payload_copy()
         payload['windows'][0]['status'] = 'provisional'
-        with self.assertRaisesRegex(ValueError, 'C6'):
-            analyze(payload)
+        fill, _ = analyze(payload)
+        self.assertEqual(fill['calibration']['decision'], 'pending_final_eligibility')
+        self.assertFalse(any(f['window'].startswith('T') for f in fill['fits']))
 
     def test_frozen_calibration_matches_and_tampering_refuses(self):
         payload = self.payload_copy()

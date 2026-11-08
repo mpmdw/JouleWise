@@ -78,7 +78,7 @@ class Ruling9Tests(unittest.TestCase):
     def test_delivery_by_admitted_temperature_or_g1_waits(self):
         def rows(s_slow, g_waits):
             return [{"arm": "S", "admission_slow_c": s_slow, "g1_wait_s_by_turn": []},
-                    {"arm": "G", "admission_slow_c": 5.0, "g1_wait_s_by_turn": g_waits}]
+                    {"arm": "G", "admission_slow_c": 5.0, "g1_waited_by_turn": [v > 0 for v in g_waits]}]
         self.assertTrue(v4.contrast_delivery(rows(6.0, [0, 0]), delta_slow_c=2)["delivered"])
         self.assertTrue(v4.contrast_delivery(rows(5.0, [3, 0]), delta_slow_c=2)["delivered"])
         result = v4.contrast_delivery(rows(5.5, [0, 0, 4]), delta_slow_c=2)

@@ -201,12 +201,13 @@ def member_record(episode, journal, *, os_readings, pm_samples, pm_period_s,
             if before and after:
                 levels = [max(before)[1], min(after)[1]]
         samples = [r for r in pm_samples if r['start_ns'] < observation_end and r['end_ns'] > turn.start_ns]
-        supports = sorted((max(turn.start_ns, r['start_ns']), min(turn.end_ns, r['end_ns'])) for r in samples)
+        supports = sorted((max(turn.start_ns, r['start_ns']), min(observation_end, r['end_ns'])) for r in samples)
         cursor, gap = turn.start_ns, 0
         for a, b in supports:
             gap = max(gap, a-cursor)
             cursor = max(cursor, b)
-        gap = max(gap, turn.end_ns-cursor)
+        gap = max(gap, observation_end-cursor,
+                  max((r['end_ns']-r['start_ns'] for r in samples), default=0))
         weights = []
         for r in samples:
             # Decode-owned clock excludes holds and prefill, weighted by activity.
@@ -232,7 +233,7 @@ def member_record(episode, journal, *, os_readings, pm_samples, pm_period_s,
         for sample in sorted(pm_samples, key=lambda s: s['start_ns']):
             left, right = max(a, sample['start_ns']), min(b, sample['end_ns'])
             if left < right:
-                pm_gap = max(pm_gap, left-cursor)
+                pm_gap = max(pm_gap, left-cursor, sample['end_ns']-sample['start_ns'])
                 cursor = max(cursor, right)
         pm_gap = max(pm_gap, b-cursor)
     traces = [t for t in episode.power_traces if t.source == source and t.channel == channel]
@@ -245,6 +246,16 @@ def member_record(episode, journal, *, os_readings, pm_samples, pm_period_s,
         per_turn.append({'turn': turn.index, 'decode_clock_mhz': clock,
                          'owned_j': sum(s.energy.joules for s in attributed.segments if s.turn == turn.index),
                          'slow_c': prior[-1]['sensors'].get(policy['sensors']['s_slow']) if prior and gated else None})
+    waited = []
+    for gate in (g for g in intervals if g['kind'] == 'G1'):
+        readings = [r for r in decision_rows if gate['start_ns'] <= r['monotonic_ns'] < gate['end_ns']]
+        ref = (g0 or {}).get('release')
+        valid = [r for r in readings if all(r['sensors'].get(policy['sensors'][s]) is not None
+                                          for s in ('s_fast', 's_slow'))]
+        waited.append(any(r['sensors'][policy['sensors'][s]] > ref[k]+policy[d]
+                          for r in valid for s, k, d in (('s_fast','fast_c','delta_fast_c'),
+                                                       ('s_slow','slow_c','delta_slow_c')))
+                      if valid and ref else None)
     return {'id': episode.episode_id, 'gated': gated, 'model': episode.agent_model,
             'pair': episode.task_pair, 'condition': episode.condition, 'start_ns': episode.start_ns,
             'flags': list(dict.fromkeys([*episode.flags, *thermal.get('flags', []),
@@ -252,9 +263,12 @@ def member_record(episode, journal, *, os_readings, pm_samples, pm_period_s,
             'registered_os_nonzero': any(type(v) is int and v > 0 for _, v in (registered_os_readings or ())),
             'registered_os_observed': registered_os_readings is not None and any(type(v) is int and v >= 0 for _, v in registered_os_readings),
             'coverage': coverage, 'turn_observation': turn_observation, 'pm_period_s': pm_period_s,
+            'sidecar_present': bool(rows), 'g1_waited_by_turn': waited,
+            'admission_slow_c': [t['slow_c'] for t in per_turn if t['slow_c'] is not None],
             'pm_max_gap_s': pm_gap/NS,
             'turn_admissions': len(episode.turns) + sum(r['kind'] == 'G1' and r['outcome'] in ('timeout', 'deadman') for r in intervals),
-            'intervals': intervals, 'releases': releases, 'g0_slow_c': g0['release']['slow_c'] if g0 else None,
+            'intervals': intervals, 'releases': releases,
+            'g0_slow_c': (g0.get('release') or {}).get('slow_c') if g0 else None,
             'tokens': exact_tokens, 'decode_clocks_mhz': clocks, 'turn_owned_j': owned,
             # Cold pass LOW 5: a custody-invalid member's energy is re-attributed
             # with no thermal intervals, so it omits every hold; say so.
@@ -332,17 +346,19 @@ def deciding_experiment(runs, *, v4=False, delta_slow_c=None, predeclared=None):
                           'T REJECTED iff both |d| <=6 J and CI inside [-6,+6] J. '
                           'The contrast governs no D cell; D always retains G1 and holds.')
         if predeclared:
-            return {**result, 'reason': predeclared}
+            result.update(predeclared=predeclared, consequence='non_veto')
         from joulewise.align.apple.v4_estimands import contrast_delivery
         if delta_slow_c is None or delta_slow_c <= 0:
-            return {**result, 'reason': 'missing registered delta_slow_c'}
-        by_template = {t: contrast_delivery([r for r in runs if r.get('template') == t],
-                                            delta_slow_c=delta_slow_c) for t in ('X', 'Y')}
-        delivery = {'by_template': by_template,
-                    'delivered': all(r['delivered'] for r in by_template.values())}
+            result['reason'] = 'missing registered delta_slow_c'
+            delivery = {'by_template': {}, 'delivered': False, 'status': 'inconclusive'}
+        else:
+            by_template = {t: contrast_delivery([r for r in runs if r.get('template') == t],
+                                                delta_slow_c=delta_slow_c) for t in ('X', 'Y')}
+            delivery = {'by_template': by_template,
+                        'delivered': all(r['delivered'] for r in by_template.values())}
         result['delivery'] = delivery
         if not delivery['delivered']:
-            return {**result, 'reason': 'treatment not delivered'}
+            result['reason'] = 'treatment not delivered'
     cells = {(t, a): [r for r in runs if r.get('template') == t and r.get('arm') == a
                      and r.get('pilot7_token_identical') is True and not r.get('excluded', False)
                      and not calibration_exclusions(r)]
@@ -369,9 +385,9 @@ def deciding_experiment(runs, *, v4=False, delta_slow_c=None, predeclared=None):
         return {**result, 'd_template_j': d, 'reason': 'singular contrast design'}
     delta, ci = fit['coef'][2], fit['ci90'][2]
     positive = all(v >= 10 for v in d.values()) if v4 else all(abs(v) >= 10 for v in d.values()) and d['X']*d['Y'] > 0
-    if positive and (ci[0] > 0 or ci[1] < 0):
+    if positive and (ci[0] > 0 or ci[1] < 0) and (not v4 or delivery['delivered']):
         result['verdict'] = 'T CONFIRMED'
-    elif all(abs(v) <= 6 for v in d.values()) and ci[0] >= -6 and ci[1] <= 6:
+    elif all(abs(v) <= 6 for v in d.values()) and ci[0] >= -6 and ci[1] <= 6 and (not v4 or delivery['delivered']):
         result.update(verdict='T REJECTED', branch='light cells use G0 only; heavy cells keep G1 and holds')
     result.update(d_template_j=d, arm_effect_j=delta, ci90_j=ci, df=fit['df'],
                   same_arm_pairs={f'{t}-{a}': identical_pair(*cell) for (t, a), cell in cells.items()})
@@ -641,7 +657,8 @@ def collector_lost(member):
 
 
 def state_unobserved(member):
-    return 'thermal.state_unobserved' in member.get('flags', ()) or collector_lost(member)
+    return ('thermal.state_unobserved' in member.get('flags', ()) or collector_lost(member)
+            or 'X4' in member.get('analysis_classes', ()))
 
 
 def thermal_exclusions(member):
@@ -658,6 +675,7 @@ def thermal_exclusions(member):
         reasons.append('thermal.os_level_nonzero')
     if any(t.get('pm_nominal') is False for t in member.get('turn_observation', ())):
         reasons.append('thermal.powermetrics_non_nominal')
+    reasons.extend(c for c in member.get('analysis_classes', ()) if c in ('X1','X2','X3','X4'))
     return sorted(set(reasons))
 
 
@@ -682,25 +700,29 @@ def acceptance(members, *, pairs=(), u4=None, u5=None, u6=None, u3_bar=None, v4=
     checks.extend('pass' if t['pm_max_gap_s'] <= max(1, 5*r['pm_period_s']) else 'fail'
                   for r in observed for t in r['turn_observation'])
     checks.extend('pass' if r.get('pm_max_gap_s', 0) <= max(1, 5*r['pm_period_s']) else 'fail' for r in observed)
-    admissions = sum(r['turn_admissions'] for r in observed)
-    timeouts = sum(i['kind'] in ('G1', 'H') and i['outcome'] == 'timeout' for r in observed for i in r['intervals'])
-    g0_timeouts = sum(i['kind'] == 'G0' and i['outcome'] == 'timeout' for r in observed for i in r['intervals'])
+    gate_members = [r for r in gated if r.get('captured', True) and r.get('sidecar_present', bool(r.get('coverage')))] if v4 else observed
+    admissions = (sum(i['kind'] in ('G1', 'H') for r in gate_members for i in r['intervals']) if v4 else
+                  sum(r['turn_admissions'] for r in observed))
+    timeouts = sum(i['kind'] in ('G1', 'H') and i['outcome'] == 'timeout' for r in gate_members for i in r['intervals'])
+    g0_timeouts = sum(i['kind'] == 'G0' and i['outcome'] == 'timeout' for r in gate_members for i in r['intervals'])
     checks.append('pass' if g0_timeouts <= 1 else 'fail')
-    checks.append('pass' if admissions and timeouts/admissions <= .02 else 'fail' if admissions else 'inconclusive')
+    checks.append('pass' if admissions and timeouts/admissions <= .02 or v4 and not admissions else 'fail' if admissions else 'inconclusive')
     if not turns or not observed:
         checks.append('inconclusive')
-    slow = [r['g0_slow_c'] for r in included if r.get('g0_slow_c') is not None]
+    slow = [r['g0_slow_c'] for r in included if r.get('g0_slow_c') is not None and (
+        not v4 or any(i['kind'] == 'G0' and i['outcome'] == 'released' for i in r['intervals']))]
     range_c = max(slow)-min(slow) if slow else None
-    release_checks = [v['journal_verified'] for r in included for v in r['releases']]
-    u2 = combine(['pass' if range_c is not None and range_c <= 3 else 'fail' if range_c is not None else 'inconclusive',
-                  combine(['inconclusive' if v is None else 'pass' if v else 'fail' for v in release_checks])
-                  if release_checks else 'inconclusive'])
+    release_checks = [v['journal_verified'] for r in included for v in r['releases'] if not v4 or v.get('kind') != 'G0']
+    u2a = 'pass' if range_c is not None and range_c <= 3 else 'fail' if range_c is not None else 'inconclusive'
+    u2b = (combine(['inconclusive' if v is None else 'pass' if v else 'fail' for v in release_checks])
+           if release_checks else 'not_applicable' if v4 else 'inconclusive')
+    u2 = combine([u2a, *([u2b] if u2b != 'not_applicable' else [])])
     pair_results = [identical_pair(a, b, u3_bar=({} if v4 and u3_bar is None else u3_bar)) for a, b in pairs
                     if not state_unobserved(a) and not state_unobserved(b)]
     eligible_pairs = [p['status'] for p in pair_results if p['status'] != 'excluded']
     results = {'U1': {'status': combine(checks), 'thermal_excluded_members': excluded,
                       'turn_admissions': admissions, 'g1_h_timeouts': timeouts, 'g0_timeouts': g0_timeouts},
-               'U2': {'status': u2, 'g0_slow_range_c': range_c},
+               'U2': {'status': u2, 'g0_slow_range_c': range_c, 'parts': {'a': u2a, 'b': u2b}},
                'U3': {'status': combine(eligible_pairs) if eligible_pairs else 'inconclusive', 'pairs': pair_results},
                'U4': ((u4 or {}).get('sentinels', {'status': 'inconclusive'}) if v4 else _combined_u4(u4)),
                'U5': u5 or {'status': 'inconclusive', 'reason': 'requires pair s_r and state sensitivity evidence'},

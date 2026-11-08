@@ -1,6 +1,8 @@
 """Deterministic synthetic full series. Never opens data or model directories."""
 from copy import deepcopy
 import random
+import math
+from .io import canonical, digest
 
 from .engine import SCHEMA, ORDER, D_MODEL, roster
 from .residual import design_row
@@ -36,7 +38,7 @@ def series(*, turns=12, identity_tokens=8):
                 tokens.append(dict(prompt_token_ids=[(i+k)%256 for i in range(count)],
                     output_token_ids=[(i+slot['seed_index'])%256 for i in range(
                         r['decode_tokens'] if identity_tokens == 'full' else identity_tokens)]))
-            owned = sum(r['energy_j'] for r in rows)
+            owned = math.fsum(r['energy_j'] for r in rows)
             d = slot['model_id'] == D_MODEL
             thermal = dict(id=run, model=slot['model_id'], gated=d, pair=slot['task_pair'],
                 condition=slot['condition'], status='completed', start_ns=(wi*100000+slot['ordinal']*2000)*10**9,
@@ -55,6 +57,8 @@ def series(*, turns=12, identity_tokens=8):
                 battery=dict(status='observed', flags=[], soc_pct=[100., 100.], charger_w=[80., 80.],
                              source_sha256='c'*64),
                 configuration=deepcopy(cohort['configuration']), cohort_identity=deepcopy(cohort['identity']))
+            thermal['identity_sha256'] = digest(canonical([tokens, thermal['identity_evidence']]))
+            thermal['turn_counts'] = [[r[k] for k in ('context_tokens', 'prefill_tokens', 'decode_tokens')] for r in rows]
             if slot['series_role'] == 'sentinel':
                 thermal['identical_work_group'] = 'sentinel'
             summary = dict(flags=[], seed=slot['expected_episode_seed'], residual_rows={
@@ -72,6 +76,7 @@ def series(*, turns=12, identity_tokens=8):
                         r1_d_screen=dict(token_identical=True, eligible=True, relative_difference=.001)),
         reference=dict(qualified=True, r1_replay_j=[reference_j]*2,
                        w1_sentinel_j={'5': reference_j, '17': reference_j}),
-        r1_sensitivity=dict(pairs=[dict(token_identical=True, delta_slow_c=t, delta_j=.1*t)
-                                   for t in (1., 2., 3.)], r1_replay_j=[reference_j]*2, delta_slow_c=1.),
+        r1_sensitivity=dict(states=[dict(token_identical=True, g0_slow_c=t, turn_owned_j=100+.1*t,
+                                        designed_target_c=t) for t in (50., 55., 60.)],
+                            r1_replay_j=[reference_j]*2, delta_slow_c=1.),
         u6_split_rule='within_pair_episode_order', custody='synthetic only; no native qualification')

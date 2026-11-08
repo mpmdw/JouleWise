@@ -50,7 +50,7 @@ def input_path(path):
     path = Path(os.path.abspath(path))
     cwd = Path.cwd()
     if ('restricted' in path.parts or any(p.startswith(('night-', 'jw-b5-')) for p in path.parts)
-            or str(path).startswith('/Users/edr/') and not path.is_relative_to(cwd)):
+            or (path == Path('/Users/edr') or str(path).startswith('/Users/edr/')) and not path.is_relative_to(cwd)):
         raise ValueError('input path refused')
     base = cwd if path.is_relative_to(cwd) else Path(path.anchor)
     cursor = base
@@ -66,15 +66,20 @@ def input_path(path):
 
 
 def read_source(root, reference):
+    return strict_json(read_blob(root, reference))
+
+
+def read_blob(root, reference):
     root = input_path(root)
     path = local_path(root, reference['path'])
     raw = path.read_bytes()
     if digest(raw) != reference['sha256']:
         raise ValueError('source digest differs')
-    return strict_json(raw)
+    return raw
 
 
-def load(path, *, calibration_only=False, document=None, source_session=None):
+def load(path, *, calibration_only=False, through_window=None, cache_dir=None, workers=1,
+         document=None, source_session=None):
     """Input contains explicit thermal PILOT and raw alternative-desk exports.
 
     One in-invocation byte read per (relative path,digest), with every reference
@@ -82,6 +87,11 @@ def load(path, *, calibration_only=False, document=None, source_session=None):
     """
     path = input_path(path)
     payload = deepcopy(document) if document is not None else strict_json(path.read_bytes())
+    if through_window is not None:
+        order = ['W1', *('C'+str(i) for i in range(1,9)), *('T'+str(i) for i in range(1,4))]
+        if through_window not in order:
+            raise ValueError('window prefix differs')
+        payload['windows'] = [w for w in payload['windows'] if order.index(w['window']) <= order.index(through_window)]
     root, sources, census = path.parent, (source_session if source_session is not None else {}), []
     if 'series_source' in payload:
         ref = payload['series_source']
@@ -102,6 +112,13 @@ def load(path, *, calibration_only=False, document=None, source_session=None):
             continue
         if 'members' in window:
             raise ValueError('file input requires source-bound desk exports')
+        if 'raw_source' in window:
+            from . import raw as adapter
+            ref = window['raw_source']
+            native = read_source(root, ref)
+            window['members'] = adapter.window(root, native, window.pop('roster'), cache_dir=cache_dir, workers=workers)
+            census.append(dict(path=ref['path'], sha256=ref['sha256']))
+            continue
         records = []
         for key in ('thermal_source', 'residual_source'):
             ref = window[key]
@@ -130,4 +147,6 @@ def load(path, *, calibration_only=False, document=None, source_session=None):
     if calibration_only:
         payload['windows'] = [w for w in payload['windows'] if not w['window'].startswith('T')]
     payload['input_census'] = census
+    if any(w['window'] == 'W1' for w in payload['windows']):
+        payload['selection_desk'] = dict(members=[m['thermal'] for w in payload['windows'] if w['window'] == 'W1' for m in w['members']])
     return payload
