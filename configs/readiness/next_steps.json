@@ -1,87 +1,307 @@
 {
   "schema": "joulewise.readiness_next2.v1",
-  "mbp_available_at": null,
-  "planning_note": "Lead-maintained candidates, not arm authority. null means a real unresolved prerequisite, never an implied command or receipt. Track branch tips until the lead supplies a full commit pin. Update on every planned step, ruling or lane change. Baseline origin/main dcfa4c593. Downstream checks use its named R0-filled kit candidate (d9d1098c6), pending the agreed route. No network used to populate this list.",
-  "timing_note": "null availability conservatively means MBP available now. Minimum durations give earliest possible hours, not promises: R1 lower bound rounded DOWN from no-redo 67371 s; chain 0; smoke at most 45 min so lower bound 0; W1 lower bound rounded DOWN from 26940 s. Set absolute availability and lower bounds when scheduling.",
+  "mbp_available_at": "2026-11-09T03:59:00Z",
+  "planning_note": "Lead-maintained candidates, not arm authority. null means a real unresolved prerequisite, never an implied command or receipt. Updated 2026-11-08 ~09:25 UTC by the Opus cold review (docs/process/2026-11-08-opus-review-readiness-guardreplay.md on ops/2026-11-08-opus-review-anti-idle). State: R1 is ARMED at lane/2026-11-08-r1-arm-fixes 20e9edbc4 (RUN_STATE 225/227), so R1 is no longer a candidate here. Next two MBP steps: the native W1 smoke (merged kit, align/2026-11-08-w1-smoke-merged) and W1 (align/2026-11-08-v4-r11). The merged smoke kit sits on v4-r11 at 2cce80ede; v4-r11 has since moved to 8d0dabc73, so the smoke does NOT yet exercise the W1 commit (W1-SMOKE.md Part B requires a --w1-next w1 PASS at the exact HEAD the MBP runs). CW-1 (R16, <=2 h characterization after R1) is not yet scheduled; add it as a step when the lead schedules it. R14-R16 agreements live on their own branches; they are listed as evidence so their absence from the W1 tree stays visible.",
+  "timing_note": "mbp_available_at is R1's EARLIEST possible end, not its expected end: t0 2026-11-08T09:17Z (RUN_STATE 227) + the 67,371 s no-redo floor (items 215/219) = 2026-11-09T03:59:51Z, rounded down. Latest end is 2026-11-09T14:39Z. Smoke lower bound 0 (<=45 min). W1 lower bound rounded DOWN from 26,940 s.",
   "steps": [
     {
-      "id": "R1",
-      "branch": "lane/2026-11-08-r1-arm",
-      "minimum_duration_hours": 18.7,
-      "arm": {
-        "exercises": ["run_night", "launcher", "night_gate", "watchdog"],
-        "pending_reason": "No agreed R1 arm route at baseline dcfa4c593 (RUN_STATE 218-220). Lead must pin the agreed route, exact live argv, and an end-to-end FakeWorld/--dry-arm seam; driver-only rehearsal is insufficient.",
-        "route_files": []
-      },
-      "kit": {
-        "required_fields": ["R0.reasoning_effort", "WP15.runtime_entrypoint"],
-        "check": null,
-        "pending_reason": "R1 arm kit/check interface is pending on the agreed route. Do not require downstream R1 outputs to arm R1."
-      },
-      "evidence": [
-        {"name": "independent Sol/Opus arm agreement", "path": "docs/align/R1-ARM-AGREEMENT.md"},
-        {"name": "lead ruling naming agreed R1 route and commit", "path": null},
-        {"name": "R0 completion receipt in code-only form (never a host data path)", "path": null}
-      ],
-      "prequal": {"stage": "r1"},
-      "tests": [
-        {"module": "tests.align.test_r1_runtime_contract", "timeout_s": 120},
-        {"module": "tests.align.test_r1_runtime_e2e", "timeout_s": 480},
-        {"module": "tests.align.test_v4_w1_synthetic", "env": {"JW_WP22_FULL": "1"}, "timeout_s": 600}
-      ]
-    },
-    {"id": "R1->W1 chain"},
-    {
       "id": "W1 smoke",
-      "branch": "align/2026-11-08-w1-smoke",
+      "branch": "align/2026-11-08-w1-smoke-merged",
+      "commit": "1d73b7f1d515112e35dc76980ad3afa776338ecd",
+      "minimum_duration_hours": 0,
       "arm": {
-        "exercises": ["smoke launch", "safe fault injections", "non-registrable outputs"],
-        "pending_reason": "Smoke kit is being built (RUN_STATE 219). Lead must pin the agreed <=45 minute native command and its synthetic launch seam."
+        "live_command": [
+          "$M/.venv/bin/python",
+          "-B",
+          "scripts/align_v4_w1_smoke.py",
+          "run",
+          "--detach",
+          "--measurement-root",
+          "$M",
+          "--smoke-dir",
+          "<smoke-root>/align-v4-smoke-<utc>",
+          "--prequal-report",
+          "<prequal-w1.json>",
+          "--next-arm-triage",
+          "<w1 packet.json>",
+          "--w1-disk-config",
+          "<R0 desk config with W1 offloads>",
+          "--obc-off-attested-by",
+          "<name>",
+          "--battery-log",
+          "<live battery log>"
+        ],
+        "exercises": [
+          "align_v4_prequal --w1-next w1: arm-cli (production install via fake host, 12 cases)",
+          "arm-route (configs/align/v4/arm_routes.json w1 route)",
+          "smoke-kit (isolate + measurement_view + isolation_violations)",
+          "km003c-launch (real HAZARD_PACK driver, reader SIGKILL)",
+          "r1-w1-chain",
+          "wp22-dry-run",
+          "receipt",
+          "deadline",
+          "series-manifest",
+          "w1-window-max"
+        ],
+        "route_files": [
+          "scripts/align_v4_w1_smoke.py",
+          "joulewise/align/w1_smoke.py",
+          "joulewise/align/w1_prequal.py",
+          "configs/align/v4/arm_routes.json",
+          "configs/align/v4/w1_smoke.json",
+          "scripts/align_v4_session.py",
+          "scripts/run_night.py",
+          "joulewise/night_gate.py",
+          "scripts/install_night_agent.sh"
+        ],
+        "synthetic": {
+          "argv": [
+            "{python}",
+            "-B",
+            "scripts/align_v4_prequal.py",
+            "--w1-next",
+            "w1",
+            "--jobs",
+            "4",
+            "--output",
+            "{scratch}/w1next"
+          ],
+          "timeout_s": 900,
+          "assert_json": {
+            "path": "w1next/prequal-w1.json",
+            "equals": {
+              "status": "PASS",
+              "next": "w1"
+            }
+          }
+        }
       },
       "evidence": [
-        {"name": "R1-derived slots", "path": "configs/campaigns/align_v4/registration/r1_slots.json"},
-        {"name": "R1-filled W1 plan", "path": "configs/campaigns/align_v4/registration/w1_plan.json"},
-        {"name": "R1-derived sizing", "path": "configs/campaigns/align_v4/registration/sizing_b5.json"},
-        {"name": "lead chain agreement/ruling (path to be supplied)", "path": null},
-        {"name": "independent smoke design agreement and lead ruling", "path": null}
+        {
+          "name": "W1 smoke Sol/Opus agreement (RUN_STATE 220/221.3)",
+          "path": "docs/align/v4/W1-SMOKE-AGREEMENT.md"
+        },
+        {
+          "name": "R1->W1 chain runbook",
+          "path": "docs/align/R1-TO-W1-CHAIN.md"
+        },
+        {
+          "name": "R14 W1-blockers agreement, in the W1 tree",
+          "path": "docs/align/v4/W1-BLOCKERS-AGREEMENT.md"
+        },
+        {
+          "name": "R15 D/C/T series agreement, in the W1 tree",
+          "path": "docs/align/v4/DCT-SERIES-AGREEMENT.md"
+        },
+        {
+          "name": "R16 condition-waits agreement, in the W1 tree",
+          "path": "docs/align/v4/CONDITION-WAITS-AGREEMENT.md"
+        },
+        {
+          "name": "R1-derived slots (produced by R1)",
+          "path": "configs/campaigns/align_v4/registration/r1_slots.json"
+        },
+        {
+          "name": "R1-filled W1 plan (produced by R1)",
+          "path": "configs/campaigns/align_v4/registration/w1_plan.json"
+        },
+        {
+          "name": "R1-derived sizing (produced by R1)",
+          "path": "configs/campaigns/align_v4/registration/sizing_b5.json"
+        },
+        {
+          "name": "signed W1 registration receipt (W1-SMOKE.md Part B: smoke runs after registration is signed)",
+          "path": null
+        }
+      ],
+      "tests": [
+        {
+          "module": "tests.align.test_w1_smoke",
+          "timeout_s": 300
+        },
+        {
+          "module": "tests.align.test_w1_prequal",
+          "timeout_s": 600
+        },
+        {
+          "module": "tests.align.test_v4_prequal",
+          "timeout_s": 300
+        },
+        {
+          "module": "tests.align.test_v4_kit",
+          "timeout_s": 180
+        },
+        {
+          "module": "tests.align.test_v4_w1_plan",
+          "timeout_s": 120
+        },
+        {
+          "module": "tests.align.test_v4_w1_synthetic",
+          "env": {
+            "JW_WP22_FULL": "1"
+          },
+          "timeout_s": 600
+        }
       ]
     },
     {
       "id": "W1",
+      "branch": "align/2026-11-08-v4-r11",
+      "commit": "8d0dabc73192852692521194b2f452ff1cc6194d",
       "minimum_duration_hours": 7.48,
-      "arm": {"pending_reason": "Lead must pin the exact agreed W1 launch argv and synthetic arm/launch seam after R1 fills the kit."},
+      "arm": {
+        "live_command": [
+          "$M/.venv/bin/python",
+          "-B",
+          "scripts/align_v4_session.py",
+          "install",
+          "<session per align_pilot_session install>",
+          "--w1-disk-config",
+          "<R0 desk config with W1 offloads>",
+          "--obc-off-attested-by",
+          "<name>",
+          "--battery-log",
+          "<live battery log>",
+          "--next-arm-triage",
+          "<w1 packet.json>"
+        ],
+        "pending_reason": "Documentation only (the gate never runs it): the arm_routes.json w1 route is align_v4_session.py prepare/install -> install_night_agent.sh -> run_night.py. The lead has not pinned the exact argv for this commit. The --w1-next seam exists only on the smoke-merged branch, not on v4-r11 8d0dabc73: merge the smoke kit forward (or v4-r11 into it) so one commit carries both.",
+        "exercises": [
+          "align_v4_prequal --w1-next w1 at the W1 commit"
+        ],
+        "route_files": [
+          "scripts/align_v4_session.py",
+          "scripts/run_night.py",
+          "joulewise/night_gate.py",
+          "scripts/install_night_agent.sh",
+          "joulewise/align/w1_prequal.py",
+          "configs/align/v4/arm_routes.json"
+        ],
+        "synthetic": {
+          "argv": [
+            "{python}",
+            "-B",
+            "scripts/align_v4_prequal.py",
+            "--w1-next",
+            "w1",
+            "--jobs",
+            "4",
+            "--output",
+            "{scratch}/w1next"
+          ],
+          "timeout_s": 900,
+          "assert_json": {
+            "path": "w1next/prequal-w1.json",
+            "equals": {
+              "status": "PASS",
+              "next": "w1"
+            }
+          }
+        }
+      },
       "evidence": [
-        {"name": "R1-derived slots", "path": "configs/campaigns/align_v4/registration/r1_slots.json"},
-        {"name": "R1-filled W1 plan", "path": "configs/campaigns/align_v4/registration/w1_plan.json"},
-        {"name": "R1-derived sizing", "path": "configs/campaigns/align_v4/registration/sizing_b5.json"},
-        {"name": "lead chain agreement/ruling (path to be supplied)", "path": null},
-        {"name": "native W1 smoke PASS receipt (code-only attestation)", "path": null}
+        {
+          "name": "W1 smoke Sol/Opus agreement, in the W1 tree",
+          "path": "docs/align/v4/W1-SMOKE-AGREEMENT.md"
+        },
+        {
+          "name": "R1->W1 chain runbook",
+          "path": "docs/align/R1-TO-W1-CHAIN.md"
+        },
+        {
+          "name": "R14 W1-blockers agreement, in the W1 tree",
+          "path": "docs/align/v4/W1-BLOCKERS-AGREEMENT.md"
+        },
+        {
+          "name": "R15 D/C/T series agreement, in the W1 tree",
+          "path": "docs/align/v4/DCT-SERIES-AGREEMENT.md"
+        },
+        {
+          "name": "R16 condition-waits agreement, in the W1 tree",
+          "path": "docs/align/v4/CONDITION-WAITS-AGREEMENT.md"
+        },
+        {
+          "name": "R1-derived slots (produced by R1)",
+          "path": "configs/campaigns/align_v4/registration/r1_slots.json"
+        },
+        {
+          "name": "R1-filled W1 plan (produced by R1)",
+          "path": "configs/campaigns/align_v4/registration/w1_plan.json"
+        },
+        {
+          "name": "R1-derived sizing (produced by R1)",
+          "path": "configs/campaigns/align_v4/registration/sizing_b5.json"
+        },
+        {
+          "name": "signed W1 registration receipt",
+          "path": null
+        },
+        {
+          "name": "native W1 smoke PASS receipt at this commit (code-only attestation)",
+          "path": null
+        }
+      ],
+      "tests": [
+        {
+          "module": "tests.align.test_w1_prequal",
+          "timeout_s": 600
+        },
+        {
+          "module": "tests.align.test_v4_prequal",
+          "timeout_s": 300
+        },
+        {
+          "module": "tests.align.test_v4_kit",
+          "timeout_s": 180
+        },
+        {
+          "module": "tests.align.test_v4_w1_plan",
+          "timeout_s": 120
+        },
+        {
+          "module": "tests.align.test_v4_w1_synthetic",
+          "env": {
+            "JW_WP22_FULL": "1"
+          },
+          "timeout_s": 600
+        }
       ]
     },
     {
-      "id": "D1",
+      "id": "C1",
       "branch": null,
-      "arm": {"pending_reason": "D1 branch, agreed plan, live launch argv and synthetic launch seam are not pinned yet."},
+      "arm": {
+        "pending_reason": "C1 follows W1 closure under R15 (fixed 8 calibration windows, seeds 2-65). Branch, series projection and arm argv not pinned yet."
+      },
       "evidence": [
-        {"name": "R1-derived slots", "path": "configs/campaigns/align_v4/registration/r1_slots.json"},
-        {"name": "R1-filled W1 plan", "path": "configs/campaigns/align_v4/registration/w1_plan.json"},
-        {"name": "R1-derived sizing", "path": "configs/campaigns/align_v4/registration/sizing_b5.json"},
-        {"name": "lead chain agreement/ruling (path to be supplied)", "path": null},
-        {"name": "native W1 smoke PASS receipt (code-only attestation)", "path": null},
-        {"name": "W1 closure and D1 independent-design agreement/ruling", "path": null}
+        {
+          "name": "W1 closure and frozen series projection (R15)",
+          "path": null
+        }
       ]
     }
   ],
   "defaults": {
-    "branch": "lane/2026-11-07-r1-kit-r0fill",
+    "branch": null,
     "commit": null,
     "minimum_duration_hours": 0,
     "arm": {
       "live_command": null,
-      "exercises": ["align_v4_session.prepare", "align_v4_session.install", "run_night", "launcher", "night_gate"],
+      "exercises": [
+        "align_v4_session.prepare",
+        "align_v4_session.install",
+        "run_night",
+        "launcher",
+        "night_gate"
+      ],
       "synthetic": null,
-      "pending_reason": "WP22 exercises kit -> controller -> desk, not the arm/installer/night-driver chain. The lead must supply the agreed chain command and a safe end-to-end synthetic seam.",
-      "route_files": ["scripts/align_v4_session.py", "scripts/run_night.py", "joulewise/night_gate.py", "scripts/launch_window.py"]
+      "pending_reason": "Lead must supply the agreed arm argv and a synthetic end-to-end seam with a success assertion.",
+      "route_files": [
+        "scripts/align_v4_session.py",
+        "scripts/run_night.py",
+        "joulewise/night_gate.py",
+        "scripts/launch_window.py"
+      ]
     },
     "kit": {
       "path": "configs/campaigns/align_v4/registration/inputs.json",
@@ -98,20 +318,39 @@
         "R1.T_dead",
         "R1.thermal_policy"
       ],
-      "check": {"argv": ["{python}", "-B", "scripts/align_v4_kit.py", "--check"], "timeout_s": 180}
+      "check": {
+        "argv": [
+          "{python}",
+          "-B",
+          "scripts/align_v4_kit.py",
+          "--check"
+        ],
+        "timeout_s": 180
+      }
     },
-    "evidence": [
-      {"name": "R1-derived slots", "path": "configs/campaigns/align_v4/registration/r1_slots.json"},
-      {"name": "R1-filled W1 plan", "path": "configs/campaigns/align_v4/registration/w1_plan.json"},
-      {"name": "R1-derived sizing", "path": "configs/campaigns/align_v4/registration/sizing_b5.json"},
-      {"name": "lead chain agreement/ruling (path to be supplied)", "path": null}
-    ],
-    "prequal": {"stage": "w1", "checks": ["r0-config", "kit", "w1-plan", "d-pin-verifier"], "timeout_s": 180},
+    "evidence": [],
+    "prequal": {
+      "stage": "w1",
+      "checks": [
+        "r0-config",
+        "kit",
+        "w1-plan",
+        "d-pin-verifier"
+      ],
+      "timeout_s": 180
+    },
     "tests": [
-      {"module": "tests.align.test_v4_kit", "timeout_s": 180},
-      {"module": "tests.align.test_v4_w1_plan", "timeout_s": 120},
-      {"module": "tests.align.test_v4_w1_synthetic.KitBridgeTests", "timeout_s": 120},
-      {"module": "tests.align.test_v4_w1_synthetic", "env": {"JW_WP22_FULL": "1"}, "timeout_s": 600}
+      {
+        "module": "tests.align.test_v4_kit",
+        "timeout_s": 180
+      },
+      {
+        "module": "tests.align.test_v4_w1_synthetic",
+        "env": {
+          "JW_WP22_FULL": "1"
+        },
+        "timeout_s": 600
+      }
     ]
   }
 }
