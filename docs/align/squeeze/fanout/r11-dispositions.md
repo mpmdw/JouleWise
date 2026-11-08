@@ -172,3 +172,12 @@ window journal, breaks continuity as before. Amendment allowlist unchanged.
 | S1 F3 / S2 F2 attempt id vs slot id | `slot_of` normalizes a validated `<slot>#<k>` to its slot for the previous-window comparison; full attempt ids stay in records, chain and rulings | `align_v4_series.bind_packet` |
 | S2 F3 desk provisional ceiling dropped | The builder reads each calibration record's committed `series_desk_row` (mandatory) and carries `desk_eligible_benign` into the history; the series check refuses final counts above it | builder `desk_ceiling` |
 | S2 F5 22-member ceiling | `CAPTURED_MAX` is 22 (supplemental sentinels count toward nothing); the series binding remains a second guard | `v4_cadence.CAPTURED_MAX` |
+
+## R22 (RUN_STATE 234): Block 5 lessons applied to v4
+
+| Item | Change | Where |
+|---|---|---|
+| R22-1 contention disclosure-only | Every member records its outside-tree CPU-seconds over its member span; a `contention.unmeasured` gap over 30 s is flagged and disclosed, never excluded; no `contention.*` code can exclude a member (desk and committed-record reader strip them; test over the catalog codes) | `v4_contention.py`, `align_v4_session.powermode_desk_check`, builder |
+| R22-2 blind replacement windows | C9 and C10 pre-declared, seeds in kit order after C8 (C9 66-73, C10 74-81 per pair; T1-T3 shift to 82-90 and 100-114); armed only after a STRUCTURAL bar (U1-U3 FAIL, whole-window capture failure, zero-capture refusal beyond the retry); exactly 8 counted windows; `insufficient_calibration` if a pair stays below 39 after both are used or more than two are barred; wired into the manifest generator, `calibration_stop` (`barred`) and the triage (the builder derives bars from the committed record). Manifest bytes changed: a paired Sol seed check and a Sol FPR simulation follow | `align_v4_series.py`, `v4_cadence.py`, builder |
+| R22-3 balance check | Exclusions + flags per member-second by condition and pair against the exposure-adjusted expectation, printed and disclosed (`balance_check`) | `v4_balance.py` |
+| R22-5 tau_rel | 0.13 % (stress 0.21 %) of cell energy recorded as the Block 5 between-window prior; B3's tau = 0.5 s_r conversion to be checked at the first benign residual SD | `pilot_protocol_v4.md` |

@@ -489,30 +489,44 @@ class HistoryChainTests(Base):
         self.assertEqual(builder.FULL_DESK_GATE_EXEMPT, session.FULL_DESK_GATE_EXEMPT)
         self.assertEqual(first['checks']['full_desk_gate']['status'], 'pass')
 
-    def test_two_zero_capture_attempts_escalate_until_a_ruling_with_a_committed_text(self):
+    def test_a_zero_capture_retry_that_is_also_zero_bars_the_slot_and_a_replacement_is_owed(self):
+        # R22-2: a zero-capture refusal beyond the retry is a STRUCTURAL bar: the slot is replaced (C9), not
+        # escalated, and nothing depends on scores or counts.
         s = self.calibration_series([('C1', False, True), ('C1#2', False, True)])
+        packet = s.build()
+        decision = packet['calibration_decision']
+        self.assertEqual(decision['decision'], 'continue')
+        self.assertEqual((decision['barred_windows'], decision['replacements_used']), (['C1#2'], 1))
+        self.assertEqual(decision['attempted'], 0)
+        self.assertTrue(packet['packet_preflight']['ready'], packet['packet_preflight'])
+
+    def test_a_third_zero_capture_bar_escalates_until_a_ruling_with_a_committed_text(self):
+        spec = [(w, False, True) for w in ('C1', 'C1#2', 'C2', 'C2#2', 'C3', 'C3#2')]
+        s = self.calibration_series(spec)
         packet = s.build()
         self.assertFalse(packet['packet_preflight']['ready'])
         self.assertEqual(packet['calibration_decision']['decision'], 'escalate_to_lead')
-        text = b'LEAD RULING SYNTHETIC-1: re-arm C1 after two zero-capture refusals\n'
+        text = b'LEAD RULING SYNTHETIC-1: three zero-capture bars, both replacement windows exhausted\n'
         ref = s.write(f'{s.dir}/rulings/synthetic-1.txt', text)
-        s.series['lead_rulings'] = [{'ruling_id': 'SYNTHETIC-1', 'after_window': 'C1#2', 'text': ref,
+        s.series['lead_rulings'] = [{'ruling_id': 'SYNTHETIC-1', 'after_window': 'C3#2', 'text': ref,
                                      'lead_signature': 'lead: synthetic-ruling 2026-11-08'}]
         s.write(s.series_path, s.series)
         s.series_commit = s.commit()
         packet = s.build()
         self.assertEqual(packet['lead_rulings'], [{
             'ruling_id': 'SYNTHETIC-1', 'text_sha256': hashlib.sha256(text).hexdigest(),
-            'resets': 'zero_capture_escalation', 'after_window': 'C1#2',
+            'resets': 'zero_capture_escalation', 'after_window': 'C3#2',
             'lead_signature': 'lead: synthetic-ruling 2026-11-08'}])        # the digest is computed, not entered
-        self.assertEqual(packet['calibration_decision']['decision'], 'continue')
-        self.assertEqual(packet['calibration_decision']['zero_capture_refusals'], 2)
-        self.assertTrue(packet['packet_preflight']['ready'], packet['packet_preflight'])
+        # the ruling resets the trailing refusal count but cannot repair calibration: 8 counted windows are
+        # out of reach once more than two windows are barred
+        self.assertEqual(packet['calibration_decision']['decision'], 'insufficient_calibration')
+        self.assertEqual(packet['calibration_decision']['zero_capture_refusals'], 6)
+        self.assertFalse(packet['packet_preflight']['ready'])
         for bad in ({'ruling_id': 'X', 'after_window': 'C9', 'text': ref, 'lead_signature': 'lead: s 2026-11-08'},
-                    {'ruling_id': 'X', 'after_window': 'C1#2', 'text': {**ref, 'sha256': '0'*64},
+                    {'ruling_id': 'X', 'after_window': 'C3#2', 'text': {**ref, 'sha256': '0'*64},
                      'lead_signature': 'lead: s 2026-11-08'},
-                    {'ruling_id': 'X', 'after_window': 'C1#2', 'text': ref, 'lead_signature': 'PENDING'},
-                    {'ruling_id': 'X', 'after_window': 'C1#2', 'text': ref}):
+                    {'ruling_id': 'X', 'after_window': 'C3#2', 'text': ref, 'lead_signature': 'PENDING'},
+                    {'ruling_id': 'X', 'after_window': 'C3#2', 'text': ref}):
             s.series['lead_rulings'] = [bad]
             s.write(s.series_path, s.series)
             s.series_commit = s.commit()

@@ -67,7 +67,7 @@ NEXT_ARM_TRIAGE = (
               'exclusions); counts are provisional until this check passes'),
     dict(id='calibration_stop', source=DERIVED, first_window_na=True,
          text='B3 fixed-8 predicate over the packet counts: continue for a calibration arm '
-              'until 8 counted windows, '
+              'until 8 counted windows (a structurally barred window is replaced by C9/C10), '
               'calibration_complete for a test arm; pending_final_eligibility, '
               'insufficient_calibration and escalate_to_lead refuse'),
     dict(id='battery_window', source=PACKET, first_window_na=True,
@@ -265,6 +265,18 @@ ADDED_SENTINELS_MAX = 2           # R20: U4/U5 inconclusive adds two SUPPLEMENTA
 # R20 (delta5 S2 F5): the supplemental sentinels count toward nothing, not even captured_members, so the
 # count-only ceiling is the 22 ordinary members (it was 24 under the delta2 reading, now superseded).
 CAPTURED_MAX = WINDOW_MEMBERS
+# R22-2 (RUN_STATE 234): up to two pre-declared blind replacement calibration windows (C9, C10). A window is
+# replaced, never added: the total stays 8 COUNTED calibration windows. They are armed only when a C window
+# is barred for a STRUCTURAL reason, never on scores or eligible counts.
+REPLACEMENT_WINDOWS = 2
+STRUCTURAL_BARS = ('u1_u3_fail', 'whole_window_capture_failure')     # row['barred'] (set from the committed record)
+ZERO_CAPTURE_BAR = 'zero_capture_refusal'                              # derived: the retry is also a zero capture
+
+
+def slot_of(window_id):
+    """The frozen slot of an attempt id: ``C3#2`` (a validated zero-capture retry) is slot ``C3``."""
+    match = re.fullmatch(r'([CTD][1-9][0-9]*)#[1-9][0-9]*', window_id) if isinstance(window_id, str) else None
+    return match.group(1) if match else window_id
 
 
 def _battery_ruled(rulings, previous):
@@ -295,41 +307,44 @@ def _validated_rulings(rulings, window_ids):
 
 
 def calibration_stop(windows, lead_rulings=()):
-    """Fixed-8 calibration predicate. ``windows`` lists the window attempts in the frozen order.
+    """Fixed-8 calibration predicate with R22-2 blind replacement windows.
 
-    Each entry: ``{'window': unique id, 'status': 'final'|'provisional',
-    'captured_members': int >= 0, 'eligible_benign': {'spam': n, 'bank': n}}``
-    (optionally ``eligible_total``, which must equal their sum). Rows must be
-    internally consistent: integers (no bool), ``captured_members`` at most the registered
-    roster maximum (22, plus the two sentinels a U4/U5-inconclusive window may add), and the eligible benign members (spam + bank) no more than
-    were captured; a contradictory row raises and can never authorize completion.
+    ``windows`` lists the window attempts in the frozen order. Each entry: ``{'window': unique id,
+    'status': 'final'|'provisional', 'captured_members': int >= 0, 'eligible_benign': {'spam': n,
+    'bank': n}}`` (optionally ``eligible_total``, which must equal their sum, and ``barred``, one of
+    ``STRUCTURAL_BARS``). Rows must be internally consistent: integers (no bool), ``captured_members``
+    at most the 22 ordinary members (the two R20 supplemental sentinels count toward nothing), and the
+    eligible benign members (spam + bank) no more than were captured; a contradictory row raises and
+    can never authorize completion.
 
-    Calibration is exactly 8 counted windows; there is no early stop. A **final**
-    window that captured zero members is a zero-capture refusal and does not count
-    (its eligible counts must be zero); a **provisional** zero-capture window is
-    unfinished, not a refusal, and holds the gate pending. A window with at least
-    one captured member counts, whether lost, failed or in flight. Two consecutive
-    final zero-capture refusals escalate to the lead (RUN_STATE 216) until a valid
-    ``lead_rulings`` row (``resets`` ``zero_capture_escalation``, signed, naming the
-    last window row it follows) resets the count. The predicate reads no score,
-    alarm, residual or energy field. Returns ``decision``:
+    Calibration is exactly 8 COUNTED windows; there is no early stop. A window is **barred** for a
+    STRUCTURAL reason only (R22-2): its committed record carries ``barred`` (``u1_u3_fail`` or
+    ``whole_window_capture_failure``; its eligible counts must be zero), or its zero-capture retry is also
+    a zero capture (``zero_capture_refusal``: the attempts of one slot share the id before ``#``). A
+    barred window is not counted and consumes one of up to **two** pre-declared replacement windows (C9,
+    C10), armed only then and never on scores or eligible counts; the total stays 8 counted windows. A
+    **final** window that captured zero members is a zero-capture refusal and does not count; a
+    **provisional** zero-capture window, or a provisional barred window, is unfinished and holds the gate
+    pending. A window with at least one captured member and no bar counts, whether lost, failed or in
+    flight. Two consecutive final zero-capture refusals of different slots, or a zero-capture bar once
+    both replacements are used, escalate to the lead (RUN_STATE 216) until a valid ``lead_rulings`` row
+    (``resets`` ``zero_capture_escalation``, signed, naming the last window row it follows) resets the
+    count. The predicate reads no score, alarm, residual or energy field. Returns ``decision``:
 
-    * ``escalate_to_lead`` - the last two attempts since any ruling are final
-      zero-capture refusals; nothing is armed until the lead rules;
-    * ``pending_final_eligibility`` - an unfinished zero-capture window, or 8 counted
+    * ``escalate_to_lead`` - see above; nothing is armed until the lead rules;
+    * ``pending_final_eligibility`` - an unfinished zero-capture or barred window, or 8 counted
       windows of which any is provisional;
-    * ``continue`` - fewer than 8 counted windows: arm the next frozen window;
-    * ``calibration_complete`` - 8 final counted windows and BOTH pairs have >=39
-      eligible benign summed over all 8 (every eligible calibrator counts: no
-      quietest-39 selection, no reordering);
-    * ``insufficient_calibration`` - 8 final counted windows and either pair below
-      39. No ninth counted attempt exists.
+    * ``continue`` - fewer than 8 counted windows and a window (primary or replacement) remains: arm it;
+    * ``calibration_complete`` - 8 final counted windows and BOTH pairs have >=39 eligible benign
+      summed over all of them (every eligible calibrator counts: no quietest-39 selection, no reordering);
+    * ``insufficient_calibration`` - 8 final counted windows and either pair below 39, or more than two
+      windows barred so that 8 cannot be reached. No ninth counted attempt exists.
 
     This is not an exchangeability or R13/R14 result.
     """
     if not isinstance(windows, (list, tuple)):
         raise ValueError('windows must be a sequence in frozen order')
-    seen, counted, refusals, unfinished_zero = set(), [], 0, 0
+    seen = set()
     order = []
     for row in windows:
         counts = row.get('eligible_benign') if isinstance(row, dict) else None
@@ -339,25 +354,65 @@ def calibration_stop(windows, lead_rulings=()):
                 or not isinstance(counts, dict) or set(counts) != set(CAL_PAIRS)
                 or any(type(n) is not int or not 0 <= n <= BENIGN_PER_PAIR_PER_WINDOW for n in counts.values())
                 or sum(counts.values()) > row['captured_members']
-                or ('eligible_total' in row and row['eligible_total'] != sum(counts.values()))):
+                or ('eligible_total' in row and row['eligible_total'] != sum(counts.values()))
+                or (row.get('barred') is not None and 'barred' in row
+                    and (row['barred'] not in STRUCTURAL_BARS or row['captured_members'] == 0
+                         or any(counts.values())))):
             raise ValueError('calibration window rows need a unique id, final|provisional status, integer '
                              f'captured_members in 0..{WINDOW_MEMBERS}, integer eligible_benign in '
                              f'0..{BENIGN_PER_PAIR_PER_WINDOW} per pair summing to at most captured_members '
-                             '(and to eligible_total when given)')
+                             '(and to eligible_total when given); a barred row names a structural bar, '
+                             'captured something and has zero eligible counts')
         seen.add(row['window'])
         order.append(row['window'])
-        if row['captured_members'] == 0:
-            if row['status'] == 'provisional':
-                unfinished_zero += 1
+    groups = []
+    for row in windows:
+        slot = slot_of(row['window'])
+        if groups and groups[-1][0] == slot:
+            groups[-1][1].append(row)
+        else:
+            groups.append((slot, [row]))
+    counted, barred, refusals, unfinished = [], [], 0, 0
+    for slot, rows in groups:
+        captured = [r for r in rows if r['captured_members']]
+        zeros = [r for r in rows if not r['captured_members']]
+        refusals += sum(r['status'] == 'final' for r in zeros)
+        if len(captured) > 1:
+            raise ValueError('a retry follows only a zero-capture attempt: slot ' + slot)
+        if captured:
+            if captured[0].get('barred'):
+                barred.append(captured[0])
+                unfinished += captured[0]['status'] == 'provisional'
             else:
-                refusals += 1
-            continue
-        counted.append(row)
+                counted.append(captured[0])
+        elif any(r['status'] == 'provisional' for r in zeros):
+            unfinished += 1
+        elif len(rows) >= 2:
+            barred.append({'window': rows[-1]['window'], 'status': 'final', 'barred': ZERO_CAPTURE_BAR})
+        # a single final zero-capture attempt awaits its retry
     rulings = _validated_rulings(lead_rulings, set(order))
     last_reset = max((order.index(r['after_window']) for r in rulings), default=-1)
-    trailing_zero = 0
+    # Trailing pure-zero slot groups since the last ruling: (slot, final zero-capture attempts).
+    tail_groups = []
     for row in windows[last_reset+1:]:
-        trailing_zero = trailing_zero+1 if (row['captured_members'] == 0 and row['status'] == 'final') else 0
+        slot = slot_of(row['window'])
+        zero = row['captured_members'] == 0 and row['status'] == 'final'
+        if tail_groups and tail_groups[-1][0] == slot:
+            tail_groups[-1][1].append(zero)
+        else:
+            tail_groups.append((slot, [zero]))
+    trailing = []                                   # contiguous pure-zero slot groups at the very end
+    for group in reversed(tail_groups):
+        if not all(group[1]):
+            break
+        trailing.append(group[1])
+    trailing.reverse()
+    last_group = trailing[-1] if trailing else []
+    previous_group = trailing[-2] if len(trailing) > 1 else []
+    # A refusal that is followed by a DIFFERENT slot without its retry is two consecutive refusals (RUN_STATE
+    # 216); a slot whose retry is also a zero capture is a structural bar, escalated only beyond the replacements.
+    consecutive_refusals = bool(previous_group) and len(previous_group) == 1 and bool(last_group)
+    zero_bar_last = len(last_group) >= 2
     if len(counted) > CAL_WINDOWS:
         raise ValueError(f'more than the fixed {CAL_WINDOWS} counted calibration windows')
     totals = dict.fromkeys(CAL_PAIRS, 0)
@@ -365,15 +420,20 @@ def calibration_stop(windows, lead_rulings=()):
         for pair in CAL_PAIRS:
             totals[pair] += row['eligible_benign'][pair]
     attempted = len(counted)
-    final = all(row['status'] == 'final' for row in counted) and not unfinished_zero
+    final = all(row['status'] == 'final' for row in counted) and not unfinished
     base = {'attempted': attempted, 'windows': CAL_WINDOWS, 'target_per_pair': CAL_TARGET_PER_PAIR,
             'eligible_by_pair': totals, 'counts_are_final': final, 'zero_capture_refusals': refusals,
-            'unfinished_zero_capture_windows': unfinished_zero,
+            'unfinished_zero_capture_windows': unfinished,
+            'barred_windows': [r['window'] for r in barred],
+            'replacements_used': len(barred), 'replacements_allowed': REPLACEMENT_WINDOWS,
             'lead_rulings_applied': [r['ruling_id'] for r in rulings]}
-    if trailing_zero >= 2:
+    exhausted = len(barred) > REPLACEMENT_WINDOWS
+    if consecutive_refusals or (zero_bar_last and exhausted):
         return {**base, 'decision': 'escalate_to_lead'}
-    if unfinished_zero:
+    if unfinished:
         return {**base, 'decision': 'pending_final_eligibility'}
+    if exhausted:
+        return {**base, 'decision': 'insufficient_calibration'}       # 8 counted windows are out of reach
     if attempted < CAL_WINDOWS:
         return {**base, 'decision': 'continue'}
     if not final:
