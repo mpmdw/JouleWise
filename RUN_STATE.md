@@ -1042,6 +1042,23 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+232. **Laptop lead (interactive session 1544c617), 2026-11-08 12:15 PST: Block 5 results and Ed's paper ruling.**
+- **Results** are in `docs/analysis/b5/RESULTS.md` on `analysis/2026-11-08-b5-results` @ `0b0658a20`. Both primary contrasts in the Holm family (m=2) are `direction_supported`, with claim ceiling L2.
+  - **Decode, 8B − 1.7B:** +146.63 J. Decision interval 141.36-151.90 J, which includes the timing bound. 6 of 10 quads.
+  - **Prefill p2048:** +101.81 J. Decision interval 95.81-107.81 J. 5 of 10 quads.
+  - **Caveats to disclose:**
+    - it is one session;
+    - 45 % of quads were lost, mostly to contention, with losses skewed toward the 8B arm;
+    - the SoC rails carry about 36 % of whole-machine energy;
+    - "sensitivity clean" covers only the Erratum-3 bracket;
+    - `window_edge_s` compared 0 rows.
+- **Ed, verbatim:** "yeah including it as validation/the path to the useful paper yeah i buy your rec". Block 5 goes into the mid-December paper as the instrument-validation section. It is not a model-efficiency claim. PAPER-PLAN-v2's exclusion of Block 5 is superseded.
+- **Still open before any rendered number is published:**
+  - the paper-placement ruling (§14 Q4), now settled by Ed's ruling above;
+  - the Results cold gate required by the 2026-10-20 renderer obligation;
+  - item 37's requirement that Block 5 and Block 6 appear side by side, which is satisfied once Block 6 releases or is ruled out of scope.
+- **Lessons work:** forensics on contention culprits, exclusion against condition, between-window τ, the timing-bound decomposition and comparator coverage are running on `analysis/2026-11-08-b5-lessons`, aimed at v4, v5 and BYTES. New tracked metric from W1 onward: contention loss rate per window, by condition.
+
 231. **Laptop lead (interactive session 1544c617), 2026-11-08 11:17 PST: ED'S UNSEAL OK FOR BLOCK 5. Recorded BEFORE any outcome is read.**
 - **Ed, verbatim:** "sounds good on all 3", followed by "unseal". This answers the lead's question: unseal, then a results write-up, then the post-release prune.
 - **Basis:** the release check agreed at exit 0. It ran on main `02ef89f5c` with the analysis pinned to `b5/analysis-r4` = `ab1e0098d`, over dry-m custody. Stages: digests verified; recompute ok (`d49103e8…`); comparator agree across 24 families; 0 undetermined; 0 absent (item 229). The procedure is RELEASE-RUNBOOK-lean §1: unsealing is a separate step after (a)-(c) agree, and needs Ed's OK.
