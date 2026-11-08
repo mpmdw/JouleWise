@@ -36,6 +36,7 @@ The magistrate on the MacBook Pro owns running, re-running and arming windows
 | R1 rehearsal driver | `scripts/align_r1_rehearsal.py` + `joulewise/align/apple/r1_runtime.py` on the R1 integration line `lane/2026-11-06-v4-r1-integrated`. Not on `main`, and not yet on the measurement lane, which has only the earlier WP17 driver without `r1_runtime.py` | The WP17 driver on the measurement lane |
 | v4 kit and sessions | `scripts/align_v4_kit.py`, `scripts/align_v4_session.py` on the R1 integration line (`lane/2026-11-06-v4-r1-integrated`); the WP17 versions are also on the measurement lane. Not on `main` | — |
 | Window records | Record branches `records/<date>-align-*` and `docs/align/r0/<date>/` (cited from `RUN_STATE.md`) | — |
+| Between-window MBP → Air offload | `scripts/offload_to_air.py` (`push`, restricted `serve`, Air-only `backup-once`); setup and shared-loop lease: [`docs/ops/AIR-OFFLOAD.md`](docs/ops/AIR-OFFLOAD.md). PROVISIONAL: synthetic tests only, magistrate integration and native transport rehearsal pending | — |
 | Block-5 window harvest (collection finished) | `scripts/harvest_b5_window.py` + `joulewise/b5/**` | `scripts/harvest_g2a_window.py` (kept only because `joulewise/v5_qualification.py` imports it); the CA-42 arm/T-0 route (`scripts/launch_window.py`, `scripts/capture_t0_step.py`, retiring in PR #668) |
 
 ## Block-5 analysis
