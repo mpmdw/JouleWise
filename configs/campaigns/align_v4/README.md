@@ -58,13 +58,18 @@ pilot-3 disk law (two copies). Until then --check and prepare refuse with
 that reason. Use fit_roster with R1 measured cost estimates:
 drop only 18 first, then decrease B_D by 1024 down to 6144; otherwise return
 to lead. Preserve anchors, contrasts and 5/17. Requalify/freeze changed budgets.
-W1 arm requires --obc-off-attested-by, --topup-completed-at, --topup-source and --w1-disk-config. By-day
+W1 arm requires --obc-off-attested-by, --topup-completed-at, --topup-source, --next-arm-triage and --w1-disk-config. By-day
 scripts/align_v4_offloads.py verifies configured inventories; the disk config
 names daytime_offload_receipt and an explicit lead-signed
 daytime_offload_freshness policy (max_age_s, lead_signature); no default duration. Arm checks >=80 decimal GB
 free without remounting/re-hashing the SSD. Empty offloads require explicit
 offloads_owed: none. Battery arm requires fresh AC, >=99%, not charging and
 |InstantAmperage| <=200 mA, retaining raw ioreg and pmset evidence.
+R12: a window ends at authenticated terminal completion (the 59,520 s maximum is a
+ceiling, not a reservation). W1/D arm also requires --next-arm-triage, the frozen
+B2 list (joulewise/align/apple/v4_cadence.NEXT_ARM_TRIAGE), every entry gating.
+The calibration stop is v4_cadence.calibration_stop: counts only, minimum 6, cap 8,
+39 eligible benign per pair; exchangeability is qualified separately.
 require_w1_ready also requires registration_receipt.json, bound to current and
 committed protocol/kit/desk/estimand/deviation/U3/WP19 bytes, two admitted gate
 reports and the lead signature. The committed pending template never admits.

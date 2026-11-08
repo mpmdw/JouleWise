@@ -51,6 +51,7 @@
     "joulewise/align/apple/thermal.py": null,
     "joulewise/align/apple/thermal_desk.py": null,
     "joulewise/align/apple/thermal_gates.py": null,
+    "joulewise/align/apple/v4_cadence.py": null,
     "joulewise/align/apple/v4_estimands.py": null,
     "joulewise/align/apple/v4_registration.py": null,
     "joulewise/align/apple/workload.py": null,

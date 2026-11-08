@@ -644,6 +644,8 @@ These dispositions settle the round-8 executing review of `lane/2026-11-06-v4-r1
 | R6-2 retry allowance: 4 × (1,500 s precool + segment) | 29,055.98 | **29,055.98** (step-30b takes no R6-2 retry) |
 | Every R6-2 retry plus one batch-window wait | 88,798.95 | **90,662.94** |
 
+**Correction (RUN_STATE 214/215, 2026-11-08).** The two "batch-window wait (+5,400)" rows above are stale: one encounter can wait the segment bound plus 5,400 s (step-d: 11,163.9952 s), so the corrected one-encounter no-redo subtotal is 67,371 s and a planned redo uses 90,663 s; see `docs/align/r1_runtime_contract.md` ("R1 night worst case"). Do not size an R1 deadline from 61,607 s.
+
 The per-segment bounds behind the table:
 - the soak: 1,800 s;
 - step-30b: **5,163.9952 s**;

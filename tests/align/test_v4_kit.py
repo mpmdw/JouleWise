@@ -27,7 +27,9 @@ ROOT = Path(__file__).resolve().parents[2]
 def topup():
     """Synthetic completed-top-up evidence, one minute before the arm."""
     import time
-    return dict(topup_completed_at=time.time()-60, topup_source='synthetic')
+    from tests.align.test_v4_cadence import passing_packet
+    return dict(topup_completed_at=time.time()-60, topup_source='synthetic',
+                next_arm_triage=passing_packet())
 
 
 def independent_seed(value):
@@ -1798,10 +1800,11 @@ class W1DiskGateTests(unittest.TestCase):
         with patch.object(session, 'install', fake):
             self.assertEqual(session.main(['install', '--session-root', 's', '--w1-disk-config', '/c.json',
                                            '--obc-off-attested-by', 'synthetic', '--topup-completed-at', '1700000000',
-                                           '--topup-source', 'synthetic']), 0)
+                                           '--topup-source', 'synthetic',
+                                           '--next-arm-triage', '/t.json']), 0)
         self.assertEqual(seen, {'session_root': Path('s'), 'w1_disk_config': Path('/c.json'),
                                 'obc_off_attested_by': 'synthetic', 'topup_completed_at': '1700000000',
-                                'topup_source': 'synthetic'})
+                                'topup_source': 'synthetic', 'next_arm_triage': Path('/t.json')})
 
 
 if __name__ == '__main__':

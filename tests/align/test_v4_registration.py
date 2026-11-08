@@ -168,6 +168,8 @@ class RegistrationTests(unittest.TestCase):
 
     def test_arm_records_battery_and_refuses_missing_attestation(self):
         from scripts import align_v4_session as session
+        from tests.align.test_v4_cadence import passing_packet
+        packet = passing_packet()
         good = dict(passed=True, probe_error=False, external_connected=True, is_charging=False,
                     current_capacity_pct=100, instant_amperage_ma=0, update_age_s=1)
         with patch('joulewise.align.apple.powermode.admit_ac_powermode', return_value={'admitted': True}), \
@@ -178,18 +180,30 @@ class RegistrationTests(unittest.TestCase):
             record = session.arm_checks('.', {}, runner=run)
             self.assertFalse(record['admitted'])
             record = session.arm_checks('.', {}, obc_off_attested_by='synthetic', runner=run,
-                                        now=lambda: 5000., topup_source='synthetic')
+                                        now=lambda: 5000., topup_source='synthetic', next_arm_triage=packet)
             self.assertFalse(record['admitted'])
             record = session.arm_checks('.', {}, obc_off_attested_by='synthetic', runner=run,
-                                        now=lambda: 5000., topup_completed_at=4900, topup_source='synthetic')
+                                        now=lambda: 5000., topup_completed_at=4900, topup_source='synthetic', next_arm_triage=packet)
             self.assertTrue(record['admitted'])
             self.assertEqual(record['battery']['topup'], {'completed_at_epoch_s': 4900., 'source': 'synthetic'})
+            self.assertEqual(set(record['next_arm_triage']['checks']), set(__import__(
+                'joulewise.align.apple.v4_cadence', fromlist=['x']).TRIAGE_IDS))
+            # R12 B2: the triage list gates the arm itself.
+            self.assertFalse(session.arm_checks('.', {}, obc_off_attested_by='synthetic', runner=run,
+                now=lambda: 5000., topup_completed_at=4900, topup_source='synthetic')['admitted'])
+            bad = passing_packet()
+            bad['checks']['meter_samples_clock']['status'] = 'fail'
+            refused = session.arm_checks('.', {}, obc_off_attested_by='synthetic', runner=run,
+                now=lambda: 5000., topup_completed_at=4900, topup_source='synthetic', next_arm_triage=bad)
+            self.assertFalse(refused['admitted'])
+            self.assertIn('next_arm_triage: triage meter_samples_clock failed', refused['reasons'])
             record = session.arm_checks('.', {}, obc_off_attested_by='synthetic', runner=run,
                                         now=lambda: 5000., topup_completed_at='2000-01-01T00:00:00+00:00',
-                                        topup_source='synthetic')
+                                        topup_source='synthetic', next_arm_triage=packet)
             self.assertFalse(record['admitted'])
             record = session.arm_checks('.', {}, obc_off_attested_by='synthetic', runner=run,
-                                        now=lambda: 5000., topup_completed_at='not a time', topup_source='synthetic')
+                                        now=lambda: 5000., topup_completed_at='not a time', topup_source='synthetic',
+                                        next_arm_triage=packet)
             self.assertFalse(record['admitted'])
             self.assertEqual(record['battery']['raw_ioreg'], 'synthetic raw')
             self.assertEqual(observe.call_args.kwargs['phase'], 'arm_check')
