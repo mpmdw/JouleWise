@@ -267,7 +267,8 @@ def cross_pilot_identity(members, compare_session):
 
 
 def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None,
-         kit=KIT, desk_schema=SCHEMA, extra_checks=None):
+         kit=KIT, desk_schema=SCHEMA, extra_checks=None, secondary_inputs=None,
+         secondary_members=None):
     session = Path(session_root).resolve()
     state = h.read(session / 'session.json')
     plan = h.read(state['plan_path'])
@@ -350,7 +351,7 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
         member['battery_discharge'] = battery.get(member['run_id'])
     comparison = cross_pilot_identity(members, compare_session) if compare_session else None
     checks, deterministic, _legacy_spreads = instrument_checks(members)
-    from joulewise.align.apple.pilot_analysis import sampling_checks, residual_analysis, episode_eligible, episode_ineligibility_reasons
+    from joulewise.align.apple.pilot_analysis import sampling_checks, residual_analysis, episode_eligible, episode_ineligibility_reasons, registered_secondary_analysis
     i4, spreads, raw_spread = sampling_checks(members)
     residuals = residual_analysis(members)
     # I4' replaces the greedy check for sampled cohorts. Collisions are
@@ -372,6 +373,8 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
              'plan_id': state['session_id'], 'runs_root': str(runs_root), 'members': members,
              'checks': checks, 'repeat_token_identity': deterministic, 'repeat_energy_spread': spreads,
              'I4_prime': i4, 'raw_within_cell_energy_sd': raw_spread, 'residual_analysis': residuals,
+             'registered_secondary_analysis': registered_secondary_analysis(
+                 members if secondary_members is None else secondary_members, inputs=secondary_inputs),
              'registered_eligible_members': [m['run_id'] for m in members if not m['excluded']],
              'episode_scope_alternative_eligible_members': [m['run_id'] for m in members if m.get('summary') and episode_eligible(m)],
              'episode_scope_alternative_ineligible_reasons': {m['run_id']: episode_ineligibility_reasons(m)

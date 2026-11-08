@@ -258,6 +258,8 @@ class SyntheticDeskTests(unittest.TestCase):
             self.assertIn('--non-claim', calls[0])
             result = h.read(session / 'PILOT.json')
             self.assertTrue(result['non_claim'])
+            self.assertEqual(result['registered_secondary_analysis']['registration_status'], 'pending_addendum')
+            self.assertEqual(result['registered_secondary_analysis']['status'], 'unavailable')
             # Mock short tool windows carry the reducer's own phase ineligibility.
             self.assertEqual(result['status'], 'instrument_incomplete', result['checks'])
             self.assertFalse(result['checks']['chain_eligibility'])
