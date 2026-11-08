@@ -1042,7 +1042,79 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
-215. **Laptop lead (interactive session 1544c617), 2026-11-07 about 23:40 PST: before arming R1, size its deadline from the corrected figure. R12 amended after two Sol cross-checks** (`perf/2026-11-08-r12-review-sol1` @ `ba995e2a0`, `-sol2` @ `e3609d3f7`).
+221. **Laptop lead (interactive session 1544c617), 2026-11-08 00:35 PST: standing anti-idle rules (Ed, "persistent rules to do a robust smoke that would catch these could remedy this no? or SOMETHING").** This week the MBP lost more time sitting idle than to slow steps: four R0 refusals from guards that refuse on routine macOS activity, and R1 with no arm route (item 218). These rules bind the lead and the magistrate from now on.
+1. **Readiness of the next two steps.** The next two MBP steps must show GREEN on an automated end-to-end readiness check before either is scheduled. The check runs the real arm path in synthetic mode, PREQUAL, kit `--check`, and confirms the required rulings and receipts exist and that no required test is skipped. A RED within 24 h of the MBP reaching that step is a critical-path alarm for the lead. Tooling is being built on `ops/2026-11-08-readiness-gate`: a scheduled CI job every 3 h plus an hourly Air job.
+2. **Guard replay before gating.** A new or changed guard that can refuse a run first replays against recorded idle and contended host traces and reports its false-refusal rate. Above the stated bound, it may not gate a real run without a lead ruling. Tooling: `ops/2026-11-08-guard-replay`, including a cheap trace recorder for the idle MBP between windows.
+3. **Native smoke before every long block after any code or config change.** This is a labelled, non-registrable run of ≤45 min. It uses the exact production arm, 1-2 tiny members with the meter, finalize and wake, plus safe fault injections. Kit builds: Sol `align/2026-11-08-w1-smoke` and Opus `align/2026-11-08-w1-smoke-opus`, merged after agreement.
+4. **No hidden tests.** Every test a registration or arm depends on runs in default CI, never only behind an opt-in variable. An opt-in audit is running on `perf/2026-11-08-optin-audit`.
+5. **No blind re-runs.** After a refusal, the next attempt needs either a fix verified on the refusal's own recorded trace, or a ruling that the refusal was correct.
+6. **Paired builds** (item 220): every block or window design gets independent Sol and Opus builds and an agreement report.
+
+220. **Laptop lead (interactive session 1544c617), 2026-11-08 00:15 PST: Ed's rule — Sol and Opus each build every block or window design (arm routes and plans included), then compare and agree. Do not arm R1 on a single-family route.**
+- Ed, 2026-11-08 ~00:12 PST, verbatim: "sol and opus should be building the r1 plan and comparing and agreeing on any block/window design".
+- **R1:** the magistrate's Sol seat R1-ARM-1 (`lane/2026-11-08-r1-arm`) keeps going. An **Opus 5.5** build of the same task runs on the laptop, independently, on `lane/2026-11-08-r1-arm-opus` from `d9d1098c6`. Once both exist, Opus writes `docs/align/R1-ARM-AGREEMENT.md`, comparing route, gates passed, sizing and tests. The lead then rules which route arms (Opus has the final say under the window design council).
+- **Magistrate:** arm R1 only after a lead ruling item naming the agreed route and sha. The Opus executing review (item 219) is folded into the agreement step. Until that ruling, re-executing R1-ARM-1's synthetic run is fine; arming is not.
+- **Standing rule from now on:** every future block or window design follows this pattern, including W1/D plans, calibration and test series manifests, and the smoke kit: an independent Sol build and Opus build, an agreement report, then a lead ruling. Cross-family review alone is not enough.
+
+219. **Laptop lead (interactive session 1544c617), 2026-11-08 00:05 PST: the laptop provides R1-ARM-1's independent executing review.**
+- **Item 218 (1) review:** when `lane/2026-11-08-r1-arm` is pushed with `.codex-report/R1-ARM-1.md`, the laptop lead runs an **Opus 5.5 executing review** on the Air right away. Opus is cross-family to the Sol seat. It re-executes the synthetic end-to-end arm through the real `run_night`, launcher and gate path, and checks every change to `run_night.py`, `night_gate.py` and the watchdog. The verdict is posted as a PR comment or a reply item here. The magistrate still re-executes the synthetic run itself as its own step (1). If the laptop verdict is ADMIT, no cloud seat is needed.
+- **R1 sizing:** `window_max_s` must be at least 96,427 s plus bracket, close and harvest (item 216). If R1-ARM-1's route has no redo, item 215's 67,371 s floor applies instead. State which in the runbook.
+- **Lesson recorded:** that no R1 arm route existed should have been caught off the Mac. "An arm route exists end to end for the next measurement" is now a PREQUAL item. A native W1 smoke kit is being built on `align/2026-11-08-w1-smoke`: PREQUAL extension plus a ≤45 min labelled, non-registrable native smoke with safe fault injections, run before the first long window after any code change.
+- **Note on the R0 record:** keeping the reports on the Mac, pinned by sha256 in NOTE.md, is fine. A push-protection false positive on model-generated fixture text is not a reason to bypass protection.
+
+218. **Magistrate activation 17ca7bed (Opus 5.5, headless, 2026-11-07 from 23:48 PST): R0 re-run 11 PASSED, complete_r0 true. Kit filled with the R0 rung. R1 cannot be armed yet because no route exists to arm it. A Sol xhigh seat is building one.** No pending notices, no unread mail from Ed. The open directive issues are unchanged and none acted on this slice.
+- **R0 re-run 11** (`/Users/edr/night-align/r0-v4-20261108T0550Z`, 21:41-23:45 PST, 7,437 s): `pass`; all 13 checks pass or are diagnostic/not_required by design.
+  - SMC `s_fast` TV0h (alias TV1h), `s_slow` Tf08 (design_literal rule; picks PROVISIONAL, R1 re-classifies).
+  - Ladder selected `medium` (xhigh bad-cap fraction 0.25 failed; medium 0.20). Load NLL 11.0368 vs reference 11.0642. Peak memory 37.0 GB. B7 not required (rewind 0.0).
+  - D pins PASS.
+  - Contention: SMC not contended; two long-decode guard flags (softwareupdated 0.25-0.29 core at about 23:10, the known scan).
+  - Display: dwell 300 s, no wake, so the run is admissible (item 209).
+  - Activation 5bcfa84e exited 21:36:15, before the dwell ended; no agent alive during the run.
+  - Record: `records/2026-11-08-align-r0-v4-rerun11` @ `d8bc5baa1`. It holds only NOTE.md: GitHub push protection matched a Stripe-test-key-shaped string in model-generated fixture text inside report.json (not a credential; not bypassed). The reports stay on the Mac, pinned by sha256 in the NOTE. Ed mailed on thread `1a198fafa8fc12ba`.
+- **Item 202 (1)-(2) done** on `lane/2026-11-07-r1-kit-r0fill`:
+  - `5d9b66dd4`: `R0.reasoning_effort = "medium"`, kit regenerated; `--check` blocks on exactly `R1.B_D, R1.I_D, R1.T_dead, R1.thermal_policy`.
+  - `d9d1098c6`: `configs/align/v4/r1_runtime.json` `sensors` filled. The runtime refuses (exit 2) while it reads PENDING_R0, a step item 202 did not list. Values: TV0h/Tf08, fans F0Ac/F1Ac, `r0_sha256` = sha256 of R0's `smc/r0.json` `e6231a8f…769b`.
+  - 8 snapshot tests that pin the committed pending state now fail as expected (6 in `test_v4_kit`, 2 in `test_r1_runtime`). The R1-ARM-1 seat updates them.
+- **Why R1 cannot arm (item 202 (3)):** no R1 night plan or arm route exists. The R1 integration report says so ("There is still no R1 plan"; prerequisite 5).
+  - A `DIAGNOSTIC_NO_PACK` plan refuses in `night_gate._check_registration` (no ruled R1 registration).
+  - `run_night --dry-arm` takes only HAZARD_PACK plans.
+  - The pilot session tooling arms member windows, not the R1 chain.
+- **Seat R1-ARM-1** (Sol 6.1 xhigh, local, Mac otherwise idle). Branch `lane/2026-11-08-r1-arm` from `d9d1098c6`. Brief and output `~/night-archive/seats-17ca7bed/R1-ARM-1-*`.
+  - It chooses the smallest correct route (HAZARD_PACK window around the R1 chain, a ruled R1 registration, or an R0-style launcher).
+  - It runs the route end to end on a synthetic runtime through the real run_night or launcher, and writes the runbook.
+  - It sizes `window_max_s` from item 216's 96,427 s floor plus bracket/close/harvest.
+  - It answers item 202 (4) from code, and fixes the snapshot tests.
+  - No R1 measurement code changes.
+
+**Next activation (replaces item 211's pointer; items 202-204, 207, 209, 210, 212-217 hold):**
+(1) Read R1-ARM-1's report (`.codex-report/R1-ARM-1.md` on `lane/2026-11-08-r1-arm`). Re-execute its synthetic end-to-end run yourself. Have one independent executing review (cloud Claude, or a different Sol seat) of any change to `run_night.py`, `night_gate.py` or the watchdog, because arming code decides whether a window measures.
+(2) Then arm R1 from a measurement checkout of that branch per its runbook: arm notice to Ed before install; display asleep; `window_max_s` ≥ 96,427 s plus derived bracket/close/harvest; no external volume. Exit before t0.
+(3) If the seat returns NEEDS_RULING on anything that changes which data count, take it to the laptop lead in a RUN_STATE item, and to Ed only if the lead is silent.
+(4) Item 205 (4) holds: Flash-Next and the SSD qualification wait for Ed at the Mac (Sunday).
+
+217. **Laptop lead (interactive session 1544c617), 2026-11-07 about 23:40 PST: R12 B3 reverted to a FIXED 8 calibration windows.** Two independent synthetic simulations (`align/2026-11-08-b3-sim-sol1` @ `09d7b3c7f`, `-sol2` @ `95d43c054`) agree. Stopping on counts saves about one window, but under window-level drift it lowers the threshold and raises future benign FPR against fixed 8:
+- sol1, clustered/hot state: maximum rule 2.84 % vs 2.14 %; 5 % rank 5.38 % vs 4.13 %;
+- sol2, hot10, tau .5: 2.73 % vs 2.22 %.
+
+Counts never read scores, so blinding was never at risk. The cost of fixed 8 is about 13 MBP hours, which is cheap for a cleaner FPR claim.
+- **Ruling:**
+  - Calibration is exactly 8 windows in the frozen order. If either pair is below 39 eligible after 8, the outcome is `insufficient_calibration`.
+  - The zero-capture rule (item 216) stays: a window with zero captured members does not consume a slot, and two in a row escalate.
+  - `calibration_stop` becomes a fixed-8 predicate.
+- **Not adopted now:** sol1's candidate "minimum 7 plus a frozen 0.5 s_r threshold margin". It is model-dependent and needs a scale/scorer qualification and a power assessment. It is recorded as an open statistics item before W1 registration.
+- **Disclosure stands:** both designs exceed nominal FPR under a forward drift trend. R14's FPR statement stays conditional on exchangeability, and the held-out test cohort is the empirical FPR evidence. Public text must say so.
+
+216. **Laptop lead (interactive session 1544c617), 2026-11-07 about 23:30 PST: correction to item 215. The 90,663 s "redo" figure is stale too.**
+- **For the magistrate, before R1 arms:** the 90,663 s figure in item 215 still contains the old 5,400 s batch wait. With the corrected 11,164 s step-D encounter, the same sum is **96,427 s**. Each retry segment can also meet its own encounter.
+  - Plan has a redo: size `window_max_s` from your installed plan's actual segments, at 11,164 s per segment that can touch 11:45-13:15, plus bracket, close and harvest. The floor is 96,427 s.
+  - Plan has no redo: item 215's 67,371 s floor stands.
+- **The R1 lane code is not changed before R1 runs.** `night_worst_case_s` and `tests/align/test_r1_round7_science.py` still print or assert the stale 61,607 s, which is display only. They are corrected after R1 on the v4 branch, never on `lane/2026-11-06-v4-r1-integrated` while it is armed.
+- **R12 is now in the v4 registration text and kit** (`align/2026-11-08-v4-r11` @ `b3d1470ef`). This adds a frozen 14-entry next-arm triage list, enforced by `arm_checks` with the `--next-arm-triage` packet, and the `calibration_stop` predicate. Lead confirmations:
+  - The triage packet schema is confirmed.
+  - From window 6 on, a window whose final eligibility is still pending blocks the next arm, so no window straddles the B3 stop.
+  - A window that captured zero members does not count toward the cap of 8. One that captured at least one member counts, whether lost, failed or in flight. After two consecutive zero-capture refusals, escalate to the lead.
+
+215. **Laptop lead (interactive session 1544c617), 2026-11-07 about 23:10 PST: before arming R1, size its deadline from the corrected figure. R12 amended after two Sol cross-checks** (`perf/2026-11-08-r12-review-sol1` @ `ba995e2a0`, `-sol2` @ `e3609d3f7`).
 - **For the magistrate, before R1 arms (HIGH, both seats):** item 202(3) and `docs/align/r1_runtime_contract.md:95` say to set `window_max_s` from 56,207 / 61,607 / 90,663 s. `scripts/run_night.py:1152-1171` enforces a stop at `t0 + window_max_s + WINDOW_SHUTDOWN_GRACE_S` and kills the process group. One step-D encounter with the 11:45-13:15 batch window adds up to 11,164 s, so a plan sized from 61,607 s can cut R1 short.
   - Use at least **67,371 s**, the corrected one-encounter subtotal with no redo, plus the plan's bracket, close and harvest time.
   - If the plan includes a redo, use the 90,663 s option.
@@ -1054,7 +1126,7 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
   - **B3 changes:** the count-based stop (minimum 6, cap 8) is written prospectively in the registration. It fixes the window order and roles, final eligibility, both-pair predicates, cap accounting and the failure outcome. Its effect on selection and exchangeability is qualified by simulation before W1, and R13/R14 are not described as satisfied by count alone.
   - Owner: the v4 registration builder on `align/2026-11-08-v4-r11`, followed by two Sol reviews.
 
-214. **Laptop lead (interactive session 1544c617), 2026-11-07 about 23:45 PST: lead ruling R12, v4-lean. Adopt three window-cadence changes before W1 registration; keep the rest.** Source: `docs/perf/2026-11-08-latency-synthesis.md` on `perf/2026-11-08-latency-synthesis` @ `55029b860` (Sonnet synthesis of four Sol seats: `perf/2026-11-08-latency-audit-sol{1,2}`, `perf/2026-11-08-window-efficiency-sol{1,2}`). Decided blind: only programmed durations, reservations and eligible counts were used, no outcomes. v4 is not registered yet, so these go into the registration text, not the deviation log.
+214. **Laptop lead (interactive session 1544c617), 2026-11-07 about 22:55 PST: lead ruling R12, v4-lean. Adopt three window-cadence changes before W1 registration; keep the rest.** Source: `docs/perf/2026-11-08-latency-synthesis.md` on `perf/2026-11-08-latency-synthesis` @ `55029b860` (Sonnet synthesis of four Sol seats: `perf/2026-11-08-latency-audit-sol{1,2}`, `perf/2026-11-08-window-efficiency-sol{1,2}`). Decided blind: only programmed durations, reservations and eligible counts were used, no outcomes. v4 is not registered yet, so these go into the registration text, not the deviation log.
 - **For the magistrate first: the R1 printed batch bound is not a bound.** `wait_outside_os_batch` waits to 13:15 whenever a segment would overlap 11:45, so one encounter can add the segment bound plus 5,400 s (11,164 s for step D). The printed 61,607 s R1 figure can therefore become 67,371 s = 18.71 h. Before arming R1, check that no deadline, abort or schedule relies on the printed figure. This is a stale bound, not a measurement change.
 - **Adopted (registration text, before W1):**
   - **B1. A window ends at terminal completion; the 59,520 s ceiling is a ceiling, not a reservation.** Arm the next window from the committed record (item 213). The programmed D span is 40,527 s = 11.26 h, so the cycle falls from about 17.0-17.3 h to about 11.8-12.0 h, from about 1.4 to about 2.0 windows per day. Nothing about the measured trajectory changes.
