@@ -82,10 +82,12 @@ class SeriesTests(unittest.TestCase):
         self.assertIn("classes", out["exclusions"]["C3"]["C3:align-v4-c3-e02"])
         # U1/U2 aggregates that include scored C sabotage: verdict and parts, a seal, a benign-only aggregate.
         u1 = out["acceptance"]["U1"]["C3"]["D"]
-        self.assertEqual(sorted(u1), ["benign_only", "parts", "sealed_sha256", "verdict"])
+        self.assertEqual(sorted(u1), ["benign_only", "g0_timeouts", "g1h_entries", "g1h_timeouts", "included", "parts",
+                                      "verdict", "x1_x4_members"])
+        self.assertEqual(u1["g0_timeouts"], {"status": "sealed"})                # no hash (R23h)
         self.assertNotIn("align-v4-c3-e09", u1["benign_only"]["included"])
         self.assertIn(u1["benign_only"]["verdict"], ("pass", "fail", "inconclusive"))
-        self.assertEqual(sorted(out["acceptance"]["U2"]["C3"]["D"]), ["benign_only", "parts", "sealed_sha256", "verdict"])
+        self.assertEqual(out["acceptance"]["U2"]["C3"]["D"]["g0_slow_range_c"], {"status": "sealed"})
         self.assertIn("g0_timeouts", out["acceptance"]["U1"]["T1"]["D"])          # T windows are not sealed
         self.assertEqual(set(out["reduction"]["align-v4-c3-e09"]["columns"]["gpu_mw"]), {"sha256", "n"})
         self.assertIn("fsum", out["reduction"]["align-v4-c3-e07"]["columns"]["gpu_mw"])

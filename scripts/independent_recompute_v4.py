@@ -1871,35 +1871,41 @@ NUMERIC_GRID = list(CURVE_GRID)
 def h_star_estimand(points, threshold):
     """R26 (2): H*_i = the smallest H* grid dose g, ascending, whose exact sub-turn stripped score is STRICTLY
     above the pair's detection threshold, provided every earlier grid dose was observed and at or below it.
-    A missing/unreachable earlier dose makes h_star undefined (null) and is listed; no exceedance gives
-    null with bounded_above false and an empty list; off-grid observed doses are ignored and listed."""
+    ``points`` are the row's observed actual-dose points (council and H* grids merged, "full" excluded). A
+    missing/unreachable earlier grid dose makes h_star undefined (null) and is listed; no exceedance gives
+    null with bounded_above false and an empty list; observed doses off the grid (0 and 300 on the council
+    grid) are ignored and listed (R23h); inputs must be unique integer doses with finite scores."""
     out = {"estimand": "H*_i", "grid": list(H_STAR_GRID), "status": "registered_secondary",
            "h_star": None, "bounded_above": False, "undefined_missing_grid_doses": [], "off_grid_doses": []}
+    observed = {}
+    for key, p in points.items():
+        if key == "full" or p is None:
+            continue
+        need(is_int(p.get("H")) and p["H"] not in observed and finite(p.get("score")), "h_star_input_invalid",
+             f"dose {key}")
+        observed[p["H"]] = p["score"]
+    out["off_grid_doses"] = sorted(h for h in observed if h not in H_STAR_GRID)
     if threshold is None:
         return dict(out, status="threshold_unavailable")
-    seen = set()
-    for g in H_STAR_GRID:
-        p = points.get(str(g))
-        if p is not None:
-            need(is_int(p.get("H")) and p["H"] not in seen and finite(p.get("score")), "h_star_input_invalid",
-                 f"dose {g}")
-            seen.add(p["H"])
-            if p["H"] != g:
-                out["off_grid_doses"].append(p["H"])
-                p = None
     missing = []
     for g in H_STAR_GRID:
-        p = points.get(str(g))
-        if p is None or p["H"] != g:
+        if g not in observed:
             missing.append(g)
             continue
-        if p["score"] > threshold:
+        if observed[g] > threshold:
             if missing:
                 out["undefined_missing_grid_doses"] = missing
             else:
                 out.update(h_star=g, bounded_above=True)
             return out
     return out
+
+
+def h_star_points(kh):
+    """The row's observed points over council U H* grid (the same exact strip at a shared dose)."""
+    merged = dict(kh.get("h_star_grid") or {})
+    merged.update({k: v for k, v in (kh.get("council") or {}).items() if k != "full"})
+    return merged
 
 
 def carrier_curve(carriers):
@@ -1927,7 +1933,7 @@ def carrier_curve(carriers):
                 hits[g] = bool(p["score"] > thr)
         detail.append({"run_id": c["run_id"], "window_id": c["window_id"], "threshold": thr, "rank": rank, "m": m,
                        "council": c["known_h"]["council"], "h_star_grid": c["known_h"].get("h_star_grid"),
-                       "detected": hits, "h_star": h_star_estimand(c["known_h"].get("h_star_grid", {}),
+                       "detected": hits, "h_star": h_star_estimand(h_star_points(c["known_h"]),
                                                                    c.get("pair_threshold"))})
     fractions = curve_fractions(detail)
     full = [d["detected"]["full"] for d in detail]
@@ -2269,15 +2275,13 @@ def sealed_row(row, captured):
 
 
 def seal_aggregate(agg, fn, members, results, elig, sealed_ids):
-    """A27: an aggregate that includes scored C-sabotage thermal fields prints its verdict and parts, the
-    hash of the full aggregate, and the same aggregate (verdict and parts included) over the members that are not
-    sealed. The all-member verdict and parts are unchanged."""
-    keep = {k: agg[k] for k in ("verdict", "parts")}
-    hidden = {k: v for k, v in agg.items() if k not in keep}
+    """A27(b), as patched in R23h: every aggregate field that includes scored C-sabotage thermal fields prints
+    {"status": "sealed"} only (no hash: a value hash of a small count is reversible). The all-member verdict
+    and parts are unchanged, and a benign_only aggregate (verdict and parts included) is printed beside them."""
     rest = [m for m in members if m["run_id"] not in sealed_ids]
-    benign = fn(rest, results, elig) if rest else None
-    return dict(keep, sealed_sha256=hashlib.sha256(canonical(hidden)).hexdigest(),
-                benign_only=benign)
+    out = {k: (v if k in ("verdict", "parts") else {"status": "sealed"}) for k, v in agg.items()}
+    out["benign_only"] = fn(rest, results, elig) if rest else None
+    return out
 
 
 def recompute(root, workers=1, cache_dir=None, timings=None, stage="full", freeze_in=None):
@@ -2556,7 +2560,7 @@ def known_h_summary(windows, fits, pair, thr):
                     row["exceeds"] = row["score"] > thr["threshold"]
                     row["detection"] = bool(row["exceeds"] and row["H"] > 0)
             out[rid] = dict(kh, window_id=w["window_id"],
-                            h_star=h_star_estimand(kh.get("h_star_grid", {}), thr["threshold"]))   # R26 (3)
+                            h_star=h_star_estimand(h_star_points(kh), thr["threshold"]))   # R26 (3)
     return out
 
 

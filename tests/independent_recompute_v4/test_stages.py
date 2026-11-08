@@ -686,6 +686,10 @@ class CarrierTests(unittest.TestCase):
         self.assertEqual((h["h_star"], h["bounded_above"], h["undefined_missing_grid_doses"]), (None, False, []))
         h = rc.h_star_estimand(dict(pts(base), **{"384": {"H": 390, "score": 9.0}}), 2.5)  # off-grid ignored
         self.assertEqual((h["h_star"], h["off_grid_doses"], h["undefined_missing_grid_doses"]), (None, [390], [384]))
+        # Council doses 0 and 300 are observed off the H* grid (R23h): ignored and listed; "full" is not a dose.
+        h = rc.h_star_estimand(dict(pts(base), **{"0": {"H": 0, "score": 0.1}, "300": {"H": 300, "score": 9.0},
+                                                  "full": {"H": 1999, "score": 9.0}}), 2.5)
+        self.assertEqual((h["h_star"], h["off_grid_doses"]), (768, [0, 300]))
         with self.assertRaises(rc.Refusal):
             rc.h_star_estimand(dict(pts(base), **{"128": {"H": 128, "score": float("nan")}}), 2.5)
         self.assertEqual(rc.h_star_estimand(pts(base), None)["status"], "threshold_unavailable")

@@ -71,8 +71,8 @@ was not read.
   anchor-sabotage replays (ordinals 2/3) are anchors and print. A sealed member prints, in `members` and
   `exclusions`, only `status: sealed` and `sealed_sha256` (members keep the roster echo), plus
   `captured: false` when not captured. U1/U2 aggregates of a calibration window's D model that include a
-  sealed member print `verdict`, `parts`, `sealed_sha256` and a `benign_only` aggregate; verdicts are
-  unchanged. Non-benign DC rows stay sealed (A20).
+  sealed member print `verdict` and `parts`, every other field as `{"status": "sealed"}` (no hash, R23h:
+  a value hash of a small count is reversible), and a `benign_only` aggregate; verdicts are unchanged. Non-benign DC rows stay sealed (A20).
 
 **R26 (lead, blind): the A7 H* text, implemented.**
 - `H_STAR_GRID` = {128, 256, 384, 512, 768, 1024, 1536, 2048}; the export carries it as `series.json`
@@ -81,7 +81,8 @@ was not read.
 - `h_star` (`h_star_estimand`): the smallest grid dose, ascending, whose stripped score is STRICTLY above the
   pair's detection threshold, every earlier dose observed and at or below it. A missing or unreachable
   earlier dose gives null with `undefined_missing_grid_doses`; no exceedance gives null, `bounded_above`
-  false, empty list; `bounded_above` iff defined; off-grid doses ignored and listed; non-finite or
+  false, empty list; `bounded_above` iff defined; observed doses off the grid (council 0 and 300) are ignored
+  and listed in `off_grid_doses` (R23h); "full" is not a dose; non-finite or
   duplicate inputs refuse (`h_star_input_invalid`); `status: registered_secondary`.
 - Rows: the C benign carriers (`claim.carrier_curve.<pair>.carriers[*].h_star`) and the T sabotage known-H
   rows (`claim.known_h.<pair>.<run>.h_star`). T benign rows carry none.
