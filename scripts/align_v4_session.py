@@ -144,8 +144,20 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
     plan = {'members': pilot._member_rows(state, kit=kit_path)}
     observed = {m['run_id']: bundle_ac_powermode(Path(runs_root) / m['run_id']) for m in plan['members']}
     verdict = kit.validate_powermode_members(plan, observed)
+    from joulewise.align.apple import km003c
+    try:
+        custody = (state.get('inputs') or {}).get('custody_root')
+        if custody is None and state.get('plan_path'):
+            custody = pilot.h.read(state['plan_path'])['custody_root']
+        dc = km003c.session_report(custody, plan['members'], runs_root, members)
+    except Exception as exc:  # secondary diagnostics must never become a rails admission gate
+        dc = km003c.unavailable_report(plan['members'], 'meter.desk_failed:' + type(exc).__name__,
+                                       detail=str(exc))
+    for rid, row in dc['members'].items():
+        print(f'{rid} {km003c.LABEL}: ' + json.dumps({k: row[k] for k in
+              ('status', 'dc_in_energy_j', 'dc_in_delta_j', 'dc_in_residual_j', 'flags')}, sort_keys=True))
     return {'ac_powermode_members': verdict['instrument_ok']}, {
-        **verdict, 'd_member_x2': d_member_x2_report(plan['members'], runs_root)}
+        **verdict, 'd_member_x2': d_member_x2_report(plan['members'], runs_root), 'km003c': dc}
 
 
 def desk(session_root, **kwargs):

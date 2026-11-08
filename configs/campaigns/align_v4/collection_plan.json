@@ -1093,6 +1093,14 @@
   "runtime_requirements": {
     "D_tools": "family-validated XML via qwen3_5",
     "ac_powermode": null,
+    "km003c": {
+      "custody_directory": "hazards/meter",
+      "enabled": true,
+      "label": "SECONDARY / not yet registered",
+      "reader": "scripts/km003c_monitor.py",
+      "scope": "before_first_idle_baseline_through_last_member",
+      "supervisor": "joulewise.b5.driver"
+    },
     "presence_penalty": 0,
     "r1_runtime_entrypoint": [
       "scripts/align_r1_runtime.py",
