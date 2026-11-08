@@ -490,3 +490,74 @@ set, which is a separate ruling. This note records the gap.
 
 > The release event has not happened. The lead has seen no Block 5 energy or outcome value. Ed delegated
 > preregistration rulings to the lead.
+
+## Signing statement for DLE-5
+
+DLE-5 carries the following statement verbatim, made by the signer at signing:
+
+> The release event has not happened. The lead has seen no Block 5 energy or outcome value. Ed delegated
+> preregistration rulings to the lead.
+
+Signer: the block-5 lead (Opus), <date>. Found by code reading and synthetic tests only (PR #701 and its
+executing review); no block-5 data was read.
+
+---
+
+## DLE-5. BYTES lineage landing: cited in-place rebind of five frozen collection files and two extractor modules
+
+(This is this log's own DLE-5, not the CARE draft of the same number listed above as not adopted.)
+
+- **Status.** ADOPTED, <date>, with the merge of PR #701 (`lane/2026-11-07-bytes-stage1` into `main`). It changes
+  no L9 output (result-equal to r4) on block-5 windows. The analysis pin is unchanged: `b5/analysis-r4` is tagged
+  on a commit before this merge. Any later analysis tag that includes this merge is re-run through the D-188
+  comparator before release (DLE-1 stages (b) and (c)).
+- **Source.** The block-6 and BYTES collection lane (`lane/2026-10-28-bytes-pass2-open` @ `ee4ce93fc`,
+  BY-THERM-LINES `4e29114ea`) edited these files in place for block 6. They land on `main` with this merge.
+- **Frozen files rebound** (`tests/b5_analysis/test_frozen_files.py`: `EVOLVED_ON_MAIN`, `REBOUND_WORKING_TREE`,
+  `FROZEN_FILES_TEST_SHA256`):
+  1. `joulewise/flags/catalog.py`: 17 block-6 DRAFT codes and the DISCLOSE code
+     `records.claim_usable_counting_disagreement`. The sealed block-5 catalog is unchanged, and no block-5 writer
+     emits any of them.
+  2. `joulewise/flags/core.py`: 11 block-6 core codes (`agent.pause_marker_stale`, `sleep.*`, `idle.*`) and
+     `calibration.acceptance_preflight_unverified`. Their only writers are block-6 lane code; none exists at any
+     block-5 window's pinned commit.
+  3. `joulewise/flags/exclusions.py`: `compute(..., *, pack_scoped=True)`, which keeps the default behaviour.
+     `cell.below_minimum` is now added only when the catalog in force maps it to `EXCLUDE_WINDOW`; the sealed
+     block-5 catalog does, so block-5 behaviour is identical.
+  4. `scripts/run_campaign.py`: block-6 HAZARD collection hooks (pause marker, run clock and sleep flags, idle-wait
+     member cap, `StorageStop` exit 2). On the analysis path:
+     - `_final_idle_admission_attempt` accepts consecutive `[1..k]`; the block-5 controller wrote at most `[1, 2]`.
+     - The busy-fraction admission exception is gated on `busy_fraction_admitted`. Its only writer is
+       `joulewise/controller.py` `_wait_hazard_idle`, added on the lane in `a1b2b59c3` (2026-10-14) and absent from
+       `main`, so no block-5 bundle carries it.
+     - `core_passed` in the whole-window verdict is rewritten through `_idle_admission_claim_barrier_reasons`; it is
+       equivalent on every input that lacks `final_admission_attempt`.
+  5. `scripts/harvest_b5_window.py`: `StorageStop` exits with code 3. It is reachable only from a compressed-archive
+     restore; block-5 archives are plain.
+- **Step-4 extractor modules (not frozen, census-pinned).**
+  6. `joulewise/environment_admission.py`: adds `busy_fraction_admission_admitted`, which waives
+     `environment_admission_failed` and the core CPU failure for an explicit controller busy-fraction admission.
+     It is unreachable on block-5 data for the reason in item 4. The step-4 reason census gains `busy_fraction_admitted`
+     and `compression_records` in `tooling` (`configs/analysis/b5/step4_reason_classes.json` regenerated). No mask
+     or R3 code changes and the step-4 rule is unchanged.
+  7. `joulewise/whole_window.py`: the lane's compressed-archive restore wraps main's `_prepare` body
+     (`readable_run` yields a plain directory unchanged). The whole-window verdict now reads a non-admitted member's
+     `metadata.json` before deciding; the decision is unchanged on block-5 data.
+- **Scope of "inert".** Inert for the analysis of collected block-5 windows. Block-5 collection is closed. A new
+  collection from block-5 configs on `main` would differ: `block_id` is logged in `executed_order`, the HAZARD
+  idle wait replaces the one retry, and run-clock records are written.
+- **Release condition.** None beyond DLE-1, provided `b5/analysis-r4` is tagged before this merge. Otherwise the
+  D-188 comparator is re-run at the tag that includes it, and any disagreement is a hold.
+
+- **Review caveats and the census change (executing review of PR #701).**
+  1. `block_id` is logged by new collections, so "inert" holds for the analysis of collected windows, not for
+     re-collecting a block-5 config on post-merge `main`.
+  2. `whole_window`'s merged verdict reads the bundle's `metadata.json` for every non-admitted member before
+     deciding; the decision is the same and only the reads are added.
+  3. Merge order: tag `b5/analysis-r4` before this merge, or re-run the D-188 comparator at a tag that includes the
+     lineage.
+  4. The CI-fallout respelling of `busy_fraction_admitted` and `compression_records` (`373471bbf`) was removed:
+     the plain literals are restored and `configs/analysis/b5/step4_reason_classes.json` is regenerated with
+     `tests/b5_analysis/step4_reasons/make_table.py` (plus `RULING`). The only diff is the two literals, both in
+     `tooling`; the mask list, the R3 codes and the step-4 rule are unchanged. The respelling had hidden an
+     admission-relaxing path (`busy_fraction_admission_admitted`) from the census.

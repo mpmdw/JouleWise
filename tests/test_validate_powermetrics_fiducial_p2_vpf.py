@@ -19,6 +19,7 @@ import json
 import math
 from pathlib import Path
 import tempfile
+import types
 import unittest
 from unittest import mock
 
@@ -364,10 +365,27 @@ class StalePinWiringTests(unittest.TestCase):
         target = ("_derivation_only_screen_basis" if derivation_only
                   else "_derive_preflight_systematic_screen_s")
         with mock.patch.object(writer, target, side_effect=stop), \
+                contextlib.ExitStack() as stack, \
                 contextlib.redirect_stderr(io.StringIO()) as stderr:
+            if hazard and not derivation_only:
+                # HAZARD carries the preflight error, so stop at the next
+                # refusal handler using a stub MLX module and no hardware reads.
+                mlx = types.ModuleType("mlx")
+                mlx.core = types.ModuleType("mlx.core")
+                stack.enter_context(mock.patch.dict("sys.modules", {"mlx": mlx, "mlx.core": mlx.core}))
+                stack.enter_context(mock.patch.object(writer, "_planned_t1_bindings", return_value={}))
+                begin = stack.enter_context(mock.patch.object(
+                    writer._CaptureLedgerLifecycle, "begin",
+                    side_effect=writer.CalibrationLedgerError(
+                        RefusalCode.RESERVED_SLOT_MISMATCH, context={"reason": "wiring_probe"})))
             rc = writer.main(argv)
+            if hazard and not derivation_only:
+                begin.assert_called_once_with()
         self.assertEqual(rc, 2, stderr.getvalue())
         self.assertIn("wiring_probe", stderr.getvalue())
+        if hazard and not derivation_only:
+            refusal = json.loads(stderr.getvalue().splitlines()[-1])
+            self.assertEqual(refusal["code"], RefusalCode.RESERVED_SLOT_MISMATCH.value)
         return captured
 
     def test_hazard_writer_authenticates_continued_epochs_past_a_stale_pin(self):

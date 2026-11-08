@@ -1,0 +1,1251 @@
+{
+  "authority": [
+    "docs/registrations/bytes_pack_v1.md sections 6, 7, 14",
+    "docs/design/bytes_pack_design.md R3, R8 item 6",
+    "docs/design/block6_collection_draft.md section 14",
+    "docs/process_traces/2026-10-23-magistrate-786c0858/BYTES-P0-RULINGS.md item 3"
+  ],
+  "fallback_all_regimes_and_boundaries": "max(1, E/E_ref, T/T_ref)",
+  "method": {
+    "change": "end mean minus start mean; comparison = workload change minus reference change",
+    "exactness": "Fraction of each CSV decimal lexeme; exact numerator/denominator retained; J printed to 3 decimals",
+    "flagged_inclusive": "restore succeeded usable catalog-excluded rows, labelled description (section 6)",
+    "mean": "arithmetic mean of the alternating same-model observations in each start/end stage",
+    "no_threshold": true,
+    "primary": "succeeded usable rows not excluded by the registered catalog (section 6)",
+    "reference_energy": "gross_energy_j (gross rails whole request), as section 7 and bytes_analysis.neg8_inputs",
+    "scope": "descriptive stage means, not floor-module cells or a claim analysis",
+    "workload_energy": "phase_decode_j (gross rails decode)"
+  },
+  "non_claim": true,
+  "regimes": [
+    {
+      "boundary": "rails",
+      "fallback_scale": "max(1, E/E_ref, T/T_ref)",
+      "input_rows": [
+        {
+          "config_key": "Llama-3.3-70B-Instruct-4bit|bytes_synthetic_2048_decode_512|512",
+          "dur_decode_s": "55.77384614944458",
+          "energy_request_j": "3288.0619840555228",
+          "excluded": "False",
+          "exclusion_codes": "",
+          "flag_codes": "battery.accumulator_activity;battery.assist;calibration.refit_cache_miss;contention.request_overlap;idle.busy_fraction_exceeded;meter.battery_activity;model.identity_mismatch",
+          "gross_energy_j": "3293.038754926565",
+          "measurement_receipt": {
+            "census_quanta": 9,
+            "flag_codes": [
+              "battery.accumulator_activity",
+              "battery.assist",
+              "calibration.refit_cache_miss",
+              "contention.request_overlap",
+              "idle.busy_fraction_exceeded",
+              "meter.battery_activity",
+              "model.identity_mismatch"
+            ],
+            "member_wall_s": 267.83769512176514,
+            "outside_cpu_s": 5.539999999999229,
+            "request_s": 81.76365780830383,
+            "retained_bytes": 434987008,
+            "stream_s": 198.11243641597684,
+            "thermal_level": 0
+          },
+          "model_name": "Llama-3.3-70B-Instruct-4bit",
+          "order_index": "21",
+          "phase_decode_j": "2110.3646191676535",
+          "run_id": "bytes-mac-check-test7-llama-70b-start-r01",
+          "stage_id": "bytes-mac-check-test7-llama-70b-start",
+          "status": "succeeded"
+        },
+        {
+          "config_key": "Qwen2.5-1.5B-Instruct-4bit|df_rq_mid|256",
+          "dur_decode_s": "0.9929192066192627",
+          "energy_request_j": "36.84110853385138",
+          "excluded": "False",
+          "exclusion_codes": "",
+          "flag_codes": "calibration.refit_cache_miss;model.identity_mismatch",
+          "gross_energy_j": "36.90926524174213",
+          "measurement_receipt": {
+            "census_quanta": 1,
+            "flag_codes": [
+              "calibration.refit_cache_miss",
+              "model.identity_mismatch"
+            ],
+            "member_wall_s": 127.64888286590576,
+            "outside_cpu_s": 0.2499999999987556,
+            "request_s": 1.31007719039917,
+            "retained_bytes": 322502656,
+            "stream_s": 90.10668129194528,
+            "thermal_level": 0
+          },
+          "model_name": "Qwen2.5-1.5B-Instruct-4bit",
+          "order_index": "22",
+          "phase_decode_j": "25.569846399145128",
+          "run_id": "bytes-mac-check-test7-llama-70b-start-r02",
+          "stage_id": "bytes-mac-check-test7-llama-70b-start",
+          "status": "succeeded"
+        },
+        {
+          "config_key": "Llama-3.3-70B-Instruct-4bit|bytes_synthetic_2048_decode_512|512",
+          "dur_decode_s": "55.856014013290405",
+          "energy_request_j": "3201.2984706851344",
+          "excluded": "False",
+          "exclusion_codes": "",
+          "flag_codes": "battery.accumulator_activity;battery.assist;calibration.refit_cache_miss;meter.battery_activity;model.identity_mismatch",
+          "gross_energy_j": "3205.7176251287924",
+          "measurement_receipt": {
+            "census_quanta": 9,
+            "flag_codes": [
+              "battery.accumulator_activity",
+              "battery.assist",
+              "calibration.refit_cache_miss",
+              "meter.battery_activity",
+              "model.identity_mismatch"
+            ],
+            "member_wall_s": 262.0501010417938,
+            "outside_cpu_s": 4.0800000000035155,
+            "request_s": 82.27166295051575,
+            "retained_bytes": 435322880,
+            "stream_s": 198.25139095797203,
+            "thermal_level": 0
+          },
+          "model_name": "Llama-3.3-70B-Instruct-4bit",
+          "order_index": "23",
+          "phase_decode_j": "2047.8944240475703",
+          "run_id": "bytes-mac-check-test7-llama-70b-start-r03",
+          "stage_id": "bytes-mac-check-test7-llama-70b-start",
+          "status": "succeeded"
+        },
+        {
+          "config_key": "Qwen2.5-1.5B-Instruct-4bit|df_rq_mid|256",
+          "dur_decode_s": "0.9909679889678955",
+          "energy_request_j": "36.991588732611376",
+          "excluded": "False",
+          "exclusion_codes": "",
+          "flag_codes": "calibration.refit_cache_miss;model.identity_mismatch",
+          "gross_energy_j": "37.03741606843329",
+          "measurement_receipt": {
+            "census_quanta": 1,
+            "flag_codes": [
+              "calibration.refit_cache_miss",
+              "model.identity_mismatch"
+            ],
+            "member_wall_s": 126.31290221214294,
+            "outside_cpu_s": 0.4399999999921303,
+            "request_s": 1.3098738193511963,
+            "retained_bytes": 321896448,
+            "stream_s": 89.53276491595898,
+            "thermal_level": 0
+          },
+          "model_name": "Qwen2.5-1.5B-Instruct-4bit",
+          "order_index": "24",
+          "phase_decode_j": "25.49721242647505",
+          "run_id": "bytes-mac-check-test7-llama-70b-start-r04",
+          "stage_id": "bytes-mac-check-test7-llama-70b-start",
+          "status": "succeeded"
+        },
+        {
+          "config_key": "Llama-3.3-70B-Instruct-4bit|bytes_synthetic_2048_decode_512|512",
+          "dur_decode_s": "56.04571890830994",
+          "energy_request_j": "3083.7870409763104",
+          "excluded": "True",
+          "exclusion_codes": "thermal.os_level_nonzero",
+          "flag_codes": "battery.assist;calibration.refit_cache_miss;meter.battery_activity;model.identity_mismatch;thermal.os_level_nonzero",
+          "gross_energy_j": "3086.9370771258486",
+          "measurement_receipt": {
+            "census_quanta": 9,
+            "flag_codes": [
+              "battery.assist",
+              "calibration.refit_cache_miss",
+              "meter.battery_activity",
+              "model.identity_mismatch",
+              "thermal.os_level_nonzero"
+            ],
+            "member_wall_s": 270.6575708389282,
+            "outside_cpu_s": 3.619999999996529,
+            "request_s": 82.84857606887817,
+            "retained_bytes": 437133312,
+            "stream_s": 200.19533654104453,
+            "thermal_level": 1
+          },
+          "model_name": "Llama-3.3-70B-Instruct-4bit",
+          "order_index": "58",
+          "phase_decode_j": "1948.4691791257662",
+          "run_id": "bytes-mac-check-test7-llama-70b-end-r01",
+          "stage_id": "bytes-mac-check-test7-llama-70b-end",
+          "status": "succeeded"
+        },
+        {
+          "config_key": "Qwen2.5-1.5B-Instruct-4bit|df_rq_mid|256",
+          "dur_decode_s": "0.9954822063446045",
+          "energy_request_j": "36.531419500295996",
+          "excluded": "False",
+          "exclusion_codes": "",
+          "flag_codes": "calibration.refit_cache_miss;model.identity_mismatch",
+          "gross_energy_j": "36.577435452789544",
+          "measurement_receipt": {
+            "census_quanta": 1,
+            "flag_codes": [
+              "calibration.refit_cache_miss",
+              "model.identity_mismatch"
+            ],
+            "member_wall_s": 127.51304769515991,
+            "outside_cpu_s": 0.1900000000044071,
+            "request_s": 1.2963640689849854,
+            "retained_bytes": 322256896,
+            "stream_s": 89.91568474995438,
+            "thermal_level": 0
+          },
+          "model_name": "Qwen2.5-1.5B-Instruct-4bit",
+          "order_index": "59",
+          "phase_decode_j": "25.556983372755052",
+          "run_id": "bytes-mac-check-test7-llama-70b-end-r02",
+          "stage_id": "bytes-mac-check-test7-llama-70b-end",
+          "status": "succeeded"
+        },
+        {
+          "config_key": "Llama-3.3-70B-Instruct-4bit|bytes_synthetic_2048_decode_512|512",
+          "dur_decode_s": "55.98273420333862",
+          "energy_request_j": "3137.963836343608",
+          "excluded": "False",
+          "exclusion_codes": "",
+          "flag_codes": "battery.accumulator_activity;battery.assist;calibration.refit_cache_miss;meter.battery_activity;model.identity_mismatch",
+          "gross_energy_j": "3142.7257351158482",
+          "measurement_receipt": {
+            "census_quanta": 9,
+            "flag_codes": [
+              "battery.accumulator_activity",
+              "battery.assist",
+              "calibration.refit_cache_miss",
+              "meter.battery_activity",
+              "model.identity_mismatch"
+            ],
+            "member_wall_s": 263.8540461063385,
+            "outside_cpu_s": 4.150000000002272,
+            "request_s": 82.54986476898193,
+            "retained_bytes": 436060160,
+            "stream_s": 199.0899726250209,
+            "thermal_level": 0
+          },
+          "model_name": "Llama-3.3-70B-Instruct-4bit",
+          "order_index": "60",
+          "phase_decode_j": "1991.5311435514986",
+          "run_id": "bytes-mac-check-test7-llama-70b-end-r03",
+          "stage_id": "bytes-mac-check-test7-llama-70b-end",
+          "status": "succeeded"
+        },
+        {
+          "config_key": "Qwen2.5-1.5B-Instruct-4bit|df_rq_mid|256",
+          "dur_decode_s": "0.9917807579040527",
+          "energy_request_j": "37.43875462227396",
+          "excluded": "False",
+          "exclusion_codes": "",
+          "flag_codes": "calibration.refit_cache_miss;model.identity_mismatch",
+          "gross_energy_j": "37.48493662768886",
+          "measurement_receipt": {
+            "census_quanta": 1,
+            "flag_codes": [
+              "calibration.refit_cache_miss",
+              "model.identity_mismatch"
+            ],
+            "member_wall_s": 127.45664525032043,
+            "outside_cpu_s": 0.8899999999979177,
+            "request_s": 1.3076488971710205,
+            "retained_bytes": 322494464,
+            "stream_s": 90.0543339579599,
+            "thermal_level": 0
+          },
+          "model_name": "Qwen2.5-1.5B-Instruct-4bit",
+          "order_index": "61",
+          "phase_decode_j": "25.58190621682644",
+          "run_id": "bytes-mac-check-test7-llama-70b-end-r04",
+          "stage_id": "bytes-mac-check-test7-llama-70b-end",
+          "status": "succeeded"
+        }
+      ],
+      "model": "Llama-3.3-70B-Instruct-4bit",
+      "outcome": "pass_not_established",
+      "reason": "The governing texts specify no numerical pass criterion.",
+      "regime": "llama-70b",
+      "selections": {
+        "flagged_inclusive": {
+          "absolute_drift_excess_j": {
+            "decimal": "109.071514883828008",
+            "denominator": 125000000000000,
+            "numerator": 13633939360478501
+          },
+          "counts": {
+            "reference_end": 2,
+            "reference_start": 2,
+            "workload_end": 2,
+            "workload_start": 2
+          },
+          "delta_difference_j": {
+            "decimal": "-109.187205654130992",
+            "denominator": 62500000000000,
+            "numerator": -6824200353383187
+          },
+          "means_j": {
+            "reference_end": {
+              "decimal": "37.031186040239202",
+              "denominator": 500000000000000,
+              "numerator": 18515593020119601
+            },
+            "reference_start": {
+              "decimal": "36.97334065508771",
+              "denominator": 100000000000000,
+              "numerator": 3697334065508771
+            },
+            "workload_end": {
+              "decimal": "1970.0001613386324",
+              "denominator": 2500000000000,
+              "numerator": 4925000403346581
+            },
+            "workload_start": {
+              "decimal": "2079.1295216076119",
+              "denominator": 10000000000000,
+              "numerator": 20791295216076119
+            }
+          },
+          "reference_delta_j": {
+            "decimal": "0.057845385151492",
+            "denominator": 250000000000000,
+            "numerator": 14461346287873
+          },
+          "reference_fractional_change": {
+            "decimal": "0.0015645160574239914133775570708741155937431651405986",
+            "denominator": 18486670327543855,
+            "numerator": 28922692575746
+          },
+          "selected_run_ids": {
+            "reference_end": [
+              "bytes-mac-check-test7-llama-70b-end-r02",
+              "bytes-mac-check-test7-llama-70b-end-r04"
+            ],
+            "reference_start": [
+              "bytes-mac-check-test7-llama-70b-start-r02",
+              "bytes-mac-check-test7-llama-70b-start-r04"
+            ],
+            "workload_end": [
+              "bytes-mac-check-test7-llama-70b-end-r01",
+              "bytes-mac-check-test7-llama-70b-end-r03"
+            ],
+            "workload_start": [
+              "bytes-mac-check-test7-llama-70b-start-r01",
+              "bytes-mac-check-test7-llama-70b-start-r03"
+            ]
+          },
+          "workload_delta_j": {
+            "decimal": "-109.1293602689795",
+            "denominator": 2000000000000,
+            "numerator": -218258720537959
+          },
+          "workload_fractional_change": {
+            "decimal": "-0.052488004780288607949711160094350320931193022213544",
+            "denominator": 20791295216076119,
+            "numerator": -1091293602689795
+          }
+        },
+        "primary": {
+          "absolute_drift_excess_j": {
+            "decimal": "87.540532670961808",
+            "denominator": 62500000000000,
+            "numerator": 5471283291935113
+          },
+          "counts": {
+            "reference_end": 2,
+            "reference_start": 2,
+            "workload_end": 1,
+            "workload_start": 2
+          },
+          "delta_difference_j": {
+            "decimal": "-87.656223441264792",
+            "denominator": 125000000000000,
+            "numerator": -10957027930158099
+          },
+          "means_j": {
+            "reference_end": {
+              "decimal": "37.031186040239202",
+              "denominator": 500000000000000,
+              "numerator": 18515593020119601
+            },
+            "reference_start": {
+              "decimal": "36.97334065508771",
+              "denominator": 100000000000000,
+              "numerator": 3697334065508771
+            },
+            "workload_end": {
+              "decimal": "1991.5311435514986",
+              "denominator": 5000000000000,
+              "numerator": 9957655717757493
+            },
+            "workload_start": {
+              "decimal": "2079.1295216076119",
+              "denominator": 10000000000000,
+              "numerator": 20791295216076119
+            }
+          },
+          "reference_delta_j": {
+            "decimal": "0.057845385151492",
+            "denominator": 250000000000000,
+            "numerator": 14461346287873
+          },
+          "reference_fractional_change": {
+            "decimal": "0.0015645160574239914133775570708741155937431651405986",
+            "denominator": 18486670327543855,
+            "numerator": 28922692575746
+          },
+          "selected_run_ids": {
+            "reference_end": [
+              "bytes-mac-check-test7-llama-70b-end-r02",
+              "bytes-mac-check-test7-llama-70b-end-r04"
+            ],
+            "reference_start": [
+              "bytes-mac-check-test7-llama-70b-start-r02",
+              "bytes-mac-check-test7-llama-70b-start-r04"
+            ],
+            "workload_end": [
+              "bytes-mac-check-test7-llama-70b-end-r03"
+            ],
+            "workload_start": [
+              "bytes-mac-check-test7-llama-70b-start-r01",
+              "bytes-mac-check-test7-llama-70b-start-r03"
+            ]
+          },
+          "workload_delta_j": {
+            "decimal": "-87.5983780561133",
+            "denominator": 10000000000000,
+            "numerator": -875983780561133
+          },
+          "workload_fractional_change": {
+            "decimal": "-0.042132237143350749112891884605726998140263272120938",
+            "denominator": 20791295216076119,
+            "numerator": -875983780561133
+          }
+        }
+      },
+      "test7_passed": false
+    },
+    {
+      "boundary": "rails",
+      "fallback_scale": "max(1, E/E_ref, T/T_ref)",
+      "input_rows": [
+        {
+          "config_key": "Qwen3.5-122B-A10B-4bit|bytes_synthetic_2048_decode_512|512",
+          "dur_decode_s": "10.980268239974976",
+          "energy_request_j": "505.9789820914563",
+          "excluded": "False",
+          "exclusion_codes": "",
+          "flag_codes": "battery.accumulator_activity;battery.assist;calibration.refit_cache_miss;meter.battery_activity;model.identity_mismatch",
+          "gross_energy_j": "506.8328949913491",
+          "measurement_receipt": {
+            "census_quanta": 3,
+            "flag_codes": [
+              "battery.accumulator_activity",
+              "battery.assist",
+              "calibration.refit_cache_miss",
+              "meter.battery_activity",
+              "model.identity_mismatch"
+            ],
+            "member_wall_s": 187.7222490310669,
+            "outside_cpu_s": 0.7499999999925483,
+            "request_s": 15.857204914093018,
+            "retained_bytes": 343949312,
+            "stream_s": 110.6345259170048,
+            "thermal_level": 0
+          },
+          "model_name": "Qwen3.5-122B-A10B-4bit",
+          "order_index": "25",
+          "phase_decode_j": "306.8250170894689",
+          "run_id": "bytes-mac-check-test7-qwen35-122b-start-r01",
+          "stage_id": "bytes-mac-check-test7-qwen35-122b-start",
+          "status": "succeeded"
+        },
+        {
+          "config_key": "Qwen2.5-1.5B-Instruct-4bit|df_rq_mid|256",
+          "dur_decode_s": "0.9934301376342773",
+          "energy_request_j": "37.50117920505049",
+          "excluded": "False",
+          "exclusion_codes": "",
+          "flag_codes": "calibration.refit_cache_miss;contention.request_overlap;idle.waited;model.identity_mismatch",
+          "gross_energy_j": "37.56191687329269",
+          "measurement_receipt": {
+            "census_quanta": 1,
+            "flag_codes": [
+              "calibration.refit_cache_miss",
+              "contention.request_overlap",
+              "idle.waited",
+              "model.identity_mismatch"
+            ],
+            "member_wall_s": 207.49415683746338,
+            "outside_cpu_s": 1.6000000000025139,
+            "request_s": 1.3124158382415771,
+            "retained_bytes": 450224128,
+            "stream_s": 89.98983304190915,
+            "thermal_level": 0
+          },
+          "model_name": "Qwen2.5-1.5B-Instruct-4bit",
+          "order_index": "26",
+          "phase_decode_j": "25.590368484652043",
+          "run_id": "bytes-mac-check-test7-qwen35-122b-start-r02",
+          "stage_id": "bytes-mac-check-test7-qwen35-122b-start",
+          "status": "succeeded"
+        },
+        {
+          "config_key": "Qwen3.5-122B-A10B-4bit|bytes_synthetic_2048_decode_512|512",
+          "dur_decode_s": "10.977961778640747",
+          "energy_request_j": "505.08257634538404",
+          "excluded": "False",
+          "exclusion_codes": "",
+          "flag_codes": "battery.accumulator_activity;battery.assist;calibration.refit_cache_miss;idle.busy_fraction_exceeded;meter.battery_activity;model.identity_mismatch",
+          "gross_energy_j": "505.96626090761566",
+          "measurement_receipt": {
+            "census_quanta": 3,
+            "flag_codes": [
+              "battery.accumulator_activity",
+              "battery.assist",
+              "calibration.refit_cache_miss",
+              "idle.busy_fraction_exceeded",
+              "meter.battery_activity",
+              "model.identity_mismatch"
+            ],
+            "member_wall_s": 182.48995184898376,
+            "outside_cpu_s": 1.1599999999949984,
+            "request_s": 15.862058877944946,
+            "retained_bytes": 343572480,
+            "stream_s": 110.11069354205392,
+            "thermal_level": 0
+          },
+          "model_name": "Qwen3.5-122B-A10B-4bit",
+          "order_index": "27",
+          "phase_decode_j": "306.0085809795246",
+          "run_id": "bytes-mac-check-test7-qwen35-122b-start-r03",
+          "stage_id": "bytes-mac-check-test7-qwen35-122b-start",
+          "status": "succeeded"
+        },
+        {
+          "config_key": "Qwen2.5-1.5B-Instruct-4bit|df_rq_mid|256",
+          "dur_decode_s": "0.9957659244537354",
+          "energy_request_j": "37.61641096587432",
+          "excluded": "False",
+          "exclusion_codes": "",
+          "flag_codes": "calibration.refit_cache_miss;idle.busy_fraction_exceeded;model.identity_mismatch",
+          "gross_energy_j": "37.67773893152654",
+          "measurement_receipt": {
+            "census_quanta": 1,
+            "flag_codes": [
+              "calibration.refit_cache_miss",
+              "idle.busy_fraction_exceeded",
+              "model.identity_mismatch"
+            ],
+            "member_wall_s": 128.5881552696228,
+            "outside_cpu_s": 0.8899999999957448,
+            "request_s": 1.3190138339996338,
+            "retained_bytes": 321961984,
+            "stream_s": 90.23047029098962,
+            "thermal_level": 0
+          },
+          "model_name": "Qwen2.5-1.5B-Instruct-4bit",
+          "order_index": "28",
+          "phase_decode_j": "26.271809433251857",
+          "run_id": "bytes-mac-check-test7-qwen35-122b-start-r04",
+          "stage_id": "bytes-mac-check-test7-qwen35-122b-start",
+          "status": "succeeded"
+        },
+        {
+          "config_key": "Qwen3.5-122B-A10B-4bit|bytes_synthetic_2048_decode_512|512",
+          "dur_decode_s": "10.994806051254272",
+          "energy_request_j": "505.5904761077944",
+          "excluded": "False",
+          "exclusion_codes": "",
+          "flag_codes": "battery.accumulator_activity;battery.assist;calibration.refit_cache_miss;idle.busy_fraction_exceeded;meter.battery_activity;model.identity_mismatch",
+          "gross_energy_j": "506.247702543",
+          "measurement_receipt": {
+            "census_quanta": 3,
+            "flag_codes": [
+              "battery.accumulator_activity",
+              "battery.assist",
+              "calibration.refit_cache_miss",
+              "idle.busy_fraction_exceeded",
+              "meter.battery_activity",
+              "model.identity_mismatch"
+            ],
+            "member_wall_s": 185.46823978424072,
+            "outside_cpu_s": 0.7800000000019864,
+            "request_s": 15.88878083229065,
+            "retained_bytes": 344383488,
+            "stream_s": 111.1535636249464,
+            "thermal_level": 0
+          },
+          "model_name": "Qwen3.5-122B-A10B-4bit",
+          "order_index": "62",
+          "phase_decode_j": "306.35958634171726",
+          "run_id": "bytes-mac-check-test7-qwen35-122b-end-r01",
+          "stage_id": "bytes-mac-check-test7-qwen35-122b-end",
+          "status": "succeeded"
+        },
+        {
+          "config_key": "Qwen2.5-1.5B-Instruct-4bit|df_rq_mid|256",
+          "dur_decode_s": "0.9929900169372559",
+          "energy_request_j": "36.82205113821514",
+          "excluded": "False",
+          "exclusion_codes": "",
+          "flag_codes": "calibration.refit_cache_miss;model.identity_mismatch",
+          "gross_energy_j": "36.891734340456246",
+          "measurement_receipt": {
+            "census_quanta": 1,
+            "flag_codes": [
+              "calibration.refit_cache_miss",
+              "model.identity_mismatch"
+            ],
+            "member_wall_s": 126.54959297180176,
+            "outside_cpu_s": 0.42999999999966865,
+            "request_s": 1.2981560230255127,
+            "retained_bytes": 321806336,
+            "stream_s": 89.26580199995078,
+            "thermal_level": 0
+          },
+          "model_name": "Qwen2.5-1.5B-Instruct-4bit",
+          "order_index": "63",
+          "phase_decode_j": "25.312291713521482",
+          "run_id": "bytes-mac-check-test7-qwen35-122b-end-r02",
+          "stage_id": "bytes-mac-check-test7-qwen35-122b-end",
+          "status": "succeeded"
+        },
+        {
+          "config_key": "Qwen3.5-122B-A10B-4bit|bytes_synthetic_2048_decode_512|512",
+          "dur_decode_s": "10.986889123916626",
+          "energy_request_j": "506.64277800651024",
+          "excluded": "False",
+          "exclusion_codes": "",
+          "flag_codes": "battery.accumulator_activity;battery.assist;calibration.refit_cache_miss;idle.busy_fraction_exceeded;meter.battery_activity;model.identity_mismatch",
+          "gross_energy_j": "507.4954172112002",
+          "measurement_receipt": {
+            "census_quanta": 3,
+            "flag_codes": [
+              "battery.accumulator_activity",
+              "battery.assist",
+              "calibration.refit_cache_miss",
+              "idle.busy_fraction_exceeded",
+              "meter.battery_activity",
+              "model.identity_mismatch"
+            ],
+            "member_wall_s": 184.9073929786682,
+            "outside_cpu_s": 1.270000000002647,
+            "request_s": 15.897386074066162,
+            "retained_bytes": 344219648,
+            "stream_s": 111.30494300008286,
+            "thermal_level": 0
+          },
+          "model_name": "Qwen3.5-122B-A10B-4bit",
+          "order_index": "64",
+          "phase_decode_j": "307.1705602024746",
+          "run_id": "bytes-mac-check-test7-qwen35-122b-end-r03",
+          "stage_id": "bytes-mac-check-test7-qwen35-122b-end",
+          "status": "succeeded"
+        },
+        {
+          "config_key": "Qwen2.5-1.5B-Instruct-4bit|df_rq_mid|256",
+          "dur_decode_s": "1.0038621425628662",
+          "energy_request_j": "37.30185324144537",
+          "excluded": "False",
+          "exclusion_codes": "",
+          "flag_codes": "calibration.refit_cache_miss;model.identity_mismatch",
+          "gross_energy_j": "37.35570142982221",
+          "measurement_receipt": {
+            "census_quanta": 2,
+            "flag_codes": [
+              "calibration.refit_cache_miss",
+              "model.identity_mismatch"
+            ],
+            "member_wall_s": 128.83795499801636,
+            "outside_cpu_s": 1.7000000000027007,
+            "request_s": 1.3172578811645508,
+            "retained_bytes": 322519040,
+            "stream_s": 90.00530108308885,
+            "thermal_level": 0
+          },
+          "model_name": "Qwen2.5-1.5B-Instruct-4bit",
+          "order_index": "65",
+          "phase_decode_j": "25.95906689393282",
+          "run_id": "bytes-mac-check-test7-qwen35-122b-end-r04",
+          "stage_id": "bytes-mac-check-test7-qwen35-122b-end",
+          "status": "succeeded"
+        }
+      ],
+      "model": "Qwen3.5-122B-A10B-4bit",
+      "outcome": "pass_not_established",
+      "reason": "The governing texts specify no numerical pass criterion.",
+      "regime": "qwen35-122b",
+      "selections": {
+        "flagged_inclusive": {
+          "absolute_drift_excess_j": {
+            "decimal": "-0.147835779671207",
+            "denominator": 1000000000000000,
+            "numerator": -147835779671207
+          },
+          "counts": {
+            "reference_end": 2,
+            "reference_start": 2,
+            "workload_end": 2,
+            "workload_start": 2
+          },
+          "delta_difference_j": {
+            "decimal": "0.844384254869567",
+            "denominator": 1000000000000000,
+            "numerator": 844384254869567
+          },
+          "means_j": {
+            "reference_end": {
+              "decimal": "37.123717885139228",
+              "denominator": 250000000000000,
+              "numerator": 9280929471284807
+            },
+            "reference_start": {
+              "decimal": "37.619827902409615",
+              "denominator": 200000000000000,
+              "numerator": 7523965580481923
+            },
+            "workload_end": {
+              "decimal": "306.76507327209593",
+              "denominator": 100000000000000,
+              "numerator": 30676507327209593
+            },
+            "workload_start": {
+              "decimal": "306.41679903449675",
+              "denominator": 4000000000000,
+              "numerator": 1225667196137987
+            }
+          },
+          "reference_delta_j": {
+            "decimal": "-0.496110017270387",
+            "denominator": 1000000000000000,
+            "numerator": -496110017270387
+          },
+          "reference_fractional_change": {
+            "decimal": "-0.013187461105812509469441714006214026415174445514664",
+            "denominator": 37619827902409615,
+            "numerator": -496110017270387
+          },
+          "selected_run_ids": {
+            "reference_end": [
+              "bytes-mac-check-test7-qwen35-122b-end-r02",
+              "bytes-mac-check-test7-qwen35-122b-end-r04"
+            ],
+            "reference_start": [
+              "bytes-mac-check-test7-qwen35-122b-start-r02",
+              "bytes-mac-check-test7-qwen35-122b-start-r04"
+            ],
+            "workload_end": [
+              "bytes-mac-check-test7-qwen35-122b-end-r01",
+              "bytes-mac-check-test7-qwen35-122b-end-r03"
+            ],
+            "workload_start": [
+              "bytes-mac-check-test7-qwen35-122b-start-r01",
+              "bytes-mac-check-test7-qwen35-122b-start-r03"
+            ]
+          },
+          "workload_delta_j": {
+            "decimal": "0.34827423759918",
+            "denominator": 50000000000000,
+            "numerator": 17413711879959
+          },
+          "workload_fractional_change": {
+            "decimal": "0.0011366029496312664378342638110733637024755778507321",
+            "denominator": 30641679903449675,
+            "numerator": 34827423759918
+          }
+        },
+        "primary": {
+          "absolute_drift_excess_j": {
+            "decimal": "-0.147835779671207",
+            "denominator": 1000000000000000,
+            "numerator": -147835779671207
+          },
+          "counts": {
+            "reference_end": 2,
+            "reference_start": 2,
+            "workload_end": 2,
+            "workload_start": 2
+          },
+          "delta_difference_j": {
+            "decimal": "0.844384254869567",
+            "denominator": 1000000000000000,
+            "numerator": 844384254869567
+          },
+          "means_j": {
+            "reference_end": {
+              "decimal": "37.123717885139228",
+              "denominator": 250000000000000,
+              "numerator": 9280929471284807
+            },
+            "reference_start": {
+              "decimal": "37.619827902409615",
+              "denominator": 200000000000000,
+              "numerator": 7523965580481923
+            },
+            "workload_end": {
+              "decimal": "306.76507327209593",
+              "denominator": 100000000000000,
+              "numerator": 30676507327209593
+            },
+            "workload_start": {
+              "decimal": "306.41679903449675",
+              "denominator": 4000000000000,
+              "numerator": 1225667196137987
+            }
+          },
+          "reference_delta_j": {
+            "decimal": "-0.496110017270387",
+            "denominator": 1000000000000000,
+            "numerator": -496110017270387
+          },
+          "reference_fractional_change": {
+            "decimal": "-0.013187461105812509469441714006214026415174445514664",
+            "denominator": 37619827902409615,
+            "numerator": -496110017270387
+          },
+          "selected_run_ids": {
+            "reference_end": [
+              "bytes-mac-check-test7-qwen35-122b-end-r02",
+              "bytes-mac-check-test7-qwen35-122b-end-r04"
+            ],
+            "reference_start": [
+              "bytes-mac-check-test7-qwen35-122b-start-r02",
+              "bytes-mac-check-test7-qwen35-122b-start-r04"
+            ],
+            "workload_end": [
+              "bytes-mac-check-test7-qwen35-122b-end-r01",
+              "bytes-mac-check-test7-qwen35-122b-end-r03"
+            ],
+            "workload_start": [
+              "bytes-mac-check-test7-qwen35-122b-start-r01",
+              "bytes-mac-check-test7-qwen35-122b-start-r03"
+            ]
+          },
+          "workload_delta_j": {
+            "decimal": "0.34827423759918",
+            "denominator": 50000000000000,
+            "numerator": 17413711879959
+          },
+          "workload_fractional_change": {
+            "decimal": "0.0011366029496312664378342638110733637024755778507321",
+            "denominator": 30641679903449675,
+            "numerator": 34827423759918
+          }
+        }
+      },
+      "test7_passed": false
+    },
+    {
+      "boundary": "rails",
+      "fallback_scale": "max(1, E/E_ref, T/T_ref)",
+      "input_rows": [
+        {
+          "config_key": "Qwen3-Next-80B-A3B-Instruct-4bit|bytes_synthetic_2048_decode_512|512",
+          "dur_decode_s": "6.923778057098389",
+          "energy_request_j": "230.17817330722517",
+          "excluded": "False",
+          "exclusion_codes": "",
+          "flag_codes": "calibration.refit_cache_miss;contention.request_overlap;model.identity_mismatch",
+          "gross_energy_j": "230.5656943053987",
+          "measurement_receipt": {
+            "census_quanta": 1,
+            "flag_codes": [
+              "calibration.refit_cache_miss",
+              "contention.request_overlap",
+              "model.identity_mismatch"
+            ],
+            "member_wall_s": 161.15963792800903,
+            "outside_cpu_s": 1.7300000000015143,
+            "request_s": 9.013283967971802,
+            "retained_bytes": 332406784,
+            "stream_s": 99.35696300002746,
+            "thermal_level": 0
+          },
+          "model_name": "Qwen3-Next-80B-A3B-Instruct-4bit",
+          "order_index": "29",
+          "phase_decode_j": "147.16027860499858",
+          "run_id": "bytes-mac-check-test7-qwen3-next-80b-start-r01",
+          "stage_id": "bytes-mac-check-test7-qwen3-next-80b-start",
+          "status": "succeeded"
+        },
+        {
+          "config_key": "Qwen2.5-1.5B-Instruct-4bit|df_rq_mid|256",
+          "dur_decode_s": "0.999885082244873",
+          "energy_request_j": "37.03376406680713",
+          "excluded": "False",
+          "exclusion_codes": "",
+          "flag_codes": "calibration.refit_cache_miss;model.identity_mismatch",
+          "gross_energy_j": "37.10131823089495",
+          "measurement_receipt": {
+            "census_quanta": 1,
+            "flag_codes": [
+              "calibration.refit_cache_miss",
+              "model.identity_mismatch"
+            ],
+            "member_wall_s": 127.63234090805054,
+            "outside_cpu_s": 0.440000000001558,
+            "request_s": 1.3175709247589111,
+            "retained_bytes": 322584576,
+            "stream_s": 90.62584745802451,
+            "thermal_level": 0
+          },
+          "model_name": "Qwen2.5-1.5B-Instruct-4bit",
+          "order_index": "30",
+          "phase_decode_j": "25.74235053491592",
+          "run_id": "bytes-mac-check-test7-qwen3-next-80b-start-r02",
+          "stage_id": "bytes-mac-check-test7-qwen3-next-80b-start",
+          "status": "succeeded"
+        },
+        {
+          "config_key": "Qwen3-Next-80B-A3B-Instruct-4bit|bytes_synthetic_2048_decode_512|512",
+          "dur_decode_s": "6.957612037658691",
+          "energy_request_j": "224.93774959130786",
+          "excluded": "False",
+          "exclusion_codes": "",
+          "flag_codes": "calibration.refit_cache_miss;model.identity_mismatch",
+          "gross_energy_j": "225.26611528240184",
+          "measurement_receipt": {
+            "census_quanta": 2,
+            "flag_codes": [
+              "calibration.refit_cache_miss",
+              "model.identity_mismatch"
+            ],
+            "member_wall_s": 154.89293885231018,
+            "outside_cpu_s": 0.8000000000008994,
+            "request_s": 9.041148900985718,
+            "retained_bytes": 332414976,
+            "stream_s": 99.60160108294804,
+            "thermal_level": 0
+          },
+          "model_name": "Qwen3-Next-80B-A3B-Instruct-4bit",
+          "order_index": "31",
+          "phase_decode_j": "142.26368609912396",
+          "run_id": "bytes-mac-check-test7-qwen3-next-80b-start-r03",
+          "stage_id": "bytes-mac-check-test7-qwen3-next-80b-start",
+          "status": "succeeded"
+        },
+        {
+          "config_key": "Qwen2.5-1.5B-Instruct-4bit|df_rq_mid|256",
+          "dur_decode_s": "1.000236988067627",
+          "energy_request_j": "37.30757558786439",
+          "excluded": "False",
+          "exclusion_codes": "",
+          "flag_codes": "calibration.refit_cache_miss;model.identity_mismatch",
+          "gross_energy_j": "37.38596598088522",
+          "measurement_receipt": {
+            "census_quanta": 1,
+            "flag_codes": [
+              "calibration.refit_cache_miss",
+              "model.identity_mismatch"
+            ],
+            "member_wall_s": 128.22024512290955,
+            "outside_cpu_s": 0.29999999999889665,
+            "request_s": 1.3163368701934814,
+            "retained_bytes": 322158592,
+            "stream_s": 89.76929183397442,
+            "thermal_level": 0
+          },
+          "model_name": "Qwen2.5-1.5B-Instruct-4bit",
+          "order_index": "32",
+          "phase_decode_j": "25.927183121962546",
+          "run_id": "bytes-mac-check-test7-qwen3-next-80b-start-r04",
+          "stage_id": "bytes-mac-check-test7-qwen3-next-80b-start",
+          "status": "succeeded"
+        },
+        {
+          "config_key": "Qwen3-Next-80B-A3B-Instruct-4bit|bytes_synthetic_2048_decode_512|512",
+          "dur_decode_s": "6.936630010604858",
+          "energy_request_j": "225.11636958350775",
+          "excluded": "False",
+          "exclusion_codes": "",
+          "flag_codes": "battery.accumulator_activity;battery.assist_outside_request;calibration.refit_cache_miss;model.identity_mismatch",
+          "gross_energy_j": "225.4634172153616",
+          "measurement_receipt": {
+            "census_quanta": 2,
+            "flag_codes": [
+              "battery.accumulator_activity",
+              "battery.assist_outside_request",
+              "calibration.refit_cache_miss",
+              "model.identity_mismatch"
+            ],
+            "member_wall_s": 160.45125484466553,
+            "outside_cpu_s": 0.5300000000046876,
+            "request_s": 9.035178899765015,
+            "retained_bytes": 332308480,
+            "stream_s": 99.28879208408762,
+            "thermal_level": 0
+          },
+          "model_name": "Qwen3-Next-80B-A3B-Instruct-4bit",
+          "order_index": "66",
+          "phase_decode_j": "142.46597503542424",
+          "run_id": "bytes-mac-check-test7-qwen3-next-80b-end-r01",
+          "stage_id": "bytes-mac-check-test7-qwen3-next-80b-end",
+          "status": "succeeded"
+        },
+        {
+          "config_key": "Qwen2.5-1.5B-Instruct-4bit|df_rq_mid|256",
+          "dur_decode_s": "0.9925601482391357",
+          "energy_request_j": "37.295639251099175",
+          "excluded": "False",
+          "exclusion_codes": "",
+          "flag_codes": "calibration.refit_cache_miss;model.identity_mismatch",
+          "gross_energy_j": "37.3501860781162",
+          "measurement_receipt": {
+            "census_quanta": 1,
+            "flag_codes": [
+              "calibration.refit_cache_miss",
+              "model.identity_mismatch"
+            ],
+            "member_wall_s": 127.18081307411194,
+            "outside_cpu_s": 0.5399999999992087,
+            "request_s": 1.3111538887023926,
+            "retained_bytes": 322396160,
+            "stream_s": 90.00983241596259,
+            "thermal_level": 0
+          },
+          "model_name": "Qwen2.5-1.5B-Instruct-4bit",
+          "order_index": "67",
+          "phase_decode_j": "25.887450337582827",
+          "run_id": "bytes-mac-check-test7-qwen3-next-80b-end-r02",
+          "stage_id": "bytes-mac-check-test7-qwen3-next-80b-end",
+          "status": "succeeded"
+        },
+        {
+          "config_key": "Qwen3-Next-80B-A3B-Instruct-4bit|bytes_synthetic_2048_decode_512|512",
+          "dur_decode_s": "6.938709020614624",
+          "energy_request_j": "226.196137128796",
+          "excluded": "False",
+          "exclusion_codes": "",
+          "flag_codes": "battery.accumulator_activity;battery.assist_outside_request;calibration.refit_cache_miss;model.identity_mismatch",
+          "gross_energy_j": "226.52202761738252",
+          "measurement_receipt": {
+            "census_quanta": 2,
+            "flag_codes": [
+              "battery.accumulator_activity",
+              "battery.assist_outside_request",
+              "calibration.refit_cache_miss",
+              "model.identity_mismatch"
+            ],
+            "member_wall_s": 155.57382488250732,
+            "outside_cpu_s": 0.36999999999805455,
+            "request_s": 9.039694786071777,
+            "retained_bytes": 332423168,
+            "stream_s": 99.46887970797252,
+            "thermal_level": 0
+          },
+          "model_name": "Qwen3-Next-80B-A3B-Instruct-4bit",
+          "order_index": "68",
+          "phase_decode_j": "143.52086831620454",
+          "run_id": "bytes-mac-check-test7-qwen3-next-80b-end-r03",
+          "stage_id": "bytes-mac-check-test7-qwen3-next-80b-end",
+          "status": "succeeded"
+        },
+        {
+          "config_key": "Qwen2.5-1.5B-Instruct-4bit|df_rq_mid|256",
+          "dur_decode_s": "0.9974219799041748",
+          "energy_request_j": "37.822540660119024",
+          "excluded": "False",
+          "exclusion_codes": "",
+          "flag_codes": "calibration.refit_cache_miss;contention.request_overlap;model.identity_mismatch",
+          "gross_energy_j": "37.87642069925709",
+          "measurement_receipt": {
+            "census_quanta": 1,
+            "flag_codes": [
+              "calibration.refit_cache_miss",
+              "contention.request_overlap",
+              "model.identity_mismatch"
+            ],
+            "member_wall_s": 127.23940396308899,
+            "outside_cpu_s": 2.719999999999323,
+            "request_s": 1.316694974899292,
+            "retained_bytes": 322756608,
+            "stream_s": 90.32874574989546,
+            "thermal_level": 0
+          },
+          "model_name": "Qwen2.5-1.5B-Instruct-4bit",
+          "order_index": "69",
+          "phase_decode_j": "26.06585459247446",
+          "run_id": "bytes-mac-check-test7-qwen3-next-80b-end-r04",
+          "stage_id": "bytes-mac-check-test7-qwen3-next-80b-end",
+          "status": "succeeded"
+        }
+      ],
+      "model": "Qwen3-Next-80B-A3B-Instruct-4bit",
+      "outcome": "pass_not_established",
+      "reason": "The governing texts specify no numerical pass criterion.",
+      "regime": "qwen3-next-80b",
+      "selections": {
+        "flagged_inclusive": {
+          "absolute_drift_excess_j": {
+            "decimal": "1.34889939345032",
+            "denominator": 12500000000000,
+            "numerator": 16861242418129
+          },
+          "counts": {
+            "reference_end": 2,
+            "reference_start": 2,
+            "workload_end": 2,
+            "workload_start": 2
+          },
+          "delta_difference_j": {
+            "decimal": "-2.08822195904344",
+            "denominator": 12500000000000,
+            "numerator": -26102774488043
+          },
+          "means_j": {
+            "reference_end": {
+              "decimal": "37.613303388686645",
+              "denominator": 200000000000000,
+              "numerator": 7522660677737329
+            },
+            "reference_start": {
+              "decimal": "37.243642105890085",
+              "denominator": 200000000000000,
+              "numerator": 7448728421178017
+            },
+            "workload_end": {
+              "decimal": "142.99342167581439",
+              "denominator": 100000000000000,
+              "numerator": 14299342167581439
+            },
+            "workload_start": {
+              "decimal": "144.71198235206127",
+              "denominator": 100000000000000,
+              "numerator": 14471198235206127
+            }
+          },
+          "reference_delta_j": {
+            "decimal": "0.36966128279656",
+            "denominator": 12500000000000,
+            "numerator": 4620766034957
+          },
+          "reference_fractional_change": {
+            "decimal": "0.0099254869259442818654891830396015470601944303853128",
+            "denominator": 7448728421178017,
+            "numerator": 73932256559312
+          },
+          "selected_run_ids": {
+            "reference_end": [
+              "bytes-mac-check-test7-qwen3-next-80b-end-r02",
+              "bytes-mac-check-test7-qwen3-next-80b-end-r04"
+            ],
+            "reference_start": [
+              "bytes-mac-check-test7-qwen3-next-80b-start-r02",
+              "bytes-mac-check-test7-qwen3-next-80b-start-r04"
+            ],
+            "workload_end": [
+              "bytes-mac-check-test7-qwen3-next-80b-end-r01",
+              "bytes-mac-check-test7-qwen3-next-80b-end-r03"
+            ],
+            "workload_start": [
+              "bytes-mac-check-test7-qwen3-next-80b-start-r01",
+              "bytes-mac-check-test7-qwen3-next-80b-start-r03"
+            ]
+          },
+          "workload_delta_j": {
+            "decimal": "-1.71856067624688",
+            "denominator": 6250000000000,
+            "numerator": -10741004226543
+          },
+          "workload_fractional_change": {
+            "decimal": "-0.011875731700405394318875525879024291071577208613526",
+            "denominator": 4823732745068709,
+            "numerator": -57285355874896
+          }
+        },
+        "primary": {
+          "absolute_drift_excess_j": {
+            "decimal": "1.34889939345032",
+            "denominator": 12500000000000,
+            "numerator": 16861242418129
+          },
+          "counts": {
+            "reference_end": 2,
+            "reference_start": 2,
+            "workload_end": 2,
+            "workload_start": 2
+          },
+          "delta_difference_j": {
+            "decimal": "-2.08822195904344",
+            "denominator": 12500000000000,
+            "numerator": -26102774488043
+          },
+          "means_j": {
+            "reference_end": {
+              "decimal": "37.613303388686645",
+              "denominator": 200000000000000,
+              "numerator": 7522660677737329
+            },
+            "reference_start": {
+              "decimal": "37.243642105890085",
+              "denominator": 200000000000000,
+              "numerator": 7448728421178017
+            },
+            "workload_end": {
+              "decimal": "142.99342167581439",
+              "denominator": 100000000000000,
+              "numerator": 14299342167581439
+            },
+            "workload_start": {
+              "decimal": "144.71198235206127",
+              "denominator": 100000000000000,
+              "numerator": 14471198235206127
+            }
+          },
+          "reference_delta_j": {
+            "decimal": "0.36966128279656",
+            "denominator": 12500000000000,
+            "numerator": 4620766034957
+          },
+          "reference_fractional_change": {
+            "decimal": "0.0099254869259442818654891830396015470601944303853128",
+            "denominator": 7448728421178017,
+            "numerator": 73932256559312
+          },
+          "selected_run_ids": {
+            "reference_end": [
+              "bytes-mac-check-test7-qwen3-next-80b-end-r02",
+              "bytes-mac-check-test7-qwen3-next-80b-end-r04"
+            ],
+            "reference_start": [
+              "bytes-mac-check-test7-qwen3-next-80b-start-r02",
+              "bytes-mac-check-test7-qwen3-next-80b-start-r04"
+            ],
+            "workload_end": [
+              "bytes-mac-check-test7-qwen3-next-80b-end-r01",
+              "bytes-mac-check-test7-qwen3-next-80b-end-r03"
+            ],
+            "workload_start": [
+              "bytes-mac-check-test7-qwen3-next-80b-start-r01",
+              "bytes-mac-check-test7-qwen3-next-80b-start-r03"
+            ]
+          },
+          "workload_delta_j": {
+            "decimal": "-1.71856067624688",
+            "denominator": 6250000000000,
+            "numerator": -10741004226543
+          },
+          "workload_fractional_change": {
+            "decimal": "-0.011875731700405394318875525879024291071577208613526",
+            "denominator": 4823732745068709,
+            "numerator": -57285355874896
+          }
+        }
+      },
+      "test7_passed": false
+    }
+  ],
+  "schema": "joulewise.bytes_test7_desk.v1",
+  "script_sha256": "92706a67528c85db8b453f0032b70b737051305c3abfd4e3070703cc30eb46d6",
+  "session_id": "bytes-h2-20261023T144711843389Z-calibration",
+  "source_sha256": {
+    "/Users/edr/code/jw-wt/by-fill/configs/b6/flag_catalog_b6.json": "33e1c6110d98474465109062cfcdff480679ba8b2c9854fc754fa26fa07bccb6",
+    "/Users/edr/night-bytes/h2-20261023T144711Z/MEASUREMENTS.json": "c7d9c4f17f5758f82a8263b3a24a71c215fb02885e27d416eabac820b10f76a8",
+    "/Users/edr/night-bytes/h2-20261023T144711Z/export/bytes-mac-check/bytes-h2-20261023T144711843389Z-calibration.runs.csv": "88633cced4259d0d39791a0ac9a4b3d18385fa5b9b9d7b66c11e1969a1f11bfc"
+  },
+  "unavailable_boundaries": {
+    "DC input": "The requested export has no meter-integrated DC-input columns; no DC-input pass established.",
+    "rest": "Requires DC input minus rails; no rest pass established."
+  }
+}

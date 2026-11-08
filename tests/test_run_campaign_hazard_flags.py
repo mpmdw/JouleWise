@@ -1012,7 +1012,9 @@ class StagePreflightTests(_Stage):
         self.assertEqual(child["error"], "RuntimeError: pmset probe timed out")
         # s2-01: the raise branch keeps a snapshot, including the python_packages
         # that reduce.py reads mlx_version from, and that snapshot's own evaluation.
-        self.assertEqual(set(child["snapshot"]["python_packages"]), {"mlx", "mlx-lm", "transformers"})
+        # Block 6 records mlx-metal and tokenizers per run too (b6 adapters lane).
+        self.assertEqual(set(child["snapshot"]["python_packages"]),
+                         {"mlx", "mlx-lm", "transformers", "mlx-metal", "tokenizers"})
         self.assertIsInstance(child["evaluation"], dict)
         self.assertIn("findings", child["evaluation"])
         flags = [row for row in self.flags() if row["code"] == "env.stage_preflight_not_admitted"]

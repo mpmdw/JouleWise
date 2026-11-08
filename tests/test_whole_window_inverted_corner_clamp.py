@@ -63,8 +63,10 @@ ORIGIN_MAIN_SHA256 = {
 # Cited rebind (DLE-3, docs/analysis/b5/DEVIATION-LOG.md): test_frozen_files.py gained the
 # calibration_bracketing.py entry of EVOLVED_ON_MAIN and its citation (b5 under-90 round 2, 13af1baa8),
 # then the working-tree pin of the rebound bytes (REBOUND_WORKING_TREE; PR #693 review M2/M1).
+# Rebound again for the BYTES lineage landing (lane/2026-11-07-bytes-stage1): five block-6 collection
+# files joined EVOLVED_ON_MAIN and REBOUND_WORKING_TREE.
 FROZEN_FILES_TEST_SHA256 = (
-    "12c58f2a298bf8c969c7164bcbbc0364ad32a5ed191d1dd4719de6057fdb0b24"
+    "d0ec80be6dbeff6c82fdaf5c68b8cb11819bf2230ab31b541b3bfe85b529a82f"
 )
 PREFILL = "/phase_energy_j/prefill"
 UNRECORDED = "anchor_energy_envelope_unrecorded"

@@ -856,7 +856,9 @@ class HazardRefusalSites(unittest.TestCase):
         self.assertEqual(set(counts), set(entries))
         for key, entry in entries.items():
             self.assertEqual((counts[key], guards[key]), (entry["count"], entry["guard"]), key)
-        self.assertEqual(sum(counts.values()), 19)
+        # 20 since the BYTES lineage landing (2026-11-07): the block-6 lane's compressed-input refusal
+        # (a RestoreRefused for a compressed bundle that needs restoring) joined main's 19 sites.
+        self.assertEqual(sum(counts.values()), 20)
         # The new public surface adds no raise of its own.
         for function in ("ensure_grammar_verdict", "forced_grammar", "_parse_strict_memoized",
                          "recording_authentication_reads", "_record_read", "_record_sessionless",

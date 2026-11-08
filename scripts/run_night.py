@@ -1543,9 +1543,24 @@ def _durable_record(custody_root: Path, night_dir: Path, plan: NightPlan) -> str
     return None
 
 
+class _FallbackPlan(night_gate.HazardNightPlan):
+    """A malformed record's reporting plan; its courier must be a program.
+
+    Surviving bindings cannot establish which block the original plan used.
+    Keep them for reporting, but never use their shape to authorize an agent.
+    """
+
+
 def _resolve_courier_bin(
-    requested: Path | None,
+    requested: Path | None, *, plan: NightPlan | None = None,
 ) -> tuple[Path | None, str | None, dict[str, str] | None]:
+    # Block six (design 3.1, 6.4) sends no mail through an agent: its courier is
+    # a program, never `claude`, and a missing courier is never substituted.
+    if plan is not None:
+        from joulewise.b6 import courier as b6_courier
+        if isinstance(plan, _FallbackPlan) or b6_courier.block_six_plan(plan):
+            found, error = b6_courier.resolve(requested, plan.measurement_root)
+            return found, error, None
     substitution: dict[str, str] | None = None
     if requested is not None:
         candidate = requested
@@ -2086,19 +2101,21 @@ def _fallback_plan(plan_path: Path) -> NightPlan:
     receipt_class = raw.get("receipt_class")
     if receipt_class not in set(night_gate.PLAN_RECEIPT_CLASSES):
         receipt_class = "DIAGNOSTIC_NO_PACK"
-    return NightPlan(
+    hazard = raw.get("hazard_window")
+    return _FallbackPlan(
         plan_id=plan_id,
         receipt_class=receipt_class,
         t0_epoch_s=now,
         window_max_s=1,
         authored_epoch_s=now,
         repo_head="0" * 40,
-        measurement_root="/",
+        measurement_root=raw.get("measurement_root") if isinstance(raw.get("measurement_root"), str) else "/",
         measurement_head="0" * 40,
         chain_path="",
         chain_sha256_path="",
         custody_root=custody,
         registration_path=None,
+        hazard_window=hazard if isinstance(hazard, dict) else {},
     )
 
 
@@ -2384,7 +2401,7 @@ def _malformed_plan_exit(plan_path: Path, error: Exception, courier_bin: Path | 
         started_epoch_s,
         started_monotonic_ns,
     )
-    resolved, resolution_error, substitution = _resolve_courier_bin(courier_bin)
+    resolved, resolution_error, substitution = _resolve_courier_bin(courier_bin, plan=plan)
     _record_courier_substitution(custody_root, substitution)
     return _finish_reporting(
         custody_root,
@@ -4029,7 +4046,7 @@ def run_night(
             started_epoch_s=started_epoch_s, started_monotonic_ns=started_monotonic_ns,
             courier_bin=courier_bin, seams=_hazard_seams())
     resolved_courier, courier_error, courier_substitution = _resolve_courier_bin(
-        courier_bin
+        courier_bin, plan=plan
     )
     _record_courier_substitution(custody_root, courier_substitution)
     if resolved_courier is None:
@@ -4506,7 +4523,7 @@ def dead_man(plan_path: Path, *, courier_bin: Path | None = None) -> int:
         return EXIT_GO
 
     resolved_courier, courier_error, courier_substitution = _resolve_courier_bin(
-        courier_bin
+        courier_bin, plan=plan
     )
     _record_courier_substitution(custody_root, courier_substitution)
     if _courier_lock_is_live(night_dir):

@@ -2092,7 +2092,7 @@ class D078R01RegressionTests(unittest.TestCase):
     RAW_SHA256 = "cb25bfddc13610150795732a44be1183c154dcc4990b857425943028fd8edf81"
 
     def test_d138_reduce_source_bytes_remain_at_issued_pin(self) -> None:
-        """Hardening work cannot silently rotate a physics/evidence input."""
+        """D-138: preserve the exact reducer bytes pinned by issued acceptances."""
 
         issued_pin = (
             "7b9c0d28869040229e113ea2d40ecc69966075fd34052fbb51cfaffbd9ff9fcc"
@@ -2110,12 +2110,47 @@ class D078R01RegressionTests(unittest.TestCase):
             ["joulewise/reduce.py"],
             issued_pin,
         )
+        # Storage-only I/O edits also stale the issued acceptances. Restore
+        # compressed bundles to scratch before invoking this pinned reducer.
+        # Golden regressions and a subset of AST nodes cannot replace the
+        # source-byte invariant; D-138 governs any future estimator re-issue.
         self.assertEqual(
-            hashlib.sha256(
-                (REPO_ROOT / "joulewise" / "reduce.py").read_bytes()
-            ).hexdigest(),
+            hashlib.sha256((REPO_ROOT / "joulewise/reduce.py").read_bytes()).hexdigest(),
             issued_pin,
         )
+
+    def test_half_gap_bound_takes_maximum_of_unequal_perturbations(self) -> None:
+        # The cold-pass max->min mutant is at _interpolation_edge_bound_j
+        # (reduce.py:540), called the anchor-shift bound in the FIX-573 brief.
+        # P(t)=4t W, integral=2t^2 J, edges 1.25/1.75 s, gaps 1 s.
+        # +/- half a gap gives energies 5, 0, 0, 7 J around the 3 J base:
+        # absolute changes 2, 3, 3, 4 J. All operands/results are exact binary
+        # fractions, so exact equality is the property; no tolerance applies.
+        curve = [reduce_module.TracePoint(t=float(t), power_w=float(4*t))
+                 for t in range(4)]
+        window = reduce_module.Window(1.25, 1.75)
+        self.assertEqual(reduce_module._integrate(curve, 1.25, 1.75), 3.0)
+        self.assertEqual(tuple(reduce_module._integrate(curve, start, end)
+                               for start, end in ((.75, 1.75), (1.75, 1.75),
+                                                  (1.25, 1.25), (1.25, 2.25))),
+                         (5.0, 0.0, 0.0, 7.0))
+        self.assertEqual(reduce_module._interpolation_edge_bound_j(curve, window), 4.0)
+
+    def test_joint_half_gap_bound_takes_maximum_of_unequal_perturbations(self) -> None:
+        # Closed form for STA-6: P(t)=4t W, integral=2t^2 J. With edges
+        # 1.25/2.75 s and 1 s bracketing gaps, the base energy is 12 J.
+        # Simultaneous +/-0.5 s shifts give 9, 20, 4, 15 J, hence changes
+        # 3, 8, 8, 3 J. The bound must be 8 J; max->min would give 3 J.
+        # Use the no-silly-numbers 1e-6 relative fallback: 8e-6 J is well
+        # above 1e6 * float epsilon * 20 J (~4.4e-9 J), far below the 5 J
+        # separation from the mutant. No source-byte pin enters this check.
+        curve = [reduce_module.TracePoint(t=float(t), power_w=float(4*t))
+                 for t in range(5)]
+        window = reduce_module.Window(1.25, 2.75)
+        expected_j = 8.0
+        self.assertAlmostEqual(
+            reduce_module._interpolation_joint_edge_bound_j(curve, window),
+            expected_j, delta=1e-6 * expected_j)
 
     @staticmethod
     def _claim_gates() -> dict:

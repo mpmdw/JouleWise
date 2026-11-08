@@ -1,0 +1,103 @@
+{
+ "repo": "mlx-community/Qwen3-14B-4bit",
+ "mlx_version": "0.31.2",
+ "ok": true,
+ "errors": [],
+ "snapshot": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-14B-4bit/snapshots/a4d9b2df59d2c150bef02fcbe0d91046b7ca33a4",
+ "on_disk_bytes": 8323903488,
+ "config_excerpt": {
+  "model_type": "qwen3",
+  "num_hidden_layers": 40,
+  "hidden_size": 5120,
+  "num_attention_heads": 40,
+  "num_key_value_heads": 8,
+  "head_dim": 128,
+  "vocab_size": 151936,
+  "num_experts": null,
+  "num_local_experts": null,
+  "num_experts_per_tok": null,
+  "experts_per_token": null,
+  "moe_intermediate_size": null,
+  "intermediate_size": 17408,
+  "shared_expert_intermediate_size": null,
+  "full_attention_interval": null,
+  "sliding_window": null,
+  "layer_types": null,
+  "tie_word_embeddings": false,
+  "quantization": {
+   "group_size": 64,
+   "bits": 4
+  }
+ },
+ "rss_before_load": 92487680,
+ "load_s": 0.6056196660210844,
+ "mlx_active_after_load": 8307800072,
+ "rss_after_load": 8620883968,
+ "accounting": {
+  "categories": {
+   "embed": {
+    "logical_params": 777912320,
+    "stored_bytes": 437575680
+   },
+   "always_active": {
+    "logical_params": 13212482560,
+    "stored_bytes": 7432632320
+   },
+   "lm_head": {
+    "logical_params": 777912320,
+    "stored_bytes": 437575680
+   }
+  },
+  "quant_mix_logical_params": {
+   "4b/64g/affine": 14767882240
+  },
+  "num_experts": null,
+  "experts_per_tok": null,
+  "tied_embeddings": false,
+  "total_params": 14768307200,
+  "active_params": 14768307200.0,
+  "resident_weight_bytes": 8307783680,
+  "bytes_read_per_token_measured": 7870210880.0,
+  "bytes_read_per_token_formula_4bit": 7384153600.0
+ },
+ "runs": [
+  {
+   "rep": 0,
+   "prefill_s": 5.3218342079781,
+   "prefill_tps": 384.8297259861628,
+   "decode_tokens": 511,
+   "decode_s": 12.758855749998474,
+   "decode_tps": 40.05061347292535,
+   "total_s": 18.080689957976574,
+   "mlx_peak_bytes": 9331365928,
+   "kv_cache_bytes_end": 419430400,
+   "distinct_tokens_out": 47,
+   "output_head": " night is now armed with a watchdog that kills it after a fixed time (1 hour for the idle-variance pilot, 2 hours for the scored experiment) and a watchdog that kills the watchdog if it fails to kill the night. The watchdog is a child process of the night, so it can"
+  },
+  {
+   "rep": 1,
+   "prefill_s": 5.2334374169877265,
+   "prefill_tps": 391.32979661745765,
+   "decode_tokens": 511,
+   "decode_s": 12.718060333019821,
+   "decode_tps": 40.17908286480556,
+   "total_s": 17.951497750007547,
+   "mlx_peak_bytes": 9331365928,
+   "kv_cache_bytes_end": 419430400,
+   "distinct_tokens_out": 47
+  },
+  {
+   "rep": 2,
+   "prefill_s": 5.2084533750021365,
+   "prefill_tps": 393.20693736634627,
+   "decode_tokens": 511,
+   "decode_s": 12.679286375001539,
+   "decode_tps": 40.30195271931761,
+   "total_s": 17.887739750003675,
+   "mlx_peak_bytes": 9331365928,
+   "kv_cache_bytes_end": 419430400,
+   "distinct_tokens_out": 47
+  }
+ ],
+ "peak_rss_bytes": 8666873856
+}

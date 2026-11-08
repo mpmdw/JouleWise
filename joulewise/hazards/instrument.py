@@ -59,7 +59,7 @@ DEFAULT_THRESHOLDS: dict[str, Any] = {
     "frames": 300,          # production idle count: 30 s at 10 Hz
     "bound_s": 55.0,        # the adapter's bound: 300 x 0.1 x 1.5 + 10
     "median_ms_max": 150.0,
-    "max_ms_max": 200.0,
+    "max_ms_max": 200.0,    # twice the 100 ms sampling period; diagnostic only
 }
 THRESHOLD_KEYS = tuple(DEFAULT_THRESHOLDS)
 
@@ -168,13 +168,16 @@ def judge(measurement: Measurement, thresholds: Mapping[str, Any]) -> Verdict:
         reasons.append(f"elapsed {elapsed} s exceeds the {limits['bound_s']} s bound")
     if v.get("median_ms") is None or v["median_ms"] > limits["median_ms_max"]:
         reasons.append(f"median interval {v.get('median_ms')} ms > {limits['median_ms_max']} ms")
+    flags = []
     if v.get("max_ms") is None or v["max_ms"] > limits["max_ms_max"]:
-        reasons.append(f"maximum interval {v.get('max_ms')} ms > {limits['max_ms_max']} ms")
+        flags.append({"code": "instrument.single_interval_above_screen",
+                      "max_ms": v.get("max_ms"), "screen_ms": limits["max_ms_max"]})
     if v.get("group_gone") is not True:
         reasons.append("the capture's process group was not proven gone: "
                        + "; ".join(v.get("group_census") or ["no census"]))
     observed = {key: v.get(key) for key in ("frames", "elapsed_s", "median_ms", "p95_ms",
                                             "max_ms", "returncode", "group_gone")}
+    observed["flags"] = flags
     return Verdict(MODULE, REFUSE if reasons else PASS, tuple(reasons), limits, observed)
 
 

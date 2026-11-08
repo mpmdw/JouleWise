@@ -1,0 +1,19 @@
+=== Qwen3-1.7B-4bit start Tue Oct 20 16:04:30 PDT 2026
+=== Qwen3-1.7B-4bit rc=0 wall_s=11 end Tue Oct 20 16:04:41 PDT 2026
+=== Qwen3-4B-4bit start Tue Oct 20 16:04:41 PDT 2026
+=== Qwen3-4B-4bit rc=0 wall_s=15 end Tue Oct 20 16:04:56 PDT 2026
+=== Qwen3-8B-4bit start Tue Oct 20 16:04:56 PDT 2026
+=== Qwen3-8B-4bit rc=0 wall_s=20 end Tue Oct 20 16:05:16 PDT 2026
+=== Qwen3-14B-4bit start Tue Oct 20 16:05:16 PDT 2026
+=== Qwen3-14B-4bit rc=0 wall_s=32 end Tue Oct 20 16:05:48 PDT 2026
+=== Qwen3-30B-A3B-4bit start Tue Oct 20 16:05:48 PDT 2026
+=== Qwen3-30B-A3B-4bit rc=0 wall_s=19 end Tue Oct 20 16:06:07 PDT 2026
+=== Qwen3-32B-4bit start Tue Oct 20 16:06:07 PDT 2026
+=== Qwen3-32B-4bit rc=0 wall_s=62 end Tue Oct 20 16:07:09 PDT 2026
+=== Llama-3.3-70B-Instruct-4bit start Tue Oct 20 16:07:09 PDT 2026
+=== Llama-3.3-70B-Instruct-4bit rc=0 wall_s=128 end Tue Oct 20 16:09:17 PDT 2026
+=== Qwen3-Next-80B-A3B-Instruct-4bit start Tue Oct 20 16:09:17 PDT 2026
+=== Qwen3-Next-80B-A3B-Instruct-4bit rc=0 wall_s=26 end Tue Oct 20 16:09:43 PDT 2026
+=== Qwen3.5-122B-A10B-4bit start Tue Oct 20 16:09:43 PDT 2026
+=== Qwen3.5-122B-A10B-4bit rc=0 wall_s=42 end Tue Oct 20 16:10:25 PDT 2026
+DONE Tue Oct 20 16:10:25 PDT 2026

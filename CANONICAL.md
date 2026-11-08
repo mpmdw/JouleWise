@@ -11,7 +11,7 @@ because nobody could see which tool was current. The 2026-11-06 prune
 ([run report](docs/run_reports/2026-11-06-repo-prune.md)) removed about 8,100 stale files so
 that cannot happen again.
 
-Last updated: 2026-11-06 (lane/2026-11-06-repo-prune, merged with `main` at `a07134b8`; entries checked against the triage of `sol/burn-canon`).
+Last updated: 2026-11-07 (BYTES section added by `lane/2026-11-07-bytes-stage1`). Before that: 2026-11-06 (lane/2026-11-06-repo-prune, merged with `main` at `a07134b8`; entries checked against the triage of `sol/burn-canon`).
 
 ## Project state
 
@@ -49,6 +49,21 @@ The magistrate on the MacBook Pro owns running, re-running and arming windows
 | Comparator (recompute against the heavy pipeline) | `scripts/compare_b5_recompute.py` (bars in `configs/analysis/b5/recompute_bars.json`) | `tools/normalized_compare.py` and its R1 original under `docs/process_traces/2026-11-01-l9-speedup-r1/` (deleted in the prune) |
 | D-188 equivalence gate (accepting a restructured heavy pipeline) | `tools/b5_equivalence/compare_b5_results.py` (result-equivalence comparator, `--mode blinded` by default). A different job from the comparator above | Byte-for-byte replays of the old pipeline |
 | Seal and digest pins | `scripts/digest_pin_census.py` (censuses every SHA-256 literal in `tests/` and `configs/`, writes `configs/pins/registry.json`); checked in CI by `python3 scripts/repin.py --check` | One-off seal verification scripts in process traces; hand repins |
+
+## BYTES (Paper 1, Part 2)
+
+Collection closed 2026-10-31 (12 of 12 sub-packs count, `RUN_STATE.md` item 151). Next: stage 1, due 12 Nov
+([plan and magistrate instructions](docs/run_reports/2026-11-07-bytes-stage1-plan.md)).
+
+| Job | Canonical | Replaced |
+|---|---|---|
+| Registration | `docs/registrations/bytes_pack_v1.md` (§1 known-bytes slot filled; §11 stages; §21 pass 2), with `bytes_end_date_amendment_2026-10-27.md`, `bytes_extension_models_2026-10-27.md` (extension dropped, item 151) and the clerical `bytes_freeze_by_commit_addendum.md` | `docs/design/bytes_pack_design.md` (the ruling) as the specification |
+| Analysis (registered estimator, SHA-256 `18582818…0a71`) | `joulewise/bytes_analysis.py` via `scripts/bytes_analyze.py` (`--stage blinded`, `fit`, `heldout`); independent twin `scripts/bytes_twin.py`; comparer `compare_campaign` in `tests/test_bytes_agreement.py` | — |
+| Stage-1 run on real data (census, analysis manifest, blinded agreement, fit release, stage 1) | `scripts/bytes_stage1.py`, run on the MBP from `lane/2026-11-07-bytes-stage1-run` (the measured code plus the driver), not from `main` | — |
+| Export and key release | `scripts/b6_export_runs.py` (`joulewise/b6/export_runs.py`); `scripts/b6_release_subset.py` | — |
+| §21 thermal lines (printed beside the primary) | `scripts/bytes_thermal_lines.py` (admitted at `4e29114ea`) | the "(1c) thermal transform" plan |
+| Known-bytes stream test (rails coverage) | Outcome `docs/process_traces/2026-10-31-magistrate-5cbfbcfc/KB-SLOT-FILL.md`; rule `docs/registrations/bytes_known_bytes_reading_rule_DRAFT.md`; capture code on `codex/2026-10-31-kb-matched` (not on `main`) | KB attempts 1-2 |
+| Pilot regressors (no power) | `docs/design/bytes_pilot/` (`SUMMARY.md`) and the frozen manifest `configs/bytes/bytes_manifest.json` | — |
 
 ## Flash-Next (qwen4_exp) MLX port
 

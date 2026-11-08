@@ -230,3 +230,13 @@ ran the code of `2649fad54`.
 
 The `measurement_head` of `/Users/edr/night-b6/sessions/r2-bytes-s1-p2/custody/night_plan.json` is `f1a55bb40`, and its smoke
 fingerprint's `code_commit` and `os_build` agree.
+
+### 5.x The registration lands on `main` (2026-11-07)
+
+The BYTES lineage (`lane/2026-10-28-bytes-pass2-open` @ `ee4ce93fc`, through `4e29114ea` and
+`lane/2026-11-07-bytes-stage1-run`) is merged into `main` by branch `lane/2026-11-07-bytes-stage1`. In the same branch
+`docs/registrations/bytes_pack_v1.md` changes in §1 and §18 only: the known-bytes slot is filled from
+`docs/process_traces/2026-10-31-magistrate-5cbfbcfc/KB-SLOT-FILL.md` (the copy that file's status line asks for), with
+the reading rule's §4 wording change. No number, rule, exclusion, estimator or pack registration changes. Text SHA-256
+before: `1dc6105a4fc0210cbb6860cf41ff882161e21b76729dd3614e432bcdabb909a5` (above); after:
+`4fd5f0ea96946c42f725ecc32e99ca6e48d38697f9555d93b0d9c6377daf9800`.

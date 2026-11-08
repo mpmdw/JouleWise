@@ -23,6 +23,7 @@ import threading
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
+from joulewise.desk_compress import is_file as desk_is_file
 from joulewise.authentication_io import (
     active_v2_authentication_session,
     read_authentication_input,
@@ -51,6 +52,7 @@ from joulewise.adapters.powermetrics import (
     samples_from_raw_powermetrics,
 )
 from joulewise.bundle import BundleError
+from joulewise.desk_restore import readable_run, StorageStop
 from joulewise.bundle_read import (
     FROZEN_LEGACY_BUNDLE_IDENTITIES,
     BundleReader,
@@ -597,22 +599,23 @@ def validate_bundle(
                 strict,
                 physics_cache=physics_cache,
             )
-    reader = BundleReader(Path(path))
-    problems = reader.problems()
-    if strict:
-        problems.extend(
-            _strict_problems(reader)
-            if physics_cache is None
-            else _strict_problems(reader, physics_cache=physics_cache)
-        )
-        if problems and leaf_body:
-            # A problem list is not stored at all: the L1 entry is path-free
-            # (relative name plus content), and problem text can quote the
-            # bundle's location in ways a location search cannot see.
-            from joulewise.analysis_verified_store import note_unstorable  # noqa: PLC0415
+    with readable_run(path) as plain:
+        reader = BundleReader(Path(plain))
+        problems = reader.problems()
+        if strict:
+            problems.extend(
+                _strict_problems(reader)
+                if physics_cache is None
+                else _strict_problems(reader, physics_cache=physics_cache)
+            )
+            if problems and leaf_body:
+                # A problem list is not stored at all: the L1 entry is path-free
+                # (relative name plus content), and problem text can quote the
+                # bundle's location in ways a location search cannot see.
+                from joulewise.analysis_verified_store import note_unstorable  # noqa: PLC0415
 
-            note_unstorable("strict problems are location-bearing")
-    return problems
+                note_unstorable("strict problems are location-bearing")
+        return problems
 
 
 def _strict_problems(
@@ -629,181 +632,183 @@ def _strict_problems(
     ``physics_cache``: see :func:`validate_bundle` (J2).  An explicit dict is
     used as given and never replaced by a V2 authentication session's cache.
     """
-    # The run-scoped variant also sees the analysis run's store from an
-    # isolated replay context (a fresh contextvars.Context); outside a run it
-    # is whole_window.physics_cache_for unchanged.
-    from joulewise.analysis_run_cache import physics_cache_for_call as physics_cache_for
+    with readable_run(reader.path) as plain:
+        reader = BundleReader(plain)
+        # The run-scoped variant also sees the analysis run's store from an
+        # isolated replay context (a fresh contextvars.Context); outside a run it
+        # is whole_window.physics_cache_for unchanged.
+        from joulewise.analysis_run_cache import physics_cache_for_call as physics_cache_for
 
-    raw_config = reader.raw_config()
-    metadata = reader.raw_metadata()
-    summary = reader.raw_summary()
-    if physics_cache is None:
-        authentication_session = active_v2_authentication_session()
-        physics_cache = (
-            authentication_session.instrument_calibration_physics_cache
-            if authentication_session is not None
-            else None
-        )
+        raw_config = reader.raw_config()
+        metadata = reader.raw_metadata()
+        summary = reader.raw_summary()
         if physics_cache is None:
-            physics_cache = physics_cache_for(None, metadata)
-    else:
-        # A caller's own dict keeps its semantics; inside an analysis run it
-        # also sees the run partition for this bundle's exact metadata bound.
-        physics_cache = physics_cache_for(physics_cache, metadata)
-    axi_selected = (
-        isinstance(raw_config, dict)
-        and raw_config.get("schema_extensions")
-        == ["joulewise.axi_decode_config.v1"]
-    ) or (
-        isinstance(metadata, dict)
-        and metadata.get("event_semantics_version") == "joulewise.events.v2"
-    ) or (
-        isinstance(summary, dict)
-        and isinstance(summary.get("summary_provenance"), dict)
-        and isinstance(summary["summary_provenance"].get("reducer_version"), str)
-        and summary["summary_provenance"]["reducer_version"]
-        in AXI_REDUCER_VERSIONS
-    )
-    if axi_selected:
-        # Event-v2 evidence is validated completely before reducer
-        # interpretation. Only a clean evidence gate may reach the 0.6.0
-        # derivation comparison.
-        axi_problems = axi_v2_validation_problems(reader)
-        if axi_problems:
-            return axi_problems
-        if (
-            not isinstance(summary, dict)
-            or summary.get("status") != RunStatus.SUCCEEDED.value
-        ):
-            return []
-        recorded_axi_version = (
-            summary["summary_provenance"].get("reducer_version")
-            if isinstance(summary.get("summary_provenance"), dict)
-            else None
-        )
-        comparison_axi_version = (
-            recorded_axi_version
-            if recorded_axi_version in AXI_REDUCER_VERSIONS
-            else AXI_REDUCER_VERSION
-        )
-        try:
-            fresh = _strict_reduce_dict(
-                reader.path,
-                reducer_version=comparison_axi_version,
-                physics_cache=physics_cache,
+            authentication_session = active_v2_authentication_session()
+            physics_cache = (
+                authentication_session.instrument_calibration_physics_cache
+                if authentication_session is not None
+                else None
             )
-        except (ValueError, SchemaError) as exc:
-            return [
-                f"axi:event_semantics_invalid: strict reducer {comparison_axi_version} "
-                f"dispatch failed: {exc}"
-            ]
-        differing = _strict_summary_differences(fresh, summary)
-        if differing:
-            return [
-                "axi:event_semantics_invalid: summary_metrics.json does not "
-                f"match a fresh {comparison_axi_version} "
-                "re-reduction of event-v2 evidence (differing keys: "
-                + ", ".join(differing)
-                + ")"
-            ]
-        return []
-    if not isinstance(summary, dict) or summary.get("status") != RunStatus.SUCCEEDED.value:
-        return []
-    problems: list[str] = []
-    try:
-        window = reader.measured_window()
-    except BundleReadError as exc:
-        return [f"strict: {exc}"]
-    if window is None:
-        return ["strict: succeeded bundle has no measured window in events.jsonl"]
-    try:
-        curve = reader.summed_curve()
-    except BundleReadError as exc:
-        problems.append(f"strict: {exc}")
-        return problems
-    if window.duration_s <= 0:
-        # P2-040 FIX-1 (ARC-3): independent of the fresh-summary comparison, a
-        # succeeded bundle over a nonpositive measured window is never
-        # strict-valid.
-        problems.append(
-            "strict: succeeded bundle measured window duration must be > 0 s; "
-            f"got {window.duration_s}"
+            if physics_cache is None:
+                physics_cache = physics_cache_for(None, metadata)
+        else:
+            # A caller's own dict keeps its semantics; inside an analysis run it
+            # also sees the run partition for this bundle's exact metadata bound.
+            physics_cache = physics_cache_for(physics_cache, metadata)
+        axi_selected = (
+            isinstance(raw_config, dict)
+            and raw_config.get("schema_extensions")
+            == ["joulewise.axi_decode_config.v1"]
+        ) or (
+            isinstance(metadata, dict)
+            and metadata.get("event_semantics_version") == "joulewise.events.v2"
+        ) or (
+            isinstance(summary, dict)
+            and isinstance(summary.get("summary_provenance"), dict)
+            and isinstance(summary["summary_provenance"].get("reducer_version"), str)
+            and summary["summary_provenance"]["reducer_version"]
+            in AXI_REDUCER_VERSIONS
         )
-    else:
-        in_window = sum(
-            1
-            for point in curve
+        if axi_selected:
+            # Event-v2 evidence is validated completely before reducer
+            # interpretation. Only a clean evidence gate may reach the 0.6.0
+            # derivation comparison.
+            axi_problems = axi_v2_validation_problems(reader)
+            if axi_problems:
+                return axi_problems
             if (
-                point.support_start_s is not None
-                and point.support_end_s is not None
-                and min(window.end_s, point.support_end_s)
-                > max(window.start_s, point.support_start_s)
+                not isinstance(summary, dict)
+                or summary.get("status") != RunStatus.SUCCEEDED.value
+            ):
+                return []
+            recorded_axi_version = (
+                summary["summary_provenance"].get("reducer_version")
+                if isinstance(summary.get("summary_provenance"), dict)
+                else None
             )
-            or (
-                point.support_start_s is None
-                and window.start_s <= point.t <= window.end_s
+            comparison_axi_version = (
+                recorded_axi_version
+                if recorded_axi_version in AXI_REDUCER_VERSIONS
+                else AXI_REDUCER_VERSION
             )
-        )
-        if in_window < 2:
+            try:
+                fresh = _strict_reduce_dict(
+                    reader.path,
+                    reducer_version=comparison_axi_version,
+                    physics_cache=physics_cache,
+                )
+            except (ValueError, SchemaError) as exc:
+                return [
+                    f"axi:event_semantics_invalid: strict reducer {comparison_axi_version} "
+                    f"dispatch failed: {exc}"
+                ]
+            differing = _strict_summary_differences(fresh, summary)
+            if differing:
+                return [
+                    "axi:event_semantics_invalid: summary_metrics.json does not "
+                    f"match a fresh {comparison_axi_version} "
+                    "re-reduction of event-v2 evidence (differing keys: "
+                    + ", ".join(differing)
+                    + ")"
+                ]
+            return []
+        if not isinstance(summary, dict) or summary.get("status") != RunStatus.SUCCEEDED.value:
+            return []
+        problems: list[str] = []
+        try:
+            window = reader.measured_window()
+        except BundleReadError as exc:
+            return [f"strict: {exc}"]
+        if window is None:
+            return ["strict: succeeded bundle has no measured window in events.jsonl"]
+        try:
+            curve = reader.summed_curve()
+        except BundleReadError as exc:
+            problems.append(f"strict: {exc}")
+            return problems
+        if window.duration_s <= 0:
+            # P2-040 FIX-1 (ARC-3): independent of the fresh-summary comparison, a
+            # succeeded bundle over a nonpositive measured window is never
+            # strict-valid.
             problems.append(
-                f"strict: only {in_window} summed power sample(s) inside the "
-                "measured window; a succeeded summary needs a "
-                "reducer-consumable curve"
+                "strict: succeeded bundle measured window duration must be > 0 s; "
+                f"got {window.duration_s}"
             )
-    (
-        version_problems,
-        absent_tolerance,
-        tolerate_fresh_nulls,
-        comparison_reducer_version,
-    ) = (
-        _strict_reducer_version_dispatch(reader, summary)
-    )
-    problems.extend(version_problems)
-    stored_idle_problems = _strict_idle_mean_uncertainty_problems(summary)
-    problems.extend(stored_idle_problems)
-    problems.extend(_strict_workload_provenance_problems(reader, summary))
-    problems.extend(_strict_realized_output_problems(reader))
-    problems.extend(_strict_budgeted_suite_prompt_count_problems(reader))
-    problems.extend(_strict_uncertainty_evidence_problems(reader))
-    problems.extend(_strict_raw_to_trace_problems(reader))
-    problems.extend(_strict_rich_telemetry_problems(reader))
-    # A schema-invalid stored summary is already rejected structurally.  Do
-    # not add a second derivation-drift diagnosis for the same malformed
-    # object; semantic re-reduction remains applicable to valid summaries.
-    if not version_problems and not summary_validation_problems(summary):
-        fresh = (
-            _strict_reduce_dict(
-                reader.path,
-                reducer_version=SUMMARY_REDUCER_VERSION,
-                physics_cache=physics_cache,
+        else:
+            in_window = sum(
+                1
+                for point in curve
+                if (
+                    point.support_start_s is not None
+                    and point.support_end_s is not None
+                    and min(window.end_s, point.support_end_s)
+                    > max(window.start_s, point.support_start_s)
+                )
+                or (
+                    point.support_start_s is None
+                    and window.start_s <= point.t <= window.end_s
+                )
             )
-            if comparison_reducer_version is None
-            else _strict_reduce_dict(
-                reader.path,
-                reducer_version=comparison_reducer_version,
-                physics_cache=physics_cache,
-            )
+            if in_window < 2:
+                problems.append(
+                    f"strict: only {in_window} summed power sample(s) inside the "
+                    "measured window; a succeeded summary needs a "
+                    "reducer-consumable curve"
+                )
+        (
+            version_problems,
+            absent_tolerance,
+            tolerate_fresh_nulls,
+            comparison_reducer_version,
+        ) = (
+            _strict_reducer_version_dispatch(reader, summary)
         )
-        # The fresh current derivation is the raw/metadata authority. Inspect it
-        # before legacy additive-absence projection can hide the governed
-        # object, while retaining the stored-summary check for unsupported
-        # versions and tampered current-era summaries.  Exact diagnostics are
-        # de-duplicated when both views independently report the mismatch.
-        for problem in _strict_idle_mean_uncertainty_problems(fresh):
-            if problem not in problems:
-                problems.append(problem)
-        differing = _strict_summary_differences(
-            fresh,
-            summary,
-            absent_tolerance=absent_tolerance,
-            tolerate_fresh_nulls=tolerate_fresh_nulls,
-        )
-        if differing:
-            problems.append(
-                "strict: summary_metrics.json does not match a fresh re-reduction "
-                f"of the raw artifacts (differing keys: {', '.join(differing)})"
+        problems.extend(version_problems)
+        stored_idle_problems = _strict_idle_mean_uncertainty_problems(summary)
+        problems.extend(stored_idle_problems)
+        problems.extend(_strict_workload_provenance_problems(reader, summary))
+        problems.extend(_strict_realized_output_problems(reader))
+        problems.extend(_strict_budgeted_suite_prompt_count_problems(reader))
+        problems.extend(_strict_uncertainty_evidence_problems(reader))
+        problems.extend(_strict_raw_to_trace_problems(reader))
+        problems.extend(_strict_rich_telemetry_problems(reader))
+        # A schema-invalid stored summary is already rejected structurally.  Do
+        # not add a second derivation-drift diagnosis for the same malformed
+        # object; semantic re-reduction remains applicable to valid summaries.
+        if not version_problems and not summary_validation_problems(summary):
+            fresh = (
+                _strict_reduce_dict(
+                    reader.path,
+                    reducer_version=SUMMARY_REDUCER_VERSION,
+                    physics_cache=physics_cache,
+                )
+                if comparison_reducer_version is None
+                else _strict_reduce_dict(
+                    reader.path,
+                    reducer_version=comparison_reducer_version,
+                    physics_cache=physics_cache,
+                )
             )
-    return problems
+            # The fresh current derivation is the raw/metadata authority. Inspect it
+            # before legacy additive-absence projection can hide the governed
+            # object, while retaining the stored-summary check for unsupported
+            # versions and tampered current-era summaries.  Exact diagnostics are
+            # de-duplicated when both views independently report the mismatch.
+            for problem in _strict_idle_mean_uncertainty_problems(fresh):
+                if problem not in problems:
+                    problems.append(problem)
+            differing = _strict_summary_differences(
+                fresh,
+                summary,
+                absent_tolerance=absent_tolerance,
+                tolerate_fresh_nulls=tolerate_fresh_nulls,
+            )
+            if differing:
+                problems.append(
+                    "strict: summary_metrics.json does not match a fresh re-reduction "
+                    f"of the raw artifacts (differing keys: {', '.join(differing)})"
+                )
+        return problems
 
 
 _STRICT_ADDITIVE_ABSENT_TOLERANCE = {
@@ -1124,7 +1129,7 @@ def _strict_suite_prompt_rollup(
     reader: BundleReader,
 ) -> tuple[dict[str, Any] | None, list[str]]:
     path = reader.path / "outputs" / "suite_items.jsonl"
-    if not path.is_file():
+    if not desk_is_file(path):
         return None, ["strict: outputs/suite_items.jsonl is missing for suite rollup"]
     try:
         text = read_authentication_text(
@@ -1642,7 +1647,7 @@ def _strict_uncertainty_evidence_problems(reader: BundleReader) -> list[str]:
         return problems
     pre_path = reader.path / "raw" / RAW_IDLE_NAME
     post_path = reader.path / "raw" / RAW_IDLE_POST_NAME
-    if post_path.is_file() and pre_path.is_file():
+    if desk_is_file(post_path) and desk_is_file(pre_path):
         try:
             pre_data = read_authentication_input(
                 pre_path,
@@ -1767,7 +1772,7 @@ def _strict_raw_to_trace_problems(reader: BundleReader) -> list[str]:
 
 def _verify_powermetrics_raw_to_trace(reader: BundleReader) -> list[str]:
     raw_path = reader.path / "raw" / RAW_SAMPLES_NAME
-    if not raw_path.is_file():
+    if not desk_is_file(raw_path):
         return [f"strict: raw-to-trace: missing raw/{RAW_SAMPLES_NAME}"]
     metadata = reader.raw_metadata()
     if not isinstance(metadata, dict):
@@ -1865,7 +1870,7 @@ def _strict_rich_telemetry_problems(reader: BundleReader) -> list[str]:
         return []
     raw_path = reader.path / "raw" / RAW_SAMPLES_NAME
     rich_path = reader.path / RICH_TELEMETRY_NAME
-    if not rich_path.is_file():
+    if not desk_is_file(rich_path):
         device = metadata.get("device")
         if isinstance(device, dict) and device.get("rich_telemetry_error"):
             return []
@@ -1911,7 +1916,7 @@ def _verify_mock_raw_to_trace_exemption(reader: BundleReader) -> list[str]:
 
 def _verify_nvidia_smi_raw_to_trace(reader: BundleReader) -> list[str]:
     raw_path = reader.path / "raw" / NVIDIA_SMI_RAW_SAMPLES_NAME
-    if not raw_path.is_file():
+    if not desk_is_file(raw_path):
         return [
             "strict: raw-to-trace: nvidia_smi missing "
             f"raw/{NVIDIA_SMI_RAW_SAMPLES_NAME}"
@@ -2124,61 +2129,63 @@ def _run_reduce_physics_cache(bundle_path: Path) -> dict[str, float] | None:
 def _cmd_reduce(args: argparse.Namespace) -> int:
     """Write a prospective reduction without mutating stored summary bytes."""
     bundle_path = Path(args.path)
-    if not bundle_path.is_dir() or not (bundle_path / "config.json").is_file():
-        print(
-            f"error: not a run bundle directory (no config.json): {bundle_path}",
-            file=sys.stderr,
-        )
-        return 2
-    try:
-        authenticated_launch = authenticate_bundle_launch_lineage(
-            bundle_path,
-            require_completion=False,
-        )
-    except LaunchLineageError as exc:
-        print(f"error: {exc.reason_code}: {exc}", file=sys.stderr)
-        return 2
-    stored_path = bundle_path / "summary_metrics.json"
-    recorded_version: str | None = None
-    if stored_path.is_file():
-        try:
-            stored = json.loads(
-                read_authentication_text(
-                    stored_path,
-                    grammar="json",
-                    label=f"bundle {bundle_path.name} stored summary",
-                    encoding="utf-8",
-                )
+    with readable_run(bundle_path) as plain:
+        if not plain.is_dir() or not (plain / "config.json").is_file():
+            print(
+                f"error: not a run bundle directory (no config.json): {plain}",
+                file=sys.stderr,
             )
-        except (OSError, json.JSONDecodeError):
-            stored = None
-        provenance = stored.get("summary_provenance") if isinstance(stored, dict) else None
-        value = provenance.get("reducer_version") if isinstance(provenance, dict) else None
-        recorded_version = value if isinstance(value, str) else None
-    requested_version = args.reducer_version
-    if requested_version is None and stored_path.is_file():
-        requested_version = recorded_version
-    run_physics_cache = _run_reduce_physics_cache(bundle_path)
-    # D-188 L3: a verified earlier reduction of these bytes, or None (then the
-    # two stages below run exactly as before).
-    served = _served_reduction(
-        bundle_path,
-        reducer_version=requested_version,
-        physics_cache=run_physics_cache,
-    )
-    summary = (
-        reduce_bundle(
-            bundle_path,
+            return 2
+        try:
+            authenticated_launch = authenticate_bundle_launch_lineage(
+                plain,
+                require_completion=False,
+            )
+        except LaunchLineageError as exc:
+            print(f"error: {exc.reason_code}: {exc}", file=sys.stderr)
+            return 2
+        stored_path = plain / "summary_metrics.json"
+        recorded_version: str | None = None
+        if stored_path.is_file():
+            try:
+                stored = json.loads(
+                    read_authentication_text(
+                        stored_path,
+                        grammar="json",
+                        label=f"bundle {plain.name} stored summary",
+                        encoding="utf-8",
+                    )
+                )
+            except (OSError, json.JSONDecodeError):
+                stored = None
+            provenance = stored.get("summary_provenance") if isinstance(stored, dict) else None
+            value = provenance.get("reducer_version") if isinstance(provenance, dict) else None
+            recorded_version = value if isinstance(value, str) else None
+        requested_version = args.reducer_version
+        if requested_version is None and stored_path.is_file():
+            requested_version = recorded_version
+        run_physics_cache = _run_reduce_physics_cache(plain)
+        # D-188 L3: a verified earlier reduction of these bytes, or None (then the
+        # two stages below run exactly as before).
+        served = _served_reduction(
+            plain,
             reducer_version=requested_version,
-            **(
-                {"_instrument_calibration_physics_cache": run_physics_cache}
-                if run_physics_cache is not None
-                else {}
-            ),
+            physics_cache=run_physics_cache,
         )
-        if served is None
-        else None
-    )
+        summary = (
+            reduce_bundle(
+                plain,
+                reducer_version=requested_version,
+                **(
+                    {"_instrument_calibration_physics_cache": run_physics_cache}
+                    if run_physics_cache is not None
+                    else {}
+                ),
+            )
+            if served is None
+            else None
+        )
+    stored_path = bundle_path / "summary_metrics.json"
     try:
         payload = summary.to_dict() if served is None else served
     except SchemaError as exc:
@@ -2713,6 +2720,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return args.func(args)
+    except StorageStop as exc:
+        print(f"refused: {exc}", file=sys.stderr)
+        return 2
     except (
         OSError,
         json.JSONDecodeError,

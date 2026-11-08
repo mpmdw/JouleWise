@@ -1,0 +1,51 @@
+{
+  "hardware_target": {
+    "device_kind": "apple_silicon_unified_memory",
+    "id": "macbook_m3_max",
+    "notes": "R8.6 non-claim structural session; never a registered pack.",
+    "runtime_backend": "mlx",
+    "telemetry_backend": "powermetrics",
+    "transport": "local"
+  },
+  "interconnect": {
+    "name": "local"
+  },
+  "model": {
+    "context_window": 32768,
+    "family": "qwen2.5",
+    "name": "Qwen2.5-1.5B-Instruct-4bit",
+    "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+    "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+    "weight_format": "mlx"
+  },
+  "quantization": {
+    "bits": 4,
+    "name": "int4"
+  },
+  "run_id": "bytes-mac-check-test7-qwen35-122b-start-r04",
+  "run_metadata": {
+    "operator": "lead",
+    "project": "capstone-joulewise",
+    "tags": [
+      "bytes-mac-check",
+      "non-claim",
+      "launch_lineage_required",
+      "bytes-model=reference",
+      "bytes-purpose=test7",
+      "bytes-end=start"
+    ]
+  },
+  "sampling": {
+    "idle_seconds": 57.6,
+    "power_hz": 10.0,
+    "warmup_seconds": 5.0
+  },
+  "schema_version": "0.1",
+  "workload_profile": {
+    "name": "df_rq_mid",
+    "output_tokens": 256,
+    "prompt_tokens": 1024,
+    "repetitions": 1,
+    "warmup_runs": 1
+  }
+}

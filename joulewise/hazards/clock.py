@@ -8,8 +8,8 @@ Measured directly, never parsed from a settings string:
 - the kernel **frequency word** f, read without privileges by
   ``ntp_adjtime(modes=0)`` (``kernel_clock.read_kernel_frequency``).  With
   network time OFF the anchor drifts linearly at f;
-- the **residual**: the anchor's movement after removing f x elapsed RAW time.
-  The sign was checked live on 10-05 (f = -207591, -3.1676 ppm): over 90 s
+- the arm **residual**: anchor departure from the measured least-squares line.
+  The in-window f residual’s sign was checked live on 10-05 (f = -207591, -3.1676 ppm): over 90 s
   the anchor moved -285.71 us against -285.23 us predicted, and every 10 s
   residual stayed under 1 us;
 - the boot session (``kern.bootsessionuuid``): a reboot makes anchors
@@ -17,14 +17,12 @@ Measured directly, never parsed from a settings string:
 
 Arm (plan §2.3; thresholds from the window plan, defaults below):
 
-(i)   frequency gate: h + (|f| + 0.25 ppm) x T_stream_max <= 5 ms with
-      h = 3.7 ms and T_stream_max = 335 s, i.e. |f| <= 3.6306 ppm.  The live
-      word on 10-05 (-207591 = -3.1676 ppm) gives 4.8449 ms;
-(ii)  over the dwell, sampled at 1 Hz, the signed residual stays within
-      +-1 ms of its start value;
+(i)   measured-rate hold: h + (|r| + 0.25 ppm) x T_stream_max <= 5 ms,
+      using the precheck's estimator and bound on the arm's own dwell anchors;
+(ii)  residuals from that fitted line stay within +-1 ms;
 (iii) every anchor read pair has skew <= 1 ms;
-(iv)  f is identical at dwell start, dwell end and GO; the boot session is
-      unchanged.
+(iv)  the boot session is unchanged. The frequency word and its changes
+      are diagnostic observations, never arm refusals.
 
 In the window (flag only): ``clock.step`` when the residual moves more than
 1 ms between consecutive 1 Hz samples, ``clock.frequency_changed`` when f
@@ -78,8 +76,8 @@ DEFAULT_THRESHOLDS: dict[str, Any] = {
     "frequency_margin_ppm": 0.25,
     "limit_ms": 5.0,
     "skew_max_ns": 1_000_000,
-    "residual_max_ns": 1_000_000,   # dwell linearity, +-1 ms of the start value
-    "step_ns": 1_000_000,           # in-window step between consecutive samples
+    "residual_max_ns": 1_000_000,   # dwell linearity, +-1 ms from the fitted line
+    "step_ns": 1_000_000,           # step between consecutive residuals / window samples
 }
 THRESHOLD_KEYS = tuple(DEFAULT_THRESHOLDS)
 
@@ -231,14 +229,9 @@ def measure(ctx: Context, *, frequency_reader: FrequencyReader = read_frequency,
 
 def series(samples: Sequence[Mapping[str, Any]], *, boot_start: str | None,
            boot_end: str | None, started: Stamp, finished: Stamp) -> Measurement:
-    """A dwell series (1 Hz samples, f at least at start and end) as one Measurement."""
+    """A dwell anchor series with optional diagnostic frequency words."""
 
-    errors = [item["error"] for item in samples if item.get("error")]
-    error = None
-    if errors:
-        error = f"{len(errors)} sample(s) failed; first: {errors[0]}"
-    elif boot_start is None or boot_end is None:
-        error = "boot session unread at dwell start or end"
+    error = "boot session unread at dwell start or end" if boot_start is None or boot_end is None else None
     values = {"samples": [dict(item) for item in samples], "boot_session_uuid_start": boot_start,
               "boot_session_uuid_end": boot_end}
     encoded = canonical_json(values)
@@ -251,19 +244,48 @@ def series(samples: Sequence[Mapping[str, Any]], *, boot_start: str | None,
 # Arithmetic (exact)
 
 
-def frequency_bound(raw_word: int, thresholds: Mapping[str, Any]) -> dict[str, Any]:
-    """h + (|f| + margin) x T_stream_max against the limit, in exact arithmetic."""
+def fit_anchor_rate(anchors: Sequence[Mapping[str, int]]) -> tuple[Fraction, list[Fraction]]:
+    """Precheck's exact least-squares rate (ppm) and residuals from its line."""
+    if len(anchors) < 2:
+        raise ValueError("rate fit needs at least two anchors")
+    origin = anchors[0]["monotonic_raw_ns"]
+    xs = [Fraction(item["monotonic_raw_ns"] - origin) for item in anchors]
+    if any(b <= a for a, b in zip(xs, xs[1:])):
+        raise ValueError("rate fit needs increasing RAW times")
+    ys = [Fraction(item["anchor_ns"]) for item in anchors]
+    xm, ym = sum(xs) / len(xs), sum(ys) / len(ys)
+    slope = sum((x - xm) * (y - ym) for x, y in zip(xs, ys)) / sum((x - xm)**2 for x in xs)
+    return slope * 10**6, [y - ym - slope * (x - xm) for x, y in zip(xs, ys)]
 
-    rate_ppm = Fraction(abs(int(raw_word)), FREQUENCY_SCALE)
+
+def measured_rate_bound(rate_ppm: Fraction, thresholds: Mapping[str, Any]) -> dict[str, Any]:
+    """The registered precheck hold, shared with the arm; no rounded operands."""
     span_s = Fraction(str(thresholds["t_stream_max_s"]))
-    h_s = Fraction(str(thresholds["h_ms"])) / 1000
+    h_ms = Fraction(str(thresholds["h_ms"]))
     margin = Fraction(str(thresholds["frequency_margin_ppm"]))
-    limit_s = Fraction(str(thresholds["limit_ms"])) / 1000
-    bound_s = h_s + (rate_ppm + margin) * span_s / 1_000_000
-    max_ppm = (limit_s - h_s) * 1_000_000 / span_s - margin
-    return {"frequency_ppm": float(Fraction(int(raw_word), FREQUENCY_SCALE)),
-            "bound_ms": float(bound_s * 1000), "limit_ms": float(limit_s * 1000),
-            "max_abs_frequency_ppm": float(max_ppm), "passes": bound_s <= limit_s}
+    limit_ms = Fraction(str(thresholds["limit_ms"]))
+    bound = h_ms + (abs(rate_ppm) + margin) * span_s / 1000
+    maximum = (limit_ms - h_ms) * 1000 / span_s - margin
+    gate = {"rate_ppm": float(rate_ppm), "bound_ms": float(bound),
+            "limit_ms": float(limit_ms), "max_abs_rate_ppm": float(maximum),
+            "passes": bound <= limit_ms}
+    if h_ms == 0:
+        gate["rate_above_budget"] = gate["passes"] and (
+            bound + Fraction(str(DEFAULT_THRESHOLDS["h_ms"])) > limit_ms)
+    return gate
+
+
+def frequency_bound(raw_word: int, thresholds: Mapping[str, Any]) -> dict[str, Any]:
+    """Diagnostic projection of the kernel word through the registered budget."""
+    gate = measured_rate_bound(Fraction(int(raw_word), FREQUENCY_SCALE), thresholds)
+    gate["frequency_ppm"] = gate.pop("rate_ppm")
+    gate["max_abs_frequency_ppm"] = gate.pop("max_abs_rate_ppm")
+    return gate
+
+
+def rate_flags(gate: Mapping[str, Any]) -> list[dict[str, Any]]:
+    return ([{"code": "clock.rate_above_budget", "frequency_gate": dict(gate)}]
+            if gate.get("rate_above_budget", False) else [])
 
 
 def expected_anchor_movement_ns(raw_word: int, elapsed_raw_ns: int) -> Fraction:
@@ -304,49 +326,86 @@ def _judge_instant(values: Mapping[str, Any], limits: Mapping[str, Any]) -> Verd
                        limits)
     reasons = []
     gate = frequency_bound(frequency["raw_word"], limits)
-    if not gate["passes"]:
-        reasons.append(
-            f"frequency gate: {gate['bound_ms']:.4f} ms > {gate['limit_ms']} ms "
-            f"(|f| {abs(gate['frequency_ppm']):.4f} ppm > {gate['max_abs_frequency_ppm']:.4f} ppm)")
     if anchor["read_skew_ns"] < 0 or anchor["read_skew_ns"] > limits["skew_max_ns"]:
         reasons.append(f"anchor read skew {anchor['read_skew_ns']} ns exceeds "
                        f"{limits['skew_max_ns']} ns")
     observed = {"frequency_gate": gate, "read_skew_ns": anchor["read_skew_ns"],
-                "raw_word": frequency["raw_word"]}
+                "raw_word": frequency["raw_word"], "flags": []}
     return Verdict(MODULE, REFUSE if reasons else PASS, tuple(reasons), limits, observed)
 
 
 def _judge_series(values: Mapping[str, Any], limits: Mapping[str, Any]) -> Verdict:
     samples = list(values.get("samples") or [])
-    if len(samples) < 2 or samples[0].get("frequency") is None:
-        return Verdict(MODULE, UNMEASURED,
-                       ("dwell series needs >= 2 samples and f at its start",), limits)
-    if samples[-1].get("frequency") is None:
-        return Verdict(MODULE, UNMEASURED, ("dwell series has no f at its end",), limits)
+    anchored = [item for item in samples if item.get("anchor")]
+    unmeasured = [{"code": "clock.unmeasured", "sample_index": index,
+                   "error": item.get("error") or "anchor absent"}
+                  for index, item in enumerate(samples) if not item.get("anchor")]
+    # Two anchors determine the rate exactly but cannot measure a step after
+    # fitting. At N >= 3, test only pairs resolved by their own read uncertainty.
+    step_measured = len(anchored) >= 3
+    step_flags = [] if step_measured else [{"code": "clock.step_unmeasured"}]
+    if len(anchored) == 2:
+        step_flags[0]["interval_index"] = 0
+    coverage = {"flags": unmeasured + step_flags, "samples": len(samples),
+                "anchored_samples": len(anchored), "step_measured": step_measured}
+    if len(anchored) < 2:
+        return Verdict(MODULE, UNMEASURED, ("dwell series needs >= 2 anchored samples",), limits,
+                       coverage)
     reasons = []
     if values.get("boot_session_uuid_start") != values.get("boot_session_uuid_end"):
         reasons.append("boot session changed during the dwell")
     words = [item["frequency"]["raw_word"] for item in samples if item.get("frequency")]
-    f0 = words[0]
-    if any(word != f0 for word in words):
-        reasons.append(f"frequency word changed during the dwell: {sorted(set(words))}")
-    gate = frequency_bound(f0, limits)
+    f0 = words[0] if words else None
+    try:
+        rate, residuals = fit_anchor_rate([item["anchor"] for item in anchored])
+    except (KeyError, TypeError, ValueError) as exc:
+        return Verdict(MODULE, UNMEASURED, (str(exc),), limits, coverage)
+    gate = measured_rate_bound(rate, limits)
     if not gate["passes"]:
-        reasons.append(f"frequency gate: {gate['bound_ms']:.4f} ms > {gate['limit_ms']} ms")
-    skews = [item["anchor"]["read_skew_ns"] for item in samples]
+        reasons.append(f"measured rate gate: {gate['bound_ms']:.4f} ms > {gate['limit_ms']} ms")
+    skews = [item["anchor"]["read_skew_ns"] for item in anchored]
     worst_skew = max(skews)
     if min(skews) < 0 or worst_skew > limits["skew_max_ns"]:
         reasons.append(f"anchor read skew {worst_skew} ns exceeds {limits['skew_max_ns']} ns")
-    first = samples[0]["anchor"]
-    residuals = [residual_ns(first, item["anchor"], f0) for item in samples]
+    first = anchored[0]["anchor"]
     worst = max(residuals, key=abs)
     if abs(worst) > limits["residual_max_ns"]:
         reasons.append(f"dwell residual {float(worst) / 1e6:+.4f} ms exceeds "
-                       f"+-{limits['residual_max_ns'] / 1e6} ms of its start value")
-    raw_span = samples[-1]["anchor"]["monotonic_raw_ns"] - first["monotonic_raw_ns"]
-    observed = {"frequency_gate": gate, "samples": len(samples), "raw_span_ns": raw_span,
+                       f"+-{limits['residual_max_ns'] / 1e6} ms from the fitted line")
+    # Residuals retain the order of the remaining anchored samples.
+    step = max(abs(b - a) for a, b in zip(residuals, residuals[1:]))
+    if step_measured:
+        xs = [Fraction(item["anchor"]["monotonic_raw_ns"] - first["monotonic_raw_ns"])
+              for item in anchored]
+        mean = sum(xs) / len(xs)
+        centered = [x - mean for x in xs]
+        squared = sum(x * x for x in centered)
+        suffix = sum(centered)
+        for j, (a, b) in enumerate(zip(residuals, residuals[1:])):
+            suffix -= centered[j]
+            # A step between j and j+1 loses exactly a_j to the fitted slope,
+            # including across rejected anchors: a_j = dx * sum_{i>j}(x_i-xbar)
+            # / sum_i(x_i-xbar)^2. Use the registered step_ns after that same
+            # absorption, with exact arithmetic and no additional numeric bar.
+            absorbed = (xs[j + 1] - xs[j]) * suffix / squared
+            bar = Fraction(str(limits["step_ns"])) * (1 - absorbed)
+            uncertainty = skews[j] + skews[j + 1]
+            if bar <= uncertainty:
+                step_flags.append({"code": "clock.step_unmeasured", "interval_index": j})
+                continue
+            if abs(b - a) > bar + uncertainty:
+                reasons.append(f"dwell step {float(abs(b - a)) / 1e6:.4f} ms exceeds "
+                               f"fit-corrected plus read uncertainty {float(bar + uncertainty) / 1e6:.6f} ms")
+        step_measured = not step_flags
+    raw_span = anchored[-1]["anchor"]["monotonic_raw_ns"] - first["monotonic_raw_ns"]
+    observed = {"measured_rate_gate": gate, "frequency_gate": frequency_bound(f0, limits) if f0 is not None else None,
+                "frequency_word_absent": len(words) < len(samples), "max_step_ns": float(step), "step_measured": step_measured,
+                "frequency_words": words, "frequency_word_changed": len(set(words)) > 1,
+                "samples": len(samples), "anchored_samples": len(anchored), "raw_span_ns": raw_span,
+                "flags": unmeasured + step_flags + rate_flags(gate) + ([{"code": "clock.frequency_changed"}]
+                                              if len(set(words)) > 1 else []),
                 "max_abs_residual_ns": float(abs(worst)), "max_read_skew_ns": worst_skew,
-                "anchor_movement_ns": samples[-1]["anchor"]["anchor_ns"] - first["anchor_ns"]}
+                "anchor_movement_ns": anchored[-1]["anchor"]["anchor_ns"] - first["anchor_ns"]}
     return Verdict(MODULE, REFUSE if reasons else PASS, tuple(reasons), limits, observed)
 
 

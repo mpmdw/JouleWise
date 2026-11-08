@@ -31,6 +31,11 @@ READERS = {
     "scripts/independent_recompute_b5.py": (
         "independent recompute (comparison only)", "reads calibration captures' and members' stored "
         "b_fiducial_s to compute b_op for an offline cross-check; issues, pins and gates nothing"),
+    "joulewise/b6/calibration.py": ("bracket rows", "outside the derivation scope: own-capture exact lexeme and physics refit"),
+    "joulewise/b6/capture_list.py": ("bracket rows", "outside the derivation scope: one-way finalized observation adapter"),
+    "joulewise/b6/capture_screen.py": ("bracket rows", "outside the derivation scope: opening capture screen"),
+    "joulewise/b6/acceptance.py": ("bracket rows", "outside the derivation scope: session's own refitted capture times"),
+    "joulewise/b6/precheck.py": ("pre-session synthetic evidence; not a claim reader", "synthetic capture median only"),
     "scripts/issue_calibration_acceptance_generation.py": (
         "gated", "check dry run and prepare-candidate, both through authenticate_battery_epoch "
         "(authenticate_committed_verdict); proved by test_battery_float_consumers and the "

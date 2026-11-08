@@ -121,6 +121,17 @@ def successful_fake_run(command, **kwargs):
 
 
 class EnvironmentSnapshotTests(unittest.TestCase):
+    def test_per_run_runtime_distribution_records_without_host_probes(self) -> None:
+        from joulewise.environment import empty_environment_snapshot
+        with patch("joulewise.environment.importlib_metadata.version", side_effect=lambda name: "test-" + name):
+            packages = empty_environment_snapshot()["python_packages"]
+        for name in ("mlx-metal", "tokenizers"):
+            self.assertEqual(packages[name], {"present": True, "version": "test-" + name})
+        with patch("joulewise.environment.importlib_metadata.version",
+                   side_effect=importlib.metadata.PackageNotFoundError):
+            packages = empty_environment_snapshot()["python_packages"]
+        self.assertEqual(packages["tokenizers"], {"present": False, "version": None})
+
     def test_quiet_mac_shell_accepts_live_capabilities_are_spelling(self) -> None:
         pattern = r"Current System Capabilities( are)?:.*Graphics"
         script = (
@@ -260,6 +271,8 @@ class EnvironmentSnapshotTests(unittest.TestCase):
                 "mlx": {"present": True, "version": "1.2.3"},
                 "mlx-lm": {"present": False, "version": None},
                 "transformers": {"present": False, "version": None},
+                "mlx-metal": {"present": False, "version": None},
+                "tokenizers": {"present": False, "version": None},
             },
         )
         self.assertTrue(snapshot["errors"])
@@ -305,7 +318,7 @@ class EnvironmentSnapshotTests(unittest.TestCase):
         self.assertEqual(snapshot["memory_pressure_percent"], 58.0)
         self.assertEqual(
             set(snapshot["python_packages"]),
-            {"mlx", "mlx-lm", "transformers"},
+            {"mlx", "mlx-lm", "transformers", "mlx-metal", "tokenizers"},
         )
         for record in snapshot["python_packages"].values():
             self.assertIn("present", record)
@@ -603,7 +616,7 @@ class EnvironmentSnapshotTests(unittest.TestCase):
                 self.assertEqual(value["reason"], "not_found")
                 continue
             if key == "python_packages":
-                self.assertEqual(set(value), {"mlx", "mlx-lm", "transformers"})
+                self.assertEqual(set(value), {"mlx", "mlx-lm", "transformers", "mlx-metal", "tokenizers"})
                 continue
             if isinstance(value, dict):
                 for nested_value in value.values():
@@ -658,7 +671,7 @@ class EnvironmentSnapshotTests(unittest.TestCase):
                 self.assertEqual(value["reason"], "failed")
                 continue
             if key == "python_packages":
-                self.assertEqual(set(value), {"mlx", "mlx-lm", "transformers"})
+                self.assertEqual(set(value), {"mlx", "mlx-lm", "transformers", "mlx-metal", "tokenizers"})
                 continue
             if isinstance(value, dict):
                 for nested_value in value.values():

@@ -150,6 +150,9 @@ def current_catalogs() -> list[dict]:
     catalogs = [dict(DRAFT_CODES), json.loads(FIXTURE_CATALOG.read_bytes())["codes"]]
     if SEALED_CATALOG.is_file():
         catalogs.append(json.loads(SEALED_CATALOG.read_bytes())["codes"])
+    b6_catalog = ROOT / "configs/b6/flag_catalog_b6.json"
+    if b6_catalog.is_file():
+        catalogs.append(json.loads(b6_catalog.read_bytes())["codes"])
     return catalogs
 
 

@@ -20,7 +20,15 @@ B5_ANALYSIS_COMMIT = "b13a510dc15b5e280309f7dd6b280426bf44afc6"
 # joulewise/calibration_bracketing.py -- b5 under-90 round 2 (lead ruling under D-188
 # and the 2026-10-30 frozen-components rule): the run-scoped candidate-physics memo
 # (_verified_candidate_bound); every value it returns is the frozen refit's own.
-EVOLVED_ON_MAIN = frozenset({"joulewise/b5/harvest.py", "joulewise/calibration_bracketing.py"})
+# BYTES lineage landing (lane/2026-11-07-bytes-stage1; plan docs/run_reports/2026-11-07-bytes-stage1-plan.md):
+# the block-6 and BYTES collection lane edited five collection files in place for block 6. For block 5
+# each edit is inert: new DRAFT and DISCLOSE codes the sealed block-5 catalog does not carry, a
+# keyword-only exclusions.compute(pack_scoped=True) default, cell.below_minimum still read from the
+# sealed catalog's EXCLUDE_WINDOW effect, StorageStop exits, and block-6 runner hooks.
+EVOLVED_ON_MAIN = frozenset({"joulewise/b5/harvest.py", "joulewise/calibration_bracketing.py",
+                             "joulewise/flags/catalog.py", "joulewise/flags/core.py",
+                             "joulewise/flags/exclusions.py", "scripts/run_campaign.py",
+                             "scripts/harvest_b5_window.py"})
 # A cited rebind moves the pin, it does not remove it (DLE-3, docs/analysis/b5/DEVIATION-LOG.md;
 # PR #693 review M2/M1). The analysis executes these files, so beside the seal pin4 check on the
 # accepted commit's bytes, the working tree is pinned to the rebound bytes: a further edit fails
@@ -28,6 +36,12 @@ EVOLVED_ON_MAIN = frozenset({"joulewise/b5/harvest.py", "joulewise/calibration_b
 REBOUND_WORKING_TREE = {
     # b5 under-90 round 2 (13af1baa8), the candidate-physics memo; DLE-3.
     "joulewise/calibration_bracketing.py": "40fd34bb82b8a0a57ece79ef23e507482a5ea79dd0c6cc001c5e3ea0cfe2a1f2",
+    # BYTES lineage landing (above): the merged bytes of the block-6 lane's in-place edits.
+    "joulewise/flags/catalog.py": "64cdcbe6bcc62bb7315432e1194cf904d5267cf604180d0ebb249a21b15594c2",
+    "joulewise/flags/core.py": "027c11caa0bcbf661bbe6460bc0dad4d58dd65853e55d45f05afaed2a9457f51",
+    "joulewise/flags/exclusions.py": "0aa0b881b0e628d3f302b2b84e0b8c1d100469168e073b32d9e666aa3587ea1e",
+    "scripts/harvest_b5_window.py": "3ea711b84974c4ab191b8b00a6915ebe126b3c64a0ccd83d2e3a05ff9fe2a9ea",
+    "scripts/run_campaign.py": "734820b2467a4296d07001ead3af4f8f0def451bb1a4ab130f3d87457716efc7",
 }
 PACK_PREFIXES = ("configs/campaigns/d117_floor_qwen3-1p7b_v5/", "configs/campaigns/d117_floor_qwen3-8b_v5/",
                  "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/")

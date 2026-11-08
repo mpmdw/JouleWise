@@ -1,0 +1,2041 @@
+{
+  "KV_bytes": 226492416.0,
+  "after_last_token": {
+    "cache_bytes": 251658240,
+    "layers": [
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 5242880,
+        "allocated_capacity": 2560,
+        "cache_bytes": 5242880,
+        "cache_class": "KVCache",
+        "occupied_length": 2560,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2560,
+            128
+          ],
+          [
+            1,
+            4,
+            2560,
+            128
+          ]
+        ]
+      }
+    ]
+  },
+  "after_prefill": {
+    "cache_bytes": 201326592,
+    "layers": [
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      },
+      {
+        "allocated_bytes": 4194304,
+        "allocated_capacity": 2048,
+        "cache_bytes": 4194304,
+        "cache_class": "KVCache",
+        "occupied_length": 2048,
+        "state_shapes": [
+          [
+            1,
+            4,
+            2048,
+            128
+          ],
+          [
+            1,
+            4,
+            2048,
+            128
+          ]
+        ]
+      }
+    ]
+  },
+  "config_sha256": "5a5fdac36fffb64ead4a539e0cd4ca865105a01298d62f3346e407c25e6ff3e6",
+  "decode_forward_passes": 512,
+  "model_dir": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/snapshots/d388dead1515f5e085ef7a0431dd8fadf0886c57",
+  "model_name": "Qwen3-30B-A3B-4bit",
+  "output_tokens": 512,
+  "prompt_tokens": 2048,
+  "revision": "d388dead1515f5e085ef7a0431dd8fadf0886c57",
+  "schema_version": "joulewise.bytes_kv.v1",
+  "tokenizer": {
+    "tokenizer_config_sha256": "253153d0738ceb4c668d2eff957714dd2bea0b56de772a9fdccd96cbf517e6a0",
+    "tokenizer_json_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4"
+  }
+}

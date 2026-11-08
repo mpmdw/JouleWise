@@ -316,8 +316,9 @@ class ExecutedCodeTests(_SandboxCase):
         self.assertEqual(evidence["acceptance_preflight"]["stale_code"]["executed"],
                          observed["executed"])
 
-    def test_epoch_mismatch_still_refuses_with_stale_code_allowed(self) -> None:
-        # Keeper: only the digest comparison relaxes; the epoch check stays.
+    def test_epoch_mismatch_flags_then_refuses_reservation_with_stale_code_allowed(self) -> None:
+        # The acceptance mismatch is carried as a flag; the unchanged slot
+        # reservation check still refuses the changed identity before capture.
         state = self.rig.real_writer_state("session-stale-epoch")
         reduce_path = self.rig.repo / "joulewise" / "reduce.py"
         reduce_path.write_text(reduce_path.read_text() + "\n# executed differs from sealed\n")
@@ -325,8 +326,14 @@ class ExecutedCodeTests(_SandboxCase):
         state["identity_path"].write_text(json.dumps(identity) + "\n", encoding="utf-8")
         self.rig.hazard(state)
         refusal = _refusal(self, self.rig.run_writer(state))
-        self.assertEqual(refusal["code"], RefusalCode.FROZEN_PROTOCOL_INVALID.value)
-        self.assertEqual(refusal["context"]["reason"], "acceptance_artifact_epoch_mismatch")
+        flags = [flag for flag in self.rig.flags(state)
+                 if flag["code"] == "calibration.acceptance_preflight_unverified"]
+        self.assertEqual(len(flags), 1, self.rig.flags(state))
+        self.assert_window_flag(flags[0], "calibration.acceptance_preflight_unverified")
+        self.assertEqual(flags[0]["observed"]["reason"], "acceptance_artifact_epoch_mismatch")
+        self.assertEqual(flags[0]["observed"]["context"]["stale_fields"], ["os_build"])
+        self.assertEqual(refusal["code"], RefusalCode.RESERVED_SLOT_MISMATCH.value)
+        self.assertFalse(Path(state["custody_locator"]).exists())
 
 
 if __name__ == "__main__":

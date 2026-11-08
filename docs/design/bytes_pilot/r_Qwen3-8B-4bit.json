@@ -1,0 +1,103 @@
+{
+ "repo": "mlx-community/Qwen3-8B-4bit",
+ "mlx_version": "0.31.2",
+ "ok": true,
+ "errors": [],
+ "snapshot": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-8B-4bit/snapshots/545dc4251c05440727734bcd94334791f6ab0192",
+ "on_disk_bytes": 4623810560,
+ "config_excerpt": {
+  "model_type": "qwen3",
+  "num_hidden_layers": 36,
+  "hidden_size": 4096,
+  "num_attention_heads": 32,
+  "num_key_value_heads": 8,
+  "head_dim": 128,
+  "vocab_size": 151936,
+  "num_experts": null,
+  "num_local_experts": null,
+  "num_experts_per_tok": null,
+  "experts_per_token": null,
+  "moe_intermediate_size": null,
+  "intermediate_size": 12288,
+  "shared_expert_intermediate_size": null,
+  "full_attention_interval": null,
+  "sliding_window": null,
+  "layer_types": null,
+  "tie_word_embeddings": false,
+  "quantization": {
+   "group_size": 64,
+   "bits": 4
+  }
+ },
+ "rss_before_load": 92454912,
+ "load_s": 0.7948250409972388,
+ "mlx_active_after_load": 4607731720,
+ "rss_after_load": 4916772864,
+ "accounting": {
+  "categories": {
+   "embed": {
+    "logical_params": 622329856,
+    "stored_bytes": 350060544
+   },
+   "always_active": {
+    "logical_params": 6946075648,
+    "stored_bytes": 3907610624
+   },
+   "lm_head": {
+    "logical_params": 622329856,
+    "stored_bytes": 350060544
+   }
+  },
+  "quant_mix_logical_params": {
+   "4b/64g/affine": 8190427136
+  },
+  "num_experts": null,
+  "experts_per_tok": null,
+  "tied_embeddings": false,
+  "total_params": 8190735360,
+  "active_params": 8190735360.0,
+  "resident_weight_bytes": 4607731712,
+  "bytes_read_per_token_measured": 4257673472.0,
+  "bytes_read_per_token_formula_4bit": 4095367680.0
+ },
+ "runs": [
+  {
+   "rep": 0,
+   "prefill_s": 3.073991792014567,
+   "prefill_tps": 666.2347002097314,
+   "decode_tokens": 511,
+   "decode_s": 7.6255256249860395,
+   "decode_tps": 67.01177402455264,
+   "total_s": 10.699517417000607,
+   "mlx_peak_bytes": 5610391604,
+   "kv_cache_bytes_end": 377487360,
+   "distinct_tokens_out": 35,
+   "output_head": " unattended night now has a watchdog that checks the custody directory for any new night, and if one is found, it arms the next night. The watchdog is a separate process, not the same as the one that runs the night. The watchdog is also responsible for checking the custody directory for any new"
+  },
+  {
+   "rep": 1,
+   "prefill_s": 3.074363916995935,
+   "prefill_tps": 666.1540583006745,
+   "decode_tokens": 511,
+   "decode_s": 7.7094616669928655,
+   "decode_tps": 66.28218960965656,
+   "total_s": 10.7838255839888,
+   "mlx_peak_bytes": 5610391604,
+   "kv_cache_bytes_end": 377487360,
+   "distinct_tokens_out": 35
+  },
+  {
+   "rep": 2,
+   "prefill_s": 3.0795525000139605,
+   "prefill_tps": 665.0316888543761,
+   "decode_tokens": 511,
+   "decode_s": 7.696369707991835,
+   "decode_tps": 66.39493935295008,
+   "total_s": 10.775922208005795,
+   "mlx_peak_bytes": 5610391604,
+   "kv_cache_bytes_end": 377487360,
+   "distinct_tokens_out": 35
+  }
+ ],
+ "peak_rss_bytes": 4962631680
+}
