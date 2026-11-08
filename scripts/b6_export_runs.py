@@ -23,10 +23,13 @@ def main(argv=None) -> int:
     parser.add_argument("--pack-records-root", type=Path, required=True)
     parser.add_argument("--export-dir", type=Path, required=True)
     parser.add_argument("--non-claim", action="store_true")
+    parser.add_argument("--read-workers", type=int, choices=range(1, 9), default=1,
+                        help="bounded source-verification workers (default: 1); keys and publication stay serial")
     args = parser.parse_args(argv)
     try:
         result = export(args.archive, json.loads(args.plan.read_text()), args.registration_dir,
-                        args.pack_records_root, args.export_dir, non_claim=args.non_claim)
+                        args.pack_records_root, args.export_dir, non_claim=args.non_claim,
+                        read_workers=args.read_workers)
         print(json.dumps(result.structure(), sort_keys=True))
         return 0
     except StorageStop as exc:

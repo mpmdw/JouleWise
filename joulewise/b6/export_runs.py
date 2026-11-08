@@ -3,22 +3,25 @@
 from __future__ import annotations
 
 import csv
+import errno
 import hashlib
 import json
 import math
 import os
 import tempfile
-from collections import defaultdict
+from collections import defaultdict, deque
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from threading import Lock
 from typing import Mapping
 
 from joulewise.b6 import blinding
 from joulewise.b6.acceptance import _stage_roles, evidence_from_archive
 from joulewise.b6.archive import (CLOCK_ANCHOR_STATUS, bundle_of, bundle_roots, ordered_roster, read_json,
                                 plan_tree, unresolved_clock_anchor)
-from joulewise.desk_compress import read_bytes
+from joulewise.desk_compress import CHUNK_BYTES, open_bytes, read_bytes
 from joulewise.desk_restore import StorageStop
 
 PHASES = ("tokenize", "generation_setup", "prefill", "decode")
@@ -69,9 +72,15 @@ def atomic_write(path: Path, writer) -> None:
 class _ReferenceInputs:
     """Authenticate reference inputs against the harvest's source inventory."""
 
-    def __init__(self, root: Path):
+    def __init__(self, root: Path, *, read_workers=1):
         self.root = root
+        self.read_workers = read_workers
         self.digests = {}
+        self.paths_under = defaultdict(set)
+        self.verified = {}
+        self.cached_bytes = 0
+        self.cache_lock = Lock()
+        self.restore_records = {}
         self.checked_bundles = set()
         self.unwitnessed_removed_stages = None
         path = root / "sources/SHA256SUMS"
@@ -87,26 +96,88 @@ class _ReferenceInputs:
                 self.digests[target] = digest
             if not self.digests:
                 raise ValueError("SHA256SUMS is empty")
+            # One lexical index replaces a full inventory scan per reference.
+            # Keep symlink names lexical, as the checksum inventory does.
+            archive_path = Path(os.path.abspath(root))
+            for target in self.digests:
+                self.paths_under[target].add(target)
+                for parent in target.parents:
+                    self.paths_under[parent].add(target)
+                    if parent == archive_path:
+                        break
         except Exception as exc:
             raise StorageStop(f"reference inventory {path}: {type(exc).__name__}: {exc}") from exc
 
     def read(self, path: Path, *, require_digest=False, equivalent: Path | None = None) -> bytes:
+        return self._load(path, require_digest=require_digest, equivalent=equivalent, want_bytes=True)
+
+    def verify(self, path: Path, *, require_digest=False) -> None:
+        """Hash logical bytes in bounded chunks; never materialize large raw inputs."""
+        self._load(path, require_digest=require_digest, want_bytes=False)
+
+    @staticmethod
+    def _state(path):
+        # A cache is local to one export and never hides replacement, deletion,
+        # a new plain sibling, or a changed compressed file between reads.
+        physical = path if path.exists() else Path(str(path) + ".zst")
         try:
-            raw = read_bytes(path)
-            digest = self.digests.get(Path(os.path.abspath(path)))
+            info = physical.stat()
+        except FileNotFoundError:
+            # Match the owning logical reader's missing-sibling refusal.
+            raise FileNotFoundError(errno.ENOENT, "file not found", str(physical)) from None
+        return (Path(os.path.abspath(physical)), info.st_dev, info.st_ino, info.st_size,
+                info.st_mtime_ns, info.st_ctime_ns)
+
+    def _load(self, path, *, require_digest=False, equivalent=None, want_bytes):
+        try:
+            cache_path = Path(os.path.abspath(path))
+            state = self._state(path)
+            digest = self.digests.get(cache_path)
             if digest is None and equivalent is not None:
                 digest = self.digests.get(Path(os.path.abspath(equivalent)))
+            with self.cache_lock:
+                cached = self.verified.get(cache_path)
+            if cached is not None and cached[:2] == (state, digest) and (digest is not None or not require_digest):
+                if not want_bytes or cached[2] is not None:
+                    return cached[2]
+            if want_bytes:
+                raw = read_bytes(path)
+                actual = hashlib.sha256(raw).hexdigest()
+            else:
+                checksum, chunks, size = hashlib.sha256(), [], 0
+                with open_bytes(path) as stream:
+                    for chunk in iter(lambda: stream.read(CHUNK_BYTES), b""):
+                        checksum.update(chunk)
+                        size += len(chunk)
+                        if size <= 64 * 1024:
+                            chunks.append(chunk)
+                        else:
+                            chunks.clear()
+                actual = checksum.hexdigest()
+                raw = b"".join(chunks) if size <= 64 * 1024 else None
             if digest is None and require_digest:
                 raise ValueError("input has no SHA256SUMS proof")
-            if digest is not None and hashlib.sha256(raw).hexdigest() != digest:
+            if digest is not None and actual != digest:
                 raise ValueError("SHA256SUMS digest mismatch")
+            if self._state(path) != state:
+                raise ValueError("input changed during read")
+            # At most 4 MiB of small control files per export. Hash-only entries
+            # retain metadata, never whole traces or raw telemetry artifacts.
+            with self.cache_lock:
+                saved = raw if raw is not None and len(raw) <= 64 * 1024 else None
+                if saved is not None and self.cached_bytes + len(saved) > 4 * 1024**2:
+                    saved = None
+                previous = self.verified.get(cache_path)
+                self.cached_bytes -= len(previous[2]) if previous and previous[2] is not None else 0
+                self.cached_bytes += len(saved) if saved is not None else 0
+                self.verified[cache_path] = (state, digest, saved)
             return raw
         except Exception as exc:
             raise StorageStop(f"reference bytes {path}: {type(exc).__name__}: {exc}") from exc
 
     def listed_bundle(self, run_id: str, plan: Mapping) -> bool:
-        return any(path.is_relative_to(Path(os.path.abspath(base / run_id)))
-                   for base in bundle_roots(self.root, plan, archive_only=True) for path in self.digests)
+        return any(self.paths_under.get(Path(os.path.abspath(base / run_id)))
+                   for base in bundle_roots(self.root, plan, archive_only=True))
 
     def bundle(self, run_id: str, plan: Mapping) -> Path:
         # Collected references belong to the archive. Coexisting external
@@ -114,7 +185,7 @@ class _ReferenceInputs:
         candidates = {Path(os.path.abspath(base / run_id))
                       for base in bundle_roots(self.root, plan, archive_only=True)}
         listed = [candidate for candidate in sorted(candidates)
-                  if any(path.is_relative_to(candidate) for path in self.digests)]
+                  if self.paths_under.get(candidate)]
         stray = [candidate for candidate in sorted(candidates)
                  if candidate.is_dir() and candidate not in listed]
         if stray:
@@ -193,8 +264,8 @@ class _ReferenceInputs:
         listed_ids = set()
         for base in bundle_roots(self.root, plan, archive_only=True):
             base = Path(os.path.abspath(base))
-            listed_ids.update(path.relative_to(base).parts[0] for path in self.digests
-                              if path.is_relative_to(base) and len(path.relative_to(base).parts) > 1)
+            listed_ids.update(path.relative_to(base).parts[0] for path in self.paths_under.get(base, ())
+                              if len(path.relative_to(base).parts) > 1)
         reference_ids = {run for run, role in roles.items() if role in REFERENCE_ROLES}
         # A non-smoke session that collected nothing (empty harvest roster and no
         # run bundle in the inventory, e.g. a t0 refusal) has no membership to
@@ -308,8 +379,8 @@ class _ReferenceInputs:
         # Include listed files that have disappeared, including whole subtrees.
         if bundle in self.checked_bundles:
             return
-        listed = {path for path in self.digests if path.is_relative_to(Path(os.path.abspath(bundle)))
-                  and path.name != ".DS_Store"}
+        listed = {path for path in self.paths_under.get(Path(os.path.abspath(bundle)), ())
+                  if path in self.digests and path.name != ".DS_Store"}
         if not listed:
             raise StorageStop(f"reference bundle {bundle}: no inventory entries")
         # Verify vanished listed inputs as well as every present logical input.
@@ -325,8 +396,29 @@ class _ReferenceInputs:
                     continue  # Finder metadata is never an input to a reader.
                 path = Path(directory) / name
                 present.add(Path(str(path)[:-4]) if path.suffix == ".zst" else path)
-        for path in sorted(listed | present):
-            self.read(path, require_digest=True)
+        paths = iter(sorted(listed | present))
+        if self.read_workers == 1:
+            for path in paths:
+                self.verify(path, require_digest=True)
+        else:
+            # Only immutable input verification runs in workers. At most N
+            # futures are outstanding; consume in the serial path order so a
+            # later fast failure cannot replace the first custody refusal.
+            with ThreadPoolExecutor(max_workers=self.read_workers, thread_name_prefix="bytes-read") as pool:
+                pending = deque()
+                try:
+                    for _ in range(self.read_workers):
+                        path = next(paths, None)
+                        if path is not None:
+                            pending.append(pool.submit(self.verify, path, require_digest=True))
+                    while pending:
+                        pending.popleft().result()
+                        path = next(paths, None)
+                        if path is not None:
+                            pending.append(pool.submit(self.verify, path, require_digest=True))
+                finally:
+                    for future in pending:
+                        future.cancel()
         self.checked_bundles.add(bundle)
 
 
@@ -436,7 +528,7 @@ def _reference_request_fields(bundle, events, summary, record, archive_root, *, 
             if key in summary and not (key == "idle_baseline" and summary[key] is None) and not isinstance(summary[key], dict):
                 raise ValueError(f"{summary_path}: {key} must be an object")
         journal = Path(str(archive_root) + ".desk") / "compression.jsonl"
-        with readable_run(bundle, compression_records=journal) as plain:
+        with readable_run(bundle, compression_records=journal, _record_cache=inputs.restore_records) as plain:
             reader = BundleReader(plain)
             curve = reader.summed_curve()
             bound = (record.get("calibration") or {}).get("operative_bound_s")
@@ -523,7 +615,9 @@ def _reference_request_fields(bundle, events, summary, record, archive_root, *, 
 def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str,
            pack_records_root: Path | str, export_dir: Path | str, *, non_claim: bool = False,
            evidence=None, acceptance_record: Mapping | None = None,
-           pack_registration: Mapping | None = None) -> ExportResult:
+           pack_registration: Mapping | None = None, read_workers: int = 1) -> ExportResult:
+    if type(read_workers) is not int or not 1 <= read_workers <= 8:
+        raise ValueError("read-workers must be an integer from 1 through 8")
     root = Path(archive_root)
     _verify_harvest_outputs(root)
     record = acceptance_record or read_json(root / "derived/b6-acceptance.json")
@@ -555,7 +649,7 @@ def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str
         raise ValueError(f"explicit pack registration empty or malformed for {pack_id}")
     bytes_request = (pack_registration.get("blinding_group") == "bytes" or pack_id == "bytes"
                      or pack_id.startswith("bytes-"))
-    reference_inputs = _ReferenceInputs(root)
+    reference_inputs = _ReferenceInputs(root, read_workers=read_workers)
     try:
         evidence = evidence or evidence_from_archive(root, plan, registration_dir)
     except Exception as exc:
@@ -636,7 +730,7 @@ def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str
                     fallback = f"; external fallback refused: {bundle}" if bundle is not None else ""
                     raise FileNotFoundError(f"collected bundle directory missing from archive; tried {candidates}{fallback}")
                 reference_inputs.check_bundle(bundle)
-                reference_inputs.read(bundle / "power_trace.csv", require_digest=True)
+                reference_inputs.verify(bundle / "power_trace.csv", require_digest=True)
                 config = _reference_json(bundle / "config.json", reference_inputs)
                 metadata = _reference_json(bundle / "metadata.json", reference_inputs)
                 status_path = bundle / "status.json"

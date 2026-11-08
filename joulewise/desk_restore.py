@@ -65,13 +65,13 @@ def _restore_stack():
 
 @contextmanager
 def restored_run(run_dir, scratch_dir, *, compression_records=None, reserve_gib=MIN_RESERVE_GIB,
-                 _require_bundle=True):
+                 _require_bundle=True, _record_cache=None):
     # Catch materialization failures only. Reader exceptions retain their identity.
     with _restore_stack() as stack:
         try:
             plain = stack.enter_context(_restored_run(run_dir, scratch_dir,
                 compression_records=compression_records, reserve_gib=reserve_gib,
-                _require_bundle=_require_bundle))
+                _require_bundle=_require_bundle, _record_cache=_record_cache))
         except (OSError, ValueError) as exc:
             raise RestoreRefused(exc) from exc
         yield plain
@@ -96,6 +96,28 @@ def _records(path):
                 or not re.fullmatch(r"[0-9a-f]{64}", row["sha256"])):
             raise ValueError("invalid compression record")
         records[Path(row["path"]).resolve()] = row
+    return records
+
+
+def _cached_records(path, cache):
+    """Reuse a successful journal parse only within a caller-owned read scope."""
+    if cache is None or path is None:
+        return _records(path)
+    path = Path(path)
+    try:
+        info = path.stat()
+    except OSError:
+        return _records(path)  # Preserve the owning reader's refusal.
+    key = path.absolute()
+    state = (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+    previous = cache.get(key)
+    if previous is not None and previous[0] == state:
+        return previous[1]
+    records = _records(path)
+    after = path.stat()
+    if state != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns):
+        raise ValueError("compression journal changed during read")
+    cache[key] = (state, records)
     return records
 
 
@@ -143,7 +165,7 @@ def _copy(stream, target, size, record):
 
 @contextmanager
 def _restored_run(run_dir, scratch_dir, *, compression_records=None, reserve_gib=MIN_RESERVE_GIB,
-                  _require_bundle=True):
+                  _require_bundle=True, _record_cache=None):
     """Yield one private, plain bundle; clean it up on success or failure."""
     if not math.isfinite(reserve_gib) or reserve_gib < MIN_RESERVE_GIB:
         raise ValueError(f"reserve-gib must be finite and at least {MIN_RESERVE_GIB}")
@@ -168,7 +190,7 @@ def _restored_run(run_dir, scratch_dir, *, compression_records=None, reserve_gib
         record_dir = Path(compression_records).resolve().parent
         if scratch == record_dir or record_dir in scratch.parents:
             raise ValueError("scratch must be outside the compression records")
-    entries = _inventory(source, _records(compression_records))
+    entries = _inventory(source, _cached_records(compression_records, _record_cache))
     scratch.mkdir(parents=True, exist_ok=True)
     # Reader and operator restores share the TMPDIR lock, even when the
     # operator chooses another scratch directory on the same filesystem.
@@ -205,12 +227,14 @@ def _scratch_lock(root):
 
 
 @contextmanager
-def readable_run(run_dir, *, compression_records=None, _require_bundle=True):
+def readable_run(run_dir, *, compression_records=None, _require_bundle=True, _record_cache=None):
     """Keep plain runs in place; verify and restore compressed runs for readers.
 
     The standard desk journal is ARCHIVE.desk/compression.jsonl. Callers
     with a different journal location can name it explicitly. Scratch uses
     the caller's TMPDIR and is removed before returning to archive work.
+    A private caller-owned _record_cache can reuse successful journal parses
+    within one operation; every reuse checks the journal's file identity.
     """
     source = Path(run_dir)
     if not any(not path.with_suffix("").is_file() for path in source.rglob("*.zst")):
@@ -230,7 +254,7 @@ def readable_run(run_dir, *, compression_records=None, _require_bundle=True):
             scratch = stack.enter_context(tempfile.TemporaryDirectory(prefix="joulewise-reader-"))
             restored = stack.enter_context(restored_run(source, scratch,
                 compression_records=compression_records,
-                _require_bundle=_require_bundle))
+                _require_bundle=_require_bundle, _record_cache=_record_cache))
         except (OSError, ValueError) as exc:
             raise RestoreRefused(exc) from exc
         yield restored
