@@ -83,6 +83,15 @@ Rules (RC-CMP-1 A1-A4):
 - RC-CMP-11: bit-identical numbers and thresholds on both sides decide a test (strict relations false at
   equality); the registered p42 cell's code is the producer's own (P42_REFUSAL_CODE); L9's direction is "none"
   only for a printed None; an undetermined row still requires a producer word (direction, a trigger printed once);
+- DLE-5 (attribution-floor metadata): the D-078 rule is re-derived from the recompute's own computed floor terms
+  (limited_forms; a computed record without them refuses recompute_floor_terms_missing). The aggregate metadata is
+  expected only when every arm's floor is usable (the engine's conditional publication), a usable limited arm keeps its
+  own diagnostic. Outside the floor_j bar the engine's strict > decides; inside it every form is undetermined (L9 prints no
+  bound, so no operand set is bit-identical: delta-2 S1-1) and a within_bar_undetermined row records it, listed in the
+  output's limit_undetermined (keys only) and holding the comparison (exit 1; a refusal, exit 2, outranks it) and so the
+  release. The fill's copy of the verdict's
+  attribution-floor metadata, derivation-exempt words and flags included, is equal leaf by leaf in both directions
+  (floor_limit_copy_defects);
 - stdout carries per-family pass/fail counts and structure codes only; values and
   observed differences go only to the restricted output file, which is written
   whenever the inputs could be read.
@@ -2147,6 +2156,7 @@ def compare_arms(c, ours, cid, floor, registry):
                 contrast["conditions"][index] if pack else None)
         c.numeric("floor_gate_j", f"{cid}/arm/{index}/floor_gate_j", gate.get("floor_gate_j"),
                   get(cells, f"{MODELS.get(pack)}/{phase}", "floor_gate_j"))
+    usable = dict(enumerate(usable_arms(ours, contrast)))
     for index, resolution, pack in c.pairs(f"contrast/{cid}/resolution/", positions(floor.get("resolutions")), ARMS):
         resolution = resolution if isinstance(resolution, dict) else {}
         cell = f"{MODELS.get(pack)}/{phase}"
@@ -2165,6 +2175,196 @@ def compare_arms(c, ours, cid, floor, registry):
             entry = registry.entry(source, "floor")
             c.exact("routing_id", f"contrast/{cid}/resolution/{index}/source_cell_ids/{number}",
                     cell_key(entry) if entry else None, own, raw=source)
+        # DLE-5: a resolution's point diagnostics, present exactly when the D-078 rule (limited_forms) makes its
+        # own source cell attribution-limited, and keyed only by that cell (L1: the registered floor cell of this
+        # arm, never the other arm's). Exact: by form, its cell the one source cell; transported: by cell then form.
+        own_cell = (contrast.get("floor_cells") or (None, None))[index] if pack else None
+        listed_sources = listed(resolution.get("source_cell_ids"))
+        exact = resolution.get("status") == "exact" and len(listed_sources) == 1
+        diagnostics = resolution.get("point_floor_diagnostics")
+        if exact and "point_floor_diagnostics" in resolution:
+            diagnostics = {listed_sources[0]: diagnostics}
+        # A resolution that is not usable (no recompute floor gate for its arm) publishes none; a usable limited one
+        # keeps its own diagnostic even when its partner refuses (the engine's _floor_row; R704-D2).
+        compare_point_diagnostics(c, ours, f"{cid}/resolution/{index}/point_floor_diagnostics", diagnostics,
+                                  contrast, registry, exact,
+                                  allowed=(own_cell,) if own_cell and usable.get(index) else ())
+
+
+# The rows limited_forms records for a within-bar form it cannot decide are keyed <scope>/limit_decision/<cell>/<form>.
+LIMIT_DECISION = "/limit_decision/"
+# The terms a computed floor record must carry for the D-078 rule (independent_recompute_b5.floor_estimate always
+# writes them before it returns status computed).
+LIMIT_TERMS = ("widths_j", "linear_deviation_bound_j", "guard", "point_unguarded_floor_j")
+
+
+def limit_terms(record):
+    """(widths, linear bound, guard, point floor) of a computed floor record. A record that says computed but lacks a
+    term (or carries a malformed one) is a recompute structure error, never the absence of a limit (R704-D2)."""
+    widths = record.get("widths_j")
+    terms = tuple(record.get(name) for name in LIMIT_TERMS[1:])
+    if not (isinstance(widths, list) and widths and all(finite(w) for w in widths) and all(finite(t) for t in terms)):
+        raise Refusal("recompute_floor_terms_missing")
+    return (widths,) + terms
+
+
+def limited_forms(c, ours, contrast, registry, key="", allowed=None, printed=None, decision=None):
+    """The D-078 rule, re-derived from the recompute's own terms (detection_floor.
+    admissible_set_uncertainty_dominates_point_floor; plan section 5): a form of a registered floor cell is
+    attribution-limited when its admissible-set uncertainty (linear_deviation_bound_j: the largest linear residual
+    or contrast the member anchor envelopes admit) exceeds its guarded point-only floor (guard x point_unguarded_floor_j),
+    and the cell has some nonzero admissible half-width. -> {registered cell id: {form: True | None}}, only the
+    limited forms; None marks a form that cannot be decided (below).
+
+    Only a form whose record says computed is classified: a below-minimum or not-computed form (make_floors turns a
+    computed form into not_computed when the whole-window drift allowance is unrecorded, after the terms are
+    retained) has no limit. A computed record without its terms refuses (recompute_floor_terms_missing).
+
+    Outside the floor_j bar of the guarded point floor the strict relation decides. Inside it the form is always
+    undetermined (None; R704-D3 and Sol delta-2 S1-1): the engine's bound is not printed by L9 and is computed by a
+    different floating-point expression than the recompute's (the absolute form sums the other widths differently),
+    so no decision operand can be shown bit-identical and the RC-CMP-11 F1 exception has nothing to stand on. With
+    decision (the row scope), Comparison.word records a within_bar_undetermined row for it (printed: {cell: {form:
+    diagnostic}}, whose point floor, guard and guarded floor are the printed numbers that must agree within their
+    bar for the row to be AGREE); the comparison and the release check hold on every such row. Without printed no row
+    is made."""
+    floors = ours.get("floors") if isinstance(ours.get("floors"), dict) else {}
+    result = {}
+    for cell_id in (contrast or {}).get("floor_cells", ()):
+        entry = registry.entry(cell_id, "floor")
+        if not entry or (allowed is not None and cell_id not in allowed):
+            continue
+        for form in FLOOR_FORMS:
+            record = floors.get(f"{cell_key(entry)}/{form}")
+            record = record if isinstance(record, dict) else {}
+            if record.get("status") != "computed":
+                continue
+            widths, linear, guard, point = limit_terms(record)
+            if not any(widths):
+                continue
+            gate = guard * point
+            where = f"{key}{cell_id}/{form}"
+            if abs(linear - gate) > c.bar("floor_j", where, gate):
+                if linear > gate:
+                    result.setdefault(cell_id, {})[form] = True
+                continue
+            result.setdefault(cell_id, {})[form] = None
+            if decision is not None:
+                diagnostic = get(printed, cell_id, form)
+                operands = tuple(get(diagnostic, name) for name in ("unguarded_floor_j", "guard_factor", "guarded_floor_j"))
+                # The strict relation on the recompute's own terms, kept as the row's recompute word; the atom is open
+                # by construction (we are inside the bar), and agrees when nothing is printed or the printed numbers do.
+                atom = c.atom("limited", "floor_j", where, linear, linear, gate, lambda number, threshold: number > threshold)
+                atom["within"] = True
+                atom["agree"] = diagnostic is None or all(
+                    finite(v) and abs(v - w) <= c.bar("floor_j", where, w) for v, w in zip(operands, (point, guard, gate)))
+                c.word("outcome_word", f"{decision}/{cell_id}/{form}", "present" if isinstance(diagnostic, dict) else "absent",
+                       "present" if atom["truth"] else "absent", [atom], lambda t: "present" if t["limited"] else "absent")
+    return result
+
+
+def decided_limited(derived):
+    """Whether the rule makes some form limited beyond the bar (limited_forms' True, not None)."""
+    return any(v for forms in derived.values() for v in forms.values())
+
+
+def usable_arms(ours, contrast):
+    """Per registered arm position, whether the engine's resolution is usable (exact or transported): the recompute
+    has a finite floor gate for the arm's registered floor cell (floor_cells; make_floors leaves it None for a
+    below-minimum or drift-unrecorded cell)."""
+    cells = ours.get("floor_cells")
+    return [finite(get(cells, f"{MODELS[pack]}/{(contrast or {}).get('phase')}", "floor_gate_j")) for pack in ARMS.values()]
+
+
+def compare_floor_limit(c, ours, cid, row, mine, registry):
+    """DLE-5: a contrast's attribution-floor metadata (detection_floor D-078; analysis_engine _floor_row and
+    claims.evaluate_claim's floor_limit), printed only when a source cell's floor is attribution-limited.
+
+    The point diagnostics of the floor and of the claim evaluation (keyed by source cell then form; a resolution's
+    are compared in compare_arms), the claim evaluation's class and source words against the engine's words, and its
+    published floor against the recompute's contrast floor gate (the active floor's own row). The engine prints a
+    diagnostic only for a form whose admissible-set uncertainty dominates its guarded point floor; which forms (and so
+    whether floor_limit, its class and source words, and each resolution's diagnostics are printed at all) is
+    re-derived here from the recompute's own terms (limited_forms), and every number a printed diagnostic carries is
+    compared. It is a label beside the floor, never the floor a claim is gated on (published_claim_floor is false).
+
+    The aggregate metadata (the floor's, the claim evaluation's) follows the engine's conditional publication
+    (analysis_engine _floor_row): present only when every resolution is usable and one is limited, so none is
+    expected when an arm's floor is refused (R704-D2; a usable limited arm keeps its own diagnostic, compare_arms).
+    """
+    contrast = registry.entry(cid, "contrast")
+    # The engine publishes the aggregate metadata only when all resolutions are usable: no recompute floor gate for
+    # an arm, no combined floor and no claim floor_limit to require.
+    arms = usable_arms(ours, contrast)
+    allowed = None if arms and all(arms) else ()
+    limit = get(row, "claim_evaluation", "floor_limit")
+    printed = isinstance(limit, dict)
+    floor_diagnostics = get(row, "floor", "point_floor_diagnostics")
+    # The printed operands the within-bar cases are decided against (limited_forms): the floor's, else the claim's.
+    reference = floor_diagnostics if isinstance(floor_diagnostics, dict) else (
+        limit.get("point_floor_diagnostics") if printed and isinstance(limit.get("point_floor_diagnostics"), dict) else {})
+    derived = limited_forms(c, ours, contrast, registry, f"{cid}/", allowed, printed=reference)
+    compare_point_diagnostics(c, ours, f"{cid}/floor/point_floor_diagnostics", floor_diagnostics, contrast, registry,
+                              allowed=allowed)
+    surely = decided_limited(derived)
+    if surely or not derived:
+        # The rule's presence, against the producer's: the claim evaluation carries floor_limit exactly when some
+        # source cell's floor is attribution-limited (M1).
+        c.exact("outcome_word", f"{cid}/claim_evaluation/floor_limit/presence",
+                "present" if printed else "absent", "present" if surely else "absent")
+    compare_point_diagnostics(c, ours, f"{cid}/claim_evaluation/floor_limit/point_floor_diagnostics",
+                              limit.get("point_floor_diagnostics") if printed else None, contrast, registry,
+                              allowed=allowed)
+    if not printed:
+        return
+    for field, word in ATTRIBUTION_WORDS.items():
+        c.exact("outcome_word", f"{cid}/claim_evaluation/floor_limit/{field}", limit.get(field), word if derived else None)
+    c.numeric("floor_gate_j", f"{cid}/claim_evaluation/floor_limit/published_floor_j", limit.get("published_floor_j"),
+              mine.get("floor_gate_j"))
+
+
+def compare_point_diagnostics(c, ours, scope, diagnostics, contrast, registry, by_form=False, allowed=None):
+    """One printed point_floor_diagnostics object, {cell: {form: diagnostic}} (by_form: an exact resolution's
+    {form: diagnostic}, passed as {its one source cell: ...}). The cells and forms that carry a diagnostic are the
+    ones the D-078 rule makes attribution-limited (limited_forms) among the allowed registered floor cells (the
+    contrast's both, or one resolution's own); a printed cell or form outside them, or a limited one not printed,
+    is a routing_id row DISAGREE (S3), looked up literally (G3). The diagnostic's unguarded floor is the recompute's
+    point floor of that cell and form (max of the largest deviation and the prediction term), its guard factor the
+    recompute's guard, its guarded floor their product (composed from the recompute's own terms); its label and
+    flag are the engine's words."""
+    cells = diagnostics if isinstance(diagnostics, dict) else {}
+    # The rows of a within-bar form (limited_forms) sit beside the scope, not under point_floor_diagnostics.
+    base = scope[:-len("/point_floor_diagnostics")] if scope.endswith("/point_floor_diagnostics") else scope
+    derived = limited_forms(c, ours, contrast, registry, scope + "/", allowed, printed=cells, decision=base + "/limit_decision")
+    for cell, forms, entry in c.pairs(scope + "/cells/", cells, diagnostic_cells(cells, derived, registry)):
+        forms = forms if isinstance(forms, dict) else {}
+        for form, diagnostic, point in c.pairs(f"{scope}/forms/{cell}/", forms,
+                                               diagnostic_forms(forms, entry, ours, derived.get(cell, {}))):
+            key = f"{scope}/{form}" if by_form else f"{scope}/{cell}/{form}"
+            diagnostic = diagnostic if isinstance(diagnostic, dict) else {}
+            unguarded, guard = get(point, "point_unguarded_floor_j"), get(point, "guard")
+            c.numeric("floor_j", key + "/unguarded_floor_j", diagnostic.get("unguarded_floor_j"), unguarded)
+            c.numeric("floor_j", key + "/guard_factor", diagnostic.get("guard_factor"), guard)
+            c.numeric("floor_j", key + "/guarded_floor_j", diagnostic.get("guarded_floor_j"), times(guard, unguarded))
+            for field, word in POINT_DIAGNOSTIC_WORDS.items():
+                c.exact("outcome_word", f"{key}/{field}", diagnostic.get(field), word if point is not None else None)
+
+
+def diagnostic_cells(cells, derived, registry):
+    """The cells the rule makes limited (or undetermined at the bar and printed) -> their registered floor entry."""
+    return {cell: registry.entry(cell, "floor") for cell, forms in derived.items()
+            if any(forms.values()) or cell in cells}
+
+
+def diagnostic_forms(forms, entry, ours, derived_forms):
+    """The limited forms of a cell (or undetermined ones that are printed) -> the recompute's floor of that cell and
+    form ({} when the recompute has none, so each number is DISAGREE missing_or_null). A printed form that is not
+    limited gets rows of its own against nothing."""
+    if not entry:
+        return {}
+    floors = ours.get("floors") if isinstance(ours.get("floors"), dict) else {}
+    return {form: floors.get(f"{cell_key(entry)}/{form}") if isinstance(floors.get(f"{cell_key(entry)}/{form}"), dict)
+            else {} for form, sure in derived_forms.items() if sure or form in forms}
 
 
 def registered_floor_keys(contrast, registry):
@@ -2250,6 +2450,7 @@ def compare_contrasts(c, custody, ours):
             c.numeric("floor_gate_j", f"{cid}/{field}", get(row, "floor", field),
                       contrast_floor_part(ours.get("floor_cells"), registry.entry(cid, "contrast"), field))
         compare_arms(c, ours, cid, row.get("floor") if isinstance(row.get("floor"), dict) else {}, registry)
+        compare_floor_limit(c, ours, cid, row, mine, registry)
         multiplicity = row.get("multiplicity") or {}
         c.numeric("contrast_p", f"{cid}/raw_p", multiplicity.get("raw_p"), mine.get("p"))
         c.numeric("contrast_p", f"{cid}/adjusted_p", multiplicity.get("adjusted_p"), mine.get("holm_p"))
@@ -2402,6 +2603,13 @@ def compare_contrasts(c, custody, ours):
 
 # The engine's leave-one-out floor-status words (analysis_engine _loo_family; pinned by test_rc_cmp10.py).
 FLOOR_STATUS_WORDS = ("above_floor", "not_above_floor")
+# DLE-5: the engine's attribution-floor words (detection_floor ATTRIBUTION_LIMIT_CLASS and ATTRIBUTION_FLOOR_SOURCE,
+# the plan's section 4 step 7 bound) and the point diagnostic's label and flag (detection_floor
+# _point_floor_diagnostic); tests/independent_recompute/test_floor_limit.py pins each to its source on origin/main.
+ATTRIBUTION_WORDS = {"floor_limit_class": "attribution_limited", "floor_source": "E_clock_anchor_shift_bound_j"}
+POINT_DIAGNOSTIC_WORDS = {"label": "repeatability_diagnostic", "published_claim_floor": False}
+# The two registered floor forms (the recompute's floors are keyed model/phase/form).
+FLOOR_FORMS = ("absolute", "comparative")
 # The v3 claim floor's aggregation word (analysis_engine/artifact.py: a v3 floor's aggregation must be max_never_sum).
 V3_AGGREGATION = "max_never_sum"
 # The ceilings that make a contrast claim-ready (analysis_engine/artifact.py: ready iff the ceiling is L2, L3 or L4).
@@ -3549,7 +3757,10 @@ LOAD_LINE = (NAMED + "load-correlated sensitivity line (PLAN 8.1): never replace
              "not compared here")
 ESTIMATOR_INTERNALS = (NAMED + "registered estimator internals beside SE_total and the metrology-aware interval "
                        "(compared): SE_repeat, SE_metrology, repeat-point interval, variance contributions, exact t")
-FLOOR_DIAGNOSTICS = NAMED + "attribution-floor diagnostics carried beside the resolved floor; the floor values are compared"
+# DLE-5: a point diagnostic's source cell (a key of point_floor_diagnostics), routed by compare_point_diagnostics.
+DIAG_CELL = r"(?P<diag_cell>[a-z0-9][a-z0-9.-]*)"
+DIAG_NUMBER = r"/(?P<form>absolute|comparative)/(?P<field>unguarded_floor_j|guard_factor|guarded_floor_j)"
+DIAG_WORD = r"/(?P<form>absolute|comparative)/(?P<field>label|published_claim_floor)"
 FLOOR_KEPT = NAMED + "kept-unit counts of a floor cell or a contrast's repeat stratum; the floor's n and n_admitted and the contrast's n are compared"
 F = r"fill:gamma/contrasts/\*/"
 D = "disclosure:"
@@ -3604,9 +3815,28 @@ COVERAGE = (
     (F + r"floor/resolutions/\*/transport_group_id", "routing_id", "contrast/{cid}/resolution/{resolution}/transport_group_id"),
     (F + r"floor/arm_gates/\*/floor_gate_j", "floor_gate_j", "{cid}/arm/{arm}/floor_gate_j"),
     (F + r"floor/arm_gates/\*/(?P<field>arm_id|condition_family_id)", "routing_id", "contrast/{cid}/arm/{arm}/{field}"),
-    (F + r"floor/(resolutions/\*/)?point_floor_diagnostics/(unguarded_floor_j|guard_factor|guarded_floor_j)", FLOOR_DIAGNOSTICS),
-    (F + r"floor/(resolutions/\*/)?(point_floor_diagnostics/(label|published_claim_floor)|single_count_discipline/[a-z_]+)",
-     UNCOVERED + "attribution-floor diagnostic label and flag, and the single-count discipline's words"),
+    # DLE-5: the attribution-floor metadata (compare_floor_limit). Each point diagnostic as the producers key it (the
+    # floor's and the claim evaluation's by source cell then form; a transported resolution's likewise; an exact
+    # resolution's by form), against the recompute's point floor of that registered cell and form, and its label and
+    # flag against the engine's; the claim evaluation's class and source words and its published floor.
+    (F + r"(?P<where>floor|claim_evaluation/floor_limit)/point_floor_diagnostics/" + DIAG_CELL + DIAG_NUMBER, "floor_j",
+     "{cid}/{where}/point_floor_diagnostics/{diag_cell}/{form}/{field}"),
+    (F + r"(?P<where>floor|claim_evaluation/floor_limit)/point_floor_diagnostics/" + DIAG_CELL + DIAG_WORD, "outcome_word",
+     "{cid}/{where}/point_floor_diagnostics/{diag_cell}/{form}/{field}"),
+    (F + r"floor/resolutions/\*/point_floor_diagnostics" + DIAG_NUMBER, "floor_j",
+     "{cid}/resolution/{resolution}/point_floor_diagnostics/{form}/{field}"),
+    (F + r"floor/resolutions/\*/point_floor_diagnostics" + DIAG_WORD, "outcome_word",
+     "{cid}/resolution/{resolution}/point_floor_diagnostics/{form}/{field}"),
+    (F + r"floor/resolutions/\*/point_floor_diagnostics/" + DIAG_CELL + DIAG_NUMBER, "floor_j",
+     "{cid}/resolution/{resolution}/point_floor_diagnostics/{diag_cell}/{form}/{field}"),
+    (F + r"floor/resolutions/\*/point_floor_diagnostics/" + DIAG_CELL + DIAG_WORD, "outcome_word",
+     "{cid}/resolution/{resolution}/point_floor_diagnostics/{diag_cell}/{form}/{field}"),
+    (F + r"claim_evaluation/floor_limit/(?P<field>floor_limit_class|floor_source)", "outcome_word",
+     "{cid}/claim_evaluation/floor_limit/{field}"),
+    (F + r"claim_evaluation/floor_limit/published_floor_j", "floor_gate_j", "{cid}/claim_evaluation/floor_limit/published_floor_j"),
+    (F + r"(floor/(resolutions/\*/)?|claim_evaluation/floor_limit/)single_count_discipline/[a-z_]+",
+     UNCOVERED + "the single-count discipline's words (a fixed registered object: rule id, roles, flags, note); "
+     "no number, and it gates nothing (gating false)"),
     (F + r"floor/(status|transport_verdict|floor_source|floor_limit_class|"
      r"arm_gates/\*/status|resolutions/\*/(status|reason_codes(/\*)?|floor_source|floor_limit_class))",
      UNCOVERED + "floor-resolution status and source words: they report how the engine's floor transport resolved "
@@ -3936,7 +4166,76 @@ COPIED_LISTS = ((r"fill:gamma/contrasts/\*/kept_block_ids/\*", r"contrast/ctr-[^
                 (r"fill:gamma/contrasts/\*/sampling/removed_block_ids/\*",
                  r"contrast/ctr-[^/]+/sampling_removed_block_ids/[0-9]+"),
                 (r"fill:gamma/contrasts/\*/loo/rows/\*/influence_triggers/\*",
-                 r"ctr-[^/]+/loo/b[0-9]+/influence_triggers/[0-9]+"))
+                 r"ctr-[^/]+/loo/b[0-9]+/influence_triggers/[0-9]+"),
+                # DLE-5 (Sol R704-2): the fill's copies of the verdict's attribution-floor metadata, leaf by leaf: the
+                # floor's, each resolution's and the claim evaluation's point diagnostics (their cell/form/field
+                # rows, never the routing rows of the cells and forms) and its class and source words and published
+                # floor (not the presence row). A fill that omits a leaf the verdict prints is copy_shortened; a fill
+                # leaf the verdict lacks has no row (unmapped); a changed value is value_differs: both directions.
+                (r"fill:gamma/contrasts/\*/(floor(/resolutions/\*)?/point_floor_diagnostics|claim_evaluation/floor_limit)/.*",
+                 r"ctr-[^/]+/(floor/point_floor_diagnostics/(?!cells/|forms/)[^/]+/[^/]+/[^/]+"
+                 r"|resolution/[0-9]+/point_floor_diagnostics/(?!cells/|forms/)[^/]+(/[^/]+)?/[^/]+"
+                 r"|claim_evaluation/floor_limit/(point_floor_diagnostics/(?!cells/|forms/)[^/]+/[^/]+/[^/]+"
+                 r"|floor_limit_class|floor_source|published_floor_j))"))
+
+
+# DLE-5 (R704-D1): the keys of a floor or resolution that hold the attribution-floor metadata the fill copies.
+FLOOR_LIMIT_KEYS = ("floor_source", "floor_limit_class", "point_floor_diagnostics", "single_count_discipline")
+
+
+def floor_limit_metadata(row):
+    """{path: leaf} of the attribution-floor metadata of a contrast row (the claim verdict's, or the fill's copy of
+    it): the floor's and each resolution's class and source words, point diagnostics and discipline object, and
+    the claim evaluation's whole floor_limit. Every leaf, the derivation-exempt words and flags included; an empty
+    container is a leaf of its own, so presence differs from absence."""
+    found = {}
+
+    def walk(value, path):
+        if isinstance(value, dict) and value:
+            for name, item in value.items():
+                walk(item, path + (name,))
+        elif isinstance(value, list) and value:
+            for index, item in enumerate(value):
+                walk(item, path + (index,))
+        else:
+            found[path] = value
+
+    floor = row.get("floor") if isinstance(row, dict) else None
+    if isinstance(floor, dict):
+        for name in FLOOR_LIMIT_KEYS:
+            if name in floor:
+                walk(floor[name], ("floor", name))
+        for index, resolution in enumerate(floor.get("resolutions") if isinstance(floor.get("resolutions"), list) else ()):
+            for name in FLOOR_LIMIT_KEYS:
+                if isinstance(resolution, dict) and name in resolution:
+                    walk(resolution[name], ("floor", "resolutions", index, name))
+    evaluation = row.get("claim_evaluation") if isinstance(row, dict) else None
+    if isinstance(evaluation, dict) and "floor_limit" in evaluation:
+        walk(evaluation["floor_limit"], ("claim_evaluation", "floor_limit"))
+    return found
+
+
+def floor_limit_copy_defects(verdicts, fill):
+    """R704-D1: the fill's copy of each contrast's attribution-floor metadata equals the verdict's, leaf by leaf, type
+    and presence included, in both directions. The words and flags exempt from independent derivation (the
+    discipline object, the floor and resolution class and source words) stay exempt from derivation; only the
+    equality of the two copies is checked here. -> {(path, family, key, reason)} for coverage's unbound set."""
+    def by_contrast(rows):
+        return {row["contrast_id"]: row for row in rows if isinstance(row, dict) and isinstance(row.get("contrast_id"), str)} \
+            if isinstance(rows, list) else {}
+
+    l9, copied = by_contrast(get(verdicts, "contrasts")), by_contrast(get(fill, "gamma", "contrasts"))
+    defects = set()
+    for cid in sorted(set(l9) | set(copied)):
+        printed, mine = floor_limit_metadata(l9.get(cid)), floor_limit_metadata(copied.get(cid))
+        for path in sorted(set(printed) | set(mine), key=str):
+            reason = ("copy_shortened" if path not in mine else "copy_extra" if path not in printed else
+                      None if same(printed[path], mine[path]) else "value_differs")
+            if reason:
+                shape = "/".join("*" if isinstance(part, int) else part for part in path)
+                defects.add(("fill:gamma/contrasts/*/" + shape, "floor_limit_copy",
+                             cid + "/" + "/".join(map(str, path)), reason))
+    return defects
 
 
 def coverage(custody, comparison, rules=None):
@@ -4002,6 +4301,12 @@ def coverage(custody, comparison, rules=None):
         for row in comparison.rows:
             if re.fullmatch(key, row["key"]) and row["l9"] is not None and row["key"] not in printed:
                 unbound.setdefault((pattern.replace("\\", ""), row["family"], row["key"], "copy_shortened"), None)
+    if "fill" not in absent:
+        verdicts = custody.one(r"outputs/[0-9a-f]{64}-claim-verdicts\.json")
+        if verdicts is not None:
+            # R704-D1: the exempt words and flags too must be the verdict's, in both directions.
+            for defect in floor_limit_copy_defects(verdicts, custody.one(STEP11_SOURCES[0][1])):
+                unbound.setdefault(defect, None)
     uncompared = sorted({path for path, *_ in unbound})
     for path in routed - set(uncompared):
         # An identity field that routed an agreeing binding is compared by its routing_id rows (S2).
@@ -4013,6 +4318,11 @@ def coverage(custody, comparison, rules=None):
             "uncovered_numeric": sorted(named), "absent_sources": absent, "nonfinite": sorted(nonfinite),
             # G5: each named numeric exemption (rule pattern) with the leaves it took, for the full-size census.
             "named_exemptions": {pattern: sorted(paths) for pattern, paths in sorted(exemptions.items())}}
+
+
+def limit_undetermined(rows):
+    """The keys of the rows that record a within-bar attribution-limit form left undetermined (R704-D3)."""
+    return sorted(row["key"] for row in rows if row.get("reason") == "within_bar_undetermined" and LIMIT_DECISION in row["key"])
 
 
 def run(l9_custody, recompute_path, bars_path=DEFAULT_BARS, rules=None, meter=(), registry=None, window_index=None):
@@ -4041,7 +4351,10 @@ def run(l9_custody, recompute_path, bars_path=DEFAULT_BARS, rules=None, meter=()
     compare_fill_identity(c, custody, ours)
     compare_history(c, custody, ours)
     cover = coverage(custody, c, rules)
-    return {"schema": SCHEMA, "bar_set": bars.get("bar_set"), "bars": bars["families"],
+    return {"schema": SCHEMA,
+            # R704-D3: every within-bar form the D-078 rule could not decide (keys only). The comparison exits 1 and the
+            # release check holds while there is one, whatever their numeric AGREE.
+            "limit_undetermined": limit_undetermined(c.rows), "bar_set": bars.get("bar_set"), "bars": bars["families"],
             "l9_steps": {f"{s}/{w}" if w else str(s): v for (s, w), v in sorted(custody.status.items(), key=str)},
             "recompute_program_sha256": ours.get("program_sha256"), "harvest_meter_sha256": meter_digests,
             "routing_registry_sha256": custody.registry.digests,
@@ -4089,7 +4402,8 @@ def main(argv=None):
           + " step11_unmapped=" + str(len(cover["unmapped"])) + " step11_nonfinite=" + str(len(cover["nonfinite"]))
           + " step11_uncovered_numeric="
           + str(len(cover["uncovered_numeric"])) + " step11_absent=" + ",".join(cover["absent_sources"] or ["none"])
-          + " structure_flags=" + str(len(result["structure_flags"])))
+          + " structure_flags=" + str(len(result["structure_flags"]))
+          + " limit_undetermined=" + str(len(result["limit_undetermined"])))
     if cover["nonfinite"]:
         # A NaN or Infinity in a step-11 output is never a printed value to cover (S1).
         print("refused=step11_nonfinite_value", file=sys.stderr)
@@ -4098,7 +4412,9 @@ def main(argv=None):
         # Coverage of step 11 cannot be shown without every step-11 output.
         print("refused=" + ("step11_unmapped_fill" if cover["unmapped"] else "step11_outputs_absent"), file=sys.stderr)
         return 2
-    return 0 if all(v["fail"] == 0 for v in counts.values()) else 1
+    # R704-D3: a within-bar attribution-limit form that could not be decided holds the release (exit 1), even when
+    # every row is numerically AGREE.
+    return 0 if all(v["fail"] == 0 for v in counts.values()) and not result["limit_undetermined"] else 1
 
 
 if __name__ == "__main__":
