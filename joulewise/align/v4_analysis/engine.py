@@ -278,13 +278,41 @@ def _screen_member(member, cohort, *, divergent=False):
 
 
 def _member_output(member, **fields):
-    """A27: all C-sabotage member desks expose only identity and one seal."""
+    """A27: scored C-sabotage is sealed; hardware anchors remain identified."""
     identity = {'run_id': member['slot']['run_id']}
     if 'window' in fields:
         identity['window'] = fields['window']
     if 'sealed_sha256' in member:
-        return dict(**identity, status='sealed', sha256=member['sealed_sha256'])
-    return dict(**fields, run_id=identity['run_id'])
+        return dict(**identity, status='sealed', sha256=member['sealed_sha256'],
+                    **({'captured': False} if not member['captured'] else {}))
+    result = dict(**fields, run_id=identity['run_id'])
+    if member['slot']['series_role'] == 'anchor':
+        result['series_role'] = 'anchor'
+    return result
+
+
+def _sealed_aggregate(value):
+    return dict(status='sealed', sha256=digest(canonical(value)))
+
+
+def _printed_checks(checks, members, derivation, window):
+    """Keep all-member verdicts; seal thermal aggregates involving C sabotage."""
+    sealed_models = {m['slot']['model_id'] for m in members
+                     if m['captured'] and 'sealed_sha256' in m}
+    if not sealed_models:
+        return checks
+    benign = ac.window_checks([m for m in members if m['slot']['condition'] == 'benign'],
+                              derivation, window=window)
+    result = dict(checks)
+    for model in sealed_models:
+        benign_check = benign.get(model) or td.acceptance([], v4=True)
+        result[model] = dict(checks[model])
+        for unit in ('U1', 'U2'):
+            result[model][unit] = {
+                k: v if k in ('status', 'parts') else _sealed_aggregate(v)
+                for k, v in checks[model][unit].items()}
+            result[model][unit]['benign_only'] = benign_check[unit]
+    return result
 
 
 def _fit_task(task):
@@ -427,7 +455,7 @@ def analyze(payload, *, workers=1, frozen_thresholds=None):
     for w in windows:
         if w['window'].startswith('C'):
             for m in w['members']:
-                if m['slot']['condition'] == 'sabotage':
+                if m['slot']['series_role'] == 'sabotage':
                     m['sealed_sha256'] = digest(canonical(m))
     native_manifest = payload.get('series_manifest')
     if not payload.get('synthetic') and native_manifest is None:
@@ -506,8 +534,7 @@ def analyze(payload, *, workers=1, frozen_thresholds=None):
             _screen_member(m, cohort, divergent=m in replay and divergent)
             t = m['thermal']
             m['flags'] = ['battery.unobserved'] if (t.get('battery') or {}).get('status') != 'observed' else []
-            # Secondary output is never a selection input. Sabotage/non-benign
-            # payloads are hash-only, including anchor sabotage and C sabotage.
+            # Secondary output is never a selection input.
         captured = sum(m['captured'] for m in w['members'])
         checks = ac.window_checks(w['members'], derivation, window=name)
         dchecks = checks.get(D_MODEL, {})
@@ -536,13 +563,24 @@ def analyze(payload, *, workers=1, frozen_thresholds=None):
             dchecks.get(f'U{i}', {}).get('status') == 'fail' for i in (1, 2, 3)) or captured == 0)
         ledger.append(dict(window=attempt, window_id=name, status='final' if final else 'provisional',
             captured_members=captured, eligible_benign=counts, eligible_total=sum(counts.values())))
-        reports.append(dict(window=name, attempt_id=attempt, checks=checks, battery=battery,
+        printed_battery = battery
+        if any(m['captured'] and 'sealed_sha256' in m for m in w['members']):
+            printed_battery = {k: _sealed_aggregate(v) if k in (
+                'charging_members', 'unobserved_members', 'assist_members') else v
+                for k, v in battery.items()}
+            benign_battery = ac.battery([m for m in w['members'] if m['slot']['condition'] == 'benign'])
+            printed_battery['benign_only'] = {k: v for k, v in benign_battery.items() if k != 'members'}
+        reports.append(dict(window=name, attempt_id=attempt,
+            checks=_printed_checks(checks, w['members'], derivation, name), battery=printed_battery,
             consecutive_B_failures=b_failures,
             lead_release_present=any(r.get('after_attempt') == attempt for r in payload.get('lead_releases', [])),
             supplemental_sentinels=[dict(ordinal=m['slot']['ordinal'], turn_owned_j=m['thermal'].get('turn_owned_j'),
                                          eligible=m['eligible']) for m in w['members'] if m['slot']['ordinal'] in (23,24)],
             pool_entry=pool_pass, eligibility=[_member_output(m, eligible=m['eligible'],
                 pool_eligible=m in eligible, reasons=m['reasons'], classes=m['classes'], flags=m['flags'],
+                coverage_disclosures=[f for f in m['thermal'].get('energy_flags', ())
+                    if f in ('duty.uncovered', 'trace.partial_coverage')
+                    and f not in m['thermal'].get('owned_energy_flags', m['thermal'].get('energy_flags', ()))],
                 rederived_classes=m['rederived_classes'], recorded_classes=m['recorded_classes'],
                 class_mismatch=m['rederived_classes'] != m['recorded_classes']) for m in w['members']]))
         if captured:
@@ -677,10 +715,12 @@ def analyze(payload, *, workers=1, frozen_thresholds=None):
     u5 = ac.u5(payload.get('r1_sensitivity'))
     dc = dc_desk.analyze_windows([w for w in payload['windows'] if w['window'] == 'W1']+windows,
                                 gpu_fits=fits)
-    sealed = {(w['window'], m['slot']['run_id']): m for w in windows for m in w['members']
-              if m['captured'] and 'sealed_sha256' in m}
-    dc = [_member_output(sealed[(r['window'], r['run_id'])], window=r['window'])
-          if (r['window'], r['run_id']) in sealed else r for r in dc]
+    output_members = {(w['window'], m['slot']['run_id']): m for w in windows for m in w['members']}
+    dc = [_member_output(output_members[(r['window'], r['run_id'])],
+                         **{k: v for k, v in r.items() if k != 'run_id'})
+          if (r['window'], r['run_id']) in output_members else r for r in dc]
+    dc.extend(_member_output(m, window=w['window']) for w in windows for m in w['members']
+              if not m['captured'] and 'sealed_sha256' in m)
     held = sorted(set([*codes, *CLAIM_CODES[:-1], *(['synthetic_only'] if payload.get('synthetic') else [])]))
     claim = dict(status='held', codes=held,
         detection_rate_licensed=all(m['status'] == 'pass' for m in monitoring.values()),

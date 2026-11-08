@@ -235,7 +235,7 @@ class CaptureAndAnchorTests(unittest.TestCase):
         u1a = a['windows'][0]['checks'][e.D_MODEL]['U1']
         u1b = b['windows'][0]['checks'][e.D_MODEL]['U1']
         self.assertEqual(u1a['status'], u1b['status'])
-        self.assertEqual(u1b['turn_admissions'], u1a['turn_admissions']-3)
+        self.assertEqual(u1b['benign_only']['turn_admissions'], u1a['benign_only']['turn_admissions']-3)
         self.assertEqual(b['U4']['per_window']['C1']['skipped'], True)
         self.assertEqual(td.acceptance([m['thermal']], v4=True)['U1']['turn_admissions'], 0)
 

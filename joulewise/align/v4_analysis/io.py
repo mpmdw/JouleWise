@@ -4,13 +4,6 @@ import json
 import os
 from pathlib import Path
 from copy import deepcopy
-from decimal import Decimal
-
-EXACT_SECOND_FIELDS = frozenset((
-    'first_record_endpoint_s', 'epoch_s', 'monotonic_before_s', 'monotonic_after_s',
-    'wall_resolution_s', 'monotonic_resolution_s', 'wall_minus_monotonic_lower_s',
-    'wall_minus_monotonic_upper_s', 'effective_clock_anchor_bound_s',
-))
 
 
 def canonical(value):
@@ -23,28 +16,25 @@ def digest(raw):
 
 
 def strict_json(raw, *, exact_seconds=False):
-    """Reject duplicate/nonfinite JSON; raw exports keep seconds as lexemes.
+    """Reject duplicate/nonfinite JSON; preserve the recorded numeric type.
 
-    Only the raw-source loader enables exact_seconds. Other numeric evidence
-    keeps its existing int/float representation and canonical output format.
+    Harness JSON reals record binary floats, recovered by float(lexeme).
+    Exact decimal seconds must be exported as strings; integers stay exact.
+    exact_seconds remains an accepted loader option for older callers: exact
+    rational conversion happens after decoding the recorded value, not its
+    decimal spelling.
     """
-    def number(value, seconds=False):
-        if isinstance(value, Decimal):
-            return str(value) if seconds else float(value)
-        if isinstance(value, list):
-            return [number(v, seconds) for v in value]
-        return value
     def pairs(items):
         result = {}
         for key, value in items:
             if key in result:
                 raise ValueError('duplicate JSON key')
-            result[key] = number(value, key in EXACT_SECOND_FIELDS) if exact_seconds else value
+            result[key] = value
         return result
     def invalid(_):
         raise ValueError('nonfinite JSON')
     return json.loads(raw, object_pairs_hook=pairs, parse_constant=invalid,
-                      parse_float=Decimal if exact_seconds else float)
+                      parse_float=float)
 
 
 def local_path(root, name):

@@ -20,7 +20,7 @@ from joulewise.adapters.powermetrics import (
 )
 from joulewise.align.apple import reduce_sol as sol
 from joulewise.align.apple.sampler import power_records, TRACE_DOMAIN
-from joulewise.align.attribution import attribute_episode
+from joulewise.align.attribution import attribute_episode, owned_energy_flags
 from joulewise.align.records import ClockMapping, ToolCall
 from joulewise.align.records import to_json
 from joulewise.interfaces import PowerSample
@@ -59,7 +59,21 @@ def a37_starts(supports):
     return result
 
 
+def recorded_endpoints(records, anchor):
+    # The harness recorded a float anchor; later endpoints are that exact
+    # binary value plus native integer elapsed ns, without epoch additions.
+    elapsed = 0
+    result = []
+    for i, record in enumerate(records):
+        elapsed += record.elapsed_ns if i else 0
+        result.append(Fraction(anchor) + Fraction(elapsed, 1_000_000_000))
+    return result
+
+
 def reference_traces(records, *, evidence=EVIDENCE):
+    if records:
+        endpoints = recorded_endpoints(records, records[0].timestamp_s)
+        records = [replace(r, timestamp_s=t) for r, t in zip(records, endpoints)]
     # Snap the original observation sequence, before the sampler projects it.
     ends = [round(Fraction(r.timestamp_s)*1_000_000_000) for r in records]
     native_supports = a37_starts([(end-r.elapsed_ns, end) for r, end in zip(records, ends)])
@@ -100,7 +114,9 @@ def reference_table(data, ep, *, endpoint=ENDPOINT, evidence=EVIDENCE):
     result = {}
     for rail in sol.RAILS:
         attributed = attribute_episode(joined, source='powermetrics', channel=rail)
-        result[rail] = {'attribution': asdict(attributed), 'turns': [
+        record = asdict(attributed)
+        record['flags'] = owned_energy_flags(attributed)
+        result[rail] = {'attribution': record, 'turns': [
             {'turn': t.index, 'owned_j': sum(s.energy.joules for s in attributed.segments if s.turn == t.index),
              'owned_half_width_j': sum(s.energy.half_width_j for s in attributed.segments if s.turn == t.index)}
             for t in ep.turns]}
@@ -131,10 +147,11 @@ class ExtractorEqualityTests(unittest.TestCase):
         self.assertEqual(samples.raw_sha256, hashlib.sha256(data).hexdigest())
         self.assertEqual(samples.raw_size, len(data))
         self.assertEqual(samples.dropped_tail, asdict(diagnostic) if diagnostic else None)
-        self.assertEqual(list(samples.endpoint_seconds(ENDPOINT)), [r.timestamp_s for r in records])
+        endpoints = recorded_endpoints(records, ENDPOINT)
+        self.assertEqual(list(samples.endpoint_seconds(ENDPOINT)), endpoints)
         pm = []
-        for native, detail in zip(records, rich):
-            end = round(Fraction(detail['timestamp_s']) * 1_000_000_000) + OFFSET
+        for native, detail, endpoint in zip(records, rich, endpoints):
+            end = round(endpoint * 1_000_000_000) + OFFSET
             states = (detail.get('gpu') or {}).get('dvfm_states', ())
             active = sum(s.get('used_ns', 0) for s in states)
             clock = sum(s['freq'] * s.get('used_ns', 0) for s in states) / active if active else None

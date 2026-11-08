@@ -59,8 +59,8 @@ class TimeoutTests(unittest.TestCase):
         self.assertEqual(row['classes'], ['X2', 'X3'])
         self.assertFalse(row['eligible'])
         checks = fill['windows'][0]['checks'][e.D_MODEL]
-        self.assertEqual(checks['U1']['thermal_excluded_members'], 1)
-        self.assertLess(checks['U2']['g0_slow_range_c'], 1.)
+        self.assertEqual(checks['U1']['benign_only']['thermal_excluded_members'], 1)
+        self.assertLess(checks['U2']['benign_only']['g0_slow_range_c'], 1.)
         pair = target['slot']['task_pair']
         self.assertEqual(fill['ledger'][0]['eligible_benign'][e.KEYS[pair]], 6)
         for convention in e.CONVENTIONS:
@@ -107,10 +107,11 @@ class ExactTimeTests(unittest.TestCase):
         self.assertEqual(trace.t_ns, (base+954,))
         self.assertEqual(json.loads(trace.notes)['sample_support_ns'], [[base+954-NS, base+954]])
 
-    def test_raw_json_time_lexemes_survive_before_conversion(self):
+    def test_raw_json_float_is_recovered_before_exact_conversion(self):
         value = strict_json(b'{"first_record_endpoint_s":4300000000.000000954,"configuration":{"deadman_s":1200.0}}',
                             exact_seconds=True)
         self.assertIs(type(value['configuration']['deadman_s']), float)
+        self.assertIs(type(value['first_record_endpoint_s']), float)
         samples = sol.reduce_stream(io.BytesIO(b''.join(synthetic_frames(2))))
         samples.columns['elapsed_ns'] = array('q', [NS, NS])
         self.assertEqual(list(samples.monotonic_t_ns(value['first_record_endpoint_s'], -4_300_000_000*NS)),
@@ -204,7 +205,7 @@ class SealTests(unittest.TestCase):
         p['windows'] = p['windows'][:1]
         fill, _ = analyze(p)
         targets = {m['slot']['run_id'] for m in p['windows'][0]['members']
-                   if m['slot']['condition'] == 'sabotage'}
+                   if m['slot']['series_role'] == 'sabotage'}
         found = set()
         def visit(value):
             if isinstance(value, dict):

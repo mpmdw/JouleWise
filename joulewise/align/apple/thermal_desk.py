@@ -12,7 +12,7 @@ from statistics import fmean, stdev
 import json
 from pathlib import Path
 
-from joulewise.align.attribution import attribute_episode
+from joulewise.align.attribution import attribute_episode, owned_energy_flags
 from joulewise.align.apple import thermal as temperature
 
 NS = 1_000_000_000
@@ -287,13 +287,13 @@ def member_record(episode, journal, *, os_readings, pm_samples, pm_period_s,
                                        'meter_end_ns': r['end_ns']-offset if offset is not None else None,
                                        'mapping_uncertainty_ns': mappings[0].uncertainty_ns if len(mappings) == 1 else 0 if offset == 0 else None}
                                     for r in intervals],
-            'energy_flags': energy_flags}
+            'energy_flags': energy_flags, 'owned_energy_flags': list(owned_energy_flags(attributed))}
 
 
 def energy_exclusions(member):
-    reasons = [f for f in member.get('energy_flags', ()) if f.startswith((
+    reasons = [f for f in member.get('owned_energy_flags', member.get('energy_flags', ())) if f.startswith((
         'trace.missing', 'trace.ambiguous', 'clock.', 'clock_anchor_unresolved',
-        'duty.uncovered', 'energy.'))]
+        'trace.partial_coverage', 'duty.uncovered', 'energy.'))]
     for key in ('turn_owned_half_width_j', 'gross_episode_half_width_j'):
         value = member.get(key)
         if type(value) not in (int, float) or not math.isfinite(value):
@@ -750,7 +750,7 @@ def thermal_timeout_exclusions(member):
     reasons = ['thermal.' + ('gate' if i['kind'] == 'G1' else 'hold') + '_timeout:derived'
                for i in member.get('intervals', ())
                if i.get('kind') in ('G1', 'H') and i.get('outcome') == 'timeout']
-    if member.get('g1_h_timeouts', 0) > 0 and member.get('status') != 'completed':
+    if (member.get('g1_h_timeouts') or 0) > 0 and member.get('status') != 'completed':
         reasons.append('thermal.gate_timeout:derived_stopped_episode')
     return reasons
 

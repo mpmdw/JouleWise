@@ -743,4 +743,17 @@ def attribute_episode(
     return EpisodeAttribution(episode.episode_id, channel, total, segments, _flags(flags))
 
 
-__all__ = ["EnergyEstimate", "SegmentEnergy", "EpisodeAttribution", "trace_energy", "attribute_episode"]
+def owned_energy_flags(attributed: EpisodeAttribution) -> tuple[str, ...]:
+    """A2(4): scope coverage defects to turn/tool segments, retaining other flags.
+
+    The full episode flags and total/unowned segment flags remain disclosures.
+    Gates and holds have turn=None after the production ownership partition.
+    """
+    coverage = ('duty.uncovered', 'trace.partial_coverage')
+    return _flags([f for f in attributed.flags if f not in coverage] + [
+        f for segment in attributed.segments if segment.turn is not None
+        for f in segment.energy.flags if f in coverage])
+
+
+__all__ = ["EnergyEstimate", "SegmentEnergy", "EpisodeAttribution", "trace_energy", "attribute_episode",
+           "owned_energy_flags"]

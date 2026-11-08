@@ -278,24 +278,17 @@ class SampleColumns:
         return len(self.columns['elapsed_ns'])
 
     def endpoint_seconds(self, first_record_endpoint_s):
-        """Preserve textual seconds; retain the adapter order for float inputs."""
+        """Accumulate native integer ns from the exact recorded anchor value."""
         from joulewise.validation import finite_float
-        if not isinstance(first_record_endpoint_s, float):
-            anchor = Fraction(first_record_endpoint_s)
-            cumulative_ns = 0
-            result = []
-            for i, elapsed in enumerate(self.columns['elapsed_ns']):
-                if i:
-                    cumulative_ns += elapsed
-                result.append(anchor + Fraction(cumulative_ns, 1_000_000_000))
-            return result
-        anchor = finite_float(first_record_endpoint_s, 'first_record_endpoint_s')
-        cumulative = 0.0
-        result = array('d')
+        if isinstance(first_record_endpoint_s, float):
+            finite_float(first_record_endpoint_s, 'first_record_endpoint_s')
+        anchor = Fraction(first_record_endpoint_s)
+        cumulative_ns = 0
+        result = []
         for i, elapsed in enumerate(self.columns['elapsed_ns']):
             if i:
-                cumulative += elapsed / 1_000_000_000.0
-            result.append(anchor + cumulative)
+                cumulative_ns += elapsed
+            result.append(anchor + Fraction(cumulative_ns, 1_000_000_000))
         return result
 
     def monotonic_t_ns(self, first_record_endpoint_s, offset_ns):
@@ -615,7 +608,7 @@ def turn_energy_table(samples, episode, *, first_record_endpoint_s, nominal_inte
     Do not cache this return value: it depends on the supplied episode, clock
     mapping and uncertainty evidence. No fitting or eligibility occurs here.
     """
-    from joulewise.align.attribution import attribute_episode
+    from joulewise.align.attribution import attribute_episode, owned_energy_flags
     traces, flags = samples.power_traces(first_record_endpoint_s,
                                          nominal_interval_ns=nominal_interval_ns, evidence=evidence)
     joined = replace(episode, power_traces=traces,
@@ -623,7 +616,11 @@ def turn_energy_table(samples, episode, *, first_record_endpoint_s, nominal_inte
     result = {}
     for rail in RAILS:
         attributed = attribute_episode(joined, source='powermetrics', channel=rail)
-        result[rail] = {'attribution': asdict(attributed), 'turns': [
+        record = asdict(attributed)
+        # Gross and unowned coverage remains disclosed in total/segments;
+        # the table's screening flags describe coverage of owned work only.
+        record['flags'] = owned_energy_flags(attributed)
+        result[rail] = {'attribution': record, 'turns': [
             {'turn': turn.index,
              'owned_j': sum(s.energy.joules for s in attributed.segments if s.turn == turn.index),
              'owned_half_width_j': sum(s.energy.half_width_j for s in attributed.segments if s.turn == turn.index)}

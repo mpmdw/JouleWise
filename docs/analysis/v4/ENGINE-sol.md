@@ -1,4 +1,4 @@
-# V4 primary engine (Sol), R23e
+# V4 primary engine (Sol), R23f
 
 2026-11-08. **PROVISIONAL: synthetic qualification, no live study validation.**
 Authority: the lead's engine-r23 brief (A37 and R23-E1/R23-1–4), on
@@ -32,34 +32,61 @@ and calibration exclusion helpers feed U1/U2, W1 screening, GPU fits and
 calibration counts. The ten-C/T-block hand fixture plus a timed-out W1 anchor
 prints K=10 and `W1_anchor_block: excluded:X2`.
 
-Seconds-to-ns conversion uses exact rational arithmetic with ties to even.
-Raw-source JSON preserves the decimal lexemes of endpoint/stamp/anchor fields;
-configuration and other numeric evidence retain their existing types. Decimal,
-text and integer inputs remain exact; already-materialized floats use their
-exact binary value, so `4300000000.000001` converts to epoch +954 ns, not
-+1024 ns. Textual endpoints accumulate integer elapsed ns; the trusted float
-API retains its adapter addition order before exact conversion. Supports use
-integer endpoint minus native elapsed ns for both power and thermal rows.
-Legacy conservative clock uncertainty budgets remain in place.
+R23f applies the lead's corrected P2, owned-time A2(4), A27 scope and nullable
+timeout rulings on `16fd0cbf2` (2026-11-08). This supersedes R23e's decimal
+lexeme interpretation. Seconds-to-ns conversion uses exact rational arithmetic
+with ties to even **on the value the harness recorded**. A JSON real written
+from a binary float is recovered as `float(lexeme)`, then converted through
+`Fraction`; it is never treated as an exact decimal spelling. Integers and
+explicit exact-decimal strings stay exact, as do Decimal API inputs.
+The synthetic production-style float export yields the same A21 offset as
+production `stamp_mapping`: `-1766813254444549501`, and passes the exported
+offset check through `raw.member`. The 4.3e9 s float is exactly epoch plus
+953.67431640625 ns, so it still rounds to +954 ns. Both float and exact endpoint
+APIs add cumulative native **integer** elapsed ns to the exact anchor; no float
+epoch addition intervenes. Supports subtract native integer elapsed ns for both
+power and thermal rows. Legacy conservative clock uncertainty budgets remain.
 
 A37 still snaps only original-record interior seams of at most 1000 ns.
 Sol traces carry `support_policy: A37`, preventing a downstream reader from
 snapping different neighbours after sorting/filtering. The legacy reader's
 float-quantum fallback is also capped at 1000 ns. Sol attribution leaves larger
-gaps unfilled, contributes no invented gap energy, and flags `duty.uncovered`;
-uncovered owned time excludes through `energy_unavailable`. Synthetic 9e9 s
+gaps unfilled, contributes no invented gap energy, and flags `duty.uncovered`.
+A2(4) checks each owned segment after production tool ownership and gate/hold
+subtraction: either `duty.uncovered` or `trace.partial_coverage` in owned time
+excludes through `energy_unavailable`. `thermal_desk.member_record` retains
+full `energy_flags` and adds `owned_energy_flags` for screening. Sol's turn-table
+attribution flags use the same owned-coverage scope; gross/segment flags remain
+in the table as disclosures. The printed eligibility `coverage_disclosures`
+lists defects confined to non-owned time. The p7 half-second owned edge excludes;
+the p8 G1 seam stays eligible and discloses `duty.uncovered`. Pre-turn gaps and
+hold seams also disclose without exclusion; uncovered own-tool time excludes.
+Desk-only exports need the freshly derived owned flags for this distinction;
+legacy flag-only inputs cannot locate a coverage defect and retain their
+conservative flag screening. Synthetic 9e9 s
 records with 1900/2000 ns seams establish this through the raw adapter and
 member screen. The contiguous 2026-epoch control retains its literal supports,
 30 J integral and eligibility. This does not claim byte equality with incorrect
 pre-R23e subsecond float timing. Scorer/reducer identities cover the changed
 conversion/support code, so prior prospective freezes require regeneration.
 
-A27 seals every C-window sabotage member's per-member output: eligibility,
-battery, cache, realized counts and secondary DC rows retain only their
-identifiers, `status: sealed` and a SHA-256 of the whole input member before
-analysis annotations. Token counts are included in the seal, with no numeric
-token-count leaf. Aggregated registered diagnostics still run; C sabotage
-continues to enter no score, calibration pool, known-H or carrier curve.
+A27 seals only the **scored held-out C-window sabotage roster**. Ordinals 2/3
+are 30B hardware anchors for σ_w/U4, exempt from A27, and print
+`series_role: anchor`. Their secondary DC presence remains sealed under A20's
+separate non-benign rule; raw sabotage DC is never opened.
+Scored C-sabotage eligibility, battery, cache, realized-count and secondary DC
+rows retain only their identifiers, `status: sealed` and a SHA-256 of the whole
+input member before analysis annotations. They have no numeric token-count
+leaf. A missing capture also
+prints `captured: false`, including the DC presence row. U1/U2 verdicts still
+use all registered members. Their printed aggregate values involving scored
+C sabotage are replaced at their existing keys by `{status: sealed, sha256}`;
+`benign_only` prints the corresponding benign arithmetic beside each unit.
+This includes U1 exclusion/admission/G1-H/G0 counts and the U2 temperature range;
+U2 part verdicts stay visible. Battery aggregate counts likewise seal beside
+benign-only counts. Internal pool decisions continue to use all-member verdicts.
+C sabotage continues to enter no score, calibration pool, known-H or carrier curve.
+`g1_h_timeouts: null` is treated as zero.
 
 ## Ruling → code map
 
@@ -70,7 +97,7 @@ exclusions mean modules in `v4_analysis/`.
 |---|---|
 | A0 | `raw.member/window` map an explicit digest-bound manifest over the lead-owned raw export. `io.load` retains the desk-export adapter. Export creation/authentication is lead-owned. |
 | A1 | `engine._fit_task`: scored J is `math.fsum` of fitted turn rows; refusal on disagreement with desk owned J at 1e-12 relative. Gross J is printed only. |
-| A2 | `apple.reduce_sol.turn_energy_table`: production `attribute_episode`, native prorated supports, tools, overlap ownership and holds. Invalid thermal custody remains excluded by the thermal desk. |
+| A2 | `apple.reduce_sol.turn_energy_table`: production `attribute_episode`, native prorated supports, tools, overlap ownership and holds. `attribution.owned_energy_flags` scopes interior and edge coverage defects to owned segments; non-owned coverage prints as disclosure. Invalid thermal custody remains excluded by the thermal desk. |
 | A3 | `engine._rows/_fit_task`: turn/episode h=0 and standard_uncertainty. Source bounds print under diagnostic_bounds. Missing gross totals/bounds do not select members or affect scores. Frozen fitter boundary flags survive. |
 | A4 | Per-window × pair × convention; benign LOTO keyed by run_id; full benign fit for sabotage; T uses its own fits. Only thresholds carry C→T. |
 | A5 | Pair × convention, one GPU rail, sample maximum, strict >. |
@@ -89,13 +116,13 @@ exclusions mean modules in `v4_analysis/`.
 | A18 | `_test_summary`: one-sided 95% Clopper–Pearson via production incomplete beta; missing assignments retained. |
 | A19 | Exactly eight eligible token-identical W1 runs, second-stage indicator, admission within 2 s. Recorded G1 waiting is an above-E+δ sidecar sample before release. Numbers print even if treatment was not delivered. |
 | A20 | `dc.capture/analyze_windows`: benign DC desk actually runs; whole-member and owned integrals, battery-assist disclosure, own five-term h=0 LOTO model. GPU coefficients never transfer. Non-benign rows sealed; comparison presence/status only. Missing DC never selects GPU. |
-| A21 | `raw.member` calls exact production stamp_mapping over all stamps, anchor widened; optional exported offset_ns checked exactly. Raw clock/endpoint decimal lexemes survive JSON parsing. `sampler.seconds_ns` uses exact rational conversion; SampleColumns subtracts integer native elapsed ns. |
+| A21 | `raw.member` calls production stamp_mapping over all recorded stamps, anchor widened; optional exported offset_ns checked exactly. `io.strict_json` recovers recorded binary floats before exact rational conversion; explicitly exact strings/integers stay exact. SampleColumns accumulates/subtracts integer native elapsed ns for both endpoint APIs. |
 | A22 | U3 heavy-tail trigger uses each difference's zero-centred leave-one-out RMS. |
 | A23 | Only U1–U3 FAIL bars pool entry; INCONCLUSIVE prints and counts. |
 | A24 | Barred windows have no GPU fits/scores and no U6 contribution. DC residual fits withhold barred/ineligible members. |
 | A25 | T fits/scores withheld and thresholds null until calibration_complete; prospective freeze checked before opening T sources. |
 | A26 | Undefined eligible C score holds the threshold with nonfinite_calibration_score; m never silently shrinks. |
-| A27 | C sabotage enters no GPU fit, score, known-H or carrier curve. Whole-member output is hash/status only, including realized token counts, eligibility, battery, cache and DC desks. |
+| A27 | Scored C sabotage enters no GPU fit, score, known-H or carrier curve. Its whole-member output is hash/status, plus captured:false if absent. 30B ordinals 2/3 print as anchors. All-member U1/U2 verdicts are preserved; thermal aggregates involving scored sabotage seal beside benign_only aggregates. |
 | A28 | battery.unobserved is retained for GPU; window B bar unavailable. |
 | A29 | Actual seed and four-slot cohort/model-stack identity checked; named classes exclude mismatches. |
 | A30 | Missing/Unknown PM is not X3; U1(a) inconclusive. |
@@ -321,3 +348,11 @@ Named-file compileall and `git diff --check` passed. The two reducer cases
 that read captured fixtures/templates and the full suite were deliberately
 unrun. See `docs/run_reports/2026-11-08-engine-r23e.md` for exact commands,
 failing-first evidence, compatibility changes and lead handoff.
+
+R23f verification: **213 targeted synthetic tests passed**, including 13 new
+hand tests and the retained serial/parallel byte-equality checks. Original p7/p8
+probes give the ruled outcomes. Named-file compileall, protected-path diff and
+`git diff --check` pass. The two captured/template-reading reducer cases and
+full suite remain unrun. The initial test-process overlap, exact commands,
+compatibility limits and lead release handoff are recorded in
+`docs/run_reports/2026-11-08-engine-r23f.md`.
