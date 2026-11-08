@@ -5250,7 +5250,7 @@ def _manifest_members(
                 compression_records=compression_records,
             ),
             runs_root / bundle_id,
-            **(dict(compression_records=compression_records) if compression_records is not None else {}),
+            **({"compression_records": compression_records} if compression_records is not None else {}),
         )
         for bundle_id in result
     ):
@@ -6707,11 +6707,11 @@ def _manifest_bundle_paths(
                 if _current_strict_summary(
                     _read_json_object(path / "summary_metrics.json", compression_records=compression_records),
                     path,
-                    **(dict(compression_records=compression_records) if compression_records is not None else {}),
+                    **({"compression_records": compression_records} if compression_records is not None else {}),
                 ) or _current_strict_summary(
                     _read_json_object(result[bundle_id] / "summary_metrics.json", compression_records=compression_records),
                     result[bundle_id],
-                    **(dict(compression_records=compression_records) if compression_records is not None else {}),
+                    **({"compression_records": compression_records} if compression_records is not None else {}),
                 ):
                     return None
                 continue
@@ -6828,7 +6828,7 @@ def _current_core_rederivation_reasons(
             else:
                 reasons.add(reason)
     restore_kwargs = (
-        dict(compression_records=compression_records)
+        {"compression_records": compression_records}
         if compression_records is not None else {}
     )
     paths = _manifest_bundle_paths(manifests, runs_root, compression_records=compression_records)

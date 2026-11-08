@@ -610,8 +610,7 @@ def busy_fraction_admission_admitted(final: Any, cpu: Any = None) -> bool:
     cpu = raw_cpu if cpu is None else cpu
     return (
         final.get("admitted") is True
-        # BYTES lineage landing: block-6 metadata is outside the sealed B5 code census.
-        and final.get("busy" + "_fraction_admitted") is True
+        and final.get("busy_fraction_admitted") is True
         and isinstance(raw_cpu, Mapping)
         and busy_fraction_only(raw_cpu)
         and isinstance(cpu, Mapping)

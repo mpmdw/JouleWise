@@ -148,7 +148,10 @@ class Step4ReasonTableTests(unittest.TestCase):
             self.assertEqual(table[name], sorted(set(table[name])))
             self.assertTrue(all(type(code) is str and code for code in table[name]))
         self.assertFalse(set(table['mask']) & set(table['tooling']))
-        self.assertEqual((len(table['mask']), len(table['tooling'])), (42, 1898))
+        # 1898 on main; +2 for the BYTES lineage landing (DLE-5 item 6): 'busy_fraction_admitted' and
+        # 'compression_records', both tooling (neither matches the mask pattern).
+        self.assertEqual((len(table['mask']), len(table['tooling'])), (42, 1900))
+        self.assertTrue({'busy_fraction_admitted', 'compression_records'} <= set(table['tooling']))
 
     def test_R1_generator_copy_is_the_committed_blind_generator(self):
         digest = hashlib.sha256(GENERATOR.read_bytes()).hexdigest()
