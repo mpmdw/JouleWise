@@ -19,6 +19,10 @@ import os
 import subprocess
 
 NS = 1_000_000_000
+# Reader diagnostics only: 20 ppm allows the review's ~9.2 ppm ordinary drift.
+# The 1 ms floor covers short records. Neither is a capture acceptance rule.
+CLOCK_DRIFT_PPM = 20
+CLOCK_FLOOR_NS = 1_000_000
 PHASES = ("arm", "dwell", "idle", "scaffold", "decode", "gates", "holds",
           "references", "finalize", "offload", "unattributed")
 
@@ -36,6 +40,15 @@ def integer(value):
     if type(value) is not int:
         raise ValueError("nanosecond timestamp must be an integer")
     return value
+
+
+def drift_allowance(elapsed_ns):
+    return max(CLOCK_FLOOR_NS, (abs(elapsed_ns)*CLOCK_DRIFT_PPM+999_999)//1_000_000)
+
+
+def drift_detail(delta, elapsed):
+    ppm = delta*1_000_000/elapsed if elapsed else None
+    return f"wall_minus_monotonic_ns={delta} drift_ppm={ppm}"
 
 
 def safe_path(path):
@@ -224,8 +237,8 @@ class _Reader:
             if "started_monotonic_ns" in row and "ended_monotonic_ns" in row:
                 elapsed = integer(row["ended_monotonic_ns"]) - integer(row["started_monotonic_ns"])
                 # Diagnostic only; no clock correction or measurement tolerance changes.
-                if abs((b-a)-elapsed) > 1_000_000:
-                    self.warn(source, "clock_elapsed_disagreement wall_minus_monotonic_ns="+str(b-a-elapsed))
+                if elapsed < 0 or abs((b-a)-elapsed) > drift_allowance(elapsed):
+                    self.warn(source, "clock_elapsed_disagreement "+drift_detail(b-a-elapsed, elapsed))
             return a, b
         except (ValueError, TypeError) as error:
             self.warn(source, str(error))
@@ -260,6 +273,31 @@ class _Reader:
         doc = self.load(path)
         if not isinstance(doc, dict):
             return
+
+        def duration(value, source):
+            if value is None:
+                return None
+            try:
+                result = ns(value)
+                if result < 0:
+                    raise ValueError("negative_wait_duration")
+                return result
+            except ValueError as error:
+                self.warn(source, str(error))
+                return None
+
+        def boundaries(row, source):
+            if not isinstance(row, dict):
+                return None
+            if "entry_epoch_s" in row and "exit_epoch_s" in row:
+                return self.timed(dict(started_epoch_s=row["entry_epoch_s"],
+                                       ended_epoch_s=row["exit_epoch_s"]), source)
+            if any(k in row for k in ("started_ns", "started_epoch_s", "ended_ns", "ended_epoch_s")):
+                return self.timed(row, source)
+            # In particular, bare g0.start_ns/end_ns are episode monotonic,
+            # NOT epoch. Do not place them without a clock bridge.
+            return None
+
         def attempt(row, source):
             if not isinstance(row, dict):
                 self.warn(source, "expected_attempt_object")
@@ -274,24 +312,78 @@ class _Reader:
                          if name in ("pre_calibration_bracket", "post_calibration_bracket") else "unattributed")
                 self.add(*times, phase, source, 3, activity=name)
                 self.bounds.append(times)
-            wait = row.get("os_batch_wait_s")
-            try:
-                wait_ns = ns(wait) if wait is not None else None
-                if wait_ns is not None and wait_ns < 0:
-                    raise ValueError("negative_os_batch_wait")
-            except ValueError as error:
-                self.warn(source, str(error))
-                wait_ns = None
-            # Wait occurs BEFORE optional release and started_ns. Do not invent
-            # its position by subtracting it from the model start timestamp.
+            wait_ns = duration(row.get("os_batch_wait_s"), source+".os_batch_wait_s")
+            wait_times = boundaries(row.get("os_batch_wait"), source+".os_batch_wait")
+            release = row.get("g0_release")
+            if release is not None and not isinstance(release, dict):
+                self.warn(source, "expected_g0_release_object")
+            gate = release.get("g0") if isinstance(release, dict) else None
+            if gate is not None and not isinstance(gate, dict):
+                self.warn(source, "expected_g0_object")
+                gate = None
+            release_times = boundaries(release, source+".g0_release")
+            gate_times = boundaries(gate, source+".g0_release.g0")
+            gate_wait = duration(release.get("g0_wait_s", (gate or {}).get("duration_s")),
+                                 source+".g0_release.g0_wait_s") if isinstance(release, dict) else None
             self.attempts.append(dict(name=name, attempt=row.get("attempt"), source=source,
                                      start_ns=times[0] if times else None, end_ns=times[1] if times else None,
                                      os_batch_wait_ns=wait_ns, wait_placement="unplaced",
+                                     os_batch_wait_basis="requested, unmeasured",
+                                     os_batch_wait_interval=None, gap_before_ns=None,
+                                     g0_release=dict(interval=None, gate_interval=None, wait_ns=gate_wait,
+                                                     placement="unplaced") if release is not None else None,
+                                     _wait_times=wait_times, _release_times=release_times, _gate_times=gate_times,
                                      aggregate_phases_s=_plain((row.get("result") or {}).get("phases_s"))))
-            if wait_ns:
-                self.warn(source, "os_batch_wait_unplaced")
         for i, row in enumerate(doc.get("phases", [])):
             attempt(row, f"{path}#phases[{i}]")
+        # Chronology includes superseded attempts; JSON nesting is not order.
+        previous_end = None
+        self.attempts.sort(key=lambda r: (r["start_ns"] is None, r["start_ns"] or 0))
+        for row in self.attempts:
+            start, end, source = row["start_ns"], row["end_ns"], row["source"]
+            if start is not None and previous_end is not None:
+                row["gap_before_ns"] = start-previous_end
+
+            def place(times, activity, priority, upper):
+                if times is None or start is None:
+                    return None
+                a, b = times
+                if b > upper or (previous_end is not None and a < previous_end):
+                    self.warn(source, activity+"_outside_pre_attempt_gap")
+                    return None
+                self.add(a, b, "gates", source+"."+activity, priority, activity=activity)
+                self.bounds.append(times)
+                return dict(start_ns=a, end_ns=b, duration_ns=b-a, basis="measured boundaries")
+
+            release_times, gate_times = row.pop("_release_times"), row.pop("_gate_times")
+            release = row["g0_release"]
+            if release is not None:
+                release["interval"] = place(release_times, "g0_release", 6, start)
+                if gate_times and release_times and not (release_times[0] <= gate_times[0] <= gate_times[1] <= release_times[1]):
+                    self.warn(source, "g0_release_gate_outside_release")
+                else:
+                    release["gate_interval"] = place(gate_times, "g0_release_wait", 7, start)
+                if release["interval"] or release["gate_interval"]:
+                    release["placement"] = "measured boundaries"
+                else:
+                    self.warn(source, "g0_release_unplaced")
+            release_start = min((i[0] for i in (release_times, gate_times) if i), default=start)
+            wait_times = row.pop("_wait_times")
+            row["os_batch_wait_interval"] = place(wait_times, "os_batch_wait", 6, release_start)
+            if row["os_batch_wait_interval"] is not None:
+                row["wait_placement"] = "measured boundaries"
+                row["os_batch_wait_basis"] = "requested sleep total; interval separately measured"
+            elif row["os_batch_wait_ns"]:
+                # An optional requested position is a table annotation ONLY:
+                # no measured ledger interval, and no observed bound extension.
+                if release is None and start is not None:
+                    row["os_batch_wait_interval"] = dict(start_ns=start-row["os_batch_wait_ns"],
+                        end_ns=start, duration_ns=row["os_batch_wait_ns"], basis="requested, unmeasured")
+                    row["wait_placement"] = "inferred before attempt; excluded from ledger"
+                else:
+                    self.warn(source, "os_batch_wait_unplaced; requested, unmeasured")
+            if end is not None:
+                previous_end = max(previous_end, end) if previous_end is not None else end
 
     def bundle(self, path):
         meta_path = path+"/metadata.json"
@@ -308,6 +400,7 @@ class _Reader:
         events = self.load(event_path, lines=True)
         opened = {}
         run_start = run_end = None
+        event_times = []
         stage_map = {"validate": "scaffold", "prepare": "scaffold", "warmup": "scaffold",
                      "idle_baseline": "idle", "idle_drift_sentinel": "idle",
                      "measured_run": "unattributed", "cleanup": "scaffold", "reduce": "scaffold"}
@@ -320,6 +413,7 @@ class _Reader:
             except (KeyError, ValueError, TypeError) as error:
                 self.warn(source, "invalid_event_timestamp "+str(error))
                 continue
+            event_times.append(at)
             kind, phase = row.get("event_type"), row.get("phase")
             if kind == "run_started":
                 if run_start is not None:
@@ -344,11 +438,17 @@ class _Reader:
             self.warn(source, "unclosed_event="+str(phase))
         if run_start is not None and run_end is not None and run_end >= run_start:
             state["bounds"] = (run_start, run_end)
-            self.add(run_start, run_end, "unattributed", event_path+"#run", 10, member)
-            self.bounds.append((run_start, run_end))
+            state["bounds_basis"] = "run_started_to_run_finalized"
         else:
             state["unavailable"].append("member_wall")
             self.warn(event_path, "member_boundaries_unavailable")
+            state["bounds_basis"] = "event_envelope_incomplete_run" if event_times else "unavailable"
+            if event_times:
+                state["bounds"] = (min(event_times), max(event_times))
+                self.warn(event_path, "incomplete_run_bounded_by_event_envelope")
+        if state["bounds"] is not None:
+            self.add(*state["bounds"], "unattributed", event_path+"#run", 10, member)
+            self.bounds.append(state["bounds"])
         self.episode(path+"/outputs/align_episode.json", member, state)
 
     def episode(self, path, member, state):
@@ -362,12 +462,17 @@ class _Reader:
                     and m.get("episode_domain") == ep.get("clock_domain")]
         try:
             pairs = hardware.get("paired_clock_stamps_ns") or []
+            drift = 0
+            mono_elapsed = integer(ep["end_ns"])-integer(ep["start_ns"])
             if len(pairs) >= 2:
                 epoch_elapsed = integer(pairs[-1]["epoch_ns"])-integer(pairs[0]["epoch_ns"])
                 mono_elapsed = ((integer(pairs[-1]["monotonic_before_ns"])+integer(pairs[-1]["monotonic_after_ns"]))//2
                                 - (integer(pairs[0]["monotonic_before_ns"])+integer(pairs[0]["monotonic_after_ns"]))//2)
-                if abs(epoch_elapsed-mono_elapsed) > 1_000_000:
-                    raise ValueError("episode_clock_elapsed_disagreement; placement_unavailable")
+                if epoch_elapsed < 0 or mono_elapsed < 0:
+                    raise ValueError("reversed_paired_clock_interval")
+                drift = epoch_elapsed-mono_elapsed
+                state["clock_elapsed_drift_ns"] = drift
+                state["clock_elapsed_drift_ppm"] = drift*1_000_000/mono_elapsed if mono_elapsed else None
             if len(mappings) > 1:
                 raise ValueError("conflicting_clock_mappings")
             if len(mappings) == 1:
@@ -375,6 +480,11 @@ class _Reader:
                 uncertainty = integer(mappings[0]["uncertainty_ns"])
                 if uncertainty < 0:
                     raise ValueError("negative_clock_uncertainty")
+                # The native mapping already includes its anchor span. Keep it
+                # usable; conservatively expose an additional observed-drift
+                # allowance, rather than treating 1 ms as a placement veto.
+                state["recorded_clock_mapping_uncertainty_ns"] = uncertainty
+                uncertainty += abs(drift)
             else:
                 # Early episodes can carry paired stamps but no trace mapping.
                 if not pairs:
@@ -383,8 +493,17 @@ class _Reader:
                 upper = max(integer(p["epoch_ns"])-integer(p["monotonic_before_ns"]) for p in pairs)
                 resolution = max(integer(p.get("wall_resolution_ns", 0)) +
                                  integer(p.get("monotonic_resolution_ns", 0)) for p in pairs)
+                if resolution < 0 or any(integer(p["monotonic_after_ns"]) < integer(p["monotonic_before_ns"])
+                                         for p in pairs):
+                    raise ValueError("invalid_paired_clock_bracket")
                 offset, uncertainty = (lower+upper)//2, (upper-lower+1)//2+resolution
+                if abs(drift) > uncertainty+drift_allowance(mono_elapsed):
+                    raise ValueError("episode_clock_elapsed_disagreement; placement_unavailable; "+
+                                     drift_detail(drift, mono_elapsed))
                 self.warn(path, "paired_clock_bracket_only")
+            if abs(drift) > drift_allowance(mono_elapsed):
+                self.warn(path, "episode_clock_elapsed_disagreement; mapping_retained; "+
+                          drift_detail(drift, mono_elapsed))
             state["clock_mapping_uncertainty_ns"] = uncertainty
             a, b = integer(ep["start_ns"])+offset, integer(ep["end_ns"])+offset
             if b < a:
@@ -399,6 +518,10 @@ class _Reader:
                 self.warn(path, "episode_outside_member_bounds")
                 state["unavailable"].append("episode_placement")
                 return
+        else:
+            self.warn(path, "episode_member_bounds_unavailable")
+            state["unavailable"].append("episode_placement")
+            return
         self.add(a, b, "unattributed", path, 25, member)
         self.bounds.append((a, b))
         state["turns"] = len(ep.get("turns", []))
@@ -493,11 +616,15 @@ def read_window(read_blob, *, night_result=None, chain_journal=None, chain_start
     if start is not None and end is not None:
         if end < start:
             raise ValueError("chain exit precedes start")
-        reader.bounds.append((start, end))
         if "monotonic_ns" in start_doc and "monotonic_ns" in end_doc:
-            delta = (end-start)-(integer(end_doc["monotonic_ns"])-integer(start_doc["monotonic_ns"]))
-            if abs(delta) > 1_000_000:
-                reader.warn(chain_exited, "clock_elapsed_disagreement wall_minus_monotonic_ns="+str(delta))
+            elapsed = integer(end_doc["monotonic_ns"])-integer(start_doc["monotonic_ns"])
+            delta = (end-start)-elapsed
+            if elapsed < 0 or abs(delta) > drift_allowance(elapsed):
+                reader.warn(chain_exited, "clock_elapsed_disagreement "+drift_detail(delta, elapsed))
+    # A lone terminal is still observed evidence, including the unknown tail.
+    for boundary in (start, end):
+        if boundary is not None:
+            reader.bounds.append((boundary, boundary))
     if chain_journal:
         reader.journal(chain_journal, stage_phases)
     if r1_result:
@@ -614,7 +741,9 @@ def worksheet(report):
         from joulewise.align.window_timing_r0 import worksheet_r0
         lines += worksheet_r0(report["r0"])
     lines += ["", "MEMBERS (seconds; phase shares use the member's observed wall)",
-              "member\twall\tidle\tscaffold\tprefill\tdecode\ttool\tG0\tG1\tH\tunknown\ttail\tturns\ttokens\tunavailable"]
+              "decode excludes tool-call time and gates/holds; tool is a separate disjoint activity.",
+              "Native R1 phases_s.decode includes tool-call time (subtracts holds only); its totals may overlap tool.",
+              "member\twall\tidle\tscaffold\tprefill\tdecode_excluding_tools\ttool\tG0\tG1\tH\tunknown\ttail\tturns\ttokens\tunavailable"]
     def seconds(value):
         return "unavailable" if value is None else f"{value/NS:.6f}"
     for member, state in report["members"].items():
@@ -629,18 +758,31 @@ def worksheet(report):
         if state["wall_ns"]:
             lines.append("  phase fractions: "+", ".join(f"{p}={v/state['wall_ns']:.6%}" for p, v in phases.items() if v))
         lines.append("  activities (disjoint seconds): "+", ".join(f"{p}={v/NS:.6f}" for p, v in activities.items()))
+        lines.append("  member bounds: "+state["bounds_basis"])
         for gate in state["gate_waits"]:
             lines.append(f"  {gate['kind']} {gate['outcome']}: {seconds(gate['duration_ns'])} s")
     lines += ["", "STAGES (inclusive envelopes; do not add these to the disjoint ledger)"]
     for stage in report["stages"]:
         lines.append(f"{stage['stage_id']} {stage['kind']} rc={stage['rc']}: "+seconds(stage["end_ns"]-stage["start_ns"])+" s")
-    lines += ["", "R1 ATTEMPTS (aggregate batch waits are unplaced; never added to wall)"]
+    lines += ["", "R1 ATTEMPTS (inclusive; only measured boundaries enter the disjoint ledger)",
+              "Requested sleep totals are requested, unmeasured; inferred positions never extend observed wall."]
     for attempt in report["attempts"]:
         duration = attempt["end_ns"]-attempt["start_ns"] if attempt["start_ns"] is not None else None
         lines.append(f"{attempt['name']} attempt={attempt['attempt']} wall="+seconds(duration)+" s; os_batch_wait="+
-                     seconds(attempt["os_batch_wait_ns"])+" s ("+attempt["wait_placement"]+")")
+                     seconds(attempt["os_batch_wait_ns"])+" s ("+attempt["os_batch_wait_basis"]+"); "+
+                     attempt["wait_placement"]+"; gap_before="+seconds(attempt["gap_before_ns"])+" s")
+        def show_interval(label, interval):
+            if interval is not None:
+                lines.append(f"  {label}: [{interval['start_ns']}, {interval['end_ns']}) epoch ns; "+
+                             seconds(interval["duration_ns"])+" s ("+interval["basis"]+")")
+        show_interval("os_batch_wait", attempt["os_batch_wait_interval"])
+        if attempt["g0_release"] is not None:
+            release = attempt["g0_release"]
+            lines.append("  g0_release: "+release["placement"]+"; recorded G0 wait="+seconds(release["wait_ns"])+" s")
+            show_interval("g0_release envelope", release["interval"])
+            show_interval("g0_release gate", release["gate_interval"])
         if attempt["aggregate_phases_s"] is not None:
-            lines.append("  recorded phase totals (unplaced, may overlap): "+json.dumps(attempt["aggregate_phases_s"], sort_keys=True))
+            lines.append("  recorded phase totals (unplaced, may overlap; decode includes tools): "+json.dumps(attempt["aggregate_phases_s"], sort_keys=True))
     ceiling = report["ceiling"]
     lines += ["", "CEILING: "+ceiling["status"],
               "  origin-to-terminal="+seconds(ceiling["terminal_minus_origin_ns"])+" s; cap="+seconds(ceiling["cap_ns"])+" s",

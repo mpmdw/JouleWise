@@ -56,7 +56,9 @@ class WindowTimingTest(unittest.TestCase):
             result={"phases_s": {"decode": 20}})])).encode()
         report = self.read(docs, r1_result="r1.json")
         self.assertEqual(sum(a["os_batch_wait_ns"] for a in report["attempts"]), 11167*NS)
-        self.assertTrue(all(a["wait_placement"] == "unplaced" for a in report["attempts"]))
+        self.assertEqual(report["attempts"][1]["wait_placement"], "unplaced")
+        self.assertTrue(all(a["os_batch_wait_basis"] == "requested, unmeasured" for a in report["attempts"]))
+        self.assertNotIn("os_batch_wait", report["activity_ns"])
         self.assertEqual(report["wall_ns"], 100*NS)
 
     def test_missing_episode_clock_mapping_cannot_be_guessed(self):
@@ -208,6 +210,9 @@ class WindowTimingTest(unittest.TestCase):
         docs = fixture()
         p = "runs/m1/outputs/align_episode.json"
         ep = json.loads(docs[p])
+        # A valid explicit mapping is retained with added uncertainty. This
+        # exercises the paired-stamp-only fallback's refusal of a clock step.
+        ep["clock_mappings"] = []
         ep["hardware"]["paired_clock_stamps_ns"] = [
             dict(epoch_ns=(EPOCH+30)*NS, monotonic_before_ns=130*NS, monotonic_after_ns=130*NS),
             dict(epoch_ns=(EPOCH+60)*NS, monotonic_before_ns=158*NS, monotonic_after_ns=158*NS)]
