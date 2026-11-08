@@ -1,0 +1,103 @@
+{
+ "repo": "mlx-community/Qwen3-32B-4bit",
+ "mlx_version": "0.31.2",
+ "ok": true,
+ "errors": [],
+ "snapshot": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-32B-4bit/snapshots/bcaaf7f538adf166c1080a2befdb4f6019f66639",
+ "on_disk_bytes": 18445905920,
+ "config_excerpt": {
+  "model_type": "qwen3",
+  "num_hidden_layers": 64,
+  "hidden_size": 5120,
+  "num_attention_heads": 64,
+  "num_key_value_heads": 8,
+  "head_dim": 128,
+  "vocab_size": 151936,
+  "num_experts": null,
+  "num_local_experts": null,
+  "num_experts_per_tok": null,
+  "experts_per_token": null,
+  "moe_intermediate_size": null,
+  "intermediate_size": 25600,
+  "shared_expert_intermediate_size": null,
+  "full_attention_interval": null,
+  "sliding_window": null,
+  "layer_types": null,
+  "tie_word_embeddings": false,
+  "quantization": {
+   "group_size": 64,
+   "bits": 4
+  }
+ },
+ "rss_before_load": 93388800,
+ "load_s": 0.8278932500106748,
+ "mlx_active_after_load": 18429683720,
+ "rss_after_load": 18743066624,
+ "accounting": {
+  "categories": {
+   "embed": {
+    "logical_params": 777912320,
+    "stored_bytes": 437575680
+   },
+   "always_active": {
+    "logical_params": 31206298624,
+    "stored_bytes": 17554515968
+   },
+   "lm_head": {
+    "logical_params": 777912320,
+    "stored_bytes": 437575680
+   }
+  },
+  "quant_mix_logical_params": {
+   "4b/64g/affine": 32761446400
+  },
+  "num_experts": null,
+  "experts_per_tok": null,
+  "tied_embeddings": false,
+  "total_params": 32762123264,
+  "active_params": 32762123264.0,
+  "resident_weight_bytes": 18429667328,
+  "bytes_read_per_token_measured": 17992094528.0,
+  "bytes_read_per_token_formula_4bit": 16381061632.0
+ },
+ "runs": [
+  {
+   "rep": 0,
+   "prefill_s": 11.815023624978494,
+   "prefill_tps": 173.33862927453333,
+   "decode_tokens": 511,
+   "decode_s": 28.024055000016233,
+   "decode_tps": 18.234334752758087,
+   "total_s": 39.83907862499473,
+   "mlx_peak_bytes": 19750914088,
+   "kv_cache_bytes_end": 671088640,
+   "distinct_tokens_out": 85,
+   "output_head": " unattended-night process now runs under a watchdog that kills it cleanly after five minutes if it does not self-terminate cleanly within five minutes of starting capture. The watchdog also kills the child process cleanly if it runs longer than five minutes after the child has finished its last capture. The watchdog is itself killed"
+  },
+  {
+   "rep": 1,
+   "prefill_s": 12.74688391701784,
+   "prefill_tps": 160.66671771175382,
+   "decode_tokens": 511,
+   "decode_s": 28.270584665995557,
+   "decode_tps": 18.07532479562198,
+   "total_s": 41.0174685830134,
+   "mlx_peak_bytes": 19750914088,
+   "kv_cache_bytes_end": 671088640,
+   "distinct_tokens_out": 85
+  },
+  {
+   "rep": 2,
+   "prefill_s": 12.552464625012362,
+   "prefill_tps": 163.1552098477221,
+   "decode_tokens": 511,
+   "decode_s": 28.28005420899717,
+   "decode_tps": 18.06927229430231,
+   "total_s": 40.832518834009534,
+   "mlx_peak_bytes": 19750914088,
+   "kv_cache_bytes_end": 671088640,
+   "distinct_tokens_out": 85
+  }
+ ],
+ "peak_rss_bytes": 18790563840
+}

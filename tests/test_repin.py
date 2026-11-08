@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 from scripts import digest_pin_census as census
 from scripts import repin
-from tests.test_digest_pin_census import REDUCE_SOURCE, build_tree, rows_by_path, sha
+from tests.test_digest_pin_census import FIXTURE_TMP, REDUCE_SOURCE, build_tree, rows_by_path, sha
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -23,8 +23,7 @@ class MiniatureTree:
     """build_tree plus its committed registry, in a temporary directory."""
 
     def __init__(self) -> None:
-        # Git fixtures must stay outside the worktree even when TMPDIR points into it.
-        self._temporary = tempfile.TemporaryDirectory(dir="/tmp")
+        self._temporary = tempfile.TemporaryDirectory(dir=FIXTURE_TMP)
         self.root = Path(self._temporary.name)
         self.digests = build_tree(self.root)
         with redirect_stdout(io.StringIO()):

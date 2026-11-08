@@ -76,6 +76,7 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from joulewise.desk_compress import read_bytes
 from joulewise.hazards import battery, clock, contention, disk, smc, thermal
 from joulewise.hazards.base import (
     Context, Stamp, canonical_json, sha256_hex, write_create_once,
@@ -209,9 +210,10 @@ def read_journal(path: Path) -> tuple[list[dict[str, Any]], str | None]:
     """All complete lines, plus a note when the last line is truncated (a death mid-write)."""
 
     path = Path(path)
-    if not path.exists():
+    try:
+        data = read_bytes(path)
+    except FileNotFoundError:
         return [], None
-    data = path.read_bytes()
     lines = data.split(b"\n")
     tail = lines.pop()  # empty when the file ends with a newline
     out = []

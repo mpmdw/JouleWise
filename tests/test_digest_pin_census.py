@@ -15,6 +15,10 @@ from scripts import digest_pin_census as census
 from tests.git_fixture import init_git_fixture
 
 ROOT = Path(__file__).resolve().parents[1]
+# Honor an external TMPDIR while keeping Git fixtures outside the worktree.
+FIXTURE_TMP = tempfile.gettempdir()
+if Path(FIXTURE_TMP).resolve().is_relative_to(ROOT):
+    FIXTURE_TMP = "/tmp"
 
 
 def sha(raw: bytes | str) -> str:
@@ -103,7 +107,7 @@ class LiteralLocationTests(unittest.TestCase):
 
 class ResolutionTests(unittest.TestCase):
     def test_every_method_round_trips_through_target_digest(self) -> None:
-        with tempfile.TemporaryDirectory(dir="/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir=FIXTURE_TMP) as temporary:
             root = Path(temporary)
             build_tree(root)
             files = census.tracked_files(root)
@@ -119,7 +123,7 @@ class ResolutionTests(unittest.TestCase):
             self.assertIn(census.Target("joulewise/reduce.py::reduce", "py_def"), index[sha(REDUCE_SOURCE)])
 
     def test_missing_target_digest_is_none(self) -> None:
-        with tempfile.TemporaryDirectory(dir="/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir=FIXTURE_TMP) as temporary:
             self.assertIsNone(census.target_digest(Path(temporary), census.Target("gone.json", "file")))
             self.assertIsNone(census.target_digest(
                 Path(temporary), census.Target("joulewise/x.py::missing", "py_def")))
@@ -194,7 +198,7 @@ class ClassificationTests(unittest.TestCase):
 
 class CensusTests(unittest.TestCase):
     def test_census_of_a_miniature_tree(self) -> None:
-        with tempfile.TemporaryDirectory(dir="/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir=FIXTURE_TMP) as temporary:
             root = Path(temporary)
             digests = build_tree(root)
             registry = census.census(root)
@@ -227,7 +231,7 @@ class CensusTests(unittest.TestCase):
             self.assertTrue(digests["plan"])
 
     def test_render_is_line_oriented_and_round_trips(self) -> None:
-        with tempfile.TemporaryDirectory(dir="/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir=FIXTURE_TMP) as temporary:
             root = Path(temporary)
             build_tree(root)
             registry = census.census(root)
@@ -257,7 +261,7 @@ class Block5EraScopeTests(unittest.TestCase):
         self.assertIsNone(census.era_spec(self.REGISTRATION, literals[2], text))
 
     def test_era_index_resolves_a_named_directory_and_basename(self) -> None:
-        with tempfile.TemporaryDirectory(dir="/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir=FIXTURE_TMP) as temporary:
             root = Path(temporary)
             digests = build_tree(root)
             subprocess.run(["git", "-C", str(root), "-c", "user.name=t", "-c", "user.email=t@t",

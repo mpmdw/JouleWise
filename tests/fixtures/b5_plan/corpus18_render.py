@@ -11,7 +11,7 @@ from tests.fixtures.b5_plan.fake_window import PACKS
 ROOT = Path(__file__).resolve().parents[3]
 
 
-def render_pack(pack: str, scratch: Path) -> tuple[bytes, dict, list[str]]:
+def render_pack(pack: str, scratch: Path, *, bindings_overrides: dict | None = None) -> tuple[bytes, dict, list[str]]:
     pack_root = ROOT / 'configs/campaigns' / PACKS[pack]
     tree_raw = (pack_root / 'plan_tree.json').read_bytes()
     tree = json.loads(tree_raw)
@@ -22,6 +22,7 @@ def render_pack(pack: str, scratch: Path) -> tuple[bytes, dict, list[str]]:
         'bound_backup_destination', 'identity_epoch_json', 't1_bindings_json')}
     bindings.update(repo_root=str(ROOT), bracket_session_id=f'corpus18-{pack}',
                     pre_attempt_id=f'corpus18-{pack}-pre', post_attempt_id=f'corpus18-{pack}-post')
+    bindings.update(bindings_overrides or {})
     raw = chain.render_chain(tree=tree, tree_sha256=hashlib.sha256(tree_raw).hexdigest(),
                              stages=stages, bindings=bindings, measurement_root=ROOT,
                              pack_root=pack_root, plan_id=f'corpus18-{pack}-dry',

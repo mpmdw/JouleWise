@@ -1,0 +1,157 @@
+{
+  "minimum_kept_units_per_stratum": 5,
+  "models": [
+    {
+      "identity_status": "draft_pending_C4",
+      "model": {
+        "family": "qwen3",
+        "name": "Qwen3-1.7B-4bit",
+        "revision": "3b1b1768f8f8cf8351c712464f906e86c2b8269e",
+        "source": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-1.7B-4bit/snapshots/3b1b1768f8f8cf8351c712464f906e86c2b8269e",
+        "weight_format": "mlx"
+      },
+      "model_id": "qwen3-1p7b",
+      "pilot": "r_qwen3-1.7b.json",
+      "revision_status": "pinned_source",
+      "role": "fit"
+    },
+    {
+      "identity_status": "draft_pending_C4",
+      "model": {
+        "family": "qwen3",
+        "name": "Qwen3-4B-4bit",
+        "revision": "4dcb3d101c2a062e5c1d4bb173588c54ea6c4d25",
+        "source": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-4B-4bit/snapshots/4dcb3d101c2a062e5c1d4bb173588c54ea6c4d25",
+        "weight_format": "mlx"
+      },
+      "model_id": "qwen3-4b",
+      "pilot": "r_Qwen3-4B-4bit.json",
+      "revision_status": "pinned_source",
+      "role": "fit"
+    },
+    {
+      "identity_status": "draft_pending_C4",
+      "model": {
+        "family": "qwen3",
+        "name": "Qwen3-8B-4bit",
+        "revision": "545dc4251c05440727734bcd94334791f6ab0192",
+        "source": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-8B-4bit/snapshots/545dc4251c05440727734bcd94334791f6ab0192",
+        "weight_format": "mlx"
+      },
+      "model_id": "qwen3-8b",
+      "pilot": "r_Qwen3-8B-4bit.json",
+      "revision_status": "pinned_source",
+      "role": "fit"
+    },
+    {
+      "identity_status": "draft_pending_C4",
+      "model": {
+        "family": "qwen3_moe",
+        "name": "Qwen3-30B-A3B-4bit",
+        "revision": "d388dead1515f5e085ef7a0431dd8fadf0886c57",
+        "source": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/snapshots/d388dead1515f5e085ef7a0431dd8fadf0886c57",
+        "weight_format": "mlx"
+      },
+      "model_id": "qwen3-30b-a3b",
+      "pilot": "r_Qwen3-30B-A3B-4bit.json",
+      "revision_status": "pinned_source",
+      "role": "held_out"
+    },
+    {
+      "identity_status": "draft_pending_C4",
+      "model": {
+        "family": "qwen3",
+        "name": "Qwen3-14B-4bit",
+        "revision": "a4d9b2df59d2c150bef02fcbe0d91046b7ca33a4",
+        "source": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-14B-4bit/snapshots/a4d9b2df59d2c150bef02fcbe0d91046b7ca33a4",
+        "weight_format": "mlx"
+      },
+      "model_id": "qwen3-14b",
+      "pilot": "r_Qwen3-14B-4bit.json",
+      "revision_status": "pinned_source",
+      "role": "held_out"
+    },
+    {
+      "identity_status": "draft_pending_C4",
+      "model": {
+        "family": "qwen3_next",
+        "name": "Qwen3-Next-80B-A3B-Instruct-4bit",
+        "revision": "d8a069bfa8ae87d3d468412e1034acae19b5892b",
+        "source": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-Next-80B-A3B-Instruct-4bit/snapshots/d8a069bfa8ae87d3d468412e1034acae19b5892b",
+        "weight_format": "mlx"
+      },
+      "model_id": "qwen3-next-80b",
+      "pilot": "r_Qwen3-Next-80B-A3B-Instruct-4bit.json",
+      "revision_status": "pinned_source",
+      "role": "held_out"
+    },
+    {
+      "identity_status": "draft_pending_C4",
+      "model": {
+        "family": "qwen3",
+        "name": "Qwen3-32B-4bit",
+        "revision": "bcaaf7f538adf166c1080a2befdb4f6019f66639",
+        "source": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-32B-4bit/snapshots/bcaaf7f538adf166c1080a2befdb4f6019f66639",
+        "weight_format": "mlx"
+      },
+      "model_id": "qwen3-32b",
+      "pilot": "r_Qwen3-32B-4bit.json",
+      "revision_status": "pinned_source",
+      "role": "held_out"
+    },
+    {
+      "identity_status": "draft_pending_C4",
+      "model": {
+        "family": "qwen3",
+        "name": "Qwen3-8B-8bit",
+        "revision": "48a0b75b1ae72503e21e1558d040bc227510ff06",
+        "source": "/Users/edr/jw_models/mlx-community/Qwen3-8B-8bit",
+        "weight_format": "mlx"
+      },
+      "model_id": "qwen3-8b-8bit",
+      "pilot": null,
+      "revision_status": "pinned_source",
+      "role": "held_out"
+    },
+    {
+      "identity_status": "draft_pending_C4",
+      "model": {
+        "family": "llama",
+        "name": "Llama-3.3-70B-Instruct-4bit",
+        "revision": "de2dfaf56839b7d0e834157d2401dee02726874d",
+        "source": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Llama-3.3-70B-Instruct-4bit/snapshots/de2dfaf56839b7d0e834157d2401dee02726874d",
+        "weight_format": "mlx"
+      },
+      "model_id": "llama-70b",
+      "pilot": "r_Llama-3.3-70B-Instruct-4bit.json",
+      "revision_status": "pinned_source",
+      "role": "held_out"
+    },
+    {
+      "identity_status": "draft_pending_C4",
+      "model": {
+        "family": "qwen3.5",
+        "name": "Qwen3.5-122B-A10B-4bit",
+        "revision": "e9c67b08899964be5fdd069bb1b4bc8907fe68f5",
+        "source": "/Users/edr/jw_models/mlx-community/Qwen3.5-122B-A10B-4bit",
+        "weight_format": "mlx"
+      },
+      "model_id": "qwen35-122b",
+      "pilot": "r_Qwen3.5-122B-A10B-4bit_pinned.json",
+      "revision_status": "pinned_source",
+      "role": "held_out"
+    }
+  ],
+  "source_run_config": "configs/campaigns/d117_floor_qwen3-8b_v5/01_phase_decode_absolute/d117fq38-df-ph-decode-abs-r01.json",
+  "status": "draft",
+  "workload": {
+    "decode_forward_passes": 512,
+    "eos_suppressed": true,
+    "output_tokens": 512,
+    "phase_boundary_method": "first_token",
+    "prompt_tokens": 2048,
+    "settle_seconds": 5.0,
+    "temperature": 0,
+    "warmup_tokens": 4
+  }
+}

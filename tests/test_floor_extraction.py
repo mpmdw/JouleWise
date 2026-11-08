@@ -17,6 +17,7 @@ import hashlib
 import io
 import json
 import math
+import os
 import random
 import shutil
 import tempfile
@@ -3190,6 +3191,10 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
             "common_mode_precondition_failed",
         )
 
+    @unittest.skipIf(
+        os.environ.get("JW_B5_SYNTHETIC_ONLY") == "1",
+        "local source corpus disabled in synthetic-only runs",
+    )
     def test_campaign_candidate_common_mode_domain_inventory(self):
         """Pin today's one collected root and seven named absences."""
 
@@ -4245,6 +4250,10 @@ class RegisteredCommonModeRealBlockTests(unittest.TestCase):
                         )
                     )
 
+    @unittest.skipIf(
+        os.environ.get("JW_B5_SYNTHETIC_ONLY") == "1",
+        "local source corpus disabled in synthetic-only runs",
+    )
     def test_real_fixture_provenance_pins_match_available_source(self):
         fixture_bytes = sum(
             path.stat().st_size

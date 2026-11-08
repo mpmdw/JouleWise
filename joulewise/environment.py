@@ -226,6 +226,8 @@ def empty_environment_snapshot() -> dict[str, Any]:
             "mlx": _package_version_record("mlx"),
             "mlx-lm": _package_version_record("mlx-lm"),
             "transformers": _package_version_record("transformers"),
+            "mlx-metal": _package_version_record("mlx-metal"),
+            "tokenizers": _package_version_record("tokenizers"),
         },
         "load_average_1m": None,
         "load_average_5m": None,

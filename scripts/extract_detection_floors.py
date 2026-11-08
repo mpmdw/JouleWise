@@ -30,6 +30,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from joulewise.floor_extraction import FloorExtractionError, _block5_runs_root, extract_cells  # noqa: E402
+from joulewise.desk_restore import StorageStop  # noqa: E402
 from joulewise.whole_window import (  # noqa: E402
     MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
     MINTED_CONSUMPTION_SEMANTICS_ID,
@@ -236,6 +237,9 @@ def main(argv: list[str] | None = None) -> int:
             manifest_id=args.manifest_id, evaluation_basis_sha256=args.evaluation_basis_sha256,
             consumption_semantics_id=args.consumption_semantics_id,
             hash_bundles=args.hash_bundles, mode="read_replay")
+    except StorageStop as exc:
+        print(f"refused: {exc}", file=sys.stderr)
+        return 2
     except (FloorExtractionError, AnalysisRefusal) as exc:
         code = exc.code if isinstance(exc, AnalysisRefusal) else str(exc)
         if (args.window_index is not None and not isinstance(exc, AnalysisRefusal)

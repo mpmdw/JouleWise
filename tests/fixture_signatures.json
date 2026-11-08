@@ -1,5 +1,10 @@
 [
   {
+    "id": "hazards-test-real-monitor",
+    "command_regex": "(?:^|\\s)\\S*/scripts/hazard_monitor\\.py\\s+--config\\s+\\S*/tmp[a-z0-9_]{8}/(?:[^\\s/]+/)*hazards/monitor/config\\.json(?:\\s|$)",
+    "source": "tests/hazards/test_monitor.py: SupervisorTests tempfile custody roots; real monitor launcher restricted to a tempfile-made path component"
+  },
+  {
     "id": "nv5-fake-vllm",
     "command_regex": "(?:^|\\s)(?:\\S*/)?vllm\\s+serve\\s+/fake/model\\s+.*?--served-model-name\\s+nv5-fake-model(?:\\s|$)",
     "source": "tests/test_node_worker_subprocess.py: _write_fake_vllm and _runtime_task; argv built by joulewise/adapters/node_worker.py:_vllm_serve_command"
@@ -18,5 +23,20 @@
     "id": "b5-fake-hazard-monitor",
     "command_regex": "\\s-c\\s(?:\\\\012| )?import json, os, pathlib, sys, time(?:\\\\012| )custody, life, code = ",
     "source": "tests/test_b5_driver.py: FAKE_MONITOR via fake_monitor_argv (python -c, a stand-in for the hazard monitor); its source has newlines, which macOS ps prints as the four characters \\012 and Linux procps ps prints as one space"
+  },
+  {
+    "id": "b6-fake-powermetrics-process",
+    "command_regex": "(?:^|\\s)\\S*/tests/fixtures/fake_powermetrics_process\\.py(?:\\s|$)",
+    "source": "tests/fixtures/fake_powermetrics_process.py"
+  },
+  {
+    "id": "b6-fake-powermetrics-instrument",
+    "command_regex": "(?:^|\\s)\\S*/tests/fixtures/hazards/instrument/fake_powermetrics\\.py(?:\\s|$)",
+    "source": "tests/fixtures/hazards/instrument/fake_powermetrics.py"
+  },
+  {
+    "id": "b6-synthetic-acceptance-fault",
+    "command_regex": "\\s-c\\simport sys; sys\\.path\\.insert\\(0, [\\s\\S]*from scripts import harvest_b6_session as w[\\s\\S]*synthetic acceptance program fault",
+    "source": "tests/b6/round_support.py: Round.run's one-shot acceptance-fault child; actual harvest, synthetic acceptance exception"
   }
 ]

@@ -137,11 +137,15 @@ class CensusTests(unittest.TestCase):
         self.assertTrue((harness.night / "chain.exited").exists())
 
     def test_output_with_a_timeout_exit_is_still_an_agent(self):
-        harness = self.harness("/bin/sleep 30\n")
+        harness = self.harness("exit 0\n")
         harness.census.responses += [probe(CENSUS), probe(CENSUS),
                                      probe(CENSUS, exit_code=124, stdout="77 claude\n")]
-        self.assertEqual(harness.driver.EXIT_ABORTED, harness.run())
-        self.assertEqual("night_aborted_agent_present", harness.result()["aborted_reason"])
+        def chain_once(*args, census, **kwargs):
+            self.assertIsNone(census()[1])
+            return 0, None, 1, [], True
+        with mock.patch.object(harness.driver, "_run_chain_once", side_effect=chain_once):
+            self.assertEqual(harness.driver.EXIT_GO, harness.run())
+        self.assertEqual(harness.hazard()["agent_pause"]["episodes"][0]["basenames"], ["claude"])
 
     def test_a_census_journal_write_fault_is_a_flag_and_never_ends_supervision(self):
         harness = self.harness()

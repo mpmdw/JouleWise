@@ -768,13 +768,16 @@ class EnvironmentGuardTests(_LifecycleBase):
         bundle, summary = self.run_live_guard("legacy-a11-unknown", [unknown, unknown])
         self.assertEqual(summary.status, RunStatus.FAILED)
 
-    def test_a11_keeper_busy_idle_admission_still_aborts(self) -> None:
+    def test_a11_busy_idle_admission_collects_with_flag(self) -> None:
         with self.hazard():
-            _bundle, summary = self.run_live_guard(
+            bundle, summary = self.run_live_guard(
                 "hazard-a11-busy", [_guard()] * 4,
                 registry=AdmissionIdleRegistry([False, False], cpu_busy_sequence=[0.9, 0.9]))
-        self.assertEqual(summary.status, RunStatus.FAILED)
-        self.assertIn("idle environment admission failed after one retry", summary.failure_message)
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED, summary.failure_message)
+        admission = json.loads((bundle / "metadata.json").read_bytes())["environment_admission"]
+        self.assertEqual(len(admission["attempts"]), 1)
+        self.assertEqual(admission["decision"], "admitted")
+        self.assertEqual(len(self.member_flags("idle.busy_fraction_exceeded")), 1)
 
     def test_s2_01_stage_preflight_does_not_decide_the_member(self) -> None:
         policy, _binding, _preflight, snapshot = campaign_policy_fixture(exploratory=False)
@@ -813,7 +816,7 @@ class EnvironmentGuardTests(_LifecycleBase):
         with self.hazard():
             bundle, summary = self.run_live_guard(
                 "hazard-a11-attempt2", [_guard(), _guard(), awake, _guard()],
-                registry=AdmissionIdleRegistry([False, False], cpu_busy_sequence=[0.9, 0.1]))
+                registry=AdmissionIdleRegistry([False, False], combined_power_sequence=[2.0, 0.1]))
         self.assertEqual(summary.status, RunStatus.SUCCEEDED, summary.failure_message)
         admission = json.loads((bundle / "metadata.json").read_bytes())["environment_admission"]
         self.assertEqual([row["admitted"] for row in admission["attempts"]], [False, True])
@@ -917,11 +920,14 @@ class IdleAdmissionEvidenceTests(_LifecycleBase):
         final = json.loads((bundle / "metadata.json").read_bytes())["environment_admission"]["attempts"][-1]
         self.assertIs(final["gpu_admitted"], False)
 
-    def test_a18_keeper_busy_cpu_still_aborts_on_hazard(self) -> None:
+    def test_a18_busy_cpu_collects_with_busy_flag_on_hazard(self) -> None:
         with self.hazard():
-            _bundle, summary = self.run_member(
+            bundle, summary = self.run_member(
                 "hazard-a18-busy", AdmissionIdleRegistry([False, False], cpu_busy_sequence=[0.9, 0.9]))
-        self.assertEqual(summary.status, RunStatus.FAILED)
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED, summary.failure_message)
+        admission = json.loads((bundle / "metadata.json").read_bytes())["environment_admission"]
+        self.assertEqual(len(admission["attempts"]), 1)
+        self.assertEqual(len(self.member_flags("idle.busy_fraction_exceeded")), 1)
         self.assertEqual(self.member_flags("member.idle_admission_telemetry_missing"), [])
 
     def test_a18_keeper_threshold_plus_missing_evidence_still_aborts(self) -> None:
@@ -967,11 +973,11 @@ class TeardownTests(_LifecycleBase):
         real_killpg, real_kill = os.killpg, os.kill
 
         def record_killpg(pgid, sig):
-            signals.append(("killpg", sig, report_exists()))
+            signals.append(("killpg", sig, report_exists("process_group_id", pgid)))
             return real_killpg(pgid, sig)
 
         def record_kill(pid, sig):
-            signals.append(("kill", sig, report_exists()))
+            signals.append(("kill", sig, report_exists("direct_child_pid", pid)))
             return real_kill(pid, sig)
 
         teardowns: list[SamplerTeardown] = []
@@ -981,8 +987,9 @@ class TeardownTests(_LifecycleBase):
             real_init(instance, *args, **kwargs)
             teardowns.append(instance)
 
-        def report_exists() -> bool:
-            return any(item.report is not None for item in teardowns)
+        def report_exists(field, pid) -> bool:
+            return any(item.report is not None and item.report.get(field) == pid
+                       for item in teardowns)
 
         with patch.object(SamplerTeardown, "_wide_argv_census", return_value=[escaped]), \
                 patch.object(SamplerTeardown, "__init__", tracking_init), \
@@ -990,6 +997,7 @@ class TeardownTests(_LifecycleBase):
                 patch("os.kill", side_effect=record_kill):
             bundle, summary = _produce_admission_powermetrics_bundle(
                 self.runs_root, run_id, RetryAdmissionPowermetricsRegistry())
+        self.sampler_reports = [item.report for item in teardowns if item.spawned]
         return bundle, summary, signals
 
     def test_a17_contaminated_census_reduces_normally_and_flags(self) -> None:
@@ -1000,16 +1008,23 @@ class TeardownTests(_LifecycleBase):
         metadata = json.loads((bundle / "metadata.json").read_bytes())
         teardown = metadata["uncertainty_evidence"]["process_group_teardown"]
         self.assertEqual(teardown["status"], "contaminated")
+        attempts = metadata["environment_admission"]["attempts"]
+        self.assertEqual([row["admitted"] for row in attempts], [False, True])
+        self.assertEqual(len(self.sampler_reports), 2)
+        self.assertEqual(len({row["direct_child_pid"] for row in self.sampler_reports}), 2)
+        self.assertEqual(attempts[0]["sampler_teardown"], self.sampler_reports[0])
+        self.assertEqual(teardown, self.sampler_reports[1])
         flags = self.member_flags("teardown.survivors")
-        self.assertEqual(len(flags), 1)
-        value = observed(flags[0])
-        self.assertEqual(value["kind"], "sampler")
-        self.assertEqual(value["status"], "contaminated")
-        self.assertEqual(value["escaped_candidates"], 1)
-        self.assertEqual(value["pids"], [{"pid": 999999, "argv": ["injected", "escaped", "sampler"]}])
-        self.assertEqual(flags[0]["scope"]["run_id"], bundle.name)
+        self.assertEqual(len(flags), len(self.sampler_reports), "one flag per contaminated stream")
+        for flag in flags:
+            value = observed(flag)
+            self.assertEqual(value["kind"], "sampler")
+            self.assertEqual(value["status"], "contaminated")
+            self.assertEqual(value["escaped_candidates"], 1)
+            self.assertEqual(value["pids"], [{"pid": 999999, "argv": ["injected", "escaped", "sampler"]}])
+            self.assertEqual(flag["scope"]["run_id"], bundle.name)
         self.assertEqual([row for row in signals if row[2]], [],
-                         "no signal is sent after the teardown report exists")
+                         "no signal is sent to a stream after its own teardown report exists")
         # One true stop marker.
         events = [json.loads(line) for line in (bundle / "events.jsonl").read_text().splitlines()]
         self.assertEqual(sum(event["event_type"] == "sampling_stopped" for event in events), 1)

@@ -1,0 +1,170 @@
+```json
+{"schema":"claude-codex-report/v1","genre":"implementation","status":"blocked","completion":"partial","summary":"Bundle/derived/status corrections implemented; H uncollected-reference equality needs a ruling.","workspace":{"base_requested":"81782d6a3","base_mode":"exact","head_start":"81782d6a3ef3b5b6904ede9a38d1ef84e0967da2","head_end":"81782d6a3ef3b5b6904ede9a38d1ef84e0967da2","upstream_end":null,"branch":"integrate/2026-10-24-416"},"pathspec":[".scratch-416F/REPORT-round1.txt",".scratch-416F/REPORT.txt",".scratch-416F/envelope.json",".scratch-416F/final-shas.json",".scratch-416F/round2_agreement_pair.py",".scratch-416F/round2_alias_probe.py",".scratch-416F/round2_census.py",".scratch-416F/round2_cli_probe.py",".scratch-416F/round2_current_probes.py",".scratch-416F/round2_current_replay.py",".scratch-416F/round2_final_probes.py",".scratch-416F/round2_finalize_report.py",".scratch-416F/round2_finish_replay.py",".scratch-416F/round2_last_replay.py",".scratch-416F/round2_postcheck.py",".scratch-416F/round2_probes.py",".scratch-416F/round2_replay.py","configs/b6/flag_catalog_b6.json","configs/b6/packs/bytes-s1-p1/registration.json","configs/b6/packs/bytes-s1-p2/registration.json","configs/b6/packs/bytes-s2-p1/registration.json","configs/b6/packs/bytes-s2-p2/registration.json","configs/b6/packs/bytes-s3-p1/registration.json","configs/b6/packs/bytes-s3-p2/registration.json","configs/b6/packs/bytes-s4-p1/registration.json","configs/b6/packs/bytes-s4-p2/registration.json","configs/b6/packs/bytes-s5-p1/registration.json","configs/b6/packs/bytes-s5-p2/registration.json","configs/b6/packs/bytes-s6-p1/registration.json","configs/b6/packs/bytes-s6-p2/registration.json","configs/gates/hazard_refusals.json","joulewise/b6/acceptance.py","joulewise/b6/archive.py","joulewise/b6/export_runs.py","joulewise/hazards/clock.py","scripts/b6_export_runs.py","scripts/build_b6_flag_catalog.py","tests/b6/test_export_runs.py","tests/b6/test_fix416_gates.py","tests/fixtures/bytes/campaign.py","tests/hazards/test_clock.py","tests/test_bytes_gates.py"],"unowned_dirty":[".scratch-416C/",".scratch-416E/"],"verdict":{"implementation":"partial","acceptance":"needs_ruling"},"verification":[{"id":"V1","kind":"suite","cmd":"env TMPDIR=/private/tmp/fix416f/round2 JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B -m unittest tests.b6.test_export_runs tests.b6.test_fix416_gates tests.hazards.test_clock","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["Ran 105 tests in 25.710s","OK (skipped=1)"]},"expected":{"exit_code":0,"tail_regex":"OK|PASS:"}},{"id":"V2","kind":"suite","cmd":"env TMPDIR=/private/tmp/fix416f/round2 JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B -m unittest tests.b6.test_export_runs tests.b6.test_fix416_gates tests.b6.test_blinding tests.b6.test_model_files tests.test_bytes_gates tests.test_bytes_h_session tests.test_bytes_twin","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["Ran 247 tests in 800.997s","OK"]},"expected":{"exit_code":0,"tail_regex":"OK|PASS:"}},{"id":"V3","kind":"suite","cmd":"env TMPDIR=/private/tmp/fix416f/round2 JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B -m unittest discover -s tests/hazards -t . -v","cwd":".","observed":{"result":"fail","exit_code":1,"tail":["Ran 323 tests in 126.305s","FAILED (failures=28, skipped=9)"]},"expected":{"exit_code":0,"tail_regex":"OK|PASS:"}},{"id":"V4","kind":"other","cmd":"env TMPDIR=/private/tmp/fix416f/round2 JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B .scratch-416F/round2_finish_replay.py after --keep-going","cwd":".","observed":{"result":"fail","exit_code":1,"tail":["TOTAL 25 STOPS 1"]},"expected":{"exit_code":0,"tail_regex":"TOTAL 25 STOPS 0"}},{"id":"V5","kind":"other","cmd":"env TMPDIR=/private/tmp/fix416f/round2 JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B .scratch-416F/round2_postcheck.py","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["PASS: issuers, pins, refusal census, source syntax, exhaustive write scope, unchanged estimators and diff whitespace"]},"expected":{"exit_code":0,"tail_regex":"OK|PASS:"}},{"id":"V6","kind":"suite","cmd":"env TMPDIR=/private/tmp/fix416f/round2 JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B -m unittest tests.b6.test_acceptance tests.b6.test_session_wrapper tests.hazards.test_clock tests.hazards.test_refusal_allowlist tests.test_bytes_plan_trees tests.b6.test_catalog","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["Ran 127 tests in 23.943s","OK (skipped=1)"]},"expected":{"exit_code":0,"tail_regex":"OK|PASS:"}},{"id":"V7","kind":"suite","cmd":"env TMPDIR=/private/tmp/fix416f/round2 JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B -m unittest tests.b6.test_cold_pass_fixes.ColdPassTests tests.b6.test_s3_cold_fixes.StageThreeTests","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["Ran 15 tests in 0.509s","OK"]},"expected":{"exit_code":0,"tail_regex":"OK|PASS:"}}],"flags":[{"id":"F2H","kind":"lead_ruling","level":"blocking","text":"NEEDS_RULING: literal F2 equality stops H on three explicitly excluded, uncollected end references with roster entries but no listed bundles. Other 24 real-plan replays have zero stops and identical CSVs.","needs":"Rule on the narrow explicit-uncollected exception or retain the H stop."},{"id":"F3","kind":"environment","level":"nonblocking","text":"Hazards reproduces the same 28 sandbox-limited failures across 22 census methods; refusal allowlist passes.","needs":"Lead performs the assigned host census rerun."}]}
+```
+
+## Change
+
+FIX-416-F round 2, activation 7209d1b0, continuing the same uncommitted implementation. Round 1 is preserved in .scratch-416F/REPORT-round1.txt with its original before evidence under /private/tmp/fix416f/main. Round-2 fixture archives, APFS mutations, exports and logs are under /private/tmp/fix416f/round2. Real archives were read only. This is desk and synthetic evidence, not live hardware validation. No repository commit, push or merge was made. Pre-existing .scratch-416C/ and .scratch-416E/ were preserved.
+
+1. **Bundle custody / F1:** joulewise/b6/export_runs.py:110, joulewise/b6/archive.py:34 and joulewise/b6/acceptance.py:463 limit reference bundle and evidence lookup to archived source roots. External originals never shadow or replace a collected reference. Copied-custody aliases are normalized and confined to archive/sources too; two escaping-path regressions change before STOP to after EXPORT, while all 25 real-plan root tuples remain unchanged (alias-boundary.log). Within the archive, an unlisted candidate, multiple listed candidates, empty inventory, missing directory or missing input digest stops with its cause. Round 1's digest requirement for every present logical and listed bundle input, including raw/instrument and compressed inputs, remains. Opus shadow before changed gross energy 5x without a flag; after, intact exports and the shadow stops as an unlisted directory. The regression also permits a corrupt external original beside an intact archive, then stops if the archived bundle disappears. **Intact BY-H2, real plan: 73 rows, 24 populated request references, 0 stops, every CSV byte identical to the base.** CSV SHA-256: b675bf831827bf0800c5327c52b86a6d18c346b9446ee50bf01b1207e595a9f6.
+
+2. **Canonical null idle:** joulewise/b6/export_runs.py:315 retains the authenticated idle_baseline: null path and idle_null regression. The final Opus probe_b shows null and absent idle disclose bytes.reference_request_unavailable with blank request columns. Unsealed changes and other non-object idle values still stop. The requested registration sentence appears below.
+
+3. **Status:** joulewise/b6/export_runs.py:467 compares both assessment and explicit roster status with the verified source state on the registered BYTES reference path. An assessment cannot mask a conflicting roster state. Succeeded/non-succeeded disagreement in either direction stops, including an excluded reference. Absent/null assessments use verified source status; legacy bundles without status.json retain the verified original-summary witness. Both Fable failed-status flips stop with the conflicting states. Matching verified failures retain their row. New tests cover both witnesses, both directions and missing proof.
+
+4. **Epoch gap representation:** joulewise/b6/export_runs.py:354 retains the four-ulp interior-edge allowance and its comment derivation. At 1.79e9 s one ulp is 2.384185791015625e-7 s; four are 9.5367431640625e-7 s, 0.0954% of the smallest printed 1 ms duration digit. Tests permit 1 and 4 ulp and stop a 1 ms gap. Endpoint containment stays exact. The original full-plan margin probe is rerun; its evidence preserves the real 1-ulp interiors and multi-second containment margins.
+
+5. **Derived authentication / F2:** joulewise/b6/export_runs.py:222 verifies every derived output whose digest harvest.json records before evidence or rows are built, for every exported pack. Roster and flags require their recorded digest when present; optional recorded member-assessment digests are checked too. No real receipt was modified and no digest was invented. Both inventory-listed default plan-tree candidates are authenticated before role selection; a vanished control tree cannot silently reclassify a reference as science. The new regression exported without stopping before the fix, then stopped on plan_tree.json with its cause afterward (missing-plan-before.log and the final focused suite). Post-harvest acceptance and unrecorded assessments have no digest gate. On the registered BYTES reference path, joulewise/b6/export_runs.py:129 independently classifies inventory references through the authenticated archived plan and compares both roster and projected acceptance reference sets against listed reference-role bundles. Duplicate references and either set difference stop. Planned-reference directories are also checked independently of the sets: a directory cannot vanish from custody if roster and inventory entries disappear together. The added joint-loss subtest exported before the fix and now stops as an unlisted bundle (unlisted-joint-before.log and the final focused suite). Status uses item 3; every acceptance exclusion remains a row with its code. Fable roster_entry_missing and roster_duplicate now stop immediately on the roster digest. Synthetic tests also reseal a missing/duplicate roster to prove the independent two-way check, remove inventory entries, and remove an acceptance member. The explicit exclusion control remains 73 rows with target excluded=True and exclusion_codes=member.bytes_missing, as F2/D-161 permits.
+
+The 25/25 zero-stop requirement is NOT met: literal equality stops H on three uncollected end references. H's authenticated roster names neg8-window-end-r1/r2/r3, none with a listed bundle or assessment. Acceptance excludes each with agent.presence, member.bytes_missing and member.status_not_succeeded. This real-archive stop was reported before changing any rule; no exception has been invented. Other 24 real-plan replays have zero stops and identical CSVs. first-stop.json/log preserve the first failure.
+
+5b. **Standalone CLI:** scripts/b6_export_runs.py:32 retains class-plus-message reporting and exit 5 for StorageStop and ordinary exceptions. Actual subprocess before/after: StorageStop exit 1 -> 5; ValueError now retains its message at exit 5. Final cli.log records both.
+
+5c. **Clock / issuers:** joulewise/hazards/clock.py:343 retains rate judgment at N>=2, the residual check and the N>=150 step gate derived from 1.5/N<=1%. Below 150, clock.step_unmeasured discloses the limitation, including the one-anchor UNMEASURED result; count itself never refuses. scripts/build_b6_flag_catalog.py:51 issues the catalog code and the existing plan issuer supplies all 12 BYTES flag_effects/digest updates. Both supplied clock probes were rerun. With a 1.1 ms step: N=1 UNMEASURED+flag; N=2,3,149 PASS+flag; N=150 REFUSE with measured step 1.0820 ms; N=183 REFUSE with 1.0910 ms. Two-anchor rate and short-series residual hazards remain tested.
+
+6. **Short dwell text:** configs/gates/hazard_refusals.json:1727 states that the step bar holds for full dwells, a fitted line absorbs about 1.5/N of a step, and at N=2 only the rate gate acts. The claim about never hiding a measured step hazard is gone. New census entries describe specific desk-only custody protections. No collection refusal was added.
+
+7. **Campaign condition / fixtures:** neither joulewise/bytes_analysis.py nor scripts/bytes_twin.py changed from HEAD, so the conditional 17 registered plus 2 battery campaign rerun and rebinding are not triggered. Fresh withheld/compressed agreement campaigns passed, with 219549/262385 comparisons and zero above-bar differences. Fresh generation exposed synthetic bundles without a source-status witness. tests/fixtures/bytes/campaign.py:227 and tests/test_bytes_gates.py:54 now write status.json before inventory sealing; synthetic sealers also issue harvest receipts for derived bytes. Production checks and energy arithmetic remain unchanged. Initial failed fixture logs are retained with -initial.log suffixes; final attempts pass.
+
+**25-archive replay with real plans.** All 25 archives have custody/night_plan.json; none uses plan={}. Before uses untouched requested HEAD, and before/after share per-archive key directories. H/BY-H2 use the documented explicit bytes-mac-check registration seam. Every row, column and complete CSV digest is compared. BYTES/ abbreviates /Users/edr/night-bytes/; B6/ abbreviates /Users/edr/night-b6/.
+
+| Archive | Stops before / after | Rows before / after | Populated after | All columns / CSV bytes |
+|---|---:|---:|---:|---|
+| BYTES/h-20261021T185555Z/archive | 0 / 1 | 123 / STOP | — | STOP: three uncollected end refs |
+| BYTES/h2-20261023T144711Z/archive | 0 / 0 | 73 / 73 | 24 | identical |
+| B6/loop/staging/r1-alpha-smoke-0/smoke/d117_floor_qwen3-1p7b_v5-20261018T0252Z/archive | 0 / 0 | 4 / 4 | 0 | identical |
+| B6/loop/staging/r1-beta-smoke-0/smoke/d117_floor_qwen3-8b_v5-20261018T1122Z/archive | 0 / 0 | 4 / 4 | 0 | identical |
+| B6/loop/staging/r1-gamma-smoke-0/smoke/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5-20261018T2018Z/archive | 0 / 0 | 6 / 6 | 0 | identical |
+| B6/loop/staging/r2-alpha-smoke-0/smoke/d117_floor_qwen3-1p7b_v5-20261019T2126Z/archive | 0 / 0 | 4 / 4 | 0 | identical |
+| B6/loop/staging/r2-beta-smoke-0/smoke/d117_floor_qwen3-8b_v5-20261019T0421Z/archive | 0 / 0 | 4 / 4 | 0 | identical |
+| B6/loop/staging/r2-gamma-smoke-0/smoke/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5-20261019T1311Z/archive | 0 / 0 | 6 / 6 | 0 | identical |
+| B6/loop/staging/r3-alpha-smoke-0/smoke/d117_floor_qwen3-1p7b_v5-20261020T0703Z/archive | 0 / 0 | 4 / 4 | 0 | identical |
+| B6/loop/staging/r3-beta-smoke-0/smoke/d117_floor_qwen3-8b_v5-20261020T1541Z/archive | 0 / 0 | 4 / 4 | 0 | identical |
+| B6/loop/staging/r3-gamma-smoke-0/smoke/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5-20261019T2233Z/archive | 0 / 0 | 6 / 6 | 0 | identical |
+| B6/loop/staging/r4-alpha-smoke-0/smoke/d117_floor_qwen3-1p7b_v5-20261021T0049Z/archive | 0 / 0 | 4 / 4 | 0 | identical |
+| B6/machine-test/MT-20261016T2114Z/smoke/d117_floor_qwen3-1p7b_v5-20261016T2114Z/archive | 0 / 0 | 4 / 4 | 0 | identical |
+| B6/machine-test/MT-20261017T1735Z/smoke/d117_floor_qwen3-1p7b_v5-20261017T1735Z/archive | 0 / 0 | 4 / 4 | 0 | identical |
+| B6/machine-test/MT-20261017T2215Z/smoke/d117_floor_qwen3-1p7b_v5-20261017T2215Z/archive | 0 / 0 | 4 / 4 | 0 | identical |
+| B6/sessions/r1-alpha/archive | 0 / 0 | 125 / 125 | 0 | identical |
+| B6/sessions/r1-beta/archive | 0 / 0 | 125 / 125 | 0 | identical |
+| B6/sessions/r1-gamma/archive | 0 / 0 | 107 / 107 | 0 | identical |
+| B6/sessions/r2-beta/archive | 0 / 0 | 125 / 125 | 0 | identical |
+| B6/sessions/r2-gamma/archive | 0 / 0 | 107 / 107 | 0 | identical |
+| B6/sessions/r3-alpha/archive | 0 / 0 | 125 / 125 | 0 | identical |
+| B6/sessions/r3-beta/archive | 0 / 0 | 125 / 125 | 0 | identical |
+| B6/sessions/r3-gamma/archive | 0 / 0 | 107 / 107 | 0 | identical |
+| B6/sessions/r4-alpha/archive | 0 / 0 | 125 / 125 | 0 | identical |
+| BYTES/h2-20261023T051434Z/archive | 0 / 0 | 0 / 0 | 0 | identical |
+
+The raw membership census (membership-census.json) also records planned but uncollected reference slots in 13 non-BYTES smoke archives. Their existing partial-stage projection is preserved; the BYTES §6 reference-request custody check applies on the BYTES path, while recorded derived-output verification applies to all packs. Among the BYTES archives, only H has a roster-to-inventory difference.
+
+Replay commands: env TMPDIR=/private/tmp/fix416f/round2 JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B .scratch-416F/round2_replay.py before ; env TMPDIR=/private/tmp/fix416f/round2 JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B .scratch-416F/round2_finish_replay.py after --keep-going . final-replay.json retains the plan paths/digests and CSV comparisons. The zero-run archive remains a zero-row export.
+
+**Original Fable matrix, real plan, round-2 source.** Permitted controls retain their intended meanings: absent/null assessment falls back to verified source, a byte-identical listed symlink verifies, an unrelated ledger input is outside the reference path, and an explicit exclusion prints its code.
+
+| Case | Before | After |
+|---|---|---|
+| roster_entry_missing | OK | STOP: roster digest |
+| roster_duplicate | OK | STOP: roster digest |
+| acceptance_excluding_added | OK | 73 rows; exclusion code printed |
+| assess_flip_failed | OK | STOP: verified status disagreement |
+| assess_flip_start_ref | OK | STOP: verified status disagreement |
+| assess_status_null | OK | 73 rows; verified control |
+| assess_entry_missing | OK | 73 rows; verified control |
+| symlink_same | OK | 73 rows; verified control |
+| symlink_modified | STOP | STOP: source digest |
+| sums_wrong_unread | STOP | STOP: source digest |
+| sums_wrong_ledger | OK | 73 rows; verified control |
+| rereduced_missing | STOP | STOP: missing summary |
+
+Probe command: env TMPDIR=/private/tmp/fix416f/round2 JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B .scratch-416F/round2_current_probes.py . Adaptations are limited to code/output paths, TMPDIR/APFS clone storage and the >=60 GiB reserve check. Full original before/after logs and mutation-matrix.json remain in scratch. H's stop does not mask the BY-H2 matrix.
+
+**Decisions I made:** apply the archive-only rule to evidence as well as integration; verify all recorded derived outputs, including currently unparsed ones; require the existing roster/flags digests; check both declared status witnesses, not just the precedence winner; classify inventory references from the verified archived plan; retain digest-verifiable lexical symlinks and reject cycles; retain the authenticated legacy summary-status witness and null-status fallback; retain explicit exclusions as coded rows under D-161. I did not exempt H's uncollected references or invent acceptance digests. Round 1's null-idle, four-ulp, 150-anchor and catalog classification decisions remain unchanged.
+
+**Registration sentences for the lead (the registration document is outside WRITE_SCOPE):**
+
+“An idle-baseline absence qualifies only when the present summary is a JSON object, matches its archived digest (a re-reduced summary with no inventory entry must match the listed source summary_metrics.json digest), and lacks idle_baseline, has it null, or has no finite numeric power_w_mean in an object-valued idle_baseline.”
+
+“The registered step bar holds for full dwells. With N remaining anchors the fitted line absorbs about 1.5/N of a step, so the step test is applied only at N>=150, where this approximate loss is at most 1% of the registered step_ns bar. Below 150 anchors the dwell discloses clock.step_unmeasured, keeps the rate and residual checks whenever measurable, and never refuses because of anchor count. At N=2 only the rate gate acts.”
+
+“A collected reference's bundle is the unique directory listed for that run id in archive/sources/SHA256SUMS, searching only archived source roots. An unlisted archive candidate, second listed candidate, missing inventory proof or missing archived bundle stops desk export; external originals are never candidates or fallbacks.”
+
+“Every derived input covered by harvest.json is verified against its recorded digest before export. Post-harvest acceptance membership is cross-checked both ways against listed reference bundles, every explicit exclusion is printed with its code, and succeeded/non-succeeded status is cross-checked against the verified source in both directions.”
+
+**Final SHAs.** HEAD remains 81782d6a3ef3b5b6904ede9a38d1ef84e0967da2, branch integrate/2026-10-24-416. No commit was made. .scratch-416F/final-shas.json is the machine-readable manifest.
+
+| File | SHA-256 |
+|---|---|
+| configs/b6/flag_catalog_b6.json | 90ef019ff0e5ff63b6e0c9d77bd449033baca38109dffe32f549f0fadc335ee1 |
+| configs/b6/packs/bytes-s1-p1/registration.json | 57e4268bf9083e0c583c7a4a10898bc76848a7d02d6773cac0587763c1f56ab3 |
+| configs/b6/packs/bytes-s1-p2/registration.json | dfcb3b5e820b13adb3bdce17b6cbc6845584f887f21d07b2148c53c077876028 |
+| configs/b6/packs/bytes-s2-p1/registration.json | bcfa2fba42fc1ba129c1e432d0051c9dd51d03959192fe7f9377c33579e88ec5 |
+| configs/b6/packs/bytes-s2-p2/registration.json | 861d197311de9e72f974abedb7dd316527c9e5efdd8b2d7767d0d726df26356b |
+| configs/b6/packs/bytes-s3-p1/registration.json | dab80c49631987a62f2d4ad76eb6c8831bc974c4bf9e7601b818db0748f8b1dd |
+| configs/b6/packs/bytes-s3-p2/registration.json | c2b00f94570bcc12552bd8148d1dfcbce6373f08e7c3f7e532ca3961c375af97 |
+| configs/b6/packs/bytes-s4-p1/registration.json | a3e793393fbc235aea0280eb89cb59c1a06610f64cdb13a80dbc743dc6565b22 |
+| configs/b6/packs/bytes-s4-p2/registration.json | e02f21b62da8390e8e6bf88d2ed35eef125b31165b3d38c50a25dd08e05b404d |
+| configs/b6/packs/bytes-s5-p1/registration.json | 72c9c986e864bd4c4134ba65d562c544d2725f72ed65d8ee7f78e4315ff1ecae |
+| configs/b6/packs/bytes-s5-p2/registration.json | afb2b8f0a68e9427677fecf5809339924b3e08f4dc85497648cc55f139c16045 |
+| configs/b6/packs/bytes-s6-p1/registration.json | b7d97fef7d26fb165b8572ac1d05eaf16c80e2cd7223fe25be2b93ee8e50a4a7 |
+| configs/b6/packs/bytes-s6-p2/registration.json | 7013aababdccfed44167473540c199465a4fbfb7532f4890cebce83f2dc1405b |
+| configs/gates/hazard_refusals.json | 821a76de37936a9b1c681d0c63bc0c690e31287392dddc10de2108e07d95c816 |
+| joulewise/b6/acceptance.py | cefb51aadd905dbcff0b6a622d453cf9c95b8b8ef27fdbd002efcb82b30514b6 |
+| joulewise/b6/archive.py | 94056cccd2cf5bd378b92de22a12acca096104c6c4950d0aa249795f5786416c |
+| joulewise/b6/export_runs.py | 39c48264047ef3f0eae02ffff7255caa1ba1448aaefed323a738718c16bec1e6 |
+| joulewise/bytes_analysis.py | 18582818c7e03bad148b54dce8b8d60a62e2ffc5597e701ae3ab0418dffc0a71 |
+| joulewise/hazards/clock.py | 5d5c16bff9e7b9dd84fa9e822d2ebe97b042930e94e04114b57980c592f7093d |
+| scripts/b6_export_runs.py | 8371f069ec04eea957e883e20b1eee6d830df3722881826bb2c3ed4953c6bacc |
+| scripts/build_b6_flag_catalog.py | 74004fabc0f0a4205879501c493df27dcedbc03ef1172fcc69683c96b4c37af5 |
+| scripts/bytes_plan_trees.py | c1bfedde1c25cd6ea840434d485d98cdf1901dced986dece1941177353faa829 |
+| scripts/bytes_twin.py | 25aa36082c11402cf042103257e83de36eca77c1d70d47876bd58f4c8bd117a9 |
+| tests/b6/test_export_runs.py | 6324672343c6a6bb724b3e81ffbd185b274de692d151440ee45ceb92d5c991d9 |
+| tests/b6/test_fix416_gates.py | 30d54975615960c4afc4a6bc7aa383c0f21c1304681eeedabb844c27cc09a8ea |
+| tests/fixtures/bytes/campaign.py | 3674118eb7354d8802f8e1a4bf175b1bf50ba2e1fac80f0b956b3eb838f3bf63 |
+| tests/hazards/test_clock.py | e5477375cbffef7d88fe94035190defd81be5bee0a225088dae2376766003582 |
+| tests/test_bytes_gates.py | f40e5a29ca9652b36f360f960ba6d0dc9d0aec39b2c733090830b037e6f37437 |
+
+## Verification notes
+
+The Fable matrix uses the source snapshot in /private/tmp/fix416f/round2/probe-source. The subsequent missing-plan-tree and joint-loss guards affect cases outside that matrix: every matrix clone preserves the same inventory-listed BY-H2 plan tree and reference bundle entries. Those failure cases have independent before/after regressions, and the 25-archive replay and selected suite are repeated after the guards. Round 1's five H-session errors are resolved by archive-only source lookup. The final focused rerun also covers two additional status-witness/missing-digest regressions. Supplemental acceptance, wrapper and cold-pass tests exercise the changed evidence-reader callers and spare-slot behavior. Full canonical discovery would include the prohibited full modules and was not run; tests.test_bytes_analysis, tests.test_bytes_agreement and tests.test_bytes_coverage_map were not run in full. The two specified agreement campaigns used their production-shaped harness: env TMPDIR=/private/tmp/fix416f/round2 JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B .scratch-416F/round2_agreement_pair.py withheld ; env TMPDIR=/private/tmp/fix416f/round2 JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B .scratch-416F/round2_agreement_pair.py compressed .
+
+Superseded intermediate verification jobs were interrupted after later boundary corrections. The first broad supplemental cold-pass command also included long FullRoundTests; those were interrupted and replaced by the targeted reader classes in V7. Their interrupted results and TMPDIR cleanup warnings are retained in intermediate logs, not counted as custody failures or final test results. Initial fresh fixture attempts stopped on absent source-status witnesses; selected-initial.log, agreement-withheld-initial.log and agreement-compressed-initial.log preserve them. Final attempts use corrected fixture builders. Round 1's historical agreement evidence is retained but is not substituted for the fresh final-tree runs.
+
+Hazards: Ran 323 tests in 126.305s; FAILED (failures=28, skipped=9). The 28 failures are exactly the same 22 sandbox-limited census methods as round 1's unchanged-base reproduction. The refusal allowlist passes, including the new desk-only sites. F3 assigns the host rerun to the lead. Exact assertions/subtests follow; sandbox-census-methods.txt is the deduplicated runnable list:
+
+- tests.hazards.test_arm.ArmTests.test_a_battery_current_that_starts_during_the_dwell_refuses_at_the_final_read
+- tests.hazards.test_arm.ArmTests.test_agent_that_starts_during_the_dwell_gets_no_go
+- tests.hazards.test_arm.ArmTests.test_block6_plan_holds_above_its_registered_rate
+- tests.hazards.test_arm.ArmTests.test_charging_that_starts_during_the_dwell_refuses_at_the_final_read
+- tests.hazards.test_arm.ArmTests.test_clock_step_during_the_dwell_refuses
+- tests.hazards.test_arm.ArmTests.test_contending_daemon_times_the_dwell_out
+- tests.hazards.test_arm.ArmTests.test_frequency_word_change_at_the_end_of_the_dwell_is_diagnostic
+- tests.hazards.test_arm.ArmTests.test_go_records_a_clean_census_taken_after_the_final_reads
+- tests.hazards.test_arm.ArmTests.test_go_records_the_smc_current_beside_the_registry_cross_check
+- tests.hazards.test_arm.ArmTests.test_network_time_off_output_is_recorded_not_judged
+- tests.hazards.test_arm.ArmTests.test_quiet_float_mac_arms_go_in_the_registered_order
+- tests.hazards.test_arm.ArmTests.test_record_only_collectors_never_change_the_decision
+- tests.hazards.test_arm.ArmTests.test_unmeasured_refuses_at_arm_only_for_the_instrument (module='battery')
+- tests.hazards.test_arm.ArmTests.test_unmeasured_refuses_at_arm_only_for_the_instrument (module='thermal')
+- tests.hazards.test_arm.ArmTests.test_unmeasured_refuses_at_arm_only_for_the_instrument (module='disk')
+- tests.hazards.test_arm.ArmTests.test_unmeasured_refuses_at_arm_only_for_the_instrument (module='clock')
+- tests.hazards.test_arm.ArmTests.test_unmeasured_refuses_at_arm_only_for_the_instrument (module='contention')
+- tests.hazards.test_arm.ArmTests.test_without_the_smc_the_arm_judges_the_registry_and_records_the_fallback
+- tests.hazards.test_arm_identity.ArmIdentityTests.test_empty_epoch_list_never_refuses
+- tests.hazards.test_arm_identity.ArmIdentityTests.test_failed_read_is_recorded_and_never_refuses [spawn error]
+- tests.hazards.test_arm_identity.ArmIdentityTests.test_failed_read_is_recorded_and_never_refuses [nonzero exit]
+- tests.hazards.test_arm_identity.ArmIdentityTests.test_failed_read_is_recorded_and_never_refuses [empty output]
+- tests.hazards.test_arm_identity.ArmIdentityTests.test_judged_identity_proceeds_to_go
+- tests.hazards.test_arm_identity.ArmIdentityTests.test_no_expected_epochs_reads_no_identity
+- tests.hazards.test_import_graph.ImportGraphTests.test_a_complete_arm_and_monitor_run_load_no_retired_module
+- tests.hazards.test_instrument.CadenceProbeTests.test_block3_interactive_capture_at_130_ms_passes
+- tests.hazards.test_instrument.CadenceProbeTests.test_privilege_prefix_is_prepended_to_the_adapter_command
+- tests.hazards.test_instrument.ProductionCommandTests.test_timeout_kills_the_capture_group
+
+NEEDS_RULING — **Question:** may a reference with no archived candidate directory, no listed bundle, no success assessment and explicit recorded uncollected exclusions remain a printed failed/excluded row outside roster-to-bundle equality? **Options considered:** retain literal equality (current code; intact H stops), or allow only this explicit uncollected case while retaining every row/code and every collected/listed reference in both sets. **Recommendation:** the narrow uncollected exception preserves the historical non-collection record without silent reference removal; no exception has been applied. **Blocked work:** H's zero-stop export, the required 25/25 zero-stop acceptance and final acceptance of item 5. The delegated-session authority rule and bridge contract §3 require the lead's ruling before changing the contract.
+
+All artifact generation/mutation stayed under TMPDIR; free space remained above 60 GiB (75 GiB at intake; 73 GiB at a later check). No live arm, runner, night command, model load or prohibited system command ran. State/queue/registration documents outside WRITE_SCOPE were not changed.
+
+## Residual risk
+
+H membership remains blocking. Next exact step: the lead answers the uncollected-reference ruling; if authorized, apply it prospectively and rerun H plus focused membership checks and final replay comparison. The lead owns final diff review, the F3 host census rerun, live/hardware gates and any eventual commit. All changes remain uncommitted.

@@ -48,6 +48,29 @@ def tearDownModule():  # noqa: N802 (unittest hook)
     base._TEMPLATE = None
 
 
+class BusyOnlyHarvestTests(unittest.TestCase):
+    def test_reduced_phase_and_verdict_keep_busy_only_member(self):
+        from joulewise.reduce import _apply_environment_claim_barrier, _apply_cpu_admission_claim_barrier
+        from tests.test_hazard_whole_window_verdict import busy_only_core_fixture
+
+        with tempfile.TemporaryDirectory() as tmp:
+            member, result = busy_only_core_fixture(Path(tmp))
+            prechecks = {"phase": {"prefill": {"eligible": True, "reasons": []}}}
+            _apply_environment_claim_barrier(prechecks, member.metadata)
+            _apply_cpu_admission_claim_barrier(prechecks, member.metadata)
+            self.assertEqual(prechecks["phase"]["prefill"], {"eligible": True, "reasons": []})
+            emitted = []
+            roster_member = {"run_id": "member", "stage_id": "science", "cells": [
+                {"target": True, "target_precheck_path": ["phase", "prefill"]}]}
+            recorder = SimpleNamespace(roster={"members": [roster_member]},
+                                       emit=lambda code, **kw: emitted.append(code))
+            h._Harvest._precheck_flags(recorder, roster_member, {"precheck": prechecks}, {"run_id": "member"})
+            row = {"bundle_ids": ["member"], "member_failures": list(result.member_failures), "status": "passed"}
+            self.assertEqual(h._Harvest.whole_window_member_failures(recorder, row), "listed")
+            self.assertNotIn("member.target_phase_precheck_failed", emitted)
+            self.assertNotIn("member.whole_window_member_failure", emitted)
+
+
 def smc_values(current_ma: int, counter: int, voltage_mv: int = 12500) -> dict:
     """A ``source: smc`` battery line's values as L1's monitor writes them (``battery.smc_sample``).
 

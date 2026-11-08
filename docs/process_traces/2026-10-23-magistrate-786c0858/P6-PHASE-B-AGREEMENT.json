@@ -1,0 +1,135 @@
+[
+  {
+    "campaign": "bytes",
+    "compared": 416077,
+    "equal": 408793,
+    "under_bar": 7284,
+    "above_bar": 0
+  },
+  {
+    "campaign": "compressed",
+    "compared": 346417,
+    "equal": 340014,
+    "under_bar": 6403,
+    "above_bar": 0
+  },
+  {
+    "campaign": "defects",
+    "compared": 355637,
+    "equal": 349026,
+    "under_bar": 6611,
+    "above_bar": 0
+  },
+  {
+    "campaign": "edge_locked",
+    "compared": 346417,
+    "equal": 340166,
+    "under_bar": 6251,
+    "above_bar": 0
+  },
+  {
+    "campaign": "marker_incomplete",
+    "compared": 20540,
+    "equal": 18176,
+    "under_bar": 2364,
+    "above_bar": 0
+  },
+  {
+    "campaign": "late_start",
+    "compared": 220743,
+    "equal": 214881,
+    "under_bar": 5862,
+    "above_bar": 0
+  },
+  {
+    "campaign": "empty_payload_n",
+    "compared": 416077,
+    "equal": 408795,
+    "under_bar": 7282,
+    "above_bar": 0
+  },
+  {
+    "campaign": "replayed_batch",
+    "compared": 416077,
+    "equal": 408765,
+    "under_bar": 7312,
+    "above_bar": 0
+  },
+  {
+    "campaign": "replayed_tail",
+    "compared": 416077,
+    "equal": 408681,
+    "under_bar": 7396,
+    "above_bar": 0
+  },
+  {
+    "campaign": "first_batch_tail_replayed",
+    "compared": 416077,
+    "equal": 408849,
+    "under_bar": 7228,
+    "above_bar": 0
+  },
+  {
+    "campaign": "minimum",
+    "compared": 336000,
+    "equal": 329116,
+    "under_bar": 6884,
+    "above_bar": 0
+  },
+  {
+    "campaign": "resident",
+    "compared": 346417,
+    "equal": 340162,
+    "under_bar": 6255,
+    "above_bar": 0
+  },
+  {
+    "campaign": "time",
+    "compared": 346417,
+    "equal": 339968,
+    "under_bar": 6449,
+    "above_bar": 0
+  },
+  {
+    "campaign": "polls_only",
+    "compared": 20448,
+    "equal": 17970,
+    "under_bar": 2478,
+    "above_bar": 0
+  },
+  {
+    "campaign": "header_closed",
+    "compared": 20448,
+    "equal": 18129,
+    "under_bar": 2319,
+    "above_bar": 0
+  },
+  {
+    "campaign": "invalid_anchor",
+    "compared": 345937,
+    "equal": 339555,
+    "under_bar": 6382,
+    "above_bar": 0
+  },
+  {
+    "campaign": "withheld",
+    "compared": 286518,
+    "equal": 280642,
+    "under_bar": 5876,
+    "above_bar": 0
+  },
+  {
+    "campaign": "battery_instant",
+    "compared": 417517,
+    "equal": 410231,
+    "under_bar": 7286,
+    "above_bar": 0
+  },
+  {
+    "campaign": "battery_delayed",
+    "compared": 416077,
+    "equal": 408784,
+    "under_bar": 7293,
+    "above_bar": 0
+  }
+]

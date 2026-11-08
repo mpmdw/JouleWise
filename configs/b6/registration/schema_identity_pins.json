@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "joulewise.b5_identity_pins.v1",
+  "type": "object",
+  "required": ["schema", "runtime_versions", "units"],
+  "properties": {
+    "schema": {"const": "joulewise.b5_identity_pins.v1"},
+    "runtime_versions": {
+      "type": "object", "required": ["python", "packages"],
+      "properties": {
+        "python": {"type": "string"},
+        "packages": {"type": "object", "additionalProperties": {"type": "string", "minLength": 1}}
+      }
+    },
+    "units": {
+      "type": "object", "minProperties": 1,
+      "additionalProperties": {
+        "type": "object", "required": ["model_source", "model_artifact_sha256", "stack_identity"],
+        "properties": {
+          "model_source": {"type": "string", "minLength": 1},
+          "model_artifact_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "stack_identity": {"type": "object"}
+        }
+      }
+    }
+  }
+}

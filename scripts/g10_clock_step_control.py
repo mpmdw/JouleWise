@@ -24,8 +24,7 @@ Steps (gate-prune plan section 4, "G10"):
 4. Evaluate the clock module's arm verdict (``hazards.clock.judge`` on a
    two-sample ``hazards.clock.series``) on the before/after pair. A REFUSE
    whose measured residual exceeds the 1 ms limit is DISCHARGED; the decision
-   reads the number (``observed["max_abs_residual_ns"]``), never the reason
-   text. G10's own copy of the arithmetic (``evaluate_pair``) runs beside it
+   uses the pair's residual against the diagnostic frequency-word expectation. G10's own copy of the arithmetic (``evaluate_pair``) runs beside it
    as a recorded cross-check. Until ``joulewise.hazards`` is importable,
    ``main()`` falls back to ``evaluate_pair`` and says so in the record.
 5. Keep network time ON while reading f once a minute; switch OFF at the
@@ -347,12 +346,12 @@ def load_hazard_clock() -> tuple[Any, Any] | None:
 
 
 def make_hazard_evaluator(hazard_clock: Any, hazard_base: Any) -> Callable[..., dict[str, Any]]:
-    """The clock module's arm verdict on the pair, as an ``evaluate`` callable.
+    """The dwell judge plus G10's frequency-word step diagnostic.
 
     The pair becomes a two-sample dwell series (f_before at the start,
     f_after at the end) judged with the module's thresholds, the residual and
     skew limits taken from ``Params``. ``step_seen`` is decided on the number:
-    REFUSE and ``observed["max_abs_residual_ns"]`` above the residual limit.
+    the pair's residual against the diagnostic frequency-word expectation.
     """
 
     def evaluate(before, after, f_before, f_after, params: Params) -> dict[str, Any]:
@@ -380,11 +379,15 @@ def make_hazard_evaluator(hazard_clock: Any, hazard_base: Any) -> Callable[..., 
             started=now, finished=now)
         verdict = hazard_clock.judge(measurement, thresholds)
         observed = dict(verdict.observed)
-        residual = observed.get("max_abs_residual_ns")
-        step_seen = (verdict.status == hazard_base.REFUSE and residual is not None
-                     and residual > params.residual_limit_ns)
+        diagnostic = evaluate_pair(before, after, f_before, f_after, params)
+        residual = diagnostic.get("residual_ns")
+        step_seen = residual is not None and residual > params.residual_limit_ns
         status = {hazard_base.PASS: PASS, hazard_base.REFUSE: REFUSE,
                   hazard_base.UNMEASURED: UNMEASURED}[verdict.status]
+        if diagnostic["verdict"] == UNMEASURED:
+            status = UNMEASURED
+        elif step_seen:
+            status = REFUSE
         return {"evaluator": EVALUATOR_HAZARD, "verdict": status,
                 "reasons": list(verdict.reasons), "residual_ns": residual,
                 "residual_limit_ns": params.residual_limit_ns, "step_seen": bool(step_seen),

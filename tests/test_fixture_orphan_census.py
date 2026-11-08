@@ -54,6 +54,29 @@ class FixtureOrphanCensusTests(unittest.TestCase):
                 with self.subTest(command=command, parent=parent):
                     self.assertEqual(sentinel.census(row(command, ppid=parent), self.signatures), [])
 
+    def test_real_monitor_requires_test_tempfile_custody(self) -> None:
+        prefix = "/opt/homebrew/bin/python3.13 -B /repo/scripts/hazard_monitor.py --config "
+        for path in (
+            "/private/tmp/jwtmp-byloop.Abc123/tmpxwija5mv/hazards/monitor/config.json",
+            "/repo/.scratch-fix/tmp/s3-run/tmpxwija5mv/tmpzvtu2yd3/hazards/monitor/config.json",
+        ):
+            with self.subTest(path=path):
+                self.assertEqual([item["signature"] for item in sentinel.census(row(prefix + path), self.signatures)],
+                                 ["hazards-test-real-monitor"])
+                self.assertEqual(sentinel.census(row(prefix + path, ppid=200), self.signatures), [])
+        for path in (
+            "/Users/edr/night-b6/session/custody/hazards/monitor/config.json",
+            "/Users/edr/night-bytes/session/custody/hazards/monitor/config.json",
+            "/Users/edr/night-custody/session/hazards/monitor/config.json",
+            "/private/tmp/tmpfixture/hazards/monitor/config.json",
+            "/private/tmp/tmpxwija5mvX/hazards/monitor/config.json",
+        ):
+            with self.subTest(path=path):
+                self.assertEqual(sentinel.census(row(prefix + path), self.signatures), [])
+        self.assertEqual(sentinel.census(row(
+            "/usr/bin/python3 -m joulewise.hazards.monitor --config "
+            "/private/tmp/tmpxwija5mv/hazards/monitor/config.json"), self.signatures), [])
+
     def test_nonfixtures_do_not_match(self) -> None:
         for command in (
             "/usr/bin/sleep 30",
@@ -203,9 +226,24 @@ class FixtureOrphanCensusTests(unittest.TestCase):
             with self.subTest(production=command):
                 self.assertEqual(sentinel.census(row(command), self.signatures), [])
 
+    def test_unavailable_inventory_skips_before_starting_an_orphan(self) -> None:
+        case = type(self)("test_live_an_orphaned_fake_meter_is_reported")
+        result = unittest.TestResult()
+        with mock.patch.object(sentinel, "process_inventory", side_effect=PermissionError("sandbox denies ps")), \
+                mock.patch.object(subprocess, "run", side_effect=AssertionError("orphan started without census")) as spawn:
+            case.run(result)
+        self.assertEqual(len(result.skipped), 1, (result.errors, result.failures))
+        spawn.assert_not_called()
+
     def test_live_an_orphaned_fake_meter_is_reported(self) -> None:
         # A real orphan: the fake meter started by a shell that exits at once,
         # so the meter is reparented to PID 1; the census must name it.
+        # The cleanup also needs ps. Check access before creating a child that
+        # neither the observation nor the cleanup could find in a sandbox.
+        try:
+            sentinel.process_inventory()
+        except PermissionError:
+            self.skipTest("sandbox denies ps")
         from tests import process_reaper
         from tests.test_b5_driver_p3 import FAKE_METER
         directory = Path(tempfile.mkdtemp(prefix="orphan-census-"))

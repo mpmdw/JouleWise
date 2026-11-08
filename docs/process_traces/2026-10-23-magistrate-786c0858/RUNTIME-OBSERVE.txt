@@ -1,0 +1,59 @@
+0.31.3 0.31.2
+25G83
+Mac15,9
+{
+  "interpreter": "/Users/edr/code/JouleWise/.venv/bin/python",
+  "interpreter_sha256": "d483cfdc272ddd1bfd8f6f595b65cdc2f00b8e503f0deab65b20e8faeb986132",
+  "matches_registered_runtime": true,
+  "model_loaded": false,
+  "registered_runtime_versions_sha256": "9033a69906aab1f0ff5724b5a6c2f3efd623512ee49a7048713e2410e701c794",
+  "resolved_interpreter": "/opt/homebrew/Cellar/python@3.13/3.13.1/Frameworks/Python.framework/Versions/3.13/bin/python3.13",
+  "runtime_versions": {
+    "packages": {
+      "mlx": "0.31.2",
+      "mlx-lm": "0.31.3",
+      "mlx-metal": "0.31.2",
+      "numpy": "2.5.1",
+      "safetensors": "0.8.0",
+      "tokenizers": "0.22.2",
+      "transformers": "5.12.1"
+    },
+    "python": "3.13.1"
+  },
+  "runtime_versions_sha256": "9033a69906aab1f0ff5724b5a6c2f3efd623512ee49a7048713e2410e701c794",
+  "tokenizer_loaded": false,
+  "vectors": {
+    "identity-epoch.json": {
+      "block3_sha256": "b8a1094c24d1795e39fc527ce96ba9e1a4ba2bda66d4250f35a462e28a90b607",
+      "bytes_base64": "ewogICJlc3RpbWF0b3JfcmV2aXNpb24iOiAiam9pbnRfbG9zc19zdWJsZXZlbF9pbnRlcnZhbF9icmFuY2hfdjIiLAogICJoYXJkd2FyZV9tb2RlbCI6ICJNYWMxNSw5IiwKICAib3NfYnVpbGQiOiAiMjVHODMiLAogICJwb3dlcl9wb2xpY3kiOiAiYWNfaGlnaF9wb3dlciIsCiAgInB1bHNlX3Byb3RvY29sX2lkIjogInBvd2VybWV0cmljc19wdWxzZV9maWR1Y2lhbF92MyIsCiAgInNhbXBsaW5nX2ludGVydmFsX21zIjogMTAwCn0K",
+      "matches_block3": true,
+      "sha256": "b8a1094c24d1795e39fc527ce96ba9e1a4ba2bda66d4250f35a462e28a90b607",
+      "value": {
+        "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
+        "hardware_model": "Mac15,9",
+        "os_build": "25G83",
+        "power_policy": "ac_high_power",
+        "pulse_protocol_id": "powermetrics_pulse_fiducial_v3",
+        "sampling_interval_ms": 100
+      }
+    },
+    "t1-bindings.json": {
+      "block3_sha256": "8dcdfb009d9cf6c7d218bf19667ad1b88f6a9747c6822c02fd2997ef9a1e9d98",
+      "bytes_base64": "ewogICJhbmNob3JfbWV0aG9kX3ZlcnNpb24iOiAicG93ZXJtZXRyaWNzX25hdGl2ZV9zZWNvbmRfcmF0ZV9hd2FyZV9zZXRfbWVtYmVyc2hpcF92MSIsCiAgImVzdGltYXRvcl9yZXZpc2lvbiI6ICJqb2ludF9sb3NzX3N1YmxldmVsX2ludGVydmFsX2JyYW5jaF92MiIsCiAgImhhcmR3YXJlX21vZGVsIjogIk1hYzE1LDkiLAogICJtbHhfdmVyc2lvbiI6ICIwLjMxLjIiLAogICJvc19idWlsZCI6ICIyNUc4MyIsCiAgInBvd2VyX3BvbGljeSI6ICJhY19oaWdoX3Bvd2VyIiwKICAicG93ZXJtZXRyaWNzX3NoYTI1NiI6ICJiNzYyZTViZjc2MjhlNzdkMjc5MDEyODgyYzA5NmU5MjI2MzNhNDdhYTM4YmQ1ZjA1YzAzODFjZmIyMTMzMGM1IiwKICAicHJvdG9jb2xfc2hhMjU2IjogIjllYWY5MmY4NTEzNmUyMzRjNTZlYTNmZmQzNDM5MmE3M2MzMTNkNGEwOTJjYWJmMzA4ZjVmNWFhZmY5YTMxYjEiLAogICJwdWxzZV9wcm90b2NvbF9pZCI6ICJwb3dlcm1ldHJpY3NfcHVsc2VfZmlkdWNpYWxfdjMiLAogICJzYW1wbGluZ19pbnRlcnZhbF9tcyI6IDEwMAp9Cg==",
+      "matches_block3": true,
+      "sha256": "8dcdfb009d9cf6c7d218bf19667ad1b88f6a9747c6822c02fd2997ef9a1e9d98",
+      "value": {
+        "anchor_method_version": "powermetrics_native_second_rate_aware_set_membership_v1",
+        "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
+        "hardware_model": "Mac15,9",
+        "mlx_version": "0.31.2",
+        "os_build": "25G83",
+        "power_policy": "ac_high_power",
+        "powermetrics_sha256": "b762e5bf7628e77d279012882c096e922633a47aa38bd5f05c0381cfb21330c5",
+        "protocol_sha256": "9eaf92f85136e234c56ea3ffd34392a73c313d4a092cabf308f5f5aaff9a31b1",
+        "pulse_protocol_id": "powermetrics_pulse_fiducial_v3",
+        "sampling_interval_ms": 100
+      }
+    }
+  }
+}

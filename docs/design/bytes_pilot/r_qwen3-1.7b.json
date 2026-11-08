@@ -1,0 +1,99 @@
+{
+ "repo": "mlx-community/Qwen3-1.7B-4bit",
+ "mlx_version": "0.31.2",
+ "ok": true,
+ "errors": [],
+ "snapshot": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-1.7B-4bit/snapshots/3b1b1768f8f8cf8351c712464f906e86c2b8269e",
+ "on_disk_bytes": 984043520,
+ "config_excerpt": {
+  "model_type": "qwen3",
+  "num_hidden_layers": 28,
+  "hidden_size": 2048,
+  "num_attention_heads": 16,
+  "num_key_value_heads": 8,
+  "head_dim": 128,
+  "vocab_size": 151936,
+  "num_experts": null,
+  "num_local_experts": null,
+  "num_experts_per_tok": null,
+  "experts_per_token": null,
+  "moe_intermediate_size": null,
+  "intermediate_size": 6144,
+  "shared_expert_intermediate_size": null,
+  "full_attention_interval": null,
+  "sliding_window": null,
+  "layer_types": null,
+  "tie_word_embeddings": true,
+  "quantization": {
+   "group_size": 64,
+   "bits": 4
+  }
+ },
+ "rss_before_load": 94322688,
+ "load_s": 0.3766752500087023,
+ "mlx_active_after_load": 968017928,
+ "rss_after_load": 1278820352,
+ "accounting": {
+  "categories": {
+   "embed": {
+    "logical_params": 311164928,
+    "stored_bytes": 175030272
+   },
+   "always_active": {
+    "logical_params": 1409410048,
+    "stored_bytes": 792971264
+   }
+  },
+  "quant_mix_logical_params": {
+   "4b/64g/affine": 1720451072
+  },
+  "num_experts": null,
+  "experts_per_tok": null,
+  "tied_embeddings": true,
+  "total_params": 1720574976,
+  "active_params": 1720574976.0,
+  "resident_weight_bytes": 968001536,
+  "bytes_read_per_token_measured": 968002688.0,
+  "bytes_read_per_token_formula_4bit": 860287488.0
+ },
+ "runs": [
+  {
+   "rep": 0,
+   "prefill_s": 0.5640844579902478,
+   "prefill_tps": 3630.661988626191,
+   "decode_tokens": 511,
+   "decode_s": 2.3821425829955842,
+   "decode_tps": 214.51276831524035,
+   "total_s": 2.946227040985832,
+   "mlx_peak_bytes": 1912055890,
+   "kv_cache_bytes_end": 293601280,
+   "distinct_tokens_out": 47,
+   "output_head": " session that was in the middle of a measurement, and that had a terminal record, is now eligible for a new measurement. The first such session is the one that started on 2026-09-16, and that session's first run is the one that failed on "
+  },
+  {
+   "rep": 1,
+   "prefill_s": 0.5641994169855025,
+   "prefill_tps": 3629.9222195981547,
+   "decode_tokens": 511,
+   "decode_s": 2.349244750017533,
+   "decode_tps": 217.516714678701,
+   "total_s": 2.9134441670030355,
+   "mlx_peak_bytes": 1912055890,
+   "kv_cache_bytes_end": 293601280,
+   "distinct_tokens_out": 47
+  },
+  {
+   "rep": 2,
+   "prefill_s": 0.564477416977752,
+   "prefill_tps": 3628.134515930012,
+   "decode_tokens": 511,
+   "decode_s": 2.370077833009418,
+   "decode_tps": 215.60473368554113,
+   "total_s": 2.93455524998717,
+   "mlx_peak_bytes": 1912055890,
+   "kv_cache_bytes_end": 293601280,
+   "distinct_tokens_out": 47
+  }
+ ],
+ "peak_rss_bytes": 1323532288
+}

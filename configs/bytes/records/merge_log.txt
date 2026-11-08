@@ -1,0 +1,10 @@
+{"W_minus_pilot_bytes": 0.0, "comparison": "W versus pilot read_meas_GB (pilot column excludes KV)", "model": "llama-3.3-70b-instruct-4bit", "pilot_read_meas_GB": 39.0973568}
+{"W_minus_pilot_bytes": 0.0, "comparison": "W versus pilot read_meas_GB (pilot column excludes KV)", "model": "qwen3-1.7b-4bit", "pilot_read_meas_GB": 0.968002688}
+{"W_minus_pilot_bytes": 0.0, "comparison": "W versus pilot read_meas_GB (pilot column excludes KV)", "model": "qwen3-14b-4bit", "pilot_read_meas_GB": 7.87021088}
+{"W_minus_pilot_bytes": 0.0, "comparison": "W versus pilot read_meas_GB (pilot column excludes KV)", "model": "qwen3-30b-a3b-4bit", "pilot_read_meas_GB": 1.711355008}
+{"W_minus_pilot_bytes": 0.0, "comparison": "W versus pilot read_meas_GB (pilot column excludes KV)", "model": "qwen3-32b-4bit", "pilot_read_meas_GB": 17.992094528}
+{"W_minus_pilot_bytes": 0.0, "comparison": "W versus pilot read_meas_GB (pilot column excludes KV)", "model": "qwen3-4b-4bit", "pilot_read_meas_GB": 2.262921632}
+{"W_minus_pilot_bytes": 4.76837158203125e-07, "comparison": "W versus pilot read_meas_GB (pilot column excludes KV)", "model": "qwen3-8b-4bit", "pilot_read_meas_GB": 4.257673472}
+{"W_minus_pilot_bytes": null, "comparison": "W versus pilot read_meas_GB (pilot column excludes KV)", "model": "qwen3-8b-8bit", "pilot_read_meas_GB": null}
+{"W_minus_pilot_bytes": 0.0, "comparison": "W versus pilot read_meas_GB (pilot column excludes KV)", "model": "qwen3-next-80b-a3b-instruct-4bit", "pilot_read_meas_GB": 2.031833728}
+{"W_minus_pilot_bytes": 0.0, "comparison": "W versus pilot read_meas_GB (pilot column excludes KV)", "model": "qwen3.5-122b-a10b-4bit", "pilot_read_meas_GB": 5.070253248}
