@@ -128,7 +128,8 @@ class FakeHost:
     ``night_job_loaded`` makes launchd report a loaded night job.
     """
 
-    def __init__(self, mode=0, *, extra_mount=False, night_job_loaded=False, soc=100, charging=False):
+    def __init__(self, mode=0, *, extra_mount=False, night_job_loaded=False, soc=100, charging=False, now=None):
+        self.now = now
         self.mode, self.extra_mount, self.night_job_loaded = mode, extra_mount, night_job_loaded
         self.soc, self.charging = soc, charging
         self.calls, self.installer_calls = [], []
@@ -145,7 +146,7 @@ class FakeHost:
                    f'      "IsCharging" = {"Yes" if self.charging else "No"}\n'
                    '      "InstantAmperage" = 0\n      "Amperage" = 0\n'
                    f'      "CurrentCapacity" = {self.soc}\n'
-                   f'      "UpdateTime" = {int(time.time())}\n    }}\n').encode()
+                   f'      "UpdateTime" = {int(self.now or time.time())}\n    }}\n').encode()
             return subprocess.CompletedProcess(argv, 0, raw, b'')
         if argv == ('pmset', '-g', 'batt'):
             return done(0, 'synthetic: 100%; AC; not charging')
@@ -220,41 +221,36 @@ def battery_log(path, now, kind='completed'):
     return path
 
 
-def _git_record_repo(root, windows):
-    """A git repository holding one committed record per window, in order; returns {window: commit}."""
-    root = Path(root)
-    root.mkdir(parents=True, exist_ok=True)
-    env = {**os.environ, 'GIT_AUTHOR_NAME': 'prequal', 'GIT_AUTHOR_EMAIL': 'prequal@invalid',
-           'GIT_COMMITTER_NAME': 'prequal', 'GIT_COMMITTER_EMAIL': 'prequal@invalid'}
-    run = lambda *a: subprocess.run(['git', '-C', str(root), *a], capture_output=True, text=True, check=True,
-                                    env=env, timeout=60)
-    if not (root / '.git').exists():
-        run('init', '-q')
-        run('config', 'commit.gpgsign', 'false')
-    commits = {}
-    for window in windows:
-        record = root / 'records' / f'2026-11-08-align-v4-{window}'
-        record.mkdir(parents=True, exist_ok=True)
-        (record / 'NOTE.md').write_text(f'synthetic {window} record\n')
-        run('add', '-A')
-        run('commit', '-q', '-m', f'record {window}')
-        commits[window] = run('rev-parse', 'HEAD').stdout.strip()
-    return commits
+def _scenario_class():
+    """The v4 fixer's synthetic record fixture (real ``window_record.v1`` index and ``series/state.json``)."""
+    from tests.align.test_v4_next_arm_packet import Scenario
+    return Scenario
+
+
+def _fresh(scenario, now):
+    """Quiet-state observation one second before the arm (its validity window is 30 s)."""
+    scenario.quiet['observed_at_epoch_s'] = int(now) - 1
+    return scenario
 
 
 def arm_fixture(ctx, name, *, now, t0_offset_s=3600):
-    """A session the production install CLI accepts: measurement view, plan, R0 disk config."""
+    """A session the production install CLI accepts: an R1 -> W1 record series, plan, R0 disk config."""
     from scripts import align_v4_kit as kit, bytes_h_session as h
     base = ctx.work / name
     measurement, session, custody = base / 'measurement', base / 'session', base / 'custody'
-    (measurement / kit.KIT / 'registration').mkdir(parents=True)
-    commit = _git_record_repo(measurement, ['R1'])['R1']
-    session.mkdir(parents=True)
-    custody.mkdir(parents=True)
+    measurement.mkdir(parents=True)
+    scenario = _scenario_class()(measurement, 'R1')
+    scenario.next_plan.update(window='W1', role='development')
+    del scenario.thermal['model_windows']
+    # The kit files the arm reads are committed with the records, so the desk-passed artifact set holds.
+    (measurement / kit.KIT / 'registration').mkdir(parents=True, exist_ok=True)
     plan = json.loads((ctx.repo / kit.KIT / 'collection_plan.json').read_bytes())
     plan.setdefault('runtime_requirements', {})['ac_powermode'] = 0
     (measurement / kit.KIT / 'collection_plan.json').write_text(json.dumps(plan))
     (measurement / kit.R1_SLOTS).write_text(json.dumps({'ac_powermode': 0}))
+    _fresh(scenario, now).finish()
+    session.mkdir(parents=True)
+    custody.mkdir(parents=True)
     night_plan = custody / 'night_plan.json'
     night_plan.write_text(json.dumps({'t0_epoch_s': now + t0_offset_s, 'plan_id': 'w1-prequal-synthetic'}))
     h.write(session / 'session.json', {
@@ -265,34 +261,39 @@ def arm_fixture(ctx, name, *, now, t0_offset_s=3600):
         config['offloads_owed'] = 'none'
     disk = base / 'r0_desk.json'
     disk.write_text(json.dumps(config))
-    from joulewise.align.apple import v4_registration as reg
-    (base / 'record_commit').write_text(commit)
-    (base / 'desk_digest').write_text(reg.artifact_set_digest(measurement))
+    (base / 'identities.json').write_text(json.dumps(scenario.identities()))
     return base, session, disk
 
 
-def fixture_packet(base, **kwargs):
-    """The W1 pointer packet naming the fixture's committed R1 record (path, sha256, commit) and desk digest."""
-    record = Path(base) / 'measurement/records/2026-11-08-align-v4-R1/NOTE.md'
-    commit = (Path(base) / 'record_commit').read_text()
-    packet = triage_packet(record_commit=commit, desk_digest=(Path(base) / 'desk_digest').read_text(), **kwargs)
-    packet.update(record_path='records/2026-11-08-align-v4-R1/NOTE.md',
-                  record_sha256=hashlib.sha256(record.read_bytes()).hexdigest(),
-                  expires_at_epoch_s=int(time.time()) + 1800, pushed_tip=commit,
-                  packet_preflight={'producer': 'w1-prequal synthetic'})
-    return packet
+def fixture_packet(base, now=None):
+    """The producer's packet (scripts/align_v4_next_arm_packet.build_packet) for the fixture's R1 record."""
+    from scripts import align_v4_next_arm_packet as builder
+    from joulewise.align.apple import v4_registration as reg
+    root = Path(base) / 'measurement'
+    return builder.build_packet(root, **json.loads((Path(base) / 'identities.json').read_text()),
+                                now_epoch_s=now or time.time(),
+                                current_artifact_set_sha256=reg.artifact_set_digest(root))
 
 
 def valid_packet(ctx, base, now):
     """The packet the production arm accepts for the fixture: its own rebuild when it rebuilds, else the pointer."""
-    pointer = fixture_packet(base)
+    pointer = fixture_packet(base, now)
     rebuilt = _find_rebuilt(_arm_file(ctx, Path(base) / 'measurement', pointer, now=now))
     if rebuilt is None:
         return pointer
     return {**rebuilt, **{k: pointer[k] for k in PACKET_IGNORED if k in pointer}}
 
 
-def run_install(ctx, session, disk, packet, *, host, args_override=None, drop=(), now=None, kind='completed'):
+def LIVE_METER(root):
+    return {'live': True, 'synthetic': 'w1-prequal fake meter probe (the real probe runs km003c_monitor.py)'}
+
+
+def DEAD_METER(root):
+    return {'live': False, 'reason': 'synthetic: no aligned samples'}
+
+
+def run_install(ctx, session, disk, packet, *, host, args_override=None, drop=(), now=None, kind='completed',
+                meter_probe=None):
     """Drive the production CLI (align_v4_session.main) with host seams only."""
     import functools
     from scripts import align_v4_kit as kit, align_v4_session as session_mod, bytes_h_session as h
@@ -315,7 +316,8 @@ def run_install(ctx, session, disk, packet, *, host, args_override=None, drop=()
     stderr = io.StringIO()
     from unittest import mock
     with mock.patch.object(session_mod, 'install', functools.partial(
-            real_install, runner=host, volume_runner=host, disk_gate=gate, now=lambda: now)), \
+            real_install, runner=host, volume_runner=host, disk_gate=gate, now=lambda: now,
+            meter_probe=meter_probe or LIVE_METER)), \
             mock.patch.object(h, 'install', functools.partial(real_h_install, run=host, now=lambda: now)), \
             mock.patch.object(kit, 'generate', lambda *a, **k: None), \
             contextlib.redirect_stderr(stderr), contextlib.redirect_stdout(io.StringIO()):
@@ -371,9 +373,12 @@ def check_arm_cli(ctx):
         # battery log kind, expected (admitted?, refusal substring)
         ('control', lambda v: None, {}, {}, (), 'completed', (True, None)),
         ('triage-missing', None, {}, {}, (), 'completed', (False, 'next-arm triage packet missing or wrong schema')),
-        ('triage-edited', edited, {}, {}, (), 'completed', (False, 'triage capture_faults failed')),
-        ('triage-stale-schema', old_schema, {}, {}, (), 'completed', (False, 'missing or wrong schema')),
-        ('record-commit-unknown', unknown_commit, {}, {}, (), 'completed', (False, 'triage record_committed failed')),
+        # Packet faults: the arm's rebuild refuses a supplied packet that differs (or cannot be rebuilt).
+        ('triage-edited', edited, {}, {}, (), 'completed', (False, ('does not match', 'triage capture_faults failed'))),
+        ('triage-stale-schema', old_schema, {}, {}, (), 'completed',
+         (False, ('could not be rebuilt', 'does not match', 'missing or wrong schema'))),
+        ('record-commit-unknown', unknown_commit, {}, {}, (), 'completed',
+         (False, ('could not be rebuilt', 'does not match', 'triage record_committed failed'))),
         ('topup-no-charge', lambda v: None, {}, {}, (), 'no-charge', (False, 'completed top-up evidence missing')),
         ('topup-stale', lambda v: None, {}, {}, (), 'stale', (False, 'completed top-up evidence missing')),
         ('topup-future', lambda v: None, {}, {}, (), 'future', (False, 'completed top-up evidence missing')),
@@ -384,12 +389,14 @@ def check_arm_cli(ctx):
         ('battery-charging', lambda v: None, {'charging': True}, {}, (), 'completed',
          (False, 'battery top-up incomplete')),
         ('powermode-mismatch', lambda v: None, {'mode': 2}, {}, (), 'completed', (False, 'ac_powermode')),
+        ('meter-not-live', lambda v: None, {}, {}, (), 'completed', (False, 'triage meter_reader_live failed')),
     ]
     for name, mutate, host_kwargs, overrides, drop, kind, (admit, needle) in cases:
         base, session, disk = arm_fixture(ctx, 'arm-' + name, now=now)
-        host = FakeHost(**host_kwargs)
+        host = FakeHost(now=now, **host_kwargs)
         out = run_install(ctx, session, disk, None if mutate is None else packet(base, mutate), host=host,
-                          args_override=overrides, drop=drop, now=now, kind=kind)
+                          args_override=overrides, drop=drop, now=now, kind=kind,
+                          meter_probe=DEAD_METER if name == 'meter-not-live' else LIVE_METER)
         arm = out['arm'] or {}
         row = {'case': name, 'rc': out['rc'], 'admitted': arm.get('admitted'),
                'installer_called': bool(out['installer_calls']), 'reasons': arm.get('reasons')}
@@ -399,7 +406,9 @@ def check_arm_cli(ctx):
                   and '--plan' in out['installer_calls'][0])
         else:
             text = json.dumps(arm.get('reasons') or []) + out['stderr']
-            ok = out['rc'] != 0 and arm.get('admitted') is False and not out['installer_calls'] and needle in text
+            needles = needle if isinstance(needle, tuple) else (needle,)
+            ok = (out['rc'] != 0 and arm.get('admitted') is False and not out['installer_calls']
+                  and any(n in text for n in needles))
         if not ok:
             failures.append(f'{name}: expected {"admit" if admit else "refusal " + repr(needle)}; got {row} '
                             f'{tail(out["stderr"], 300)}')
@@ -413,11 +422,12 @@ def _arm_on_records(ctx, measurement, packet_or_path, *, now):
     """The production ``arm_checks`` against a git measurement root, every host command faked."""
     from scripts import align_v4_session as session_mod
     log = battery_log(ctx.work / f'battery-{time.monotonic_ns()}.jsonl', now)
-    host = FakeHost()
+    host = FakeHost(now=now)
     with contextlib.redirect_stdout(io.StringIO()):
         return session_mod.arm_checks(measurement, {'runtime_requirements': {'ac_powermode': 0}}, runner=host,
                                       volume_runner=host, obc_off_attested_by='w1-prequal synthetic',
-                                      battery_log=log, now=lambda: now, next_arm_triage=packet_or_path)
+                                      battery_log=log, now=lambda: now, next_arm_triage=packet_or_path,
+                                      meter_probe=LIVE_METER)
 
 
 # --- Packet-as-pointer design (lead ruling, 2026-11-08): the ARM REBUILDS the next-arm packet
@@ -425,51 +435,34 @@ def _arm_on_records(ctx, measurement, packet_or_path, *, now):
 # receipt, lead rulings) and requires canonical equality, ignoring only these fields. Expiry is
 # mandatory; window records are hash-chained to their predecessor; zero-capture retries are C3#2.
 PACKET_IGNORED = ('pushed_tip', 'packet_preflight')
-SERIES = (('C1', 22), ('C2', 22), ('C3#1', 0), ('C3#2', 22))     # (attempt id, captured members)
+# W1, C1, C2, a zero-capture C3, its retry C3#2 (the fixer's attempt-id convention).
+SERIES = (('C1', True), ('C2', True), ('C3', False), ('C3#2', True))
 
 
-def _series_records(ctx, name):
-    """A git measurement root holding a hash-chained window-record series with a zero-capture retry."""
-    from joulewise.align.apple import v4_registration as reg
+def _series_records(ctx, name, now):
+    """A hash-chained series on the real record schema; returns the last window's scenario."""
     os.environ.setdefault('JOULEWISE_HOST_STATE_DIR', str(ctx.work / 'host-state'))
     Path(os.environ['JOULEWISE_HOST_STATE_DIR']).mkdir(parents=True, exist_ok=True)
     root = ctx.work / f'{name}-{time.monotonic_ns()}'
     root.mkdir(parents=True)
-    env = {**os.environ, 'GIT_AUTHOR_NAME': 'prequal', 'GIT_AUTHOR_EMAIL': 'prequal@invalid',
-           'GIT_COMMITTER_NAME': 'prequal', 'GIT_COMMITTER_EMAIL': 'prequal@invalid'}
-    run = lambda *a: subprocess.run(['git', '-C', str(root), *a], capture_output=True, text=True, check=True,
-                                    env=env, timeout=60)
-    run('init', '-q')
-    run('config', 'commit.gpgsign', 'false')
-    previous, records = None, []
-    for attempt, captured in SERIES:
-        window = attempt.split('#')[0]
-        rows = {'spam': 7, 'bank': 7} if captured else {'spam': 0, 'bank': 0}
-        record = {'schema': 'joulewise.align_v4.window_record.v1', 'window': window, 'attempt': attempt,
-                  'role': 'calibration', 'status': 'final', 'captured_members': captured, 'eligible_benign': rows,
-                  'predecessor_sha256': previous}
-        path = Path('records') / f'2026-11-08-align-v4-{attempt.replace("#", "-attempt")}' / 'record.json'
-        (root / path).parent.mkdir(parents=True)
-        raw = (json.dumps(record, indent=2, sort_keys=True) + '\n').encode()
-        (root / path).write_bytes(raw)
-        run('add', '-A')
-        run('commit', '-q', '-m', f'record {attempt}')
-        previous = hashlib.sha256(raw).hexdigest()
-        records.append({'attempt': attempt, 'path': path.as_posix(), 'sha256': previous,
-                        'commit': run('rev-parse', 'HEAD').stdout.strip(), 'row': record})
-    return root, records, reg.artifact_set_digest(root)
+    Scenario = _scenario_class()
+    previous = Scenario(root, 'W1').finish()
+    for window, captured in SERIES:
+        current = Scenario(root, window, previous=previous, captured=captured, eligible=True)
+        if window == SERIES[-1][0]:
+            _fresh(current, now)
+        previous = current.finish()
+    return previous
 
 
-def _pointer(records, digest, now):
-    """The best packet a producer can build: it names the last record; the arm's rebuild is the authority."""
-    last = records[-1]
-    windows = [{'window': r['attempt'], 'status': 'final', 'captured_members': r['row']['captured_members'],
-                'eligible_benign': r['row']['eligible_benign']} for r in records]
-    packet = triage_packet(previous='C3', role='calibration', windows=windows, record_commit=last['commit'],
-                           desk_digest=digest)
-    packet.update(record_path=last['path'], record_sha256=last['sha256'], expires_at_epoch_s=int(now) + 1800,
-                  pushed_tip=last['commit'], packet_preflight={'producer': 'w1-prequal synthetic'})
-    return packet
+def _triage_ok(arm):
+    """The arm admits the PACKET (host checks such as battery and powermode are judged elsewhere)."""
+    return not any(str(r).startswith('next_arm_triage:') for r in arm.get('reasons', ()))
+
+
+def _verdict(arm):
+    return {'admitted': _triage_ok(arm), 'reasons': [r for r in arm.get('reasons', ())
+                                                    if str(r).startswith('next_arm_triage:')][:6]}
 
 
 def _find_rebuilt(value, depth=0):
@@ -497,12 +490,15 @@ def _arm_file(ctx, measurement, packet, *, now):
 
 
 def _rebuild(ctx, name):
-    """Series records, the pointer packet, the arm's verdict on it and the packet the arm rebuilt."""
+    """Series records, the producer's packet, the arm's verdict on it and the packet the arm rebuilt."""
+    from scripts import align_v4_next_arm_packet as builder
+    from joulewise.align.apple import v4_registration as reg
     now = time.time()
-    root, records, digest = _series_records(ctx, name)
-    pointer = _pointer(records, digest, now)
-    arm = _arm_file(ctx, root, pointer, now=now)
-    return root, records, now, pointer, arm, _find_rebuilt(arm)
+    scenario = _series_records(ctx, name, now)
+    pointer = builder.build_packet(scenario.root, **scenario.identities(), now_epoch_s=now,
+                                   current_artifact_set_sha256=reg.artifact_set_digest(scenario.root))
+    arm = _arm_file(ctx, scenario.root, pointer, now=now)
+    return scenario.root, scenario, now, pointer, arm, _find_rebuilt(arm)
 
 
 def _mutations(packet):
@@ -534,30 +530,36 @@ def _mutations(packet):
             yield f'edited basis text of {name}', edited
 
 
-def _omit_attempt(packet, attempt='C3#1'):
-    """The packet with every list element naming ``attempt`` removed (a chain with a hole)."""
+def _zero_capture_attempt(packet):
+    rows = packet.get('calibration_windows') or []
+    return next((r.get('window') for r in rows if isinstance(r, dict) and r.get('captured_members') == 0), None)
+
+
+def _omit_attempt(packet, attempt):
+    """The packet with every list element naming ``attempt`` (window == attempt) removed: a chain hole."""
     removed = [0]
+
+    def names(value):
+        return isinstance(value, dict) and value.get('window') == attempt or value == attempt
 
     def walk(value):
         if isinstance(value, dict):
             return {k: walk(v) for k, v in value.items()}
         if isinstance(value, list):
-            kept = [walk(v) for v in value if attempt not in json.dumps(v)]
+            kept = [walk(v) for v in value if not names(v)]
             removed[0] += len(value) - len(kept)
             return kept
         return value
-    out = walk(packet)
-    return out, removed[0]
-
+    return walk(packet), removed[0]
 
 
 @check('packet-rebuild', 'G1 (packet as pointer): the arm rebuilds the next-arm packet from the identities it names '
        'and a valid rebuild admits; ignored fields (pushed_tip, packet_preflight) may differ; an expired packet '
        'is refused', gates='w1')
 def check_packet_rebuild(ctx):
-    root, records, now, pointer, arm, rebuilt = _rebuild(ctx, 'rebuild')
-    evidence = {'pointer_verdict': {'admitted': arm['admitted'], 'reasons': arm['reasons']},
-                'series': [r['attempt'] for r in records]}
+    root, scenario, now, pointer, arm, rebuilt = _rebuild(ctx, 'rebuild')
+    evidence = {'pointer_verdict': _verdict(arm), 'series': ['W1', *(w for w, _ in SERIES)],
+                'preflight': (pointer.get('packet_preflight') or {}).get('ready')}
     if rebuilt is None:
         return result(FAIL, 'the arm record carries no rebuilt packet: the arm does not rebuild the next-arm '
                       'packet from the identities it names (lead ruling: the packet is only a pointer). '
@@ -566,52 +568,55 @@ def check_packet_rebuild(ctx):
     verdicts = {'rebuild': _arm_file(ctx, root, valid, now=now)}
     verdicts['ignored-fields-differ'] = _arm_file(ctx, root, {**valid, 'pushed_tip': '0' * 40,
                                                                   'packet_preflight': {'other': True}}, now=now)
-    verdicts['expired'] = _arm_file(ctx, root, valid, now=now + 30 * 86400)
-    evidence['verdicts'] = {k: {'admitted': v['admitted'], 'reasons': v['reasons']} for k, v in verdicts.items()}
+    verdicts['expired'] = _arm_file(ctx, root, valid, now=now + 3600)
+    evidence['verdicts'] = {k: _verdict(v) for k, v in verdicts.items()}
+    evidence['valid_until_epoch_s'] = valid.get('valid_until_epoch_s')
     failures = []
-    if not verdicts['rebuild']['admitted']:
-        failures.append('the arm refuses its own rebuild: ' + '; '.join(verdicts['rebuild']['reasons'])[:400])
-    if not verdicts['ignored-fields-differ']['admitted']:
+    if not _triage_ok(verdicts['rebuild']):
+        failures.append('the arm refuses its own rebuild: ' + '; '.join(evidence['verdicts']['rebuild']['reasons'])[:400])
+    if not _triage_ok(verdicts['ignored-fields-differ']):
         failures.append('a difference only in pushed_tip/packet_preflight is refused')
-    if verdicts['expired']['admitted']:
+    if 'valid_until_epoch_s' not in valid:
+        failures.append('the rebuilt packet carries no valid_until_epoch_s (expiry is mandatory)')
+    if _triage_ok(verdicts['expired']):
         failures.append('the same packet admits 30 days later: expiry is not enforced')
     if failures:
         return result(FAIL, '; '.join(failures), **evidence)
-    return result(PASS, 'the arm rebuilds the packet; a valid rebuild admits, ignored fields may differ, an '
-                  'expired packet refuses', **evidence)
+    return result(PASS, 'the arm rebuilds the packet; a valid rebuild admits, ignored fields may differ, the '
+                  'same packet an hour later (past valid_until_epoch_s) refuses', **evidence)
 
 
 @check('packet-tamper', 'G1b (packet as pointer): a packet that differs from the arm\'s rebuild in ANY field '
        '(changed, removed, added, edited basis text) is refused, and so is a chain that omits an attempt '
        '(zero-capture C3#1 before C3#2)', gates='w1')
 def check_packet_tamper(ctx):
-    root, records, now, pointer, arm, rebuilt = _rebuild(ctx, 'tamper')
+    root, scenario, now, pointer, arm, rebuilt = _rebuild(ctx, 'tamper')
     if rebuilt is None:
         return result(FAIL, 'the arm record carries no rebuilt packet, so no packet can be compared with the arm\'s '
                       'rebuild; today a field the arm does not re-derive is trusted as supplied. '
-                      + GAP_REFS['packet-tamper'], pointer_verdict={'admitted': arm['admitted'],
-                                                                   'reasons': arm['reasons']})
+                      + GAP_REFS['packet-tamper'], pointer_verdict=_verdict(arm))
     valid = {**rebuilt, **{k: pointer[k] for k in PACKET_IGNORED if k in pointer}}
     admitted_mutations = []
     tried = 0
     for label, mutated in _mutations(valid):
         tried += 1
-        if _arm_file(ctx, root, mutated, now=now)['admitted']:
+        if _triage_ok(_arm_file(ctx, root, mutated, now=now)):
             admitted_mutations.append(label)
-    holed, removed = _omit_attempt(valid)
+    attempt = _zero_capture_attempt(valid)
+    holed, removed = _omit_attempt(valid, attempt) if attempt else (valid, 0)
     hole = _arm_file(ctx, root, holed, now=now) if removed else None
-    evidence = {'mutations_tried': tried, 'admitted_mutations': admitted_mutations, 'omitted_elements': removed,
-                'omitted_attempt_admitted': hole['admitted'] if hole else None}
+    evidence = {'mutations_tried': tried, 'admitted_mutations': admitted_mutations, 'zero_capture_attempt': attempt,
+                'omitted_elements': removed, 'omitted_attempt_admitted': _triage_ok(hole) if hole else None}
     failures = []
     if admitted_mutations:
         failures.append(f'{len(admitted_mutations)} of {tried} single-field changes admit: {admitted_mutations[:8]}')
     if not removed:
-        failures.append('the rebuilt packet names no C3#1 attempt: the chain does not list zero-capture attempts')
-    elif hole['admitted']:
-        failures.append('a packet whose chain omits attempt C3#1 admits')
+        failures.append('the rebuilt packet lists no zero-capture attempt: the chain does not list every attempt')
+    elif _triage_ok(hole):
+        failures.append(f'a packet whose chain omits attempt {attempt} admits')
     if failures:
         return result(FAIL, '; '.join(failures), **evidence)
-    return result(PASS, f'all {tried} single-field changes and the omitted attempt are refused', **evidence)
+    return result(PASS, f'all {tried} single-field changes and the chain omitting {attempt} are refused', **evidence)
 
 
 def _window(name, spam=7, bank=7, status='final', captured=22):
@@ -656,8 +661,8 @@ def check_calibration_stop(ctx):
         failures.append('a ninth counted window was accepted')
     except ValueError:
         pass
-    internal = {'series_powermode': True, 'external_volume': True, 'charging_battery': True}
-    bound = dict(record_commit='a' * 40, desk_digest='b' * 64)
+    internal = {r['id']: True for r in cad.NEXT_ARM_TRIAGE if r['source'] == cad.ARM}
+    bound = dict(record_commit='a' * 40, desk_digest='b' * 64, overrides={'valid_until_epoch_s': 2e9})
     identity = {'artifact_set_sha256': 'b' * 64, 'record_commit_exists': True, 'record_bound': True}
     arm_cases = {
         'W1 arm (previous R1)': (triage_packet(**bound), True),
@@ -669,7 +674,7 @@ def check_calibration_stop(ctx):
         'test arm after C8': (triage_packet(previous='C8', role='test', windows=planned, **bound), True),
     }
     for name, (packet, admit) in arm_cases.items():
-        got = cad.next_arm_triage(packet, internal, identity)
+        got = cad.next_arm_triage(packet, internal, identity, now_epoch_s=1.9e9)
         trace.append((name, got['admitted']))
         if got['admitted'] != admit:
             failures.append(f'{name}: admitted={got["admitted"]} expected {admit}: {got["reasons"]}')
@@ -692,10 +697,10 @@ def check_cal_escalation_exit(ctx):
         trace['before'] = cad.calibration_stop(rows)['decision']
         trace['after_ruling'] = cad.calibration_stop(rows, [ruling])['decision']
         packet = triage_packet(previous='C1', role='calibration', windows=rows, rulings=[ruling],
-                               record_commit='a' * 40, desk_digest='b' * 64)
-        arm = cad.next_arm_triage(packet, {'series_powermode': True, 'external_volume': True,
-                                           'charging_battery': True},
-                                  {'artifact_set_sha256': 'b' * 64, 'record_commit_exists': True, 'record_bound': True})
+                               record_commit='a' * 40, desk_digest='b' * 64, overrides={'valid_until_epoch_s': 2e9})
+        arm = cad.next_arm_triage(packet, {r['id']: True for r in cad.NEXT_ARM_TRIAGE if r['source'] == cad.ARM},
+                                  {'artifact_set_sha256': 'b' * 64, 'record_commit_exists': True, 'record_bound': True},
+                                  now_epoch_s=1.9e9)
         trace['triage_admitted'] = arm['admitted']
         trace['triage_reasons'] = arm['reasons']
     except (ValueError, TypeError, AttributeError) as exc:
@@ -1499,7 +1504,7 @@ def check_smoke_kit(ctx):
             continue
         base, session, disk = arm_fixture(ctx, 'smoke-' + fault['id'], now=now, t0_offset_s=-600)
         packet = (fault.get('packet') or copy.deepcopy)(valid_packet(ctx, base, now))
-        host = FakeHost(extra_mount=fault.get('setup') == 'dmg')
+        host = FakeHost(extra_mount=fault.get('setup') == 'dmg', now=now)
         out = run_install(ctx, session, disk, packet, host=host, args_override=fault.get('args'),
                           drop=fault.get('drop', ()), now=now, kind=fault.get('battery', 'completed'))
         state = json.loads((session / 'session.json').read_bytes())

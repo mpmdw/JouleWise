@@ -14,8 +14,9 @@ blocks". A fault that a 30-45 min check can catch must never cost a 12 h W1/D wi
   - the series-manifest binding;
   - transcript and process-group discipline.
 
-It lives on `align/2026-11-08-w1-smoke-merged`, merged onto `align/2026-11-08-v4-r11` @ `8d0dabc73`. That head
-carries the delta2 fixes: strict-by-default receipt, interim G1 record binding, G2, G3 and top-up.
+It lives on `align/2026-11-08-w1-smoke-merged`. That branch merges `align/2026-11-08-v4-r11` @ `48a4d1d76`,
+which carries the packet rebuild (`scripts/align_v4_next_arm_packet.py`), the W1 blockers, and the
+delta2 fixes (G2, G3).
 
 **Lead rulings applied:**
 1. Opus owns the single merged kit, and the command folds into `scripts/align_v4_prequal.py`.
@@ -34,7 +35,7 @@ carries the delta2 fixes: strict-by-default receipt, interim G1 record binding, 
    - Window records are hash-chained to their predecessor, and zero-capture retries take ids such as
      `C3#2`.
    - G1 and G1b are rewritten as behaviour checks for this design. They do not assume that packets are
-     committed files.
+     committed files. They run on the fixer's real schema and are green on `48a4d1d76`.
 8. **The next measurement is W1.** R1 is armed (RUN_STATE 225/227: `lane/2026-11-08-r1-arm-fixes` @
    `20e9edbc4`, plan `align-r1-20261108T0917Z`). Its route is pinned in `arm_routes.json`.
    `--w1-next w1` is the gate that matters now.
@@ -87,8 +88,8 @@ the launcher's own dwell test seam (`JOULEWISE_R0_TEST_DISPLAY_DWELL_S=0.1`) and
 | Check | Gates | What it runs | Goes green when |
 |---|---|---|---|
 | `arm-cli` | w1 | `align_v4_session.py install --help`, then `install` without evidence (argparse must name every required flag: `--w1-disk-config`, `--obc-off-attested-by`, `--battery-log`, `--next-arm-triage`). Then the production `main(['install', …])` through `h.install` against a fake host, in 12 cases. The measurement root is a git repo with a committed R1 record. The battery log is synthetic. The cases: control; triage missing, edited or pre-R12; `record_commit` unknown; top-up with no charge, stale or future-dated; OBC unattested; a disk image mounted; battery charging; powermode mismatch. | The control admits and calls the installer exactly once. The 11 faults each refuse with their documented reason before the installer. |
-| `packet-rebuild` | w1 | **G1, packet as pointer.** The fixture is a git measurement root holding a hash-chained window-record series: C1, C2, a zero-capture `C3#1`, then `C3#2`. A producer-style pointer packet names the last record (path, sha256, commit) and carries an expiry, `pushed_tip` and `packet_preflight`. The production `arm_checks` runs on it, and the packet the arm rebuilt is read from its arm record (any key naming a rebuild). Then three runs: the rebuild itself (must admit); the rebuild with only `pushed_tip` and `packet_preflight` changed (must admit); the rebuild 30 days later (must refuse, because expiry is mandatory). | The arm rebuilds the packet and retains the rebuild in its record. |
-| `packet-tamper` | w1 | **G1b, packet as pointer.** Every single-field change to the arm's rebuild must refuse: each key changed, each key removed, an added key, and edited basis text. The ignored fields are excluded. A chain with a hole must also refuse: the rebuild with every element naming `C3#1` removed. | Canonical equality with the rebuild is enforced, and the chain lists every attempt, `C3#1` included. |
+| `packet-rebuild` | w1 | **G1, packet as pointer.** The fixture is the fixer's real record schema (`tests/align/test_v4_next_arm_packet.Scenario`: the `window_record.v1` index and `series/state.json` with `previous_record` links). The series is W1, C1, C2, a zero-capture C3, then its retry `C3#2`. The producer, `build_packet`, writes the packet. The production `arm_checks` (fake host, fake meter probe) is run on it, and the rebuild is read from `next_arm_triage.rebuilt_packet`. Then three runs: the rebuild itself (the packet must admit); the rebuild with `pushed_tip` and `packet_preflight` changed (must admit); the same packet an hour later, past `valid_until_epoch_s` (must refuse). Host checks such as battery are judged elsewhere; only `next_arm_triage:` reasons count here. | It is green on `48a4d1d76`. |
+| `packet-tamper` | w1 | **G1b, packet as pointer.** Every single-field change to the rebuild must refuse: 44 today, covering each key changed, each key removed, an added key, and edited basis text, with the ignored fields excluded. A chain with a hole must also refuse: the rebuild with every element naming the zero-capture attempt (C3) removed from `window_chain` and `calibration_windows`. | It is green on `48a4d1d76`. |
 | `calibration-stop` | w1 | `calibration_stop` over the planned C1-C8 (7/7 per pair, 22 members): the 8 prefixes, zero-capture, escalation, provisional, insufficient, a ninth window, loss of two whole windows (completes) and of three (insufficient). Then 5 triage-integrated arms, with the arm-derived identity. | It is green now. |
 | `cal-escalation-exit` | w1 | MED-2(a): two final zero-capture refusals escalate. Then a signed `lead_rulings` row (`resets: zero_capture_escalation`) resets the count, and the triage admits the next calibration arm. | It is green now. |
 | `kit-ready` | w1 | `align_v4_kit.py --check` on a clean clone of the candidate | The kit is W1-ready (R0 and R1 values filled). |

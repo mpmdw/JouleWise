@@ -299,10 +299,10 @@ def _stale(packet):
 ARM_FAULTS = (
     {'id': 'arm-control', 'expect': 'admit', 'needle': 'plan t0 has passed',
      'doc': 'no fault: the arm admits, the W1 disk gate passes, the installer guard refuses the past t0'},
-    # Needles name today's refusal and the packet-as-pointer design's (the arm's rebuild differs).
-    {'id': 'triage-edited', 'packet': _edited, 'expect': 'refuse', 'needle': ('triage capture_faults failed', 'rebuil'),
+    # Needles: the packet-as-pointer refusals (the supplied packet differs from, or cannot be, the arm's rebuild).
+    {'id': 'triage-edited', 'packet': _edited, 'expect': 'refuse', 'needle': ('does not match its committed sources', 'triage capture_faults failed'),
      'doc': 'a gating packet entry edited to fail'},
-    {'id': 'triage-stale', 'packet': _stale, 'expect': 'refuse', 'needle': ('missing or wrong schema', 'rebuil'),
+    {'id': 'triage-stale', 'packet': _stale, 'expect': 'refuse', 'needle': ('could not be rebuilt', 'does not match its committed sources', 'missing or wrong schema'),
      'doc': 'a pre-R12 packet (no schema, no full_desk_gate)'},
     {'id': 'receipt-digest-mismatch', 'setup': 'receipt_clone', 'expect': 'refuse_before_arm',
      'needle': 'digest drift', 'doc': 'one receipt-bound file differs by one byte in a disposable clone'},

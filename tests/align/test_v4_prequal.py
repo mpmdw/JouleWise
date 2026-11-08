@@ -142,7 +142,9 @@ class ConfigPinKitChecks(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             row = prequal.check_kit(ctx(tmp))
             self.assertEqual(row["status"], "pass", row["problems"])
-            self.assertIn("R0.reasoning_effort", row["pending_inputs"])
+            # R0 passed and its rung is filled (RUN_STATE 218); R1 values stay pending until R1 closes.
+            self.assertNotIn("R0.reasoning_effort", row["pending_inputs"])
+            self.assertIn("R1.B_D", row["pending_inputs"])
             self.assertFalse([p for p in row["pending_inputs"] if p.startswith("WP11.")])
             self.assertEqual(row["d_identity_folded_sha256"],
                              "a8d1c5c963787dd9dc524912e05d409172124da773d196e8f5123820b4c36b30")

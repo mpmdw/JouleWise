@@ -94,19 +94,36 @@ class CadenceTests(_Ctx):
         self.assertEqual(row['status'], wp.FAIL)
         self.assertIn('MED-2', row['detail'])
 
-    def test_packet_rebuild_and_tamper_are_red_until_the_arm_rebuilds(self):
-        for name in ('packet-rebuild', 'packet-tamper'):
-            row = self.probe(name)
-            self.assertEqual(row['status'], wp.FAIL, name)
-            self.assertIn('no rebuilt packet', row['detail'])
+    def test_packet_rebuild_and_tamper_pass_on_the_production_arm(self):
+        rebuild, tamper = self.probe('packet-rebuild'), self.probe('packet-tamper')
+        self.assertEqual(rebuild['status'], wp.PASS, rebuild['detail'])
+        self.assertEqual(tamper['status'], wp.PASS, tamper['detail'])
+        self.assertEqual(tamper['evidence']['zero_capture_attempt'], 'C3')
+        self.assertGreater(tamper['evidence']['mutations_tried'], 20)
 
-    def test_packet_checks_go_green_on_a_rebuilding_arm_and_catch_a_lenient_one(self):
+    def test_an_arm_that_keeps_no_rebuild_or_trusts_the_supplied_packet_fails(self):
+        from scripts import align_v4_next_arm_packet as builder, align_v4_session as session
+        real = session.arm_checks
+
+        def forgetful(*a, **kw):          # the pre-fix arm: no rebuilt packet in the record
+            record = real(*a, **kw)
+            record['next_arm_triage'].pop('rebuilt_packet', None)
+            return record
+        with mock.patch.object(session, 'arm_checks', forgetful):
+            self.assertIn('no rebuilt packet', self.probe('packet-rebuild')['detail'])
+        rebuild = builder.rebuild_and_compare
+        with mock.patch.object(builder, 'rebuild_and_compare',
+                               lambda *a, **kw: (rebuild(*a, **kw)[0], True)):     # trusts any supplied packet
+            row = self.probe('packet-tamper')
+        self.assertEqual(row['status'], wp.FAIL)
+        self.assertTrue(row['evidence']['admitted_mutations'])
+
+    def test_packet_checks_judge_a_stand_in_rebuilding_arm(self):
         from scripts import align_v4_session as session
         with mock.patch.object(session, 'arm_checks', RebuildingArm()):
             rebuild, tamper = self.probe('packet-rebuild'), self.probe('packet-tamper')
         self.assertEqual(rebuild['status'], wp.PASS, rebuild['detail'])
         self.assertEqual(tamper['status'], wp.PASS, tamper['detail'])
-        self.assertGreater(tamper['evidence']['mutations_tried'], 10)
         with mock.patch.object(session, 'arm_checks', RebuildingArm(ignore={'record_commit'})):
             row = self.probe('packet-tamper')
         self.assertEqual(row['status'], wp.FAIL)
@@ -114,30 +131,34 @@ class CadenceTests(_Ctx):
         with mock.patch.object(session, 'arm_checks', RebuildingArm(chain_strict=False)):
             row = self.probe('packet-tamper')
         self.assertEqual(row['status'], wp.FAIL)
-        self.assertIn('omits attempt C3#1', row['detail'])
+        self.assertIn('omits attempt C3', row['detail'])
         with mock.patch.object(session, 'arm_checks', RebuildingArm(expiry=False)):
             self.assertIn('expiry is not enforced', self.probe('packet-rebuild')['detail'])
 
 
 class RebuildingArm:
-    """A stand-in for the lead-ruled design: rebuild the packet from the repository, canonical equality."""
+    """A stand-in for the ruled design: rebuild from the repository, canonical equality, expiry."""
 
     def __init__(self, ignore=(), chain_strict=True, expiry=True):
         self.ignore, self.chain_strict, self.expiry = set(ignore), chain_strict, expiry
 
     def rebuild(self, root):
-        log = subprocess.run(['git', '-C', str(root), 'log', '--reverse', '--format=%H %ct', '--name-only'],
+        log = subprocess.run(['git', '-C', str(root), 'log', '--reverse', '--format=%H', '--name-only'],
                              capture_output=True, text=True, check=True).stdout.split()
-        chain, head, stamp = [], None, None
+        rows, head = [], None
         for token in log:
-            if len(token) == 40:
+            if len(token) == 40 and all(c in '0123456789abcdef' for c in token):
                 head = token
-            elif token.isdigit():
-                stamp = int(token)
-            elif token.endswith('record.json'):
-                chain.append(json.loads((Path(root) / token).read_text())['attempt'])
-        return {'schema': 'joulewise.align_v4.next_arm_triage.v2', 'record_commit': head, 'chain': chain,
-                'expires_at_epoch_s': stamp + 3600, 'checks': {'capture_faults': {'status': 'pass', 'basis': 'b'}}}
+            elif token.endswith('/record.json'):
+                record = json.loads(subprocess.run(['git', '-C', str(root), 'show', f'{head}:{token}'],
+                                                   capture_output=True, text=True, check=True).stdout)
+                captured = sum(v is not None for v in (record.get('captures') or {}).values())
+                rows.append({'window': record['window'], 'captured_members': captured})
+        stamp = int(subprocess.run(['git', '-C', str(root), 'log', '-1', '--format=%ct'], capture_output=True,
+                                   text=True, check=True).stdout)
+        return {'schema': 'stand-in.next_arm_triage', 'record_commit': head, 'calibration_windows': rows,
+                'valid_until_epoch_s': stamp + 600,          # deterministic: from committed history
+                'checks': {'capture_faults': {'status': 'pass', 'basis': 'b'}}}
 
     def __call__(self, measurement_root, plan, *, next_arm_triage=None, now=None, **kw):
         rebuilt = self.rebuild(measurement_root)
@@ -145,13 +166,14 @@ class RebuildingArm:
             packet = json.loads(Path(next_arm_triage).read_text())
         except (OSError, ValueError, TypeError):
             packet = {}
-        strip = lambda p: {k: v for k, v in p.items() if k not in ('pushed_tip', 'packet_preflight') and k not in self.ignore}
+        strip = lambda p: {k: v for k, v in p.items() if k not in ('pushed_tip', 'packet_preflight')
+                           and k not in self.ignore}
         same = strip(packet) == strip(rebuilt)
-        if not self.chain_strict and packet.get('chain') and set(packet['chain']) <= set(rebuilt['chain']):
-            same = strip({**packet, 'chain': rebuilt['chain']}) == strip(rebuilt)
-        fresh = not self.expiry or (now or __import__('time').time)() < rebuilt['expires_at_epoch_s']
+        if not self.chain_strict and isinstance(packet.get('calibration_windows'), list):
+            same = same or (strip({**packet, 'calibration_windows': rebuilt['calibration_windows']}) == strip(rebuilt))
+        fresh = not self.expiry or (now or __import__('time').time)() < rebuilt['valid_until_epoch_s']
         ok = same and fresh
-        return {'admitted': ok, 'reasons': [] if ok else ['packet differs from the rebuild or expired'],
+        return {'admitted': ok, 'reasons': [] if ok else ['next_arm_triage: packet differs from the rebuild or expired'],
                 'next_arm_triage': {'rebuilt_packet': rebuilt}}
 
 

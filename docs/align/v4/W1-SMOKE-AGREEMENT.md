@@ -151,3 +151,15 @@ strict-tier receipt work.
   - Neither check assumes committed packet files. Tests prove both go green on a stand-in rebuilding arm
     and catch a lenient one.
 - **v4-r11 merged again at `8d0dabc73`.** G2 (`r1-w1-chain`) and G3 (`km003c-crash-radius`) are now green.
+
+### 6b. Packet rebuild landed (v4-r11 @ 48a4d1d76)
+
+The merged kit now merges `48a4d1d76`. `_series_records` and the arm fixtures use the fixer's real
+record schema (`Scenario`: the `window_record.v1` index, `series/state.json` with `previous_record`
+links, `valid_until_epoch_s`, and `next_arm_triage.rebuilt_packet`), with packets from the real producer
+`build_packet`.
+
+`packet-rebuild` and `packet-tamper` PASS: 44 field mutations and the chain hole at the zero-capture C3
+are all refused. The arm's real meter probe (`km003c_monitor.py`) is replaced by a fake in PREQUAL, and a
+`meter-not-live` arm case was added. The native smoke's triage-fault needles now expect the rebuild
+refusal (`does not match its committed sources` / `could not be rebuilt`).
