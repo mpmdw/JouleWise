@@ -1,12 +1,20 @@
 # Squeeze analysis — DRAFT, synthetic only
 
-NumPy planning tools for a transcript monitor plus a trusted, whole-episode
+Planning tools for a transcript monitor plus a trusted, whole-episode
 external DC meter. No measurement readers, model runtimes, downloads or network
 code are present. These tools do not register an estimator, change v4, establish
 SHADE-Arena monitor response, or validate an adaptive hardware claim.
 
-The optional dependency is `.[squeeze]` (NumPy). The package namespace and the
-scalar calibration APIs import on bare Python; numerical submodules require it.
+The v5 `estar.py` module adds stdlib whole-member KM003C/battery reduction,
+member-level five-term fits and per-channel-maximum OR/AND statistics. Its
+[pilot integration and admission requirements](../../../docs/align/squeeze/fanout/estar.md)
+are provisional registered-secondary work; no monitor is invoked. This literal
+OR has bound `2/(m+1)` and requires m>=39 for 5%, distinct from calibrating one
+joint-conformal score at `1/(m+1)`.
+
+The optional dependency is `.[squeeze]` (NumPy). The package namespace,
+`estar` and scalar calibration APIs import on bare Python; the original
+simulation submodules require NumPy.
 Tests skip numerical cases when it is absent.
 
 ## Calibration and guarantees
