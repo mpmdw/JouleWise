@@ -170,32 +170,24 @@ class BoundaryTests(unittest.TestCase):
         child_span = next(d for d in docs if d['activity'] == 'worker_dwell')
         self.assertEqual(child_span['start_boundary']['parent_span_id'], parent['start_boundary']['span_id'])
 
-    def test_measured_marker_uses_existing_bundle_handle_without_open_flush_or_fsync(self):
-        from joulewise.bundle import RunBundleWriter
-        from tests.test_bundle import load_example_config
-        with tempfile.TemporaryDirectory() as tmp:
-            config = load_example_config(run_id="synthetic")
-            config = replace(config, workload_profile=replace(config.workload_profile, name='align_episode'))
-            bundle = RunBundleWriter.create(Path(tmp), config, FakeClock())
-            self.addCleanup(bundle._event_stream.close)
-            # The spy delegates writes but fails on either flush or opening a
-            # second file. No sync/thread/process is permitted by the marker.
-            stream = bundle._event_stream
-            spy = SimpleNamespace(write=stream.write,
-                                  flush=lambda: self.fail('marker flushed during measurement'))
-            bundle._event_stream = spy
-            with patch('os.fsync', side_effect=AssertionError('marker fsync')), \
-                 patch.object(Path, 'open', side_effect=AssertionError('marker opened a file')), \
-                 patch('threading.Thread.start', side_effect=AssertionError('marker thread')), \
-                 patch('subprocess.Popen', side_effect=AssertionError('marker subprocess')), \
-                 timing.bind(bundle.timing), timing.span('gates', 'measured_boundary'):
-                pass
-            bundle._event_stream = stream
-            stream.flush()  # existing owner's later stage boundary
-            rows = [json.loads(line) for line in (bundle.path / 'events.jsonl').read_text().splitlines()]
-            docs, warnings = timing.project(rows)
-            self.assertEqual(warnings, [])
-            self.assertEqual(len(docs), 1)
+    def test_measured_marker_only_appends_to_the_controller_memory_buffer(self):
+        from joulewise.controller import _Execution
+        execution = _Execution.__new__(_Execution)
+        execution._events = []
+        clock = FakeClock(100.123456789)
+        sink = writer([], clock)
+        sink.append = execution._buffer_timing_boundary
+        with patch('os.fsync', side_effect=AssertionError('marker fsync')), \
+             patch.object(Path, 'open', side_effect=AssertionError('marker opened a file')), \
+             patch('threading.Thread.start', side_effect=AssertionError('marker thread')), \
+             patch('subprocess.Popen', side_effect=AssertionError('marker subprocess')), \
+             timing.bind(sink), timing.span('gates', 'measured_boundary'):
+            clock.sleep(1)
+        rows = [dict(metadata=event.metadata) for event in execution._events]
+        docs, warnings = timing.project(rows)
+        self.assertEqual(warnings, [])
+        self.assertEqual(len(docs), 1)
+        self.assertEqual(execution._events[0].timestamp_s, 100.123456789)
 
 
 class ProducerTests(unittest.TestCase):
@@ -236,6 +228,26 @@ class ProducerTests(unittest.TestCase):
             self.assertEqual([d['end_boundary']['status'] for d in docs if d['activity'] == 'night_result'], ['error'])
             self.assertEqual(len(pushes), 2)  # no recursive publish of completion
             self.assertFalse((root / 'results-clone/docs/process_traces/night-results/W1/chain-stages.jsonl').exists())
+
+    def test_driver_log_appends_preserve_interleaved_owner_messages_and_parse_offline(self):
+        from scripts import run_night as driver
+        from joulewise.align.window_timing import read_window
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            night = root/'night'
+            night.mkdir()
+            plan = SimpleNamespace(plan_id='W1', hazard_window=None)
+            driver._append_log(root, 'synthetic first message')
+            with driver._timing_journal(night, plan), timing.span('arm', 'synthetic admission'):
+                driver._append_log(root, 'synthetic interleaved message')
+            raw = (root/'night.log').read_bytes()
+            self.assertIn(b'synthetic first message', raw)
+            self.assertIn(b'synthetic interleaved message', raw)
+            self.assertFalse((night/'chain-stages.jsonl').exists())
+            report = read_window(lambda path: raw, night_log='night.log')
+            self.assertEqual(report['warnings'], [])
+            self.assertEqual(report['phase_ns']['unattributed'], 0)
+            self.assertGreater(report['phase_ns']['arm'], 0)
 
     def test_off_settle_counts_only_actual_residual_sleep_after_overlapping_dwell(self):
         from scripts import run_night as driver
@@ -307,6 +319,73 @@ class ProducerTests(unittest.TestCase):
                 self.assertEqual(warnings, [])
                 self.assertEqual([d['activity'] for d in docs].count('hazard_clean_dwell'), int(not refused))
 
+    def test_v4_arm_probe_and_packet_markers_precede_the_dwell_landmark(self):
+        from tests.align.test_v4_next_arm_packet import ArmRebuildTests
+        rig = ArmRebuildTests()
+        rig.setUp()
+        self.addCleanup(rig.doCleanups)
+        scenario = rig.scenario().finish()
+        rows, clock = [], FakeClock()
+        def dwell_start():
+            activities = [(row['activity'], row['event']) for row in rows]
+            self.assertIn(('v4_meter_probe', 'end'), activities)
+            self.assertIn(('v4_packet_rebuild', 'end'), activities)
+            return 10**30
+        with timing.bind(writer(rows, clock)):
+            record = rig.arm(scenario, scenario.build(), dwell_start=dwell_start)
+        self.assertTrue(record['admitted'], record['reasons'])
+        documents, warnings = timing.project(rows)
+        self.assertEqual(warnings, [])
+        self.assertEqual({d['activity'] for d in documents},
+                         {'v4_arm_checks', 'v4_packet_rebuild', 'v4_meter_probe'})
+
+    def test_v4_disk_gate_and_installer_handoff_close_on_success_and_refusal(self):
+        from scripts import align_v4_session as session
+        for refused in (False, True):
+            with self.subTest(refused=refused), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                rows, clock = [], FakeClock()
+                record = dict(admitted=True, reasons=[], ac_powermode=dict(observed=0))
+                def gate(*args, **kwargs):
+                    clock.sleep(2)
+                    if refused:
+                        raise ValueError('synthetic disk refusal')
+                    return {'status': 'pass'}
+                with timing.bind(writer(rows, clock)), \
+                     patch.object(session, 'arm_checks', return_value=record), \
+                     patch.object(session, 'w1_disk_check', side_effect=gate), \
+                     patch.object(session.kit, 'arm_powermode_check'), \
+                     patch.object(session.pilot, 'install', return_value={'exit_code': 0}):
+                    call = lambda: session._arm_and_install(root, {}, root, {}, None,
+                        runner=None, volume_runner=None, now=lambda: 100, w1_disk_config=None, disk_gate=None)
+                    if refused:
+                        with self.assertRaisesRegex(ValueError, 'synthetic disk refusal'):
+                            call()
+                    else:
+                        self.assertEqual(call(), {'exit_code': 0})
+                documents, warnings = timing.project(rows)
+                self.assertEqual(warnings, [])
+                self.assertEqual([d['activity'] for d in documents],
+                    ['v4_disk_gate'] if refused else ['v4_disk_gate', 'v4_installer_handoff'])
+                self.assertEqual(documents[0]['end_boundary']['status'], 'error' if refused else 'complete')
+
+    def test_chain_settle_uses_one_sleep_process_and_the_existing_chain_log(self):
+        from joulewise.b5.chain import SETTLE_HELPER, _PRELUDE_FUNCTIONS
+        self.assertNotIn('/bin/sleep', _PRELUDE_FUNCTIONS)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp)/'window-chain.log'
+            missing = subprocess.run([sys.executable, '-B', '-c', SETTLE_HELPER, str(path), '0'],
+                capture_output=True, text=True)
+            self.assertEqual(missing.returncode, 0, missing.stderr)
+            self.assertFalse(path.exists())
+            path.write_text('synthetic chain start\n')
+            subprocess.run([sys.executable, '-B', '-c', SETTLE_HELPER, str(path), '0'], check=True)
+            rows = [json.loads(line) for line in path.read_text().splitlines()[1:]]
+            documents, warnings = timing.project(rows)
+            self.assertEqual(warnings, [])
+            self.assertEqual([d['activity'] for d in documents], ['chain_settle'])
+            self.assertEqual(documents[0]['start_boundary']['requested_s'], 0)
+
     def test_watchdog_reason_change_and_release_reuse_transition_sync(self):
         from scripts import magistrate_watchdog as wd
         import datetime
@@ -346,33 +425,77 @@ class ProducerTests(unittest.TestCase):
 
 
 class CaptureEqualityTests(unittest.TestCase):
-    def test_synthetic_capture_bytes_equal_with_and_without_markers(self):
-        from scripts import align_v4_w1_synthetic as dry
-        full = os.environ.get('JW_WP22_FULL') == '1'
-        args = SimpleNamespace(variant='kit', inject='all', leak=0.004,
-                               members='all' if full else '5,6')
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp) / 'synthetic'
-            root.mkdir()
-            with redirect_stdout(io.StringIO()), patch.object(timing.Writer, 'emit', return_value=None):
-                dry.collect(args, root)
-            baseline = {p.relative_to(root): p.read_bytes() for p in root.rglob('*') if p.is_file()}
-            shutil.rmtree(root)  # only this test's synthetic TemporaryDirectory
-            root.mkdir()
-            with redirect_stdout(io.StringIO()):
-                dry.collect(args, root)
-            marked = {p.relative_to(root): p.read_bytes() for p in root.rglob('*') if p.is_file()}
-            self.assertEqual(baseline.keys(), marked.keys())
-            marker_count = 0
-            for path in baseline:
-                raw = marked[path]
-                if path.name == 'events.jsonl':
-                    lines = raw.splitlines(keepends=True)
-                    marker_count += sum(json.loads(line).get('event_type') == 'timing_boundary' for line in lines)
-                    raw = b''.join(line for line in lines if json.loads(line).get('event_type') != 'timing_boundary')
-                self.assertEqual(baseline[path], raw, str(path))
-            self.assertGreater(marker_count, 0)
-            self.assertLess(marker_count, 100)  # boundaries only, never sample rate
+    @classmethod
+    def setUpClass(cls):
+        import tarfile
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.addClassCleanup(cls.tmp.cleanup)
+        root = Path(cls.tmp.name)
+        cls.base = root / 'base'
+        cls.base.mkdir()
+        cls.repo = Path(__file__).resolve().parents[2]
+        env = {**os.environ, 'GIT_CONFIG_GLOBAL': os.devnull, 'GIT_CONFIG_NOSYSTEM': '1',
+               'GIT_NO_LAZY_FETCH': '1', 'PYTHONDONTWRITEBYTECODE': '1'}
+        # Export code/config only. No worktree operation, data path or fetch.
+        names = subprocess.run(['git', 'ls-tree', '-r', '--name-only', '1a2574b49',
+                                '--', 'joulewise', 'scripts', 'tests', 'configs'],
+                               cwd=cls.repo, env=env, check=True, capture_output=True, text=True).stdout.splitlines()
+        names = [p for p in names if p.endswith('.py') or p.startswith('configs/')]
+        archive = subprocess.run(['git', 'archive', '1a2574b49', '--', *names],
+                                 cwd=cls.repo, env=env, check=True, capture_output=True).stdout
+        with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
+            tar.extractall(cls.base, members=[m for m in tar.getmembers() if m.isfile()], filter='data')
+        helper = cls.repo / 'tests/align/timing_receipts_capture.py'
+        cls.captures, cls.desks = [], []
+        for tree in (cls.base, cls.repo):
+            child_env = {**env, 'PYTHONPATH': str(tree), 'GIT_DIR': str(cls.repo/'.git'),
+                         'GIT_WORK_TREE': str(tree)}
+            for operation, target in (('capture', cls.captures), ('desk', cls.desks)):
+                output = root / operation
+                code = 'import runpy; runpy.run_path('+repr(str(helper))+', run_name="__main__")'
+                done = subprocess.run([sys.executable, '-B', '-c', code, operation, str(output)],
+                                      cwd=tree, env=child_env, capture_output=True, text=True, timeout=240)
+                if done.returncode:
+                    raise AssertionError(done.stderr)
+                target.append(json.loads(Path(str(output)+'.json').read_text()))
+                normalized = Path(str(output)+'.normalized')
+                if normalized.exists():
+                    normalized.rename(root / ('base-bytes' if tree == cls.base else 'head-bytes'))
+                if output.exists():
+                    shutil.rmtree(output)  # this class's own synthetic output
+
+    def test_full_w1_capture_bytes_equal_the_pinned_pre_receipts_tree(self):
+        base, marked = self.captures
+        self.assertEqual(base['manifest'].keys(), marked['manifest'].keys())
+        unequal = [name for name in base['manifest'] if base['manifest'][name] != marked['manifest'][name]]
+        if unequal:
+            import difflib
+            diagnostics = []
+            for name in unequal[:4]:
+                before = (Path(self.tmp.name)/'base-bytes'/name).read_text().splitlines()
+                after = (Path(self.tmp.name)/'head-bytes'/name).read_text().splitlines()
+                diagnostics.extend(line[:300] for line in list(difflib.unified_diff(before, after, fromfile='base/'+name, tofile='head/'+name))[:45])
+            self.fail('\n'.join(diagnostics))
+        self.assertEqual(base['markers'], 0)
+        self.assertGreater(marked['markers'], 0)
+        self.assertLess(marked['markers'], 100)
+
+    def test_all_twenty_bundles_validate_without_any_structural_problem(self):
+        for capture in self.captures:
+            self.assertEqual(len(capture['problems']), 20)
+            self.assertEqual(capture['problems'], {name: [] for name in capture['problems']})
+
+    def test_real_w1_producer_output_has_negligible_unattributed_member_time(self):
+        reader = self.captures[1]['reader']
+        self.assertLessEqual(reader['unattributed_in_member_ns'], 1_000_000, reader)
+
+    def test_happy_and_pre_chain_refusal_desk_bytes_equal_the_base_tree(self):
+        self.assertEqual(self.desks[0], self.desks[1])
+        for desk in self.desks:
+            self.assertTrue(desk['False']['journal_exists'])
+            self.assertFalse(desk['True']['journal_exists'])
+            self.assertIsNone(desk['True']['stage_journal'])
+            self.assertTrue(desk['True']['presence'])
 
 
 if __name__ == '__main__':

@@ -62,6 +62,7 @@ _NAMED_ARTIFACTS = (
 # subset of ARTIFACTS. Not seen by a static walk: importlib string imports, computed
 # paths and third-party modules (declared separately).
 EXECUTED_CLOSURE = (
+    'joulewise/timing_receipts.py',
     'joulewise/align/apple/v4_u3.py',
     'joulewise/align/apple/v4_battery.py',
     'joulewise/__init__.py',

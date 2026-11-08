@@ -274,10 +274,10 @@ def run(config: ArmConfig, seams: Seams | None = None) -> ArmResult:
         return clock.sample(ctx, frequency_reader=seams.frequency_reader,
                             max_skew_ns=int(thresholds["clock"]["skew_max_ns"]))
 
-    dwell_started = ctx.stamp()
-    boot_start = _boot(seams, ctx)
-    samples = [clock_sample()]
     with timing_receipts.span("dwell", "hazard_clean_dwell"):
+        dwell_started = ctx.stamp()
+        boot_start = _boot(seams, ctx)
+        samples = [clock_sample()]
         dwell = contention.run_dwell(
             ctx, thresholds["contention"], tree_roots=config.tree_roots,
             on_tick=lambda: samples.append(clock_sample()),

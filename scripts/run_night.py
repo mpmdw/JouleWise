@@ -1095,7 +1095,7 @@ def _run_chain_once_impl(chain_path, plan, probes, night_dir, claim_descriptor,
     census_path = night_dir / "censuses.jsonl"
     stdout_path = night_dir / "chain.stdout.log"
     stderr_path = night_dir / "chain.stderr.log"
-    with stdout_path.open("xb") as stdout, stderr_path.open("xb") as stderr:
+    with ExitStack() as launch_timing, stdout_path.open("xb") as stdout, stderr_path.open("xb") as stderr:
         os.chmod(stdout_path, 0o600)
         os.chmod(stderr_path, 0o600)
         environment = _chain_environment(plan, night_dir)
@@ -1105,6 +1105,7 @@ def _run_chain_once_impl(chain_path, plan, probes, night_dir, claim_descriptor,
             environment.update(extra_env)
         launch_options = {}
         if child_channel is not None:
+            launch_timing.enter_context(timing_receipts.span("arm", "chain_launch_barrier"))
             environment[start_fd_env] = str(child_channel.fileno())
             launch_options["pass_fds"] = (child_channel.fileno(),)
         if _CHAIN_HOST_LOCK is not None and _CHAIN_HOST_LOCK.held:
@@ -1258,6 +1259,7 @@ def _run_chain_once_impl(chain_path, plan, probes, night_dir, claim_descriptor,
                     pgid = _complete_chain_start(descriptor, process, night_dir)
                     claimed = True
                     awaiting_start = False
+                    launch_timing.close()  # before releasing any collection
                     try:
                         channel.sendall(b"G")
                     except OSError as error:
@@ -1265,6 +1267,7 @@ def _run_chain_once_impl(chain_path, plan, probes, night_dir, claim_descriptor,
                 elif signal_byte == b"":
                     # EOF is the ordinary refusal path. No claim was made.
                     awaiting_start = False
+                    launch_timing.close()
                 elif signal_byte is not None:
                     return refuse_start(_CODES["chain_launch_failed"],
                         "launcher sent an invalid chain-start signal")
@@ -2105,7 +2108,7 @@ def run_courier(
         optional("courier lock removal", lambda: (night_dir / "courier.lock").unlink(missing_ok=True))
 
 
-@timing_receipts.timed("finalize", "night_result")
+@timing_receipts.timed('finalize', 'night_result')
 def _write_result(
     custody_root: Path,
     night_dir: Path,
@@ -2541,20 +2544,33 @@ def _author_pack_arm(plan: NightPlan, prepared):
 
 @contextmanager
 def _timing_journal(night, plan):
-    """Own the existing stage-journal handle for this driver invocation."""
+    """Use the driver's existing log; never create a child stage journal.
+
+    Arm-only invocations without a driver log retain observations in memory.
+    No new file is created just to persist a timing receipt.
+    """
+    rows = []
     scope = ExitStack()
     try:
         try:
-            handle = scope.enter_context((night / "chain-stages.jsonl").open("a"))
-            def append_boundary(row):
-                handle.write(json.dumps(row, sort_keys=True) + "\n")
-                handle.flush()  # turnaround only; no added fsync
+            append = rows.append
+            path = night.parent / "night.log"
+            try:
+                # No O_CREAT: a missing log stays absent. Main has already
+                # written its normal 'night driver started' entry.
+                handle = scope.enter_context(os.fdopen(
+                    os.open(path, os.O_WRONLY | os.O_APPEND), "w", encoding="utf-8"))
+                def append(row):
+                    handle.write(json.dumps(row, sort_keys=True) + "\n")
+                    handle.flush()  # turnaround only; no added fsync
+            except FileNotFoundError:
+                pass
             scope.enter_context(timing_receipts.bind(timing_receipts.Writer(
-                append_boundary, producer="night_driver", plan_id=plan.plan_id,
+                append, producer='night_driver', plan_id=plan.plan_id,
                 attempt=(getattr(plan, "hazard_window", None) or {}).get("attempt"))))
         except Exception as error:
             sys.stderr.write(f"timing journal unavailable: {error}\n")
-        yield
+        yield rows
     finally:
         try:
             scope.close()
@@ -4511,15 +4527,12 @@ def _run_night(
         return EXIT_REFUSED
 
     _append_census(night_dir / "censuses.jsonl", initial_probe, initial_refusal)
-    # Open the existing stage journal before arm/capture. Parent boundaries
-    # occur before/after the shell chain; the child retains stage ownership.
-    # Receipt rows have no stage_id, so stage consumers continue to ignore them.
-    timing_scope = ExitStack()
-    closers.append(timing_scope.close)
-    timing_scope.enter_context(_timing_journal(night_dir, plan))
     started_epoch_s = time.time()
     started_monotonic_ns = time.monotonic_ns()
     _append_log(custody_root, "night driver started")
+    timing_scope = ExitStack()
+    closers.append(timing_scope.close)
+    timing_scope.enter_context(_timing_journal(night_dir, plan))
     # Host-level power-mode admission (executing review HIGH-3, 2026-11-06),
     # before any receipt-class branch: a crash, SIGKILL or power loss during
     # R1's High Power leg leaves the persistent AC profile at powermode 2,

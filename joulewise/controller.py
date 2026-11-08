@@ -1568,6 +1568,18 @@ class _Execution:
         # Deferred buffers (D-013): nothing below touches disk until _finish
         # or the explicitly post-window artifact writes.
         self._events: list[RuntimeEvent] = []
+        if config.workload_profile.name == "align_episode":
+            from joulewise.clock import SystemClock
+            clock_info = clock.stamp()
+            lineage = writer._launch_lineage or {}
+            writer.timing = timing_receipts.Writer(
+                self._buffer_timing_boundary, producer="bundle", member=writer.run_id,
+                plan_id=lineage.get("plan_id"), boot_session_id=lineage.get("boot_session_id"),
+                stamp=(timing_receipts.paired_stamp if isinstance(clock, SystemClock) else
+                       lambda: timing_receipts.clock_stamp(clock)),
+                clock_domain="host-monotonic" if isinstance(clock, SystemClock) else "synthetic-controller",
+                wall_resolution_s=clock_info.wall_resolution_s,
+                monotonic_resolution_s=clock_info.monotonic_resolution_s)
         self._controller_log: list[str] = []
         self._runtime_log: list[str] = []
         self._telemetry_log: list[str] = []
@@ -3920,6 +3932,15 @@ class _Execution:
             f"registry returned no {kind} adapter and no structured failure",
         )
 
+    def _buffer_timing_boundary(self, row) -> None:
+        # Keep the injected clock's original float for event ordering. Rounding
+        # it through integer epoch nanoseconds can move an equal-time marker
+        # ahead of run_started. The receipt retains its integer clock pair.
+        self._events.append(RuntimeEvent(
+            timestamp_s=row.get("timestamp_s", row["epoch_ns"] / 1e9),
+            event_type="timing_boundary", phase=row["phase"],
+            message=row["activity"], metadata=row))
+
     def _flush_events(self) -> None:
         """Append every buffered event to ``events.jsonl`` exactly once.
 
@@ -3940,9 +3961,12 @@ class _Execution:
 
     def _finish(self) -> None:
         """Flush buffered logs and events, then finalize (D-011, D-013)."""
-        self._flush_log("controller.log", self._controller_log)
-        self._flush_log("runtime.log", self._runtime_log)
-        self._flush_log("telemetry.log", self._telemetry_log)
+        with timing_receipts.span("finalize", "bundle_finalize"):
+            self._flush_log("controller.log", self._controller_log)
+            self._flush_log("runtime.log", self._runtime_log)
+            self._flush_log("telemetry.log", self._telemetry_log)
+        # Both finalize boundaries join the same stable event sort. Summary
+        # persistence follows run_finalized; the driver's night_result owns it.
         self._flush_events()
         self._writer.finalize()
 

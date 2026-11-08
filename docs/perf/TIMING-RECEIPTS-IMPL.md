@@ -1,132 +1,104 @@
 # Timing boundary receipts implementation
 
-2026-11-08. Implementation against `origin/align/2026-11-08-v4-r11`;
-reader/spec pinned to `dc684b308` on `origin/fix-timing`. Ed's markers-only
-rule in `origin/main:docs/perf/SPEED-TOOLBOX.md` supersedes the proposal's
-new-sidecar/durable-write language. **Prospective capture change, pending
-Opus review and registration. Not a completed live timing ledger.**
+2026-11-08. Prospective capture instrumentation; **pending delta review,
+STRICT re-registration, and native validation**. The integration includes
+`origin/align/2026-11-08-v4-r11` at `a67de02f27328d77f7f40fac931f4b95f6c39dee`
+by merge. The Opus review of `5fc873136` supplied the correction scope.
+Ed's markers-only rule in `origin/main:docs/perf/SPEED-TOOLBOX.md` controls.
+No live or sealed measurement record was used.
 
 ## Recorded boundaries
 
-| Owner | Boundary and journal |
+| Owner | Boundary and destination |
 |---|---|
-| `scripts/run_night.py` | Pack arm, evidence authoring, receipt generation/verification; broad arm-only admission; actual OFF-settle envelope/residual sleep; derivation clean dwell; result inventory/write and post-chain preparation; reporting hand-off; publication, results copy, local commit and push. Uses the existing `night/chain-stages.jsonl`, opened before admission and retained until driver cleanup. |
-| `joulewise/hazards/arm.py` | Hazard arm, including refused returns and terminal `arm.json` persistence; actual clean dwell. Uses the caller's driver journal. |
-| `joulewise/b5/driver.py` | Arm dispatch (including existing worker startup/join) and post-chain monitor hold. Copies the receipt context into the already-existing arm worker; starts no additional worker. |
-| `joulewise/align/apple/thermal_gates.py` | G0 call start, terminal outcome, timeout and exceptions, including a collector fault before the native interval exists. Uses the member's existing `events.jsonl` handle. G1/H retain their existing native receipts; H's actual dispatch/resume endpoint is preserved. No duplicate per-turn series. |
-| `joulewise/bundle.py`, `joulewise/controller.py` | Bind each ALIGN member's existing event journal before execution; bracket final summary persistence. The terminal boundary follows the write without rewriting its result. Non-ALIGN event bytes retain their existing behavior. |
-| `scripts/magistrate_watchdog.py` | Observed holds (`FENCED`, census/unsafe/clock/network holds, backoff, stopped), including changes of reason, activation or fenced plan. Close at release/launch; record a paired terminal-release milestone. These are watchdog holds, not thermal cooling or model idle. |
+| `scripts/run_night.py` | Pack arm/evidence/receipt authoring and verification; OFF-settle and residual sleep; clean dwell; result preparation/persistence; reporting and publication. Uses the driver's existing `night.log`, opened without `O_CREAT` and with `O_APPEND`. The child exclusively owns `night/chain-stages.jsonl`. If no driver log exists (including arm-only), observations remain in memory and no file is created. |
+| `joulewise/hazards/arm.py` | Hazard arm and clean dwell. The start marker precedes `dwell_started`, the boot read and the first clock sample; no marker append occurs within that dwell. |
+| `joulewise/b5/driver.py` | Arm dispatch and existing worker join, post-chain monitor hold. Only receipt identity crosses into the existing worker. |
+| `joulewise/align/apple/thermal_gates.py` | G0 entry/return/timeout/error. Native G1/H receipts remain the detailed source; no per-turn marker series was added. |
+| `joulewise/controller.py`, `joulewise/bundle.py` | ALIGN markers are `RuntimeEvent`s in the controller's ordinary in-memory event list. The existing stable sort orders them after `run_started`. `bundle_finalize` brackets final log flushes, and both boundaries flush before `run_finalized`. Final event and summary persistence retain the base writer behavior. |
+| `scripts/align_v4_session.py` | Whole v4 install, arm checks, packet rebuild, live meter probe, disk gate and installer handoff. Install markers buffer until the operation exits, then append JSON lines to already-open CLI stdout. Retain that existing CLI transcript for offline timing; no sidecar is created. Direct `arm_checks` calls use their caller's receipt context. |
+| `joulewise/b5/chain.py` | Each unmeasured chain settle. One Python sleeping process replaces the existing `/bin/sleep` process; it appends boundaries to the chain's already-existing `window-chain.log`, without `O_CREAT`. There is no additional process alongside the sleep, sampler, timer or thread. Sleep duration remains `SETTLE_S`. |
+| `scripts/run_night.py` launcher | A launch-barrier span opens before spawning the blocked launcher, closes before sending its `G` release, and closes on refusal/error unwinding. No marker write is added to the collection loop. |
+| `scripts/magistrate_watchdog.py` | Existing observed hold/reason transitions, release and terminal-release paired stamp; unchanged in this correction round. |
 
-Each marker is one JSONL record with schema `joulewise.timing_boundary.v1`:
-`start`/`end`, phase, activity, producer/producer ID, sequence, span/parent
-ID, plan/member/stage/attempt, clock domain, boot ID, both resolutions and
-integer `epoch_ns`, `monotonic_before_ns`, `monotonic_after_ns`. Production
-reads the wall clock inside the monotonic bracket. Ends retain status and
-return code where available. Requested sleeps appear only as `requested_s`.
-Identity unavailable from the existing owner is explicitly null; no extra
-boot probe or inferred identity is introduced.
+Each marker retains schema `joulewise.timing_boundary.v1`, phase/activity,
+sequence, span/parent identity, plan/member/attempt/stage, producer, clock
+identity/resolutions, and paired integer wall/monotonic stamps. Ends retain
+status and return code where available. Requested sleep is descriptive only.
+The injected-clock seam additionally retains the original float timestamp
+for event ordering: a round trip through epoch nanoseconds must not move an
+equal-time marker ahead of its preceding event.
 
-The helper performs only boundary stamping/encoding/appending. It computes
-no durations, ledger, gate decision, inventory or hash. It creates no file,
-thread or process. The owners extend existing journal-handle lifetimes;
-no additional journal basename is introduced. Parent and shell stage writers
-operate before/after the chain respectively; markers have no `stage_id`, so
-existing stage consumers ignore them. Each member has its own producer and
-journal. The existing arm worker uses the same serialized writer.
+Member appends perform no open, write, flush, fsync, process launch or thread
+startup. The controller's existing event drain persists them after measurement.
+A process death can lose buffered markers; missing ends remain missing. The
+bundle writer no longer holds an extra event stream or relies on a destructor
+to close it. Driver and chain turnaround markers add no fsync. These are
+boundary observations, never per-sample or per-token markers. No gate decision,
+batching, caching, measured episode, or duration policy changed.
 
-Member markers are buffered. Ordinary event writes and final close drain the
-buffer; there is no added marker flush or fsync inside a measured member.
-An interrupted member may therefore have a missing start/end until the
-existing owner drains its buffer. Turnaround appends flush the driver handle
-without fsync. Watchdog markers share the existing transition append/sync;
-reason-only boundaries add no fsync. There are tens of markers per W1,
-not sample-rate markers. Existing admission decisions, waits, batch sizes,
-generated chains, episode records, thermal journals and scientific reducers
-are unchanged.
+## Offline reader
 
-## Offline reader projection
+`joulewise/align/window_timing.py` is brought in from the local code object
+`dc684b308`, with the following targeted corrections:
 
-The pinned reader does **not** ingest generic markers directly. On an
-authorized unblinded export, decode the explicitly named journals and call
-`joulewise.timing_receipts.project(rows)`. It accepts plain JSONL records or
-the member events' five-key `metadata` envelope and returns completed timed
-documents plus diagnostics. Original integer stamps and brackets remain in
-each document. Open, duplicate, reversed, cross-domain and cross-boot pairs
-are not converted into completed intervals.
+- Read member boundary envelopes directly from `events.jsonl`; read driver
+  JSON boundary lines mixed with its ordinary ISO text in `night.log`.
+- Project complete, validated pairs; report missing/reversed/cross-identity
+  pairs and clock disagreement. Refine parent spans at observed boundaries;
+  unrelated overlaps stay ambiguous.
+- Give observed spans priority over broad `measured_run`/episode envelopes,
+  below native turn/tool/gate intervals. Generic projected spans retain their
+  member identity and activity.
+- Place native G0/G1/H intervals against the member envelope using the
+  episode's recorded clock mapping. A G0 timeout before episode start
+  remains gate time. A gate outside the member is rejected, never clipped.
+- Account for sampler startup/teardown from existing sampling/stage events,
+  and the runtime's explicit zero-generation stop-observation phase. No gap
+  becomes a known phase just because it lies inside `measured_run`.
 
-Pass completed documents through `reader_projection(documents)` before
-feeding them as named `--span` records to the pinned reader's `read_window`.
-This offline step partitions nested envelopes at observed wall boundaries:
-for example, dwell refines arm, rather than becoming an equal-priority
-conflict. Unrelated overlaps remain explicitly unattributed. Preserve both
-diagnostic lists and the original pair documents alongside the reader
-report; the projection does not invent monotonic stamps for wall-axis cuts.
-Use the originals for the reader's elapsed-clock diagnostic. Unknown gaps
-stay unknown. For native stage attribution, supply a separate stage-only
-export to the legacy `--chain-journal` input, preserving the original mixed
-journal alongside it: that reader otherwise warns about each standalone
-boundary's absent timed-object fields. No runtime path calls either
-projection function.
+For other existing logs (chain settle log, v4 CLI transcript), extract the
+explicit JSON marker lines, call `timing_receipts.project(rows)` and then
+`reader_projection(documents)`, and pass the resulting documents as `--span`
+inputs. Preserve original markers and both diagnostic lists. Only explicitly
+authorized, committed records may enter `GitRecords`; its sealed-path fence
+is retained. Runtime producers never call the offline projection/reader.
 
-Push completion remains in the local driver journal. This change does not
-broaden the structure-only courier's export or publish timing journals.
-The custodian must explicitly export authorized R1/W1/D timing records later;
-never export sealed Block 5 records. A push cannot include its own completion
-receipt, and no recursive push is added.
+## Synthetic proof and limits
 
-## Verification and remaining integration
+The cross-tree capture test exports code/config from `1a2574b49` without a
+fetch or another working tree. Two separate subprocesses run the complete
+W1 synthetic at the same temporary output path, one against that base and
+one against the current source. Both receive the same tiny synthetic battery
+response and deterministic source provenance. Traceback source locations are
+removed at the formatting seam in both trees; actual exception types/messages
+are retained and compared.
+Only process RSS and source-worktree paths are normalized after capture;
+only added timing-boundary lines are removed. File sets and every normalized
+file's bytes (SHA-256) must match. All **20** bundles (18 W1 members plus two
+pilot references) must return `[]` from `validate_bundle` on both trees.
+Strict/physics eligibility is not asserted by that structural check.
 
-`tests/align/test_timing_receipts.py` requires **reader code only** from
-`dc684b308` in the local Git object store (including CI); it never fetches
-that dependency or silently skips the required integration check. Invented nested turnaround operations
-reconcile to 647 seconds with zero unattributed wall in that reader. Other
-tests cover malformed/open/cross-boot receipts, timeout/interruption,
-emission failure, refused arm, G0 faults, overlapping OFF/dwell,
-failed finalize, failed push then successful retry, and watchdog reason changes.
-The measured-marker test instruments the real bundle callback and forbids
-open, flush, fsync, process creation and thread startup during its emission.
+A second cross-tree check compares the complete structure JSON, actual
+harvest yield JSON, stage-journal result, collection-presence decision and
+its flags on happy and pre-chain-refusal fixtures. It uses an empty synthetic
+roster and the real stage/yield methods; it does not run a production harvest.
+Neither consumer implementation was edited.
 
-The capture comparison runs the existing W1 synthetic capture path twice at
-the same temporary root: markers disabled, then enabled. It compares every
-file byte for byte, removing only added timing-boundary JSONL lines. With
-`JW_WP22_FULL=1`, this includes every member and all existing fault injections.
-The synthetic driver now supplies the existing battery-runner and clock
-seams too, preventing host battery reads and nondeterministic battery stamps.
-This compares receipt enablement at one source tree; it does not claim that
-source/provenance digests equal those of an older registered source tree.
+The actual W1 synthetic output, including its G0 timeout and fault cases,
+must have at most **1 ms total unattributed in-member time** across the 18
+W1 members in the corrected reader. Native clock diagnostics and deliberately
+unclosed failure stages remain visible. This is producer evidence, distinct
+from the retained 647-second invented nested-span test against the old reader.
 
-A final software-only overhead check wrote 2,000 markers to an already-open
-`StringIO`: 20,165,875 ns total, approximately 10.1 microseconds per marker,
-1,363,783 encoded bytes. Earlier runs took 11.4 and 19.3 microseconds per marker.
-These are in-memory observations under concurrent host load, not a disk-I/O
-or native-capture timing claim and not a speedup.
-Test commands/results and the full touched-file list are in
-`docs/run_reports/2026-11-08-timing-receipts.md`.
+`joulewise/timing_receipts.py` is now in `EXECUTED_CLOSURE` and the committed
+dynamic trace. The trace preserves its prior scenarios and unions a fresh,
+single-module minimal W1 execution as `timing_receipts_delta`; it is not a
+claim that every historical scenario was rerun together. Targeted module
+results, all receipt-bound paths, and handoff gates are recorded in
+`docs/run_reports/2026-11-08-receipts-fix.md`.
 
-**Blocking integration:** the specified R16 cool-down evaluator is absent
-from this checkout and the inspected `origin/main` ALIGN code. Its actual
-operation must be wrapped using the existing owner's open writer and
-`span('idle', 'cooldown')`, including its terminal/error path, once its owning
-code/ref is supplied. The existing R1 `idle-until-soak` is not silently
-substituted for R16. Manual harvest/backup/push work outside this driver still
-needs its own existing Python owner's boundary calls; the reporting hand-off
-is not evidence of downstream completion. No helper process was added to
-the shell backup or frozen chain.
-
-The qualification dwell source contains only monotonic stamps and boot ID;
-these are retained in its projection receipt, without inventing wall stamps
-or rerunning dwell. Its historical wall placement requires an authenticated
-clock bridge. Direct calls outside a bound existing journal produce no new
-journal. R0/R1-only insertion points and launch-capability barriers outside
-the W1/D driver path are not expanded by this patch.
-
-Consequently the synthetic completeness test proves the receipt geometry,
-not completeness of all native/external turnaround sources. Lead next step:
-supply/integrate R16 and external desk boundaries, run the native verification
-outside this sandbox, complete the Opus review, then register every changed
-capture dependency before W1. No live measurement or registration was run.
-
-The existing native array qualification command is
-`JW_ALIGN_MLX_NATIVE_TESTS=1 python3.13 -B -m unittest tests.align.test_thermal_mlx`.
-It uses small synthetic streams and no model weights. Run it only outside
-this no-Metal sandbox under lead-controlled machine-state conditions.
+No throughput or live overhead claim is made. The real R16 condition-wait arm,
+manual off-machine harvest/backup/push completion, and native MLX/capture
+remain lead-owned integration gates. No model weights were obtained, no
+quiet-machine session was started, and coordination state was not edited.

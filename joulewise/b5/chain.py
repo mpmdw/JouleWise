@@ -934,10 +934,39 @@ def runbook_screen(runbook_text: str) -> str:
     return block
 
 
+SETTLE_HELPER = r"""
+import json, os, sys, time
+from joulewise import timing_receipts
+journal = None
+writer = None
+try:
+    try:
+        journal = os.fdopen(os.open(sys.argv[1], os.O_WRONLY | os.O_APPEND), "w")
+        def append(row):
+            journal.write(json.dumps(row, sort_keys=True) + "\n")
+            journal.flush()
+        writer = timing_receipts.Writer(append, producer="chain")
+    except Exception as error:
+        sys.stderr.write(f"timing journal unavailable: {error}\n")
+    with timing_receipts.bind(writer), \
+         timing_receipts.span("idle", "chain_settle", requested_s=float(sys.argv[2])):
+        time.sleep(float(sys.argv[2]))
+finally:
+    if journal is not None:
+        try:
+            journal.close()
+        except OSError as error:
+            sys.stderr.write(f"timing journal close failed: {error}\n")
+"""
+
+
+
 _PRELUDE_FUNCTIONS = r"""stamp() { TZ=UTC /bin/date '+%Y-%m-%dT%H:%M:%SZ'; }
 timestamp() { stamp; }
 note() { print -r -- "$(stamp) $*" >> "$CHAIN_LOG"; }
-settle() { /bin/sleep "$SETTLE_S"; }
+# Replace the existing sleep process with a stamped sleep: still one process,
+# outside every member, writing only the chain's already-existing log.
+settle() { "$PY" -B -c "$B5_SETTLE_PY" "$CHAIN_LOG" "$SETTLE_S"; }
 # journal STAGE_ID KIND RC STARTED: one JSON line per stage (identifiers are [A-Za-z0-9._-]).
 journal() {
   print -r -- "{\"stage_id\":\"$1\",\"kind\":\"$2\",\"rc\":$3,\"started_epoch_s\":$4,\"ended_epoch_s\":$(/bin/date +%s)}" >> "$STAGE_JOURNAL"
@@ -1112,6 +1141,7 @@ def render_chain(*, tree: Mapping[str, Any], tree_sha256: str, stages: Sequence[
         f"BOUND_RUNS_ROOT={_literal(bindings['bound_runs_root'])}",
         'CHAIN_LOG="$OPERATOR_LOG_ROOT/window-chain.log"',
         f'STAGE_JOURNAL="$NIGHT_DIR/{STAGE_JOURNAL}"',
+        "B5_SETTLE_PY=" + shlex.quote(SETTLE_HELPER),
         'TRANSCRIPT_ROOT="$NIGHT_DIR/transcript"',
         *heredoc("B5_PRUNE_PY", PRUNE_HELPER),
         *heredoc("B5_BUDGET_PY", BUDGET_HELPER),

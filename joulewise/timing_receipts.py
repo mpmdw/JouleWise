@@ -31,7 +31,7 @@ def paired_stamp():
 def clock_stamp(clock):
     """Use the controller's injected clock, including the synthetic clock seam."""
     stamp = clock.stamp()
-    return dict(epoch_ns=round(stamp.epoch_s * 1e9),
+    return dict(timestamp_s=stamp.epoch_s, epoch_ns=round(stamp.epoch_s * 1e9),
                 monotonic_before_ns=round(stamp.monotonic_before_s * 1e9),
                 monotonic_after_ns=round(stamp.monotonic_after_s * 1e9))
 
@@ -261,6 +261,7 @@ def reader_projection(documents):
         # Endpoints come from emitted boundaries, with their original clock
         # brackets retained. Do not fabricate a monotonic stamp for a wall cut.
         result.append(dict(phase=owner['phase'], activity=owner['activity'],
+                           member=owner['start_boundary'].get('member'),
                            started_ns=a, ended_ns=b,
                            source_span_id=owner['start_boundary']['span_id']))
     return result, warnings
