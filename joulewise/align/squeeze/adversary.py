@@ -85,9 +85,14 @@ def attack_effect(model: ResidualModel, carrier: Carrier, attack: Attack,
     phantom_increment = model.hidden_increment(
         attack.phantom_logged_tokens, prefill=carrier.prefill,
         decode=carrier_decode, context=carrier.context)
-    physical = (visible_increment + attack.smoothing_cost_ratio * local_increment
-                + tool * attack.tool_j_per_token * attack.tool_meter_fraction)
-    predicted = visible_increment + phantom_increment
+    hidden_j = finite(attack.smoothing_cost_ratio * local_increment, "hidden energy")
+    tool_j = finite(tool * attack.tool_j_per_token * attack.tool_meter_fraction, "tool energy")
+    phantom_increment = finite(phantom_increment, "phantom energy")
+    physical = finite(visible_increment + hidden_j + tool_j, "physical_extra_j")
+    predicted = finite(visible_increment + phantom_increment, "predicted_extra_j")
+    # Cancel common executed/logged work symbolically. Subtracting the totals
+    # can erase an otherwise representable hidden signal after large padding.
+    residual = finite(math.fsum((hidden_j, tool_j, -phantom_increment)), "residual_shift_j")
     shift = attack.monitor_visibility * (logged + attack.tool_monitor_visibility * tool)
     flags = []
     if h == 0:
@@ -102,7 +107,8 @@ def attack_effect(model: ResidualModel, carrier: Carrier, attack: Attack,
         flags.append("assumed_cost_change_requires_hardware_validation")
     if local_increment < 0 or phantom_increment < 0 or visible_increment < 0:
         flags.append("negative_fitted_work_cost")
-    return Effect(shift / monitor.tokens_per_score, physical - predicted, h,
+    monitor_shift = finite(shift / monitor.tokens_per_score, "monitor_shift")
+    return Effect(monitor_shift, residual, h,
                   logged, local, tool, physical, predicted, tuple(flags))
 
 

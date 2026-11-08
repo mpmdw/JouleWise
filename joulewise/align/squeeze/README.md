@@ -33,6 +33,8 @@ tail above a maximum is at most `1 - 0.1**(1/m)`:
 m=39**, and infinity for m<19. The older empirical rule `ceil((1-alpha)*m)`
 is not used. These different rules must not be silently interchanged. Ties
 are conservative; NaN/infinite calibration or test scores are refused.
+Overflow during standardization or joint summation is also refused, even
+when the input scores are finite.
 
 For two channels, `JointScore` freezes their locations/scales/energy weight,
 then uses the maximum of their standardized scores. Calibrating this *one*
@@ -78,6 +80,10 @@ It does not invent a new call intercept, propagate hidden contexts through
 later turns, or simulate model execution. A fresh hidden call would also have
 its own intercept/prefill/context costs; it is not this continuation estimand.
 Coefficients remain unmodified; negative work costs are flagged.
+Attack residuals cancel common executed/logged padding before arithmetic,
+so subtracting large rounded totals cannot erase the hidden signal. Reported
+physical/predicted totals can still round to the same float; the directly
+computed residual retains the difference. Nonfinite effect joules are refused.
 
 `attack_effect` conserves a supplied adversarial work budget H across:
 
@@ -192,6 +198,7 @@ python3 -B -m unittest tests.align.squeeze.test_detection
 python3 -B -m unittest tests.align.squeeze.test_adversary
 python3 -B -m unittest tests.align.squeeze.test_power
 python3 -B -m unittest tests.align.squeeze.test_cli
+python3 -B -m unittest tests.align.squeeze.test_review
 ```
 
 No MLX code is used. The lead must repeat numerical tests with NumPy on Python

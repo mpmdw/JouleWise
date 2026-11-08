@@ -163,16 +163,24 @@ class JointScore:
         a = np.asarray(scores, dtype=float)
         if a.ndim < 1 or a.shape[-1] != 2 or not np.all(np.isfinite(a)):
             raise ValueError("scores must be finite with final dimension 2")
-        return np.stack(((a[..., 0] - self.monitor_location) / self.monitor_scale,
-                         self.energy_weight * (a[..., 1] - self.energy_location_j)
-                         / self.energy_scale_j), axis=-1)
+        with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+            out = np.stack(((a[..., 0] - self.monitor_location) / self.monitor_scale,
+                            self.energy_weight * (a[..., 1] - self.energy_location_j)
+                            / self.energy_scale_j), axis=-1)
+        if not np.isfinite(out).all():
+            raise ValueError("standardized scores overflow")
+        return out
 
     def __call__(self, scores):
         import numpy as np
 
         a = self.channels(scores)
         if self.mode == "sum":
-            return np.sum(a, axis=-1)
+            with np.errstate(over="ignore", invalid="ignore"):
+                out = np.sum(a, axis=-1)
+            if not np.isfinite(out).all():
+                raise ValueError("joint scores overflow")
+            return out
         return (np.max if self.mode == "max" else np.min)(a, axis=-1)
 
     def calibrate(self, benign_scores):
