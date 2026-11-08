@@ -106,6 +106,10 @@ PAIR_GROUPS = {5: 'D-5-17', 17: 'D-5-17', 6: 'X-G', 16: 'X-G', 9: 'X-S', 13: 'X-
 
 
 def build_kit(inputs, r1_slots=SYN_R1_SLOTS):
+    # R10-4: the stand-in R1's X-G ran W1's WP18 X turn count, which this dry
+    # run measures from its own pilot-7 stand-in before building the kit.
+    r1_slots = deepcopy(r1_slots)
+    r1_slots['x_g']['admitted_turns'] = inputs['WP18']['X']['max_turns']
     with patch.object(kit, 'read_inputs', lambda root=kit.ROOT: deepcopy(inputs)), \
             patch.object(kit, 'read_r1_slots', lambda root=kit.ROOT: deepcopy(r1_slots)):
         kit.require_ready(deepcopy(inputs), deepcopy(r1_slots), synthetic=True)
