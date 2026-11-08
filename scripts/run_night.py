@@ -5534,6 +5534,12 @@ def _probe_worker(plan_path: Path, receipt_path: Path, progress_path: Path, dead
     except ValueError as exc:
         _atomic_probe_json(receipt_path, {"outcome": "refused", "refusal_code": str(exc)})
         return 2
+    if payload_kind == "align_v4_r1":
+        # The ALIGN v4 R1 chain is never executed by a probe (it would start
+        # R1); the installer never asks for one (night_agent_install).
+        _atomic_probe_json(receipt_path, {"outcome": "refused", "plan_id": plan.plan_id,
+                                          "refusal_code": "align_v4_r1_chain_never_probed"})
+        return 2
     if payload_kind == "quiet_predicate_evidence":
         phase("evidence-dispatch", {"schema": "joulewise.night_evidence_probe_receipt.v1",
               "plan_id": plan.plan_id, "measurement_head": plan.measurement_head,

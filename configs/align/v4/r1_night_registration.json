@@ -1,0 +1,27 @@
+{
+  "schema": "joulewise.align_v4_r1_night_registration.v1",
+  "label": "ALIGN v4 R1 hardware rehearsal night (non-claim qualification)",
+  "non_claim": true,
+  "night_kind": "align_v4_r1",
+  "receipt_class": "DIAGNOSTIC_NO_PACK",
+  "chain_source_path": "scripts/night_chains/align_r1_rehearsal.zsh",
+  "chain_source_sha256": "40a49bde4475c583719dc178d5f66963abe29918350b288a829c91bf54946be0",
+  "driver": "scripts/align_r1_rehearsal.py",
+  "runtime_contract": "docs/align/r1_runtime_contract.md",
+  "ac_powermode": 0,
+  "sizing": {
+    "authority": "RUN_STATE items 215 and 216 (laptop lead, 2026-11-07): the R1 driver can redo (ruling 8 load redos, R6-2 G0 retries), so the redo floor applies",
+    "r1_floor_s": 96427,
+    "batch_encounter_s": 11164,
+    "admission_allowance_s": 3000,
+    "display_dwell_s": 300,
+    "meter_allowance_s": 30,
+    "calibration_brackets_allowance_s": 600,
+    "harvest_allowance_s": 1800,
+    "close_allowance_s": 120
+  },
+  "display": {"command": "pmset displaysleepnow", "dwell_s": 300, "authority": "R0-L3 display ruling (RUN_STATE items 206, 209)"},
+  "meter": {"program": "scripts/km003c_monitor.py", "stream_dir": "hazards/meter", "authority": "Ed 2026-11-07: every measurement captures the KM003C"},
+  "external_volumes": "none: ruling 20, enforced by the R1 driver at t0, before every runtime invocation and before r1_slots",
+  "arm_authority": "RUN_STATE item 220: armable only after a lead ruling item names the agreed route and sha"
+}

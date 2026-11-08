@@ -1896,11 +1896,16 @@ class EvidenceRegistrationTests(unittest.TestCase):
         # canonical form v2 uses (sorted keys, indent 2); digest re-pinned.
         # 2026-09-30: add the sealed Revision 6 digest under cold registration
         # gate REV6-25G83-01 and erratum REV6-25G83-01-E1 (GAP 1).
+        # 2026-11-08 (lane/2026-11-08-r1-arm-opus; RUN_STATE item 220): add the
+        # ALIGN v4 R1 night registration (configs/align/v4/r1_night_registration.json,
+        # chain-bound to the unchanged R1 chain). PENDING the lead's route ruling
+        # item (item 220: R1 arms only on the route a lead ruling names); if that
+        # ruling picks another route, this entry is dropped with the branch.
         # Any membership/metadata amendment needs its cold-gate ruling and a
         # dated update here.
         serialized = json.dumps(night_gate.RULED_REGISTRATIONS, sort_keys=True, separators=(',', ':'))
         self.assertEqual(hashlib.sha256(serialized.encode()).hexdigest(),
-                         'e70f35b226fe1f8b768fc93f2fab15206713cf0b629908411585daaa8fec4e76')
+                         'f346912ac47e534d25671a9c2fc33b4454edb08d3adf34037175341c9b6e62da')
 
     def test_the_gate_share_equals_the_registrations_t0_share(self):
         # Fix round 1 (lens N6): ruling 10 makes the GATE constant binding,

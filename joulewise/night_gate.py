@@ -113,6 +113,10 @@ QPE01_PILOT_REGISTRATION_V2_SHA256 = "2c5392401a7956dfbb30f316a084541e0f53f214a4
 # ``superseded_by``, which the armability readers refuse.
 QPE01_PILOT_REGISTRATION_V1_SHA256 = "f59804a9a28b2145f7bb8e91a8f0fe11b21ae6728cee70d8e943fe52a46da6f6"
 EVIDENCE_CHAIN_PATH = kind_row("quiet_predicate_evidence").chain_source_path
+# ALIGN v4 R1 night (RUN_STATE items 202, 215-220): the registration binds the
+# unchanged R1 chain's SHA-256 (scripts/night_chains/align_r1_rehearsal.zsh).
+ALIGN_V4_R1_REGISTRATION_PATH = kind_row("align_v4_r1").protocol_path
+ALIGN_V4_R1_REGISTRATION_SHA256 = "f0b1d7c67e19a78d6cdd3167fd122a368f43db8e17a8f9f4de12279283c0e1c1"
 # Amended only by cold-gate ruling; each entry names its authority ("ruling",
 # surfaced in the receipt) and the tracked records that hold it ("records":
 # repo-relative paths, optionally "#<heading id>" inside a decision log;
@@ -159,6 +163,14 @@ RULED_REGISTRATIONS = {
                     "docs/process_traces/2026-09-22-activation-a022aecc/03-coldgate-packet-daemon-contamination/25-magistrate-synthesis-round-2.md",
                     "docs/process_traces/2026-09-22-activation-a022aecc/03-coldgate-packet-daemon-contamination/31-coldgate-fable-observer-floor-design-ruling.md",
                     "docs/process_traces/2026-09-22-activation-a022aecc/03-coldgate-packet-daemon-contamination/35-magistrate-synthesis-round-3.md")},
+    ALIGN_V4_R1_REGISTRATION_SHA256: {
+        "label": "ALIGN v4 R1 hardware rehearsal night (non-claim; chain-bound)",
+        "ruling": "LEAD-RULINGS-2 (R1 runtime and sizing); RUN_STATE items 202, 215, 216; "
+                  "armed only on the route a lead ruling item names (item 220)",
+        "binds_chain": True,
+        "records": ("docs/align/council-2026-11-06-v4-review/LEAD-RULINGS-2.md",
+                    "docs/align/r1_runtime_contract.md",
+                    "docs/align/R1-ARM-RUNBOOK-opus.md")},
 }
 
 

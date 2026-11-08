@@ -734,6 +734,23 @@ WRITER_CUSTODY_PASSES = 3
 CUSTODY_HEADROOM_FACTOR = 1.5
 
 
+# Payload kinds whose chain the installer never executes and never probes:
+# the ALIGN v4 R1 night (scripts/write_align_r1_night.py). Its wrapper refuses
+# both inspection modes, the probe's calibration-ledger bindings do not exist
+# for it, and running it would start R1 itself. Like a HAZARD_PACK chain, it
+# runs once, inside the launchd job, after run_night's admission.
+NEVER_PROBED_PAYLOAD_KINDS = frozenset({"align_v4_r1"})
+
+
+def never_probed_payload(chain_text):
+    """True for a chain that declares a never-probed payload kind; False otherwise."""
+    from joulewise import night_gate
+    try:
+        return night_gate.probe_payload_kind(chain_text) in NEVER_PROBED_PAYLOAD_KINDS
+    except ValueError:
+        return False
+
+
 def _digest(path):
     import hashlib
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
@@ -1325,6 +1342,21 @@ def validate_install(args, repo):
         supplied = getattr(args, field, None)
         if supplied is not None and supplied != schedule["night_calendar"][field.capitalize()]:
             raise Refused(2, "--{} must match the plan calendar".format(field))
+    if not hazard:
+        try:
+            r1_night = never_probed_payload(Path(plan.chain_path).read_text(encoding="utf-8"))
+        except (OSError, UnicodeError):
+            r1_night = False
+        if r1_night:
+            # The ALIGN v4 R1 night: never executed or probed before t0. The
+            # gate's C1/C5 (ruled chain-bound registration, tracked R1 source)
+            # and run_night's admission run inside the launchd job.
+            if args.render_only is not None:
+                print(json.dumps({"payload_kind": "align_v4_r1", "chain_sha256": _digest_or_none(plan.chain_path),
+                                  "input_digests": None,
+                                  "detail": "align_v4_r1: never probed; admission runs in the launchd job"},
+                                 sort_keys=True))
+            return prepared
     if hazard:
         # A HAZARD_PACK chain is never executed at install: it refuses both
         # inspection modes, and the instrument cadence probe runs inside the

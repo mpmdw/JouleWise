@@ -228,7 +228,14 @@ class NightKindTests(unittest.TestCase):
         self.assertTrue(FIXTURE.is_dir())
 
     def test_rows_and_unknown_kind(self):
-        self.assertEqual(set(NIGHT_KINDS), {"quiet_predicate_evidence", "calibration"})
+        self.assertEqual(set(NIGHT_KINDS), {"quiet_predicate_evidence", "calibration", "align_v4_r1"})
+        r1 = kind_row("align_v4_r1")
+        self.assertEqual(r1.chain_source_path, "scripts/night_chains/align_r1_rehearsal.zsh")
+        self.assertEqual(r1.receipt_class, "DIAGNOSTIC_NO_PACK")
+        self.assertTrue(r1.payload_kind)
+        self.assertTrue(r1.authenticate_chain_source)
+        self.assertTrue(r1.requires_chain_bound_registration)
+        self.assertIsNone(r1.window_max_s)   # sized per plan (RUN_STATE items 215/216)
         self.assertIs(night_gate.NIGHT_KINDS, NIGHT_KINDS)
         idle = kind_row("quiet_predicate_evidence")
         calibration = kind_row("calibration")

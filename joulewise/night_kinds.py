@@ -93,6 +93,35 @@ NIGHT_KINDS = MappingProxyType({
         notice_work="",
         notice_followup="",
     ),
+    # ALIGN v4 R1 (RUN_STATE items 202, 215-220; docs/align/R1-ARM-RUNBOOK-opus.md).
+    # A DIAGNOSTIC_NO_PACK night whose generated wrapper (scripts/write_align_r1_night.py)
+    # runs the unchanged R1 chain; C5 authenticates that chain's tracked source and
+    # C1 requires the ruled registration that binds its digest. Its sizing is per
+    # plan (items 215/216), so the row pins no window. The installer never probes
+    # it: the chain is never executed before t0 (night_agent_install).
+    "align_v4_r1": NightKind(
+        kind="align_v4_r1",
+        plan_id_prefix="align-v4-r1-",
+        measurement_root_suffix=None,
+        chain_source_path="scripts/night_chains/align_r1_rehearsal.zsh",
+        protocol_path="configs/align/v4/r1_night_registration.json",
+        receipt_class="DIAGNOSTIC_NO_PACK",
+        window_max_s=None,
+        manifest_for=None,
+        manifest_module=None,
+        generator_script="scripts/write_align_r1_night.py",
+        executor_module="scripts.align_r1_rehearsal",
+        authenticate_chain_source=True,
+        requires_chain_bound_registration=True,
+        corecaptured_at_arm_and_t0=False,
+        non_observer_at_arm_and_t0=False,
+        battery_brackets=False,
+        payload_kind=True,
+        notice_intro="This ALIGN v4 R1 night is a non-claim hardware rehearsal that fills R1's slots.",
+        notice_envelope_noun="R1 segments",
+        notice_work="The R1 driver runs its fixed segment plan; refusals and redos are its own records.",
+        notice_followup="After delivery the lead fills the R1 leaves and delivers the W1 kit.",
+    ),
 })
 
 
