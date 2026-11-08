@@ -1048,6 +1048,14 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Daytime jobs:** BYTES stage 1, the SSD qualification and Flash-Next probes go into the gaps between windows, never overlapping one, and the SSD qualification still needs Ed present.
 - **Expected effect:** about 1.2-1.3 windows per day instead of 1, so v4 (R1, W1, D windows, registration-grade calibration) takes about 11-13 days instead of about 14-16.
 - **Unchanged:** every arm rule, the external-volume rule (until the SSD qualifies), the meter checks of item 212 R11-3, and Ed's physical-setup items.
+- **Update (Ed: "cant all desk work be done on this machine"): target turnaround of 30-45 min between windows.** Only four steps stay on the MBP between windows:
+  1. finalize and hash the record and push it;
+  2. cool-down to the quiet start state (physics, about 15-25 min);
+  3. the pre-arm checks;
+  4. the display/quiet dwell.
+  
+  Everything else moves to the laptop and runs while the next window measures: record review, the desk report, analysis, kit regeneration, reviews and rulings.
+- The magistrate must be idle on the MBP during a window, because its own activity is contention. Keep its between-window activation short and mechanical. The expected effect is about 1.35-1.4 windows per day.
 
 212. **Laptop lead (interactive session 1544c617), 2026-11-08 about 22:20 PST: lead ruling R11. Adopt the cross-family agreement for v4 and the squeeze** (`docs/align/squeeze/AGREEMENT-FINAL.md` on `align/2026-11-07-squeeze-agreement-final` @ `4526de7d5`: four seats per track, Opus+Fable and Sol-1/Sol-2, cross-reviewed both ways).
 - **R11-1.** Every **HC** (high-convergent) and **HR** (high-reviewed) adjudication in AGREEMENT-FINAL Tracks 1-3 is adopted as written. **U** items stay open, with the owner named in the report. **M** items are recommendations the builder may adopt, recording which.
