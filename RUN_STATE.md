@@ -1042,7 +1042,7 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
-217. **Laptop lead (interactive session 1544c617), 2026-11-08 about 01:15 PST: R12 B3 reverted to a FIXED 8 calibration windows.** Two independent synthetic simulations (`align/2026-11-08-b3-sim-sol1` @ `09d7b3c7f`, `-sol2` @ `95d43c054`) agree. Stopping on counts saves about one window, but under window-level drift it lowers the threshold and raises future benign FPR against fixed 8:
+217. **Laptop lead (interactive session 1544c617), 2026-11-07 about 23:40 PST: R12 B3 reverted to a FIXED 8 calibration windows.** Two independent synthetic simulations (`align/2026-11-08-b3-sim-sol1` @ `09d7b3c7f`, `-sol2` @ `95d43c054`) agree. Stopping on counts saves about one window, but under window-level drift it lowers the threshold and raises future benign FPR against fixed 8:
 - sol1, clustered/hot state: maximum rule 2.84 % vs 2.14 %; 5 % rank 5.38 % vs 4.13 %;
 - sol2, hot10, tau .5: 2.73 % vs 2.22 %.
 
@@ -1054,7 +1054,7 @@ Counts never read scores, so blinding was never at risk. The cost of fixed 8 is 
 - **Not adopted now:** sol1's candidate "minimum 7 plus a frozen 0.5 s_r threshold margin". It is model-dependent and needs a scale/scorer qualification and a power assessment. It is recorded as an open statistics item before W1 registration.
 - **Disclosure stands:** both designs exceed nominal FPR under a forward drift trend. R14's FPR statement stays conditional on exchangeability, and the held-out test cohort is the empirical FPR evidence. Public text must say so.
 
-216. **Laptop lead (interactive session 1544c617), 2026-11-08 about 00:30 PST: correction to item 215. The 90,663 s "redo" figure is stale too.**
+216. **Laptop lead (interactive session 1544c617), 2026-11-07 about 23:30 PST: correction to item 215. The 90,663 s "redo" figure is stale too.**
 - **For the magistrate, before R1 arms:** the 90,663 s figure in item 215 still contains the old 5,400 s batch wait. With the corrected 11,164 s step-D encounter, the same sum is **96,427 s**. Each retry segment can also meet its own encounter.
   - Plan has a redo: size `window_max_s` from your installed plan's actual segments, at 11,164 s per segment that can touch 11:45-13:15, plus bracket, close and harvest. The floor is 96,427 s.
   - Plan has no redo: item 215's 67,371 s floor stands.
@@ -1064,7 +1064,7 @@ Counts never read scores, so blinding was never at risk. The cost of fixed 8 is 
   - From window 6 on, a window whose final eligibility is still pending blocks the next arm, so no window straddles the B3 stop.
   - A window that captured zero members does not count toward the cap of 8. One that captured at least one member counts, whether lost, failed or in flight. After two consecutive zero-capture refusals, escalate to the lead.
 
-215. **Laptop lead (interactive session 1544c617), 2026-11-07 about 23:40 PST: before arming R1, size its deadline from the corrected figure. R12 amended after two Sol cross-checks** (`perf/2026-11-08-r12-review-sol1` @ `ba995e2a0`, `-sol2` @ `e3609d3f7`).
+215. **Laptop lead (interactive session 1544c617), 2026-11-07 about 23:10 PST: before arming R1, size its deadline from the corrected figure. R12 amended after two Sol cross-checks** (`perf/2026-11-08-r12-review-sol1` @ `ba995e2a0`, `-sol2` @ `e3609d3f7`).
 - **For the magistrate, before R1 arms (HIGH, both seats):** item 202(3) and `docs/align/r1_runtime_contract.md:95` say to set `window_max_s` from 56,207 / 61,607 / 90,663 s. `scripts/run_night.py:1152-1171` enforces a stop at `t0 + window_max_s + WINDOW_SHUTDOWN_GRACE_S` and kills the process group. One step-D encounter with the 11:45-13:15 batch window adds up to 11,164 s, so a plan sized from 61,607 s can cut R1 short.
   - Use at least **67,371 s**, the corrected one-encounter subtotal with no redo, plus the plan's bracket, close and harvest time.
   - If the plan includes a redo, use the 90,663 s option.
@@ -1076,7 +1076,7 @@ Counts never read scores, so blinding was never at risk. The cost of fixed 8 is 
   - **B3 changes:** the count-based stop (minimum 6, cap 8) is written prospectively in the registration. It fixes the window order and roles, final eligibility, both-pair predicates, cap accounting and the failure outcome. Its effect on selection and exchangeability is qualified by simulation before W1, and R13/R14 are not described as satisfied by count alone.
   - Owner: the v4 registration builder on `align/2026-11-08-v4-r11`, followed by two Sol reviews.
 
-214. **Laptop lead (interactive session 1544c617), 2026-11-07 about 23:45 PST: lead ruling R12, v4-lean. Adopt three window-cadence changes before W1 registration; keep the rest.** Source: `docs/perf/2026-11-08-latency-synthesis.md` on `perf/2026-11-08-latency-synthesis` @ `55029b860` (Sonnet synthesis of four Sol seats: `perf/2026-11-08-latency-audit-sol{1,2}`, `perf/2026-11-08-window-efficiency-sol{1,2}`). Decided blind: only programmed durations, reservations and eligible counts were used, no outcomes. v4 is not registered yet, so these go into the registration text, not the deviation log.
+214. **Laptop lead (interactive session 1544c617), 2026-11-07 about 22:55 PST: lead ruling R12, v4-lean. Adopt three window-cadence changes before W1 registration; keep the rest.** Source: `docs/perf/2026-11-08-latency-synthesis.md` on `perf/2026-11-08-latency-synthesis` @ `55029b860` (Sonnet synthesis of four Sol seats: `perf/2026-11-08-latency-audit-sol{1,2}`, `perf/2026-11-08-window-efficiency-sol{1,2}`). Decided blind: only programmed durations, reservations and eligible counts were used, no outcomes. v4 is not registered yet, so these go into the registration text, not the deviation log.
 - **For the magistrate first: the R1 printed batch bound is not a bound.** `wait_outside_os_batch` waits to 13:15 whenever a segment would overlap 11:45, so one encounter can add the segment bound plus 5,400 s (11,164 s for step D). The printed 61,607 s R1 figure can therefore become 67,371 s = 18.71 h. Before arming R1, check that no deadline, abort or schedule relies on the printed figure. This is a stale bound, not a measurement change.
 - **Adopted (registration text, before W1):**
   - **B1. A window ends at terminal completion; the 59,520 s ceiling is a ceiling, not a reservation.** Arm the next window from the committed record (item 213). The programmed D span is 40,527 s = 11.26 h, so the cycle falls from about 17.0-17.3 h to about 11.8-12.0 h, from about 1.4 to about 2.0 windows per day. Nothing about the measured trajectory changes.
