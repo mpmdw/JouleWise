@@ -85,7 +85,7 @@ for name in corespotlightd spotlightknowledged; do
         [[ "$rc" -eq 1 ]] || { echo "Spotlight census failed for $name (exit $rc)" >&2; exit 2; }
     fi
 done
-"$python_bin" "$helper" run --deadline "$deadline" --runner-spec "$runner_spec" &
+"$python_bin" "$helper" run --deadline "$deadline" --runner-spec "$runner_spec" --pmset-bin "$pmset_bin" &
 child_pid=$!
 wait "$child_pid"
 child_pid=""

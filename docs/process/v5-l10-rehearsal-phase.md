@@ -17,7 +17,7 @@ that item with the real-corpus ladder below
 ([89-RULING-l10-corpus-precondition.md:39–45](../process_traces/2026-09-01-fresh-model-review/89-RULING-l10-corpus-precondition.md)).
 
 ED-L10-1 was never executed and has no closure record, so the retained a9/a10
-append-only evidence directory is not an L10 corpus source ([ROW-L10.md:501](../process_traces/2026-08-19-prep-sprint/ready-packet/rows/ROW-L10.md)).
+append-only evidence directory is not an L10 corpus source ([ROW-L10.md:501](https://github.com/mpmdw/JouleWise/blob/archive/pre-prune-2026-11-06/docs/process_traces/2026-08-19-prep-sprint/ready-packet/rows/ROW-L10.md)).
 
 These definitions precede the procedure:
 
@@ -62,7 +62,7 @@ These definitions precede the procedure:
   those objects on real bytes: [F1 — run the reusable G3 provenance block](../process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md#f1--run-the-reusable-g3-provenance-block)
   invokes [G3 — nightly desk check (reusable)](../process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md#g3--nightly-desk-check-reusable) with
   `check_window_provenance.py --bracket-binding … --calibration-ledger … --head-pin …`
-  ([97-RULING-g2b-floor-precondition.md, R-6h](../process_traces/2026-09-01-fresh-model-review/97-RULING-g2b-floor-precondition.md)).
+  ([97-RULING-g2b-floor-precondition.md, R-6h](https://github.com/mpmdw/JouleWise/blob/archive/pre-prune-2026-11-06/docs/process_traces/2026-09-01-fresh-model-review/97-RULING-g2b-floor-precondition.md)).
 - A **tree hash** here is SHA-256 over the sorted relative-path/file-digest
   pairs in a directory; it changes when a file byte or relative path changes.
 - The **Claim gate** is the final governed code path that computes registered
@@ -142,7 +142,7 @@ aggregate-floor precondition and replaces it with an empty `$CUSTODY_ROOT/floors
 directory plus an intentionally absent **attachment** path; an attachment is
 the finalizer's name for a declared external artifact (verdict, bracket, ledger,
 or aggregate floor) that it must locate under the custody root and hash.
-([97-RULING-g2b-floor-precondition.md, R-6a](../process_traces/2026-09-01-fresh-model-review/97-RULING-g2b-floor-precondition.md)).
+([97-RULING-g2b-floor-precondition.md, R-6a](https://github.com/mpmdw/JouleWise/blob/archive/pre-prune-2026-11-06/docs/process_traces/2026-09-01-fresh-model-review/97-RULING-g2b-floor-precondition.md)).
 
 ## C. Execution record
 
@@ -197,7 +197,7 @@ staging unit: the production pack is copied into `$CUSTODY_ROOT/prospective`,
 `$CUSTODY_ROOT/floors` exists and is **EMPTY**, and the completed calibration
 ledger plus head pin are copied into `$CUSTODY_ROOT/calibration`. No floor is
 staged for L10-A; L10-B's mint is the first producer of a floor
-([97-RULING-g2b-floor-precondition.md, R-6a and R-6c](../process_traces/2026-09-01-fresh-model-review/97-RULING-g2b-floor-precondition.md)).
+([97-RULING-g2b-floor-precondition.md, R-6a and R-6c](https://github.com/mpmdw/JouleWise/blob/archive/pre-prune-2026-11-06/docs/process_traces/2026-09-01-fresh-model-review/97-RULING-g2b-floor-precondition.md)).
 The L10-A staging commands below copy the exact transaction-custodied source
 directories and the harmless empty `floors/` directory, so the magistrate can
 identify both the owner and the source of each present finalizer input before
@@ -383,7 +383,7 @@ L10-A outcome, not a failure. An observed
 `analysis_finalization_attachment_missing` is a **STOP** and **a ruling**: halt
 the ladder, run no further L10 command, preserve the transcript, and route the
 observation to the magistrate for a written ruling; never stage a floor and
-rerun ([97-RULING-g2b-floor-precondition.md, R-6a, R-6c, and R-6h](../process_traces/2026-09-01-fresh-model-review/97-RULING-g2b-floor-precondition.md)).
+rerun ([97-RULING-g2b-floor-precondition.md, R-6a, R-6c, and R-6h](https://github.com/mpmdw/JouleWise/blob/archive/pre-prune-2026-11-06/docs/process_traces/2026-09-01-fresh-model-review/97-RULING-g2b-floor-precondition.md)).
 
 ```sh
 export L10_A_SCRATCH_ROOT="$L10_CUSTODY_ROOT/l10-a-scratch"
@@ -434,7 +434,7 @@ producer corpus is the transaction-custodied path below, not G2-b. Ruling 97
 R-6f moves the floor containment/symlink leg
 here: L10-B's floor artifact must live under the custody root and must not be a
 symlink, because L10-B is the first phase that produces a floor
-([97-RULING-g2b-floor-precondition.md, R-6f](../process_traces/2026-09-01-fresh-model-review/97-RULING-g2b-floor-precondition.md)).
+([97-RULING-g2b-floor-precondition.md, R-6f](https://github.com/mpmdw/JouleWise/blob/archive/pre-prune-2026-11-06/docs/process_traces/2026-09-01-fresh-model-review/97-RULING-g2b-floor-precondition.md)).
 
 ```sh
 export REPO="$(/usr/bin/git rev-parse --show-toplevel)"

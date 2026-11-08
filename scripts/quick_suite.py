@@ -34,7 +34,6 @@ DOCS_MODULE = "tests.test_docs_freshness"
 # until that lane removes their hardcoded interpreter/corpus dependencies.
 CANONICAL_PATH_MODULES = frozenset({
     "tests.test_paper_round7_artifacts",
-    "tests.test_admit_model_panel_entry",
     "tests.test_rpt001_report_slice",
     "tests.test_floor_extraction",
     "tests.test_run_campaign",

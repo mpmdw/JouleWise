@@ -24,13 +24,19 @@ import hashlib
 import itertools
 import json
 import math
+import multiprocessing
+import multiprocessing.connection
+import os
 from pathlib import Path
+import pickle
 import platform
 import plistlib
 import re
 import statistics
 import struct
+import types
 import sys
+import weakref
 from xml.parsers.expat import ExpatError
 
 SCHEMA = "joulewise.independent_recompute_b5.v1"
@@ -486,6 +492,9 @@ class Member:
                 self.comparison = {"status": "compared", "reason": None}
             else:
                 self.comparison = {"status": "not_compared", "reason": "phase_events_ambiguous"}
+        # The bundle's own recorded trace placement (power_trace.csv, absolute epoch seconds), kept for the
+        # descriptive whole-machine line only (unanchored_machine_member); never a claim input.
+        self.trace_records = csv_data
         self.tokens = self.token_surfaces()
 
     def token_surfaces(self):
@@ -516,6 +525,178 @@ class Member:
                 "stored_max_abs_delta_j": stored_a,
                 "r_j": {k: v["max_abs_delta_j"] for k, v in self.residual.items()},
                 "m_s": self.m, "s_s": self.s, "tokens": self.tokens}
+
+
+def _member_worker(index, channels):
+    """Pool worker: build each member exactly as Window.member builds it, with a private Reader.
+
+    It keeps only its own task reader and result writer and closes every other pipe end it inherited, so a
+    worker that dies part way through a reply leaves its result pipe at end of file (the parent then refuses,
+    never blocks). The reply is pickled here, so a payload that cannot be pickled becomes an error the parent
+    re-raises where the serial run would have built the member, never a lost reply.
+    """
+    for number, ((task_reader, task_writer), (result_reader, result_writer)) in enumerate(channels):
+        task_writer.close()
+        result_reader.close()
+        if number != index:
+            task_reader.close()
+            result_writer.close()
+    (tasks, _), (_, results) = channels[index]
+    while True:
+        try:
+            task = tasks.recv()
+        except EOFError:
+            return
+        if task is None:
+            return
+        path, run_id, pack, bop, member_role = task
+        try:
+            flags = []
+            reader = Reader(pack, flags)
+            member = Member(Path(path), run_id, reader, bop, member_role)
+            state = dict(vars(member))
+            state["reader"] = None
+            payload = pickle.dumps((None, (state, flags, sorted(reader.files))), pickle.HIGHEST_PROTOCOL)
+        except Exception as exc:
+            try:
+                payload = pickle.dumps((exc, None), pickle.HIGHEST_PROTOCOL)
+            except Exception:
+                payload = pickle.dumps((RuntimeError(type(exc).__name__), None), pickle.HIGHEST_PROTOCOL)
+        results.send_bytes(payload)
+
+
+# Set only while MemberPool forks its workers (see _disarm_inherited_finalizers).
+_POOL_FORKING = False
+_AT_FORK_HOOK = False
+
+
+def _disarm_inherited_finalizers():
+    """At-fork hook (child side), active only for a member-pool worker.
+
+    multiprocessing's fork child clears the inherited atexit callbacks before the worker runs. An object the parent
+    kept alive only through atexit (for example a TemporaryDirectory whose cleanup was registered there) is then
+    freed in the child, and its weakref.finalize would delete the parent's still-live files. Dropping the child's
+    copy of the finalize registry first turns every such inherited finalizer into a no-op in the worker; the parent
+    is unaffected. The worker needs no finalizer of its own.
+    """
+    if _POOL_FORKING:
+        weakref.finalize._registry.clear()
+
+
+class MemberPool:
+    """Build members in worker processes; the serial code consumes them in its own order (--workers N > 1).
+
+    Building a member (Member.__init__: reading its records and parsing and placing its trace) is the run's
+    dominant cost. It depends only on the member's files, its pack, its role and the window's operative bound.
+    Each window prefetches its candidate members here once that bound is known. The serial code is unchanged:
+    when it first asks for a member (Window.member) it takes the worker's result instead of building it.
+
+    Byte identity with the serial run: the worker's Reader starts empty, and its flags are replayed into the
+    window's reader, in emission order, at the point where the serial run would have built the member. So
+    Reader.flag's de-duplication against the window's list yields the list the serial run builds. The files
+    read are merged into the window's set. A member asked for under a key that was not prefetched (another
+    root, role or bound) is built in-process; a prefetched member that is never asked for is discarded.
+
+    Transport: each worker has its own task pipe and result pipe, and holds one task at a time; the parent keeps
+    the backlog and hands the next task to whichever worker replies. No queue thread exists in either process.
+    Workers are forked once, from a process with no thread of ours, and receive only plain tuples (no code is
+    pickled), so the script also runs a pool when it is loaded by file path rather than imported by name. A
+    worker that exits, or a reply cut short, raises RuntimeError in the parent (guarded_main: exit 2).
+    """
+
+    def __init__(self, workers):
+        self.workers = workers
+        self.procs = None
+        self.submitted = {}
+        self.backlog = []
+        self.done = {}
+
+    def _start(self):
+        context = multiprocessing.get_context("fork")
+        channels = [(context.Pipe(duplex=False), context.Pipe(duplex=False)) for _ in range(self.workers)]
+        self.procs = []
+        global _POOL_FORKING, _AT_FORK_HOOK
+        if not _AT_FORK_HOOK:
+            os.register_at_fork(after_in_child=_disarm_inherited_finalizers)
+            _AT_FORK_HOOK = True
+        _POOL_FORKING = True
+        try:
+            for index in range(self.workers):
+                process = context.Process(target=_member_worker, args=(index, channels), daemon=True)
+                process.start()
+                self.procs.append(process)
+        finally:
+            _POOL_FORKING = False
+        for (task_reader, _), (_, result_writer) in channels:
+            task_reader.close()
+            result_writer.close()
+        self.task_writers = [task_writer for (_, task_writer), _ in channels]
+        self.result_readers = [result_reader for _, (result_reader, _) in channels]
+        self.busy = [None] * self.workers
+
+    def _dispatch(self):
+        for index, key in enumerate(self.busy):
+            if key is None and self.backlog:
+                key = self.backlog.pop(0)
+                self.busy[index] = key
+                self.task_writers[index].send(self.submitted[key])
+
+    def _collect(self, block):
+        """Read every reply that is ready (with block, wait for at least one); refuse on a worker's exit."""
+        readers = {self.result_readers[i]: i for i, key in enumerate(self.busy) if key is not None}
+        sentinels = {process.sentinel: process for process in self.procs}
+        if not readers and block:
+            raise RuntimeError("member pool has no task in flight")
+        for ready in multiprocessing.connection.wait([*readers, *sentinels], None if block else 0):
+            if ready in sentinels:
+                raise RuntimeError("member pool worker exited")
+            index = readers[ready]
+            try:
+                payload = ready.recv_bytes()
+            except (EOFError, OSError):
+                raise RuntimeError("member pool worker exited") from None
+            self.done[self.busy[index]] = payload
+            self.busy[index] = None
+        self._dispatch()
+
+    def prefetch(self, pack, root, run_id, bop, member_role):
+        key = (pack, str(root), run_id, bop, member_role)
+        if key in self.submitted:
+            return
+        if self.procs is None:
+            self._start()
+        self.submitted[key] = (str(Path(root) / run_id), run_id, pack, bop, member_role)
+        self.backlog.append(key)
+        self._collect(block=False)
+
+    def take(self, pack, root, run_id, bop, member_role):
+        """The worker's (state, flags, files) for this key, or None when it was not prefetched."""
+        key = (pack, str(root), run_id, bop, member_role)
+        if key not in self.submitted:
+            return None
+        while key not in self.done:
+            self._collect(block=True)
+        self._collect(block=False)
+        del self.submitted[key]
+        error, result = pickle.loads(self.done.pop(key))
+        if error is not None:
+            raise error
+        return result
+
+    def close(self):
+        """Stop the workers. Every result the run used has been taken; anything still queued is unused."""
+        if self.procs is None:
+            return
+        for process in self.procs:
+            process.terminate()
+        for process in self.procs:
+            process.join()
+        for connection in (*self.task_writers, *self.result_readers):
+            connection.close()
+        self.procs = None
+        self.submitted.clear()
+        self.backlog.clear()
+        self.done.clear()
 
 
 def catalog_effect(catalog, code):
@@ -678,8 +859,10 @@ def drift_allowance(start, midpoint, end, bound):
 
 
 class Window:
-    def __init__(self, pack, archive, flags, exclusions=None, claim_root=None, bound_root=None, diagnostic=False):
+    def __init__(self, pack, archive, flags, exclusions=None, claim_root=None, bound_root=None, diagnostic=False,
+                 pool=None):
         self.pack, self.archive, self.diagnostic = pack, Path(archive), diagnostic
+        self.pool = pool
         self.reader = Reader(pack, flags)
         self.claim_root = Path(claim_root) if claim_root else self.archive / "sources/claim-runs"
         self.bound_root = Path(bound_root) if bound_root else self.archive / "sources/bound-runs"
@@ -729,6 +912,8 @@ class Window:
                 key = (u["cell_id"], u["stratum"], u["unit_id"])
                 self.units.setdefault(key, []).append(m["run_id"])
         self.b = self.calibration()
+        if pool is not None:
+            self.prefetch_members()
         self.neg8 = self.compute_neg8()
         self.exclusion_check = self.check_exclusions()
 
@@ -859,7 +1044,20 @@ class Window:
             self.compared_run_ids.add(run_id)
         if run_id not in self.members:
             root = self.bound_root if member_role == "corpus" else self.claim_root
-            self.members[run_id] = Member(root / run_id, run_id, self.reader, self.b["b_op_s"], member_role)
+            built = self.pool.take(self.pack, root, run_id, self.b["b_op_s"], member_role) if self.pool else None
+            if built is None:
+                self.members[run_id] = Member(root / run_id, run_id, self.reader, self.b["b_op_s"], member_role)
+            else:
+                # MemberPool: the worker's member, with its flags replayed here, where the serial run raises them.
+                state, flags, files = built
+                m = Member.__new__(Member)
+                m.__dict__.update(state)
+                m.reader = self.reader
+                for row in flags:
+                    if row not in self.reader.flags:
+                        self.reader.flags.append(row)
+                self.reader.files.update(files)
+                self.members[run_id] = m
             m = self.members[run_id]
             pre = self.b["b_pre_s"]
             if member_role == "science" and not finite(m.bpre):
@@ -868,6 +1066,40 @@ class Window:
             elif member_role == "science" and finite(pre) and m.bpre != pre:
                 self.reader.flag("member_pre_bound_mismatch", run_id, {"window_s": pre, "member_s": m.bpre})
         return self.members[run_id]
+
+    def prefetch_members(self):
+        """Queue every member this window may build (MemberPool), in roughly the order the run asks for them.
+
+        A superset, read without the window's reader so that planning raises no flag and reads no counted
+        file: the named clean corpus, the plan tree's reference slots, every roster member, and every corpus
+        member under the bound root. Each run id is queued under the first role the serial code asks for it
+        with (compute_neg8 before select, add_machine and --member-detail); any other request builds in-process.
+        """
+        planned = {}
+        try:
+            clean = json.loads((self.archive / "derived/neg8-clean-corpus.json").read_bytes())
+            for m in objects(get(clean, "members")):
+                if isinstance(m.get("bundle_id"), str):
+                    planned.setdefault(m["bundle_id"], "corpus")
+        except (OSError, ValueError, AttributeError):
+            pass
+        for run_id, slot in self.reference_slots.items():
+            planned.setdefault(run_id, slot)
+        for m in objects(self.roster.get("members")):
+            run_id = m.get("run_id")
+            if isinstance(run_id, str):
+                planned.setdefault(run_id, "corpus" if role(run_id) == "corpus" else
+                                   ("science" if m.get("kind") == "science" else role(run_id)))
+        try:
+            for path in sorted(self.bound_root.glob("neg8-refcorpus-r*/metadata.json")):
+                planned.setdefault(path.parent.name, "corpus")
+        except OSError:
+            pass
+        for run_id, member_role in planned.items():
+            if Path(run_id).name != run_id or run_id in (".", ".."):
+                continue
+            root = self.bound_root if member_role == "corpus" else self.claim_root
+            self.pool.prefetch(self.pack, root, run_id, self.b["b_op_s"], member_role)
 
     def compute_neg8(self):
         r, a = self.reader, self.archive
@@ -956,6 +1188,15 @@ class Window:
             bracket = {}
         recorded = get(bracket, "drift_allowances", "gross_energy", "allowance_j")
         result["allowance_recorded_j"] = recorded
+        # Structure only: the record's gross-family endpoint protocol word. The bracket writer records the two
+        # survivor bound terms only under replicated_endpoints (whole_window.py survivor_fields), so the
+        # comparator compares them only when the record can carry them (2026-11-07 release trace, D6).
+        # On the stored-verdict path the word is read from the verdict's NEG-8 bracket, the one L9 prints from,
+        # in every mode; the recorded allowance above stays diagnostic-only (PR #693 review, Fable L2).
+        protocol_source = bracket if bracket or source.get("source") != "stored_verdict" else get(
+            self.verdict, "idle_admission_core", "neg8_bracket", default={})
+        protocol = get(protocol_source, "claim_families", "gross_energy", "endpoint_protocol")
+        result["recorded_endpoint_protocol"] = protocol if isinstance(protocol, str) else None
         if not finite(recorded):
             r.flag("neg8_allowance_unrecorded", "window", "no recorded gross allowance")
         # Agreement policy, unrounded joules; no printed cell half-width on the allowance.
@@ -1710,10 +1951,27 @@ def controller_request_spans(member):
     return request, baseline
 
 
+def idle_attempt_telemetry_name(member):
+    """The rich idle telemetry file of the idle-baseline attempt the bundle's baseline is.
+
+    The controller re-measures the idle baseline when its first admission attempt is not admitted,
+    and the baseline it keeps (metadata idle_baseline: the reducer's idle term, REG 5.8's
+    idle_subtracted_energy_j) is the LAST attempt measured (controller._measure_idle_admission_attempt).
+    The adapter writes attempt 1's rich rows to rich_telemetry_idle.jsonl and attempt N's to
+    rich_telemetry_idle_attempt_N.jsonl; promotion replaces only the canonical raw plist, never the
+    rich file (adapters/powermetrics.py measure_idle, promote_idle_admission_attempt). So the file
+    is the one of the metadata's last recorded environment_admission attempt.
+    """
+    attempts = get(getattr(member, "metadata", None), "environment_admission", "attempts")
+    last = attempts[-1].get("attempt") if isinstance(attempts, list) and attempts and isinstance(attempts[-1], dict) else 1
+    return "rich_telemetry_idle_attempt_%d.jsonl" % last if positive_int(last) and last > 1 else "rich_telemetry_idle.jsonl"
+
+
 def rail_idle_power(member):
-    """REG 5.8: elapsed_ns-weighted rich idle telemetry, never the trace's idle overlap."""
+    """REG 5.8: elapsed_ns-weighted rich idle telemetry of the kept idle attempt, never the trace's idle overlap."""
     if not hasattr(member, "_rail_idle_power"):
-        rows = member.reader.lines(member.path / "rich_telemetry_idle.jsonl", member.run_id + "/rich_telemetry_idle.jsonl")
+        name = idle_attempt_telemetry_name(member)
+        rows = member.reader.lines(member.path / name, member.run_id + "/" + name)
         valid = [row for row in rows if positive_int(row.get("elapsed_ns"))
                  and finite(row.get("rail_sum_power_w")) and row["rail_sum_power_w"] >= 0]
         member._rail_idle_power = (math.fsum(row["rail_sum_power_w"] * row["elapsed_ns"] for row in valid)
@@ -1746,6 +2004,42 @@ def request_battery_activity(member, stream, wall, offset, flag):
     return {"available": lo != hi, "active": active, "n": hi - lo}
 
 
+def measured_request_edges(member):
+    """The measured run's sampling_started/sampling_stopped event times (absolute epoch seconds), or None."""
+    starts = [e.get("timestamp_s") for e in member.events
+              if e.get("phase") == "measured_run" and e.get("event_type") == "sampling_started"]
+    ends = [e.get("timestamp_s") for e in member.events
+            if e.get("phase") == "measured_run" and e.get("event_type") == "sampling_stopped"]
+    if len(starts) != 1 or len(ends) != 1 or not all(finite(x) for x in starts + ends) or ends[0] <= starts[0]:
+        return None
+    return starts[0], ends[0]
+
+
+def unanchored_machine_member(member, streams, journal, bop, flag=True):
+    """PLAN 8.2 describes every collected member, kept or removed; the harvest's record gives a member whose clock
+    anchor did not resolve its meter terms and REG 5.8's rail delta (the bundle's idle_subtracted_energy_j, which
+    the reducer integrates over the bundle's recorded trace when the anchor is unresolved: reduce.py
+    _unresolved_anchor_context). The recompute re-derives them for such a succeeded member from the controller
+    clock stamps (meter) and the bundle's recorded power_trace.csv placement (rail) instead of leaving the member
+    null (2026-11-07 release trace, D3). Descriptive whole-machine request only; never a claim input."""
+    edges = measured_request_edges(member)
+    if (member.summary.get("status") != "succeeded" or not getattr(member, "trace_records", None) or edges is None
+            or controller_request_spans(member) is None):
+        return None
+    proxy = types.SimpleNamespace(
+        run_id=member.run_id, reader=member.reader, path=member.path, metadata=member.metadata, events=member.events,
+        origin=0.0, records=member.trace_records, edges={"request": edges},
+        comparison={"status": "compared", "reason": None})
+    row = machine_member(proxy, "request", streams, journal, bop, flag=flag)
+    if hasattr(proxy, "_rail_idle_power"):
+        member._rail_idle_power = proxy._rail_idle_power
+    if not finite(row.get("delta_J")):
+        return None
+    row.update(status="descriptive_unanchored", reason=member.comparison.get("reason"),
+               rail_basis="bundle_power_trace_csv")
+    return row
+
+
 def machine_member(member, phase, streams, journal, bop, shifts=(0.0, 0.0), flag=True):
     """Request: REG 5.8 delta. Phases: 03:26 amendment, gross meter only."""
     scope = member.run_id + "/" + phase
@@ -1758,6 +2052,11 @@ def machine_member(member, phase, streams, journal, bop, shifts=(0.0, 0.0), flag
         "boundary": PHASE_MACHINE_BOUNDARY}
     comparison = getattr(member, "comparison", {})
     if comparison.get("status") == "not_compared":
+        if (request and shifts == (0.0, 0.0) and comparison.get("reason") == "anchor_unbounded"
+                and isinstance(member, Member)):
+            described = unanchored_machine_member(member, streams, journal, bop, flag=flag)
+            if described is not None:
+                return described
         return {**unavailable, "status": "not_compared", "reason": comparison["reason"]}
     controller = controller_request_spans(member) if request else None
     if (request and (controller[1] if controller else baseline) is None) or phase not in member.edges or (
@@ -2139,6 +2438,15 @@ def add_machine(output, selections, windows, meter_dir=None):
             if not (root / rid / "metadata.json").is_file():
                 continue
             member = w.member(rid, which)
+            if (rid not in mapping(recorded.get("members")) and "request" not in member.edges
+                    and controller_request_spans(member) is None):
+                # PLAN 8.2 describes each member over its measured request (the harvest's request span,
+                # sampling_started to sampling_stopped; harvest.member_spans). A collected member that never
+                # measured one has no meter row on either side; it is listed here, never as a null member. A
+                # member with a measured request that the record lacks still gets its row (a dropped row stays
+                # visible to the comparator).
+                line.setdefault("no_measured_request", []).append(rid)
+                continue
             if which != "corpus" and "request" in member.edges:
                 start = member.origin + member.edges["request"][0]
                 old = line["first_request_epoch_s"]
@@ -2850,7 +3158,29 @@ def main(argv=None) -> int:
     parser.add_argument("--extra-beta", action="append", nargs="+", default=[],
                         metavar="PATH", help="extra BETA ARCHIVE [CLAIM_ROOT [BOUND_ROOT]]; '-' means archive default")
     parser.add_argument("--out", required=True)
+    parser.add_argument("--workers", type=worker_count, default=10,
+                        help="member worker processes (default 10); 1 builds every member in this process. "
+                             "The output bytes do not depend on it")
     args = parser.parse_args(argv)
+    pool = MemberPool(args.workers) if args.workers > 1 else None
+    try:
+        return run_main(parser, args, pool)
+    finally:
+        if pool is not None:
+            pool.close()
+
+
+def worker_count(text):
+    try:
+        value = int(text)
+    except ValueError:
+        value = 0
+    if value < 1:
+        raise argparse.ArgumentTypeError("--workers must be a positive integer")
+    return value
+
+
+def run_main(parser, args, pool):
     flags, windows = [], {}
     for pack in ("alpha", "beta", "gamma"):
         archive = getattr(args, pack)
@@ -2867,7 +3197,7 @@ def main(argv=None) -> int:
             parser.error("unreadable archive root: " + archive)
         windows[pack.upper()] = Window(pack.upper(), archive, flags, getattr(args, pack + "_exclusions"),
                                         getattr(args, "claim_runs_" + pack), getattr(args, "bound_runs_" + pack),
-                                        args.diagnostic_ignore_exclusions)
+                                        args.diagnostic_ignore_exclusions, pool=pool)
     output = recompute(windows, flags, args.member_detail, args.diagnostic_ignore_exclusions, args.meter_dir)
     if args.extra_beta:
         extras = []
@@ -2876,7 +3206,7 @@ def main(argv=None) -> int:
                 parser.error("--extra-beta takes ARCHIVE and at most two runs roots")
             archive, claim, bound = [*entry, *([None] * (3 - len(entry)))]
             extras.append(Window("BETA", archive, [], claim_root=claim if claim != "-" else None,
-                                 bound_root=bound if bound != "-" else None))
+                                 bound_root=bound if bound != "-" else None, pool=pool))
         add_beta_inclusive(output, windows.get("BETA"), extras)
         extra_windows = {str(i): w for i, w in enumerate(extras)}
         report = member_comparison_report(extra_windows)

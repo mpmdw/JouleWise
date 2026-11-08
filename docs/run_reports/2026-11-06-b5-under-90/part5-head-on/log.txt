@@ -1,0 +1,11 @@
+restoring committed synthetic S10 windows
+running joined driver: workers 2 custody /tmp/jwp/run/custody
+{"label": "head-on", "exit_code": 2, "wall_s": 2160.1633563859996, "record_sha256": "8cbe8e1ca025e8525105bb2053f137ee46f10120158174745486adab1d8dfd9d", "manifest_sha256": "864bc9e3f927638aa532b8c8b974e950868de825b5ca74a92cdbd492b83f192b", "code_sha256": "4bf79b035bf7fb2f1b34b40841801512a783484e005e7691fbfb96017e5387c3"}
+step   0:      18.4 s
+step   1:     328.0 s
+step   2:      17.6 s
+step   3:       0.7 s
+step  3b:     313.2 s
+step   4:     275.5 s
+step   5:    1205.1 s
+step   8:       0.1 s

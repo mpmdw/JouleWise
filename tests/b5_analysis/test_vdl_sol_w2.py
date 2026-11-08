@@ -524,8 +524,12 @@ class LeafSideEffectAudit(unittest.TestCase):
 
     PHYSICS_LEAVES = {"L1_strict_validation", "L2_operative_summary", "L3_reduce_dict",
                       "L6_verify_instrument_calibration"}
+    # CANDIDATE_PHYSICS_MEMO: the cited in-place rebind of calibration_bracketing.py
+    # (b5 under-90 round 2, lead ruling under D-188; DLE-3 in docs/analysis/b5/DEVIATION-LOG.md):
+    # a pure refit remembered by the SHA-256 of its three authenticated inputs.
     DECISION_INVARIANT_MEMOS = {"GRAMMAR_VERDICT_MEMO", "_STRICT_CLOCK_EVIDENCE_MEMO",
-                                "_IDLE_PARSE_SUCCESS_MEMO", "_THERMAL_SCAN_MEMO"}
+                                "_IDLE_PARSE_SUCCESS_MEMO", "_THERMAL_SCAN_MEMO",
+                                "CANDIDATE_PHYSICS_MEMO"}
 
     def _sources(self):
         return {path: path.read_text() for path in sorted((ROOT / "joulewise").rglob("*.py"))}

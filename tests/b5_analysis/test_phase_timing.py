@@ -783,33 +783,5 @@ class PhaseReportTests(unittest.TestCase):
             self.assertIn('invalid line', err.getvalue())
 
 
-class NormalizedCompareCopyTests(unittest.TestCase):
-    def test_runtime_logs_are_excluded_and_r1_evidence_is_untouched(self):
-        sys.path.insert(0, str(ROOT / 'tools'))
-        try:
-            import normalized_compare as nc
-        finally:
-            sys.path.remove(str(ROOT / 'tools'))
-        with tempfile.TemporaryDirectory(prefix='phase-compare-') as tmp:
-            roots = []
-            for name, extra in (('a', b'1'), ('b', b'2')):
-                run = Path(tmp) / name / 'dry-run'
-                (run / 'restricted/logs').mkdir(parents=True)
-                (run / nc.RECORD).write_text('{}')
-                (run / 'restricted/logs/0001-1-alpha.stdout.log').write_text('same')
-                (run / 'restricted/logs/runtime-phases.jsonl').write_bytes(extra)
-                (run / 'restricted/logs/runtime-stack-1.txt').write_bytes(extra)
-                roots.append(Path(tmp) / name)
-            for flags in ([], ['--logs']):
-                with self.subTest(flags=flags), contextlib.redirect_stdout(io.StringIO()):
-                    self.assertEqual(nc.main([str(roots[0]), str(roots[1])] + flags), 0)
-            self.assertNotIn('restricted/logs/runtime-phases.jsonl', nc.load(roots[0], True))
-            (roots[1] / 'dry-run/restricted/logs/0001-1-alpha.stdout.log').write_text('other')
-            with contextlib.redirect_stdout(io.StringIO()):
-                self.assertEqual(nc.main([str(roots[0]), str(roots[1]), '--logs']), 1)
-        original = (ROOT / 'docs/process_traces/2026-11-01-l9-speedup-r1/normalized_compare.py').read_text()
-        self.assertNotIn('runtime-', original)
-
-
 if __name__ == '__main__':
     unittest.main()

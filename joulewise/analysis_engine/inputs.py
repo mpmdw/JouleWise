@@ -1343,7 +1343,35 @@ def _calibration_order_tags(raw_config: Mapping[str, Any] | None) -> Mapping[str
     }
 
 
+def _row_member_ids(row: Mapping[str, Any]) -> list[str]:
+    bundle_ids = row.get("bundle_ids")
+    if isinstance(bundle_ids, list):
+        return [item for item in bundle_ids if isinstance(item, str) and item]
+    for key in ("bundle_id", "run_id"):
+        item = row.get(key)
+        if isinstance(item, str) and item:
+            return [item]
+    return []
+
+
 def _order_member_ids(value: object, *, campaign_log: bool) -> list[str] | None:
+    """Return the executed member ids, in order, of an order manifest or campaign log.
+
+    A campaign log written by the runner names each executed member in its own
+    row: ``scripts/run_campaign.py`` writes per-member rows with ``log_row``,
+    which never sets ``record_type`` (ok, failed, timeout, drained, blocked,
+    skipped and config_error members alike). Every campaign-level record carries
+    a ``record_type``: the whole-window evaluation
+    ``idle_admission_whole_window_verdict``, whose ``bundle_ids`` lists the
+    campaign's members, ``campaign_verdict``, ``campaign_stop``,
+    ``shakedown_gate``, the provenance attestation and
+    ``campaign_occurrence_supersession``. When the log has member rows, only
+    they give the executed order; counting a campaign-level record as well would
+    name its members a second time (DLE-4, block-5 defect D5). A log with no
+    member row (attestations and the evaluation only, as a desk-written log has)
+    keeps the previous parse of every row. The order-manifest parse is
+    unchanged.
+    """
     rows: object
     if campaign_log:
         rows = value
@@ -1351,20 +1379,15 @@ def _order_member_ids(value: object, *, campaign_log: bool) -> list[str] | None:
         rows = value.get("executed_order") if isinstance(value, Mapping) else None
     if not isinstance(rows, list):
         return None
-    result: list[str] = []
-    for row in rows:
-        if not isinstance(row, Mapping):
-            continue
-        bundle_ids = row.get("bundle_ids")
-        if isinstance(bundle_ids, list):
-            result.extend(item for item in bundle_ids if isinstance(item, str) and item)
-            continue
-        for key in ("bundle_id", "run_id"):
-            item = row.get(key)
-            if isinstance(item, str) and item:
-                result.append(item)
-                break
-    return result
+    mappings = [row for row in rows if isinstance(row, Mapping)]
+    if campaign_log:
+        member_rows = [
+            row for row in mappings
+            if "record_type" not in row and _row_member_ids(row)
+        ]
+        if member_rows:
+            mappings = member_rows
+    return [item for row in mappings for item in _row_member_ids(row)]
 
 
 def _safe_relative_posix(value: object, label: str) -> str:

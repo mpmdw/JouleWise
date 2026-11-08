@@ -25,6 +25,7 @@ from joulewise.analysis_engine import (
     analyze_claims,
 )
 from joulewise.analysis_engine.artifact import render_claim_verdicts
+from joulewise.analysis_engine.claims import evaluate_claim
 from joulewise.analysis_engine.artifact import (
     calculate_claim_verdicts_id,
     validate_claim_verdicts,
@@ -700,6 +701,52 @@ class AnalysisIntegrationTests(unittest.TestCase):
                         "floor_cmp_missing",
                         "floor_transport_inapplicable",
                     ],
+                )
+
+    def test_floor_binding_refusal_maps_to_floor_artifact_invalid(self) -> None:
+        """D5b (DLE-3): the wrapper's floor-evidence binding refusal is an invalid
+        floor artifact (plan section 7.2 step 1, not_estimable), not an inapplicable
+        transport. Binding codes beside it keep their existing mapping."""
+        for reason_codes, expected in (
+            (
+                ("artifact_schema_invalid",),
+                ["floor_artifact_invalid", "floor_abs_missing", "floor_cmp_missing"],
+            ),
+            (
+                ("artifact_schema_invalid", "calibration_plan_identity_mismatch"),
+                [
+                    "floor_artifact_invalid",
+                    "floor_transport_inapplicable",
+                    "floor_abs_missing",
+                    "floor_cmp_missing",
+                ],
+            ),
+        ):
+            with self.subTest(reason_codes=reason_codes):
+                resolution = FloorResolution(
+                    status="refused",
+                    artifact_id="floor-binding-refusal",
+                    artifact_sha256="a" * 64,
+                    source_cell_ids=(),
+                    transport_group_id=None,
+                    transport_rule_id=None,
+                    floor_abs_j=None,
+                    floor_cmp_j=None,
+                    floor_gate_j=None,
+                    reason_codes=reason_codes,
+                )
+                reasons = _floor_engine_reasons([resolution])
+                self.assertEqual(sorted(reasons), sorted(expected))
+                self.assertEqual(
+                    evaluate_claim(
+                        estimate=1.0,
+                        metrology_aware_ci95={"lower": 0.5, "upper": 1.5},
+                        decision_interval={"lower": 0.5, "upper": 1.5},
+                        floor_gate_j=None,
+                        adjusted_rejected=True,
+                        base_reason_codes=reasons,
+                    )["outcome"],
+                    "not_estimable",
                 )
 
     def setUp(self):
@@ -2296,7 +2343,10 @@ class AnalysisIntegrationTests(unittest.TestCase):
         for contrast in first["contrasts"]:
             with self.subTest(contrast=contrast["contrast_id"]):
                 evaluation = contrast["claim_evaluation"]
-                self.assertEqual(evaluation["outcome"], "not_resolvable")
+                # D5b (DLE-3): the production-identity floor binding refusal
+                # (artifact_schema_invalid) is floor_artifact_invalid, not_estimable.
+                self.assertEqual(evaluation["outcome"], "not_estimable")
+                self.assertIn("floor_artifact_invalid", evaluation["reason_codes"])
                 self.assertFalse(evaluation["claim_ready_for_l2_l3"])
                 self.assertNotIn(
                     "window_evidence_precheck_missing", evaluation["reason_codes"]
@@ -3596,10 +3646,26 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 encoding="utf-8",
             )
             campaign_path = evidence_root / "campaign_log.jsonl"
+            # The runner's campaign-level records follow the member rows. The
+            # whole-window evaluation lists every member in bundle_ids; it is not
+            # an executed-member row (DLE-4, block-5 defect D5).
+            member_ids = [row["run_id"] for row in campaign_rows[root_id]]
+            campaign_level_rows = [
+                {
+                    "record_type": "campaign_provenance_attestation",
+                    "campaign_provenance_session_id": f"floor-exact-{root_id}",
+                },
+                {"record_type": "campaign_verdict", "status": "verdict"},
+                {
+                    "record_type": "idle_admission_whole_window_verdict",
+                    "status": "passed",
+                    "bundle_ids": member_ids,
+                },
+            ]
             campaign_path.write_text(
                 "".join(
                     json.dumps(row, sort_keys=True) + "\n"
-                    for row in campaign_rows[root_id]
+                    for row in (*campaign_rows[root_id], *campaign_level_rows)
                 ),
                 encoding="utf-8",
             )
@@ -4842,9 +4908,11 @@ class AnalysisIntegrationTests(unittest.TestCase):
                     "fixed_n_plan_incomplete",
                     contrast["claim_evaluation"]["reason_codes"],
                 )
+                # D5b (DLE-3): the floor binding refusal under the production
+                # identity is floor_artifact_invalid, which precedes not_resolvable.
                 self.assertEqual(
                     contrast["claim_evaluation"]["outcome"],
-                    "not_resolvable",
+                    "not_estimable",
                 )
 
     def test_bundle_config_byte_mutation_is_excluded_even_when_identity_and_metadata_hash_match(self):

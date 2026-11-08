@@ -1,9 +1,9 @@
 # Receipt Historical-Semantics Verifier Contract
 
 This document is the one normative home for `RECEIPT-HISTSEM-01`. Its
-authority is the [final D-144 co-design ruling](../process_traces/2026-08-20-go-session/rh-ruling.md),
+authority is the [final D-144 co-design ruling](https://github.com/mpmdw/JouleWise/blob/archive/pre-prune-2026-11-06/docs/process_traces/2026-08-20-go-session/rh-ruling.md),
 including its normative annexes, and the
-[cold delta verdict](../process_traces/2026-08-20-go-session/rh-cold-verdict.md).
+[cold delta verdict](https://github.com/mpmdw/JouleWise/blob/archive/pre-prune-2026-11-06/docs/process_traces/2026-08-20-go-session/rh-cold-verdict.md).
 For gate-eligibility semantics on an absent-at-HEAD pinset, the adopted
 rule-11 consult
 (../process_traces/2026-08-20-go-session/t19-envelopes/rh-consult.md)
