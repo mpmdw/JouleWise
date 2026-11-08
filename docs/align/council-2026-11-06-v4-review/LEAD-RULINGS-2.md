@@ -769,7 +769,13 @@ R1 (item 202) is not affected. `lane/2026-11-06-v4-r1-integrated` itself is unch
   - the rule texts, the X2 exposure and the deviation-log line;
   - `lead_signature`.
 - **How the kit reads it.** `align_v4_kit.require_w1_ready` reads the file, which must be canonical JSON (indent 2, sorted keys), and `ruling_1f_fit(..., receipt=)` honours it.
-- **No receipt.** The kit behaves as before: 1(f) refuses unconditionally when it does not fit, and names the largest fitting B_D (R6-3). This branch commits no receipt.
+- **No receipt** (corrected by cold-review disposition MEDIUM-2, below). With no receipt the kit behaves exactly as at `e901eb2a4`:
+  - D's 1(f) G0 term and armed cap include X-G (R7-2's G0_cap_W1).
+  - An INCONCLUSIVE X-G does not refuse on that alone (R7-12).
+  - 1(f) refuses unconditionally when it does not fit, and names the largest fitting B_D (R6-3).
+  - The separate contrast cap, the contrast proof and ruling (iv)'s refusal apply only under an R10-2(a) receipt.
+
+  This branch commits no receipt. Before MEDIUM-2 was applied, items 2 and (iv) below were implemented for every W1, which contradicted this bullet.
 - **Refused receipts.** A receipt is refused if it is unsigned (`PENDING_LEAD_SIGNATURE`), has another schema or authority, or takes branch (b) or (c). The refusal names the branch: 8-bit W1 never arms on (b) or (c).
 
 **2. Separate W1 G0 caps (R7-12's "D-to-X" wording kept).**
@@ -855,3 +861,45 @@ The lead ruled on the builder decisions and open points above. The rulings are q
     It is print-only, and no instrument check is added.
 - `a73324a4f`: the kit regenerated (generator digest and its identity pin). `--check` blocks on the same R0 and R1 leaves only.
 - The doc commit that adds this subsection.
+
+### Cold review dispositions 2026-11-07
+
+The cold review of `lane/2026-11-07-w1-kit-r10@05bdff797` is `docs/align/reviews/2026-11-07-w1-kit-r10-cold-review.md` (`1573c919e`). Its verdict was ADMIT_WITH_FIXES. The lead's dispositions are quoted verbatim as the lead gave them:
+
+> MEDIUM-1: r10_2_derivation/require_ready must treat "the current 600 s rule fits at some B_D" (max_fitting_b_d not None) as CURRENT and refuse a branch-(a) receipt, as protocol v4:381 and R10-2's order require. Use the reviewer's reproduction (I_D 400, 22 tok/s, 2,200 tokens per gated run) as a test.
+> MEDIUM-2: with NO receipt the kit must behave exactly as at e901eb2a4: D's 1(f) G0 term and armed cap include X-G (R7-2's G0_cap_W1), and an INCONCLUSIVE X-G does not refuse on that alone (R7-12). The separate contrast cap, the contrast proof and ruling (iv)'s refusal apply only under an R10-2(a) receipt. Fix LEAD-RULINGS-2:772 to say exactly this. Test: the reviewer's D-waits-120/X-G-560 case refuses with no receipt, as at e901.
+> LOW-1: the signature check strips whitespace and rejects any case of PENDING_LEAD_SIGNATURE; require a non-trivial signature line of the form 'lead: <name/session> <ISO date>'.
+> LOW-2: the kit verifies the receipt's deviation_log is non-null and names a DEVIATION entry, procedure.sha256 equals the committed procedure script's sha256, and r1_record matches the R1 record actually bound.
+> LOW-3: the procedure filters phases_s keys against the whitelist BEFORE any copy; extend the TrackingDict test with poisoned nested keys and a __deepcopy__ hook.
+> LOW-4: branch (a) requires at least one gated D run with decoded tokens > 0; otherwise decide returns R1-RERUN.
+> LOW-5: decide never recommends a B_D below r1_slots.slots.B_D; fix the thermal_gates:121 message; reorder r1_runtime_contract.md:94 so the supersession note comes first; add a g0_cap_receipt slot to the night-plan template.
+
+**Implemented** on `lane/2026-11-07-w1-kit-r10`:
+
+- `fd694694c`: failing-first tests. On `1573c919e` they gave 22 failures and 1 error. `tests/align/test_v4_kit.py` and `test_v4_w1_plan.py` are restored to their `e901eb2a4` bytes, so the no-receipt kit is held to e901's own tests.
+- `581560e5d`: the code, plus the protocol v4 and R1 contract text.
+- `b41315ad9`: the kit and W1 template regenerated. `--check` still blocks only on the R0 and R1 leaves.
+- The doc commit that adds this subsection and corrects the "No receipt" bullet above.
+
+What each disposition changed:
+
+- **MEDIUM-1.** `r10_2_derivation` returns `current` whenever `max_fitting_b_d` is not None, so the kit refuses a branch-(a) receipt with "the current 600 s rule fits". The reviewer's reproduction is a test: G0\* is 547.9 s while the 600 s rule fits at 6,144.
+- **MEDIUM-2.**
+  - **With no receipt.** `ruling_1f_fit`'s G0 term and the bound `g0_cap_s` are R7-2's G0_cap_W1 again. The binding message is e901's. `contrast_g0_cap_s` is refused, and every member arms `g0_cap_s`. The contrast proof does not run, so an INCONCLUSIVE X-G is admitted when 1(f) fits, as at e901. The reviewer's D-120 / X-G-560 case refuses with a 700 s term.
+  - **Under a receipt.** D's G0\* is still sized on the three gated D waits. The contrast cap is bound and its proof is required, so an INCONCLUSIVE X-G refuses (ruling (iv)).
+  - **Fixture rollback.** The WP22 synthetic's stand-in inputs and record are back to `e901eb2a4`.
+- **LOW-1.** `align_v4_kit.valid_lead_signature` requires `lead: <name/session> <ISO date>`. The signature must already be stripped, the date must be a valid ISO date, and `PENDING_LEAD_SIGNATURE` may not appear in any case. The procedure's `sign` uses the same check.
+- **LOW-2.** The kit requires:
+  - `deviation_log` to start with `DEVIATION R10-2(a)`, which the draft now writes;
+  - `procedure` to equal {path, sha256 of the committed `scripts/align_w1_budget_procedure.py`};
+  - `r1_record` to equal the bound record's schema, source, I_D and `max_r1_tail_s`.
+
+  These are checked after the numeric re-derivation.
+- **LOW-3.** `phases_s` is dropped from the row and X-G pick lists, and is copied only key by key through the phase whitelist. The test now poisons every level, nested `phases_s` included, and logs `__deepcopy__`, `items`, `keys`, `values` and iteration.
+- **LOW-4.** With no gated D run that decoded a token, the derivation is `rerun` and `decide` returns R1-RERUN.
+- **LOW-5.**
+  - **B_D.** `decide` refuses (it returns to the lead) rather than recommend (a)'s 6,144 when `r1_slots.slots.B_D` is below it. Builder note: the lead's text reads "never recommends a B_D below r1_slots.slots.B_D". The fit rule only lowers B_D, so this was implemented as the reviewer's finding states it: never above `slots.B_D`.
+  - **Message.** `validate_gate_policy` now names "(0, 1200] with a g0_cap_receipt".
+  - **Contract doc.** In `r1_runtime_contract.md`, the scope note now opens the G0_cap_W1 bullet.
+  - **Template.** The W1 template carries `g0_cap_receipt` and `contrast_g0_cap_s` as receipt-only slots, to be filled from the receipt or deleted.
+- **Builder addition, for the lead to confirm.** Because the no-receipt term now includes X-G again, a record can have G0\* ≥ 600 s while the e901 rule still misses (a long X-G wait). R10-2(a) was ruled for a D cap below 600 s, so the derivation calls this `lead`. The kit refuses such a receipt, and `decide` returns to the lead.
