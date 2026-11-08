@@ -89,8 +89,9 @@ class StrictLaunchTierWitnesses(unittest.TestCase):
 class CalibrationRosterWitnesses(unittest.TestCase):
     def test_two_additional_registered_sentinels_do_not_make_capture_counts_impossible(self):
         # Protocol U4/U5 inconclusive: add two sentinels to remaining windows.
-        # They do not enter the benign calibration pool: still 7/pair, 24 captured.
-        rows = [window(f'C{i}', 7, 7, captured=24) for i in range(1, 9)]
+        # R20 (superseding the delta2 reading): they are supplemental, count toward nothing and do not enter
+        # the benign calibration pool: still 7/pair and at most 22 counted captures.
+        rows = [window(f'C{i}', 7, 7, captured=22) for i in range(1, 9)]
         self.assertEqual(cadence.calibration_stop(rows)['decision'], 'calibration_complete')
 
 

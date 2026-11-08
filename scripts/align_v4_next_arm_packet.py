@@ -38,6 +38,9 @@ IDENTITY_FIELDS = ('record_commit', 'record_path', 'series_commit', 'series_path
 # The series ledger is ONE canonical append-only file, rewritten by each window's commit. Its latest
 # committed version names the latest window record (delta3 G1), so an older packet cannot stay current.
 SERIES_PATH = 'series/state.json'
+# The frozen series names its two task pairs in full; the count-only predicate keys them spam/bank.
+PAIR_NAMES = {'spam': cadence.CAL_PAIRS[0], 'bank': cadence.CAL_PAIRS[1],
+              'spam_filter_update': cadence.CAL_PAIRS[0], 'bank_transfer_2': cadence.CAL_PAIRS[1]}
 MANIFEST_PATH = 'configs/campaigns/align_v4/series/series_manifest.json'   # the frozen D/C/T series (R15)
 FULL_DESK_GATE_EXEMPT = ('v4_B_bar',)     # = align_v4_session.FULL_DESK_GATE_EXEMPT (tested equal)
 
@@ -182,6 +185,22 @@ class WindowRecord:
                 found.add(name)
         return found
 
+    def counted_captures(self):
+        """Captured members that count: every capture is authenticated, supplemental (R20) ones excluded."""
+        supplemental = {m['run_id'] for m in self.roster() if m.get('supplemental')}
+        return len(self.captures() - supplemental)
+
+    def desk_ceiling(self):
+        """The desk's committed provisional eligible counts for this calibration window (an upper bound)."""
+        pilot = self.source('pilot')
+        row = (pilot.get('extra_checks') or {}).get('series_desk_row')
+        require(isinstance(row, dict) and row.get('window_id') == self.window.split('#')[0]
+                and isinstance(row.get('desk_eligible_benign'), dict)
+                and set(row['desk_eligible_benign']) == set(cadence.CAL_PAIRS)
+                and all(type(v) is int and v >= 0 for v in row['desk_eligible_benign'].values()),
+                'committed desk provisional counts (series_desk_row) missing or malformed for ' + self.window)
+        return dict(row['desk_eligible_benign'])
+
     def verify_raw(self):
         rows = self.record.get('raw_evidence')
         require(isinstance(rows, list) and rows, 'raw evidence digest inventory missing')
@@ -215,7 +234,10 @@ class WindowRecord:
         require(set(excluded) <= {m['id'] for m in thermal['members']}, 'exclusions outside roster')
         require(len(excluded) == len(exclusions['members_excluded']), 'duplicate exclusions')
         counts = dict.fromkeys(cadence.CAL_PAIRS, 0)
-        captured = self.captures()
+        captured = self.captures()           # every capture is authenticated, supplemental ones included
+        # R20: supplemental diagnostics (ordinals 23/24) count toward nothing, not even captured_members.
+        supplemental = {m['run_id'] for m in self.roster() if m.get('supplemental')}
+        counted = captured - supplemental
         by_id = {m['id']: m for m in thermal['members']}
         # The desk's U3 pair rows do not carry member ids. Reconstruct the
         # registered comparisons from the same immutable roster tags instead.
@@ -255,10 +277,17 @@ class WindowRecord:
                 require(not member['calibration_exclusions'], 'calibration exclusion unresolved')
                 model_report = thermal['model_windows'].get(f"{member.get('model')}/{self.window}")
                 pool_ok = model_report and all(model_report[f'U{k}']['status'] == 'pass' for k in (1, 2, 3))
-                if pool_ok and planned.get('role') == 'D' and planned.get('condition') == 'benign':
-                    require(planned.get('task_pair') in counts, 'unknown benign task pair')
-                    counts[planned['task_pair']] += 1
-        return {'window': self.window, 'status': 'final', 'captured_members': len(captured),
+                # Only the frozen CALIBRATION pool counts: ordinary and supplemental sentinels, anchors,
+                # known-H and test members never enter m. A roster without pool metadata (the W1 kit)
+                # keeps the older benign-D reading.
+                in_pool = (planned.get('pool_role') == 'calibration' if 'pool_role' in planned
+                           else True)
+                if (pool_ok and in_pool and not planned.get('supplemental') and planned.get('role') == 'D'
+                        and planned.get('condition') == 'benign'):
+                    pair = PAIR_NAMES.get(planned.get('task_pair'))
+                    require(pair in counts, 'unknown benign task pair')
+                    counts[pair] += 1
+        return {'window': self.window, 'status': 'final', 'captured_members': len(counted),
                 'eligible_benign': counts}
 
 
@@ -666,10 +695,12 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
                 continue
             if record.record.get('role') == 'calibration':
                 row = by_attempt[record.window]
+                # The desk's provisional counts are an upper bound the final adjudication may lower, never
+                # raise (R15): carried into the history so the series binding enforces it.
                 counts = {'captured_members': row['captured_members'], 'status': row['status'],
-                          'eligible_benign': row['eligible_benign']}
+                          'eligible_benign': row['eligible_benign'], 'desk_eligible_benign': record.desk_ceiling()}
             else:
-                counts = {'captured_members': len(record.captures()), 'status': 'final',
+                counts = {'captured_members': record.counted_captures(), 'status': 'final',
                           'eligible_benign': dict.fromkeys(cadence.CAL_PAIRS, 0)}
             history.append({'window_id': record.window.split('#')[0], 'attempt_id': record.window, **counts})
             for ruling in packet['lead_rulings']:
