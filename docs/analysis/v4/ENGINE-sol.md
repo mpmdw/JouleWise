@@ -278,6 +278,13 @@ sandbox. These are synthetic wall times during the existing external load,
 not hardware energy validation or a guaranteed throughput ratio. Final-head
 receipts and any subsequent timing are recorded in the run report.
 
+The final implementation's [unprofiled receipt](ENGINE-sol-synthetic-timing.json)
+is **4.331 s serial / 5.091 s with two workers**, with identical complete bytes.
+Serial stays the default; no general parallel speedup is asserted under this
+shared load. The [full-size profile](ENGINE-sol-synthetic-profile.txt) is
+synthetic and includes profiler overhead. The [run report](../../run_reports/2026-11-08-v4-engine-sol.md)
+records the tests, earlier failures, output digests and outstanding rulings.
+
 For reproducibility:
 
 ```sh

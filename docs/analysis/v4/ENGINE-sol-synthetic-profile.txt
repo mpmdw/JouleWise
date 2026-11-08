@@ -1,0 +1,44 @@
+SYNTHETIC ONLY — full 11 x 22 x 12 desk exports; profiler overhead included.
+Engine commit f0b141ee080039a8cfbc92521e06b9d23b43cac9
+
+         28156043 function calls (27945672 primitive calls) in 29.858 seconds
+
+   Ordered by: cumulative time
+   List reduced from 1071 to 35 due to restriction <35>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.021    0.021   29.873   29.873 <repo>/joulewise/align/v4_analysis/engine.py:295(analyze)
+        2    0.000    0.000   25.862   12.931 <repo>/joulewise/align/v4_analysis/engine.py:269(_execute)
+       44    0.235    0.005   25.862    0.588 <repo>/joulewise/align/v4_analysis/engine.py:207(_fit_task)
+      352    0.089    0.000   14.484    0.041 <repo>/joulewise/align/v4_analysis/residual.py:22(fit)
+      352    0.183    0.001   13.899    0.039 <repo>/joulewise/align/v4_analysis/_frozen_residual.py:393(fit_energy_model)
+     4160    0.486    0.000   11.004    0.003 <repo>/joulewise/align/v4_analysis/residual.py:34(predict)
+   156096    3.141    0.000    9.280    0.000 <repo>/joulewise/align/v4_analysis/_frozen_residual.py:196(_row_flags)
+     2326    1.834    0.001    8.149    0.004 <repo>/joulewise/align/v4_analysis/_frozen_residual.py:343(_wls)
+   125712    0.998    0.000    7.514    0.000 <repo>/joulewise/align/v4_analysis/_frozen_residual.py:218(design_row)
+     1974    0.200    0.000    6.851    0.003 <repo>/joulewise/align/v4_analysis/_frozen_residual.py:468(evaluate)
+   467180    3.526    0.000    6.432    0.000 {built-in method math.fsum}
+     4160    0.252    0.000    6.204    0.001 <repo>/joulewise/align/v4_analysis/_frozen_residual.py:513(predict_episode)
+   259216    0.539    0.000    3.264    0.000 <repo>/joulewise/align/v4_analysis/_frozen_residual.py:315(_dot)
+   234179    0.519    0.000    2.132    0.000 {built-in method builtins.all}
+  1059264    1.355    0.000    2.118    0.000 <repo>/joulewise/align/v4_analysis/_frozen_residual.py:177(_token_count)
+   909504    0.717    0.000    2.062    0.000 <repo>/joulewise/align/v4_analysis/_frozen_residual.py:201(<genexpr>)
+   168562    0.356    0.000    2.033    0.000 {built-in method builtins.max}
+        1    0.047    0.047    1.492    1.492 <repo>/joulewise/align/apple/v4_estimands.py:98(benign_carrier_curve)
+     1001    0.996    0.001    1.424    0.001 <repo>/joulewise/align/apple/v4_estimands.py:136(estimate)
+296656/296590    0.682    0.000    1.342    0.000 {built-in method builtins.any}
+  1012992    0.646    0.000    1.342    0.000 <repo>/joulewise/align/v4_analysis/_frozen_residual.py:209(<genexpr>)
+  1210336    0.898    0.000    1.252    0.000 <repo>/joulewise/align/v4_analysis/_frozen_residual.py:170(_finite)
+  3849588    1.242    0.000    1.242    0.000 <repo>/joulewise/align/v4_analysis/_frozen_residual.py:316(<genexpr>)
+    75792    0.720    0.000    1.145    0.000 <repo>/joulewise/align/v4_analysis/residual.py:12(turn)
+      352    0.160    0.000    1.056    0.003 <repo>/joulewise/align/v4_analysis/_frozen_residual.py:319(_identified_columns)
+        1    0.000    0.000    0.880    0.880 <repo>/joulewise/align/v4_analysis/acceptance.py:28(u3_derivation)
+       64    0.601    0.009    0.879    0.014 <repo>/joulewise/align/v4_analysis/acceptance.py:14(_series_tail)
+   866450    0.532    0.000    0.703    0.000 <repo>/joulewise/align/v4_analysis/_frozen_residual.py:348(<genexpr>)
+    13956    0.018    0.000    0.683    0.000 <repo>/joulewise/align/v4_analysis/_frozen_residual.py:357(<genexpr>)
+        1    0.000    0.000    0.568    0.568 <repo>/joulewise/align/apple/v4_cadence.py:252(calibration_stop)
+        1    0.000    0.000    0.568    0.568 <repo>/joulewise/align/apple/v4_cadence.py:237(_validated_rulings)
+     96/1    0.001    0.000    0.568    0.568 <frozen importlib._bootstrap>:1358(_find_and_load)
+     96/1    0.001    0.000    0.568    0.568 <frozen importlib._bootstrap>:1306(_find_and_load_unlocked)
+     95/2    0.000    0.000    0.568    0.284 <frozen importlib._bootstrap>:911(_load_unlocked)
+     91/1    0.000    0.000    0.568    0.568 <frozen importlib._bootstrap_external>:1021(exec_module)
