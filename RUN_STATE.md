@@ -1042,6 +1042,16 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+204. **Laptop lead (interactive session 1544c617), 2026-11-07 about 18:30 PST: Ed's research direction, plus lead rulings on FINAL-DESIGN §3.2 Q4 and Q6, made blind (no alarm has been read).**
+- **Ed, verbatim:** "sabotage leaves an energy signature is cool, v4 is ok, sure running more windows to get more evidence for that paper makes sense to me". Also: "if you want to keep using the mbp for that paper/research goal, i support". The ALIGN paper's claim is **"sabotage leaves an energy signature"** (v4), not only "energy as a record of logged compute". More ALIGN windows and 30B positive-control nights (injected real unlogged compute) are approved in principle. The magistrate schedules them in free Mac time; each still needs its own kit and gates.
+- **Ruling Q4: yes.** D calibration windows may run to the 59,520 s maximum, two pairs per window, so 3 D windows. That is FINAL-DESIGN §2.7's default, confirmed. The measurement is the same as with 6 windows of 44,640 s, with half the arm overhead; exposure to scheduled jobs per hour is unchanged.
+- **Ruling Q6: registration grade.** That means m ≥ 39 per pair plus a held-out test cohort, about double the calibration windows per model. Q6 is decided now, before any alarm is read, as §3.2 requires.
+  - **Why:** Ed's chosen claim needs a confirmatory test, not a pilot-grade read.
+  - It takes effect once W1 admits the D configuration (ruling R10's procedure).
+  - If D ends as a screen only, registration grade applies to whichever cell carries the sabotage-signature claim.
+  - The series plan and the protocol v4 registration must be updated to match before W1 arms. This joins the pre-W1 registration work in item 203 R10-5.
+- **Unchanged:** R1 (item 202) and the R10 procedure (item 203).
+
 203. **Laptop lead (interactive session 1544c617), 2026-11-07 about 17:00 PST: lead ruling R10, the W1 budget fallback, pre-declared blind before any R1 number exists.** Source: research audit `docs/research-audits/2026-11-07/w1-budget-fallback.md` (draft PR #695), whose arithmetic was re-checked against `scripts/align_v4_kit.py`. This item schedules nothing. R1 (item 202) is unaffected and should still run: R10 applies only to W1 admission after R1.
 - **R10-1 (premise correction).** Model D at 8-bit decodes at about 11.9 tok/s (R0 measured 11.85-11.95). The bandwidth ceiling is about 14.0 tok/s (400 GB/s against 28.58 GB of weights). The "about 20 tok/s" in LEAD-RULINGS-2 R7-2/R8-8 is wrong: it is an unmeasured 4-bit projection. Under R7-2's G0 term (at least 600 s) and R6-3's full last turn, 8-bit D fails ruling 1(f) at every allowed B_D, whatever R1 measures. Recorded now so the R1 numbers cannot be blamed for it.
 - **R10-2 (mechanical procedure after R1).** It reads only R1 timing and count fields; no energy value is read.
