@@ -8,6 +8,9 @@ calibration is exactly 8 windows).
 """
 from __future__ import annotations
 
+import math
+import time
+
 TRIAGE_SCHEMA = 'joulewise.align_v4.next_arm_triage.v1'
 # Evidence an arm computes itself (cannot be supplied by the packet) vs the
 # packet built off the MBP from the committed record and the laptop desk.
@@ -38,7 +41,8 @@ NEXT_ARM_TRIAGE = (
          text='charging/battery: AC, >=99%, not charging, |InstantAmperage|<=200 mA, '
               'completed top-up within 30 min, OBC off attested (R02)'),
     dict(id='meter_samples_clock', source=PACKET, first_window_na=False,
-         text='KM003C samples present and clock coverage for every member of the previous window'),
+         text='KM003C coverage tabulated with gaps listed (SECONDARY, non-gating); '
+              'meter samples and clock verified live before this arm'),
     dict(id='capture_faults', source=PACKET, first_window_na=False,
          text='sidecar/powermetrics coverage, collector faults, OOM/Metal, deadman and '
               'unobserved-state faults (X1-X8) tabulated for the previous window'),
@@ -69,7 +73,7 @@ TRIAGE_IDS = tuple(row['id'] for row in NEXT_ARM_TRIAGE)
 _BY_ID = {row['id']: row for row in NEXT_ARM_TRIAGE}
 
 
-def next_arm_triage(packet, internal):
+def next_arm_triage(packet, internal, *, now_epoch_s=None):
     """Evaluate the frozen triage list. Every listed check gates the arm.
 
     ``internal`` maps each ARM-source id to bool (computed by the arm itself).
@@ -88,6 +92,12 @@ def next_arm_triage(packet, internal):
     packet = packet if isinstance(packet, dict) else {}
     if packet.get('schema') != TRIAGE_SCHEMA:
         reasons.append('next-arm triage packet missing or wrong schema')
+    if 'valid_until_epoch_s' in packet:
+        expires = packet['valid_until_epoch_s']
+        now = time.time() if now_epoch_s is None else now_epoch_s
+        if (type(expires) not in (int, float) or not math.isfinite(expires)
+                or type(now) not in (int, float) or not math.isfinite(now) or now > expires):
+            reasons.append('triage packet quiet/meter observations expired or malformed')
     previous = packet.get('previous_window')
     if not isinstance(previous, str) or not previous.strip():
         reasons.append('triage packet needs previous_window (window id, or R1 before W1)')
@@ -184,15 +194,30 @@ def calibration_stop(windows):
     * ``insufficient_calibration`` - 8 final counted windows and either pair below
       39. No ninth counted attempt exists.
 
+    MED-2a: a ``type='lead_ruling'`` row with unique nonblank ``ruling_id``
+    and ``after_window`` equal to the current two-zero tail acknowledges the
+    escalation and resets only that tail. Attempts and counts remain intact.
     This is not an exchangeability or R13/R14 result.
     """
     if not isinstance(windows, (list, tuple)):
         raise ValueError('windows must be a sequence in frozen order')
-    seen, counted, refusals = set(), [], 0
+    seen, ruling_ids, counted, refusals = set(), set(), [], 0
     trailing_zero = 0
+    last_window = None
     for row in windows:
+        # MED-2a: retain both refused attempts; a prospective lead ruling
+        # acknowledges that exact tail without deleting or counting a window.
+        if isinstance(row, dict) and row.get('type') == 'lead_ruling':
+            ruling = row.get('ruling_id')
+            if (not isinstance(ruling, str) or not ruling.strip() or ruling in ruling_ids
+                    or trailing_zero < 2 or row.get('after_window') != last_window):
+                raise ValueError('lead_ruling needs a unique ruling_id after the current two-zero-capture tail')
+            ruling_ids.add(ruling)
+            trailing_zero = 0
+            continue
         counts = row.get('eligible_benign') if isinstance(row, dict) else None
         if (not isinstance(row, dict) or not isinstance(row.get('window'), str) or row['window'] in seen
+                or row.get('type', 'window') != 'window'
                 or row.get('status') not in ('final', 'provisional')
                 or type(row.get('captured_members')) is not int or row['captured_members'] < 0
                 or not isinstance(counts, dict) or set(counts) != set(CAL_PAIRS)
@@ -201,6 +226,7 @@ def calibration_stop(windows):
                              'integer captured_members >= 0 and integer eligible_benign in '
                              f'0..{BENIGN_PER_PAIR_PER_WINDOW} for each pair')
         seen.add(row['window'])
+        last_window = row['window']
         if row['captured_members'] == 0:
             if any(counts.values()):
                 raise ValueError('a zero-capture window cannot carry eligible members')

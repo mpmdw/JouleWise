@@ -14,6 +14,8 @@ declares 2 and restores Automatic when that night closes. Every session start
 (prepare, install) first restores a marker it does not own, never while a
 measuring night holds the host night lock.
 """
+import base64
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -296,20 +298,31 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
     # off-MBP packet supplies the rest (joulewise.align.apple.v4_cadence).
     from joulewise.align.apple import v4_cadence
     packet = next_arm_triage
+    packet_raw = None
     if isinstance(packet, (str, Path)):
         try:
-            packet = json.loads(Path(packet).read_bytes())
+            packet_raw = Path(packet).read_bytes()
+            packet = json.loads(packet_raw)
         except (OSError, ValueError):
+            packet = None
+    elif isinstance(packet, dict):
+        try:
+            packet_raw = json.dumps(packet, sort_keys=True, allow_nan=False).encode()
+        except (TypeError, ValueError):
             packet = None
     triage = v4_cadence.next_arm_triage(packet, {
         'series_powermode': bool(power['admitted']),
         'external_volume': volumes['verdict'] == external_volume.PASS,
-        'charging_battery': bool(battery['admitted'])})
+        'charging_battery': bool(battery['admitted'])}, now_epoch_s=(now or time.time)())
     reasons += ['next_arm_triage: ' + reason for reason in triage['reasons']
                 if not reason.startswith(('triage series_powermode', 'triage external_volume',
                                           'triage charging_battery'))]
     return {'schema': ARM_RECORD_SCHEMA, 'admitted': not reasons, 'reasons': reasons,
             'next_arm_triage': triage,
+            'next_arm_triage_source': {
+                'bytes_base64': base64.b64encode(packet_raw).decode() if packet_raw is not None else None,
+                'sha256': hashlib.sha256(packet_raw).hexdigest() if packet_raw is not None else None,
+                'record_commit': packet.get('record_commit') if isinstance(packet, dict) else None},
             'ac_powermode': power, 'external_volumes': volumes, 'battery': battery,
             # Lead ruling R7-10: the host state directory this arm used.
             'host_state_dir': powermode.host_state_dir()}

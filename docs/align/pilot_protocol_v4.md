@@ -792,7 +792,7 @@ from the committed record before the arm; the arm waits for them.
 | `series_powermode` | AC powermode equals the plan-frozen series value (arm-computed; not Automatic-only) |
 | `external_volume` | no external/network/FUSE volume mounted (ruling 20; arm-computed) |
 | `charging_battery` | AC, >=99%, not charging, |InstantAmperage|<=200 mA, completed top-up within 30 min, OBC attested (R02; arm-computed) |
-| `meter_samples_clock` | KM003C samples and clock coverage for the previous window's members |
+| `meter_samples_clock` | KM003C coverage tabulated with gaps listed (SECONDARY; past gaps non-gating); samples and clock verified live before this arm |
 | `capture_faults` | sidecar/powermetrics coverage, collector, OOM/Metal, deadman, unobserved-state faults (X1-X8) |
 | `thermal_escalation` | U1-U3 result and the registered escalation ladder, recorded before use, never in place |
 | `cohort_pool_rules` | U1-U3 failure bars pool entry; one frozen cohort; no pooling across a changed configuration |
@@ -813,6 +813,11 @@ previous-window checks before W1 (previous window R1). The triage packet is
 `--next-arm-triage`; the arm retains it in `staging/v4-arm-NNN.json`. Whether the
 triage fits in five minutes, and the 30-45 minute turnaround, are targets, not
 measurements.
+
+The off-MBP production builder and source inventory template are
+[`align_v4_next_arm_packet.py`](../../scripts/align_v4_next_arm_packet.py),
+documented in [`next_arm_packet.md`](next_arm_packet.md). It binds exact raw
+source digests and the previous record commit; hardware checks remain arm-owned.
 
 **B3 - fixed 8 calibration windows (RUN_STATE 217; supersedes the count stop of
 214/215).** Calibration is exactly 8 counted windows, C1-C8, run in one frozen order
@@ -840,6 +845,11 @@ residual or energy field (`v4_cadence.calibration_stop`):
    failed or in flight. Two consecutive zero-capture refusals escalate to the lead
    (`escalate_to_lead`; nothing is armed until the lead rules). There is no ninth
    counted attempt, and no refusal path reorders, adds or drops a window.
+   MED-2a ruling wire: retain both refused attempts and append
+   `{"type":"lead_ruling","ruling_id":"<lead id>","after_window":"<last refusal id>"}`.
+   A unique nonblank ruling id bound to the current two-zero tail resets only
+   that trailing refusal count. It neither counts a window nor changes totals,
+   the fixed-eight cap or the target; two further zero captures escalate again.
 4. Failure outcome: after 8 final windows with either pair below 39 the result is
    `insufficient_calibration`; no extension, no D7/D8, no relaxed target.
 5. A window launched as calibration stays calibration.
