@@ -113,6 +113,8 @@ class V4SessionHighPowerTests(HostStateCase):
     def make_session(self, ac_powermode=2):
         measurement = self.tmp / 'm'
         (measurement / kit.KIT).mkdir(parents=True, exist_ok=True)
+        from tests.align.test_v4_kit import seed_series
+        seed_series(measurement)
         (measurement / kit.KIT / 'collection_plan.json').write_text(json.dumps(
             {'runtime_requirements': {'ac_powermode': ac_powermode}}))
         root = self.tmp / 's'

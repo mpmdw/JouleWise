@@ -37,6 +37,9 @@ EXCLUDED_FILES = ('scripts/align_v4_dynamic_trace.py',)
 
 # (scenario id, environment, unittest ids). Each is a synthetic path of the W1/D/R1 chain.
 SCENARIOS = (
+    # first: the production-session replays read process-global tiny-model state that earlier scenarios' temp dirs leave stale
+    ('dct_series_window', {}, ['tests.align.test_v4_series', 'tests.align.test_v4_series_e2e',
+                               'tests.align.test_v4_series_r20']),
     ('wp22_synthetic_w1_chain', {'JW_WP22_FULL': '1'}, ['tests.align.test_v4_w1_synthetic']),
     ('r1_synthetic_arm', {}, ['tests.align.test_r1_rehearsal', 'tests.align.test_r1_runtime_e2e']),
     ('r1_to_w1_chain', {}, ['tests.align.test_r1_turn_counts_export', 'tests.align.test_r1_to_w1_chain',
