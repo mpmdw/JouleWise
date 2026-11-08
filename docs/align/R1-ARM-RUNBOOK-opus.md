@@ -59,6 +59,15 @@ Not carried over (stated, not hidden):
   powermetrics fails R1's first model segment, and R1 refuses (exit 3).
 - **The QPE-only predicates.** The non-observer interval and the corecaptured predicate are not
   turned on for this kind.
+- **The HAZARD_PACK-only machinery** (found when comparing with the Sol build; see
+  `R1-ARM-AGREEMENT.md`). A non-hazard night has none of the following:
+  - no disk gate at arm and no live disk floor (the hazard disk module keeps 20 GiB of headroom and
+    stops the night at 10 GiB);
+  - no continuous hazard monitor outside R1's own per-segment journals;
+  - no `caffeinate` keep-awake assertion;
+  - no powermetrics instrument module at arm.
+
+  Under this route the magistrate checks free disk and the AC `sleep 0` setting by hand (§3 step 2).
 
 ## 2. Sizing: `window_max_s`
 
@@ -126,6 +135,9 @@ Placeholders: `$SHA` is the ruled sha; `$MROOT` is a fresh measurement checkout 
    - **No external volume:** `/sbin/mount | /usr/bin/grep -v ' on / \| on /System' ` lists no `/Volumes/*`
      disk, and the SSD stays unplugged for the whole night.
    - `launchctl print gui/$(id -u)/com.joulewise.night` must say the service is absent.
+   - `pmset -g custom` AC `sleep` reads 0. No keep-awake assertion is taken in this route.
+   - `df -g /Users/edr` shows at least 80 GB free. This route has no disk gate: R1 writes model bundles
+     and powermetrics, and R0 measured 66 GB as the lower bound.
 
 3. **Write the plan.** Run this from the measurement checkout, so `repo_head` = `measurement_head`:
 
@@ -152,7 +164,10 @@ Placeholders: `$SHA` is the ruled sha; `$MROOT` is a fresh measurement checkout 
 6. **Install** (the shared installer; no probe for this kind):
 
        "$MROOT/scripts/install_night_agent.sh" --plan "$CUSTODY/night_plan.json" \
-         --python "$MROOT/.venv/bin/python"
+         --python "$MROOT/.venv/bin/python" --courier-bin "$MROOT/scripts/b6_courier.sh"
+
+   `--courier-bin` names the file-only program courier. Without it the installer resolves `claude`, an
+   agent courier, which would run on the MBP after the chain.
 
    It must print the two plist paths.
 
