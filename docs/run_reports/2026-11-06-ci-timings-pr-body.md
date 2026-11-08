@@ -12,42 +12,58 @@ Impact statement (start each answer with Yes or No, then say why; any Yes makes 
 
 | # | Gate | Evidence |
 | --- | --- | --- |
-| 1 | Independent review by a non-author, with a lens that executes the code (light tier: N/A (light tier)) | NOT-RUN |
+| 1 | Independent review by a non-author, with a lens that executes the code (light tier: N/A (light tier)) | RUN 19cbb28ff |
 | 2 | Whole suite on the merged tree (current main merged into the head), exact tail recorded (light tier, docs only: N/A (docs only)) | NOT-RUN |
 | 3 | CI green on the final head; evidence is that head's sha | NOT-RUN |
 | 4 | Cold Fable final pass on merge code that touches measurement, calibration or claims (otherwise: N/A (no measurement, calibration or claim code); light tier: N/A (light tier)) | N/A (no measurement, calibration or claim code) |
-| 5 | Findings dispositioned: each fixed, deferred to a named lane, or rejected with a reason (light tier: N/A (light tier)) | NOT-RUN |
+| 5 | Findings dispositioned: each fixed, deferred to a named lane, or rejected with a reason (light tier: N/A (light tier)) | RUN fafc45368 |
+
+## Gate evidence
+
+- Row 1: Opus 5.5 cold review, commit `19cbb28ff` on `perf/2026-11-08-opus-review-ci-timing`, Branch 1 section of `docs/perf/2026-11-08-opus-review-ci-timing.md` (read with `git show origin/perf/2026-11-08-opus-review-ci-timing:docs/perf/2026-11-08-opus-review-ci-timing.md`). It executed the code: it replayed test discovery on both trees and ran the targeted modules one per process. Verdict: HOLD on the old head `858d9f91b`, ADMIT_WITH_FIXES for Sol's `eaf3143f7`. It proved no test is lost: 12,217 test ids on main versus 12,227 on Sol's tree merged with main.
+- Row 2: pending the CI pull_request run on the final head (RUN_STATE item 165 counts it as row 2).
+- Row 3: pending CI on the final head.
+- Row 5: see Dispositions.
 
 ## Summary
 
-This PR moves the CI shard-balance and flake fixes from lane/2026-11-06-sol-ci-flaky-timings (head d0f7a8a1e) onto main. It does not carry that lane's b5 base. The lane was stacked on lane/2026-11-05-b5-post-release-fixes (PR #651, head a33860c4d). PR #651 is marked "do not merge before the block-5 release" and still has open NEEDS-LEAD and NEEDS-ED items, including a DRAFT decision-log entry. A plain merge of the lane would have landed all eight #651 commits on main under a CI title. So the branch is origin/main 284867530 plus the lane's five CI commits, cherry-picked in order. Each commit message names its source sha. The last commit is new.
+The old PR head (`858d9f91b`) was stale: it conflicted with main, so GitHub ran no CI on it, and its own new guard `test_every_discovered_module_has_timing_or_documented_exemption` failed once main was merged (15 modules main added after the timing harvest). This update replaces it with Sol's finished work from `perf/2026-11-08-eng-ci` (`eaf3143f7`), merged without rebase, then merges current `origin/main`.
 
-The CI files (scripts/shard_tests.py, scripts/test_timings.json, tests/test_shard_split.py, tests/test_shard_tests.py, tests/git_fixture.py, tests/test_receipt_histsem.py, tests/test_harvest_v5_qualification.py) are byte-identical to a local merge of the whole lane into main. None of those paths depends on the #651 commits. The five tests.b5_analysis.test_postrelease_* weights in seconds_by_module are inert until #651 lands. Like the 190 cross-lane entries, they name modules this tree does not have yet.
+What the PR now does:
 
-From the lane (see each commit for its evidence):
+- **Timing repair.** The 15 modules added on main after the 2026-11-06 harvest, plus the new BYTES regression, get explicit `timing_exemptions` entries ("pending hosted timing"). They still run, packed at the conservative 26.98 s unknown weight. No hosted measurement was invented. Main deleted `tests/test_harvest_v5_qualification.py`, so its timing entries and the lane's harvest-v5 hex-boundary change are dropped.
+- **Exemptions expire both ways.** The guard already rejected an exemption for a module that has gained a weight. It now also rejects one for a module that no longer exists (Opus LOW-3), so stale exemptions cannot pile up.
+- **Git fixture maintenance at clone time.** `clone_git_fixture` installs the maintenance controls during the clone, before checkout hooks run, and `tests/test_receipt_histsem.py` uses it at its clone sites (the "[Errno 39] Directory not empty" teardown flake). A checkout-hook regression fails before the fix and passes after it.
+- **Fail-fast off.** The ordinary CI matrix has `fail-fast: false`, so one failing shard no longer cancels the timing observations and tests on the others.
+- **Independent BYTES worlds.** `docs/perf/2026-11-08-bytes-world-split.patch` splits the 60-campaign `test_bytes_analysis` method into three independent 20-campaign world methods, for the ALIGN lane. It is a patch only. Main has no BYTES module, and no BYTES implementation is backported here. `tests/test_bytes_campaign_split.py` pins the split semantics. The log format changes from one three-world `BYTES_SIMULATION_REPORT=` line to three one-world lines (Opus LOW-2). Anyone harvesting that line by hand must concatenate the three lines in world order.
 
-- test(harvest-v5): the hex-boundary blindness scan exempts an all-decimal secret only inside a maximal hex digest run, and field names keep plain substring matching (2 commits; the first was a cloud Sol 6.1 xhigh task applied by the lead and is unreviewed).
-- test(histsem): clone_git_fixture disables detached git maintenance at all eight clone sites. This fixes the "[Errno 39] Directory not empty" teardown flake on hosted run 42000523184.
-- ci(timings): the invented 20 s/method estimates are replaced with hosted observations. 190 cross-lane modules (PR #682, main, qwen4/qwen4exp lanes) get hosted medians. The tests.test_bytes_analysis 60-campaign method is split out (5,742 s plus a 3,380 s remainder). PR #682's tests.b6.test_cold_pass_fixes split is ported with hosted per-test seconds, which run 1.3x to 6x above #682's local estimates. untimed_module_allowance admits small new tests.align. and tests.test_qwen4 modules.
+**What the savings are, honestly.** They apply only to lanes that carry `tests.test_bytes_analysis`, which is not on main. On main this PR gives previously untimed modules weights (tighter LPT packing) and turns fail-fast off. Main's slowest shard is already about 31 min (last green main run 42457786443), so do not read this as a main CI saving. The headline 152.0 min to 56.3 min figure is a static projection for the ALIGN lane (`align/2026-11-08-v4-r11` or later), and needs two steps there: this timing map reaches ALIGN, then the BYTES patch is applied. The three world weights are equal shares (5,741.949 / 3 = 1,913.983 s each), not measurements. Up to 16 modules are packed at the fallback weight, so the planner's balance (1,386.9 s x 12 on the main-based tree) is a lower bound until the next hosted harvest.
 
-New on this branch (verifier LOW on d0f7a8a1e):
+Opus cold review: `git show origin/perf/2026-11-08-opus-review-ci-timing:docs/perf/2026-11-08-opus-review-ci-timing.md`, Branch 1 (commit `19cbb28ff`). Sol's report: `docs/perf/2026-11-08-eng-ci.md`, shard map `docs/perf/2026-11-08-eng-ci-shards.json`.
 
-- awaiting_lane now expires. scripts/shard_tests.forward_declaration_problems() reports two states: a split for an absent module with no awaiting_lane, and a split for a present module that still carries awaiting_lane. The checked-in guard in tests/test_shard_split.py asserts the list is empty. When tests.test_bytes_analysis or tests.b6.test_cold_pass_fixes reaches main, the guard fails until that one key is deleted. The hosted declared weights stay. Scheduling still never reads the key.
-- scripts/test_timings.json is now a key superset of every lane/2026-11-0* timing map (48 checked, lane/2026-11-05-align-pilot10-benign included). That lane carries PR #682's local cold_pass_fixes split. Three provenance keys only the lanes had are added and marked SUPERSEDED with the hosted value now in force. Every seconds_by_module and split_modules key on those lanes was already present. A MERGE RULE sentence in _hosted_observations_2026_11_06_cross_lane says to keep this file's (hosted) values when an align lane reaches main.
+## Dispositions
+
+- HIGH-1 (PR cannot merge; guard fails on merged tree): fixed. Sol's `eaf3143f7` is now the base, main is merged, and the guard passes.
+- MED-1 (152 to 56.3 min is not a main effect): accepted and stated above. The BYTES patch stays an ALIGN-lane step after this map lands there.
+- LOW-1 (no assertion weakened): confirmed by the review; no action.
+- LOW-2 (BYTES log format): documented above; no code consumer exists outside the test.
+- LOW-3 (exemptions never expire for deleted modules): fixed in `fafc45368`.
+- LOW-4 (optimistic balance from fallback weights): deferred to the next hosted harvest, which replaces the exemptions with measured weights.
+- `docs/run_reports/2026-11-06-ci-timings-pr-body.md` (stale body describing the old lane): refreshed.
 
 ## Verification
 
-All runs are local: Python 3.13.18 (/private/tmp/jwsol/venv-both), TMPDIR=/private/tmp/jwwf-tmp, under nice -n 19 taskpolicy -b. These are targeted modules only, not the whole suite.
+Local, Python 3.14 (homebrew), `python -m unittest`, one module per process, `TMPDIR=/private/tmp/pr685`, on the merged tree:
 
-- python -m unittest tests.test_shard_split tests.test_shard_tests tests.test_harvest_v5_qualification: Ran 58 tests, OK.
-- python -m unittest tests.test_receipt_histsem: OK (skipped=1). This is the module whose clone-teardown flake the histsem commit fixes; it took about 30 min under background QoS.
-- Mutation check: with the present-and-marked branch of forward_declaration_problems disabled, tests.test_shard_split.SplitDeclarationLoadingTests.test_awaiting_lane_expires_once_the_module_is_discovered fails (FAILED (failures=1)).
-- CI plan self-check (the ci.yml ordinary-shard planning code, SHARD_COUNT=12, no units run): 488 modules discovered, none untimed, forward_declaration_problems empty, ORDINARY SHARD ESTIMATES 1404.178 s x 12.
-- Projection onto lane/2026-11-05-align-pilot10-benign's 567 test modules with this map: no module is untimed. forward_declaration_problems flags exactly tests.b6.test_cold_pass_fixes and tests.test_bytes_analysis, which is the intended expiry.
-- On the full-lane merge variant (which includes #651), these also passed: tests.b5_analysis.test_postrelease_{step4,g9,step11_codes,bracket_copies,bracket_snapshot} and tests.b5_analysis.test_sensitivity_guard, plus tests.test_harvest_v5_qualification. Ran 47 tests, OK.
+| Module | Result |
+| --- | --- |
+| tests.test_shard_split | 36 tests, OK |
+| tests.test_shard_tests | 8 tests, OK |
+| tests.test_git_fixture_maintenance | 6 tests, OK |
+| tests.test_git_fixture_hygiene | 7 tests, OK |
+| tests.test_bytes_campaign_split | 4 tests, OK |
+| tests.test_receipt_histsem | 74 tests, OK (skipped=1), 980 s |
 
-Gate rows 1, 2, 3 and 5 are unclaimed. Row 3 needs this branch's final head sha after CI.
+The whole suite was not run locally; row 2 is the CI pull_request run on the final head.
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
-
-https://claude.ai/code/session_01JActAZFNBsamTNawK8HS2S
