@@ -585,22 +585,39 @@ Decided from the code and the registration (structure only). No bar is widened a
   form at the floor, the claim evaluation and each resolution) records both labels, AGREE only if the printed numbers
   agree within their bar. Outside the bar the strict `>` decides. The hold is automatic: the comparison lists the keys
   of every such row (`limit_undetermined`) and exits 1, and `scripts/release_b5.py` reports their count and keys
-  (structure only, no value) and exits 1 with reason `within_bar_undetermined`, whatever the rows' numeric agreement;
+  (structure only, no value) and exits 1 with reason `within_bar_undetermined` (comparator stage status `undetermined_hold` when every family agrees), whatever the rows' numeric agreement;
   exit 0 requires zero such rows. Precedence is refused (exit 2) > hold (exit 1) > agree (exit 0) in both: a
   comparator that exits 2 (for example, a disagreeing fill copy is unmapped) is a release refusal and is never
   reported as `within_bar_undetermined` or as a disagreement hold; its family counts are still reported. Neither label
   is ever accepted silently.
-  **Disclosed consequence.** A value genuinely inside the bar holds the release until the lead discloses it and Ed
-  decides: a correct non-limited form at or just under the threshold prints no diagnostic and is undetermined even
-  when every number agrees, and rerunning the same immutable inputs cannot clear it (an equality can also be
-  structural, for example a maximum with zero width and other members with positive widths). That is the intended
-  behaviour, not a defect, and there is no liveness guarantee. A form that is not `computed` (below minimum, or `not_computed` after `make_floors` retained its
+  **Disclosed consequence, and its prespecified disposition (lead ruling, made blind before any release run).** A
+  value genuinely inside the bar is held: a correct non-limited form at or just under the threshold prints no
+  diagnostic and is undetermined even when every number agrees, and rerunning the same immutable inputs cannot clear it
+  (an equality can also be structural, for example a maximum with zero width and other members with positive widths).
+  That is the intended behaviour, not a defect, and there is no liveness guarantee. The disposition is fixed now and
+  involves no discretion: the affected cell and form is published with the label "attribution limit not independently
+  determined". No bar, threshold, outcome or label is changed, and there is no other discretion. The release exit
+  stays 1 mechanically; this rule says only how the hold is reported. Ed's unseal decision is unaffected.
+  A form that is not `computed` (below minimum, or `not_computed` after `make_floors` retained its
   terms because the drift allowance is unrecorded) has no limit, and a `computed` record without its four terms
   (`widths_j`, `linear_deviation_bound_j`, `guard`, `point_unguarded_floor_j`) refuses
   `recompute_floor_terms_missing` instead of meaning "no limit". The label stays a label beside the floor (no outcome reads it), but a wrong one no longer
   passes. The floor's and the resolutions' own `floor_source` and `floor_limit_class` words stay uncovered (RC-CMP-8 2).
   Every number a printed diagnostic carries is compared. A cell that is not one of the contrast's registered floor
   cells, or a form other than absolute or comparative, is DISAGREE, and so is every number under it.
+- **Leaf count is structure, not an outcome (Fable LOW-6).** The 14 + 10C + 5R leaf count above is floor-metrology
+  structure (how many registered cell and form pairs carry an attribution diagnostic), not a Block 5 outcome. No bar or
+  threshold was chosen after seeing it: the bars are byte-pinned by `RELEASE_BARS_SHA256` in `scripts/release_b5.py`.
+- **Notes from the cold final pass (Fable LOW-1, -2, -4, -5).** (1) The release script's row-key alphabet takes the same
+  cell-id characters as the comparator's `DIAG_CELL`, a dot included, so a hold on such a cell still names its keys
+  (all four registered floor cells are dot-free). (2) The release precedence trusts the comparator's exit code, not its
+  summary: with comparator exit 1 and a summary that shows both a family failure and unmapped leaves (possible only if
+  the comparator's own precedence broke) the release reports `comparator_disagreement` (exit 1) rather than a refusal;
+  it can never come out as agree. (3) The tests that pin the engine's words read `detection_floor.py` from
+  `origin/main` and skip if the ref is absent, not from the DLE-1 analysis commit; the engine files are blob-identical
+  at `ab1e0098d`, `origin/main` and this head, so the pin is harmless today. (4) The discipline object's flags
+  (`gating`, `not_an_acceptance_gate`) are checked for equality between verdict and fill but not pinned as literals;
+  the engine's object is a frozen literal, so it cannot print `gating: true`, and the exemption is disclosed above.
 - **Fill copies, both directions (Sol R704-2).** Comparison rows come from the verdict and coverage walks the fill's
   leaves, so a fill that omitted a verdict leaf was silently uncovered. The fill's copies of the attribution-floor
   metadata (the floor's, each resolution's and the claim evaluation's point diagnostics, and the claim evaluation's

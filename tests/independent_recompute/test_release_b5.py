@@ -187,6 +187,7 @@ class ReleaseTests(unittest.TestCase):
         verdict, code, _ = self.release(ours=ours)
         self.assertEqual((code, verdict["verdict"], verdict["reason"]), (1, "hold", "comparator_disagreement"))
         self.assertEqual(verdict["stages"]["comparator"]["exit"], 1)
+        self.assertEqual(verdict["stages"]["comparator"]["status"], "disagree")
         families = verdict["stages"]["comparator"]["families"]
         self.assertEqual(families["run_phase_energy_j"]["verdict"], "hold")
         self.assertGreater(families["run_phase_energy_j"]["fail"], 0)
@@ -222,7 +223,7 @@ class ReleaseTests(unittest.TestCase):
         verdict, code, out = self.release(ours=ours)
         self.assertEqual((code, verdict["verdict"], verdict["reason"]), (1, "hold", "within_bar_undetermined"))
         comparator = verdict["stages"]["comparator"]
-        self.assertEqual(comparator["status"], "disagree")
+        self.assertEqual(comparator["status"], "undetermined_hold")
         self.assertTrue(all(row["verdict"] == "agree" for row in comparator["families"].values()))
         listed = comparator["limit_undetermined"]
         self.assertEqual(listed["count"], len(listed["rows"]))
@@ -408,6 +409,13 @@ class ReleaseTests(unittest.TestCase):
             verdict, code, _ = self.release()
         self.assertEqual((code, verdict["verdict"], verdict["reason"]), (1, "hold", "within_bar_undetermined"))
         self.assertEqual(verdict["stages"]["comparator"]["limit_undetermined"], {"count": 1, "rows": [row]})
+        # A cell id with a dot (the comparator's DIAG_CELL alphabet) still reports its hold with the key.
+        dotted = "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/floor/limit_decision/d117-cell.a-v5/absolute"
+        with self.fake_comparison({**counted, "limit_undetermined": [dotted]}):
+            verdict, code, _ = self.release()
+        self.assertEqual((code, verdict["verdict"], verdict["reason"]), (1, "hold", "within_bar_undetermined"))
+        self.assertEqual(verdict["stages"]["comparator"]["limit_undetermined"], {"count": 1, "rows": [dotted]})
+        self.assertEqual(verdict["stages"]["comparator"]["status"], "undetermined_hold")
         with self.fake_comparison({**counted, "limit_undetermined": ["not a key 1.5"]}):
             verdict, code, _ = self.release()
         self.assertEqual((code, verdict["reason"]), (2, "comparison_output_unreadable"))
