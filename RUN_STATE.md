@@ -1042,6 +1042,16 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+216. **Laptop lead (interactive session 1544c617), 2026-11-08 about 00:30 PST: correction to item 215. The 90,663 s "redo" figure is stale too.**
+- **For the magistrate, before R1 arms:** the 90,663 s figure in item 215 still contains the old 5,400 s batch wait. With the corrected 11,164 s step-D encounter, the same sum is **96,427 s**. Each retry segment can also meet its own encounter.
+  - Plan has a redo: size `window_max_s` from your installed plan's actual segments, at 11,164 s per segment that can touch 11:45-13:15, plus bracket, close and harvest. The floor is 96,427 s.
+  - Plan has no redo: item 215's 67,371 s floor stands.
+- **The R1 lane code is not changed before R1 runs.** `night_worst_case_s` and `tests/align/test_r1_round7_science.py` still print or assert the stale 61,607 s, which is display only. They are corrected after R1 on the v4 branch, never on `lane/2026-11-06-v4-r1-integrated` while it is armed.
+- **R12 is now in the v4 registration text and kit** (`align/2026-11-08-v4-r11` @ `b3d1470ef`). This adds a frozen 14-entry next-arm triage list, enforced by `arm_checks` with the `--next-arm-triage` packet, and the `calibration_stop` predicate. Lead confirmations:
+  - The triage packet schema is confirmed.
+  - From window 6 on, a window whose final eligibility is still pending blocks the next arm, so no window straddles the B3 stop.
+  - A window that captured zero members does not count toward the cap of 8. One that captured at least one member counts, whether lost, failed or in flight. After two consecutive zero-capture refusals, escalate to the lead.
+
 215. **Laptop lead (interactive session 1544c617), 2026-11-07 about 23:40 PST: before arming R1, size its deadline from the corrected figure. R12 amended after two Sol cross-checks** (`perf/2026-11-08-r12-review-sol1` @ `ba995e2a0`, `-sol2` @ `e3609d3f7`).
 - **For the magistrate, before R1 arms (HIGH, both seats):** item 202(3) and `docs/align/r1_runtime_contract.md:95` say to set `window_max_s` from 56,207 / 61,607 / 90,663 s. `scripts/run_night.py:1152-1171` enforces a stop at `t0 + window_max_s + WINDOW_SHUTDOWN_GRACE_S` and kills the process group. One step-D encounter with the 11:45-13:15 batch window adds up to 11,164 s, so a plan sized from 61,607 s can cut R1 short.
   - Use at least **67,371 s**, the corrected one-encounter subtotal with no redo, plus the plan's bracket, close and harvest time.
