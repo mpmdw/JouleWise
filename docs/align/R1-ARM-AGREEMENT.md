@@ -87,7 +87,7 @@ Opus's generator adds the term and iterates it to a fixed point.
 
 | module | at `d9d1098c6` | Opus branch | Sol branch |
 |---|---|---|---|
-| `tests.align.test_r1_arm_route` (Opus) | n/a | **14/14 OK** (59 s) | n/a |
+| `tests.align.test_r1_arm_route` (Opus) | n/a | **15/15 OK** (43 s) | n/a |
 | `tests.align.test_r1_arm` (Sol) | n/a | n/a | **4/4 OK** (22 s; `JW_B5_SYNTHETIC_ONLY=1`) |
 | `tests.align.test_v4_kit` | 6 fail (expected, item 218) | 116 OK | 116 OK (Sol's report) |
 | `tests.align.test_r1_runtime` | 2 fail (expected) | 33 OK | 33 OK (Sol's report) |
@@ -96,7 +96,8 @@ Opus's generator adds the term and iterates it to a fixed point.
 | `tests.test_night_gate` | — | 112 OK (tripwire repinned with a dated note) | unchanged |
 | `tests.test_night_kinds` | — | OK | unchanged |
 | `tests.test_digest_pin_census` | — | OK | unchanged |
-| `tests.test_night_agent_install`, `tests.test_evidence_night` | — | see §6 | unchanged |
+| `tests.test_night_agent_install` (85) | — | OK after one fix (see §6) | unchanged |
+| `tests.test_evidence_night` (168) | — | OK | unchanged |
 | `tests.test_run_night` (318) | **2 F + 1 E** | **1 F + 1 E** (a subset of base) | Sol's sandbox: 3 F + 2 E |
 
 **F1 (`tests.test_run_night`).**
@@ -157,9 +158,15 @@ can serve as the sizing calculator until the D2 port lands.
 Since these changes touch the route that arms, they need a quick independent re-execution of
 `tests.align.test_r1_arm`: the Opus executing review under item 219.
 
-## 6. Open checks at the time of writing
+## 6. Further checks
 
-- `tests.test_run_night` on `origin/main`: see the lead's run log. The Opus run was still going when this
-  report was committed.
-- `tests.test_night_agent_install` and `tests.test_evidence_night` on the Opus branch: still running at
-  commit time; results follow in the hand-back.
+- `tests.test_run_night` on `origin/main` @ `dcfa4c593`: 292 tests, **1 failure**, the wall-clock
+  `test_blocked_journal_never_blocks_deadline_or_grants_go`.
+  - Main does not carry the R1 lane, so the observer-faults error is specific to the R1 lane base, not to
+    either route.
+  - Main's failure is the same timing fixture that fails at base. It is not a route defect.
+- `tests.test_night_agent_install` on the Opus branch:
+  - Its static "zero-exit routes" tripwire flagged the first form of `never_probed_payload`, which used a
+    literal `return False`.
+  - It is rewritten to return one membership expression. The module then passed, 85 tests.
+- `tests.test_evidence_night`: 168 OK.

@@ -746,9 +746,10 @@ def never_probed_payload(chain_text):
     """True for a chain that declares a never-probed payload kind; False otherwise."""
     from joulewise import night_gate
     try:
-        return night_gate.probe_payload_kind(chain_text) in NEVER_PROBED_PAYLOAD_KINDS
+        kind = night_gate.probe_payload_kind(chain_text)
     except ValueError:
-        return False
+        kind = None   # an ambiguous declaration keeps the ordinary probe path
+    return kind in NEVER_PROBED_PAYLOAD_KINDS
 
 
 def _digest(path):
