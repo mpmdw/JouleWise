@@ -1042,6 +1042,25 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+240. **Laptop lead (interactive session 1544c617), 2026-11-08 15:56 PST: harvest-off and smoke kit ADMITTED (software); Air-offload built; engine line at r23g/r23h.**
+- **Harvest-off (R17) ADMITTED in software at `align/2026-11-08-harvest-off-fix` @ `d3933432c`.**
+  - Six Sol review seats ran: delta 1/2, final delta2 1/2 and a confirmation seat. Their witness modules are all green, except seat-1's raise-in-hook test, which is ruled wrong (D8).
+  - The final regression (an honest alias through a session-internal hop failing restore on the Air) is fixed in verification only. Finalize and pack are unchanged, and a negative control was added.
+  - **Remaining gates are native and the magistrate's:** the N1 ignored-input census (first finalize refuses until it is declared), native finalize/pack/restore timing, N2 cross-host, the RSS sweep, and a real dwell plus installer run (`installer_end_ns` is disclosed).
+- **W1 smoke kit ADMITTED in software at `align/2026-11-08-w1-smoke-merged` @ `0ad6f29f3`.** The Sol delta5 check ADMITs the F6 rework: patching deleted, production prepare in a bounded child, CLI-only. Seven adapted witnesses are mapped in W1-SMOKE-AGREEMENT §10.
+  - PREQUAL `--w1-next w1` fails only the five checks that wait on R1 outputs or uncommitted inputs.
+  - The native MBP smoke follows R1 close.
+- **Air-offload merged build** at `ops/2026-11-08-air-offload-merged` @ `967a406eb`: agreement items 1-9 on the Opus base, landing on JW-EXT, iCloud round-trip as the second copy. 87 tests pass, and an end-to-end run on the real SSD works.
+  - **Lead rulings:**
+    - ONE pack per window: the harvest-off pack is canonical, and the offload consumes its parts.
+    - Terminal evidence (`result.json`, chain.*, courier.sent) must be inside the finalized closure, confirmed by the N1 census.
+  - The single-pack integration is in progress, followed by two Sol review seats.
+  - Ed's sudo setup (`offload_setup_air.sh`: JW-EXT ownership, the `jw-offload` account, the sshd Match block, the iCloud agent) waits for review.
+- **Engine line:**
+  - `engine-r23f` and `engine-r23g` (@ `caea768b7`): recorded-float conversion, A21 float-seconds accumulation exactly as the production adapter does it, A2(4) owned-time exclusion, the A27 scope, and R26 H*. The Opus delta review is ADMIT-WITH-FIXES.
+  - **Ruling:** sealed U1/U2 and battery aggregates print `status: sealed` with NO hash, because value hashes of small integers are reversible. Benign-only aggregates print beside them, and per-member whole-record seals stay.
+  - Opus patch `engine-r23h`: that ruling, `attempt_id` on per-member rows, H* off-grid doses, refusal of string stamps, and refusal of a legacy thermal_source export without owned flags in release mode. Then a Sol check and the comparator rehearsal.
+
 239. **Laptop lead (interactive session 1544c617), 2026-11-08 15:38 PST: lead rulings R25 and R26 (blind; synthetic), the P2 correction, the A2(4) scope and the A27 scope.**
 - **R25, U3 scope for reserves (pre-signature design change).** The production U3 policy template scoped only W1, C1-C8 and T1-T3 (N = 16 comparisons), so a healthy C9-C14 reserve would be U3-inconclusive and contribute zero calibrators (Sol r11-delta6 seat 2, F2).
   - The U3 bar is not yet signed (it is due after R1), so the roster expands prospectively: C9-C14 get U3 scopes.
