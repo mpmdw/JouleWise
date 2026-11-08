@@ -77,6 +77,12 @@ The magistrate on the MacBook Pro owns running, re-running and arming windows
 | Build | `docs/paper/build/build_paper.py` | — |
 | Reader's artifact guide | `docs/paper/artifact-guide.md` | — |
 
+## Open-source contributions
+
+| Job | Canonical | Replaced |
+|---|---|---|
+| What to contribute upstream, in what order, and under which project rules (AI-use, PR limits, licenses) | [`docs/research-audits/2026-11-07/oss-contributions.md`](docs/research-audits/2026-11-07/oss-contributions.md) | `docs/oss_contributions_shortlist.md` (2026-11-05; only ever on lanes, never on `main`) |
+
 ## Kept but undecided (do not build on these without asking)
 
 - The public site and report pipeline (`scripts/build_site.py`, `scripts/pack_capsule.py`,
