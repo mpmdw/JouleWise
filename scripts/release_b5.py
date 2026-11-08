@@ -28,12 +28,14 @@ Stages (docs/analysis/b5/DEVIATION-LOG.md, DLE-1):
     the harvest wrote one.
 
 Release condition: (a) verified, the recompute exits 0 with comparison_stopped false, and the comparator
-exits 0 (every family passes, nothing unmapped, no absent step-11 output, no non-finite step-11 value).
-Any other result holds the release. The verdict also reports step11.uncovered_numeric (leaves under a named
+exits 0 (every family passes, nothing unmapped, no absent step-11 output, no non-finite step-11 value) with no
+within-bar attribution-limit form left undetermined (DLE-5, R704-D3: the comparator's limit_undetermined list, whose
+count and row keys, never a value, the verdict carries; any such row holds the release, exit 1, for the lead's
+disclosure, whatever the rows' numeric agreement). Any other result holds the release. The verdict also reports step11.uncovered_numeric (leaves under a named
 exemption, the LEAN-COVERAGE-AUDIT gap) and structure_flags; like the comparator's own exit, these counts do not
 gate, and a nonzero count under agree is expected, not a defect.
 
-Exit codes: 0 agree; 1 hold (the comparator found a disagreement); 2 hold on a refusal (custody, binding,
+Exit codes: 0 agree; 1 hold (the comparator found a disagreement, or an undetermined within-bar limit form); 2 hold on a refusal (custody, binding,
 recompute or comparator). The verdict (stdout, and verdict.json in --restricted-out) carries structure only;
 values and differences stay in --restricted-out (recompute.json, comparison.json, the programs' streams).
 """
@@ -76,6 +78,8 @@ SEAL_KEYS = {"registration_sha256": "registration_sha256", "analysis_plan_sha256
 DIFFERS = "release_digest_differs_from_dry_run"
 HEX40, HEX64 = re.compile(r"[0-9a-f]{40}"), re.compile(r"[0-9a-f]{64}")
 # The verdict is refused if any of its bytes reads as a decimal or exponent number (dry_run._FLOAT_TOKEN).
+# A comparator row key (registered ids and structure words only): the keys of the undetermined rows the verdict names.
+LIMIT_ROW_KEY = re.compile(r"[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)+")
 FLOAT_TOKEN = re.compile(r"(?<![A-Za-z0-9])(?:\d+\.\d+(?:[eE][+-]?\d+)?|\d+[eE][+-]?\d+)(?![A-Za-z0-9])")
 
 
@@ -395,7 +399,16 @@ def stage_compare(custody, entries, index_path, restricted, python):
     if len(status["step11"]["absent_sources"]) != len(cover.get("absent_sources") or []):
         return status, "comparison_output_unreadable", False
     status["structure_flags"] = len(result.get("structure_flags") or [])
+    undetermined = result.get("limit_undetermined")
+    if not (isinstance(undetermined, list) and all(isinstance(k, str) and LIMIT_ROW_KEY.fullmatch(k) for k in undetermined)):
+        # The comparator always writes the list (compare_b5_recompute.run); absent or odd means unreadable.
+        return status, "comparison_output_unreadable", False
+    status["limit_undetermined"] = {"count": len(undetermined), "rows": sorted(undetermined)}
     disagreement = any(row["fail"] for row in families.values())
+    if undetermined and not disagreement and not status["step11"]["unmapped"] and not status["step11"]["nonfinite"] \
+            and not status["step11"]["absent_sources"]:
+        # R704-D3: the release is held, mechanically, for the lead's disclosure of each undetermined row.
+        return status, "within_bar_undetermined", True
     if code == 0 and not disagreement and not status["step11"]["unmapped"] and not status["step11"]["nonfinite"] \
             and not status["step11"]["absent_sources"]:
         return status, None, False

@@ -585,8 +585,10 @@ Decided from the code and the registration (structure only). No bar is widened a
   exactly at the guarded floor is not limited and a printed limited label fails; otherwise (nothing printed, or other
   numbers) the form is undetermined and a `within_bar_undetermined` row (the `limit_decision` rows, one per cell and
   form at the floor, the claim evaluation and each resolution) records both labels, AGREE only if the printed numbers
-  agree within their bar, and the release is held for lead disclosure of every such row. Neither label is ever
-  accepted silently. A form that is not `computed` (below minimum, or `not_computed` after `make_floors` retained its
+  agree within their bar. The hold is automatic: the comparison lists the keys of every such row
+  (`limit_undetermined`) and exits 1, and `scripts/release_b5.py` reports their count and keys (structure only, no
+  value) and exits 1 with reason `within_bar_undetermined`, whatever the rows' numeric agreement; exit 0 requires
+  zero such rows, and the lead discloses each one. Neither label is ever accepted silently. A form that is not `computed` (below minimum, or `not_computed` after `make_floors` retained its
   terms because the drift allowance is unrecorded) has no limit, and a `computed` record without its four terms
   (`widths_j`, `linear_deviation_bound_j`, `guard`, `point_unguarded_floor_j`) refuses
   `recompute_floor_terms_missing` instead of meaning "no limit". The label stays a label beside the floor (no outcome reads it), but a wrong one no longer
@@ -621,8 +623,9 @@ Decided from the code and the registration (structure only). No bar is widened a
 
 ### Tests
 
-`tests/independent_recompute/test_floor_limit.py`, 15 tests. At the r4 comparator 13 fail (one of them the pin
-test, an error); the other 2 pin refusals that must survive the fix. All 15 pass after. The fixtures are synthetic
+`tests/independent_recompute/test_floor_limit.py`, 15 tests when first written (now 37 after the review rounds). At
+the r4 comparator 13 of the 15 fail (one of them the pin test, an error); the other 2 pin refusals that must survive
+the fix. All 15 passed after the first fix. The fixtures are synthetic
 and shaped as the producers write them: exact and transported resolutions, one form
 per cell, the prefill contrast's own cells. Each of these disagrees and the run does not exit 0: a point floor, a
 guard factor or a guarded floor off the recompute's; an exact resolution's diagnostic off; a class or source word other
@@ -631,7 +634,9 @@ another contrast. An unregistered form or an extra number in a diagnostic refuse
 copy that differs from the verdict is not coverage.
 
 `tests/independent_recompute/test_sol_delta_review_704.py` (Sol's delta witnesses, now ordinary tests, with the added
-cases for R704-D1, D2 and D3) and the within-bar tests of `test_floor_limit.py` cover the three dispositions.
+cases for R704-D1, D2 and D3), the within-bar tests of `test_floor_limit.py` and the hold tests of
+`test_release_b5.py` (one undetermined row exits 1 with the reason and the row keys; none leaves exit 0) cover the
+three dispositions.
 
 ### Release condition
 

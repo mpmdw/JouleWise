@@ -297,13 +297,13 @@ class FloorLimitRuleTests(GateCase):
         # diagnostics carry the recompute's point floor, guard and guarded floor exactly, so the strict > decides:
         # limited, as printed (AGREE, no undetermined row).
         verdict, fill = with_floor_limit(self, dominated=False)
-        for floor in self.ours["floors"].values():
-            floor["linear_deviation_bound_j"] = POINT * (1 + 1e-9)
+        for key, floor in self.ours["floors"].items():
+            if "/decode/" in key:  # the prefill contrast prints nothing and stays away from the bar
+                floor["linear_deviation_bound_j"] = POINT * (1 + 1e-9)
         result = self.shipped()
         self.assertEqual(self.fails(result), {})
-        # (The prefill contrast prints nothing, so its forms are the undetermined ones.)
-        self.assertFalse([r for r in result["comparisons"]
-                          if r.get("reason") == "within_bar_undetermined" and r["key"].startswith(DECODE)])
+        self.assertFalse([r for r in result["comparisons"] if r.get("reason") == "within_bar_undetermined"])
+        self.assertEqual(result["limit_undetermined"], [])
         self.assertEqual(self.exit_code(CODED)[0], 0)
 
     def test_a_bound_within_the_bar_with_no_label_printed_is_undetermined_and_recorded(self):
@@ -326,7 +326,9 @@ class FloorLimitRuleTests(GateCase):
         # 2 cells x 2 forms at the floor and at the claim evaluation, and each arm's own cell's 2 forms on its resolution.
         self.assertEqual(len(rows), 4 + 4 + 2 * 2)
         self.assertTrue(all(r["l9"] == "absent" and r["verdict"] == "AGREE" for r in rows))
-        self.assertEqual(self.exit_code(CODED)[0], 0)
+        # The rows are numerically AGREE, but the comparison lists them and exits 1: the release holds (R704-D3).
+        self.assertEqual(sorted(r["key"] for r in rows), [k for k in result["limit_undetermined"] if k.startswith(DECODE)])
+        self.assertEqual(self.exit_code(CODED)[0], 1)
 
     def test_a_bound_exactly_at_the_guarded_floor_does_not_pass_a_printed_label(self):
         # The engine's relation is strict >: equality is not limited, so the printed label fails (R704-D3).

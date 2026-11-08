@@ -169,6 +169,7 @@ class ReleaseTests(unittest.TestCase):
         self.assertTrue(all(row["verdict"] == "agree" and row["fail"] == 0
                             for row in stages["comparator"]["families"].values()))
         self.assertEqual(stages["comparator"]["step11"]["unmapped"], 0)
+        self.assertEqual(stages["comparator"]["limit_undetermined"], {"count": 0, "rows": []})
         self.assertTrue((out / "comparison.json").is_file() and (out / "recompute.json").is_file())
         # The recompute ran on every indexed root, with the member detail and the requested pool.
         argv = self.recompute_argv
@@ -189,6 +190,40 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual(families["contrast_j"]["verdict"], "hold")
         self.assertGreater(families["contrast_j"]["fail"], 0)
         self.assertEqual(families["run_phase_energy_j"]["verdict"], "agree")
+
+    def within_bar(self, ours, relative=1e-9):
+        """The decode contrast's floors computed with a linear bound inside the floor_j bar of the guarded point
+        floor (38.0): the D-078 rule is undetermined there when the verdict prints no diagnostic (R704-D3)."""
+        for model in ("Qwen3-1.7B-4bit", "Qwen3-8B-4bit"):
+            for kind in ("absolute", "comparative"):
+                ours["floors"][f"{model}/decode/{kind}"].update(
+                    status="computed", widths_j=[1.0] * 9, point_unguarded_floor_j=38.0,
+                    linear_deviation_bound_j=38.0 * (1 + relative))
+
+    def test_an_undetermined_within_bar_limit_form_holds_the_release(self):
+        # R704-D3: the comparator's rows are numerically AGREE, yet the release exits 1 (hold) with the row keys.
+        ours = copy.deepcopy(self.ours)
+        self.within_bar(ours)
+        verdict, code, out = self.release(ours=ours)
+        self.assertEqual((code, verdict["verdict"], verdict["reason"]), (1, "hold", "within_bar_undetermined"))
+        comparator = verdict["stages"]["comparator"]
+        self.assertEqual(comparator["status"], "disagree")
+        self.assertTrue(all(row["verdict"] == "agree" for row in comparator["families"].values()))
+        listed = comparator["limit_undetermined"]
+        self.assertEqual(listed["count"], len(listed["rows"]))
+        # 2 cells x 2 forms at the floor and at the claim evaluation, and each arm's own cell's 2 forms.
+        self.assertEqual(listed["count"], 4 + 4 + 4)
+        self.assertTrue(all(tc.DECODE in key and "/limit_decision/" in key for key in listed["rows"]))
+        self.assertEqual(comparator["exit"], 1)
+
+    def test_no_undetermined_row_means_the_release_is_unchanged(self):
+        # Away from the bar the rule decides: limited forms with no label printed are a plain disagreement, not a hold
+        # for disclosure; a bound under the guarded floor is simply not limited.
+        ours = copy.deepcopy(self.ours)
+        self.within_bar(ours, relative=-0.5)
+        verdict, code, _ = self.release(ours=ours)
+        self.assertEqual((code, verdict["verdict"], verdict["reason"]), (0, "agree", None))
+        self.assertEqual(verdict["stages"]["comparator"]["limit_undetermined"], {"count": 0, "rows": []})
 
     def test_tampered_output_digest_refuses_before_any_program_runs(self):
         name = next(iter(tc.l9_files()))
@@ -335,9 +370,23 @@ class ReleaseTests(unittest.TestCase):
             with self.subTest(reason=reason), self.fake_comparison(result):
                 verdict, code, _ = self.release()
                 self.assertEqual((code, verdict["verdict"], verdict["reason"]), (2, "hold", reason))
-        with self.fake_comparison({"counts": {"count": {"pass": 1, "fail": 0}}, "coverage": empty}):
+        # R704-D3: the comparator always writes limit_undetermined; its absence is unreadable output.
+        counted = {"counts": {"count": {"pass": 1, "fail": 0}}, "coverage": empty}
+        with self.fake_comparison(counted):
+            verdict, code, _ = self.release()
+        self.assertEqual((code, verdict["reason"]), (2, "comparison_output_unreadable"))
+        with self.fake_comparison({**counted, "limit_undetermined": []}):
             verdict, code, _ = self.release()
         self.assertEqual((code, verdict["verdict"]), (0, "agree"))
+        # An undetermined row holds whatever the comparator's own exit says (exit 0 here): exit 0 needs none.
+        row = "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/floor/limit_decision/d117-qwen3-1p7b-decode-floor-v5/absolute"
+        with self.fake_comparison({**counted, "limit_undetermined": [row]}):
+            verdict, code, _ = self.release()
+        self.assertEqual((code, verdict["verdict"], verdict["reason"]), (1, "hold", "within_bar_undetermined"))
+        self.assertEqual(verdict["stages"]["comparator"]["limit_undetermined"], {"count": 1, "rows": [row]})
+        with self.fake_comparison({**counted, "limit_undetermined": ["not a key 1.5"]}):
+            verdict, code, _ = self.release()
+        self.assertEqual((code, verdict["reason"]), (2, "comparison_output_unreadable"))
 
     def test_recompute_stop_payload_reaches_the_verdict_only_as_null(self):
         ours = dict(self.ours, comparison_stopped={"word": "resolved", "value": 12})

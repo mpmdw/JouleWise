@@ -87,7 +87,8 @@ Rules (RC-CMP-1 A1-A4):
   (limited_forms; a computed record without them refuses recompute_floor_terms_missing). The aggregate metadata is
   expected only when every arm's floor is usable (the engine's conditional publication), a usable limited arm keeps its
   own diagnostic. Inside the floor_j bar the engine's strict > decides only on operands bit-identical to the printed
-  diagnostic's (RC-CMP-11 F1); otherwise a within_bar_undetermined row records the form. The fill's copy of the verdict's
+  diagnostic's (RC-CMP-11 F1); otherwise a within_bar_undetermined row records the form, listed in the output's limit_undetermined (keys
+  only) and holding the comparison (exit 1) and so the release. The fill's copy of the verdict's
   attribution-floor metadata, derivation-exempt words and flags included, is equal leaf by leaf in both directions
   (floor_limit_copy_defects);
 - stdout carries per-family pass/fail counts and structure codes only; values and
@@ -2189,6 +2190,8 @@ def compare_arms(c, ours, cid, floor, registry):
                                   allowed=(own_cell,) if own_cell and usable.get(index) else ())
 
 
+# The rows limited_forms records for a within-bar form it cannot decide are keyed <scope>/limit_decision/<cell>/<form>.
+LIMIT_DECISION = "/limit_decision/"
 # The terms a computed floor record must carry for the D-078 rule (independent_recompute_b5.floor_estimate always
 # writes them before it returns status computed).
 LIMIT_TERMS = ("widths_j", "linear_deviation_bound_j", "guard", "point_unguarded_floor_j")
@@ -4321,6 +4324,11 @@ def coverage(custody, comparison, rules=None):
             "named_exemptions": {pattern: sorted(paths) for pattern, paths in sorted(exemptions.items())}}
 
 
+def limit_undetermined(rows):
+    """The keys of the rows that record a within-bar attribution-limit form left undetermined (R704-D3)."""
+    return sorted(row["key"] for row in rows if row.get("reason") == "within_bar_undetermined" and LIMIT_DECISION in row["key"])
+
+
 def run(l9_custody, recompute_path, bars_path=DEFAULT_BARS, rules=None, meter=(), registry=None, window_index=None):
     bars = load_bars(bars_path)
     flags = []
@@ -4347,7 +4355,10 @@ def run(l9_custody, recompute_path, bars_path=DEFAULT_BARS, rules=None, meter=()
     compare_fill_identity(c, custody, ours)
     compare_history(c, custody, ours)
     cover = coverage(custody, c, rules)
-    return {"schema": SCHEMA, "bar_set": bars.get("bar_set"), "bars": bars["families"],
+    return {"schema": SCHEMA,
+            # R704-D3: every within-bar form the D-078 rule could not decide (keys only). The comparison exits 1 and the
+            # release check holds while there is one, whatever their numeric AGREE.
+            "limit_undetermined": limit_undetermined(c.rows), "bar_set": bars.get("bar_set"), "bars": bars["families"],
             "l9_steps": {f"{s}/{w}" if w else str(s): v for (s, w), v in sorted(custody.status.items(), key=str)},
             "recompute_program_sha256": ours.get("program_sha256"), "harvest_meter_sha256": meter_digests,
             "routing_registry_sha256": custody.registry.digests,
@@ -4395,7 +4406,8 @@ def main(argv=None):
           + " step11_unmapped=" + str(len(cover["unmapped"])) + " step11_nonfinite=" + str(len(cover["nonfinite"]))
           + " step11_uncovered_numeric="
           + str(len(cover["uncovered_numeric"])) + " step11_absent=" + ",".join(cover["absent_sources"] or ["none"])
-          + " structure_flags=" + str(len(result["structure_flags"])))
+          + " structure_flags=" + str(len(result["structure_flags"]))
+          + " limit_undetermined=" + str(len(result["limit_undetermined"])))
     if cover["nonfinite"]:
         # A NaN or Infinity in a step-11 output is never a printed value to cover (S1).
         print("refused=step11_nonfinite_value", file=sys.stderr)
@@ -4404,7 +4416,9 @@ def main(argv=None):
         # Coverage of step 11 cannot be shown without every step-11 output.
         print("refused=" + ("step11_unmapped_fill" if cover["unmapped"] else "step11_outputs_absent"), file=sys.stderr)
         return 2
-    return 0 if all(v["fail"] == 0 for v in counts.values()) else 1
+    # R704-D3: a within-bar attribution-limit form that could not be decided holds the release (exit 1), even when
+    # every row is numerically AGREE.
+    return 0 if all(v["fail"] == 0 for v in counts.values()) and not result["limit_undetermined"] else 1
 
 
 if __name__ == "__main__":
