@@ -809,6 +809,9 @@ class MlxEndpoint:
         self.flags.extend(flags)
         self.turn_provenance.append({
             "turn": turn_index, "flags": flags, "generation": provenance,
+            # Lossless evidence, independent of parsed/history text (which may
+            # split reasoning or normalise tool arguments). Never a monitor view.
+            "raw_text": text,
             "start_stamp": start_stamp.__dict__, "end_stamp": end_stamp.__dict__,
             "clock_mapping": mapping.__dict__,
         })

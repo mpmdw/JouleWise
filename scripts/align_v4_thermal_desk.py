@@ -64,6 +64,10 @@ def main(argv=None):
     result = window_report(members, cross_windows=inputs.get('cross_windows'),
                            sensitivity=inputs.get('sensitivity'), monitoring=inputs.get('monitoring'))
     result['K_session_read'] = compared or {'status': 'inconclusive', 'reason': 'no --compare-session inputs'}
+    # All equality/thermal checks above use original evidence. The exported
+    # desk must not provide a decodable copy of the sealed v4 transcript.
+    from joulewise.align.apple.transcript_custody import withhold_desk_transcripts
+    withhold_desk_transcripts(result['members'])
     args.output.mkdir(parents=True, exist_ok=False)
     (args.output/'PILOT.json').write_text(json.dumps(result, indent=2, sort_keys=True, allow_nan=False)+'\n')
     (args.output/'THERMAL.md').write_text(markdown_report(result))

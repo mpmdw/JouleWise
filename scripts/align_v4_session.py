@@ -137,6 +137,33 @@ def d_member_x2_report(plan_members, runs_root):
             'x2_rate': count / len(rows) if rows else None, 'members': rows}
 
 
+def transcript_desk_custody(*, state, runs_root, kit_path, plan_members=None):
+    """Seal before harvest snapshots custody; never snapshot an unproven chain."""
+    from joulewise.align.apple.transcript_custody import seal_window
+    rows = plan_members if plan_members is not None else pilot._member_rows(state, kit=kit_path)
+
+    def unavailable(status, flag, error=None):
+        return {'status': status, 'flags': [flag],
+                **({'error_type': type(error).__name__} if error is not None else {}),
+                'members': [{'run_id': row['run_id'], 'exists': None, 'complete': False,
+                             'sha256': None, 'flags': [flag]} for row in rows]}
+
+    try:
+        night_plan = pilot.h.read(state['plan_path'])
+        night = Path(night_plan['custody_root']) / 'night'
+        if not (night / 'result.json').is_file():
+            return unavailable('deferred', 'transcript.chain_not_quiescent')
+        if (night / 'chain.started').exists():
+            hazard = pilot.h.read(night / 'hazard_result.json') if (night / 'hazard_result.json').is_file() else {}
+            census = pilot.h.read(night / 'chain.exit-census.json') if (night / 'chain.exit-census.json').is_file() else {}
+            if (hazard.get('chain', {}).get('termination_proven') is not True
+                    and census.get('proven') is not True):
+                return unavailable('deferred', 'transcript.chain_not_quiescent')
+        return seal_window(night_plan['custody_root'], runs_root, rows, window_id=night_plan['plan_id'])
+    except Exception as error:  # custody errors stay flags, never new v4 exclusions
+        return unavailable('fault', 'transcript.custody_failed', error)
+
+
 def powermode_desk_check(*, state, members, runs_root, kit_path):
     """Council ruling 7: any member whose bundle-recorded AC powermode differs
     from the frozen series value sets ``instrument_ok`` false. The report also
@@ -144,14 +171,23 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
     plan = {'members': pilot._member_rows(state, kit=kit_path)}
     observed = {m['run_id']: bundle_ac_powermode(Path(runs_root) / m['run_id']) for m in plan['members']}
     verdict = kit.validate_powermode_members(plan, observed)
+    from joulewise.align.apple.transcript_custody import withhold_desk_transcripts
+    transcripts = transcript_desk_custody(state=state, runs_root=runs_root, kit_path=kit_path,
+                                          plan_members=plan['members'])
+    by_id = {row['run_id']: row for row in transcripts['members']}
+    for member in members:
+        member['transcript'] = by_id[member['run_id']]
+    withhold_desk_transcripts(members)
     return {'ac_powermode_members': verdict['instrument_ok']}, {
-        **verdict, 'd_member_x2': d_member_x2_report(plan['members'], runs_root)}
+        **verdict, 'd_member_x2': d_member_x2_report(plan['members'], runs_root),
+        'transcript_custody': transcripts}
 
 
 def desk(session_root, **kwargs):
     kwargs.setdefault('kit', kit.KIT)
     kwargs.setdefault('desk_schema', kit.DESK_SCHEMA)
     kwargs.setdefault('extra_checks', powermode_desk_check)
+    kwargs.setdefault('before_harvest', transcript_desk_custody)
     return pilot.desk(session_root, **kwargs)
 
 
@@ -384,6 +420,7 @@ def main(argv=None):
     return pilot.main(argv, kit=kit.KIT, pack_id=kit.PACK_ID, desk_schema=kit.DESK_SCHEMA,
                       session_prefix='align-v4-', prepare_fn=prepare, install_fn=install,
                       desk_extra_checks=powermode_desk_check,
+                      desk_before_harvest=transcript_desk_custody,
                       install_options=(('--w1-disk-config', dict(
                           type=Path, required=True,
                           help='validated R0 desk config (disk_path, W1 offloads) for the W1 disk gate')),))

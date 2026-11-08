@@ -2086,6 +2086,21 @@ def _report(plan: Any, base_exit_code: int, facts: Mapping[str, Any], diagnostic
             "base_exit_code": base_exit_code, "prepared": False}
 
 
+def _v4_transcript_record(plan: Any, *, quiescent: bool) -> dict[str, Any] | None:
+    """Structure-only closeout; no new v4 refusal or exclusion semantics."""
+    pack_id = plan.hazard_window["pack"]["pack_id"]
+    if pack_id != "align-v4" and not pack_id.startswith("align-v4-"):
+        return None
+    if not quiescent:
+        return {"status": "deferred", "flags": ["transcript.chain_not_quiescent"]}
+    try:
+        from joulewise.align.apple.transcript_custody import seal_v4_window
+        return seal_v4_window(plan)
+    except Exception as error:
+        return {"status": "fault", "flags": ["transcript.custody_failed"],
+                "error_type": type(error).__name__}
+
+
 def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_census: tuple[Any, Any], *,
                      started_epoch_s: float, started_monotonic_ns: int, courier_bin: Path | None,
                      seams: Seams) -> int:
@@ -2157,6 +2172,9 @@ def _run_hazard_night_body(rt: Any, plan_path: Path, plan: Any, probes: Any,
     def refuse(stage: str, reason: str, detail: str, evidence: Any, *,
                fault_reasons: Sequence[str] = ()) -> int:
         verify_awake("end")
+        transcripts = _v4_transcript_record(plan, quiescent=not (night / "chain.started").exists())
+        if transcripts is not None:
+            hazard["transcript_custody"] = transcripts
         hazard.update(verdict="REFUSED", stage_reached=stage, refusal={"reason": reason, "detail": detail},
                       flags_emitted=list(window.flags), diagnostics=list(window.diagnostics), ended=stamp())
         if fault_reasons:
@@ -2722,6 +2740,12 @@ def _run_hazard_night_body(rt: Any, plan_path: Path, plan: Any, probes: Any,
         if meter is not None:
             hazard["meter"] = stop_meter(left_running=True)
     hazard["disk_floor"] = {"low_bytes": disk.low_bytes, "stops": disk.readings, "errors": disk.errors}
+    # v4's transcript-only addition runs after collection and monitor close;
+    # it cannot change model execution, thermal waits or member eligibility.
+    # Never seal a snapshot while an unproven chain could still be writing it.
+    transcripts = _v4_transcript_record(plan, quiescent=proven)
+    if transcripts is not None:
+        hazard["transcript_custody"] = transcripts
     chain_stop = next((row for row in journal if row.get("stage_id") == "chain.stop"), None)
     # The chain's stop exits (10/11/12) come only from its stop_chain, which
     # journals chain.stop first. A stop exit whose journal line is missing (an

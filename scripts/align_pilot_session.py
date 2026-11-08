@@ -267,7 +267,7 @@ def cross_pilot_identity(members, compare_session):
 
 
 def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None,
-         kit=KIT, desk_schema=SCHEMA, extra_checks=None):
+         kit=KIT, desk_schema=SCHEMA, extra_checks=None, before_harvest=None):
     session = Path(session_root).resolve()
     state = h.read(session / 'session.json')
     plan = h.read(state['plan_path'])
@@ -280,6 +280,8 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
         tree = h.read(registration.parent / 'plan_tree.json')
         claim_root = Path(state['inputs']['runs_parent']) / tree['roots']['claim_root_leaf']
     runs_root = Path(claim_root)
+    if before_harvest is not None:
+        before_harvest(state=state, runs_root=runs_root, kit_path=kit)
     from joulewise.align.apple.diagnostics import member_thermal_readings, thermal_onset
     thermal = member_thermal_readings(custody)
     targets = {}
@@ -437,7 +439,7 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
 
 def main(argv=None, *, kit=KIT, pack_id=PACK_ID, desk_schema=SCHEMA,
          prepare_fn=prepare, install_fn=install, session_prefix='align-pilot-',
-         desk_extra_checks=None, install_options=()):
+         desk_extra_checks=None, desk_before_harvest=None, install_options=()):
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
     p = commands.add_parser('prepare')
@@ -462,6 +464,7 @@ def main(argv=None, *, kit=KIT, pack_id=PACK_ID, desk_schema=SCHEMA,
         else:
             status = desk(args.session_root, harvest=not args.no_harvest, compare_session=args.compare_session,
                           kit=kit, desk_schema=desk_schema,
+                          **({'before_harvest': desk_before_harvest} if desk_before_harvest is not None else {}),
                           **({'extra_checks': desk_extra_checks} if desk_extra_checks is not None else {}))
             return 0 if status['harvest_status'] in ('ok', 'not_run') and status['pilot_status'] == 'instrument_ok' else 2
         return 0
