@@ -1,0 +1,236 @@
+{
+  "captured_utc": "2026-11-08T06:30:20.443102+00:00",
+  "ci_recorded_MEASURED_metadata": {
+    "bytes_split": {
+      "_evidence": "Per-test seconds from GitHub log line timestamps (each 'test_x (...) ... ok' line's time minus the previous result line's) in runs 42022192283 (job 127232198657) and 42025676611 (job 127242907606); the per-run totals reproduce the MODULE PASS seconds (9,130.964 and 9,112.624). Declared weight and remainder are medians of the two runs; the remainder is the module total minus the declared method.",
+      "awaiting_lane": "lane/2026-11-05-align-v4-assembled (PR #682); also carried by lane/2026-11-05-align-flashnext-port and lane/2026-11-05-align-flashnext-realparity",
+      "declared": {
+        "tests.test_bytes_analysis.CampaignWordRates.test_twenty_production_shaped_campaigns_per_world": 5741.949
+      },
+      "granularity": "test",
+      "reason": "One method, CampaignWordRates.test_twenty_production_shaped_campaigns_per_world, runs 60 synthetic campaigns at ~96 s each on a hosted runner (5,742 s of the module's 9,122 s). Whole-module packing puts 9,122 s on one ordinary shard; declaring that method alone moves it to its own unit and lets the 111 other tests ride one remainder unit (3,380 s). Independence: CampaignWordRates has no setUpClass/setUp, the module has no setUpModule and no module-level mutable state, and the method reads tests/fixtures/bytes/campaign_design.json and writes only inside its own TemporaryDirectory per seed; no other test reads anything it produces. The remainder keeps every class with a setUpClass (Addendum4RegressionTests, Addendum7RegressionTests, BatteryCampaignTests) whole in one process. The method itself is indivisible by this runner, so it is the suite's wall-time floor until the test is split (for example per world) in tests/test_bytes_analysis.py.",
+      "remainder_weight_seconds": 3379.853
+    },
+    "tests.align.test_moe_calibration": 1376.959,
+    "tests.test_bytes_analysis": 9121.794,
+    "tests.test_run_night": 108.804
+  },
+  "ci_scheduling_ESTIMATED": {
+    "module_count": 594,
+    "ordinary_modules": 592,
+    "projections": {
+      "12": {
+        "atomic_modules_s": [
+          9121.794,
+          4032.784,
+          2787.918,
+          2231.989,
+          2231.989,
+          2231.989,
+          2231.989,
+          2231.99,
+          2231.99,
+          2231.989,
+          2231.989,
+          2231.99
+        ],
+        "declared_splits_s": [
+          5741.949,
+          3379.853,
+          2787.918,
+          2680.064,
+          2680.065,
+          2680.064,
+          2680.065,
+          2680.064,
+          2680.064,
+          2680.065,
+          2680.064,
+          2680.064
+        ],
+        "indivisible_unit_floor_s": 5741.949,
+        "module_sum_s": 36030.4
+      },
+      "8": {
+        "atomic_modules_s": [
+          9121.794,
+          4032.784,
+          3812.637,
+          3812.637,
+          3812.637,
+          3812.637,
+          3812.637,
+          3812.637
+        ],
+        "declared_splits_s": [
+          5741.949,
+          4326.908,
+          4326.907,
+          4326.907,
+          4326.907,
+          4326.907,
+          4326.907,
+          4326.907
+        ],
+        "indivisible_unit_floor_s": 5741.949,
+        "module_sum_s": 36030.4
+      }
+    },
+    "untimed": [
+      "tests.align.test_external_volume",
+      "tests.align.test_protocol_v4_doc",
+      "tests.align.test_r0_dispositions",
+      "tests.align.test_r0_load_reference",
+      "tests.align.test_r0_load_reference_adversarial",
+      "tests.align.test_r1_inventory",
+      "tests.align.test_r1_round5_exec_review",
+      "tests.align.test_r1_round6_exec_review",
+      "tests.align.test_r1_round6_lows",
+      "tests.align.test_r1_round6_power",
+      "tests.align.test_r1_round7_close_deferral",
+      "tests.align.test_r1_round7_exec_review",
+      "tests.align.test_r1_round7_install",
+      "tests.align.test_r1_round7_power",
+      "tests.align.test_r1_round7_science",
+      "tests.align.test_r1_round8",
+      "tests.align.test_r1_round8_exec_review",
+      "tests.align.test_r1_runtime",
+      "tests.align.test_r1_runtime_contract",
+      "tests.align.test_r1_runtime_e2e",
+      "tests.align.test_ssd_qualification",
+      "tests.align.test_v4_estimands",
+      "tests.align.test_v4_powermode_record",
+      "tests.align.test_v4_prequal",
+      "tests.align.test_v4_w1_plan",
+      "tests.align.test_v4_w1_synthetic",
+      "tests.align.test_v4_wp18_fixtures"
+    ]
+  },
+  "r1_all_caps_ESTIMATED": {
+    "batch_window_wait_max_s": 5400.0,
+    "g0_timeout_s": 1200,
+    "no_redo_s": 56206.9616,
+    "precool_cap_s": 1500,
+    "r6_2_retry_max_s": 29055.9808,
+    "redo_release_s": 665,
+    "segments": [
+      {
+        "bound_s": 0.0,
+        "kind": "calibration-pre",
+        "name": "pre_calibration_bracket"
+      },
+      {
+        "bound_s": 1800.0,
+        "kind": "idle",
+        "name": "idle_soak"
+      },
+      {
+        "bound_s": 5163.9952,
+        "kind": "step-30b",
+        "name": "step_30b"
+      },
+      {
+        "bound_s": 4328.9952,
+        "kind": "high-power-aba-a1",
+        "name": "high_power_A1"
+      },
+      {
+        "bound_s": 4328.9952,
+        "kind": "high-power-aba-b",
+        "name": "high_power_B"
+      },
+      {
+        "bound_s": 4328.9952,
+        "kind": "high-power-aba-a2",
+        "name": "high_power_A2"
+      },
+      {
+        "bound_s": 1500.0,
+        "kind": "idle-until-soak",
+        "name": "step_D_prefill_10k_decode_4096.precool"
+      },
+      {
+        "bound_s": 5763.9952,
+        "kind": "step-d",
+        "name": "step_D_prefill_10k_decode_4096"
+      },
+      {
+        "bound_s": 1500.0,
+        "kind": "idle-until-soak",
+        "name": "cooldown_after_D"
+      },
+      {
+        "bound_s": 5763.9952,
+        "kind": "d-planning-turn-r-plus-4c",
+        "name": "planning_turn_R_plus_4C"
+      },
+      {
+        "bound_s": 1500.0,
+        "kind": "idle-until-soak",
+        "name": "planning_turn_R_plus_2C.precool"
+      },
+      {
+        "bound_s": 5763.9952,
+        "kind": "d-planning-turn-r-plus-2c",
+        "name": "planning_turn_R_plus_2C"
+      },
+      {
+        "bound_s": 1500.0,
+        "kind": "idle-until-soak",
+        "name": "planning_turn_R_plus_0C.precool"
+      },
+      {
+        "bound_s": 5763.9952,
+        "kind": "d-planning-turn-r-plus-0c",
+        "name": "planning_turn_R_plus_0C"
+      },
+      {
+        "bound_s": 1800.0,
+        "kind": "d-bank-benign-s1",
+        "name": "D_bank_benign_s1_gated_held"
+      },
+      {
+        "bound_s": 1800.0,
+        "kind": "d-spam-benign-s1-a",
+        "name": "D_spam_benign_s1_gated_held_a"
+      },
+      {
+        "bound_s": 1800.0,
+        "kind": "d-spam-benign-s1-b",
+        "name": "D_spam_benign_s1_gated_held_b"
+      },
+      {
+        "bound_s": 1800.0,
+        "kind": "x-g",
+        "name": "X_G_contrast"
+      },
+      {
+        "bound_s": 0.0,
+        "kind": "calibration-post",
+        "name": "post_calibration_bracket"
+      }
+    ],
+    "with_one_batch_wait_s": 61606.9616,
+    "with_retries_and_one_batch_wait_s": 90662.9424
+  },
+  "revisions": {
+    "base": "4e7e878a151d919faf56bb9131af1fcca4b7be75",
+    "bytes": "e091c0881e4a059f9deac1e2f9ab507b2c33ff0c",
+    "ci": "87d9b445c9b3b5e9fb7f76a07230e3399821b3fb",
+    "r1": "e901eb2a480d51377a494be9d797733dfcd0220b"
+  },
+  "scope": "source-only arithmetic and historical timing metadata; no data pipeline, MLX, model weights or tests imported",
+  "source_sha256": {
+    "ci_timing_map": "d2ade31089f75ffda731874d1fc7303e69f3c3a325219a0477c6a2d5344a5072",
+    "r1_driver": "c158b1a45f7ff539ebe77afa64db80309392d95e4a84a34bb87e4d8e309a6436"
+  },
+  "ssd_ESTIMATED": {
+    "decode_guess_s": 7200,
+    "gaps_s": 7200,
+    "idle_s": 7200,
+    "label": "ESTIMATED from configured schedule",
+    "planned_total_s": 24600,
+    "segment_count": 125,
+    "settle_s": 3000
+  }
+}
