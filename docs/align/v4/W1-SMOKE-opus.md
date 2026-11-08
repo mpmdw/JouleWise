@@ -81,6 +81,13 @@ findings from this kit. MED-2(a), HIGH-1, the pending R0/R1 inputs and the U3 st
 
 ## Part B: native MBP smoke
 
+> **DO NOT RUN NATIVELY YET.** Comparing this build with Sol's (`W1-SMOKE-AGREEMENT.md`, item 6) exposed
+> a defect in the prepare seam. The production `measurement_view` links the checkout's `runs/`
+> directory, so the smoke's bracket reservation and calibration captures would append to the production
+> calibration ledger. The next W1 prepare would then refuse with `calibration_ledger_head_mismatch`.
+> The merged kit must prepare in an isolated `b6.smoke`-style clone with a copied ledger (distinct
+> inodes) first. The rest of Part B stands.
+
 **When to run it.** Run it on the MBP only, in a gap between windows. Run it before the first long
 window after any code change, and in particular before W1. It needs a W1-ready kit, because it runs
 the production prepare. It is never run during a window: the guards refuse if a night job is loaded,
