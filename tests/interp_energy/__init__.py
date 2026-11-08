@@ -1,1 +1,1 @@
-"""Fast synthetic-only interp × energy tests."""
+"""Synthetic tests for the interpretability and energy desk tools."""
