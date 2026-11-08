@@ -503,8 +503,10 @@ entry. Apply the registered escalation ladder before the next window, never
 in-place: idle 300→450 s; loosen δ_slow in 0.5 °C steps up to 2.0 °C
 for timeout-driven failures, tighten for spread-driven failures; then one
 quantization step down. Holds are already on for heavy D and are not another step. U4/U5 failure means state not
-controlled; inconclusive adds two sentinels to remaining windows, never a
-looser margin. U6 is reported, never a window-admission gate; imprecision bars
+controlled; a **U4** inconclusive adds the two R20 escalation sentinels (below), never a
+looser margin. A U5 inconclusive does NOT (A15 / R21: U5, an OLS with intercept on three
+R1 designed states with df 1, is inconclusive by construction, the sentinels cannot resolve
+it and would cost about an hour of MBP per window; U5 is reported descriptively). U6 is reported, never a window-admission gate; imprecision bars
 a stability claim, and FAIL bars a detection-rate claim from that cell. Any revised sizing
 and configuration must be recorded before use. `F:400–409; A:129–149`
 
@@ -868,7 +870,7 @@ from the committed record before the arm; the arm waits for them.
 | `capture_faults` | sidecar/powermetrics coverage, collector, OOM/Metal, deadman, unobserved-state faults (X1-X8) |
 | `thermal_escalation` | U1-U3 result and the registered escalation ladder, recorded before use, never in place |
 | `cohort_pool_rules` | U1-U3 failure bars pool entry; one frozen cohort; no pooling across a changed configuration |
-| `sentinel_roster` | U4/U5 inconclusive adds two sentinels to the remaining windows |
+| `sentinel_roster` | a U4 inconclusive (not U5; A15 / R21) adds the two R20 escalation sentinels to the next window |
 | `member_eligibility` | final eligibility adjudication (identity X5, U3 pairs, exclusions); counts are provisional until it passes |
 | `calibration_stop` | the B3 fixed-8 predicate over the packet counts (derived, not asserted): continue until 8 counted windows (a structurally barred window is replaced by C9-C14, R22-2 / R24), `calibration_complete` before a test arm |
 | `battery_window` | previous window's B bar (rule `zero_B_auto_resume_v1`, W1-BLOCKERS lead ruling 9): pass, or the first non-passing window in a row resumes automatically on fresh admissible top-up + OBC attestation (`charging_battery`); a second consecutive non-passing window needs a signed `battery_rulings` row |
@@ -999,7 +1001,7 @@ included**; the arm binds its own rebuild of the packet (a supplied packet is on
 history is derived from the hash-chained records. An ordinary window may run to **59,520 s**; a window
 that carries the two escalation sentinels below may run to **62,400 s**.
 
-**R20 - escalation sentinels (RUN_STATE 226).** When a window's U4/U5 is inconclusive, the next window
+**R20 - escalation sentinels (RUN_STATE 226).** When a window's **U4** is inconclusive (A15 / R21: a U5 inconclusive is expected by construction and does NOT trigger them), the next window
 (never W1) appends two sentinels at **ordinals 23 and 24**, after the late sentinel at 22 and before
 the closing reference/scaffold (`align_v4_series.py materialize --window-id Cn --extra-sentinels 2`,
 `align_v4_session.py prepare --window-id Cn --extra-sentinels 2`). Both replay the admitted W1:5
@@ -1010,7 +1012,7 @@ unchanged, they join no identical-work group (U3's frozen comparison scope is un
 held-out seed, they never count toward the window's captured members or any calibration count, and the
 desk reports them descriptively (`supplemental_sentinels`). The committed-record reader likewise counts them toward nothing anywhere: not in `captured_members` (so the count-only ceiling is 22 and a window holding only supplemental captures consumes no calibration slot), not in the eligible counts (only the frozen calibration pool enters m), while their captures stay authenticated in custody. The desk's committed provisional counts (`series_desk_row`) are an upper bound the final counts may lower, never raise; the arm's rebuild carries and enforces it. The frozen manifest bytes do not change; the
 24-member plan is derived from it at materialization. The packet's `sentinel_roster` check requires the
-roster to include them after a U4/U5-inconclusive window.
+roster to include them after a U4-inconclusive window.
 
 **R22 - Block 5 lessons applied to v4 (RUN_STATE 234; decided blind, with no v4 data).**
 

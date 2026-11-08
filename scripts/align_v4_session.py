@@ -49,7 +49,7 @@ def prepare(measurement_root, session_root, *, power_runner=None, window_id=None
     kit.generate(measurement_root, check=True, source_root=measurement_root)
     series_state = None
     if extra_sentinels not in (0, 2) or (extra_sentinels and window_id in (None, 'W1')):
-        raise ValueError('escalation sentinels (R20) apply to a C/T window after a U4/U5-inconclusive window only')
+        raise ValueError('escalation sentinels (R20) apply to a C/T window after a U4-inconclusive window only')
     if window_id is not None:
         from scripts import align_v4_series as series
         manifest = series.load(measurement_root)
@@ -937,7 +937,7 @@ def main(argv=None):
                       prepare_options=(('--window-id', dict(help='frozen series window or D alias; requires series admission')),
                                        ('--extra-sentinels', dict(type=int, default=0, choices=(0, 2),
                                            help='R20: two supplemental escalation sentinels (ordinals 23, 24) '
-                                                'after a U4/U5-inconclusive window; ceiling 62,400 s'))),
+                                                'after a U4-inconclusive window; ceiling 62,400 s'))),
                       desk_extra_checks=powermode_desk_check,
                       install_options=(('--w1-disk-config', dict(
                           type=Path, required=True,
