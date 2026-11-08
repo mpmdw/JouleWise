@@ -29,29 +29,46 @@ if str(ROOT) not in sys.path:
 from scripts import align_pilot_session as pilot, align_v4_kit as kit
 
 
-def series_ac_powermode(measurement_root):
+def series_ac_powermode(measurement_root, kit_path=kit.KIT):
     """The R1-frozen series AC powermode the generated collection plan carries."""
-    plan = json.loads((Path(measurement_root) / kit.KIT / 'collection_plan.json').read_bytes())
+    plan = json.loads((Path(measurement_root) / kit_path / 'collection_plan.json').read_bytes())
     value = (plan.get('runtime_requirements') or {}).get('ac_powermode')
     if type(value) is not int or value not in (0, 2):
         raise ValueError(f'v4 collection plan freezes no series AC powermode (got {value!r})')
     return value
 
 
-def prepare(measurement_root, session_root, *, power_runner=None, **kwargs):
+def prepare(measurement_root, session_root, *, power_runner=None, window_id=None, **kwargs):
     # Lead ruling R6-7: at every session start a host-level High Power marker
     # means an Automatic restore is owed. Restore it first (never under a
     # measuring night, which holds the host night lock and restores at its own
     # close) and refuse the session if the restore fails its read-back.
     start = session_start_restore(measurement_root, runner=power_runner)
     kit.generate(measurement_root, check=True, source_root=measurement_root)
+    series_state = None
+    if window_id is not None:
+        from scripts import align_v4_series as series
+        manifest = series.load(measurement_root)
+        selected = series.selected(manifest, window_id)
+        series.require_admission(measurement_root, manifest, post_w1=selected['id'] != 'W1')
+        if selected['id'] != 'W1':
+            series.generate(measurement_root, window_id, check=True)
+            kwargs.update(kit=series.kit_path(selected['id']), pack_id=series.pack_id(selected['id']))
+        series_state = dict(window_id=selected['id'], role=selected['role'],
+            manifest_sha256=kit.sha((Path(measurement_root) / series.MANIFEST).read_bytes()),
+            admission_sha256=kit.sha((Path(measurement_root) / series.ADMISSION).read_bytes()))
     # Lead ruling R5-6: the night plan declares the frozen series powermode, so
     # run_night admits a High Power host only for a W1 that adopted it.
-    kwargs.setdefault('ac_powermode', series_ac_powermode(measurement_root))
+    kwargs.setdefault('ac_powermode', series_ac_powermode(measurement_root, kwargs.get('kit', kit.KIT)))
     kwargs.setdefault('kit', kit.KIT)
     kwargs.setdefault('pack_id', kit.PACK_ID)
     kwargs.setdefault('session_prefix', 'align-v4-')
     state = pilot.prepare(measurement_root, session_root, **kwargs)
+    if series_state is not None:
+        if state.get('preparation_status') != 'STAGED':
+            raise ValueError('series prepare produced no armable plan; inspect session flags')
+        state['v4_series'] = series_state
+        pilot.h.write(Path(session_root) / 'session.json', state)
     if start['action'] != 'none':
         try:
             pilot.h.write(Path(session_root) / f'staging/v4-session-start-restore-{time.time_ns()}.json', start)
@@ -147,6 +164,12 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
     verdict = kit.validate_powermode_members(plan, observed)
     checks = {'ac_powermode_members': verdict['instrument_ok']}
     report = {**verdict, 'd_member_x2': d_member_x2_report(plan['members'], runs_root)}
+    if state.get('v4_series'):
+        report['series'] = state['v4_series']
+        report['pool_members'] = {role: [r['run_id'] for r in plan['members'] if r.get('pool_role') == role]
+                                  for role in ('anchor', 'sentinel', 'fit', 'calibration', 'test')}
+        report['calibration_counts_final'] = False
+        report['calibration_counts_note'] = 'Final eligibility receipt required; desk diagnostics never imply pool entry.'
     from joulewise.align.apple import km003c
     try:
         custody = (state.get('inputs') or {}).get('custody_root')
@@ -182,8 +205,8 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
                  'flags': ['member.runtime_failure'], 'tokens': None, 'intervals': [],
                  'turn_observation': [], 'coverage': [], 'releases': [], 'turn_admissions': 0,
                  'pm_period_s': .1, 'calibration_exclusions': ['member.runtime_failure'], 'error': str(exc)}
-        r.update({k: row[k] for k in ('ordinal', 'role') if k in row},
-                 window='W1', stage=row.get('stage_id'))
+        r.update({k: row[k] for k in ('ordinal', 'role', 'pool_role') if k in row},
+                 window=state.get('v4_series', {}).get('window_id', 'W1'), stage=row.get('stage_id'))
         if row.get('replay_of'):
             r['identical_work_group'] = row['replay_of']
         elif row.get('ordinal') == 5 or row.get('role', '').startswith(('X-', 'Y-')):
@@ -204,6 +227,13 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
         delta_slow_c=policy.get('delta_slow_c'), contrast_predeclared=contrast_predeclaration(wp19, policy))
     report['registration_diagnostics'] = v4_registration.desk_diagnostics(records,
         r1_soak=r1_soak_c(registration_dir))
+    if state.get('v4_series', {}).get('window_id', 'W1') != 'W1':
+        from joulewise.align.apple.v4_estimands import sentinel_admissibility
+        report['registration_diagnostics']['sentinel'] = {
+            'source': 'W1:5 (admitted before this series)',
+            'candidates': {r['ordinal']: sentinel_admissibility(r) for r in records
+                           if r.get('pool_role') == 'sentinel'},
+            'reference_status': 'requires authenticated R1/W1 E_ref for cross-window U4'}
     for model, result in report['thermal']['model_windows'].items():
         for n in (1, 2, 3):
             checks[f'v4_{model}_U{n}'] = result[f'U{n}']['status'] == 'pass'
@@ -213,10 +243,33 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
 
 
 def desk(session_root, **kwargs):
+    state = pilot.h.read(Path(session_root) / 'session.json')
+    if state.get('v4_series', {}).get('window_id', 'W1') != 'W1':
+        from scripts import align_v4_series as series
+        kwargs['kit'] = series.kit_path(state['v4_series']['window_id'])
     kwargs.setdefault('kit', kit.KIT)
     kwargs.setdefault('desk_schema', kit.DESK_SCHEMA)
     kwargs.setdefault('extra_checks', powermode_desk_check)
     return pilot.desk(session_root, **kwargs)
+
+
+def validate_series_state(state):
+    """Recheck source kit and exact admission after prepare, before any arm."""
+    from scripts import align_v4_series as series
+    selection = state['v4_series']
+    root = Path(state['source_measurement_root'])
+    manifest = series.load(root)
+    if (selection['manifest_sha256'] != kit.sha((root / series.MANIFEST).read_bytes())
+            or selection['admission_sha256'] != kit.sha((root / series.ADMISSION).read_bytes())):
+        raise ValueError('prepared series/admission changed; prepare a new session')
+    window = series.selected(manifest, selection['window_id'])
+    if window['role'] != selection['role']:
+        raise ValueError('prepared series role changed')
+    series.require_admission(root, manifest, post_w1=window['id'] != 'W1')
+    if window['id'] != 'W1':
+        series.generate(root, window['id'], check=True)
+    directory = kit.KIT if window['id'] == 'W1' else series.kit_path(window['id'])
+    return json.loads((root / directory / 'collection_plan.json').read_bytes())
 
 
 ARM_RECORD_SCHEMA = 'joulewise.align_v4_arm.v1'
@@ -429,8 +482,10 @@ def install(session_root, *, runner=None, volume_runner=None, now=None, w1_disk_
     measurement_root = state['measurement_root']
     # Council ruling 7: the frozen series powermode comes from the measurement
     # checkout's r1_slots, and arm refuses on a mismatch with the host.
-    kit.generate(measurement_root, check=True, source_root=measurement_root)
-    plan = json.loads((Path(measurement_root) / kit.KIT / 'collection_plan.json').read_bytes())
+    source_root = state['source_measurement_root'] if state.get('v4_series') else measurement_root
+    kit.generate(source_root, check=True, source_root=source_root)
+    plan = (validate_series_state(state) if state.get('v4_series') else
+            json.loads((Path(measurement_root) / kit.KIT / 'collection_plan.json').read_bytes()))
     from joulewise.align.apple import powermode
     high = None
     # Lead ruling R6-7: the High Power marker is host-level, so every later
@@ -539,10 +594,22 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
                      w1_disk_config, disk_gate, lock=None, owner=None,
                      obc_off_attested_by=None, battery_runner=None, topup_completed_at=None,
                      topup_source=None, next_arm_triage=None, **kwargs):
+    if state.get('v4_series'):
+        from scripts import align_v4_series as series
+        packet = (json.loads(Path(next_arm_triage).read_bytes()) if isinstance(next_arm_triage, (str, Path))
+                  else next_arm_triage)
+        series.bind_packet(state['source_measurement_root'], state['v4_series']['window_id'], packet or {})
+        bound_packet = packet
+    else:
+        bound_packet = None
     record = arm_checks(measurement_root, plan, runner=runner, volume_runner=volume_runner, lock=lock,
                         owner=owner, obc_off_attested_by=obc_off_attested_by, battery_runner=battery_runner,
                         topup_completed_at=topup_completed_at, topup_source=topup_source, now=now,
                         next_arm_triage=next_arm_triage)
+    if bound_packet is not None:
+        # Preserve exact source-receipt snapshots with the attempt, including
+        # a refusal. No Air-only locator must remain a native arm dependency.
+        record['series_packet'] = bound_packet
     if high is not None:
         record['high_power_enter'] = high
         if not high['ok']:
@@ -567,12 +634,14 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
     kit.arm_powermode_check(plan, record['ac_powermode']['observed'])
     receipt = w1_disk_check(w1_disk_config, gate=disk_gate)
     pilot.h.write(session / 'staging/w1_disk_gate.json', receipt)
-    return pilot.install(session, **kwargs)
+    return pilot.install(session, now=now or time.time, **kwargs)
 
 
 def main(argv=None):
     return pilot.main(argv, kit=kit.KIT, pack_id=kit.PACK_ID, desk_schema=kit.DESK_SCHEMA,
                       session_prefix='align-v4-', prepare_fn=prepare, install_fn=install,
+                      desk_fn=desk,
+                      prepare_options=(('--window-id', dict(help='frozen series window or D alias; requires series admission')),),
                       desk_extra_checks=powermode_desk_check,
                       install_options=(('--w1-disk-config', dict(
                           type=Path, required=True,

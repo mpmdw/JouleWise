@@ -191,6 +191,14 @@ def measurement_view(source, session, *, kit=KIT, pack_id=PACK_ID):
             model, hardware = typed['model'], typed['hardware_target']
             unit_id = model_ids.get(model['source'], 'neg8_reference')
             if typed['workload_profile']['name'] == ALIGN_EPISODE:
+                # ALIGN's D model is absent from the older BYTES model roster.
+                # Its existing frozen config tag owns this ID, just as in the
+                # kit's identity_pins; falling back to neg8_reference misbinds D.
+                tags = [t.removeprefix('align-model=') for t in typed['run_metadata']['tags']
+                        if t.startswith('align-model=')]
+                if len(tags) != 1 or not tags[0]:
+                    raise ValueError('ALIGN config needs one model identity tag: ' + row['run_id'])
+                unit_id = tags[0]
                 # Each episode spec is its own declared workload, so its own unit.
                 unit_id = align_unit_id(unit_id, row['run_id'])
             declared = {
