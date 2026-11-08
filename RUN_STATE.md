@@ -1042,6 +1042,21 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+235. **Laptop lead (interactive session 1544c617), 2026-11-08 13:05 PST: lead ruling R23 (blind; synthetic evidence only, no v4 data exists) on the first v4 release-tool rehearsal.** The Opus comparator plus `release_v4.py` (`align/2026-11-08-v4-release-tools` @ `698a3f490`) covers all 282,691 engine leaves with 0 unmapped. On the synthetic series it HOLDS (exit 1): 56 of 61 recomputed families agree exactly. The planted mutations each move their intended family.
+- **R23-E1, engine bug:** a zero-capture window crashes `thermal_desk.acceptance` (`KeyError pm_period_s`). Not-captured members never enter acceptance, fits, U-units or claims. The zero-capture attempt is a final, not-counted record, and its retry takes the slot.
+- **R23-1, anchor σ_w (print-only):** it uses the same anchor set as U4, so W1 is included (K = 12). Both the raw method-of-moments σ_w² and max(0, raw) are printed, with K ≥ 3.
+- **R23-2, carrier curve at H = 0 (A8):** the H = 0 point is the honest leave-one-carrier-out false-alarm fraction and is never forced to 0. H50/H90 crossings use doses > 0 only. `level_reached_at_h0` is flagged and leaves that crossing undefined.
+- **R23-3, carrier status:** `ok` whenever m ≥ 40 and the thresholds are defined. The engine's `insufficient_calibration` there is a mapping bug.
+- **R23-4, benign DC residual (A20):** it mirrors the GPU benign residual rows and the LOTO training sets exactly. The engine's W1 DC fit over 30B and development members is deleted.
+- **A2 restated:** a G0 that overlaps the episode makes the member custody-invalid in both builds.
+- **A20:** the recompute adds the dropped-sample check.
+- **Export contract:**
+  - production sensor keys `s_fast`/`s_slow`;
+  - series-unique anchor run ids `<window_id>:<run_id>`;
+  - the export carries the W1 sentinel ordinals, and the recompute re-derives them from the R15 roster and refuses on mismatch;
+  - A27 seal scope applied as written.
+- **Engine base correction:** the A37 job was briefed on `c8da9ee40`, which lacks the R21 streaming reducer, and it stopped on NEEDS_RULING. A37 plus R23 are now applied on `engine-fix` @ `8eb7982f0`, in the Sol job `engine-r23`. The recompute fixes and the rehearsal rerun go to the comparator builder. **Target:** exact AGREE including the C3 zero-capture retry and an A37 seam fixture.
+
 234. **Laptop lead (interactive session 1544c617), 2026-11-08 13:10 PST: lead ruling R22, Block 5 lessons applied to v4 before W1 registration.** Decided blind, with no v4 data. Source: `docs/analysis/b5/LESSONS-FOR-V4-V5.md` on `analysis/2026-11-08-b5-lessons` @ `7fdd43912`.
 - **R22-1, contention:** in-window contention in v4 is DISCLOSURE-ONLY. Block 5's rule (0.05 CPU-s/s per 10 s, applied as an exclusion) is never used. At v4's roughly 830 s active episodes it would flag more than 99.7 % of members.
   - Each member records its outside-tree CPU-seconds.
