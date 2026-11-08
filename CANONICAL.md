@@ -29,6 +29,7 @@ The magistrate on the MacBook Pro owns running, re-running and arming windows
 | Job | Canonical | Replaced |
 |---|---|---|
 | Window design | `docs/align/council-2026-11-05/FINAL-DESIGN.md` with `FINAL-DESIGN-AMENDMENT-1.md` and `-2.md` | The council's round briefs and seat records (r1/r2 Opus, Sol, Fable), archived; v0-v3 pilot protocols |
+| Next two MBP steps: software readiness | `configs/readiness/next_steps.json` + `scripts/readiness_next2.py`; rule: `docs/process/READINESS.md`. Synthetic checks on the named branch trees; no arm authority | Ad hoc downstream smoke checks and opt-in-only WP22 coverage |
 | Measurement lane (kits, code, runbooks) | Branch `lane/2026-11-05-align-pilot10-benign`: `joulewise/align/**`, `configs/align/v4/**`, `docs/align/**` (v4 desk: `docs/align/v4_desk.md`, R0: `docs/align/r0_desk_runbook.md`) | ALIGN v0-v3 pilot kits (`scripts/align_pilot_kit.py`, `scripts/align_pilot_session.py`) for v4 work |
 | R0 launch | `scripts/launch_align_r0.py` on `main` (hands R0 to a one-shot LaunchAgent via `scripts/run_align_r0_launchagent.sh`) | Running R0 from an agent tree |
 | R0 runner (the checks themselves) | `scripts/align_r0_checks.py` + `joulewise/align/r0*.py` (`r0.py`, `r0_host.py`, `r0_mlx.py`, `r0_runner.py`, `r0_step.py`) on `lane/2026-11-05-align-pilot10-benign`. Not on `main` | — |
@@ -64,7 +65,7 @@ The magistrate on the MacBook Pro owns running, re-running and arming windows
 |---|---|---|
 | Full suite | `python3 scripts/shard_tests.py --workers N --split` (N concurrent shards, e.g. 8). Plain `--workers` does **not** enforce the timing map's `exclusive_modules`: the two calibration modules share the pool with everything else, where CI gives each its own job. On the analysis or measurement Mac, leave the full suite to CI | `python3 -m unittest discover -s tests` (sequential, about 3.2 h) |
 | Quick tier | `python3 scripts/quick_suite.py --tier quick --workers 4` (as CI runs it); `--tier touched --since <base>` adds modules related to a change | — |
-| CI workflows | Three: `.github/workflows/ci.yml` (quick tier, fences, twelve ordinary `shard_tests.py` shards plus the two exclusive calibration jobs; docs-only ranges report success without running tests); `.github/workflows/gate-ledger.yml` + `scripts/check_gate_ledger.py` (**required** on `main`; validates the PR body's gate ledger); `.github/workflows/d117-production-proof.yml` (**dispatch-only**, `workflow_dispatch`, never runs on a PR) | — |
+| CI workflows | `.github/workflows/ci.yml` (quick tier, fences, twelve ordinary `shard_tests.py` shards plus the two exclusive calibration jobs; docs-only ranges report success without running tests); `.github/workflows/gate-ledger.yml` + `scripts/check_gate_ledger.py` (**required** on `main`; validates the PR body's gate ledger); `.github/workflows/d117-production-proof.yml` (**dispatch-only**, `workflow_dispatch`, never runs on a PR); `.github/workflows/readiness.yml` (**advisory**, every 3 h and lane/align/fix pushes, synthetic next-two readiness artifacts) | — |
 | Pins | `python3 scripts/repin.py --check` (all families); `--write registry` after deleting or adding pinned files | Hand repins |
 | State kernel | `python3 scripts/gen_state.py --check` | — |
 

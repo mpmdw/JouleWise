@@ -1,0 +1,50 @@
+name: MBP next-two readiness
+
+# Advisory, never a required branch-protection check. Keep failures visible.
+on:
+  schedule:
+    - cron: '17 */3 * * *'
+  push:
+    branches:
+      - 'lane/**'
+      - 'align/**'
+      - 'fix/**'
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: readiness-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  readiness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      # The gate and lead-maintained list always come from main, even when a
+      # lane push triggers the run. The gate fetches each listed branch itself.
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Exercise next two steps (synthetic, offline except git fetch)
+        run: |
+          python3 -B scripts/readiness_next2.py --fetch --output tmp/readiness/status.json
+      - name: Publish status table
+        if: always()
+        shell: bash
+        run: |
+          if test -f tmp/readiness/status.md; then
+            cat tmp/readiness/status.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Retain status and exact refusal/test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mbp-readiness-${{ github.run_id }}
+          path: tmp/readiness/status.*
+          if-no-files-found: error
+          retention-days: 14

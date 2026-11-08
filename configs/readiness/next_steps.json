@@ -1,0 +1,117 @@
+{
+  "schema": "joulewise.readiness_next2.v1",
+  "mbp_available_at": null,
+  "planning_note": "Lead-maintained candidates, not arm authority. null means a real unresolved prerequisite, never an implied command or receipt. Track branch tips until the lead supplies a full commit pin. Update on every planned step, ruling or lane change. Baseline origin/main dcfa4c593. Downstream checks use its named R0-filled kit candidate (d9d1098c6), pending the agreed route. No network used to populate this list.",
+  "timing_note": "null availability conservatively means MBP available now. Minimum durations give earliest possible hours, not promises: R1 lower bound rounded DOWN from no-redo 67371 s; chain 0; smoke at most 45 min so lower bound 0; W1 lower bound rounded DOWN from 26940 s. Set absolute availability and lower bounds when scheduling.",
+  "steps": [
+    {
+      "id": "R1",
+      "branch": "lane/2026-11-08-r1-arm",
+      "minimum_duration_hours": 18.7,
+      "arm": {
+        "exercises": ["run_night", "launcher", "night_gate", "watchdog"],
+        "pending_reason": "No agreed R1 arm route at baseline dcfa4c593 (RUN_STATE 218-220). Lead must pin the agreed route, exact live argv, and an end-to-end FakeWorld/--dry-arm seam; driver-only rehearsal is insufficient.",
+        "route_files": []
+      },
+      "kit": {
+        "required_fields": ["R0.reasoning_effort", "WP15.runtime_entrypoint"],
+        "check": null,
+        "pending_reason": "R1 arm kit/check interface is pending on the agreed route. Do not require downstream R1 outputs to arm R1."
+      },
+      "evidence": [
+        {"name": "independent Sol/Opus arm agreement", "path": "docs/align/R1-ARM-AGREEMENT.md"},
+        {"name": "lead ruling naming agreed R1 route and commit", "path": null},
+        {"name": "R0 completion receipt in code-only form (never a host data path)", "path": null}
+      ],
+      "prequal": {"stage": "r1"},
+      "tests": [
+        {"module": "tests.align.test_r1_runtime_contract", "timeout_s": 120},
+        {"module": "tests.align.test_r1_runtime_e2e", "timeout_s": 480},
+        {"module": "tests.align.test_v4_w1_synthetic", "env": {"JW_WP22_FULL": "1"}, "timeout_s": 600}
+      ]
+    },
+    {"id": "R1->W1 chain"},
+    {
+      "id": "W1 smoke",
+      "branch": "align/2026-11-08-w1-smoke",
+      "arm": {
+        "exercises": ["smoke launch", "safe fault injections", "non-registrable outputs"],
+        "pending_reason": "Smoke kit is being built (RUN_STATE 219). Lead must pin the agreed <=45 minute native command and its synthetic launch seam."
+      },
+      "evidence": [
+        {"name": "R1-derived slots", "path": "configs/campaigns/align_v4/registration/r1_slots.json"},
+        {"name": "R1-filled W1 plan", "path": "configs/campaigns/align_v4/registration/w1_plan.json"},
+        {"name": "R1-derived sizing", "path": "configs/campaigns/align_v4/registration/sizing_b5.json"},
+        {"name": "lead chain agreement/ruling (path to be supplied)", "path": null},
+        {"name": "independent smoke design agreement and lead ruling", "path": null}
+      ]
+    },
+    {
+      "id": "W1",
+      "minimum_duration_hours": 7.48,
+      "arm": {"pending_reason": "Lead must pin the exact agreed W1 launch argv and synthetic arm/launch seam after R1 fills the kit."},
+      "evidence": [
+        {"name": "R1-derived slots", "path": "configs/campaigns/align_v4/registration/r1_slots.json"},
+        {"name": "R1-filled W1 plan", "path": "configs/campaigns/align_v4/registration/w1_plan.json"},
+        {"name": "R1-derived sizing", "path": "configs/campaigns/align_v4/registration/sizing_b5.json"},
+        {"name": "lead chain agreement/ruling (path to be supplied)", "path": null},
+        {"name": "native W1 smoke PASS receipt (code-only attestation)", "path": null}
+      ]
+    },
+    {
+      "id": "D1",
+      "branch": null,
+      "arm": {"pending_reason": "D1 branch, agreed plan, live launch argv and synthetic launch seam are not pinned yet."},
+      "evidence": [
+        {"name": "R1-derived slots", "path": "configs/campaigns/align_v4/registration/r1_slots.json"},
+        {"name": "R1-filled W1 plan", "path": "configs/campaigns/align_v4/registration/w1_plan.json"},
+        {"name": "R1-derived sizing", "path": "configs/campaigns/align_v4/registration/sizing_b5.json"},
+        {"name": "lead chain agreement/ruling (path to be supplied)", "path": null},
+        {"name": "native W1 smoke PASS receipt (code-only attestation)", "path": null},
+        {"name": "W1 closure and D1 independent-design agreement/ruling", "path": null}
+      ]
+    }
+  ],
+  "defaults": {
+    "branch": "lane/2026-11-07-r1-kit-r0fill",
+    "commit": null,
+    "minimum_duration_hours": 0,
+    "arm": {
+      "live_command": null,
+      "exercises": ["align_v4_session.prepare", "align_v4_session.install", "run_night", "launcher", "night_gate"],
+      "synthetic": null,
+      "pending_reason": "WP22 exercises kit -> controller -> desk, not the arm/installer/night-driver chain. The lead must supply the agreed chain command and a safe end-to-end synthetic seam.",
+      "route_files": ["scripts/align_v4_session.py", "scripts/run_night.py", "joulewise/night_gate.py", "scripts/launch_window.py"]
+    },
+    "kit": {
+      "path": "configs/campaigns/align_v4/registration/inputs.json",
+      "required_fields": [
+        "R0.reasoning_effort",
+        "WP15.runtime_entrypoint",
+        "WP11.identity_unit",
+        "WP11.artifact_inventory",
+        "WP11.local_file_verification",
+        "WP18.X",
+        "WP18.Y",
+        "R1.B_D",
+        "R1.I_D",
+        "R1.T_dead",
+        "R1.thermal_policy"
+      ],
+      "check": {"argv": ["{python}", "-B", "scripts/align_v4_kit.py", "--check"], "timeout_s": 180}
+    },
+    "evidence": [
+      {"name": "R1-derived slots", "path": "configs/campaigns/align_v4/registration/r1_slots.json"},
+      {"name": "R1-filled W1 plan", "path": "configs/campaigns/align_v4/registration/w1_plan.json"},
+      {"name": "R1-derived sizing", "path": "configs/campaigns/align_v4/registration/sizing_b5.json"},
+      {"name": "lead chain agreement/ruling (path to be supplied)", "path": null}
+    ],
+    "prequal": {"stage": "w1", "checks": ["r0-config", "kit", "w1-plan", "d-pin-verifier"], "timeout_s": 180},
+    "tests": [
+      {"module": "tests.align.test_v4_kit", "timeout_s": 180},
+      {"module": "tests.align.test_v4_w1_plan", "timeout_s": 120},
+      {"module": "tests.align.test_v4_w1_synthetic.KitBridgeTests", "timeout_s": 120},
+      {"module": "tests.align.test_v4_w1_synthetic", "env": {"JW_WP22_FULL": "1"}, "timeout_s": 600}
+    ]
+  }
+}

@@ -46,3 +46,6 @@ docs/process_traces/**/*.log
 
 # setuptools editable-install metadata (the measurement clone gate requires a clean tree; D-127 clone recipe)
 *.egg-info/
+
+# Generated next-two readiness status and local diagnostic snapshots.
+/tmp/readiness/
