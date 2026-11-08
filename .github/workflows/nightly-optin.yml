@@ -31,9 +31,9 @@ name: nightly-optin
 # - The full verbose log of every entry is uploaded, pass or fail.
 #
 # The WP22 entry checks out the ALIGN lane branch, not main. The audit
-# reproduced that this entry is RED today (7895b9e7e: the contrast proof is
-# not refreshed from the synthetic pilot's turn counts); it will stay red until
-# the lead repairs the harness. That is the intended signal.
+# reproduced a RED entry at 7895b9e7e (the contrast proof was not refreshed
+# from the synthetic pilot's turn counts). The lane can repair that independently;
+# each run's header records the exact checked-out head for current evidence.
 
 on:
   schedule:
@@ -120,11 +120,13 @@ jobs:
           fi
           test -x /bin/zsh
       - name: Record the tree under test
+        env:
+          REQUESTED_REF: ${{ matrix.ref }}
         run: |
           mkdir -p nightly-logs
           {
             echo "entry=${{ matrix.name }}"
-            echo "requested_ref=${{ matrix.ref }}"
+            echo "requested_ref=$REQUESTED_REF"
             echo "head=$(git rev-parse HEAD)"
             echo "optin=${{ matrix.optin }}=1"
             echo "module=${{ matrix.module }}"
