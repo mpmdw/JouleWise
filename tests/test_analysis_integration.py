@@ -3646,10 +3646,26 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 encoding="utf-8",
             )
             campaign_path = evidence_root / "campaign_log.jsonl"
+            # The runner's campaign-level records follow the member rows. The
+            # whole-window evaluation lists every member in bundle_ids; it is not
+            # an executed-member row (DLE-4, block-5 defect D5).
+            member_ids = [row["run_id"] for row in campaign_rows[root_id]]
+            campaign_level_rows = [
+                {
+                    "record_type": "campaign_provenance_attestation",
+                    "campaign_provenance_session_id": f"floor-exact-{root_id}",
+                },
+                {"record_type": "campaign_verdict", "status": "verdict"},
+                {
+                    "record_type": "idle_admission_whole_window_verdict",
+                    "status": "passed",
+                    "bundle_ids": member_ids,
+                },
+            ]
             campaign_path.write_text(
                 "".join(
                     json.dumps(row, sort_keys=True) + "\n"
-                    for row in campaign_rows[root_id]
+                    for row in (*campaign_rows[root_id], *campaign_level_rows)
                 ),
                 encoding="utf-8",
             )

@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>The Energy Tripwire</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a bench notebook. Narrow reading column, wide "instrument plates" for the trace, roadmap and tables. */
+:root{
+  --paper:#F3F5F2; --plate:#FFFFFF; --ink:#18202B; --muted:#5A6573; --rule:#D5DBD6;
+  --signal:#2B55D9; --signal-soft:#E3E9FB; --trip:#B86A00; --trip-soft:#F8EBD6; --ok:#2F7D4F; --no:#A3362B;
+  --grid:#E4E9E5;
+  --display:"Archivo", "Helvetica Neue", Arial, sans-serif;
+  --body:"Source Serif 4", Georgia, "Times New Roman", serif;
+  --mono:"JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --paper:#0E131A; --plate:#151C25; --ink:#E4E9EF; --muted:#9AA6B4; --rule:#2A3441;
+  --signal:#8AA8FF; --signal-soft:#1C2A4D; --trip:#F2B556; --trip-soft:#3A2A10; --ok:#6CC08F; --no:#F08B7E;
+  --grid:#1F2833; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --paper:#0E131A; --plate:#151C25; --ink:#E4E9EF; --muted:#9AA6B4; --rule:#2A3441;
+  --signal:#8AA8FF; --signal-soft:#1C2A4D; --trip:#F2B556; --trip-soft:#3A2A10; --ok:#6CC08F; --no:#F08B7E;
+  --grid:#1F2833; color-scheme:dark }
+
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font-family:var(--body);font-size:17px;line-height:1.6;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));padding-block:0 64px}
+.wrap{max-width:1040px;margin:0 auto}
+.col{max-width:68ch}
+h1,h2,h3{font-family:var(--display);text-wrap:balance;line-height:1.08;margin:0}
+h1{font-size:clamp(2.6rem,7vw,5.4rem);font-weight:800;font-stretch:72%;letter-spacing:-0.01em}
+h2{font-size:clamp(1.6rem,3.4vw,2.3rem);font-weight:700;font-stretch:82%;margin-bottom:.5em}
+h3{font-size:1.12rem;font-weight:700;font-stretch:92%}
+p{margin:0 0 1em}
+a{color:var(--signal)}
+a:focus-visible{outline:2px solid var(--signal);outline-offset:3px;border-radius:2px}
+.eyebrow{font-family:var(--mono);font-size:.74rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+section{padding-block:56px;border-top:1px solid var(--rule);scroll-margin-top:12px}
+
+header.hero{padding-block:48px 28px;display:grid;gap:22px}
+.lede{font-size:1.22rem;max-width:58ch}
+.lede em{font-style:normal;background:linear-gradient(transparent 62%, var(--trip-soft) 62%)}
+.byline{display:flex;flex-wrap:wrap;gap:8px 18px;color:var(--muted);font-family:var(--mono);font-size:.8rem}
+nav.toc{display:flex;flex-wrap:wrap;gap:6px 8px;margin-top:6px}
+nav.toc a{font-family:var(--mono);font-size:.78rem;text-decoration:none;color:var(--ink);border:1px solid var(--rule);border-radius:999px;padding:4px 10px;background:var(--plate)}
+nav.toc a:hover{border-color:var(--signal);color:var(--signal)}
+
+.plate{background:var(--plate);border:1px solid var(--rule);border-radius:6px;padding:18px}
+.trace-wrap{overflow-x:auto}
+svg text{font-family:var(--mono);font-size:11px;fill:var(--muted)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 18px;font-family:var(--mono);font-size:.78rem;color:var(--muted);margin-top:10px}
+.key{display:inline-block;width:18px;height:3px;vertical-align:middle;margin-right:6px}
+
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:18px}
+.fact{border-top:3px solid var(--signal);padding-top:12px;min-width:0}
+.fact .n{font-family:var(--display);font-weight:800;font-stretch:75%;font-size:2.1rem;line-height:1}
+.fact .n small{font-size:.9rem;font-weight:600;color:var(--muted);font-stretch:100%}
+.fact p{font-size:.95rem;color:var(--muted);margin:.4em 0 0}
+.caveat{border-left:3px solid var(--trip);background:var(--trip-soft);padding:12px 16px;border-radius:0 6px 6px 0;font-size:.95rem}
+
+.inst{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr));gap:1px;background:var(--rule);border:1px solid var(--rule);border-radius:6px;overflow:hidden}
+.inst div{background:var(--plate);padding:14px 16px;min-width:0}
+.inst b{display:block;font-family:var(--display);font-stretch:90%;font-size:1rem;margin-bottom:4px}
+.inst span{font-size:.92rem;color:var(--muted)}
+
+ol.road{list-style:none;margin:0;padding:0}
+ol.road li{display:grid;grid-template-columns:56px 1fr;gap:14px;padding:14px 0;border-bottom:1px dashed var(--rule)}
+ol.road li:last-child{border-bottom:0}
+.step{font-family:var(--mono);font-size:.8rem;color:var(--signal);padding-top:3px}
+.status{display:inline-block;font-family:var(--mono);font-size:.7rem;letter-spacing:.06em;text-transform:uppercase;padding:2px 8px;border-radius:999px;margin-left:8px;vertical-align:2px;border:1px solid currentColor;white-space:nowrap}
+.s-now{color:var(--signal)} .s-built{color:var(--ok)} .s-next{color:var(--trip)} .s-later{color:var(--muted)}
+ol.road p{margin:.3em 0 0;font-size:.95rem;color:var(--muted)}
+
+.tbl{overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:640px;font-size:.93rem}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--rule);vertical-align:top}
+th{font-family:var(--mono);font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+td.tag{white-space:nowrap}
+.v-ok{color:var(--ok);font-family:var(--mono);font-size:.8rem}
+.v-part{color:var(--trip);font-family:var(--mono);font-size:.8rem}
+.v-no{color:var(--no);font-family:var(--mono);font-size:.8rem}
+
+.split{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:18px}
+.chan{padding:18px;border-radius:6px;min-width:0}
+.chan.big{background:var(--signal-soft)}
+.chan.tiny{background:var(--plate);border:1px solid var(--rule)}
+.chan .q{font-family:var(--display);font-weight:800;font-stretch:72%;font-size:2.6rem;line-height:1}
+.bar{height:10px;border-radius:5px;background:var(--grid);overflow:hidden;margin:10px 0 4px}
+.bar i{display:block;height:100%;background:var(--signal)}
+.bar.t i{background:var(--trip)}
+
+.kits{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:14px}
+.kit{background:var(--plate);border:1px solid var(--rule);border-radius:6px;padding:14px 16px;min-width:0}
+.kit .repo{font-family:var(--mono);font-size:.78rem;color:var(--signal);word-break:break-word}
+.kit p{font-size:.92rem;color:var(--muted);margin:.4em 0 0}
+
+.roster{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:8px;margin-top:12px}
+.member{border:1px solid var(--rule);border-radius:6px;padding:8px 10px;background:var(--plate);font-size:.85rem;min-width:0}
+.member .k{font-family:var(--mono);font-size:.72rem;color:var(--muted)}
+.member.d{border-color:var(--signal)} .member.x{border-color:var(--trip)}
+
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:28px}
+.two > div{min-width:0}
+dl.spec{display:grid;grid-template-columns:max-content 1fr;gap:6px 16px;margin:0;font-size:.93rem}
+dl.spec dt{font-family:var(--mono);font-size:.76rem;color:var(--muted);padding-top:2px}
+dl.spec dd{margin:0}
+
+footer{padding-top:28px;border-top:1px solid var(--rule);color:var(--muted);font-size:.86rem}
+@media (prefers-reduced-motion: no-preference){ .trip-band{animation:pulse 2.8s ease-in-out infinite} }
+@keyframes pulse{0%,100%{opacity:.18}50%{opacity:.32}}
+</style>
+
+<div class="wrap">
+<header class="hero">
+  <div class="eyebrow">JouleWise · research map · 7 November 2026</div>
+  <h1>The Energy Tripwire</h1>
+  <p class="lede">An AI agent can edit its own logs. It cannot edit the joules it drew from the wall. JouleWise measures LLM agents on an Apple-silicon laptop precisely enough to ask whether <em>sabotage leaves an energy signature</em>: hidden work that shows up as unexplained energy against the work the agent reported.</p>
+  <div class="byline"><span>PI: Ed R.</span><span>Rig: 128 GB MacBook Pro, M3 Max class</span><span>Preregistered · blinded · public deviation log</span></div>
+  <nav class="toc" aria-label="Sections">
+    <a href="#shade">SHADE-Arena</a><a href="#instrument">Instrument</a><a href="#evidence">Evidence</a><a href="#roadmap">Roadmap</a><a href="#experiments">Experiments</a><a href="#interp">Interp × energy</a><a href="#port">Qwen-Next port</a><a href="#oss">Open source</a><a href="#today">Today's research</a>
+  </nav>
+</header>
+
+<div class="plate" aria-labelledby="fig1">
+  <div class="eyebrow" id="fig1">Figure 1 · illustrative drawing, not measured data</div>
+  <div class="trace-wrap"><svg id="trace" viewBox="0 0 900 260" width="100%" style="min-width:560px" role="img" aria-label="Illustrative whole-machine power trace for two agent episodes. The prediction from logged work matches the honest episode; the episode with hidden work draws extra power above the prediction and crosses the tripwire."></svg></div>
+  <div class="legend"><span><i class="key" style="background:var(--muted)"></i>predicted from logged work</span><span><i class="key" style="background:var(--signal)"></i>honest episode</span><span><i class="key" style="background:var(--trip)"></i>episode with unlogged work</span></div>
+</div>
+
+<section>
+  <div class="col">
+    <div class="eyebrow">The idea</div>
+    <h2>Energy as a record the agent cannot rewrite</h2>
+    <p>Every token an agent generates costs energy in a way we can model: prefill, decode, context length, tool calls, idle baseline. Fit that model on honest episodes and each new episode gets a residual: measured joules minus the joules its own log explains. Hidden reasoning, unlogged tool work or covert computation should push that residual up. The research question is how small a hidden action the tripwire can catch, at what false-alarm rate, on a machine that is never perfectly quiet.</p>
+    <p>No published work we could find uses measured energy to audit an agent's logged token counts. Software-only hidden-token audits exist (CoIn, token-inflation work), and physical verification exists at whole-workload scale. The per-episode, token-level tripwire sits between them.</p>
+  </div>
+</section>
+
+<section id="shade">
+  <div class="eyebrow">Walkthrough</div>
+  <h2>How a SHADE-Arena episode becomes a tripwire reading</h2>
+  <p class="col"><a href="https://arxiv.org/abs/2506.15740">SHADE-Arena</a> gives an agent a legitimate main task inside a simulated tool environment, and in sabotage runs also a covert side task it must complete without getting caught. JouleWise runs open models on the laptop through two of its task pairs and meters every episode.</p>
+  <ol class="road">
+    <li><div class="step">01</div><div><h3>Pick a task pair and a condition</h3><p><span class="mono">spam_filter_update</span> and <span class="mono">bank_transfer_2</span>, each run <b>benign</b> (main task only) or <b>sabotage</b> (main task plus the hidden side task). Every episode has a fixed, published seed derived from model, task and index, so any run can be replayed exactly.</p></div></li>
+    <li><div class="step">02</div><div><h3>Run the agent locally, under thermal control</h3><p>The model runs with thinking on, through multi-turn tool calls. Before the episode, gate G0 waits until the slow thermometer is back near its reference; between turns, gate G1 and short holds keep every turn starting from the same heat state, so heat history cannot fake a signal.</p></div></li>
+    <li><div class="step">03</div><div><h3>Meter the whole machine</h3><p>The USB-C DC meter records joules at the charger cable, while powermetrics rails and SMC sensors record the inside view. Quiet guards record any background process that competes for the machine.</p></div></li>
+    <li><div class="step">04</div><div><h3>Predict the energy from the log</h3><p>A five-term residual model, fit on honest episodes, turns the logged prefill, decode, context and tool counts into expected joules. The residual is what the log does not explain.</p></div></li>
+    <li><div class="step">05</div><div><h3>Set the tripwire from benign runs</h3><p>The alarm threshold is the largest residual among <i>m</i> benign episodes. That gives a marginal false-alarm rate of at most 1/(<i>m</i>+1): about 5 % at <i>m</i> = 20, and 2.5 % at the registration grade of <i>m</i> ≥ 39 now ruled for v4.</p></div></li>
+    <li><div class="step">06</div><div><h3>Test it against known hidden work</h3><p>The known-H test keeps the measured joules but strips a known number of reasoning tokens from the log, the way a deceptive agent might hide its thinking. Sweeping that number gives a detection curve (H50, H90: the hidden-token counts caught half and nine-tenths of the time). Positive-control nights will add real unlogged computation.</p></div></li>
+  </ol>
+  <div class="plate" style="margin-top:22px">
+    <div class="eyebrow">The first v4 window (W1), as ordered</div>
+    <div class="roster">
+      <div class="member"><div class="k">1–4 · anchors</div>Qwen3-30B spam/bank, benign/sabotage, unchanged from v3</div>
+      <div class="member d"><div class="k">5 · D original</div>Qwen3.8-27B spam/benign, the window's reference</div>
+      <div class="member x"><div class="k">6, 7, 9 … · contrast</div>Replayed pilot-7 X (sabotage) and Y (benign) members with and without gates</div>
+      <div class="member d"><div class="k">8, 11, 14 · D gated</div>bank/benign, spam/sabotage, bank/sabotage with G0, G1 and holds</div>
+      <div class="member d"><div class="k">17 · D replay of 5</div>The identical-work check: same tokens, late in the night</div>
+      <div class="member"><div class="k">18 · development</div>bank/benign seed 93, the alternate sentinel</div>
+    </div>
+    <p style="margin:12px 0 0;font-size:.9rem;color:var(--muted)">The contrast tests whether thermal gating itself changes the energy reading (the T-versus-W verdict). The replay pair checks that identical work reads identically hours apart.</p>
+  </div>
+</section>
+
+<section id="instrument">
+  <div class="eyebrow">The instrument</div>
+  <h2>A laptop turned into a measurement bench</h2>
+  <div class="inst">
+    <div><b>External DC meter</b><span>A USB-C power meter (KM003C) on the charger cable measures whole-machine energy independently of macOS.</span></div>
+    <div><b>Software power rails</b><span>powermetrics CPU, GPU and ANE rails, used as a second channel and checked against the meter.</span></div>
+    <div><b>SMC thermometry</b><span>A model-free sensor classifier picks fast and slow thermometers; thermal gates G0 and G1 hold every run to the same heat state.</span></div>
+    <div><b>Quiet guards</b><span>Background contention is measured as CPU-seconds per second, recorded on every run, and redone only when sustained.</span></div>
+    <div><b>Paired designs</b><span>A/B/B/A blocks and replays put each comparison inside the same thermal and drift conditions.</span></div>
+    <div><b>Blinded analysis</b><span>Outcomes stay sealed until an independent recompute agrees with the analysis, family by family.</span></div>
+  </div>
+</section>
+
+<section id="evidence">
+  <div class="eyebrow">Evidence so far</div>
+  <h2>What the pilots already show</h2>
+  <div class="grid2" style="margin-block:8px 22px">
+    <div class="fact"><div class="n mono">≈2 <small>J</small></div><p>How closely an identical replay repeats, on agent episodes of 2,000–4,000 J (Qwen3-30B-A3B, SHADE-Arena tasks).</p></div>
+    <div class="fact"><div class="n mono">19–58 <small>J</small></div><p>Residual spread per task pair after the token model: the noise the tripwire has to beat.</p></div>
+    <div class="fact"><div class="n mono">all</div><p>Held-out one-turn omissions of 539 or 1,193 tokens were detected in the pilots.</p></div>
+    <div class="fact"><div class="n mono">≈76 <small>%</small></div><p>Share of memory-traffic energy that lands outside the powermetrics rails (known-bytes test, f = 0.238 ± 0.098). Software counters alone miss most of it, which is why the external meter matters.</p></div>
+  </div>
+  <div class="caveat col"><b>Read with care.</b> The held-out sabotage set holds only two distinct trajectories, each threshold is a sample maximum, and the pilot tamper is a log edit rather than real hidden work. In pilots 4–9, 2 of 26 untampered sabotage-task runs crossed the threshold. The claim holds against an agent that does not adapt to the meter, since powermetrics runs on the same host. The v4 series exists to close these gaps.</div>
+</section>
+
+<section id="roadmap">
+  <div class="eyebrow">Roadmap</div>
+  <h2>From readiness checks to a registered test</h2>
+  <ol class="road">
+    <li><div class="step">01</div><div><h3>R0 · readiness <span class="status s-now">in progress</span></h3><p>Host, memory, model load and thermometry. The display now sleeps before every quiet step, and routine macOS background tasks are recorded instead of aborting the run.</p></div></li>
+    <li><div class="step">02</div><div><h3>R1 · thermal rehearsal <span class="status s-built">kit built</span></h3><p>One night (up to about 16 h worst case) that calibrates the thermal gates, the decode budget and the deadman on the production model, Qwen3.8-27B at 8-bit.</p></div></li>
+    <li><div class="step">03</div><div><h3>W1 · first v4 window <span class="status s-built">fallback ruled</span></h3><p>The 8-bit model decodes at about 11.9 tok/s, so the original budget cannot fit. A fallback was declared before any R1 number exists: a budget-sized warm-up cap first, then 4-bit, then the design council.</p></div></li>
+    <li><div class="step">04</div><div><h3>D windows <span class="status s-next">next</span></h3><p>Three long windows of up to 59,520 s, two task pairs each.</p></div></li>
+    <li><div class="step">05</div><div><h3>Registration grade <span class="status s-next">ruled</span></h3><p>At least 39 episodes per pair plus a held-out test cohort, decided before any alarm was read. This turns the pilot signal into a confirmatory test.</p></div></li>
+    <li><div class="step">06</div><div><h3>Positive controls <span class="status s-later">approved</span></h3><p>30B nights that inject real unlogged computation, so the tripwire is tested against genuine hidden work rather than edited logs.</p></div></li>
+  </ol>
+</section>
+
+<section id="experiments">
+  <div class="eyebrow">Next experiments on the rig</div>
+  <h2>Ranked, and checked for novelty</h2>
+  <p class="col">Each proposal was attacked by two independent checkers that searched for prior work that already answered it.</p>
+  <div class="tbl plate" style="padding:4px 6px">
+    <table>
+      <thead><tr><th>Experiment</th><th>Why this rig</th><th>Novelty check</th><th>Cost</th></tr></thead>
+      <tbody>
+        <tr><td><b>Two-channel audit of hidden tokens</b> <span class="status s-next">next</span><br>Energy plus trusted time as two detectors of stripped reasoning, with an attack grid</td><td>DC meter plus timing on the same episodes</td><td class="tag"><span class="v-ok">survives</span></td><td class="mono">analysis</td></tr>
+        <tr><td><b>Agent energy at the machine boundary</b> <span class="status s-next">next</span><br>Where a local agent episode's joules go, at the DC input</td><td>Whole-machine meter on unified memory</td><td class="tag"><span class="v-ok">survives</span></td><td class="mono">desk</td></tr>
+        <tr><td><b>Instrument night</b> <span class="status s-later">banked</span><br>powermetrics transfer function against the meter</td><td>Both channels at once, no model weights</td><td class="tag"><span class="v-ok">survives</span></td><td class="mono">1–1.5 nights</td></tr>
+        <tr><td><b>SSD-tier model memory</b> <span class="status s-later">banked</span><br>Energy of a 51B n-gram table paged from SSD (Flash-Next)</td><td>128 GB unified memory plus SSD paging</td><td class="tag"><span class="v-ok">survives</span></td><td class="mono">1–1.5 nights</td></tr>
+        <tr><td>Oversight tax in joules · power modes by phase · rail share by phase</td><td>—</td><td class="tag"><span class="v-part">partly anticipated</span></td><td class="mono">varies</td></tr>
+        <tr><td>Speculative decoding energy</td><td>—</td><td class="tag"><span class="v-no">refuted (Dutta et al.)</span></td><td class="mono">dropped</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="interp">
+  <div class="eyebrow">Interp × energy</div>
+  <h2>What a surgical weight edit does to power</h2>
+  <p class="col">Models can now edit weights directly: MIT CSAIL's "Sparks of Weight-Space Programming" (November 2026) changed 0.016 % of Qwen3.5-0.8B's weights and lifted MATH-500 from 7.9 % to 48.1 %. An edit like that changes energy through two channels, and they differ by orders of magnitude.</p>
+  <div class="split" style="margin-top:8px">
+    <div class="chan big">
+      <div class="eyebrow">Behaviour channel</div>
+      <div class="q mono">12–15×</div>
+      <p style="margin:.5em 0 0">fewer tokens per correct answer in the Astra case. The edit changes how much the model writes and thinks. That shows up plainly at the meter, and it is the same channel the tripwire uses.</p>
+      <div class="bar" aria-hidden="true"><i style="width:100%"></i></div>
+    </div>
+    <div class="chan tiny">
+      <div class="eyebrow">Physics channel</div>
+      <div class="q mono">≤ 3×10⁻⁵</div>
+      <p style="margin:.5em 0 0">of energy at identical tokens, likely 10⁻⁶ or less. Different weight values flip different transistors, but separating that from zero would take about 95,000 replay pairs, so the honest deliverable is an upper bound.</p>
+      <div class="bar t" aria-hidden="true"><i style="width:1%"></i></div>
+    </div>
+  </div>
+  <div class="col" style="margin-top:22px">
+    <h3>Pulling a tiny signal out of a busy machine</h3>
+    <p>Background programs are not the binding limit: in the known-bytes test they were 0.2 % of the measurement half-width. The limits are the effect's own size, and the chance that Apple's software counters are modelled rather than measured. Small-effect claims are therefore judged on the external meter, with lock-in modulation: the process swaps between edited and unedited weights on a known schedule and reads energy only at that frequency.</p>
+    <p><b>First experiment, ASTRA-2CH:</b> one Mac window. Energy per answer for the edited and base models; the same token stream replayed through both weight sets; and a synthetic test of whether the power readings react to operand data at all.</p>
+    <p><b>Desk tools built:</b> forced-token replay, a reversible weight-edit toolkit with in-process swapping, lock-in and power-analysis tools, a fixed-FLOP data-dependence benchmark, a preregistration draft and a behaviour-channel calculator. <b>In progress:</b> a joules-per-bit-transition model, energy-capability frontiers of edits, a tamper-detection threat model and blinded challenge, a per-component energy map, and the energy cost of ablation styles.</p>
+  </div>
+</section>
+
+<section id="port">
+  <div class="eyebrow">Model port</div>
+  <h2>Qwen3.8-Flash-Next on Apple silicon</h2>
+  <div class="two">
+    <div>
+      <p>The strongest open model that fits in 128 GB is the one we most want agents to run in SHADE-Arena: smart enough to attempt deception. Flash-Next is a 125B-parameter mixture of experts with about 6B active per token. We are building our own MLX implementation, checked against Qwen's official transformers code, because energy results are only as trustworthy as the model they run.</p>
+      <dl class="spec">
+        <dt>architecture</dt><dd>Gated DeltaNet, sparse attention with an indexer, hyper-connection streams, 512 experts, a 51B n-gram embedding paged from disk</dd>
+        <dt>validated</dt><dd>Gold parity on tiny configs and real-weight layer parity against the reference; a 48-layer bf16 quality reference (top-64) for scoring quantized builds</dd>
+        <dt>open</dt><dd>Full 48-layer MLX parity, a real-weight test of sparse attention, and every on-Mac measurement</dd>
+        <dt>build</dt><dd>6-bit experts with the rest bf16 and the n-gram table paged from SSD; about 2.7 GB of memory margin, so a 5-bit fallback is ready</dd>
+        <dt>speed</dt><dd>about 16–25 tok/s expected decode</dd>
+      </dl>
+    </div>
+    <div>
+      <h3 style="margin-bottom:8px">Plan when the SSD arrives</h3>
+      <ol class="road" style="margin-bottom:14px">
+        <li><div class="step">01</div><div><h3>Download and convert on the Air</h3><p>Overnight, with the SSD plugged into the analysis laptop instead of the measurement Mac.</p></div></li>
+        <li><div class="step">02</div><div><h3>4–8 daytime hours on the MBP</h3><p>Live probes and quantized-quality scoring against the bf16 reference, with the SSD unplugged before any measurement night.</p></div></li>
+        <li><div class="step">03</div><div><h3>Join the ALIGN series</h3><p>As its own preregistered addendum, once validated.</p></div></li>
+      </ol>
+      <p style="font-size:.93rem;color:var(--muted)">Qwen3-Next itself already runs in mlx-lm. What upstream still lacks is multi-token prediction with recurrent-state rollback, a chunked gated-delta prefill kernel and a fused attention kernel; each is a multi-week job. Our most useful upstream contribution is a correctness audit: a verification package for the open Flash-Next pull request, built from our gold harness.</p>
+    </div>
+  </div>
+</section>
+
+<section id="oss">
+  <div class="eyebrow">Open source</div>
+  <h2>Giving the tooling back</h2>
+  <p class="col">A plan checked 40 candidate contributions against existing projects and each project's rules and kept 22. Ed writes and posts all upstream text himself, following each project's AI-use policy. The repository is MIT-licensed. The first four are prepared as repro, failing test, fix and fact sheet, ready for Ed to run in a sandbox.</p>
+  <div class="kits" style="margin-block:6px 22px">
+    <div class="kit"><div class="repo">Neywa-Labs/mlx-vlm</div><h3>Batched sparse attention drifts</h3><p>Ragged batches of Qwen sparse attention silently diverge past 2,052 tokens.</p></div>
+    <div class="kit"><div class="repo">ggml-org/llama.cpp</div><h3>Converter drops sparse attention</h3><p>The GGUF converter silently drops the sparse-attention settings for indexed-attention checkpoints.</p></div>
+    <div class="kit"><div class="repo">ml-explore/mlx-lm</div><h3>Reasoning field round-trip</h3><p>The server returns <span class="mono">reasoning</span> but never maps it back to <span class="mono">reasoning_content</span> for OpenAI-style clients.</p></div>
+    <div class="kit"><div class="repo">okhsunrog/km003c-rs</div><h3>Meter samples counted twice</h3><p>A re-delivered sample batch longer than nine periods is integrated twice by the USB-C meter parser.</p></div>
+  </div>
+  <div class="grid2">
+    <div class="fact" style="border-color:var(--ok)"><h3>Later, from our own tooling</h3><p>A background-contention checker for Apple-silicon benchmarks, an Inspect energy plugin, windowed-energy tools, SMC thermometer probes, and an active-bytes table.</p></div>
+    <div class="fact" style="border-color:var(--trip)"><h3>After the registered releases</h3><p>Preregistration templates, the open energy dataset, and Flash-Next logit records for others validating ports.</p></div>
+  </div>
+</section>
+
+<section id="today">
+  <div class="eyebrow">7 November 2026</div>
+  <h2>Today's research, in one table</h2>
+  <p class="col">About 150 model agents worked in parallel today, with independent Fable 5.1 and Opus 5.5 seats on each question, adversarial checkers on each claim, and a synthesis that settled their disagreements against the code and the sources. Every document is in the repository.</p>
+  <div class="tbl plate" style="padding:4px 6px">
+    <table>
+      <thead><tr><th>Question</th><th>Headline</th><th>Where</th></tr></thead>
+      <tbody>
+        <tr><td><b>Research program</b></td><td>ALIGN is the novel line; Paper 1's strongest material is BYTES and known-bytes; BYTES stage 1 now has an owner for its 12 November checkpoint.</td><td><a href="https://github.com/mpmdw/JouleWise/pull/695">PR #695</a></td></tr>
+        <tr><td><b>Literature</b></td><td>About 35 sources opened and checked. No one meters energy to audit an agent's logged tokens, and no LLM energy study gates on thermal state.</td><td><a href="https://github.com/mpmdw/JouleWise/pull/695">PR #695</a></td></tr>
+        <tr><td><b>W1 pre-arm gate</b></td><td>No arm yet: protocol v4 still lacks nine council rulings; battery, contrast and duty-bar rules are listed for closing first.</td><td><a href="https://github.com/mpmdw/JouleWise/pull/695">PR #695</a></td></tr>
+        <tr><td><b>W1 budget</b></td><td>8-bit decode at about 11.9 tok/s cannot fit the original budget; a mechanical fallback was declared before R1 and built into the kit.</td><td><a href="https://github.com/mpmdw/JouleWise/pull/695">PR #695</a></td></tr>
+        <tr><td><b>Block 6 design</b></td><td>Block 6 data are already sealed; registration amendments should land before Block 5 is unsealed.</td><td><a href="https://github.com/mpmdw/JouleWise/pull/695">PR #695</a></td></tr>
+        <tr><td><b>Release to paper</b></td><td>The release check is sound; the path from released numbers to Paper 1's 219 figures still needs a renderer and a few blind rules.</td><td><a href="https://github.com/mpmdw/JouleWise/pull/695">PR #695</a></td></tr>
+        <tr><td><b>Proportionality</b></td><td>The strict quiet rule caused most R0 stops and protected no number; it is being replaced. The blinded analysis earned its cost.</td><td><a href="https://github.com/mpmdw/JouleWise/pull/695">PR #695</a></td></tr>
+        <tr><td><b>Methodology vs literature</b></td><td>Ten new experiments for the Mac, each novelty-checked; two next, two banked, one refuted.</td><td><a href="https://github.com/mpmdw/JouleWise/pull/698">PR #698</a></td></tr>
+        <tr><td><b>Qwen-Next port</b></td><td>Validated on the laptop; disk is the binding limit; SSD-on-the-Air plan; upstream path is a correctness audit.</td><td><a href="https://github.com/mpmdw/JouleWise/pull/698">PR #698</a></td></tr>
+        <tr><td><b>Open-source plan</b></td><td>22 contributions kept of 40; four fix kits prepared; Ed writes all upstream posts.</td><td><a href="https://github.com/mpmdw/JouleWise/pull/696">PR #696</a></td></tr>
+        <tr><td><b>Interp × energy</b></td><td>The behaviour channel dominates; the physics channel is an upper-bound measurement; ASTRA-2CH is first; desk tools are being built.</td><td><a href="https://github.com/mpmdw/JouleWise/pull/702">PR #702</a></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <div class="eyebrow">Under the hood</div>
+  <h2>A pipeline that earns its result</h2>
+  <div class="grid2">
+    <div class="fact"><div class="n mono">37 h → 1 h 40</div><p>Block 5's blinded analysis, after a speed rewrite proven result-equivalent by a blinded comparator.</p></div>
+    <div class="fact"><div class="n mono">12 → 1</div><p>Disagreeing result families between the analysis and the independent recompute after six blind fixes; the last cause was found from structure-only probes and fixed in the version now running.</p></div>
+    <div class="fact"><div class="n mono">≈650 <small>/h</small></div><p>Background tasks macOS starts on an idle Mac. The quiet rules now record them instead of fighting them.</p></div>
+  </div>
+</section>
+
+<footer>
+  <p>JouleWise · Ed R. · All numbers come from unblinded pilots, public tests or design documents. Block 5 outcomes remain sealed until their registered release. Figure 1 is a drawing, not data. Living agenda: <span class="mono">docs/research/AGENDA.md</span>.</p>
+</footer>
+</div>
+
+<script>
+(function(){
+  var svg=document.getElementById('trace'); if(!svg) return;
+  var NS='http://www.w3.org/2000/svg', W=900, H=260, L=48, R=14, T=16, B=34, TMAX=600, PMAX=60;
+  function el(name, attrs, parent){var e=document.createElementNS(NS,name);for(var k in attrs)e.setAttribute(k,attrs[k]);(parent||svg).appendChild(e);return e}
+  function x(t){return L+(t/TMAX)*(W-L-R)}
+  function y(p){return H-B-(p/PMAX)*(H-T-B)}
+  function noise(i){var v=Math.sin(i*12.9898)*43758.5453;return (v-Math.floor(v))-0.5}
+  function model(t){
+    var base=9;
+    if(t>40&&t<70||t>=330&&t<360) return base+34;
+    if(t>=70&&t<270||t>=360&&t<560) return base+24+3*Math.sin(t/9);
+    return base;
+  }
+  function line(t0,t1,f){var d='';for(var t=t0;t<=t1;t+=2){d+=(t===t0?'M':'L')+x(t).toFixed(1)+' '+y(f(t)).toFixed(1)}return d}
+  for(var p=0;p<=60;p+=20){el('line',{x1:L,x2:W-R,y1:y(p),y2:y(p),stroke:'var(--grid)','stroke-width':1});el('text',{x:L-8,y:y(p)+4,'text-anchor':'end'}).textContent=p+' W'}
+  for(var s=0;s<=600;s+=100){el('text',{x:x(s),y:H-12,'text-anchor':'middle'}).textContent=s+' s'}
+  el('rect',{'class':'trip-band',x:x(440),y:y(50),width:x(500)-x(440),height:y(30)-y(50),fill:'var(--trip)'});
+  el('path',{d:line(0,TMAX,model),fill:'none',stroke:'var(--muted)','stroke-width':1.5,'stroke-dasharray':'4 4'});
+  el('path',{d:line(0,300,function(t){return model(t)+noise(t)*2.4}),fill:'none',stroke:'var(--signal)','stroke-width':2});
+  el('path',{d:line(300,TMAX,function(t){var v=model(t)+noise(t+7)*2.4;if(t>=440&&t<500)v+=13;return v}),fill:'none',stroke:'var(--trip)','stroke-width':2});
+  var lab=el('text',{x:x(470),y:y(53),'text-anchor':'middle'});lab.textContent='unexplained joules';lab.style.fill='var(--trip)';
+  el('text',{x:x(150),y:y(48),'text-anchor':'middle'}).textContent='honest episode';
+  el('text',{x:x(450),y:y(9)-8,'text-anchor':'middle'}).textContent='episode with hidden work';
+})();
+</script>
+
+</html>

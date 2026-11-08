@@ -80,3 +80,49 @@ Written by the laptop lead (Opus 5.5, session 1544c617) before Ed retired this C
   - whether the Khiani paper is connected to us;
   - the OSS questions: the license, the "John Davis" alias, and running upstream code in sandboxes;
   - a Paper 1 retitle.
+
+## Update, about 19:50 PST 11-07
+- **Block 5 r4 merged and tagged:** `b5/analysis-r4` = `ab1e0098d` (PR #697; executing review ADMIT, cold Fable ADMIT; dispositions in the PR body). DLE-4 owes one follow-up sentence (exec Low 1).
+- **dry-m is running** (blind; staging `/Users/edr/jw-b5-staging/dryrun-m`, custody `/Users/edr/jw-b5-custody/dry-m`, 8 workers, worktree `jw-wt/b5-r4-run`, started about 19:40 PST). It is expected to take about 1 h 40 min. Read only its exit code; exit 3 (the GAMMA outcome class) is no longer expected, but read it before assuming.
+- **Release check after dry-m:** in `jw-wt/b5-r4-run`, run `TMPDIR=/private/tmp/jwrelchk-m-tmp nice -n 5 /opt/homebrew/bin/python3.13 -B scripts/release_b5.py --custody /Users/edr/jw-b5-custody/dry-m --window-index configs/analysis/b5/analysed_windows.json --pinned-commit ab1e0098dbd0ab839c8f278088221aa8aa4de8d2 --restricted-out /Users/edr/jw-b5-custody/release-check-drym-<UTC> --workers 6 > <out>.stdout-UNREAD 2> <out>.stderr-UNREAD`.
+  - Exit 0 means agree: ask Ed for the unseal OK.
+  - Exit 1 means a hold. Read only `verdict.json` through a float-masking printer, and attribute failing rows by family and contrast id. If GAMMA still holds, check the binding sub-check words with `tools/probe_d5_kinds.py` (cold MEDIUM-1: the order and contiguity checks run on real data for the first time).
+  - The release comparator cannot pass registered null outcomes (`b5-release-to-paper.md`). Rule on that blind if any family is null.
+- **R0:** re-runs 8-10 were refused by routine macOS activity (trustkit, WindowServer/ControlCenter with the display on since 11-05, routined during a dasd wave).
+  - Ruling **R0-L3**: contention is recorded and not fatal; one redo on a sustained ≥ 0.5-core single process, excluding kernel_task; the display sleeps with a 300 s dwell. It is in PRs #699 (lane) and #700 (main). Cloud reviews were launched by the magistrate (RUN_STATE 208), which may merge them if both reviews admit with nothing above LOW.
+  - After that, R0 runs, then R1 (RUN_STATE 202).
+  - #694 (the sampler) conflicts with #699 in QuietGuard; resolve before merging.
+- **OSS fix kits (read-only, UNRUN):** branch `oss/2026-11-07-fix-kits`, `docs/oss/2026-11-07/`. mlx-vlm is now `Neywa-Labs/mlx-vlm` (transferred from Blaizzy).
+- **Interp × energy:** six Sol desk jobs are in flight (`docs/research/interp-energy-desk-work.md`). Study PR #702. Agenda: `docs/research/AGENDA.md`.
+- **Ed, 11-07:**
+  - ALIGN claim "sabotage leaves an energy signature"; more windows OK.
+  - Q4 yes, Q6 registration grade (RUN_STATE 204).
+  - MIT license.
+  - The "John Davis" alias is his.
+  - Ping him before running upstream code (the auto-mode classifier also blocks it; he may add a permission rule).
+  - The Khiani paper is independent.
+  - Interp is his main interest.
+- `tools/launch_b5_dry_run.zsh`: fixed a quoting bug (the tag lookup was in single quotes).
+
+## Update, about 20:40 PST 11-07
+- **R10-4 W1 kit:** `lane/2026-11-07-w1-kit-r10`.
+  - Builder rulings applied (`05bdff797`).
+  - Cold review: ADMIT_WITH_FIXES (`1573c919e`). MEDIUM-1: refuse branch (a) when the 600 s rule fits. MEDIUM-2: the no-receipt path must equal e901eb2a4 exactly. LOWs 1-5.
+  - The dispositions were sent to the builder, which applies them on the same branch. **Verify that the fixes landed** (LEAD-RULINGS-2 "Cold review dispositions 2026-11-07") before merging the branch into the R1 lane, which happens after R1 runs.
+- **dry-m** was still running at 20:40 (at step 3b). Release-check command: see the 19:50 update.
+- **Interp desk:** wave 1 is pushed and wave 2 is chained (see `docs/research/interp-energy-desk-work.md`).
+
+## Update, about 21:00 PST 11-07
+- **R10-4 is complete** on `lane/2026-11-07-w1-kit-r10` @ `d600baba0`, with all cold-review dispositions applied and verified against the reviewer's own adversarial tests.
+- **Lead confirms:**
+  - LOW-5 as built: never recommend a B_D above `r1_slots.slots.B_D`. The lead's wording had the direction wrong.
+  - The new "lead" derivation branch: G0* ≥ 600 while the e901 rule misses because of a long X-G wait. The kit refuses the receipt and returns to the lead.
+- **Still open:** the duty-bar fallback step under R10-2(a), ruled after R1.
+- **Merge timing:** merge `w1-kit-r10` into the R1 lane after the R1 night (so it never changes code under R1), then run R1's numbers through `scripts/align_w1_budget_procedure.py decide`.
+
+## ★ MAIN GOAL (Ed, about 20:55 PST 11-07). Read this first
+**ALIGN v4 plus an adaptive red team showing the monitor+energy squeeze holds**, aimed at a top-venue main-track paper. All spare effort goes to auditing v4 and maximizing that chance; other lanes take spare capacity only. The memory file is `main-goal-v4-squeeze`, and `docs/research/AGENDA.md` has the in-flight branches and the critical path. Review and act on these as they land:
+- the Sol drafts `align/2026-11-07-{squeeze-prereg,squeeze-analysis,adversary-kit,reviewer2}`;
+- the workflow outputs `align/2026-11-07-v4-{v4-registration,squeeze-design,reviewer2}`;
+- part 5, `research/2026-11-07-tripwire-directions`.
+- **Cross-family soundness rule (Ed):** every v4/squeeze step gets at least two independent Sol 6.1 xhigh seats next to the Claude seats, plus an agreement report. For tonight's run, see the agenda's MAIN GOAL section. Start from `align/2026-11-07-squeeze-agreement` (`docs/align/squeeze/AGREEMENT.md`) once it lands. It is the merged, agreement-weighted v4 action list.

@@ -87,8 +87,8 @@ class LiteralPinTests(unittest.TestCase):
         self.assertIn(f"raise PaperReportedEnergyRefusal('{cmp.BELOW_MINIMUM_CODE}')", estimate)
         self.assertIn(cmp.BELOW_MINIMUM_CODE, cmp.REPORTED_REFUSAL_CODES)
         sensitivity = self.source("joulewise/b5_analysis/sensitivity.py")
-        self.assertIn('"status": "refused",\n                                                  "code": _get(refused[cid], "code")}',
-                      sensitivity)
+        # Either quote style and layout: the parallel sensitivity derivation (2b659f71b) moved this row.
+        self.assertRegex(sensitivity, r'''["']status["']: ["']refused["'],\s*["']code["']: _get\(refused\[cid\], ["']code["']\)\}''')
         self.assertEqual(cmp.P42_REFUSED_STATUS, "refused")
         self.assertNotIn("p42_expected_unresolvable", Path(cmp.__file__).read_text())
         # The fixture's code is the issuer's own (tests/b5_analysis T12) and one of the set.

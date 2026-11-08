@@ -2,6 +2,22 @@
 
 Started 2026-11-07 by the laptop lead from Ed's decisions. Update it in place; keep each entry's source link.
 
+## ★ MAIN GOAL (Ed, 2026-11-07)
+**ALIGN v4 plus an adaptive red team showing the monitor+energy squeeze holds**, aimed at a main-track submission at a top ML or security venue.
+- **The squeeze:** energy and transcript monitors are blind in opposite places. Hiding compute from the meter forces logging plausible work, which the monitor reads. Avoiding the monitor forces unlogged work, which the meter sees.
+- **All spare effort goes to** auditing v4 and maximizing the chance of this result. Other lanes get spare capacity only.
+- **Work in flight on it** (started 2026-11-07 about 21:00 PST):
+  - **Sol, detached** (pushes on completion when the audit is clean): `align/2026-11-07-squeeze-prereg` (preregistration addendum draft), `align/2026-11-07-squeeze-analysis` (joint detection curves, adaptive-adversary simulator, power analysis), `align/2026-11-07-adversary-kit` (meter-aware adversary variants and a positive-control compute injector), `align/2026-11-07-reviewer2` (hostile-reviewer audit). Status files: `/private/tmp/jwsol/squeeze/<name>/pushed`.
+  - **Claude workflow `v4-squeeze-readiness`** (Fable + Opus seats; each track pushes itself): `align/2026-11-07-v4-v4-registration` (closing the pre-W1 registration blockers, plus the blind gate checklist), `align/2026-11-07-v4-squeeze-design`, `align/2026-11-07-v4-reviewer2`.
+  - Also `research/2026-11-07-tripwire-directions` (part 5: what the tool enables if it works).
+- **Cross-family seats (Ed: "every step should have multiple supporting sol 6.1 xhigh seats ... v4 must be as sound as possible"):**
+  - Two independent Sol seats per workflow track: `align/2026-11-07-sol-{v4-registration,squeeze-design,reviewer2}-seat{1,2}`.
+  - A second Sol preregistration draft: `align/2026-11-07-squeeze-prereg-seat2`.
+  - Independent Sol reviewers that run the tests: `align/2026-11-07-squeeze-analysis-review` and `align/2026-11-07-adversary-kit-review`.
+  - **Agreement report** `align/2026-11-07-squeeze-agreement` (`docs/align/squeeze/AGREEMENT.md`): findings by which seats raised them (Fable, Opus, Sol-1, Sol-2), agreement k of n, adjudicated conflicts, and one merged v4 action list weighted by cross-family agreement. Its orchestrator is `/private/tmp/jwsol/squeeze/seats.zsh`.
+
+- **Critical path:** R0-L3 merge (#699/#700) → R0 → R1 (RUN_STATE 202) → R10 procedure → W1 kit (`lane/2026-11-07-w1-kit-r10`) → close the pre-W1 registration blockers → the blind registration gate → W1 → D windows (Q4) → registration-grade calibration (Q6) → adaptive red team and positive controls, preregistered before data.
+
 ## Ed's direction (2026-11-07)
 - **ALIGN claim:** "sabotage leaves an energy signature" (protocol v4). More windows and 30B positive-control nights are approved. Registration grade was ruled under Q6 (RUN_STATE 204).
 - **Paper 1** is led by BYTES and known-bytes (what a laptop's own counters can and cannot resolve). It is accepted, though Ed finds it less exciting than ALIGN. BYTES stage 1 is due 12 Nov.
@@ -22,7 +38,16 @@ Started 2026-11-07 by the laptop lead from Ed's decisions. Update it in place; k
 R0 → R1 (RUN_STATE 202) → W1 under ruling R10 (RUN_STATE 203) → D windows (Q4: 3 windows of 59,520 s) → registration-grade calibration (Q6). Pre-W1 blockers are in `docs/research-audits/2026-11-07/w1-prearm-gate.md`.
 
 ## Interp × energy (Ed's main interest)
-Design study: `docs/research-audits/2026-11-07/interp-weight-edit-energy.md`. It covers how surgical weight edits change power and performance, whether that signal can be pulled out of machine noise, and a staged pilot. Until it lands, this section points to it.
+Design study: `docs/research-audits/2026-11-07/interp-weight-edit-energy.md` (draft PR #702; 18 ideas, 36 adversarial checks).
+- **Ed's reference** exists as a blog post, not a paper: MIT CSAIL, "Sparks of Weight-Space Programming" (2026-11-02). Astra edited 0.016 % of Qwen3.5-0.8B's weights; MATH-500 went from 7.9 % to 48.1 %, and answers hitting the cap fell from 93 % to 33 %. The post has no energy data. An independent rerun found thinking-off already scores 45.8 %.
+- **Physics:** for surgical edits, almost all the energy effect comes through **behaviour** (tokens generated; about 12-15× fewer tokens per correct answer in the Astra case). The fixed-token, weight-only effect is predicted at ≤ 3e-5 of energy, likely ≤ 1e-6. Separating it from zero would need about 95,000 replay pairs, so the deliverable is an **upper bound**.
+- **Noise:** background processes are not the limit (0.2 % of the known-bytes half-width). The limits are the tiny surgical effect itself, and the chance that the powermetrics rails are *modelled*, not measured. Any small-effect claim must be checked against the KM003C DC meter.
+- **Best first experiment: ASTRA-2CH** (one measurement-Mac window after desk prep).
+  - Measure energy on the free-running edited and base models.
+  - Replay the same tokens through both weight sets to bound the weight-only effect.
+  - Run a synthetic data-dependence test of the rails.
+  - Needs Ed's OK to download Qwen3.5-0.8B and the edit, plus a forced-token decode loop. Queued **behind** Mac experiments 1-2, BYTES stage 1, the ALIGN windows and the Paper 1 freeze.
+- **Refuted ideas:** ROUTER-EDIT (the repo's question bank already predicts a null) and DVFS-COUPLE (the GPU clock is pinned on the fan-cooled Mac).
 
 ## Other audits (2026-11-07, PR #695)
 W1 pre-arm gate · W1 budget fallback · Block 6 design (REG §17 amendments before the B5 unseal) · B5 release-to-paper · literature · research program · proportionality.
