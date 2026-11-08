@@ -186,6 +186,19 @@ def charging_only_exclusion(member):
     return bool(member.get('excluded')) and bool(codes) and codes <= set(EXCLUDE)
 
 
+def neutral_exclusion(member):
+    """True iff the member is excluded and every code is a charging B code or a disclosure-only contention code.
+
+    R22-1: no ``contention.*`` code may affect any desk verdict, gate or count; ruling 9: B alone never fails the
+    full desk. Real (other) exclusions keep failing it.
+    """
+    from joulewise.align.apple import v4_contention
+    from joulewise.align.apple.v4_battery import EXCLUDE
+    codes = _exclusion_codes(member)
+    return (bool(member.get('excluded')) and bool(codes)
+            and all(c in set(EXCLUDE) or v4_contention.is_disclosure_only(c) for c in codes))
+
+
 def full_desk_gate_pass(checks, members=None):
     """The ``full_desk_gate`` verdict.
 
@@ -198,7 +211,7 @@ def full_desk_gate_pass(checks, members=None):
     if members is not None and any(k in gated for k in EXCLUSION_DERIVED):
         # Charging-only members stay in the window evidence (readability, prechecks);
         # only their B exclusion stops counting against the desk.
-        neutral = [{**m, 'excluded': False} if charging_only_exclusion(m) else m for m in members]
+        neutral = [{**m, 'excluded': False} if neutral_exclusion(m) else m for m in members]
         recomputed, _, _ = pilot.instrument_checks(neutral)
         others = any(m.get('excluded') for m in neutral)
         if 'no_member_exclusions' in gated:
@@ -376,6 +389,8 @@ def desk(session_root, **kwargs):
     kwargs.setdefault('kit', kit.KIT)
     kwargs.setdefault('desk_schema', kit.DESK_SCHEMA)
     kwargs.setdefault('extra_checks', powermode_desk_check)
+    from joulewise.align.apple import v4_contention
+    kwargs.setdefault('exclusion_policy', v4_contention.split_codes)      # R22-1: contention is disclosure-only
     status = pilot.desk(session_root, **kwargs)
     # Evidence-aware full-desk verdict (ruling 9) beside the common desk status.
     try:
@@ -383,8 +398,10 @@ def desk(session_root, **kwargs):
     except (OSError, ValueError, KeyError, TypeError, AttributeError):
         members = None
     removed = [m.get('run_id') for m in members or () if charging_only_exclusion(m)]
+    disclosed = [m.get('run_id') for m in members or () if m.get('disclosed_exclusion_codes')]
     status['full_desk_gate'] = {'pass': members is not None and full_desk_gate_pass(status.get('checks'), members),
                                 'charging_only_members_removed': removed,
+                                'contention_disclosed_members': disclosed,
                                 'rule': 'all desk checks except v4_B_bar; charging-only exclusions removed (ruling 9)'}
     if status.get('pilot'):
         pilot.h.write(Path(status['pilot']).parent/'desk.json', status)

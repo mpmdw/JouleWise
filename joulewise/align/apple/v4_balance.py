@@ -4,8 +4,8 @@ Exclusions and flags per member-second are compared benign against sabotage, and
 against the exposure-adjusted expectation. The result is PRINTED and DISCLOSED; it gates nothing and
 selects nothing (``status: print_only``). Pure functions over desk records.
 
-Events of a member = its distinct flags + its calibration exclusions (contention codes included as
-disclosed events: R22-1 makes them disclosure-only, not absent). Exposure = the member's span in
+Events of a member = its distinct flags, calibration exclusions and disclosed contention codes/flags (R22-1
+makes contention disclosure-only, not absent), counted once each. Exposure = the member's span in
 seconds (the R22-1 contention span, else the episode's gross latency).
 """
 from __future__ import annotations
@@ -24,7 +24,13 @@ def _exposure_s(record):
 
 
 def _events(record):
-    return len(set(record.get('flags') or ())) + len(set(record.get('calibration_exclusions') or ()))
+    # R22-1 moves contention codes out of the exclusions into ``record['contention']`` (disclosed codes and the
+    # coverage-gap flag); they are still events for the balance check. A union avoids double counting a code
+    # that is present in more than one place.
+    contention = record.get('contention') or {}
+    events = (set(record.get('flags') or ()) | set(record.get('calibration_exclusions') or ())
+              | set(contention.get('disclosed_codes') or ()) | set(contention.get('flags') or ()))
+    return len(events)
 
 
 def _two_sided_binomial_p(k, n, p):

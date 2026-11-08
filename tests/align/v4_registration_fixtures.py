@@ -11,7 +11,7 @@ def export():
                       energies_j=[30000, 30030]))
     policy = dict(method='session_zero_rms_series_exact_v1', series_alpha=.05,
                   checks_by_window={'W1': {'30B': 4, 'D': 1},
-                                    **{f'C{i}': {'30B': 0, 'D': 1} for i in range(1, 9)},
+                                    **{f'C{i}': {'30B': 0, 'D': 1} for i in range(1, 15)},      # R25: + the six reserves, N = 22
                                     **{f'T{i}': {'30B': 0, 'D': 1} for i in range(1, 4)}},
                   d_transfer_factor=1.5, d_configuration_sha256='b'*64,
                   r1_configuration_sha256='b'*64, transfer_justification_sha256='f'*64,

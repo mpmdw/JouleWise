@@ -659,7 +659,7 @@ R1's adjacent D_spam a/b pair as a transfer screen (`scripts/align_v4_u3_export.
 s₀ is the RMS of the relative differences about zero (df = n); q solves the series
 false-fail E_U[1−(1−P(|Z|>qU))^N] = β, integrating the shared scale uncertainty once,
 with β = .05 (halved if any pilot difference exceeds 3× the leave-one-out RMS) and
-N = 16 (W1 30B:4 + D:1, C1-C8 and T1-T3 D:1 each; RUN_STATE 226 R15). A pair fails if
+N = 22 (**R25**, a pre-signature design change: W1 30B:4 + D:1, C1-C14 D:1 each, T1-T3 D:1 each; it was 16 = 5 + 8 + 3 under RUN_STATE 226 R15 before the six R24 reserve windows C9-C14 existed). The U3 bar is not signed yet, so the roster expands prospectively to every window that can be run, and the familywise false-fail budget stays β over every possible comparison. The U3 inputs draft (`U3-transfer` on `align/2026-11-08-u3-inputs-draft`) restates its N and its OC at N = 22 before signing; the bar build reports q and the OC for the new N. A pair fails if
 |ΔE| > q·s₀·Ē for 30B and f·q·s₀·Ē for D, f = 1.5 with a digest-bound written
 justification. A refuted or missing R1 screen leaves D U3 inconclusive. There is
 no multiplier outside this recomputed derivation: no k=3, 2.576 or floor. `validate_u3`
@@ -1034,7 +1034,7 @@ roster to include them after a U4-inconclusive window.
   including the members it did capture (no partial use); its records stay in custody (the hash-linked chain)
   and are disclosed (`barred_windows`, `replacements_used`). **Cap (R24, from Sol's reserve-cap sweep at bar
   rate 1/4, e = .10):** qualification is 52.6 % at C10, 84.2 % at C12 and 96.2 % at C14, so the cap is C14,
-  pre-registered; gate-admitted FPR is invariant to the cap at b = 0 and drift lowers it. **Seeds:** T1-T3 keep
+  pre-registered; gate-admitted FPR is invariant to the cap at b = 0. **Drift disclosure (RUN_STATE 238 correction):** with the T windows placed after the stop, C14 RAISES gate-admitted FPR slightly under drift b = .05, by +0.03 to +0.17 percentage points (maximum rule) relative to C10; this is disclosed, not gated, and C14 stands. **Seeds:** T1-T3 keep
   exactly their R15 seeds (66-89 per pair, already MATCHed by the Sol seed check). The reserve seeds are one
   contiguous pool allocated after the T range and after the reserved development indices: indices 91-99 are
   skipped because the protocol reserves them (W1 uses 1 and 93, R0 uses 91-92, and 94-99 are held in reserve),

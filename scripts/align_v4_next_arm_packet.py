@@ -404,6 +404,37 @@ def attempts(chain):
                 consumed[slot] = 'barred'
 
 
+def effective_desk(desk, exclusions):
+    """The native desk with disclosure-only (contention) exclusions neutralized (R22-1).
+
+    A desk written before the exclusion policy (or by a common desk that still listed a contention-only
+    member) reports ``harvest_status: members_excluded`` and fails the exclusion-derived checks. When the
+    committed harvest exclusions hold ONLY disclosure-only codes, those two checks and the harvest status are
+    re-derived as passing and the explicit full-desk gate is recomputed from the remaining checks (the exempt
+    B bar aside). Any real exclusion leaves the desk untouched.
+    """
+    from joulewise.align.apple import v4_contention
+    if not isinstance(desk, dict) or not isinstance(exclusions, dict) or not isinstance(exclusions.get('members_excluded'), list):
+        return desk
+    entries = exclusions['members_excluded']
+    if not entries or any(v4_contention.split_codes(e.get('codes'))[0] or not e.get('codes') for e in entries if isinstance(e, dict)):
+        return desk
+    checks = dict(desk.get('checks') or {})
+    for key in ('no_member_exclusions', 'chain_eligibility'):
+        if checks.get(key) is False:
+            checks[key] = True
+    fixed = {**desk, 'checks': checks,
+             'harvest_status': 'ok' if desk.get('harvest_status') == 'members_excluded' else desk.get('harvest_status')}
+    gate = desk.get('full_desk_gate')
+    if isinstance(gate, dict) and gate.get('pass') is False:
+        gated = {k: v for k, v in checks.items() if k not in FULL_DESK_GATE_EXEMPT}
+        fixed['full_desk_gate'] = {**gate, 'pass': bool(gated) and all(v is True for v in gated.values()),
+                                   'recomputed': 'contention-only harvest exclusions are disclosure-only (R22-1)'}
+    if all(v is True for v in checks.values()) and desk.get('pilot_status') == 'instrument_incomplete':
+        fixed['pilot_status'] = 'instrument_ok'
+    return fixed
+
+
 def desk_passes(desk):
     """Whether a native desk.json counts as a passing full desk.
 
@@ -567,7 +598,7 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
         require(isinstance(last_ref, dict), 'last desk-passed record missing')
         last_record = WindowRecord(evidence, last_ref['commit'], last_ref['path'])
         require(last_record.sha256 == last_ref.get('sha256'), 'last desk-passed record digest mismatch')
-        last = last_record.source('desk')
+        last = effective_desk(last_record.source('desk'), last_record.source('exclusions'))
         require(desk_passes(last),
                 'last desk-passed state has no passing desk')
         code_commit = evidence.commit(last_record.record.get('code_commit', last_record.commit))
@@ -614,6 +645,11 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
         if any(r[f'U{k}']['status'] != 'pass' for r in table['model_windows'].values() for k in (1, 2, 3)):
             require(not pool, 'U1-U3 failure bars pool entry')
         eligible = previous.eligibility()
+        # One shared structural-bar predicate for history, pool admission and calibration (R22-2): a barred
+        # window enters no pool and gives no partial use, including the members it did capture.
+        bar = previous.structural_bar(eligible['captured_members'])
+        if bar:
+            require(not pool, f'{bar}: a structurally barred window enters no pool')
         excluded = {m['id'] for m in members if m['excluded']}
         require(not (set(pool) & excluded), 'excluded member entered pool')
         if pool:
@@ -645,7 +681,7 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
         # Same derivation as the consumer: required after W1, or when the arm's current artifact set
         # differs from the one the last desk passed on.
         required = previous.window == 'W1' or last_digest != current_artifact_set_sha256
-        desk = previous.source('desk')
+        desk = effective_desk(previous.source('desk'), previous.source('exclusions'))
         passing = desk_passes(desk)
         if desk.get('status') == 'running_off_mbp' and not required:
             return {'status': 'deferred', 'basis': 'unchanged later window; full desk running off MBP'}
