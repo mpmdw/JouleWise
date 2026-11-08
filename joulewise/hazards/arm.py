@@ -113,6 +113,9 @@ class ArmConfig:
     # The acceptance's judged identity epochs (calibration_epoch_continuation.
     # acceptance_judged_epochs); None skips the identity read entirely.
     expected_epochs: Sequence[Mapping[str, Any]] | None = None
+    # Prospective R16 native adapter, pre-GO only. None preserves the sealed
+    # default path. It shares this dwell, never consumes a previous PASS file.
+    start_state: Any = None
 
 
 @dataclasses.dataclass
@@ -208,6 +211,19 @@ def run(config: ArmConfig, seams: Seams | None = None) -> ArmResult:
         return _refusals(verdicts)
 
     def finish(decision: str, refused_at: str | None, reasons: Sequence[str]) -> ArmResult:
+        if config.start_state is not None:
+            try:
+                record['condition_waits'] = config.start_state.receipt
+            finally:
+                config.start_state.close()
+            if decision == GO:
+                receipt = record['condition_waits'] or {}
+                age = ctx.stamp().monotonic_ns-(receipt.get('finished') or {}).get('monotonic_ns', 0)
+                if not receipt.get('go') or not 0 <= age <= 2_000_000_000:
+                    decision, refused_at, reasons = NULL, 'condition_waits', ['R16 GO receipt stale after native cleanup']
+            record['quiet_start_state'] = {**config.start_state.binding(),
+                'status': 'pass' if decision == GO else 'fail', 'source': 'native',
+                'basis': 'R16 freshly evaluated native receipt (not the preliminary install receipt)'}
         record.update(decision=decision, refused_at=refused_at, reasons=list(reasons),
                       hazards=recorder.hazards, steps=recorder.steps,
                       finished=ctx.stamp().to_json())
@@ -274,10 +290,19 @@ def run(config: ArmConfig, seams: Seams | None = None) -> ArmResult:
     dwell_started = ctx.stamp()
     boot_start = _boot(seams, ctx)
     samples = [clock_sample()]
+    joint = config.start_state
+    if joint is not None:
+        joint.start()
+    def tick():
+        samples.append(clock_sample())
+        if joint is not None:
+            joint.tick()
     dwell = contention.run_dwell(
         ctx, thresholds["contention"], tree_roots=config.tree_roots,
-        on_tick=lambda: samples.append(clock_sample()),
-        tick_s=config.dwell_tick_s, host_reader=seams.host_cpu)
+        on_tick=tick,
+        tick_s=config.dwell_tick_s, host_reader=seams.host_cpu,
+        **({'on_interval': joint.interval, 'joint_ready': joint.ready, 'joint_stop': joint.stop}
+           if joint is not None else {}))
     samples.append(clock_sample())
     boot_end = _boot(seams, ctx)
     contention_verdict = recorder.hazard(
@@ -288,6 +313,8 @@ def run(config: ArmConfig, seams: Seams | None = None) -> ArmResult:
                               started=dwell_started, finished=ctx.stamp())
         recorder.hazard("dwell", series, clock.judge(series, thresholds["clock"]))
         return finish(NULL, "dwell", refused)
+    if joint is not None and not joint.ready():
+        return finish(NULL, 'condition_waits', ['R16 not_ready: joint start state did not release'])
 
     # 7. Final reads, then GO.  The GO clock sample closes the dwell series, so
     # f is compared at dwell start, dwell end and GO.
@@ -307,6 +334,18 @@ def run(config: ArmConfig, seams: Seams | None = None) -> ArmResult:
     if refused:
         return finish(NULL, "final", refused)
 
+    if joint is not None and not joint.at_go():
+        return finish(NULL, 'condition_waits', ['R16 final native start-state recheck failed'])
+    if joint is not None:
+        # Include R16's final source reads in the native clock proof as well.
+        samples.append(clock_sample())
+        go_series = clock.series(samples, boot_start=boot_start, boot_end=_boot(seams, ctx),
+                                 started=dwell_started, finished=ctx.stamp())
+        go_clock = recorder.hazard('condition_waits_and_go', go_series,
+                                  clock.judge(go_series, thresholds['clock']))
+        late_refusals = refusals('final', [go_clock])
+        if late_refusals:
+            return finish(NULL, 'condition_waits_clock', late_refusals)
     # The census again, last: step 1 ran up to ~47 min earlier (cadence probe
     # plus a dwell of up to 2700 s), and doctrine says never start [QUIET-MAC]
     # work while an agent session is alive.

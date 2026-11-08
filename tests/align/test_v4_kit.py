@@ -1811,7 +1811,8 @@ class W1DiskGateTests(unittest.TestCase):
                                            '--next-arm-triage', '/t.json']), 0)
         self.assertEqual(seen, {'session_root': Path('s'), 'w1_disk_config': Path('/c.json'),
                                 'obc_off_attested_by': 'synthetic', 'battery_log': Path('/b.jsonl'),
-                                'next_arm_triage': Path('/t.json')})
+                                'next_arm_triage': Path('/t.json'), 'start_state_evidence': None,
+                                'start_state_setup_attested_by': None})
 
 
 if __name__ == '__main__':

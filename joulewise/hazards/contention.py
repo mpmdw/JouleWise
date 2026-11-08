@@ -637,7 +637,8 @@ def _summary(result: Mapping[str, Any]) -> dict[str, Any]:
 
 def run_dwell(ctx: Context, thresholds: Mapping[str, Any], *, tree_roots: Iterable[int],
               on_tick=None, tick_s: float = 1.0,
-              host_reader: HostReader | None = read_host_cpu) -> Measurement:
+              host_reader: HostReader | None = read_host_cpu,
+              on_interval=None, joint_ready=None, joint_stop=None) -> Measurement:
     """The arm dwell: a ps snapshot every ``interval_s``; ``on_tick`` runs every
     ``tick_s`` in between (the arm samples the clock there at 1 Hz).
 
@@ -668,14 +669,20 @@ def run_dwell(ctx: Context, thresholds: Mapping[str, Any], *, tree_roots: Iterab
                               aggregate_limit=aggregate, root_identities=root_identities)
             previous_over = over_limit(result)
             dwell.add(result)
+            if on_interval is not None:
+                on_interval(result)
             previous = current
             next_snapshot_ns = current.midpoint_ns + int(limits["interval_s"] * 1e9)
-            if dwell.ready:
+            if dwell.ready and joint_ready is None:
                 break
         if dwell.expired(ctx.clocks.monotonic_ns()):
             break
         if on_tick is not None:
             on_tick()
+        if joint_ready is not None and dwell.ready and joint_ready():
+            break
+        if joint_stop is not None and joint_stop():
+            break
         remaining = (next_snapshot_ns - ctx.clocks.monotonic_ns()) / 1e9
         ctx.clocks.sleep(max(0.0, min(tick_s, remaining)))
     return dwell.measurement(started=started, finished=ctx.stamp())
