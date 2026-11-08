@@ -73,7 +73,8 @@ ceiling, not a reservation). W1/D arm also requires --next-arm-triage, the froze
 B2 list (joulewise/align/apple/v4_cadence.NEXT_ARM_TRIAGE), every entry gating.
 The packet is a pointer: the arm rebuilds it (scripts/align_v4_next_arm_packet.py) from the identities it
 names, requires equality ignoring only pushed_tip/packet_preflight, requires an unexpired valid_until_epoch_s
-and computes the live meter, powermode, volume and battery checks itself; nothing is lead-entered.
+and computes the live meter (before the quiet dwell, never during it), powermode, volume and battery
+checks itself; nothing is lead-entered.
 Calibration is a fixed 8 counted windows (v4_cadence.calibration_stop, RUN_STATE 217): no
 early stop, 39 eligible benign per pair after 8, else insufficient_calibration.
 require_w1_ready also requires registration_receipt.json, bound to current and
