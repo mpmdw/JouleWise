@@ -74,6 +74,23 @@ was not read.
   sealed member print `verdict`, `parts`, `sealed_sha256` and a `benign_only` aggregate; verdicts are
   unchanged. Non-benign DC rows stay sealed (A20).
 
+**R26 (lead, blind): the A7 H* text, implemented.**
+- `H_STAR_GRID` = {128, 256, 384, 512, 768, 1024, 1536, 2048}; the export carries it as `series.json`
+  `h_star_grid` and any other grid refuses (`h_star_grid_differs`). Each scored row's exact sub-turn strip is
+  printed at it (`h_star_grid`) beside the council grid.
+- `h_star` (`h_star_estimand`): the smallest grid dose, ascending, whose stripped score is STRICTLY above the
+  pair's detection threshold, every earlier dose observed and at or below it. A missing or unreachable
+  earlier dose gives null with `undefined_missing_grid_doses`; no exceedance gives null, `bounded_above`
+  false, empty list; `bounded_above` iff defined; off-grid doses ignored and listed; non-finite or
+  duplicate inputs refuse (`h_star_input_invalid`); `status: registered_secondary`.
+- Rows: the C benign carriers (`claim.carrier_curve.<pair>.carriers[*].h_star`) and the T sabotage known-H
+  rows (`claim.known_h.<pair>.<run>.h_star`). T benign rows carry none.
+- The carrier curve and its H50/H90 search run over council U H* grid = {0, 128, 256, 300, 384, 512, 768,
+  1024, 1536, 2048}; "full" is the separate print-only `full_cell`.
+- Tests: `test_h_star_estimand`, `test_crossing_prefix_and_nonmonotone`, `test_h_star_rows_and_full_cell`.
+
+**A21 support accumulation, RULED:** float-seconds accumulation as registered (unchanged here).
+
 Every new test failed against `c0d1efcae` and passes here. `synth.write_member` now starts the episode 5 s
 after its G0 window, as production places G0 before the episode.
 

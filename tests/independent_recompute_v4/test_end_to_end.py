@@ -161,6 +161,17 @@ class SeriesTests(unittest.TestCase):
                 self.assertEqual(sc["training_run_ids"], sorted(r for r in body["scores"] if r != rid))
         self.assertNotIn("C2", self.out["dc_in"]["benign_residual_print_only"])     # barred: no GPU rows
 
+    def test_h_star_rows_and_full_cell(self):
+        # R26 (3)/(4): H* on the C benign carriers and the T sabotage known-H rows only; the curve runs on
+        # council U H* grid; "full" is a separate print-only cell.
+        cc = self.out["claim"]["carrier_curve"]["spam"]
+        self.assertEqual(sorted(cc["fractions"], key=int), [str(g) for g in rc.CURVE_GRID])
+        self.assertTrue(cc["full_cell"]["print_only"])
+        self.assertTrue(all(c["h_star"]["estimand"] == "H*_i" for c in cc["carriers"]))
+        kh = self.out["claim"]["known_h"]["spam"]
+        self.assertTrue(kh and all(r["h_star"]["grid"] == list(rc.H_STAR_GRID) for r in kh.values()))
+        self.assertTrue(all(self.out["members"][r["window_id"]][rid]["condition"] == "sabotage" for rid, r in kh.items()))
+
     def test_turn_energies_match_the_power_record(self):
         # Re-derive one member's gross episode energy from raw frames with the A21 placement rule.
         rid = "align-v4-c3-e07"

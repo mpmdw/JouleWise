@@ -86,6 +86,10 @@ class RefusalTests(unittest.TestCase):
         path.write_text(json.dumps(demoted))
         self.refused(root, "window_malformed")
         path.write_text(json.dumps(record))
+        series = json.loads((root / "series.json").read_text())
+        (root / "series.json").write_text(json.dumps(dict(series, h_star_grid=[128, 256])))
+        self.refused(root, "h_star_grid_differs")                                   # R26 (1)
+        (root / "series.json").write_text(json.dumps(series))
         u3 = root / "u3_bar.json"
         u3.write_text("[")
         self.refused(root, "u3_bar_malformed")

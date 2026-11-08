@@ -309,7 +309,8 @@ def write_series(root, windows=None, members_per_window=None, period_ns=100_000_
         windows = ["W1"] + list(windows)
     rng = random.Random(seed)
     template = FrameTemplate(n_tasks=n_tasks, seed=seed, clusters=clusters)
-    series = {"schema": "joulewise.v4_recompute_input.series.v1", "windows": []}
+    series = {"schema": "joulewise.v4_recompute_input.series.v1", "windows": [],
+              "h_star_grid": [128, 256, 384, 512, 768, 1024, 1536, 2048]}   # R26 (1)
     epoch_offset = EPOCH0_S * NS
     clock = 0
     next_index = {"spam": 2, "bank": 2}

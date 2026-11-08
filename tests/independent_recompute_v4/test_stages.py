@@ -654,17 +654,41 @@ class CarrierTests(unittest.TestCase):
         self.assertEqual(out["bootstrap"]["H50_replicate_counts"], {"128": h50.count(128), "256": h50.count(256)})
 
     def test_crossing_prefix_and_nonmonotone(self):
+        # R26 (4): the curve and its H50/H90 search run over council U H* grid (no "full").
+        self.assertEqual(rc.CURVE_GRID, (0, 128, 256, 300, 384, 512, 768, 1024, 1536, 2048))
+
         def fr(values, missing=()):
-            return {str(g): {"fraction": f, "missing": 1 if g in missing else 0} for g, f in zip(rc.H_GRID, values)}
-        self.assertEqual(rc.crossing(fr((0, .6, .4, .7, .8, .9, 1, 1)), 0.5),
+            return {str(g): {"fraction": f, "missing": 1 if g in missing else 0} for g, f in zip(rc.CURVE_GRID, values)}
+        self.assertEqual(rc.crossing(fr((0, .6, .4, .7, .8, .8, .9, .9, 1, 1)), 0.5),
                          {"dose": 128, "status": "nonmonotone", "level_reached_at_h0": False})
-        # R23-2: crossings search doses > 0 only; a level already reached at H = 0 is flagged, undefined.
-        self.assertEqual(rc.crossing(fr((.55, .6, .7, .8, .9, .95, 1, 1)), 0.5),
-                         {"dose": None, "status": "undefined: level reached at h0", "level_reached_at_h0": True})
-        self.assertEqual(rc.crossing(fr((.55, .6, .7, .8, .9, .95, 1, 1)), 0.9)["dose"], 512)
-        self.assertEqual(rc.crossing(fr((0, .1, .2, .3, .6, .9, 1, 1), missing=(512,)), 0.5)["status"],
+        self.assertEqual(rc.crossing(fr((0, .1, .2, .3, .4, .6, .9, 1, 1, 1), missing=(384,)), 0.5)["status"],
                          "undefined: dose unreachable")
-        self.assertEqual(rc.crossing(fr((0, .1, .1, .1, .1, .1, .1, 1)), 0.5)["status"], "undefined: level not reached")
+        self.assertEqual(rc.crossing(fr((0, .1, .1, .1, .1, .1, .1, .1, .1, .1)), 0.5)["status"],
+                         "undefined: level not reached")
+        # R23-2: crossings search doses > 0 only; a level already reached at H = 0 is flagged, undefined.
+        self.assertEqual(rc.crossing(fr((.55, .6, .7, .8, .85, .9, .95, 1, 1, 1)), 0.5),
+                         {"dose": None, "status": "undefined: level reached at h0", "level_reached_at_h0": True})
+        self.assertEqual(rc.crossing(fr((.55, .6, .7, .8, .85, .9, .95, 1, 1, 1)), 0.9)["dose"], 512)
+        self.assertEqual(rc.crossing(fr((0, .1, .2, .3, .6, .7, .9, 1, 1, 1)), 0.5)["dose"], 384)
+
+    def test_h_star_estimand(self):
+        # R26 (2): smallest H* grid dose strictly above the threshold, every earlier dose observed and <= it.
+        def pts(scores, drop=()):
+            return {str(g): (None if g in drop else {"H": g, "score": v}) for g, v in zip(rc.H_STAR_GRID, scores)}
+        base = (1.0, 1.5, 2.0, 2.5, 3.5, 4.0, 5.0, 6.0)
+        h = rc.h_star_estimand(pts(base), 2.5)
+        self.assertEqual((h["h_star"], h["bounded_above"], h["undefined_missing_grid_doses"], h["status"]),
+                         (768, True, [], "registered_secondary"))
+        self.assertEqual(rc.h_star_estimand(pts(base), 2.0)["h_star"], 512)            # strict: 2.0 is not > 2.0
+        h = rc.h_star_estimand(pts(base, drop=(256,)), 2.5)
+        self.assertEqual((h["h_star"], h["bounded_above"], h["undefined_missing_grid_doses"]), (None, False, [256]))
+        h = rc.h_star_estimand(pts(base, drop=(256,)), 10.0)                            # never exceeds
+        self.assertEqual((h["h_star"], h["bounded_above"], h["undefined_missing_grid_doses"]), (None, False, []))
+        h = rc.h_star_estimand(dict(pts(base), **{"384": {"H": 390, "score": 9.0}}), 2.5)  # off-grid ignored
+        self.assertEqual((h["h_star"], h["off_grid_doses"], h["undefined_missing_grid_doses"]), (None, [390], [384]))
+        with self.assertRaises(rc.Refusal):
+            rc.h_star_estimand(dict(pts(base), **{"128": {"H": 128, "score": float("nan")}}), 2.5)
+        self.assertEqual(rc.h_star_estimand(pts(base), None)["status"], "threshold_unavailable")
 
 
 class ThermalSummaryTests(unittest.TestCase):

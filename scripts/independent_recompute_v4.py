@@ -57,7 +57,9 @@ MIN_FIT_ROWS = 6
 REGISTRATION_M = 39
 CALIBRATION_WINDOWS = 8
 W1_SENTINEL_ORDINALS = (5, 17)   # R15 W1 roster: the replay sentinels
-H_GRID = (0, 128, 256, 300, 512, 1024, 2048, "full")
+H_GRID = (0, 128, 256, 300, 512, 1024, 2048, "full")          # council grid (P:550-555)
+H_STAR_GRID = (128, 256, 384, 512, 768, 1024, 1536, 2048)      # R26 (1): registered as text
+CURVE_GRID = (0, 128, 256, 300, 384, 512, 768, 1024, 1536, 2048)  # R26 (4): council U H* grid, no "full"
 CARRIER_ALPHA = 0.025
 BOOTSTRAP_REPLICATES = 1000
 BOOTSTRAP_SEED = 20261108
@@ -1863,7 +1865,41 @@ def w1_contrast(window, results, elig):
     return out
 
 
-NUMERIC_GRID = [g for g in H_GRID if g != "full"]
+NUMERIC_GRID = list(CURVE_GRID)
+
+
+def h_star_estimand(points, threshold):
+    """R26 (2): H*_i = the smallest H* grid dose g, ascending, whose exact sub-turn stripped score is STRICTLY
+    above the pair's detection threshold, provided every earlier grid dose was observed and at or below it.
+    A missing/unreachable earlier dose makes h_star undefined (null) and is listed; no exceedance gives
+    null with bounded_above false and an empty list; off-grid observed doses are ignored and listed."""
+    out = {"estimand": "H*_i", "grid": list(H_STAR_GRID), "status": "registered_secondary",
+           "h_star": None, "bounded_above": False, "undefined_missing_grid_doses": [], "off_grid_doses": []}
+    if threshold is None:
+        return dict(out, status="threshold_unavailable")
+    seen = set()
+    for g in H_STAR_GRID:
+        p = points.get(str(g))
+        if p is not None:
+            need(is_int(p.get("H")) and p["H"] not in seen and finite(p.get("score")), "h_star_input_invalid",
+                 f"dose {g}")
+            seen.add(p["H"])
+            if p["H"] != g:
+                out["off_grid_doses"].append(p["H"])
+                p = None
+    missing = []
+    for g in H_STAR_GRID:
+        p = points.get(str(g))
+        if p is None or p["H"] != g:
+            missing.append(g)
+            continue
+        if p["score"] > threshold:
+            if missing:
+                out["undefined_missing_grid_doses"] = missing
+            else:
+                out.update(h_star=g, bounded_above=True)
+            return out
+    return out
 
 
 def carrier_curve(carriers):
@@ -1878,8 +1914,11 @@ def carrier_curve(carriers):
         m = len(others)
         rank = math.ceil((1 - CARRIER_ALPHA) * (m + 1))
         thr = others[rank - 1] if rank <= m else None
+        points = dict(c["known_h"].get("h_star_grid", {}))
+        points.update(c["known_h"]["council"])           # same strip at a shared dose; council keys win
         hits = {}
-        for g, p in c["known_h"]["council"].items():
+        for g in [str(x) for x in CURVE_GRID] + ["full"]:
+            p = points.get(g)
             if p is None or thr is None or p["score"] is None:
                 hits[g] = None
             else:
@@ -1887,16 +1926,22 @@ def carrier_curve(carriers):
                 # threshold. (Known-H detection for a scored member still never counts H = 0, A7.)
                 hits[g] = bool(p["score"] > thr)
         detail.append({"run_id": c["run_id"], "window_id": c["window_id"], "threshold": thr, "rank": rank, "m": m,
-                       "council": c["known_h"]["council"], "detected": hits})
+                       "council": c["known_h"]["council"], "h_star_grid": c["known_h"].get("h_star_grid"),
+                       "detected": hits, "h_star": h_star_estimand(c["known_h"].get("h_star_grid", {}),
+                                                                   c.get("pair_threshold"))})
     fractions = curve_fractions(detail)
+    full = [d["detected"]["full"] for d in detail]
+    reached = [v for v in full if v is not None]
     out.update(status="ok", fractions=fractions, carriers=detail, H50=crossing(fractions, 0.5),
-               H90=crossing(fractions, 0.9), bootstrap=window_bootstrap(detail))
+               H90=crossing(fractions, 0.9), bootstrap=window_bootstrap(detail),
+               full_cell={"detected": sum(reached), "n": len(reached), "missing": len(full) - len(reached),
+                          "fraction": sum(reached) / len(reached) if reached else None, "print_only": True})
     return out
 
 
 def curve_fractions(detail):
     out = {}
-    for g in map(str, H_GRID):
+    for g in map(str, CURVE_GRID):
         vals = [d["detected"][g] for d in detail]
         reached = [v for v in vals if v is not None]
         out[g] = {"detected": sum(reached), "n": len(reached), "missing": len(vals) - len(reached),
@@ -2239,10 +2284,10 @@ def recompute(root, workers=1, cache_dir=None, timings=None, stage="full", freez
     t0 = time.perf_counter()
     series = load_series(root)
     windows = series["windows"]
-    grids = {"council": list(H_GRID)}
-    h_star = series["series"].get("h_star_grid")
-    if isinstance(h_star, list) and h_star and all(is_int(g) and g >= 0 for g in h_star):
-        grids["h_star"] = list(h_star)
+    # R26 (1): the export carries h_star_grid; it must be the registered grid.
+    h_star = series["series"].get("h_star_grid", list(H_STAR_GRID))
+    need(h_star == list(H_STAR_GRID), "h_star_grid_differs", "series.json h_star_grid")
+    grids = {"council": list(H_GRID), "h_star_grid": list(H_STAR_GRID)}
     resets = {r.get("after_window") for r in series["series"].get("lead_rulings", [])
               if isinstance(r, dict) and r.get("resets") == "zero_capture_escalation"}
     pool = None
@@ -2373,6 +2418,8 @@ def recompute(root, workers=1, cache_dir=None, timings=None, stage="full", freez
             calibration["thresholds"][variant][pair] = thr
             test[variant][pair] = test_summary(windows, fits, pair, variant, thr, score_t)
             if variant == "logged":
+                for c in carriers:      # R26 (2): H* against the pair's detection threshold
+                    c["pair_threshold"] = thr["threshold"]
                 claim["carrier_curve"][pair] = carrier_curve(carriers)
                 claim["known_h"][pair] = known_h_summary(windows, fits, pair, thr)
     calibration["freeze"] = freeze_record(stop, calibration["thresholds"])
@@ -2507,7 +2554,8 @@ def known_h_summary(windows, fits, pair, thr):
                 if thr["threshold"] is not None and row["score"] is not None:
                     row["exceeds"] = row["score"] > thr["threshold"]
                     row["detection"] = bool(row["exceeds"] and row["H"] > 0)
-            out[rid] = dict(kh, window_id=w["window_id"])
+            out[rid] = dict(kh, window_id=w["window_id"],
+                            h_star=h_star_estimand(kh.get("h_star_grid", {}), thr["threshold"]))   # R26 (3)
     return out
 
 
