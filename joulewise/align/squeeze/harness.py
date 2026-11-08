@@ -9,7 +9,7 @@ from copy import deepcopy
 from typing import Any, Mapping
 
 from .config import canonical, sha256, validate_variant
-from .control import ControlEndpoint, HiddenDecode, SqueezeRun
+from .control import ControlEndpoint, Injection, SqueezeRun
 
 
 class AdversaryTask:
@@ -77,7 +77,7 @@ def offline_shade_adversary_task(*, base_task_kwargs: Mapping[str, Any],
 
 
 def run_adversarial_episode(task: Any, condition: str, endpoint: Any, *,
-                            variant: Mapping[str, Any], control: HiddenDecode | None = None,
+                            variant: Mapping[str, Any], control: Injection | None = None,
                             **run_kwargs: Any) -> SqueezeRun:
     """Run the actual generic ALIGN harness; return a separate private receipt.
 
@@ -94,7 +94,10 @@ def run_adversarial_episode(task: Any, condition: str, endpoint: Any, *,
     from joulewise.align.runner import run_episode
 
     wrapped = ControlEndpoint(endpoint, variant_sha256=variant["config_sha256"], control=control)
-    episode, transcript = run_episode(AdversaryTask(task, variant), condition, wrapped, **run_kwargs)
+    adapted_task = AdversaryTask(task, variant)
+    if control is not None and control.placement == "tool":
+        adapted_task = ToolControlTask(task, variant, control)
+    episode, transcript = run_episode(adapted_task, condition, wrapped, **run_kwargs)
     private_control = None if control is None else control.receipt()
     if private_control is not None:
         start, end = private_control["start_ns"], private_control["end_ns"]
@@ -110,3 +113,18 @@ def run_adversarial_episode(task: Any, condition: str, endpoint: Any, *,
             for message in transcript]).encode("utf-8")),
     }
     return SqueezeRun(episode, transcript, receipt)
+
+
+class ToolControlTask(AdversaryTask):
+    """Inject in an existing tool call; return only the original tool result."""
+
+    def __init__(self, task: Any, variant: Mapping[str, Any], control: Injection) -> None:
+        super().__init__(task, variant)
+        self.control, self.calls = control, 0
+
+    def call_tool(self, name: str, arguments_json: str) -> str:
+        index = self.calls
+        self.calls += 1
+        if index == self.control.trigger_index:
+            self.control.execute()
+        return self.task.call_tool(name, arguments_json)

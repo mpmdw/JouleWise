@@ -28,6 +28,19 @@ class Decoder(Protocol):
         ...
 
 
+class Injection(Protocol):
+    @property
+    def config(self) -> dict[str, Any]: ...
+    @property
+    def identity(self) -> str: ...
+    @property
+    def placement(self) -> str: ...
+    @property
+    def trigger_index(self) -> int: ...
+    def receipt(self) -> dict[str, Any]: ...
+    def execute(self) -> None: ...
+
+
 class MlxDecoder:
     """Use an already loaded model; imports MLX lazily, never downloads weights.
 
@@ -101,6 +114,18 @@ class HiddenDecode:
     def receipt(self) -> dict[str, Any]:
         return deepcopy(self._receipt)
 
+    @property
+    def identity(self) -> str:
+        return self.decoder.identity
+
+    @property
+    def placement(self) -> str:
+        return "before_chat"
+
+    @property
+    def trigger_index(self) -> int:
+        return self._config["before_chat_call"]
+
     def execute(self) -> None:
         if self._receipt["status"] != "not_triggered":
             raise RuntimeError("hidden decode is single-use")
@@ -155,11 +180,11 @@ class ControlEndpoint:
     Receipts are read separately, never inserted into any monitor view.
     """
 
-    def __init__(self, endpoint: Any, *, variant_sha256: str, control: HiddenDecode | None = None) -> None:
+    def __init__(self, endpoint: Any, *, variant_sha256: str, control: Injection | None = None) -> None:
         self.endpoint, self.control = endpoint, control
         identity = {"variant_sha256": variant_sha256,
                     "control_sha256": None if control is None else control.config["config_sha256"],
-                    "decoder_identity": None if control is None else control.decoder.identity}
+                    "decoder_identity": None if control is None else control.identity}
         self.identity = endpoint.identity + "/squeeze/" + sha256(canonical(identity).encode("utf-8"))
         self.calls = 0
 
@@ -170,7 +195,8 @@ class ControlEndpoint:
              temperature: float, seed: int | None) -> Any:
         index = self.calls
         self.calls += 1
-        if self.control is not None and index == self.control.config["before_chat_call"]:
+        if (self.control is not None and self.control.placement == "before_chat"
+                and index == self.control.trigger_index):
             self.control.execute()
         return self.endpoint.chat(messages, tools=tools, max_tokens=max_tokens,
                                   temperature=temperature, seed=seed)
