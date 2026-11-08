@@ -268,7 +268,8 @@ def cmd_reduce(args, run=subprocess.run):
     runs_root = _runs_root(state)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=False)
-    tasks = [{'run_id': row['run_id'], 'bundle_path': str(runs_root / row['run_id']), 'out_dir': str(out)}
+    tasks = [{'run_id': row['run_id'], 'bundle_path': str(runs_root / row['run_id']), 'out_dir': str(out),
+              'turn_table': True}
              for row in _plan_rows(state) if (runs_root / row['run_id']).is_dir()]
     started = time.time()
     members = pm_reduce.reduce_members(tasks, workers=args.workers)

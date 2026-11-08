@@ -1,4 +1,9 @@
-"""Synthetic harvest I/O and transport witnesses. Never open local study data."""
+"""Synthetic harvest I/O witnesses (Sol build, ported for R17). Never open local study data.
+
+Sol's raw transport was folded into joulewise.align.apple.harvest_offload (it refused
+symlinks, which every ALIGN session's measurement view uses); its record-bound finalized
+manifest is kept there and exercised here.
+"""
 import hashlib
 import json
 import os
@@ -64,7 +69,7 @@ class HarvestIOTests(unittest.TestCase):
 
     @unittest.skipUnless(shutil.which('zstd'), 'zstd CLI required')
     def test_complete_harvest_equal_on_verified_copy_in_canonical_namespace(self):
-        from joulewise.harvest_transport import pack_raw, unpack_raw
+        from joulewise.align.apple import harvest_offload as off
         # This guard MUST precede importing the existing fixture module: its
         # optional native-test decorator otherwise stats a local archive.
         with patch.dict(os.environ, {'JW_B5_SYNTHETIC_ONLY': '1'}):
@@ -90,12 +95,14 @@ class HarvestIOTests(unittest.TestCase):
                          for p in window.archive.rglob('*') if p.is_file()}
             shutil.rmtree(window.archive)  # synthetic output only
             self.assertEqual(manifest(window.root), original)
-            pack_raw(window.root, root/'transport', original, workers=2)
+            finalized = off.finalized_manifest(window.root)        # MBP, at finalize (record-bound)
+            off.pack(window.root, root/'transport', finalized=finalized)
             # Model the two hosts mounting exactly the SAME canonical paths.
             # Absolute locators in original bytes remain untouched. Compare
             # every file without scrubbing paths, clocks, digests or reports.
             window.root.rename(root/'original-kept')
-            unpack_raw(root/'transport', window.root, original)
+            off.unpack(root/'transport', window.root, finalized=finalized,
+                       finalized_sha256=off.manifest_sha256(finalized))
             replay = window.harvest(seams=seams(2), prepare_desk=True, run_g3=False)
             self.assertEqual(replay['verdict'], record['verdict'],
                 (window.archive/'withheld/collector-errors.json').read_text())
@@ -107,73 +114,6 @@ class HarvestIOTests(unittest.TestCase):
             if profile := os.environ.get('JW_HARVEST_OFF_PROFILE'):
                 Path(profile).write_text(json.dumps({'files': len(reference), 'stages': rows,
                     'raw_bytes': sum(r.get('size', 0) for r in original.values())}, indent=2)+'\n')
-
-
-@unittest.skipUnless(shutil.which('zstd'), 'zstd CLI required')
-class RawTransportTests(unittest.TestCase):
-    def test_deduplicated_compressed_copy_restores_exact_bytes(self):
-        from joulewise.harvest_transport import pack_raw, unpack_raw
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            source = root/'raw'
-            (source/'night').mkdir(parents=True)
-            raw = b'<?xml version="1.0"?><plist><dict/></plist>\n'*100000
-            (source/'powermetrics.plist').write_bytes(raw)
-            (source/'duplicate.plist').write_bytes(raw)
-            (source/'night/result.json').write_bytes(b'{"terminal":true}\n')
-            expected = manifest(source)
-            packed = pack_raw(source, root/'packed', expected, workers=2)
-            self.assertEqual(packed['files'], 3)
-            self.assertEqual(packed['payloads'], 2)
-            unpack_raw(root/'packed', root/'air', expected)
-            self.assertEqual(manifest(root/'air'), expected)
-            self.assertEqual(manifest(source), expected)
-            # Compression is canonical for a pinned zstd version/thread count.
-            pack_raw(root/'air', root/'repacked', expected, workers=1)
-            self.assertEqual(manifest(root/'packed'), manifest(root/'repacked'))
-
-    def test_changed_missing_extra_escaping_and_symlink_inputs_refuse(self):
-        from joulewise.harvest_transport import pack_raw
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            source = root/'raw'
-            source.mkdir()
-            (source/'one').write_bytes(b'original')
-            expected = manifest(source)
-            (source/'one').write_bytes(b'changed!')
-            with self.assertRaisesRegex(ValueError, 'digest'):
-                pack_raw(source, root/'bad', expected)
-            self.assertFalse((root/'bad').exists())
-            (source/'one').unlink()
-            with self.assertRaises(ValueError):
-                pack_raw(source, root/'bad', expected)
-            (source/'one').symlink_to(root/'absent')
-            with self.assertRaises(ValueError):
-                pack_raw(source, root/'bad', expected)
-            with self.assertRaises(ValueError):
-                pack_raw(source, root/'bad', {'../escape': next(iter(expected.values()))})
-            (source/'one').unlink()
-            (source/'one').write_bytes(b'original')
-            (source/'extra').write_bytes(b'extra')
-            with self.assertRaises(ValueError):
-                pack_raw(source, root/'bad', expected)
-
-    def test_corrupt_payload_or_wrong_committed_manifest_never_publishes(self):
-        from joulewise.harvest_transport import pack_raw, unpack_raw
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            source = root/'raw'
-            source.mkdir()
-            (source/'one').write_bytes(bytes(range(256))*10000)
-            expected = manifest(source)
-            pack_raw(source, root/'packed', expected)
-            with self.assertRaises(ValueError):
-                unpack_raw(root/'packed', root/'bad', {})
-            payload = next((root/'packed/payloads').iterdir())
-            payload.write_bytes(payload.read_bytes()[:10])
-            with self.assertRaises((ValueError, subprocess.CalledProcessError)):
-                unpack_raw(root/'packed', root/'bad', expected)
-            self.assertFalse((root/'bad').exists())
 
 
 if __name__ == '__main__':

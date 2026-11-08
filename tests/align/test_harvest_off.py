@@ -196,6 +196,27 @@ class OffloadTests(unittest.TestCase):
             self.off.unpack(self.root / 'out')
         self.assertFalse(self.src.exists())
 
+    def test_record_bound_manifest_chains_committed_digest_to_restored_bytes(self):
+        finalized = self.off.finalized_manifest(self.src)              # MBP, at finalize
+        committed = self.off.manifest_sha256(finalized)                 # goes into the window record
+        (self.src / 'runs/m1/late.txt').write_text('written after finalize')
+        with self.assertRaisesRegex(self.off.OffloadRefused, 'finalized record manifest'):
+            self.off.pack(self.src, self.root / 'late', finalized=finalized)
+        self.assertFalse((self.root / 'late').exists())
+        (self.src / 'runs/m1/late.txt').unlink()
+        manifest = self.off.pack(self.src, self.root / 'bound', finalized=finalized)
+        self.assertEqual(manifest['finalized_manifest_sha256'], committed)
+        shutil.move(self.src, self.root / 'moved')
+        with self.assertRaisesRegex(self.off.OffloadRefused, 'committed digest'):
+            self.off.unpack(self.root / 'bound', finalized=finalized, finalized_sha256='0' * 64)
+        forged = dict(finalized)
+        forged['runs/m1/run.sh'] = {'sha256': '1' * 64, 'size': 10}
+        with self.assertRaisesRegex(self.off.OffloadRefused, 'offload manifest differs'):
+            self.off.unpack(self.root / 'bound', finalized=forged, finalized_sha256=self.off.manifest_sha256(forged))
+        self.assertFalse(self.src.exists())
+        self.off.unpack(self.root / 'bound', finalized=finalized, finalized_sha256=committed)
+        self.assertEqual(self.off.finalized_manifest(self.src), finalized)
+
     def test_refuses_unsupported_file_types(self):
         os.mkfifo(self.src / 'fifo')
         with self.assertRaisesRegex(self.off.OffloadRefused, 'unsupported file type'):
@@ -215,8 +236,12 @@ class SamePathHarvestEqualityTests(unittest.TestCase):
 
     def seams(self, workers, boot, pinned):
         clocks = {'now': lambda: 1786300000.0, 'monotonic_ns': lambda: 123} if pinned else {}
+        # The harvest program's checkout record is pinned: on the Air, unpack's mirror check makes it
+        # identical to the MBP's; in this shared worktree, concurrent test modules may dirty git status.
+        checkout = h.harvest_checkout(block_six=False)
         return h.Seams(group_alive=lambda pgid: False, exclusions_compute=w.EXCLUSIONS,
-                       boot_session_uuid=lambda: boot, workers=workers, **clocks)
+                       boot_session_uuid=lambda: boot, workers=workers, io_workers=workers,
+                       harvest_checkout=lambda **_: checkout, **clocks)
 
     def mbp_then_air(self, *, pinned, boots):
         # MBP: today's path (one worker, no parse dedupe) on the live record.
@@ -506,6 +531,184 @@ class PmReduceTests(unittest.TestCase):
                 raw = (w.template() / row['raw']).read_bytes()
                 self.assertEqual(row['raw_sha256'], hashlib.sha256(raw).hexdigest())
                 self.assertLess(row['reduced_size'] * 50, row['raw_size'])
+
+
+class SyntheticV4SessionE2ETests(unittest.TestCase):
+    """R17: triage -> desk -> final -> reduce through the runner on a synthetic v4 kit session.
+
+    Real native-endpoint bundles (fake MLX), a v4 kit layout with a synthetic registration,
+    the real light triage, the real v4 desk (only the harvest subprocess is replaced by a
+    synthetic archive writer; the harvest itself is covered by SamePathHarvestEqualityTests),
+    the real final row and reduce-once with per-turn tables proven equal to PILOT.json.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from joulewise.clock import FakeClock
+        from joulewise.align.apple.r1_runtime import SOAK_REFERENCE_SCHEMA
+        from scripts import align_v4_kit as kit
+        from tests.align.test_apple_endpoint import run_native_review
+        from tests.align.test_pilot3_cache import CacheAPI
+        from tests.align.test_thermal_desk import DeskTests
+        cls.tmp = tempfile.TemporaryDirectory(prefix='v4-e2e-', dir=REAL_TMP)
+        root = cls.root = Path(cls.tmp.name).resolve()
+        runs, session = root / 'runs', root / 'session'
+        reg = root / kit.KIT / 'registration'
+        reg.mkdir(parents=True)
+        DeskTests.synthetic_registration(None, reg)
+        (reg / 'inputs.json').write_text(json.dumps({'R1': {'thermal_policy': {'sensors': {'s_fast': 'TF', 's_slow': 'TS'}}}}))
+        (reg / 'r1_soak_reference.json').write_text(json.dumps({'schema': SOAK_REFERENCE_SCHEMA,
+                                                               'sensors_c': {'TF': 40.0, 'TS': 38.0}}))
+        rows = []
+        for i, pair in enumerate(('spam_filter_update', 'bank_transfer_2', 'spam_filter_update')):
+            rid = f'e2e-m{i}'
+            with mock.patch('joulewise.align.apple.prompt_cache.native_cache_api', return_value=CacheAPI()):
+                bundle, status, _ = run_native_review(root / 'src' / rid, 'think', FakeClock(),
+                                                      prompt_cache='episode_prefix')
+            assert status.status.value == 'succeeded'
+            shutil.copytree(bundle, runs / rid)
+            episode = runs / rid / 'outputs/align_episode.json'
+            value = json.loads(episode.read_text())
+            value['episode_id'] = rid
+            value.setdefault('hardware', {})['ac_powermode'] = {'value': 0}
+            from tests.align.test_thermal_gate import policy as gate_policy
+            value['hardware'].setdefault('thermal', {'policy': gate_policy(), 'intervals': []})   # gated: U1-U3 evaluated
+            episode.write_text(json.dumps(value))
+            rows.append({'run_id': rid, 'ordinal': 5 + i, 'role': 'D', 'model_id': 'qwen3.8-27b',
+                         'task_pair': pair, 'condition': 'benign', 'repeat': 1, 'ac_powermode': 0,
+                         'stage_id': 's1', 'block': 'A'})
+        (reg.parent / 'collection_plan.json').write_text(json.dumps({'members': rows}))
+        custody = root / 'custody'
+        (custody / 'night').mkdir(parents=True)
+        (custody / 'night/result.json').write_text('{}')
+        (root / 'plan.json').write_text(json.dumps({'custody_root': str(custody)}))
+        (session / 'staging').mkdir(parents=True)
+        (session / 'session.json').write_text(json.dumps({
+            'session_id': 'v4-e2e', 'measurement_root': str(root), 'registration_dir': str(reg),
+            'plan_path': str(root / 'plan.json'), 'inputs': {'custody_root': str(custody)},
+            'runs_roots': {'claim': str(runs)}}))
+        cls.rows, cls.session, cls.runs = rows, session, runs
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def runner(self, argv, run=None):
+        import io
+        from scripts import align_v4_harvest_off as runner
+        with contextlib.redirect_stdout(io.StringIO()) as out, contextlib.redirect_stderr(io.StringIO()) as err:
+            code = runner.main(argv, **({'run': run} if run else {}))
+        self.assertEqual(code, 0, err.getvalue()[-2000:])
+        return json.loads(out.getvalue().strip().splitlines()[-1])
+
+    def test_triage_desk_final_reduce_end_to_end(self):
+        import io
+        import subprocess
+        from scripts import align_v4_session as v4
+        from joulewise.align.apple import light_triage, turn_table, pm_reduce
+        session = self.session
+        excluded = self.rows[2]['run_id']
+        light_path = self.root / 'light_triage.json'
+        light = self.runner(['triage', '--session-root', str(session), '--window-id', 'C1', '--out', str(light_path)])
+        self.assertEqual(light['member_eligibility']['stage'], 'provisional')
+        self.assertEqual(light['calibration_row']['status'], 'provisional')
+        source = json.loads(light_path.read_text())
+        self.assertEqual(source['schema'], light_triage.SCHEMA)
+        self.assertEqual(source['thermal']['schema'], 'joulewise.align.thermal_desk.v1')
+        seen = []
+
+        def harvest(argv, **_):
+            seen.append(argv)
+            derived = session / 'archive/derived'
+            derived.mkdir(parents=True, exist_ok=True)
+            (derived / 'exclusions.json').write_text(json.dumps(
+                {'members_excluded': [{'run_id': excluded, 'codes': ['clock.step']}]}))
+            (derived / 'flags.jsonl').write_text('')
+            return subprocess.CompletedProcess(argv, 0, stdout='', stderr='')
+
+        def desk_in_process(argv, **_):
+            workers = int(argv[argv.index('--harvest-workers') + 1])
+            with contextlib.redirect_stdout(io.StringIO()):
+                status = v4.desk(session, run=harvest, harvest_workers=workers)
+            return subprocess.CompletedProcess(argv, 0 if status else 1)
+
+        desk = self.runner(['desk', '--session-root', str(session), '--workers', 'auto'], run=desk_in_process)
+        self.assertGreaterEqual(desk['workers'], 1)
+        self.assertEqual(desk['sizing']['peak_basis'], '8x_largest_plist')
+        self.assertEqual(seen[0][-2:], ['--workers', str(desk['workers'])])
+        final = self.runner(['final', '--session-root', str(session), '--window-id', 'C1'])
+        self.assertEqual(final['member_eligibility']['stage'], 'final')
+        self.assertLessEqual(set(final['member_eligibility']['eligible']), set(light['member_eligibility']['eligible']))
+        self.assertFalse(final['member_eligibility']['members'][excluded]['eligible'])
+        self.assertEqual(final['member_eligibility']['captured_members'], light['member_eligibility']['captured_members'])
+        self.assertTrue(light['thermal_escalation']['models'])                       # U1-U3 were evaluated
+        self.assertEqual(final['thermal_escalation'], light['thermal_escalation'])   # U1-U3 ignore the harvest
+        reduced = self.runner(['reduce', '--session-root', str(session), '--out', str(self.root / 'reduced'),
+                               '--workers', '2'])
+        self.assertEqual(reduced['reduced_members'], len(self.rows))
+        pilot = json.loads((session / 'PILOT.json').read_text())
+        manifest = json.loads((self.root / 'reduced/MANIFEST.json').read_text())
+        for member in manifest['members']:
+            table = json.loads((self.root / 'reduced' / member['turn_table']['path']).read_text())
+            self.assertTrue(turn_table.equal_to_pilot(table, pilot), member['run_id'])
+            self.assertTrue(any(table['channels'][c]['per_turn_j'] for c in table['channels']))
+            self.assertTrue(table['thermal']['per_turn'])
+            for row in member['files']:
+                binding, _rows = pm_reduce.read_npy((self.root / 'reduced' / row['reduced']).read_bytes())
+                self.assertEqual(binding['raw_sha256'], row['raw_sha256'])
+
+    def test_turn_table_differs_from_a_tampered_pilot(self):
+        from joulewise.align.apple import turn_table
+        rid = self.rows[0]['run_id']
+        table = turn_table.member_table(self.runs / rid, rid)
+        thermal = turn_table._canonical(__import__('scripts.align_v4_thermal_desk', fromlist=['x']).enrich_record(
+            __import__('joulewise.align.apple.thermal_desk', fromlist=['x']).read_bundle_record(self.runs / rid),
+            self.runs / rid))
+        from scripts.align_pilot_session import episode_summary
+        pilot = {'members': [{'run_id': rid, 'summary': episode_summary(self.runs / rid)}],
+                 'extra_checks': {'thermal': {'members': [thermal]}}}
+        self.assertTrue(turn_table.equal_to_pilot(table, pilot))
+        pilot['extra_checks']['thermal']['members'][0]['per_turn'][0]['owned_j'] = 123.0
+        self.assertFalse(turn_table.equal_to_pilot(table, pilot))
+
+
+class WorkerSizingTests(unittest.TestCase):
+    """R17: workers = min(free cores, free memory / measured peak per worker)."""
+
+    def test_auto_workers_takes_the_binding_limit_and_never_zero(self):
+        from scripts import align_v4_harvest_off as runner
+        gib = 1 << 30
+        self.assertEqual(runner.auto_workers(peak_bytes=4 * gib, memory=28 * gib, cores=10)['workers'], 6)
+        self.assertEqual(runner.auto_workers(peak_bytes=1 * gib, memory=64 * gib, cores=3)['workers'], 3)
+        self.assertEqual(runner.auto_workers(peak_bytes=64 * gib, memory=8 * gib, cores=10)['workers'], 1)
+        self.assertEqual(runner.free_cores(load_average=7.6, cpu_count=10), 2)
+        self.assertEqual(runner.free_cores(load_average=30.0, cpu_count=10), 1)
+
+    def test_free_memory_reads_vm_stat_pages(self):
+        import subprocess
+        from scripts import align_v4_harvest_off as runner
+        text = ('Mach Virtual Memory Statistics: (page size of 16384 bytes)\nPages free: 100.\n'
+                'Pages active: 999.\nPages inactive: 50.\nPages speculative: 10.\nPages purgeable: 5.\n')
+        run = lambda argv, **_: subprocess.CompletedProcess(argv, 0, stdout=text)  # noqa: E731
+        self.assertEqual(runner.free_memory_bytes(run), 165 * 16384)
+
+    def test_sweep_records_each_worker_count_and_its_peak(self):
+        import subprocess
+        from scripts import align_v4_harvest_off as runner
+        root = Path(tempfile.mkdtemp(prefix='sweep-', dir=REAL_TMP))
+        self.addCleanup(shutil.rmtree, root, True)
+        (root / 'plan.json').write_text(json.dumps({'custody_root': str(root / 'custody')}))
+        (root / 'session.json').write_text(json.dumps({'plan_path': str(root / 'plan.json'), 'session_id': 's',
+            'measurement_root': str(root), 'registration_dir': str(root / 'reg')}))
+        calls = []
+        run = lambda argv, **_: calls.append(argv) or subprocess.CompletedProcess(argv, 0)  # noqa: E731
+        receipt = runner.cmd_sweep(type('A', (), {'session_root': root, 'out': root / 'sweep',
+                                                  'workers': [2, 4, 6, 8, 10]})(), run=run)
+        self.assertEqual([r['workers'] for r in receipt['runs']], [2, 4, 6, 8, 10])
+        self.assertEqual([c[c.index('--workers') + 1] for c in calls], ['2', '4', '6', '8', '10'])
+        self.assertEqual(len({c[c.index('--archive-root') + 1] for c in calls}), 5)
+        self.assertTrue(all('--profile' in c for c in calls))
+        self.assertTrue((root / 'sweep/SWEEP.json').is_file())
 
 
 if __name__ == '__main__':

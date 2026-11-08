@@ -176,7 +176,16 @@ def reduce_member(task: dict[str, str]) -> dict[str, Any]:
         rows.append({'raw': f"{task['run_id']}/raw/{name}", 'raw_sha256': hashlib.sha256(data).hexdigest(),
                      'raw_size': len(data), 'reduced': f"{task['run_id']}/{target.name}",
                      'reduced_sha256': hashlib.sha256(reduced).hexdigest(), 'reduced_size': len(reduced)})
-    return {'run_id': task['run_id'], 'files': rows}
+    result = {'run_id': task['run_id'], 'files': rows}
+    if task.get('turn_table'):
+        # The per-turn energy table: the registered desk functions, run once (turn_table.py).
+        from joulewise.align.apple import turn_table
+        raw = (json.dumps(turn_table.member_table(bundle, task['run_id']), indent=2, sort_keys=True,
+                          allow_nan=False) + '\n').encode()
+        with (out / 'turns.json').open('xb') as sink:
+            sink.write(raw)
+        result['turn_table'] = {'path': f"{task['run_id']}/turns.json", 'sha256': hashlib.sha256(raw).hexdigest()}
+    return result
 
 
 def reduce_members(tasks: list[dict[str, str]], *, workers: int = 1) -> list[dict[str, Any]]:
