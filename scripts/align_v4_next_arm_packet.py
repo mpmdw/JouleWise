@@ -626,12 +626,13 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
 
     def sentinels():
         reports = previous.thermal()['model_windows']
-        needed = 4 if any(r[f'U{k}']['status'] == 'inconclusive' for r in reports.values() for k in (4, 5)) else 2
+        # A15 / R21: only a U4 inconclusive triggers the R20 escalation sentinels; U5 is inconclusive by construction
+        needed = 4 if any(r['U4']['status'] == 'inconclusive' for r in reports.values()) else 2
         planned = [m['run_id'] for m in next_plan()['members'] if m.get('role') == 'sentinel']
         frozen = series.get('sentinel_ids')
         require(isinstance(frozen, list) and len(frozen) == len(set(frozen)) and len(frozen) >= needed
-                and planned == frozen, 'next frozen roster must include two extra sentinels after U4/U5 inconclusive')
-        return {'basis': 'next sentinel roster recorded with U4/U5 consequence', 'sentinel_ids': planned}
+                and planned == frozen, 'next frozen roster must include two extra sentinels after a U4 inconclusive')
+        return {'basis': 'next sentinel roster recorded with the U4 consequence', 'sentinel_ids': planned}
 
     def eligibility():
         return {'basis': 'final desk eligibility, identity X5, U3 pair exclusions and capture inventory reconciled',

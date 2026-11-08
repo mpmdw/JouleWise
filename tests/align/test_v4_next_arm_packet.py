@@ -535,6 +535,48 @@ class HistoryChainTests(Base):
                 self.assertFalse(s.build()['packet_preflight']['ready'])
 
 
+class SentinelTriggerTests(Base):
+    """A15 / R21: the R20 escalation sentinels trigger on a U4 inconclusive only; U5 never does."""
+
+    def roster_check(self, u4, u5):
+        s = self.calibration_series([('C1', True, True)])
+        s.next_plan['members'] = s.next_plan['members'][:2]                   # the ordinary two sentinels only
+        s.series['sentinel_ids'] = s.series['sentinel_ids'][:2]
+        s.thermal['model_windows']['tiny/C1']['U4']['status'] = u4
+        s.thermal['model_windows']['tiny/C1']['U5']['status'] = u5
+        s.finish()
+        return s.build()['checks']['sentinel_roster']
+
+    def test_a_u5_inconclusive_alone_does_not_require_the_escalation_sentinels(self):
+        self.assertEqual(self.roster_check('pass', 'inconclusive')['status'], 'pass')
+        self.assertEqual(self.roster_check('pass', 'pass')['status'], 'pass')
+
+    def test_a_u4_inconclusive_requires_them(self):
+        check = self.roster_check('inconclusive', 'pass')
+        self.assertEqual(check['status'], 'fail')
+        self.assertIn('two extra sentinels after a U4 inconclusive', check['basis'])
+        self.assertEqual(self.roster_check('inconclusive', 'inconclusive')['status'], 'fail')
+
+    def test_the_desk_consequence_adds_sentinels_for_u4_only(self):
+        from joulewise.align.apple import thermal_desk
+        from tests.align.test_thermal_desk import member
+        rows = []
+        for ordinal in (5, 22):
+            row = member(str(ordinal))
+            row.update(window='C1', role='D', u3_configuration_sha256='a' * 64)
+            rows.append(row)
+        for key, cross, expected in (
+                ('u4', {'synthetic': {'sentinels': {'status': 'inconclusive'}}}, 'add 2 sentinels per remaining window'),
+                ('u5', {'synthetic': {'sentinels': {'status': 'pass', 'W': 8, 'df': 7}}}, None)):
+            report = thermal_desk.window_report(rows, v4=True, cross_windows=cross,
+                                                sensitivity={'synthetic': {'status': 'inconclusive'}} if key == 'u5' else None)
+            consequence = next(iter(report['model_windows'].values()))['consequence']
+            if key == 'u4':
+                self.assertEqual(consequence, expected)
+            else:
+                self.assertNotEqual(consequence, 'add 2 sentinels per remaining window')
+
+
 class DeskDerivationTests(Base):
     def test_last_desk_digest_is_computed_from_committed_bytes_and_drives_the_desk_requirement(self):
         s = self.calibration_series([('C1', True, True)])

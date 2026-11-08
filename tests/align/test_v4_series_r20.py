@@ -115,6 +115,77 @@ class EscalationSentinelTests(unittest.TestCase):
                 session.prepare(ROOT, ROOT / 'unused-session', window_id='C3', extra_sentinels=3)
 
 
+class MaterializedEscalationSentinelTests(unittest.TestCase):
+    """The two escalation sentinels survive a real on-disk materialization (write, then read back)."""
+
+    @classmethod
+    def setUpClass(cls):
+        import hashlib
+        import tempfile
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.addClassCleanup(cls.tmp.cleanup)
+        root = Path(cls.tmp.name)
+        manifest = s.load(ROOT)
+        cls.files = s.build_files(ROOT, manifest, 'C5', extra_sentinels=2)
+        for path, raw in cls.files.items():
+            target = root / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(raw)
+        cls.root, cls.sha = root, hashlib.sha256
+        cls.directory = s.kit_path('C5')
+        cls.plan = json.loads((root / cls.directory / 'collection_plan.json').read_bytes())
+        cls.members = {m['ordinal']: m for m in cls.plan['members']}
+
+    def config(self, ordinal):
+        return json.loads((self.root / self.members[ordinal]['config_path']).read_bytes())
+
+    def test_both_are_supplemental_count_toward_nothing_and_are_flagged_in_the_plan_on_disk(self):
+        self.assertEqual(sorted(self.members), list(range(1, 25)))
+        self.assertEqual(self.plan['extra_sentinels'], 2)
+        for ordinal in (23, 24):
+            member = self.members[ordinal]
+            self.assertIs(member['supplemental'], True)
+            self.assertEqual(member['escalation_sentinel'], ordinal - 22)
+            self.assertEqual((member['pool_role'], member['counts_toward']), ('sentinel', 'none'))
+            self.assertIs(member['held_out'], False)
+            self.assertEqual(member['replay_of'], self.members[5]['run_id'])
+        for ordinal in range(1, 23):
+            self.assertNotIn('supplemental', self.members[ordinal])             # the ordinary 22 are not supplemental
+        self.assertEqual(sum(m.get('counts_toward') == 'calibration' for m in self.plan['members']), 14)
+
+    def test_each_is_its_own_batch_1_member_with_the_normal_idle_and_thermal_gates(self):
+        late = self.config(22)
+        seen = set()
+        for ordinal in (23, 24):
+            member, config = self.members[ordinal], self.config(ordinal)
+            self.assertNotIn(member['run_id'], seen | {self.members[o]['run_id'] for o in range(1, 23)})
+            seen.add(member['run_id'])
+            self.assertEqual(config['run_id'], member['run_id'])                  # a separate one-episode bundle
+            self.assertEqual(self.sha(( self.root / member['config_path']).read_bytes()).hexdigest(),
+                             member['config_sha256'])
+            self.assertEqual(config['sampling'], late['sampling'])                # the normal idle (300 s), warmup, power rate
+            spec, late_spec = (json.loads(c['workload_profile']['prompt_text']) for c in (config, late))
+            self.assertEqual(spec, late_spec)                                     # same thermal gates, caps, seed, cache policy
+            self.assertEqual((spec['thermal']['heavy'], spec['thermal']['per_turn']), (True, True))
+            self.assertEqual(spec['thermal']['window_reference']['role'], 'consume')
+            self.assertEqual(spec['seed'], 1)
+        rows = {}
+        for path in (self.root / self.directory / 'stages').rglob('order_manifest.json'):
+            for row in json.loads(path.read_bytes())['executed_order']:
+                rows.setdefault(row['run_id'], []).append(row)
+        for ordinal in (23, 24):
+            run_id = self.members[ordinal]['run_id']
+            self.assertEqual(len(rows[run_id]), 1)                                # exactly one batch entry each
+            self.assertEqual(rows[run_id][0]['rep'], ordinal - 20)
+        ids_b = [r['run_id'] for path in (self.root / self.directory / 'stages' / 'episodes-b').rglob('order_manifest.json')
+                 for r in json.loads(path.read_bytes())['executed_order']]
+        self.assertEqual(ids_b[-3:], [self.members[o]['run_id'] for o in (22, 23, 24)])   # after the late sentinel
+
+    def test_the_manifest_the_windows_are_derived_from_is_unchanged_by_materialization(self):
+        self.assertEqual((ROOT / s.MANIFEST).read_bytes(), s.raw_json(s.candidate()))
+        self.assertEqual(len(s.selected(s.load(ROOT), 'C5')['members']), 22)
+
+
 class DeskTests(unittest.TestCase):
     def test_supplemental_members_join_no_identical_work_group_and_are_reported_descriptively(self):
         regular = {}

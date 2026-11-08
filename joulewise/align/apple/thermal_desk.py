@@ -726,7 +726,7 @@ def acceptance(members, *, pairs=(), u4=None, u5=None, u6=None, u3_bar=None, v4=
     results['consequence'] = ('thermal protocol not met' if any(results[f'U{k}']['status'] == 'fail' for k in (1, 2, 3)) else
                              'state not controlled; calibration unresolved' if any(results[f'U{k}']['status'] == 'fail' for k in (4, 5)) else
                              'calibration unresolved' if results['U6']['status'] == 'fail' else
-                             'add 2 sentinels per remaining window' if any(results[f'U{k}']['status'] == 'inconclusive' for k in (4, 5)) else
+                             'add 2 sentinels per remaining window' if results['U4']['status'] == 'inconclusive' else      # A15 / R21: U4 only
                              'under control' if hardware == 'pass' else 'inconclusive')
     return results
 

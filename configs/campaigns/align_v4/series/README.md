@@ -33,7 +33,8 @@ same seeds.
 **Ceiling.** An ordinary window may run to 59,520 s. A window carrying the two
 escalation sentinels may run to 62,400 s (`window_ceiling_s`).
 
-**Escalation sentinels (R20).** After a window whose U4/U5 is inconclusive, the next
+**Escalation sentinels (R20).** After a window whose **U4** is inconclusive (A15 / R21: not U5, which is inconclusive by
+construction), the next
 window appends two sentinels at ordinals 23 and 24 (after the late sentinel at 22, before
 the closing reference/scaffold): `materialize --window-id C3 --extra-sentinels 2`, or
 `align_v4_session.py prepare --window-id C3 --extra-sentinels 2`. Both are exact replays

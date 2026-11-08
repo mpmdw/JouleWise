@@ -60,7 +60,7 @@ NEXT_ARM_TRIAGE = (
          text='cohort and pool rules: U1-U3 failure bars pool entry; one frozen four-slot '
               'cohort; no pooling across a changed configuration'),
     dict(id='sentinel_roster', source=PACKET, first_window_na=True,
-         text='U4/U5 inconclusive adds two sentinels to remaining windows; roster for the '
+         text='a U4 inconclusive (not U5; A15 / R21) adds two R20 sentinels to the next window; roster for the '
               'next window recorded'),
     dict(id='member_eligibility', source=PACKET, first_window_na=True,
          text='final eligibility adjudication of the previous window (identity X5, U3 pairs, '
@@ -261,7 +261,7 @@ CAL_WINDOWS = 8
 CAL_TARGET_PER_PAIR = 39
 BENIGN_PER_PAIR_PER_WINDOW = 7    # protocol default roster: 14 benign (7/pair) per window
 WINDOW_MEMBERS = 22               # 4 anchors + 2 sentinels + 14 benign + 2 sabotage
-ADDED_SENTINELS_MAX = 2           # R20: U4/U5 inconclusive adds two SUPPLEMENTAL sentinels (ordinals 23, 24)
+ADDED_SENTINELS_MAX = 2           # R20 (A15 / R21: U4 only): an inconclusive U4 adds two SUPPLEMENTAL sentinels (ordinals 23, 24)
 # R20 (delta5 S2 F5): the supplemental sentinels count toward nothing, not even captured_members, so the
 # count-only ceiling is the 22 ordinary members (it was 24 under the delta2 reading, now superseded).
 CAPTURED_MAX = WINDOW_MEMBERS

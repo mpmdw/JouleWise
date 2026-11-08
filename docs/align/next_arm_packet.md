@@ -165,7 +165,7 @@ No native collection readiness is claimed by the synthetic tests.
 | capture_faults | exact roster sidecar/powermetrics coverage, flags and exclusion lists | capture coverage or X1-X8 tabulation missing |
 | thermal_escalation | U1–U3 per gated model; prospective ladder when failed/unevaluated | U1-U3 failure needs prospective recorded escalation |
 | cohort_pool_rules | native D slot/identity assertion; failed/excluded pool bar; next configuration equality | previous D four-slot cohort inconsistent; U1-U3 failure bars pool entry |
-| sentinel_roster | U4/U5 consequence and exact next roster | next frozen roster must include two extra sentinels after U4/U5 inconclusive |
+| sentinel_roster | U4 consequence (A15 / R21: U5 never triggers) and exact next roster | next frozen roster must include two extra sentinels after a U4 inconclusive |
 | member_eligibility | final exclusions, X5/token comparisons and capture inventory | desk and final exclusions disagree; identity X5/U3 pair unresolved |
 | calibration_stop | count-only fixed-eight predicate over authenticated history | escalate_to_lead; pending_final_eligibility; insufficient_calibration; role mismatch |
 | battery_window | the desk's `v4_B_bar` for the previous record; `consecutive_non_pass` is the trailing non-passing run on the hash-linked chain (missing evidence is a non-pass; R1 has no B bar); the consumer turns a first non-pass into an automatic resume and needs a signed `battery_rulings` row for the second | previous B window did not pass; no signed battery ruling after the second |

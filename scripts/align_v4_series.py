@@ -732,7 +732,7 @@ def main(argv=None):
             p.add_argument('--check', action='store_true')
             p.add_argument('--extra-sentinels', type=int, default=0, choices=(0, 2),
                            help='R20: append the two supplemental escalation sentinels (ordinals 23, 24) '
-                                'after a U4/U5-inconclusive window; ceiling 62,400 s')
+                                'after a U4-inconclusive window; ceiling 62,400 s')
         else:
             p.add_argument('--sources', type=Path, required=True,
                            help='JSON: history, checks, record_commit, last_desk_passed_artifact_set_sha256')
