@@ -1042,6 +1042,27 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+230. **Laptop lead (interactive session 1544c617), 2026-11-08 03:25 PST: lead ruling R21, the v4 analysis interpretations, made BLIND (no v4 data exists).** Source: `docs/analysis/v4/INTERPRETATION-RULINGS-DRAFT.md` on `align/2026-11-08-v4-interpretation-rulings` @ `a3465eda8`. It is an Opus reconciliation of the Sol primary engine (`align/2026-11-08-v4-analysis-engine-sol` @ `77b1ab60f`) and the Opus independent recompute (`align/2026-11-08-v4-recompute-opus` @ `9085cb1b8`), reading code and docs only.
+- **Adopted as drafted:** every recommended ruling in A0-A36. The high-impact ones:
+  - **A1:** the scored total is the turn-owned GPU-energy sum, over the same rows the fit uses. The whole-episode gross is printed only.
+  - **A3:** half-widths are zero (OLS). Attribution bounds are print-only.
+  - **A4:** one fit per window × pair. Benign members are scored LOTO, sabotage on the full benign fit, T windows on their own fits. Only thresholds carry from C to T. This is the registered scorer, and the claim stays conditional on its validity.
+  - **A22:** the heavy-tail rule uses leave-one-out RMS.
+  - **A23:** only a U1-U3 FAIL bars pool entry; INCONCLUSIVE does not, and is disclosed.
+  - **A16:** U6 is per pair over the C1-C8 benign residuals only.
+  - **A20:** the drafted benign DC residual spec, print-only; sealed rows are compared by presence.
+  - **A14:** the first U4 verdict comes at W ≥ 3.
+  - **A21:** clocks use production `stamp_mapping`.
+- **Changed from the draft, A15:** U5 (OLS with intercept on three R1 designed states, df 1) is expected to be inconclusive by construction. **A U5 inconclusive does NOT trigger the R20 escalation sentinels.** They cannot resolve U5 and would cost about 1 h of MBP per window. U5 is reported descriptively, and that is disclosed. R20 sentinels trigger on U4 only.
+- **Speed:**
+  - Sol rebuilds its reducer as a targeted byte scanner with a plistlib fallback, proven equal to plistlib.
+  - Both builds use one streaming read for hash plus parse, a columnar observation cache keyed by raw sha256, and per-turn energy tables recomputed fresh each run.
+  - Analysis runs incrementally per window on the Air as each window lands.
+- **Next:**
+  - Both builds apply their §7 fix lists.
+  - A blinded comparator plus `release_v4.py` follow, with B5's exit contract (refused 2 > hold 1 > agree 0).
+  - Then a synthetic full-series rehearsal: engine against recompute, exact agreement.
+
 229. **Laptop lead (interactive session 1544c617), 2026-11-08 03:10 PST: Block 5 release check AGREE; ruling R20; integration plan updates.**
 - **Block 5 release check: exit 0, verdict `agree`.** It ran on main `02ef89f5c`, which includes #704's comparator, with the analysis pinned to `b5/analysis-r4` = `ab1e0098d` and dry-m custody. The independent recompute sha256 is `d49103e8…`. Wall time 523 s. Output is in `/Users/edr/jw-b5-custody/release-check-final-20261108T0942Z` and was not read.
   - A structure-only masked read shows: digests `verified`; recompute `ok`; comparator `agree` across 24 families; 0 undetermined holds; 0 absent sources; release checkout clean.
