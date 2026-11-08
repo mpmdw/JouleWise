@@ -222,10 +222,12 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
 
 
 def desk(session_root, **kwargs):
+    from joulewise.align.apple.desk_execution import host_desk_guard
     kwargs.setdefault('kit', kit.KIT)
     kwargs.setdefault('desk_schema', kit.DESK_SCHEMA)
     kwargs.setdefault('extra_checks', powermode_desk_check)
-    return pilot.desk(session_root, **kwargs)
+    with host_desk_guard(kwargs.get('workers', 1)):
+        return pilot.desk(session_root, **kwargs)
 
 
 ARM_RECORD_SCHEMA = 'joulewise.align_v4_arm.v1'
@@ -252,7 +254,7 @@ def parse_topup_completed_at(value):
 
 def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=None, owner=None,
                obc_off_attested_by=None, battery_runner=None, topup_completed_at=None,
-               topup_source=None, now=None):
+               topup_source=None, now=None, next_arm_triage=None):
     """W1/D arm evidence: ruling 7 AC powermode and ruling 20 volumes.
 
     Ruling 7: the AC-profile powermode must equal the plan's frozen series
@@ -300,7 +302,25 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
         battery['admitted'] = False
         battery['reasons'].append(f'pmset -g batt unavailable: {exc}')
     reasons += battery['reasons']
+    # R12 B2: the frozen next-arm triage list gates every arm; the powermode,
+    # volume and battery results above are its arm-computed members and the
+    # off-MBP packet supplies the rest (joulewise.align.apple.v4_cadence).
+    from joulewise.align.apple import v4_cadence
+    packet = next_arm_triage
+    if isinstance(packet, (str, Path)):
+        try:
+            packet = json.loads(Path(packet).read_bytes())
+        except (OSError, ValueError):
+            packet = None
+    triage = v4_cadence.next_arm_triage(packet, {
+        'series_powermode': bool(power['admitted']),
+        'external_volume': volumes['verdict'] == external_volume.PASS,
+        'charging_battery': bool(battery['admitted'])})
+    reasons += ['next_arm_triage: ' + reason for reason in triage['reasons']
+                if not reason.startswith(('triage series_powermode', 'triage external_volume',
+                                          'triage charging_battery'))]
     return {'schema': ARM_RECORD_SCHEMA, 'admitted': not reasons, 'reasons': reasons,
+            'next_arm_triage': triage,
             'ac_powermode': power, 'external_volumes': volumes, 'battery': battery,
             # Lead ruling R7-10: the host state directory this arm used.
             'host_state_dir': powermode.host_state_dir()}
@@ -529,10 +549,11 @@ def _termination_handlers():
 def _arm_and_install(session, state, measurement_root, plan, high, *, runner, volume_runner, now,
                      w1_disk_config, disk_gate, lock=None, owner=None,
                      obc_off_attested_by=None, battery_runner=None, topup_completed_at=None,
-                     topup_source=None, **kwargs):
+                     topup_source=None, next_arm_triage=None, **kwargs):
     record = arm_checks(measurement_root, plan, runner=runner, volume_runner=volume_runner, lock=lock,
                         owner=owner, obc_off_attested_by=obc_off_attested_by, battery_runner=battery_runner,
-                        topup_completed_at=topup_completed_at, topup_source=topup_source, now=now)
+                        topup_completed_at=topup_completed_at, topup_source=topup_source, now=now,
+                        next_arm_triage=next_arm_triage)
     if high is not None:
         record['high_power_enter'] = high
         if not high['ok']:
@@ -573,7 +594,9 @@ def main(argv=None):
                           help='when the battery top-up completed: epoch seconds or ISO-8601 with UTC offset; '
                                'arm refuses if it is future-dated or more than 30 min old')),
                                        ('--topup-source', dict(required=True,
-                          help='who/what attests that completion time (operator name or log)'))))
+                          help='who/what attests that completion time (operator name or log)')),
+                                       ('--next-arm-triage', dict(type=Path, required=True,
+                          help='R12 B2 next-arm triage packet (JSON) built off the MBP from the committed record'))))
 
 
 if __name__ == '__main__':

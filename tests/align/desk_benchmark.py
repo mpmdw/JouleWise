@@ -1,11 +1,15 @@
 """Small synthetic full-consumer-chain benchmark; never loads model weights.
 
+This historical timing helper splices only the pilot and session modules. Use
+test_desk_equivalence_review for whole-tree equivalence and heterogeneous
+residual/thermal evidence; timing output here is not that stronger proof.
+
 python3.13 -B -m tests.align.desk_benchmark --reference <base-sha> --output <new-dir>
 The harvest subprocess is an inert receipt producer; its inputs are already
 synthetic archived records. No hardware/production-harvest timing is implied.
 """
 import argparse
-from contextlib import redirect_stdout
+from contextlib import nullcontext, redirect_stdout
 import csv
 import hashlib
 import io
@@ -70,7 +74,8 @@ def main(argv=None):
             stream = io.StringIO()
             profile = args.output/f'{repeat}-{label}.json'
             started = time.perf_counter()
-            with redirect_stdout(stream), patch('joulewise.align.apple.v4_registration.validate_u3'):
+            with redirect_stdout(stream), patch('joulewise.align.apple.v4_registration.validate_u3'), \
+                    patch('joulewise.align.apple.desk_execution.host_desk_guard', side_effect=lambda _: nullcontext()):
                 options = {} if module is old else {'workers': workers, 'profile': profile}
                 module.desk(session, run=harvested, **options)
             wall = time.perf_counter()-started

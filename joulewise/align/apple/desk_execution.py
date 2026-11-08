@@ -9,7 +9,10 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 import json
 import multiprocessing
+import os
 from pathlib import Path
+import subprocess
+import sys
 import time
 
 _current = ContextVar('align_desk_execution', default=None)
@@ -17,6 +20,36 @@ _current = ContextVar('align_desk_execution', default=None)
 
 def current_execution():
     return _current.get()
+
+
+@contextmanager
+def host_desk_guard(workers):
+    """Keep parallel host desks out of both armed and measuring Mac windows.
+
+    Retain the night lock through shutdown/publication so a concurrent install
+    cannot arm between the check and the work. Plan-0 nights do not hold that
+    lock, so also require the shared launchd night job to be absent. Replay
+    over portable exports deliberately does not use this host admission path.
+    """
+    if type(workers) is not int or not 1 <= workers <= 8:
+        raise ValueError('desk workers must be an integer from 1 to 8')
+    if workers == 1 or sys.platform != 'darwin':
+        yield
+        return
+    from joulewise.align.apple.powermode import HostLock
+    lock = HostLock(role='parallel-desk')
+    try:
+        if not lock.acquire():
+            raise ValueError('parallel desk refused: a window holds the host night lock')
+        label = 'com.joulewise.night'
+        job = subprocess.run(['launchctl', 'print', f'gui/{os.getuid()}/{label}'],
+                             capture_output=True, text=True, check=False, timeout=10)
+        absent = f'Could not find service "{label}" in domain for user gui: {os.getuid()}'
+        if job.returncode != 113 or absent not in (job.stderr or '').splitlines():
+            raise ValueError('parallel desk refused: night job is armed/measuring or its state is unknown')
+        yield
+    finally:
+        lock.release()
 
 
 def _call(function, task):
@@ -35,6 +68,8 @@ class DeskExecution:
     def __enter__(self):
         if self.profile is not None and Path(self.profile).exists():
             raise ValueError('desk profile already exists')
+        if self.profile is not None and not Path(self.profile).parent.is_dir():
+            raise ValueError('desk profile parent directory must exist')
         self.token = _current.set(self)
         self.started = time.perf_counter()
         return self
@@ -47,8 +82,13 @@ class DeskExecution:
                 record = {'schema': 'joulewise.align.desk_timing.v1', 'workers': self.workers,
                           'wall_s': time.perf_counter()-self.started,
                           'status': 'ok' if kind is None else kind.__name__, 'stages': self.stages}
-                with Path(self.profile).open('x') as handle:
-                    handle.write(json.dumps(record, indent=2, sort_keys=True)+'\n')
+                try:
+                    with Path(self.profile).open('x') as handle:
+                        handle.write(json.dumps(record, indent=2, sort_keys=True)+'\n')
+                except OSError as error:
+                    if value is None:
+                        raise
+                    value.add_note(f'desk timing receipt failed: {error}')
         finally:
             _current.reset(self.token)
 

@@ -100,8 +100,8 @@ def main(argv=None):
     parser.add_argument('--workers', type=int, default=1, help='1 (serial reference) through 8 read workers')
     parser.add_argument('--profile', type=Path, help='separate stage timing receipt')
     args = parser.parse_args(argv)
-    from joulewise.align.apple.desk_execution import DeskExecution
-    with DeskExecution(args.workers, args.profile) as execution:
+    from joulewise.align.apple.desk_execution import DeskExecution, host_desk_guard
+    with host_desk_guard(args.workers), DeskExecution(args.workers, args.profile) as execution:
         return _main(args, execution)
 
 

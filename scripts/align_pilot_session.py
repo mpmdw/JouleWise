@@ -307,6 +307,7 @@ def desk(session_root, *, workers=1, profile=None, **kwargs):
 def _desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None,
           kit=KIT, desk_schema=SCHEMA, extra_checks=None, execution,
           output=None, state=None, plan=None, targets=None, report_root=None):
+    explicit_output = output is not None
     session = Path(session_root).resolve()
     state = h.read(session / 'session.json') if state is None else state
     plan = h.read(state['plan_path']) if plan is None else plan
@@ -317,7 +318,8 @@ def _desk(session_root, *, run=subprocess.run, harvest=True, compare_session=Non
         if harvest:
             raise ValueError('explicit desk output requires harvest=False')
         output = Path(output)
-        output.mkdir(parents=True, exist_ok=False)
+        if output.exists():
+            raise ValueError('desk output directory already exists')
     claim_root = state.get('runs_roots', {}).get('claim')
     if not claim_root:
         registration = Path(state.get('registration_dir', Path(state['measurement_root']) / kit / 'registration'))
@@ -422,6 +424,8 @@ def _desk(session_root, *, run=subprocess.run, harvest=True, compare_session=Non
              'status': 'instrument_ok' if all(v is True for v in checks.values()) else 'instrument_incomplete'}
     from joulewise.align.apple.pilot_analysis import finite_json
     pilot = finite_json(pilot)
+    if not harvest and explicit_output:
+        output.mkdir(parents=True, exist_ok=False)
     h.write(output / 'PILOT.json', pilot)
     status = {'schema_version': desk_schema, 'non_claim': True, 'plan_id': state['session_id'],
               'pilot': str(Path(report_root or output) / 'PILOT.json'), 'pilot_status': pilot['status'], 'checks': checks,

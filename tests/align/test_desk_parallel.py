@@ -1,5 +1,5 @@
 """Portable desk consumer chain: synthetic bytes only, including refusals."""
-from contextlib import redirect_stdout
+from contextlib import nullcontext, redirect_stdout
 from dataclasses import replace
 import hashlib
 import io
@@ -18,6 +18,17 @@ from unittest.mock import patch
 from scripts import align_pilot_session as pilot, align_v4_session as v4
 from scripts import bytes_h_session as h
 from tests.align.test_pilot4 import native
+
+
+def setUpModule():
+    # Synthetic exports never inspect or take the real machine's night lock.
+    global host_guard
+    host_guard = patch('joulewise.align.apple.desk_execution.host_desk_guard', side_effect=lambda _: nullcontext())
+    host_guard.start()
+
+
+def tearDownModule():
+    host_guard.stop()
 
 
 def work(item):
@@ -217,7 +228,7 @@ class ChainTests(unittest.TestCase):
 
 class CommittedRecordTests(unittest.TestCase):
     def record(self, root):
-        from joulewise.align.apple.desk_record import describe
+        from joulewise.align.apple.desk_record import describe, finalize
         inputs, repository = root/'inputs', root/'repository'
         session = synthetic_record(inputs, 3)
         # These are inert locator strings. A laptop must never follow them.
@@ -226,11 +237,26 @@ class CommittedRecordTests(unittest.TestCase):
                      registration_dir='/unavailable/registration', runs_roots={'claim': '/unavailable/runs'})
         state['inputs'] = {'custody_root': '/unavailable/custody'}
         h.write(session/'session.json', state)
-        h.write(inputs/'plan.json', {'custody_root': '/unavailable/custody'})
-        value = describe(inputs, dict(session='session', measurement_root='measurement',
+        h.write(inputs/'plan.json', {'plan_id': 'synthetic', 'custody_root': '/unavailable/custody'})
+        h.write(inputs/'custody/night/result.json', {'plan_id': 'synthetic'})
+        for path in ('collection/run_clock.jsonl', 'hazards/monitor/thermal.jsonl', 'hazards/meter/stream-0.jsonl'):
+            target = inputs/'custody'/path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text('')
+        h.write(inputs/'custody/night/hazard_result.json', {'meter': {'streams': [
+            {'path': 'hazards/meter/stream-0.jsonl', 'sha256': hashlib.sha256(b'').hexdigest()}]}})
+        h.write(session/'desk.json', {'plan_id': 'synthetic', 'harvest_status': 'ok', 'harvest_exit': 0})
+        for name in ('harvest.stdout', 'harvest.stderr'):
+            path = session/'staging'/name
+            path.parent.mkdir(exist_ok=True)
+            path.write_text('synthetic harvest log\n')
+        layout = dict(session='session', measurement_root='measurement',
                          registration_dir='measurement/configs/campaigns/align_v4/registration', runs_root='runs',
-                         custody_root='custody', plan='plan.json'))
+                         custody_root='custody', plan='plan.json')
         repository.mkdir()
+        h.write(repository/'finalize.json', finalize(inputs, layout))
+        layout.update(finalize_manifest='finalize.json', records_ref='refs/remotes/origin/records/synthetic')
+        value = describe(inputs, layout, repository=repository)
         env = dict(os.environ, GIT_CONFIG_GLOBAL='/dev/null', GIT_CONFIG_NOSYSTEM='1')
         def git(*args):
             return subprocess.run(['git', '-C', str(repository), '-c', 'core.hooksPath=/dev/null',
@@ -238,8 +264,9 @@ class CommittedRecordTests(unittest.TestCase):
                 check=True, capture_output=True, text=True, env=env).stdout.strip()
         git('init', '-q')
         h.write(repository/'record.json', value)
-        git('add', 'record.json')
+        git('add', 'record.json', 'finalize.json')
         git('commit', '-qm', 'Synthetic desk record descriptor')
+        git('update-ref', layout['records_ref'], 'HEAD')
         return repository, git('rev-parse', 'HEAD'), inputs, value
 
     def test_committed_record_relocates_all_host_paths_and_is_byte_equal(self):
@@ -307,7 +334,7 @@ class CommittedRecordTests(unittest.TestCase):
             layout = root/'layout.json'
             h.write(layout, descriptor)
             before = snapshot(inputs)
-            self.assertEqual(main(['--describe', str(layout), '--inputs', str(inputs),
+            self.assertEqual(main(['--repository', str(repository), '--describe', str(layout), '--inputs', str(inputs),
                                    '--output', str(root/'described.json')]), 0)
             self.assertEqual(h.read(root/'described.json'), descriptor)
             with redirect_stdout(io.StringIO()):
