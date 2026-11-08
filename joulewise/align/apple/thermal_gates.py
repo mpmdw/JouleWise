@@ -118,7 +118,8 @@ def validate_gate_policy(value):
     if 'g0_cap_s' in policy:
         cap = policy['g0_cap_s']
         if type(cap) not in (int, float) or not math.isfinite(cap) or not 0 < cap <= G0_CAP_MAX_S:
-            raise ValueError(f'thermal.g0_cap_s must be finite and in [{G0_CAP_DEFAULT_S}, {G0_CAP_MAX_S}]')
+            raise ValueError(f'thermal.g0_cap_s must be finite and in [{G0_CAP_DEFAULT_S}, {G0_CAP_MAX_S}], or in '
+                             f'(0, {G0_CAP_MAX_S}] with a g0_cap_receipt ({R10_G0_CAP_AUTHORITY})')
         if cap < G0_CAP_DEFAULT_S and receipt is None:
             raise ValueError(f'thermal.g0_cap_s must be finite and in [{G0_CAP_DEFAULT_S}, {G0_CAP_MAX_S}]; '
                              f'a cap below {G0_CAP_DEFAULT_S} s needs the lead\'s ruling 1(f) receipt '

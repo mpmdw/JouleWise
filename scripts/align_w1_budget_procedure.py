@@ -24,8 +24,9 @@ Steps of ``decide`` (R10-2, recorded before any R1 number exists):
   3. otherwise R10-2(b): 4-bit D next, after its own R1-4bit gated night; the
      lead rules on it with Ed. (c) (window council) follows if (a) also fails
      on the 4-bit night.
-The contrast members' cap must fit their deadman in every branch (R10-2(a));
-when it cannot be shown, --check refuses W1 and this tool says so.
+Under R10-2(a) the contrast members' cap must fit their deadman; when it
+cannot be shown, --check refuses W1 and this tool says so. With no receipt
+the kit is e901eb2a4's (cold-review disposition MEDIUM-2).
 """
 from __future__ import annotations
 
@@ -43,9 +44,10 @@ from scripts import align_v4_kit as kit  # noqa: E402
 
 # The only fields read (R10-2: timing and count fields, never energies).
 SLOT_FIELDS = ('I_D', 'B_D')
-ROW_FIELDS = ('run', 'g0_outcome', 'phases_s', 'decode_tokens', 'admitted_turns', 'x7')
+# phases_s is copied only through _phases, key by key (cold-review LOW-3).
+ROW_FIELDS = ('run', 'g0_outcome', 'decode_tokens', 'admitted_turns', 'x7')
 FIT_FIELDS = ('r_decode_tok_per_s', 'r_decode_step_d_tok_per_s', 'turn_cap_tokens')
-X_G_FIELDS = ('status', 'g0_outcome', 'g0_wait_s', *kit.X_G_EVIDENCE_FIELDS)
+X_G_FIELDS = ('status', 'g0_outcome', 'g0_wait_s', 'admitted_turns', 'x7')
 DUTY_FIELDS = ('verdict', 'pass')
 PHASE_FIELDS = ('G0', 'G1', 'H', 'decode', 'prefill', 'tool', 'tail')
 X_G_RESULT_FIELDS = ('g0_outcome', 'g0_wait_s', 'admitted_turns', 'phases_s', 'episode_flags')
@@ -84,7 +86,7 @@ def _draft(branch, derived, view):
         exposure = (f'A W1 D member whose G0 does not release within G0* = {d["d_g0_cap_s"]} s ends X2 before '
                     f'turn 1 (episode.g0_unreleased), never X7. R1\'s gated D G0 waits were {waits} s '
                     f'(censored: {d["censored_D"]}).')
-        deviation = ('Public deviation (R10-2(a)): lowers FINAL-DESIGN\'s and R7-2\'s 600 s G0-cap floor for W1\'s '
+        deviation = (f'{kit.DEVIATION_PREFIX}: lowers FINAL-DESIGN\'s and R7-2\'s 600 s G0-cap floor for W1\'s '
                      f'D members only, to {d["d_g0_cap_s"]} s; ruling 1(f)\'s worst-case guarantee is kept with '
                      'that armed cap as its G0 term.')
     else:
@@ -94,10 +96,9 @@ def _draft(branch, derived, view):
                      f'{d["admit_bound_s"]} s against G0* = {d["G0_star_s"]:.1f} s). R10-2(b): 4-bit D next, '
                      'after its own R1-4bit gated night; the lead rules on it with Ed.')
     return {'schema': kit.RULING_1F_RECEIPT_SCHEMA, 'authority': kit.R10_AUTHORITY, 'branch': branch,
-            'procedure': {'path': 'scripts/align_w1_budget_procedure.py',
+            'procedure': {'path': kit.PROCEDURE_SCRIPT.as_posix(),
                           'sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest()},
-            'r1_record': {'schema': view['schema'], 'source': view['source'], 'I_D': view['slots'].get('I_D'),
-                          'max_r1_tail_s': view['max_r1_tail_s']},
+            'r1_record': kit.r1_record_identity(view),
             'inputs': derived['inputs'], 'derivation': derived['derivation'], 'contrast': derived['contrast'],
             'rules': {'g0_term_rule': 'G0 term = the armed D cap = floor(G0*) (R10-2(a))',
                       'g0_star_rule': 'G0* = T_dead - holds_proj - max(prefill + tool) - 10,240 / r',
@@ -109,8 +110,8 @@ def _draft(branch, derived, view):
                                      'ceil(1.25 x the longest released gated D G0 wait) <= G0*'),
                       'contrast_rule': derived['contrast']['rule']},
             'x2_exposure': exposure, 'deviation_log': deviation,
-            'lead_signature': kit.UNSIGNED + ': the lead replaces this with a signature line '
-                              '(name, session, date) via `align_w1_budget_procedure.py sign`'}
+            'lead_signature': kit.UNSIGNED + ": the lead signs with `align_w1_budget_procedure.py sign "
+                              "--signature 'lead: <name/session> <ISO date>'`"}
 
 
 def decide(r1_slots, x_max_turns):
@@ -130,8 +131,8 @@ def decide(r1_slots, x_max_turns):
     duty = view['duty_bar']
     notes = []
     if not contrast['fits']:
-        notes.append('CONTRAST: the contrast G0 cap cannot be shown to fit the contrast deadman; --check refuses '
-                     'W1 in every branch (R10-2(a)): ' + '; '.join(contrast['reasons']))
+        notes.append('CONTRAST: the contrast G0 cap cannot be shown to fit the contrast deadman; under an R10-2(a) '
+                     'receipt --check refuses W1: ' + '; '.join(contrast['reasons']))
     if duty.get('pass') is not True:
         notes.append(f'DUTY BAR: verdict {duty.get("verdict")!r}; --check also needs r1_slots.duty_bar.lead_fallback '
                      '(ruling 1(e) step) before W1 arms')
@@ -141,11 +142,18 @@ def decide(r1_slots, x_max_turns):
     if largest is not None:
         return {**base, 'step': 'CURRENT-RULE', 'branch': None, 'receipt_draft': None,
                 'set_inputs': {'R1.B_D': largest, 'R1.T_dead': t_dead,
-                               'R1.thermal_policy.g0_cap_s': kit.w1_d_g0_cap(view)['value_s'],
-                               'R1.thermal_policy.contrast_g0_cap_s': contrast['value_s']}}
+                               'R1.thermal_policy.g0_cap_s': kit.w1_g0_cap(view)['value_s']}}
     branch = derived['branch']
-    if branch == 'current':   # G0* >= 600 s but the current rule misses: not reachable, kept fail closed
-        raise ValueError('R10-2: G0* is at least 600 s yet the current rule does not fit; return to the lead')
+    if branch == 'rerun':
+        return {**base, 'step': 'R1-RERUN', 'branch': None, 'receipt_draft': None,
+                'reason': 'no gated D run decoded a token: no gated rate or holds evidence (cold-review LOW-4)'}
+    if branch in ('current', 'lead'):   # current: unreachable here (checked above), kept fail closed
+        raise ValueError(f'R10-2: derivation branch {branch!r} (G0* {derived["derivation"]["G0_star_s"]:.1f} s); '
+                         'return to the lead')
+    top = view['slots'].get('B_D')
+    if branch == 'a' and (type(top) is not int or top < kit.BUDGET_FLOOR):
+        raise ValueError(f'R10-2(a) arms B_D {kit.BUDGET_FLOOR}, but r1_slots.slots.B_D {top} is below it; the fit '
+                         'rule only lowers B_D (cold-review LOW-5); return to the lead')
     out = {**base, 'step': f'R10-2({branch})', 'branch': branch, 'receipt_draft': _draft(branch, derived, view)}
     if branch == 'a':
         out['set_inputs'] = {'R1.B_D': kit.BUDGET_FLOOR, 'R1.T_dead': t_dead,
@@ -165,8 +173,8 @@ def sign(draft, signature):
     """The lead's signature on a drafted receipt; returns the receipt."""
     if not isinstance(draft, dict) or draft.get('schema') != kit.RULING_1F_RECEIPT_SCHEMA:
         raise ValueError(f'not a {kit.RULING_1F_RECEIPT_SCHEMA} draft')
-    if not isinstance(signature, str) or not signature.strip() or signature.startswith(kit.UNSIGNED):
-        raise ValueError('the signature line must be non-empty text')
+    if not kit.valid_lead_signature(signature):
+        raise ValueError("the signature line must read 'lead: <name/session> <ISO date>'")
     return {**draft, 'lead_signature': signature.strip()}
 
 

@@ -363,14 +363,18 @@ Under the three WP14 rulings above, retain these council rules:
   designed start states arm 1,200 s. A G0 that did not release counts at
   1,200 s, and an INCONCLUSIVE X-G falls back to 1,200 s (R7-12). Ruling
   1(f) uses G0_cap_W1 as its G0 term. Every other G0 keeps 600 s.
-  **LEAD-RULINGS-2 R10-4 (per-role caps):** W1 arms one G0 cap per role.
-  D members arm the D-role cap, the same rule over D_bank, D_spam a and
-  D_spam b only (`thermal_policy.g0_cap_s`), and that cap is ruling 1(f)'s
-  G0 term. Contrast members arm their own cap from X-G
-  (`thermal_policy.contrast_g0_cap_s`; R7-12's fallback to 1,200 s for an
-  INCONCLUSIVE X-G stays). It must fit the 1,086.3 s contrast deadman on
-  R1's X-G record (complete WP18 X turns, no deadman, cap + G1 + H +
-  prefill + decode + tool), or the kit refuses W1 (R10-2(a)).
+  **LEAD-RULINGS-2 R10-4 (per-role caps, under an R10-2(a) receipt only;
+  cold-review disposition MEDIUM-2):** with no receipt, W1 is exactly as
+  above. Every member arms G0_cap_W1 (X-G included), which is 1(f)'s G0
+  term, and an INCONCLUSIVE X-G does not refuse on that alone (R7-12).
+  Under a signed R10-2(a) receipt, D's cap is sized on the three gated D
+  waits only (below). Contrast members arm their own cap from X-G
+  (`thermal_policy.contrast_g0_cap_s`, with R7-12's 1,200 s fallback). It
+  must fit the 1,086.3 s contrast deadman on R1's X-G record (complete WP18
+  X turns, no deadman, cap + G1 + H + prefill + decode + tool), or the kit
+  refuses W1. An INCONCLUSIVE X-G then refuses: lead ruling (iv), which
+  supersedes R7-12's "does not refuse on that alone" for W1 admission under
+  a receipt.
   **LEAD-RULINGS-2 R10-2(a) (public deviation, D only, under a signed lead
   receipt `registration/ruling_1f_receipt.json`):** D arms G0* = T_dead −
   holds − prefill/tool − 10,240/r, below 600 s, with r the minimum of
@@ -378,7 +382,8 @@ Under the three WP14 rulings above, retain these council rules:
   decoded token to 10,240 tokens. It applies only when no gated D G0 is
   censored (timeout, deadman or unobserved; lead ruling on R10 builder
   decision (i)), 1.25 × the longest released gated D G0 wait ≤ G0*, and the
-  600 s rule does not fit. A D G0 that has not released by G0* ends X2
+  600 s rule fits at no B_D (cold-review disposition MEDIUM-1), and at
+  least one gated D run decoded a token (LOW-4). A D G0 that has not released by G0* ends X2
   before turn 1, never X7, so 1(f)'s worst case holds with G0* as its G0
   term. `scripts/align_w1_budget_procedure.py` computes the branch from R1
   timing and count fields only and drafts the receipt; the kit re-derives

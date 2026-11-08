@@ -58,11 +58,7 @@ SYN_R1_SLOTS = {'schema': kit.R1_SLOTS_SCHEMA, 'source': kit.R1_SYNTHETIC_SOURCE
                 'budget_fit_inputs': {'r_decode_tok_per_s': 40.0, 'r_decode_step_d_tok_per_s': 40.0,
                                       'turn_cap_tokens': 4096},
                 'external_volumes': [{'point': 't0', 'verdict': 'PASS'}], 'inconclusive_segments': {},
-                # R10-4: X-G's evidence for the contrast cap (5 complete WP18 X turns, no deadman).
-                'x_g': {'status': 'measured', 'g0_outcome': 'released', 'g0_wait_s': 60.0,
-                        'admitted_turns': 5, 'x7': False,
-                        'phases_s': {'G0': 60.0, 'G1': 20.0, 'H': 0.0, 'decode': 120.0, 'prefill': 30.0,
-                                     'tool': 5.0, 'tail': 0.0}},
+                'x_g': {'status': 'measured', 'g0_outcome': 'released', 'g0_wait_s': 60.0},
                 'g0_cap_w1': {'authority': 'LEAD-RULINGS-2 R7-2, R7-12', 'r1_g0_timeout_s': 1200.0,
                               'floor_s': 600.0, 'factor': 1.25,
                               'waits_s': {**dict.fromkeys(kit.GATED_D_RUN_NAMES, 60.0), 'X_G_contrast': 60.0},
@@ -92,8 +88,7 @@ SYN_INPUTS = {
                               'sensors': {'s_fast': syn.FAST, 's_slow': syn.SLOW, 'fan_keys': [syn.FAN],
                                           'r0_sha256': R0_SHA},
                               'delta_fast_c': 1.5, 'delta_slow_c': 1.0, 'turn_cap_s': 120,
-                              'chunk_tokens': 2048, 'g0_cap_s': 600, 'contrast_g0_cap_s': 600,
-                              'heavy': True, 'per_turn': True}},
+                              'chunk_tokens': 2048, 'g0_cap_s': 600, 'heavy': True, 'per_turn': True}},
     'WP15': {'runtime_entrypoint': ['scripts/align_r1_runtime.py', '--config', 'configs/align/v4/r1_runtime.json']},
 }
 
@@ -106,10 +101,6 @@ PAIR_GROUPS = {5: 'D-5-17', 17: 'D-5-17', 6: 'X-G', 16: 'X-G', 9: 'X-S', 13: 'X-
 
 
 def build_kit(inputs, r1_slots=SYN_R1_SLOTS):
-    # R10-4: the stand-in R1's X-G ran W1's WP18 X turn count, which this dry
-    # run measures from its own pilot-7 stand-in before building the kit.
-    r1_slots = deepcopy(r1_slots)
-    r1_slots['x_g']['admitted_turns'] = inputs['WP18']['X']['max_turns']
     with patch.object(kit, 'read_inputs', lambda root=kit.ROOT: deepcopy(inputs)), \
             patch.object(kit, 'read_r1_slots', lambda root=kit.ROOT: deepcopy(r1_slots)):
         kit.require_ready(deepcopy(inputs), deepcopy(r1_slots), synthetic=True)
