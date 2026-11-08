@@ -20,6 +20,8 @@ records review findings, draft incompatibilities, tests and open decisions.
 | `behaviour_channel` | Stage 1 F behaviour channel; later H1 frontier arithmetic | `Answer`, `EnergyModel`, `CapScenario`, `answer_energy`, `summarize_answers`, `compare_answers`, `compare_scenarios`. Count-based predictions only; no free-generation runner, scorer, calibration fitting or measured-energy reducer. |
 | `lockin` | LOCKIN-SWAP / PRBS instrument proposal | `Schedule`, `NoiseModel`, `make_schedule`, `simulate_trace`, `demodulate`, `abba_differences`, `estimate_abba`. Synthetic traces, exploratory block inference; no hardware acquisition or promised lock-in gain. |
 | `power` | Study §2.2 sizing / PSD-gated lock-in feasibility | `plan_power`, `study_reference`. Independent-unit normal planning; no TOST or registered claim decision. |
+| `tamper_detection` | Ranked ideas 10/11/13: hidden editing, precision substitution and blinded detection | Synthetic signed GPU/DC/time residuals, held-out calibration, timing padding/adaptive counterexamples; reuses behaviour, lock-in and power tools. No artifact reader, native execution or hardware evidence. |
+| `tamper_challenge` | Blinded copy counts and energy-bound sensitivity | Exact binomial `plan_binary`, known-SD `equivalence_power`, separate synthetic analyst roster/curator key via `make_challenge`. Copy independence and native custody remain design gates. |
 | `rail_data_dependence` | S1 Apple-GPU data dependence; Stage 1 P instrument ladder | `Settings`, `make_plan`, `synthetic_weight`, `abba_schedule`, `execute_plan`, `MLXBackend`, `NumpyDryBackend`. Fixed dispatch counts within a geometry/dtype; dry mode is a tiny float32 CPU surrogate. |
 | `operand_stats` | P fill descriptors; possible later H4 toggle work | `hamming_weight`, `zero_fraction`, `bit_toggle_rate`, `operand_statistics`, `combine_statistics`, bf16 encoding helpers. Host storage descriptors, not observed hardware bus activity. |
 | `capture_hooks` | Future authorized P capture | `existing_capture`: lifecycle wrapper around existing powermetrics and KM003C collectors. External native use only; tests mock both collectors. |
@@ -230,6 +232,12 @@ unverified. Collection requires a separate lead-controlled quiet session; an
 active agent must never run `--execute` or actual capture hooks.
 
 ## Verification and native handoff
+
+The [tamper threat model](../../docs/research/interp-energy/TAMPER-THREAT-MODEL.md)
+defines adversary access, weak-effect copy sizing, signed residuals and explicit
+coverage limits. `scripts/interp_energy/tamper_detection.py --design-only` is
+stdlib-only; omit the flag for a NumPy synthetic stress realization. All new
+effect sizes and noise settings are assumptions. No collection is authorized.
 
 Run unittest modules individually, one process at a time. All tests use tiny
 synthetic arrays/configs; capture tests mock collectors. The integration module
