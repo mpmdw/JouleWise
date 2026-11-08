@@ -8,12 +8,21 @@ under a reviewed post-release PR.
 
 ## Identity and authority
 
-A registration binds `{block_id, role, commit, tree, ref, inputs, environment}`:
+A registration binds `{block_id, role, commit, tree, ref, tag_object, review, inputs, environment}`:
 
 - `commit`: full Git commit SHA; `tree`: full tree object ID.
-- `ref`: exact approved annotated tag, for example `refs/tags/pin/b6-analysis-r1`,
+- `ref`: exact approved annotated tag, for example `refs/tags/b6/analysis-r1`,
   or an exact protected block release branch. No namespace-wide “any pin tag”
   match. Collection, analysis and ledger-head identities are distinct roles.
+- `tag_object`: full annotated tag-object ID as well as its peeled commit.
+  Detect a deleted/recreated tag even if its commit is unchanged. Reuse existing
+  scientific names; never create duplicate `pin/b5-analysis-r*` identities.
+- `review`: PR number, exact reviewed commit, required check-run names and
+  conclusions for that SHA, archived PR/check JSON digests and reviewer/time.
+  Require successful conclusions for every required check and reviewed PR
+  evidence, or recorded reachability on a protected `block/*` line with the same
+  required checks (record its originating PR/check evidence per tag too).
+  Historical retention tags with missing evidence cannot authorize a new run.
 - `inputs`: `{repo-relative path: SHA-256}` plus external artifact identities.
   Check Git blobs at the registered commit, not today's working tree. Treat
   external identities as metadata; do not fetch weights or open sealed data in
@@ -25,7 +34,11 @@ A registration binds `{block_id, role, commit, tree, ref, inputs, environment}`:
 The hashed/reviewed registration's commit is the authority. A mutable tag or
 branch name cannot replace it. Prefer annotated immutable release tags; configure
 server rules to prohibit update/deletion, and retain them in a standalone bundle.
-Signed tags can add signer authentication where keys are available. Neither a
+Use one Ed-created active ruleset over all `refs/tags/**`: no updates/deletions,
+creation restricted to admins, no agent bypass. Push the explicit reviewed tags
+and verify server tag-object IDs and peeled commits with `git ls-remote --tags`.
+Archive the ruleset JSON with the receipt and two full mirror/`bundle --all`
+backups. Signed tags can add signer authentication where keys are available. Neither a
 local tag nor a local remote-tracking ref proves server protection. Record that
 administrative evidence separately; the driver verifies object identity offline.
 
@@ -35,18 +48,27 @@ For an ordinary immutable run, require:
 
 1. Resolve the **exact** registered ref, peel it to a commit, verify annotated
    tag type when the contract requires a tag, and compare to registered commit
-   and tree. Missing/ambiguous refs, moved tags, unavailable objects or malformed
+   and tree, plus registered tag-object ID and archived exact-SHA review/check
+   evidence. A correct identity without required PR/check evidence refuses.
+   Missing/ambiguous refs, moved tags, unavailable objects or malformed
    registrations refuse with stable field-only errors. No fallback to main.
 2. Require clean tracked checkout and `HEAD == registered commit`. Verify input
    digests from that tree, environment record and the existing artifact/custody
    bindings. A ref's existence or ancestry alone never authenticates those bytes.
 3. If the registration explicitly permits reviewed revisions on a protected
    block branch, require the anchor to be an ancestor of HEAD **and** HEAD to
-   belong to that exact block release line **and** an authenticated ruling entry
-   to name the precise new commit/tree and superseded identity. Every executed
-   revision gets its own immutable `pin/<block>-analysis-r<k>` tag. Unlisted
+   belong to that exact block release line **and** an approved ruling entry
+   to name the precise new commit/tree, superseded identity, owner/ruling source,
+   PR number and required-check receipt. The hashed registration explicitly
+   allowlists that ruling's identity and evidence digests; local narrative text
+   or a newly found tag is not authentication. If signatures are used, require
+   `git verify-tag` against a **committed `allowed_signers` file** whose digest
+   the registration pins. Absent signatures/keys are never called verified.
+   Every executed
+   revision gets its own immutable `<block>/analysis-r<k>` tag. Unlisted
    descendants, merges and cross-block commits refuse even if branch-contained.
-4. Record registered and executed commit/tree, ref and peeled target, revision
+4. Record registered and executed commit/tree, ref, tag-object ID and peeled target,
+   PR/check/ruleset evidence digests, revision
    ruling, input digests and environment identities in the run receipt. Errors
    and blinded checks expose identities/field names only, never measured values.
 
@@ -54,7 +76,7 @@ The Git predicates for retention/line membership are explicitly separate:
 
 ```sh
 # Exact immutable identity (compare output to the registered full SHA):
-git rev-parse --verify 'refs/tags/pin/b6-analysis-r1^{commit}'
+git rev-parse --verify 'refs/tags/b6/analysis-r1^{commit}'
 # Retention: this does not authorize execution of a different commit.
 git merge-base --is-ancestor "$registered_commit" "$preserving_tag^{commit}"
 # Optional revision-line topology, only alongside an exact ruling allowlist:
@@ -80,9 +102,10 @@ validator's public seam, not a mocked ancestry result:
 | Delete its delivery branch and advance unrelated main; recover tag from a complete bundle in a repository with no alternates | Still accept; registered blob digests equal |
 | Delete tag, shallow/missing required object, malformed ref or tag targets a blob/tree | Refuse with distinct stable identity errors |
 | Move expected tag to a different commit, even one with identical file bytes; substitute an unregistered tag from the same namespace | Refuse; registered commit equality is mandatory |
+| Correct tag but missing/failed checks, PR for a different SHA, changed tag-object ID, or unapproved ruling | Refuse |
 | Correct tag but wrong HEAD, dirty tracked file, changed registered input, wrong tree/environment digest | Refuse |
 | Branch-contained descendant with no ruling, cross-block merge, or forged local tracking ref without registered commit/ruling | Refuse |
-| Explicit permitted revision, exact new commit/tree in authenticated ruling, correct block-line topology and new immutable revision tag | Accept and receipt names both identities |
+| Explicit permitted revision, exact new commit/tree in approved ruling, correct block-line topology and new immutable revision tag | Accept and receipt names both identities |
 | Prior registration replayed after branch advances | Same original commit remains authoritative |
 
 Also add a regression proving the existing B5 validator/driver source and seal

@@ -1,61 +1,68 @@
 # Release-day prune plan
 
-**Prepared only. Do not run before the Block-5 release.** Baseline and full pin
-tables: [PIN-INVENTORY](PIN-INVENTORY.md). This task creates documentation and a
-local commit only. It neither releases B5 nor authorizes a measurement, offload,
-branch deletion, tag publication or disk cleanup today.
+**PLAN ONLY — no operation is authorized by this document today.** Revised for
+Opus's `ADMIT_WITH_FIXES` cold review on
+`origin/ops/2026-11-08-prune-plan-opus-review:docs/ops/prune-plan-opus-review.md`.
+Source identities: [PIN-INVENTORY](PIN-INVENTORY.md). Future driver contract:
+[TAG-PINNING](TAG-PINNING.md). No network, cleanup, tag creation or publication
+was performed while preparing this revision. All commands below belong to a
+later owner-controlled session after the gates have passed.
 
-Keep main's history intact. Delete old working-tree files through ordinary PRs;
-preserve scientific commits through immutable annotated tags and a standalone
-backup. Tags are enough to preserve branch history, but cannot bypass the
-ancestry checks in an already frozen driver. Future drivers follow
-[TAG-PINNING](TAG-PINNING.md).
+Keep main's history intact. Use **one GitHub tag ruleset**, about 30 named
+anchors (33 in the present TSV), existing `b5/*`, `b6/collection` and
+`bytes/collection-n*` tags, a fresh self-contained mirror and `bundle --all` in
+two durable places. Batch 1 deletes **merged branches only**. Later unmerged
+retirements preserve the **whole tip** at `archive/branch/<branch-name>` first.
+The citation census checks coverage; it does not manufacture per-citation tags.
+No filter-repo, main rewrite, reflog expiry, aggressive GC or alternate-store
+pruning is proposed. Frozen B5 driver/registration semantics remain unchanged.
 
-## Entry conditions
+## Entry gates and branch disposition
 
-The release lead records that the B5 release receipt is accepted, independent
-recompute/comparison gates have passed, and the current blinded job has ended.
-The lead supplies the receipt's full analysis commit and adds it to the pin
-manifest. Never infer it from the newest tag or a running process. Preserve all
-earlier analysis tags, their oracle/refutation records and sealed inputs.
+1. The lead accepts the B5 release receipt and independent recompute/comparison
+   gates; the running eight-worker analysis has ended. Supply five full commit
+   identities from the receipt: **analysis, equivalence oracle (including the
+   D-189 reference), independent comparator checkout, recompute checkout, and
+   release checkout (`release_checkout.commit`)**. Record tree IDs, receipt
+   digest and the existing or new exact retaining tag for each. Do not assume
+   these are the same commit, r4, or the current branch tip. The #704 comparator
+   `bea480f296e5c7bc77ad1684936f2b257801f597` must be retained if used off main.
+2. The magistrate recovers **B5 final ledger head `4cb222a19` from the MBP** to
+   server branch `records/b5-ledger-final` and annotated tag `pin/b5-ledger-final`;
+   the recorded full SHA must start with `4cb222a19`. Verify both server targets
+   with `ls-remote`, include them in the mirror/bundle, and prove recovery before
+   **any MBP checkout cleanup**. This is an owner/magistrate step, never a license
+   for this blinded worker to open its checkout or ledger. Do not substitute the
+   collection tag for this descendant.
+3. Fetch remote branches **and PR heads** before refreshing or declaring an
+   object unavailable. `498ad1d0` exists on GitHub per Opus; it is an **unfetched
+   server object**, not a missing-history finding. Resolve its full SHA after
+   fetching PR heads. `050aaad13`, `6bcd90a3`, `9a6f8880` need recovery or explicit
+   owner disposition; unresolved scientific pins cannot be waived as narrative.
+4. Refresh the census and review its diff. [BRANCH-TRIAGE.tsv](BRANCH-TRIAGE.tsv)
+   records exact tips; new/moved refs default HOLD. Main plus **every HOLD tip**
+   is scanned for eligible source text, including docs, tools, code/config/tests
+   and registrations (fixture data payloads and sealed paths are excluded).
+   Unchanged HOLD blobs inherit main's scan; changed/new regular blobs are read
+   at each tip. Sealed path components are excluded, never followed. Unresolved
+   hex strings include dates, synthetic values and model revisions: disposition
+   actual Git citations explicitly. No local census proves server freshness.
+5. Land the separate equivalence-test fix before batch 1. It requires
+   `b5/analysis-r1-9bfix-ref^{commit}`; absence is a failure. Run the committed
+   name-consumer grep on main and HOLD tips. For **every candidate hit**, record
+   source location, exact tip, owner, disposition (runtime migration, narrative
+   only with reason, or KEEP). Unresolved hits keep that branch on HOLD.
+6. Complete tag publication/protection, PR/check evidence, two-copy recovery,
+   worktree/alternates and model-cache gates below. B6, BYTES, ALIGN, qwen4_exp,
+   Flash-Next and x86 remain independent live lanes. B5 release does not retire
+   them or change lead-owned coordination state.
 
-Refresh this inventory against the release-day repository. A moved branch,
-additional pin, unresolved commit reference or new caller changes the deletion
-set. In particular, recover the five unavailable commit citations in the
-inventory (the final B5 ledger head is a provenance pin), or obtain an explicit
-owner disposition for historical non-scientific references. A proof covering
-only the locally resolvable set is not complete pin preservation. Keep affected
-records/branches on hold until that work is done. Set the **not-yet-created**
-archive tag's manifest target to release-day pre-prune main so it also covers
-new process records; once created, never move it. B6, BYTES, ALIGN v4/v5, the MLX port and x86 work remain independent live
-lanes. B5 release alone does not retire them. Coordination state and its pointer
-targets remain lead-owned; this plan does not register or close kernel tasks.
-
-## Branch disposition
-
-[BRANCH-TRIAGE.tsv](BRANCH-TRIAGE.tsv) enumerates every locally recorded origin
-branch with its full tip. At the baseline: **687 merged candidates**, **190 held
-refs**, **605 held unmerged refs**. “Candidate” means safe for retention once the
-tag/bundle, unchanged-tip, idle-worktree and no-live-ref-name checks pass; it does
-not establish those operational checks. No remote freshness was queried.
-
-| Branch set | Why it can be deleted / why held | Release-day condition |
-|---|---|---|
-| All `MERGED-CANDIDATE` rows (the exact list is the TSV) | Entire tips are ancestors of baseline; proposed archive tag retains all their commits | Recheck tip and archive ancestry; owner confirms branch name is not an active delivery or receipt interface; clean, idle worktrees only |
-| `lane/2026-10-09-harvest-corpus-cap` at `224a264c5faaae90cdf56118df37e773a932700b` | Frozen historical harvest, whole tip retained by `pin/b5-harvest-2` | Candidate after release and ref-name consumers move to tag/SHA |
-| `lane/2026-10-10-harvest-screen-sources` at `0699abbb0881ce64b39c46ba07de568cc3848260` | Frozen historical harvest, whole tip retained by `pin/b5-harvest-3` | Same; never re-harvest earlier excluded attempts |
-| `lane/2026-10-11-harvest-trigger-scope` | Pin4 is `b039c0257`; branch tip is later `b517626d8` | HOLD until its entire tip is explicitly archived and its later changes dispositioned; pin4 alone does not preserve them |
-| `records/b6-pin-heads` at `20c881075…`; `records/bytes-pass2-heads` at `1aca17e27…` | Whole ledger chains retained by proposed final-head tags | HOLD by default; eligible for a later owner-directed retirement after B6/BYTES consumers use tags. Their blocks remain live |
-| `lane/2026-10-28-bytes-pass2-open`, `lane/2026-10-17-b6-packs-registered` and B6/BYTES analysis/stage lanes | Registration/measurement code still used off main | HOLD; preserve tags now, retire only after owners replace delivery pointers |
-| ALIGN measurement/R1 integration, `align/*`, `port/*`, x86, current research and record branches | Ongoing science, porting, pending reviews or authoritative records | HOLD even if Git calls them merged |
-| `archive/pre-prune-2026-11-06` branch and tag | Existing archive promise says neither ref will be moved/deleted | KEEP both; do not “deduplicate” the branch into the tag |
-| `main`, origin's symbolic HEAD, current ops branch, `night*` refs | Primary/current refs or potentially sealed evidence | KEEP; no evidence-branch content census in this task |
-| Every other `HOLD-UNMERGED` row | Unmerged is not synonymous with superseded; tags for individual pins cannot establish that all useful work is retained | KEEP pending explicit owner disposition; no wildcard deletion |
-
-The two named historical-harvest candidates are additions to, not overrides of,
-the TSV's conservative HOLD classification. No other unmerged ref is approved
-for the first deletion batch. An ancestor test proves storage, not that an
-operational consumer has stopped using a branch name.
+| Branch set | Disposition |
+|---|---|
+| Refreshed `MERGED-CANDIDATE`, unchanged tip ancestor of freshly fetched protected main | Batch 1 eligible only after name-consumer dispositions, clean/idle worktrees and retention proof |
+| Every unmerged branch, including historical harvest 2/3, B6/BYTES records, ALIGN, ports, research, #701 and #704 | HOLD in batch 1; later owner retirement must tag the entire exact tip as `archive/branch/<name>`, publish/protect/verify it and refresh both bundles first |
+| Main, symbolic HEAD, active ops/delivery/evidence lanes | KEEP; a Git ancestry result cannot retire a live interface |
+| Existing `archive/pre-prune-2026-11-06` branch **and** tag | KEEP both unchanged; existing archive promise persists |
 
 ## File prune PRs and dependency gates
 
@@ -105,221 +112,260 @@ landed prune PR updates its rows with the replacement and retained tag:
 5. Add the pin integrity test and standalone-bundle recovery procedure. Keep CI's
    full suite on CI; this blinded machine must not run it.
 
-## Commands, in order — for the later operator
+## Later operator sequence — never run in this blinded task
 
-These blocks are a runbook, not execution evidence. Run from a clean, owner-chosen
-repository after the entry conditions, not a running analysis/measurement
-checkout. All Git source inspection is offline. Set `RELEASE_COMMIT` to the full
-40-hex receipt commit, `RELEASE_ID` to its reviewed identifier, and
-`PRESERVATION_BUNDLE` to a new owner-selected bundle filename on independent
-storage. These values cannot be filled from this blinded task.
+### 1. Fresh census, receipt identities and review evidence
 
-### 1. Preflight, tag creation, then retention dry run
+Use an idle, owner-chosen checkout; disable auto-GC in alternate object owners
+until borrowers have been dissociated. Fetch does not count as dissociation.
+In the **later connected session only**:
 
 ```sh
-git status --short --branch
-git rev-parse --is-shallow-repository       # must be false
-git rev-parse HEAD refs/remotes/origin/main
-# Compare branch tips and pin changes with the TSV snapshot; refresh if changed.
-# Require clean worktree, completed jobs and the release receipt before continuing.
-export RELEASE_COMMIT RELEASE_ID PRESERVATION_BUNDLE
-python3 -B - <<'PY'
-import csv, os, re, subprocess
-def git(*args):
-    return subprocess.check_output(['git', *args], text=True).strip()
-assert not git('status', '--porcelain'), 'dirty tree'
-assert git('rev-parse', '--is-shallow-repository') == 'false'
-release = os.environ['RELEASE_COMMIT']
-rid = os.environ['RELEASE_ID']
-assert re.fullmatch(r'[0-9a-f]{40}', release)
-assert re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]*', rid)
-rows = list(csv.DictReader(open('docs/ops/TAGS-TO-CREATE.tsv'), delimiter='\t'))
-rows.append({'tag': 'pin/b5-release-' + rid, 'commit': release})
-for row in rows:
-    tag, commit = row['tag'], row['commit']
-    assert git('rev-parse', commit + '^{commit}') == commit
-    ref = 'refs/tags/' + tag
-    exists = subprocess.run(['git', 'show-ref', '--verify', '--quiet', ref]).returncode
-    if exists == 0:
-        assert git('cat-file', '-t', ref) == 'tag', 'expected annotated tag'
-        assert git('rev-parse', ref + '^{commit}') == commit, 'tag conflict'
-    else:
-        assert exists == 1, 'cannot inspect tag'
-        subprocess.run(['git', 'tag', '-a', tag, commit, '-m',
-                        'Release-day retention; source: docs/ops/PIN-INVENTORY.md'], check=True)
-PY
-
-# DRY RUN: tags now exist, but no branch/file has been removed.
-python3 -B - <<'PY'
-import csv, os, subprocess
-def git(*args):
-    return subprocess.check_output(['git', *args], text=True).strip()
-for row in csv.DictReader(open('docs/ops/TAGS-TO-CREATE.tsv'), delimiter='\t'):
-    assert git('rev-parse', 'refs/tags/' + row['tag'] + '^{commit}') == row['commit']
-for row in csv.DictReader(open('docs/ops/PIN-COMMITS.tsv'), delimiter='\t'):
-    # One explicit merge-base check for EVERY inventoried commit, not just tips.
-    subprocess.run(['git', 'merge-base', '--is-ancestor', row['commit'],
-                    'refs/tags/' + row['preserving_tag'] + '^{commit}'], check=True)
-assert git('rev-parse', 'refs/tags/pin/b5-release-' + os.environ['RELEASE_ID'] + '^{commit}') == os.environ['RELEASE_COMMIT']
-print('PASS: all manifest commits retained; unavailable-pin gate is separate')
-PY
-
-# No exclusion/range arguments: create a complete, self-contained tag bundle.
-git bundle create "$PRESERVATION_BUNDLE" --tags
-git bundle verify "$PRESERVATION_BUNDLE"    # require complete history, no prerequisites
-git bundle list-heads "$PRESERVATION_BUNDLE" 'refs/tags/*'
+git -c gc.auto=0 fetch --prune origin
+git -c gc.auto=0 fetch origin '+refs/pull/*/head:refs/remotes/pull/*/head'
+ARCHIVE_COMMIT=$(git rev-parse refs/remotes/origin/main)
+# Set RELEASE_DATE and CENSUS_DIR to reviewed values; output must be inside the
+# owner-approved scratch area. Never reuse an already-created archive tag name.
+python3.13 -B scripts/ops/prune_refresh.py --output "$CENSUS_DIR" \
+  --archive-commit "$ARCHIVE_COMMIT" --archive-date "$RELEASE_DATE"
+# Review output vs docs/ops; commit the refreshed tables and dispositions.
 ```
 
-The operator must also retain the refreshed TSVs and the release receipt beside
-the bundle. Set `RECOVERY_REPO` to a new empty scratch directory, then recover
-into an isolated repository with no alternates:
+The four scripts in `scripts/ops/` never fetch, tag or delete. The refresh emits
+all five original TSVs, `CENSUS-SCOPE.tsv`, `CENSUS.json` and
+`BRANCH-NAME-CONSUMERS.tsv`. Name hits have disposition REVIEW. The standalone
+`prune_branch_names.py` exits 1 when matches need review. `prune_verify.py`
+refuses a stale archive row, changed scope tip or lost commit; normal snapshot
+mode reports HOLD-only pins without calling them protected. Its
+`--release-ready` mode refuses HOLD-only pins and requires local exact tags;
+use it for a scoped unmerged-retirement manifest after adding its whole-tip
+archive tag. The full census may still report unrelated HOLD-only pins, whose
+branches must remain.
+It is a local topology check, not an attestation of administrative gates.
+
+[TAGS-TO-CREATE.tsv](TAGS-TO-CREATE.tsv) is now a **named-anchor manifest**:
+existing names are verified/reused, not recreated. Add the five receipt roles
+and recovered ledger to it at release time, reusing existing exact tags where
+possible. The archive row must equal `ARCHIVE_COMMIT` from that fetch; the
+refresh sets it, and the verifier refuses a different target. Date the archive
+name at creation, never move an existing tag to refresh it.
+
+For **each tag**, complete [TAG-REVIEW-EVIDENCE.tsv](TAG-REVIEW-EVIDENCE.tsv)
+and archive an evidence row containing tag name, tag-object ID,
+peeled full commit and tree, PR number, exact reviewed SHA, required check names
+and conclusions, source JSON/digest and reviewer/time. Use PR/check evidence for
+the exact SHA (not a green sibling or the latest run on the branch). If a
+historical pin lacks a PR, retain it as historical evidence and record that
+limitation; it cannot authorize a new tag-pinned run. A protected `block/*` line
+with the same required checks can establish review provenance, but still record
+its originating PR/check evidence per tag. Unknown or failing checks block use.
+
+In the later connected owner session, collect (with pagination):
 
 ```sh
-git init --bare "$RECOVERY_REPO"
-git -C "$RECOVERY_REPO" fetch "$PRESERVATION_BUNDLE" 'refs/tags/*:refs/tags/*'
-# This fetch reads the local bundle file, not a network remote.
+gh api --paginate --slurp "repos/mpmdw/JouleWise/commits/$commit/check-runs" > "$CHECKS_JSON"
+gh api --paginate --slurp "repos/mpmdw/JouleWise/commits/$commit/pulls" > "$PRS_JSON"
 ```
 
-Repeat the per-pin checks above with `git -C "$RECOVERY_REPO"` for every Git
-call and the saved TSVs as inputs. Require recovery success, not just successful
-bundle creation. Install immutable retention refs in the object-owning canonical
-repository before its branches can be deleted; local refs in this clone do not
-protect an alternate store from its own GC. Server rules should forbid tag
-update/deletion. An offline task cannot attest those rules or server publication.
+Do not infer PR numbers/check results offline; the current evidence status is
+**PENDING**, not PASS. Keep receipt/evidence JSON and their digests with both
+backups. [TAG-PINNING](TAG-PINNING.md) defines review and ruling authentication.
 
-### 2. Branch deletion, after the retention proof
+### 1b. Ed's one ruleset; publish and verify exact tags
 
-The operator creates `approved-branches.tsv` in a scratch directory, retaining
-the TSV header and unchanged rows for retired `MERGED-CANDIDATE` branches only.
-The no-live-ref-name and idle-worktree review may remove candidates, never
-automatically add HOLD rows. The two historical-harvest exceptions can be a
-separate reviewed batch with the preserving tags named in the table above.
-Set `APPROVED_BRANCHES` to that reviewed filename. The following local deletion
-block intentionally supports only the merged first batch:
+Ed creates **one active GitHub tag ruleset** covering **all `refs/tags/**`**
+(including existing scientific names, `pin/**`, and archive names). Block updates
+and deletion, restrict creation to repository admins; no agent bypass grant.
+Record/export ruleset JSON, ID, active enforcement, patterns and bypass roles.
+Verify those settings from the server; do not assume main protection covers tags.
+Record any administrative bypass powers explicitly; an admin credential is not
+mutation-proof. Registered commit/tag-object IDs and both backups remain checks
+against an accidental administrative retag.
+This gate precedes every remote branch deletion. New tags are annotated; verify
+existing annotated identities unchanged. Signing is optional, never implied.
+
+Create missing manifest tags locally using `git tag -a` at each full SHA only
+after the manifest/evidence review; existing conflicts stop the process. Then
+push **only the explicit reviewed ref list**, with no force or `--tags` wildcard:
 
 ```sh
-export APPROVED_BRANCHES
-python3 -B - <<'PY'
-import csv, os, subprocess
-def git(*args):
-    return subprocess.check_output(['git', *args], text=True).strip()
-snapshot = {r['branch']: r for r in csv.DictReader(open('docs/ops/BRANCH-TRIAGE.tsv'), delimiter='\t')}
-for row in csv.DictReader(open(os.environ['APPROVED_BRANCHES']), delimiter='\t'):
-    name, tip = row['branch'], row['snapshot_commit']
-    assert snapshot[name] == row and row['disposition'] == 'MERGED-CANDIDATE'
-    assert git('rev-parse', 'refs/remotes/origin/' + name) == tip, 'branch moved'
-    subprocess.run(['git', 'merge-base', '--is-ancestor', tip,
-                    'refs/tags/archive/process-traces-before-release-prune-2026-11-08^{commit}'], check=True)
-    exists = subprocess.run(['git', 'show-ref', '--verify', '--quiet', 'refs/heads/' + name]).returncode
-    if exists == 0:
-        assert git('rev-parse', 'refs/heads/' + name) == tip, 'local branch differs'
-        # branch -d also refuses a branch checked out in a registered worktree.
-        subprocess.run(['git', 'branch', '-d', '--', name], check=True)
-    else:
-        assert exists == 1
-PY
+git push origin "refs/tags/$reviewed_tag_1" "refs/tags/$reviewed_tag_2"
+git ls-remote --tags origin > "$SERVER_TAGS"
 ```
 
-Deleting a local branch or remote-tracking ref does not delete a server branch.
-Remote removal belongs to the later connected owner session after server tag
-retention is confirmed. For each **approved, still-identical** server branch,
-the exact deletion command is below; the explicit lease refuses a moved tip:
+For **every** manifest tag require both `refs/tags/<name>` (tag-object ID) and
+`refs/tags/<name>^{}` (peeled commit) to match the local object and manifest.
+Record the server listing and compare it to the evidence rows; missing,
+lightweight, conflicting, deleted/recreated tag objects fail. This is a required
+operator comparison, not just saving the listing. Also verify
+`records/b5-ledger-final` against the recovered full SHA. No deletion can proceed
+from local tags alone. Avoid force-updating any scientific tag.
+
+### 1c. Mirror, bundle --all, two durable copies and isolated restore
+
+After server publication, create a fresh mirror **from GitHub**, never a local
+alternate-backed clone. Explicitly fetch PR heads: do not rely on clone defaults
+for the hosting service's special refs. Preserve all branches, tags and PR heads.
 
 ```sh
+git -c gc.auto=0 clone --mirror "$GITHUB_URL" "$MIRROR_REPO"
+git -C "$MIRROR_REPO" -c gc.auto=0 fetch origin '+refs/pull/*/head:refs/pull/*/head'
+git -C "$MIRROR_REPO" rev-parse --is-shallow-repository  # require false
+# Require no objects/info/alternates or GIT_ALTERNATE_OBJECT_DIRECTORIES.
+git -C "$MIRROR_REPO" fsck --full
+git -C "$MIRROR_REPO" bundle create "$PRESERVATION_BUNDLE" --all
+git -C "$MIRROR_REPO" bundle verify "$PRESERVATION_BUNDLE"
+git -C "$MIRROR_REPO" bundle list-heads "$PRESERVATION_BUNDLE" > "$BUNDLE_REFS"
+git clone --mirror "$PRESERVATION_BUNDLE" "$RECOVERY_REPO"
+git -C "$RECOVERY_REPO" fsck --full
+```
+
+Require no bundle prerequisites and no recovery alternates. Compare **every
+saved ref/object ID**, all anchor tag-object/peeled IDs, release identities,
+recovered ledger and inventoried commit reachability against the recovery repo.
+HOLD-only citations remain explicitly HOLD-only; before retiring one, its whole
+tip must become a protected archive tag. Enumerate any UNRETAINED citation and
+recover/retain it before deletion; a successful bundle cannot repair absent refs.
+Keep the mirror plus complete bundle, manifest, scope, receipts, PR/check JSON,
+server listing and rollback log in **two durable independent places** with
+matching SHA-256 manifests and a recovery test from each. Record destinations,
+volume/service identity, verifier and time. Two directories on one device or
+one sync account are one failure domain. **The borrowed SSD never counts as an
+independent copy**, even if it currently holds a correct bundle. Use owned
+storage, a self-contained Air copy, or a verified independent cloud destination.
+
+### 2. Merged branches only; freshness, lease and rollback record
+
+Create a reviewed approved subset of `MERGED-CANDIDATE` rows. For each, bind the
+name-consumer dispositions and worktree-idle evidence to that exact snapshot SHA.
+Immediately before checking tips, **fetch first**, never trust stale tracking refs:
+
+```sh
+git -c gc.auto=0 fetch --prune origin
+git rev-parse "refs/remotes/origin/$branch"  # must equal snapshot_commit
+git merge-base --is-ancestor "$snapshot_commit" refs/remotes/origin/main
+git merge-base --is-ancestor "$snapshot_commit" "refs/tags/$ARCHIVE_TAG^{commit}"
+# Commit an INTENT rollback row before deletion, then perform the explicit lease:
 git push --force-with-lease="refs/heads/$branch:$snapshot_commit" origin \
   ":refs/heads/$branch"
+# Verify server absence; append CONFIRMED (or FAILED) to the committed log.
 ```
 
-No push is part of the present task. Do not delete tracking refs to simulate
-remote cleanup, force-delete an unexpected local tip, expire reflogs, rewrite
-main, run aggressive GC or prune the shared object store.
+The rollback log is [PRUNE-ROLLBACK.tsv](PRUNE-ROLLBACK.tsv) (header only today;
+no deletion occurred). Append timestamp, INTENT/CONFIRMED/FAILED, branch,
+full SHA, archive tag/tag-object ID, bundle digest/location, operator and receipt.
+Commit INTENT before the operation and outcome afterward; an interrupted push
+leaves a recoverable intent. Abort on a moved tip, failed check or unexpected
+server result. Delete local names only with `git branch -d -- "$branch"` after
+checking local tip equality; it also rejects registered checked-out branches.
 
-### 3. File prune PR, after branch retention/deletion
-
-Materialize the final approved paths from the file-group table in an explicit
-newline-delimited `REVIEWED_DELETIONS_FILE` (no patterns, external paths or
-directories containing unreviewed live files). Keep deferred groups out. First
-implement that group's dependency migration and commit-scoped pin tests; those
-implementation changes are future PR work, not changes supplied by this plan.
-Set `PRUNE_BASE` to the release-day reviewed main commit.
+Restore an accidentally deleted name from a verified bundle/recovery repository,
+protected tag, or saved PR ref:
 
 ```sh
-git switch -c ops/release-day-file-prune "$PRUNE_BASE"
-git rm --pathspec-from-file="$REVIEWED_DELETIONS_FILE"
-# Apply reviewed caller/test/allowlist changes and CANONICAL.md/archive links.
-python3 -B scripts/repin.py --write registry
-python3 -B scripts/repin.py --check
-python3 -B -m unittest tests.b5_analysis.test_frozen_files
-python3 -B -m unittest tests.test_b5_seal_landing
-# Add the affected group's focused modules, one invocation at a time.
-# Full suite belongs to CI, never the machine running the blinded 8-worker job.
-git diff --check
-git diff --stat
-git diff -- CANONICAL.md configs/pins/registry.json
-git status --short
-# Stage explicit reviewed paths, commit, then submit one bounded PR per group.
+git cat-file -e "$snapshot_commit^{commit}"
+git push origin "$snapshot_commit:refs/heads/$branch"
 ```
 
-After migration, the frozen-files module must still prove the original identities
-from tags rather than fail because main's computation was removed. A complete
-suite in CI and an isolated reproduction from the actual release tag precede
-merging any science-computation deletion. No real-data reproduction runs from
-an agent under the present blinding or machine-load restrictions.
+Verify the restored server SHA. Do not force over a newly created branch.
+Unmerged retirement is a **later** explicit owner decision: add annotated
+`archive/branch/<name>` at the exact tip, with review/evidence status, push and
+verify under the same ruleset, refresh both backups, repeat census/consumer
+checks, then lease-delete. This replaces the old harvest exceptions.
 
-## Disk cleanup checklist — procedure only
+### 3. Bounded file-prune PRs
 
-These steps belong to Ed/the machine owner after jobs finish and any remaining
-block/retention holds lift. No filesystem inventory of either machine was done
-here. No estimate of reclaimable space is asserted. Deleting branch names saves
-little disk while tags retain history; worktrees, environments, scratch and
-verified redundant data copies are the practical space targets.
+Use the dependency table above. Preserve old-format readers and independent
+tools. For every retired path review `git show HEAD:<path>` and `git log -S`
+consumers, especially `paper_custody.py`, `paper_reported_energy.py`,
+`evidence_night.py`, `refresh_receipt_histsem_pinset.py`,
+`build_v4_histsem_pinset.py`, `harvest_window.py`, `flags/collect.py`,
+`digest_pin_census.py`, `arm_readiness.py`, identity pins and generalized mint.
+Main history alone does not preserve a path that a verifier reads at HEAD.
+Migrate those consumers with meaningful regressions before removing files.
+Use an explicit reviewed path list; update CANONICAL, registry and affected
+callers in the same PR. Run affected unittest modules one at a time; full CI
+belongs off this busy machine. Frozen-source and scientific digest identities
+remain unchanged. Reproduction from sealed data is a lead gate outside agents.
 
-### Air
+## Disk cleanup — Ed/magistrate only, after jobs and retention gates
 
-- Stop at the current analysis job boundary. Preserve its checkout, custody,
-  environment and outputs until the release lead has accepted the receipt and
-  designated the archival copy. Do not touch the long-running eight-worker job.
-- Review old `jw-wt` worktrees individually. Record branch/HEAD, owner, clean
-  status, untracked/ignored files and any active process. Retain uncommitted work,
-  environment locks and unique audit artifacts. Only after the pin/bundle proof,
-  remove a retired clean worktree with Git's worktree-removal mechanism; then
-  prune stale worktree metadata. Do not recursively delete the parent directory.
-- Review `/private/tmp` scratch by known task/owner and completion state. Age
-  alone is not evidence of disposability. Exclude sockets, live process files,
-  locks, unique reports and anything used by running jobs. Use an explicit
-  reviewed list; no broad age-based `find ... rm` recipe.
-- Remove venvs attached only to retired worktrees after preserving interpreter,
-  dependency/lock and toolchain metadata. Keep the exact release environment
-  through successful recovery/reproduction. No downloads or installations here.
-- For the **jwgold** run, the PI brief says it was already copied to Dropbox
-  and verified. Consult that existing verification receipt; do not claim this
-  task reverified it. Match source identity and full manifest/checksums, confirm
-  the cloud copy is server-resident and recoverable, preserve custody/retention
-  records, then let Ed delete only the redundant local copy if the ruling covers
-  it. A Finder badge or sync client status alone is insufficient.
+No machine inventory or copy verification is claimed here. No external paths
+were inspected. Never use a blanket recursive deletion, age-based scratch prune,
+cache purge or worktree prune as an implied follow-on operation.
 
-### MBP
+### Gates shared by both machines
 
-- Coordinate a desk boundary with the magistrate. Do not disturb collection,
-  the analysis job, active worktrees, ledger roots, calibration dependencies or
-  sealed outcomes. B5 release does not lift B6/BYTES/ALIGN holds automatically.
-- Apply **Ed's stated retention ruling: external SSD plus server-confirmed
-  iCloud** before deleting a redundant local archive copy. The SSD is an
-  independent second copy; two folders on one disk are not independent copies.
-- Through the owner-controlled offload procedure, bind each source archive to
-  its full manifest/checksums and custody identity. Verify every file against
-  both destinations, including nonempty/size checks and a recovery/read test.
-  The cloud verification must establish remote server content, not merely a
-  local placeholder, cached file or upload queue. No traversal commands or
-  archive path list are supplied here.
-- Record verification times, destination volume identity, cloud receipt,
-  retention ruling and who verified recovery. Preserve manifests and custody
-  records locally or in the designated durable record store. Leave failed or
-  uncertain copies in place and retry verification, not deletion.
-- Ed removes only the explicitly verified redundant source copies permitted by
-  that ruling, then checks free space. Keep both retained copies; no trash
-  emptying, cloud eviction or backup pruning as an implied follow-on action.
+- For **every** copy to delete, record its exact local path and prove it is
+  **outside every synced tree**, including Dropbox and iCloud Desktop/Documents.
+  Local deletion in a synced tree propagates to cloud storage. Such a path is
+  ineligible for this deletion procedure; cloud eviction is a separate explicit
+  owner action. Verify the cloud copy from a different device/session by
+  re-downloading and comparing all manifest checksums; Finder badges and local
+  placeholders are insufficient. Retain two durable independent copies, excluding
+  the borrowed SSD. Keep manifests/custody/verification receipts with them.
+- Build a **model-weight KEEP inventory** from live registrations/identity pins:
+  repository/model ID, upstream revision, format/conversion, exact owner-recorded
+  local path, all shard/tokenizer/config digests, dependent lanes, second-copy
+  destination and checksum/recovery receipt. Include ALIGN v4's pinned
+  `Qwen/Qwen3.8-27B@8c0b3d30…`, B6/BYTES manifests, qwen4_exp/Flash-Next originals
+  and MLX conversions, and x86 working sets. Treat paths as text here. KEEP all
+  HF/MLX caches and conversion inputs until this inventory is complete; upstream
+  re-downloadability is not retention. Remove a cache only after a digest-verified
+  durable second copy is recorded and no live job depends on it. Never download
+  or open weights in this planning task.
+- Before any clone removal, record clean/dirty state, untracked/ignored files,
+  branch/HEAD, worktree registry, active owner/process, and
+  `git rev-list --branches --not --remotes` for **unpushed commits**. Preserve
+  unique commits with pushed/verified retention refs and both bundles first.
+  A clean working tree does not prove there is no unique work.
 
-No current receipt, second-copy state or data-retention exception was validated
-by this task. The first next step is to refresh this plan at the accepted B5
-release receipt, then run the tag-and-bundle retention proof before any deletion.
+### Air: alternates graph before any clone or checkout removal
+
+- Do not touch the long-running analysis job, its environments, custody or
+  outputs. The current authoritative correction is: **handoff is now
+  self-contained**. Do not repeat the review's stale handoff → council-pr edge.
+  Surviving `sol-*` borrowers still need handoff's objects: KEEP handoff until
+  every surviving borrower is dissociated or intentionally retired.
+- `/Users/edr/jw-b5-analysis` **still backs about 14 clones**. This is a textual
+  owner warning only: **never delete or GC it before all surviving borrowers
+  have been repacked/dissociated**. Do not open it in this blinded session.
+  Keep council-pr or any other object owner if the refreshed graph still names
+  it. Counts and edges must be rechecked by Ed, never inferred from directory age.
+- Ed obtains an authorized metadata-only alternates graph for approved clone
+  roots (including approved home clones); do not blindly traverse `$HOME` or any
+  sealed/restricted root. Record each clone, its actual Git/common directory,
+  alternates edges (including chains), dependents, unpushed commits and worktrees.
+  Mark **every object owner KEEP** and set `gc.auto=0` there before operations
+  that might auto-GC. No agent permission to read protected paths follows.
+- For each surviving borrower, while stores are intact and jobs idle, Ed runs
+  `git repack -a -d` **without `--local`** so borrowed reachable objects copy in.
+  Save its alternates metadata, detach that file, unset alternate environment
+  paths, then run `git fsck --full` and required-ref/recovery checks isolated from
+  owners. A failure means restore the metadata and KEEP the owner. Iterate chains
+  until there are no surviving inbound dependencies. Repacking an owner alone
+  does not dissociate its borrowers. Install refs for unique commits first.
+- Distinguish standalone clones from registered worktrees. Remove only reviewed
+  idle clean worktrees through Git; keep environments/locks through recovery.
+  Scratch age alone is not proof of disposability. Preserve unique reports,
+  sockets, process files and locks. The existing jwgold Dropbox receipt still
+  needs the unsynced-source and independent-session recovery checks above.
+
+### MBP: magistrate ledger recovery first
+
+- **Before any checkout cleanup, the magistrate completes `4cb222a19` recovery,
+  server branch/tag verification and both bundle restores in entry gate 2.**
+  Preserve all other active collection, ledger and calibration dependencies.
+- Apply the same alternates/unique-work checks before removing clones. Lock
+  SSD-hosted worktrees with `git worktree lock --reason "removable volume"`
+  while attached; a detached volume is not a stale worktree. Do not run
+  `git worktree prune` while removable-volume worktrees are unavailable.
+- The borrowed SN7100 is staging/scratch and **never an independent retention
+  copy**. Draft permanent-SSD branches do not change that. Obtain owned storage,
+  a verified self-contained Air copy, or an independent verified Dropbox copy
+  alongside server-confirmed iCloud before deleting an eligible unsynced source.
+- Check every file against both durable destination manifests, record volume and
+  cloud identities/time/verifier, and test restore. Ed deletes only explicitly
+  authorized redundant unsynced copies; failed/uncertain copies stay. No trash
+  emptying or backup pruning follows implicitly. Preserve the model-cache KEEP
+  inventory and exact release environment on both machines.
