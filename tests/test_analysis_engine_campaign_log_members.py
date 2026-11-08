@@ -1,4 +1,4 @@
-"""The floor binder reads executed members from a campaign log's member rows only.
+"""The floor binder reads executed members from a campaign log's member rows when it has them.
 
 Block-5 defect D5 (docs/analysis/b5/DEVIATION-LOG.md, DLE-4): the runner's
 campaign log carries per-member rows (``scripts/run_campaign.py`` ``log_row``,
@@ -8,7 +8,9 @@ which writes no ``record_type``) and campaign-level records that each carry a
 ``bundle_ids``. The binder used to count that list as executed members too, so
 every calibration bundle appeared twice and every floor cell whose log carries
 the evaluation was left unbound ("does not bind every calibration bundle exactly
-once"). Synthetic data only; the row shapes mirror the writers' key sets.
+once"). A log with no member row (attestations and the evaluation only, the
+shape of the synthetic S10 chain's desk-written logs) keeps the previous parse.
+Synthetic data only; the row shapes mirror the writers' key sets.
 """
 
 from __future__ import annotations
@@ -203,6 +205,17 @@ class CampaignLogMemberParseTests(unittest.TestCase):
         rows.insert(index, _member_row(ABSOLUTE[2], 0, status="failed"))
         problems = self.evidence(rows).problems()
         self.assertTrue(any("campaign_log " + EXACTLY_ONCE in problem for problem in problems), problems)
+
+    def test_log_without_member_rows_keeps_the_previous_parse(self):
+        # The synthetic S10 windows' logs: attestations and the evaluation only.
+        executed = [*ABSOLUTE, *(member for block in BLOCKS for member in block)]
+        rows = [_attestation_row(1), _attestation_row(2), _evaluation_row(executed)]
+        self.assertEqual(inputs._order_member_ids(rows, campaign_log=True), executed)
+        self.assertEqual(self.evidence(rows).problems(), ())
+        # Still exactly once: a second campaign-level record naming the members refuses.
+        problems = self.evidence([*rows, _evaluation_row(executed)]).problems()
+        self.assertTrue(problems)
+        self.assertTrue(all(EXACTLY_ONCE in problem for problem in problems), problems)
 
     def test_order_manifest_branch_is_unchanged(self):
         # The order manifest's executed_order has no campaign-level records; its
