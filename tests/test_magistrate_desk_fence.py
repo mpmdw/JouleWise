@@ -273,9 +273,11 @@ if pid not in (900000001,900000002):
         (self.repo / "scripts/align_r0_checks.py").write_text('''
 import argparse, json, sys, time
 from pathlib import Path
-p=argparse.ArgumentParser(); p.add_argument('--config'); p.add_argument('--output'); a=p.parse_args()
+p=argparse.ArgumentParser(); p.add_argument('--config'); p.add_argument('--output')
+p.add_argument('--checks'); p.add_argument('--keep-going', action='store_true'); a=p.parse_args()
 c=json.loads(Path(a.config).read_text()); root=Path(c['root'])
 Path(a.output).mkdir(); (root/'runner.started').write_text('started')
+(root/'runner.args').write_text(json.dumps({'checks': a.checks, 'keep_going': a.keep_going}))
 if c['case']=='term': time.sleep(120)
 sys.exit(7 if c['case']=='error' else 0)
 ''')
@@ -509,6 +511,39 @@ sys.exit(7 if c['case']=='error' else 0)
         self.assertEqual(str(link), json.loads((job / "runner.json").read_text())[0])
         (plist,) = job.glob("*.plist")
         self.assertIn(str(link), plistlib.loads(plist.read_bytes())["ProgramArguments"])
+
+    def test_r0l3_runner_spec_defaults_to_keep_going_and_passes_checks(self):
+        # R0-L3 item 3: desk runs keep going; a subset run (R0-L1) is headless.
+        self.assertEqual(0, self.launch().returncode, self.logs())
+        (job,) = self.custody.glob("r0-launches/*")
+        spec = json.loads((job / "runner.json").read_text())
+        self.assertEqual(spec[-1], "--keep-going")
+        self.assertNotIn("--checks", spec)
+        self.stop(self.owner)  # the magistrate exits; the runner starts
+        self.wait_for(lambda: launcher.read_fence(self.custody) is None)
+        self.assertEqual(json.loads((self.root / "runner.args").read_text()),
+                         {"checks": None, "keep_going": True})
+
+    def test_r0l3_checks_subset_and_no_keep_going_reach_the_runner(self):
+        subset = "host,disk,load,template,generated,memory,ladder,long-decode"
+        self.assertEqual(0, self.launch("--checks", subset, "--no-keep-going").returncode, self.logs())
+        (job,) = self.custody.glob("r0-launches/*")
+        spec = json.loads((job / "runner.json").read_text())
+        self.assertEqual(spec[spec.index("--checks") + 1], subset)
+        self.assertNotIn("--keep-going", spec)
+        self.stop(self.owner)
+        self.wait_for(lambda: launcher.read_fence(self.custody) is None)
+        self.assertEqual(json.loads((self.root / "runner.args").read_text()),
+                         {"checks": subset, "keep_going": False})
+
+    def test_r0l3_malformed_checks_refuse_before_publication(self):
+        for value in ("", "host;rm -rf /", "host,,ladder", "Host"):
+            with self.subTest(value=value):
+                result = self.launch("--checks", value)
+                self.assertEqual(2, result.returncode)
+                self.assertIn("R0 launch refused: --checks", result.stderr)
+                self.assertIsNone(launcher.read_fence(self.custody))
+                self.assertEqual([], list(self.custody.glob("r0-launches/*")))
 
     def test_bootstrap_failure_clears_only_its_own_fence(self):
         (self.root / "fail-bootstrap").touch()

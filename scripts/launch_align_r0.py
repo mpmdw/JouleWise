@@ -11,6 +11,7 @@ import math
 import os
 from pathlib import Path
 import plistlib
+import re
 import signal
 import stat
 import subprocess
@@ -24,6 +25,9 @@ FENCE_NAME = "desk_fence.json"
 # watchdog fence; a cap stops a unit slip (ms for s) or a typo from fencing
 # the magistrate for days if the job hangs or its PID is reused.
 MAX_DESK_SECONDS = 12 * 3600
+# R0-L3 item 3: a comma list of runner check names (the runner validates
+# the names themselves); nothing else may reach the runner's argv.
+CHECKS_PATTERN = re.compile(r"[a-z][a-z-]*(?:,[a-z][a-z-]*)*")
 
 
 def positive_seconds(value: str) -> float:
@@ -184,6 +188,8 @@ def launch(args) -> None:
         raise ValueError(f"desk deadline is more than {MAX_DESK_SECONDS} s ahead")
     if args.output.exists():
         raise ValueError("R0 output must be a new record directory")
+    if args.checks is not None and not CHECKS_PATTERN.fullmatch(args.checks):
+        raise ValueError("--checks must be comma-separated runner check names")
     runner = args.repo / "scripts/align_r0_checks.py"
     if not runner.is_file() or not args.config.is_file() or not os.access(args.python_bin, os.X_OK):
         raise ValueError("measurement checkout runner, config and executable interpreter required")
@@ -198,8 +204,12 @@ def launch(args) -> None:
     plist = job / f"{label}.plist"
     wrapper = Path(__file__).with_name("run_align_r0_launchagent.sh").resolve()
     runner_spec = job / "runner.json"
+    # R0-L3 item 3: pass a check subset (R0-L1) and --keep-going (the desk
+    # default) through; the runner's prerequisite gates still apply.
     runner_spec.write_text(json.dumps([str(args.python_bin), str(runner),
-                                      "--config", str(args.config), "--output", str(args.output)]) + "\n")
+                                      "--config", str(args.config), "--output", str(args.output),
+                                      *(["--checks", args.checks] if args.checks is not None else []),
+                                      *(["--keep-going"] if args.keep_going else [])]) + "\n")
     # Keep the measurement entry-point name out of the launcher ancestors'
     # argv: QuietGuard correctly refuses a second align_r0_checks process.
     arguments = ["/bin/bash", str(wrapper), str(Path(__file__).resolve()),
@@ -251,6 +261,9 @@ def main(argv=None) -> int:
     start.add_argument("--output", type=Path, required=True)
     start.add_argument("--python-bin", type=Path, required=True)
     start.add_argument("--disk-path", type=Path, required=True)
+    start.add_argument("--checks", help="comma-separated runner check subset (R0-L1); default: the runner's full list")
+    start.add_argument("--keep-going", action=argparse.BooleanOptionalAction, default=True,
+                       help="continue after a failed check (R0-L3 desk default; --no-keep-going stops at the first)")
     start.add_argument("--launchctl-bin", default="/bin/launchctl")
     start.add_argument("--pmset-bin", default="/usr/bin/pmset")
     start.add_argument("--pgrep-bin", default="/usr/bin/pgrep")

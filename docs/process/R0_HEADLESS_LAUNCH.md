@@ -19,6 +19,17 @@ PID (the `pid` in its watchdog lock, not the PID of a transient tool shell):
   --disk-path "$R0_DISK"
 ```
 
+Optional runner arguments (lead ruling R0-L3, item 3,
+`docs/align/r0/R0-L3-contention-rule.md` on the measurement lane):
+
+- `--checks host,disk,...` passes a check subset to the runner, for example
+  R0-L1's non-SMC run (`RUN_STATE.md` item 196). The default is the runner's
+  full list. The launcher accepts only comma-separated lowercase names; the
+  runner validates them.
+- `--keep-going` is the default for desk runs: the runner continues after a
+  failed check, and its prerequisite gates (host identity, model load) still
+  apply. `--no-keep-going` restores stop-at-first-failure.
+
 The custody root must be the installed watchdog's custody root. All file
 arguments are resolved to absolute paths before rendering. The interpreter
 must be the measurement environment's executable. No model files or config
