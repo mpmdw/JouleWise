@@ -119,3 +119,33 @@ def calibration_row(window_id, plan_rows, eligibility, *, calibrator=is_calibrat
     status = 'final' if eligibility['captured_members'] == 0 else eligibility['stage']
     return {'window': window_id, 'status': status,
             'captured_members': eligibility['captured_members'], 'eligible_benign': counts}
+
+
+# R17 review F4 and delta D9: ONE finality predicate, used by the runner's ``final`` and by the packet
+# builder's ``WindowRecord``. A completed harvest whose exclusions the desk recorded, a completed desk
+# adjudication, both bound to this window's plan, and exclusions agreeing with what the desk recorded.
+COMPLETED_HARVEST = ('ok', 'members_excluded')
+DESK_ADJUDICATIONS = ('instrument_ok', 'instrument_incomplete')
+
+
+def final_adjudication_error(desk, pilot, exclusions, plan_id, *, captured):
+    """``None`` when ``desk``/``pilot``/``exclusions`` are a final adjudication of the plan ``plan_id``.
+
+    ``captured``: whether the window holds ANY capture (supplemental ones included; delta D5). Only a
+    window with no capture at all has nothing to harvest, so only it may carry a desk whose harvest
+    did not run. A completed desk that did not PASS is still final.
+    """
+    if not isinstance(desk, dict) or desk.get('status') == 'running_off_mbp':
+        return 'the desk recorded no completed harvest (still running off the MBP)'
+    if desk.get('harvest_status') not in COMPLETED_HARVEST and captured:
+        return 'the desk recorded no completed harvest (harvest_status ' + str(desk.get('harvest_status')) + ')'
+    if desk.get('plan_id') != plan_id or not isinstance(pilot, dict) or pilot.get('plan_id') != plan_id:
+        return "the desk and PILOT.json are not bound to this window's plan"
+    if pilot.get('status') not in DESK_ADJUDICATIONS:
+        return 'PILOT.json carries no completed desk adjudication (status ' + str(pilot.get('status')) + ')'
+    if not isinstance(exclusions, dict) or not isinstance(exclusions.get('members_excluded'), list):
+        return 'final exclusions missing'
+    if any(value is not None and value != exclusions['members_excluded']
+           for value in (desk.get('members_excluded'), pilot.get('members_excluded'))):
+        return 'desk, PILOT.json and exclusions disagree'
+    return None

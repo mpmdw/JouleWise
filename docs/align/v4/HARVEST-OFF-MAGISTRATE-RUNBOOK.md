@@ -32,11 +32,19 @@ $RUN finalize-manifest --session-root "$S" --out "$OUT/finalized_manifest.json"
 shasum -a 256 "$OUT/finalized_manifest.json"     # == H: the file is canonical bytes
 ```
 
-What it binds (R17 review F1), besides every tree entry and the restore namespace `$S`:
-- **Links into `M`** (the measurement view): the checkout identity of `M` (head, clean incl. untracked, interpreter and packages). The Air must reproduce it exactly. `M` must be clean and identified, or finalize refuses.
-- **The calibration ledger** the window appended: its bytes.
-- **Any other link that leaves `$S`**: the bytes it reaches (a file, or every regular file below a directory), at most 4,096 files, 1 GiB, and 256 MiB per file. A target past those bounds, or one that reaches a further link, refuses. Bind it through `M` instead. Model weights are never hashed or copied.
+What it binds (R17 review F1 and delta D1-D4), besides every tree entry and the restore namespace `$S`:
+- **Every external link is followed hop by hop** (lstat, nothing collapsed first). A link whose immediate target is another link refuses, unless the chain ends inside `M`; then every hop's text is bound.
+- **Links into `M`** (the measurement view): the checkout identity of `M` (head, clean incl. untracked, interpreter and packages) plus the mirror-relative target each link selects. The Air must reproduce both exactly. `M` must be clean and identified, or finalize refuses.
+- **What Git identity does NOT cover: ignored checkout content.** Every ignored path a link into `M` reaches is classified by `configs/align/v4/harvest_off_ignored_inputs.json`:
+  - covered by the interpreter identity (`.venv/`);
+  - a regenerated cache (`__pycache__`, `*.pyc`, `.DS_Store`);
+  - inside a declared directory (`runs/`), whose consumed files are exactly the declared inputs.
+
+  Anything else **refuses at finalize**. The declared inputs are the calibration ledger plus whatever the **native N1 census** finds. That census is a lead-owned gate and has not run yet. Until it lands, a real session that links other ignored content refuses (fail closed). This is the exact scope of the guarantee: tracked and untracked-not-ignored files by identity, declared ignored inputs by bytes, nothing else assumed.
+- **The calibration ledger** the window appended (a declared input): its bytes and its real path. Its resolved parent directories must be the same on the Air immediately before it is placed, or the restore refuses (D1).
+- **Any other link that leaves `$S`**: the bytes it reaches (a file, or every regular file below a directory), at most 4,096 files, 4,096 directories, 1 GiB and 256 MiB per file. The bounds apply during the walk, before the offending file is hashed, and a directory linked many times is enumerated once. A target past those bounds, an unreadable directory (D4), or one that reaches a further link, refuses. Bind it through `M` instead. Model weights are never hashed or copied.
 - **A link to a missing path** stays bound as missing.
+- **The name `.external-staged`** is reserved; a session containing it refuses.
 
 **1c. Pack the verified compressed copy.** The calibration ledger the window appended travels with it. `--finalized-manifest` is required: without it, pack refuses.
 
@@ -149,8 +157,13 @@ $RUN reduce --session-root "$S" --out "$OUT/reduced" --workers 2              # 
   - `--workers auto` uses min(free cores, (free memory − 4 GiB reserve) ÷ the per-worker peak).
   - **If not even one worker fits, it refuses: postpone the desk** until memory is free. It never launches over budget.
   - Pass the sweep receipt once it exists (§7). Without it the peak defaults to 8× the window's largest raw plist.
-  - A sweep receipt is used only if it is bound to the same harvest code (checkout head and interpreter) and records its input size. Its peak scales up with this window's largest plist and never down. A receipt for other code, or with no binding, falls back to 8×. A receipt with a failed or nonpositive run refuses.
-- **`final`** refuses unless the harvest completed (`harvest_status` `ok` or `members_excluded`) and the desk and PILOT.json are this session's. Its rows must be a subset of the light triage's provisional rows. If not, stop and escalate to the lead: the proof says this cannot happen.
+  - A sweep receipt is used only if it records its input size and is bound to the same harvest code (D6). That code identity is the source checkout behind the measurement view: its head, a clean tree, and a usable interpreter identity. A dirty or unidentified checkout falls back to 8×. Its peak scales up with this window's largest plist and never down. A receipt for other code, or with no binding, falls back to 8×. A receipt with a failed or nonpositive run refuses.
+- **`final`** applies the same finality predicate as the packet builder (`light_triage.final_adjudication_error`, delta D9). It refuses unless all of these hold:
+  - the harvest completed (`harvest_status` `ok` or `members_excluded`), or the window has no capture at all;
+  - PILOT.json shows a completed adjudication (`instrument_ok`/`instrument_incomplete`);
+  - the desk and PILOT.json are this session's;
+  - the exclusions agree.
+  - Supplemental captures count as captures here (D5). Its rows must be a subset of the light triage's provisional rows. If not, stop and escalate to the lead: the proof says this cannot happen.
 - **`reduced/`** is outcome-bearing (energies) and is restricted like `withheld/`. Its `MANIFEST.json` digests and row counts are structure-only. Each `<run_id>/turns.json` equals PILOT.json (`turn_table.equal_to_pilot`); check this before any analysis reads tables instead of bundles.
 - Hand the three final files to the magistrate for record k+1 (§4).
 - Prune the restored `$S` on the Air only after record k+1 (or k) with the final sources is pushed. The MBP originals follow the air-offload lane's retention rule.
@@ -161,7 +174,10 @@ $RUN reduce --session-root "$S" --out "$OUT/reduced" --workers 2              # 
 |---|---|---|
 | `finalize-manifest`, `pack` | `terminal record absent` | Not terminal. Wait for B1 completion. |
 | `finalize-manifest` | `not a clean, identified mirror source` | `M` is dirty, or has no head or `.venv`. Fix the checkout, then finalize. |
-| `finalize-manifest` | `external closure ... not finite` / `over ... bytes` / `further link` | A link leaves `$S` towards something large or linked. Bind it through `M`, or escalate. |
+| `finalize-manifest` | `external closure ... not finite` / `over ... bytes` / `further link` / `points at a further link` / `cannot read directory` | A link leaves `$S` towards something large, linked or unreadable. Bind it through `M`, or escalate. |
+| `finalize-manifest` | `reaches an undeclared ignored input` | A link into `M` reaches ignored content the declaration does not cover. Do not edit the declaration ad hoc: the N1 census decides (lead). |
+| `unpack` | `declared input ... resolves to` / `external destination ... now resolves to` | The ledger's parent directories resolve differently on the Air (an alias changed). Fix the mirror path; nothing was written. |
+| `unpack` | `mirror link ... selects` / `ignored mirror content ... differs` | A link into `M` now selects another file, or ignored content changed. Fix the mirror. |
 | `pack`, `unpack` | `requires the record binding` | `--finalized-manifest` (and on unpack `--finalized-sha256`) missing. There is no unbound route. |
 | `pack`, `unpack` | `external closure input differs` / `external link ... resolves differently` / `closure directory differs` | Bytes a link points at changed since finalize, or differ on the Air. Fix the mirror, or do not restore. |
 | `unpack` | `restore namespace differs` / `external file is not bound` | The transport manifest was edited. Re-transfer. |

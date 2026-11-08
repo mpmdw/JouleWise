@@ -151,3 +151,30 @@ The full list of modules run:
    - `ArmOrderWitness` records the full order with an audit hook: subprocesses, writes and `disk_usage`.
    - Not resolved here: that write and the handoff run right after the stamp in this process. The night job's own dwell continues after install. No live dwell was timed.
 6. **Not run here:** native MLX/Metal, the live meter, 1 GiB members, a real sweep, cross-host N2.
+
+## 9. Delta round (Sol delta seats 1 and 2 on `6938c3733`; lead rulings 2026-11-08)
+
+- **Threat model (lead, binding):** operator and host mistakes (wrong alias, stale mirror, changed inputs, unreadable directories), not an in-process adversary.
+- **Inputs:** `docs/align/v4/HARVEST-OFF-DELTA-sol{1,2}.md`. `tests/align/test_hoff_delta_sol{1,2}.py` are brought in unmodified.
+- **Ruled-wrong witnesses (both seats agree):** the two disputed witnesses are rewritten into their honest variants. Seat 1's F4 now uses a light triage; C2 arms, C3 is refused by the rebuild and the binder. Seat 2's retarget now finalizes after the code exists, refuses, and then restores honestly.
+- **F7 ruling:** separate commit `db729ab1a` (§8 open item 5).
+
+| Delta | Fix |
+|---|---|
+| **D1** destination parent retarget | Declared inputs are bound by real path. Pack, the Air pre-publication check, and `_place_external` (immediately before the write) refuse a changed resolution. Only declared inputs may be transported. |
+| **D2** link-to-link; mirror target | `_link_chain` follows hops with lstat. A further link refuses unless the chain ends in the mirror, where every hop text is bound. Mirror links bind `target` and `mirror_path`. |
+| **D3** ignored checkout inputs | Ignored paths a mirror link reaches (`git ls-files --others --ignored --directory`) are classified by the policy: `identity_bound`, `regenerated`, `declared_directories` or undeclared. The CLI (`configs/align/v4/harvest_off_ignored_inputs.json`) refuses undeclared ones. The library default byte-binds them in `closure.ignored`, so any change refuses on the Air. The runbook states exactly this scope. The N1 census is a lead-owned gate. |
+| **D4** unreadable directory | Both walkers (`_walk`, `_directory_listing`) refuse on any `os.walk` error. |
+| **D5** supplemental-only captures | The no-harvest exemption requires actual capture absence (`capture_absent`, supplemental included). `counted_captures` stays the calibration predicate. A zero-capture record with only a light triage is final, and stays final in later history. |
+| **D6** sweep identity | `sweep_code_identity` is the source checkout behind the view: `root`, `head`, `tracked_clean` and `python`. A receipt binds only an identified, clean code; anything else falls back to 8×. |
+| **D7/D8** test fence | `synthetic_custody` adds a child-process fence (`synthetic_custody_child/sitecustomize.py` on PYTHONPATH). It patches the custody resolver in every fresh interpreter, refuses forbidden opens there, and chains Homebrew's sitecustomize. The parent audit counts str and bytes paths plus `os.stat`/`os.lstat`. `tearDownModule` FAILS on any violation. |
+| **D9** one finality predicate | `light_triage.final_adjudication_error` is used by `WindowRecord.final_evidence` and `cmd_final`. They differ only by input: the runner reads `exclusions.json`, or the desk's `members_excluded` when no harvest ran. |
+| **Seat 1 new** staging through a link | `.external-staged` is a reserved name. `finalize`, `pack` and unpack refuse it, and the staging directory is created with `os.mkdir` (an existing entry refuses). |
+| **Cost** | Directory enumeration is memoized per finalize. The file, directory and byte bounds apply during the walk. |
+
+**Open after this round.**
+1. **Seat 1 delta `test_a_forbidden_open_audit_event_must_fail_the_test_not_only_log` stays red.** It requires the parent audit hook to RAISE, while seat 2's `test_audit_must_report_filesystem_bytes_paths` requires the same call to record without raising. No single hook can do both. I followed the lead's D8 form: record, and FAIL the module at teardown. Children refuse outright.
+2. **D7 fixtures not rewritten.** The B5 window copies the digest-pinned acceptance config, whose home locators are text. Rewriting them breaks its pins. "Children cannot get one back" is met by the child fence instead.
+3. **D3 deviation (library default only):** undeclared ignored content is byte-bound rather than refused, so the witnesses' finalize-then-unpack flow holds. The production CLI refuses.
+4. **D2 interpretation:** link-to-link is refused except for chains ending in the mirror (every hop bound). Seat 2's mirror witness requires that exception.
+5. **N1 census, native finalize timing, and the cost of `git ls-files` per mirror link on a real checkout** are not measured here.

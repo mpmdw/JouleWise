@@ -237,17 +237,26 @@ class EligibilityWitnesses(ReviewBase):
 
     def test_final_sources_must_prove_a_completed_harvest(self):
         # F4: stale PILOT/exclusions plus a running desk must not be called final.
+        # REWRITTEN (both R17 delta seats ruled the original WRONG; coordinator 2026-11-08): the
+        # original C1 had no light triage, so it had neither final nor provisional evidence and C2
+        # correctly refused; it also demanded the series binder accept an unsafe C3. Honest variant:
+        # C1 carries its light triage, releases C2, and C3 is refused by the arm rebuild AND the binder.
+        from scripts import align_v4_next_arm_packet as builder
         from scripts import align_v4_series as series
         manifest = self.root / series.MANIFEST
         manifest.parent.mkdir(parents=True)
         manifest.write_bytes(series.raw_json(series.candidate()))
         w1 = Scenario(self.root, 'W1').finish()
         c1 = Scenario(self.root, 'C1', previous=w1)
+        light = deepcopy(c1.thermal)
+        for m in light['members']:
+            m['excluded'] = bool(m['calibration_exclusions'])
+        c1.sources['light_triage'] = {'schema': builder.LIGHT_TRIAGE_SCHEMA, 'window': 'C1', 'thermal': light,
+            'checks': {'v4_B_bar': True}, 'km003c': c1.sources['pilot']['extra_checks']['km003c'],
+            'series_desk_row': c1.sources['pilot']['extra_checks']['series_desk_row']}
         c1.sources['desk'] = {'plan_id': c1.sources['plan']['plan_id'], 'status': 'running_off_mbp'}
         c1.next_plan['window'] = 'C2'
         c1.finish()
-        # Keep the last-passed pointer honest: W1 passed, C1 has not. This
-        # incomplete C1 really can release C2 before we test its k+2 deadline.
         c1.series['last_passed_record'] = dict(w1.passed_ref)
         c1.passed_ref = dict(w1.passed_ref)
         c1.write(c1.series_path, c1.series)
@@ -259,7 +268,9 @@ class EligibilityWitnesses(ReviewBase):
         c2.next_plan['window'] = 'C3'
         c2.finish()
         packet = c2.build()
-        self.assertIs(series.bind_packet(self.root, 'C3', packet, authenticated_by_rebuild=True), packet)
+        self.assertIn('R17: final eligibility of C1', packet['calibration_error'])
+        with self.assertRaises(ValueError):
+            series.bind_packet(self.root, 'C3', packet, authenticated_by_rebuild=True)
         self.assertFalse(evaluate(c2, packet)['admitted'],
                          'older eligibility is final although its desk never recorded a completed harvest')
 

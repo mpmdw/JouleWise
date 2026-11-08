@@ -106,18 +106,28 @@ class CustodyTests(Scratch):
             self.unpack()
 
     def test_external_destination_must_not_be_retargeted_into_checkout_code(self):
+        # REWRITTEN (both R17 delta seats ruled the original WRONG; coordinator 2026-11-08): it created
+        # collector.py after finalizing a byte-bound checkout directory and required the restore to
+        # SUCCEED. Refusal is the right outcome. Honest variant: finalize after the code exists, declare
+        # the ledger, retarget the transport row into checkout code: refused, code unchanged; then the
+        # honest manifest restores.
         code = self.checkout / 'collector.py'
         code.write_bytes(b'')
-        manifest = self.pack(external=(self.ledger,))
-        # The finalized digest is unchanged. An empty existing file is a valid
-        # prefix of the ledger, so append-only placement does not protect the
-        # destination if its absolute path is unbound.
+        finalized = off.finalized_manifest(self.source, inputs=(self.ledger,))
+        committed = off.manifest_sha256(finalized)
+        manifest = off.pack(self.source, self.transport, finalized=finalized, external=(self.ledger,))
+        honest = (self.transport / off.MANIFEST).read_bytes()
         next(iter(manifest['external'].values()))['path'] = str(code)
         self.edit_manifest(manifest)
         self.source.rename(self.root / 'kept')
-        self.unpack()
+        with self.assertRaises(off.OffloadRefused):
+            off.unpack(self.transport, finalized=finalized, finalized_sha256=committed)
         self.assertEqual(code.read_bytes(), b'',
                          'unpack accepted a self-declared external destination and changed checkout code')
+        self.assertFalse(self.source.exists())
+        (self.transport / off.MANIFEST).write_bytes(honest)
+        off.unpack(self.transport, finalized=finalized, finalized_sha256=committed)
+        self.assertEqual(code.read_bytes(), b'')
 
     def test_refused_payload_must_not_write_through_measurement_view(self):
         manifest = self.pack()

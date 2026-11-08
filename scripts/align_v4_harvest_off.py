@@ -72,9 +72,18 @@ def _usable_identity(identity):
 
 
 def _ledger_input(session, plan):
-    """The calibration ledger the window appended (outside the session): bound by bytes and transported."""
-    ledger = Path(((plan.get('hazard_window') or {}).get('bindings') or {}).get('ledger_path') or '')
-    return (ledger,) if ledger.is_absolute() and ledger.is_file() and session not in ledger.parents else ()
+    """The calibration ledger the window appended: a declared input, bound by bytes and real path, transported.
+
+    The plan may name it through the session's measurement view (a link into the checkout's runs/);
+    the declared input is then its resolved path, which is outside the session.
+    """
+    import os
+    named = ((plan.get('hazard_window') or {}).get('bindings') or {}).get('ledger_path')
+    if not named or not Path(named).is_absolute():
+        return ()
+    ledger = Path(os.path.realpath(named))
+    session_real = Path(os.path.realpath(session))
+    return (ledger,) if ledger.is_file() and session_real not in ledger.parents else ()
 
 
 def _require(args, *names):
@@ -158,27 +167,32 @@ def cmd_triage(args, run=subprocess.run):
     return {k: v for k, v in result.items() if k not in ('thermal', 'km003c')}
 
 
-# A completed harvest whose exclusions the desk recorded (= align_v4_next_arm_packet.COMPLETED_HARVEST,
-# tested equal). Any other status (not_run, program_fault, exclusions_unavailable) is not final.
-COMPLETED_HARVEST = ('ok', 'members_excluded')
+# The shared finality predicate (delta D9): the packet builder's WindowRecord applies the same one.
+COMPLETED_HARVEST = light_triage.COMPLETED_HARVEST
+IGNORED_INPUTS = ROOT / 'configs/align/v4/harvest_off_ignored_inputs.json'
 
 
 def cmd_final(args, run=subprocess.run):
-    """Final eligibility row from the full desk's PILOT.json on the verified copy."""
+    """Final eligibility row from the full desk's PILOT.json on the verified copy.
+
+    Refuses unless ``light_triage.final_adjudication_error`` passes: a completed harvest (or, with no
+    capture at all, no harvest needed), a completed desk adjudication, both of this session's plan,
+    and agreeing exclusions. The packet builder applies the same predicate to the committed sources.
+    """
     session, state, plan = _session(args.session_root)
     pilot = _read(args.pilot or session / 'PILOT.json')
     desk = _read(session / 'desk.json')
-    if desk.get('harvest_status') not in COMPLETED_HARVEST:
-        raise ValueError('final eligibility needs a completed harvest (harvest_status '
-                         + str(desk.get('harvest_status')) + ')')
-    plan_id = state.get('session_id')
-    if desk.get('plan_id') != plan_id or pilot.get('plan_id') != plan_id:
-        raise ValueError('final eligibility needs the desk and PILOT.json of this session (plan_id '
-                         + json.dumps([desk.get('plan_id'), pilot.get('plan_id'), plan_id]) + ')')
-    thermal = pilot['extra_checks']['thermal']
     rows = _plan_rows(state)
     runs_root = _runs_root(state)
     captured = {row['run_id'] for row in rows if (runs_root / row['run_id']).is_dir()}
+    exclusions_path = session / 'archive/derived/exclusions.json'
+    exclusions = (_read(exclusions_path) if exclusions_path.is_file() else
+                  {'members_excluded': desk.get('members_excluded', pilot.get('members_excluded', []))})
+    error = light_triage.final_adjudication_error(desk, pilot, exclusions, state.get('session_id'),
+                                                  captured=bool(captured))
+    if error is not None:
+        raise ValueError('final eligibility refused: ' + error)
+    thermal = pilot['extra_checks']['thermal']
     eligibility = light_triage.member_eligibility(thermal['members'], rows, captured=captured, final=True)
     return {'thermal_escalation': light_triage.thermal_escalation(thermal),
             'member_eligibility': eligibility,
@@ -280,10 +294,20 @@ def _sweep_peak(path):
 
 
 def sweep_code_identity(session_root, run=subprocess.run):  # run: the git/interpreter probe, never a harvest runner
-    """The harvest program a sweep measures: the session's measurement checkout head and interpreter."""
+    """The harvest program a sweep measures (delta D6): the SOURCE checkout behind the measurement view,
+    its head, whether its tracked and untracked files are clean, and the interpreter/package identity."""
     _session_dir, state, _plan = _session(session_root)
-    identity = checkout_identity(state['measurement_root'], run=run)
-    return {'head': identity['head'], 'python': identity['python']}
+    root = _mirror_root(state)
+    identity = checkout_identity(root, run=run)
+    return {'root': root, 'head': identity['head'], 'tracked_clean': identity['tracked_clean'],
+            'python': identity['python']}
+
+
+def _identified_code(code):
+    """A usable code identity: a head, not dirty, and an interpreter identity that was actually read."""
+    return (isinstance(code, dict) and isinstance(code.get('head'), str) and code['head']
+            and code.get('tracked_clean') is not False
+            and isinstance(code.get('python'), list) and bool(code['python']))
 
 
 def sweep_basis(path, session_root):
@@ -299,8 +323,12 @@ def sweep_basis(path, session_root):
     swept, code = receipt.get('largest_plist_bytes'), receipt.get('code')
     if receipt.get('schema') != SWEEP_SCHEMA or type(swept) is not int or swept <= 0 or not isinstance(code, dict):
         return None, {'reason': 'receipt not bound to an input size and code', 'path': str(path)}
+    if not _identified_code(code):
+        return None, {'reason': 'receipt code identity incomplete (head, clean tree, interpreter)', 'path': str(path)}
     current_code = sweep_code_identity(session_root)
-    if code != current_code or current_code['head'] is None:
+    if not _identified_code(current_code):
+        return None, {'reason': 'this harvest code is unidentified or dirty', 'path': str(path)}
+    if code != current_code:
         return None, {'reason': 'receipt measured other harvest code', 'path': str(path)}
     current = largest_plist_bytes(session_root)
     scaled = peak if current <= swept else -(-peak * current // swept)
@@ -358,8 +386,10 @@ def cmd_finalize_manifest(args, run=subprocess.run):
     if not _usable_identity(identity):
         raise harvest_offload.OffloadRefused('measurement checkout is not a clean, identified mirror source: '
                                              + json.dumps(identity, sort_keys=True))
+    declared = _read(IGNORED_INPUTS)
+    policy = {key: declared[key] for key in harvest_offload.DEFAULT_IGNORED_POLICY}
     manifest = harvest_offload.finalized_manifest(session.absolute(), mirror={'root': mirror, 'identity': identity},
-                                                  inputs=_ledger_input(session, plan))
+                                                  inputs=_ledger_input(session, plan), ignored_policy=policy)
     # Canonical bytes, so the file's own SHA-256 (the record's raw_evidence descriptor) IS the
     # digest unpack checks (manifest_sha256): one number in the record, not two.
     with Path(args.out).open('xb') as sink:

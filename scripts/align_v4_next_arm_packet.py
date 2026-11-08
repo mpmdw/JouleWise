@@ -24,6 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from joulewise.align.apple import light_triage
 from joulewise.align.apple import v4_cadence as cadence
 from joulewise.align.apple import v4_registration as registration
 from joulewise.align.apple.v4_estimands import FROZEN_D_SLOT_KEYS, d_configuration_assertion
@@ -49,8 +50,8 @@ FINAL_SOURCES = ('pilot', 'desk', 'exclusions')
 LIGHT_TRIAGE_SCHEMA = 'joulewise.align_v4.light_triage.v1'   # = light_triage.SCHEMA (tested equal)
 # R17 review F4: final sources count only as evidence of a COMPLETED harvest whose exclusions the desk
 # recorded (= align_v4_harvest_off.COMPLETED_HARVEST, tested equal), bound to the window's own plan.
-COMPLETED_HARVEST = ('ok', 'members_excluded')
-DESK_ADJUDICATIONS = ('instrument_ok', 'instrument_incomplete')   # PILOT.json status of a completed desk
+COMPLETED_HARVEST = light_triage.COMPLETED_HARVEST          # the shared predicate (delta D9)
+DESK_ADJUDICATIONS = light_triage.DESK_ADJUDICATIONS        # PILOT.json status of a completed desk
 # R17 review F2: every record after R1 binds the record-bound tree manifest written at finalize
 # (= harvest_offload.FINALIZED_SCHEMA, tested equal); its canonical bytes' SHA-256 is the digest unpack checks.
 FINALIZED_MANIFEST_SCHEMA = 'joulewise.align_v4.finalized_manifest.v2'
@@ -201,41 +202,38 @@ class WindowRecord:
     def final_evidence(self):
         """``None`` when the full desk's final adjudication is bound to this record, else why not.
 
-        R17 review F4: the sources (the record's own, or its successor's ``previous_final``) must
-        evidence a COMPLETED harvest and a completed desk adjudication bound to THIS window's plan:
-        ``desk.harvest_status`` in COMPLETED_HARVEST (never the ``running_off_mbp`` placeholder), the
-        desk's and PILOT.json's ``plan_id`` equal to this record's plan, PILOT.json a completed desk
-        status, and exclusions agreeing with what the desk recorded. A completed desk that did not
-        PASS is still final (passing is ``desk_passes``, a separate question).
+        R17 review F4 / delta D5 and D9: the sources (the record's own, or its successor's
+        ``previous_final``) must pass ``light_triage.final_adjudication_error``, the predicate the
+        runner's ``final`` also applies. A record with NO capture at all (supplemental ones count as
+        captures here; ``counted_captures`` stays the calibration predicate) has nothing to harvest:
+        its desk need not have harvested, and with no final sources its light triage, which classified
+        every planned member, is final at once and stays final in later history.
         """
         names = self.record.get('sources', {})
-        if self.final_from is None and not all(name in names for name in FINAL_SOURCES):
+        absent = self.capture_absent()
+        if not self.has_final_sources():
+            if absent and 'light_triage' in names:
+                try:
+                    self.light()
+                    return None
+                except (ValueError, KeyError, TypeError, AttributeError) as exc:
+                    return 'light triage unreadable: ' + str(exc)
             return 'no final sources'
         try:
             desk, pilot, exclusions = self.source('desk'), self.source('pilot'), self.source('exclusions')
             plan_id = self.evidence.source(self.commit, names.get('plan'))['plan_id']
         except (ValueError, KeyError, TypeError, AttributeError) as exc:
             return 'final sources unreadable: ' + str(exc)
-        if not isinstance(desk, dict) or desk.get('status') == 'running_off_mbp':
-            return 'the desk recorded no completed harvest (still running off the MBP)'
-        # A zero-capture attempt has nothing to harvest: its completed desk is final whatever it ran (R15/R17).
-        if desk.get('harvest_status') not in COMPLETED_HARVEST and not self._zero_capture():
-            return 'the desk recorded no completed harvest (harvest_status ' + str(desk.get('harvest_status')) + ')'
+        return light_triage.final_adjudication_error(desk, pilot, exclusions, plan_id, captured=not absent)
 
-        if desk.get('plan_id') != plan_id or not isinstance(pilot, dict) or pilot.get('plan_id') != plan_id:
-            return "the desk and PILOT.json are not bound to this window's plan"
-        if pilot.get('status') not in DESK_ADJUDICATIONS:
-            return 'PILOT.json carries no completed desk adjudication'
-        if not isinstance(exclusions, dict) or not isinstance(exclusions.get('members_excluded'), list):
-            return 'final exclusions missing'
-        if any(value is not None and value != exclusions['members_excluded']
-               for value in (desk.get('members_excluded'), pilot.get('members_excluded'))):
-            return 'desk, PILOT.json and exclusions disagree'
-        return None
+    def has_final_sources(self):
+        names = self.record.get('sources', {})
+        return self.final_from is not None or all(name in names for name in FINAL_SOURCES)
 
-    def _zero_capture(self):
+    def capture_absent(self):
+        """No capture at all, supplemental diagnostics included (delta D5)."""
         try:
-            return self.counted_captures() == 0
+            return len(self.captures()) == 0
         except (ValueError, KeyError, TypeError, AttributeError):
             return False
 
@@ -251,7 +249,7 @@ class WindowRecord:
 
     def pilot_view(self):
         """PILOT.json when final; otherwise the light triage's identical thermal section (R17 proof)."""
-        if self.is_final():
+        if self.is_final() and self.has_final_sources():
             return self.source('pilot')
         light = self.light()
         return {'status': 'provisional', 'extra_checks': {'thermal': light['thermal'],
@@ -332,7 +330,8 @@ class WindowRecord:
         """Final counts from the full desk; provisional ones from the light triage only when allowed (R17)."""
         why = self.final_evidence()
         if why is None:
-            status, exclusions = 'final', self.source('exclusions')
+            status = 'final'
+            exclusions = self.source('exclusions') if self.has_final_sources() else {'members_excluded': []}
         else:
             require(allow_provisional, 'R17: final eligibility of ' + self.window + ' must be recorded '
                     'before the arm of the window after next, and before any arm the full desk gates ('
@@ -399,8 +398,9 @@ class WindowRecord:
                     pair = PAIR_NAMES.get(planned.get('task_pair'))
                     require(pair in counts, 'unknown benign task pair')
                     counts[pair] += 1
-        # A zero-capture window has nothing a harvest could exclude: final at once (R17).
-        return {'window': self.window, 'status': 'final' if not counted else status,
+        # A window with no capture at all has nothing a harvest could exclude: final at once (R17;
+        # delta D5: actual absence, supplemental captures included, as in final_evidence).
+        return {'window': self.window, 'status': 'final' if not captured else status,
                 'captured_members': len(counted), 'eligible_benign': counts}
 
 
@@ -801,8 +801,7 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
         # R17 (review F3): window k's final eligibility is due before the arm of k+2 for EVERY window in
         # the hash chain, test windows included (they still contribute zero calibration). Only the
         # previous window may be unfinished; a calibration window also refuses in the history below.
-        # A zero-capture attempt has nothing a harvest could adjudicate: final at once (as its eligibility row).
-        late = [r.window for r in chain[:-1] if r.window != 'R1' and not r.is_final() and not r._zero_capture()]
+        late = [r.window for r in chain[:-1] if r.window != 'R1' and not r.is_final()]
         if late and previous.window != 'R1':
             packet['checks']['member_eligibility'] = {
                 'status': 'fail', 'sources': [],
@@ -890,7 +889,8 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
 
         def bar(record):
             try:
-                checks = (record.source('desk') if record.is_final() else record.light()).get('checks')
+                checks = (record.source('desk') if record.is_final() and record.has_final_sources()
+                          else record.light()).get('checks')
                 return isinstance(checks, dict) and checks.get('v4_B_bar') is True
             except (ValueError, KeyError, TypeError, AttributeError):
                 return False

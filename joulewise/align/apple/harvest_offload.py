@@ -59,10 +59,15 @@ class _HashingReader:
         return data
 
 
+def _walk_error(error: OSError):
+    # R17 delta D4: a directory that cannot be read refuses; it is never bound as empty.
+    raise OffloadRefused(f'cannot read directory {error.filename}: {error.strerror or error}')
+
+
 def _walk(root: Path):
-    """Sorted, deterministic walk that never follows a symlink."""
+    """Sorted, deterministic walk that never follows a symlink and refuses an unreadable directory."""
     entries = []
-    for current, dirs, files in os.walk(root, followlinks=False):
+    for current, dirs, files in os.walk(root, followlinks=False, onerror=_walk_error):
         dirs.sort()
         here = Path(current)
         for name in sorted(dirs + files):
@@ -72,17 +77,31 @@ def _walk(root: Path):
 
 
 EXTERNAL = '.external'
+EXTERNAL_STAGING = '.external-staged'
+RESERVED_NAMES = frozenset({EXTERNAL_STAGING})   # never a session entry: unpack stages externals there
 FINALIZED_SCHEMA = 'joulewise.align_v4.finalized_manifest.v2'
 FINALIZED_KEYS = frozenset({'schema', 'source_root', 'entries', 'closure'})
+CLOSURE_KEYS = frozenset({'links', 'files', 'ignored', 'inputs', 'mirror', 'ignored_policy'})
 # R17 review F1: the finite external-input closure. A link whose target leaves the session root is
 # a dependency: it is bound either by the bytes it reaches (hashed at finalize, re-verified at pack
 # and on the Air) or, for the measurement checkout, by the separately bound mirror identity. These
-# bounds make the byte closure finite. Anything past them refuses at finalize: it must become a
-# declared mirror or input. Closure bytes are hashed in place, never copied, except the declared
-# append-only externals (the calibration ledger). Model weights never fit the per-file bound.
+# bounds make the byte closure finite and are applied DURING each walk, before the offending hash.
+# Anything past them refuses at finalize: it must become a declared mirror or input. Closure bytes
+# are hashed in place, never copied, except the declared append-only externals (the calibration
+# ledger). Model weights never fit the per-file bound.
 CLOSURE_MAX_FILES = 4096
+CLOSURE_MAX_DIRECTORIES = 4096
 CLOSURE_MAX_BYTES = 1 << 30
 CLOSURE_MAX_FILE_BYTES = 256 << 20
+MAX_LINK_HOPS = 16
+# R17 delta D3: Git identity does not cover ignored checkout content. Every ignored path a mirror
+# link reaches is classified by this policy: covered by the interpreter identity (``identity_bound``),
+# a regenerated cache never read as an input (``regenerated``), or inside a ``declared_directories``
+# entry whose consumed files are exactly the declared ``inputs`` (the ledger, plus whatever the
+# lead-owned native N1 census finds). Anything else is ``undeclared``: the production CLI refuses
+# it; the library default binds its bytes (within the bounds) so a change on the Air refuses.
+DEFAULT_IGNORED_POLICY = {'identity_bound': ['.venv/'], 'regenerated': ['__pycache__', '*.pyc', '.DS_Store'],
+                          'declared_directories': [], 'undeclared': 'bind'}
 
 
 def _canonical_bytes(value: Any) -> bytes:
@@ -97,6 +116,8 @@ def _tree_rows(root: Path) -> dict[str, dict[str, Any]]:
     rows: dict[str, dict[str, Any]] = {}
     for path in _walk(root):
         relative = path.relative_to(root).as_posix()
+        if relative in RESERVED_NAMES:
+            raise OffloadRefused(f'reserved name in the session root: {relative}')
         info = os.lstat(path)
         if stat.S_ISLNK(info.st_mode):
             rows[relative] = {'link': os.readlink(path)}
@@ -110,15 +131,23 @@ def _tree_rows(root: Path) -> dict[str, dict[str, Any]]:
 
 
 class _ClosureFiles:
-    """Accumulates the closure's regular files, enforcing the finite bounds before any hash."""
+    """Accumulates the closure's regular files under shared finite bounds, checked before any hash.
+
+    ``files`` holds external link targets and declared inputs; ``ignored`` the byte-bound ignored
+    checkout content (D3). ``listings`` deduplicates directory enumeration across links.
+    """
 
     def __init__(self):
         self.files: dict[str, dict[str, Any]] = {}
+        self.ignored: dict[str, dict[str, Any]] = {}
+        self.listings: dict[str, list[str]] = {}
         self.total = 0
+        self.count = 0
 
-    def add(self, path: Path, why: str) -> None:
+    def add(self, path: Path, why: str, *, into: str = 'files') -> None:
         key = str(path)
-        if key in self.files:
+        if key in self.files or key in self.ignored:
+            getattr(self, into).setdefault(key, (self.files.get(key) or self.ignored.get(key)))
             return
         info = os.lstat(path)
         if stat.S_ISLNK(info.st_mode):
@@ -129,84 +158,203 @@ class _ClosureFiles:
             raise OffloadRefused(f'external closure file over {CLOSURE_MAX_FILE_BYTES} bytes ({why}): {path}; '
                                  'large inputs (model weights) are never bound or copied; bind them by a mirror')
         self.total += info.st_size
-        if len(self.files) + 1 > CLOSURE_MAX_FILES or self.total > CLOSURE_MAX_BYTES:
+        self.count += 1
+        if self.count > CLOSURE_MAX_FILES or self.total > CLOSURE_MAX_BYTES:
             raise OffloadRefused(f'external closure is not finite within {CLOSURE_MAX_FILES} files / '
                                  f'{CLOSURE_MAX_BYTES} bytes ({why}); declare a mirror instead of traversing it')
-        self.files[key] = {'sha256': _file_sha256(path), 'size': info.st_size}
+        getattr(self, into)[key] = {'sha256': _file_sha256(path), 'size': info.st_size}
 
 
-def _directory_listing(target: Path) -> list[str]:
-    """Regular-file listing below an external directory link; never follows a link."""
-    names = []
-    for current, dirs, files in os.walk(target, followlinks=False):
+def _directory_listing(target: Path, collected: _ClosureFiles | None = None, *, why: str = '',
+                       into: str = 'files') -> list[str]:
+    """Regular files below an external directory; never follows a link; refuses an unreadable directory.
+
+    With ``collected`` each file is bound as the walk reaches it (bounds before its hash), and a
+    directory already enumerated in this finalize is not walked again.
+    """
+    key = str(target)
+    if collected is not None and key in collected.listings:
+        return collected.listings[key]
+    names, directories = [], 0
+    for current, dirs, files in os.walk(target, followlinks=False, onerror=_walk_error):
+        dirs.sort()
         here = Path(current)
         for name in dirs:
             if (here / name).is_symlink():
                 raise OffloadRefused(f'external closure reaches a further link: {here / name}; declare it')
-        names.extend((here / name).relative_to(target).as_posix() for name in files)
-    return sorted(names)
+            directories += 1
+            if directories > CLOSURE_MAX_DIRECTORIES:
+                raise OffloadRefused(f'external closure has over {CLOSURE_MAX_DIRECTORIES} directories: {target}')
+        for name in sorted(files):
+            if collected is not None:
+                collected.add(here / name, why or str(target), into=into)
+            elif len(names) + 1 > CLOSURE_MAX_FILES:
+                raise OffloadRefused(f'external closure is not finite within {CLOSURE_MAX_FILES} files: {target}')
+            names.append((here / name).relative_to(target).as_posix())
+    names.sort()
+    if collected is not None:
+        collected.listings[key] = names
+    return names
 
 
-def _classify_link(path: Path, root_real: Path, mirror_real: Path | None) -> tuple[str, Path]:
-    target = Path(os.path.realpath(path))
-    if _under(target, root_real):
-        return 'internal', target
+def _link_chain(path: Path) -> tuple[list[str], Path]:
+    """Follow a link hop by hop with lstat, never collapsing a hop first (D2). Returns hop texts and the end."""
+    hops, current = [], path
+    while True:
+        text = os.readlink(current)
+        hops.append(text)
+        following = Path(os.path.normpath(os.path.join(os.path.dirname(current), text)))
+        try:
+            is_link = stat.S_ISLNK(os.lstat(following).st_mode)
+        except FileNotFoundError:
+            is_link = False
+        except OSError as exc:
+            raise OffloadRefused(f'cannot inspect link target {following}: {exc}') from None
+        if not is_link:
+            return hops, following
+        if len(hops) >= MAX_LINK_HOPS:
+            raise OffloadRefused(f'link chain longer than {MAX_LINK_HOPS} hops: {path}')
+        current = following
+
+
+def _classify_link(path: Path, root_real: Path, mirror_real: Path | None):
+    """``(class, real target, hops)``: internal, mirror, absent or bytes."""
+    if _under(Path(os.path.realpath(path)), root_real):
+        return 'internal', None, None
+    hops, end = _link_chain(path)
+    target = Path(os.path.realpath(end))
     if mirror_real is not None and _under(target, mirror_real):
-        return 'mirror', target
-    if not os.path.lexists(target):
-        return 'absent', target
-    return 'bytes', target
+        return 'mirror', target, hops
+    return ('absent' if not os.path.lexists(target) else 'bytes'), target, hops
 
 
-def _closure(root: Path, *, mirror: dict[str, Any] | None, inputs: tuple[Path | str, ...]) -> dict[str, Any]:
+def _policy_match(entry: str, patterns) -> bool:
+    parts = [p for p in entry.rstrip('/').split('/') if p]
+    for pattern in patterns:
+        if pattern.startswith('*.') and parts and parts[-1].endswith(pattern[1:]):
+            return True
+        if pattern in parts:
+            return True
+    return False
+
+
+def _git_ignored(mirror_real: Path, relative: str) -> list[str]:
+    """Ignored paths at or below ``relative`` in the mirror checkout (Git collapses ignored directories)."""
+    try:
+        result = subprocess.run(['git', '-C', str(mirror_real), 'ls-files', '-z', '--others', '--ignored',
+                                 '--exclude-standard', '--directory', '--', relative or '.'],
+                                capture_output=True, timeout=60, check=False)
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise OffloadRefused(f'cannot list ignored mirror content: {exc}') from None
+    if result.returncode != 0:
+        raise OffloadRefused('mirror is not a readable Git checkout: '
+                             + result.stderr.decode(errors='replace').strip()[:200])
+    return sorted(p for p in result.stdout.decode().split('\0') if p)
+
+
+def _mirror_ignored(target: Path, mirror_real: Path, policy: dict[str, Any], declared_real: set[str],
+                    collected: _ClosureFiles | None, link: str) -> list[dict[str, Any]]:
+    """Classify every ignored path a mirror link reaches (D3); bind or refuse the undeclared ones."""
+    relative = target.relative_to(mirror_real).as_posix() if target != mirror_real else ''
+    rows = []
+    for entry in _git_ignored(mirror_real, relative):
+        # A file inside an ignored directory is listed as that directory: classify the file itself.
+        if target.is_file():
+            entry = relative
+        path = mirror_real / entry
+        if any(entry.startswith(prefix) for prefix in policy['identity_bound']):
+            rows.append({'path': entry, 'class': 'identity_bound'})
+        elif _policy_match(entry, policy['regenerated']):
+            rows.append({'path': entry, 'class': 'regenerated'})
+        elif target.is_file() and str(target) in declared_real:
+            rows.append({'path': entry, 'class': 'declared_input'})
+        elif not target.is_file() and any(entry.startswith(d) for d in policy['declared_directories']):
+            rows.append({'path': entry, 'class': 'declared_directory'})
+        elif policy['undeclared'] == 'bind':
+            if collected is not None:
+                if path.is_dir() and not path.is_symlink():
+                    _directory_listing(path, collected, why=link, into='ignored')
+                else:
+                    collected.add(path, link, into='ignored')
+            rows.append({'path': entry, 'class': 'bound'})
+        else:
+            raise OffloadRefused(f'mirror link {link} reaches an undeclared ignored input {entry}: declare it '
+                                 '(ledger or N1 census) or remove the dependency')
+        if target.is_file():
+            break
+    return rows
+
+
+def _external_row(path: Path, relative: str, root_real: Path, mirror_real: Path | None, policy, declared_real,
+                  collected: _ClosureFiles | None):
+    kind, target, hops = _classify_link(path, root_real, mirror_real)
+    if kind == 'internal':
+        return None
+    if len(hops) > 1 and kind != 'mirror':
+        # D2: a link whose immediate target is another link refuses before anything behind it is read.
+        raise OffloadRefused(f'external link {relative} points at a further link ({hops[0]}); link the target directly')
+    row: dict[str, Any] = {'class': kind, 'target': str(target), 'hops': hops}
+    if kind == 'mirror':
+        row['mirror_path'] = target.relative_to(mirror_real).as_posix() if target != mirror_real else '.'
+        row['ignored'] = _mirror_ignored(target, mirror_real, policy, declared_real, collected, relative)
+    elif kind == 'bytes':
+        if target.is_dir():
+            row.update(kind='directory', files=_directory_listing(target, collected, why=relative))
+        else:
+            if collected is not None:
+                collected.add(target, relative)
+            row['kind'] = 'file'
+    return row
+
+
+def _closure(root: Path, *, mirror: dict[str, Any] | None, inputs: tuple[Path | str, ...],
+             ignored_policy: dict[str, Any] | None) -> dict[str, Any]:
+    if mirror is not None and (not isinstance(mirror, dict) or set(mirror) != {'root', 'identity'}
+                               or not isinstance(mirror['identity'], dict)):
+        raise OffloadRefused('mirror must be {root, identity}')
+    policy = dict(DEFAULT_IGNORED_POLICY if ignored_policy is None else ignored_policy)
+    if set(policy) != set(DEFAULT_IGNORED_POLICY) or policy['undeclared'] not in ('bind', 'refuse'):
+        raise OffloadRefused('ignored_policy must name identity_bound, regenerated, declared_directories, undeclared')
     root_real = Path(os.path.realpath(root))
     mirror_real = Path(os.path.realpath(mirror['root'])) if mirror is not None else None
     collected = _ClosureFiles()
-    links: dict[str, dict[str, Any]] = {}
-    for path in _walk(root):
-        if not path.is_symlink():
-            continue
-        relative = path.relative_to(root).as_posix()
-        kind, target = _classify_link(path, root_real, mirror_real)
-        if kind == 'internal':
-            continue
-        row: dict[str, Any] = {'class': kind, 'target': str(target)}
-        if kind == 'bytes':
-            if target.is_dir():
-                listing = _directory_listing(target)
-                for name in listing:
-                    collected.add(target / name, relative)
-                row.update(kind='directory', files=listing)
-            else:
-                collected.add(target, relative)
-                row['kind'] = 'file'
-        links[relative] = row
-    declared = []
+    declared: dict[str, dict[str, str]] = {}
     for value in inputs:
         path = Path(value)
         if not path.is_absolute() or path.is_symlink() or not path.is_file() or _under(path, root):
             raise OffloadRefused(f'declared input must be an absolute regular file outside the root: {path}')
+        # D1: the destination's real ancestry is bound and re-checked before any placement.
+        declared[str(path)] = {'real': os.path.realpath(path)}
         collected.add(path, 'declared input')
-        declared.append(str(path))
-    if mirror is not None and (not isinstance(mirror, dict) or set(mirror) != {'root', 'identity'}
-                               or not isinstance(mirror['identity'], dict)):
-        raise OffloadRefused('mirror must be {root, identity}')
-    return {'links': links, 'files': collected.files, 'inputs': sorted(declared), 'mirror': mirror}
+    declared_real = {row['real'] for row in declared.values()}
+    links: dict[str, dict[str, Any]] = {}
+    for path in _walk(root):
+        if path.is_symlink():
+            relative = path.relative_to(root).as_posix()
+            row = _external_row(path, relative, root_real, mirror_real, policy, declared_real, collected)
+            if row is not None:
+                links[relative] = row
+    return {'links': links, 'files': collected.files, 'ignored': collected.ignored, 'inputs': declared,
+            'mirror': mirror, 'ignored_policy': policy}
 
 
 def finalized_manifest(root: Path | str, *, mirror: dict[str, Any] | None = None,
-                       inputs: tuple[Path | str, ...] = ()) -> dict[str, Any]:
+                       inputs: tuple[Path | str, ...] = (), ignored_policy: dict[str, Any] | None = None
+                       ) -> dict[str, Any]:
     """The record-bound manifest, written on the MBP at finalize and committed with the record.
 
     ``entries``: relative path -> ``{sha256, size}`` (regular file), ``{link}`` (symlink, kept
     literally) or ``{directory: True}``. ``source_root``: the restore namespace. ``closure``: the
-    finite inventory of the external inputs that links point at (R17 review F1):
+    finite inventory of the external inputs that links point at (R17 review F1, delta D1-D4):
 
+    * every external link is followed hop by hop with lstat. A link to a further link refuses,
+      unless the chain ends in the mirror, where every hop text is bound;
     * a link into ``mirror['root']`` (the measurement checkout) is bound by ``mirror['identity']``
-      (head, clean incl. untracked, interpreter and packages), which the Air must reproduce;
+      plus its mirror-relative target. Every ignored path it reaches is classified by
+      ``ignored_policy``; undeclared ones are byte-bound (library default) or refused (CLI);
     * any other external link target is bound by the bytes it reaches (a file, or every regular file
       below a directory), within the finite bounds; an absent target stays bound as absent;
-    * ``inputs`` are further absolute files bound by bytes (the calibration ledger the window appended).
+    * ``inputs`` are the declared absolute files bound by bytes and by their real path (the ledger).
 
     The external bytes are re-verified at pack and on the Air before the tree is published.
     """
@@ -214,7 +362,7 @@ def finalized_manifest(root: Path | str, *, mirror: dict[str, Any] | None = None
     if not root.is_absolute() or root.is_symlink() or not root.is_dir():
         raise OffloadRefused('source root must be an absolute real directory')
     return {'schema': FINALIZED_SCHEMA, 'source_root': str(root), 'entries': _tree_rows(root),
-            'closure': _closure(root, mirror=mirror, inputs=inputs)}
+            'closure': _closure(root, mirror=mirror, inputs=inputs, ignored_policy=ignored_policy)}
 
 
 def _validate_finalized(finalized: Any) -> None:
@@ -222,7 +370,7 @@ def _validate_finalized(finalized: Any) -> None:
     if (not isinstance(finalized, dict) or set(finalized) != FINALIZED_KEYS
             or finalized.get('schema') != FINALIZED_SCHEMA or not isinstance(finalized.get('source_root'), str)
             or not isinstance(finalized.get('entries'), dict) or not isinstance(closure, dict)
-            or set(closure) != {'links', 'files', 'inputs', 'mirror'}):
+            or set(closure) != CLOSURE_KEYS):
         raise OffloadRefused('finalized record manifest malformed (schema ' + FINALIZED_SCHEMA + ')')
 
 
@@ -248,6 +396,15 @@ def _check_finalized(rows, finalized_entries, where):
                              f'extra={extra[:5]} changed={changed[:5]}')
 
 
+def _same_bytes(path: Path, row: dict[str, Any]) -> bool:
+    try:
+        info = os.lstat(path)
+        return (stat.S_ISREG(info.st_mode) and info.st_size == row['size']
+                and _file_sha256(path) == row['sha256'])
+    except OSError:
+        return False
+
+
 def _verify_closure(closure: dict[str, Any], root: Path, *, mirror_identity: dict[str, Any] | None,
                     transported: frozenset[str] = frozenset(), where: str) -> None:
     """Re-verify the closure against this host's bytes; ``root`` is where the tree is now (or staged)."""
@@ -255,36 +412,46 @@ def _verify_closure(closure: dict[str, Any], root: Path, *, mirror_identity: dic
     if mirror is not None and mirror_identity != mirror['identity']:
         raise OffloadRefused(f'{where}: measurement checkout mirror differs from the finalized record manifest: '
                              + json.dumps({'finalized': mirror['identity'], 'here': mirror_identity}, sort_keys=True))
+    for name, row in sorted(closure['inputs'].items()):
+        if os.path.realpath(name) != row['real']:
+            raise OffloadRefused(f'{where}: declared input {name} resolves to {os.path.realpath(name)}, '
+                                 f'not the finalized {row["real"]}')
     root_real = Path(os.path.realpath(root))
     mirror_real = Path(os.path.realpath(mirror['root'])) if mirror is not None else None
+    policy = closure['ignored_policy']
+    declared_real = {row['real'] for row in closure['inputs'].values()}
+    transported_real = {os.path.realpath(name) for name in transported} | set(transported)
     for relative, row in sorted(closure['links'].items()):
-        kind, target = _classify_link(root / relative, root_real, mirror_real)
-        if kind != row['class'] or (kind != 'mirror' and str(target) != row['target']):
+        kind, target, hops = _classify_link(root / relative, root_real, mirror_real)
+        if kind != row['class'] or str(target) != row['target'] or hops != row['hops']:
             raise OffloadRefused(f'{where}: external link {relative} resolves differently from the finalized '
-                                 f'record manifest ({kind} {target})')
+                                 f'record manifest ({kind} {target} via {hops})')
         if kind == 'bytes' and row['kind'] == 'directory' and _directory_listing(target) != row['files']:
             raise OffloadRefused(f'{where}: external closure directory differs from the finalized record '
                                  f'manifest: {target}')
         if kind == 'bytes' and row['kind'] == 'file' and target.is_dir():
             raise OffloadRefused(f'{where}: external closure file became a directory: {target}')
-    for name, row in sorted(closure['files'].items()):
-        if name in transported:
-            continue
-        path = Path(name)
-        try:
-            info = os.lstat(path)
-            same = (stat.S_ISREG(info.st_mode) and info.st_size == row['size']
-                    and _file_sha256(path) == row['sha256'])
-        except OSError:
-            same = False
-        if not same:
-            raise OffloadRefused(f'{where}: external closure input differs from the finalized record manifest: {path}')
+        if kind == 'mirror':
+            mirror_path = target.relative_to(mirror_real).as_posix() if target != mirror_real else '.'
+            if mirror_path != row['mirror_path']:
+                raise OffloadRefused(f'{where}: mirror link {relative} selects {mirror_path}, not {row["mirror_path"]}')
+            here = _mirror_ignored(target, mirror_real, policy, declared_real, None, relative)
+            if here != row['ignored']:
+                raise OffloadRefused(f'{where}: ignored mirror content under {relative} differs from the finalized '
+                                     'record manifest')
+    for group in ('files', 'ignored'):
+        for name, row in sorted(closure[group].items()):
+            if name in transported_real:
+                continue
+            if not _same_bytes(Path(name), row):
+                raise OffloadRefused(f'{where}: external closure input differs from the finalized record '
+                                     f'manifest: {name}')
 
 
 def _closure_external(finalized: dict[str, Any], path: str, sha256: str, size: int) -> None:
-    row = finalized['closure']['files'].get(path)
-    if row is None:
+    if path not in finalized['closure']['inputs']:
         raise OffloadRefused(f'external file is not bound by the finalized record manifest: {path}')
+    row = finalized['closure']['files'].get(path)
     if row != {'sha256': sha256, 'size': size}:
         raise OffloadRefused(f'external input differs from the finalized record manifest: {path}')
 
@@ -312,8 +479,8 @@ def pack(source_root: Path | str, out_dir: Path | str, *, finalized: dict[str, A
     if str(source) != finalized['source_root']:
         raise OffloadRefused('source root differs from the finalized record manifest')
     for path in external:
-        if str(Path(path)) not in finalized['closure']['files']:
-            raise OffloadRefused(f'external file is not bound by the finalized record manifest: {path}')
+        if str(Path(path)) not in finalized['closure']['inputs']:
+            raise OffloadRefused(f'external file is not a declared input of the finalized record manifest: {path}')
     if source.is_dir() and not source.is_symlink():
         _verify_closure(finalized['closure'], source, mirror_identity=mirror_identity, where='pack')
 
@@ -336,6 +503,8 @@ def pack_unbound(source_root: Path | str, out_dir: Path | str, *, level: int = D
 def _pack(source: Path, out: Path, *, level, threads, external, check, finalized_sha256) -> dict[str, Any]:
     if not source.is_absolute() or source.is_symlink() or not source.is_dir():
         raise OffloadRefused('source root must be an absolute real directory')
+    if any(os.path.lexists(source / name) for name in RESERVED_NAMES):
+        raise OffloadRefused('reserved name in the session root: ' + ', '.join(sorted(RESERVED_NAMES)))
     externals = [Path(p) for p in external]
     for path in externals:
         if not path.is_absolute() or path.is_symlink() or not path.is_file() or _under(path, source):
@@ -512,10 +681,12 @@ def _unpack(offload: Path, dest_root, *, finalized, mirror_identity) -> dict[str
                     if member.name.startswith(EXTERNAL + '/') and member.isfile():
                         if member.name not in externals or member.name in external_seen:
                             raise OffloadRefused(f'external payload entry not in the manifest: {member.name}')
-                        external_seen[member.name] = _stage_external(tar, member, staging)
+                        external_seen[member.name] = _stage_external(tar, member, staging, first=not external_seen)
                         continue
                     relative = _safe_relative(member.name)
                     name = relative.as_posix()
+                    if relative.parts[0] in RESERVED_NAMES:
+                        raise OffloadRefused(f'reserved name in payload: {name}')
                     expected = entries.get(name)
                     # Every member is checked against the manifest BEFORE anything is written for it.
                     if expected is None or name in seen:
@@ -564,8 +735,9 @@ def _unpack(offload: Path, dest_root, *, finalized, mirror_identity) -> dict[str
             _verify_closure(finalized['closure'], staging, mirror_identity=mirror_identity,
                             transported=frozenset(row['path'] for row in externals.values()), where='unpack')
         for name, row in sorted(externals.items()):
-            _place_external(staging / '.external-staged' / name.rsplit('/', 1)[1], Path(row['path']))
-        shutil.rmtree(staging / '.external-staged', ignore_errors=True)
+            real = finalized['closure']['inputs'][row['path']]['real'] if finalized is not None else None
+            _place_external(staging / EXTERNAL_STAGING / name.rsplit('/', 1)[1], Path(row['path']), real=real)
+        shutil.rmtree(staging / EXTERNAL_STAGING, ignore_errors=True)
         os.rename(staging, target)
     except BaseException:
         shutil.rmtree(staging, ignore_errors=True)
@@ -573,9 +745,21 @@ def _unpack(offload: Path, dest_root, *, finalized, mirror_identity) -> dict[str
     return manifest
 
 
-def _stage_external(tar, member, staging: Path) -> dict[str, Any]:
-    directory = staging / '.external-staged'
-    directory.mkdir(exist_ok=True)
+def _stage_external(tar, member, staging: Path, *, first: bool) -> dict[str, Any]:
+    """Stage one external inside the verified staging tree, in a directory this restore created itself.
+
+    The directory is made without following anything and an existing entry refuses (seat-1 delta):
+    a restored link at that name can never redirect the staged bytes outside the tree.
+    """
+    directory = staging / EXTERNAL_STAGING
+    if first:
+        try:
+            os.mkdir(directory)
+        except FileExistsError:
+            raise OffloadRefused(f'external staging name already present in the restored tree: {EXTERNAL_STAGING}') from None
+    info = os.lstat(directory)
+    if not stat.S_ISDIR(info.st_mode):
+        raise OffloadRefused(f'external staging is not a real directory: {directory}')
     stream = tar.extractfile(member)
     digest, size = hashlib.sha256(), 0
     with (directory / member.name.rsplit('/', 1)[1]).open('xb') as sink:
@@ -587,8 +771,15 @@ def _stage_external(tar, member, staging: Path) -> dict[str, Any]:
     return {'sha256': digest.hexdigest(), 'size': size, 'mode': member.mode}
 
 
-def _place_external(staged: Path, destination: Path) -> None:
-    """Append-only placement: absent, identical, or the current bytes are a prefix."""
+def _place_external(staged: Path, destination: Path, *, real: str | None = None) -> None:
+    """Append-only placement: absent, identical, or the current bytes are a prefix.
+
+    ``real`` (the finalized real path, D1) is re-checked immediately before the write: a retargeted
+    ancestor of the destination refuses instead of writing through it.
+    """
+    if real is not None and os.path.realpath(destination) != real:
+        raise OffloadRefused(f'external destination {destination} now resolves to {os.path.realpath(destination)}, '
+                             f'not the finalized {real}')
     new = staged.read_bytes()
     if destination.exists():
         old = destination.read_bytes()

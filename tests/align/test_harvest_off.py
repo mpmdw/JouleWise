@@ -247,6 +247,8 @@ class R17ReviewCustodyTests(unittest.TestCase):
         self.ledger = self.checkout / 'runs/ledger.jsonl'
         self.ledger.write_bytes(b'{"row": 1}\n')
         (self.src / 'measurement').symlink_to(self.checkout, target_is_directory=True)
+        import subprocess
+        subprocess.run(['git', 'init', '-q', str(self.checkout)], check=True, capture_output=True)   # D3: ignored-content probe
         self.identity = {'head': 'a' * 40, 'tracked_clean': True}
         self.mirror = {'root': str(self.checkout), 'identity': self.identity}
 
@@ -297,6 +299,7 @@ class R17ReviewCustodyTests(unittest.TestCase):
         self.assertFalse(self.src.exists())
 
     def test_byte_closure_is_reverified_on_the_air_before_publication(self):
+        shutil.rmtree(self.checkout / '.git')    # no mirror here: a plain linked directory
         final = self.finalize()           # no mirror: the linked directory is bound by its bytes
         self.assertEqual(set(final['closure']['files']), {str(self.checkout / 'joulewise.py'), str(self.ledger)})
         self.off.pack(self.src, self.root / 'o', finalized=final)
@@ -932,7 +935,7 @@ class WorkerSizingTests(unittest.TestCase):
         # R17 review F5: the receipt is bound to the input size and the harvest code it measured.
         self.assertEqual(receipt['schema'], runner.SWEEP_SCHEMA)
         self.assertEqual(receipt['largest_plist_bytes'], 1000)
-        self.assertEqual(set(receipt['code']), {'head', 'python'})
+        self.assertEqual(set(receipt['code']), {'root', 'head', 'tracked_clean', 'python'})
 
 
 if __name__ == '__main__':

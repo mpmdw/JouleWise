@@ -1,0 +1,8 @@
+{
+  "schema": "joulewise.align_v4.harvest_off_ignored_inputs.v1",
+  "note": "R17 delta D3 (lead ruling): Git identity does not cover ignored checkout content. finalize-manifest classifies every ignored path a mirror link reaches: identity_bound (covered by the interpreter/package identity), regenerated (caches never read as inputs), declared_directories (whose consumed files are exactly the declared inputs: the calibration ledger, plus whatever the lead-owned native N1 census finds). Anything else refuses at finalize. N1 census: PENDING; until it lands, a real session that links any other ignored content refuses (fail closed).",
+  "identity_bound": [".venv/"],
+  "regenerated": ["__pycache__", "*.pyc", ".DS_Store"],
+  "declared_directories": ["runs/"],
+  "undeclared": "refuse"
+}
