@@ -188,6 +188,13 @@ class FakeWorld:
                            # R7-2: the G0 wait under the R1 G0 timeout.
                            g0_wait_s=1200.0 if out.name in self.g0_timeout else self.g0_waits.get(out.name, 120.0),
                            g0_timeout_s=1200.0)
+        if kind == "x-g":
+            # LEAD-RULINGS-2 R10-4: what the runtime's x-g returns and the driver
+            # records in r1_slots.x_g: 12 complete WP18 X turns, no deadman, and
+            # phases that fit the contrast deadman under a 600 s contrast cap.
+            payload.update(admitted_turns=12, episode_flags=[],
+                           phases_s={"G0": payload["g0_wait_s"], "G1": 60.0, "H": 0.0, "decode": 300.0,
+                                     "prefill": 60.0, "tool": 6.0, "tail": 0.0})
         if kind.startswith("d-") and "planning" not in kind and kind != "d-4bit":
             payload.update(energy_j={"d-spam-benign-s1-a": 30000.0, "d-spam-benign-s1-b": 30036.0,
                                      "d-bank-benign-s1": 32000.0}[kind],
