@@ -1042,6 +1042,30 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+228. **Laptop lead (interactive session 1544c617), 2026-11-08 01:45 PST: lead rulings R17-R19 and the W1 integration plan.** All are decided blind; none concerns data.
+- **R17, harvest off the MBP.** Paired builds on `align/2026-11-08-harvest-off-{sol,opus}`, agreement `docs/align/v4/HARVEST-OFF-AGREEMENT.md` @ `ea5612686`. Opus has the final say.
+  - **Adopted:** the MBP does finalize, light triage and pack. The Air restores the verified raw copy at the same path, then runs the harvest, the full desk and reduce-once while the next window measures. Archive byte-identity between the MBP and the Air is proven (177 files). Parse dedupe plus workers give 5-6.5× on the whole harvest. `pm_reduce` equals plistlib on 1,735 documents.
+  - **Eligibility:** at the arm, `member_eligibility` passes on the light triage's provisional adjudication. Window k's FINAL eligibility must be in before the arm of k+2, and before any arm the full-desk rule already gates (after W1, or after any code or config change). Item 216's "from window 6 on" clause is withdrawn; it belonged to the superseded count stop.
+  - **Memo:** a scoped in-run memo of parsed content, keyed by content sha256, is derived data and therefore allowed. Refusals are never kept, and the cache is dropped at run end. The toolbox wording gets amended to match.
+  - **Workers:** auto-size to min(free cores, free memory / measured peak per worker), and sweep 2/4/6/8/10 on the Air to find the knee.
+- **R18, guard replay** (`ops/2026-11-08-guard-replay`, Opus review on `ops/2026-11-08-opus-review-anti-idle` @ `00c1cdf5b`).
+  - **F-G4, bound:** exposure is sized per guard (arm guards about 55 h). SHADOW MODE is the default route: a new or changed guard only flags on real runs until replay plus shadow exposure clears a one-sided false-refusal bound, then it is promoted. An INSUFFICIENT replay needs a ruling before the guard may refuse.
+  - **F-G3:** R0 attempts that ran idle under protocol are labelled idle, not unknown.
+  - **Recorder:** on HOLD until it is rebuilt with self-exit on any run_night/chain/hazard/km003c or loaded night agent, a maximum lifetime, a stop step in the pre-arm runbook before the R16 cool-down, and no battery fields (F-G5/F-G6).
+- **R19, readiness gate.** It merges to main as an ADVISORY check after F-R1 to F-R4 and F-R6. That means accepted expected failures are bound to rulings (for example WP22 F3), a PENDING_UPSTREAM state, UNKNOWN on timeout, and a CI zsh/python setup. It binds scheduling only after those land. Until then, the binding pre-arm check is the merged-smoke `--w1-next` PREQUAL PASS on the exact commit to be armed.
+- **W1 integration plan.** Every merge goes onto `align/2026-11-08-v4-r11` (the v4 fixer owns it), each only after its own review admits:
+  1. the R0 fill (`5d9b66dd4`, `d9d1098c6`, from `lane/2026-11-07-r1-kit-r0fill`);
+  2. R0-L3 (#699, `9c40e4e5d`);
+  3. W1 blockers (`align/2026-11-08-w1-blockers-merged`, after its Sol fixes);
+  4. the D/C/T series (`align/2026-11-08-dct-series-merged`, after its paired seed check);
+  5. condition waits (`align/2026-11-08-condition-waits-impl`, after Opus review);
+  6. timing receipts (after Opus review);
+  7. harvest-off (R17, after its integration review);
+  8. the merged smoke kit (`align/2026-11-08-w1-smoke-merged`, after its two Sol reviews);
+  9. the R14-R17 agreement docs.
+  
+  Then one full-suite run plus `JW_WP22_FULL=1`, then PREQUAL `--w1-next w1` on that exact commit. That commit is pinned for BOTH the native W1 smoke and W1. It is the blind registration gate's candidate (with Fable's final look) after the U3 bar, the battery policy and the receipt are signed.
+
 227. **Magistrate activation b17edfbb (Opus 5.5, headless, 2026-11-08 00:57 PST): R1 ARMED under ruling R13 / item 225. t0 01:17 PST (09:17 UTC), `window_max_s` 105,427 s (one 11:45 crossing), latest end Mon 11-09 06:39 PST.**
 - **Plan:** `align-r1-20261108T0917Z`, custody `/Users/edr/night-align/r1-20261108T085636Z`. The install exited 0 and both night agents are loaded: `com.joulewise.night` and `.deadman`, with plists in `~/Library/LaunchAgents`.
 - **Item 225 N1 checks:**
