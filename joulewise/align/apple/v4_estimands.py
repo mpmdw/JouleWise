@@ -19,7 +19,7 @@ FROZEN_D_SLOT_KEYS = ("max_episode_decode_tokens", "deadman_s", "max_tokens", "m
 
 
 def subturn_h_star(scores, threshold, *, grid=H_STAR_GRID):
-    """Registered H*: first exact sub-turn hidden-token count reaching threshold.
+    """Registered H*: first exact sub-turn hidden-token count exceeding threshold.
 
     Rows are actual measured doses: non-negative integers, unique, with finite
     scores (R15). Invalid rows are refused, never coerced or overwritten. The

@@ -58,14 +58,14 @@ class RecordedTimeTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'exported production clock offset differs'):
                 raw.member(root, slot, exported)
 
-    def test_954ns_float_endpoint_accumulates_exact_native_ns(self):
+    def test_954ns_float_endpoint_uses_adapter_float_accumulation(self):
         value = strict_json(b'{"first_record_endpoint_s":4300000000.000000954}', exact_seconds=True)
         anchor = value['first_record_endpoint_s']
         self.assertEqual(Fraction(anchor)-4_300_000_000, Fraction(1, 1048576))
         samples = sol.reduce_stream(io.BytesIO(b''.join(synthetic_frames(3))))
         samples.columns['elapsed_ns'] = array('q', [NS, 100_000_001, 100_000_003])
         base = 4_300_000_000*NS
-        expected = [954, 100_000_955, 200_000_958]
+        expected = [954, 100_001_335, 200_000_763]
         self.assertEqual(seconds_ns(anchor)-base, 954)
         self.assertEqual(list(samples.monotonic_t_ns(anchor, -base)), expected)
         self.assertEqual([r['end_ns'] for r in samples.native_pm_samples(anchor, -base)], expected)

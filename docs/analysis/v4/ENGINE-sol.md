@@ -1,4 +1,4 @@
-# V4 primary engine (Sol), R23f
+# V4 primary engine (Sol), R23g
 
 2026-11-08. **PROVISIONAL: synthetic qualification, no live study validation.**
 Authority: the lead's engine-r23 brief (A37 and R23-E1/R23-1–4), on
@@ -42,10 +42,53 @@ explicit exact-decimal strings stay exact, as do Decimal API inputs.
 The synthetic production-style float export yields the same A21 offset as
 production `stamp_mapping`: `-1766813254444549501`, and passes the exported
 offset check through `raw.member`. The 4.3e9 s float is exactly epoch plus
-953.67431640625 ns, so it still rounds to +954 ns. Both float and exact endpoint
-APIs add cumulative native **integer** elapsed ns to the exact anchor; no float
-epoch addition intervenes. Supports subtract native integer elapsed ns for both
-power and thermal rows. Legacy conservative clock uncertainty budgets remain.
+953.67431640625 ns, so it still rounds to +954 ns. Legacy conservative clock
+uncertainty budgets remain. R23g's A21 ruling below supersedes R23f's integer-ns
+elapsed accumulation and support subtraction.
+
+R23g applies the lead's R26 A7 definition and corrected A21 native-support
+ruling on `a5734d255` (2026-11-08).
+
+H*_i is the smallest H_STAR_GRID dose whose exact sub-turn stripped score is
+strictly above the pair's detection threshold, provided every earlier grid dose
+was observed and at or below threshold. Otherwise it is undefined and lists the
+missing doses. If no dose exceeds the threshold, H*_i is null with bounded_above
+false. Off-grid doses are listed separately. H_STAR_GRID is
+128, 256, 384, 512, 768, 1024, 1536, 2048. H_star rows are emitted only for
+C benign carriers and T sabotage, under counts_logged. T benign rows have no
+H_star field; scored C sabotage still enters no fit or score.
+
+The carrier-curve doses remain council union H*: 0, 128, 256, 300, 384, 512,
+768, 1024, 1536, 2048. Each pair additionally prints full_cell with status
+print_only, n (the number of finite full scores), and fraction (the fraction
+strictly above that pair's frozen counts_logged detection threshold). Full means
+all logged reasoning stripped. The fraction is null if the pair threshold is
+unavailable. This diagnostic uses the pair threshold; the curve retains its
+registered other-carrier untouched thresholds. Full is never a curve dose,
+never in H50/H90 or their bootstrap crossings, and never in H*.
+
+A21 registers the adapter's native supports. Production accumulates elapsed
+time as float seconds in record order: start cumulative_s at 0.0, skip record
+0's elapsed time, then add elapsed_ns / 1_000_000_000.0 for each subsequent
+record. Each end is anchor_s + cumulative_s. Each start is that float end minus
+its own elapsed_ns / 1_000_000_000.0, also in float arithmetic. Only after these
+operations does seconds_ns convert Fraction(float) to ns with ties to even;
+the integer clock offset is added afterwards. The production paths are
+`joulewise/adapters/powermetrics.py:1772` (accumulator initialization),
+`:1776-1779` (first_record_endpoint_s endpoint path), `:1882-1891` (matching
+decode_rich_telemetry endpoint path), and `:2012-2013` (samples_from_records
+float start subtraction). SampleColumns endpoint, power, mapped-column and
+thermal-support APIs reproduce this order; they do not accumulate integer ns or
+repeatedly add elapsed time to the epoch. Inputs accepted as strings/Decimal
+anchors are converted to float here, just as in the adapter; standalone
+seconds_ns and stamp_mapping still preserve explicit exact values.
+
+The synthetic 2026-epoch hand record matches adapter float bits and exact ns
+supports. At 9e9 s, actual float accumulation creates 1907/1908 ns interior gaps.
+They exceed A37's 1000 ns cap, remain unsnapped and uncover owned time, excluding
+the member under A2(4). The C5-style 2026 synthetic fixture integrates to
+15.000014310000001 J with float accumulation, versus R23f's 15.00000919 J over
+the same hand interval. These are synthetic software checks only.
 
 A37 still snaps only original-record interior seams of at most 1000 ns.
 Sol traces carry `support_policy: A37`, preventing a downstream reader from
@@ -102,8 +145,8 @@ exclusions mean modules in `v4_analysis/`.
 | A4 | Per-window × pair × convention; benign LOTO keyed by run_id; full benign fit for sabotage; T uses its own fits. Only thresholds carry C→T. |
 | A5 | Pair × convention, one GPU rail, sample maximum, strict >. |
 | A6 | Logged decode includes reasoning; withheld subtracts the logged count exactly; C/P/J equality checked. Withheld prints alongside. |
-| A7 | Exact earliest-first sub-turn strip. Unreachable nominal dose has null H/score and dose_unreachable. First-k actual doses, separate council grid, eight-dose H_STAR_GRID. |
-| A8 | `apple.v4_estimands.benign_carrier_curve`: per-dose n; crossings on all-carrier prefix; later nonmonotonicity flagged without voiding crossings. Other-carrier untouched thresholds, ≥40 carriers. Engine pins Random(0), choices over sorted window IDs with multiplicity, 1000 replicates, type-1 5/95 order statistics over defined replicates; undefined counts retained. |
+| A7 | Exact earliest-first sub-turn strip. R26's plain-text H* definition above applies to C benign and T sabotage only. Unreachable nominal dose has null H/score and dose_unreachable. First-k actual doses, separate council grid, eight-dose H_STAR_GRID. |
+| A8 | `apple.v4_estimands.benign_carrier_curve`: per-dose n; crossings on all-carrier prefix; later nonmonotonicity flagged without voiding crossings. Other-carrier untouched thresholds, ≥40 carriers. Engine pins Random(0), choices over sorted window IDs with multiplicity, 1000 replicates, type-1 5/95 order statistics over defined replicates; undefined counts retained. Separate pair full_cell is print-only against the pair threshold, outside curves/crossings. |
 | A9 | `exclusions.FLAG_TO_CLASS/CLASSES`; union of re-derived and recorded classes. `thermal_desk.thermal_timeout_exclusions` derives X2 from G1/H timeout intervals or a positive timeout count on a stopped episode. Component sets, reasons and mismatch print for unsealed members. |
 | A10 | `raw.member` limits registered OS readings to registered_span_ns; production desk derives registered-span X1; episode observations remain visible. |
 | A11 | `apple.thermal_desk.member_record/acceptance`: wall spans through tool ends include holds; collector-grid episode/G0 coverage; PM uncovered-gap or wide-support union. G1+H entries/timeouts over captured members with sidecars, including X1–X4. |
@@ -116,7 +159,7 @@ exclusions mean modules in `v4_analysis/`.
 | A18 | `_test_summary`: one-sided 95% Clopper–Pearson via production incomplete beta; missing assignments retained. |
 | A19 | Exactly eight eligible token-identical W1 runs, second-stage indicator, admission within 2 s. Recorded G1 waiting is an above-E+δ sidecar sample before release. Numbers print even if treatment was not delivered. |
 | A20 | `dc.capture/analyze_windows`: benign DC desk actually runs; whole-member and owned integrals, battery-assist disclosure, own five-term h=0 LOTO model. GPU coefficients never transfer. Non-benign rows sealed; comparison presence/status only. Missing DC never selects GPU. |
-| A21 | `raw.member` calls production stamp_mapping over all recorded stamps, anchor widened; optional exported offset_ns checked exactly. `io.strict_json` recovers recorded binary floats before exact rational conversion; explicitly exact strings/integers stay exact. SampleColumns accumulates/subtracts integer native elapsed ns for both endpoint APIs. |
+| A21 | `raw.member` calls production stamp_mapping over all recorded stamps, anchor widened; optional exported offset_ns checked exactly. `io.strict_json` recovers recorded binary floats; standalone exact conversion retains strings/integers. SampleColumns reproduces adapter float-second elapsed accumulation, epoch addition and start subtraction before Fraction(float) → ns; source lines are cited above. |
 | A22 | U3 heavy-tail trigger uses each difference's zero-centred leave-one-out RMS. |
 | A23 | Only U1–U3 FAIL bars pool entry; INCONCLUSIVE prints and counts. |
 | A24 | Barred windows have no GPU fits/scores and no U6 contribution. DC residual fits withhold barred/ineligible members. |
@@ -356,3 +399,13 @@ probes give the ruled outcomes. Named-file compileall, protected-path diff and
 full suite remain unrun. The initial test-process overlap, exact commands,
 compatibility limits and lead release handoff are recorded in
 `docs/run_reports/2026-11-08-engine-r23f.md`.
+
+R23g verification: **235 targeted synthetic tests passed**, including seven
+new R26/A21 hand witnesses. All modules ran sequentially in separate processes;
+the full suite and captured/template reducer cases were not run. Adapter float
+bits, exact ns supports, real float-generated 1907/1908 ns gaps, owned exclusion,
+the C5-style hand energy, unchanged carrier grid, print-only full_cell and
+serial/parallel output bytes are covered. Named-file compileall, protected-path
+diff and `git diff --check` pass. Commands, failing-first evidence and limits are
+in `docs/run_reports/2026-11-08-engine-r23g.md`. No MLX code changed; no new
+native Metal test is required by this patch.

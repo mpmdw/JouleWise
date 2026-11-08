@@ -59,24 +59,12 @@ def a37_starts(supports):
     return result
 
 
-def recorded_endpoints(records, anchor):
-    # The harness recorded a float anchor; later endpoints are that exact
-    # binary value plus native integer elapsed ns, without epoch additions.
-    elapsed = 0
-    result = []
-    for i, record in enumerate(records):
-        elapsed += record.elapsed_ns if i else 0
-        result.append(Fraction(anchor) + Fraction(elapsed, 1_000_000_000))
-    return result
-
-
 def reference_traces(records, *, evidence=EVIDENCE):
-    if records:
-        endpoints = recorded_endpoints(records, records[0].timestamp_s)
-        records = [replace(r, timestamp_s=t) for r, t in zip(records, endpoints)]
     # Snap the original observation sequence, before the sampler projects it.
-    ends = [round(Fraction(r.timestamp_s)*1_000_000_000) for r in records]
-    native_supports = a37_starts([(end-r.elapsed_ns, end) for r, end in zip(records, ends)])
+    adapter_samples = samples_from_records(records)[::len(sol.RAILS)]
+    native_supports = a37_starts([(round(Fraction(r.interval_start_s)*1_000_000_000),
+                                  round(Fraction(r.interval_end_s)*1_000_000_000)) for r in adapter_samples])
+    ends = [s[1] for s in native_supports]
     projected = [PowerSample(Fraction(end, 1_000_000_000), r.rail_power_w[rail], 'powermetrics', rail,
                             Fraction(support[0], 1_000_000_000), Fraction(end, 1_000_000_000))
                  for r, end, support in zip(records, ends, native_supports) for rail in sol.RAILS]
@@ -147,15 +135,17 @@ class ExtractorEqualityTests(unittest.TestCase):
         self.assertEqual(samples.raw_sha256, hashlib.sha256(data).hexdigest())
         self.assertEqual(samples.raw_size, len(data))
         self.assertEqual(samples.dropped_tail, asdict(diagnostic) if diagnostic else None)
-        endpoints = recorded_endpoints(records, ENDPOINT)
+        endpoints = [r.timestamp_s for r in records]
         self.assertEqual(list(samples.endpoint_seconds(ENDPOINT)), endpoints)
         pm = []
-        for native, detail, endpoint in zip(records, rich, endpoints):
-            end = round(endpoint * 1_000_000_000) + OFFSET
+        adapter_samples = samples_from_records(records)[::len(sol.RAILS)]
+        for native, detail, endpoint, support in zip(records, rich, endpoints, adapter_samples):
+            end = round(Fraction(endpoint) * 1_000_000_000) + OFFSET
             states = (detail.get('gpu') or {}).get('dvfm_states', ())
             active = sum(s.get('used_ns', 0) for s in states)
             clock = sum(s['freq'] * s.get('used_ns', 0) for s in states) / active if active else None
-            pm.append({'start_ns': end - native.elapsed_ns, 'end_ns': end, 'state': native.thermal_pressure,
+            pm.append({'start_ns': round(Fraction(support.interval_start_s)*1_000_000_000) + OFFSET,
+                       'end_ns': end, 'state': native.thermal_pressure,
                        'active_ns': active, 'clock_mhz': clock})
         for row, support in zip(pm, a37_starts([(r['start_ns'],r['end_ns']) for r in pm])):
             row['start_ns'] = support[0]
@@ -165,9 +155,7 @@ class ExtractorEqualityTests(unittest.TestCase):
         mapped = samples.mapped_columns(ENDPOINT, OFFSET)
         self.assertEqual(list(mapped['t_ns']), [r['end_ns'] for r in pm])
         self.assertEqual(list(mapped['thermal_start_ns']), [r['start_ns'] for r in pm])
-        self.assertEqual(list(mapped['power_start_ns']),
-                         [s[0] for s in a37_starts([(end-r.elapsed_ns, end)
-                                                  for r, end in zip(records, [r['end_ns'] for r in pm])])])
+        self.assertEqual(list(mapped['power_start_ns']), [r['start_ns'] for r in pm])
         for i, native in enumerate(records):
             self.assertEqual(samples.columns['native_timestamp_ns'][i], native.metadata['plist_timestamp_ns'])
             for rail in sol.RAILS:

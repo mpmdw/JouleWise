@@ -278,17 +278,15 @@ class SampleColumns:
         return len(self.columns['elapsed_ns'])
 
     def endpoint_seconds(self, first_record_endpoint_s):
-        """Accumulate native integer ns from the exact recorded anchor value."""
+        """Reproduce the adapter's ordered float-second accumulation (A21)."""
         from joulewise.validation import finite_float
-        if isinstance(first_record_endpoint_s, float):
-            finite_float(first_record_endpoint_s, 'first_record_endpoint_s')
-        anchor = Fraction(first_record_endpoint_s)
-        cumulative_ns = 0
+        anchor = finite_float(first_record_endpoint_s, 'first_record_endpoint_s')
+        cumulative_s = 0.0
         result = []
         for i, elapsed in enumerate(self.columns['elapsed_ns']):
             if i:
-                cumulative_ns += elapsed
-            result.append(anchor + Fraction(cumulative_ns, 1_000_000_000))
+                cumulative_s += elapsed / 1_000_000_000.0
+            result.append(anchor + cumulative_s)
         return result
 
     def monotonic_t_ns(self, first_record_endpoint_s, offset_ns):
@@ -298,10 +296,8 @@ class SampleColumns:
                            for t in self.endpoint_seconds(first_record_endpoint_s)))
 
     def native_pm_samples(self, first_record_endpoint_s, offset_ns):
-        ends = self.monotonic_t_ns(first_record_endpoint_s, offset_ns)
+        starts, ends = self._mapped_supports_ns(first_record_endpoint_s, offset_ns)
         c = self.columns
-        starts = array('q', (end-c['elapsed_ns'][i] for i, end in enumerate(ends)))
-        _snap_interior_starts(starts, ends)
         return [{'start_ns': starts[i], 'end_ns': end,
                  'state': self.thermal_labels[c['thermal_code'][i]],
                  'active_ns': int(c['active_ns'][i]) if c['active_integer'][i] else c['active_ns'][i],
@@ -311,26 +307,32 @@ class SampleColumns:
     def mapped_columns(self, first_record_endpoint_s, offset_ns):
         """Fresh arrays on the supplied episode clock (normally monotonic).
 
-        Both power and thermal supports subtract native integer elapsed_ns
-        from exactly converted endpoints. A37 changes only interior starts.
+        Supports use adapter float subtraction before exact ns conversion.
+        A37 changes only interior starts, after conversion.
         """
-        ends = self.monotonic_t_ns(first_record_endpoint_s, offset_ns)
-        elapsed = self.columns['elapsed_ns']
-        starts = array('q', (end-elapsed[i] for i, end in enumerate(ends)))
-        thermal_starts = array('q', (end-elapsed[i] for i, end in enumerate(ends)))
-        _snap_interior_starts(starts, ends)
-        _snap_interior_starts(thermal_starts, ends)
+        starts, ends = self._mapped_supports_ns(first_record_endpoint_s, offset_ns)
         return {**self.columns, 't_ns': ends, 'power_start_ns': starts,
-                'thermal_start_ns': thermal_starts}
+                'thermal_start_ns': array('q', starts)}
+
+    def _mapped_supports_ns(self, first_record_endpoint_s, offset_ns):
+        if type(offset_ns) is not int:
+            raise ValueError('clock offset must be integer nanoseconds')
+        endpoints = self.endpoint_seconds(first_record_endpoint_s)
+        ends = array('q', (seconds_ns(t) + offset_ns for t in endpoints))
+        # Production samples_from_records subtracts in float seconds, before
+        # conversion. Exact endpoints supplied by synthetic API overrides keep
+        # their exact arithmetic; endpoint_seconds itself always emits floats.
+        starts = array('q', (seconds_ns(t - elapsed / 1_000_000_000.0
+                    if isinstance(t, float) else Fraction(t) - Fraction(elapsed, 1_000_000_000)) + offset_ns
+                    for t, elapsed in zip(endpoints, self.columns['elapsed_ns'], strict=True)))
+        _snap_interior_starts(starts, ends)
+        return starts, ends
 
     def power_traces(self, first_record_endpoint_s, *, nominal_interval_ns, evidence=None):
         """Apply A37 in native record order, then project each rail's samples."""
         from joulewise.align.apple.sampler import power_records
         from joulewise.interfaces import PowerSample
-        endpoints = self.endpoint_seconds(first_record_endpoint_s)
-        ends = [seconds_ns(t) for t in endpoints]
-        starts = [end-self.columns['elapsed_ns'][i] for i, end in enumerate(ends)]
-        _snap_interior_starts(starts, ends)
+        starts, ends = self._mapped_supports_ns(first_record_endpoint_s, 0)
         samples = []
         for i, end in enumerate(ends):
             # Feed the common projector exact seconds, never float epochs.
@@ -347,7 +349,7 @@ class SampleColumns:
             # first record at a duplicated ns endpoint. Carry the supports of
             # those same records; never snap against a projected neighbour.
             retained = {}
-            for i in sorted(range(len(endpoints)), key=endpoints.__getitem__):
+            for i in sorted(range(len(ends)), key=ends.__getitem__):
                 if math.isfinite(self.columns[trace.channel][i]):
                     retained.setdefault(ends[i], [starts[i], ends[i]])
             snapped_supports = [retained[t] for t in trace.t_ns]
