@@ -41,6 +41,18 @@ PROCESSOR_KEYS = frozenset((*RAILS, 'cpu_energy', 'gpu_energy', 'ane_energy'))
 GPU_KEYS = frozenset(('dvfm_states',))
 STATE_KEYS = frozenset(('freq', 'used_ns', 'used_ratio'))
 CHUNK_BYTES = 1024 * 1024
+INTERIOR_SEAM_NS = 1_000  # A37: fixed, symmetric gap/overlap rule; never edges.
+
+
+def _snap_interior_starts(starts, ends):
+    """Snap fresh support starts before any integration or coverage check."""
+    snapped = 0
+    for i in range(1, len(starts)):
+        edge = ends[i-1]
+        if starts[i] != edge and edge < ends[i] and abs(starts[i]-edge) <= INTERIOR_SEAM_NS:
+            starts[i] = edge
+            snapped += 1
+    return snapped
 
 
 def _json(value):
@@ -284,7 +296,9 @@ class SampleColumns:
     def native_pm_samples(self, first_record_endpoint_s, offset_ns):
         ends = self.monotonic_t_ns(first_record_endpoint_s, offset_ns)
         c = self.columns
-        return [{'start_ns': end - c['elapsed_ns'][i], 'end_ns': end,
+        starts = array('q', (end-c['elapsed_ns'][i] for i, end in enumerate(ends)))
+        _snap_interior_starts(starts, ends)
+        return [{'start_ns': starts[i], 'end_ns': end,
                  'state': self.thermal_labels[c['thermal_code'][i]],
                  'active_ns': int(c['active_ns'][i]) if c['active_integer'][i] else c['active_ns'][i],
                  'clock_mhz': c['clock_mhz'][i] if c['clock_valid'][i] else None}
@@ -295,17 +309,21 @@ class SampleColumns:
 
         Power supports follow the adapter's float conversion; native thermal
         supports subtract integer elapsed_ns. These two existing conventions
-        differ by sub-microsecond rounding and must not be conflated.
+        differ by sub-microsecond rounding. A37 closes interior seams in both;
+        the first start and every end retain their original placement.
         """
         ends = self.monotonic_t_ns(first_record_endpoint_s, offset_ns)
         elapsed = self.columns['elapsed_ns']
         starts = array('q', (round((t - elapsed[i] / 1_000_000_000.0) * 1_000_000_000) + offset_ns
                              for i, t in enumerate(self.endpoint_seconds(first_record_endpoint_s))))
+        thermal_starts = array('q', (end-elapsed[i] for i, end in enumerate(ends)))
+        _snap_interior_starts(starts, ends)
+        _snap_interior_starts(thermal_starts, ends)
         return {**self.columns, 't_ns': ends, 'power_start_ns': starts,
-                'thermal_start_ns': array('q', (end-elapsed[i] for i, end in enumerate(ends)))}
+                'thermal_start_ns': thermal_starts}
 
     def power_traces(self, first_record_endpoint_s, *, nominal_interval_ns, evidence=None):
-        """Re-use the established support conversion and flags, including edge snapping."""
+        """Convert supports, then apply A37 before attribution sees the trace."""
         from joulewise.align.apple.sampler import power_records
         from joulewise.interfaces import PowerSample
         samples = []
@@ -314,7 +332,22 @@ class SampleColumns:
             samples.extend(PowerSample(timestamp_s=end, power_w=self.columns[rail][i],
                                        source='powermetrics', rail=rail,
                                        interval_start_s=start, interval_end_s=end) for rail in RAILS)
-        return power_records(samples, nominal_interval_ns=nominal_interval_ns, evidence=evidence)
+        traces, flags = power_records(samples, nominal_interval_ns=nominal_interval_ns, evidence=evidence)
+        result, flags = [], list(flags)
+        for trace in traces:
+            notes = json.loads(trace.notes)
+            supports = notes['sample_support_ns']
+            starts = [s[0] for s in supports]
+            if _snap_interior_starts(starts, [s[1] for s in supports]):
+                notes['sample_support_ns'] = [[start, s[1]] for start, s in zip(starts, supports)]
+                flag = f'support_edge_snapped:{trace.channel}'
+                flags.append(flag)
+                notes['flags'].append(flag)
+                widths = {s[1]-start for start, s in zip(starts, supports)}
+                trace = replace(trace, notes=json.dumps(notes, sort_keys=True),
+                                averaging_window_ns=next(iter(widths)) if len(widths) == 1 else None)
+            result.append(trace)
+        return tuple(result), tuple(flags)
 
 
 def _append_observation(document, i, columns, labels):
@@ -379,7 +412,7 @@ def _portable_code(code):
 def producer_sha256():
     """Fingerprint code *as loaded*, never just source files on disk."""
     from joulewise import validation
-    digest = hashlib.sha256(_json([SCHEMA, LAYOUT, sorted(ROOT_KEYS), sorted(PROCESSOR_KEYS),
+    digest = hashlib.sha256(_json([SCHEMA, LAYOUT, INTERIOR_SEAM_NS, sorted(ROOT_KEYS), sorted(PROCESSOR_KEYS),
                                   sorted(GPU_KEYS), sorted(STATE_KEYS), sys.version,
                                   ET.VERSION, expat.EXPAT_VERSION, native.LOADED_SHA256]))
     functions = {name: value for name, value in globals().items() if isinstance(value, FunctionType)}

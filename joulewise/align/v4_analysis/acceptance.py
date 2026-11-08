@@ -101,6 +101,7 @@ def u3_pair(a, b, derivation, population):
 
 
 def window_checks(members, derivation, *, window=None):
+    members = [m for m in members if m.get('captured', m['thermal'].get('captured', True))]
     result = {}
     for model in sorted({m['slot']['model_id'] for m in members}):
         rows = [m['thermal'] for m in members if m['slot']['model_id'] == model]
@@ -113,7 +114,8 @@ def window_checks(members, derivation, *, window=None):
         for ordinal, row in by_ordinal.items():
             if row.get('identical_work_group'):
                 groups.setdefault(row['identical_work_group'], []).append(ordinal)
-        if groups and sorted(sorted(v) for v in groups.values()) != sorted(sorted(v) for v in fixed):
+        observed_fixed = [[i for i in pair if i in by_ordinal] for pair in fixed]
+        if groups and sorted(sorted(v) for v in groups.values()) != sorted(sorted(v) for v in observed_fixed if v):
             raise ValueError('desk replay tags differ from fixed ordinal pairs')
         pairs = []
         for a, b in fixed:
@@ -130,6 +132,7 @@ def window_checks(members, derivation, *, window=None):
 
 
 def battery(members):
+    members = [m for m in members if m['captured']]
     charge = missing = assist = 0
     for m in members:
         b = m['thermal'].get('battery') or {}
@@ -137,7 +140,7 @@ def battery(members):
         charge += bool(flags & {'battery.member_span', 'battery.accumulator_excursion'})
         missing += b.get('status') != 'observed'
         assist += 'battery.assist' in flags
-    return dict(status='fail' if charge else 'unavailable' if missing else 'pass',
+    return dict(status='fail' if charge else 'unavailable' if missing or not members else 'pass',
                 charging_members=charge, unobserved_members=missing, assist_members=assist,
                 next_action='fresh_topup_and_obc' if charge else 'none', assist='disclosure_only',
                 members=[dict(run_id=m['slot']['run_id'],
@@ -146,13 +149,25 @@ def battery(members):
                     flags=(m['thermal'].get('battery') or {}).get('flags', [])) for m in members])
 
 
-def anchor_diagnostic(windows):
+def anchor_diagnostic(windows, selection=None):
     sessions = {}
+    # W1 can arrive as its own window or the supported selection desk export.
+    # Its anchors have per-window run IDs, just like C/T; use ordinal cells.
+    if selection:
+        anchors = [r for r in selection['members'] if r.get('ordinal') in (1, 2, 3, 4)]
+        if (len(anchors) == 4 and all(r.get('captured', True) and r.get('status') == 'completed'
+                and not ex.classes([*td.calibration_exclusions(r), *r.get('calibration_exclusions', [])])
+                and isinstance(r.get('turn_owned_j'), (int, float)) and math.isfinite(r['turn_owned_j'])
+                for r in anchors)):
+            sessions['W1'] = {str(r['ordinal']): r['turn_owned_j'] for r in anchors}
     for w in windows:
         anchors = [m for m in w['members'] if m['slot']['series_role'] == 'anchor']
-        if len(anchors) == 4 and all(m['eligible'] for m in anchors):
+        if len(anchors) == 4 and all(m['captured'] and m['eligible'] for m in anchors):
             sessions[w['window']] = {str(m['slot']['ordinal']): m['thermal']['turn_owned_j'] for m in anchors}
     result = td._anchor_moments(sessions)
+    if 'K' in result:
+        raw = (result['ms_window_j2']-result['ms_error_j2'])/4
+        result.update(sigma_w2_raw_j2=raw, sigma_w2_reported_j2=max(0., raw))
     # The historical helper has a 6J veto; v4 expressly demotes it to print-only.
     result.pop('status')
     return dict(status='print_only', **result)
@@ -170,7 +185,7 @@ def u4(reference, windows):
     per_window = {'W1': dict(status='unevaluable', window_count=1, skipped=False)}
     for window in windows:
         name = window['window']
-        sentinels = [m for m in window['members'] if m['slot']['ordinal'] in (5, 22)]
+        sentinels = [m for m in window['members'] if m['captured'] and m['slot']['ordinal'] in (5, 22)]
         reason = None
         if len(sentinels) != 2 or any(not m['eligible'] or not m['thermal'].get('identity_sha256')
                or len((m.get('summary') or {}).get('residual_rows', {}).get('True', [])) < 3 for m in sentinels):

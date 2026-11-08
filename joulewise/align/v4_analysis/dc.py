@@ -55,11 +55,22 @@ def capture(streams, episode, member_span):
                 turn_owned_j=None, turn_rows=[], battery_assist=dict(status='unavailable', joules=None))
 
 
-def analyze_windows(windows, *, calibration_complete):
+def analyze_windows(windows, *, gpu_fits):
+    """Mirror the logged GPU benign rows and their exact LOTO training IDs.
+
+    Missing DC withholds a residual rather than changing the training set.
+    W1, anchors, sentinels and development members have no benign residual
+    here because the GPU scorer supplies no such row.
+    """
+    gpu_rows = {(f['window'], f['pair'], r['run_id']): r
+                for f in gpu_fits if f['convention'] == 'counts_logged'
+                for r in f['scores'] if r['condition'] == 'benign'}
     output = []
     for window in windows:
         benign = []
         for m in window['members']:
+            if not m['captured']:
+                continue
             slot = m['slot']
             identity = dict(window=window['window'], run_id=slot['run_id'])
             if slot['condition'] != 'benign':
@@ -68,31 +79,31 @@ def analyze_windows(windows, *, calibration_complete):
                 output.append(dict(**identity, status='sealed', sealed=True,
                     sha256=digest(canonical(m.get('dc')))))
                 continue
+            key = (window['window'], slot['task_pair'], slot['run_id'])
+            if key not in gpu_rows:
+                continue
+            identity['pair'] = slot['task_pair']
             evidence = m.get('dc_evidence')
             row = capture(evidence['streams'], evidence['episode'], evidence['member_span_ns']) if evidence else dict(
                 status='missing', flags=['meter.raw_evidence_unavailable'], turn_rows=[],
                 whole_member_j=None, turn_owned_j=None, battery_assist=dict(status='unavailable', joules=None))
-            result = dict(**identity, status='print_only', value=row, residual_status='dc_unavailable')
+            result = dict(**identity, status='print_only', value=row, residual_status='dc_unavailable',
+                          training_run_ids=list(gpu_rows[key]['training_trajectories']))
             output.append(result)
             benign.append((m, row, result))
         for m, row, result in benign:
             if row['status'] != 'available':
                 continue
-            if not window.get('pool_entry', True) or not m['eligible']:
-                result['residual_status'] = 'ineligible'
-                continue
-            if window['window'].startswith('T') and not calibration_complete:
-                result['residual_status'] = 'calibration_incomplete'
-                continue
             slot = m['slot']
-            train = [(n, r) for n, r, _ in benign if n['eligible'] and
-                     n['slot']['model_id'] == slot['model_id'] and n['slot']['task_pair'] == slot['task_pair']
-                     and n['slot']['run_id'] != slot['run_id'] and r['status'] == 'available'
-                     and n['slot']['held_out'] == slot['held_out']]
-            model = residual.fit([v for _, r in train for v in r['turn_rows']])
+            by_run = {n['slot']['run_id']: r for n, r, _ in benign if n['slot']['task_pair'] == slot['task_pair']}
+            train = [by_run.get(run) for run in result['training_run_ids']]
+            if any(r is None or r['status'] != 'available' for r in train):
+                result['residual_status'] = 'dc_training_unavailable'
+                continue
+            model = residual.fit([v for r in train for v in r['turn_rows']])
             point = residual.predict(model, row['turn_rows'], measured_j=row['turn_owned_j'],
                                      measured_half_width_j=0., uncertainty_kind='standard_uncertainty')
             result.update(residual_status='available' if math.isfinite(point['predicted_j']) else 'dc_fit_unavailable',
-                model=model, training_run_ids=[n['slot']['run_id'] for n, _ in train],
+                model=model,
                 prediction_j=point['predicted_j'], residual_j=point['residual_j'], method='leave_one_trajectory_out')
     return output

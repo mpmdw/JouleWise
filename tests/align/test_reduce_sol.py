@@ -21,7 +21,8 @@ from joulewise.align.apple.sampler import power_records, TRACE_DOMAIN
 from joulewise.align.attribution import attribute_episode
 from joulewise.align.records import ClockMapping, ToolCall
 from joulewise.align.records import to_json
-from scripts.bench_reduce_sol import synthetic_frames
+from scripts.bench_reduce_sol import synthetic_frames as realistic_frames
+from tests.align.v4_synthetic import synthetic_frames
 from tests.align.test_attribution import episode, turn
 
 FIXTURES = Path(__file__).resolve().parents[1] / 'fixtures'
@@ -46,10 +47,36 @@ def synthetic_episode(duration_ns=3_000_000_000):
                    clock_mappings=(ClockMapping(TRACE_DOMAIN, 'host', OFFSET, 31_000_000, 'synthetic'),))
 
 
-def reference_table(data, ep, *, endpoint=ENDPOINT, evidence=EVIDENCE):
-    records = parse_powermetrics_records(data, first_record_endpoint_s=endpoint)
+def a37_starts(supports):
+    """Reference rule over adapter supports, independent of Sol code."""
+    result = [list(s) for s in supports]
+    for previous, current in zip(result, result[1:]):
+        if 0 < abs(current[0]-previous[1]) <= 1000 and previous[1] < current[1]:
+            current[0] = previous[1]
+    return result
+
+
+def reference_traces(records, *, evidence=EVIDENCE):
     traces, flags = power_records(samples_from_records(records), nominal_interval_ns=100_000_000,
                                   evidence=evidence)
+    result, flags = [], list(flags)
+    for trace in traces:
+        notes = json.loads(trace.notes)
+        supports = a37_starts(notes['sample_support_ns'])
+        if supports != notes['sample_support_ns']:
+            notes['sample_support_ns'] = supports
+            flag = 'support_edge_snapped:'+trace.channel
+            flags.append(flag); notes['flags'].append(flag)
+            widths = {b-a for a,b in supports}
+            trace = replace(trace, notes=json.dumps(notes,sort_keys=True),
+                            averaging_window_ns=next(iter(widths)) if len(widths)==1 else None)
+        result.append(trace)
+    return tuple(result), tuple(flags)
+
+
+def reference_table(data, ep, *, endpoint=ENDPOINT, evidence=EVIDENCE):
+    records = parse_powermetrics_records(data, first_record_endpoint_s=endpoint)
+    traces, flags = reference_traces(records, evidence=evidence)
     joined = replace(ep, power_traces=traces, flags=tuple(dict.fromkeys((*ep.flags, *flags))))
     result = {}
     for rail in sol.RAILS:
@@ -81,6 +108,8 @@ class ExtractorEqualityTests(unittest.TestCase):
             clock = sum(s['freq'] * s.get('used_ns', 0) for s in states) / active if active else None
             pm.append({'start_ns': end - native.elapsed_ns, 'end_ns': end, 'state': native.thermal_pressure,
                        'active_ns': active, 'clock_mhz': clock})
+        for row, support in zip(pm, a37_starts([(r['start_ns'],r['end_ns']) for r in pm])):
+            row['start_ns'] = support[0]
         self.assertEqual(samples.native_pm_samples(ENDPOINT, OFFSET), pm)
         self.assertEqual(json.dumps(samples.native_pm_samples(ENDPOINT, OFFSET), sort_keys=True),
                          json.dumps(pm, sort_keys=True))
@@ -88,14 +117,14 @@ class ExtractorEqualityTests(unittest.TestCase):
         self.assertEqual(list(mapped['t_ns']), [r['end_ns'] for r in pm])
         self.assertEqual(list(mapped['thermal_start_ns']), [r['start_ns'] for r in pm])
         self.assertEqual(list(mapped['power_start_ns']),
-                         [round((r.timestamp_s-r.elapsed_ns/1e9)*1e9)+OFFSET for r in records])
+                         [s[0] for s in a37_starts([(round((r.timestamp_s-r.elapsed_ns/1e9)*1e9)+OFFSET,
+                                                    round(r.timestamp_s*1e9)+OFFSET) for r in records])])
         for i, native in enumerate(records):
             self.assertEqual(samples.columns['native_timestamp_ns'][i], native.metadata['plist_timestamp_ns'])
             for rail in sol.RAILS:
                 self.assertEqual(samples.columns[rail][i], native.rail_power_w[rail])
         self.assertEqual(samples.power_traces(ENDPOINT, nominal_interval_ns=100_000_000, evidence=EVIDENCE),
-                         power_records(samples_from_records(records), nominal_interval_ns=100_000_000,
-                                       evidence=EVIDENCE))
+                         reference_traces(records))
         return samples
 
     def test_committed_real_and_small_fixtures(self):
@@ -113,7 +142,7 @@ class ExtractorEqualityTests(unittest.TestCase):
                 self.assert_reference(data)
 
     def test_synthetic_realistic_skeleton(self):
-        data = b''.join(synthetic_frames(40))
+        data = b''.join(realistic_frames(40))
         samples = self.assert_reference(data)
         self.assertGreater(len(data) / len(samples), 50_000)
         self.assertLess(len(sol.encode_columns(samples)), len(data) / 100)

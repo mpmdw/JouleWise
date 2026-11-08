@@ -158,6 +158,8 @@ def _clean(value):
 
 
 def _rows(member, logged=True):
+    if not member['captured']:
+        return []
     summary = member['summary']
     a = summary['residual_rows']['True']
     b = summary['residual_rows']['False']
@@ -182,6 +184,8 @@ def _rows(member, logged=True):
 
 
 def _member_reasons(member, cohort):
+    if not member['captured']:
+        return ['not_captured']
     t, s = member['thermal'], member.get('summary')
     reasons = [f for f in td.calibration_exclusions(t) if f not in
                ('energy.uncertainty_unavailable', 'energy.nonfinite_half_width')]
@@ -190,8 +194,6 @@ def _member_reasons(member, cohort):
         if flag.startswith(('episode.deadman', 'episode.malformed_tool_call:', 'endpoint_error:',
                             'episode_error:', 'X5', 'X6', 'X7', 'X8', 'runtime.oom', 'runtime.metal')):
             reasons.append(flag)
-    if not member['captured']:
-        reasons.append('not_captured')
     if t.get('status') != 'completed':
         reasons.append('member_incomplete')
     if s is None:
@@ -315,7 +317,7 @@ def selection_report(desk, derivation, delta_slow_c, predeclared):
     """W1 checks/contrast only. Its members never become fit/C/T units."""
     if not desk:
         return dict(status='inconclusive', reason='W1 desk snapshot unavailable')
-    rows = desk['members']
+    rows = [r for r in desk['members'] if r.get('captured', True)]
     checks = ac.window_checks([dict(slot={'model_id': D_MODEL if r.get('ordinal') in (5, 8, 11, 14, 17, 18)
                                         else r['model'], 'ordinal': r.get('ordinal')}, thermal=r) for r in rows], derivation, window='W1')
     contrasts = [r for r in rows if r.get('template') in ('X', 'Y') and r.get('arm') in ('S', 'G')]
@@ -344,7 +346,9 @@ def analyze(payload, *, workers=1, frozen_thresholds=None):
     # eligibility annotations are ours; copying full token arrays took most of
     # the 130 MB rehearsal's analysis time. Own the containers we annotate and
     # share the read-only evidence, without memoizing any decision.
-    selection = next((dict(members=[{**m['thermal'], 'ordinal': m['slot']['ordinal']}
+    selection = next((dict(members=[{**m['thermal'], 'ordinal': m['slot']['ordinal'],
+                                    'captured': m['captured'], 'calibration_exclusions': [
+                                        *m['thermal'].get('calibration_exclusions', []), *m.get('source_flags', [])]}
                                    for m in w['members']]) for w in payload['windows'] if w['window'] == 'W1'),
                      payload.get('selection_desk'))
     windows = [{**w, 'members': [{**m, 'thermal': dict(m['thermal'])} for m in w['members']]}
@@ -394,7 +398,7 @@ def analyze(payload, *, workers=1, frozen_thresholds=None):
         expected = roster(name, escalated=len(w['members']) == 24)
         if len(w['members']) not in (22, 24):
             raise ValueError('roster must retain every planned member including failures')
-        replay = [m for m in w['members'] if m['slot']['ordinal'] in (5, 22)]
+        replay = [m for m in w['members'] if m['captured'] and m['slot']['ordinal'] in (5, 22)]
         replay_counts = [[[r[k] for k in ('context_tokens','prefill_tokens','decode_tokens')] for r in _rows(m)]
                          for m in replay if m.get('summary')]
         divergent = (len(replay) == 2 and all(m['thermal'].get('identity_sha256') for m in replay) and
@@ -427,7 +431,7 @@ def analyze(payload, *, workers=1, frozen_thresholds=None):
         captured = sum(m['captured'] for m in w['members'])
         checks = ac.window_checks(w['members'], derivation, window=name)
         dchecks = checks.get(D_MODEL, {})
-        pool_pass = not any(dchecks.get(f'U{i}', {}).get('status') == 'fail' for i in (1, 2, 3))
+        pool_pass = bool(captured) and not any(dchecks.get(f'U{i}', {}).get('status') == 'fail' for i in (1, 2, 3))
         w['pool_entry'] = pool_pass
         battery = ac.battery(w['members'])
         b_failures = b_failures+1 if battery['status'] == 'fail' else 0
@@ -471,7 +475,7 @@ def analyze(payload, *, workers=1, frozen_thresholds=None):
             population = [m for m in fresh if m['slot']['task_pair'] == pair]
             if population:
                 for convention in CONVENTIONS:
-                    compact = [dict(slot=m['slot'], summary=m['summary'],
+                    compact = [dict(slot=m['slot'], summary=m['summary'], captured=m['captured'],
                                     thermal={'start_ns': m['thermal']['start_ns'],
                                              'turn_owned_j': m['thermal']['turn_owned_j'],
                                              'turn_owned_half_width_j': m['thermal'].get('turn_owned_half_width_j'),
@@ -585,13 +589,8 @@ def analyze(payload, *, workers=1, frozen_thresholds=None):
                 if carrier_rows else dict(status='inconclusive', reason='no finite carriers'))
     u4 = ac.u4(payload.get('reference'), [w for w in windows if any(m['captured'] for m in w['members'])])
     u5 = ac.u5(payload.get('r1_sensitivity'))
-    dc_w1 = []
-    for w in payload['windows']:
-        if w['window'] == 'W1':
-            dc_w1.append({**w, 'pool_entry': True, 'members': [{**m, 'eligible': not ex.classes([
-                *_member_reasons(m,cohort), *m.get('source_flags', []),
-                *m['thermal'].get('calibration_exclusions', [])])} for m in w['members']]})
-    dc = dc_desk.analyze_windows([*dc_w1,*windows], calibration_complete=cal['decision'] == 'calibration_complete')
+    dc = dc_desk.analyze_windows([w for w in payload['windows'] if w['window'] == 'W1']+windows,
+                                gpu_fits=fits)
     held = sorted(set([*codes, *CLAIM_CODES[:-1], *(['synthetic_only'] if payload.get('synthetic') else [])]))
     claim = dict(status='held', codes=held,
         detection_rate_licensed=all(m['status'] == 'pass' for m in monitoring.values()),
@@ -620,9 +619,10 @@ def analyze(payload, *, workers=1, frozen_thresholds=None):
             dict(trajectory=f['window']+'/'+r['run_id'], hold_count=r['hold_count'], residual_j=v)
             for f in fits if f['convention'] == c for r in f['scores'] for v in r['turn_residuals_j']])
             for c in CONVENTIONS},
-        anchor_sigma_w=ac.anchor_diagnostic(windows),
+        anchor_sigma_w=ac.anchor_diagnostic(windows, selection),
         estimand_notes=dict(counts_logged='headline', counts_withheld='alongside, same C/P and measured J',
-            known_H='exact logged reasoning count removed; H=0 is never a detection',
+            known_H='exact logged reasoning count removed; H* searches positive doses only',
+            carrier_H0='untouched leave-one-carrier-out false-alarm fraction; never forced to zero',
             preserve_thinking='log omission only; no semantic transcript scoring',
             full_omission='print-only full dose in H_grid',
             ordinary_agent='gated/held reference-state energy, not free-running production energy'),

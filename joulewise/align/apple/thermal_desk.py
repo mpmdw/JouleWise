@@ -681,6 +681,9 @@ def thermal_exclusions(member):
 
 def acceptance(members, *, pairs=(), u4=None, u5=None, u6=None, u3_bar=None, v4=False):
     """One model/window; only included members supply U1(a)/U2 values."""
+    if v4:
+        members = [r for r in members if r.get('captured', True)]
+        pairs = [(a, b) for a, b in pairs if a.get('captured', True) and b.get('captured', True)]
     model_ids = {r.get('model') for r in members if r.get('gated')}
     if len(model_ids) > 1:
         raise ValueError('acceptance is per model per window')

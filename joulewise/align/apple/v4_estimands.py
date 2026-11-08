@@ -119,13 +119,14 @@ def benign_carrier_curve(rows, *, bootstrap_replicates=1000, seed=0, grid=None):
             raise ValueError('a source carrier must belong to one window')
         sources[key] = window
         groups[pair].append(row)
-    fixed = []
+    fixed, calibrated = [], {}
     for pair, group in groups.items():
         baseline = {r['carrier']: r['score'] for r in group if r['h'] == 0}
         if set(baseline) != {r['carrier'] for r in group}:
             raise ValueError('each source carrier needs an untouched H=0 reference')
         cutoffs = {c: calibration_cutoff([v for other, v in baseline.items() if other != c])
                    for c in baseline}
+        calibrated[pair] = len(baseline) >= 40 and all(c['threshold'] is not None for c in cutoffs.values())
         for row in group:
             cutoff = cutoffs[row['carrier']]
             fixed.append({**row, 'detected': (row['score'] > cutoff['threshold']
@@ -154,11 +155,19 @@ def benign_carrier_curve(rows, *, bootstrap_replicates=1000, seed=0, grid=None):
                 if p is None or len(cells[pair, h]) != expected[pair]:
                     break
                 prefix.append((h, p))
-            result[pair] = {'curve': points, 'H50': _crossing(prefix, .5),
-                            'H90': _crossing(prefix, .9),
+            h0 = dict(points).get(0)
+            crossings, crossing_states, at_h0 = {}, {}, {}
+            for name, level in (('H50', .5), ('H90', .9)):
+                at_h0[name] = h0 is not None and h0 >= level
+                crossings[name] = None if at_h0[name] else _crossing([(h,p) for h,p in prefix if h > 0], level)
+                crossing_states[name+'_status'] = ('level_reached_at_h0' if at_h0[name] else
+                    'grid_only' if crossings[name] is not None else
+                    'insufficient_calibration' if not calibrated[pair] else 'undefined: dose unreachable')
+            result[pair] = {'curve': points, **crossings, **crossing_states,
+                            'level_reached_at_h0': at_h0,
                             'n_by_h': {h: len(cells[pair, h]) for h, _ in points},
                             'expected_carriers': expected[pair],
-                            'status': 'available' if complete else 'insufficient_calibration',
+                            'status': 'ok' if calibrated[pair] else 'insufficient_calibration',
                             'all_carrier_prefix': [h for h, _ in prefix],
                             'crossing_status': 'grid_only' if len(prefix) == len(points) else 'undefined: dose unreachable beyond prefix',
                             'monotone': monotone}

@@ -1,7 +1,8 @@
-# V4 primary engine (Sol), R21
+# V4 primary engine (Sol), R23
 
 2026-11-08. **PROVISIONAL: synthetic qualification, no live study validation.**
-Authority: R21 (`origin/main:RUN_STATE.md`, item 230), adopting A0–A36 of
+Authority: the lead's engine-r23 brief (A37 and R23-E1/R23-1–4), on
+`8eb7982f0`, retaining R21 (`origin/main:RUN_STATE.md`, item 230), adopting A0–A36 of
 `origin/align/2026-11-08-v4-interpretation-rulings:docs/analysis/v4/INTERPRETATION-RULINGS-DRAFT.md`.
 The amendment is binding: **U5 INCONCLUSIVE never triggers R20; U4 alone can
 trigger supplemental sentinels.** This replaces the earlier interpretation
@@ -57,6 +58,12 @@ exclusions mean modules in `v4_analysis/`.
 | A34 | W1 accepted in windows[]; adapter builds selection evidence and acceptance.W1 prints U1–U3. W1 never enters C/T fits or m. |
 | A35 | roster(escalated=True) accepts 24 members; 23/24 supplemental W1:5 replays print descriptively, outside U3/U4/fits/m. |
 | A36 | B bar, consecutive failures and release presence print; missing operational B release never refuses analysis. Arm enforcement remains external. |
+| A37 | `apple.reduce_sol.SampleColumns`: fixed `INTERIOR_SEAM_NS=1000`; snap a later start to the previous end for an interior gap or overlap ≤1000 ns before energy, gap or coverage arithmetic. Both power and native PM supports follow this rule. Larger seams and all outer edges retain their placement. The shared `power/windows.py` is unchanged. |
+| R23-E1 | `engine._rows/_member_reasons`, `acceptance.window_checks/battery/u4`, v4 thermal acceptance and W1 contrast exclude `captured:false`. Zero-capture final attempts have no pool entry or fits and do not consume a C slot; their retry takes that slot. Planned-member missing-assignment disclosures remain visible. |
+| R23-1 | `acceptance.anchor_diagnostic` includes W1's four anchors from either its window or selection desk alongside C/T. Complete eligible synthetic C1–C8 + T1–T3 + W1 yields K=12. K≥3 remains required. `sigma_w2_raw_j2=(MS_window−MS_error)/4` may be negative; `sigma_w2_reported_j2=max(0,raw)` and `anchor_sigma_j=sqrt(reported)` print without a veto. |
+| R23-2 | Carrier H=0 prints the strict untouched score exceedance fraction against other-carrier thresholds. H50/H90 search the all-carrier prefix at H>0 only. Each crossing prints its own status and `level_reached_at_h0` flag; a level already reached at H=0 remains undefined, including bootstrap replicates. |
+| R23-3 | Carrier pair status is `ok` for ≥40 original carriers with defined thresholds, even when later doses/crossings are unreachable. `<40` is `insufficient_calibration`. Undefined calibrated crossings print `undefined: dose unreachable` per crossing. |
+| R23-4 | `dc.analyze_windows(gpu_fits=...)` takes benign (window, pair, run_id) rows and ordered LOTO training IDs directly from logged GPU fits. It refits the five-term model at h=0 on DC-in owned energies. Missing DC training evidence withholds the residual rather than shrinking its training set. There are no W1/30B/development benign DC rows or fits because the GPU scorer supplies none. Non-benign presence seals remain separate. |
 
 The byte-pinned fitter is unchanged: `_frozen_residual.py` is the
 `4d54cb47b` implementation pinned by `cda28a5ef`, SHA-256
@@ -92,6 +99,15 @@ g0_slow_c, turn_owned_j, designed_target_c, token_identical; plus replay energie
 and delta_slow_c. W1 also supplies recorded template/arm/stage and authenticated
 token-identity evidence for the existing contrast desk. Missing evidence stays
 unavailable.
+
+Exporter contract check (observed, unchanged): Episode thermal policy uses
+`hardware.thermal.policy.sensors.s_fast` and `.s_slow`, mapping roles to actual
+journal sensor names (for example F/S); journal `sensors` values use those mapped
+names. Thermal desk outputs use `fast_c`/`slow_c`. Anchor `run_id` values are
+window-local, **not series-unique**: ordinals 1–4 reuse
+`align-pilot-v3-episodes-a-e01` through `e04` in each C/T window. The adapter
+matches IDs within each window; `(window, run_id)` identifies a series row.
+No sensor-key or run-ID schema changes were made; export registration is lead-owned.
 
 No config paths are followed. Traversal, symlinks, sealed path names and other
 /Users/edr checkouts refuse before target reads. Native file mode is source-bound;
@@ -151,12 +167,24 @@ Non-benign DC hashes are not numeric cross-build targets.
 
 ## Verification and limits
 
-Failing-first witnesses: tests.align.test_v4_r21_engine and
-tests.align.test_v4_raw_engine. Reducer tests compare columns and production
-turn energies byte-for-byte against plistlib on synthetic records and an exact
-allowlist of committed small fixtures, including malformed/duplicate/unusual
-XML. They check a single cold raw open, hit rehash, mutation, checksum damage,
+Failing-first R23 witnesses: `tests.align.test_v4_r23_engine`; retained R21/raw
+witnesses: `tests.align.test_v4_r21_engine` and `tests.align.test_v4_raw_engine`.
+R23's PM test records are constructed from scratch in `tests.align.v4_synthetic`.
+The two reducer cases that read committed captured fixtures or their realistic
+template were not run in this session. The executed reducer tests compare columns
+and production turn energies byte-for-byte against plistlib on synthetic records,
+including malformed/duplicate/unusual XML. The retained suite also has an exact
+allowlist of committed small fixtures for lead-controlled verification.
+The synthetic tests check a single cold raw open, hit rehash, mutation, checksum damage,
 loaded-code identity and serial/parallel CLI equality.
+
+R23 qualification covers ±1000/±1001 ns seams, both tiny edge gaps, exact overlap
+energy, epoch-float placement, C3 zero-capture then C3#2 through T3 with eight
+counted C windows, K=12 and negative/positive anchor moments, strict H=0 rates,
+unreachable and H=0-reached crossings (including bootstrap), and exact GPU/DC
+row/training parity. DC numeric scaling uses synthetic capture output; the
+separate raw-adapter witness integrates a synthetic KM003C stream and verifies
+its independent five-term fit. These establish software behavior only.
 
 `scripts/benchmark_v4_r21.py` generates eleven windows and 242 raw members.
 It compares complete fill/verdict bytes for serial/parallel cold/cache modes.
@@ -181,6 +209,12 @@ inputs were absent; separate synthetic DC integration/LOTO witnesses passed.
 It does not establish real DC throughput or full-duration scaling. Earlier
 before/after JSON receipts are development snapshots; the R21 receipt is final.
 
-Focused verification: 179 tests passed across eight explicitly selected modules;
+R21 baseline verification: 179 tests passed across eight explicitly selected modules;
 compileall and git diff --check passed. See the engine-fix run report for commands,
 fail-first evidence, changed files and the exact lead handoff.
+
+R23 verification: 125 focused tests passed across six complete synthetic modules
+and 21 selected synthetic reducer cases, one module per process. Named-path
+compileall and `git diff --check` passed. See
+`docs/run_reports/2026-11-08-engine-r23.md` for commands, failing-first witnesses,
+the two deliberately unrun captured-template reducer cases, and the export handoff.

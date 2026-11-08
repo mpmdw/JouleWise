@@ -10,7 +10,7 @@ from joulewise.align.v4_analysis.io import canonical, digest, load
 from joulewise.align.v4_analysis.synthetic import series
 from joulewise.align.v4_analysis import analyze
 from tests.align.test_reduce_sol import synthetic_episode, ENDPOINT, OFFSET, EVIDENCE
-from scripts.bench_reduce_sol import synthetic_frames
+from tests.align.v4_synthetic import synthetic_frames
 from joulewise.align.records import to_json
 
 
@@ -114,9 +114,12 @@ class RawTests(unittest.TestCase):
             stream=kp.Stream(dict(status='streaming',start_raw_ns=0,start_mono_ns=0),dict(end_raw_ns=1,end_mono_ns=1),[],[],
                 kp.Samples([j*10 for j in range(301)],[28.]*301,[w/28 for w in watts],[0]*301,0,10),
                 kp.Fit(0.,1e6,dict(excess_latency_ms_max=0.)),times,watts,[],[])
-            members.append(dict(eligible=True,slot=dict(run_id=str(i),model_id='D',task_pair='p',condition='benign',held_out=True),
+            members.append(dict(captured=True,eligible=True,slot=dict(run_id=str(i),model_id='D',task_pair='p',condition='benign',held_out=True),
                 dc_evidence=dict(streams=[('synthetic',stream)],episode=ep,member_span_ns=[0,3*10**9])))
-        out=dc.analyze_windows([dict(window='C1',pool_entry=True,members=members)],calibration_complete=False)
+        gpu_fits = [dict(window='C1',pair='p',convention='counts_logged',scores=[dict(
+            run_id=str(i), condition='benign', training_trajectories=[str(j) for j in range(7) if j != i])
+            for i in range(7)])]
+        out=dc.analyze_windows([dict(window='C1',pool_entry=True,members=members)],gpu_fits=gpu_fits)
         for i,r in enumerate(out):
             self.assertEqual(r['residual_status'],'available')
             self.assertEqual(len(r['training_run_ids']),6)
