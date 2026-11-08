@@ -43,6 +43,7 @@
    "joulewise/align/apple/thermal_gates.py",
    "joulewise/align/apple/v4_battery.py",
    "joulewise/align/apple/v4_cadence.py",
+   "joulewise/align/apple/v4_contention.py",
    "joulewise/align/apple/v4_estimands.py",
    "joulewise/align/apple/v4_registration.py",
    "joulewise/align/apple/v4_topup.py",
@@ -224,6 +225,7 @@
    "joulewise/align/apple/thermal_gates.py",
    "joulewise/align/apple/v4_battery.py",
    "joulewise/align/apple/v4_cadence.py",
+   "joulewise/align/apple/v4_contention.py",
    "joulewise/align/apple/v4_estimands.py",
    "joulewise/align/apple/v4_registration.py",
    "joulewise/align/apple/v4_topup.py",
@@ -412,8 +414,10 @@
    "joulewise/align/apple/thermal.py",
    "joulewise/align/apple/thermal_desk.py",
    "joulewise/align/apple/thermal_gates.py",
+   "joulewise/align/apple/v4_balance.py",
    "joulewise/align/apple/v4_battery.py",
    "joulewise/align/apple/v4_cadence.py",
+   "joulewise/align/apple/v4_contention.py",
    "joulewise/align/apple/v4_estimands.py",
    "joulewise/align/apple/v4_registration.py",
    "joulewise/align/apple/v4_topup.py",
@@ -1023,6 +1027,7 @@
   "joulewise/align/apple/thermal_gates.py",
   "joulewise/align/apple/v4_battery.py",
   "joulewise/align/apple/v4_cadence.py",
+  "joulewise/align/apple/v4_contention.py",
   "joulewise/align/apple/v4_estimands.py",
   "joulewise/align/apple/v4_registration.py",
   "joulewise/align/apple/v4_topup.py",
@@ -1173,14 +1178,14 @@
  "not_strict": [],
  "scenarios": {
   "arm_install_session": {
-   "new_paths": 3,
+   "new_paths": 1,
    "ok": true,
-   "tests_run": 144
+   "tests_run": 145
   },
   "dct_series_window": {
-   "new_paths": 141,
+   "new_paths": 145,
    "ok": true,
-   "tests_run": 32
+   "tests_run": 52
   },
   "desk_dc_session": {
    "new_paths": 1,
@@ -1203,7 +1208,7 @@
    "tests_run": 47
   },
   "wp22_synthetic_w1_chain": {
-   "new_paths": 30,
+   "new_paths": 29,
    "ok": true,
    "tests_run": 22
   }

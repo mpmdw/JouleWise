@@ -147,9 +147,11 @@ class SeriesCadenceEndToEnd(unittest.TestCase):
         if s.selected(self.manifest, window)['role'] == 'calibration' and captured:
             spam = bank = 0 if u_pass is False else 7     # U1-U3 FAIL bars pool entry (R15)
             spam = max(0, spam - excluded)
-        row = dict(window_id=window, attempt_id=f'{window}-a{n}', captured_members=captured,
+        row = dict(window_id=window, attempt_id=window if n == 1 else f'{window}#{n}', captured_members=captured,
                    eligible_benign=dict(spam=spam, bank=bank), status=status)
-        path = write(self.tmp / 'receipts', row['attempt_id'] + '.json', row)
+        if s.selected(self.manifest, window)['role'] == 'calibration' and captured and u_pass is False:
+            row['barred'] = 'u1_u3_fail'           # R22-2: a U1-U3 FAIL is a structural bar, replaced not counted
+        path = write(self.tmp / 'receipts', row['attempt_id'].replace('#', '-') + '.json', row)
         entry = dict(row, evidence=ref(path))
         if desk is not None:
             entry['desk_eligible_benign'] = desk
@@ -287,22 +289,50 @@ class SeriesCadenceEndToEnd(unittest.TestCase):
             self.assertTrue(any(r.startswith(f'series_binding: {window}') for r in record['reasons']))
 
     def test_escalation_refuses_until_a_lead_release(self):
-        self.advance(4)
-        self.outcome('C5', captured=0)
-        valid = self.packet('C5')                         # attempt 2 is still allowed
-        self.outcome('C5', captured=0)
+        # R22-2: a zero-capture refusal beyond the retry is a structural bar replaced by C9/C10, not an
+        # escalation, until both replacements are owed; the third bar escalates.
+        self.outcome('W1', captured=18)
+        for window in ('C1', 'C2'):
+            self.outcome(window, captured=0)
+            self.packet(window)                           # the retry is still allowed
+            self.outcome(window, captured=0)              # barred, replacement owed
+        valid = self.packet('C3')
+        self.outcome('C3', captured=0)
+        self.packet('C3')
+        self.outcome('C3', captured=0)                    # the third bar exhausts both replacements
         with self.assertRaisesRegex(ValueError, 'escalate_to_lead'):
-            self.packet('C5')
+            self.packet('C4')
         forged = deepcopy(valid)
-        forged['series_history'] = deepcopy(self.history)
-        root, record, error, calls = self.arm('C5', forged, n=1)
+        forged.update(series_history=deepcopy(self.history), next_window_id='C4')
+        root, record, error, calls = self.arm('C4', forged, n=1)
         self.assertEqual(calls, 0)
         self.assertTrue(any('escalate_to_lead' in r for r in record['reasons']))
         self.history.append({'lead_release': dict(
             ruling_id='RUN_STATE synthetic', text_sha256='c' * 64, resets='zero_capture_escalation',
-            after_window='C5-a2', lead_signature=SIGNATURE)})
-        root, record, error, calls = self.arm('C5', self.packet('C5'), n=2)
-        self.assert_armed('C5', record, error, calls, root)
+            after_window='C3#2', lead_signature=SIGNATURE)})
+        with self.assertRaisesRegex(ValueError, 'insufficient_calibration'):     # a release cannot repair 8 windows
+            self.packet('C4')
+
+    def test_replacement_windows_arm_only_after_a_structural_bar(self):
+        self.advance(8)
+        self.assertEqual(self.next_window(), 'T1')              # nothing barred: C9/C10 are never armed
+        with self.assertRaisesRegex(ValueError, 'does not arm the next frozen window'):
+            self.packet('C9')
+        self.history.clear()
+        self.outcome('W1', captured=18)
+        self.outcome('C1', u_pass=False)                         # U1-U3 FAIL: barred, replaced, not counted
+        for i in range(2, 9):
+            self.outcome(f'C{i}')
+        self.assertEqual(self.next_window(), 'C9')
+        with self.assertRaisesRegex(ValueError, 'does not arm the next frozen window|calibration_stop'):
+            self.packet('T1')                                    # only 7 counted windows
+        root, record, error, calls = self.arm('C9', self.packet('C9'), n=1)
+        self.assert_armed('C9', record, error, calls, root)
+        self.outcome('C9')
+        self.assertEqual(self.next_window(), 'T1')
+        self.freeze()
+        root, record, error, calls = self.arm('T1', self.packet('T1'), n=2)
+        self.assert_armed('T1', record, error, calls, root)
 
     def test_t1_refuses_on_pending_or_insufficient_calibration(self):
         self.advance(7)
@@ -318,10 +348,12 @@ class SeriesCadenceEndToEnd(unittest.TestCase):
 
     def test_insufficient_calibration_is_terminal(self):
         self.outcome('W1', captured=18)
-        for i in range(1, 9):
-            self.outcome(f'C{i}', u_pass=(i % 2 == 0))   # four U1-U3 FAIL windows: 28 < 39
+        for i in range(1, 6):
+            self.outcome(f'C{i}', u_pass=(i % 2 == 0))   # C1, C3 and C5 FAIL U1-U3: three bars, 8 counted windows unreachable
         with self.assertRaisesRegex(ValueError, 'insufficient_calibration'):
             self.packet('T1')
+        with self.assertRaisesRegex(ValueError, 'insufficient_calibration'):
+            self.packet('C6')
 
     def test_c6_fence_and_d_alias(self):
         self.outcome('W1', captured=18)

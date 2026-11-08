@@ -41,12 +41,16 @@ def ref(path, pointer=''):
     return dict(path=str(path), sha256=s.sha(path.read_bytes()), pointer=pointer)
 
 
-def attempt(root, name, *, captured=22, spam=7, bank=7, status='final', suffix='a1'):
+def attempt(root, name, *, captured=22, spam=7, bank=7, status='final', suffix='a1', barred=None):
     if name.startswith('T'):
         spam = bank = 0
-    row = dict(window_id=name, attempt_id=name + '-' + suffix, captured_members=captured,
-               eligible_benign=dict(spam=spam, bank=bank), status=status)
-    path = write(root, row['attempt_id'] + '.json', row)
+    if barred:
+        spam = bank = 0
+    # production attempt ids: the first attempt is the window id, a retry adds #k (C3, C3#2)
+    attempt_id = name if suffix == 'a1' else f'{name}#{suffix[1:]}'
+    row = dict(window_id=name, attempt_id=attempt_id, captured_members=captured,
+               eligible_benign=dict(spam=spam, bank=bank), status=status, **({'barred': barred} if barred else {}))
+    path = write(root, row['attempt_id'].replace('#', '-') + '.json', row)
     return dict(row, evidence=ref(path))
 
 
@@ -83,7 +87,7 @@ class ManifestTests(unittest.TestCase):
         # RUN_STATE 226 R15: D_k = C_k, distinct seeds in kit order, sabotage at 9/18, 3 tests.
         self.assertEqual((ROOT / s.MANIFEST).read_bytes(), s.raw_json(s.candidate()))
         m = self.manifest
-        self.assertEqual(m['order'], ['W1'] + [f'C{i}' for i in range(1, 9)] + ['T1', 'T2', 'T3'])
+        self.assertEqual(m['order'], ['W1'] + [f'C{i}' for i in range(1, 11)] + ['T1', 'T2', 'T3'])   # R22-2: C9, C10
         per_pair = {pair: [] for pair in s.PAIRS}
         ranges = {'calibration': set(), 'known_h': set(), 'test': set()}
         for number, window in enumerate(m['windows'][1:], 1):
@@ -109,16 +113,16 @@ class ManifestTests(unittest.TestCase):
         for pair, seeds in per_pair.items():
             self.assertEqual(seeds, sorted(seeds))                      # kit order
             self.assertEqual(len(seeds), len(set(seeds)))               # distinct: no condition reuse
-            self.assertEqual((seeds[0], seeds[-1]), (2, 89))
+            self.assertEqual((seeds[0], seeds[-1]), (2, 114))
             self.assertFalse(set(seeds) & s.RESERVED_INDICES)
-        self.assertEqual((min(ranges['calibration'] | ranges['known_h']), max(ranges['calibration'] | ranges['known_h'])), (2, 65))
-        self.assertEqual((min(ranges['test']), max(ranges['test'])), (66, 89))
+        self.assertEqual((min(ranges['calibration'] | ranges['known_h']), max(ranges['calibration'] | ranges['known_h'])), (2, 81))
+        self.assertEqual((min(ranges['test']), max(ranges['test'])), (82, 114))      # C9-C10 66-81; T2 skips 91-99
 
     def test_alias_mapping_three_tests_and_frozen_bytes(self):
         m = self.manifest
         for k in range(1, 9):
             self.assertEqual(s.selected(m, f'D{k}')['id'], f'C{k}')
-        self.assertEqual(len([w for w in m['windows'] if w['role'] == 'calibration']), 8)
+        self.assertEqual(len([w for w in m['windows'] if w['role'] == 'calibration']), 10)     # 8 + C9, C10 (R22-2)
         self.assertEqual(len([w for w in m['windows'] if w['role'] == 'test']), 3)
         self.assertEqual((m['d_mapping'], m['test_windows']), ('alias_calibration', 3))
         bad = deepcopy(self.manifest)
@@ -272,30 +276,47 @@ class PacketTests(unittest.TestCase):
         zero = attempt(self.root, 'C1', captured=0, spam=0, bank=0)
         self.packet('C1', self.fit + [zero])
         zero2 = attempt(self.root, 'C1', captured=0, spam=0, bank=0, suffix='a2')
-        with self.assertRaisesRegex(ValueError, 'escalate_to_lead'):
+        # R22-2: a zero-capture refusal beyond the retry is a STRUCTURAL bar: the slot is replaced (C9),
+        # not escalated, while a replacement remains.
+        with self.assertRaisesRegex(ValueError, 'does not arm the next frozen window'):
             self.packet('C1', self.fit + [zero, zero2])
+        barred = self.packet('C2', self.fit + [zero, zero2])
+        self.assertEqual(barred['calibration_windows'][-1]['window'], 'C1#2')
         final = attempt(self.root, 'C1', suffix='a2')
         self.packet('C2', self.fit + [zero, final])
+        # a third zero-capture bar exhausts both replacements and escalates
+        bars = []
+        for n in (1, 2, 3):
+            bars += [attempt(self.root, f'C{n}', captured=0, spam=0, bank=0),
+                     attempt(self.root, f'C{n}', captured=0, spam=0, bank=0, suffix='a2')]
+        with self.assertRaisesRegex(ValueError, 'escalate_to_lead'):
+            self.packet('C4', self.fit + bars)
 
     def test_lead_release_resumes_after_escalation(self):
-        cal = [attempt(self.root, f'C{i}') for i in range(1, 3)]
-        z1 = attempt(self.root, 'C3', captured=0, spam=0, bank=0)
-        z2 = attempt(self.root, 'C3', captured=0, spam=0, bank=0, suffix='a2')
+        # R22-2: escalation now needs a third zero-capture bar (both replacement windows already owed).
+        bars = []
+        for n in (1, 2, 3):
+            bars += [attempt(self.root, f'C{n}', captured=0, spam=0, bank=0),
+                     attempt(self.root, f'C{n}', captured=0, spam=0, bank=0, suffix='a2')]
         release = {'lead_release': dict(ruling_id='RUN_STATE 999', text_sha256='c' * 64,
-                                        resets='zero_capture_escalation', after_window='C3-a2',
+                                        resets='zero_capture_escalation', after_window='C3#2',
                                         lead_signature='lead: SYNTHETIC-ONLY 2026-11-08')}
         with self.assertRaisesRegex(ValueError, 'escalate_to_lead'):
-            self.packet('C3', cal + [z1, z2])
-        packet = self.packet('C3', cal + [z1, z2, release])
-        self.assertEqual(packet['lead_rulings'], [release['lead_release']])
+            self.packet('C4', bars)
+        # The release is valid and the ledger moves on, but it cannot repair calibration: more than two
+        # windows are barred, so 8 counted windows are out of reach.
+        manifest = s.load(self.root)
+        rows, nxt, previous, releases = s.calibration_rows(manifest, bars + [release])
+        self.assertEqual((previous, releases), ('C3', [release['lead_release']]))
+        self.assertIsNone(nxt)
+        with self.assertRaisesRegex(ValueError, 'insufficient_calibration'):
+            self.packet('C4', bars + [release])
         # A release that names another attempt, or comes before an escalation, refuses.
-        for bad in (dict(release['lead_release'], after_window='C3-a1'),):
+        for bad in (dict(release['lead_release'], after_window='C3'),):
             with self.assertRaisesRegex(ValueError, 'lead_release'):
-                self.packet('C3', cal + [z1, z2, {'lead_release': bad}])
+                self.packet('C4', bars + [{'lead_release': bad}])
         with self.assertRaisesRegex(ValueError, 'lead_release'):
-            self.packet('C3', cal + [z1, release])
-        # The released series continues: C3 captured, then C4.
-        self.packet('C4', cal + [z1, z2, release, attempt(self.root, 'C3', suffix='a3')])
+            self.packet('C3', bars[:3] + [release])
 
     def test_final_counts_may_lower_never_raise_desk_counts(self):
         row = attempt(self.root, 'C1', spam=6, bank=7)
@@ -312,7 +333,8 @@ class PacketTests(unittest.TestCase):
         self.assertEqual((row['captured_members'], row['desk_eligible_benign']), (22, {'spam': 6, 'bank': 6}))
         failed = s.desk_row(m, 'C1', members, False)
         self.assertEqual(failed['desk_eligible_benign'], {'spam': 0, 'bank': 0})
-        self.assertIn('u1_u3_failed:pool_entry_barred', failed['flags'])
+        self.assertIn('u1_u3_failed:window_barred_and_replaced', failed['flags'])
+        self.assertEqual(failed['barred'], 'u1_u3_fail')
         none = s.desk_row(m, 'C1', [dict(r, captured=False) for r in members], None)
         self.assertEqual((none['captured_members'], none['desk_eligible_benign']), (0, {'spam': 0, 'bank': 0}))
         self.assertEqual(s.desk_row(m, 'T1', members, True)['desk_eligible_benign'], {'spam': 0, 'bank': 0})
@@ -494,6 +516,8 @@ class ProductionPathTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as receipts:
             for window in manifest['windows']:
                 name = window['id']
+                if window.get('replacement'):
+                    continue                    # armed only after a structural bar: replayed below
                 with self.subTest(window=name):
                     files = s.build_files(ROOT, manifest, 'C1' if name == 'W1' else name)
                     world = FakeWorld(self, name, files)
@@ -501,7 +525,16 @@ class ProductionPathTests(unittest.TestCase):
                     self.assertEqual(state['v4_series']['window_id'], name)
                     if name != 'W1':
                         history.append(attempt(receipts, name))
-
+            # R22-2: C9 behind one structural bar, C10 behind two (C9 itself counted)
+            for name, bars in (('C9', (1,)), ('C10', (1, 2))):
+                with self.subTest(window=name):
+                    store = Path(receipts) / name
+                    prior = [attempt(store, f'C{i}', barred='u1_u3_fail' if i in bars else None) for i in range(1, 9)]
+                    if name == 'C10':
+                        prior.append(attempt(store, 'C9'))
+                    world = FakeWorld(self, name, s.build_files(ROOT, manifest, name))
+                    state = world.replay(self, prior)
+                    self.assertEqual(state['v4_series']['window_id'], name)
 
 if __name__ == '__main__':
     unittest.main()

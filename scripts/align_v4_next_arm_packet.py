@@ -190,6 +190,23 @@ class WindowRecord:
         supplemental = {m['run_id'] for m in self.roster() if m.get('supplemental')}
         return len(self.captures() - supplemental)
 
+    def structural_bar(self, captured):
+        """R22-2: the STRUCTURAL reason (never a score or a count) that bars a captured calibration window.
+
+        ``u1_u3_fail``: the desk's U1-U3 verdict FAILed for a gated model; ``whole_window_capture_failure``:
+        the committed terminal result is not a completed GO chain. A zero-capture refusal is not barred
+        here: it is barred by its retry (see ``attempts``).
+        """
+        if not captured:
+            return None
+        reports = self.thermal()['model_windows']
+        if any(r[f'U{k}']['status'] == 'fail' for r in reports.values() for k in (1, 2, 3)):
+            return 'u1_u3_fail'
+        result = self.source('result')
+        if result.get('verdict') != 'GO' or result.get('chain_exit_code') != 0:
+            return 'whole_window_capture_failure'
+        return None
+
     def desk_ceiling(self):
         """The desk's committed provisional eligible counts for this calibration window (an upper bound)."""
         pilot = self.source('pilot')
@@ -351,22 +368,40 @@ def committed_artifact_set_digest(evidence, commit):
 def attempts(chain):
     """The counted-order check over a chain of calibration attempts (oldest first).
 
-    Frozen order is unchanged: counted windows are C1, C2, ... with no gap. A zero-capture
-    attempt keeps its window id with an attempt suffix (``C3`` then ``C3#2``), so an omitted
-    attempt breaks the sequence.
+    ``chain``: ``(record, captured_members, barred)`` triples. Frozen order is unchanged: slots are C1..C8,
+    then (R22-2) the replacement windows C9 and C10 only while fewer than 8 windows are counted. A
+    zero-capture attempt keeps its window id with an attempt suffix (``C3`` then ``C3#2``); a slot whose
+    retry is also a zero capture is barred. A barred slot is not counted and owes a replacement. An
+    omitted attempt breaks the sequence.
     """
-    expected_base, expected_attempt = 1, 1
-    for record, captured in chain:
+    primary = [f'C{n}' for n in range(1, cadence.CAL_WINDOWS+1)]
+    replacements = [f'C{n}' for n in range(cadence.CAL_WINDOWS+1, cadence.CAL_WINDOWS+cadence.REPLACEMENT_WINDOWS+1)]
+    consumed, zeros = {}, {}
+
+    def next_slot():
+        for slot in primary:
+            if slot not in consumed:
+                return slot
+        if sum(v == 'counted' for v in consumed.values()) < cadence.CAL_WINDOWS:
+            for slot in replacements:
+                if slot not in consumed:
+                    return slot
+        return None
+
+    for record, captured, barred in chain:
         match = ATTEMPT.match(record.window)
         require(match and match.group(1) == 'C', 'calibration chain contains a non-calibration id: ' + record.window)
-        base, attempt = int(match.group(2)), int(match.group(3) or 1)
-        require((base, attempt) == (expected_base, expected_attempt),
-                f'calibration attempts out of order or omitted: expected C{expected_base}'
-                + ('' if expected_attempt == 1 else f'#{expected_attempt}') + f', found {record.window}')
+        slot, attempt = f'C{int(match.group(2))}', int(match.group(3) or 1)
+        expected = next_slot()
+        require(slot == expected and attempt == zeros.get(slot, 0) + 1,
+                f'calibration attempts out of order or omitted: expected {expected}'
+                + ('' if zeros.get(slot, 0) == 0 else f'#{zeros[slot] + 1}') + f', found {record.window}')
         if captured > 0:
-            expected_base, expected_attempt = expected_base+1, 1
+            consumed[slot] = 'barred' if barred else 'counted'
         else:
-            expected_attempt += 1
+            zeros[slot] = zeros.get(slot, 0) + 1
+            if zeros[slot] >= 2:
+                consumed[slot] = 'barred'
 
 
 def desk_passes(desk):
@@ -666,7 +701,11 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
                 continue
             record.verify_raw()
             row = record.eligibility()
-            counted.append((record, row['captured_members']))
+            bar = record.structural_bar(row['captured_members'])
+            if bar:
+                # R22-2: a window barred for a STRUCTURAL reason enters no pool and is replaced, not counted.
+                row = {**row, 'eligible_benign': dict.fromkeys(cadence.CAL_PAIRS, 0), 'barred': bar}
+            counted.append((record, row['captured_members'], bar))
             packet['calibration_windows'].append(row)
         attempts(counted)
         if previous.record.get('role') == 'calibration':
@@ -701,6 +740,8 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
                 # raise (R15): carried into the history so the series binding enforces it.
                 counts = {'captured_members': row['captured_members'], 'status': row['status'],
                           'eligible_benign': row['eligible_benign'], 'desk_eligible_benign': record.desk_ceiling()}
+                if row.get('barred'):
+                    counts['barred'] = row['barred']
             else:
                 counts = {'captured_members': record.counted_captures(), 'status': 'final',
                           'eligible_benign': dict.fromkeys(cadence.CAL_PAIRS, 0)}

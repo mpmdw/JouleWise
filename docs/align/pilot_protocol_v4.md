@@ -870,7 +870,7 @@ from the committed record before the arm; the arm waits for them.
 | `cohort_pool_rules` | U1-U3 failure bars pool entry; one frozen cohort; no pooling across a changed configuration |
 | `sentinel_roster` | U4/U5 inconclusive adds two sentinels to the remaining windows |
 | `member_eligibility` | final eligibility adjudication (identity X5, U3 pairs, exclusions); counts are provisional until it passes |
-| `calibration_stop` | the B3 fixed-8 predicate over the packet counts (derived, not asserted): continue until 8 counted windows, `calibration_complete` before a test arm |
+| `calibration_stop` | the B3 fixed-8 predicate over the packet counts (derived, not asserted): continue until 8 counted windows (a structurally barred window is replaced by C9/C10, R22-2), `calibration_complete` before a test arm |
 | `battery_window` | previous window's B bar (rule `zero_B_auto_resume_v1`, W1-BLOCKERS lead ruling 9): pass, or the first non-passing window in a row resumes automatically on fresh admissible top-up + OBC attestation (`charging_battery`); a second consecutive non-passing window needs a signed `battery_rulings` row |
 | `full_desk_gate` | the full desk; a false `v4_B_bar` alone does not fail it (`battery_window` governs) |
 
@@ -944,9 +944,10 @@ residual or energy field (`v4_cadence.calibration_stop`):
 3. Cap accounting (lead ruling, RUN_STATE 216): a window that captured **zero**
    members (a zero-capture refusal) does not count toward the 8 and carries no
    eligible members; a window with at least one captured member counts, whether lost,
-   failed or in flight. Two consecutive zero-capture refusals escalate to the lead
-   (`escalate_to_lead`; nothing is armed until a signed `lead_ruling` row resets the
-   count). A zero-capture window that is still provisional is unfinished, not a
+   failed or in flight, **unless it is structurally barred (R22-2, below)**. Two consecutive
+   zero-capture refusals of different slots, or a zero-capture bar once both replacement
+   windows are used, escalate to the lead (`escalate_to_lead`; nothing is armed until a
+   signed `lead_ruling` row resets the count). A zero-capture window that is still provisional is unfinished, not a
    refusal: it holds the gate at `pending_final_eligibility`. Count rows are checked
    for consistency (integers, at most the 22-member roster captured, eligible benign
    members no more than captured, `eligible_total` and any `calibration_totals` equal
@@ -988,12 +989,12 @@ shape and no v5 content. Every C/T window has 22 members: anchors 1-4 (original 
 sentinel at ordinal 5, sixteen fresh held-out D members at 6-21 alternating pair by pair (odd windows
 start with spam, even windows with bank), sabotage at ordinals 9 and 18, and the late sentinel at 22;
 the midpoint follows ordinal 11. Held-out seed indices are distinct and consumed per pair in kit order
-from 2, skipping 1 and 91-99 (C1-C8 use 2-65, T1-T3 use 66-89); a zero-capture re-arm reuses the same
-seeds. A C-window sabotage member is pool `known_h` and counts toward nothing. A U1-U3 fail bars the
-window from the pool but the window still counts toward the eight. Final adjudication may lower the
+from 2, skipping 1 and 91-99 (C1-C8 use 2-65, C9-C10 66-81, T1-T3 82-90 and 100-114); a zero-capture
+re-arm reuses the same seeds. A C-window sabotage member is pool `known_h` and counts toward nothing. A
+U1-U3 fail bars the window from the pool (R22-2: and the window is then replaced, not counted). Final adjudication may lower the
 desk's provisional counts, never raise them. The manifest is
 `configs/campaigns/align_v4/series/series_manifest.json` (bound and strict; its bytes were paired-seed
-checked, MATCH) and is built by `scripts/align_v4_series.py`. **Every arm binds the series, W1
+checked, MATCH, before R22-2 added C9/C10, which needs a new paired check) and is built by `scripts/align_v4_series.py`. **Every arm binds the series, W1
 included**; the arm binds its own rebuild of the packet (a supplied packet is only a pointer), whose
 history is derived from the hash-chained records. An ordinary window may run to **59,520 s**; a window
 that carries the two escalation sentinels below may run to **62,400 s**.
@@ -1020,6 +1021,22 @@ roster to include them after a U4/U5-inconclusive window.
   `contention.unmeasured` coverage gap is bounded: a gap over 30 s is flagged and disclosed, never
   excluded. **No `contention.*` code can exclude a member**: the desk and the committed-record reader
   both strip them from every exclusion list and keep them as disclosed codes.
+* **R22-2, blind replacement calibration windows C9 and C10.** Calibration stays **exactly 8 COUNTED
+  windows**. Up to two pre-declared blind replacement windows, C9 and C10, are armed ONLY when a C window is
+  barred for a STRUCTURAL reason: a U1-U3 FAIL, a whole-window capture failure (the committed terminal result
+  is not a completed GO chain), or a zero-capture refusal beyond the retry (the retry `C3#2` is also a zero
+  capture). A replacement never depends on scores or on eligible counts. A barred window enters no pool and is
+  not counted: it is replaced, not added (this supersedes R15's rule that a U1-U3-failed window still counts
+  toward the eight). Their seeds are pre-allocated in kit order after C8 (C9 66-73 and C10 74-81 per pair),
+  skipping 1 and 91-99; the test windows' seeds follow (T1-T3 82-90 and 100-114). The window order is
+  C1-C8, then C9 and C10 only as owed, then T1-T3. If both replacements are used and a pair still has fewer
+  than 39 eligible benign, or more than two windows are barred so that 8 counted windows are out of reach, the
+  outcome is `insufficient_calibration`. The rule is **not a count stop**: a window with few eligible members
+  that is not structurally barred counts. It is wired into the series manifest generator
+  (`scripts/align_v4_series.py`), `v4_cadence.calibration_stop` (`barred`, `replacements_used`) and the triage
+  (the packet builder derives each bar from the committed record). The manifest bytes changed, so a paired Sol
+  seed check follows, and a Sol simulation must confirm that the rule keeps FPR at the fixed-8 level under
+  drift before registration.
 * **R22-3, balance check by condition.** Exclusions and flags per member-second are compared benign
   against sabotage, and per task pair, against the exposure-adjusted pooled expectation
   (`joulewise/align/apple/v4_balance.py`). The result is printed in the desk report and disclosed

@@ -4,8 +4,11 @@
 code base with Opus's allocation. It still needs one paired seed check before
 the lead signs `series/admission.json`.
 
-**Order.** W1, then C1–C8, then T1–T3. D_k is C_k, so `--window-id D3` selects
-C3; there are no separate fit windows.
+**Order.** W1, then C1–C8, then C9 and C10 only as owed, then T1–T3. D_k is C_k, so
+`--window-id D3` selects C3; there are no separate fit windows. C9 and C10 are the two
+pre-declared blind replacement calibration windows (R22-2): armed only after a STRUCTURAL
+bar of a C window (U1–U3 FAIL, whole-window capture failure, zero-capture refusal beyond the
+retry), never on scores or counts; calibration stays exactly 8 counted windows.
 
 **Window shape.** Every C/T window has 22 members:
 
@@ -22,7 +25,7 @@ C3; there are no separate fit windows.
 - The midpoint follows ordinal 11.
 
 **Seeds.** Held-out seeds are distinct and consumed per pair in kit order: C1–C8
-use 2–65, T1–T3 use 66–89, never 1 or 91–99. A zero-capture re-arm reuses the
+use 2–65, C9–C10 use 66–81, T1–T3 use 82–90 and 100–114, never 1 or 91–99. A zero-capture re-arm reuses the
 same seeds.
 
 **Ceiling.** An ordinary window may run to 59,520 s. A window carrying the two
