@@ -825,3 +825,33 @@ R1 (item 202) is not affected. `lane/2026-11-06-v4-r1-integrated` itself is unch
 - **(c) A W1 D member after a 30B member under G0\*.** Its X2 exposure is unmeasured until W1 (audit A6, C2). The receipt's `x2_exposure` line states R1's D-after-D waits only.
 
 **Tests.** All 127 tests/align modules pass at `f37cd791e`. They ran one module per process, at most two at a time, under `nice -n 19 taskpolicy -b`. `test_v4_w1_synthetic` ran with `JW_WP22_FULL=1`: 18 tests, with the one expected failure being the existing WP22 F3. `test_w1_kit_r10` has 23 tests, `test_v4_kit` 116 and `test_r1_rehearsal` 73. The regenerated kit's `--check` blocks on `R0.reasoning_effort, R1.B_D, R1.I_D, R1.T_dead, R1.thermal_policy` only. The v3 kit diff against `lane/2026-11-05-align-pilot10-benign` is empty.
+
+### R10 builder decisions, lead rulings 2026-11-07
+
+The lead ruled on the builder decisions and open points above. The rulings are quoted verbatim as the lead gave them:
+
+> (i) CHANGE: any censored (timed-out) gated D G0 wait BLOCKS R10-2(a), as the audit's §6 says. `decide` must return R10-2(b) or R1-RERUN in that case, never (a). Add a failing-first test.
+> (ii) Accepted: ceil(1.25 × W_D) ≤ G0*, arm floor(G0*).
+> (iii) Accepted: the holds projection applies only under a receipt; the no-receipt path stays exactly as now.
+> (iv) Accepted: an INCONCLUSIVE X-G refuses W1 under R10-2(a) (the contrast cap must provably fit 1,086.3 s). Record that this supersedes R7-12's "does not refuse on that alone" for W1 admission.
+> (v) Accepted.
+> (a) OPEN: the duty_bar.lead_fallback step under R10-2(a) is ruled after the R1 night from the procedure's output. Record it as open; no code.
+> (b) Accepted: `backfill-x-g` from r1_result.json is a recorded lead step, like s6_tuning. It must record its source sha.
+> (c) Accepted as a known limitation: W1 must report its D-member X2 count and rate in the night summary. If the W1 kit or report lacks that field, add it (print-only).
+
+**Recorded:** for W1 admission, (iv) supersedes R7-12's "it does not refuse on that alone". R7-12's 1,200 s fallback still sets the D-to-X (contrast) term, and that term now has to fit the contrast deadman. Point (a) stays open, with no code.
+
+**Implemented** on `lane/2026-11-07-w1-kit-r10`:
+- `081de31e8`: failing-first tests for (i), (b) and (c). On `7b6d7b866` they gave 7 failures and 1 error.
+- `e9f4a4605`: the code.
+  - **(i)** `r10_2_derivation` returns branch (b) whenever any gated D G0 is censored (timeout, deadman or unobserved). The kit refuses a branch-(a) receipt over such a record. `decide` then returns R10-2(b), or R1-RERUN when a segment is inconclusive. The protocol v4 G0 paragraph says so.
+  - **(b)** `backfill-x-g` refuses unless it is given a valid 64-hex `r1_result.json` sha256. It records that sha with `lead_step: true`.
+  - **(c)** The W1 desk's v4 extra-check report (`align_v4_session.powermode_desk_check`, carried in `PILOT.json` `extra_checks`) adds `d_member_x2`. It holds:
+    - the D members' X2 count: a G0 timeout before turn 1, or a G1 or hold timeout;
+    - the G0-timeout count;
+    - the rate over readable bundles;
+    - the members whose bundles could not be read.
+
+    It is print-only, and no instrument check is added.
+- `a73324a4f`: the kit regenerated (generator digest and its identity pin). `--check` blocks on the same R0 and R1 leaves only.
+- The doc commit that adds this subsection.
