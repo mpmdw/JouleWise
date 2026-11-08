@@ -223,32 +223,51 @@ class PortedSolTests(_Ctx):
         self.assertEqual(self.probe('series-manifest', series_projection=projection(
             'two', windows[:2], projected=windows[:2]))['status'], wp.FAIL)     # roster agrees, not fixed-8
 
-    def installed_plan(self, name, **change):
-        from joulewise import night_gate
-        plan = {'schema': night_gate.HAZARD_PLAN_SCHEMA, 'receipt_class': night_gate.HAZARD_PACK,
-                'plan_id': 'align-v4-20261109T000000Z', 'window_max_s': 44640,
-                'pack': {'programmed_span_s': 26927}}
-        plan.update(change)
-        return self.write(name, plan)
+    def bundle(self, name, *, plan_id='align-v4-20261109T000000Z', plist_plan=None, sha=None, exit_code=0):
+        """An installed-plan evidence bundle around a REAL plan from the production plan writer."""
+        import hashlib
+        import plistlib
+        import time as _time
+        from joulewise.b5 import plan as b5_plan
+        from tests.fixtures.b5_plan import fake_window
+        root = self.tmp / f'plan-{name}'
+        root.mkdir()
+        measurement = fake_window.build_checkout(root)
+        record = b5_plan.write_window_plan(
+            fake_window.inputs(root, measurement, 'alpha', plan_id=plan_id, t0_epoch_s=(int(_time.time()) // 60) * 60,
+                               g10=False),
+            settle_s=0, pack_digest=lambda _root: 'e' * 64, threshold_defaults=fake_window.threshold_defaults)
+        plan_path = record['plan']['path']
+        raw = Path(plan_path).read_bytes()
+        directory = self.tmp / 'proj' / 'bundles' / name
+        directory.mkdir(parents=True)
+        (directory / 'night_plan.json').write_bytes(raw)
+        (directory / 'session.json').write_text(json.dumps({
+            'plan_path': plan_path, 'plan_sha256': sha or hashlib.sha256(raw).hexdigest(),
+            'install': {'exit_code': exit_code, 'argv': ['install_night_agent.sh', '--plan', plan_path]}}))
+        (directory / 'com.joulewise.night.plist').write_bytes(plistlib.dumps({'ProgramArguments': [
+            '/v/bin/python', 'scripts/run_night.py', 'run', '--plan', plist_plan or plan_path]}))
+        return f'bundles/{name}', json.loads(raw)
 
-    def test_deadline_is_bound_to_the_installed_plan(self):
+    def test_deadline_is_bound_to_the_installed_plan_plist_and_session(self):
         self.write('placeholder', {})
         self.assertEqual(self.probe('deadline', next='w1')['status'], wp.FAIL)
-        row = self.probe('deadline', next='w1', deadline_projection=self.installed_plan('w1'))
+        name, plan = self.bundle('ok')
+        row = self.probe('deadline', next='w1', deadline_projection=name)
         self.assertEqual(row['status'], wp.PASS, row['detail'])
-        self.assertEqual(row['evidence']['required_s'], 44640)
-        short = self.installed_plan('short', window_max_s=30000)
-        self.assertEqual(self.probe('deadline', next='w1', deadline_projection=short)['status'], wp.FAIL)
-        self.assertEqual(self.probe('deadline', next='r1', deadline_projection=self.installed_plan('w1b'))['status'],
-                         wp.FAIL)                                         # a W1 plan cannot size R1
-        smoke_plan = self.installed_plan('smoke', plan_id='align-v4-smoke-20261109T0000Z')
-        self.assertEqual(self.probe('deadline', next='w1', deadline_projection=smoke_plan)['status'], wp.FAIL)
-        r1 = self.installed_plan('r1', plan_id='align-r1-20261108T0917Z', window_max_s=60000)
-        self.assertEqual(self.probe('deadline', next='r1', deadline_projection=r1)['status'], wp.FAIL)   # floor
-        r1_ok = self.installed_plan('r1ok', plan_id='align-r1-20261108T0917Z', window_max_s=105427)
-        self.assertEqual(self.probe('deadline', next='r1', deadline_projection=r1_ok)['status'], wp.PASS)
-        declaration = self.write('decl', {'window_max_s': 99999, 'smoke_deadline_projection': {'kind': 'w1'}})
-        self.assertEqual(self.probe('deadline', next='w1', deadline_projection=declaration)['status'], wp.FAIL)
+        self.assertEqual(row['evidence']['window_max_s'], plan['window_max_s'])
+        self.assertEqual(row['evidence']['programmed_span_s'], plan['hazard_window']['programmed_span_s'])
+        self.assertEqual(self.probe('deadline', next='r1', deadline_projection=name)['status'], wp.FAIL)  # kind
+        for label, kwargs in (('other-plist', {'plist_plan': '/elsewhere/night_plan.json'}),
+                              ('bad-sha', {'sha': '0' * 64}), ('failed-install', {'exit_code': 1}),
+                              ('smoke', {'plan_id': 'align-v4-smoke-20261109T0000Z'})):
+            with self.subTest(label=label):
+                bundle, _ = self.bundle(label, **kwargs)
+                self.assertEqual(self.probe('deadline', next='w1', deadline_projection=bundle)['status'], wp.FAIL)
+        r1, _ = self.bundle('r1', plan_id='align-r1-20261108T0917Z')
+        self.assertIn('required', self.probe('deadline', next='r1', deadline_projection=r1)['detail'])  # R1 floor
+        lone = self.write('lone-plan', plan)
+        self.assertEqual(self.probe('deadline', next='w1', deadline_projection=lone)['status'], wp.FAIL)
 
     def test_executed_closure_reaches_the_arm_and_driver_modules(self):  # noqa: D102
         closure = wp.executed_closure(ROOT)

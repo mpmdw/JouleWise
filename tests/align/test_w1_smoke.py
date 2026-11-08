@@ -172,7 +172,7 @@ def fake_prepare(measurement_root, session_root, keep, **kwargs):
     return state
 
 
-def fake_isolate(measurement_root, smoke_dir, *, python=None):
+def fake_isolate(measurement_root, smoke_dir, *, python=None, run=None):
     clone = Path(smoke_dir) / 'measurement'
     (clone / '.venv/bin').mkdir(parents=True)
     return {'clone': str(clone), 'head': 'a' * 40, 'ledger': str(clone / 'runs/ledger.jsonl'),

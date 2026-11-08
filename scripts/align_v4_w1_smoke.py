@@ -53,6 +53,16 @@ def main(argv=None):
         return 0 if report['status'] == 'PASS' else 1
     if args.smoke_dir.exists():
         parser.error('--smoke-dir must be a new directory')
+    # Validate the destination (and the detached log beside it) BEFORE any write, detached or not.
+    config = smoke.load_config(args.measurement_root)
+    roots = smoke.production_roots(args.measurement_root, config)
+    log_path = args.smoke_dir.with_name(args.smoke_dir.name + '.out')
+    violations = smoke.destination_violations(args.smoke_dir, roots) + [
+        v for v in smoke.destination_violations(log_path, roots) if 'production' in v['why']]
+    if violations:
+        print(json.dumps({'smoke': 'refused', 'reason': 'destination', 'violations': violations}, default=str),
+              file=sys.stderr)
+        return 2
     if args.detach:
         args.smoke_dir.parent.mkdir(parents=True, exist_ok=True)
         rest = [a for a in (argv if argv is not None else sys.argv[1:]) if a != '--detach']

@@ -14,7 +14,7 @@ blocks". A fault that a 30-45 min check can catch must never cost a 12 h W1/D wi
   - the series-manifest binding;
   - transcript and process-group discipline.
 
-It lives on `align/2026-11-08-w1-smoke-merged`. That branch merges `align/2026-11-08-v4-r11` @ `a67de02f2` (delta4),
+It lives on `align/2026-11-08-w1-smoke-merged`. That branch merges `align/2026-11-08-v4-r11` @ `03253edca`,
 which carries the packet rebuild (`scripts/align_v4_next_arm_packet.py`), the W1 blockers, and the
 delta2 fixes (G2, G3).
 
@@ -94,13 +94,13 @@ the launcher's own dwell test seam (`JOULEWISE_R0_TEST_DISPLAY_DWELL_S=0.1`) and
 |---|---|---|---|
 | `arm-cli` | w1 | `align_v4_session.py install --help`, then `install` without evidence (argparse must name every required flag: `--w1-disk-config`, `--obc-off-attested-by`, `--battery-log`, `--next-arm-triage`). Then the production `main(['install', …])` through `h.install` against a fake host, in 12 cases. The measurement root is a git repo with a committed R1 record. The battery log is synthetic. The cases: control; triage missing, edited or pre-R12; `record_commit` unknown; top-up with no charge, stale or future-dated; OBC unattested; a disk image mounted; battery charging; powermode mismatch. | The control admits and calls the installer exactly once. The 11 faults each refuse with their documented reason before the installer. |
 | `packet-rebuild` | w1 | **G1, packet as pointer.** The fixture is the fixer's real record schema (`Scenario`): W1, C1, C2, a zero-capture C3 and its retry `C3#2`. The packet comes from the real producer `build_packet`. The production `arm_checks` runs with a fake host and a fake meter probe, and the rebuild is read from `next_arm_triage.rebuilt_packet`. Four probes, all judged on `next_arm_triage:` reasons only: the rebuild must admit; the rebuild with only `pushed_tip`/`packet_preflight` changed must admit; one second **before** `valid_until_epoch_s` it must admit; one second **after**, it must be refused *for expiry* (`expired` / `valid_until`), never for an unrelated reason (S3). A missing `valid_until_epoch_s` FAILs. | Green. |
-| `packet-tamper` | w1 | **G1b.** An admitted control comes first: the arm's own rebuild. If that control is refused, the check FAILs, because no refusal can then be attributed to tampering (S3). Then every single change must be refused as a mismatch (`does not match its committed sources` / `could not be rebuilt`); any other refusal reason counts as not refused. The changes: every top-level key changed or removed; an added key; in **every** check entry the status flipped, the basis edited, the status removed and a key added (S2-3: nested leaves); every `window_chain`/`calibration_windows` element's first leaf changed; and the chain with the zero-capture attempt removed. About 100 arm runs, 6 in parallel. | Green. |
+| `packet-tamper` | w1 | **G1b.** Every leaf at any depth of every check entry and every `window_chain`/`calibration_windows` element is changed and removed, and a key is added to each (D6/D2-5: chain `path`/`sha256`/`previous_sha256`/`status` leaves included). Beyond that: An admitted control comes first: the arm's own rebuild. If that control is refused, the check FAILs, because no refusal can then be attributed to tampering (S3). Then every single change must be refused as a mismatch (`does not match its committed sources` / `could not be rebuilt`); any other refusal reason counts as not refused. The changes: every top-level key changed or removed; an added key; in **every** check entry the status flipped, the basis edited, the status removed and a key added (S2-3: nested leaves); every `window_chain`/`calibration_windows` element's first leaf changed; and the chain with the zero-capture attempt removed. About 100 arm runs, 6 in parallel. | Green. |
 | `calibration-stop` | w1 | `calibration_stop` over the planned C1-C8 (7/7 per pair, 22 members): the 8 prefixes, zero-capture, escalation, provisional, insufficient, a ninth window, loss of two whole windows (completes) and of three (insufficient). Then 5 triage-integrated arms, with the arm-derived identity. | It is green now. |
 | `cal-escalation-exit` | w1 | MED-2(a): two final zero-capture refusals escalate. Then a signed `lead_rulings` row (`resets: zero_capture_escalation`) resets the count, and the triage admits the next calibration arm. | It is green now. |
 | `kit-ready` | w1 | `align_v4_kit.py --check` on a clean clone of the candidate | The kit is W1-ready (R0 and R1 values filled). |
 | `receipt` | w1 | Three parts. **(Sol)** The static import closure of `endpoint.py`, `run_night.py` and `align_v4_session.py`, **every** first-party path including `scripts/` (S10), must be covered by `ARTIFACTS`. A validator self-test: an exact receipt is admitted; a digest mismatch and a working-bytes drift are refused. Then the committed receipt via `require_registration`, whose bound commit must be an ancestor of the candidate, with a clean checkout. | The receipt is registered. A receipt cannot contain its own commit, so the merged kit requires the bound commit to be an *ancestor* of the candidate rather than Sol's literal `receipt.commit == candidate`. |
 | `series-manifest` | w1 | `--series-projection`: one W1, then C1-C8 in order, then tests, with 7/7 benign. It names its source manifest by sha256, and the projected roster must **equal the source's `windows` roster** (order, roles, windows, per-pair counts). A digest binds bytes; the roster has to describe them (S2). Fixed-8 is checked on that roster. | The lead freezes and projects the series. |
-| `deadline` | r1 | `--deadline-projection` is a repo-relative copy of the next window's **installed `night_plan.json`**, identified by sha256 (S1/S2-4). A free schedule declaration is refused. The plan must be a HAZARD_PACK v5 plan whose `plan_id` kind (`align-r1-`, `align-v4-`; never `align-v4-smoke-`) is the next measurement. Its `window_max_s` must cover its own `programmed_span_s` through the plan writer's formula (`plan_inputs.window_max_s`), and for R1 also the corrected floors (67,371 s, or 96,427 s if the plan has a retry or redo). | The magistrate copies in the installed plan. |
+| `deadline` | r1 | `--deadline-projection` is a repo-relative **evidence bundle** directory copied from the arm (D5/D2-4): `night_plan.json`, its session's `session.json`, and the published `~/Library/LaunchAgents/com.joulewise.night.plist`. Three things are checked. **Binding:** all three must name one plan. The plist runs `--plan P`; the session's `plan_path` is P; its `plan_sha256` equals the copied bytes; its installer argv names P and exited 0; P is `<custody_root>/night_plan.json`. **Validity:** the plan must parse as a production `NightPlan`, and its `plan_id` kind (`align-r1-`, `align-v4-`; never `align-v4-smoke-`) must be the next measurement. **Sizing:** the authoritative `hazard_window.programmed_span_s`, through the plan writer's formula, must fit `window_max_s`; for R1 the corrected floors (67,371 / 96,427 s) also apply. A lone plan or a schedule declaration is refused. | The magistrate copies the bundle in. |
 | `r1-w1-chain` | w1 | `R1-TO-W1-CHAIN.md` as written, on a lane-shaped synthetic R1 record in a clean clone: exporter, `backfill-x-g`, `backfill-turn-counts`, `derive-contrast` (equal to the kit's re-derivation), `decide`, `kit.require_ready`, then the kit steps the runbook's shell block documents. | **G2.** It is green on `8d0dabc73`: the runbook now regenerates the kit (step 7) before `--check`. |
 | `km003c-launch` | r1 | The real HAZARD_PACK driver with a live sample-writing stand-in meter, run clean and with the reader SIGKILLed mid-chain. Custody hashes and the SIGTERM stop are checked; the reader must restart into `stream-002`; the straddling member must read DC `missing` with `meter.*` flags; the other members must read `available` with rails unchanged. Also the production argv and `require_enabled`. | It is green now. |
 | `km003c-crash-radius` | w1 | **G3.** A member that ended *before* the reader was killed | It is green on `8d0dabc73` (unclosed-stream salvage). |
@@ -161,12 +161,34 @@ These are checked against the production roots:
 - Any hit raises `IsolationAbort`. The whole smoke stops (exit 2) before any further arm, and `parse`
   shows `isolated-clone` FAIL.
 
+**Write-time safety (delta D2/D2-1).** Every write the runner makes after creating the smoke directory goes
+through `safe_write`, which opens the target from a directory handle with `O_NOFOLLOW` at every component
+and requires a regular, single-link file before truncating. A link or directory swapped in after the last
+check is refused at use time. This covers the log, transcripts, fault sessions and plan copies, the packet,
+and the reducer's manifests and tree. The smoke directory is created `0700`. The command `TMPDIR` is a
+directory this smoke created; its device and inode are re-verified before and after every command, and a
+replacement aborts. Every path-typed HAZARD_PACK launch binding (`b5.plan._BINDING_TYPES`, including
+`operator_log_root` and `pre/post_calibration_dir`) is a write locator (D7). The detached CLI validates the
+destination and its log before creating anything (D1).
+
+**Residual trust boundary, for a lead ruling.** Two things are outside this protection. The production
+`align_v4_session.prepare` and the installer write files inside the session by pathname, and a child
+resolves `TMPDIR` by path after the inode check. So a concurrent same-user writer that renames smoke
+directories in those windows is outside the guarantee. The owner-only directory mode excludes other users.
+
 **Hard limits** (Sol S5/S7, S2-2), not reports:
 - **Teardown.** A fault's teardown that cannot be proven stops the smoke before the main arm: the disk
   image still mounted, the receipt clone not removed, or a teardown error. So does a fault that reached
   the installer.
-- **Budget.** One deadline (`budget_s` = 2,700 s) clips every command timeout and every sleep.
-  Exceptions are teardown commands. Nothing is armed unless `arm_reserve_s` (1,800 s) of budget is left.
+- **Budget.** One **monotonic** deadline (`budget_s` = 2,700 s) clips every command timeout and every
+  sleep (D3/D2-2), including isolation's git/venv commands, run with the remaining budget and the smoke
+  `TMPDIR`, and the production prepare's commands, run through the bounded runner. Prepare itself starts
+  only with budget left and runs with the smoke `TMPDIR`. Teardown commands are the exception. Plan t0
+  stays on wall time. Nothing is armed unless `arm_reserve_s` (1,800 s) of budget is left.
+- **Installer ownership.** The main install is recorded as pending before the installer runs (D4/D2-3).
+  On any abnormal return (timeout, surviving group, error), the session is reconciled, and an install of
+  this smoke's own plan is adopted and torn down. A published plist that runs another plan is never
+  touched.
 - **Owned teardown.** On a budget expiry, a failed terminal or any error after the main install, `finally`
   uninstalls only the job this smoke installed (`install_night_agent.sh --plan <its plan> --uninstall`),
   stops and reaps the contender, and proves the job unloaded and no process naming its plan. If that

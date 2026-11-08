@@ -196,3 +196,20 @@ was open.
 **Not claimed:**
 - Native MBP behaviour, the 45-min wall time and real launchd teardown remain unmeasured.
 - Configured-root resolution touches link metadata only.
+
+## 8. Delta reviews (HOLD at ed65d9094) and their fixes
+
+Reviews: `docs/align/v4/w1-smoke-delta-sol1.md` and `w1-smoke-delta-sol2.md`. Their witness modules are on
+this branch unmodified and pass: `test_smoke_delta_sol1` and `test_smoke_delta_sol2`.
+
+| Finding | Fix |
+|---|---|
+| D1 / D2-1: the detached entry writes before validation | The CLI validates the destination and its `.out` log against production roots before any mkdir or spawn; exit 2. |
+| D2 / D2-1: check-then-write race (manifest, staging, TMPDIR swaps) | `safe_write` (O_NOFOLLOW at every component from a directory handle, regular single-link file) for every runner and reducer write. `TMPDIR` device/inode is verified before and after every command. The smoke directory is 0700. The residual boundary (production prepare/installer writes, the child's own TMPDIR resolution) is documented for a lead ruling. |
+| D7: launch write bindings borrow the read-only exception | Every path-typed launch binding is a write locator. |
+| D3 / D2-2: isolate/prepare outside the deadline and TMPDIR | Monotonic budget. Isolation commands run with the remaining budget and the smoke TMPDIR. Prepare is budget-gated, runs with the smoke TMPDIR and gets the bounded runner. |
+| D4 / D2-3: installer timeout leaves an untracked job | Pending ownership is set before the install; `finally` reconciles it, and a plist running another plan is never touched. |
+| D5 / D2-4: a forged plan passes the deadline | An evidence bundle (plan, session, published plist) must bind one plan path and sha256. The plan must be a production `NightPlan`, and the span is read only from `hazard_window.programmed_span_s`. |
+| D6 / D2-5: chain leaves | Every leaf of every check entry and chain element is changed and removed, plus a key added to each. |
+
+Native behaviour remains unmeasured.

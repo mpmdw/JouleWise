@@ -525,10 +525,38 @@ def _bump(value):
     return 'injected' if value is None else None
 
 
+def _leaves(value, path=()):
+    """(path, leaf) for every scalar or empty container below ``value``."""
+    if isinstance(value, dict) and value:
+        for key in sorted(value):
+            yield from _leaves(value[key], path + (key,))
+    elif isinstance(value, list) and value:
+        for index, item in enumerate(value):
+            yield from _leaves(item, path + (index,))
+    else:
+        yield path, value
+
+
+def _edit(packet, path, action):
+    edited = copy.deepcopy(packet)
+    parent = edited
+    for step in path[:-1]:
+        parent = parent[step]
+    last = path[-1]
+    if action == 'change':
+        parent[last] = _bump(parent[last])
+    elif action == 'remove':
+        if isinstance(parent, dict):
+            parent.pop(last)
+        else:
+            parent.pop(last)
+    return edited
+
+
 def _mutations(packet):
     """Single changes to a packet (ignored fields excluded): every top-level key changed or removed, an
-    added key; in EVERY check entry its status flipped, its basis edited, its status removed and a key
-    added (S2-3: nested leaves); in every window_chain/calibration_windows element its first leaf changed."""
+    added key; in EVERY check entry and EVERY window_chain / calibration_windows element, every leaf at
+    any depth changed and removed, plus a key added (S2-3, D6, D2-5: chain identity and digest leaves)."""
     for key in sorted(packet):
         if key in PACKET_IGNORED:
             continue
@@ -538,20 +566,30 @@ def _mutations(packet):
     for name, entry in sorted((packet.get('checks') or {}).items()):
         if not isinstance(entry, dict):
             continue
-        for label, change in (('status flipped', lambda e: e.__setitem__('status', _bump(e.get('status', 'pass')))),
-                              ('basis edited', lambda e: e.__setitem__('basis', str(e.get('basis')) + ' (edited)')),
-                              ('status removed', lambda e: e.pop('status', None)),
-                              ('key added', lambda e: e.__setitem__('injected', True))):
-            edited = copy.deepcopy(packet)
-            change(edited['checks'][name])
-            yield f'checks.{name}: {label}', edited
+        if 'status' in entry:
+            yield f'checks.{name}: status flipped', _edit(packet, ('checks', name, 'status'), 'change')
+        for path, _leaf in _leaves(entry):
+            if path == ('status',):
+                continue
+            label = 'checks.' + name + '.' + '.'.join(map(str, path))
+            yield label + ' changed', _edit(packet, ('checks', name) + path, 'change')
+            yield label + ' removed', _edit(packet, ('checks', name) + path, 'remove')
+        if 'status' in entry:
+            yield f'checks.{name}: status removed', _edit(packet, ('checks', name, 'status'), 'remove')
+        edited = copy.deepcopy(packet)
+        edited['checks'][name]['injected'] = True
+        yield f'checks.{name}: key added', edited
     for list_key in ('window_chain', 'calibration_windows'):
         for index, element in enumerate(packet.get(list_key) or []):
-            if isinstance(element, dict) and element:
-                leaf = sorted(element)[0]
-                edited = copy.deepcopy(packet)
-                edited[list_key][index][leaf] = _bump(element[leaf])
-                yield f'{list_key}[{index}].{leaf} changed', edited
+            if not isinstance(element, dict):
+                continue
+            for path, _leaf in _leaves(element):
+                label = f'{list_key}[{index}].' + '.'.join(map(str, path))
+                yield label + ' changed', _edit(packet, (list_key, index) + path, 'change')
+                yield label + ' removed', _edit(packet, (list_key, index) + path, 'remove')
+            edited = copy.deepcopy(packet)
+            edited[list_key][index]['injected'] = True
+            yield f'{list_key}[{index}] key added', edited
 
 
 def _refused_for(arm, needles):
@@ -1028,36 +1066,81 @@ def plan_kind(plan_id):
     return None
 
 
-@check('deadline', 'the INSTALLED plan (a repo-relative copy of night_plan.json, by sha256) sizes the window: its '
-       'own window_max_s covers its own programmed span through the plan writer\'s formula, and for R1 the '
-       'corrected floors (67,371 / 96,427 s); its kind (plan_id) must be the next measurement', gates='r1')
+DEADLINE_BUNDLE = ('night_plan.json', 'session.json', 'com.joulewise.night.plist')
+
+
+@check('deadline', 'the INSTALLED plan sizes the window: an evidence bundle copied from the arm (night_plan.json, '
+       'its session.json, the published com.joulewise.night.plist) must agree on one plan path and sha256; the '
+       'plan must parse as a production NightPlan; its hazard_window.programmed_span_s through the plan writer\'s '
+       'formula (and, for R1, the corrected floors) must fit window_max_s; its plan_id kind must be the next '
+       'measurement', gates='r1')
 def check_deadline(ctx):
+    import plistlib
     from joulewise import night_gate
+    from joulewise.align.apple import v4_registration as reg
     from joulewise.b6 import plan_inputs
     if not ctx.deadline_projection:
-        return result(FAIL, 'no --deadline-projection supplied: pass a copy of the next window\'s installed '
-                      'night_plan.json, never a printed figure or a free declaration (RUN_STATE 215/216)')
-    plan, digest = _repo_json(ctx, ctx.deadline_projection)
-    evidence = {'plan_sha256': digest, 'plan_id': plan.get('plan_id')}
-    if plan.get('schema') != night_gate.HAZARD_PLAN_SCHEMA or plan.get('receipt_class') != night_gate.HAZARD_PACK:
-        return result(FAIL, 'the deadline input is not an installed HAZARD_PACK night plan (schema/receipt_class); '
-                      'a schedule declaration is not bound to the plan being armed (S1)', **evidence)
+        return result(FAIL, 'no --deadline-projection supplied: pass the installed-plan evidence bundle (a '
+                      'repo-relative directory with ' + ', '.join(DEADLINE_BUNDLE) + ' copied from the arm)')
+    try:
+        bundle = reg._local(ctx.repo, ctx.deadline_projection)
+    except (OSError, ValueError) as exc:
+        return result(FAIL, f'deadline bundle path refused: {exc}')
+    if not bundle.is_dir():
+        return result(FAIL, 'the deadline input must be the installed-plan evidence bundle (a directory with '
+                      + ', '.join(DEADLINE_BUNDLE) + '); a lone plan or schedule file is not bound to what was '
+                      'installed (D5/D2-4)')
+    try:
+        raw = {name: reg._local(ctx.repo, f'{ctx.deadline_projection}/{name}').read_bytes() for name in DEADLINE_BUNDLE}
+        plan, session = json.loads(raw['night_plan.json']), json.loads(raw['session.json'])
+        plist = plistlib.loads(raw['com.joulewise.night.plist'])
+    except (OSError, ValueError, plistlib.InvalidFileException) as exc:
+        return result(FAIL, f'deadline bundle unreadable: {exc}')
+    digest = hashlib.sha256(raw['night_plan.json']).hexdigest()
+    evidence = {'plan_sha256': digest, 'plan_id': plan.get('plan_id'),
+                'bundle': {k: hashlib.sha256(v).hexdigest() for k, v in raw.items()}}
+    try:
+        night_gate.NightPlan.from_mapping(plan)
+    except (night_gate.PlanError, ValueError, TypeError, KeyError) as exc:
+        return result(FAIL, f'night_plan.json is not a valid installed NightPlan: {exc}', **evidence)
+    args = [str(a) for a in plist.get('ProgramArguments') or []]
+    plan_path = session.get('plan_path')
+    install_argv = [str(a) for a in ((session.get('install') or {}).get('argv') or [])]
+    custody = plan.get('custody_root')
+    binding = {
+        'plist runs the session plan': bool(plan_path) and plan_path in args,
+        'session plan sha256 = copied plan bytes': session.get('plan_sha256') == digest,
+        'session installer argv names the plan': bool(plan_path) and plan_path in install_argv,
+        'installer exited 0': (session.get('install') or {}).get('exit_code') == 0,
+        'plan path is the plan custody night_plan.json': bool(plan_path) and bool(custody) and
+            Path(plan_path).name == 'night_plan.json' and _same_dir(Path(plan_path).parent, custody),
+    }
+    evidence['binding'] = binding
+    if not all(binding.values()):
+        return result(FAIL, 'the bundle does not bind one installed plan: '
+                      + ', '.join(k for k, v in binding.items() if not v), **evidence)
     kind = plan_kind(plan.get('plan_id'))
     if kind != ctx.next:
         return result(FAIL, f'the installed plan {plan.get("plan_id")!r} is a {kind!r} plan, not the next '
                       f'measurement {ctx.next!r}', **evidence)
-    span, maximum = _find_key(plan, 'programmed_span_s'), plan.get('window_max_s')
+    hazard = plan.get('hazard_window') if isinstance(plan.get('hazard_window'), dict) else {}
+    span, maximum = hazard.get('programmed_span_s'), plan.get('window_max_s')
     if type(span) not in (int, float) or type(maximum) not in (int, float):
-        return result(FAIL, 'the installed plan carries no numeric programmed_span_s / window_max_s', **evidence)
+        return result(FAIL, 'the installed plan carries no numeric hazard_window.programmed_span_s / window_max_s',
+                      **evidence)
     required = plan_inputs.window_max_s({'programmed_span_s': {'seconds': span}})
     if kind == 'r1':
-        retries = bool(_find_key(plan, 'retry') or _find_key(plan, 'redo'))
+        retries = bool(_find_key(hazard, 'retry') or _find_key(hazard, 'redo'))
         required = max(required, 96427 if retries else 67371)
     evidence.update(kind=kind, programmed_span_s=span, window_max_s=maximum, required_s=required)
     if maximum < required:
         return result(FAIL, f'window_max_s {maximum} < {required} s required by the plan\'s own span', **evidence)
-    return result(PASS, f'installed {kind} plan {plan.get("plan_id")}: window_max_s {maximum} >= {required} s '
-                  f'(span {span} s)', **evidence)
+    return result(PASS, f'installed {kind} plan {plan.get("plan_id")} (sha {digest[:12]}, bound to its plist and '
+                  f'session): window_max_s {maximum} >= {required} s (span {span} s)', **evidence)
+
+
+def _same_dir(a, b):
+    return os.path.normpath(os.path.abspath(str(a))) == os.path.normpath(os.path.abspath(str(b)))
 
 
 def runbook_kit_steps(path):

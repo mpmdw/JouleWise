@@ -67,6 +67,59 @@ def sha256(path):
 # The one prepare seam: reduce the session-local view's pack
 
 
+def _open_beneath(base, path, flags, mode=0o600):
+    """Open ``path`` (inside ``base``) by walking it from a directory handle with O_NOFOLLOW at every
+    component, so a symlink or swapped directory anywhere below ``base`` is refused at use time,
+    not only at check time. The opened file must be a regular file with a single link."""
+    import errno
+    import stat
+    base, path = Path(base), Path(path)
+    try:
+        relative = Path(os.path.relpath(_norm(path), _norm(base)))
+    except ValueError as exc:
+        raise IsolationAbort(f'{path} is not inside {base}') from exc
+    if relative.is_absolute() or relative.parts[:1] == ('..',) or not relative.parts:
+        raise IsolationAbort(f'{path} is not inside {base}')
+    directory = os.open(base, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        for part in relative.parts[:-1]:
+            try:
+                child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=directory)
+            except OSError as exc:
+                if exc.errno in (errno.ELOOP, errno.ENOTDIR):
+                    raise IsolationAbort(f'refuses to write {path}: {part} is a symlink or not a directory') from exc
+                raise
+            os.close(directory)
+            directory = child
+        try:
+            fd = os.open(relative.parts[-1], flags | os.O_NOFOLLOW, mode, dir_fd=directory)
+        except OSError as exc:
+            if exc.errno in (errno.ELOOP, errno.EMLINK):
+                raise IsolationAbort(f'refuses to write {path}: it is a symlink') from exc
+            raise
+    finally:
+        os.close(directory)
+    info = os.fstat(fd)
+    if not stat.S_ISREG(info.st_mode) or info.st_nlink > 1:
+        os.close(fd)
+        raise IsolationAbort(f'refuses to write {path}: not a regular single-link file')
+    return fd
+
+
+def safe_write(base, path, data, *, append=False):
+    """Write ``data`` to ``path`` inside ``base`` without following any symlink at use time."""
+    raw = data.encode() if isinstance(data, str) else data
+    flags = os.O_WRONLY | os.O_CREAT | (os.O_APPEND if append else 0)
+    fd = _open_beneath(base, path, flags)
+    try:
+        if not append:
+            os.ftruncate(fd, 0)          # only after the regular-file/single-link check
+        os.write(fd, raw)
+    finally:
+        os.close(fd)
+    return Path(path)
+
+
 def reduce_view(view, pack, keep):
     """Reduce ``pack/plan_tree.json`` (a session-local copy) to ``keep`` members per stage.
 
@@ -101,7 +154,7 @@ def reduce_view(view, pack, keep):
         manifest['executed_order'] = manifest['executed_order'][:n]
         if 'planned_n_bundles' in manifest:
             manifest['planned_n_bundles'] = n
-        path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + '\n')
+        safe_write(session, writable(path), json.dumps(manifest, indent=2, sort_keys=True) + '\n')
         digest = sha256(path)
         repinned[stage['input']['path']] = digest
         stage['input']['sha256'] = digest
@@ -122,8 +175,8 @@ def reduce_view(view, pack, keep):
     reduced['smoke_label'] = {'label': 'smoke', 'registrable': False, 'pooled': False, 'analysed': False}
     from joulewise.b5 import chain
     chain.stage_plan(reduced)
-    writable(tree_path).write_text(json.dumps(reduced, indent=2, sort_keys=True) + '\n')
-    writable(pack / 'plan_tree.sha256').write_text(sha256(tree_path) + '  plan_tree.json\n')
+    safe_write(session, writable(tree_path), json.dumps(reduced, indent=2, sort_keys=True) + '\n')
+    safe_write(session, writable(pack / 'plan_tree.sha256'), sha256(tree_path) + '  plan_tree.json\n')
     return {'keep': dict(keep), 'stages': [s['stage_id'] for s in reduced['stage_graph']],
             'kept_runs': kept_runs, 'tree_sha256_before': before, 'tree_sha256_after': sha256(tree_path),
             'removed': reduced['smoke_reduction']['removed']}
@@ -256,12 +309,29 @@ SMOKE_WRITE_KEYS = ('custody_root', 'runs_parent', 'claim_backup_destination', '
                     'disk_volumes')
 
 
+def _launch_write_bindings():
+    """Every path-typed HAZARD_PACK launch binding (``b5.plan._BINDING_TYPES``): all are write or
+    window-owned locations and must lie inside the smoke (D7)."""
+    try:
+        from joulewise.b5 import plan as b5_plan
+        types = b5_plan._BINDING_TYPES
+    except Exception:  # noqa: BLE001 - the explicit names below still apply
+        types = {}
+    path_kinds = {'existing_absolute_directory', 'existing_absolute_file', 'fresh_absolute_directory',
+                  'fresh_absolute_directory_with_declared_leaf', 'absolute_directory', 'absolute_path',
+                  'authenticated_absolute_file'}
+    names = {name for name, kinds in types.items() if set(kinds) & path_kinds}
+    return names | {'operator_log_root', 'pre_calibration_dir', 'post_calibration_dir', 'repo_root',
+                    'claim_runs_root', 'bound_runs_root', 'claim_backup_destination', 'bound_backup_destination',
+                    'identity_epoch_json', 't1_bindings_json', 'ledger_path'}
+
+
 def _write_values(value, path=''):
     """(locator, value) for every write key anywhere in a nested state/plan document."""
     if isinstance(value, dict):
         for key, item in value.items():
             here = f'{path}.{key}' if path else str(key)
-            if key in SMOKE_WRITE_KEYS:
+            if key in SMOKE_WRITE_KEYS or key in _WRITE_BINDINGS:
                 for leaf in (item if isinstance(item, (list, tuple)) else
                              item.values() if isinstance(item, dict) else [item]):
                     if isinstance(leaf, str):
@@ -270,6 +340,9 @@ def _write_values(value, path=''):
     elif isinstance(value, (list, tuple)):
         for index, item in enumerate(value):
             yield from _write_values(item, f'{path}[{index}]')
+
+
+_WRITE_BINDINGS = frozenset(_launch_write_bindings())
 
 
 def isolation_violations(smoke_dir, state, roots, *, plan=None, readonly=(), env=None):
@@ -384,7 +457,7 @@ def isolate(measurement_root, smoke_dir, *, python=None, run=None):
             'readonly': [str(p.resolve()) for p in source_sites]}
 
 
-def fault_session(main_session, name, root, *, now):
+def fault_session(main_session, name, root, *, now, base=None):
     """A disposable arm session: the main session's state, a fresh custody and a past-t0 plan copy.
 
     h.install refuses a passed t0 after the arm, so no fault attempt can install
@@ -402,12 +475,13 @@ def fault_session(main_session, name, root, *, now):
     plan = json.loads(Path(state['plan_path']).read_bytes())
     plan['t0_epoch_s'] = int(now) - 600
     plan_path = custody / 'night_plan.past-t0.json'
-    plan_path.write_text(json.dumps(plan, indent=2, sort_keys=True) + '\n')
+    write = (lambda path, text: safe_write(base, path, text)) if base else (lambda path, text: path.write_text(text))
+    write(plan_path, json.dumps(plan, indent=2, sort_keys=True) + '\n')
     state['plan_path'] = str(plan_path)
     state['plan_sha256'] = h.locator(plan_path)['sha256']
     state.setdefault('inputs', {})['custody_root'] = str(custody)
     state['smoke_fault'] = name
-    h.write(session / 'session.json', state)
+    write(session / 'session.json', json.dumps(state, indent=2, sort_keys=True) + '\n')
     return session
 
 
@@ -525,7 +599,7 @@ class SmokeRunner:
 
     def __init__(self, measurement_root, smoke_dir, *, packet, battery_log, obc_off_attested_by,
                  w1_disk_config, prequal_report, python=None, config=None, run=_run, popen=subprocess.Popen,
-                 sleep=time.sleep, clock=time.time, prepare=prepare_smoke, isolate_fn=isolate, poll_s=5.0):
+                 sleep=time.sleep, clock=None, wall=None, prepare=prepare_smoke, isolate_fn=isolate, poll_s=5.0):
         self.m = Path(measurement_root)
         self.dir = Path(smoke_dir)
         self.packet = packet
@@ -533,12 +607,17 @@ class SmokeRunner:
         self.disk_config, self.prequal = Path(w1_disk_config), Path(prequal_report)
         self.base_python = python or str(self.m / '.venv/bin/python')
         self.config = config or load_config(self.m)
-        self.run_cmd, self.popen, self.sleep_fn, self.clock = run, popen, sleep, clock
+        # The budget runs on a monotonic clock; plan t0, battery logs and fault plan copies use wall time.
+        # An injected clock (tests) serves both unless a wall clock is injected too.
+        self.clock = clock or time.monotonic
+        self.wall = wall or clock or time.time
+        self.run_cmd, self.popen, self.sleep_fn = run, popen, sleep
         self.prepare_fn, self.isolate_fn, self.poll_s = prepare, isolate_fn, poll_s
         self.roots = production_roots(self.m, self.config)
         self.clone, self.readonly, self.started, self.transcripts = None, (), None, 0
-        self.deadline, self.installed, self.contender = None, None, None
+        self.deadline, self.installed, self.contender, self.pending_install = None, None, None, None
         self.env = {**os.environ, 'TMPDIR': str(self.dir / 'tmp')}
+        self.tmp_identity = None
 
     @property
     def python(self):
@@ -563,11 +642,28 @@ class SmokeRunner:
 
     # -- log -----------------------------------------------------------------
     def log(self, step, outcome, **fields):
-        row = {'t': self.clock(), 'elapsed_s': round(self.clock() - (self.started or self.clock()), 1),
+        row = {'t': self.wall(), 'elapsed_s': round(self.clock() - (self.started or self.clock()), 1),
                'step': step, 'outcome': outcome, **fields}
-        with (self.dir / LOG).open('a') as handle:
-            handle.write(json.dumps(row, sort_keys=True, default=str) + '\n')
+        safe_write(self.dir, self.dir / LOG, json.dumps(row, sort_keys=True, default=str) + '\n', append=True)
         return row
+
+    def make_tmp(self):
+        tmp = self.dir / 'tmp'
+        os.mkdir(tmp, 0o700)
+        info = os.lstat(tmp)
+        self.tmp_identity = (info.st_dev, info.st_ino)
+
+    def verify_tmp(self, when):
+        """The command TMPDIR is still the directory this smoke created (not a swapped-in link)."""
+        if self.tmp_identity is None:
+            return
+        import stat
+        try:
+            info = os.lstat(self.dir / 'tmp')
+        except OSError as exc:
+            raise IsolationAbort(f'command TMPDIR vanished {when}: {exc}') from exc
+        if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode) or (info.st_dev, info.st_ino) != self.tmp_identity:
+            raise IsolationAbort(f'command TMPDIR {self.dir / "tmp"} was replaced {when}; refusing')
 
     def cmd(self, argv, timeout=600, *, teardown=False, **kw):
         """One bounded command, clipped to the remaining budget (teardown commands excepted); its
@@ -578,16 +674,21 @@ class SmokeRunner:
             self.require_budget(1, 'command ' + Path(argv[0]).name)
             timeout = max(1, min(timeout, self.remaining()))
         kw.setdefault('env', self.env)
+        self.verify_tmp('before ' + Path(argv[0]).name)
         started = self.clock()
         out = self.run_cmd(argv, timeout=timeout, **kw)
         self.transcripts += 1
-        path = self.dir / 'transcripts' / f'{self.transcripts:04d}-{Path(argv[0]).name}.json'
-        path.parent.mkdir(parents=True, exist_ok=True)
+        directory = self.dir / 'transcripts'
+        if not directory.exists():
+            os.mkdir(directory, 0o700)
+        path = directory / f'{self.transcripts:04d}-{Path(argv[0]).name}.json'
         record = {'argv': argv, 'rc': out.returncode, 'stdout': out.stdout or '', 'stderr': out.stderr or '',
                   'started': started, 'ended': self.clock(), 'timeout_s': timeout,
                   'group_survived': getattr(out, 'group_survived', False)}
-        with path.open('x') as handle:
-            handle.write(json.dumps(record, indent=2, sort_keys=True, default=str) + '\n')
+        if path.exists() or path.is_symlink():
+            raise IsolationAbort(f'transcript {path} already exists')
+        safe_write(self.dir, path, json.dumps(record, indent=2, sort_keys=True, default=str) + '\n')
+        self.verify_tmp('after ' + Path(argv[0]).name)
         if getattr(out, 'group_survived', False) is True:
             raise TeardownFailure(f'process group of {argv[0]} survived SIGKILL after its timeout')
         return out.returncode, out.stdout or '', out.stderr or ''
@@ -625,8 +726,27 @@ class SmokeRunner:
         return ok, head
 
     # -- 2. isolate and prepare --------------------------------------------------
+    def isolate_run(self, argv, **kw):
+        """isolate()'s command runner: the remaining budget, the smoke TMPDIR, its own session."""
+        self.require_budget(1, 'isolate command ' + Path(str(argv[0])).name)
+        self.verify_tmp('before isolate command')
+        kw.update(capture_output=True, text=True, check=True, env=self.env, start_new_session=True,
+                  timeout=max(0.001, min(600, self.remaining())))
+        return subprocess.run([str(a) for a in argv], **kw)
+
+    def prepare_run(self, argv, *args, **kw):
+        """The production prepare's command runner (h.prepare ``run=``): bounded like every command."""
+        rc, out, err = self.cmd(argv, timeout=kw.get('timeout') or 600)
+        text = kw.get('text') or kw.get('universal_newlines')
+        result = subprocess.CompletedProcess(argv, rc, out if text else out.encode(), err if text else err.encode())
+        if kw.get('check') and rc:
+            raise subprocess.CalledProcessError(rc, argv, result.stdout, result.stderr)
+        return result
+
     def isolate(self):
-        record = self.isolate_fn(self.m, self.dir, python=self.base_python)
+        self.require_budget(1, 'isolate')
+        record = self.isolate_fn(self.m, self.dir, python=self.base_python, run=self.isolate_run)
+        self.require_budget(1, 'after isolate')
         self.clone, self.readonly = Path(record['clone']), tuple(record.get('readonly', ()))
         self.log('isolate', 'pass', production_roots=self.roots, **record)
         self.check_isolation({'source_measurement_root': str(self.clone)}, 'isolate')
@@ -643,8 +763,20 @@ class SmokeRunner:
             raise IsolationAbort(f'isolation violations at {step}: {violations[:3]}')
 
     def prepare_main(self):
+        import tempfile
         session = self.dir / 'main'
-        state = self.prepare_fn(self.clone, session, self.config['keep'])
+        self.require_budget(self.config.get('prepare_reserve_s', 60), 'prepare')
+        saved_env, saved_tempdir = os.environ.get('TMPDIR'), tempfile.tempdir
+        os.environ['TMPDIR'] = tempfile.tempdir = str(self.dir / 'tmp')
+        try:
+            state = self.prepare_fn(self.clone, session, self.config['keep'], run=self.prepare_run)
+        finally:
+            tempfile.tempdir = saved_tempdir
+            if saved_env is None:
+                os.environ.pop('TMPDIR', None)
+            else:
+                os.environ['TMPDIR'] = saved_env
+        self.require_budget(1, 'after prepare')
         plan_id = json.loads(Path(state['plan_path']).read_bytes()).get('plan_id') if state.get('plan_path') else None
         labelled = str(state.get('session_id', '')).startswith(LABEL_PREFIX)
         ok = state.get('preparation_status') == 'STAGED' and labelled
@@ -669,10 +801,12 @@ class SmokeRunner:
         name = fault['id']
         self.require_budget(1, f'fault {name}')
         root = self.dir / 'faults'
-        session = fault_session(main_session, name, root, now=self.clock())
+        if not root.exists():
+            os.mkdir(root, 0o700)
+        session = fault_session(main_session, name, root, now=self.wall(), base=self.dir)
         packet = (fault.get('packet') or (lambda p: copy.deepcopy(p)))(self.packet)
         packet_path = session / 'packet.json'
-        packet_path.write_text(json.dumps(packet, indent=2, sort_keys=True))
+        safe_write(self.dir, packet_path, json.dumps(packet, indent=2, sort_keys=True))
         teardown, setup = [], {}
         rc, out, err = None, '', ''
         try:
@@ -686,7 +820,7 @@ class SmokeRunner:
             args = dict(fault.get('args') or {})
             if fault.get('battery'):
                 from joulewise.align.w1_prequal import battery_log
-                args['--battery-log'] = str(battery_log(root / name / 'battery.jsonl', self.clock(), fault['battery']))
+                args['--battery-log'] = str(battery_log(root / name / 'battery.jsonl', self.wall(), fault['battery']))
             argv = self.install_argv(session, packet_path=packet_path, args=args, drop=fault.get('drop', ()))
             rc, out, err = self.cmd(argv, timeout=300)
         finally:
@@ -733,7 +867,7 @@ class SmokeRunner:
             handle.write(b'\n')
         state = json.loads((session / 'session.json').read_bytes())
         state['measurement_root'] = str(clone)
-        (session / 'session.json').write_text(json.dumps(state, indent=2, sort_keys=True) + '\n')
+        safe_write(self.dir, session / 'session.json', json.dumps(state, indent=2, sort_keys=True) + '\n')
         return {'clone': str(clone), 'edited': victim}
 
     def _attach_dmg(self, base, teardown):
@@ -760,7 +894,9 @@ class SmokeRunner:
 
     def arm_main(self, session):
         packet_path = session / 'staging/smoke-next-arm-triage.json'
-        packet_path.write_text(json.dumps(self.packet, indent=2, sort_keys=True))
+        safe_write(self.dir, packet_path, json.dumps(self.packet, indent=2, sort_keys=True))
+        # D4: ownership is pending BEFORE the installer runs, so any abnormal return is reconciled.
+        self.pending_install = session
         rc, out, err = self.cmd(self.install_argv(session, packet_path=packet_path), timeout=600)
         state = json.loads((session / 'session.json').read_bytes())
         ok = rc == 0 and (state.get('install') or {}).get('exit_code') == 0
@@ -854,6 +990,41 @@ class SmokeRunner:
             self.installed = None           # the window closed itself: nothing left to tear down
         return bool(result and gone)
 
+    def reconcile_pending_install(self):
+        """An install attempt that did not return normally may still have published a job: adopt it as
+        owned when this smoke's own session records installing ITS plan, or a published plist names it."""
+        session, self.pending_install = self.pending_install, None
+        if session is None or self.installed is not None:
+            return
+        try:
+            state = json.loads((Path(session) / 'session.json').read_bytes())
+        except (OSError, ValueError):
+            state = None
+        plan = (state or {}).get('plan_path')
+        argv = ((state or {}).get('install') or {}).get('argv') or []
+        # This smoke's own session (inside its directory) records an installer run for its own plan:
+        # h.install only ever installs the session's plan_path.
+        if plan and ((state or {}).get('install') or plan in [str(a) for a in argv]):
+            self.installed = state
+        elif plan and self.published_plan_owner() == 'ours:' + str(plan):
+            self.installed = state
+        self.log('install-reconcile', 'owned' if self.installed is not None else 'nothing-installed',
+                 plan_path=plan, installer_argv=argv[:4])
+
+    def published_plan_owner(self):
+        """Which plan the published night plist runs: 'ours:<plan>', 'other:<plan>', or None."""
+        import plistlib
+        plist = Path.home() / 'Library/LaunchAgents' / f'{NIGHT_LABEL}.plist'
+        if not plist.is_file():
+            return None
+        try:
+            args = [str(a) for a in plistlib.loads(plist.read_bytes()).get('ProgramArguments', [])]
+        except Exception:  # noqa: BLE001 - unreadable: treat as not ours
+            return 'other:unreadable'
+        plan = args[args.index('--plan') + 1] if '--plan' in args[:-1] else None
+        ours = (self.installed or {}).get('plan_path')
+        return ('ours:' if plan and ours and plan == ours else 'other:') + str(plan)
+
     def teardown_owned(self):
         """Uninstall ONLY the job this smoke installed (its own plan path), stop its contender, and
         prove both gone; otherwise leave a recoverable record."""
@@ -865,6 +1036,11 @@ class SmokeRunner:
             ok = False
             record['steps'].append({'contender': str(exc)})
         state = self.installed
+        owner = self.published_plan_owner() if state is not None else None
+        if state is not None and owner is not None and not owner.startswith('ours:'):
+            record.update(plan_path=state.get('plan_path'), published_owner=owner,
+                          refused='the published night plist runs another plan; not touched')
+            ok, state = False, None
         if state is not None:
             plan = state.get('plan_path')
             record['plan_path'] = plan
@@ -925,8 +1101,8 @@ class SmokeRunner:
             print(json.dumps({'smoke': 'refused', 'reason': 'destination', 'violations': violations},
                              default=str), file=sys.stderr)
             return 2
-        self.dir.mkdir(parents=True)
-        (self.dir / 'tmp').mkdir()
+        self.dir.mkdir(parents=True, mode=0o700)
+        self.make_tmp()
         self.started = self.clock()
         budget = self.config['budget_s']
         self.deadline = self.started + budget
@@ -945,6 +1121,7 @@ class SmokeRunner:
             self.log('end-reason', 'abort', reason='budget', error=str(exc))
             code = 1
         finally:
+            self.reconcile_pending_install()
             if self.installed is not None or self.contender is not None:
                 if not self.teardown_owned():
                     code = code or 1
@@ -969,7 +1146,7 @@ class SmokeRunner:
             except Exception as exc:  # noqa: BLE001 - a fault that cannot be staged is a FAIL row
                 self.log('arm-fault:' + fault['id'], 'fail', error=f'{type(exc).__name__}: {exc}')
         t0 = state.get('t0_epoch_s')
-        if not isinstance(t0, (int, float)) or self.clock() > t0 - self.config['min_lead_at_arm_s']:
+        if not isinstance(t0, (int, float)) or self.wall() > t0 - self.config['min_lead_at_arm_s']:
             # The fault attempts outlasted the prepared lead: stage a fresh session (same reduction).
             self.dir.joinpath('main').rename(self.dir / 'main.superseded')
             self.log('prepare-again', 'info', reason='t0 too close after the fault attempts', t0_epoch_s=t0)
