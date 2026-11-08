@@ -56,7 +56,7 @@ def capture(streams, episode, member_span):
 
 
 def analyze_windows(windows, *, gpu_fits):
-    """Mirror the logged GPU benign rows and their exact LOTO training IDs.
+    """Print all captured benign DC values; mirror GPU rows only for residuals.
 
     Missing DC withholds a residual rather than changing the training set.
     W1, anchors, sentinels and development members have no benign residual
@@ -80,17 +80,17 @@ def analyze_windows(windows, *, gpu_fits):
                     sha256=digest(canonical(m.get('dc')))))
                 continue
             key = (window['window'], slot['task_pair'], slot['run_id'])
-            if key not in gpu_rows:
-                continue
             identity['pair'] = slot['task_pair']
             evidence = m.get('dc_evidence')
             row = capture(evidence['streams'], evidence['episode'], evidence['member_span_ns']) if evidence else dict(
                 status='missing', flags=['meter.raw_evidence_unavailable'], turn_rows=[],
                 whole_member_j=None, turn_owned_j=None, battery_assist=dict(status='unavailable', joules=None))
-            result = dict(**identity, status='print_only', value=row, residual_status='dc_unavailable',
-                          training_run_ids=list(gpu_rows[key]['training_trajectories']))
+            result = dict(**identity, status='print_only', value=row, residual_status='no_gpu_row')
             output.append(result)
-            benign.append((m, row, result))
+            if key in gpu_rows:
+                result.update(residual_status='dc_unavailable',
+                              training_run_ids=list(gpu_rows[key]['training_trajectories']))
+                benign.append((m, row, result))
         for m, row, result in benign:
             if row['status'] != 'available':
                 continue

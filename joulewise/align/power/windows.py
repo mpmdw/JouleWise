@@ -34,8 +34,10 @@ def window_supports(
     Apple records retain each native support in sample_support_ns, including
     variable widths. Explicit unknown entries remain unknown. Malformed or
     non-end-stamped supports must never silently select point interpolation.
-    Powermetrics edges within their float conversion quantum share one edge;
-    flags receives support_edge_snapped:<channel> once when any edge snapped.
+    This reader's legacy Powermetrics fallback shares edges within the float
+    conversion quantum. Sol applies A37's fixed 1000 ns snap earlier, over
+    the original record sequence, before sorting/filtering power samples.
+    flags receives support_edge_snapped:<channel> when this fallback snaps.
     The recorded trace and its evidence are never rewritten.
     """
     if trace.unit != "W":

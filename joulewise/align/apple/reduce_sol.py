@@ -323,11 +323,16 @@ class SampleColumns:
                 'thermal_start_ns': thermal_starts}
 
     def power_traces(self, first_record_endpoint_s, *, nominal_interval_ns, evidence=None):
-        """Convert supports, then apply A37 before attribution sees the trace."""
+        """Apply A37 in native record order, then project each rail's samples."""
         from joulewise.align.apple.sampler import power_records
         from joulewise.interfaces import PowerSample
+        endpoints = self.endpoint_seconds(first_record_endpoint_s)
+        ends = [round(t*1_000_000_000) for t in endpoints]
+        starts = [round((t-self.columns['elapsed_ns'][i]/1_000_000_000.0)*1_000_000_000)
+                  for i, t in enumerate(endpoints)]
+        _snap_interior_starts(starts, ends)
         samples = []
-        for i, end in enumerate(self.endpoint_seconds(first_record_endpoint_s)):
+        for i, end in enumerate(endpoints):
             start = end - self.columns['elapsed_ns'][i] / 1_000_000_000.0
             samples.extend(PowerSample(timestamp_s=end, power_w=self.columns[rail][i],
                                        source='powermetrics', rail=rail,
@@ -337,15 +342,28 @@ class SampleColumns:
         for trace in traces:
             notes = json.loads(trace.notes)
             supports = notes['sample_support_ns']
-            starts = [s[0] for s in supports]
-            if _snap_interior_starts(starts, [s[1] for s in supports]):
-                notes['sample_support_ns'] = [[start, s[1]] for start, s in zip(starts, supports)]
+            # power_records sorts, filters nonfinite powers and keeps the
+            # first record at a duplicated ns endpoint. Carry the supports of
+            # those same records; never snap against a projected neighbour.
+            retained = {}
+            for i in sorted(range(len(endpoints)), key=endpoints.__getitem__):
+                if math.isfinite(self.columns[trace.channel][i]):
+                    retained.setdefault(ends[i], [starts[i], ends[i]])
+            snapped_supports = [retained[t] for t in trace.t_ns]
+            if snapped_supports != supports:
                 flag = f'support_edge_snapped:{trace.channel}'
                 flags.append(flag)
                 notes['flags'].append(flag)
-                widths = {s[1]-start for start, s in zip(starts, supports)}
-                trace = replace(trace, notes=json.dumps(notes, sort_keys=True),
-                                averaging_window_ns=next(iter(widths)) if len(widths) == 1 else None)
+            notes['sample_support_ns'] = snapped_supports
+            widths = {b-a for a, b in snapped_supports}
+            variable_flag = f'variable_averaging_support:{trace.channel}'
+            flags = [f for f in flags if f != variable_flag]
+            notes['flags'] = [f for f in notes['flags'] if f != variable_flag]
+            if len(widths) > 1:
+                flags.append(variable_flag)
+                notes['flags'].append(variable_flag)
+            trace = replace(trace, notes=json.dumps(notes, sort_keys=True),
+                            averaging_window_ns=next(iter(widths)) if len(widths) == 1 else None)
             result.append(trace)
         return tuple(result), tuple(flags)
 

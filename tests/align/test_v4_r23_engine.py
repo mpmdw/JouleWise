@@ -36,6 +36,36 @@ def w1_window(payload):
 
 
 class SeamTests(unittest.TestCase):
+    def test_hand_written_a37_supports_survive_projection_order(self):
+        samples = sol.reduce_stream(io.BytesIO(b''.join(synthetic_frames(4))))
+        samples.columns['elapsed_ns'] = array('q', [NS]*4)
+        samples.endpoint_seconds = lambda _: array('d', [1., 3., 2., 3.0000005])
+        # Record 4 follows the 2s record, so its 500ns gap closes at 2s.
+        # Sorting the projected power trace must not change that neighbour.
+        expected_native = [0, 2*NS, NS, 2*NS]
+        expected_trace = [[0, NS], [NS, 2*NS], [2*NS, 3*NS], [2*NS, 3*NS+500]]
+        self.assertEqual([r['start_ns'] for r in samples.native_pm_samples(1., 0)], expected_native)
+        self.assertEqual(list(samples.mapped_columns(1., 0)['power_start_ns']), expected_native)
+        traces, _ = samples.power_traces(1., nominal_interval_ns=NS)
+        for trace in traces:
+            self.assertEqual(json.loads(trace.notes)['sample_support_ns'], expected_trace)
+
+    def test_variable_support_flag_describes_post_snap_widths(self):
+        samples = sol.reduce_stream(io.BytesIO(b''.join(synthetic_frames(2))))
+        samples.columns['elapsed_ns'] = array('q', [NS, NS+500])
+        samples.endpoint_seconds = lambda _: array('d', [1., 2.])
+        traces, flags = samples.power_traces(1., nominal_interval_ns=NS)
+        for trace in traces:
+            self.assertEqual(trace.averaging_window_ns, NS)
+            self.assertNotIn('variable_averaging_support:'+trace.channel, flags)
+            self.assertNotIn('variable_averaging_support:'+trace.channel, json.loads(trace.notes)['flags'])
+        samples = self.samples(500)
+        traces, flags = samples.power_traces(1., nominal_interval_ns=NS)
+        for trace in traces:
+            self.assertIsNone(trace.averaging_window_ns)
+            self.assertIn('variable_averaging_support:'+trace.channel, flags)
+            self.assertIn('variable_averaging_support:'+trace.channel, json.loads(trace.notes)['flags'])
+
     def samples(self, seam):
         samples = sol.reduce_stream(io.BytesIO(b''.join(synthetic_frames(2))))
         samples.columns['elapsed_ns'] = array('q', [NS, NS])
@@ -110,6 +140,77 @@ class SeamTests(unittest.TestCase):
 
 
 class CaptureAndAnchorTests(unittest.TestCase):
+    def test_t_retry_missing_assignments_use_counted_attempt_reasons(self):
+        for pool_bar in (False, True):
+            with self.subTest(pool_bar=pool_bar):
+                p = series(turns=4)
+                retry = p['windows'][9]  # T2
+                zero = copy.deepcopy(retry)
+                zero['members'] = [raw.member(Path.cwd(), m['slot'], {'captured': False})
+                                   for m in zero['members']]
+                retry['attempt_id'] = 'T2#2'
+                target = retry['members'][6]
+                target['thermal']['flags'].append('runtime.oom')
+                recorded = retry['members'][7]
+                recorded['source_flags'] = ['X3']
+                if pool_bar:
+                    # An eligible replay can fail U3 and bar the whole pool.
+                    retry['members'][21]['thermal']['decode_clock_mhz'] = 1300.
+                p['windows'].insert(9, zero)
+                fill, _ = analyze(p)
+                self.assertEqual(fill['windows'][10]['pool_entry'], not pool_bar)
+                for convention in e.CONVENTIONS:
+                    for member, reason in ((target, 'runtime.oom'), (recorded, 'X3')):
+                        cell = fill['test'][convention][e.KEYS[member['slot']['task_pair']]]['benign']
+                        rows = [r for r in cell['members'] if r['window'] == 'T2'
+                                and r['run_id'] == member['slot']['run_id']]
+                        self.assertEqual(len(rows), 1)
+                        self.assertIn(reason, rows[0]['reasons'])
+                        self.assertNotIn('not_captured', rows[0]['reasons'])
+                    if pool_bar:
+                        eligible = retry['members'][5]
+                        self.assertTrue(fill['windows'][10]['eligibility'][5]['eligible'])
+                        cell = fill['test'][convention][e.KEYS[eligible['slot']['task_pair']]]['benign']
+                        row = next(r for r in cell['members'] if r['window'] == 'T2'
+                                   and r['run_id'] == eligible['slot']['run_id'])
+                        self.assertEqual(row['reasons'], ['window_pool_ineligible'])
+
+    def test_zero_capture_skips_consecutive_b_failure_counter(self):
+        p = series(turns=4)
+        for i in (1, 2):
+            p['windows'][i]['members'][6]['thermal']['battery']['flags'].append('battery.member_span')
+        zero = copy.deepcopy(p['windows'][2])
+        zero['members'] = [raw.member(Path.cwd(), m['slot'], {'captured': False}) for m in zero['members']]
+        p['windows'][2]['attempt_id'] = 'C3#2'
+        p['windows'].insert(2, zero)
+        fill, _ = analyze(p)
+        self.assertEqual([w['consecutive_B_failures'] for w in fill['windows'][:5]], [0, 1, 1, 2, 0])
+
+    def test_w1_anchors_obey_member_and_recorded_class_screen(self):
+        for fault in ('runtime.oom', 'battery.member_span', 'wrong_seed', 'recorded_X3'):
+            with self.subTest(fault=fault):
+                p = series(turns=4)
+                w1 = w1_window(p)
+                m = w1['members'][0]
+                if fault == 'wrong_seed':
+                    m['summary']['seed'] += 1
+                elif fault == 'recorded_X3':
+                    m['source_flags'] = ['X3']
+                elif fault.startswith('battery.'):
+                    m['thermal']['battery']['flags'].append(fault)
+                else:
+                    m['thermal']['flags'].append(fault)
+                for route in ('window', 'selection'):
+                    with self.subTest(route=route):
+                        q = copy.deepcopy(p)
+                        if route == 'window':
+                            q['windows'].insert(0, w1)
+                        else:
+                            q['selection_desk'] = dict(members=[m['thermal'] for m in w1['members']],
+                                                       anchor_members=w1['members'][:4])
+                        fill, _ = analyze(q)
+                        self.assertEqual(fill['anchor_sigma_w']['K'], 11)
+
     def test_c3_zero_capture_then_retry_runs_full_series_with_eight_counted(self):
         p = series(turns=4)
         zero = copy.deepcopy(p['windows'][2])
@@ -154,6 +255,10 @@ class CaptureAndAnchorTests(unittest.TestCase):
         self.assertEqual(fill['anchor_sigma_w']['status'], 'print_only')
         p['windows'].pop(0)
         p['selection_desk'] = dict(members=[m['thermal'] for m in w1['members']])
+        fill, _ = analyze(p)
+        self.assertEqual(fill['anchor_sigma_w']['K'], 11)  # no seed evidence
+        self.assertEqual(fill['W1']['status'], 'computed')
+        p['selection_desk']['anchor_members'] = w1['members'][:4]
         fill, _ = analyze(p)
         self.assertEqual(fill['anchor_sigma_w']['K'], 12)
 
@@ -212,8 +317,22 @@ class CarrierTests(unittest.TestCase):
             r = est.benign_carrier_curve(self.rows(),bootstrap_replicates=10)['pairs']['p']
         self.assertIsNone(r['H50']); self.assertIsNone(r['H90'])
         self.assertEqual(r['level_reached_at_h0'],dict(H50=True,H90=True))
-        self.assertEqual(r['H50_status'],'level_reached_at_h0')
+        self.assertEqual(r['H50_status'],'undefined: level reached at h0')
         self.assertEqual(r['bootstrap_undefined_replicates']['H90'],10)
+
+    def test_all_reachable_but_never_crossed_has_distinct_status(self):
+        rows = self.rows()
+        for row in rows:
+            if row['h'] > 0:
+                row['score'] = -1.
+        r = est.benign_carrier_curve(rows, bootstrap_replicates=10)['pairs']['p']
+        self.assertEqual(r['status'], 'ok')
+        self.assertEqual(r['all_carrier_prefix'], [0, 128])
+        for name in ('H50', 'H90'):
+            self.assertIsNone(r[name])
+            self.assertEqual(r[name+'_status'], 'undefined: level not reached')
+            self.assertEqual(r['bootstrap_undefined_replicates'][name], 10)
+        self.assertNotIn('crossing_status', r)
 
     def test_bootstrap_h0_guard_uses_honest_rate_with_fixed_original_thresholds(self):
         rows = self.rows()
@@ -226,6 +345,40 @@ class CarrierTests(unittest.TestCase):
         self.assertEqual(r['curve'][0],(0,1/40))
         self.assertEqual(r['bootstrap_undefined_replicates']['H50'],expected)
         self.assertEqual(r['window_cluster_bootstrap']['H50'],[128,128])
+
+
+class ExportContractTests(unittest.TestCase):
+    def payload(self):
+        p = series(turns=4)
+        for w in p['windows']:
+            for m in w['members'][:4]:
+                run = w['window']+':'+m['slot']['run_id']
+                m['slot']['run_id'] = m['thermal']['id'] = run
+        p['series_manifest'] = dict(windows=[dict(window=w['window'], members=[m['slot'] for m in w['members']])
+                                            for w in p['windows']])
+        return p
+
+    def test_series_unique_anchor_ids_pass_r15_without_changing_seeds(self):
+        p = self.payload()
+        fill, _ = analyze(p)
+        self.assertEqual(fill['anchor_sigma_w']['K'], 11)
+        for w in fill['windows']:
+            self.assertTrue(all(m['eligible'] for m in w['eligibility'][:4]))
+            self.assertTrue(all(m['run_id'].startswith(w['window']+':') for m in w['eligibility'][:4]))
+
+    def test_anchor_prefix_must_match_manifest_and_observation_window(self):
+        for target in ('manifest', 'observation'):
+            with self.subTest(target=target):
+                p = self.payload()
+                if target == 'manifest':
+                    p['series_manifest'] = copy.deepcopy(p['series_manifest'])
+                    slot = p['series_manifest']['windows'][0]['members'][0]
+                else:
+                    p.pop('series_manifest')
+                    slot = p['windows'][0]['members'][0]['slot']
+                slot['run_id'] = slot['run_id'].replace('C1:', 'C2:')
+                with self.assertRaisesRegex(ValueError, 'window prefix'):
+                    analyze(p)
 
 
 class DCRowTests(unittest.TestCase):
@@ -265,7 +418,8 @@ class DCRowTests(unittest.TestCase):
         with patch.object(dc,'capture',side_effect=self.capture):
             fill, _ = analyze(p)
         pair = missing['slot']['task_pair']
-        rows = [r for r in fill['dc_secondary'] if r.get('pair')==pair and not r.get('sealed')]
+        rows = [r for r in fill['dc_secondary'] if r['window']=='C1' and r.get('pair')==pair
+                and r.get('residual_status')!='no_gpu_row' and not r.get('sealed')]
         self.assertTrue(rows)
         for r in rows:
             if r['run_id'] == missing['slot']['run_id']:
@@ -274,7 +428,7 @@ class DCRowTests(unittest.TestCase):
                 self.assertEqual(r['residual_status'],'dc_training_unavailable')
                 self.assertIn(missing['slot']['run_id'],r['training_run_ids'])
 
-    def test_dc_never_adds_ineligible_members_or_barred_window_rows(self):
+    def test_dc_values_include_ineligible_and_pool_barred_but_residuals_follow_gpu(self):
         p = self.payload()
         excluded = p['windows'][1]['members'][5]
         excluded['source_flags'] = ['X5']
@@ -284,16 +438,54 @@ class DCRowTests(unittest.TestCase):
             return self.capture(streams, member, span)
         with patch.object(dc,'capture',side_effect=capture):
             fill, _ = analyze(p)
-        self.assertNotIn(excluded['slot']['run_id'],called)
-        gpu_ids = {r['run_id'] for f in fill['fits'] if f['convention']=='counts_logged'
-                   for r in f['scores'] if r['condition']=='benign'}
-        self.assertEqual(set(called),gpu_ids)
-        for m in p['windows'][1]['members']:
-            if m['slot']['model_id']==e.D_MODEL:
-                m['thermal']['registered_os_nonzero'] = True
-        with patch.object(dc,'capture',side_effect=AssertionError('barred window has no DC residuals')):
+        def check_values(fill):
+            expected = [(w['window'], m['slot']['task_pair'], m['slot']['run_id'])
+                        for w in p['windows'] for m in w['members']
+                        if m['captured'] and m['slot']['condition']=='benign']
+            values = [r for r in fill['dc_secondary'] if not r.get('sealed')]
+            self.assertEqual([(r['window'],r['pair'],r['run_id']) for r in values], expected)
+            self.assertEqual(len(called), len(expected))
+            gpu = {(f['window'],f['pair'],r['run_id']) for f in fill['fits']
+                   if f['convention']=='counts_logged' for r in f['scores'] if r['condition']=='benign'}
+            for r in values:
+                self.assertEqual(r['value']['status'], 'available')
+                self.assertEqual(r['value']['whole_member_j'], 1.)
+                self.assertGreater(r['value']['turn_owned_j'], 0.)
+                self.assertIn('battery_assist', r['value'])
+                if (r['window'],r['pair'],r['run_id']) not in gpu:
+                    self.assertEqual(r['residual_status'], 'no_gpu_row')
+                    self.assertNotIn('residual_j', r)
+                    self.assertNotIn('training_run_ids', r)
+        check_values(fill)
+        # A clock-only replay failure bars C1 while ordinary held-out members
+        # remain individually eligible; this is distinct from the X5 member.
+        p['windows'][1]['members'][21]['thermal']['decode_clock_mhz'] = 1300.
+        called.clear()
+        with patch.object(dc,'capture',side_effect=capture):
             fill, _ = analyze(p)
-        self.assertFalse(any(r.get('residual_status') for r in fill['dc_secondary']))
+        self.assertFalse(fill['windows'][0]['pool_entry'])
+        self.assertTrue(fill['windows'][0]['eligibility'][6]['eligible'])
+        check_values(fill)
+
+    def test_dc_values_print_for_t_before_calibration_and_skip_uncaptured(self):
+        p = series(turns=4)
+        # Bar all C pools, leaving T unauthorized for GPU fits.
+        for w in p['windows']:
+            if w['window'].startswith('C'):
+                w['members'][21]['thermal']['decode_clock_mhz'] = 1300.
+            for m in w['members']:
+                if m['slot']['condition']=='benign':
+                    m['dc_evidence'] = dict(streams=[], episode=copy.deepcopy(m), member_span_ns=[])
+        missing = p['windows'][-1]['members'][6]
+        missing['captured'] = False
+        with patch.object(dc,'capture',side_effect=self.capture):
+            fill, _ = analyze(p)
+        self.assertFalse(fill['fits'])
+        rows = [r for r in fill['dc_secondary'] if not r.get('sealed')]
+        self.assertTrue(any(r['window']=='T3' for r in rows))
+        self.assertFalse(any(r['run_id']==missing['slot']['run_id'] for r in rows))
+        self.assertTrue(all(r['residual_status']=='no_gpu_row' for r in rows))
+        self.assertTrue(all('residual_j' not in r for r in rows))
 
 
 if __name__ == '__main__':

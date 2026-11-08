@@ -4,6 +4,7 @@ import gzip
 import hashlib
 import io
 import json
+import math
 from pathlib import Path
 import plistlib
 import random
@@ -57,19 +58,31 @@ def a37_starts(supports):
 
 
 def reference_traces(records, *, evidence=EVIDENCE):
+    # Snap the original observation sequence, before the sampler projects it.
+    native_supports = a37_starts([(round((r.timestamp_s-r.elapsed_ns/1e9)*1e9),
+                                  round(r.timestamp_s*1e9)) for r in records])
     traces, flags = power_records(samples_from_records(records), nominal_interval_ns=100_000_000,
                                   evidence=evidence)
     result, flags = [], list(flags)
     for trace in traces:
         notes = json.loads(trace.notes)
-        supports = a37_starts(notes['sample_support_ns'])
+        retained = {}
+        for i in sorted(range(len(records)), key=lambda i: records[i].timestamp_s):
+            if math.isfinite(records[i].rail_power_w[trace.channel]):
+                retained.setdefault(native_supports[i][1], native_supports[i])
+        supports = [retained[t] for t in trace.t_ns]
         if supports != notes['sample_support_ns']:
             notes['sample_support_ns'] = supports
             flag = 'support_edge_snapped:'+trace.channel
             flags.append(flag); notes['flags'].append(flag)
-            widths = {b-a for a,b in supports}
-            trace = replace(trace, notes=json.dumps(notes,sort_keys=True),
-                            averaging_window_ns=next(iter(widths)) if len(widths)==1 else None)
+        widths = {b-a for a,b in supports}
+        variable_flag = 'variable_averaging_support:'+trace.channel
+        flags = [f for f in flags if f != variable_flag]
+        notes['flags'] = [f for f in notes['flags'] if f != variable_flag]
+        if len(widths) > 1:
+            flags.append(variable_flag); notes['flags'].append(variable_flag)
+        trace = replace(trace, notes=json.dumps(notes,sort_keys=True),
+                        averaging_window_ns=next(iter(widths)) if len(widths)==1 else None)
         result.append(trace)
     return tuple(result), tuple(flags)
 
@@ -89,6 +102,19 @@ def reference_table(data, ep, *, endpoint=ENDPOINT, evidence=EVIDENCE):
 
 
 class ExtractorEqualityTests(unittest.TestCase):
+    def test_a37_hand_written_reference(self):
+        # Inclusive ±1000ns interior seams close. ±1001ns seams and the
+        # outside edges stay put. Expected starts are literal, not derived.
+        supports = [[-20, 10000], [11000, 20000], [19000, 30000],
+                    [31001, 40000], [38999, 50000]]
+        expected = [[-20, 10000], [10000, 20000], [20000, 30000],
+                    [31001, 40000], [38999, 50000]]
+        self.assertEqual(a37_starts(supports), expected)
+        starts = [s[0] for s in supports]
+        sol._snap_interior_starts(starts, [s[1] for s in supports])
+        self.assertEqual(starts, [-20, 10000, 20000, 31001, 38999])
+        self.assertEqual(supports[0][0], -20)
+
     def assert_reference(self, data):
         samples = sol.reduce_stream(io.BytesIO(data))
         # Bytes, not tolerances: catches even one bit of reordered arithmetic.

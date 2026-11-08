@@ -160,16 +160,17 @@ def benign_carrier_curve(rows, *, bootstrap_replicates=1000, seed=0, grid=None):
             for name, level in (('H50', .5), ('H90', .9)):
                 at_h0[name] = h0 is not None and h0 >= level
                 crossings[name] = None if at_h0[name] else _crossing([(h,p) for h,p in prefix if h > 0], level)
-                crossing_states[name+'_status'] = ('level_reached_at_h0' if at_h0[name] else
+                crossing_states[name+'_status'] = ('undefined: level reached at h0' if at_h0[name] else
                     'grid_only' if crossings[name] is not None else
-                    'insufficient_calibration' if not calibrated[pair] else 'undefined: dose unreachable')
+                    'insufficient_calibration' if not calibrated[pair] else
+                    'undefined: dose unreachable' if len(prefix) < len(points) else
+                    'undefined: level not reached')
             result[pair] = {'curve': points, **crossings, **crossing_states,
                             'level_reached_at_h0': at_h0,
                             'n_by_h': {h: len(cells[pair, h]) for h, _ in points},
                             'expected_carriers': expected[pair],
                             'status': 'ok' if calibrated[pair] else 'insufficient_calibration',
                             'all_carrier_prefix': [h for h, _ in prefix],
-                            'crossing_status': 'grid_only' if len(prefix) == len(points) else 'undefined: dose unreachable beyond prefix',
                             'monotone': monotone}
         return result
 

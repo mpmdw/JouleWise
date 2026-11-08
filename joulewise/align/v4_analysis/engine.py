@@ -93,6 +93,22 @@ def threshold(scores):
         rank_05_sensitivity=dict(rank=rank05, threshold=values[rank05-1] if rank05 <= m else None))
 
 
+def allocation_run_id(run_id, window):
+    """Resolve an export's series-unique ID only within its recorded window."""
+    if not isinstance(run_id, str):
+        raise ValueError('run_id must be a string')
+    prefix, sep, local = run_id.partition(':')
+    if sep and (prefix != window or not local or ':' in local):
+        raise ValueError('run_id window prefix differs')
+    return local if sep else run_id
+
+
+def _slot_matches(actual, expected, window):
+    local = allocation_run_id(actual.get('run_id'), window)
+    return all((local if k == 'run_id' and expected['series_role'] == 'anchor'
+                else actual.get(k)) == v for k, v in expected.items())
+
+
 def _finite(v):
     return type(v) in (int, float) and math.isfinite(v)
 
@@ -213,6 +229,25 @@ def _member_reasons(member, cohort):
         if not cohort.get('identity') or not cohort.get('configuration'):
             reasons.append('cohort_incomplete')
     return sorted(set(reasons))
+
+
+def _screen_member(member, cohort, *, divergent=False):
+    """Apply the same evidence/class union to W1 and C/T members."""
+    m = member
+    m['reasons'] = _member_reasons(m, cohort)
+    m['rederived_classes'] = ex.classes(m['reasons'])
+    if divergent:
+        m['rederived_classes'] = sorted(set([*m['rederived_classes'], 'X5']))
+    m['recorded_classes'] = ex.classes([*m['thermal'].get('calibration_exclusions', []),
+                                       *m.get('source_flags', [])])
+    m['classes'] = sorted(set(m['rederived_classes']) | set(m['recorded_classes']))
+    m['eligible'] = not m['classes']
+    t = m['thermal']
+    t['captured'] = m['captured']
+    t['analysis_ineligible'] = bool(set(m['classes'])-{'X5'})
+    t['analysis_classes'] = m['classes']
+    if m.get('summary'):
+        t['turn_counts'] = [[r[k] for k in ('context_tokens', 'prefill_tokens', 'decode_tokens')] for r in _rows(m)]
 
 
 def _fit_task(task):
@@ -346,11 +381,6 @@ def analyze(payload, *, workers=1, frozen_thresholds=None):
     # eligibility annotations are ours; copying full token arrays took most of
     # the 130 MB rehearsal's analysis time. Own the containers we annotate and
     # share the read-only evidence, without memoizing any decision.
-    selection = next((dict(members=[{**m['thermal'], 'ordinal': m['slot']['ordinal'],
-                                    'captured': m['captured'], 'calibration_exclusions': [
-                                        *m['thermal'].get('calibration_exclusions', []), *m.get('source_flags', [])]}
-                                   for m in w['members']]) for w in payload['windows'] if w['window'] == 'W1'),
-                     payload.get('selection_desk'))
     windows = [{**w, 'members': [{**m, 'thermal': dict(m['thermal'])} for m in w['members']]}
                for w in payload['windows'] if w['window'] != 'W1']
     native_manifest = payload.get('series_manifest')
@@ -363,12 +393,31 @@ def analyze(payload, *, workers=1, frozen_thresholds=None):
             raise ValueError('series manifest order differs from R15')
         for w in later:
             expected_rows = roster(w.get('window', w.get('id')), escalated=len(w['members']) == 24)
-            if len(w['members']) not in (22, 24) or any(any(actual.get(k) != v for k, v in expected.items())
+            if len(w['members']) not in (22, 24) or any(not _slot_matches(actual, expected, w.get('window', w.get('id')))
                 for expected, actual in zip(expected_rows, w['members'], strict=True)):
                 raise ValueError('series manifest roster differs from R15')
     cohort = payload.get('cohort', {})
     if set(cohort.get('configuration', {})) != {'max_episode_decode_tokens', 'deadman_s', 'max_tokens', 'max_turns'}:
         raise ValueError('cohort needs frozen four-slot configuration')
+    selection = payload.get('selection_desk')
+    w1 = next((w for w in payload['windows'] if w['window'] == 'W1'), None)
+    # A thermal-only snapshot lacks the seed/turn evidence used by the member
+    # screen. It still supplies W1 checks/contrast, but cannot qualify anchors.
+    w1_members = w1['members'] if w1 is not None else (selection or {}).get('anchor_members')
+    anchor_selection = None
+    if w1_members is not None:
+        members = [{**m, 'thermal': dict(m['thermal'])} for m in w1_members]
+        for m in members:
+            allocation_run_id(m['slot']['run_id'], 'W1')
+            if m['thermal'].get('id') != m['slot']['run_id']:
+                raise ValueError('W1 desk member identity differs from roster')
+            if type(m.get('captured')) is not bool:
+                raise ValueError('captured must be explicit bool')
+            _screen_member(m, cohort)
+        anchor_selection = dict(members=[{**m['thermal'], 'ordinal': m['slot']['ordinal'],
+                                         'anchor_eligible': m['eligible']} for m in members])
+        if w1 is not None:
+            selection = anchor_selection
     for release in payload.get('lead_releases', []):
         if (not isinstance(release.get('after_attempt'),str) or not isinstance(release.get('release_id'),str)
             or not isinstance(release.get('lead_signature'),str) or not release['lead_signature'].startswith('lead: ')
@@ -405,26 +454,14 @@ def analyze(payload, *, workers=1, frozen_thresholds=None):
                      replay[0]['thermal']['identity_sha256'] != replay[1]['thermal']['identity_sha256'])
         divergent = divergent or len(replay_counts) == 2 and replay_counts[0] != replay_counts[1]
         for m, slot in zip(w['members'], expected, strict=True):
-            if any(m['slot'].get(k) != v for k, v in slot.items()):
+            if not _slot_matches(m['slot'], slot, name):
                 raise ValueError('roster differs from R15 allocation')
             if type(m.get('captured')) is not bool:
                 raise ValueError('captured must be explicit bool')
-            if m['thermal'].get('id') != slot['run_id']:
+            if m['thermal'].get('id') != m['slot']['run_id']:
                 raise ValueError('desk member identity differs from roster')
-            m['reasons'] = _member_reasons(m, cohort)
-            m['rederived_classes'] = ex.classes(m['reasons'])
-            if m in replay and divergent:
-                m['rederived_classes'] = sorted(set([*m['rederived_classes'], 'X5']))
-            m['recorded_classes'] = ex.classes([*m['thermal'].get('calibration_exclusions', []),
-                                                *m.get('source_flags', [])])
-            m['classes'] = sorted(set(m['rederived_classes']) | set(m['recorded_classes']))
-            m['eligible'] = not m['classes']
+            _screen_member(m, cohort, divergent=m in replay and divergent)
             t = m['thermal']
-            t['captured'] = m['captured']
-            t['analysis_ineligible'] = bool(set(m['classes'])-{'X5'})
-            t['analysis_classes'] = m['classes']
-            if m.get('summary'):
-                t['turn_counts'] = [[r[k] for k in ('context_tokens', 'prefill_tokens', 'decode_tokens')] for r in _rows(m)]
             m['flags'] = ['battery.unobserved'] if (t.get('battery') or {}).get('status') != 'observed' else []
             # Secondary output is never a selection input. Sabotage/non-benign
             # payloads are hash-only, including anchor sabotage and C sabotage.
@@ -434,7 +471,8 @@ def analyze(payload, *, workers=1, frozen_thresholds=None):
         pool_pass = bool(captured) and not any(dchecks.get(f'U{i}', {}).get('status') == 'fail' for i in (1, 2, 3))
         w['pool_entry'] = pool_pass
         battery = ac.battery(w['members'])
-        b_failures = b_failures+1 if battery['status'] == 'fail' else 0
+        if captured:
+            b_failures = b_failures+1 if battery['status'] == 'fail' else 0
         allowed = {m['slot']['run_id'] for m in w['members'] if m['eligible']}
         selected = w.get('adjudicated_member_ids', sorted(allowed))
         if len(selected) != len(set(selected)) or not set(selected) <= allowed:
@@ -565,14 +603,16 @@ def analyze(payload, *, workers=1, frozen_thresholds=None):
             for condition in ('benign', 'sabotage'):
                 rows = test[convention][KEYS[pair]].get(condition, [])
                 present = {(r['window'], r['run_id']) for r in rows}
-                for w in windows:
+                # Zero-capture retries consume no assignment. Only the last
+                # attempt for each window can disclose a missing scored row.
+                for w in {w['window']: w for w in windows}.values():
                     if not w['window'].startswith('T'):
                         continue
                     for m in w['members']:
                         s = m['slot']
                         if s['held_out'] and s['task_pair'] == pair and s['condition'] == condition and (w['window'], s['run_id']) not in present:
                             rows.append(dict(window=w['window'], run_id=s['run_id'], alarm=None, score=None,
-                                reasons=m['reasons'] or ['window_pool_ineligible']))
+                                reasons=m['reasons'] or m['classes'] or ['window_pool_ineligible']))
                             present.add((w['window'], s['run_id']))
                 test[convention][KEYS[pair]][condition] = {**_test_summary(rows), 'members': rows,
                     'rate_basis': 'eligible finite scores; missing assignments retained'}
@@ -619,7 +659,7 @@ def analyze(payload, *, workers=1, frozen_thresholds=None):
             dict(trajectory=f['window']+'/'+r['run_id'], hold_count=r['hold_count'], residual_j=v)
             for f in fits if f['convention'] == c for r in f['scores'] for v in r['turn_residuals_j']])
             for c in CONVENTIONS},
-        anchor_sigma_w=ac.anchor_diagnostic(windows, selection),
+        anchor_sigma_w=ac.anchor_diagnostic(windows, anchor_selection),
         estimand_notes=dict(counts_logged='headline', counts_withheld='alongside, same C/P and measured J',
             known_H='exact logged reasoning count removed; H* searches positive doses only',
             carrier_H0='untouched leave-one-carrier-out false-alarm fraction; never forced to zero',

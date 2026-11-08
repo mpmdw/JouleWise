@@ -1,4 +1,4 @@
-# V4 primary engine (Sol), R23
+# V4 primary engine (Sol), R23b
 
 2026-11-08. **PROVISIONAL: synthetic qualification, no live study validation.**
 Authority: the lead's engine-r23 brief (A37 and R23-E1/R23-1–4), on
@@ -13,6 +13,11 @@ not scientific certification.
 No Opus recompute code was read. Only the rulings were used for reconciliation.
 No network, model weights, live measurements or Block 5 outcomes were used.
 Coordination state is untouched, per the assignment.
+
+R23b applies the 2026-11-08 ADMIT-WITH-FIXES brief on `d3a133cc7`.
+The clarification restricts DC **residuals** to GPU rows; DC-in values print
+for every captured benign member. The export adapter now accepts window-bound,
+series-unique anchor IDs. This remains synthetic software qualification only.
 
 ## Ruling → code map
 
@@ -58,12 +63,12 @@ exclusions mean modules in `v4_analysis/`.
 | A34 | W1 accepted in windows[]; adapter builds selection evidence and acceptance.W1 prints U1–U3. W1 never enters C/T fits or m. |
 | A35 | roster(escalated=True) accepts 24 members; 23/24 supplemental W1:5 replays print descriptively, outside U3/U4/fits/m. |
 | A36 | B bar, consecutive failures and release presence print; missing operational B release never refuses analysis. Arm enforcement remains external. |
-| A37 | `apple.reduce_sol.SampleColumns`: fixed `INTERIOR_SEAM_NS=1000`; snap a later start to the previous end for an interior gap or overlap ≤1000 ns before energy, gap or coverage arithmetic. Both power and native PM supports follow this rule. Larger seams and all outer edges retain their placement. The shared `power/windows.py` is unchanged. |
-| R23-E1 | `engine._rows/_member_reasons`, `acceptance.window_checks/battery/u4`, v4 thermal acceptance and W1 contrast exclude `captured:false`. Zero-capture final attempts have no pool entry or fits and do not consume a C slot; their retry takes that slot. Planned-member missing-assignment disclosures remain visible. |
-| R23-1 | `acceptance.anchor_diagnostic` includes W1's four anchors from either its window or selection desk alongside C/T. Complete eligible synthetic C1–C8 + T1–T3 + W1 yields K=12. K≥3 remains required. `sigma_w2_raw_j2=(MS_window−MS_error)/4` may be negative; `sigma_w2_reported_j2=max(0,raw)` and `anchor_sigma_j=sqrt(reported)` print without a veto. |
+| A37 | `apple.reduce_sol.SampleColumns`: fixed `INTERIOR_SEAM_NS=1000`; snap a later start to the previous end for an interior gap or overlap ≤1000 ns before energy, gap or coverage arithmetic. Power, native PM and mapped columns snap the original record sequence, before power sorting/filtering. Larger seams and all outer edges retain their placement. Power width/variable-support diagnostics are recomputed after snapping. `power/windows.py` documents its separate legacy float-quantum fallback. |
+| R23-E1 | `engine._rows/_member_reasons`, `acceptance.window_checks/battery/u4`, v4 thermal acceptance and W1 contrast exclude `captured:false`. Zero-capture final attempts have no pool entry or fits and do not consume a C slot; their retry takes that slot. Missing T assignments use only the last attempt per window, retaining that attempt's member reason/class or pool bar. A zero-capture attempt leaves the consecutive B-failure counter unchanged. |
+| R23-1 | W1 anchors from a window or `selection_desk.anchor_members` pass the same `engine._screen_member` / `_member_reasons` and recorded-class union as C/T before `acceptance.anchor_diagnostic`. Runtime failures, charging flags and seed mismatches exclude the whole W1 anchor block. Thermal-only selection snapshots still supply checks/contrast, but cannot qualify anchors without seed/summary evidence. Complete eligible synthetic C1–C8 + T1–T3 + W1 yields K=12. K≥3 remains required. `sigma_w2_raw_j2=(MS_window−MS_error)/4` may be negative; `sigma_w2_reported_j2=max(0,raw)` and `anchor_sigma_j=sqrt(reported)` print without a veto. |
 | R23-2 | Carrier H=0 prints the strict untouched score exceedance fraction against other-carrier thresholds. H50/H90 search the all-carrier prefix at H>0 only. Each crossing prints its own status and `level_reached_at_h0` flag; a level already reached at H=0 remains undefined, including bootstrap replicates. |
-| R23-3 | Carrier pair status is `ok` for ≥40 original carriers with defined thresholds, even when later doses/crossings are unreachable. `<40` is `insufficient_calibration`. Undefined calibrated crossings print `undefined: dose unreachable` per crossing. |
-| R23-4 | `dc.analyze_windows(gpu_fits=...)` takes benign (window, pair, run_id) rows and ordered LOTO training IDs directly from logged GPU fits. It refits the five-term model at h=0 on DC-in owned energies. Missing DC training evidence withholds the residual rather than shrinking its training set. There are no W1/30B/development benign DC rows or fits because the GPU scorer supplies none. Non-benign presence seals remain separate. |
+| R23-3 | Carrier pair status is `ok` for ≥40 original carriers with defined thresholds, even when later doses/crossings are unreachable. `<40` is `insufficient_calibration`. Per-crossing undefined statuses distinguish `undefined: dose unreachable`, `undefined: level not reached` and `undefined: level reached at h0`. The legacy aggregate `crossing_status` field is removed. |
+| R23-4 | `dc.analyze_windows(gpu_fits=...)` prints whole-member DC-in J, turn-owned DC-in J/turn rows and battery-assist disclosure for every captured benign member, including W1, anchors, sentinels, ineligible/barred members and T before calibration completes. Only residual rows and ordered LOTO training IDs come from logged GPU fits. The five-term model is refit at h=0 on DC-in energies; missing training evidence withholds the residual rather than shrinking its training set. Value rows without a GPU row have `residual_status: no_gpu_row`, no residual/model and no training IDs. Non-benign presence seals remain separate. |
 
 The byte-pinned fitter is unchanged: `_frozen_residual.py` is the
 `4d54cb47b` implementation pinned by `cda28a5ef`, SHA-256
@@ -100,14 +105,28 @@ and delta_slow_c. W1 also supplies recorded template/arm/stage and authenticated
 token-identity evidence for the existing contrast desk. Missing evidence stays
 unavailable.
 
-Exporter contract check (observed, unchanged): Episode thermal policy uses
+For selection-only W1 exports, `selection_desk.members` retains the thermal
+records used by checks/contrast. To include W1 in σ_w, also supply
+`selection_desk.anchor_members`: four full analysis member records (`slot`,
+`captured`, `thermal`, `summary`, and any `source_flags`), with the same seed
+and residual-row evidence as window members. The engine screens those records
+fresh. Without them, W1 does not contribute an anchor block; no expected seed
+or successful runtime is inferred from a thermal snapshot.
+
+Exporter contract check (R23b): Episode thermal policy uses
 `hardware.thermal.policy.sensors.s_fast` and `.s_slow`, mapping roles to actual
 journal sensor names (for example F/S); journal `sensors` values use those mapped
-names. Thermal desk outputs use `fast_c`/`slow_c`. Anchor `run_id` values are
-window-local, **not series-unique**: ordinals 1–4 reuse
-`align-pilot-v3-episodes-a-e01` through `e04` in each C/T window. The adapter
-matches IDs within each window; `(window, run_id)` identifies a series row.
-No sensor-key or run-ID schema changes were made; export registration is lead-owned.
+names. Thermal desk outputs use `fast_c`/`slow_c`. Anchor `run_id` values may
+be series-unique `<window_id>:<run_id>` (for example
+`C1:align-pilot-v3-episodes-a-e01`) or retain the legacy local ID. Manifest and
+observed roster checks strip a matching prefix only for anchor R15 comparison;
+the exported ID remains intact in desk identities and outputs. A prefix that
+differs from the containing window refuses. The raw adapter validates roster
+and source prefixes before opening member references. Exported roster/source
+IDs must agree. A captured anchor Episode may retain its original local ID:
+the adapter verifies the suffix and binds derived rows to the exported ID,
+without changing raw bytes. A different Episode ID/prefix refuses. No sensor-key
+or input-schema migration was made.
 
 No config paths are followed. Traversal, symlinks, sealed path names and other
 /Users/edr checkouts refuse before target reads. Native file mode is source-bound;
@@ -218,3 +237,12 @@ and 21 selected synthetic reducer cases, one module per process. Named-path
 compileall and `git diff --check` passed. See
 `docs/run_reports/2026-11-08-engine-r23.md` for commands, failing-first witnesses,
 the two deliberately unrun captured-template reducer cases, and the export handoff.
+
+R23b verification: **136 targeted tests passed**, one module per process,
+including 27 R23 hand witnesses, seven raw-adapter cases and 22 synthetic
+reducer cases. The supplied p1/p2b/p3 probes confirm the retry's recorded X3,
+W1 K=11 for each bad anchor, and the B-failure sequence 0,1,1,2.
+Named-path compileall and `git diff --check` passed. Commands, compatibility
+notes and the local-commit handoff are in
+`docs/run_reports/2026-11-08-engine-r23b.md`. No MLX code changed or native
+Metal test was added; this qualification does not validate live hardware.

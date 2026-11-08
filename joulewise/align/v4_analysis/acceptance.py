@@ -151,11 +151,12 @@ def battery(members):
 
 def anchor_diagnostic(windows, selection=None):
     sessions = {}
-    # W1 can arrive as its own window or the supported selection desk export.
-    # Its anchors have per-window run IDs, just like C/T; use ordinal cells.
+    # W1 arrives after the engine's full member screen, via its own window or
+    # selection_desk.anchor_members. A thermal-only snapshot cannot check seeds.
     if selection:
         anchors = [r for r in selection['members'] if r.get('ordinal') in (1, 2, 3, 4)]
-        if (len(anchors) == 4 and all(r.get('captured', True) and r.get('status') == 'completed'
+        if (len(anchors) == 4 and all(r.get('captured', True) and r.get('anchor_eligible') is True
+                and r.get('status') == 'completed'
                 and not ex.classes([*td.calibration_exclusions(r), *r.get('calibration_exclusions', [])])
                 and isinstance(r.get('turn_owned_j'), (int, float)) and math.isfinite(r['turn_owned_j'])
                 for r in anchors)):

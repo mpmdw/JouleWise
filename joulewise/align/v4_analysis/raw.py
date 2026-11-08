@@ -25,6 +25,14 @@ def member(root, slot, source, *, cache_dir=None):
             source_flags=source.get('exclusion_codes', []))
     root = input_path(root)
     episode = from_json(Episode, read_blob(root, source['episode']).decode())
+    if episode.episode_id != slot['run_id']:
+        _, sep, local = slot['run_id'].partition(':')
+        if sep and slot.get('series_role') == 'anchor' and episode.episode_id == local:
+            # The export's window-bound alias need not rewrite the captured
+            # Episode JSON. Bind its derived rows to the series-unique ID.
+            episode = replace(episode, episode_id=slot['run_id'])
+        else:
+            raise ValueError('raw episode identity differs from roster')
     ref = source['powermetrics']
     samples = sol.reduce_file(local_path(root, ref['path']), cache_dir=cache_dir)
     if samples.raw_sha256 != ref['sha256']:
@@ -86,7 +94,12 @@ def _job(args):
     return member(root, slot, source, cache_dir=cache)
 
 
-def window(root, document, slots, *, cache_dir=None, workers=1):
+def window(root, document, slots, *, window_id, cache_dir=None, workers=1):
+    from .engine import allocation_run_id
+    # Validate before opening any member's raw references. A prefix is a
+    # window binding, not merely a way to make repeated anchor IDs unique.
+    for record in [*slots, *document['members']]:
+        allocation_run_id(record['run_id'], window_id)
     sources = {m['run_id']: m for m in document['members']}
     if len(sources) != len(document['members']) or set(sources) != {s['run_id'] for s in slots}:
         raise ValueError('raw export roster differs')

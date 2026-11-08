@@ -5,16 +5,90 @@ import io
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from joulewise.align.v4_analysis.io import canonical, digest, load
 from joulewise.align.v4_analysis.synthetic import series
-from joulewise.align.v4_analysis import analyze
+from joulewise.align.v4_analysis import analyze, engine as e
 from tests.align.test_reduce_sol import synthetic_episode, ENDPOINT, OFFSET, EVIDENCE
 from tests.align.v4_synthetic import synthetic_frames
 from joulewise.align.records import to_json
 
 
 class RawTests(unittest.TestCase):
+    def test_contract_export_with_series_unique_anchor_ids_and_sensor_keys(self):
+        p = series(turns=4)
+        planned = []
+        for name in e.ORDER:
+            slots = e.roster(name)
+            for slot in slots[:4]:
+                slot['run_id'] = name+':'+slot['run_id']
+            planned.append(dict(window=name, members=slots))
+        slots = planned[0]['members']
+        ep = replace(synthetic_episode(), episode_id=slots[0]['run_id'],
+                     agent_model=slots[0]['model_id'], seed=slots[0]['expected_episode_seed'],
+                     task_pair=slots[0]['task_pair'], condition=slots[0]['condition'],
+                     hardware={'thermal': {'policy': {'sensors': {'s_fast': 'F', 's_slow': 'S', 'fan_keys': []}},
+                                           'intervals': []}})
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            def write(name, data):
+                (root/name).write_bytes(data)
+                return dict(path=name, sha256=digest(data))
+            sources = [dict(run_id=s['run_id'], captured=False) for s in slots]
+            sources[0].update(captured=True, episode=write('episode.json', to_json(ep).encode()),
+                powermetrics=write('raw.plist', b''.join(synthetic_frames(40))),
+                first_record_endpoint_s=ENDPOINT, nominal_interval_ns=100_000_000,
+                stamps=[dict(epoch_s=ENDPOINT, monotonic_before_s=100., monotonic_after_s=100.,
+                             wall_resolution_s=0., monotonic_resolution_s=0.)],
+                registered_span_ns=[ep.start_ns, ep.end_ns],
+                journal=[dict(kind='sample', monotonic_ns=ep.start_ns,
+                              finished=dict(monotonic_after_ns=ep.start_ns), sensors={'F': 50., 'S': 45.})])
+            p['synthetic'] = False
+            p['windows'] = [dict(window='C1', attempt_id='C1#1', status='final', roster=slots,
+                                 raw_source=write('raw.json', canonical(dict(members=sources))))]
+            p['series_source'] = write('series.json', canonical(dict(windows=planned)))
+            path = root/'input.json'
+            path.write_bytes(canonical(p))
+            payload = load(path)
+            fill, _ = analyze(payload)
+            self.assertEqual(payload['windows'][0]['members'][0]['thermal']['id'], slots[0]['run_id'])
+            self.assertTrue(payload['windows'][0]['members'][0]['thermal']['sidecar_present'])
+            self.assertEqual(fill['windows'][0]['eligibility'][0]['run_id'], slots[0]['run_id'])
+            self.assertNotIn('seed_identity_differs', fill['windows'][0]['eligibility'][0]['reasons'])
+            # A series-unique alias also binds an immutable Episode that still
+            # carries its original window-local capture ID.
+            local_sources = copy.deepcopy(sources)
+            local_ep = replace(ep, episode_id=e.roster('C1')[0]['run_id'])
+            local_sources[0]['episode'] = write('local-episode.json', to_json(local_ep).encode())
+            local_input = copy.deepcopy(p)
+            local_input['windows'][0]['raw_source'] = write('local-raw.json', canonical(dict(members=local_sources)))
+            local_payload = load(path, document=local_input)
+            local_fill, _ = analyze(local_payload)
+            self.assertEqual(local_fill['windows'][0]['eligibility'], fill['windows'][0]['eligibility'])
+            self.assertEqual(canonical(local_payload['windows'][0]['members']), canonical(payload['windows'][0]['members']))
+            for target in ('roster', 'raw'):
+                with self.subTest(target=target):
+                    bad = copy.deepcopy(p)
+                    if target == 'roster':
+                        bad['windows'][0]['roster'][0]['run_id'] = 'C2:'+e.roster('C1')[0]['run_id']
+                    else:
+                        bad_sources = copy.deepcopy(sources)
+                        bad_sources[0]['run_id'] = 'C2:'+e.roster('C1')[0]['run_id']
+                        bad['windows'][0]['raw_source'] = write('bad-raw.json', canonical(dict(members=bad_sources)))
+                    # Prefix validation must happen before opening the episode.
+                    with patch('joulewise.align.v4_analysis.raw.member',
+                               side_effect=AssertionError('must refuse before raw reads')):
+                        with self.assertRaisesRegex(ValueError, 'window prefix'):
+                            load(path, document=bad)
+            bad_sources = copy.deepcopy(sources)
+            wrong_ep = replace(ep, episode_id='C2:'+e.roster('C1')[0]['run_id'])
+            bad_sources[0]['episode'] = write('wrong-episode.json', to_json(wrong_ep).encode())
+            bad = copy.deepcopy(p)
+            bad['windows'][0]['raw_source'] = write('wrong-episode-raw.json', canonical(dict(members=bad_sources)))
+            with self.assertRaisesRegex(ValueError, 'episode identity'):
+                load(path, document=bad)
+
     def test_raw_capture_presence_is_explicit_not_inferred(self):
         from joulewise.align.v4_analysis.raw import member
         for source in ({}, {'captured': 1}, {'captured': 'true'}):

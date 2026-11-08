@@ -116,7 +116,8 @@ def load(path, *, calibration_only=False, through_window=None, cache_dir=None, w
             from . import raw as adapter
             ref = window['raw_source']
             native = read_source(root, ref)
-            window['members'] = adapter.window(root, native, window.pop('roster'), cache_dir=cache_dir, workers=workers)
+            window['members'] = adapter.window(root, native, window.pop('roster'), window_id=window['window'],
+                                              cache_dir=cache_dir, workers=workers)
             census.append(dict(path=ref['path'], sha256=ref['sha256']))
             continue
         records = []
