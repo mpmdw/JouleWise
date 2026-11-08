@@ -230,7 +230,9 @@ class WindowRecord:
         thermal = self.thermal()
         exclusions = self.source('exclusions')
         require(isinstance(exclusions.get('members_excluded'), list), 'final exclusions missing')
-        excluded = {r['run_id']: r['codes'] for r in exclusions['members_excluded']}
+        # R22-1: contention is disclosure-only, so a contention code can never exclude a member here either.
+        from joulewise.align.apple import v4_contention
+        excluded = {r['run_id']: v4_contention.split_codes(r['codes'])[0] for r in exclusions['members_excluded']}
         require(set(excluded) <= {m['id'] for m in thermal['members']}, 'exclusions outside roster')
         require(len(excluded) == len(exclusions['members_excluded']), 'duplicate exclusions')
         counts = dict.fromkeys(cadence.CAL_PAIRS, 0)
@@ -267,14 +269,14 @@ class WindowRecord:
             codes = excluded.get(member['id'], [])
             require(isinstance(codes, list) and all(isinstance(c, str) and c for c in codes),
                     'exclusion codes malformed')
-            require(member['excluded'] == bool(codes or member['calibration_exclusions']),
-                    'desk and final exclusions disagree')
+            desk_codes = v4_contention.split_codes(member['calibration_exclusions'])[0]
+            require(member['excluded'] == bool(codes or desk_codes), 'desk and final exclusions disagree')
             if member['id'] not in captured:
                 require(member['excluded'], 'uncaptured member cannot be eligible')
             if not member['excluded']:
                 require(member.get('tokens') is not None and not any('identity_mismatch' in f
                         for f in member['flags']), 'identity X5 unresolved')
-                require(not member['calibration_exclusions'], 'calibration exclusion unresolved')
+                require(not desk_codes, 'calibration exclusion unresolved')
                 model_report = thermal['model_windows'].get(f"{member.get('model')}/{self.window}")
                 pool_ok = model_report and all(model_report[f'U{k}']['status'] == 'pass' for k in (1, 2, 3))
                 # Only the frozen CALIBRATION pool counts: ordinary and supplemental sentinels, anchors,

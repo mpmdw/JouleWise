@@ -14,6 +14,7 @@ declares 2 and restores Automatic when that night closes. Every session start
 (prepare, install) first restores a marker it does not own, never while a
 measuring night holds the host night lock.
 """
+from functools import wraps
 import json
 import os
 from pathlib import Path
@@ -26,6 +27,7 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+from joulewise import timing_receipts
 from scripts import align_pilot_session as pilot, align_v4_kit as kit
 
 
@@ -290,6 +292,10 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
     except (OSError, ValueError):
         battery_policy = None
     journal = v4_battery.load_journal(Path(custody)/'hazards/monitor/battery.jsonl') if custody else ([], None, 1)
+    from joulewise.align.apple import v4_contention
+    # R22-1: in-window contention is disclosure-only; every member records its outside-tree CPU-seconds.
+    contention_journal = (v4_contention.load_journal(Path(custody)/'hazards/monitor/contention.jsonl')
+                          if custody else ([], None, 1))
     records = []
     pilot_members = {m['run_id']: m for m in members}
     for row in plan['members']:
@@ -301,10 +307,11 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
                  'flags': ['member.runtime_failure'], 'tokens': None, 'intervals': [],
                  'turn_observation': [], 'coverage': [], 'releases': [], 'turn_admissions': 0,
                  'pm_period_s': .1, 'calibration_exclusions': ['member.runtime_failure'], 'error': str(exc)}
-        r.update({k: row[k] for k in ('ordinal', 'role', 'pool_role') if k in row},
+        r.update({k: row[k] for k in ('ordinal', 'role', 'pool_role', 'condition', 'task_pair') if k in row},
                  window=(state.get('v4_series') or {}).get('window_id', state.get('window_id', 'W1')),
                  stage=row.get('stage_id'))
         v4_battery.attach(r, path, journal)
+        v4_contention.attach(r, path, contention_journal)
         assign_work_group(r, row)
         if row.get('role', '').startswith(('X-', 'Y-')):
             r.update(template=row['role'][0], arm=row['role'][-1])
@@ -312,7 +319,9 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
             expected = [{k: t[k] for k in ('prompt_token_ids', 'output_token_ids')} for t in fixture['turns']]
             r['pilot7_token_identical'] = r.get('tokens') == expected
         p = pilot_members.get(row['run_id'], {})
-        codes = p.get('exclusion_codes', [])
+        codes, disclosed = v4_contention.split_codes(p.get('exclusion_codes', []))
+        if disclosed:
+            r['contention']['disclosed_codes'] = sorted(set(r['contention']['disclosed_codes']) | set(disclosed))
         if any(str(c).startswith('battery.member_span') for c in codes):
             r['flags'].append('battery.member_span')
         r['excluded'] = bool(codes) or bool(r.get('calibration_exclusions'))
@@ -329,6 +338,11 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
             'candidates': {r['ordinal']: sentinel_admissibility(r) for r in records
                            if r.get('pool_role') == 'sentinel' and not r.get('supplemental')},
             'reference_status': 'requires authenticated R1/W1 E_ref for cross-window U4'}
+    # R22-3: the printed balance check by condition (exclusions + flags per member-second); print only.
+    from joulewise.align.apple import v4_balance
+    report['balance_check'] = v4_balance.balance_check(records)
+    for line in v4_balance.lines(report['balance_check']):
+        print(line)
     if supplemental_report(records):
         report['supplemental_sentinels'] = supplemental_report(records)
     for model, result in report['thermal']['model_windows'].items():
@@ -476,6 +490,7 @@ def _record_bound(root, packet):
             and packet.get('series_sha256') == _sha256(ledger.stdout))
 
 
+@timing_receipts.timed("arm", "v4_arm_checks")
 def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=None, owner=None,
                obc_off_attested_by=None, battery_runner=None, battery_log=None, window_battery_journal=None,
                now=None, next_arm_triage=None, commit_check=None, record_check=None,
@@ -548,24 +563,26 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
             supplied = None
     current_digest = v4_registration.artifact_set_digest(measurement_root)
     built, matches, rebuild_error = None, False, None
-    try:
-        if packet_builder is not None:
-            built, matches = packet_builder(measurement_root, supplied, now_epoch_s=now_s,
-                                            current_artifact_set_sha256=current_digest)
-        else:
-            from scripts import align_v4_next_arm_packet as builder
-            built, matches = builder.rebuild_and_compare(measurement_root, supplied, now_epoch_s=now_s,
-                                                         current_artifact_set_sha256=current_digest)
-    except (ValueError, KeyError, TypeError, AttributeError, OSError) as exc:
-        rebuild_error = f'{type(exc).__name__}: {exc}'
+    with timing_receipts.span("arm", "v4_packet_rebuild"):
+        try:
+            if packet_builder is not None:
+                built, matches = packet_builder(measurement_root, supplied, now_epoch_s=now_s,
+                                                current_artifact_set_sha256=current_digest)
+            else:
+                from scripts import align_v4_next_arm_packet as builder
+                built, matches = builder.rebuild_and_compare(measurement_root, supplied, now_epoch_s=now_s,
+                                                             current_artifact_set_sha256=current_digest)
+        except (ValueError, KeyError, TypeError, AttributeError, OSError) as exc:
+            rebuild_error = f'{type(exc).__name__}: {exc}'
     # The 3 s monitor launch is USB and process activity: it runs BEFORE the quiet/display dwell
     # starts, never during it (lead ruling 2026-11-08). The arm stamps the probe's end and the dwell
     # start on one monotonic clock and refuses unless the probe ended strictly earlier.
-    probe_started_ns = time.monotonic_ns()
-    try:
-        meter = dict((meter_probe or _probe_meter_live)(measurement_root))
-    except Exception as exc:  # noqa: BLE001 - an unverifiable meter refuses; it never raises out of the arm
-        meter = {'live': False, 'reason': f'{type(exc).__name__}: {exc}'}
+    with timing_receipts.span("arm", "v4_meter_probe"):
+        probe_started_ns = time.monotonic_ns()
+        try:
+            meter = dict((meter_probe or _probe_meter_live)(measurement_root))
+        except Exception as exc:  # noqa: BLE001 - an unverifiable meter refuses; it never raises out of the arm
+            meter = {'live': False, 'reason': f'{type(exc).__name__}: {exc}'}
     meter.setdefault('probe_started_ns', probe_started_ns)
     meter.setdefault('probe_ended_ns', time.monotonic_ns())
     meter.setdefault('probe_ended_epoch_s', now_s)
@@ -717,6 +734,27 @@ def _require_night_job_absent(runner=None):
         raise ValueError('v4 install refused: launchd job state unavailable')
 
 
+def _install_timing(operation):
+    @wraps(operation)
+    def wrapped(*args, **kwargs):
+        # The session CLI already owns stdout. Buffer throughout arm/install,
+        # then append there after the unmeasured operation. No sidecar, file
+        # open, or marker write can enter the quiet start-state preparation.
+        rows = []
+        try:
+            with timing_receipts.bind(timing_receipts.Writer(rows.append, producer="v4_arm")), \
+                 timing_receipts.span("arm", "v4_install"):
+                return operation(*args, **kwargs)
+        finally:
+            for row in rows:
+                try:
+                    sys.stdout.write(json.dumps(row, sort_keys=True) + "\n")
+                except OSError as error:
+                    sys.stderr.write(f"timing receipt missing: {error}\n")
+    return wrapped
+
+
+@_install_timing
 def install(session_root, *, runner=None, volume_runner=None, now=None, w1_disk_config=None,
             disk_gate=None, **kwargs):
     session = Path(session_root)
@@ -885,9 +923,11 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
     if not record['admitted']:
         raise ValueError('v4 arm refused: ' + '; '.join(record['reasons']))
     kit.arm_powermode_check(plan, record['ac_powermode']['observed'])
-    receipt = w1_disk_check(w1_disk_config, gate=disk_gate)
+    with timing_receipts.span("arm", "v4_disk_gate"):
+        receipt = w1_disk_check(w1_disk_config, gate=disk_gate)
     pilot.h.write(session / 'staging/w1_disk_gate.json', receipt)
-    return pilot.install(session, now=now or time.time, **kwargs)
+    with timing_receipts.span("arm", "v4_installer_handoff"):
+        return pilot.install(session, now=now or time.time, **kwargs)
 
 
 def main(argv=None):

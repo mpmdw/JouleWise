@@ -47,6 +47,8 @@ This module imports no flag code and nothing from ``arm_readiness*``,
 
 from __future__ import annotations
 
+from joulewise import timing_receipts
+
 import dataclasses
 import json
 import os
@@ -172,6 +174,7 @@ class _Recorder:
         return verdict
 
 
+@timing_receipts.timed("arm", "hazard_arm")
 def run(config: ArmConfig, seams: Seams | None = None) -> ArmResult:
     """Run the arm sequence and write ``arm.json``.  Never raises for physics;
     raises only for a misuse (thresholds missing, ``arm.json`` already present)."""
@@ -271,13 +274,14 @@ def run(config: ArmConfig, seams: Seams | None = None) -> ArmResult:
         return clock.sample(ctx, frequency_reader=seams.frequency_reader,
                             max_skew_ns=int(thresholds["clock"]["skew_max_ns"]))
 
-    dwell_started = ctx.stamp()
-    boot_start = _boot(seams, ctx)
-    samples = [clock_sample()]
-    dwell = contention.run_dwell(
-        ctx, thresholds["contention"], tree_roots=config.tree_roots,
-        on_tick=lambda: samples.append(clock_sample()),
-        tick_s=config.dwell_tick_s, host_reader=seams.host_cpu)
+    with timing_receipts.span("dwell", "hazard_clean_dwell"):
+        dwell_started = ctx.stamp()
+        boot_start = _boot(seams, ctx)
+        samples = [clock_sample()]
+        dwell = contention.run_dwell(
+            ctx, thresholds["contention"], tree_roots=config.tree_roots,
+            on_tick=lambda: samples.append(clock_sample()),
+            tick_s=config.dwell_tick_s, host_reader=seams.host_cpu)
     samples.append(clock_sample())
     boot_end = _boot(seams, ctx)
     contention_verdict = recorder.hazard(
