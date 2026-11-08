@@ -60,6 +60,38 @@ def plain_trace(n=100, gpu=1000.0, **kw):
     return rc.Trace(cols([NS] * n, [gpu] * n, **kw), 1.0, -NS)
 
 
+class ExactSecondsTests(unittest.TestCase):
+    def test_seconds_to_ns_is_exact(self):
+        # Lead ruling on P2: seconds -> ns from the exact value, never the float product x * 1e9.
+        from fractions import Fraction
+        rng = rc.random.Random(5)
+        for _ in range(20000):
+            x = rng.uniform(1.7e9, 9.5e9)
+            self.assertEqual(rc.seconds_ns(x), round(Fraction(x) * NS))
+        x = 4_300_000_000.0 + 2.0 ** -20                      # one float step (953.67 ns) above 4.3e9 s
+        self.assertEqual(rc.seconds_ns(x) - 4_300_000_000 * NS, 954)
+        self.assertNotEqual(round(x * NS) - 4_300_000_000 * NS, 954)      # the float product says 1,024
+        self.assertEqual(rc.seconds_ns(7), 7 * NS)
+
+    def test_large_epoch_seams_sit_on_the_float_grid(self):
+        # Jittered supports at 4.3e9 s leave 953/954 ns seams (A37 snaps them); at 9e9 s, 1,907/1,908 ns
+        # (they stay, and uncovered owned time excludes, A2(4)).
+        def seams(anchor):
+            cum, prev, out = 0.0, None, set()
+            for i in range(400):
+                length = (NS + (333, 777)[i % 2]) / NS
+                if i:
+                    cum += length
+                end = anchor + cum
+                s, e = rc.seconds_ns(end - length), rc.seconds_ns(end)
+                if prev is not None and s != prev:
+                    out.add(abs(s - prev))
+                prev = e
+            return out
+        self.assertEqual(seams(4_300_000_000.0), {953, 954})
+        self.assertEqual(seams(9_000_000_000.0), {1907, 1908})
+
+
 class OwnershipTests(unittest.TestCase):
     def episode(self, turns, start=0, end=100 * NS):
         return {"start_ns": start, "end_ns": end, "turns": turns}

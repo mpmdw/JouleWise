@@ -681,8 +681,16 @@ def intervals_meet(a_spans, b_spans):
 
 
 def seconds_ns(x):
-    """Float seconds to integer ns: round(x * 1e9), half to even (R21 A21 restated as text; A37)."""
-    return round(x * NS)
+    """Seconds to integer ns, EXACTLY (lead ruling on P2, 2026-11-08): the exact value of x (its decimal or
+    binary value, never a float product x * 1e9, which rounds on a 256-1,024 ns grid at epoch magnitudes)
+    times 1e9, rounded half to even. Float elapsed accumulation itself stays as A21 restates it."""
+    if isinstance(x, int):
+        return x * NS
+    n, d = x.as_integer_ratio()
+    q, r = divmod(n * NS, d)
+    if 2 * r > d or (2 * r == d and q % 2):
+        q += 1
+    return q
 
 
 def stamp_mapping(ep, meta):

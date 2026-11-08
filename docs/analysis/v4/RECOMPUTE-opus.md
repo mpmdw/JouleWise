@@ -218,8 +218,11 @@ should treat a mismatch here as a request for the restated text, not as a bug.
   - Snapping is applied before any integral, gap or coverage check.
   - Tests: `test_uncovered_owned_time_excludes_but_rounding_gaps_do_not` and
     `test_float_support_placement`. Mutations to 477 ns, or to gap-only snapping, turn them red.
-- **`seconds_ns`.** Read as `round(x * 1e9)`, half to even, with the midpoint in float seconds
-  (`ClockTests`). The exporter's `production_offset_ns` settles it exactly.
+- **`seconds_ns`, RULED (lead, blind, on probe P2).** Seconds convert to ns EXACTLY: the exact value of the
+  number (no float product `x * 1e9`, which rounds on a 256-1,024 ns grid at epoch magnitudes) times 1e9,
+  half to even. Float elapsed accumulation stays as A21 restates it. At 4.3e9 s jittered supports leave
+  953/954 ns seams (snapped by A37); at 9e9 s, 1,907/1,908 ns (kept; uncovered owned time excludes,
+  A2(4)). Tests: `ExactSecondsTests`.
 - **A11(c) collector grid.** IR says the `temperature.Coverage` definition will be written as text by
   its owner. Until then the recompute uses its own one-second cells (≥ 99 %, gaps ≤ 2 s, edges
   included) over the episode span and each G0 span.
