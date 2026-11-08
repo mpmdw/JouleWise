@@ -28,6 +28,15 @@ MAX_DESK_SECONDS = 12 * 3600
 # R0-L3 item 3: a comma list of runner check names (the runner validates
 # the names themselves); nothing else may reach the runner's argv.
 CHECKS_PATTERN = re.compile(r"[a-z][a-z-]*(?:,[a-z][a-z-]*)*")
+# R0-L3 display ruling (RUN_STATE 206): with the display on, menu-bar redraws
+# every 3-4 min wake WindowServer and ControlCenter and trip the census. The
+# launcher sleeps the display (no sudo) and dwells this long before the
+# runner's first census-checked segment.
+DISPLAY_SLEEP_DWELL_S = 300
+# Test seam only: the LaunchAgent harness cannot wait 300 s. Never set it for
+# a real run; the record carries both the dwell used and the constant.
+DISPLAY_DWELL_TEST_ENV = "JOULEWISE_R0_TEST_DISPLAY_DWELL_S"
+DISPLAY_PREP_ENV = "JOULEWISE_R0_DISPLAY_PREP"
 
 
 def positive_seconds(value: str) -> float:
@@ -148,6 +157,23 @@ def preflight(args) -> None:
     print(json.dumps({"ac_power": True, "free_bytes": free, "disk_check": "report_only"}), flush=True)
 
 
+def display_dwell_seconds() -> float:
+    override = os.environ.get(DISPLAY_DWELL_TEST_ENV)
+    return DISPLAY_SLEEP_DWELL_S if override is None else positive_seconds(override)
+
+
+def sleep_display(pmset_bin) -> dict:
+    """`pmset displaysleepnow` (no sudo). A failure is recorded, never a refusal."""
+    record = {"argv": [str(pmset_bin), "displaysleepnow"], "epoch_s": time.time()}
+    try:
+        result = subprocess.run(record["argv"], capture_output=True, text=True, timeout=15,
+                                env={**os.environ, "LC_ALL": "C"})
+        record.update(exit_code=result.returncode, stderr=result.stderr.strip())
+    except (OSError, subprocess.SubprocessError) as exc:
+        record.update(exit_code=None, stderr=f"{type(exc).__name__}: {exc}")
+    return record
+
+
 def run_until_deadline(args) -> int:
     """Bound the runner by the same deadline that releases the watchdog fence."""
     # Leave time to terminate a stuck runner and resume Spotlight before the
@@ -155,6 +181,9 @@ def run_until_deadline(args) -> int:
     remaining = args.deadline - time.time() - 10
     if remaining <= 0:
         raise TimeoutError("R0 desk deadline already passed")
+    dwell = display_dwell_seconds()
+    if remaining <= dwell:
+        raise TimeoutError(f"R0 desk deadline leaves no room for the {dwell:g} s display dwell")
     child = None
 
     def interrupted(signum, _frame):
@@ -163,8 +192,18 @@ def run_until_deadline(args) -> int:
     for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
         signal.signal(signum, interrupted)
     try:
+        # RUN_STATE 206: display off, then dwell, before any census-checked
+        # segment. The runner records the display state and any wake.
+        prep = {"displaysleepnow": sleep_display(args.pmset_bin), "dwell_s": dwell,
+                "dwell_constant_s": DISPLAY_SLEEP_DWELL_S}
+        time.sleep(dwell)
+        prep["dwell_end_epoch_s"] = time.time()
+        print(json.dumps({"display_prep": prep}), flush=True)
+        remaining = args.deadline - time.time() - 10
+        if remaining <= 0:
+            raise TimeoutError("R0 desk deadline passed during the display dwell")
         runner = json.loads(args.runner_spec.read_text())
-        child = subprocess.Popen(runner)
+        child = subprocess.Popen(runner, env={**os.environ, DISPLAY_PREP_ENV: json.dumps(prep)})
         return child.wait(timeout=remaining)
     finally:
         # launchd and the shell may both deliver TERM. Finish reaping before
@@ -289,6 +328,7 @@ def main(argv=None) -> int:
     run = sub.add_parser("run")
     run.add_argument("--deadline", type=float, required=True)
     run.add_argument("--runner-spec", type=Path, required=True)
+    run.add_argument("--pmset-bin", default="/usr/bin/pmset")
     args = parser.parse_args(argv)
     for name in ("repo", "config", "output", "disk_path", "custody_root"):
         if hasattr(args, name):

@@ -30,8 +30,25 @@ Optional runner arguments (lead ruling R0-L3, item 3,
   failed check, and its prerequisite gates (host identity, model load) still
   apply. `--no-keep-going` restores stop-at-first-failure.
 
-The deadline must leave room for one redo capture, about 55 min (R0-L3
-follow-up ruling 6). Under R0-L3 a sustained contaminant (the largest single
+**Display off, then a 300 s dwell (R0-L3 display ruling, `RUN_STATE.md`
+item 206).** The magistrate found the MBP display had been on since 11-05
+(`displaysleep 0`). With the display on, ControlCenter's menu-bar redraws
+every 3-4 min wake WindowServer and trip the census; after
+`pmset displaysleepnow` those bursts stopped. macOS also starts about 650
+background (dasd) activities an hour on an idle Mac on AC. So the `run` step,
+after Spotlight is paused and before the runner's first census-checked
+segment, runs `pmset displaysleepnow` (no sudo) and dwells
+`DISPLAY_SLEEP_DWELL_S` = 300 s. A failed `displaysleepnow` is recorded, not
+a refusal. The record (`displaysleepnow` exit and stderr, the dwell, its end
+time) goes to the job's `stdout.log` and to the runner in
+`JOULEWISE_R0_DISPLAY_PREP`. The runner (measurement lane, PR #699) records
+the `pmset -g` `displaysleep` value and every display transition from
+`pmset -g log` during the run in its report. A display wake during the SMC
+capture is a flag, never a refusal. `JOULEWISE_R0_TEST_DISPLAY_DWELL_S` is a
+test seam for the LaunchAgent harness; never set it for a real run.
+
+The deadline must leave room for the 300 s display dwell and one redo
+capture, about 55 min (R0-L3 follow-up ruling 6). Under R0-L3 a sustained contaminant (the largest single
 process outside the capture's tree, `kernel_task` excluded, at ≥ 0.5 CPU-s/s
 for ≥ 60 s) abandons the first SMC capture and runs it once more.
 
