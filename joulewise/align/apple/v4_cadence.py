@@ -112,7 +112,10 @@ def next_arm_triage(packet, internal, identity=None):
 
     ``internal`` maps each ARM-source id to bool (computed by the arm itself).
     ``identity`` is what the arm derives itself, never from the packet:
-    ``{'artifact_set_sha256': <current bound-artifact digest>, 'record_commit_exists': bool}``.
+    ``{'artifact_set_sha256': <current bound-artifact digest>, 'record_commit_exists': bool,
+    'record_bound': bool}``; ``record_bound`` means the packet's ``record_path`` at its
+    ``record_commit`` has the packet's ``record_sha256`` and that commit is the last one
+    that changed the record (smoke G1: a stale but well-formed packet refuses).
     ``packet`` is the off-MBP evidence: schema, ``previous_window`` (a window id
     or ``'R1'`` for the first v4 window), ``record_commit`` (the previous record's
     commit), ``last_desk_passed_artifact_set_sha256``, ``next_window_role``
@@ -158,7 +161,10 @@ def next_arm_triage(packet, internal, identity=None):
         stop, stop_error = None, str(exc)
         reasons.append(f'calibration evidence contradictory or malformed: {stop_error}')
     commit = packet.get('record_commit')
-    record_ok = isinstance(commit, str) and bool(COMMIT.match(commit)) and identity.get('record_commit_exists') is True
+    record_ok = (isinstance(commit, str) and bool(COMMIT.match(commit))
+                 and identity.get('record_commit_exists') is True
+                 and isinstance(packet.get('record_path'), str) and _is_digest(packet.get('record_sha256'))
+                 and identity.get('record_bound') is True)
     for row in NEXT_ARM_TRIAGE:
         name, gating = row['id'], row.get('gating', True)
         if row['source'] == ARM:
@@ -211,7 +217,8 @@ def next_arm_triage(packet, internal, identity=None):
                 basis = f'{streak} consecutive non-passing B windows need a lead disposition: ' + basis
         if name == 'record_committed' and status == 'pass' and not record_ok:
             status = 'fail'
-            basis = 'record_commit is missing, malformed or not a commit in the repository: ' + basis
+            basis = ('record_commit/record_path/record_sha256 is missing, malformed, not found, or not the last committed '
+                     'window record (a stale packet refuses): ' + basis)
         results[name] = {'status': status, 'source': PACKET, 'basis': basis}
         if status == 'fail':
             reasons.append(f'triage {name} failed')
@@ -225,7 +232,8 @@ def next_arm_triage(packet, internal, identity=None):
     return {'admitted': not reasons, 'reasons': reasons, 'checks': results,
             'previous_window': previous, 'full_desk_required': desk_required,
             'derived': {'previous_window_is_w1': derived_w1, 'code_or_config_changed': derived_changed,
-                        'artifact_set_sha256': current, 'record_commit_exists': identity.get('record_commit_exists')},
+                        'artifact_set_sha256': current, 'record_commit_exists': identity.get('record_commit_exists'),
+                        'record_bound': identity.get('record_bound')},
             'list': list(TRIAGE_IDS), 'gating': list(GATING_IDS),
             'calibration': stop, 'lead_rulings': retained.get('lead_rulings', []),
             'packet': retained, 'packet_sha256': _canonical_sha256(retained)}
@@ -239,6 +247,8 @@ CAL_WINDOWS = 8
 CAL_TARGET_PER_PAIR = 39
 BENIGN_PER_PAIR_PER_WINDOW = 7    # protocol default roster: 14 benign (7/pair) per window
 WINDOW_MEMBERS = 22               # 4 anchors + 2 sentinels + 14 benign + 2 sabotage
+ADDED_SENTINELS_MAX = 2           # protocol U4/U5 inconclusive: two sentinels added to remaining windows
+CAPTURED_MAX = WINDOW_MEMBERS + ADDED_SENTINELS_MAX    # the real captured maximum (24); sentinels are not calibrators
 
 
 def _battery_ruled(rulings, previous):
@@ -274,8 +284,8 @@ def calibration_stop(windows, lead_rulings=()):
     Each entry: ``{'window': unique id, 'status': 'final'|'provisional',
     'captured_members': int >= 0, 'eligible_benign': {'spam': n, 'bank': n}}``
     (optionally ``eligible_total``, which must equal their sum). Rows must be
-    internally consistent: integers (no bool), ``captured_members`` at most the 22-member
-    window roster, and the eligible benign members (spam + bank) no more than
+    internally consistent: integers (no bool), ``captured_members`` at most the registered
+    roster maximum (22, plus the two sentinels a U4/U5-inconclusive window may add), and the eligible benign members (spam + bank) no more than
     were captured; a contradictory row raises and can never authorize completion.
 
     Calibration is exactly 8 counted windows; there is no early stop. A **final**
@@ -309,7 +319,7 @@ def calibration_stop(windows, lead_rulings=()):
         counts = row.get('eligible_benign') if isinstance(row, dict) else None
         if (not isinstance(row, dict) or not isinstance(row.get('window'), str) or row['window'] in seen
                 or row.get('status') not in ('final', 'provisional')
-                or type(row.get('captured_members')) is not int or not 0 <= row['captured_members'] <= WINDOW_MEMBERS
+                or type(row.get('captured_members')) is not int or not 0 <= row['captured_members'] <= CAPTURED_MAX
                 or not isinstance(counts, dict) or set(counts) != set(CAL_PAIRS)
                 or any(type(n) is not int or not 0 <= n <= BENIGN_PER_PAIR_PER_WINDOW for n in counts.values())
                 or sum(counts.values()) > row['captured_members']

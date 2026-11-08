@@ -14,13 +14,14 @@ PAIRS = cad.CAL_PAIRS
 ARTIFACT_SET = 'a' * 64
 RECORD_COMMIT = 'b' * 40
 # What the arm derives itself (artifact-set digest, commit existence); never taken from the packet.
-IDENTITY = {'artifact_set_sha256': ARTIFACT_SET, 'record_commit_exists': True}
+IDENTITY = {'artifact_set_sha256': ARTIFACT_SET, 'record_commit_exists': True, 'record_bound': True}
 
 
 def passing_packet(**overrides):
     """A complete passing packet for a calibration arm after window C2."""
     packet = {'schema': cad.TRIAGE_SCHEMA, 'previous_window': 'C2',
-              'record_commit': RECORD_COMMIT, 'last_desk_passed_artifact_set_sha256': ARTIFACT_SET,
+              'record_commit': RECORD_COMMIT, 'record_path': 'staging/window-record.json',
+              'record_sha256': 'e' * 64, 'last_desk_passed_artifact_set_sha256': ARTIFACT_SET,
               'next_window_role': 'calibration',
               'calibration_windows': [window('C1', 7, 7), window('C2', 7, 7)],
               'checks': {row['id']: {'status': 'recorded' if row.get('gating', True) is False else 'pass',
@@ -180,6 +181,10 @@ class TriageListTests(unittest.TestCase):
                                              {**IDENTITY, 'record_commit_exists': False})['admitted'])
         for bad in (None, 'abc', 'B' * 40):
             self.assertFalse(cad.next_arm_triage(passing_packet(record_commit=bad), INTERNAL, IDENTITY)['admitted'])
+        # smoke G1: the packet must also be bound to the last committed record
+        self.assertFalse(cad.next_arm_triage(passing_packet(), INTERNAL, {**IDENTITY, 'record_bound': False})['admitted'])
+        self.assertFalse(cad.next_arm_triage(passing_packet(record_sha256=None), INTERNAL, IDENTITY)['admitted'])
+        self.assertFalse(cad.next_arm_triage(passing_packet(record_path=None), INTERNAL, IDENTITY)['admitted'])
 
     def test_meter_coverage_is_recorded_with_gaps_and_never_gates(self):
         packet = passing_packet()
@@ -307,12 +312,20 @@ class CalibrationStopTests(unittest.TestCase):
         # boundary: exactly the captured members eligible is fine; one more is not
         ok = [window(f'C{i}', 7, 7, captured=14) for i in range(1, 9)]
         self.assertEqual(cad.calibration_stop(ok)['decision'], 'calibration_complete')
-        for bad in (window('C1', 7, 7, captured=13), window('C1', 7, 7, captured=23), window('C1', -1, 7),
+        for bad in (window('C1', 7, 7, captured=13), window('C1', 7, 7, captured=25), window('C1', -1, 7),
                     window('C1', 7.0, 7), window('C1', True, 7),
                     dict(window('C1', 3, 3), eligible_total=7)):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 cad.calibration_stop([bad])
         self.assertEqual(cad.calibration_stop([dict(window('C1', 3, 3), eligible_total=6)])['attempted'], 1)
+
+    def test_two_added_sentinels_do_not_make_capture_counts_impossible(self):
+        # delta2 S2 M1: 22 + 2 added sentinels = 24 captured, still 7 eligible benign per pair.
+        rows = [window(f'C{i}', 7, 7, captured=24) for i in range(1, 9)]
+        self.assertEqual(cad.calibration_stop(rows)['decision'], 'calibration_complete')
+        self.assertEqual(cad.CAPTURED_MAX, 24)
+        with self.assertRaises(ValueError):
+            cad.calibration_stop([window('C1', 7, 7, captured=25)])      # beyond any authorized roster
 
     def test_calibration_totals_in_the_packet_must_sum_from_the_rows(self):
         rows = [window(f'C{i}', 7, 7) for i in range(1, 9)]
@@ -399,7 +412,9 @@ class RegistrationTextTests(unittest.TestCase):
     def test_protocol_states_tiers_stage_a_checklist_topup_evidence_and_dc_sealing(self):
         text = ' '.join((Path(__file__).resolve().parents[2] / 'docs/align/pilot_protocol_v4.md').read_text().split())
         for phrase in ('Stage A checklist additions', 'JW_WP22_FULL=1', '**Strict:**', '**Amendment:**', '`amendments` row',
+                       '**strict is the default**', 'AMENDMENT_ALLOWLIST', 'dynamic closure', 'dynamic_closure_trace.json',
                        '--battery-log', 'derived from a logged battery record', 'continuous float',
+                       'sample --loop', 'consecutive', 'no continuity rule',
                        'BENIGN members only', 'sealed (hash only)', 'U3 inconclusive'):
             self.assertIn(phrase, text)
 

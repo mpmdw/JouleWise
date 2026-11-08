@@ -65,8 +65,8 @@ daytime_offload_freshness policy (max_age_s, lead_signature); no default duratio
 free without remounting/re-hashing the SSD. Empty offloads require explicit
 offloads_owed: none. Battery arm requires fresh AC, >=99%, not charging and
 |InstantAmperage| <=200 mA, retaining raw ioreg and pmset evidence (pmset is evidence only).
-Top-up evidence is derived from the logged battery record (--battery-log; a completed charge within
-30 min or continuous float since), never typed. DC residuals print for benign members only.
+Top-up evidence is derived from the logged battery record (--battery-log, sampled continuously: a
+completed charge within 30 min, or continuous float since one), never typed. DC residuals print for benign members only.
 R12: a window ends at authenticated terminal completion (the 59,520 s maximum is a
 ceiling, not a reservation). W1/D arm also requires --next-arm-triage, the frozen
 B2 list (joulewise/align/apple/v4_cadence.NEXT_ARM_TRIAGE), every entry gating.

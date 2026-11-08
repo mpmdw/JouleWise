@@ -107,3 +107,15 @@ RUN_STATE 217, and the arm-call witnesses to the battery-log API).
 | L8 | `pmset -g batt` is evidence only | `align_v4_session.py` |
 | L9 | H* refuses bool and non-numeric scores | `v4_estimands.py` |
 | L1, L4 | L1 is covered by the R1 exporter. L4 (note only): U6's trajectory-clustered SE is CR0 with z = 1.645, anti-conservative at about 14 trajectories; CR1 with t(G-1) is a candidate, not changed here (U6 is reported, never a gate) | n/a |
+
+## Delta2 round (Sol delta2 reviews on f993b784f) and the smoke-kit findings
+
+| Finding | Change | Where |
+|---|---|---|
+| S1 F01 / S2 H1, H2 receipt completeness | Strict is now the default tier; the amendment tier is a 25-module allowlist justified by the reviewed refusal census and never traced; the walker follows `-m` launches; `WP15` runtime script and its config, `joulewise/__main__.py` and the registration helpers are bound; a dynamic closure (audit-hook trace of the synthetic WP22 chain, R1 arm with the real runtime child, R1-to-W1 chain and arm/install session) is committed as evidence and asserted inside the strict receipt | `v4_registration.py`, `scripts/align_v4_dynamic_trace.py`, `docs/align/v4/dynamic_closure_trace.json`, `tests/align/test_v4_dynamic_closure.py` |
+| S1 F02 / S2 M3 stranded back-to-back arms | Basis (a) has no continuity rule; basis (b) unchanged; the sampler runs continuously (`sample --loop`) from the initial charge acquisition through windows and turnarounds | `v4_topup.py`, `align_v4_battery_log.py`, protocol section 4 |
+| S1 F03 / S2 M2 filtered rows | Raw-order evaluation: a transition needs consecutive valid timed rows; invalid, untimed, off-AC or out-of-order rows break the interval | `v4_topup.py` |
+| S2 M1 two-sentinel roster | Captured ceiling 24 (22 plus the two sentinels a U4/U5-inconclusive window may add); calibrators stay 7 per pair | `v4_cadence.py` (`CAPTURED_MAX`) |
+| G1 stale packet | The packet carries `record_path` and `record_sha256`; the arm checks the blob at `record_commit` and that it is the last commit changing the path | `align_v4_session.py` (`_record_bound`), `tests/align/test_v4_record_binding.py` |
+| G2 chain doc | Kit regeneration inserted between installing the slots and `--check`; the doc block is a tested script | `scripts/align_r1_to_w1_chain.py`, `tests/align/test_r1_to_w1_chain.py` |
+| G3 KM003C crash radius | An unclosed stream is salvaged up to its last valid record (start offset, no fabricated samples); only members overlapping the gap are DC-missing | `km003c.py`, `km003c_parse.py`, `tests/align/test_km003c.py` |

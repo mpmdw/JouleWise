@@ -20,36 +20,42 @@ Use a checkout of the v4 branch; set `WORK` to a new empty directory.
 
 ## Command sequence (laptop, repository root)
 
+`scripts/align_r1_to_w1_chain.py` runs exactly this block (`--dry-run` prints it,
+`--until STEP` stops early, `--write-contrast` merges step 5's output into `inputs.json`);
+`tests/align/test_r1_to_w1_chain.py` checks that this block and the script agree.
+
 ```sh
 RUN=/path/to/R1/output            # contains r1_result.json and D_*_gated_held*/
 SLOTS=/path/to/R1/registration/r1_slots.json
 WORK=/path/to/new/empty/dir
 
 # 1. per-turn counts (reads only <phase>/<bundle>/outputs/align_turns.jsonl per gated D run)
-python3 scripts/align_r1_turn_counts_export.py --run-dir $RUN --out $WORK/turn_counts_export.json
+python3.13 -B scripts/align_r1_turn_counts_export.py --run-dir $RUN --out $WORK/turn_counts_export.json
 
 # 2. X-G evidence into the record (R10-4)
-python3 scripts/align_w1_budget_procedure.py backfill-x-g \
-    --r1-slots $SLOTS --r1-result $RUN/r1_result.json --out $WORK/r1_slots.xg.json
+python3.13 -B scripts/align_w1_budget_procedure.py backfill-x-g --r1-slots $SLOTS --r1-result $RUN/r1_result.json --out $WORK/r1_slots.xg.json
 
 # 3. per-turn counts into the gated rows (R11/R16; records the export's sha256)
-python3 scripts/align_w1_budget_procedure.py backfill-turn-counts \
-    --r1-slots $WORK/r1_slots.xg.json --counts-export $WORK/turn_counts_export.json --out $WORK/r1_slots.json
+python3.13 -B scripts/align_w1_budget_procedure.py backfill-turn-counts --r1-slots $WORK/r1_slots.xg.json --counts-export $WORK/turn_counts_export.json --out $WORK/r1_slots.json
 
-# 4. install the record, then re-derive the contrast cap/fit from it
+# 4. install the completed record
 cp $WORK/r1_slots.json configs/campaigns/align_v4/registration/r1_slots.json
-python3 scripts/align_w1_budget_procedure.py derive-contrast     # paste both fields into
-                                                                 # registration/inputs.json R1.thermal_policy
 
-# 5. R10-2 budget procedure (writes a receipt draft when branch (a)/(b); the lead signs)
-python3 scripts/align_w1_budget_procedure.py decide --draft-out $WORK/ruling_1f_draft.json
+# 5. re-derive the contrast cap/fit from it; paste both fields into registration/inputs.json R1.thermal_policy
+python3.13 -B scripts/align_w1_budget_procedure.py derive-contrast
 
-# 6. readiness (this is kit.require_ready plus the other gates; it must pass before W1 registration)
+# 6. R10-2 budget procedure (writes a receipt draft when branch (a)/(b); the lead signs)
+python3.13 -B scripts/align_w1_budget_procedure.py decide --draft-out $WORK/ruling_1f_draft.json
+
+# 7. regenerate the committed kit from the new slots (smoke G2: between installing the slots and --check)
+python3.13 -B scripts/align_v4_kit.py
+
+# 8. readiness (this is kit.require_ready plus the other gates; it must pass before W1 registration)
 python3.13 -B scripts/align_v4_kit.py --check
 ```
 
 `--check` also needs the other pending registration inputs (U3, WP19, receipt, gates);
-it fails closed until they are supplied. Steps 1-4 are mechanical; step 5 and the
+it fails closed until they are supplied. Steps 1-5 and 7 are mechanical; step 6 and the
 signatures are lead-owned.
 
 ## What the exporter does and refuses

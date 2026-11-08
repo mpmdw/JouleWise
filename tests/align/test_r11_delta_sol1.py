@@ -120,7 +120,8 @@ class TriageEvidenceWitnesses(unittest.TestCase):
             log = write_battery_log(Path(tmp) / 'battery.jsonl', 5000.)
             records = [session.arm_checks(tmp, {}, runner=runner, now=lambda: 5000.,
                         obc_off_attested_by='synthetic', battery_log=log,
-                        commit_check=lambda root, commit: True, next_arm_triage=deepcopy(p)) for p in packets]
+                        commit_check=lambda root, commit: True, record_check=lambda root, packet: True,
+                        next_arm_triage=deepcopy(p)) for p in packets]
         self.assertTrue(all(r['admitted'] for r in records))
         # Both histories complete, but 53 and 56 eligible are different calibration sets.
         # Retaining the packet, its digest or an immutable evidence reference

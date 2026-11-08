@@ -37,7 +37,8 @@ def topup():
         _LOG_DIR.append(tempfile.TemporaryDirectory(prefix='v4-kit-battery-'))
     path = Path(_LOG_DIR[0].name) / f'battery-{time.time_ns()}.jsonl'
     write_battery_log(path, time.time())
-    return dict(battery_log=path, next_arm_triage=passing_packet(), commit_check=lambda root, commit: True)
+    return dict(battery_log=path, next_arm_triage=passing_packet(), commit_check=lambda root, commit: True,
+                record_check=lambda root, packet: True)
 
 
 def independent_seed(value):

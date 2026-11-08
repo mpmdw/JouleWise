@@ -271,9 +271,35 @@ def _commit_exists(root, commit):
         return False
 
 
+def _record_bound(root, packet):
+    """Whether the packet is bound to the last committed window record (smoke G1).
+
+    ``record_path`` at ``record_commit`` must hash to ``record_sha256``, and that commit must be
+    the last one that changed the path, so a stale but well-formed packet (built before the
+    record was re-committed) refuses.
+    """
+    import re
+    if not isinstance(packet, dict):
+        return False
+    commit, path, digest = packet.get('record_commit'), packet.get('record_path'), packet.get('record_sha256')
+    if (not isinstance(commit, str) or not re.fullmatch(r'[0-9a-f]{40}', commit) or not isinstance(path, str)
+            or not path or Path(path).is_absolute() or '..' in Path(path).parts
+            or not isinstance(digest, str) or not re.fullmatch(r'[0-9a-f]{64}', digest)):
+        return False
+    try:
+        blob = subprocess.run(['git', 'show', f'{commit}:{path}'], cwd=root, capture_output=True,
+                              timeout=30, check=False)
+        latest = subprocess.run(['git', 'log', '-1', '--format=%H', '--', path], cwd=root,
+                                capture_output=True, text=True, timeout=30, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return (blob.returncode == 0 and _sha256(blob.stdout) == digest
+            and latest.returncode == 0 and latest.stdout.strip() == commit)
+
+
 def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=None, owner=None,
                obc_off_attested_by=None, battery_runner=None, battery_log=None,
-               now=None, next_arm_triage=None, commit_check=None):
+               now=None, next_arm_triage=None, commit_check=None, record_check=None):
     """W1/D arm evidence: ruling 7 AC powermode and ruling 20 volumes.
 
     Ruling 7: the AC-profile powermode must equal the plan's frozen series
@@ -338,7 +364,8 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
             packet = None
     commit = packet.get('record_commit') if isinstance(packet, dict) else None
     identity = {'artifact_set_sha256': v4_registration.artifact_set_digest(measurement_root),
-                'record_commit_exists': (commit_check or _commit_exists)(measurement_root, commit)}
+                'record_commit_exists': (commit_check or _commit_exists)(measurement_root, commit),
+                'record_bound': bool((record_check or _record_bound)(measurement_root, packet))}
     triage = v4_cadence.next_arm_triage(packet, {
         'series_powermode': bool(power['admitted']),
         'external_volume': volumes['verdict'] == external_volume.PASS,
@@ -577,11 +604,12 @@ def _termination_handlers():
 def _arm_and_install(session, state, measurement_root, plan, high, *, runner, volume_runner, now,
                      w1_disk_config, disk_gate, lock=None, owner=None,
                      obc_off_attested_by=None, battery_runner=None, battery_log=None,
-                     next_arm_triage=None, commit_check=None, **kwargs):
+                     next_arm_triage=None, commit_check=None, record_check=None, **kwargs):
     record = arm_checks(measurement_root, plan, runner=runner, volume_runner=volume_runner, lock=lock,
                         owner=owner, obc_off_attested_by=obc_off_attested_by, battery_runner=battery_runner,
                         battery_log=battery_log, now=now,
-                        next_arm_triage=next_arm_triage, commit_check=commit_check)
+                        next_arm_triage=next_arm_triage, commit_check=commit_check,
+                        record_check=record_check)
     if high is not None:
         record['high_power_enter'] = high
         if not high['ok']:

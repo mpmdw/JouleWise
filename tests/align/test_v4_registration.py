@@ -171,6 +171,7 @@ class RegistrationTests(unittest.TestCase):
         from tests.align.test_v4_cadence import passing_packet, write_battery_log
         packet = passing_packet()
         yes = lambda root, commit: True
+        bound = lambda root, packet: True
         good = dict(passed=True, probe_error=False, external_connected=True, is_charging=False,
                     current_capacity_pct=100, instant_amperage_ma=0, update_age_s=1)
         with tempfile.TemporaryDirectory() as tmp, \
@@ -183,7 +184,7 @@ class RegistrationTests(unittest.TestCase):
             floated = write_battery_log(Path(tmp) / 'float.jsonl', 5000., completion_age=2400)     # (b) continuous float
             stale = write_battery_log(Path(tmp) / 'stale.jsonl', 5000., completion_age=2400, end_age=900)
             arm = lambda **kw: session.arm_checks('.', {}, obc_off_attested_by=kw.pop('obc', 'synthetic'), runner=run,
-                                                  now=lambda: 5000., commit_check=yes, **kw)
+                                                  now=lambda: 5000., commit_check=yes, record_check=bound, **kw)
             self.assertFalse(session.arm_checks('.', {}, runner=run)['admitted'])
             self.assertFalse(arm(obc='', battery_log=log, next_arm_triage=packet)['admitted'])     # no attestation
             self.assertFalse(arm(next_arm_triage=packet)['admitted'])                              # no battery evidence
@@ -201,7 +202,7 @@ class RegistrationTests(unittest.TestCase):
             # L8: a failing pmset is evidence only
             bad_pmset = lambda argv: subprocess.CompletedProcess(argv, 1, '', 'pmset failed')
             with_bad = session.arm_checks('.', {}, obc_off_attested_by='synthetic', runner=bad_pmset, now=lambda: 5000.,
-                                          commit_check=yes, battery_log=log, next_arm_triage=packet)
+                                          commit_check=yes, record_check=bound, battery_log=log, next_arm_triage=packet)
             self.assertTrue(with_bad['admitted'], with_bad['reasons'])
             self.assertTrue(with_bad['battery']['pmset_batt']['evidence_only'])
             self.assertEqual(set(record['next_arm_triage']['checks']), set(__import__(
