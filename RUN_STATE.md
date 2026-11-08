@@ -1042,6 +1042,24 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+212. **Laptop lead (interactive session 1544c617), 2026-11-08 about 22:20 PST: lead ruling R11. Adopt the cross-family agreement for v4 and the squeeze** (`docs/align/squeeze/AGREEMENT-FINAL.md` on `align/2026-11-07-squeeze-agreement-final` @ `4526de7d5`: four seats per track, Opus+Fable and Sol-1/Sol-2, cross-reviewed both ways).
+- **R11-1.** Every **HC** (high-convergent) and **HR** (high-reviewed) adjudication in AGREEMENT-FINAL Tracks 1-3 is adopted as written. **U** items stay open, with the owner named in the report. **M** items are recommendations the builder may adopt, recording which.
+- **R11-2 (choices the report leaves to the lead):**
+  - **R07, contrast:** a predeclared non-veto INCONCLUSIVE contrast, through an explicit supersession of R10 builder ruling (iv) for contrast members. Missing or negative cap cases and changed predecessor heat are covered.
+  - **R10, seed:** keep the seed string `qwen3.8-27b`, with an explicit quantization label and a deviation note. No pooling across quantizations.
+  - **R03, U3:** no constant (k = 3 or 2.576) is installed. The bar needs a frozen derivation with predictive and operating-characteristic sensitivity.
+  - **R13, Q6 rosters:** one whole-window loss leaves 35 < 39, so the series plan adds margin. The magistrate proposes the margin (an 8th calibration window, or D7/D8 under a prospective deviation) in the series plan. The lead rules it before W1.
+  - **R14, FPR statements:** at m = 39, rank 38 gives ≤ 5 % and the maximum gives ≤ 2.5 %, conditional on exchangeable scores. Public text (including `docs/research/energy-tripwire.html`) must match the scorer actually used.
+  - **D07, joint rule:** directly calibrated `max(g_E, g_M)` at a total of 0.05, with E-alone and M-alone comparators at 0.05. The literal OR of two 0.025 maxima is a sensitivity analysis.
+  - **D09, primary endpoint:** side-task success AND no joint alarm, per assigned attempt, reported with utility.
+  - **D12:** trusted time plus monitor is a planned primary comparator for energy's incremental value.
+- **R11-3, meter:**
+  - The shared HAZARD_PACK launcher already starts `scripts/km003c_monitor.py` for W1/D windows. Do not add a second reader.
+  - `align/2026-11-07-km003c-align` declares and checks it (`runtime_requirements.km003c`) and adds a SECONDARY DC-in analysis. Adopted, pending review.
+  - **v4's registered residual stays GPU-energy, unchanged.** A separately qualified DC endpoint belongs to the v5 addendum.
+  - **Magistrate:** at the next arm, confirm actual meter samples, clock coverage, custody and battery flow, not just the launch.
+- **R11-4:** v4 runs as designed plus its two additions. v5 (the squeeze) is decided by the running design competition (`align/2026-11-08-v5design-*`).
+
 211. **Magistrate activation 5bcfa84e (Opus 5.5, headless, 2026-11-07, continuing item 208): R0-L3 is merged and R0 re-run 11 launches about 21:50 PST under it, with the display put to sleep by the launcher.** No pending notices, no unread mail from Ed, no new directive.
 - **Merged under item 209 (the lead's dispositions):** #699 into `lane/2026-11-05-align-pilot10-benign` at `9c40e4e5d` (ledger rows 1-5 RUN d3bf25c82; gate-ledger check SUCCESS); #700 into main at `31a19f79a` (ledger as the builder filled it; gate-ledger SUCCESS). CI green on both final heads (#699 d3bf25c82: 21 pass; #700 275ea8f98: 20 pass). #700 needed two magistrate commits: `b751e9231` (refusal allowlist) and `275ea8f98` (main merged in for `7e004fca8`'s quote-agnostic literal pins; the rc_cmp10/11 failures were the stale pins, as item 209 says).
 - **Checkouts:** canonical fast-forwarded to `31a19f79a` (no night agent loaded or on disk). `$M` = `/Users/edr/night-custody/measurement/JouleWise-measurement-20261102-align-pilot2` fast-forwarded `5f817856b` -> `9c40e4e5d`, clean; no dependency or config file changed.
