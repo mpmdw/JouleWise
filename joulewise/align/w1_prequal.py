@@ -942,7 +942,11 @@ def _number(value, name):
 
 
 def validate_series(plan):
-    """A planning-only projection of the frozen series (Sol): one W1, C1-C8 in order, then tests."""
+    """A planning-only projection of the frozen series (Sol): one W1, C1-C8 in order, then tests.
+
+    R24: up to six reserve windows C9..C14 (``replacement: true``, 7/7 benign) may follow C8; they are armed only
+    to replace a structurally barred window and never change the fixed-8 predicate checked on C1-C8.
+    """
     from joulewise.align.apple import v4_cadence as cad
     if plan.get('schema') != SERIES_SCHEMA:
         raise ValueError('missing planning-only series projection')
@@ -952,9 +956,17 @@ def validate_series(plan):
     ids = [w.get('window') for w in windows]
     if any(not isinstance(w, str) or not w.strip() for w in ids) or len(set(ids)) != len(ids):
         raise ValueError('series window ids must be nonempty and unique')
-    calibration = [w for w in windows if w.get('role') == 'calibration']
+    every_calibration = [w for w in windows if w.get('role') == 'calibration']
+    calibration = [w for w in every_calibration if w.get('replacement') is not True]
+    reserves = [w for w in every_calibration if w.get('replacement') is True]
     if [w['window'] for w in calibration] != [f'C{i}' for i in range(1, 9)]:
         raise ValueError('planned calibration must be fixed C1-C8 in order')
+    if ([w['window'] for w in reserves] != [f'C{i}' for i in range(9, 9 + len(reserves))]
+            or len(reserves) > cad.REPLACEMENT_WINDOWS
+            or [w['window'] for w in every_calibration] != [*(w['window'] for w in calibration), *(w['window'] for w in reserves)]
+            or any(w.get('benign_per_pair') != {'spam': 7, 'bank': 7} for w in reserves)):
+        raise ValueError('reserve windows must be C9.. in order after C8, flagged replacement, at most '
+                         f'{cad.REPLACEMENT_WINDOWS}, with seven benign per pair (R24)')
     roles = [w.get('role') for w in windows]
     if any(r not in ('w1', 'calibration', 'test') for r in roles):
         raise ValueError('unknown series role')
@@ -971,7 +983,8 @@ def validate_series(plan):
     decisions = [cad.calibration_stop(rows[:n])['decision'] for n in range(9)]
     if decisions != ['continue'] * 8 + ['calibration_complete']:
         raise ValueError('calibration predicate is not fixed-8 on the frozen series')
-    return {'calibration_order': [w['window'] for w in calibration], 'decisions': decisions,
+    return {'calibration_order': [w['window'] for w in calibration], 'reserve_order': [w['window'] for w in reserves],
+            'decisions': decisions,
             'tests': [w['window'] for w in windows if w.get('role') == 'test']}
 
 

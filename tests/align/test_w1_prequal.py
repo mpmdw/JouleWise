@@ -222,6 +222,21 @@ class PortedSolTests(_Ctx):
             'status'], wp.FAIL)
         self.assertEqual(self.probe('series-manifest', series_projection=projection(
             'two', windows[:2], projected=windows[:2]))['status'], wp.FAIL)     # roster agrees, not fixed-8
+        # R24: reserve windows C9.. flagged `replacement` may follow C8 (at most six, in order); fixed-8 still holds
+        reserve = lambda n: {'window': f'C{n}', 'role': 'calibration', 'replacement': True,
+                             'benign_per_pair': {'spam': 7, 'bank': 7}}
+        with_reserves = windows[:9] + [reserve(n) for n in range(9, 15)] + windows[9:]
+        passed = self.probe('series-manifest', series_projection=projection('reserves', with_reserves, with_reserves))
+        self.assertEqual(passed['status'], wp.PASS)
+        self.assertEqual(passed['evidence']['reserve_order'], [f'C{n}' for n in range(9, 15)])
+        for label, bad in (('seven', windows[:9] + [reserve(n) for n in range(9, 16)] + windows[9:]),
+                           ('gap', windows[:9] + [reserve(10)] + windows[9:]),
+                           ('unflagged', windows[:9] + [dict(reserve(9), replacement=False)] + windows[9:]),
+                           ('thin', windows[:9] + [dict(reserve(9), benign_per_pair={'spam': 1, 'bank': 7})] + windows[9:]),
+                           ('after tests', windows + [reserve(9)])):
+            with self.subTest(reserves=label):
+                self.assertEqual(self.probe('series-manifest', series_projection=projection(
+                    'bad-' + label, bad, bad))['status'], wp.FAIL)
 
     def bundle(self, name, *, plan_id='align-v4-20261109T000000Z', plist_plan=None, sha=None, exit_code=0):
         """An installed-plan evidence bundle around a REAL plan from the production plan writer."""

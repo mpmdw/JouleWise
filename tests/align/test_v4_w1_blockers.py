@@ -128,7 +128,11 @@ class U3Tests(unittest.TestCase):
         from joulewise.align.apple import v4_u3
         from scripts.align_v4_u3_export import ROSTER
         for heavy in (False, True):
-            data = export()  # Retain the historical N=16 fixture for comparison.
+            data = export()
+            # The shared fixture now carries the R25 roster (N = 22); the comparison needs the historical N = 16.
+            data['policy']['checks_by_window'] = {'W1': {'30B': 4, 'D': 1},
+                                                  **{f'C{i}': {'30B': 0, 'D': 1} for i in range(1, 9)},
+                                                  **{f'T{i}': {'30B': 0, 'D': 1} for i in range(1, 4)}}
             if heavy:
                 data['pairs'][6]['energies_j'] = [990., 1010.]
             before = v4_u3.prediction(data['pairs'], data['policy'])
