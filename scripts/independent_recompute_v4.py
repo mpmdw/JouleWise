@@ -684,6 +684,13 @@ def load_plan_custody(root, wid, slot, record, members):
                       if isinstance(obj, dict) else None)
             planned[m["run_id"]] = (m["planned_config"]["sha256"],
                                     hashlib.sha256(bundle).hexdigest() if bundle is not None else None)
+            # EXP-D2 ruling: the REGISTERED plan says whether this member is gated (its kit spec carries a
+            # thermal policy, hence a planned G0); production anchors are ungated.
+            try:
+                spec = json.loads(obj["workload_profile"]["prompt_text"]) if isinstance(obj, dict) else None
+                m["planned_g0"] = isinstance(spec, dict) and isinstance(spec.get("thermal"), dict)
+            except (ValueError, KeyError, TypeError):
+                m["planned_g0"] = None
     return plan, planned
 
 
@@ -1108,6 +1115,53 @@ def process_member(task):
     return out
 
 
+COVERAGE_TOLERANCE_NS = NS // 10
+
+
+def sensor_value_valid(key, value):
+    return (type(value) in (int, float) and math.isfinite(value)
+            and (-40 <= value <= 150 if key.startswith("T") else value >= 0))
+
+
+def sidecar_coverage(samples, a, b, keys, tol=COVERAGE_TOLERANCE_NS):
+    """U1(c) sidecar coverage, the registered definition (lead ruling on EXP-D1, 2026-11-08, the A21
+    precedent): production ``thermal.Coverage`` restated as text. Every journal reading whose SMC read lasted
+    at most one period is an observation stamped at its read midpoint; the sampling grid is anchored at the
+    earliest read start over the WHOLE journal, period 1 s; a reading counts for the span only when every
+    selected sensor (s_fast, s_slow, fan keys) is valid and unerrored. Span boundaries snap to the nearest grid
+    point within the 100 ms tolerance (else stay put); expected = the whole grid cells between them; a
+    observation fills its nearest tick only within the tolerance (duplicates once). The longest interval runs
+    over the span edges and the valid stamps inside it. U1(c) passes iff the fraction is >= 0.99 and that
+    interval <= 2 s (an undefined fraction fails)."""
+    grid, common = None, set()
+    for s in samples:
+        start = s.get("monotonic_ns")
+        fin = (s.get("finished") or {}).get("monotonic_after_ns", start)
+        if not is_int(start) or not is_int(fin) or fin < start or fin - start > NS:
+            continue
+        grid = start if grid is None else min(grid, start)
+        stamp = (start + fin) // 2
+        sensors, errors = s.get("sensors") or {}, s.get("errors") or {}
+        if keys and all(k not in errors and sensor_value_valid(k, sensors.get(k)) for k in keys):
+            common.add(stamp)
+    grid = a if grid is None else grid
+
+    def nearest(t):
+        return (t - grid + NS // 2) // NS
+
+    def boundary(t):
+        snapped = grid + nearest(t) * NS
+        return snapped if abs(t - snapped) <= tol else t
+    first = -((grid - boundary(a)) // NS)
+    last = (boundary(b) - grid) // NS
+    expected = max(0, last - first) if b > a else 0
+    ticks = {nearest(t) for t in common if first <= nearest(t) < last and abs(t - (grid + nearest(t) * NS)) <= tol}
+    points = sorted({a, b, *(t for t in common if a <= t <= b)})
+    return {"coverage": len(ticks) / expected if expected else None,
+            "max_gap_ns": max((y - x for x, y in zip(points, points[1:])), default=0),
+            "expected_samples": expected, "valid_samples": len(ticks)}
+
+
 def thermal_summary(ep, thermal, intervals, samples, walls, registered):
     policy = thermal.get("policy") or {}
     sensors = policy.get("sensors") or {}
@@ -1123,12 +1177,10 @@ def thermal_summary(ep, thermal, intervals, samples, walls, registered):
         i = bisect.bisect_right(all_times, t)
         return samples[i - 1] if i else None
 
+    keys = tuple(k for k in (fast_key, slow_key, *(sensors.get("fan_keys") or [])) if isinstance(k, str))
+
     def coverage(a, b):
-        times = [s["monotonic_ns"] for s in window(a, b)]
-        cells = max(1, -(-(b - a) // NS))
-        covered = len({(t - a) // NS for t in times if t < b})
-        edges = [a] + times + [b]
-        return {"span_ns": [a, b], "coverage": covered / cells, "max_gap_ns": max(y - x for x, y in zip(edges, edges[1:]))}
+        return dict(sidecar_coverage(samples, a, b, keys), span_ns=[a, b])
     spans = [coverage(ep["start_ns"], ep["end_ns"])]
     for iv in intervals:
         if iv.get("kind") == "G0" and is_int(iv.get("start_ns")) and is_int(iv.get("end_ns")):
@@ -1791,7 +1843,7 @@ def u1_model_window(members, results, elig):
     coverage_ok, pm_ok = True, True
     for rid in observed:
         for span in results[rid]["thermal"]["spans"]:
-            if span["coverage"] < 0.99 or span["max_gap_ns"] > 2 * NS:
+            if span["coverage"] is None or span["coverage"] < 0.99 or span["max_gap_ns"] > 2 * NS:
                 coverage_ok = False
         pm = results[rid].get("pm")
         if pm is not None and not all(s["ok"] for s in pm["spans"]):
@@ -1837,7 +1889,10 @@ def u2_model_window(members, results, elig):
                         and rel["slow_c"] <= ref["slow_c"] + th["delta_slow_c"]):
                     release_ok = False
     rng = max(g0_slow) - min(g0_slow) if g0_slow else None
-    parts = {"a_g0_slow_range_le_3c": (rng <= 3.0) if rng is not None else None,
+    # EXP-D2 ruling (lead 2026-11-08): U2(a) is not_applicable when the REGISTERED plan has no G0 for this model
+    # (by design, e.g. ungated anchors); a planned but absent G0 stays inconclusive.
+    planned = any(m.get("planned_g0", True) is not False for m in members)
+    parts = {"a_g0_slow_range_le_3c": (rng <= 3.0) if rng is not None else (None if planned else "not_applicable"),
              "b_releases_verified_within_delta": release_ok if checked else "not_applicable"}
     return {"verdict": verdict(parts), "parts": parts, "g0_slow_range_c": rng, "releases_checked": checked}
 
@@ -2457,6 +2512,43 @@ def rectangle(times, powers, spans):
     return math.fsum(terms)
 
 
+DC_HOLD_LIMIT_NS = 300_000_000    # A20 / D6 ruling: a hold longer than 3 nominal 100 ms polls is uncovered
+
+
+def sample_hold(times, powers, spans, limit=DC_HOLD_LIMIT_NS):
+    """TURN-OWNED DC-in (D6 ruling on A20, 2026-11-08; the A2(3) principle applied to the meter): each sample,
+    after the clock fit, holds its power over [t_i, t_{i+1}); a hold longer than 300 ms is UNCOVERED. The
+    energy is sum(power x overlap) over the spans; None if any owned time falls in an uncovered hold or lies
+    outside the stream."""
+    if not times:
+        return None
+    terms = []
+    for a, b in spans:
+        if b <= a:
+            continue
+        if a < times[0] or b > times[-1]:
+            return None
+        i = bisect.bisect_right(times, a) - 1
+        while i < len(times) - 1 and times[i] < b:
+            lo, hi = max(a, times[i]), min(b, times[i + 1])
+            if hi > lo:
+                if times[i + 1] - times[i] > limit:
+                    return None
+                terms.append(powers[i] * (hi - lo) / NS)
+            i += 1
+    return math.fsum(terms)
+
+
+def km003c_integrate(times, powers, t0, t1):
+    """WHOLE-MEMBER DC-in (D6 ruling: the protocol authority), production ``km003c_parse.integrate`` restated
+    as text: the mean power of the samples in [t0, t1) times (t1 - t0); None when no sample falls in it."""
+    lo, hi = bisect.bisect_left(times, t0), bisect.bisect_left(times, t1)
+    n = hi - lo
+    if n == 0 or t1 <= t0:
+        return None
+    return sum(powers[lo:hi]) / n * (t1 - t0) / 1e9
+
+
 def dc_member(stream, spans):
     return rectangle(stream["times"], stream["powers"], spans)
 
@@ -2486,7 +2578,8 @@ def dc_window(task):
     for rid, span, by_turn in members:
         row = {"status": "missing_dc"}
         for s in ok:
-            e = dc_member(s, [span])
+            covered = bool(s["times"]) and s["times"][0] <= span[0] < span[1] <= s["times"][-1]
+            e = km003c_integrate(s["times"], s["powers"], span[0], span[1]) if covered else None
             if e is not None:
                 # A dropped sample inside a span makes that span's DC value unavailable, with a reason (R23).
                 reasons = []
@@ -2499,7 +2592,10 @@ def dc_window(task):
                         per_turn.append(None)
                         reasons.append(f"meter.dropped_sample_in_span:turn:{k}")
                     else:
-                        per_turn.append(dc_member(s, own) if own else 0.0)
+                        e_turn = sample_hold(s["times"], s["powers"], own) if own else 0.0
+                        if e_turn is None:
+                            reasons.append(f"meter.turn_uncovered:turn:{k}")
+                        per_turn.append(e_turn)
                 bat = rectangle(s["battery_times"], s["battery_powers"], [span])
                 row = {"status": "ok", "stream": s["name"], "dc_in_episode_j": e, "unavailable_reasons": reasons,
                        "dc_in_turn_owned_j": math.fsum(per_turn) if None not in per_turn else None,

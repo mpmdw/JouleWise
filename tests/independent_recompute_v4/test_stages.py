@@ -881,6 +881,24 @@ class ExclusionTests(unittest.TestCase):
         self.assertEqual(rc.config_seed_inputs(cfg3)[1], "thinking_off")
 
 
+class DcRuleTests(unittest.TestCase):
+    def test_sample_and_hold_and_whole_member(self):
+        # D6 ruling (A20): turn-owned DC-in is a sample-and-hold; a hold > 300 ms is uncovered; the whole member
+        # is production km003c_parse.integrate (mean of samples in [t0, t1) x duration).
+        ms = 1_000_000
+        times = [0, 100 * ms, 200 * ms, 300 * ms, 700 * ms, 800 * ms]
+        powers = [10.0, 20.0, 30.0, 40.0, 50.0, 60.0]
+        # A sub-poll owned segment (40 ms) inside one hold is fine: 20 W x 0.04 s.
+        self.assertAlmostEqual(rc.sample_hold(times, powers, [(110 * ms, 150 * ms)]), 0.8, places=12)
+        # Variable power across holds: 10 W x 0.05 + 20 W x 0.1 + 30 W x 0.05.
+        self.assertAlmostEqual(rc.sample_hold(times, powers, [(50 * ms, 250 * ms)]), 4.0, places=12)
+        # Owned time inside the 400 ms hold [300, 700) is uncovered; outside the stream too.
+        self.assertIsNone(rc.sample_hold(times, powers, [(350 * ms, 360 * ms)]))
+        self.assertIsNone(rc.sample_hold(times, powers, [(750 * ms, 900 * ms)]))
+        self.assertAlmostEqual(rc.km003c_integrate(times, powers, 0, 300 * ms), (10 + 20 + 30) / 3 * 0.3, places=12)
+        self.assertIsNone(rc.km003c_integrate(times, powers, 110 * ms, 150 * ms))   # no sample in the window
+
+
 class MeterTests(unittest.TestCase):
     def test_constant_power_stream(self):
         d = temp_dir(self)

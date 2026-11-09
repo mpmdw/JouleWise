@@ -308,25 +308,34 @@ def w1_roster():
     return out
 
 
-def write_meter(path, spans_ns, raw_minus_mono=5000, watts=30.0, period_ms=100, per_poll=10, close=True):
-    """KM003C-shaped stream: 20 V, current = watts / 20 V, device ms counter wrapping at 65536."""
+def write_meter(path, spans_ns, raw_minus_mono=5000, watts=30.0, period_ms=100, per_poll=10, close=True,
+                stalls=()):
+    """KM003C-shaped stream: 20 V, current = watts / 20 V, device ms counter wrapping at 65536. ``watts`` may be a
+    function of the sample's monotonic ns (variable power, D6 ruling); ``stalls`` are host spans with no samples
+    while the device counter runs on (dropped samples, a hold longer than 300 ms)."""
     start, end = spans_ns
     # KM003C rate index for the poll period (production STEP_MS {0: 500, 1: 100, 2: 20, 3: 1} ms); R23 fix:
     # this writer used rate_idx 2 (20 ms) for 100 ms polls, which a drop check reads as dropped samples.
     rate_idx = {500: 0, 100: 1, 20: 2, 1: 3}[period_ms]
     lines = [json.dumps({"k": "h", "schema": "joulewise.km003c_stream.v1", "rate_idx": rate_idx, "status": "streaming",
                          "start_raw_ns": start + raw_minus_mono, "start_mono_ns": start})]
-    ua = round(watts / 20.0 * 1e6)
+    power = watts if callable(watts) else (lambda _t: watts)
     t, dev = start, 0
     while t <= end:
         payload = b""
+        n = 0
         for _ in range(per_poll):
-            payload += struct.pack("<HHiiHHHH", dev % 65536, 0, 20_000_000, ua, 0, 0, 0, 0)
+            if not any(a <= t < b for a, b in stalls):
+                ua = round(power(t) / 20.0 * 1e6)
+                payload += struct.pack("<HHiiHHHH", dev % 65536, 0, 20_000_000, ua, 0, 0, 0, 0)
+                n += 1
             last = t
             t += period_ms * 1_000_000
             dev += period_ms
+        if not n:
+            continue
         rx = last + raw_minus_mono
-        lines.append(json.dumps({"k": "b", "tx": rx - 1_000_000, "rx": rx, "n": per_poll, "p": payload.hex()}))
+        lines.append(json.dumps({"k": "b", "tx": rx - 1_000_000, "rx": rx, "n": n, "p": payload.hex()}))
     if close:
         lines.append(json.dumps({"k": "t", "end_raw_ns": t + raw_minus_mono, "end_mono_ns": t}))
     Path(path).parent.mkdir(parents=True, exist_ok=True)
