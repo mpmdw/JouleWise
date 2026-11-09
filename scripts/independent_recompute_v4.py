@@ -1220,7 +1220,9 @@ def thermal_summary(ep, thermal, intervals, samples, walls, registered):
         v = prior.get("sensors", {}).get(slow_key) if prior and slow_key else None
         ok = prior is not None and t["start_ns"] - prior["monotonic_ns"] <= 2 * NS and finite(v)
         admission_slow.append(v if ok else None)
-    return {"spans": spans, "observed": bool(samples),
+    # Production: only a GATED member (its episode carries a thermal policy) is a sidecar observation; an
+    # ungated anchor's journal, if any, is not one.
+    return {"spans": spans, "observed": bool(samples) and bool(policy),
             "os_levels_episode": sorted({v for v in os_episode if v is not None}),
             "os_levels_registered": None if os_registered is None else sorted({v for v in os_registered
                                                                                 if v is not None}),
@@ -1816,6 +1818,8 @@ REPLAY_INELIGIBLE = {"X1", "X2", "X3", "X4", "X7", "F1", "B", "incomplete", "cus
 
 def verdict(parts):
     vals = [v for v in parts.values() if v != "not_applicable"]
+    if not vals:                       # EXP-D2: every part not applicable by design -> the check is too
+        return "not_applicable"
     if any(v is False for v in vals):
         return "fail"
     if any(v is None for v in vals):
