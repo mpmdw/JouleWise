@@ -44,7 +44,8 @@ def capture(streams, episode, member_span):
             flags.append('meter.clock_or_samples_unavailable')
             continue
         a, b = (v+offset for v in member_span)
-        if not stream.host_ns[0] <= a < b <= stream.host_ns[-1] or kp.span_has_drops(stream, a, b):
+        span_defect = not stream.host_ns[0] <= a < b <= stream.host_ns[-1] or kp.span_has_drops(stream, a, b)
+        if span_defect:
             # Whole-span defects remain disclosed. Only uncovered OWNED time
             # makes the turn integral unavailable (D6); gaps/gates/holds do not.
             flags.append('meter.member_uncovered_or_gap')
@@ -60,7 +61,10 @@ def capture(streams, episode, member_span):
         for turn, kind, start, end in segments:
             if turn in owned:
                 owned[turn].append(_hold_integral(stream.host_ns, stream.watts, start+offset, end+offset))
-        whole = kp.integrate(stream.host_ns, stream.watts, a, b)[0]
+        # R23n: never print an extrapolated DC-in number. Production integrate
+        # spreads the mean of the samples present over the whole span, so a span
+        # partly outside the stream or with drops prints null with its flag.
+        whole = None if span_defect else kp.integrate(stream.host_ns, stream.watts, a, b)[0]
         if any(v is None for parts in owned.values() for v in parts):
             flags.append('meter.turn_uncovered')
             continue

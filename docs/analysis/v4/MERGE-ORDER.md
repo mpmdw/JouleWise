@@ -80,3 +80,15 @@ its own subprocess. It covers Sol's three probes, a separate module patching
 both `analyze` and `load`.
 
 The engine's own R22-2 bar predicate is `engine._structural_bar`, ported from r11's `scripts/align_v4_next_arm_packet.py` (`WindowRecord.structural_bar`). It lives in the engine and is not part of this pin. R23j makes it stricter than r11: declared bars must be reproduced.
+
+## Engine-only additions outside the arm stack
+
+`joulewise/external/km003c_parse.py` on the engine line adds three functions:
+- `load_bytes`;
+- `parse_bytes`;
+- `parse_records`, which `parse` now delegates to.
+
+`joulewise/align/v4_analysis/raw.py` decodes digest-verified KM003C exports
+through `parse_bytes`. r11 has not changed this file, so the r11-first merge
+must keep the engine's version. It is not part of the r11-owned arm stack, and
+an "r11 wins" resolution must not drop these helpers.

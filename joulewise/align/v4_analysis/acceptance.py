@@ -266,12 +266,14 @@ def u5(evidence):
 
 
 def u6(records, split_rule, *, pooled_rss=None, pooled_df=None):
-    if split_rule != 'within_pair_episode_order' or len(records) < 2:
-        return dict(status='inconclusive', reason='frozen U6 split/unit missing')
+    if split_rule != 'within_pair_episode_order':
+        return dict(status='inconclusive', reason='frozen U6 split/unit missing', imprecise=None)  # R27(d): no interval
+    if len(records) < 2:
+        return dict(status='inconclusive', reason='insufficient trajectories', imprecise=None)
     turns = [v for r in records for v in r['residual_j']]
     # The owning contract must explicitly adopt this per-turn s_r definition.
     if len(turns) < 2 or pooled_df is None or pooled_df <= 0 or pooled_rss is None or pooled_rss < 0:
-        return dict(status='inconclusive', reason='no residual degrees of freedom')
+        return dict(status='inconclusive', reason='no residual degrees of freedom', imprecise=None)  # R27(d): no interval
     ordered = sorted(records, key=lambda r: (r['start_ns'], r['trajectory']))
     middle = len(ordered)//2
     rows, positions = [], []
@@ -282,7 +284,7 @@ def u6(records, split_rule, *, pooled_rss=None, pooled_df=None):
     early = [v for _, late, v in rows if not late]
     late = [v for _, is_late, v in rows if is_late]
     if not early or not late:
-        return dict(status='inconclusive', reason='empty chronological half')
+        return dict(status='inconclusive', reason='empty chronological half', imprecise=None)  # R27(d): no interval
     means = fmean(early), fmean(late)
     # Identical uncorrected cluster sandwich and 1.645 bar as the v4 helper,
     # but ordered clusters make independent-process output byte deterministic.

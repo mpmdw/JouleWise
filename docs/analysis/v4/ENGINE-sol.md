@@ -1,4 +1,4 @@
-# V4 primary engine (Sol), R23k + R23l + R23m
+# V4 primary engine (Sol), R23k + R23l + R23m + R23n/R27
 
 2026-11-08. **PROVISIONAL: synthetic qualification, no live study validation.**
 Authority: the lead's engine-r23 brief (A37 and R23-E1/R23-1–4), on
@@ -13,6 +13,44 @@ not scientific certification.
 No Opus recompute code was read. Only the rulings were used for reconciliation.
 No network, model weights, live measurements or Block 5 outcomes were used.
 Coordination state is untouched, per the assignment.
+
+R23n (lead rulings on the Opus review of r23m, 2026-11-08):
+- **Planned G0 missing.** Every registered slot except the ungated anchors
+  (ordinals 1-4) plans a G0; the r11 configs carry a thermal block for every
+  non-anchor member. A captured member whose planned G0 is absent has an
+  unobserved start state, so it is excluded as `g0_missing` (a new class) and
+  never enters the pool. U2(a) is computed per window over the planned G0s
+  that are present. It is `inconclusive` only when none is present.
+- **D7.** `test.*.by_window` lists only the T windows present. U4's
+  `per_window['W1']` is the R1/W1 REFERENCE row, built from
+  `reference.w1_sentinel_j`, not from a W1 window. It therefore appears even
+  when a prefix has no W1.
+- **DC-in.** `whole_member_j` is null whenever the member span is partly
+  outside the stream or has drops (`meter.member_uncovered_or_gap`). No
+  extrapolated DC-in number prints.
+
+R27 (lead ruling, pre-completion print semantics). Incremental analysis
+prints before `calibration_complete`. Every threshold-independent computable
+quantity prints. Every threshold-dependent leaf is null under one status word,
+`withheld_until_calibration_complete`:
+- **(a) H\* blocks** stay present on C benign carriers (and T sabotage once
+  scored). `h_star`, `bounded_above` and `undefined_missing_grid_doses` are
+  null. `grid` and `off_grid_doses` print. Dose strips and scores print as
+  before.
+- **(b) Thresholds.** `rank`, `threshold`, both bounds, the generic ranks and
+  the sensitivity ranks and thresholds are null. `m`, `comparison` and
+  `calibration_members` print.
+- **(c) Carrier curve.** `n_by_h`, `expected_carriers` and `full_cell.n`
+  print. Fractions, crossings, `level_reached_at_h0`, `all_carrier_prefix`,
+  `monotone`, `window_cluster_bootstrap` and `full_cell.fraction` are null.
+  There is no `bootstrap_undefined_replicates` block, and no bootstrap is run.
+- **(d) U6.** `imprecise` is true or false only when an interval exists. It
+  is null for the early returns: split missing, `insufficient trajectories`
+  (fewer than 2), no residual df, and an empty half.
+
+After `calibration_complete` nothing changes: the complete synthetic series
+fill, minus the scorer-bound `threshold_freeze`, is byte-identical to
+`5e1f564a2`. Witnesses: `tests.align.test_v4_r23n_engine`.
 
 R23m applies the lead's four real-producer reconciliation rulings on
 `72410b0b4` (2026-11-08). Qualification here remains synthetic only:

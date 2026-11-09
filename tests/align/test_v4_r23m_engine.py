@@ -74,7 +74,9 @@ class TurnDCHoldTests(unittest.TestCase):
         result = capture(ep, stream([0, 100, 500, 600], [10.]*4))
         self.assertEqual(result['status'], 'available')
         self.assertEqual(result['turn_owned_j'], .5)
-        self.assertEqual(result['whole_member_j'], 6.)
+        # R23n: a gapped member span prints no extrapolated whole-member number.
+        self.assertIsNone(result['whole_member_j'])
+        self.assertIn('meter.member_uncovered_or_gap', result['flags'])
         self.assertNotIn('meter.turn_uncovered', result['flags'])
 
     def test_300ms_hold_is_covered_but_never_extrapolate_stream_edges(self):

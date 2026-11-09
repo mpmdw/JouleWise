@@ -93,7 +93,9 @@ class HStarAndFullTests(unittest.TestCase):
         payload['windows'] = payload['windows'][:1]
         fill, _ = analyze(payload)
         for pair in fill['benign_carriers']['pairs'].values():
-            self.assertEqual(pair['full_cell'], dict(status='print_only', fraction=None, n=7))
+            # R27(c): before calibration_complete the cell is withheld; n still prints.
+            self.assertEqual(pair['full_cell'], dict(status='withheld_until_calibration_complete',
+                                                     fraction=None, n=7))
 
 
 class AdapterFloatTimeTests(unittest.TestCase):

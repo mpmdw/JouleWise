@@ -293,6 +293,11 @@ def _member_reasons(member, cohort):
             reasons.append(flag)
     if t.get('status') != 'completed':
         reasons.append('member_incomplete')
+    if member['slot'].get('ordinal') not in (1, 2, 3, 4) and not any(
+            i.get('kind') == 'G0' for i in t.get('intervals', ())):
+        # R23n: every registered slot except the ungated anchors plans a G0. A
+        # captured member without its G0 has an unobserved start state.
+        reasons.append('g0_missing')
     if s is None:
         reasons.append('residual_rows_unavailable')
     else:
@@ -437,7 +442,33 @@ def _fit_task(task):
     return dict(window=window, pair=pair, convention=convention, full_benign_model=full, scores=scores)
 
 
-def _test_summary(scores):
+WITHHELD = 'withheld_until_calibration_complete'   # R27: the one pre-completion status word
+
+
+def _withheld_threshold(cutoff):
+    """R27(b): before calibration_complete no rank, bound or threshold prints."""
+    out = dict(cutoff, status=WITHHELD, rank=None, threshold=None, marginal_fpr_bound=None,
+               iid_continuous_fpr_upper90=None, generic_rank_025=None, generic_rank_05=None)
+    for key in ('rank_38_sensitivity', 'rank_05_sensitivity'):
+        if isinstance(out.get(key), dict):
+            out[key] = dict(out[key], rank=None, threshold=None,
+                            **({'status': WITHHELD} if 'status' in out[key] else {}))
+    return out
+
+
+def _withheld_carriers(carriers):
+    """R27(c): counts print; fractions, crossings and bootstrap are null."""
+    for result in carriers.get('pairs', {}).values():
+        result.update(curve=[(h, None) for h, _ in result['curve']], H50=None, H90=None,
+                      H50_status=WITHHELD, H90_status=WITHHELD, level_reached_at_h0=None,
+                      status=WITHHELD, all_carrier_prefix=None, monotone=None,
+                      window_cluster_bootstrap=None)
+        result.pop('bootstrap_undefined_replicates', None)
+        result['full_cell'] = dict(result['full_cell'], status=WITHHELD, fraction=None)
+    return carriers
+
+
+def _test_summary(scores, windows=TEST_ORDER):
     known = [r for r in scores if r['alarm'] is not None]
     k, n = sum(r['alarm'] for r in known), len(known)
     upper = None
@@ -454,7 +485,7 @@ def _test_summary(scores):
                 rate=sum(r['alarm'] for r in known)/len(known) if known else None,
                 missing=len(scores)-len(known),
                 by_window={w: dict(n=sum(r['window'] == w for r in known),
-                    alarms=sum(r['alarm'] for r in known if r['window'] == w)) for w in TEST_ORDER})
+                    alarms=sum(r['alarm'] for r in known if r['window'] == w)) for w in windows})
 
 
 def freeze_bindings(payload):
@@ -762,7 +793,7 @@ def analyze(payload, *, workers=1, frozen_thresholds=None):
                 cutoffs[key] = threshold(values)
             cutoffs[key]['calibration_members'] = [r['window']+'/'+r['run_id'] for r in rows]
             if cal['decision'] != 'calibration_complete':
-                cutoffs[key].update(status=cal['decision'], threshold=None)
+                cutoffs[key] = _withheld_threshold(cutoffs[key])
     freeze = dict(schema='joulewise.align_v4.threshold_freeze.v1', thresholds=cutoffs,
                   calibration_rows_sha256=digest(canonical(cal_rows)),
                   **freeze_bindings(payload))
@@ -804,8 +835,13 @@ def analyze(payload, *, workers=1, frozen_thresholds=None):
                     # helper ignores and lists off-grid ones. 'full' is not a dose.
                     grid = [(v['H'], v['score']) for v in row['H_grid'] if type(v['nominal_H']) is int
                             and v['nominal_H'] == v['H'] and _finite(v['score'])]
-                    row['H_star'] = (estimands.subturn_h_star(grid, cutoff) if cutoff is not None else
-                                     dict(status='inconclusive', h_star=None))
+                    if cal['decision'] != 'calibration_complete':      # R27(a)
+                        listed = estimands.subturn_h_star(grid, float('inf'))
+                        row['H_star'] = dict(listed, status=WITHHELD, h_star=None, bounded_above=None,
+                                             undefined_missing_grid_doses=None)
+                    else:
+                        row['H_star'] = (estimands.subturn_h_star(grid, cutoff) if cutoff is not None else
+                                         dict(status='inconclusive', h_star=None))
                 if is_carrier:
                     carrier_full[KEYS[f['pair']]].extend(v['above_threshold'] for v in row['H_grid']
                         if v['nominal_H'] == 'full' and _finite(v['score']))
@@ -837,7 +873,8 @@ def analyze(payload, *, workers=1, frozen_thresholds=None):
                                 **({'captured': False} if not m['captured'] else {}), alarm=None, score=None,
                                 reasons=m['reasons'] or m['classes'] or ['window_pool_ineligible']))
                             present.add((w['window'], s['run_id']))
-                test[convention][KEYS[pair]][condition] = {**_test_summary(rows), 'members': rows,
+                present_t = [w for w in TEST_ORDER if any(x['window'] == w for x in windows)]  # D7
+                test[convention][KEYS[pair]][condition] = {**_test_summary(rows, present_t), 'members': rows,
                     'rate_basis': 'eligible finite scores; missing assignments retained'}
             records = [dict(pair=pair, start_ns=r['start_ns'],
                 trajectory=f['window']+'/'+r['run_id'], residual_j=r['turn_residuals_j'])
@@ -847,13 +884,16 @@ def analyze(payload, *, workers=1, frozen_thresholds=None):
                 fulls = [f['full_benign_model'] for f in fits if f['window'].startswith('C') and f['pair'] == pair and f['convention'] == convention]
                 monitoring[KEYS[pair]] = ac.u6(records, payload.get('u6_split_rule'),
                     pooled_rss=math.fsum(f['rss_j2'] for f in fulls), pooled_df=sum(f['df'] for f in fulls))
-    carriers = (estimands.benign_carrier_curve(carrier_rows, bootstrap_replicates=1000, seed=0,
+    complete = cal['decision'] == 'calibration_complete'
+    carriers = (estimands.benign_carrier_curve(carrier_rows, bootstrap_replicates=1000 if complete else 0, seed=0,
                 grid=(0,128,256,300,384,512,768,1024,1536,2048))
                 if carrier_rows else dict(status='inconclusive', reason='no finite carriers'))
     for pair, result in carriers.get('pairs', {}).items():
         full = carrier_full[pair]
         result['full_cell'] = dict(status='print_only', n=len(full),
             fraction=sum(full)/len(full) if full and None not in full else None)
+    if not complete:
+        carriers = _withheld_carriers(carriers)
     u4 = ac.u4(payload.get('reference'), [w for w in windows if any(m['captured'] for m in w['members'])])
     u5 = ac.u5(payload.get('r1_sensitivity'))
     dc = dc_desk.analyze_windows([w for w in payload['windows'] if w['window'] == 'W1']+windows,
