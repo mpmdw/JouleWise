@@ -227,9 +227,18 @@ def write_member(root, wid, m, epoch_offset_ns, delta=(1.0, 1.0), big=False, ful
             fh.write(b"\x00")
     stamp = {"epoch_ns": m.start_ns + epoch_offset_ns, "monotonic_before_ns": m.start_ns,
              "monotonic_after_ns": m.start_ns}
+    # Production clock stamps and controller events (DC-span ruling (b): the member hull is
+    # harvest.member_spans(metadata, events)['member']).
+    stamp_s = lambda ns: {"monotonic_before_s": ns / NS, "monotonic_after_s": ns / NS}
     dump(base / "metadata.json", {"uncertainty_evidence": {"clock_anchor": {
-        "first_sample_end_point_epoch_s": (first_end + epoch_offset_ns) / NS}},
+        "first_sample_end_point_epoch_s": (first_end + epoch_offset_ns) / NS,
+        "clock_stamps": {"pre_spawn": stamp_s(span_start), "sampling_started": stamp_s(span_start + NS),
+                         "sampling_stopped": stamp_s(m.end_ns + 9 * NS), "post_parse": stamp_s(m.end_ns + 10 * NS)}}},
         "sampling": {"power_period_ns": period}})
+    (base / "events.jsonl").write_text("\n".join(json.dumps(e, sort_keys=True) for e in (
+        {"event_type": "stage_started", "phase": "idle_baseline", "metadata": {"monotonic_ns": span_start - 2 * NS}},
+        {"event_type": "stage_completed", "phase": "idle_drift_sentinel",
+         "metadata": {"monotonic_ns": m.end_ns + 12 * NS}})) + "\n")
     g0 = {"kind": "G0", "turn": 0, "start_ns": m.start_ns, "end_ns": m.start_ns + 290 * NS,
           "outcome": "released", "release": {"fast_c": 50.0, "slow_c": 40.0},
           "exit_sample_ns": m.start_ns + 290 * NS}

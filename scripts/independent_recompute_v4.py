@@ -1052,6 +1052,12 @@ def process_member(task):
         flags.append(r.code)
         out["usable"] = False
         return out
+    # DC-span ruling (b), lead 2026-11-08: the whole-member DC-in span is the production member hull,
+    # harvest.member_spans(metadata, events)['member'], computed here from the digest-bound bundle files.
+    events = []
+    if (mdir / "events.jsonl").is_file():
+        events, out["inputs"]["events_sha256"], _ = read_jsonl(mdir / "events.jsonl")
+    out["member_hull"] = member_hull(meta, events)
     hw = ep.get("hardware", {}) or {}
     span = hw.get("registered_span_ns")
     out["episode"] = {"condition": ep["condition"], "n_turns": len(ep["turns"]), "flags": list(ep.get("flags", [])),
@@ -2568,6 +2574,40 @@ def rectangle(times, powers, spans):
     return math.fsum(terms)
 
 
+def _stamp_ns(stamp, field):
+    """Production harvest._stamp_ns restated: floor(seconds * 1e9) in float arithmetic, None unless a finite
+    non-negative number."""
+    value = stamp.get(field) if isinstance(stamp, dict) else None
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
+        return None
+    return math.floor(value * 1_000_000_000)
+
+
+def member_hull(metadata, events):
+    """Production ``harvest.member_spans(metadata, events)['member']`` restated as text (DC-span ruling (b)): the
+    hull of the sampler stream (clock stamps pre_spawn / sampling_started .. post_parse / sampling_stopped) and
+    the controller's battery span (idle_baseline stage_started .. idle_drift_sentinel stage_completed event
+    monotonic_ns), or None."""
+    ue = metadata.get("uncertainty_evidence") if isinstance(metadata, dict) else None
+    anchor = ue.get("clock_anchor", {}) if isinstance(ue, dict) else {}
+    stamps = anchor.get("clock_stamps") if isinstance(anchor, dict) else None
+    stamps = stamps if isinstance(stamps, dict) else {}
+    starts = [_stamp_ns(stamps.get(n), "monotonic_before_s") for n in ("pre_spawn", "sampling_started")]
+    ends = [_stamp_ns(stamps.get(n), "monotonic_after_s") for n in ("post_parse", "sampling_stopped")]
+    for event in events:
+        meta = event.get("metadata") if isinstance(event.get("metadata"), dict) else {}
+        value = meta.get("monotonic_ns")
+        if type(value) is not int or value < 0:
+            continue
+        if event.get("event_type") == "stage_started" and event.get("phase") == "idle_baseline":
+            starts.append(value)
+        if event.get("event_type") == "stage_completed" and event.get("phase") == "idle_drift_sentinel":
+            ends.append(value)
+    starts = [v for v in starts if v is not None]
+    ends = [v for v in ends if v is not None]
+    return [min(starts), max(ends)] if starts and ends and min(starts) <= max(ends) else None
+
+
 DC_HOLD_LIMIT_NS = 300_000_000    # A20 / D6 ruling: a hold longer than 3 nominal 100 ms polls is uncovered
 
 
@@ -2634,15 +2674,20 @@ def dc_window(task):
     for rid, span, by_turn in members:
         row = {"status": "missing_dc"}
         for s in ok:
-            if not s["times"] or s["times"][-1] < span[0] or s["times"][0] > span[1]:
+            own_all = [x for own in by_turn for x in own]
+            reach = span if span is not None else ([min(a for a, _ in own_all), max(b for _, b in own_all)]
+                                                   if own_all else None)
+            if reach is None or not s["times"] or s["times"][-1] < reach[0] or s["times"][0] > reach[1]:
                 continue                                       # this stream does not reach the member at all
-            covered = s["times"][0] <= span[0] < span[1] <= s["times"][-1]
+            covered = span is not None and s["times"][0] <= span[0] < span[1] <= s["times"][-1]
+            if covered and sample_hold(s["times"], [1.0] * len(s["powers"]), [tuple(span)]) is None:
+                covered = False                                # a > 300 ms hold inside the hull (DC-span ruling)
             e = km003c_integrate(s["times"], s["powers"], span[0], span[1]) if covered else None
             if True:
                 # r23m review ruling (3): a member span partly outside the stream or with dropped samples prints
                 # a null whole-member DC-in with meter.member_uncovered_or_gap; never an extrapolated number.
                 reasons = []
-                if not covered or dropped_in(s, [span]):
+                if not covered or dropped_in(s, [tuple(span)]):    # covered implies a hull
                     e = None
                     reasons.append("meter.member_uncovered_or_gap")
                 per_turn = []
@@ -2655,10 +2700,11 @@ def dc_window(task):
                         if e_turn is None:
                             reasons.append(f"meter.turn_uncovered:turn:{k}")
                         per_turn.append(e_turn)
-                bat = rectangle(s["battery_times"], s["battery_powers"], [span])
-                row = {"status": "ok", "stream": s["name"], "dc_in_episode_j": e, "unavailable_reasons": reasons,
+                bat = rectangle(s["battery_times"], s["battery_powers"], [tuple(span)]) if span else None
+                row = {"status": "ok", "stream": s["name"], "dc_in_episode_j": e, "member_hull_ns": span,
+                       "unavailable_reasons": reasons,
                        "dc_in_turn_owned_j": math.fsum(per_turn) if None not in per_turn else None,
-                       "dc_turn_j": per_turn, "episode_s": (span[1] - span[0]) / NS,
+                       "dc_turn_j": per_turn, "episode_s": (span[1] - span[0]) / NS if span else None,
                        "battery_power_integral_j": bat,
                        "battery_assist": "unavailable" if bat is None else "disclosed"}
                 break
@@ -2854,8 +2900,7 @@ def recompute(root, workers=1, cache_dir=None, timings=None, stage="full", freez
                 # not (W1, anchors, sentinels, barred windows, T before calibration_complete). Only the
                 # residual rows mirror the GPU benign rows.
                 if r.get("captured") and "owned_by_turn" in r:
-                    members.append((m["run_id"], (r["episode"]["start_ns"], r["episode"]["end_ns"]),
-                                    r["owned_by_turn"]))
+                    members.append((m["run_id"], r.get("member_hull"), r["owned_by_turn"]))
             dc_tasks.append((w["window_id"], str(series["root"] / "windows" / w["window_id"]),
                              w["record"].get("meter"), members))
         t_dc = time.perf_counter()

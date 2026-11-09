@@ -923,6 +923,20 @@ class PreCompletionTests(unittest.TestCase):
         self.assertEqual((out["verdict"], out["parts"]["b_releases_verified_within_delta"]), ("inconclusive", None))
 
 
+class MemberHullTests(unittest.TestCase):
+    def test_member_hull_is_production_member_spans(self):
+        # DC-span ruling (b): harvest.member_spans(metadata, events)['member'], restated as text.
+        meta = {"uncertainty_evidence": {"clock_anchor": {"clock_stamps": {
+            "pre_spawn": {"monotonic_before_s": 10.5}, "sampling_started": {"monotonic_before_s": 11.0},
+            "sampling_stopped": {"monotonic_after_s": 50.0}, "post_parse": {"monotonic_after_s": 51.25}}}}}
+        events = [{"event_type": "stage_started", "phase": "idle_baseline", "metadata": {"monotonic_ns": 9_000_000_000}},
+                  {"event_type": "stage_completed", "phase": "idle_drift_sentinel", "metadata": {"monotonic_ns": 60_000_000_000}},
+                  {"event_type": "stage_started", "phase": "other", "metadata": {"monotonic_ns": 1}}]
+        self.assertEqual(rc.member_hull(meta, events), [9_000_000_000, 60_000_000_000])
+        self.assertEqual(rc.member_hull(meta, []), [10_500_000_000, 51_250_000_000])
+        self.assertIsNone(rc.member_hull({}, []))
+
+
 class DcRuleTests(unittest.TestCase):
     def test_sample_and_hold_and_whole_member(self):
         # D6 ruling (A20): turn-owned DC-in is a sample-and-hold; a hold > 300 ms is uncovered; the whole member

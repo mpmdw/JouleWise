@@ -159,7 +159,10 @@ class SeriesTests(unittest.TestCase):
         dc = self.out["dc_in"]["windows"]["C3"]
         row = dc["members"]["align-v4-c3-e07"]
         member = self.out["members"]["C3"]["align-v4-c3-e07"]
-        self.assertAlmostEqual(row["dc_in_episode_j"], 30.0 * member["pm"]["gross_episode_s"], places=4)
+        # DC-span ruling (b): the whole member is the production member hull, not the Episode span.
+        hull = row["member_hull_ns"]
+        self.assertAlmostEqual(row["dc_in_episode_j"], 30.0 * (hull[1] - hull[0]) / 1e9, places=4)
+        self.assertGreater(hull[1] - hull[0], member["pm"]["gross_episode_s"] * 1e9)
         self.assertEqual(row["battery_assist"], "unavailable")
         self.assertEqual(list(dc["members"]["align-v4-c3-e09"]), ["sealed_sha256"])
         res = self.out["dc_in"]["benign_residual_print_only"]["C3"]
