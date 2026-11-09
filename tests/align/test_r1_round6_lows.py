@@ -159,7 +159,11 @@ class KitLowTests(unittest.TestCase):
                 kit.check_r1_evidence(inputs, record)
             record['duty_bar'] = {'verdict': expected, 'pass': False, 'schedule': kit_tests.R6_1_SCHEDULE,
                                   'lead_fallback': {'step': 1, 'authority': 'synthetic lead'}}
-            kit.check_r1_evidence(inputs, record)
+            # R11 Track 1 / R08 (7895b9e7e) removed the lead-fallback acceptance: a failed duty bar needs a
+            # qualified remeasured R1 record, so the aggregate is rederived and the fallback alone refuses.
+            with self.subTest(verdicts=verdicts, step='fallback'), \
+                    self.assertRaisesRegex(ValueError, 'no lead fallback step alone qualifies'):
+                kit.check_r1_evidence(inputs, record)
 
     def test_duty_pass_boolean_and_per_run_verdicts_are_checked(self):
         for change in ('boolean', 'missing', 'unknown'):
