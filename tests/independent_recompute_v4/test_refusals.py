@@ -129,6 +129,16 @@ class RefusalTests(unittest.TestCase):
             path.write_text(json.dumps(bad))
             self.refused(root, "allocation_roster_differs")
         path.write_text(json.dumps(record))
+        # Plan ownership: a sibling window's plan (correct digest, wrong header) refuses as wrong_window.
+        plan_doc = json.loads((root / record["plan_source"]["path"]).read_text())
+        foreign = root / "windows" / record["window_id"] / "foreign_plan.json"
+        foreign.write_text(json.dumps(dict(plan_doc, plan_id="align-v4-c2", window_id="C2")))
+        path.write_text(json.dumps(dict(record, plan_source={"path": str(foreign.relative_to(root)),
+                                                             "sha256": synth.sha256_file(foreign)})))
+        self.refused(root, "config_digest_not_planned:wrong_window")
+        path.write_text(json.dumps(dict(record, plan_sha256="0" * 64)))
+        self.refused(root, "config_digest_not_planned:wrong_window")
+        path.write_text(json.dumps(record))
         # Config custody loop: a re-hashed plan_source, a tampered kit config, a tampered bundle config.
         plan = root / record["plan_source"]["path"]
         good_plan = plan.read_bytes()

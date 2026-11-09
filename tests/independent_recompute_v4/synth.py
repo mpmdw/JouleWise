@@ -403,7 +403,10 @@ def write_series(root, windows=None, members_per_window=None, period_ns=100_000_
         terminal = {}
         # The window's committed collection_plan.json (plan_source): each member's planned kit config digest.
         ppath = root / "windows" / wid / "collection_plan.json"
-        dump(ppath, {"window": wid, "members": plan_rows})
+        header = ({"schema_version": "joulewise.align_v4.v1", "plan_id": "align-v4"} if wid == "W1" else
+                  {"schema_version": "joulewise.align_v4.series_window.v1", "plan_id": "align-v4-" + wid.lower(),
+                   "window_id": wid, "series_manifest_sha256": sha256_file(ALLOCATION)})
+        dump(ppath, dict(header, members=plan_rows))
         plan_ref = {"plan_source": {"path": f"windows/{wid}/collection_plan.json", "sha256": sha256_file(ppath)}}
         if role == "calibration":    # R22-2: every captured C window binds its completed-chain terminal result
             tpath = root / "windows" / wid / "terminal_result.json"

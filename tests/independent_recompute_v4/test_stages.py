@@ -810,7 +810,7 @@ class ExclusionTests(unittest.TestCase):
                              "battery": {"batt": ["battery.accumulator_excursion"], "unobs": ["battery.unobserved"]},
                              "identity": {}},
                   # Config custody loop: plan row config_sha256 = kit sha; the bundle sha = RunBundleWriter's bytes.
-                  "plan": {(m["run_id"], m["ordinal"]): {"config_sha256": "k" * 64} for m in members},
+                  "plan": {m["ordinal"]: {"run_id": m["run_id"], "config_sha256": "k" * 64} for m in members},
                   "planned": {m["run_id"]: ("k" * 64, "c" * 64) for m in members}}
         r = lambda **k: self.res(**k)
         results = {"ok": r(seed=seed), "g1": r(intervals=[("G1", "timeout")], seed=seed),
@@ -849,13 +849,18 @@ class ExclusionTests(unittest.TestCase):
         # whose config_sha256 is not the kit's, a member missing from the plan, a member without planned_config.
         for label, w, res in (
                 ("bundle", window, dict(results, ok=dict(results["ok"], inputs={"config_sha256": "d" * 64}))),
-                ("plan_digest", dict(window, plan={**window["plan"], ("ok", 30): {"config_sha256": "x" * 64}}),
+                ("plan_digest", dict(window, plan={**window["plan"], 30: {"run_id": "ok", "config_sha256": "x" * 64}}),
                  results),
-                ("plan_row", dict(window, plan={k: v for k, v in window["plan"].items() if k[0] != "ok"}), results),
+                ("plan_run_id", dict(window, plan={**window["plan"], 30: {"run_id": "g1", "config_sha256": "k" * 64}}),
+                 results),
+                ("plan_row", dict(window, plan={k: v for k, v in window["plan"].items() if k != 30}), results),
                 ("planned", dict(window, planned={k: v for k, v in window["planned"].items() if k != "ok"}), results)):
             with self.assertRaises(rc.Refusal, msg=label) as cm:
                 rc.derive_exclusions(w, res)
             self.assertEqual(cm.exception.code, "config_digest_not_planned", label)
+        # A digest-verified kit that is not a JSON object: that member alone is config_invalid.
+        out = rc.derive_exclusions(dict(window, planned={**window["planned"], "ok": ("k" * 64, None)}), results)
+        self.assertEqual(out["ok"]["classes"], ["config_invalid"])
         self.assertEqual(out["g1"]["mismatch"], ["X2"])
         self.assertEqual(out["nospan"]["flags"], ["registered_span_missing"])     # A10
         self.assertEqual(out["unobs"]["flags"], ["battery.unobserved"])           # A28: kept, flagged

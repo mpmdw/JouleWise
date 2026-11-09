@@ -632,27 +632,58 @@ def ref_bytes(root, ref, code, where):
     return raw
 
 
-def load_plan_custody(root, wid, record, members):
-    """Config custody loop (lead ruling on the r23k review; export contract ``plan_source`` and
-    ``planned_config``). The window's committed collection_plan.json binds each member's kit config by
-    ``config_sha256`` (scripts/align_v4_series.py:302); the bundle config.json must be the bytes
-    RunBundleWriter.create writes for that kit config: indent-2, sorted-key JSON plus a newline (the production
-    bundle writer). Returns ({(local run id, ordinal): plan row}, {run_id: (kit sha256, expected bundle sha256)})."""
+W1_PLAN_HEADER = {"schema_version": "joulewise.align_v4.v1", "plan_id": "align-v4"}
+SERIES_PLAN_SCHEMA = "joulewise.align_v4.series_window.v1"
+
+
+def load_plan_custody(root, wid, slot, record, members):
+    """Config custody loop (lead rulings on the r23k review; export contract ``plan_source`` and
+    ``planned_config``), restated from the text:
+
+    - the plan must be the window's OWN: C/T plans carry the series_window.v1 producer header (plan_id
+      ``align-v4-<window>``, window_id, the frozen R24 manifest digest); the W1 plan is the W1 kit plan
+      (joulewise.align_v4.v1, plan_id ``align-v4``); a plan attempt_id must equal the record's attempt_id and
+      an optional record ``plan_sha256`` pin must equal the plan digest; otherwise
+      ``config_digest_not_planned:wrong_window`` refuses;
+    - plan rows are keyed by ordinal (duplicates refuse); a row's run_id must be the member's local run id and
+      its config_sha256 the planned kit config's digest, and the kit bytes must hash to it (custody: refuses);
+    - a digest-verified kit that is not a JSON object is that member's ``config_invalid``; otherwise the bundle
+      config.json must be the bytes the production bundle writer produces for it (indent-2, sorted keys,
+      newline), checked in stage X.
+    Returns ({ordinal: plan row} or None, {run_id: (kit sha256, expected bundle sha256 or None if invalid)})."""
     plan, planned = None, {}
+    bad = "config_digest_not_planned"
     if "plan_source" in record:
-        doc = json.loads(ref_bytes(root, record["plan_source"], "config_digest_not_planned", wid + ": plan_source"))
-        rows = doc.get("members") if isinstance(doc, dict) else None
-        need(isinstance(rows, list) and all(isinstance(r, dict) for r in rows), "config_digest_not_planned",
-             wid + ": plan members")
-        plan = {(r.get("run_id"), r.get("ordinal")): r for r in rows}
+        try:
+            doc = json.loads(ref_bytes(root, record["plan_source"], bad, wid + ": plan_source"))
+        except ValueError:
+            doc = None
+        need(isinstance(doc, dict), bad + ":wrong_window", wid + ": plan is not an object")
+        want = dict(W1_PLAN_HEADER) if slot == "W1" else {
+            "schema_version": SERIES_PLAN_SCHEMA, "plan_id": "align-v4-" + slot.lower(), "window_id": slot,
+            "series_manifest_sha256": ALLOCATION_SHA256}
+        need(all(doc.get(k) == v for k, v in want.items()), bad + ":wrong_window", wid + ": plan of another window")
+        need("attempt_id" not in doc or doc["attempt_id"] == record.get("attempt_id"), bad + ":wrong_window",
+             wid + ": plan attempt differs")
+        need(record.get("plan_sha256") in (None, record["plan_source"]["sha256"]), bad + ":wrong_window",
+             wid + ": plan pin differs")
+        rows = doc.get("members")
+        need(isinstance(rows, list) and all(isinstance(r, dict) for r in rows), bad, wid + ": plan members")
+        plan = {}
+        for r in rows:
+            need(r.get("ordinal") not in plan, bad, f"{wid}: duplicate plan ordinal {r.get('ordinal')}")
+            plan[r.get("ordinal")] = r
     for m in members:
         if "planned_config" in m:
-            kit = ref_bytes(root, m["planned_config"], "config_digest_not_planned", f"{wid}: {m['run_id']}")
+            kit = ref_bytes(root, m["planned_config"], bad, f"{wid}: {m['run_id']}")
             try:
-                bundle = (json.dumps(json.loads(kit), indent=2, sort_keys=True) + "\n").encode("utf-8")
+                obj = json.loads(kit)
             except ValueError:
-                raise Refusal("config_digest_not_planned", f"{wid}: {m['run_id']}: kit config") from None
-            planned[m["run_id"]] = (m["planned_config"]["sha256"], hashlib.sha256(bundle).hexdigest())
+                obj = None
+            bundle = ((json.dumps(obj, indent=2, sort_keys=True) + "\n").encode("utf-8")
+                      if isinstance(obj, dict) else None)
+            planned[m["run_id"]] = (m["planned_config"]["sha256"],
+                                    hashlib.sha256(bundle).hexdigest() if bundle is not None else None)
     return plan, planned
 
 
@@ -751,7 +782,7 @@ def load_series(root):
         need(isinstance(adj, dict) and type(adj.get("final")) is bool
              and isinstance(adj.get("excluded", {}), dict), "window_malformed", wid + ": adjudication")
         allocation_roster_check(wid, slot, members, alloc_rows.get(slot, {}))
-        plan, planned = load_plan_custody(root, wid, record, members)
+        plan, planned = load_plan_custody(root, wid, slot, record, members)
         windows.append({"window_id": wid, "slot": slot, "role": entry["role"], "record": record, "sha256": record_sha,
                         "declared_bar": declared, "terminal": terminal, "capture_failure": non_go,
                         "plan": plan, "planned": planned,
@@ -1354,12 +1385,16 @@ def derive_exclusions(window, results):
             # Custody loop: plan row (local run id, ordinal) -> its config_sha256 = the planned kit config's
             # digest -> the bundle config.json = RunBundleWriter's bytes of that kit config.
             local = rid.split(":", 1)[-1]
-            row = (window.get("plan") or {}).get((local, m["ordinal"]))
+            need(window.get("plan") is not None, "config_digest_not_planned", f"{rid}: window lacks plan_source")
+            row = window["plan"].get(m["ordinal"])
             kit = (window.get("planned") or {}).get(rid)
-            need(row is not None and kit is not None and row.get("config_sha256") == kit[0]
-                 and res.get("inputs", {}).get("config_sha256") == kit[1], "config_digest_not_planned",
+            need(row is not None and row.get("run_id") == local and kit is not None
+                 and row.get("config_sha256") == kit[0], "config_digest_not_planned", f"{rid}: not the planned kit")
+            need(kit[1] is None or res.get("inputs", {}).get("config_sha256") == kit[1], "config_digest_not_planned",
                  f"{rid}: config.json is not the planned bytes")
             cfg = res.get("config") or {"invalid": True}
+            if kit[1] is None:                         # a digest-verified kit that is not a JSON object
+                cfg = {"invalid": True}
             if res.get("episode", {}).get("seed") != m["seed_index"]:
                 seed_reasons.append("seed_index_differs")
             if cfg["invalid"]:
