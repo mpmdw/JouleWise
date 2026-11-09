@@ -37,6 +37,17 @@ def _hold_integral(times_ns, watts, start, end):
 
 
 def capture(streams, episode, member_span):
+    """Benign DC-in for one member.
+
+    ``member_span`` is production's member hull,
+    ``harvest.member_spans(metadata, events)['member']`` (A20). It covers the
+    sampler and battery bracket, which the engine derives from the member's
+    digest-bound bundle metadata and events, never from an exported span.
+    """
+    if (not isinstance(member_span, (list, tuple)) or len(member_span) != 2
+            or not all(type(v) is int for v in member_span) or member_span[0] >= member_span[1]):
+        return dict(status='missing', flags=['meter.member_span_missing'], whole_member_j=None,
+                    turn_owned_j=None, turn_rows=[], battery_assist=dict(status='unavailable', joules=None))
     flags = []
     for name, stream in streams:
         offset = kp.raw_offset_ns(stream, allow_unclosed=True)
@@ -44,7 +55,10 @@ def capture(streams, episode, member_span):
             flags.append('meter.clock_or_samples_unavailable')
             continue
         a, b = (v+offset for v in member_span)
-        span_defect = not stream.host_ns[0] <= a < b <= stream.host_ns[-1] or kp.span_has_drops(stream, a, b)
+        # A20 over the hull: outside the stream, a counter drop, or any hold
+        # longer than MAX_HOLD_NS makes the whole-member value unavailable.
+        span_defect = (not stream.host_ns[0] <= a < b <= stream.host_ns[-1] or kp.span_has_drops(stream, a, b)
+                       or _hold_integral(stream.host_ns, stream.watts, a, b) is None)
         if span_defect:
             # Whole-span defects remain disclosed. Only uncovered OWNED time
             # makes the turn integral unavailable (D6); gaps/gates/holds do not.

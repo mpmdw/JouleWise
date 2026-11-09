@@ -102,10 +102,23 @@ def member(root, slot, source, *, cache_dir=None):
             flags=[], offset_ns=mapping.offset_ns, raw_sha256=samples.raw_sha256,
             cache_statistics=source.get('cache_statistics', {})), source_flags=source.get('exclusion_codes', []))
     if slot['condition'] == 'benign' and source.get('dc_streams'):
+        # A20: the whole-member hull is production harvest.member_spans over the
+        # bundle's digest-bound metadata.json and events.jsonl, never exported.
+        if 'member_span_ns' in source:
+            raise ValueError('member_span_ns is engine-derived (A20); export bundle metadata and events instead')
+        from joulewise.b5.harvest import member_spans
+        refs = [source.get(k) for k in ('metadata', 'events')]
+        if not all(isinstance(r, dict) and isinstance(r.get('path'), str) and isinstance(r.get('sha256'), str)
+                   for r in refs):
+            raise ValueError('benign DC member requires digest-bound bundle metadata and events references')
+        metadata = strict_json(read_blob(root, refs[0]))
+        events = [strict_json(line) for line in read_blob(root, refs[1]).splitlines() if line.strip()]
+        hull = member_spans(metadata, events)['member']
+        result['dc_sources'] = [dict(path=r['path'], sha256=r['sha256']) for r in refs]
         from joulewise.external import km003c_parse as kp
         streams = [(r['path'], kp.parse_bytes(read_blob(root,r))) for r in source['dc_streams']]
         # Capture runs in analyze(), never in a persisted decision/energy cache.
-        result['dc_evidence'] = dict(streams=streams, episode=episode, member_span_ns=source['member_span_ns'])
+        result['dc_evidence'] = dict(streams=streams, episode=episode, member_span_ns=hull)
     return result
 
 

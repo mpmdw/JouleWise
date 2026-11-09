@@ -267,6 +267,9 @@ def load(path, *, calibration_only=False, through_window=None, cache_dir=None, w
                     config_ref = member['config_source']
                     if config_ref not in census:
                         census.append(dict(config_ref))
+                for ref in member.pop('dc_sources', []):    # A20 hull inputs
+                    if ref not in census:
+                        census.append(ref)
             _bind_planned_configs(root, window, {m['run_id']: m for m in native['members']}, sources, census)
             continue
         records = []

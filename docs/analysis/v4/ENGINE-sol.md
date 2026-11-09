@@ -33,6 +33,21 @@ R23n (lead rulings on the Opus review of r23m, 2026-11-08):
   outside the stream or has drops (`meter.member_uncovered_or_gap`). No
   extrapolated DC-in number prints.
 
+A20 whole-member DC hull (lead ruling):
+- **Span.** The whole-member DC-in integral is taken over production's member
+  hull, `joulewise.b5.harvest.member_spans(metadata, events)['member']`. The
+  hull spans the sampler stamps and the idle-baseline/drift-sentinel battery
+  bracket, as `km003c.session_report` uses it.
+- **Derivation.** The engine computes the hull itself from each benign DC
+  member's digest-bound bundle `metadata` and `events` references. They are new
+  raw-export fields and are census-recorded. An exported `member_span_ns`
+  refuses.
+- **Coverage rules over the hull.** If the hull is partly outside the stream,
+  contains a counter drop, or contains any hold longer than 300 ms, the whole
+  value prints null with `meter.member_uncovered_or_gap`. A missing hull gives
+  `meter.member_span_missing`. Turn-owned DC is unchanged.
+- **Witnesses:** `tests.align.test_v4_r23o_engine`.
+
 R27 (lead ruling, pre-completion print semantics). Incremental analysis
 prints before `calibration_complete`. Every threshold-independent computable
 quantity prints. Every threshold-dependent leaf is null under one status word,
