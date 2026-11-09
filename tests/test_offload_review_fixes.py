@@ -23,10 +23,12 @@ from unittest import mock
 from tests import test_offload_window as fixtures
 
 ow = fixtures.ow
-# harvest_offload.py at origin/align/2026-11-08-harvest-off-fix @ 4c292637d: its pack carries every
-# byte_bound_inputs() entry and its unpack places them append-only at their finalized real paths.
-HARVEST_BLOB = "aaf28b28761aea5201f7b15d0997cd06b064f3d1"
-HARVEST_SHA256 = "a767a4642f559d755b2b212fbcfc91eb0b13e7fc8f8d8d1cdff6c6549806f5c4"
+# harvest_offload.py at origin/align/2026-11-08-harvest-off-fix @ d5dc1198c: its pack carries every
+# byte_bound_inputs() entry and every bound_directories() entry (empty directories included); its unpack
+# recreates those directories and places the inputs append-only at their finalized real paths; `.external`
+# and `.external-staged` are reserved transport names that finalize refuses.
+HARVEST_BLOB = "4cdbd9bc587131b963ae0dc343f65c20eb5598df"
+HARVEST_SHA256 = "93fe4d34981b54b13b7726a18abee2acc3ba8704f5d50c1fd7ebd79742a8153b"
 
 
 def native_harvest():

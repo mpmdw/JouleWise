@@ -131,10 +131,20 @@ of cool-down. The admission prediction includes it.
 | S1-D03 (HIGH) + lead ruling: pressure release could finish with only the Air copy | The pressure-release route (`--pressure-compressed-local`) is **deleted**. Under pressure the span reports `disk_pressure: true` and the policy is HOLD: no deletion without two verified, restorable copies, ever |
 | LOW (both): a replacement in the last stat/unlink gap; a duplicate root that repeats or nests the record | Closed by the quarantine (what is unlinked is what was verified); duplicate roots that equal, contain or sit inside the record or each other refuse at pack/adopt time (`duplicate_root_overlaps`) |
 
+Final round (delta2 seats 1 and 2 on `ed3b375b7`: deletion path closed). Their two native-restore gaps are fixed in
+the harvest-off lane at `d5dc1198c` (blob `4cdbd9bc`), to which the native tests are now pinned:
+
+| Finding | Fix |
+|---|---|
+| S1-F01 / F1 (MEDIUM): a link to an empty external directory released, but could not restore natively | The harvest pack carries `external_directories` (`bound_directories(finalized)`: every directory entry of every byte-bound directory target, empty ones included) and its unpack recreates them. This tool requires that list exactly, recomputed from the pinned finalize manifest, at adoption, Air verify and release (`harvest_pack_not_restorable:external_directories`); a finalize without bound directory lists refuses. Tested: an empty external directory restores from either copy on a fresh host, with and without other carried inputs |
+| F2 (MEDIUM): session files under `.external/` collided with the restore's transport namespace | `.external` and `.external-staged` are reserved: the harvest finalize refuses them (`reserved_transport_name`), and this tool refuses such entries at adoption, Air verify and release |
+| LOW (both): a forked child inherited the re-entrant lock registry | Fixed: the registry records the owning pid; a forked child ignores the inherited entry, takes its own `flock`, and is refused while the parent holds it |
+
 Residual, stated: an in-place writer that modifies the same inode through an already-open fd, and resets its mtime,
 in the microseconds between the last pathname check and the detach, is not detected (rename changes ctime on APFS,
-so ctime cannot be compared afterwards). Closed records must stay immutable; nothing in the windows' pipeline
-writes into a finalized record.
+so ctime cannot be compared afterwards). Both delta2 seats accepted it as LOW, and their witnesses are kept as
+`test_accepted_residual_*` documentation tests. Closed records must stay immutable; nothing in the windows'
+pipeline writes into a finalized record.
 
 ## 2. Design
 
@@ -403,6 +413,12 @@ witnesses fail as they should and their controls pass, except two that test remo
 pressure control (the route is gone) and seat 1's crash-on-resume control, whose hook keys on the pre-quarantine path
 (its inverted version here passes).
 
+`tests/test_offload_delta2_sol1.py` (15) and `tests/test_offload_delta2_sol2.py` (17) are the final seats' own
+modules, brought in with their restore-gap and fork witnesses inverted into required properties (empty external
+directory restores from either copy; a pack without the bound directory list refuses; `.external/` refuses at
+finalize and adoption; a forked child is refused) and their controls unchanged. All six offload modules pass:
+173 tests, no skips.
+
 ## 10. Before the first real window
 
 1. **Ed:** §3a on the Air (sudo), including Remote Login; this also enables ownership on JW-EXT.
@@ -413,7 +429,8 @@ pressure control (the route is gone) and seat 1's crash-on-resume control, whose
 4. **One pack (ruled, built):** the harvest-off runbook's step 1c should pass `--threads 4` (its CLI default is
    `--threads 0`, every core), and its step 1d becomes `run --harvest-pack` here plus the in-place `unpack` (§1a).
    Since harvest-off @ `4c292637d` its `pack` carries every `byte_bound_inputs()` entry and its finalize declares
-   external terminal files as byte-bound inputs; this tool requires exactly that set.
+   external terminal files as byte-bound inputs; since `d5dc1198c` it also carries `external_directories` and
+   reserves `.external`. This tool requires exactly those sets.
 5. **Magistrate wiring of the lease and loop lock** (§5): a magistrate change with its own review. Until then the
    probe is the active exclusion.
 6. **Real-data calibration:** the first real offload's span and `rates.json` replace the seed rates; record the

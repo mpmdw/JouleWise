@@ -718,6 +718,34 @@ def terminal_check(root: Path, ref: str, env: Envelope, now) -> dict:
     return {"terminal": label, "verdict": result["verdict"], "ended_epoch_s": ended, "plan_id": result["plan_id"]}
 
 
+RESERVED_TRANSPORT_NAMES = frozenset({".external", ".external-staged"})  # harvest_offload.RESERVED_NAMES
+
+
+def bound_directories(doc: dict) -> list[str]:
+    """Every directory entry of every byte-bound directory target, empty ones included: the same list as
+    harvest_offload.bound_directories(finalized) (harvest-off @ d5dc1198c, Air-offload delta2). The pack
+    must carry exactly this list (MANIFEST `external_directories`) so unpack recreates them on a fresh Air."""
+    closure = doc["closure"]
+    mirror = closure.get("mirror")
+    mirror_real = Path(os.path.realpath(mirror["root"])) if mirror is not None else None
+    out = set()
+    for name, row in (closure.get("links") or {}).items():
+        if row.get("class") == "bytes" and row.get("kind") == "directory":
+            require(isinstance(row.get("directories"), list), f"finalize_predates_bound_directories:{name}")
+            out.update(os.path.normpath(Path(row["target"]) / entry) for entry in row["directories"])
+        if row.get("class") == "mirror" and mirror_real is not None:
+            for ignored in row.get("ignored", []):
+                for entry in ignored.get("directories", []):
+                    out.add(os.path.normpath(mirror_real / ignored["path"] / entry))
+    return sorted(out)
+
+
+def reserved_entries(env: Envelope) -> list[str]:
+    """Session entries under the harvest transport's reserved names (`.external/`, `.external-staged`)."""
+    return sorted(rel for rel in [*env.files, *env.links, *env.dirs]
+                  if rel.split("/", 1)[0] in RESERVED_TRANSPORT_NAMES)
+
+
 def restore_gaps(env: Envelope, externals: list[dict]) -> list[str]:
     """Byte-bound closure inputs of a finalize manifest that do not travel in the pack (review S1-04).
     The harvest restore needs each of them; a copy missing one is not restorable on its own."""
@@ -805,9 +833,12 @@ _HELD_LOCKS: dict[str, list] = {}
 def state_lock(state_root: Path):
     """The ONE single-instance lock per state root (lead ruling D1): run, adopt, pack, release, resume and
     cleanup all hold it, so at most one offload operation mutates this MBP's state at a time. Re-entrant
-    within this process; another process holding it refuses."""
+    within the owning process only (delta2 LOW): a forked child inherits the registry, so an entry whose
+    owner pid is not this process is ignored and the child must take its own flock, which the parent holds."""
     state_root = Path(state_root)
     key = os.path.realpath(state_root)
+    if key in _HELD_LOCKS and _HELD_LOCKS[key][2] != os.getpid():
+        del _HELD_LOCKS[key]  # inherited across fork: never this process's ownership (the fd copy is left alone)
     if key in _HELD_LOCKS:
         _HELD_LOCKS[key][1] += 1
         try:
@@ -822,7 +853,7 @@ def state_lock(state_root: Path):
     except BlockingIOError:
         os.close(fd)
         raise Refusal("offload_already_running") from None
-    _HELD_LOCKS[key] = [fd, 1]
+    _HELD_LOCKS[key] = [fd, 1, os.getpid()]
     try:
         yield
     finally:
@@ -1040,6 +1071,10 @@ class Offload:
                 "harvest_pack_payload_size", Mismatch)
         gaps = restore_gaps(env, externals)
         require(not gaps, f"harvest_pack_not_restorable:missing_external:{gaps[:1]}")
+        reserved = reserved_entries(env)
+        require(not reserved, f"reserved_transport_name:{reserved[:1]}")
+        directories = bound_directories(env.doc)
+        require(hdoc.get("external_directories") == directories, "harvest_pack_not_restorable:external_directories")
         self._claim_pack_path(pack_dir, record_manifest_sha256, payload["sha256"])
         files = [{"path": rel, "size": infos[rel].st_size, "mtime_ns": infos[rel].st_mtime_ns,
                   "mode": stat.S_IMODE(infos[rel].st_mode), "sha256": env.files[rel]["sha256"], "part": HARVEST_PAYLOAD}
@@ -1058,6 +1093,7 @@ class Offload:
                     "parts": [{"name": HARVEST_PAYLOAD, "sha256": payload["sha256"], "bytes": payload["size"],
                                "raw_bytes": raw_bytes, "files": len(files)}],
                     "extra_objects": [{"name": HARVEST_MANIFEST, "sha256": sha_bytes(hraw), "bytes": len(hraw)}],
+                    "external_directories": directories,
                     "local_parts_dir": str(pack_dir), "compressed_bytes": payload["size"],
                     "duplicate_roots": check_duplicate_roots(record_root, duplicate_roots)}
         write_once(manifest_path, canonical(manifest), "duplicate_run_conflict")
@@ -1268,6 +1304,9 @@ class Offload:
         env = parse_record_manifest(raw, Path(manifest["record_root"]))
         gaps = restore_gaps(env, manifest.get("externals", []))
         require(not gaps, f"not_restorable_from_the_copy:missing_external:{gaps[:1]}")
+        require(not reserved_entries(env), "not_restorable_from_the_copy:reserved_transport_name")
+        require(manifest.get("external_directories") == bound_directories(env.doc),
+                "not_restorable_from_the_copy:external_directories")
 
     def release(self) -> dict:
         """Delete the MBP copy only after a FRESH Air receipt, a sealed second-copy receipt and a restorable
@@ -2278,6 +2317,9 @@ class Gate:
                         for r in externals.values()),
                 "harvest_manifest_differs_from_finalize", Mismatch)
         require(not restore_gaps(env, list(externals.values())), "harvest_pack_not_restorable", Mismatch)
+        require(not reserved_entries(env), "reserved_transport_name", Mismatch)
+        require(hdoc.get("external_directories") == bound_directories(env.doc) == manifest.get("external_directories"),
+                "harvest_pack_not_restorable:external_directories", Mismatch)
 
     def _check_member(self, tar, member, row, staging: Path, extract: bool):
         source = tar.extractfile(member)

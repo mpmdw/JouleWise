@@ -424,7 +424,7 @@ class Envelope(Fixture):
             ow.parse_record_manifest(json.dumps(doc).encode(), self.tmp)
 
 
-def build_harvest_pack(root: Path, out: Path, finalized_sha: str, externals=()) -> dict:
+def build_harvest_pack(root: Path, out: Path, finalized_sha: str, externals=(), external_directories=()) -> dict:
     """The harvest-off lane's pack format (harvest_offload._pack): payload.tar.zst + MANIFEST.json.
     Mirrors its walk, rows and manifest keys; the end-to-end run checks against the real module."""
     out.mkdir(parents=True)
@@ -462,7 +462,8 @@ def build_harvest_pack(root: Path, out: Path, finalized_sha: str, externals=()) 
     manifest = {"schema": ow.SCHEMA_HARVEST_PACK, "source_root": str(root), "entries": rows, "external": outside,
                 "files": sum("sha256" in r for r in rows.values()), "bytes": sum(r.get("size", 0) for r in rows.values()),
                 "payload": {"name": "payload.tar.zst", "sha256": sha(payload.read_bytes()), "size": payload.stat().st_size},
-                "zstd_level": 3, "finalized_manifest_sha256": finalized_sha}
+                "zstd_level": 3, "finalized_manifest_sha256": finalized_sha,
+                "external_directories": list(external_directories)}
     (out / "MANIFEST.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
     return manifest
 
