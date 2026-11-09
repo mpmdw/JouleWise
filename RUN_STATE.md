@@ -1042,6 +1042,29 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+242. **Laptop lead (interactive session 1544c617), 2026-11-08 16:52 PST: CORRECTION to item 241 ("engine FROZEN at r23h"); release reviews HOLD on a shared calibration defect; v4 line and offload progress.**
+- **Correction.** Both Sol release-tools review seats (`align/2026-11-08-release-tools-sol{1,2}`) found that BOTH builds still applied the PRE-R22 calibration rule. A barred window counted, and C9-C14 were refused.
+  - Example: C1 barred plus C2-C8 healthy reported `calibration_complete` with 7 admitted windows, and a valid C9 was refused as a ninth.
+  - Cross-build agreement cannot detect a shared defect like this; review against the registered text did. **The engine is NOT frozen.**
+  - `engine-r23i` @ `915cf8a2f` (Sol) applies R22-2/R24: exactly 8 admitted windows, barred windows contribute nothing, C9-C14 in order, ORDER C1-C14 then T, R24 escalation. It also applies R25 (U3 N = 22) and F3 (`reason_code: insufficient_contrast_runs`, no fit statistics). The Opus delta review is running.
+  - The recompute is being fixed independently from the text.
+  - The comparator is being fixed for:
+    - row completeness (expected key sets and cardinalities, not a nonempty family);
+    - the W1-inconclusive reason category;
+    - producer identity (`loaded_scorer_sha256`);
+    - journal digests in stage (a);
+    - malformed exports refusing with exit 2;
+    - the runbook command pins;
+    - the U5 abs(beta)·delta mapping.
+  - The rehearsal gains a bar-plus-reserve scenario, an unavailable W1 contrast, and U5 negative-slope and delta = 2 C fixtures.
+- **v4 line `bbfccb70a`** (manifest 21313cc2… unchanged):
+  - `effective_desk` neutralizes only when the desk's own exclusions and the committed harvest's are the same members and codes, all contention-only. Any mismatch fails as an inconsistent window record (Sol delta7 F1).
+  - The four install, lead-fallback and pin test regressions since `20e9edbc4` were fixed as test changes. The install signal handlers still restore Automatic.
+  - Measurement-core pins were updated for the timing-receipts merge only, confirmed by the Sol delta7 diff against 20e9edbc4.
+- **Air-offload `ed3b375b7`.** The deletion path is closed, according to both final Sol seats: a global state-root lock, detach-by-rename into a journaled quarantine with re-verification before unlink, lstat type checks, and `byte_bound_inputs` required. The pressure-release route is DELETED; under pressure the tool holds.
+  - The same-inode residual (write through an already-open fd that resets mtime) is accepted as LOW, because finalized records are immutable.
+  - Two native-restore edge layouts remain (a link to an empty external dir, and session files under `.external/`). They are being fixed in harvest_offload: carry empty dirs, and reserve `.external/`.
+
 241. **Laptop lead (interactive session 1544c617), 2026-11-08 16:27 PST: v4 release tooling, exact AGREE with no holds; engine frozen at r23h; R25 U3 restated; offload fixes.**
 - **v4 primary engine FROZEN at `engine-r23h` @ `244ef6f39`.** The Opus delta reviews of r23 through r23g are closed, and the Sol review of r23h (the Opus patch) is ADMIT.
   - r23h makes sealed U1/U2 and battery aggregates `{status: sealed}` with no hash, because value hashes of small integers were reversible. It also adds `attempt_id` on per-member rows, H* off-grid doses, and refusal of string stamps and of exports without owned flags on the release path.
