@@ -91,7 +91,7 @@ class TerminalCustody(unittest.TestCase):
         self.value['export_root'] = str(self.root)
         self.enterContext(patch.object(ex, 'battery_evidence', review.serial_battery))
 
-    def record(self, *, corrupt_digest=False, stale_latch=False, drop_latch=False):
+    def record(self, *, corrupt_digest=False, stale_latch=False, drop_latch=False, finalized=None):
         entry = next(w for w in self.value['windows'] if w['attempt_id'] == 'C1#1')
         git = lambda *args: native_series.git(self.repo, *args)
         record = json.loads(git('show', entry['record_commit'] + ':' + entry['record_path']))
@@ -106,6 +106,8 @@ class TerminalCustody(unittest.TestCase):
             record['sources']['watchdog_state']['sha256'] = '0' * 64
         if drop_latch:
             record['sources'].pop('watchdog_state')
+        if finalized is not None:
+            record['finalized_at_epoch_s'] = finalized
         rel = f'confirm/{self.case.name}/record.json'
         path = self.repo / rel
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -161,3 +163,18 @@ class TerminalCustody(unittest.TestCase):
             self.export()
         self.assertEqual(caught.exception.code, 'terminal_evidence_missing')
         self.assertFalse((self.root / 'state/C1.json').exists())
+
+    def test_native_window_the_arm_would_not_release_refuses(self):
+        """Lead ruling (admission): the production next-arm terminal_window_release decision runs for every
+        captured attempt. A record finalized before its result ended is not released (result_not_terminal)."""
+        self.record(finalized=99)
+        with self.assertRaises(ex.Refused) as caught:
+            self.export()
+        self.assertEqual((caught.exception.code, caught.exception.detail), ('terminal_not_released', 'result_not_terminal'))
+        self.assertFalse((self.root / 'state/C1.json').exists())
+
+    def test_native_released_window_still_exports(self):
+        """Positive control: the unmutated (re-committed) C1 record is released and lands."""
+        self.record()
+        self.export()
+        self.assertTrue((self.root / 'state/C1.json').exists())

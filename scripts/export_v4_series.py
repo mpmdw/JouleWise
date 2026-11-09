@@ -34,6 +34,7 @@ from dataclasses import asdict
 from fractions import Fraction
 import hashlib
 import json
+import math
 import os
 from pathlib import Path, PurePosixPath
 import re
@@ -651,12 +652,24 @@ def terminal_evidence(record, session, custody_rel):
         raise Refused('terminal_evidence_missing', 'night plan: ' + str(exc)) from None
     require(isinstance(plan, dict) and isinstance(plan.get('plan_id'), str) and result.get('plan_id') == plan['plan_id'],
             'terminal_evidence_mismatch', 'result plan_id is not this window\'s night plan')
-    # Watchdog latch (lead ruling CF1, seat-2 confirmation): the PRODUCTION next-arm verifier, never an optional
-    # path. Absent evidence refuses terminal_evidence_missing; present evidence that fails authentication, parse,
-    # shape or key refuses terminal_evidence_mismatch.
+    # Then, in the arm's order, the release decision and the watchdog latch, both the PRODUCTION next-arm
+    # functions. Watchdog latch (lead ruling CF1): absent evidence refuses terminal_evidence_missing; present
+    # evidence that fails authentication, parse, shape or key refuses terminal_evidence_mismatch.
+    from scripts import align_v4_next_arm_packet as packet
+    # Terminal release (lead ruling, exporter admission): the PRODUCTION next-arm decision, so the exporter accepts
+    # exactly the terminal windows the arm path would release. Its clock is the record's committed finalization
+    # time: the arm's own committed() check requires ended <= finalized <= its clock, so on any record that check
+    # passes this accepts the same windows, deterministically. Any non-release refuses terminal_not_released with
+    # the production reason as the detail.
+    finalized = (getattr(record, 'record', None) or {}).get('finalized_at_epoch_s')
+    require(type(finalized) in (int, float) and math.isfinite(finalized), 'terminal_not_released',
+            'record finalization missing')
+    try:
+        packet.terminal_release_check(record, plan, finalized)
+    except (ValueError, KeyError, TypeError, AttributeError) as exc:
+        raise Refused('terminal_not_released', str(exc)) from None
     if (getattr(record, 'record', None) or {}).get('sources', {}).get('watchdog_state') is None:
         raise Refused('terminal_evidence_missing', 'watchdog_state (the B1 empty-process latch) is required')
-    from scripts import align_v4_next_arm_packet as packet
     try:
         packet.watchdog_latch_check(record, plan)
     except (ValueError, KeyError, TypeError, AttributeError) as exc:

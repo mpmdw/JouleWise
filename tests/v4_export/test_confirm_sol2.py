@@ -31,13 +31,18 @@ class TerminalSourceChecks(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         self.repo = Path(tmp.name)
         native_series.git(self.repo, 'init', '-q')
-        self.result = ex.canonical(dict(schema=ex.RESULT_SCHEMA, plan_id='current',
-                                        verdict='GO', chain_exit_code=0))
+        # Producer shape (native_series / the night driver): a HAZARD_PACK collected window, delivered.
+        self.result = ex.canonical(dict(schema=ex.RESULT_SCHEMA, plan_id='current', receipt_class='HAZARD_PACK',
+                                        verdict='GO', chain_exit_code=0, ended_epoch_s=100))
+        self.finalized = 101
         self.sources = {}
         for name, raw in {
-            'plan': ex.canonical(dict(plan_id='current', custody_root='/synthetic/custody')),
+            'plan': ex.canonical(dict(plan_id='current', receipt_class='HAZARD_PACK',
+                                      custody_root='/synthetic/custody')),
             'result': self.result,
+            'chain_started': ex.canonical(dict(pgid=123)),
             'chain_exited': ex.canonical(dict(exit_code=0)),
+            'courier': ex.canonical(dict(sent=True)),
             'courier_sent': b'',
         }.items():
             self.put(name, raw)
@@ -48,20 +53,23 @@ class TerminalSourceChecks(unittest.TestCase):
         self.sources[name] = dict(path=path.name, sha256=ex.sha256_bytes(raw))
 
     def terminal(self):
+        return ex.terminal_evidence(self.record_view(), None, None)
+
+    def record_view(self):
         native_series.git(self.repo, 'add', '.')
-        native_series.git(self.repo, 'commit', '-qm', 'synthetic terminal sources')
+        native_series.git(self.repo, 'commit', '-qm', 'synthetic terminal sources', '--allow-empty')
         commit = native_series.git(self.repo, 'rev-parse', 'HEAD')
         evidence = packet.GitEvidence(self.repo)
-        sources = self.sources
+        sources, finalized = self.sources, self.finalized
 
         class Record:
             def __init__(self):
-                self.record = {'sources': sources}
+                self.record = {'sources': sources, 'finalized_at_epoch_s': finalized}
 
             def source(self, name, *, json_value=True):
                 return evidence.source(commit, sources.get(name), json_value=json_value)
 
-        return ex.terminal_evidence(Record(), None, None)
+        return Record()
 
     def test_matching_digest_bound_watchdog_latch_passes(self):
         key = 'current:/synthetic/custody:' + ex.sha256_bytes(self.result)
@@ -107,6 +115,99 @@ class TerminalSourceChecks(unittest.TestCase):
         with patch.object(packet, 'watchdog_latch_check', side_effect=ValueError('production says no')) as v:
             self.assertRefuses('terminal_evidence_mismatch')
         v.assert_called_once()
+
+    # ---- Terminal release (lead ruling, exporter admission): the production next-arm decision.
+    def latch(self):
+        key = 'current:/synthetic/custody:' + ex.sha256_bytes(self.result)
+        self.put('watchdog_state', ex.canonical(dict(released_terminal_windows=[key])))
+
+    def mutate_json(self, name, **change):
+        value = json.loads((self.repo / self.sources[name]['path']).read_bytes())
+        value.update(change)
+        raw = ex.canonical(value)
+        if name == 'result':
+            self.result = raw
+        self.put(name, raw)
+
+    def refuses_release(self, reason):
+        self.latch()
+        with self.assertRaises(ex.Refused) as caught:
+            self.terminal()
+        self.assertEqual((caught.exception.code, caught.exception.detail), ('terminal_not_released', reason))
+
+    def test_release_refuses_with_production_reason_not_hazard_pack(self):
+        self.mutate_json('plan', receipt_class='OTHER_PACK')
+        self.refuses_release('not_hazard_pack')
+
+    def test_release_refuses_with_production_reason_result_class(self):
+        self.mutate_json('result', receipt_class='OTHER_PACK')
+        self.refuses_release('result_class_mismatch')
+
+    def test_release_refuses_with_production_reason_not_terminal(self):
+        self.finalized = 99      # the result ended after the record's committed finalization
+        self.refuses_release('result_not_terminal')
+
+    def test_release_refuses_with_production_reason_unknown_verdict(self):
+        self.mutate_json('result', verdict='MAYBE')
+        self.refuses_release('unknown_verdict')
+
+    def test_release_refuses_undelivered_courier(self):
+        self.mutate_json('courier', sent=False)
+        self.refuses_release('courier delivery missing')
+
+    def test_release_refuses_chain_closure_disagreement(self):
+        self.put('chain_exited', ex.canonical(dict(exit_code=3)))
+        self.refuses_release('chain closure and terminal result disagree')
+
+    def test_release_refuses_missing_finalization(self):
+        self.finalized = None
+        self.refuses_release('record finalization missing')
+
+    def test_release_refuses_missing_courier_source(self):
+        self.sources.pop('courier')
+        self.latch()
+        with self.assertRaises(ex.Refused) as caught:
+            self.terminal()
+        self.assertEqual(caught.exception.code, 'terminal_not_released')
+
+    def test_exporter_uses_the_production_release_decision(self):
+        self.latch()
+        with patch.object(packet, 'terminal_release_check', side_effect=ValueError('production says no')) as v:
+            self.refuses_release('production says no')
+        v.assert_called_once()
+
+    def test_exporter_releases_exactly_what_the_production_check_releases(self):
+        """Over a grid of terminal shapes, the exporter accepts iff packet.terminal_release_check (with the
+        record's finalization as the clock) releases, and then refuses with the production reason."""
+        grid = [dict(), dict(verdict='REFUSED'), dict(verdict='ABORTED'), dict(verdict='CHAIN_STOPPED'),
+                dict(verdict='MAYBE'), dict(receipt_class='X'), dict(ended_epoch_s=101), dict(ended_epoch_s=102),
+                dict(ended_epoch_s='late'), dict(plan_id='other')]
+        base = dict(self.sources)
+        for change in grid:
+            with self.subTest(change=change):
+                self.sources = dict(base)
+                self.mutate_json('result', **change)
+                self.latch()
+                record = self.record_view()
+                plan = record.source('plan')
+                try:
+                    packet.terminal_release_check(record, plan, self.finalized)
+                    production = None
+                except (ValueError, KeyError, TypeError, AttributeError) as exc:
+                    production = str(exc)
+                try:
+                    self.terminal()
+                    exporter = None
+                except ex.Refused as exc:
+                    exporter = exc
+                if production is None:
+                    self.assertIsNone(exporter, change)
+                else:
+                    self.assertIsNotNone(exporter, change)
+                    if exporter.code == 'terminal_not_released':
+                        self.assertEqual(exporter.detail, production)
+                    else:  # refused earlier by the exporter's own result shape / plan ownership checks
+                        self.assertIn(exporter.code, ('terminal_evidence_mismatch',))
 
     def test_stale_watchdog_with_wrong_digest_must_still_refuse(self):
         self.put('watchdog_state', ex.canonical(dict(released_terminal_windows=['previous-window'])))

@@ -433,6 +433,15 @@ output reference is checked: `raw_source`, `plan_source`, `terminal_result_sourc
 
 **Terminal ownership** (review F5). The result's `plan_id` must equal the committed night plan's.
 
+**Terminal release** (lead ruling, exporter admission). For every captured C attempt, the exporter runs the
+production next-arm decision `align_v4_next_arm_packet.terminal_release_check`, which the next-arm `terminal()`
+check also calls. It checks result schema, courier delivery, chain markers, the `joulewise.arm_retry.terminal_window_release`
+decision and chain-closure agreement. Its clock is the record's committed `finalized_at_epoch_s`; the arm's
+`committed()` check requires ended <= finalized <= the arm clock, so on any record that check passes the exporter
+accepts exactly the windows the arm would release. A missing finalization or any non-release refuses
+`terminal_not_released`, with the production reason as the detail. The release decision runs before the latch,
+in the arm's order.
+
 **Watchdog latch** (lead ruling CF1/H1, Sol confirmation seats 1-2). Every captured C attempt requires
 `sources.watchdog_state`, verified with the production next-arm verifier
 (`align_v4_next_arm_packet.watchdog_latch_check`, which the next-arm `terminal()` check also calls). The source

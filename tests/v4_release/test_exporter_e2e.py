@@ -405,8 +405,16 @@ class ExporterRefusals(unittest.TestCase):
         self.refused('terminal_evidence_missing', self.record(lambda r: None, {'chain_exited': lambda raw: None}))
 
     def test_terminal_evidence_mismatch(self):
-        self.refused('terminal_evidence_mismatch',
+        # A digest-valid watchdog latch for another result (CF1: production watchdog_latch_check).
+        self.refused('terminal_evidence_mismatch', self.record(
+            lambda r: None, {'watchdog_state': lambda raw: b'{"released_terminal_windows": ["other:x:' + b'0' * 64 + b'"]}\n'}))
+
+    def test_terminal_not_released(self):
+        # Lead ruling (admission): the production next-arm release decision runs first, in the arm's order, and
+        # refuses a chain closure that disagrees with the result with the production reason.
+        self.refused('terminal_not_released',
                      self.record(lambda r: None, {'chain_exited': lambda raw: b'{"exit_code": 1}\n'}))
+        self.refused('terminal_not_released', self.record(lambda r: r.update(finalized_at_epoch_s=99)))
 
     def test_broken_plan_digest(self):
         def change(raw):
