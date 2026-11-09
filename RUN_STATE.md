@@ -1042,6 +1042,18 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+245. **Laptop lead (interactive session 1544c617), 2026-11-08 18:35 PST: v4 release tooling ADMITTED in software.** `align/2026-11-08-v4-release-tools` @ `333e9a62a`.
+- **Pins:** engine `engine-r23j` @ `50f4958b6`; recompute `9f8a8749e` (program `0e79439d…`); bars `17a26815…`. The release interpreter is CPython 3.13.
+- **Review chain:**
+  - Sol release seats 1 and 2 (F1-F7, including the shared pre-R22 calibration defect);
+  - then the Sol confirmation seat (F2 omissions of U4/U6/undefined H*);
+  - all fixed, with every witness inverted and green.
+- **row_completeness (refusing):** expected row sets are derived independently on both sides for every registered family. That covers ledger, fits, counts, residuals, test, acceptance, sentinels, thresholds, carriers, U4/U5/U6, W1 cells, DC turn rows, H* by role, the grids and U3 pairs. A family whose cardinality is fixed elsewhere is listed with its reason (runbook §3).
+- **Synthetic rehearsal, exact AGREE on both plans:** 0 of 266,566 leaves unmapped, `release_v4` exit 0 in about 11 s at 4 workers.
+- **Before the first real release:**
+  - the native exporter writes both layouts from one custody (runbook §6a);
+  - the release runs on the real W1/C custody under python3.13.
+
 244. **Laptop lead (interactive session 1544c617), 2026-11-08 18:01 PST: v4 engine final at `engine-r23j` @ `50f4958b6`; release tooling exact AGREE; W1 line integrating.**
 - **Engine, r23i to r23j:**
   - R22-2/R24 calibration (exactly 8 admitted windows; bars contribute nothing; C9-C14 reserves; ORDER C1-C14 then T) and R25 U3 N = 22.
