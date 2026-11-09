@@ -532,6 +532,23 @@ Everything else comes from real producers:
 - Past both, EXP-D1 dominates. The recompute bars C1 and C2 (U1 FAIL) while the engine fits them, so every fit,
   score, threshold, known-H and carrier family holds, and `eligible_m_per_pair` refuses (R-C5).
 
+**Status at engine-r23m `5e1f564a2` / recompute `c595cc07b`** (with the release-tools comparator G3/G4 fixes).
+- G3, G4, D1, D5 and D6 are closed.
+- Stage (a) verifies and stage (b) shares all 62 raw members.
+- 59 families are compared. Eligibility, U1/U3/U4, the fits, scores, ledger, cache and battery agree.
+- The comparator still refuses (`unmapped_leaf`) on the open items below. Every one concerns a PREFIX series (two
+  counted C windows, calibration incomplete) or a fixture artifact:
+
+| Id | Item | Class | Evidence |
+|---|---|---|---|
+| EXP-P1 | known_h_scores/doses, h_star, carrier_curve and carrier_bootstrap: the engine prints them before calibration_complete, the recompute withholds them (A25), so row_completeness refuses | build disagreement (D7 incomplete) | 532 + 1540 + 196 + 60 + 14 rows `absent_recompute`; row_completeness 47 rows |
+| EXP-P2 | Thresholds at the prefix: status `continue` with rank 14 but null bounds (engine) vs `withheld_until_calibration_complete` with bounds 1/(m+1) and iid_upper90 (recompute) | build disagreement (D7) | thresholds_rank 24 rows, threshold_bounds 16 rows |
+| EXP-P3 | calibration_stop `windows`: engine 8 vs recompute 2 counted | engine prefix print, or comparator mapping | 1 row |
+| EXP-P4 | U2 for the ungated 30B in C windows (no planned G0): engine `not_applicable` (= the D2 ruling) vs recompute `pass` | recompute D2 implementation | 4 rows |
+| EXP-P5 | U6 bank `imprecise`: engine true, recompute false | open, needs a trace | 1 row |
+| EXP-P6 | DC residuals of a constant-power synthetic meter are floating-point noise (~1e-9 J, ~1e-12 J apart), and a relative bar fails | fixture artifact exposing a comparator gap (no absolute floor) | dc_benign 7 rows |
+| EXP-P7 | Empty W1 anchor block: the engine prints `anchor_sigma_w` nulls and a `reason` (the one unmapped leaf), the recompute prints nothing | empty-state print + comparator mapping | 5 rows + `/fill/anchor_sigma_w/reason` |
+
 The table below was first recorded on the engine-r23j / recompute-9f8a8749e run. `test_exporter_e2e` now pins engine-r23k
 (`72410b0b4`) and the recompute at `7b06c6058`, which implement `plan_source`, `planned_config` and the plan owner
 check. The recompute
