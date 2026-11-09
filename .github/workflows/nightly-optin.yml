@@ -1,0 +1,169 @@
+name: nightly-optin
+
+# NOT A REQUIRED CHECK. Scheduled and manual only: it never runs on a PR or a
+# push, so it cannot block a merge, and it must stay out of main's required
+# status checks.
+#
+# Why it exists: docs/perf/2026-11-08-optin-audit.md (branch
+# perf/2026-11-08-optin-audit) found that no workflow runs the synthetic
+# opt-in test bodies below. Their modules are discovered and "pass" in the
+# ordinary shards, but every opt-in body skips there, so a red body can hide
+# for weeks (the WP22 full window did). This workflow runs them for real.
+#
+# Scope: synthetic, stdlib-only, non-MLX, non-hardware suites only.
+# - MLX/native, tokenizer-native and live-hardware opt-ins (JW_ALIGN_*_NATIVE_*,
+#   JW_PREQUAL_HF, JW_LIVE_HW, JW_REAL_METER_SMOKE, QG_LIVE_DARWIN) belong to
+#   the lead-controlled Mac smoke, not CI.
+# - JW_B5_S10_REAL_PROGRAMS needs about 8 GB of restored fixtures and hours per
+#   module (audit: "separate budget and prepared synthetic result-tree inputs"),
+#   and the sealed/external corpus rows must never run in CI. Both are left out.
+# - Optional-dependency bodies (NumPy, Torch, transformers, pynvml) need
+#   provisioned extras this repo's CI deliberately does not install (D-009,
+#   D-017). They are left out rather than skip-green.
+#
+# Visibility rules:
+# - Every module runs in its own process (one unittest module per process).
+# - fail-fast is off, so one red suite does not hide the others.
+# - A run that reports ANY skipped test fails: an opt-in that silently skipped
+#   (env var typo, missing fixture) is a red job, never a green one. An
+#   expected skip needs an explicit max_skips on its matrix entry.
+# - A run with zero tests fails.
+# - The full verbose log of every entry is uploaded, pass or fail.
+#
+# The WP22 entry checks out the ALIGN lane branch, not main. The audit
+# reproduced a RED entry at 7895b9e7e (the contrast proof was not refreshed
+# from the synthetic pilot's turn counts). The lane can repair that independently;
+# each run's header records the exact checked-out head for current evidence.
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+    inputs:
+      align_ref:
+        description: "Branch checked out for the WP22 entry"
+        required: false
+        default: "align/2026-11-08-v4-r11"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-optin
+  cancel-in-progress: false
+
+jobs:
+  optin:
+    name: optin (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ matrix.timeout }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: wp22-full-window
+            ref: ${{ inputs.align_ref || 'align/2026-11-08-v4-r11' }}
+            optin: JW_WP22_FULL
+            module: tests.align.test_v4_w1_synthetic
+            timeout: 60
+            max_skips: 0
+          - name: full-corpus-packer-stress
+            ref: main
+            optin: JOULEWISE_FULL_CORPUS
+            module: tests.test_scored_packer_stress
+            timeout: 240
+            max_skips: 0
+          - name: full-corpus-packer-fuzz
+            ref: main
+            optin: JOULEWISE_FULL_CORPUS
+            module: tests.test_scored_packer_fuzz
+            timeout: 240
+            max_skips: 0
+          - name: full-corpus-ownership-forgery
+            ref: main
+            optin: JOULEWISE_FULL_CORPUS
+            module: tests.test_scored_ownership_forgery
+            timeout: 240
+            max_skips: 0
+          - name: full-corpus-reduce
+            ref: main
+            optin: JOULEWISE_FULL_CORPUS
+            module: tests.test_scored_reduce
+            timeout: 240
+            max_skips: 0
+          - name: fullsize-recompute
+            ref: main
+            optin: JW_B5_FULLSIZE_RECOMPUTE
+            module: tests.independent_recompute.test_member_pool.FullSizeMemberPoolTests
+            timeout: 120
+            max_skips: 0
+    env:
+      # Synthetic fixtures only: never let a nightly touch real measurement data.
+      JW_B5_SYNTHETIC_ONLY: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ matrix.ref }}
+          # Golden provenance sidecars replay `git archive` against their
+          # pinned base commit; a shallow checkout lacks that object.
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Install zsh (tests invoke /bin/zsh)
+        run: |
+          if [ ! -x /bin/zsh ]; then
+            sudo apt-get update -q
+            sudo apt-get install -y -q zsh
+          fi
+          test -x /bin/zsh
+      - name: Record the tree under test
+        env:
+          REQUESTED_REF: ${{ matrix.ref }}
+        run: |
+          mkdir -p nightly-logs
+          {
+            echo "entry=${{ matrix.name }}"
+            echo "requested_ref=$REQUESTED_REF"
+            echo "head=$(git rev-parse HEAD)"
+            echo "optin=${{ matrix.optin }}=1"
+            echo "module=${{ matrix.module }}"
+            python --version
+          } | tee nightly-logs/${{ matrix.name }}.header.txt
+      - name: Run the opt-in suite
+        env:
+          OPTIN_NAME: ${{ matrix.optin }}
+          MODULE: ${{ matrix.module }}
+          MAX_SKIPS: ${{ matrix.max_skips }}
+          LOG: nightly-logs/${{ matrix.name }}.log
+        run: |
+          set -uo pipefail
+          export "${OPTIN_NAME}=1"
+          python -B -m unittest -v "$MODULE" 2>&1 | tee "$LOG"
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            echo "::error::$MODULE failed with exit status $status (see the uploaded log)"
+            exit "$status"
+          fi
+          ran=$(sed -n 's/^Ran \([0-9][0-9]*\) test.*/\1/p' "$LOG" | tail -1)
+          skipped=$(/usr/bin/env grep -c -E '\.\.\. skipped ' "$LOG" || true)
+          echo "ran=${ran:-none} skipped=$skipped max_skips=$MAX_SKIPS"
+          if [ -z "${ran:-}" ] || [ "$ran" -eq 0 ]; then
+            echo "::error::$MODULE ran no tests"
+            exit 1
+          fi
+          if [ "$skipped" -gt "$MAX_SKIPS" ]; then
+            echo "::error::$MODULE skipped $skipped test(s) with $OPTIN_NAME=1 (allowed $MAX_SKIPS); an opt-in that skips is not coverage"
+            /usr/bin/env grep -E '\.\.\. skipped ' "$LOG" || true
+            exit 1
+          fi
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: nightly-optin-${{ matrix.name }}
+          path: nightly-logs/
+          if-no-files-found: warn
+          retention-days: 30
