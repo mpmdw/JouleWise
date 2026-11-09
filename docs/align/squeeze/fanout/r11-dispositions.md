@@ -191,3 +191,10 @@ window journal, breaks continuity as before. Amendment allowlist unchanged.
 | S2 F3 terminal-barred pool | One shared structural-bar predicate (`WindowRecord.structural_bar`) feeds history, pool admission and calibration: a barred window admits an empty pool only | builder `cohort()` |
 | S2 F2 / R25 U3 scope for reserves | U3 policy template declares C1-C14; N 16 to 22 (pre-signature design change), prospective roster | `align_v4_u3_export.ROSTER`, DEVIATIONS R25 |
 | S1 doc | R24 drift prose corrected to RUN_STATE 238 | protocol, this table |
+
+## Delta7 (Sol confirmation seat HOLD e36b096fe)
+
+| Finding | Change | Where |
+|---|---|---|
+| F1 `effective_desk` upgraded a mismatched desk | A desk is neutralized ONLY when the committed harvest holds nothing but disclosure-only codes AND the desk's own record of exclusions (`members_excluded` plus the new desk's `members_disclosure_only`) is the SAME set: same members, same codes. Any desk/harvest mismatch (a stale desk recording a real exclusion, another member, other codes, a missing or malformed record) is an inconsistent window record and REFUSES; it never passes. A harvest with a real exclusion leaves the desk's own verdict. The native desk now writes `members_disclosure_only` into `desk.json`. Probes: contention/contention passes; runtime/runtime fails; runtime-desk/contention-harvest refuses; contention for a different member refuses | `align_v4_next_arm_packet.effective_desk`, `align_pilot_session.desk` |
+

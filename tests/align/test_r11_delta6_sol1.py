@@ -72,6 +72,8 @@ class Delta6Witnesses(unittest.TestCase):
         # The v4 thermal records have already stripped contention successfully.
         scenario.sources['desk'].update(
             harvest_status='members_excluded', pilot_status='instrument_incomplete',
+            # delta7: the stale-style desk must record the SAME exclusion as the committed harvest to be reconciled
+            members_excluded=[{'run_id': victim, 'codes': ['contention.request_overlap']}],
             full_desk_gate={'pass': False},
             checks={'no_member_exclusions': False, 'chain_eligibility': False, 'v4_B_bar': True})
         scenario.finish()

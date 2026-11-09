@@ -413,6 +413,7 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
               'pilot': str(output / 'PILOT.json'), 'pilot_status': pilot['status'], 'checks': checks,
               'harvest_argv': argv, 'harvest_exit': result.returncode,
               'members_excluded': pilot['members_excluded'],
+              'members_disclosure_only': pilot['members_disclosure_only'],
               'harvest_status': ('not_run' if not harvest else 'program_fault' if result.returncode not in (0, 6)
                                  else 'members_excluded' if excluded else 'exclusions_unavailable' if exclusions is None else 'ok')}
     h.write(output / 'desk.json', status)
