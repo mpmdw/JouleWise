@@ -8,6 +8,22 @@ from .engine import SCHEMA, CALIBRATION_ORDER, TEST_ORDER, D_MODEL, roster
 from .residual import design_row
 
 
+def member_config(slot):
+    """Synthetic bundle config; no task factory or model path is ever opened."""
+    spec = dict(schema='joulewise.align.apple.episode_spec.v1',
+        task_factory='joulewise.align.apple.pilot:offline_shade_task',
+        task_kwargs=dict(task_pair=slot['task_pair']), condition=slot['condition'],
+        seed=slot['seed_index'], enable_thinking=True, max_turns=12,
+        max_tokens=4096, temperature=.6,
+        sampler=dict(temperature=.6, top_p=.95, top_k=20, min_p=0))
+    return dict(schema_version='0.1', run_id=slot['run_id'],
+        model=dict(name='synthetic-model', family='mock', source='synthetic/model'),
+        quantization=dict(name='none'), hardware_target=dict(id='synthetic',
+            transport='local', runtime_backend='mock', telemetry_backend='mock'),
+        workload_profile=dict(name='align_episode', prompt_text=canonical(spec).decode()),
+        run_metadata=dict(project='synthetic', tags=['align-model='+slot['model_id']]))
+
+
 def series(*, turns=12, identity_tokens=8, reserves=0):
     if type(reserves) is not int or not 0 <= reserves <= 6:
         raise ValueError('synthetic reserves must be in 0..6')
@@ -63,10 +79,11 @@ def series(*, turns=12, identity_tokens=8, reserves=0):
             thermal['turn_counts'] = [[r[k] for k in ('context_tokens', 'prefill_tokens', 'decode_tokens')] for r in rows]
             if slot['series_role'] == 'sentinel':
                 thermal['identical_work_group'] = 'sentinel'
-            summary = dict(flags=[], seed=slot['expected_episode_seed'], residual_rows={
+            summary = dict(flags=[], seed=slot['seed_index'], residual_rows={
                 'True': rows, 'False': withheld}, energy={'powermetrics:gpu_power': dict(
                     joules=owned+2., half_width_j=2.)}, cache_statistics=dict(rebuilds=0, rewinds=0))
             members.append(dict(slot=slot, thermal=thermal, summary=summary, captured=True,
+                                config=member_config(slot),
                                 dc=dict(joules=(owned+2.)*1.5, half_width_j=4., flags=[])))
         windows.append(dict(window=name, attempt_id=name+'#1', status='final', members=members))
     reference_j = next(m['thermal']['turn_owned_j'] for m in windows[0]['members'] if m['slot']['ordinal'] == 5)

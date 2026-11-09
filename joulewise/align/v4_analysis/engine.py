@@ -14,7 +14,7 @@ import types
 import sys
 import multiprocessing
 
-from joulewise.align.apple.sampling import episode_seed
+from joulewise.align.apple.sampling import episode_seed, seed_inputs
 from joulewise.align.apple.v4_cadence import calibration_stop, slot_of, STRUCTURAL_BARS
 from joulewise.align.apple import v4_estimands as estimands
 from joulewise.align.apple import thermal_desk as td
@@ -68,9 +68,8 @@ def roster(window, *, escalated=False):
         index = next_index[pair] if held else 1
         if held:
             next_index[pair] += 1
-        stage = 'a' if ordinal <= 11 else 'b'
         run = (f'align-pilot-v3-episodes-a-e{ordinal:02}' if ordinal <= 4 else
-               f'align-v4-{window.lower()}-episodes-{stage}-e{ordinal:02}')
+               f'align-v4-{window.lower()}-e{ordinal:02}')
         rows.append(dict(ordinal=ordinal, task_pair=pair, condition=condition,
             model_id=model, seed_index=index, expected_episode_seed=episode_seed(
                 model, 'thinking_on', 'shade/'+pair, index), held_out=held,
@@ -79,7 +78,7 @@ def roster(window, *, escalated=False):
     if escalated:
         for ordinal in (23, 24):
             rows.append({**rows[4], 'ordinal': ordinal, 'series_role': 'supplemental_sentinel',
-                         'run_id': f'align-v4-{window.lower()}-episodes-b-e{ordinal:02}'})
+                         'run_id': f'align-v4-{window.lower()}-e{ordinal:02}'})
     return rows
 
 
@@ -252,8 +251,26 @@ def _member_reasons(member, cohort):
     if s is None:
         reasons.append('residual_rows_unavailable')
     else:
-        if s.get('seed') != member['slot']['expected_episode_seed']:
+        # Production Episode.seed is spec.seed (the INDEX), not the derived
+        # uint64 sampler seed. Recompute the latter independently from the
+        # member's verified bundle config using the registered production law.
+        from joulewise.schemas import BenchmarkConfig
+        from joulewise.align.apple.workload import EpisodeSpec
+        if 'config' not in member:
+            raise ValueError('captured member lacks bundle config')
+        config = BenchmarkConfig.from_mapping(member['config'])
+        spec = EpisodeSpec.from_text(config.workload_profile.prompt_text)
+        slot = member['slot']
+        seed_reasons = []
+        if type(s.get('seed')) is not int or s['seed'] != slot['seed_index']:
+            seed_reasons.append('seed_index_differs')
+        derived = episode_seed(*seed_inputs(config, spec.enable_thinking),
+                               'shade/'+slot['task_pair'], slot['seed_index'])
+        if derived != slot['expected_episode_seed']:
+            seed_reasons.append('derived_seed_differs')
+        if seed_reasons:
             reasons.append('seed_identity_differs')
+            reasons.extend(seed_reasons)
         rows = _rows(member)
         if any(not _finite(r.get('energy_j')) for r in rows):
             reasons.append('turn_energy_unavailable')

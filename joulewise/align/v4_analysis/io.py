@@ -88,6 +88,14 @@ def read_blob(root, reference):
     return raw
 
 
+def config_reference(source):
+    """A captured member must bind the bundle's config.json, never inline it."""
+    ref = source.get('config')
+    if not isinstance(ref, dict) or not all(isinstance(ref.get(k), str) for k in ('path', 'sha256')):
+        raise ValueError('captured member requires digest-bound config reference')
+    return ref
+
+
 def load(path, *, calibration_only=False, through_window=None, cache_dir=None, workers=1,
          document=None, source_session=None):
     """Input contains explicit thermal PILOT and raw alternative-desk exports.
@@ -151,6 +159,11 @@ def load(path, *, calibration_only=False, through_window=None, cache_dir=None, w
             window['members'] = adapter.window(root, native, window.pop('roster'), window_id=window['window'],
                                               cache_dir=cache_dir, workers=workers)
             census.append(dict(path=ref['path'], sha256=ref['sha256']))
+            for member in window['members']:
+                if member['captured']:
+                    config_ref = member['config_source']
+                    if config_ref not in census:
+                        census.append(dict(config_ref))
             continue
         records = []
         for key in ('thermal_source', 'residual_source'):
@@ -177,7 +190,16 @@ def load(path, *, calibration_only=False, through_window=None, cache_dir=None, w
             if captured and 'owned_energy_flags' not in thermals[run]:
                 # A2(4) release rule: no fallback to episode-level coverage flags.
                 raise ValueError('release desk export lacks owned_energy_flags')
-            window.setdefault('members', []).append(dict(slot=slot, thermal=thermals[run],
+            config = {}
+            if captured:
+                ref = config_reference(native)
+                identity = (ref['path'], ref['sha256'])
+                if identity not in sources:
+                    sources[identity] = read_source(root, ref)
+                config = dict(config=sources[identity], config_source=dict(path=ref['path'], sha256=ref['sha256']))
+                if config['config_source'] not in census:
+                    census.append(config['config_source'])
+            window.setdefault('members', []).append(dict(slot=slot, thermal=thermals[run], **config,
                 summary=native.get('summary'), captured=captured,
                 dc=native.get('dc_secondary'), source_flags=native.get('exclusion_codes', [])))
         window.pop('roster')

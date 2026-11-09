@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 
 from joulewise.align.v4_analysis.io import canonical, digest, load
-from joulewise.align.v4_analysis.synthetic import series
+from joulewise.align.v4_analysis.synthetic import member_config, series
 from joulewise.align.v4_analysis import analyze, engine as e
 from tests.align.test_reduce_sol import synthetic_episode, ENDPOINT, OFFSET, EVIDENCE
 from tests.align.v4_synthetic import synthetic_frames
@@ -22,7 +22,7 @@ class RawTests(unittest.TestCase):
         planned = release_manifest()['windows']  # R23j: full R24 allocation incl. W1
         slots = next(w['members'] for w in planned if w['window'] == 'C1')
         ep = replace(synthetic_episode(), episode_id=slots[0]['run_id'],
-                     agent_model=slots[0]['model_id'], seed=slots[0]['expected_episode_seed'],
+                     agent_model=slots[0]['model_id'], seed=slots[0]['seed_index'],
                      task_pair=slots[0]['task_pair'], condition=slots[0]['condition'],
                      hardware={'thermal': {'policy': {'sensors': {'s_fast': 'F', 's_slow': 'S', 'fan_keys': []}},
                                            'intervals': []}})
@@ -33,6 +33,7 @@ class RawTests(unittest.TestCase):
                 return dict(path=name, sha256=digest(data))
             sources = [dict(run_id=s['run_id'], captured=False) for s in slots]
             sources[0].update(captured=True, episode=write('episode.json', to_json(ep).encode()),
+                config=write('config.json', canonical(member_config(slots[0]))),
                 powermetrics=write('raw.plist', b''.join(synthetic_frames(40))),
                 first_record_endpoint_s=ENDPOINT, nominal_interval_ns=100_000_000,
                 stamps=[dict(epoch_s=ENDPOINT, monotonic_before_s=100., monotonic_after_s=100.,
@@ -49,6 +50,7 @@ class RawTests(unittest.TestCase):
             path = root/'input.json'
             path.write_bytes(canonical(p))
             payload = load(path)
+            self.assertIn(sources[0]['config'], payload['input_census'])
             fill, _ = analyze(payload)
             self.assertEqual(payload['windows'][0]['members'][0]['thermal']['id'], slots[0]['run_id'])
             self.assertTrue(payload['windows'][0]['members'][0]['thermal']['sidecar_present'])
@@ -96,7 +98,7 @@ class RawTests(unittest.TestCase):
     def test_raw_observations_to_fresh_rows_and_exact_clock(self):
         from joulewise.align.v4_analysis.raw import member
         from joulewise.align.v4_analysis.engine import roster
-        ep = replace(synthetic_episode(), episode_id=roster('C1')[5]['run_id'], seed=roster('C1')[5]['expected_episode_seed'])
+        ep = replace(synthetic_episode(), episode_id=roster('C1')[5]['run_id'], seed=roster('C1')[5]['seed_index'])
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             def write(name, data):
@@ -104,6 +106,7 @@ class RawTests(unittest.TestCase):
                 return dict(path=name, sha256=digest(data))
             raw = b''.join(synthetic_frames(40)).replace(b'<string>Moderate</string>', b'<string>Nominal</string>')
             source = dict(captured=True, episode=write('episode.json', to_json(ep).encode()),
+                config=write('config.json', canonical(member_config(roster('C1')[5]))),
                 powermetrics=write('raw.plist', raw), first_record_endpoint_s=ENDPOINT,
                 nominal_interval_ns=100_000_000, stamps=[dict(epoch_s=ENDPOINT, monotonic_before_s=100.,
                     monotonic_after_s=100., wall_resolution_s=0., monotonic_resolution_s=0.)],
@@ -148,9 +151,10 @@ class RawTests(unittest.TestCase):
             (path.parent/'C3.json').unlink()
             payload = load(path, through_window='C2')
             self.assertEqual([w['window'] for w in payload['windows']], ['C1','C2'])
-            # R23j: series manifest + C1/C2 desks + C1/C2 terminal results only.
+            # R23k: only the manifest, C1/C2 desks, terminals and member configs.
             self.assertEqual(sorted(r['path'] for r in payload['input_census']),
-                             ['C1-terminal.json', 'C1.json', 'C2-terminal.json', 'C2.json', 'series.json'])
+                             sorted(['C1-terminal.json', 'C1.json', 'C2-terminal.json', 'C2.json', 'series.json']+
+                                    [f'{w}-{i}-config.json' for w in ('C1', 'C2') for i in range(1, 23)]))
             a, _ = analyze(payload)
             self.assertEqual(a['thresholds']['counts_logged/spam']['threshold'], None)
 

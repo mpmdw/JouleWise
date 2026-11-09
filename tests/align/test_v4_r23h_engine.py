@@ -122,6 +122,7 @@ class RecordedSecondsTests(unittest.TestCase):
         stamp = dict(epoch_s=1767225600.25, monotonic_before_s=100.5, monotonic_after_s=100.5,
                      wall_resolution_s=1e-6, monotonic_resolution_s=1e-9)
         src = dict(captured=True, episode=dict(path='never.json', sha256='0'*64),
+                   config=dict(path='never-config.json', sha256='0'*64),
                    first_record_endpoint_s=1767225601.0, stamps=[stamp])
         src.update(overrides)
         return src

@@ -15,7 +15,7 @@ from joulewise.align.apple.sampler import seconds_ns, stamp_mapping, TRACE_DOMAI
 from joulewise.align.records import ClockMapping, ToolCall, to_json
 from joulewise.align.v4_analysis import analyze, acceptance as ac, engine as e, raw
 from joulewise.align.v4_analysis.io import canonical, digest, strict_json
-from joulewise.align.v4_analysis.synthetic import series
+from joulewise.align.v4_analysis.synthetic import member_config, series
 from joulewise.clock import ClockStamp
 from tests.align.test_attribution import episode, turn
 from tests.align.v4_synthetic import synthetic_frames
@@ -38,13 +38,14 @@ class RecordedTimeTests(unittest.TestCase):
         slot = e.roster('C1')[5]
         ep = replace(episode(start_ns=1000*NS, end_ns=1001*NS,
             turns=(turn(0, 1000*NS, 1001*NS, 1000*NS+1),), power_traces=(),
-            clock_mappings=()), episode_id=slot['run_id'], seed=slot['expected_episode_seed'])
+            clock_mappings=()), episode_id=slot['run_id'], seed=slot['seed_index'])
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             def write(name, data):
                 (root/name).write_bytes(data)
                 return dict(path=name, sha256=digest(data))
             source = dict(captured=True, episode=write('episode.json', to_json(ep).encode()),
+                config=write('config.json', canonical(member_config(slot))),
                 powermetrics=write('pm.plist', b''.join(synthetic_frames(2))),
                 first_record_endpoint_s=stamp.epoch_s, nominal_interval_ns=100_000_000,
                 stamps=[asdict(stamp)], offset_ns=production.offset_ns,

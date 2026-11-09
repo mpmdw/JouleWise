@@ -49,6 +49,8 @@ def write_export(root, payload):
         members = w.pop('members')
         rows = [{**m['thermal'], 'run_id': m['slot']['run_id'],
                  'summary': m['summary'], 'captured': m['captured'],
+                 **(dict(config=write(w.get('attempt_id', w['window']).replace('#', '_')+
+                     f"-{m['slot']['ordinal']}-config.json", m['config'])) if m['captured'] else {}),
                  'exclusion_codes': m.get('source_flags', [])} for m in members]
         # Attempt-named, so a zero-capture attempt and its retry never collide.
         source = write(w.get('attempt_id', w['window']).replace('#', '_')+'.json', dict(members=rows))

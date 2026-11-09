@@ -51,7 +51,7 @@ def fixture(root, samples, *, windows=11):
             intervals = [gate('G0',start-2*10**9,start-500_000_000)]
             intervals += [gate('G1',turns[i-1].end_ns, turns[i].start_ns, i) for i in range(1,4)]
             episode = Episode(episode_id=slot['run_id'], task_pair=slot['task_pair'], condition=slot['condition'],
-                agent_model=slot['model_id'], endpoint='mock', seed=slot['expected_episode_seed'], clock_domain='host',
+                agent_model=slot['model_id'], endpoint='mock', seed=slot['seed_index'], clock_domain='host',
                 start_ns=start, end_ns=start+4*10**9, turns=turns,
                 hardware={'thermal': dict(intervals=intervals, policy=dict(sensors=dict(s_fast='F',s_slow='S',fan_keys=[]),
                                             delta_fast_c=1.,delta_slow_c=1.))})
@@ -65,6 +65,7 @@ def fixture(root, samples, *, windows=11):
             seed = 0 if slot['series_role']=='sentinel' else wi*22+ordinal
             raw = b''.join(synthetic_frames(samples,seed=seed)).replace(b'<string>Moderate</string>',b'<string>Nominal</string>')
             record = dict(run_id=slot['run_id'],captured=True,
+                config=write(f'{wi}-{ordinal}.config.json', canonical(m['config'])),
                 episode=write(f'{wi}-{ordinal}.episode.json',to_json(episode).encode()),
                 powermetrics=write(f'{wi}-{ordinal}.plist',raw),
                 first_record_endpoint_s=ENDPOINT, nominal_interval_ns=100_000_000,

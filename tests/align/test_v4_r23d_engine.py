@@ -124,7 +124,7 @@ class W1AnchorRoleTests(unittest.TestCase):
                            slots, window_id='W1')
         # C/T windows keep the frozen engine roster as the role authority.
         self.assertEqual(e.slot_run_id(dict(ordinal=5, series_role='sentinel',
-            run_id='align-v4-c1-episodes-a-e05'), 'C1', strict=True), 'align-v4-c1-episodes-a-e05')
+            run_id='align-v4-c1-e05'), 'C1', strict=True), 'align-v4-c1-e05')
 
     def test_synthetic_api_remains_lenient(self):
         p = series(turns=4)

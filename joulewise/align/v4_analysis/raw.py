@@ -12,7 +12,7 @@ from joulewise.align.records import Episode, from_json
 from joulewise.align.apple import reduce_sol as sol, thermal_desk as td
 from joulewise.align.apple.sampler import stamp_mapping
 from . import residual, dc
-from .io import input_path, local_path, read_blob, strict_json
+from .io import config_reference, input_path, local_path, read_blob, strict_json
 
 
 STAMP_SECOND_FIELDS = ('epoch_s', 'monotonic_before_s', 'monotonic_after_s',
@@ -40,6 +40,8 @@ def member(root, slot, source, *, cache_dir=None):
             source_flags=source.get('exclusion_codes', []))
     _recorded_seconds(source)
     root = input_path(root)
+    config_ref = config_reference(source)
+    config = strict_json(read_blob(root, config_ref))
     episode = from_json(Episode, read_blob(root, source['episode']).decode())
     if episode.episode_id != slot['run_id']:
         _, sep, local = slot['run_id'].partition(':')
@@ -92,7 +94,8 @@ def member(root, slot, source, *, cache_dir=None):
         configuration=source.get('configuration'), identical_work_group=source.get('identical_work_group'))
     thermal.update({k: source[k] for k in ('template','arm','stage','pilot7_token_identical','window') if k in source})
     attributed = table['attribution']['total']
-    result = dict(slot=slot, captured=True, thermal=thermal,
+    result = dict(slot=slot, captured=True, thermal=thermal, config=config,
+        config_source=dict(path=config_ref['path'], sha256=config_ref['sha256']),
         summary=dict(residual_rows=rows, seed=episode.seed,
             energy={'powermetrics:gpu_power': dict(joules=attributed['joules'], half_width_j=attributed['half_width_j'])},
             flags=[], offset_ns=mapping.offset_ns, raw_sha256=samples.raw_sha256,

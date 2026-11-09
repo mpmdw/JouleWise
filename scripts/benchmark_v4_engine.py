@@ -43,6 +43,7 @@ def write_fixture(root, *, full_ids=True):
         for m in w.pop('members'):
             slots.append(m['slot'])
             records.append({**m['thermal'], 'run_id': m['slot']['run_id'],
+                'config': write(f"{w['window']}-{m['slot']['ordinal']}-config.json", m['config']),
                 'summary': m['summary'], 'captured': m['captured'], 'dc_secondary': m['dc']})
         raw = canonical(dict(members=records))
         filename = w['window']+'.json'

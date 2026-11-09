@@ -17,7 +17,7 @@ from joulewise.align.records import ClockMapping, to_json
 from joulewise.align.power.windows import window_supports
 from joulewise.align.v4_analysis import analyze, engine as e, exclusions as ex, raw
 from joulewise.align.v4_analysis.io import canonical, strict_json, digest
-from joulewise.align.v4_analysis.synthetic import series
+from joulewise.align.v4_analysis.synthetic import member_config, series
 from joulewise.clock import ClockStamp
 from tests.align.test_attribution import episode, turn
 from tests.align.test_v4_r23_engine import w1_window
@@ -172,8 +172,9 @@ class ExactTimeTests(unittest.TestCase):
             for slot in e.roster('C1')[5:7]:
                 ep = episode(start_ns=0, end_ns=2*NS+1900,
                     turns=(turn(0, 0, 2*NS+1900, 1),), power_traces=(), clock_mappings=())
-                ep = replace(ep, episode_id=slot['run_id'], seed=slot['expected_episode_seed'])
+                ep = replace(ep, episode_id=slot['run_id'], seed=slot['seed_index'])
                 source = dict(captured=True, episode=write('synthetic-episode.json', to_json(ep).encode()),
+                    config=write('config.json', canonical(member_config(slot))),
                     powermetrics=pm, first_record_endpoint_s=9000000001, nominal_interval_ns=NS,
                     # R23h: recorded numbers only; text seconds refuse.
                     stamps=[dict(epoch_s=9000000000, monotonic_before_s=0, monotonic_after_s=0,
