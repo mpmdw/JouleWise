@@ -651,15 +651,16 @@ def terminal_evidence(record, session, custody_rel):
         raise Refused('terminal_evidence_missing', 'night plan: ' + str(exc)) from None
     require(isinstance(plan, dict) and isinstance(plan.get('plan_id'), str) and result.get('plan_id') == plan['plan_id'],
             'terminal_evidence_mismatch', 'result plan_id is not this window\'s night plan')
+    # Watchdog latch (lead ruling CF1, seat-2 confirmation): the PRODUCTION next-arm verifier, never an optional
+    # path. Absent evidence refuses terminal_evidence_missing; present evidence that fails authentication, parse,
+    # shape or key refuses terminal_evidence_mismatch.
+    if (getattr(record, 'record', None) or {}).get('sources', {}).get('watchdog_state') is None:
+        raise Refused('terminal_evidence_missing', 'watchdog_state (the B1 empty-process latch) is required')
+    from scripts import align_v4_next_arm_packet as packet
     try:
-        latch = record.source('watchdog_state')
-    except (ValueError, KeyError, TypeError, AttributeError):
-        latch = None
-    released = (latch or {}).get('released_terminal_windows') if isinstance(latch, dict) else None
-    if released is not None:
-        key = f"{plan['plan_id']}:{plan.get('custody_root')}:{sha256_bytes(raw)}"
-        require(isinstance(released, list) and key in released, 'terminal_evidence_mismatch',
-                'watchdog latch does not release this plan\'s result')
+        packet.watchdog_latch_check(record, plan)
+    except (ValueError, KeyError, TypeError, AttributeError) as exc:
+        raise Refused('terminal_evidence_mismatch', 'watchdog latch: ' + str(exc)) from None
     require(isinstance(exited, dict) and exited.get('exit_code') == result['chain_exit_code'],
             'terminal_evidence_mismatch', 'chain.exited')
     if session is not None:

@@ -157,6 +157,18 @@ class GitEvidence:
         return len(raw)
 
 
+def watchdog_latch_check(record, plan):
+    """B1 watchdog latch: the record's digest-authenticated ``watchdog_state`` snapshot releases exactly this
+    plan's result (``plan_id:custody_root:sha256(result.json)``). This is the watchdog's proof of the empty
+    agent/driver/plan-process census (next_arm_packet.md). A missing, digest-failing or unparseable source,
+    a snapshot without the release list, or a list without this key raises ValueError/KeyError/TypeError/
+    AttributeError; there is no optional path. The exporter calls this same function (lead ruling CF1)."""
+    key = f"{plan['plan_id']}:{plan['custody_root']}:{digest(record.source('result', json_value=False))}"
+    latch = record.source('watchdog_state').get('released_terminal_windows', [])
+    require(isinstance(latch, list) and key in latch,
+            'watchdog empty-process terminal latch missing or for another result')
+
+
 class WindowRecord:
     def __init__(self, evidence, commit, path):
         self.evidence, self.commit, self.path = evidence, evidence.commit(commit), path
@@ -663,10 +675,7 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
         if exited:
             require(previous.source('chain_exited').get('exit_code') == result.get('chain_exit_code'),
                     'chain closure and terminal result disagree')
-        key = f"{plan['plan_id']}:{plan['custody_root']}:{digest(evidence.source(previous.commit, names['result'], json_value=False))}"
-        latch = previous.source('watchdog_state').get('released_terminal_windows', [])
-        require(isinstance(latch, list) and key in latch,
-                'watchdog empty-process terminal latch missing or for another result')
+        watchdog_latch_check(previous, plan)
         captured = previous.captures()
         require(started or not captured, 'null window carries captured members')
         return {'basis': 'B1 authenticated terminal result, chain closure, delivery and watchdog latch',

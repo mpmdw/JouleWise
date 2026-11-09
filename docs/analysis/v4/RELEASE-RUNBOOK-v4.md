@@ -431,8 +431,15 @@ output reference is checked: `raw_source`, `plan_source`, `terminal_result_sourc
 `dc_streams`. Each must be `{path, sha256}` naming exactly the placed bytes, or the export refuses
 `reference_digest_missing`.
 
-**Terminal ownership** (review F5). The result's `plan_id` must equal the committed night plan's. When the record
-carries the watchdog latch, `released_terminal_windows` must name `plan_id:custody_root:sha256(result.json)`.
+**Terminal ownership** (review F5). The result's `plan_id` must equal the committed night plan's.
+
+**Watchdog latch** (lead ruling CF1/H1, Sol confirmation seats 1-2). Every captured C attempt requires
+`sources.watchdog_state`, verified with the production next-arm verifier
+(`align_v4_next_arm_packet.watchdog_latch_check`, which the next-arm `terminal()` check also calls). The source
+must authenticate against its committed digest, parse, and carry `released_terminal_windows` naming
+`plan_id:custody_root:sha256(result.json)`. Absence refuses `terminal_evidence_missing`. Any other failure
+(digest mismatch, malformed descriptor, unparseable, wrong shape, missing list, foreign key) refuses
+`terminal_evidence_mismatch`. Nothing is swallowed. Witnesses: `tests/v4_export/test_confirm_sol{1,2}.py`.
 
 **W1 stages** (review F6). W1 rows are checked against the registered W1 kit plan
 (`configs/campaigns/align_v4/collection_plan.json`; align_v4_kit.py:1388-1408) on ordinal, role, run id, stage,
