@@ -27,8 +27,8 @@ REPO = HERE.parents[1]
 sys.path.insert(0, str(HERE))
 import common_series  # noqa: E402
 
-ENGINE_COMMIT = "72410b0b4f725d770298a301a55802e70d466537"      # origin/engine-r23k (R21 + A37 + R23-R26 + R23h-k)
-RECOMPUTE_COMMIT = "7b06c6058efa211fd14acb14838cc84c13694012"   # align/2026-11-08-v4-recompute-opus (R23-R26 + R23h + R22-2/R24/R25 + r23j exports + R26 amendment)
+ENGINE_COMMIT = "2344ec9b890b8eabf58e6e1001fd0b599e809984"      # origin/engine-r23k (R21 + A37 + R23-R26 + R23h-k)
+RECOMPUTE_COMMIT = "189aa6d84f89ae21104dbcd56d955ead34b5b99d"   # align/2026-11-08-v4-recompute-opus (R23-R26 + R23h + R22-2/R24/R25 + r23j exports + R26 amendment)
 PY = sys.executable
 _TREES = {}
 
@@ -114,7 +114,12 @@ def _key(plan_name):
 
 
 PLANS = {"full": dict(zero_capture=True, escalated=True, a37=True),
-         "probes": dict(zero_capture=True, escalated=True, a37=True, probes=True)}
+         "probes": dict(zero_capture=True, escalated=True, a37=True, probes=True),
+         # D7: prefix series (W1+C1, then W1+C1+C2), the incremental per-window mode.
+         "prefix1": dict(zero_capture=False, escalated=False, a37=False, bar=False, through="C1"),
+         "prefix2": dict(zero_capture=False, escalated=False, a37=False, bar=False, through="C2"),
+         # r23m review: a T1-only prefix (calibration complete, the first T window only).
+         "prefix_t1": dict(zero_capture=False, escalated=False, a37=False, bar=False, through="T1")}
 
 
 def rehearsal(plan_name):

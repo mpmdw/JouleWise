@@ -316,6 +316,45 @@ class RehearsalTests(unittest.TestCase):
         self.assertLess(u5["beta_T"], 0)
         self.assertEqual((u5["delta_slow_c"], fill["U5"]["delta_slow_c"]), (2.0, 2.0))
 
+    def test_prefix_series_agree(self):
+        # D7 (lead ruling): incremental per-window analysis is supported, so prefix output must AGREE: rows for
+        # windows not yet present are absent on both sides; no T rows without a T window.
+        for plan in ("prefix1", "prefix2", "prefix_t1"):
+            base = support.rehearsal(plan)
+            self.assertEqual(json.loads((base / "engine-exit.json").read_text())["exit"], 0, plan)
+            code, pub, _ = support.compare(base, self.dir / f"{plan}.json")
+            self.assertEqual((code, pub["verdict"], pub["unmapped_leaves"]), (0, "agree", 0), plan)
+            fill = json.loads((base / "engine-out" / "fill.json").read_text())
+            t_present = [w["attempt_id"] for w in fill["windows"] if w["attempt_id"].startswith("T")]
+            self.assertEqual(t_present, ["T1#1"] if plan == "prefix_t1" else [], plan)
+            if plan == "prefix_t1":    # the T table lists only the T windows present
+                by_window = fill["test"]["counts_logged"]["spam"]["benign"]["by_window"]
+                self.assertEqual(sorted(by_window), ["T1"])
+
+    def test_real_producer_shape_fixtures(self):
+        # Permanent producer-shape fixtures (exporter e2e): a non-integer 42.46 s G0 passes U1(c) on both
+        # sides; production cache statistics; DC with variable power, a sub-poll owned prefill segment (C7
+        # ordinal 8) and a > 300 ms meter stall inside a gate (C7 ordinal 10).
+        rec = json.loads((self.full / "recompute-out.json").read_text())
+        self.assertIs(rec["acceptance"]["U1"]["C5"]["D"]["parts"]["c_sidecar_coverage"], True)
+        fill = json.loads((self.full / "engine-out" / "fill.json").read_text())
+        stats = next(r["statistics"] for r in fill["cache_diagnostics"] if isinstance(r.get("statistics"), dict))
+        self.assertEqual(set(stats), {"status", "cached_tokens", "fed_tokens", "trims", "trimmed_tokens", "rebuilds",
+                                      "prefill_removed_tokens"})
+        dc = rec["dc_in"]["windows"]["C7"]["members"]
+        self.assertEqual(dc["align-v4-c7-e08"]["status"], "ok")
+        self.assertTrue(all(v is not None for v in dc["align-v4-c7-e08"]["dc_turn_j"]))
+
+    def test_r23m_review_fixtures(self):
+        # A D member whose planned G0 is missing (C9 ordinal 13) is excluded on both sides; a window with every
+        # G0 removed (C10) leaves U2(a) inconclusive; a member span overhanging the meter (C9 ordinal 1) prints a
+        # null whole-member DC-in.
+        rec = json.loads((self.full / "recompute-out.json").read_text())
+        self.assertIn("g0_missing", rec["exclusions"]["C9"]["align-v4-c9-e13"]["classes"])
+        self.assertIsNone(rec["acceptance"]["U2"]["C10"]["D"]["parts"]["a_g0_slow_range_le_3c"])
+        first = rec["dc_in"]["windows"]["C9"]["members"]["C9:align-pilot-v3-episodes-a-e01"]
+        self.assertIsNone(first.get("dc_in_episode_j"))
+
     def test_owned_time_and_large_epoch_fixtures(self):
         # A2(4) at owned-time level and the permanent large-epoch A37 windows (lead rulings, 2026-11-08).
         rec = json.loads((self.full / "recompute-out.json").read_text())
