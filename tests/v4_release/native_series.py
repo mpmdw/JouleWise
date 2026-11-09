@@ -178,6 +178,29 @@ def bind_kit(checkout, collection, configs):
 
 # ------------------------------------------------------------------------------------ session + custody
 
+def producer_v4_series(work, slot):
+    """The session state's v4_series exactly as the real producer writes it: scripts/align_v4_session.prepare
+    (window_id=slot), with only host restoration, kit/series generation, admission and the lower preparation layer
+    stubbed (as in the Sol seat 1 witness); never hand-authored."""
+    from contextlib import ExitStack
+    from scripts import align_v4_session as session, align_v4_series as series
+    measurement, target = Path(work) / 'measurement', Path(work) / 'session'
+    for directory in (measurement, target):
+        directory.mkdir(parents=True)
+    raw = MANIFEST.read_bytes()
+    for rel, value in ((series.MANIFEST, raw), (series.ADMISSION, b'{}')):
+        (measurement / rel).parent.mkdir(parents=True, exist_ok=True)
+        (measurement / rel).write_bytes(value)
+    with ExitStack() as stack:
+        for obj, name, value in ((session, 'session_start_restore', {'action': 'none'}), (session.kit, 'generate', None),
+                                 (series, 'load', json.loads(raw)), (series, 'require_admission', None),
+                                 (series, 'generate', None), (session, 'series_ac_powermode', 0),
+                                 (session.pilot, 'prepare', {'preparation_status': 'STAGED'})):
+            stack.enter_context(patch.object(obj, name, return_value=value))
+        state = session.prepare(measurement, target, window_id=slot)
+    return state['v4_series']
+
+
 def fake_run(head='a' * 40):
     def run(argv, **_):
         out = {'rev-parse': head + '\n', 'status': ''}.get(argv[3], 'Python 3.13.x\nabc\n')
@@ -193,7 +216,8 @@ def harvest_cli(*argv):
     return json.loads(out.getvalue().strip().splitlines()[-1])
 
 
-def build_session(session, *, slot, role, plan_id, members_src, plan_members, battery, terminal, synth, checkout):
+def build_session(session, *, slot, role, plan_id, members_src, plan_members, battery, terminal, synth, checkout,
+                  v4_series):
     """A session tree in the production layout; the bundles go to runs-parent/claim/<run_id>."""
     custody, claim = session / 'custody', session / 'runs-parent' / 'claim'
     (custody / 'night').mkdir(parents=True)
@@ -203,9 +227,7 @@ def build_session(session, *, slot, role, plan_id, members_src, plan_members, ba
         'session_id': plan_id, 'session_root': str(session), 'source_measurement_root': str(checkout),
         'measurement_root': str(checkout), 'registration_dir': str(checkout / 'registration'),
         'plan_path': str(custody / 'night_plan.json'), 'inputs': {'custody_root': str(custody)},
-        'runs_roots': {'claim': str(claim)},
-        'v4_series': {'window_id': slot, 'role': role,
-                      'manifest_sha256': hashlib.sha256(MANIFEST.read_bytes()).hexdigest()}}, sort_keys=True))
+        'runs_roots': {'claim': str(claim)}, 'v4_series': v4_series}, sort_keys=True))
     sources = {}
     if terminal is not None:
         sources['result'] = dumps(terminal['result'])
@@ -369,7 +391,8 @@ def build(root, synth, template, plan=None):
                                    members_src=(out / 'runs') if captured else None,
                                    plan_members=collection['members'],
                                    battery=(out / 'synthetic_battery.jsonl') if captured else None,
-                                   terminal={'result': result, 'chain': captured}, synth=synth, checkout=checkout)
+                                   terminal={'result': result, 'chain': captured}, synth=synth, checkout=checkout,
+                                   v4_series=producer_v4_series(root / 'producer' / attempt.replace('#', '-'), slot))
         work = root / 'work' / attempt.replace('#', '-')
         work.mkdir(parents=True)
         t = time.monotonic()
@@ -385,8 +408,10 @@ def build(root, synth, template, plan=None):
         from scripts.align_pilot_kit import raw_json
         # The producer plan verbatim (align_v4_series.build_files / the W1 kit), header included; only each row's
         # config_sha256 binds the WP22-synthesized kit bytes (bind_kit).
-        sources = {'plan': night_plan, 'collection_plan': raw_json(collection),
-                   'result': dumps(result), 'watchdog_state': dumps({}), 'courier': dumps({'sent': captured})}
+        # The watchdog's release latch names this plan, custody root and result digest (next_arm_packet.md).
+        latch = f"{plan_id}:{session / 'custody'}:{hashlib.sha256(dumps(result)).hexdigest()}"
+        sources = {'plan': night_plan, 'collection_plan': raw_json(collection), 'result': dumps(result),
+                   'watchdog_state': dumps({'released_terminal_windows': [latch]}), 'courier': dumps({'sent': captured})}
         if captured:
             sources.update(chain_started=dumps({'pgid': 123}), chain_exited=dumps({'exit_code': 0}), courier_sent=b'',
                            pilot=dumps(pilot_source(plan_id, pilot_thermal, record_window, captured=True)),

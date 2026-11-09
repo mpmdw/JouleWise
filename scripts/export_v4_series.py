@@ -70,8 +70,11 @@ WINDOW_KEYS = {'attempt_id', 'record_commit', 'record_path', 'session_root', 'fi
 RECORD_KEYS = {'schema', 'window', 'role', 'finalized_at_epoch_s', 'previous_record', 'sources', 'captures',
                'raw_evidence', 'finalized_manifest', 'code_commit', 'code_config', 'code_config_commit',
                'previous_final', 'barred'}
-V4_SERIES_KEYS = {'window_id', 'role', 'manifest_sha256'}
-SENSOR_KEYS = {'s_fast', 's_slow', 'fan_keys', 'r0_sha256'}
+# Every key the session producer writes (scripts/align_v4_session.py:61-63, prepare(window_id=...)). A W1 session
+# prepared without window_id carries no v4_series (align_v4_session.py:47, :71); the plan header then binds it.
+V4_SERIES_KEYS = {'window_id', 'role', 'extra_sentinels', 'manifest_sha256', 'admission_sha256'}
+SENSOR_KEYS = {'s_fast', 's_slow', 'fan_keys', 'r0_sha256'}      # = joulewise/align/apple/thermal.py:23 (exactly)
+REGISTERED_W1_PLAN = ROOT / 'configs/campaigns/align_v4/collection_plan.json'   # the registered W1 kit plan
 R1_KEYS = {'schema', 'qualified', 'r1_replay_pair_j', 'delta_slow_c', 'designed_start_states'}
 R1_STATE_KEYS = {'designed_slow_c', 'g0_release_slow_c', 'turn_owned_j', 'token_identical'}
 MEMBER_FILES = ('config.json', 'metadata.json', 'events.jsonl', 'outputs/align_episode.json',
@@ -163,13 +166,6 @@ def registered_span_ns(episode):
     intervals = ((episode.get('hardware') or {}).get('thermal') or {}).get('intervals') or []
     g0 = [i for i in intervals if isinstance(i, dict) and i.get('kind') == 'G0']
     return [g0[0]['start_ns'] if g0 else episode['start_ns'], episode['end_ns']]
-
-
-def exact_ns(seconds):
-    """Recorded seconds -> integer ns, exactly (A21, P2 ruling): the recorded binary float through Fraction,
-    ties to even. Integers stay exact. Strings and bools refuse."""
-    require(type(seconds) in (int, float), 'seconds_not_numeric', type(seconds).__name__)
-    return round(Fraction(seconds) * 1_000_000_000)
 
 
 # ------------------------------------------------------------------------------------------- custody paths
@@ -265,13 +261,15 @@ class Writer:
 # ------------------------------------------------------------------------------------------------ config
 
 def read_ref_file(ref, code):
-    require(isinstance(ref, dict) and isinstance(ref.get('path'), str) and Path(ref['path']).is_absolute(),
-            'config_invalid', code)
+    """An external input bound by {path, sha256}: the digest is REQUIRED and well formed before the file is
+    opened, and the bytes must match it (seat 1 F4 / seat 2 F5)."""
+    require(isinstance(ref, dict) and set(ref) == {'path', 'sha256'} and isinstance(ref['path'], str)
+            and Path(ref['path']).is_absolute(), 'reference_digest_missing', code)
+    require(isinstance(ref['sha256'], str) and HEX64.match(ref['sha256']), 'reference_digest_missing', code)
     path = Path(ref['path'])
     require(not path.is_symlink() and path.is_file(), code, 'missing')
     raw = path.read_bytes()
-    if 'sha256' in ref:
-        require(ref['sha256'] == sha256_bytes(raw), code, 'digest')
+    require(ref['sha256'] == sha256_bytes(raw), code, 'digest')
     return raw
 
 
@@ -339,11 +337,30 @@ def stage_index(stage_id, ordinal):
     return 0 if stage_id.endswith('-a') else 1
 
 
+def registered_w1_rows():
+    """The registered W1 kit plan's roster (configs/campaigns/align_v4/collection_plan.json; built by
+    scripts/align_v4_kit.py:1388-1408: ordinals 1-9 in episodes-a, 10-18 in episodes-b)."""
+    plan = json.loads(REGISTERED_W1_PLAN.read_bytes())
+    require(plan.get('schema_version') == W1_PLAN['schema_version'] and plan.get('plan_id') == W1_PLAN['plan_id'],
+            'roster_differs_from_registered_plan', 'registered W1 plan header')
+    return {r['ordinal']: r for r in plan['members']}
+
+
 def build_roster(slot, record_rows, allocation):
     """Engine roster rows (R15/R24 fields) and recompute member rows from the committed collection plan, checked
-    field by field against the frozen R24 allocation. Run ids are the collection plan's, never renamed."""
+    field by field against the frozen R24 allocation (and, for W1, against the registered W1 kit plan's ordinal,
+    role, run id and stage: seat 2 F4 / lead F6). Run ids are the collection plan's, never renamed."""
     frozen = {r['ordinal']: r for r in next(w for w in allocation['windows'] if w['id'] == slot)['members']}
     rows = sorted(record_rows, key=lambda r: r.get('ordinal', 0))
+    if slot == 'W1':
+        registered = registered_w1_rows()
+        require(sorted(registered) == [r.get('ordinal') for r in rows], 'roster_differs_from_registered_plan',
+                'W1 ordinals')
+        for row in rows:
+            want = registered[row['ordinal']]
+            for key in ('role', 'run_id', 'stage_id', 'task_pair', 'condition', 'seed_index', 'model_id'):
+                require(row.get(key) == want.get(key), 'roster_differs_from_registered_plan',
+                        f"W1 ordinal {row['ordinal']} {key}")
     ordinals = [r.get('ordinal') for r in rows]
     expected = sorted(frozen) + ([23, 24] if len(rows) == len(frozen) + 2 and slot != 'W1' else [])
     require(ordinals == expected, 'roster_differs_from_manifest', 'ordinals')
@@ -471,6 +488,7 @@ def member_export(session, bundle_rel, slot_rows, capture, *, rec_wid, slot, w, 
                 local + ': bundle config.json is not the writer bytes of the planned kit config')
     config = strict_loads(raw['config.json'], 'member_malformed')
     metadata = strict_loads(raw['metadata.json'], 'member_malformed')
+    meta_production = json.loads(raw['metadata.json'])
     episode = strict_loads(raw['outputs/align_episode.json'], 'member_malformed')
     turn_rows = jsonl_rows(raw['outputs/align_turns.jsonl'], 'member_malformed')
     # The thermal sidecar exists for gated members only (an ungated 30B anchor writes none); production reads it
@@ -547,19 +565,21 @@ def member_export(session, bundle_rel, slot_rows, capture, *, rec_wid, slot, w, 
         require('reasoning_tokens' not in t, 'unknown_contract_key', 'turn already carries reasoning_tokens')
         t['reasoning_tokens'] = t['hidden_tokens']        # engine reads Episode hidden_tokens (A0)
     w.bytes(f'{mdir}/outputs/align_episode.json', canonical(rep))
-    meta = json.loads(raw['metadata.json'])
-    require('sampling' not in meta, 'unknown_contract_key', 'metadata already carries sampling')
-    meta['sampling'] = {'power_period_ns': period_ns}
-    if anchor.get('status') == 'bounded':
-        meta['uncertainty_evidence']['clock_anchor']['wall_minus_monotonic_bounds_ns'] = [
-            exact_ns(anchor['wall_minus_monotonic_lower_s']), exact_ns(anchor['wall_minus_monotonic_upper_s'])]
-    w.bytes(f'{mdir}/metadata.json', canonical(meta))
+    # metadata.json / events.jsonl / align_turns.jsonl: production bytes, placed byte for byte in the recompute member
+    # directory and referenced by digest from the engine row (lead decision (a), DC-span ruling (b)). The recompute
+    # reads the period from config.json and the anchor bounds from the recorded seconds itself; nothing is projected.
+    turns_ref = ref(w.place(f'{mdir}/outputs/align_turns.jsonl', session.path(f'{bundle_rel}/outputs/align_turns.jsonl'),
+                            sha256_bytes(raw['outputs/align_turns.jsonl'])), f'{bundle_rel}/outputs/align_turns.jsonl')
+    events_ref = ref(w.place(f'{mdir}/events.jsonl', session.path(f'{bundle_rel}/events.jsonl'),
+                             sha256_bytes(raw['events.jsonl'])), f'{bundle_rel}/events.jsonl')
+    meta_ref = ref(w.place(f'{mdir}/metadata.json', session.path(f'{bundle_rel}/metadata.json'),
+                           sha256_bytes(raw['metadata.json'])), f'{bundle_rel}/metadata.json')
     if has_sidecar:
         w.bytes(f'{mdir}/outputs/align_thermal.jsonl',
                 b''.join((json.dumps(r, sort_keys=True, separators=(',', ':'), allow_nan=False) + '\n').encode()
                          for r in gate_rows))
     row = dict(run_id=erow['run_id_export'], captured=True, status=status, episode=ep_ref, powermetrics=plist,
-               config=cfg, planned_config=kit_ref, first_record_endpoint_s=endpoint, nominal_interval_ns=period_ns,
+               config=cfg, planned_config=kit_ref, metadata=meta_ref, events=events_ref, turns_source=turns_ref, first_record_endpoint_s=endpoint, nominal_interval_ns=period_ns,
                stamps=[asdict(s) for s in stamps], clock_evidence=evidence, offset_ns=mapping.offset_ns,
                journal=journal, os_readings=os_readings,
                registered_os_readings=[r for r in os_readings if span[0] <= r[0] <= span[1]],
@@ -574,7 +594,8 @@ def member_export(session, bundle_rel, slot_rows, capture, *, rec_wid, slot, w, 
             row['pilot7_token_identical'] = desk['pilot7_token_identical']
     if erow['condition'] == 'benign' and meter:
         row['dc_streams'] = [dict(m) for m in meter]
-        row['member_span_ns'] = [episode['start_ns'], episode['end_ns']]
+        # The whole-member DC hull is engine- and recompute-derived from the digest-bound metadata/events refs
+        # (production harvest.member_spans; A20, lead DC-span ruling b). No span is ever exported.
     codes = list(battery.get('flags', []))
     if battery.get('status') != 'observed':
         codes.append('battery.unobserved')
@@ -621,12 +642,50 @@ def terminal_evidence(record, session, custody_rel):
     result = strict_loads(raw, 'terminal_evidence_mismatch')
     require(isinstance(result, dict) and result.get('schema') == RESULT_SCHEMA and isinstance(result.get('verdict'), str)
             and type(result.get('chain_exit_code')) is int, 'terminal_evidence_mismatch', 'result shape')
+    # Ownership (seat 2 F3 / lead F5): the result is THIS window's night plan's result. Its plan_id equals the
+    # committed night plan's, and the watchdog latch, when the record carries one, names this plan, custody root
+    # and result digest (next_arm_packet.md: released_terminal_windows 'plan_id:custody_root:result_sha256').
+    try:
+        plan = record.source('plan')
+    except (ValueError, KeyError, TypeError, AttributeError) as exc:
+        raise Refused('terminal_evidence_missing', 'night plan: ' + str(exc)) from None
+    require(isinstance(plan, dict) and isinstance(plan.get('plan_id'), str) and result.get('plan_id') == plan['plan_id'],
+            'terminal_evidence_mismatch', 'result plan_id is not this window\'s night plan')
+    try:
+        latch = record.source('watchdog_state')
+    except (ValueError, KeyError, TypeError, AttributeError):
+        latch = None
+    released = (latch or {}).get('released_terminal_windows') if isinstance(latch, dict) else None
+    if released is not None:
+        key = f"{plan['plan_id']}:{plan.get('custody_root')}:{sha256_bytes(raw)}"
+        require(isinstance(released, list) and key in released, 'terminal_evidence_mismatch',
+                'watchdog latch does not release this plan\'s result')
     require(isinstance(exited, dict) and exited.get('exit_code') == result['chain_exit_code'],
             'terminal_evidence_mismatch', 'chain.exited')
     if session is not None:
         require(session.read(f'{custody_rel}/night/result.json', missing='terminal_evidence_missing') == raw,
                 'terminal_evidence_mismatch', 'custody result.json')
     return raw
+
+
+def v4_series_check(series, slot, members):
+    """The session producer's series state (scripts/align_v4_session.py:61-63). Returns census notes for keys the
+    exporter does not use; a W1 kit session without window_id carries none (bound by the W1 plan header)."""
+    if series is None:
+        require(slot == 'W1', 'session_window_differs', 'no v4_series in a ' + slot + ' session')
+        return [{'scope': 'session.v4_series', 'note': 'absent (W1 kit session; the W1 plan header binds it)'}]
+    require(isinstance(series, dict), 'session_window_differs', 'v4_series')
+    role = 'selection' if slot == 'W1' else 'calibration' if slot[0] == 'C' else 'test'
+    require(series.get('window_id') == slot and series.get('manifest_sha256') == ALLOCATION_SHA256
+            and series.get('role') == role, 'session_window_differs', str(series.get('window_id')))
+    if 'extra_sentinels' in series:
+        require(series['extra_sentinels'] == (2 if members == 24 else 0), 'session_window_differs', 'extra_sentinels')
+    if 'admission_sha256' in series:
+        require(isinstance(series['admission_sha256'], str) and HEX64.match(series['admission_sha256']),
+                'session_window_differs', 'admission_sha256')
+    # Unused, non-outcome session metadata: ignored, with a census note (lead ruling F1).
+    return [{'scope': 'session.v4_series', 'key': k, 'note': 'unknown key ignored (not exported)'}
+            for k in sorted(set(series) - V4_SERIES_KEYS)]
 
 
 def export_window(config, entry, stage, allocation):
@@ -646,8 +705,24 @@ def _export_window(config, entry, stage, allocation, record, evidence):
     require(record.record['role'] == {'W1': 'development'}.get(role, role), 'record_window_differs', 'role')
     why = record.final_evidence()
     require(why is None, 'record_not_final', why or '')
-    captured = record.captures()                     # authenticated, covers every planned member
+    inventory = record.captures()                    # authenticated, covers every planned member
     roster = record.roster()
+    # Seat 1 F2 / seat 2 F1: the capture set comes from the CUSTODY, the record-bound finalized manifest, never from
+    # the inventory alone. A planned member is captured in custody iff its bundle's raw plist is a bound file entry.
+    finalized = evidence.source(record.commit, record.record['finalized_manifest'])
+    planned_ids = {r['run_id'] for r in roster}
+    custody_plists = {}
+    for rel_path, row in finalized['entries'].items():
+        parts = PurePosixPath(rel_path).parts
+        if (len(parts) >= 3 and parts[-2:] == ('raw', 'powermetrics.plist') and parts[-3] in planned_ids
+                and isinstance(row, dict) and 'sha256' in row):
+            custody_plists.setdefault(parts[-3], []).append(rel_path)
+    hidden = set(custody_plists) - set(inventory)      # the inventory says none, custody holds a capture
+    require(not hidden, 'capture_missing_from_record',
+            'custody holds captures the inventory lists as none: ' + ','.join(sorted(hidden)[:4]))
+    require(not (set(inventory) - set(custody_plists)), 'capture_not_in_custody',
+            ','.join(sorted(set(inventory) - set(custody_plists))[:4]))
+    captured = inventory
     declared = record.record.get('barred')
     require(declared is None or declared in DECLARED_BARS, 'unknown_contract_key', 'barred')
     rec_wid = slot if captured else f'{slot}-z{attempt}'
@@ -663,19 +738,19 @@ def _export_window(config, entry, stage, allocation, record, evidence):
     w = Writer(stage)
     session = None
     custody_rel = runs_rel = None
-    census = []
+    census, notes = [], []
     manifest_sha = record.finalized_manifest_sha256
+    if entry.get('session_root') is not None:
+        require(finalized['source_root'] == entry['session_root'], 'session_root_differs', entry['session_root'])
     if captured:
         require(entry.get('session_root') is not None, 'session_unavailable', 'captured attempt needs session_root')
-        finalized = evidence.source(record.commit, record.record['finalized_manifest'])
-        require(finalized['source_root'] == entry['session_root'], 'session_root_differs', entry['session_root'])
         session = Session(entry['session_root'], finalized)
         state = strict_loads(session.read('session.json', missing='session_unavailable'), 'session_unavailable')
-        series = state.get('v4_series')
-        require(isinstance(series, dict) and set(series) <= V4_SERIES_KEYS, 'unknown_contract_key', 'v4_series')
-        require(series.get('window_id') == slot and series.get('manifest_sha256') == ALLOCATION_SHA256,
-                'session_window_differs', str(series.get('window_id')))
+        notes.extend(v4_series_check(state.get('v4_series'), slot, len(roster)))
         runs_rel = session.relative(state['runs_roots']['claim'])
+        for rid in planned_ids:     # the custody plist of a captured member is its bundle's, under the runs root
+            require(rid not in captured or custody_plists.get(rid) == [f'{runs_rel}/{rid}/raw/powermetrics.plist'],
+                    'capture_not_in_custody', rid)
         custody_rel = session.relative(state['inputs']['custody_root'])
         plan_raw = session.read(session.relative(state['plan_path']), missing='session_unavailable')
         require(plan_raw == record.source('plan', json_value=False), 'roster_differs_from_plan', 'night plan')
@@ -780,8 +855,10 @@ def _export_window(config, entry, stage, allocation, record, evidence):
         require(5 in cohorts, 'cohort_unbound', 'W1 ordinal 5 not captured')
         series_cohort = cohorts[5]
     else:
-        w1_state = _state_for(Path(config['export_root']), config['windows'][0])
+        w1_entry = config['windows'][0]
+        w1_state = _state_for(Path(config['export_root']), w1_entry)
         require(w1_state is not None and w1_state['slot'] == 'W1', 'window_order_gap', 'W1 must land first')
+        verify_landed(config, Path(config['export_root']), w1_entry, w1_state)     # never trusted from a cache
         series_cohort = w1_state['cohort']
     window_doc = {'schema': 'joulewise.v4_recompute_input.window.v1', 'window_id': rec_wid, 'role': role,
                   'cohort_sha256': cohort_sha256(series_cohort['identity'], series_cohort['configuration']),
@@ -809,6 +886,7 @@ def _export_window(config, entry, stage, allocation, record, evidence):
         ewin['terminal_result_source'] = terminal
     if declared is not None:
         ewin['barred'] = declared
+    verify_references(w, ewin, engine_members, window_doc, captured_c=terminal is not None)
     w.bytes(f'recompute/windows/{rec_wid}/window.json', canonical(window_doc))
     extra = {}
     if slot == 'W1':
@@ -822,11 +900,75 @@ def _export_window(config, entry, stage, allocation, record, evidence):
         extra['w1_sentinel_j'] = sentinels
     state = dict(schema=STATE_SCHEMA, attempt_id=f'{slot}#{attempt}', slot=slot, recompute_window_id=rec_wid,
                  role=role, record=dict(commit=record.commit, path=entry['record_path'], sha256=record.sha256,
-                                        finalized_manifest_sha256=manifest_sha),
+                                        finalized_manifest_sha256=manifest_sha,
+                                        final_record=entry.get('final_record'),
+                                        session_root=entry.get('session_root')),
+                 files=dict(sorted(w.files.items())), notes=notes,
                  engine_window=ewin, crosswalk=crosswalk, census=census,
                  manifest_slots=ewin['roster'], **extra)
     w.bytes(f'state/{rec_wid}.json', canonical(state))
     return rec_wid, state, w
+
+
+def verify_landed(config, root, entry, state):
+    """Seat 1 F3 / seat 2 F2: a landed window is reused only if it is still exactly the configured custody. Rebind
+    it to its configured record (commit, path, successor), re-read that committed record and its finalized manifest
+    digest NOW, and re-hash every file it landed. Any drift refuses; a fresh export root is the remedy."""
+    rec = state.get('record') or {}
+    require(rec.get('commit') == entry['record_commit'] and rec.get('path') == entry['record_path']
+            and rec.get('final_record') == entry.get('final_record')
+            and rec.get('session_root') == entry.get('session_root'), 'landed_window_stale', state.get('attempt_id'))
+    record, _ = open_record(config, entry)
+    require(record.sha256 == rec.get('sha256') and record.finalized_manifest_sha256 == rec.get('finalized_manifest_sha256'),
+            'landed_window_stale', state.get('attempt_id'))
+    files = state.get('files')
+    require(isinstance(files, dict) and files, 'landed_window_changed', state.get('attempt_id'))
+    for rel, digest in files.items():
+        path = Path(root) / rel
+        require(path.is_file() and not path.is_symlink() and sha256_file(path) == digest, 'landed_window_changed', rel)
+
+
+def landed_states(config, root):
+    """Every landed state, keyed by attempt, each verified against the configuration (content, not names)."""
+    out = {}
+    entries = {w['attempt_id']: w for w in config['windows']}
+    for path in sorted((Path(root) / 'state').glob('*.json')):
+        state = json.loads(path.read_bytes())
+        attempt = state.get('attempt_id')
+        require(attempt in entries, 'landed_window_stale', f'{path.name}: not a configured attempt')
+        require(attempt not in out, 'anchor_id_collision', attempt)
+        verify_landed(config, root, entries[attempt], state)
+        out[attempt] = state
+    return out
+
+
+ENGINE_ROW_REFS = ('episode', 'powermetrics', 'config', 'planned_config', 'journal', 'metadata', 'events',
+                   'turns_source')
+
+
+def verify_references(w, ewin, members, window_doc, *, captured_c):
+    """Seat 1 F4: every reference the contract requires carries {path, sha256} with a well-formed digest, and
+    names exactly the placed bytes. A missing or malformed digest refuses before anything lands."""
+    def check(ref, prefix=''):
+        require(isinstance(ref, dict) and set(ref) == {'path', 'sha256'} and isinstance(ref['path'], str)
+                and isinstance(ref['sha256'], str) and HEX64.match(ref['sha256']), 'reference_digest_missing',
+                str(ref)[:120])
+        require(w.files.get(prefix + ref['path']) == ref['sha256'], 'reference_digest_missing', ref['path'])
+    for key in ('raw_source', 'plan_source'):
+        check(ewin.get(key))
+    check(window_doc.get('plan_source'), 'recompute/')
+    if captured_c:
+        check(ewin.get('terminal_result_source'))
+        check(window_doc.get('terminal_result_source'), 'recompute/')
+    for m in members:
+        if m.get('captured'):
+            for key in ENGINE_ROW_REFS:
+                check(m.get(key))
+            for stream in m.get('dc_streams', []):
+                check(stream)
+    for r in window_doc['members']:
+        if r.get('captured'):
+            check(r.get('planned_config'), 'recompute/')
 
 
 def landed(stage, root, rec_wid):
@@ -989,15 +1131,19 @@ def run(config_path, attempts):
     root = Path(config['export_root'])
     root.mkdir(parents=True, exist_ok=True)
     allocation_raw, allocation = frozen_allocation(config)
+    series_inputs(config)                               # every series reference is digest-bound before any export
     order = [w['attempt_id'] for w in config['windows']]
     if attempts == 'all':
         attempts = order
     timings, results = {}, []
+    started = time.monotonic()
+    prior_states = landed_states(config, root)          # every landed window rebound and re-verified, every run
+    timings['verify_landed'] = time.monotonic() - started
     for attempt in attempts:
         require(attempt in order, 'config_invalid', 'attempt not configured: ' + attempt)
         index = order.index(attempt)
         for prior in config['windows'][:index]:
-            require(_state_for(root, prior) is not None, 'window_order_gap', prior['attempt_id'])
+            require(prior['attempt_id'] in prior_states, 'window_order_gap', prior['attempt_id'])
         stage = Path(tempfile_dir(root))
         started = time.monotonic()
         try:
@@ -1007,13 +1153,14 @@ def run(config_path, attempts):
                 # Two attempts may never share a record id (series-unique anchors, section 6a).
                 require(json.loads(prior.read_bytes()).get('attempt_id') == attempt, 'anchor_id_collision', rec_wid)
             outcome = landed(stage, root, rec_wid)
+            prior_states[attempt] = state
         finally:
             shutil.rmtree(stage, ignore_errors=True)
         timings[attempt] = time.monotonic() - started
         results.append(dict(attempt_id=attempt, window=rec_wid, outcome=outcome,
                             members=len(state['crosswalk']), captured=sum(r['captured'] for r in state['crosswalk']),
                             files=len(writer.files)))
-    states = [st for st in (_state_for(root, w) for w in config['windows']) if st is not None]
+    states = [prior_states[w['attempt_id']] for w in config['windows'] if w['attempt_id'] in prior_states]
     started = time.monotonic()
     members, census = write_index(config, root, allocation_raw, allocation, states)
     timings['index'] = time.monotonic() - started

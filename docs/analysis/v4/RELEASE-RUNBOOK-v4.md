@@ -19,8 +19,8 @@
 
 | Build | Branch | Commit | Output |
 |---|---|---|---|
-| Sol primary engine | `engine-r23m` (R21 + A37 + R23-R26 + R23h-j + R23k seeds/roster names + R23l config custody + R23m D2/D5/D6/D7) | `2344ec9b8` | `fill.json`, `verdict.json`, `thresholds.json` |
-| Opus independent recompute | `align/2026-11-08-v4-recompute-opus` | `189aa6d84` (program sha256 `f222c947…`) | one JSON (`RECOMPUTE-opus.md`) |
+| Sol primary engine | `engine-r23m` (R21 + A37 + R23-R26 + R23h-j + R23k seeds/roster names + R23l config custody + R23m D2/D5/D6/D7) | `de4a54db9` | `fill.json`, `verdict.json`, `thresholds.json` |
+| Opus independent recompute | `align/2026-11-08-v4-recompute-opus` | `7b9d215ff` (program sha256 `f01e7dbe…`) | one JSON (`RECOMPUTE-opus.md`) |
 
 History: the first rehearsal (engine `8eb7982f0` vs recompute `c0d1efcae`) held on five families and found
 engine bug E1. Lead rulings R23 (with R23b-h), R26 (H*) and the A21/P1/P2/A2(4)/A27 rulings of 2026-11-08
@@ -405,9 +405,38 @@ python3.13 -B scripts/export_v4_series.py export --config EXPORT.json --all     
 - with lstat on each component, so no symlink;
 - by its sha256 and size in the record-bound finalized manifest.
 
-The capture descriptor (`captures[run_id]`, locator or blob) must carry the member's `raw/powermetrics.plist` sha256
-and bytes. A planned member whose bundle holds a plist but whose capture is `null` refuses. A record that is not
-final refuses, since the release reads final adjudications only.
+**Captures come from custody** (review F2). The capture set is the planned members whose bundle
+`raw/powermetrics.plist` is a bound file entry of the record's finalized manifest. That manifest is read for every
+attempt, zero-capture ones included. The record's inventory is cross-checked against it in both directions:
+- a planned member with a custody plist but a `null` (or all-null) inventory refuses `capture_missing_from_record`;
+- an inventory capture that custody lacks refuses `capture_not_in_custody`.
+The capture descriptor (locator or blob) must carry that plist's sha256 and bytes. A record that is not final refuses,
+since the release reads final adjudications only.
+
+**Producer session state** (review F1). `session.json` `v4_series` is validated with every key the producer writes
+(`window_id`, `role`, `extra_sentinels`, `manifest_sha256`, `admission_sha256`: align_v4_session.py:61-63). It may be
+absent only for a W1 kit session. Unknown non-outcome session keys are ignored and noted in `census.json` `notes`.
+Record keys stay a closed set (next_arm_packet.md), because an unknown record key could carry unbound triage
+content. Policy sensors are exactly production's four keys (thermal.py:23).
+
+**Landed windows are never trusted from a cache** (review F3). Every run rebinds every landed window to its
+configured record (commit, path, `final_record`, `session_root`). It re-reads that committed record and its
+finalized-manifest digest, and re-hashes every landed file. Any drift refuses `landed_window_stale` or
+`landed_window_changed`; the remedy is a fresh export root.
+
+**Required digests** (review F4). External inputs (`allocation`, `u3_bar`, `r1_references`, `registration_inputs`)
+must be exactly `{path, sha256}` with a 64-hex digest before they are opened. Before a window lands, every required
+output reference is checked: `raw_source`, `plan_source`, `terminal_result_source`, and per captured member
+`episode`, `powermetrics`, `config`, `planned_config`, `journal`, `metadata`, `events`, `turns_source` and the
+`dc_streams`. Each must be `{path, sha256}` naming exactly the placed bytes, or the export refuses
+`reference_digest_missing`.
+
+**Terminal ownership** (review F5). The result's `plan_id` must equal the committed night plan's. When the record
+carries the watchdog latch, `released_terminal_windows` must name `plan_id:custody_root:sha256(result.json)`.
+
+**W1 stages** (review F6). W1 rows are checked against the registered W1 kit plan
+(`configs/campaigns/align_v4/collection_plan.json`; align_v4_kit.py:1388-1408) on ordinal, role, run id, stage,
+pair, condition, seed and model, or the export refuses `roster_differs_from_registered_plan`.
 
 **What it writes.**
 - Per window, immutable once landed:
@@ -438,10 +467,11 @@ where noted.
 | plan | record `sources.collection_plan` bytes, verbatim, header included (every attempt). It must be this window's plan: C/T `schema_version` `joulewise.align_v4.series_window.v1`, `plan_id` `align-v4-<window>`, `window_id`, `series_manifest_sha256` (align_v4_series.py:339-340); W1 `joulewise.align_v4.v1` / `align-v4`. A plan `attempt_id` must equal the record's | window `plan_source` ref | window.json `plan_source` (same file) |
 | kit config | `kit_root/<plan row config_path>`, sha256 = plan row `config_sha256` (align_v4_series.py:302); copied into the export (it lies outside custody) | `planned_config` ref (captured members) | member row `planned_config` (same file) |
 | stamps | Episode `hardware.paired_clock_stamps_ns` via `sampler._restore_stamp` (sampler.py:56, as workload.read_episode_bundle:900) | `stamps` (ClockStamp seconds, floats) | `paired_clock_stamps_ns` verbatim |
-| clock evidence | metadata `uncertainty_evidence` | `clock_evidence` verbatim | metadata verbatim + `clock_anchor.wall_minus_monotonic_bounds_ns` = exact(lower_s, upper_s) (Fraction, ties to even) |
+| clock evidence | metadata `uncertainty_evidence` | `clock_evidence` verbatim | `metadata.json` byte for byte (the recompute reads `wall_minus_monotonic_{lower,upper}_s` itself) |
+| metadata, events, turns | `metadata.json`, `events.jsonl`, `outputs/align_turns.jsonl` | `metadata`, `events`, `turns_source` refs | the same files byte for byte in the member directory |
 | offset | `sampler.stamp_mapping` (sampler.py:83) over the restored stamps and that evidence | `offset_ns` | `hardware.production_offset_ns` |
 | endpoint | metadata `clock_anchor.first_sample_end_point_epoch_s`, as recorded (int/float only) | `first_record_endpoint_s` | metadata verbatim |
-| period | `round(1e9 / config.sampling.power_hz)` = workload.read_episode_bundle:916 | `nominal_interval_ns` | metadata `sampling.power_period_ns` |
+| period | `round(1e9 / config.sampling.power_hz)` = workload.read_episode_bundle:916 | `nominal_interval_ns` | derived by the recompute from the copied `config.json` |
 | registered span | WP22 rule (align_v4_w1_synthetic.py:353): first G0 start (else episode start), episode end | `registered_span_ns` | `hardware.registered_span_ns` |
 | sidecar | `outputs/align_thermal.jsonl` (gated members only; absent for ungated 30B anchors, as read_bundle_record reads it) | `journal` ref (JSON array of the rows) | `outputs/align_thermal.jsonl` = `thermal_desk.normalize_journal` rows (thermal_desk.py:118) |
 | OS readings | `normalize_journal` rows' `status.os_level` (read_bundle_record:811-813) | `os_readings`, `registered_os_readings` | derived by the recompute from the rows |
@@ -454,8 +484,8 @@ where noted.
 | battery | `v4_battery.bundle_evidence` over custody `hazards/monitor/battery.jsonl` (v4_battery.py:46) | `battery` | `battery {run_id: flags + battery.unobserved}` |
 | exclusions | record `sources.exclusions.members_excluded` (final), `v4_contention.split_codes` (R22-1) | `exclusion_codes` | `adjudication.excluded` |
 | identity map | committed desk: `pilot7_token_identical` (align_v4_thermal_desk.py:133, align_v4_session.py:333) for contrast runs; desk `tokens` equality for the registered replay pairs (WindowRecord.eligibility rule) | (re-derived) | `identity` |
-| DC | custody `night/hazard_result.json` `meter.streams` (path, sha256; km003c.py:211-245) | benign `dc_streams` refs + `member_span_ns` = [episode start, end] | `meter/<name>` + `meter.streams` |
-| terminal | record `sources.result` (schema `joulewise.unattended_night_result.v1`), cross-checked with `chain_exited.exit_code` and `courier_sent` and with the restored custody `night/result.json` bytes | `terminal_result_source` (captured C only) | `terminal_result_source` (same file) |
+| DC | custody `night/hazard_result.json` `meter.streams` (path, sha256; km003c.py:211-245) | benign `dc_streams` refs + `metadata`/`events` refs; NO span is exported: the engine derives the production hull `harvest.member_spans(metadata, events)['member']` itself (engine-r23m de4a54db9 refuses an exported `member_span_ns`) | `meter/<name>` + `meter.streams`; the hull is recomputed from `metadata.json` + `events.jsonl` |
+| terminal | record `sources.result` (schema `joulewise.unattended_night_result.v1`), cross-checked with `chain_exited.exit_code`, `courier_sent`, the restored custody `night/result.json` bytes, the night plan's `plan_id` and the watchdog latch | `terminal_result_source` (captured C only) | `terminal_result_source` (same file) |
 | bar | record `barred`, passed through only if it equals `WindowRecord.structural_bar` | `barred` | `barred` |
 | U3 / R1 / delta | registered U3 bar (`v4_u3.policy_checks`, `relative_pairs`), registration `inputs.json` R1 policy, R1 references file | `u3_evidence`, `reference`, `r1_sensitivity`, `delta_slow_c`, `u6_split_rule` (A16 constant) | `u3_bar.json`, `references.json` |
 
@@ -501,7 +531,10 @@ Everything else comes from real producers:
 | `seconds_not_numeric` | Recorded seconds are not a number |
 | `roster_differs_from_manifest` | The collection plan differs from the frozen manifest |
 | `roster_differs_from_plan` | The night plan, a bundle config or the Episode differs from the collection plan |
-| `capture_missing_from_record`, `capture_digest_differs` | A capture is null while a plist exists, or its digest differs from the plist |
+| `capture_missing_from_record`, `capture_not_in_custody`, `capture_digest_differs` | Custody holds a plist the inventory lists as none (all-null included); the inventory names a capture custody lacks; or the descriptor digest differs from the plist |
+| `landed_window_stale`, `landed_window_changed` | A landed window is no longer the configured record / finalized manifest, or a landed file changed |
+| `reference_digest_missing` | A required reference lacks a well-formed `{path, sha256}` naming the bytes |
+| `roster_differs_from_registered_plan` | W1 rows differ from the registered W1 kit plan (stage, role, run id, …) |
 | `terminal_evidence_missing`, `terminal_evidence_mismatch` | Terminal evidence is missing, or result, chain.exited and custody disagree |
 | `config_digest_not_planned` | The plan row's `config_path`/`config_sha256`, the kit bytes and the bundle `config.json` do not form the writer chain |
 | `config_digest_not_planned:wrong_window` | The committed plan is not this window's producer plan (header, or `attempt_id`) |
@@ -532,7 +565,16 @@ Everything else comes from real producers:
 - Past both, EXP-D1 dominates. The recompute bars C1 and C2 (U1 FAIL) while the engine fits them, so every fit,
   score, threshold, known-H and carrier family holds, and `eligible_m_per_pair` refuses (R-C5).
 
-**Status at engine-r23m `5e1f564a2` / recompute `c595cc07b`** (with the release-tools comparator G3/G4 fixes).
+**Status at the final pins, engine-r23m `de4a54db9` / recompute `7b9d215ff` (program `f01e7dbe…`), after Sol exporter
+reviews 1-2 (F1-F6): AGREE.** `test_exporter_e2e.test_release_agrees` runs the real-producer series end to end and
+`release_v4` exits 0 with verdict `agree`:
+- the series is WP22 W1 plus series-kit C1, C2#1 (zero capture) and C2#2;
+- it goes through finalize-manifest, pack, unpack, the exporter, both builds (engine under `-X faulthandler`; no
+  crash) and the comparator.
+
+Every item below (P1-P7) is closed at these pins. Each row records the state at the pin named in its heading.
+
+**Earlier status at engine-r23m `5e1f564a2` / recompute `c595cc07b`** (with the release-tools comparator G3/G4 fixes).
 - G3, G4, D1, D5 and D6 are closed.
 - Stage (a) verifies and stage (b) shares all 62 raw members.
 - 59 families are compared. Eligibility, U1/U3/U4, the fits, scores, ledger, cache and battery agree.
@@ -590,7 +632,7 @@ and the pinned recompute's `tests/independent_recompute_v4/synth.py`):
 | `cache_statistics` | `{rebuilds, rewinds}` (common_series.py:547) | diagnostics.py:257-265 keys | production value; EXP-G4 |
 | reasoning | `reasoning_tokens` (synth turns) | Episode `hidden_tokens` | recompute alias = hidden_tokens |
 | `registered_span_ns`, `production_offset_ns`, `identity_sha256`, `cohort_sha256`, `completed`, `hardware.cache` | written into the episode by synth/common_series | absent from the production Episode | exporter contract fields (6a.1) |
-| metadata | `sampling.power_period_ns`, anchor only (synth.py:190-192) | no `sampling`; `clock_anchor.wall_minus_monotonic_{lower,upper}_s`; power_hz in config.json | `power_period_ns` from config; `bounds_ns` exact |
+| metadata | `sampling.power_period_ns`, anchor only (synth.py:190-192) | no `sampling`; `clock_anchor.wall_minus_monotonic_{lower,upper}_s`; power_hz in config.json | byte for byte; the recompute derives the period (config) and the bounds (recorded seconds) itself |
 | clock stamps, spans | whole seconds (common_series EXPORT_NOTES) | non-integer (WP22: 4387.603199999 s) | verbatim; the offset check passes; EXP-D1 |
 | power cadence | 1 Hz frames (common_series `period_ns=NS`) | 10 Hz (kit config `power_hz`) | verbatim |
 | thermal sidecar | pre-normalized `kind: sample` rows for EVERY member (synth; common_series.py:522-525) | `joulewise.align_thermal.v1` reading/session rows, gated members only | engine: raw rows (JSON); recompute: `normalize_journal` rows; anchors: none (recompute flag `thermal_journal_missing`) |
@@ -598,7 +640,7 @@ and the pinned recompute's `tests/independent_recompute_v4/synth.py`):
 | gate `reference` | copy of the G0 release (common_series.py:356-357) | production reference `{fast_c, slow_c, source_member, span_ns}` | Episode bytes |
 | turn rows | token ids fabricated from the identity hash (common_series.py:548-551) | full generation rows with cache fields | inline verbatim |
 | battery | static `{observed, soc 100, charger 80, 'c'*64}` (common_series.py:544-545) | `v4_battery.bundle_evidence` (spans, assist, per-reading lists) | production value, cross-checked with the desk |
-| DC span | `[episode start, end]` (common_series.py:547) | production desk: `harvest.member_spans(metadata, events)` (km003c.py:256) | `[episode start, end]` (the recompute's span); open item |
+| DC span | `[episode start, end]` (common_series.py:547) | production desk: `harvest.member_spans(metadata, events)` (km003c.py:256) | production hull (lead ruling b), derived by both builds from the digest-bound metadata/events |
 | meter stream | `km003c-0.jsonl` in the window dir | custody `hazards/meter/stream-NNN.jsonl`, listed with sha256 in `night/hazard_result.json` | placed under `recompute/windows/<W>/meter/` |
 | terminal result | derived `{verdict, chain_exit_code}` file (common_series.py:397-406) | `night/result.json` (`joulewise.unattended_night_result.v1`, more keys) | result.json bytes by digest; both builds accept the extra keys |
 | identity map | `identical` for every sentinel/contrast run (common_series.py:327-328) | desk `pilot7_token_identical` and desk token equality | from the committed desk |

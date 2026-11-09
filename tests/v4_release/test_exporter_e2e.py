@@ -9,10 +9,8 @@ KM003C stream, the U3 bar and the R1 references (RELEASE-RUNBOOK-v4.md section 6
 Plan: W1, C1 (captured, GO), C2#1 (zero capture), C2#2 (captured retry, GO). Each window exports as it lands; then the
 recompute and the pinned engine read the export, and release_v4 runs when the engine produces a run.
 
-Builds: the release pins (engine-r23k 72410b0b4, recompute 7b06c6058). release_v4 runs end to end: stage (a)
-verifies, the recompute reads the same raw bytes for all 62 captured members, and the comparator refuses on the
-classified gaps of RELEASE-RUNBOOK-v4.md section 6a.2, so ``test_release_agrees`` is an expected failure; an
-unexpected success means flip it.
+Builds: the release pins (engine-r23m de4a54db9, recompute 7b9d215ff). release_v4 runs end to end and AGREEs:
+stage (a) verifies, both builds read the same raw bytes for all 62 captured members, and the comparator agrees.
 """
 import copy
 import hashlib
@@ -34,10 +32,10 @@ import support  # noqa: E402
 import native_series  # noqa: E402
 
 EXPORTER = REPO / 'scripts' / 'export_v4_series.py'
-ENGINE_COMMIT = support.ENGINE_COMMIT          # origin/engine-r23k 72410b0b4 (release_v4 RELEASE_ENGINE_COMMIT)
-RECOMPUTE_COMMIT = support.RECOMPUTE_COMMIT    # 7b06c6058 (release_v4 RELEASE_RECOMPUTE_COMMIT)
-assert (ENGINE_COMMIT, RECOMPUTE_COMMIT) == ('72410b0b4f725d770298a301a55802e70d466537',
-                                             '7b06c6058efa211fd14acb14838cc84c13694012')
+# Lead request: the builds run with faulthandler (= python -X faulthandler) so a native crash leaves a trace.
+os.environ.setdefault('PYTHONFAULTHANDLER', '1')
+ENGINE_COMMIT = support.ENGINE_COMMIT          # origin/engine-r23m de4a54db9 (engine-derived member hull)
+RECOMPUTE_COMMIT = support.RECOMPUTE_COMMIT    # 7b9d215ff, reads production metadata/events/config (program f01e7dbe)
 # Engine refusals classified in RELEASE-RUNBOOK-v4.md section 6a.2 (a refusal outside this list fails the test).
 KNOWN_ENGINE_REFUSALS = {'series manifest roster differs from R15': 'EXP-G2',
                          'roster differs from R15 allocation': 'EXP-G2'}
@@ -51,6 +49,22 @@ def series():
         config, timings = native_series.cached(synth, synth.FrameTemplate(n_tasks=0, seed=7, clusters=0))
         _SERIES.update(config=config, timings=timings)
     return _SERIES['config']
+
+
+def run_engine(root, workers=4):
+    """support.run_engine with every invocation under python3.13 -X faulthandler and PYTHONFAULTHANDLER=1 (lead
+    request); each stage's stderr is kept beside the output so a native crash leaves its trace."""
+    cli = str(support.tree(ENGINE_COMMIT) / 'scripts' / 'analyze_align_v4.py')
+    env = dict(os.environ, PYTHONDONTWRITEBYTECODE='1', PYTHONFAULTHANDLER='1')
+    cal, full = root / 'engine-out-cal', root / 'engine-out'
+    for argv, name in ((['--output', cal.name, '--calibration-only'], 'engine-cal'),
+                       (['--output', full.name, '--thresholds', str(cal / 'thresholds.json')], 'engine-full')):
+        r = subprocess.run([support.PY, '-X', 'faulthandler', '-B', cli, '--input', 'engine-input.json', *argv,
+                            '--workers', str(workers)], cwd=root, capture_output=True, env=env)
+        (root / f'{name}.stderr').write_bytes(r.stderr)
+        if r.returncode:
+            return r.returncode, json.loads(r.stdout or b'{}')
+    return 0, json.loads(r.stdout or b'{}')
 
 
 def sha(path):
@@ -103,8 +117,7 @@ class ExporterEndToEnd(unittest.TestCase):
         cls.recompute_exit = support.run_recompute(cls.root, tree_dir=support.tree(RECOMPUTE_COMMIT))
         cls.wall['recompute'] = time.monotonic() - t
         t = time.monotonic()
-        cls.engine_exit, cls.engine_verdict = support.run_engine(cls.root, workers=4,
-                                                                 tree_dir=support.tree(ENGINE_COMMIT))
+        cls.engine_exit, cls.engine_verdict = run_engine(cls.root, workers=4)
         cls.wall['engine'] = time.monotonic() - t
         detail = cls.root / 'engine-out-cal' / 'refusal-detail.json'
         cls.engine_refusal = json.loads(detail.read_text()) if detail.exists() else None
@@ -113,6 +126,8 @@ class ExporterEndToEnd(unittest.TestCase):
             exporter_s={w: cls.wall[w] for w in PLAN}, series_build=_SERIES.get('timings'),
             recompute_exit=cls.recompute_exit, recompute_stderr=stderr.read_text()[-3000:] if stderr.exists() else None,
             engine_exit=cls.engine_exit, engine_verdict=cls.engine_verdict, engine_refusal=cls.engine_refusal,
+            engine_stderr={n: (cls.root / f'{n}.stderr').read_text()[-4000:] for n in ('engine-cal', 'engine-full')
+                           if (cls.root / f'{n}.stderr').exists()},
             **{k: v for k, v in cls.wall.items() if k not in PLAN}), indent=1))
 
     @classmethod
@@ -247,11 +262,9 @@ class ExporterEndToEnd(unittest.TestCase):
         detail = (self.engine_refusal or {}).get('detail', '')
         self.assertIn(detail, KNOWN_ENGINE_REFUSALS, self.engine_refusal)
 
-    @unittest.expectedFailure
     def test_release_agrees(self):
-        """AGREE on real-producer data (exit 0). Expected to fail: the comparator refuses on EXP-G3 (display-name
-        model keys) and EXP-G4 (unmapped production cache_statistics), and past them the recompute bars every
-        window on EXP-D1 (U1(c) sidecar coverage of non-integer G0 spans); RELEASE-RUNBOOK-v4.md section 6a.2."""
+        """AGREE on real-producer data, end to end (exit 0): WP22 W1 and series-kit C windows through
+        finalize-manifest, pack, unpack, the exporter, both pinned builds and release_v4."""
         self.assertEqual(self.engine_exit, 0)
         support.write_record(self.root, commit=ENGINE_COMMIT)
         checkout = support.release_checkout(self.work / 'checkout')
@@ -536,9 +549,42 @@ class ExporterRefusals(unittest.TestCase):
         path.write_text(json.dumps(value))
         self.assertEqual(export(path, 'W1#1')[0], 0)
         window = self.work / 'differs/recompute/windows/W1/window.json'
-        window.write_bytes(window.read_bytes() + b' ')
+        raw = window.read_bytes()
+        window.write_bytes(raw + b' ')
+        # Every landed window is re-hashed against its state on every run (seat 1 F3): a changed file refuses.
+        code, out, _, _ = export(path, 'W1#1')
+        self.assertEqual((code, out['code']), (2, 'landed_window_changed'))
+        window.write_bytes(raw)
+        # A landed state whose bytes no longer match a fresh re-export of the same record refuses.
+        state = self.work / 'differs/state/W1.json'
+        doc = json.loads(state.read_bytes())
+        doc['notes'] = doc.get('notes', []) + [{'scope': 'tamper'}]
+        state.write_bytes(json.dumps(doc).encode())
         code, out, _, _ = export(path, 'W1#1')
         self.assertEqual((code, out['code']), (2, 'window_already_exported_differs'))
+
+    def test_a_landed_window_bound_to_another_record_refuses(self):
+        """Seat 1 F3: changing a prior window's configured record (here its session_root binding) refuses."""
+        value = copy.deepcopy(self.value)
+        value['export_root'] = str(self.work / 'rebind')
+        path = self.work / 'rebind.json'
+        path.write_text(json.dumps(value))
+        self.assertEqual(export(path, 'W1#1')[0], 0)
+        value['windows'][0]['session_root'] = str(self.work)
+        path.write_text(json.dumps(value))
+        code, out, _, _ = export(path, 'C1#1')
+        self.assertEqual((code, out['code']), (2, 'landed_window_stale'))
+
+    def test_series_reference_without_digest_refuses(self):
+        for key in ('u3_bar', 'r1_references', 'registration_inputs', 'allocation'):
+            with self.subTest(key=key):
+                value = copy.deepcopy(self.value)
+                value[key] = {'path': value[key]['path']}
+                value['export_root'] = str(self.work / ('nodigest-' + key))
+                path = self.work / 'nodigest.json'
+                path.write_text(json.dumps(value))
+                code, out, _, _ = export(path, 'W1#1')
+                self.assertEqual((code, out['code']), (2, 'reference_digest_missing'))
 
 
 if __name__ == '__main__':

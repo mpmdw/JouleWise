@@ -37,15 +37,6 @@ class ContractDigestTests(unittest.TestCase):
         ep['hardware'] = {}
         self.assertEqual(ex.registered_span_ns(ep), [100, 900])
 
-    def test_seconds_are_converted_exactly_and_never_from_text(self):
-        self.assertEqual(ex.exact_ns(2), 2_000_000_000)
-        self.assertEqual(ex.exact_ns(0.1), 100_000_000)                 # 0.1000000000000000055511151231257827
-        self.assertEqual(ex.exact_ns(4387.603199999131), 4387603199999)   # the recorded binary value
-        for bad in ('1.5', True, None):
-            with self.assertRaises(ex.Refused) as caught:
-                ex.exact_ns(bad)
-            self.assertEqual(caught.exception.code, 'seconds_not_numeric')
-
     def test_cohort_digest_is_canonical(self):
         identity = {'model_source': 's', 'model_revision': 'r', 'runtime_sha256': 'a' * 64,
                     'execution_policy_sha256': 'b' * 64}
