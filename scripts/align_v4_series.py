@@ -556,8 +556,8 @@ def desk_row(manifest, window_id, members, u_pass):
     ``members``: one row per planned member ``{'run_id', 'captured', 'excluded'}``
     (captured: the run bundle exists; excluded: any harvest or X1-X8 exclusion).
     A calibrator counts when captured and not excluded. A U1-U3 FAIL of the D
-    model window bars the whole window from the pool, though it still counts
-    toward the eight (RUN_STATE 226 R15); a U verdict that is neither pass nor
+    model window is a STRUCTURAL bar (R22-2 / R24, superseding RUN_STATE 226 R15): the window enters no pool,
+    counts for nothing and is replaced by C9-C14; a U verdict that is neither pass nor
     fail is flagged for the final adjudication. Counts only, never a score.
     """
     window = selected(manifest, window_id)

@@ -124,6 +124,28 @@ class U3Tests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, '>=5'):
             reg.derive_u3(few['pairs'], {'x': 'a'*64, 'transfer.md': 'f'*64}, policy=few['policy'])
 
+    def test_r25_changes_only_roster_dependent_prediction(self):
+        from joulewise.align.apple import v4_u3
+        from scripts.align_v4_u3_export import ROSTER
+        for heavy in (False, True):
+            data = export()  # Retain the historical N=16 fixture for comparison.
+            if heavy:
+                data['pairs'][6]['energies_j'] = [990., 1010.]
+            before = v4_u3.prediction(data['pairs'], data['policy'])
+            expanded = deepcopy(data['policy'])
+            expanded['checks_by_window'] = deepcopy(ROSTER)
+            after = v4_u3.prediction(data['pairs'], expanded)
+            dependent = {'series_comparisons', 'series_quantile_q', 'pair_false_fail',
+                         'series_false_fail', 'relative_bar_30B', 'relative_bar_D'}
+            self.assertEqual({k: v for k, v in before.items() if k not in dependent},
+                             {k: v for k, v in after.items() if k not in dependent})
+            self.assertEqual((before['series_comparisons'], after['series_comparisons']), (16, 22))
+            self.assertEqual(after['heavy_tail_rule_applied'], heavy)
+            self.assertEqual(after['series_beta'], .025 if heavy else .05)
+            self.assertGreater(after['series_quantile_q'], before['series_quantile_q'])
+            self.assertLess(after['pair_false_fail'], before['pair_false_fail'])
+            self.assertAlmostEqual(after['series_false_fail'], after['series_beta'], places=9)
+
     def test_d_replay_checks_target_identity_battery_and_frozen_window_scope(self):
         from tests.align.test_thermal_desk import member
         from joulewise.align.apple import thermal_desk

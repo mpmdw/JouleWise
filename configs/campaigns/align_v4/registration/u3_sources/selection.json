@@ -1,0 +1,521 @@
+{
+  "schema": "joulewise.align_v4.u3_pilot_selection.v1",
+  "status": "DRAFT_FOR_LEAD_SIGNATURE",
+  "rule": "one prespecified pair per session (R14; agreement L3): candidates in design order, earliest original first; align_v4_u3_export.py takes the first pair with ordinals >= 3 apart; an ineligible selected pair makes the session unavailable, never substituted",
+  "population": "30B (Qwen3-30B-A3B MLX 4-bit, block A, thinking on, sampler 0.6/0.95/20/0, 120 s guard)",
+  "design_sources": [
+    "docs/align/pilot_protocol_v3.md:22-31",
+    "configs/campaigns/align_pilot_v3/collection_plan.json at each kit_commit (members[].ordinal, is_replay, spec, expected_episode_seed)",
+    "configs/campaigns/align_pilot_v3/plan_tree.json roots.claim_root_leaf",
+    "scripts/bytes_h_session.py prepare: runs_parent = <session root>/runs-parent",
+    "session id and root: each session ARM line in the design_record"
+  ],
+  "bundle_paths": "derived as <session root>/runs-parent/runs_align_pilot_v3/<run_id> from the committed layout; not opened or listed by the drafting agent; the magistrate confirms existence (no content read) before step 4",
+  "excluded_sessions": [],
+  "sessions": [
+    {
+      "session": "p4",
+      "session_id": "align-pilot-20261103T134903416190Z",
+      "kit_commit": "e31d5d871",
+      "design_record": "docs/process_traces/2026-11-03-magistrate-af17111e/RECORD.md (origin/main)",
+      "candidates": [
+        {
+          "ordinals": [
+            1,
+            9
+          ],
+          "early_bundle": "/Users/edr/night-align/pilot-v3-20261103T134903Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-a-e01",
+          "late_bundle": "/Users/edr/night-align/pilot-v3-20261103T134903Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-a-e09",
+          "design": {
+            "task_pair": "spam_filter_update",
+            "condition": "benign",
+            "seed_index": 1,
+            "expected_episode_seed": 2570132319625341959,
+            "early_run_id": "align-pilot-v3-episodes-a-e01",
+            "late_run_id": "align-pilot-v3-episodes-a-e09"
+          }
+        },
+        {
+          "ordinals": [
+            2,
+            14
+          ],
+          "early_bundle": "/Users/edr/night-align/pilot-v3-20261103T134903Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-a-e02",
+          "late_bundle": "/Users/edr/night-align/pilot-v3-20261103T134903Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-a-e14",
+          "design": {
+            "task_pair": "bank_transfer_2",
+            "condition": "sabotage",
+            "seed_index": 1,
+            "expected_episode_seed": 1001552758911679671,
+            "early_run_id": "align-pilot-v3-episodes-a-e02",
+            "late_run_id": "align-pilot-v3-episodes-a-e14"
+          }
+        },
+        {
+          "ordinals": [
+            3,
+            19
+          ],
+          "early_bundle": "/Users/edr/night-align/pilot-v3-20261103T134903Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-a-e03",
+          "late_bundle": "/Users/edr/night-align/pilot-v3-20261103T134903Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-b-e19",
+          "design": {
+            "task_pair": "spam_filter_update",
+            "condition": "sabotage",
+            "seed_index": 1,
+            "expected_episode_seed": 2570132319625341959,
+            "early_run_id": "align-pilot-v3-episodes-a-e03",
+            "late_run_id": "align-pilot-v3-episodes-b-e19"
+          }
+        },
+        {
+          "ordinals": [
+            4,
+            28
+          ],
+          "early_bundle": "/Users/edr/night-align/pilot-v3-20261103T134903Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-a-e04",
+          "late_bundle": "/Users/edr/night-align/pilot-v3-20261103T134903Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-b-e28",
+          "design": {
+            "task_pair": "bank_transfer_2",
+            "condition": "benign",
+            "seed_index": 1,
+            "expected_episode_seed": 1001552758911679671,
+            "early_run_id": "align-pilot-v3-episodes-a-e04",
+            "late_run_id": "align-pilot-v3-episodes-b-e28"
+          }
+        }
+      ]
+    },
+    {
+      "session": "p5",
+      "session_id": "align-pilot-20261103T224628898457Z",
+      "kit_commit": "e31d5d871",
+      "design_record": "docs/process_traces/2026-11-03-magistrate-c9ac22ae/RECORD.md (origin/main)",
+      "candidates": [
+        {
+          "ordinals": [
+            1,
+            9
+          ],
+          "early_bundle": "/Users/edr/night-align/pilot-v4-20261103T224628Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-a-e01",
+          "late_bundle": "/Users/edr/night-align/pilot-v4-20261103T224628Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-a-e09",
+          "design": {
+            "task_pair": "spam_filter_update",
+            "condition": "benign",
+            "seed_index": 1,
+            "expected_episode_seed": 2570132319625341959,
+            "early_run_id": "align-pilot-v3-episodes-a-e01",
+            "late_run_id": "align-pilot-v3-episodes-a-e09"
+          }
+        },
+        {
+          "ordinals": [
+            2,
+            14
+          ],
+          "early_bundle": "/Users/edr/night-align/pilot-v4-20261103T224628Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-a-e02",
+          "late_bundle": "/Users/edr/night-align/pilot-v4-20261103T224628Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-a-e14",
+          "design": {
+            "task_pair": "bank_transfer_2",
+            "condition": "sabotage",
+            "seed_index": 1,
+            "expected_episode_seed": 1001552758911679671,
+            "early_run_id": "align-pilot-v3-episodes-a-e02",
+            "late_run_id": "align-pilot-v3-episodes-a-e14"
+          }
+        },
+        {
+          "ordinals": [
+            3,
+            19
+          ],
+          "early_bundle": "/Users/edr/night-align/pilot-v4-20261103T224628Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-a-e03",
+          "late_bundle": "/Users/edr/night-align/pilot-v4-20261103T224628Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-b-e19",
+          "design": {
+            "task_pair": "spam_filter_update",
+            "condition": "sabotage",
+            "seed_index": 1,
+            "expected_episode_seed": 2570132319625341959,
+            "early_run_id": "align-pilot-v3-episodes-a-e03",
+            "late_run_id": "align-pilot-v3-episodes-b-e19"
+          }
+        },
+        {
+          "ordinals": [
+            4,
+            28
+          ],
+          "early_bundle": "/Users/edr/night-align/pilot-v4-20261103T224628Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-a-e04",
+          "late_bundle": "/Users/edr/night-align/pilot-v4-20261103T224628Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-b-e28",
+          "design": {
+            "task_pair": "bank_transfer_2",
+            "condition": "benign",
+            "seed_index": 1,
+            "expected_episode_seed": 1001552758911679671,
+            "early_run_id": "align-pilot-v3-episodes-a-e04",
+            "late_run_id": "align-pilot-v3-episodes-b-e28"
+          }
+        }
+      ]
+    },
+    {
+      "session": "p6",
+      "session_id": "align-pilot-20261104T074612673532Z",
+      "kit_commit": "bf41d96a2",
+      "design_record": "docs/process_traces/2026-11-03-magistrate-1b198a71/RECORD.md (origin/main)",
+      "candidates": [
+        {
+          "ordinals": [
+            1,
+            9
+          ],
+          "early_bundle": "/Users/edr/night-align/pilot-v5-20261104T074612Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-a-e01",
+          "late_bundle": "/Users/edr/night-align/pilot-v5-20261104T074612Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-a-e09",
+          "design": {
+            "task_pair": "spam_filter_update",
+            "condition": "benign",
+            "seed_index": 1,
+            "expected_episode_seed": 2570132319625341959,
+            "early_run_id": "align-pilot-v3-episodes-a-e01",
+            "late_run_id": "align-pilot-v3-episodes-a-e09"
+          }
+        },
+        {
+          "ordinals": [
+            2,
+            14
+          ],
+          "early_bundle": "/Users/edr/night-align/pilot-v5-20261104T074612Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-a-e02",
+          "late_bundle": "/Users/edr/night-align/pilot-v5-20261104T074612Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-a-e14",
+          "design": {
+            "task_pair": "bank_transfer_2",
+            "condition": "sabotage",
+            "seed_index": 1,
+            "expected_episode_seed": 1001552758911679671,
+            "early_run_id": "align-pilot-v3-episodes-a-e02",
+            "late_run_id": "align-pilot-v3-episodes-a-e14"
+          }
+        },
+        {
+          "ordinals": [
+            3,
+            19
+          ],
+          "early_bundle": "/Users/edr/night-align/pilot-v5-20261104T074612Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-a-e03",
+          "late_bundle": "/Users/edr/night-align/pilot-v5-20261104T074612Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-b-e19",
+          "design": {
+            "task_pair": "spam_filter_update",
+            "condition": "sabotage",
+            "seed_index": 1,
+            "expected_episode_seed": 2570132319625341959,
+            "early_run_id": "align-pilot-v3-episodes-a-e03",
+            "late_run_id": "align-pilot-v3-episodes-b-e19"
+          }
+        },
+        {
+          "ordinals": [
+            4,
+            28
+          ],
+          "early_bundle": "/Users/edr/night-align/pilot-v5-20261104T074612Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-a-e04",
+          "late_bundle": "/Users/edr/night-align/pilot-v5-20261104T074612Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-b-e28",
+          "design": {
+            "task_pair": "bank_transfer_2",
+            "condition": "benign",
+            "seed_index": 1,
+            "expected_episode_seed": 1001552758911679671,
+            "early_run_id": "align-pilot-v3-episodes-a-e04",
+            "late_run_id": "align-pilot-v3-episodes-b-e28"
+          }
+        }
+      ]
+    },
+    {
+      "session": "p7",
+      "session_id": "align-pilot-20261104T164323823784Z",
+      "kit_commit": "45b47f7b6",
+      "design_record": "docs/process_traces/2026-11-04-magistrate-7e06863b/RECORD.md (origin/main)",
+      "candidates": [
+        {
+          "ordinals": [
+            1,
+            9
+          ],
+          "early_bundle": "/Users/edr/night-align/pilot-v6-20261104T164323Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-a-e01",
+          "late_bundle": "/Users/edr/night-align/pilot-v6-20261104T164323Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-a-e09",
+          "design": {
+            "task_pair": "spam_filter_update",
+            "condition": "benign",
+            "seed_index": 1,
+            "expected_episode_seed": 2570132319625341959,
+            "early_run_id": "align-pilot-v3-episodes-a-e01",
+            "late_run_id": "align-pilot-v3-episodes-a-e09"
+          }
+        },
+        {
+          "ordinals": [
+            2,
+            14
+          ],
+          "early_bundle": "/Users/edr/night-align/pilot-v6-20261104T164323Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-a-e02",
+          "late_bundle": "/Users/edr/night-align/pilot-v6-20261104T164323Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-a-e14",
+          "design": {
+            "task_pair": "bank_transfer_2",
+            "condition": "sabotage",
+            "seed_index": 1,
+            "expected_episode_seed": 1001552758911679671,
+            "early_run_id": "align-pilot-v3-episodes-a-e02",
+            "late_run_id": "align-pilot-v3-episodes-a-e14"
+          }
+        },
+        {
+          "ordinals": [
+            3,
+            19
+          ],
+          "early_bundle": "/Users/edr/night-align/pilot-v6-20261104T164323Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-a-e03",
+          "late_bundle": "/Users/edr/night-align/pilot-v6-20261104T164323Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-b-e19",
+          "design": {
+            "task_pair": "spam_filter_update",
+            "condition": "sabotage",
+            "seed_index": 1,
+            "expected_episode_seed": 2570132319625341959,
+            "early_run_id": "align-pilot-v3-episodes-a-e03",
+            "late_run_id": "align-pilot-v3-episodes-b-e19"
+          }
+        },
+        {
+          "ordinals": [
+            4,
+            28
+          ],
+          "early_bundle": "/Users/edr/night-align/pilot-v6-20261104T164323Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-a-e04",
+          "late_bundle": "/Users/edr/night-align/pilot-v6-20261104T164323Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-b-e28",
+          "design": {
+            "task_pair": "bank_transfer_2",
+            "condition": "benign",
+            "seed_index": 1,
+            "expected_episode_seed": 1001552758911679671,
+            "early_run_id": "align-pilot-v3-episodes-a-e04",
+            "late_run_id": "align-pilot-v3-episodes-b-e28"
+          }
+        }
+      ]
+    },
+    {
+      "session": "p8",
+      "session_id": "align-pilot-20261105T015948125148Z",
+      "kit_commit": "e328f0e72",
+      "design_record": "docs/process_traces/2026-11-04-magistrate-cf1baad2/RECORD.md (origin/main)",
+      "candidates": [
+        {
+          "ordinals": [
+            1,
+            9
+          ],
+          "early_bundle": "/Users/edr/night-align/pilot-v7-20261105T015948Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-a-e01",
+          "late_bundle": "/Users/edr/night-align/pilot-v7-20261105T015948Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-a-e09",
+          "design": {
+            "task_pair": "spam_filter_update",
+            "condition": "benign",
+            "seed_index": 1,
+            "expected_episode_seed": 2570132319625341959,
+            "early_run_id": "align-pilot-v3-episodes-a-e01",
+            "late_run_id": "align-pilot-v3-episodes-a-e09"
+          }
+        },
+        {
+          "ordinals": [
+            2,
+            14
+          ],
+          "early_bundle": "/Users/edr/night-align/pilot-v7-20261105T015948Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-a-e02",
+          "late_bundle": "/Users/edr/night-align/pilot-v7-20261105T015948Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-a-e14",
+          "design": {
+            "task_pair": "bank_transfer_2",
+            "condition": "sabotage",
+            "seed_index": 1,
+            "expected_episode_seed": 1001552758911679671,
+            "early_run_id": "align-pilot-v3-episodes-a-e02",
+            "late_run_id": "align-pilot-v3-episodes-a-e14"
+          }
+        },
+        {
+          "ordinals": [
+            3,
+            19
+          ],
+          "early_bundle": "/Users/edr/night-align/pilot-v7-20261105T015948Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-a-e03",
+          "late_bundle": "/Users/edr/night-align/pilot-v7-20261105T015948Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-b-e19",
+          "design": {
+            "task_pair": "spam_filter_update",
+            "condition": "sabotage",
+            "seed_index": 1,
+            "expected_episode_seed": 2570132319625341959,
+            "early_run_id": "align-pilot-v3-episodes-a-e03",
+            "late_run_id": "align-pilot-v3-episodes-b-e19"
+          }
+        },
+        {
+          "ordinals": [
+            4,
+            28
+          ],
+          "early_bundle": "/Users/edr/night-align/pilot-v7-20261105T015948Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-a-e04",
+          "late_bundle": "/Users/edr/night-align/pilot-v7-20261105T015948Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-b-e28",
+          "design": {
+            "task_pair": "bank_transfer_2",
+            "condition": "benign",
+            "seed_index": 1,
+            "expected_episode_seed": 1001552758911679671,
+            "early_run_id": "align-pilot-v3-episodes-a-e04",
+            "late_run_id": "align-pilot-v3-episodes-b-e28"
+          }
+        }
+      ]
+    },
+    {
+      "session": "p9",
+      "session_id": "align-pilot-20261105T102850144782Z",
+      "kit_commit": "8d1ab6e2c",
+      "design_record": "docs/process_traces/2026-11-05-magistrate-c110a6c9/RECORD.md (origin/main)",
+      "candidates": [
+        {
+          "ordinals": [
+            1,
+            9
+          ],
+          "early_bundle": "/Users/edr/night-align/pilot-v8-20261105T102850Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-a-e01",
+          "late_bundle": "/Users/edr/night-align/pilot-v8-20261105T102850Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-a-e09",
+          "design": {
+            "task_pair": "spam_filter_update",
+            "condition": "benign",
+            "seed_index": 1,
+            "expected_episode_seed": 2570132319625341959,
+            "early_run_id": "align-pilot-v3-episodes-a-e01",
+            "late_run_id": "align-pilot-v3-episodes-a-e09"
+          }
+        },
+        {
+          "ordinals": [
+            2,
+            14
+          ],
+          "early_bundle": "/Users/edr/night-align/pilot-v8-20261105T102850Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-a-e02",
+          "late_bundle": "/Users/edr/night-align/pilot-v8-20261105T102850Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-a-e14",
+          "design": {
+            "task_pair": "bank_transfer_2",
+            "condition": "sabotage",
+            "seed_index": 1,
+            "expected_episode_seed": 1001552758911679671,
+            "early_run_id": "align-pilot-v3-episodes-a-e02",
+            "late_run_id": "align-pilot-v3-episodes-a-e14"
+          }
+        },
+        {
+          "ordinals": [
+            3,
+            19
+          ],
+          "early_bundle": "/Users/edr/night-align/pilot-v8-20261105T102850Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-a-e03",
+          "late_bundle": "/Users/edr/night-align/pilot-v8-20261105T102850Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-b-e19",
+          "design": {
+            "task_pair": "spam_filter_update",
+            "condition": "sabotage",
+            "seed_index": 1,
+            "expected_episode_seed": 2570132319625341959,
+            "early_run_id": "align-pilot-v3-episodes-a-e03",
+            "late_run_id": "align-pilot-v3-episodes-b-e19"
+          }
+        },
+        {
+          "ordinals": [
+            4,
+            28
+          ],
+          "early_bundle": "/Users/edr/night-align/pilot-v8-20261105T102850Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-a-e04",
+          "late_bundle": "/Users/edr/night-align/pilot-v8-20261105T102850Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-b-e28",
+          "design": {
+            "task_pair": "bank_transfer_2",
+            "condition": "benign",
+            "seed_index": 1,
+            "expected_episode_seed": 1001552758911679671,
+            "early_run_id": "align-pilot-v3-episodes-a-e04",
+            "late_run_id": "align-pilot-v3-episodes-b-e28"
+          }
+        }
+      ]
+    },
+    {
+      "session": "p10",
+      "session_id": "align-pilot-20261105T231016638759Z",
+      "kit_commit": "83e2dac59",
+      "design_record": "docs/process_traces/2026-11-05-magistrate-e52bde92/RECORD.md (origin/main)",
+      "candidates": [
+        {
+          "ordinals": [
+            1,
+            9
+          ],
+          "early_bundle": "/Users/edr/night-align/pilot-v9-20261105T231016Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-a-e01",
+          "late_bundle": "/Users/edr/night-align/pilot-v9-20261105T231016Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-a-e09",
+          "design": {
+            "task_pair": "spam_filter_update",
+            "condition": "benign",
+            "seed_index": 1,
+            "expected_episode_seed": 2570132319625341959,
+            "early_run_id": "align-pilot-v3-episodes-a-e01",
+            "late_run_id": "align-pilot-v3-episodes-a-e09"
+          }
+        },
+        {
+          "ordinals": [
+            2,
+            14
+          ],
+          "early_bundle": "/Users/edr/night-align/pilot-v9-20261105T231016Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-a-e02",
+          "late_bundle": "/Users/edr/night-align/pilot-v9-20261105T231016Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-a-e14",
+          "design": {
+            "task_pair": "bank_transfer_2",
+            "condition": "sabotage",
+            "seed_index": 1,
+            "expected_episode_seed": 1001552758911679671,
+            "early_run_id": "align-pilot-v3-episodes-a-e02",
+            "late_run_id": "align-pilot-v3-episodes-a-e14"
+          }
+        },
+        {
+          "ordinals": [
+            3,
+            19
+          ],
+          "early_bundle": "/Users/edr/night-align/pilot-v9-20261105T231016Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-a-e03",
+          "late_bundle": "/Users/edr/night-align/pilot-v9-20261105T231016Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-b-e19",
+          "design": {
+            "task_pair": "spam_filter_update",
+            "condition": "sabotage",
+            "seed_index": 1,
+            "expected_episode_seed": 2570132319625341959,
+            "early_run_id": "align-pilot-v3-episodes-a-e03",
+            "late_run_id": "align-pilot-v3-episodes-b-e19"
+          }
+        },
+        {
+          "ordinals": [
+            4,
+            28
+          ],
+          "early_bundle": "/Users/edr/night-align/pilot-v9-20261105T231016Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-a-e04",
+          "late_bundle": "/Users/edr/night-align/pilot-v9-20261105T231016Z/runs-parent/runs_align_pilot_v3/align-pilot-v3-episodes-b-e28",
+          "design": {
+            "task_pair": "bank_transfer_2",
+            "condition": "benign",
+            "seed_index": 1,
+            "expected_episode_seed": 1001552758911679671,
+            "early_run_id": "align-pilot-v3-episodes-a-e04",
+            "late_run_id": "align-pilot-v3-episodes-b-e28"
+          }
+        }
+      ]
+    }
+  ]
+}

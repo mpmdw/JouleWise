@@ -4,7 +4,8 @@ Pure stdlib. No probes, no scores, no outcome fields: the calibration predicate
 sees only window status and eligible benign counts per pair, so blinding holds.
 Neither function qualifies exchangeability or satisfies R13/R14; counts alone do
 not settle them (RUN_STATE 217: a count stop raised FPR under window drift, so
-calibration is exactly 8 windows).
+calibration is exactly 8 admitted windows; R22-2 / R24: up to six structurally barred windows are
+replaced by C9-C14).
 """
 from __future__ import annotations
 
