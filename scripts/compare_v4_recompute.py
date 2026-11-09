@@ -30,7 +30,9 @@ Coverage contract (B5 lessons, RUN_STATE 234 R22-4):
   engine's rows: window attempts, each attempt's eligibility members, scored rows per (attempt, pair,
   convention), every logged scored row's council grid and full H grid (council U H* with "full"), an H* block
   on exactly the C benign carriers and T sabotage known-H rows, per-turn residual counts, every carrier-curve
-  and n_by_h dose, and each window's U3 replay pairs in both print locations. A missing or extra row refuses.
+  and n_by_h dose, and each window's U3 replay pairs in both print locations; after the confirmation seat,
+  also U4 (one row per captured window, with W >= 3 fields), U6 (both pairs and their positions), H* by
+  role on both sides, and the sweep in ``sweep_completeness``. A missing or extra row refuses.
 - Producer identity (seat 1 F4 / seat 2 F3): ``loaded_scorer_sha256`` and ``raw_reducer_sha256`` are compared
   (REFUSING family ``producer_identity``) with ``--engine-identity``, the identity release_v4 computes from the
   pinned engine tree; without it those leaves stay unmapped and the comparator refuses.
@@ -467,6 +469,7 @@ class Comparison:
         self.supplemental()
         self.w1()
         self.claim()
+        self.sweep_completeness()
         self.sensitivity_lines()
         self.balance()
 
@@ -693,9 +696,23 @@ class Comparison:
                     holder = (rget(self.R, "claim", "known_h", p, m["recompute_run_id"]) if m["window"].startswith("T")
                               and m["condition"] == "sabotage" else self._carrier_row(m)
                               if m["window"].startswith("C") and m["condition"] == "benign" else MISSING)
-                    required = rget(holder, "h_star") is not MISSING
+                    # Confirmation F2 / R26 + amendment: EVERY C benign carrier row and EVERY T sabotage row carries
+                    # an H* block (undefined/null ones included), on BOTH sides; required by role, not by print.
+                    required = (m["window"].startswith("T") and m["condition"] == "sabotage") or \
+                        (m["window"].startswith("C") and m["condition"] == "benign")
                     self.add("row_completeness", unit + ("H_star", "present"),
                              rget(E.fill, "fits", i, "scores", j, "H_star") is not MISSING, required, unit=unit)
+                    if required:
+                        self.add("row_completeness", unit + ("H_star", "recompute_present"),
+                                 isinstance(rget(holder, "h_star"), dict), True, unit=unit)
+                        fk = rget(E.fill, "fits", i, "scores", j, "known_H_first_k")
+                        if m["window"].startswith("T"):        # first-k: k = 0 .. n turns (A7)
+                            nt = len(rget(self.rmember(m), "turns") or [])
+                            self.add("row_completeness", unit + ("first_k", "n"),
+                                     len(fk) if isinstance(fk, list) else MISSING, nt + 1, unit=unit)
+                            rfk = rget(holder, "first_k")
+                            self.add("row_completeness", unit + ("first_k", "recompute_n"),
+                                     len(rfk) if isinstance(rfk, list) else MISSING, nt + 1, unit=unit)
                     if holder is not MISSING:
                         for grid, want in (("council", COUNCIL_GRID), ("h_star_grid", H_STAR_GRID)):
                             keys = rget(holder, grid)
@@ -709,6 +726,101 @@ class Comparison:
                 E.exempt("fit_support_cov", *base, "flags")
                 E.exempt("fit_support_cov", *base, "out_of_support_turns")
 
+
+    def sweep_completeness(self):
+        """Confirmation F2 sweep: every print-driven loop of this comparator gets an expected key set derived
+        from the crosswalk (roster), the registered constants or the recompute's structure. Families whose
+        cardinality is fixed elsewhere are listed in RELEASE-RUNBOOK-v4.md section 3."""
+        E, R, cross = self.E, self.R, self.cross
+        f = E.fill
+        keys = lambda doc: list(doc) if isinstance(doc, dict) else MISSING
+        rows = lambda doc, *k: ([tuple(r.get(x) for x in k) if len(k) > 1 else r.get(k[0]) for r in doc
+                                 if isinstance(r, dict)] if isinstance(doc, list) else MISSING)
+        attempts = [a for a in dict.fromkeys(m["attempt_id"] for m in cross) if not a.startswith("W1")]
+        names = list(dict.fromkeys(m["window"] for m in cross))
+        captured = {m["window"] for m in cross if m["captured"]}
+        # ledger: one row per C/T attempt
+        self.complete("ledger_attempts", rows(f.get("ledger"), "window"), attempts)
+        # fits: every (attempt, pair, convention) the recompute scored
+        want = set()
+        for rwid, pairs in (rget(R, "scores") or {}).items():
+            for p, convs in pairs.items():
+                for conv, v in CONV.items():
+                    if convs.get(v):
+                        a = next(m["attempt_id"] for m in cross if m["recompute_window_id"] == rwid)
+                        want.add((a.split("#")[0], p, conv))
+        self.complete("fits", [(x.get("window"), PAIR_SHORT.get(x.get("pair")), x.get("convention"))
+                               for x in f.get("fits", []) if isinstance(x, dict)] if isinstance(f.get("fits"), list)
+                      else MISSING, sorted(want))
+        # realized counts and cache diagnostics: one row per C/T roster member of every attempt
+        members = [(m["attempt_id"], m["engine_run_id"]) for m in cross if m["window"] != "W1"]
+        for table in ("realized_counts", "cache_diagnostics"):
+            t = f.get(table)
+            got = MISSING
+            if isinstance(t, list):
+                seen = {}
+                got = []
+                for i, r in enumerate(t):
+                    try:
+                        mm = self.row_member((("fill", table, i)), seen, r.get("window"), r.get("run_id"))
+                    except Refused:
+                        got.append((None, r.get("run_id")))
+                        continue
+                    got.append((mm["attempt_id"], mm["engine_run_id"]))
+            self.complete((table, "members"), got, members)
+        # residual by hold count: one trajectory per scored row of the convention
+        for conv, v in CONV.items():
+            exp = []
+            for rwid, pairs in (rget(R, "scores") or {}).items():
+                for p, convs in pairs.items():
+                    for rrun in (convs.get(v) or {}):
+                        mm = next(m for m in cross if m["recompute_window_id"] == rwid and m["recompute_run_id"] == rrun)
+                        exp.append(f"{mm['window']}/{mm['engine_run_id']}")
+            self.complete(("residual_by_hold_count", conv),
+                          rows(rget(f, "residual_by_hold_count", conv, "rows"), "trajectory"), exp)
+        # test: registered conventions x pairs x conditions; T windows; planned assignments
+        self.complete("test_cells", [(c, p, k) for c, ps in (f.get("test") or {}).items() for p, ks in ps.items()
+                                     for k in ks] if isinstance(f.get("test"), dict) else MISSING,
+                      [(c, p, k) for c in CONV for p in ("spam", "bank") for k in ("benign", "sabotage")])
+        t_names = [w for w in names if w.startswith("T")]
+        for c in CONV:
+            for p in ("spam", "bank"):
+                for k in ("benign", "sabotage"):
+                    b = rget(f, "test", c, p, k)
+                    self.complete(("test", c, p, k, "by_window"), keys(rget(b, "by_window")), t_names)
+                    planned = [(m["window"], m["engine_run_id"]) for m in cross if m["window"].startswith("T")
+                               and m["model"] == "D" and m["role"] in ("benign", "sabotage") and m["pair"] == p
+                               and m["condition"] == k and m["attempt_id"] == self.counted.get(m["window"])]
+                    self.complete(("test", c, p, k, "members"), rows(rget(b, "members"), "window", "run_id"), planned)
+        # acceptance / window check tables: every window (attempt); both models when anything was captured
+        self.complete("acceptance_windows", keys(f.get("acceptance")), names)
+        models = sorted({D_MODEL, A_MODEL})
+        for w in names:
+            self.complete(("acceptance", w, "models"), keys(rget(f, "acceptance", w)),
+                          models if w in captured else [])
+        for i, w in enumerate(f.get("windows") or []):
+            a = w.get("attempt_id") if isinstance(w, dict) else None
+            cap = any(m["captured"] for m in cross if m["attempt_id"] == a)
+            self.complete(("windows", a, "models"), keys(rget(w, "checks")), models if cap else [])
+            sup = [m["ordinal"] for m in cross if m["attempt_id"] == a and m["ordinal"] > 22]
+            self.complete(("windows", a, "supplemental"), rows(w.get("supplemental_sentinels", []), "ordinal"), sup)
+        # thresholds: registered conventions x pairs, live and frozen
+        want = [f"{c}/{p}" for c in CONV for p in ("spam", "bank")]
+        self.complete("thresholds", keys(f.get("thresholds")), want)
+        self.complete("threshold_freeze", keys(rget(f, "threshold_freeze", "thresholds")), want)
+        # carrier curve: both pairs; U5 designed states: the recompute's (input) count
+        self.complete("carrier_pairs", keys(rget(f, "benign_carriers", "pairs")), ["spam", "bank"])
+        self.add("row_completeness", ("U5", "designed_states", "n"),
+                 len(rget(f, "U5", "designed_states")) if isinstance(rget(f, "U5", "designed_states"), list) else MISSING,
+                 len(rget(R, "acceptance", "U5", "designed_slow_c") or []))
+        # W1 same-arm contrast cells (A13): the registered four
+        if "W1" in names and rget(f, "W1", "contrast") is not MISSING:
+            sap = rget(f, "W1", "contrast", "same_arm_pairs")
+            if rget(R, "claim", "w1_contrast", "reason_code") == INSUFFICIENT_CONTRAST:
+                # seat 1 F3: an insufficient roster has no contrast statistics on either side (common absence)
+                self.add("row_completeness", ("W1", "same_arm_pairs", "absent"), sap is MISSING, True)
+            else:
+                self.complete(("W1", "same_arm_pairs"), keys(sap), ["X-G", "X-S", "Y-G", "Y-S"])
 
     def score_completeness(self):
         """F2: the engine's scored rows per (attempt, pair, convention) are exactly the recompute's (which
@@ -1182,6 +1294,20 @@ class Comparison:
         r4 = rget(R, "acceptance", "U4")
         self.add("u4_values", "E_ref_j", E.get(*b, "E_ref_j"), rget(r4, "E_ref_j"), kind="rel", bar=1e-9)
         per = rget(r4, "per_window") or {}
+        # Confirmation F2 / A14: one cumulative row per window with a captured counted attempt (W1 included),
+        # derived from the crosswalk; a missing row refuses. Required fields follow the recompute's own
+        # structural availability: W >= 3 evaluated -> statistic, df, both CI ends and W window means.
+        names = []
+        for m in self.cross:
+            if m["captured"] and m["window"] not in names:
+                names.append(m["window"])
+        epw = rget(E.fill, "U4", "per_window")
+        self.complete(("U4", "per_window"), list(epw) if isinstance(epw, dict) else MISSING, names)
+        for wname in names:
+            rp = per.get(self._rec_wid(wname), MISSING)
+            erow = rget(epw, wname) if isinstance(epw, dict) else MISSING
+            self._u4_fields(("U4", wname), erow, rp)
+        self._u4_fields(("U4", "series"), rget(E.fill, "U4"), self._rec_last_evaluated(per), top=True)
         for wname in sorted(E.get(*b, "per_window") or {}):
             pb = b + ("per_window", wname)
             attempt = self.counted.get(wname)
@@ -1233,6 +1359,29 @@ class Comparison:
                  rget(lastw, "verdict") in ("fail", "inconclusive") if lastw is not MISSING else MISSING,
                  note="R20: U4 FAIL or INCONCLUSIVE triggers; the recompute's per-window flag is printed alongside")
         E.exempt("registered_text", *b, "sigma_w_30b")
+
+    def _rec_wid(self, wname):
+        attempt = self.counted.get(wname)
+        return next((m["recompute_window_id"] for m in self.cross if m["attempt_id"] == attempt), wname)
+
+    def _u4_fields(self, unit, erow, rp, top=False):
+        """Required U4 fields of one row, from the recompute's structural availability (not the engine's)."""
+        base = {"skipped", "status", "window_count"}
+        skipped = rget(rp, "status") == "skipped"
+        w = rget(rp, "W")
+        evaluated = not skipped and isinstance(w, int) and w >= 3
+        want = set(base) | ({"reason"} if skipped and not top else set()) | (
+            {"ci90_fraction", "df", "mean_fraction", "window_means"} if evaluated else set())
+        have = set(erow) & (want | {"ci90_fraction", "df", "mean_fraction", "window_means", "reason"}) \
+            if isinstance(erow, dict) else MISSING
+        self.complete(unit + ("fields",), have, want, unit=unit)
+        if evaluated:
+            ci = rget(erow, "ci90_fraction")
+            self.add("row_completeness", unit + ("ci90_fraction", "n"), len(ci) if isinstance(ci, list) else MISSING,
+                     2, unit=unit)
+            wm = rget(erow, "window_means")
+            self.add("row_completeness", unit + ("window_means", "n"), len(wm) if isinstance(wm, list) else MISSING,
+                     w, unit=unit)
 
     def _rec_order(self, per):
         """Recompute U4 windows in series order: W1 and each window's counted attempt (a zero-capture attempt
@@ -1325,6 +1474,16 @@ class Comparison:
 
     def u6(self):
         E, R = self.E, self.R
+        # Confirmation F2 / A16: one cell per pair (both required); its turn-position keys are the recompute's
+        # (derived from the recomputed per-turn residuals), in all three engine position maps.
+        u6 = rget(E.fill, "U6")
+        self.complete(("U6", "pairs"), list(u6) if isinstance(u6, dict) else MISSING, ["spam", "bank"])
+        for p in ("spam", "bank"):
+            rpos = rget(R, "acceptance", "U6", p, "per_position_print_only")
+            want = sorted(rpos) if isinstance(rpos, dict) else []
+            for k in ("means_j", "trajectory_counts", "evaluable"):
+                got = rget(E.fill, "U6", p, "turn_position_residual_means", k)
+                self.complete(("U6", p, k), list(got) if isinstance(got, dict) else MISSING, want)
         for p in sorted(E.get("fill", "U6") or {}):
             b = ("fill", "U6", p)
             r6 = rget(R, "acceptance", "U6", p)
@@ -1460,6 +1619,12 @@ class Comparison:
                      rget(rm, "battery_assist"), unit=unit)
             self.add("dc_benign", unit + ("battery_j",), E.get(*v, "battery_assist", "joules"),
                      rget(rm, "battery_power_integral_j"), unit=unit)
+            if ok == "available":
+                # Confirmation sweep: one DC turn row per recomputed turn of the member.
+                etr = rget(E.fill, "dc_secondary", i, "value", "turn_rows")
+                self.add("row_completeness", unit + ("dc_turn_rows", "n"),
+                         len(etr) if isinstance(etr, list) else MISSING,
+                         len(rget(self.rmember(m), "turns") or []), unit=unit)
             for j, _ in enumerate(E.get(*v, "turn_rows") or []):
                 self.add("dc_benign", unit + ("turn", j), E.get(*v, "turn_rows", j, "energy_j"),
                          rget(rm, "dc_turn_j", j), unit=unit)

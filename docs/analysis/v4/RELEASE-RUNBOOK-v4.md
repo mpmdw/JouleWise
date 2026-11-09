@@ -139,6 +139,36 @@ closes those holes as follows.
   - sealed and benign DC.
 
   A count out of range gives `hold_row_count`.
+- **Row completeness (release reviews F2 and the confirmation seat; lead rulings 2026-11-08).** The REFUSING
+  family `row_completeness` derives every expected row set independently of the engine's print (crosswalk,
+  registered constants, recompute structure); a missing or extra row refuses even when both sides omit it:
+
+  | Table | Expected set |
+  |---|---|
+  | `windows`, `ledger` | every C/T attempt of the crosswalk |
+  | `windows[*].eligibility` | the attempt's roster members |
+  | `windows[*].checks`, `acceptance` | every window; both models when the attempt/window captured anything |
+  | `windows[*].supplemental_sentinels` | the attempt's ordinals > 22 |
+  | `fits`, scored rows | every (window, pair, convention) and member the recompute scored |
+  | logged rows' `council_grid` / `H_grid` | the registered council grid / council U H* grid with "full" |
+  | `H_star` | EVERY C benign carrier and T sabotage row, on BOTH sides (null/undefined blocks included; R26 and its amendment) |
+  | T sabotage `known_H_first_k` | k = 0..n turns, on both sides |
+  | `turn_residuals_j`, DC `turn_rows` | the member's recomputed turn count |
+  | `U3.pairs` (both locations) | the recompute's replay pairs (A13) |
+  | `U4.per_window` | one row per window with a captured counted attempt (W1 included); W >= 3 rows need the statistic, df, both CI ends and W window means; skipped rows their reason (A14) |
+  | `U6` | both pairs; each pair's turn positions in `means_j`, `trajectory_counts`, `evaluable` (A16) |
+  | `benign_carriers` | both pairs; every curve and `n_by_h` dose = council U H* |
+  | `realized_counts`, `cache_diagnostics` | every C/T roster member of every attempt |
+  | `residual_by_hold_count` | one trajectory per scored row of the convention |
+  | `test` | conventions x pairs x conditions; T windows in `by_window`; the planned T assignments in `members` |
+  | `thresholds`, `threshold_freeze.thresholds` | conventions x pairs |
+  | `U5.designed_states` | the recompute's designed-state count |
+  | `W1.contrast.same_arm_pairs` | X-G, X-S, Y-G, Y-S; common absence when the roster is insufficient (F3) |
+
+  Fixed elsewhere: `dc_secondary` rows (R-C2 manifest `dc_sealed`/`dc_benign_status`, `hold_row_count`),
+  `supplemental_sentinels` and the other R-C2 manifest families (hold), the U1/U2/U3-bar/U5/thresholds field
+  sets (named fields, a missing one fails its row), fit coefficients (`BETA_ORDER`), R-C4 sensitivity lines
+  and R22-3 balance.
 - **R-C3, every family is classified.** Each family is `recomputed`, `integrity_only` or `exempt`.
   `comparison.json` carries a `coverage_map` from each normalized engine pointer to its family. A renderer must
   refuse to print an `integrity_only` or `exempt` leaf without a hand-check receipt bound to its pointer
@@ -244,7 +274,7 @@ and delta = 2 C (seat 2 F7). Both plans must agree. A forged declared bar (C2 `b
 passing U1-U3) must refuse on both sides (`test_forged_declared_bar_refuses_on_both_sides`).
 
 ```bash
-for m in test_compare_v4 test_release_v4 test_rehearsal_v4 test_review_sol1 test_review_sol2; do
+for m in test_compare_v4 test_release_v4 test_rehearsal_v4 test_review_sol1 test_review_sol2 test_confirm_sol; do
   python3.13 -B -m unittest tests.v4_release.$m; done
 ```
 
@@ -262,6 +292,7 @@ for m in test_compare_v4 test_release_v4 test_rehearsal_v4 test_review_sol1 test
   | `test_rehearsal_v4` | 11 | 2 min (one engine re-run for its code mutation, one forged-bar prefix run) |
   | `test_review_sol1` | 12 | 18 s |
   | `test_review_sol2` | 14 | 20 s |
+  | `test_confirm_sol` | 6 | 55 s (inverted confirmation-seat witnesses) |
 
 **Release runtime on the synthetic series** (16 engine attempts, 284 captured members). These are
 `release_v4.py` wall times, stages (a)-(c), 4 workers, 2026-11-08 (r23j; two sessions on the Air):

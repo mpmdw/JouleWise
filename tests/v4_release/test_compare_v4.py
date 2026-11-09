@@ -165,7 +165,9 @@ class ComparatorTests(unittest.TestCase):
         self.assertEqual(self.fam(pub, "u6"), "hold_empty")
         self.assertEqual(self.fam(pub, "u6_values"), "hold_empty")
         self.assertRegex(pub["summary"], r"[1-9]\d* unexplained-empty$")
-        self.assertEqual(code, 1)
+        # Lead ruling (confirmation seat): a missing U6 cell also REFUSES through row_completeness, and a
+        # refusal outranks the R-C1 hold.
+        self.assertEqual((code, self.fam(pub, "row_completeness")), (2, "refused"))
 
     def test_expected_empty_needs_its_predicate(self):            # R-C1
         fill, cross = copy.deepcopy(self.fill), copy.deepcopy(self.cross)
