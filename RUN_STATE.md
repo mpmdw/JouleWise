@@ -1042,6 +1042,29 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+247. **Laptop lead (interactive session 1544c617), 2026-11-08 20:34 PST: rulings from the exporter's real-producer e2e (blind; synthetic): D1, D2, D5, D6, D7, the U2(a) G0 rule and R27.**
+- **D1 (U1(c) sidecar coverage).** The registered definition is production `thermal.Coverage` (thermal.py:195, the A21 precedent): nominal ticks on the sampling grid, 100 ms tolerance, the edge-cell rule. The recompute's whole-second cells failed every real non-integer G0 span; the engine already used production Coverage.
+- **D6 (A20, turn-owned DC-in).** A piecewise-constant SAMPLE-AND-HOLD: each KM003C sample holds over [t_i, t_{i+1}). A hold longer than 300 ms is uncovered. Energy is Σ power × overlap over owned segments (the A2(3) principle). This replaces the per-segment `km003c_parse.integrate`, which made sub-poll segments (for example a 39.6 ms prefill) unavailable.
+  - The whole-member DC-in integral stays production `integrate`, but prints null with `meter.member_uncovered_or_gap` when the member span is partly outside the stream or has drops. No extrapolated DC number is printed.
+- **D2, plus the U2(a) G0 rule.**
+  - U2(a) is `not_applicable` when the registered plan has no G0 for that model (for example ungated C anchors).
+  - It is computed per window over the PLANNED G0s present.
+  - A captured member whose planned G0 is missing is excluded at member level (`g0_missing` or an existing class).
+  - It is `inconclusive` only when no planned G0 is present.
+- **D5.** Not-captured members carry exactly `not_captured`.
+- **D7.** Incremental per-window (prefix) analysis is a supported mode:
+  - rows for absent windows are absent;
+  - T `by_window` lists only the windows present;
+  - the anchor_sigma_w empty state is identical on both sides;
+  - U4's W1 row is the R1/W1 reference.
+- **R27 (pre-completion print semantics).** Before calibration_complete, every threshold-independent computable quantity prints, and every threshold-dependent leaf is null under ONE status word, `withheld_until_calibration_complete` (A25):
+  - H* blocks are present but null;
+  - thresholds: rank, bounds and threshold are null;
+  - carrier curve: n_by_h and full_cell.n print, while fractions, crossings and bootstrap are null;
+  - U6 `imprecise` is null when there is no interval.
+- **Also:** the seed and config identity checks apply to EVERY captured member, anchors included (A29 amended). The exporter refuses `kit_not_normalized`.
+- **Engine:** `engine-r23m` @ `5e1f564a2` (Sol; D2/D5/D6/D7). The Opus delta review is ADMIT-WITH-FIXES, and the review findings plus R27 are being added in an Opus patch. Calibration identity pins are unchanged.
+
 246. **Laptop lead (interactive session 1544c617), 2026-11-08 19:59 PST: W1 line software-complete; real-custody gaps found by the exporter build and fixed in both builds.**
 - **W1 line `align/2026-11-08-v4-r11` @ `52f36f1d8`** (manifest 21313cc2… unchanged). It integrates:
   - the smoke kit;
