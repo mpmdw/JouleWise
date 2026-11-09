@@ -35,7 +35,7 @@ def fixture(root, samples, *, windows=11):
     for wi, w in enumerate(payload['windows']):
         records, slots = [], []
         members = w.pop('members')
-        plan, config_files = planned_config_files(members)   # R23l plan-bound configs
+        plan, config_files = planned_config_files(members, w['window'])   # R23l plan-bound configs
         for m in members:
             slot, thermal = m['slot'], m['thermal']
             ordinal = slot['ordinal']

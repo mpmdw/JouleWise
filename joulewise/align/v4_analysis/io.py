@@ -107,13 +107,53 @@ def bundle_config_bytes(mapping):
             + '\n').encode('utf-8')
 
 
+W1_PLAN = dict(schema_version='joulewise.align_v4.v1', plan_id='align-v4')
+SERIES_PLAN_SCHEMA = 'joulewise.align_v4.series_window.v1'
+
+
+def parse_config_bytes(raw):
+    """A digest-verified config's mapping, or None when it is not a JSON object."""
+    try:
+        value = strict_json(raw)
+    except (ValueError, UnicodeDecodeError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def _plan_owner_check(plan, window):
+    """R23l-review P1: the plan must belong to THIS window (never a sibling's).
+
+    C/T plans are align_v4_series.build_files output (series_window.v1) with
+    plan_id 'align-v4-<window>', window_id and the frozen R24 manifest digest;
+    the W1 kit plan is joulewise.align_v4.v1 with plan_id 'align-v4'. A plan
+    attempt_id and a window-record plan pin (``plan_sha256``) must match when present.
+    """
+    from .engine import R24_SERIES_MANIFEST_SHA256
+    name = window['window']
+    if name == 'W1':
+        expected = dict(W1_PLAN)
+    else:
+        expected = dict(schema_version=SERIES_PLAN_SCHEMA, plan_id='align-v4-'+name.lower(), window_id=name,
+                        series_manifest_sha256=R24_SERIES_MANIFEST_SHA256)
+    if any(plan.get(k) != v for k, v in expected.items()):
+        raise ValueError('config_digest_not_planned:wrong_window: plan does not belong to ' + name)
+    if 'attempt_id' in plan and plan['attempt_id'] != window.get('attempt_id'):
+        raise ValueError('config_digest_not_planned:wrong_window: plan attempt differs for ' + name)
+    pin = window.get('plan_sha256')
+    if pin is not None and pin != window['plan_source']['sha256']:
+        raise ValueError('config_digest_not_planned:wrong_window: plan pin differs for ' + name)
+
+
 def _bind_planned_configs(root, window, rows, sources, census):
     """R23l custody loop: bundle config.json <- planned kit config <- committed plan.
 
-    The window's committed collection plan (``plan_source``) names each member's
-    kit config digest (align_v4_series.py:302, ``config_sha256``). The member's
-    ``planned_config`` must be that file, and its bundle config.json must be
-    exactly the bytes production writes for it. Anything else refuses.
+    The window's committed collection plan (``plan_source``) must belong to
+    this window. Its row for each member, looked up by (window, ordinal), names
+    the kit config digest (align_v4_series.py:302, ``config_sha256``) and the
+    local run_id. The member's ``planned_config`` must be that file (custody;
+    refuses), and its bundle config.json must be exactly the bytes production
+    writes for it (refuses). A digest-verified kit that is not a valid
+    BenchmarkConfig cannot be normalized: that member alone is ``config_invalid``.
     """
     captured = [m for m in window['members'] if m['captured']]
     if not captured:
@@ -124,27 +164,39 @@ def _bind_planned_configs(root, window, rows, sources, census):
     identity = (ref['path'], ref['sha256'])
     if identity not in sources:
         sources[identity] = read_source(root, ref)
+    plan = sources[identity]
+    if not isinstance(plan, dict):
+        raise ValueError('config_digest_not_planned:wrong_window: plan is not an object')
+    _plan_owner_check(plan, window)
     if not any(r['path'] == ref['path'] and r['sha256'] == ref['sha256'] for r in census):
         census.append(dict(path=ref['path'], sha256=ref['sha256']))
     planned = {}
-    for row in sources[identity].get('members', []):
-        if row.get('run_id') in planned:
-            raise ValueError('config_digest_not_planned: duplicate plan member ' + str(row.get('run_id')))
-        planned[row.get('run_id')] = row
+    for row in plan.get('members', []):
+        if row.get('ordinal') in planned:
+            raise ValueError('config_digest_not_planned: duplicate plan ordinal ' + str(row.get('ordinal')))
+        planned[row.get('ordinal')] = row
     for member in captured:
         run = member['slot']['run_id']
         local = run.partition(':')[2] or run
-        plan_row = planned.get(local)
+        plan_row = planned.get(member['slot']['ordinal'])
         kit_ref = (rows.get(run) or {}).get('planned_config')
-        if (plan_row is None or plan_row.get('ordinal') != member['slot']['ordinal']
+        if (plan_row is None or plan_row.get('run_id') != local
                 or not isinstance(kit_ref, dict) or kit_ref.get('sha256') != plan_row.get('config_sha256')):
             raise ValueError('config_digest_not_planned: ' + run)
-        kit = read_blob(root, kit_ref)
-        if hashlib.sha256(bundle_config_bytes(strict_json(kit))).hexdigest() != member['config_source']['sha256']:
-            raise ValueError('config_digest_not_planned: bundle config is not the planned config for ' + run)
+        kit = read_blob(root, kit_ref)              # digest-verified against the plan first
         kit_entry = dict(path=kit_ref['path'], sha256=kit_ref['sha256'])
         if kit_entry not in census:
             census.append(kit_entry)
+        mapping = parse_config_bytes(kit)
+        try:
+            expected = bundle_config_bytes(mapping) if mapping is not None else None
+        except (ValueError, TypeError, KeyError, AttributeError):   # SchemaError is a ValueError
+            expected = None
+        if expected is None:
+            member['config'], member['config_invalid'] = None, True
+            continue
+        if hashlib.sha256(expected).hexdigest() != member['config_source']['sha256']:
+            raise ValueError('config_digest_not_planned: bundle config is not the planned config for ' + run)
 
 
 def load(path, *, calibration_only=False, through_window=None, cache_dir=None, workers=1,
@@ -245,10 +297,11 @@ def load(path, *, calibration_only=False, through_window=None, cache_dir=None, w
             config = {}
             if captured:
                 ref = config_reference(native)
-                identity = (ref['path'], ref['sha256'])
+                identity = ('config', ref['path'], ref['sha256'])
                 if identity not in sources:
-                    sources[identity] = read_source(root, ref)
-                config = dict(config=sources[identity], config_source=dict(path=ref['path'], sha256=ref['sha256']))
+                    sources[identity] = parse_config_bytes(read_blob(root, ref))
+                config = dict(config=sources[identity], config_source=dict(path=ref['path'], sha256=ref['sha256']),
+                              **({'config_invalid': True} if sources[identity] is None else {}))
                 if config['config_source'] not in census:
                     census.append(config['config_source'])
             window.setdefault('members', []).append(dict(slot=slot, thermal=thermals[run], **config,

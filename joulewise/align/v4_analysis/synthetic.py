@@ -121,15 +121,21 @@ def release_manifest(windows=()):
     return dict(windows=out)
 
 
-def planned_config_files(members):
+def planned_config_files(members, window):
     """Synthetic committed plan plus per-member kit/bundle config bytes (R23l).
 
-    Returns ``(plan, files)``. ``plan`` mirrors the collection plan's member rows
-    (run_id, ordinal, config_sha256 of the kit config). ``files`` maps each
-    captured slot run_id to ``(kit_bytes, bundle_bytes)``, where bundle_bytes are
-    exactly what RunBundleWriter writes for that kit config.
+    Returns ``(plan, files)``. ``plan`` carries the producer's identity header
+    for ``window``: series_window.v1 with plan_id/window_id/frozen R24 manifest
+    digest for C/T, or the W1 kit plan id. Its member rows hold run_id, ordinal
+    and the kit config's config_sha256. ``files`` maps each captured slot run_id
+    to ``(kit_bytes, bundle_bytes)``, where bundle_bytes are exactly what
+    RunBundleWriter writes for that kit config.
     """
-    from .io import bundle_config_bytes
+    from .io import bundle_config_bytes, W1_PLAN, SERIES_PLAN_SCHEMA
+    from .engine import R24_SERIES_MANIFEST_SHA256
+    header = (dict(W1_PLAN) if window == 'W1' else
+              dict(schema_version=SERIES_PLAN_SCHEMA, plan_id='align-v4-'+window.lower(), window_id=window,
+                   series_manifest_sha256=R24_SERIES_MANIFEST_SHA256))
     rows, files = [], {}
     for m in members:
         if 'config' not in m:
@@ -139,4 +145,4 @@ def planned_config_files(members):
         rows.append(dict(run_id=run.partition(':')[2] or run, ordinal=m['slot']['ordinal'],
                          config_sha256=digest(kit)))
         files[run] = (kit, bundle_config_bytes(m['config']))
-    return dict(members=rows), files
+    return dict(header, members=rows), files

@@ -34,7 +34,7 @@ class RawTests(unittest.TestCase):
             sources = [dict(run_id=s['run_id'], captured=False) for s in slots]
             # R23l: bundle config.json bytes, the planned kit config and the committed plan.
             from joulewise.align.v4_analysis.synthetic import planned_config_files
-            plan, files = planned_config_files([dict(slot=slots[0], config=member_config(slots[0]))])
+            plan, files = planned_config_files([dict(slot=slots[0], config=member_config(slots[0]))], 'C1')
             sources[0].update(captured=True, episode=write('episode.json', to_json(ep).encode()),
                 config=write('config.json', files[slots[0]['run_id']][1]),
                 planned_config=write('kit.json', files[slots[0]['run_id']][0]),

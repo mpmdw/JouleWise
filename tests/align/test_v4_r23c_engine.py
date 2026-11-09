@@ -49,7 +49,7 @@ def write_export(root, payload):
         members = w.pop('members')
         # R23l: committed plan -> planned kit config -> bundle config.json bytes.
         from joulewise.align.v4_analysis.synthetic import planned_config_files
-        plan, files = planned_config_files([m for m in members if m['captured']])
+        plan, files = planned_config_files([m for m in members if m['captured']], w['window'])
         stem = w.get('attempt_id', w['window']).replace('#', '_')
         w['plan_source'] = write(stem+'-plan.json', plan)
         def blob(name, data):

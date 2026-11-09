@@ -36,6 +36,26 @@ must be byte-equal to `io.bundle_config_bytes(kit)`, which is what
 `EpisodeSpec.from_text`, or that has no sampler, excludes only that member as
 `config_invalid`. `config_identity_differs` and `config_invalid` are new
 exclusion classes. Witnesses: `tests.align.test_v4_r23l_engine`.
+R23l-review (Sol HOLD; lead rulings):
+(P1) The plan must belong to its window.
+- A C/T `plan_source` must be the `align_v4_series.build_files` plan:
+  `schema_version` `joulewise.align_v4.series_window.v1`,
+  `plan_id` `align-v4-<window>`, `window_id` `<window>`, and
+  `series_manifest_sha256` equal to the frozen R24 digest `21313cc2…`.
+- W1's must be the W1 kit plan: `joulewise.align_v4.v1`, `plan_id`
+  `align-v4`.
+- A plan `attempt_id` and a window-record `plan_sha256` pin must match when
+  present.
+- Rows are found by ordinal, and must name the member's local run_id.
+- Otherwise it refuses with `config_digest_not_planned:wrong_window`.
+(P2) Kit bytes are digest-checked against the plan first.
+- A planned kit, or a bundle config, that is not a JSON object, or a kit that
+  `BenchmarkConfig` cannot normalize, excludes only that member as
+  `config_invalid`.
+- An unplanned digest, or a valid kit whose bundle bytes differ, still refuses
+  as custody.
+Witnesses: `tests.align.test_v4_r23l_sol_review` (both Sol witnesses green,
+markers removed) and `tests.align.test_v4_r23l_engine` `PlanOwnershipAndInvalidConfigTests`.
 
 R23k applies the lead's two producer-contract rulings on `50f4958b6`.
 `Episode.seed` is the seed **index**, as written by production

@@ -249,6 +249,8 @@ def _config_identity_reasons(member, summary):
     from joulewise.align.apple.workload import EpisodeSpec
     if 'config' not in member:
         raise ValueError('captured member lacks bundle config')
+    if member.get('config_invalid') or member['config'] is None:
+        return ['config_invalid']               # digest-verified but unparseable or unnormalizable
     slot = member['slot']
     try:
         config = BenchmarkConfig.from_mapping(member['config'])

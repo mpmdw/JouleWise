@@ -181,5 +181,113 @@ class PlannedConfigCustodyTests(unittest.TestCase):
                 load(path, through_window='C1', document=document)
 
 
+
+class PlanOwnershipAndInvalidConfigTests(unittest.TestCase):
+    """R23l-review rulings: the plan belongs to its window; invalid configs exclude one member."""
+
+    def export(self, root):
+        path = write_export(root, native_payload())
+        return path, strict_json(path.read_bytes())
+
+    def replace(self, root, ref, value=None, raw=None):
+        data = raw if raw is not None else canonical(value)
+        (root/ref['path']).write_bytes(data)
+        ref['sha256'] = digest(data)
+
+    def edit_plan(self, root, document, edit, index=1):
+        ref = document['windows'][index]['plan_source']
+        plan = strict_json((root/ref['path']).read_bytes())
+        edit(plan)
+        self.replace(root, ref, plan)
+
+    def test_plan_identity_must_be_this_windows(self):
+        cases = {
+            'window_id': lambda plan: plan.update(window_id='C2'),
+            'plan_id': lambda plan: plan.update(plan_id='align-v4-c2'),
+            'schema': lambda plan: plan.update(schema_version='joulewise.align_v4.v1'),
+            'series digest': lambda plan: plan.update(series_manifest_sha256='0'*64),
+            'attempt': lambda plan: plan.update(attempt_id='C1#9'),
+        }
+        for label, edit in cases.items():
+            with self.subTest(field=label), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                path, document = self.export(root)
+                self.edit_plan(root, document, edit)
+                with self.assertRaisesRegex(ValueError, 'config_digest_not_planned:wrong_window'):
+                    load(path, through_window='C1', document=document)
+
+    def test_record_plan_pin_must_match_when_present(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path, document = self.export(root)
+            pinned = copy.deepcopy(document)
+            pinned['windows'][1]['plan_sha256'] = pinned['windows'][1]['plan_source']['sha256']
+            load(path, through_window='C1', document=pinned)          # matching pin loads
+            pinned['windows'][1]['plan_sha256'] = '0'*64
+            with self.assertRaisesRegex(ValueError, 'config_digest_not_planned:wrong_window: plan pin'):
+                load(path, through_window='C1', document=pinned)
+
+    def test_w1_plan_has_its_own_producer_identity(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path, document = self.export(root)
+            load(path, through_window='W1')
+            self.edit_plan(root, document, lambda plan: plan.update(plan_id='align-v4-c1'), index=0)
+            with self.assertRaisesRegex(ValueError, 'wrong_window'):
+                load(path, through_window='W1', document=document)
+
+    def test_rows_are_found_by_ordinal_and_must_name_the_member(self):
+        def swap_rows(plan):                      # same digests, ordinals 7 and 8 exchanged
+            a, b = plan['members'][6], plan['members'][7]
+            a['ordinal'], b['ordinal'] = b['ordinal'], a['ordinal']
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path, document = self.export(root)
+            self.edit_plan(root, document, swap_rows)
+            with self.assertRaisesRegex(ValueError, 'config_digest_not_planned'):
+                load(path, through_window='C1', document=document)
+
+    def desk_member(self, root, document, ordinal=7):
+        window = document['windows'][1]
+        desk = strict_json((root/window['residual_source']['path']).read_bytes())
+        return window, desk, desk['members'][ordinal-1]
+
+    def write_desk(self, root, window, desk):
+        self.replace(root, window['residual_source'], desk)
+        window['thermal_source'] = copy.deepcopy(window['residual_source'])
+
+    def test_planned_but_unparseable_config_excludes_only_that_member(self):
+        for label, raw in (('not JSON', b'{not json'), ('JSON array', b'[1, 2]')):
+            with self.subTest(case=label), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                path, document = self.export(root)
+                window, desk, member = self.desk_member(root, document)
+                for key in ('config', 'planned_config'):
+                    self.replace(root, member[key], raw=raw)
+                self.edit_plan(root, document,
+                               lambda plan: plan['members'][6].update(config_sha256=member['planned_config']['sha256']))
+                self.write_desk(root, window, desk)
+                fill, _ = analyze(load(path, through_window='C1', document=document), workers=1)
+                self.assertEqual(fill['windows'][0]['eligibility'][6]['reasons'], ['config_invalid'])
+                self.assertTrue(fill['windows'][0]['eligibility'][7]['eligible'])
+
+    def test_unplanned_invalid_bytes_still_refuse_as_custody(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path, document = self.export(root)
+            window, desk, member = self.desk_member(root, document)
+            self.replace(root, member['planned_config'], raw=b'{not json')   # plan not updated
+            self.write_desk(root, window, desk)
+            with self.assertRaisesRegex(ValueError, 'config_digest_not_planned'):
+                load(path, through_window='C1', document=document)
+        with tempfile.TemporaryDirectory() as tmp:                           # valid kit, garbage bundle
+            root = Path(tmp)
+            path, document = self.export(root)
+            window, desk, member = self.desk_member(root, document)
+            self.replace(root, member['config'], raw=b'{not json')
+            self.write_desk(root, window, desk)
+            with self.assertRaisesRegex(ValueError, 'bundle config is not the planned config'):
+                load(path, through_window='C1', document=document)
+
 if __name__ == '__main__':
     unittest.main()

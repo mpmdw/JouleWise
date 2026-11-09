@@ -41,7 +41,7 @@ def write_fixture(root, *, full_ids=True):
         records = []
         slots = []
         members = w.pop('members')
-        plan, files = planned_config_files(members)   # R23l plan-bound configs
+        plan, files = planned_config_files(members, w['window'])   # R23l plan-bound configs
         w['plan_source'] = write(w['window']+'-plan.json', plan)
         def blob(filename, data):
             (root/filename).write_bytes(data)

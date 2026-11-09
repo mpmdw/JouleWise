@@ -293,9 +293,9 @@ class CLITests(unittest.TestCase):
                 with contextlib.redirect_stdout(io.StringIO()) as output:
                     rc = main(['--input', str(path), '--output', str(root/'out')])
             self.assertEqual(rc, 2)
-            # R23k/R23l: manifest + 8 C desks + 8 terminals + 176 member configs + 8 plans
-            # (kit configs are byte reads); never T.
-            self.assertEqual(reads.call_count, 201)
+            # R23l-review: JSON sources only (manifest + 8 C desks + 8 terminals + 8 plans);
+            # member bundle/kit configs are digest-checked byte reads. Never T.
+            self.assertEqual(reads.call_count, 25)
             self.assertEqual(json.loads(output.getvalue())['codes'], ['input_refused'])
 
     def test_symlink_and_external_user_paths_refuse_before_read(self):
