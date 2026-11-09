@@ -1812,7 +1812,7 @@ def calibration_stop(windows, eligibility, pool_barred, resets=()):
 # ---------------------------------------------------------------- stage 5: U1-U6
 
 EXCLUDES_FROM_U = {"X1", "X2", "X3", "X4"}
-REPLAY_INELIGIBLE = {"X1", "X2", "X3", "X4", "X7", "F1", "B", "incomplete", "custody_invalid",
+REPLAY_INELIGIBLE = {"X1", "X2", "X3", "X4", "X7", "F1", "B", "incomplete", "custody_invalid", "g0_missing",
                      "energy_unavailable", "not_captured"}
 
 
