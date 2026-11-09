@@ -303,7 +303,8 @@ class ColdReviewProbeTests(unittest.TestCase):
         with mock.patch.object(restore.shutil, 'disk_usage', return_value=SimpleNamespace(free=0)):
             with self.assertRaisesRegex(restore.RestoreRefused, 'restore_refused: insufficient scratch space'):
                 harvest.assess_members([task], workers=1)
-        fake = SimpleNamespace(_record_error=mock.Mock())
+        # R17 harvest-off: step() reports to seams.stage_observer (None here: no observer is wired).
+        fake = SimpleNamespace(_record_error=mock.Mock(), seams=SimpleNamespace(stage_observer=None))
         with self.assertRaisesRegex(restore.RestoreRefused, 'restore_refused: fixture storage'):
             harvest._Harvest.step(fake, 'members', lambda: (_ for _ in ()).throw(restore.RestoreRefused('fixture storage')))
         fake._record_error.assert_not_called()
