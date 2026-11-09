@@ -48,9 +48,22 @@ quantity prints. Every threshold-dependent leaf is null under one status word,
   is null for the early returns: split missing, `insufficient trajectories`
   (fewer than 2), no residual df, and an empty half.
 
+R27 follow-up (Sol r23n HOLD):
+- **Decision leaves.** Before completion every decision leaf is null, and the
+  row carries `threshold_status: withheld_until_calibration_complete`. That
+  covers each score row's `alarm`, and every dose row's `above_threshold` and
+  `detection` on `known_H_first_k`, `H_grid` and `council_grid`.
+- **Held T summaries.** These print `assigned` and `members` only. `n`,
+  `alarms`, `fpr_upper_95`, `rate`, `missing` and the `by_window` n and alarms
+  counts are null, under `status: withheld_until_calibration_complete`.
+- **Guard.** `tests.align.test_v4_r23n_engine` holds a registry of
+  threshold-derived leaf paths. A threshold-perturbation test checks that the
+  registry covers every leaf a threshold change moves. A pre-completion sweep
+  (a W1+C1 prefix and a held-T series) requires every registered leaf to be
+  null, and fails if any registry entry matches nothing.
 After `calibration_complete` nothing changes: the complete synthetic series
 fill, minus the scorer-bound `threshold_freeze`, is byte-identical to
-`5e1f564a2`. Witnesses: `tests.align.test_v4_r23n_engine`.
+`5e1f564a2` (4- and 12-turn series). Witnesses: `tests.align.test_v4_r23n_engine`.
 
 R23m applies the lead's four real-producer reconciliation rulings on
 `72410b0b4` (2026-11-08). Qualification here remains synthetic only:

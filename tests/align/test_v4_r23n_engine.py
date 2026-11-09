@@ -178,5 +178,103 @@ class PreCompletionPrintTests(unittest.TestCase):
                             for f in fill['fits'] if f['convention'] == 'counts_logged'
                             for r in f['scores'] if 'H_star' in r))
 
+
+# R27 registry: every fill leaf whose value depends on a detection threshold.
+THRESHOLD_DERIVED = tuple(__import__('re').compile(p) for p in (
+    # threshold keys are '<convention>/<pair>', two pointer segments
+    r'^/(thresholds|threshold_freeze/thresholds)/[^/]+/[^/]+/(rank|threshold|marginal_fpr_bound|'
+    r'iid_continuous_fpr_upper90|generic_rank_025|generic_rank_05)$',
+    r'^/(thresholds|threshold_freeze/thresholds)/[^/]+/[^/]+/rank_(38|05)_sensitivity/(rank|threshold)$',
+    r'^/fits/\d+/scores/\d+/alarm$',
+    r'^/fits/\d+/scores/\d+/(known_H_first_k|H_grid|council_grid)/\d+/(above_threshold|detection)$',
+    r'^/fits/\d+/scores/\d+/H_star/(h_star|bounded_above|undefined_missing_grid_doses)$',
+    r'^/benign_carriers/pairs/[^/]+/(H50|H90|all_carrier_prefix|monotone)$',
+    r'^/benign_carriers/pairs/[^/]+/(level_reached_at_h0|window_cluster_bootstrap)(/.*)?$',
+    r'^/benign_carriers/pairs/[^/]+/curve/\d+/1$',
+    r'^/benign_carriers/pairs/[^/]+/full_cell/fraction$',
+    r'^/test/[^/]+/[^/]+/[^/]+/(n|alarms|fpr_upper_95|rate|missing)$',
+    r'^/test/[^/]+/[^/]+/[^/]+/by_window/[^/]+/(n|alarms)$',
+    r'^/test/[^/]+/[^/]+/[^/]+/members/\d+/alarm$',
+))
+# Context leaves that legitimately move with a threshold change: the scorer
+# freeze binding and the leaf inventory itself, which lists the pointers.
+CONTEXT = (r'^/threshold_freeze/', r'^/leaf_inventory/', r'^/benign_carriers/pairs/[^/]+/bootstrap_undefined_replicates/')
+
+
+def leaves(value, pointer=''):
+    if isinstance(value, dict):
+        for k, v in value.items():
+            yield from leaves(v, pointer+'/'+str(k))
+    elif isinstance(value, (list, tuple)):
+        for i, v in enumerate(value):
+            yield from leaves(v, pointer+'/'+str(i))
+    else:
+        yield pointer, value
+
+
+def registered(pointer):
+    return any(p.match(pointer) for p in THRESHOLD_DERIVED)
+
+
+class ThresholdDerivedLeafSweepTests(unittest.TestCase):
+    """Discover threshold-derived leaves by perturbing the threshold, then require R27 nulls."""
+
+    def test_registry_covers_every_leaf_a_threshold_change_moves(self):
+        import re
+        from unittest.mock import patch
+        payload = series(turns=4)
+        base = dict(leaves(analyze(copy.deepcopy(payload))[0]))
+        original = e.threshold
+        def lowered(scores):                       # every score now exceeds the threshold
+            out = original(scores)
+            if out['threshold'] is not None:
+                out['threshold'] = min(scores) - 1.
+            return out
+        with patch.object(e, 'threshold', side_effect=lowered):
+            moved = dict(leaves(analyze(copy.deepcopy(payload))[0]))
+        changed = {k for k in base.keys() | moved.keys() if base.get(k, KeyError) != moved.get(k, KeyError)}
+        self.assertTrue(changed)
+        unregistered = sorted(k for k in changed if not registered(k)
+                              and not any(re.match(c, k) for c in CONTEXT))
+        self.assertEqual(unregistered, [])
+
+    def pre_completion_fills(self):
+        from tests.align.test_v4_r23_engine import w1_window
+        prefix = series(turns=4)
+        prefix['windows'] = prefix['windows'][:1]
+        prefix['windows'].insert(0, w1_window(prefix))
+        held = series(turns=4)
+        held['windows'][7]['status'] = 'provisional'      # T present but held (Sol's case)
+        fills = []
+        for p in (prefix, held):
+            fill, _ = analyze(p)
+            self.assertNotEqual(fill['calibration']['decision'], 'calibration_complete')
+            fills.append(fill)
+        return fills
+
+    def test_every_threshold_derived_leaf_is_null_before_completion(self):
+        hits = {p.pattern: 0 for p in THRESHOLD_DERIVED}
+        for fill in self.pre_completion_fills():
+            for pointer, value in leaves(fill):
+                for p in THRESHOLD_DERIVED:
+                    if p.match(pointer):
+                        hits[p.pattern] += 1
+                        self.assertIsNone(value, pointer)
+        self.assertEqual([p for p, n in hits.items() if n == 0], [])   # no vacuous registry entry
+
+    def test_decision_rows_carry_the_withheld_status_word(self):
+        fill = self.pre_completion_fills()[0]
+        for f in fill['fits']:
+            for r in f['scores']:
+                self.assertEqual(r['threshold_status'], 'withheld_until_calibration_complete')
+                for dose in [*r['known_H_first_k'], *r['H_grid'], *r['council_grid']]:
+                    self.assertEqual(dose['threshold_status'], 'withheld_until_calibration_complete')
+                    self.assertIsNone(dose['detection'])
+        held = self.pre_completion_fills()[1]
+        summary = held['test']['counts_logged']['spam']['benign']
+        self.assertEqual(summary['status'], 'withheld_until_calibration_complete')
+        self.assertIsNone(summary['alarms'])
+        self.assertEqual(summary['assigned'], len(summary['members']))
+
 if __name__ == '__main__':
     unittest.main()

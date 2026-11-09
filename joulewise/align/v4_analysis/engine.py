@@ -823,11 +823,16 @@ def analyze(payload, *, workers=1, frozen_thresholds=None):
     carrier_full = defaultdict(list)
     for f in fits:
         cutoff = cutoffs[f['convention']+'/'+KEYS[f['pair']]]['threshold']
+        withheld = cal['decision'] != 'calibration_complete'   # R27: every decision leaf null
         for row in f['scores']:
             row['alarm'] = row['score'] > cutoff if cutoff is not None and _finite(row['score']) else None
+            if withheld:
+                row['alarm'], row['threshold_status'] = None, WITHHELD
             for dose in [*row['known_H_first_k'], *row['H_grid']]:
                 dose['above_threshold'] = (dose['score'] > cutoff if cutoff is not None and _finite(dose['score']) else None)
                 dose['detection'] = dose['H'] is not None and dose['H'] > 0 and dose['above_threshold'] is True
+                if withheld:
+                    dose.update(above_threshold=None, detection=None, threshold_status=WITHHELD)
             if f['convention'] == 'counts_logged':
                 is_carrier = f['window'].startswith('C') and row['condition'] == 'benign'
                 if is_carrier or (f['window'].startswith('T') and row['condition'] == 'sabotage'):
@@ -874,7 +879,12 @@ def analyze(payload, *, workers=1, frozen_thresholds=None):
                                 reasons=m['reasons'] or m['classes'] or ['window_pool_ineligible']))
                             present.add((w['window'], s['run_id']))
                 present_t = [w for w in TEST_ORDER if any(x['window'] == w for x in windows)]  # D7
-                test[convention][KEYS[pair]][condition] = {**_test_summary(rows, present_t), 'members': rows,
+                summary = _test_summary(rows, present_t)
+                if cal['decision'] != 'calibration_complete':
+                    # R27: held T summaries print assignments, never alarm-derived counts.
+                    summary.update(status=WITHHELD, n=None, alarms=None, fpr_upper_95=None, rate=None,
+                                   missing=None, by_window={w: dict(n=None, alarms=None) for w in present_t})
+                test[convention][KEYS[pair]][condition] = {**summary, 'members': rows,
                     'rate_basis': 'eligible finite scores; missing assignments retained'}
             records = [dict(pair=pair, start_ns=r['start_ns'],
                 trajectory=f['window']+'/'+r['run_id'], residual_j=r['turn_residuals_j'])
