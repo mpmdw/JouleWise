@@ -95,6 +95,8 @@ def load(path, *, calibration_only=False, through_window=None, cache_dir=None, w
     One in-invocation byte read per (relative path,digest), with every reference
     rechecked. This is read deduplication, not a persisted decision/refusal cache.
     """
+    from . import calibration_identity
+    calibration_identity.check()  # live predicate identity, before any source or calibration use
     path = input_path(path)
     payload = deepcopy(document) if document is not None else strict_json(path.read_bytes())
     if (any(k in payload for k in ('selection_desk', 'selection_source'))

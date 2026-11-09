@@ -502,6 +502,8 @@ def analyze(payload, *, workers=1, frozen_thresholds=None):
     visible. This engine cannot certify the still-unruled scorer or claim test.
     """
     from joulewise.align.apple.reduce_sol import worker_count
+    from . import calibration_identity
+    calibration_identity.check()  # live predicate identity, before any calibration use
     workers = worker_count(workers)
     if payload.get('schema') != SCHEMA:
         raise ValueError('analysis input schema differs')

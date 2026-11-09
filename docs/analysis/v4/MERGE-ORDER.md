@@ -50,4 +50,33 @@ builtin.
 
 If r11 changes anything reached, the engine must re-port it before landing.
 
+## Runtime identity (lead ruling on r23j2-sol P2)
+
+A static audit cannot see import-time side effects in other modules, importlib
+monkeypatches or star imports. So `joulewise.align.v4_analysis.calibration_identity.check()`
+runs at the start of every `analyze()` and `io.load()`, before any calibration
+use.
+
+- **Code.** It hashes the LIVE objects. Each pinned function's code is hashed
+  recursively (bytecode, names, locals, constants), together with its
+  defaults. It must be a plain function bound to its own module namespace.
+- **Values.** It also hashes the current value of all 15 + 2 reached globals.
+- **Identity.** The engine's `calibration_stop`, `slot_of` and
+  `STRUCTURAL_BARS` must be the very objects in `v4_cadence`, and that module
+  and the kit must be the ones in `sys.modules`.
+- **Pins.** They were computed from the r11 `bbfccb70a` sources under CPython
+  3.13. A different interpreter refuses.
+- **Outcome.** Any difference refuses with `calibration_identity_drift`. Nothing
+  is cached.
+
+**Cost.** Hashing takes about 0.6 ms per check. The first check imports
+`scripts.align_v4_kit` (about 240 ms). `calibration_stop` imports that module
+on every call anyway, through `_validated_rulings`, so the check only moves the
+import earlier.
+
+**Witnesses.** `tests/align/test_v4_calibration_identity.py` runs each drift in
+its own subprocess. It covers Sol's three probes, a separate module patching
+`CAL_TARGET_PER_PAIR`, and nine more rebinding paths. Every one refuses in
+both `analyze` and `load`.
+
 The engine's own R22-2 bar predicate is `engine._structural_bar`, ported from r11's `scripts/align_v4_next_arm_packet.py` (`WindowRecord.structural_bar`). It lives in the engine and is not part of this pin. R23j makes it stricter than r11: declared bars must be reproduced.

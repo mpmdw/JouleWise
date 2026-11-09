@@ -294,6 +294,11 @@ kit's lead-signature check against r11 `bbfccb70a`. It covers everything they
 reach, including decorators, one binding per reached name, and no rebinding,
 augassign, global or namespace writes. Drift fails the test and forces a
 re-port. See `docs/analysis/v4/MERGE-ORDER.md`.
+Runtime guard (r23j2-sol P2): `calibration_identity.check()` hashes the live
+calibration code and the 15 + 2 reached globals, and checks engine/module
+object identity. It runs at the start of every `analyze()`/`io.load()` and
+refuses with `calibration_identity_drift`. The pins come from r11
+`bbfccb70a` under CPython 3.13.
 (P1, r23j-sol F1) The release path reads terminal results only from the
 digest-bound `terminal_result_source`. An inline `terminal_result` refuses in
 `io.load` and in non-synthetic `analyze`; it survives only on the synthetic API.
