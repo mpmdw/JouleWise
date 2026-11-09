@@ -1042,6 +1042,28 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+246. **Laptop lead (interactive session 1544c617), 2026-11-08 19:59 PST: W1 line software-complete; real-custody gaps found by the exporter build and fixed in both builds.**
+- **W1 line `align/2026-11-08-v4-r11` @ `52f36f1d8`** (manifest 21313cc2… unchanged). It integrates:
+  - the smoke kit;
+  - the U3 N = 22 inputs;
+  - harvest-off (merge `c84df94bf`, plus the finality/disclosure repair from Sol merge-c84 review F1);
+  - Air-offload (as change set `5cce0c677`, per MERGE-NOTES);
+  - timing receipts. The Sol build got an Opus cold review (ADMIT-WITH-FIXES: settle no longer depends on a package import; no stdout in the install dwell; LOWs fixed), then an Opus delta review (ADMIT).
+
+  Further status:
+  - The b6 executing-review ledger is green, with every row citing a real review.
+  - Deviation `TR-spill-LOW-2` is ACCEPTED: `night/timing-receipts.jsonl` is written after the operation, never during a window or dwell.
+  - `test_bytes_h_session`'s 9 failures were a TMPDIR environment issue: with a real-path TMPDIR, all 36 pass.
+  - **Before W1 arms:** STRICT re-registration (the chain text changed), then PREQUAL at the final head, then the R1-dependent kit values, U3 signature and receipt.
+- **Real-custody gaps** found by the exporter build (`align/2026-11-08-v4-exporter`), each a defect both builds shared and the synthetic fixtures hid:
+  1. **Seed identity.** Production stores `Episode.seed` = the seed INDEX. Both builds compared it to the derived seed, which would have excluded every D member.
+     - **Ruling (a):** `Episode.seed` must equal `seed_index`, AND production `episode_seed(seed_inputs(config), pair, seed)` must equal `expected_episode_seed`.
+  2. **Roster naming.** Production names members `align-v4-<slot>-eNN`; the frozen manifest is the authority.
+  3. **Config not bound to the slot.** A sabotage config under a benign slot stayed eligible.
+     - **Ruling:** the config's pair, condition, seed, run_id and model must match the slot (`config_identity_differs`). The config digest must equal the frozen plan's per-member `config_sha256` through `planned_config` and `plan_source` (`config_digest_not_planned`). The plan must belong to its own window (`:wrong_window`). A malformed config gives member-only `config_invalid`.
+  - **Engine:** `engine-r23k` @ `72410b0b4`. Opus delta reviews were ADMIT-WITH-FIXES, all fixed; the Sol r23l check found two gaps, both fixed with Sol's witnesses green unmodified. Calibration pins are unchanged.
+  - **Recompute:** being matched independently. Fixtures are now producer-shaped (seed index, production naming, config.json in every bundle). The exporter's fixture-vs-producer sweep continues.
+
 245. **Laptop lead (interactive session 1544c617), 2026-11-08 18:35 PST: v4 release tooling ADMITTED in software.** `align/2026-11-08-v4-release-tools` @ `333e9a62a`.
 - **Pins:** engine `engine-r23j` @ `50f4958b6`; recompute `9f8a8749e` (program `0e79439d…`); bars `17a26815…`. The release interpreter is CPython 3.13.
 - **Review chain:**
