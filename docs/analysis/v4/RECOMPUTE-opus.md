@@ -80,8 +80,11 @@ was not read.
   printed at it (`h_star_grid`) beside the council grid.
 - `h_star` (`h_star_estimand`): the smallest grid dose, ascending, whose stripped score is STRICTLY above the
   pair's detection threshold, every earlier dose observed and at or below it. A missing or unreachable
-  earlier dose gives null with `undefined_missing_grid_doses`; no exceedance gives null, `bounded_above`
-  false, empty list; `bounded_above` iff defined; observed doses off the grid (council 0 and 300) are ignored
+  earlier dose gives null; no exceedance gives null, `bounded_above` false. **R26 amendment (lead ruling,
+  2026-11-08, from the r23i rehearsal):** whenever `h_star` is null, `undefined_missing_grid_doses` lists
+  EVERY unobserved grid dose, ascending, whether or not an exceedance follows (so no exceedance with an
+  unobserved tail lists the tail; the list is empty only when the full grid was observed or h_star is
+  defined); `bounded_above` iff defined; observed doses off the grid (council 0 and 300) are ignored
   and listed in `off_grid_doses` (R23h); "full" is not a dose; non-finite or
   duplicate inputs refuse (`h_star_input_invalid`); `status: registered_secondary`.
 - Rows: the C benign carriers (`claim.carrier_curve.<pair>.carriers[*].h_star`) and the T sabotage known-H

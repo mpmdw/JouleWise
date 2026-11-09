@@ -1983,8 +1983,9 @@ def h_star_estimand(points, threshold):
     """R26 (2): H*_i = the smallest H* grid dose g, ascending, whose exact sub-turn stripped score is STRICTLY
     above the pair's detection threshold, provided every earlier grid dose was observed and at or below it.
     ``points`` are the row's observed actual-dose points (council and H* grids merged, "full" excluded). A
-    missing/unreachable earlier grid dose makes h_star undefined (null) and is listed; no exceedance gives
-    null with bounded_above false and an empty list; observed doses off the grid (0 and 300 on the council
+    missing/unreachable earlier grid dose makes h_star undefined (null); no exceedance gives null with
+    bounded_above false. Whenever h_star is null, every unobserved grid dose is listed, ascending (R26
+    amendment, lead ruling 2026-11-08: an unobserved tail after no exceedance is listed too); observed doses off the grid (0 and 300 on the council
     grid) are ignored and listed (R23h); inputs must be unique integer doses with finite scores."""
     out = {"estimand": "H*_i", "grid": list(H_STAR_GRID), "status": "registered_secondary",
            "h_star": None, "bounded_above": False, "undefined_missing_grid_doses": [], "off_grid_doses": []}
@@ -1998,17 +1999,15 @@ def h_star_estimand(points, threshold):
     out["off_grid_doses"] = sorted(h for h in observed if h not in H_STAR_GRID)
     if threshold is None:
         return dict(out, status="threshold_unavailable")
-    missing = []
+    # R26 amendment (lead ruling, 2026-11-08): whenever h_star is null, the list holds EVERY grid dose that
+    # was not observed (unreachable or missing), ascending, whether or not an exceedance follows.
+    unobserved = [g for g in H_STAR_GRID if g not in observed]
     for g in H_STAR_GRID:
         if g not in observed:
-            missing.append(g)
-            continue
+            break                                    # a missing dose before any exceedance: undefined
         if observed[g] > threshold:
-            if missing:
-                out["undefined_missing_grid_doses"] = missing
-            else:
-                out.update(h_star=g, bounded_above=True)
-            return out
+            return dict(out, h_star=g, bounded_above=True)
+    out["undefined_missing_grid_doses"] = unobserved
     return out
 
 

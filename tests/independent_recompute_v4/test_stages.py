@@ -739,8 +739,16 @@ class CarrierTests(unittest.TestCase):
         self.assertEqual(rc.h_star_estimand(pts(base), 2.0)["h_star"], 512)            # strict: 2.0 is not > 2.0
         h = rc.h_star_estimand(pts(base, drop=(256,)), 2.5)
         self.assertEqual((h["h_star"], h["bounded_above"], h["undefined_missing_grid_doses"]), (None, False, [256]))
+        h = rc.h_star_estimand(pts(base, drop=(256, 1536)), 2.5)     # R26 amendment: EVERY unobserved dose
+        self.assertEqual((h["h_star"], h["undefined_missing_grid_doses"]), (None, [256, 1536]))
         h = rc.h_star_estimand(pts(base, drop=(256,)), 10.0)                            # never exceeds
+        self.assertEqual((h["h_star"], h["bounded_above"], h["undefined_missing_grid_doses"]), (None, False, [256]))
+        h = rc.h_star_estimand(pts(base), 10.0)                  # no exceedance, full grid observed: empty list
         self.assertEqual((h["h_star"], h["bounded_above"], h["undefined_missing_grid_doses"]), (None, False, []))
+        # R26 amendment (lead ruling 2026-11-08): no exceedance with an unobserved tail lists the tail.
+        h = rc.h_star_estimand(pts(base, drop=(256, 384, 512, 768, 1024, 1536, 2048)), 2.5)
+        self.assertEqual((h["h_star"], h["bounded_above"], h["undefined_missing_grid_doses"]),
+                         (None, False, [256, 384, 512, 768, 1024, 1536, 2048]))
         h = rc.h_star_estimand(dict(pts(base), **{"384": {"H": 390, "score": 9.0}}), 2.5)  # off-grid ignored
         self.assertEqual((h["h_star"], h["off_grid_doses"], h["undefined_missing_grid_doses"]), (None, [390], [384]))
         # Council doses 0 and 300 are observed off the H* grid (R23h): ignored and listed; "full" is not a dose.
