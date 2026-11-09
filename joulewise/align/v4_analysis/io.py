@@ -96,6 +96,57 @@ def config_reference(source):
     return ref
 
 
+def bundle_config_bytes(mapping):
+    """Bytes RunBundleWriter.create writes as config.json for a kit config (D-001).
+
+    Mirrors joulewise/bundle.py and scripts/align_v4_kit.bundle_config_bytes:
+    the normalized BenchmarkConfig as indent-2, sorted-key JSON plus a newline.
+    """
+    from joulewise.schemas import BenchmarkConfig
+    return (json.dumps(BenchmarkConfig.from_mapping(mapping).to_dict(), indent=2, sort_keys=True)
+            + '\n').encode('utf-8')
+
+
+def _bind_planned_configs(root, window, rows, sources, census):
+    """R23l custody loop: bundle config.json <- planned kit config <- committed plan.
+
+    The window's committed collection plan (``plan_source``) names each member's
+    kit config digest (align_v4_series.py:302, ``config_sha256``). The member's
+    ``planned_config`` must be that file, and its bundle config.json must be
+    exactly the bytes production writes for it. Anything else refuses.
+    """
+    captured = [m for m in window['members'] if m['captured']]
+    if not captured:
+        return
+    ref = window.get('plan_source')
+    if not isinstance(ref, dict):
+        raise ValueError('config_digest_not_planned: window lacks plan_source: ' + window['window'])
+    identity = (ref['path'], ref['sha256'])
+    if identity not in sources:
+        sources[identity] = read_source(root, ref)
+    if not any(r['path'] == ref['path'] and r['sha256'] == ref['sha256'] for r in census):
+        census.append(dict(path=ref['path'], sha256=ref['sha256']))
+    planned = {}
+    for row in sources[identity].get('members', []):
+        if row.get('run_id') in planned:
+            raise ValueError('config_digest_not_planned: duplicate plan member ' + str(row.get('run_id')))
+        planned[row.get('run_id')] = row
+    for member in captured:
+        run = member['slot']['run_id']
+        local = run.partition(':')[2] or run
+        plan_row = planned.get(local)
+        kit_ref = (rows.get(run) or {}).get('planned_config')
+        if (plan_row is None or plan_row.get('ordinal') != member['slot']['ordinal']
+                or not isinstance(kit_ref, dict) or kit_ref.get('sha256') != plan_row.get('config_sha256')):
+            raise ValueError('config_digest_not_planned: ' + run)
+        kit = read_blob(root, kit_ref)
+        if hashlib.sha256(bundle_config_bytes(strict_json(kit))).hexdigest() != member['config_source']['sha256']:
+            raise ValueError('config_digest_not_planned: bundle config is not the planned config for ' + run)
+        kit_entry = dict(path=kit_ref['path'], sha256=kit_ref['sha256'])
+        if kit_entry not in census:
+            census.append(kit_entry)
+
+
 def load(path, *, calibration_only=False, through_window=None, cache_dir=None, workers=1,
          document=None, source_session=None):
     """Input contains explicit thermal PILOT and raw alternative-desk exports.
@@ -164,6 +215,7 @@ def load(path, *, calibration_only=False, through_window=None, cache_dir=None, w
                     config_ref = member['config_source']
                     if config_ref not in census:
                         census.append(dict(config_ref))
+            _bind_planned_configs(root, window, {m['run_id']: m for m in native['members']}, sources, census)
             continue
         records = []
         for key in ('thermal_source', 'residual_source'):
@@ -203,6 +255,7 @@ def load(path, *, calibration_only=False, through_window=None, cache_dir=None, w
                 summary=native.get('summary'), captured=captured,
                 dc=native.get('dc_secondary'), source_flags=native.get('exclusion_codes', [])))
         window.pop('roster')
+        _bind_planned_configs(root, window, summaries, sources, census)
     for window in payload['windows']:
         # R22-2 bars are recomputed from the committed terminal result, so
         # every captured calibration window must carry it on the release path.

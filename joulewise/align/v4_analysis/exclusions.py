@@ -15,10 +15,12 @@ FLAG_TO_CLASS = (
     ('clock_anchor_unresolved', 'energy_unavailable'), ('duty.uncovered', 'energy_unavailable'),
     ('thermal.custody_invalid', 'custody_invalid'), ('cohort_incomplete', 'cohort_changed'),
     ('final_adjudication_excluded', 'adjudicated'),
+    # R23l: bundle config bound to its roster slot; malformed config excludes the member.
+    ('config_identity_differs', 'config_identity_differs'), ('config_invalid', 'config_invalid'),
 )
 CLASSES = frozenset((*('X'+str(i) for i in range(1, 9)), 'F1', 'B', 'not_captured',
     'incomplete', 'energy_unavailable', 'custody_invalid', 'seed_identity_differs',
-    'cohort_changed', 'adjudicated'))
+    'cohort_changed', 'adjudicated', 'config_identity_differs', 'config_invalid'))
 
 
 def classes(flags):

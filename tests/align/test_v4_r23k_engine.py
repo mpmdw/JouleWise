@@ -60,8 +60,13 @@ class SeedIdentityTests(unittest.TestCase):
             ['derived_seed_differs', 'seed_identity_differs', 'seed_index_differs'])
 
     def test_production_model_name_fallback_and_integer_index(self):
+        # R23l: v4 binds the align-model tag itself; production's model.name
+        # fallback no longer qualifies a member.
         self.m['config']['run_metadata']['tags'] = []
         self.m['config']['model']['name'] = self.m['slot']['model_id']
+        self.assertFalse(self.screen()['eligible'])
+        self.assertIn('config_identity_differs:model', self.m['reasons'])
+        self.m['config']['run_metadata']['tags'] = ['align-model='+self.m['slot']['model_id']]
         self.assertTrue(self.screen()['eligible'])
         # A bool is not a recorded integer seed, even for seed index 1.
         self.m['slot']['seed_index'] = 1
@@ -155,12 +160,9 @@ class DeskConfigBindingTests(unittest.TestCase):
             (root/desk_ref['path']).write_bytes(data)
             for key in ('residual_source', 'thermal_source'):
                 window[key]['sha256'] = digest(data)
-            altered = load(path, through_window='C1', document=document)
-            changed = altered['windows'][1]['members'][5]
-            e._screen_member(changed, altered['cohort'])
-            self.assertEqual(changed['reasons'], ['derived_seed_differs', 'seed_identity_differs'])
-            self.assertFalse(changed['eligible'])
-            self.assertNotEqual(e.freeze_bindings(loaded), e.freeze_bindings(altered))
+            # R23l: a re-digested config that is not the planned config refuses.
+            with self.assertRaisesRegex(ValueError, 'config_digest_not_planned'):
+                load(path, through_window='C1', document=document)
 
     def test_release_desk_member_requires_config_reference(self):
         for value in (None, member_config(e.roster('C1')[5])):

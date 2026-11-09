@@ -32,8 +32,12 @@ class RawTests(unittest.TestCase):
                 (root/name).write_bytes(data)
                 return dict(path=name, sha256=digest(data))
             sources = [dict(run_id=s['run_id'], captured=False) for s in slots]
+            # R23l: bundle config.json bytes, the planned kit config and the committed plan.
+            from joulewise.align.v4_analysis.synthetic import planned_config_files
+            plan, files = planned_config_files([dict(slot=slots[0], config=member_config(slots[0]))])
             sources[0].update(captured=True, episode=write('episode.json', to_json(ep).encode()),
-                config=write('config.json', canonical(member_config(slots[0]))),
+                config=write('config.json', files[slots[0]['run_id']][1]),
+                planned_config=write('kit.json', files[slots[0]['run_id']][0]),
                 powermetrics=write('raw.plist', b''.join(synthetic_frames(40))),
                 first_record_endpoint_s=ENDPOINT, nominal_interval_ns=100_000_000,
                 stamps=[dict(epoch_s=ENDPOINT, monotonic_before_s=100., monotonic_after_s=100.,
@@ -45,7 +49,8 @@ class RawTests(unittest.TestCase):
             p['windows'] = [dict(window='C1', attempt_id='C1#1', status='final', roster=slots,
                                  raw_source=write('raw.json', canonical(dict(members=sources))),
                                  terminal_result_source=write('terminal.json', canonical(
-                                     dict(verdict='GO', chain_exit_code=0))))]
+                                     dict(verdict='GO', chain_exit_code=0))),
+                                 plan_source=write('plan.json', canonical(plan)))]
             p['series_source'] = write('series.json', canonical(dict(windows=planned)))
             path = root/'input.json'
             path.write_bytes(canonical(p))
@@ -151,10 +156,13 @@ class RawTests(unittest.TestCase):
             (path.parent/'C3.json').unlink()
             payload = load(path, through_window='C2')
             self.assertEqual([w['window'] for w in payload['windows']], ['C1','C2'])
-            # R23k: only the manifest, C1/C2 desks, terminals and member configs.
+            # R23k/R23l: only the manifest, C1/C2 desks, terminals, plans, member
+            # bundle configs and their planned kit configs.
             self.assertEqual(sorted(r['path'] for r in payload['input_census']),
-                             sorted(['C1-terminal.json', 'C1.json', 'C2-terminal.json', 'C2.json', 'series.json']+
-                                    [f'{w}-{i}-config.json' for w in ('C1', 'C2') for i in range(1, 23)]))
+                             sorted(['C1-terminal.json', 'C1.json', 'C2-terminal.json', 'C2.json', 'series.json',
+                                     'C1-plan.json', 'C2-plan.json']+
+                                    [f'{w}-{i}-{kind}.json' for w in ('C1', 'C2') for i in range(1, 23)
+                                     for kind in ('config', 'kit')]))
             a, _ = analyze(payload)
             self.assertEqual(a['thresholds']['counts_logged/spam']['threshold'], None)
 
@@ -166,6 +174,7 @@ class RawTests(unittest.TestCase):
             m['slot']['ordinal'] = ordinal
             m['slot']['run_id'] = 'W1-'+str(ordinal)
             m['thermal']['id'] = m['slot']['run_id']
+            m['config']['run_id'] = m['slot']['run_id']  # R23l config bound to its slot
             sentinels.append(m)
         p['windows'].insert(0,dict(window='W1',attempt_id='W1#1',status='final',members=sentinels))
         fill,_ = analyze(p)

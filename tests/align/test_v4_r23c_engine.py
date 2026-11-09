@@ -47,10 +47,19 @@ def write_export(root, payload):
             w['terminal_result_source'] = write(w['attempt_id'].replace('#', '_')+'-terminal.json',
                 w.pop('terminal_result', dict(verdict='GO', chain_exit_code=0)))
         members = w.pop('members')
+        # R23l: committed plan -> planned kit config -> bundle config.json bytes.
+        from joulewise.align.v4_analysis.synthetic import planned_config_files
+        plan, files = planned_config_files([m for m in members if m['captured']])
+        stem = w.get('attempt_id', w['window']).replace('#', '_')
+        w['plan_source'] = write(stem+'-plan.json', plan)
+        def blob(name, data):
+            (root/name).write_bytes(data)
+            return dict(path=name, sha256=digest(data))
         rows = [{**m['thermal'], 'run_id': m['slot']['run_id'],
                  'summary': m['summary'], 'captured': m['captured'],
-                 **(dict(config=write(w.get('attempt_id', w['window']).replace('#', '_')+
-                     f"-{m['slot']['ordinal']}-config.json", m['config'])) if m['captured'] else {}),
+                 **(dict(config=blob(f"{stem}-{m['slot']['ordinal']}-config.json", files[m['slot']['run_id']][1]),
+                         planned_config=blob(f"{stem}-{m['slot']['ordinal']}-kit.json", files[m['slot']['run_id']][0]))
+                    if m['captured'] else {}),
                  'exclusion_codes': m.get('source_flags', [])} for m in members]
         # Attempt-named, so a zero-capture attempt and its retry never collide.
         source = write(w.get('attempt_id', w['window']).replace('#', '_')+'.json', dict(members=rows))

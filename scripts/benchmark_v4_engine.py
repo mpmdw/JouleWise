@@ -18,7 +18,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from joulewise.align.v4_analysis import analyze, canonical
 from joulewise.align.v4_analysis.io import digest, input_path, load
-from joulewise.align.v4_analysis.synthetic import release_manifest, series
+from joulewise.align.v4_analysis.synthetic import planned_config_files, release_manifest, series
 
 
 def write_fixture(root, *, full_ids=True):
@@ -40,10 +40,18 @@ def write_fixture(root, *, full_ids=True):
                                                 dict(verdict='GO', chain_exit_code=0))
         records = []
         slots = []
-        for m in w.pop('members'):
+        members = w.pop('members')
+        plan, files = planned_config_files(members)   # R23l plan-bound configs
+        w['plan_source'] = write(w['window']+'-plan.json', plan)
+        def blob(filename, data):
+            (root/filename).write_bytes(data)
+            return dict(path=filename, sha256=digest(data))
+        for m in members:
             slots.append(m['slot'])
+            kit, bundle = files[m['slot']['run_id']]
             records.append({**m['thermal'], 'run_id': m['slot']['run_id'],
-                'config': write(f"{w['window']}-{m['slot']['ordinal']}-config.json", m['config']),
+                'config': blob(f"{w['window']}-{m['slot']['ordinal']}-config.json", bundle),
+                'planned_config': blob(f"{w['window']}-{m['slot']['ordinal']}-kit.json", kit),
                 'summary': m['summary'], 'captured': m['captured'], 'dc_secondary': m['dc']})
         raw = canonical(dict(members=records))
         filename = w['window']+'.json'

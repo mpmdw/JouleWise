@@ -119,3 +119,24 @@ def release_manifest(windows=()):
             for s in (w1 if name == 'W1' else roster(name))]
         out.append(dict(window=name, members=deepcopy(slots)))
     return dict(windows=out)
+
+
+def planned_config_files(members):
+    """Synthetic committed plan plus per-member kit/bundle config bytes (R23l).
+
+    Returns ``(plan, files)``. ``plan`` mirrors the collection plan's member rows
+    (run_id, ordinal, config_sha256 of the kit config). ``files`` maps each
+    captured slot run_id to ``(kit_bytes, bundle_bytes)``, where bundle_bytes are
+    exactly what RunBundleWriter writes for that kit config.
+    """
+    from .io import bundle_config_bytes
+    rows, files = [], {}
+    for m in members:
+        if 'config' not in m:
+            continue
+        run = m['slot']['run_id']
+        kit = canonical(m['config'])
+        rows.append(dict(run_id=run.partition(':')[2] or run, ordinal=m['slot']['ordinal'],
+                         config_sha256=digest(kit)))
+        files[run] = (kit, bundle_config_bytes(m['config']))
+    return dict(members=rows), files

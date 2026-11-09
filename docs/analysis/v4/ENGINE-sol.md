@@ -1,4 +1,4 @@
-# V4 primary engine (Sol), R23k
+# V4 primary engine (Sol), R23k + R23l
 
 2026-11-08. **PROVISIONAL: synthetic qualification, no live study validation.**
 Authority: the lead's engine-r23 brief (A37 and R23-E1/R23-1–4), on
@@ -13,6 +13,29 @@ not scientific certification.
 No Opus recompute code was read. Only the rulings were used for reconciliation.
 No network, model weights, live measurements or Block 5 outcomes were used.
 Coordination state is untouched, per the assignment.
+
+R23l (lead rulings on the Opus review of r23k, 2026-11-08):
+(1) A captured member's bundle config is bound to its slot. The derived seed
+is recomputed from the config's OWN `'shade/'+spec.task_kwargs.task_pair` and
+`spec.seed`, as production `workload.py:480` does. Each of these must also
+match the slot: `spec.task_kwargs.task_pair`, `spec.condition`, `spec.seed ==
+seed_index`, `config.run_id ==` the slot's local run_id (anchors keep their v3
+id), and the `align-model=` tag `== model_id`. A mismatch excludes the member
+as `config_identity_differs` with a sub-reason `config_identity_differs:{pair,
+condition,seed,run_id,model}`. A sabotage config under a benign slot never
+calibrates.
+(2) Custody loop. Each window carries `plan_source`, its committed
+`collection_plan.json`. Each captured member carries `planned_config`, its
+kit config, whose sha256 must equal the plan row's `config_sha256` (matched by
+local run_id and ordinal; `align_v4_series.py:302`). The bundle `config.json`
+must be byte-equal to `io.bundle_config_bytes(kit)`, which is what
+`RunBundleWriter.create` writes. Anything else refuses with
+`config_digest_not_planned`. NEW EXPORT CONTRACT FIELDS: window
+`plan_source`, member `planned_config`.
+(3)/(4) A config that fails `BenchmarkConfig.from_mapping` /
+`EpisodeSpec.from_text`, or that has no sampler, excludes only that member as
+`config_invalid`. `config_identity_differs` and `config_invalid` are new
+exclusion classes. Witnesses: `tests.align.test_v4_r23l_engine`.
 
 R23k applies the lead's two producer-contract rulings on `50f4958b6`.
 `Episode.seed` is the seed **index**, as written by production

@@ -235,6 +235,49 @@ def _rows(member, logged=True):
     return out
 
 
+def _config_identity_reasons(member, summary):
+    """Bind a captured member's bundle config to its roster slot (R23k, R23l).
+
+    Production Episode.seed is spec.seed (the INDEX). The uint64 sampler seed is
+    episode_seed(*seed_inputs(config, spec.enable_thinking), task.task_pair,
+    spec.seed), with task.task_pair = 'shade/' + spec.task_kwargs['task_pair']
+    (workload.py:480, shade/task.py:156). It is recomputed from the config's OWN
+    pair and seed, and those, the condition, run_id and model tag must match
+    the slot. A malformed or sampler-less config excludes only this member.
+    """
+    from joulewise.schemas import BenchmarkConfig
+    from joulewise.align.apple.workload import EpisodeSpec
+    if 'config' not in member:
+        raise ValueError('captured member lacks bundle config')
+    slot = member['slot']
+    try:
+        config = BenchmarkConfig.from_mapping(member['config'])
+        spec = EpisodeSpec.from_text(config.workload_profile.prompt_text or '')
+        if spec.sampler is None:
+            raise ValueError('v4 member config has no sampler policy')
+        pair = spec.task_kwargs.get('task_pair')
+        if not isinstance(pair, str):
+            raise ValueError('config spec has no task pair')
+        model = next((t.split('=', 1)[1] for t in config.run_metadata.tags if t.startswith('align-model=')), None)
+    except (ValueError, TypeError, KeyError, AttributeError):
+        return ['config_invalid']
+    local_run_id = slot['run_id'].partition(':')[2] or slot['run_id']
+    identity = [f'config_identity_differs:{name}' for name, ok in (
+        ('pair', pair == slot['task_pair']), ('condition', spec.condition == slot['condition']),
+        ('seed', spec.seed == slot['seed_index']), ('run_id', config.run_id == local_run_id),
+        ('model', model == slot['model_id'])) if not ok]
+    reasons = ['config_identity_differs', *identity] if identity else []
+    seed_reasons = []
+    if type(summary.get('seed')) is not int or summary['seed'] != slot['seed_index']:
+        seed_reasons.append('seed_index_differs')
+    derived = episode_seed(*seed_inputs(config, spec.enable_thinking), 'shade/'+pair, spec.seed)
+    if derived != slot['expected_episode_seed']:
+        seed_reasons.append('derived_seed_differs')
+    if seed_reasons:
+        reasons += ['seed_identity_differs', *seed_reasons]
+    return reasons
+
+
 def _member_reasons(member, cohort):
     if not member['captured']:
         return ['not_captured']
@@ -251,26 +294,7 @@ def _member_reasons(member, cohort):
     if s is None:
         reasons.append('residual_rows_unavailable')
     else:
-        # Production Episode.seed is spec.seed (the INDEX), not the derived
-        # uint64 sampler seed. Recompute the latter independently from the
-        # member's verified bundle config using the registered production law.
-        from joulewise.schemas import BenchmarkConfig
-        from joulewise.align.apple.workload import EpisodeSpec
-        if 'config' not in member:
-            raise ValueError('captured member lacks bundle config')
-        config = BenchmarkConfig.from_mapping(member['config'])
-        spec = EpisodeSpec.from_text(config.workload_profile.prompt_text)
-        slot = member['slot']
-        seed_reasons = []
-        if type(s.get('seed')) is not int or s['seed'] != slot['seed_index']:
-            seed_reasons.append('seed_index_differs')
-        derived = episode_seed(*seed_inputs(config, spec.enable_thinking),
-                               'shade/'+slot['task_pair'], slot['seed_index'])
-        if derived != slot['expected_episode_seed']:
-            seed_reasons.append('derived_seed_differs')
-        if seed_reasons:
-            reasons.append('seed_identity_differs')
-            reasons.extend(seed_reasons)
+        reasons.extend(_config_identity_reasons(member, s))
         rows = _rows(member)
         if any(not _finite(r.get('energy_j')) for r in rows):
             reasons.append('turn_energy_unavailable')

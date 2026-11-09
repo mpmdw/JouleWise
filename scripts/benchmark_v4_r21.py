@@ -21,7 +21,7 @@ from scripts.bench_reduce_sol import synthetic_frames
 from joulewise.align.records import Episode, Turn, to_json
 from joulewise.align.v4_analysis import analyze, canonical
 from joulewise.align.v4_analysis.io import digest, input_path, load
-from joulewise.align.v4_analysis.synthetic import series
+from joulewise.align.v4_analysis.synthetic import planned_config_files, series
 from joulewise.align.apple import reduce_sol as sol
 
 ENDPOINT = 1767225600.
@@ -34,7 +34,9 @@ def fixture(root, samples, *, windows=11):
     byte_count = 0
     for wi, w in enumerate(payload['windows']):
         records, slots = [], []
-        for m in w.pop('members'):
+        members = w.pop('members')
+        plan, config_files = planned_config_files(members)   # R23l plan-bound configs
+        for m in members:
             slot, thermal = m['slot'], m['thermal']
             ordinal = slot['ordinal']
             start = (1000+wi*10000+ordinal*10)*10**9
@@ -65,7 +67,8 @@ def fixture(root, samples, *, windows=11):
             seed = 0 if slot['series_role']=='sentinel' else wi*22+ordinal
             raw = b''.join(synthetic_frames(samples,seed=seed)).replace(b'<string>Moderate</string>',b'<string>Nominal</string>')
             record = dict(run_id=slot['run_id'],captured=True,
-                config=write(f'{wi}-{ordinal}.config.json', canonical(m['config'])),
+                config=write(f'{wi}-{ordinal}.config.json', config_files[slot['run_id']][1]),
+                planned_config=write(f'{wi}-{ordinal}.kit.json', config_files[slot['run_id']][0]),
                 episode=write(f'{wi}-{ordinal}.episode.json',to_json(episode).encode()),
                 powermetrics=write(f'{wi}-{ordinal}.plist',raw),
                 first_record_endpoint_s=ENDPOINT, nominal_interval_ns=100_000_000,
@@ -82,7 +85,7 @@ def fixture(root, samples, *, windows=11):
                 cache_statistics=dict(rebuilds=0))
             records.append(record); slots.append(slot)
         ref = write(w['window']+'.json',canonical(dict(members=records)))
-        w.update(raw_source=ref,roster=slots)
+        w.update(raw_source=ref,roster=slots,plan_source=write(w['window']+'-plan.json',canonical(plan)))
     path = root/'input.json'; path.write_bytes(canonical(payload))
     return path, byte_count
 
