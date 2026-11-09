@@ -293,13 +293,18 @@ class HappyPath(Fixture):
         for rel, raw in self.files.items():
             (dup / rel).parent.mkdir(parents=True, exist_ok=True)
             (dup / rel).write_bytes(raw)
-        (dup / "members/m01/outputs/align_turns.jsonl").write_bytes(b"a different backup\n")
+        rel = "members/m01/outputs/align_turns.jsonl"
+        (dup / rel).write_bytes(b"a different backup\n")
         self.assertEqual(self.run_offload(duplicate_root=[dup]), 0)
         self.confirm_second_copy()
+        with self.assertRaises(ow.Mismatch) as caught:  # review F1: a differing duplicate refuses the release
+            self.offload().release()
+        self.assertIn("duplicate_differs", str(caught.exception))
+        self.assert_nothing_deleted()
+        self.assertEqual((dup / rel).read_bytes(), b"a different backup\n")
+        (dup / rel).write_bytes(self.files[rel])  # the operator dispositions the duplicate
         result = self.offload().release()
-        self.assertEqual(result["files_deleted"], 2 * len(self.files) - 1)
-        self.assertEqual([s["path"] for s in result["skipped"]], ["members/m01/outputs/align_turns.jsonl"])
-        self.assertTrue((dup / "members/m01/outputs/align_turns.jsonl").exists())
+        self.assertEqual(result["files_deleted"], 2 * len(self.files))
         self.assertFalse((dup / "members/m01/raw/powermetrics.plist").exists())
 
     def test_no_extract_mode_verifies_without_raw_tree(self):
@@ -500,7 +505,7 @@ class FinalizedManifestV2(Fixture):
     def packed(self, inputs=(), **over):
         self.v2(inputs)
         self.hmanifest = build_harvest_pack(self.record, self.pack_dir, over.pop("bound_to", self.v2_sha),
-                                            externals=[self.ledger])
+                                            externals=over.pop("externals", [self.ledger, *inputs]))
         return dict(record_manifest=self.v2_path, record_manifest_sha256=self.v2_sha, harvest_pack=self.pack_dir,
                     pack=False, **over)
 

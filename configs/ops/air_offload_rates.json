@@ -5,9 +5,10 @@
     "push_mb_s": 40.0,
     "verify_raw_mb_s": 450.0,
     "ratio": 16.0,
-    "recheck_mb_s": 900.0
+    "recheck_mb_s": 900.0,
+    "release_hash_mb_s": 800.0
   },
-  "note": "Seed for scripts/offload_window.py run when the state root has no observed rates.json yet. Conservative: the loaded-Air medians below, pack derated about 20 % for the M3 Max single-thread tar loop; push is unmeasured (Wi-Fi) and stays at the 40 MB/s default. The first real offload replaces these with observed rates.",
+  "note": "Seed for scripts/offload_window.py run when the state root has no observed rates.json yet. Conservative: the loaded-Air medians below, pack derated about 20 % for the M3 Max single-thread tar loop; push is unmeasured (Wi-Fi) and stays at the 40 MB/s default. The first real offload replaces these with observed rates. release_hash_mb_s seeds the release-time content proof (800, against about 1,200 measured).",
   "evidence": {
     "date": "2026-11-08",
     "host": "Apple M4 MacBook Air (24 GB), Python 3.13.18, zstd 1.5.7",
@@ -67,6 +68,11 @@
         "ratio": 16.08
       },
       "finalize_manifest_s": 3.32
+    },
+    "release_hash_load_11_median_of_3": {
+      "note": "Offload._hash_guarded on a 3.2 GB file on the SSD: the release-time content proof of every byte to delete (review F1)",
+      "warm_mb_s": 1222,
+      "cold_f_nocache_mb_s": 1195
     }
   }
 }

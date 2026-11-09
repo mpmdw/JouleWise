@@ -105,7 +105,7 @@ ARMED_PREFIXES = ("com.joulewise.night", "com.joulewise.align-", "com.joulewise.
 MEASURING = re.compile(r"(^|[\s/])(powermetrics|run_night\.py|align_v4_session\.py|align_r1_rehearsal\.py|"
                        r"align_r0_checks\.py|run_campaign\.py|mlx_lm)(\s|$|\.)")
 DEFAULT_RATES = {"pack_raw_mb_s": 250.0, "push_mb_s": 40.0, "verify_raw_mb_s": 150.0, "ratio": 8.0,
-                 "recheck_mb_s": 250.0}
+                 "recheck_mb_s": 250.0, "release_hash_mb_s": 250.0}
 
 
 class Refusal(Exception):
@@ -717,6 +717,19 @@ def terminal_check(root: Path, ref: str, env: Envelope, now) -> dict:
     return {"terminal": label, "verdict": result["verdict"], "ended_epoch_s": ended, "plan_id": result["plan_id"]}
 
 
+def restore_gaps(env: Envelope, externals: list[dict]) -> list[str]:
+    """Byte-bound closure inputs of a finalize manifest that do not travel in the pack (review S1-04).
+    The harvest restore needs each of them; a copy missing one is not restorable on its own."""
+    closure = (env.doc or {}).get("closure") or {}
+    required = {}
+    for group in ("files", "ignored"):
+        for name, row in (closure.get(group) or {}).items():
+            if isinstance(row, dict):
+                required[name] = (row.get("sha256"), row.get("size"))
+    carried = {row["path"]: (row["sha256"], row["size"]) for row in externals}
+    return sorted(name for name, bound in required.items() if carried.get(name) != bound)
+
+
 def harvest_entries(entries) -> dict:
     """harvest_offload's transport rows in finalized_manifest.v2 form (its own `_as_finalized`)."""
     require(isinstance(entries, dict), "harvest_pack_entries_malformed", Mismatch)
@@ -935,7 +948,9 @@ class Offload:
             manifest = read_json(manifest_path)
             require(manifest["record_manifest_sha256"] == record_manifest_sha256
                     and manifest["record_root"] == str(plain_path(record_root))
-                    and manifest.get("pack_format") == SCHEMA_HARVEST_PACK, "duplicate_run_conflict", Mismatch)
+                    and manifest.get("pack_format") == SCHEMA_HARVEST_PACK
+                    and manifest.get("local_parts_dir") == str(plain_path(harvest_pack)), "duplicate_run_conflict",
+                    Mismatch)
             return manifest
         record_root, raw, env, infos, term = self.preflight(record_root, record_manifest, record_manifest_sha256,
                                                             terminal)
@@ -969,6 +984,9 @@ class Offload:
         info = os.lstat(pack_dir / HARVEST_PAYLOAD)
         require(stat.S_ISREG(info.st_mode) and info.st_nlink == 1 and info.st_size == payload["size"],
                 "harvest_pack_payload_size", Mismatch)
+        gaps = restore_gaps(env, externals)
+        require(not gaps, f"harvest_pack_not_restorable:missing_external:{gaps[:1]}")
+        self._claim_pack_path(pack_dir, record_manifest_sha256, payload["sha256"])
         files = [{"path": rel, "size": infos[rel].st_size, "mtime_ns": infos[rel].st_mtime_ns,
                   "mode": stat.S_IMODE(infos[rel].st_mode), "sha256": env.files[rel]["sha256"], "part": HARVEST_PAYLOAD}
                  for rel in sorted(env.files)]
@@ -991,6 +1009,22 @@ class Offload:
         write_once(manifest_path, canonical(manifest), "duplicate_run_conflict")
         self.journal({"event": "harvest_pack_adopted", "payload_sha256": payload["sha256"], "bytes": payload["size"]})
         return manifest
+
+    def _claim_pack_path(self, pack_dir: Path, finalized_sha256: str, payload_sha256: str):
+        """Review F2: one pack directory serves one window at a time. The claim binds the path to
+        (window_id, finalize digest, payload digest); another window's unreleased claim refuses."""
+        claims = make_dir(self.state_root / "pack-claims")
+        path = claims / (sha_bytes(str(pack_dir).encode()) + ".json")
+        mine = {"path": str(pack_dir), "window_id": self.window_id, "finalized_manifest_sha256": finalized_sha256,
+                "payload_sha256": payload_sha256}
+        if os.path.lexists(path):
+            old = read_json(path)
+            if old != mine:
+                holder = old.get("window_id")
+                released = (isinstance(holder, str) and WINDOW_ID.match(holder) is not None
+                            and os.path.lexists(self.state_root / holder / "released.json"))
+                require(released and holder != self.window_id, f"harvest_pack_path_held_by:{holder}", Mismatch)
+        write_atomic(path, canonical(mine))
 
     def _pack_part(self, record_root: Path, part: dict, rows: dict, codec: dict, hash_on_mbp: bool) -> dict:
         final, side = self.parts_dir / part["name"], self.parts_dir / (part["name"] + ".json")
@@ -1170,12 +1204,25 @@ class Offload:
         return body
 
     # -- release
+    def check_restorable(self, manifest: dict):
+        """Review S1-04: before any deletion, the Air copy must be restorable on its own. For a consumed
+        harvest pack, every byte-bound closure input of the pinned finalize manifest (external terminal
+        evidence, the calibration ledger, any byte-bound link target) must travel in the pack."""
+        if manifest.get("pack_format") != SCHEMA_HARVEST_PACK:
+            return
+        raw = read_record_manifest(self.dir / RECORD_MANIFEST_NAME, manifest["record_manifest_sha256"])
+        env = parse_record_manifest(raw, Path(manifest["record_root"]))
+        gaps = restore_gaps(env, manifest.get("externals", []))
+        require(not gaps, f"not_restorable_from_the_copy:missing_external:{gaps[:1]}")
+
     def release(self, *, pressure_compressed_local=False) -> dict:
-        """Delete the MBP copy only after a FRESH Air receipt and a sealed second-copy receipt. Never rmtree."""
+        """Delete the MBP copy only after a FRESH Air receipt and a sealed second-copy receipt, and only bytes
+        proven equal to their own bound digests (review F1). Never rmtree."""
         manifest = read_json(self.dir / MANIFEST_NAME)
         if os.path.lexists(self.dir / "released.json"):
             return read_json(self.dir / "released.json")
         self.check_quiet_allowed()
+        self.check_restorable(manifest)
         nonce = secrets.token_hex(16)
         receipts = self.call(f"receipts {self.window_id} {nonce}")
         air, second, fresh = receipts.get("air"), receipts.get("second"), receipts.get("fresh")
@@ -1185,6 +1232,7 @@ class Offload:
         require(fresh is not None, "no_fresh_receipt", Mismatch)
         self.check_fresh(fresh, nonce, air, second, manifest)
         write_atomic(self.dir / "receipt-fresh.json", canonical(fresh))
+        self.check_quiet_allowed()  # again after the receipt round trip: an arm in between stops the release
         if second is None:
             if not pressure_compressed_local:
                 raise Refusal("second_copy_not_confirmed")
@@ -1192,30 +1240,92 @@ class Offload:
                 return read_json(self.dir / "raw-released.json")
             # Pressure rule: raw goes, the Air-verified compressed parts stay on the MBP,
             # so two verified copies still exist (MBP parts + Air SSD).
-            for part in manifest["parts"]:
-                digest, size = hash_file(self._local_parts(manifest) / part["name"])
-                require(digest == part["sha256"] and size == part["bytes"], f"local_part_corrupt:{part['name']}", Mismatch)
+            self._local_pack_rows(manifest, require_all=True)
             result = self._delete_raw(manifest, "pressure_compressed_local", fresh)
             write_atomic(self.dir / "raw-released.json", canonical(result))
             return result
         self.check_second_receipt(second, manifest, air_body)
         write_once(self.dir / "receipt-second.json", canonical(second), "second_receipt_changed")
+        # Review F2: every local pack object must still be THIS window's sealed object before anything goes.
+        pack_rows = None if os.path.lexists(self.dir / "deleting-parts.json") else self._local_pack_rows(manifest)
         result = self._delete_raw(manifest, "two_verified_copies", fresh) if not os.path.lexists(
             self.dir / "raw-released.json") else read_json(self.dir / "raw-released.json")
-        local = self._local_parts(manifest)
-        for name in [p["name"] for p in manifest["parts"]] + [x["name"] for x in manifest.get("extra_objects", [])]:
-            with contextlib.suppress(FileNotFoundError):
-                os.unlink(local / name)
-        if local != self.parts_dir:
-            with contextlib.suppress(OSError):
-                os.rmdir(local)  # only when empty (the harvest lane's copy of the finalize manifest may stay)
-        result = {**result, "parts_deleted": True, "rule": "two_verified_copies"}
+        parts = self._delete_parts(manifest, pack_rows)
+        result = {**result, "parts_deleted": True, "pack_objects_deleted": parts, "rule": "two_verified_copies"}
         write_atomic(self.dir / "released.json", canonical(result))
         self.journal({"event": "released", **{k: result[k] for k in ("files_deleted", "rule")}})
         return result
 
+    def _hash_guarded(self, root: Path, rel: str | None = None) -> tuple[str, int, os.stat_result]:
+        """sha256 of one file opened without following links; the deadline is checked per chunk."""
+        fd = open_nofollow(root, rel) if rel is not None else os.open(root, os.O_RDONLY | os.O_NOFOLLOW)
+        with os.fdopen(fd, "rb") as stream:
+            info = os.fstat(stream.fileno())
+            require(stat.S_ISREG(info.st_mode), f"not_regular:{rel or root}", Mismatch)
+            digest, size = hashlib.sha256(), 0
+            for chunk in iter(lambda: stream.read(4 * CHUNK), b""):
+                digest.update(chunk)
+                size += len(chunk)
+                self.check_deadline(0, "release_hash")
+        return digest.hexdigest(), size, info
+
+    def _local_pack_rows(self, manifest: dict, require_all=False) -> list[dict]:
+        """Each local pack object (parts, extra objects) proven to be this window's sealed object."""
+        local, rows = self._local_parts(manifest), []
+        objects = [(p["name"], p["sha256"], p["bytes"]) for p in manifest["parts"]]
+        objects += [(x["name"], x["sha256"], x["bytes"]) for x in manifest.get("extra_objects", [])]
+        for name, digest, size in objects:
+            path = local / name
+            if not os.path.lexists(path):
+                require(not require_all, f"local_part_missing:{name}", Mismatch)
+                continue
+            got, got_size, info = self._hash_guarded(path)
+            require((got, got_size) == (digest, size), f"local_pack_changed:{name}", Mismatch)
+            rows.append({"path": str(path), "name": name, "sha256": digest, "size": size,
+                         "mtime_ns": info.st_mtime_ns})
+        return rows
+
+    def _delete_parts(self, manifest: dict, rows: list[dict] | None) -> int:
+        """Journaled deletion of the local pack objects (review F2). Fresh rows were just hashed: a stat
+        check suffices before unlink; a resumed deletion re-hashes every remaining object first."""
+        path = self.dir / "deleting-parts.json"
+        if rows is None:
+            journal = read_json(path)
+            require(journal.get("window_id") == self.window_id, "parts_journal_mismatch", Mismatch)
+            if journal["state"] == "deleted":
+                return len(journal["rows"])
+            rows, rehash = journal["rows"], True
+        else:
+            journal = {"schema": SCHEMA_DELETING, "window_id": self.window_id, "state": "deleting", "rows": rows}
+            write_atomic(path, canonical(journal))
+            rehash = False
+        remaining = []
+        for row in rows:
+            target = Path(row["path"])
+            if not os.path.lexists(target):
+                continue
+            if rehash:
+                got, size, _ = self._hash_guarded(target)
+                require((got, size) == (row["sha256"], row["size"]), f"local_pack_changed:{row['name']}", Mismatch)
+            else:
+                info = os.lstat(target)
+                require(stat.S_ISREG(info.st_mode) and info.st_size == row["size"]
+                        and info.st_mtime_ns == row["mtime_ns"], f"local_pack_changed:{row['name']}", Mismatch)
+            remaining.append(target)
+        for target in remaining:
+            with contextlib.suppress(FileNotFoundError):
+                self.unlink(target)
+        local = self._local_parts(manifest)
+        if local != self.parts_dir:
+            with contextlib.suppress(OSError):
+                os.rmdir(local)  # only when empty (the harvest lane's copy of the finalize manifest may stay)
+        write_atomic(path, canonical({**journal, "state": "deleted"}))
+        return len(rows)
+
     def _inventory(self, manifest: dict) -> tuple[list[dict], list[dict]]:
-        """What this release will delete, checked against the sealed manifest BEFORE the journal is written."""
+        """What this release will delete. Every present file of the record AND of each duplicate root must be
+        the sealed path with the sealed size (and, in the record, the sealed mtime); its content is proven
+        against its own bound digest before any unlink (review F1). A difference refuses the release."""
         roots = [manifest["record_root"]] + list(manifest.get("duplicate_roots", []))
         rows, skipped = [], []
         for index, root_s in enumerate(roots):
@@ -1223,35 +1333,28 @@ class Offload:
             if not root.is_dir() or root.is_symlink():
                 skipped.append({"root": root_s, "reason": "absent_or_symlink"})
                 continue
+            differs = "record_changed_since_offload" if index == 0 else f"duplicate_differs:{root_s}"
             for row in manifest["files"]:
                 try:
                     info = lstat_rel(root, row["path"])
                 except FileNotFoundError:
                     continue
-                same = (stat.S_ISREG(info.st_mode) and info.st_size == row["size"]
-                        and (index > 0 or info.st_mtime_ns == row["mtime_ns"]))
-                if index == 0:
-                    require(same, f"record_changed_since_offload:{row['path']}", Mismatch)
-                elif not same:
-                    skipped.append({"root": root_s, "path": row["path"], "reason": "duplicate_differs"})
-                    continue
+                require(stat.S_ISREG(info.st_mode) and info.st_size == row["size"]
+                        and (index > 0 or info.st_mtime_ns == row["mtime_ns"]), f"{differs}:{row['path']}", Mismatch)
                 rows.append({"root": root_s, "path": row["path"], "kind": "file", "size": info.st_size,
-                             "mtime_ns": info.st_mtime_ns})
+                             "mtime_ns": info.st_mtime_ns, "sha256": row["sha256"]})
             for row in manifest["links"]:
                 try:
                     target = readlink_rel(root, row["path"])
                 except (FileNotFoundError, OSError):
                     continue
-                if target != row["target"]:
-                    require(index > 0, f"record_changed_since_offload:{row['path']}", Mismatch)
-                    skipped.append({"root": root_s, "path": row["path"], "reason": "duplicate_differs"})
-                    continue
+                require(target == row["target"], f"{differs}:{row['path']}", Mismatch)
                 rows.append({"root": root_s, "path": row["path"], "kind": "link", "target": target})
         return rows, skipped
 
     def _delete_raw(self, manifest: dict, rule: str, fresh: dict) -> dict:
-        """Journal `deleting` (the inventory, outside the record), check every remaining entry, unlink,
-        remove now-empty directories, journal `deleted` (agreement item 7)."""
+        """Journal `deleting` (the inventory, outside the record), prove every remaining file's content against
+        its own bound digest and every link's text, unlink, remove now-empty directories, journal `deleted`."""
         path = self.dir / "deleting.json"
         resumed = os.path.lexists(path)
         if resumed:
@@ -1270,15 +1373,16 @@ class Offload:
             write_atomic(path, canonical(journal))
         rows = journal["inventory"]
         record_root = manifest["record_root"]
-        # Pass 1: every remaining entry is unchanged, and the record holds nothing new.
+        # Pass 1: every remaining entry is the bound content (by path and digest), and the record holds nothing new.
         remaining = []
         for row in rows:
             root = Path(row["root"])
             try:
                 if row["kind"] == "file":
-                    info = lstat_rel(root, row["path"])
-                    require(stat.S_ISREG(info.st_mode) and info.st_size == row["size"]
-                            and info.st_mtime_ns == row["mtime_ns"], f"changed_during_deletion:{row['path']}", Mismatch)
+                    got, size, info = self._hash_guarded(root, row["path"])
+                    require(got == row["sha256"] and size == row["size"] and info.st_mtime_ns == row["mtime_ns"]
+                            and info.st_nlink == 1, f"content_differs_from_bound_digest:{row['root']}:{row['path']}",
+                            Mismatch)
                 else:
                     require(readlink_rel(root, row["path"]) == row["target"],
                             f"changed_during_deletion:{row['path']}", Mismatch)
@@ -1289,10 +1393,15 @@ class Offload:
             listed = {row["path"] for row in rows if row["root"] == record_root}
             for rel, (kind, _) in scan_tree(Path(record_root)).items():
                 require(kind == "dir" or rel in listed, f"record_changed_since_offload:new:{rel}", Mismatch)
-        # Pass 2: unlink (files first, links last), then directories left empty, deepest first.
+        self.check_quiet_allowed()
+        # Pass 2: unlink (files first, links last), each file re-stat'ed right before; then empty directories.
         for row in sorted(remaining, key=lambda r: r["kind"] != "file"):
             fd, leaf = parent_fd(Path(row["root"]), row["path"])
             try:
+                if row["kind"] == "file":
+                    info = os.stat(leaf, dir_fd=fd, follow_symlinks=False)
+                    require(stat.S_ISREG(info.st_mode) and info.st_size == row["size"]
+                            and info.st_mtime_ns == row["mtime_ns"], f"changed_during_deletion:{row['path']}", Mismatch)
                 self.unlink(leaf, dir_fd=fd)
             finally:
                 os.close(fd)
@@ -1334,14 +1443,28 @@ class _GuardedReader:
 # -- MBP probes, transports and receipts ------------------------------------------------------
 
 def default_state_probe(launch_agents=Path.home() / "Library/LaunchAgents", markers=()):
+    """LaunchAgent and process census. Fail closed (review S1-03): an unreadable LaunchAgents directory, a ps
+    that cannot run, exits nonzero, prints nothing, prints an unparseable line, or does not list this very
+    process, all count as NOT quiet."""
     def probe():
-        armed = sorted(p.name for p in launch_agents.iterdir()
-                       if p.name.startswith(ARMED_PREFIXES) and p.name.endswith(".plist")) \
-            if launch_agents.is_dir() else []
+        armed = []
+        try:
+            if launch_agents.is_dir():
+                armed = sorted(p.name for p in launch_agents.iterdir()
+                               if p.name.startswith(ARMED_PREFIXES) and p.name.endswith(".plist"))
+        except OSError as exc:
+            armed = [f"launch_agents_unreadable:{type(exc).__name__}"]
         armed += [str(m) for m in markers if os.path.lexists(m)]
-        table = subprocess.run(["/bin/ps", "-axo", "pid=,args="], capture_output=True, text=True).stdout
+        try:
+            census = subprocess.run(["/bin/ps", "-axo", "pid=,args="], capture_output=True, text=True, timeout=30)
+        except (OSError, subprocess.SubprocessError) as exc:
+            return {"armed": armed, "measuring": [f"process_census_failed:{type(exc).__name__}"]}
+        lines = [line for line in (census.stdout or "").splitlines() if line.strip()]
+        parsed = [re.match(r"\s*(\d+)(?:\s|$)", line) for line in lines]
         mine = os.getpid()
-        measuring = [line.strip()[:120] for line in table.splitlines()
+        if census.returncode != 0 or not lines or not all(parsed) or mine not in {int(m.group(1)) for m in parsed}:
+            return {"armed": armed, "measuring": [f"process_census_failed:rc={census.returncode},lines={len(lines)}"]}
+        measuring = [line.strip()[:120] for line in lines
                      if MEASURING.search(line) and not line.strip().startswith(f"{mine} ")]
         return {"armed": armed, "measuring": measuring}
     return probe
@@ -1409,9 +1532,47 @@ def predict_s(raw: int, rates: dict, done: dict, recheck_bytes: int = 0, compres
     return pack + push + verify + recheck + 10.0  # ssh handshakes and fsyncs
 
 
-def run_offload(args, *, runner, state_probe, now=time.time, mono=time.monotonic, lease: Lease | None = None,
+ACTIVITY_START, ACTIVITY_SPAN = "activity-start.json", "activity-span.json"
+
+
+def run_offload(args, *, runner, state_probe, now=None, mono=None, lease: Lease | None = None,
                 alarm=True) -> int:
     """The magistrate's one call after finalize. Writes start/end receipts whatever happens."""
+    now, mono = now or time.time, mono or time.monotonic
+    def action(off, span, state_root, deadline):
+        outcome = _run_stages(args, off, state_root, span, runner, now, mono, deadline, state_probe, lease)
+        if any("mismatch" in row for row in outcome["older"]):
+            return Mismatch.code, {**outcome, "outcome": "older_window_mismatch"}
+        return 0, outcome
+    return _supervised(args, "offload", action, runner=runner, state_probe=state_probe, now=now, mono=mono,
+                       lease=lease, alarm=alarm)
+
+
+def run_release(args, *, runner, state_probe, now=None, mono=None, lease: Lease | None = None,
+                alarm=True) -> int:
+    """A standalone release under exactly the same supervision as `run` (review F3): the state lock that triage
+    reads, start/end receipts, the probe (plus the lease when wired), a bounded monotonic deadline with the
+    120 s margin left to the caller's --deadline-epoch or the lease, the admission prediction and the alarm."""
+    now, mono = now or time.time, mono or time.monotonic
+    def action(off, span, state_root, deadline):
+        off.check_quiet_allowed()
+        require((off.dir / MANIFEST_NAME).exists(), "nothing_offloaded_for_this_window")
+        write_atomic(off.dir / "timing" / "release-start.json", canonical(span))
+        manifest = read_json(off.dir / MANIFEST_NAME)
+        rates = load_rates(state_root, getattr(args, "rates_seed", RATES_SEED))
+        predicted = predict_release_s(manifest, rates)
+        span["predicted_s"] = round(predicted, 1)
+        off.check_deadline(predicted * args.safety, "predicted_overrun")
+        result = {}
+        pressure = args.pressure_compressed_local and _pressure(args, state_root)
+        span["stages"].append(_stage("release", now, lambda: result.update(
+            off.release(pressure_compressed_local=pressure))))
+        return 0, {"outcome": "released", "result": result}
+    return _supervised(args, "release", action, runner=runner, state_probe=state_probe, now=now, mono=mono,
+                       lease=lease, alarm=alarm)
+
+
+def _supervised(args, kind, action, *, runner, state_probe, now, mono, lease, alarm) -> int:
     try:
         state_root = plain_path(args.state_root)
         valid_window(args.window_id)
@@ -1427,8 +1588,11 @@ def run_offload(args, *, runner, state_probe, now=time.time, mono=time.monotonic
         print(json.dumps({"outcome": "refused", "reason": "offload_already_running"}))
         return Refusal.code
     started_epoch, started_mono = now(), time.monotonic_ns()
+    activity = {"kind": kind, "window_id": args.window_id, "started_epoch_s": started_epoch,
+                "started_monotonic_ns": started_mono}
+    write_atomic(state_root / ACTIVITY_START, canonical(activity))
     deadline = args.deadline_epoch if args.deadline_epoch is not None else now() + args.budget_s
-    span = {"schema": SCHEMA_SPAN, "stage_id": f"offload-{args.window_id}", "kind": "backup",
+    span = {"schema": SCHEMA_SPAN, "stage_id": f"{kind}-{args.window_id}", "kind": "backup", "activity": kind,
             "window_id": args.window_id, "started_epoch_s": started_epoch, "started_monotonic_ns": started_mono,
             "deadline_epoch_s": deadline, "stages": [],
             "interlock": {"mode": "lease+loop_lock+probe" if lease is not None else "probe_only"}}
@@ -1443,9 +1607,7 @@ def run_offload(args, *, runner, state_probe, now=time.time, mono=time.monotonic
         off = Offload(state_root, args.window_id, runner=runner, now=now, mono=mono, deadline_epoch=deadline,
                       state_probe=state_probe, lease=lease)
         with alarm_guard(off.remaining_s() if alarm else None):
-            outcome = _run_stages(args, off, state_root, span, runner, now, mono, deadline, state_probe, lease)
-            if any("mismatch" in row for row in outcome["older"]):
-                rc, outcome["outcome"] = Mismatch.code, "older_window_mismatch"
+            rc, outcome = action(off, span, state_root, deadline)
     except Refusal as exc:
         rc, outcome = exc.code, {"outcome": type(exc).__name__, "reason": str(exc)}
     except OSError as exc:  # e.g. ENOSPC; resumable, but never silent
@@ -1454,14 +1616,24 @@ def run_offload(args, *, runner, state_probe, now=time.time, mono=time.monotonic
         span.update(ended_epoch_s=now(), ended_monotonic_ns=time.monotonic_ns(), rc=rc, **outcome,
                     ended_before_deadline=now() <= deadline)
         if off is not None and off.dir.is_dir() and not off.dir.is_symlink():
-            write_atomic(off.dir / "timing" / "offload-span.json", canonical(span))
-            off.journal({"event": "run_end", "rc": rc, **outcome})
+            (off.dir / "timing").mkdir(exist_ok=True)
+            write_atomic(off.dir / "timing" / f"{kind}-span.json", canonical(span))
+            off.journal({"event": f"{kind}_end", "rc": rc, **outcome})
+        write_atomic(state_root / ACTIVITY_SPAN, canonical({**activity, "ended_epoch_s": span["ended_epoch_s"],
+                                                             "rc": rc}))
         if lease is not None:
             lease.close()
         fcntl.flock(lock_fd, fcntl.LOCK_UN)
         os.close(lock_fd)
     print(json.dumps(span, sort_keys=True))
     return rc
+
+
+def predict_release_s(manifest: dict, rates: dict) -> float:
+    """Fresh recheck on the Air, plus proving every byte to delete against its bound digest on the MBP."""
+    roots = 1 + len(manifest.get("duplicate_roots", []))
+    return (manifest["compressed_bytes"] / (rates["recheck_mb_s"] * 1e6)
+            + (manifest["raw_bytes"] * roots + manifest["compressed_bytes"]) / (rates["release_hash_mb_s"] * 1e6) + 10.0)
 
 
 def _run_stages(args, off, state_root, span, runner, now, mono, deadline, state_probe, lease) -> dict:
@@ -1482,8 +1654,8 @@ def _run_stages(args, off, state_root, span, runner, now, mono, deadline, state_
         if harvest_pack is not None:
             with contextlib.suppress(OSError):
                 compressed = os.lstat(Path(harvest_pack) / HARVEST_PAYLOAD).st_size
-    older_bytes = _pending_older_bytes(state_root, args.window_id) if args.release_older else 0
-    predicted = predict_s(raw_bytes, rates, done, older_bytes, compressed)
+    older_bytes, older_s = _pending_older(state_root, args.window_id, rates) if args.release_older else (0, 0.0)
+    predicted = predict_s(raw_bytes, rates, done, 0, compressed) + older_s
     span["predicted_s"] = round(predicted, 1)
     span["rates_used"] = rates
     off.check_deadline(predicted * args.safety, "predicted_overrun")
@@ -1541,15 +1713,18 @@ def _raw_size(args) -> int:
     return total
 
 
-def _pending_older_bytes(state_root: Path, current: str) -> int:
-    total = 0
+def _pending_older(state_root: Path, current: str, rates: dict) -> tuple[int, float]:
+    """(compressed bytes the Air rechecks, predicted seconds) for older windows still to release."""
+    total, seconds = 0, 0.0
     for directory in state_root.iterdir():
         if directory.name == current or not WINDOW_ID.match(directory.name) or directory.is_symlink():
             continue
         with contextlib.suppress(OSError, ValueError, KeyError):
             if not (directory / "released.json").exists():
-                total += read_json(directory / MANIFEST_NAME)["compressed_bytes"]
-    return total
+                manifest = read_json(directory / MANIFEST_NAME)
+                total += manifest["compressed_bytes"]
+                seconds += predict_release_s(manifest, rates)
+    return total, seconds
 
 
 def _pressure(args, state_root: Path) -> bool:
@@ -1614,7 +1789,14 @@ def triage(state_root: Path, window_id: str, dwell_start_epoch: float, margin_s:
         reasons.append("offload_started_without_end_receipt")
     if span is not None and span["ended_epoch_s"] > dwell_start_epoch - margin_s:
         reasons.append("offload_ended_inside_dwell_margin")
-    return {"schema": SCHEMA_TRIAGE, "window_id": window_id, "quiet_start_state_ok": not reasons,
+    # Any offload activity on this MBP (run or a standalone release, for any window) counts (review F3).
+    act_start = read_json(state_root / ACTIVITY_START) if (state_root / ACTIVITY_START).exists() else None
+    act_span = read_json(state_root / ACTIVITY_SPAN) if (state_root / ACTIVITY_SPAN).exists() else None
+    if act_start is not None and (act_span is None or act_span["started_epoch_s"] < act_start["started_epoch_s"]):
+        reasons.append("offload_activity_without_end_receipt")
+    if act_span is not None and act_span["ended_epoch_s"] > dwell_start_epoch - margin_s:
+        reasons.append("offload_activity_inside_dwell_margin")
+    return {"schema": SCHEMA_TRIAGE, "activity": act_span, "window_id": window_id, "quiet_start_state_ok": not reasons,
             "reasons": reasons, "span": span, "dwell_start_epoch_s": dwell_start_epoch, "margin_s": margin_s,
             "air_receipt": (state_root / window_id / "receipt-air.json").exists(),
             "second_copy": (state_root / window_id / "receipt-second.json").exists(),
@@ -1962,6 +2144,7 @@ class Gate:
                 and all(env.closure_inputs.get(r["path"]) == {"sha256": r["sha256"], "size": r["size"]}
                         for r in externals.values()),
                 "harvest_manifest_differs_from_finalize", Mismatch)
+        require(not restore_gaps(env, list(externals.values())), "harvest_pack_not_restorable", Mismatch)
 
     def _check_member(self, tar, member, row, staging: Path, extract: bool):
         source = tar.extractfile(member)
@@ -2271,6 +2454,11 @@ def main(argv=None) -> int:
                      help="below --min-free-gib, drop raw files of Air-verified windows, keeping local parts")
     rel = mbp("release")
     rel.add_argument("--pressure-compressed-local", action="store_true")
+    rel.add_argument("--min-free-gib", type=float, default=60.0)
+    rel.add_argument("--deadline-epoch", type=float, help="latest end of all release activity (dwell start - margin)")
+    rel.add_argument("--budget-s", type=float, default=600.0, help="used when --deadline-epoch is absent")
+    rel.add_argument("--safety", type=float, default=1.5)
+    rel.add_argument("--rates-seed", type=Path, default=RATES_SEED)
     rel.add_argument("--record-manifest-sha256", help="needed with --lease (the lease names the current record)")
     tri = sub.add_parser("triage")
     tri.add_argument("--state-root", type=Path, required=True)
@@ -2321,19 +2509,7 @@ def main(argv=None) -> int:
         lease = _lease_from_args(args, args.record_manifest_sha256)
         if args.command == "run":
             return run_offload(args, runner=runner, state_probe=probe, lease=lease)
-        if lease is not None:
-            lease.acquire()
-            lease.check()
-        try:
-            off = Offload(args.state_root, args.window_id, runner=runner, state_probe=probe, lease=lease,
-                          deadline_epoch=None if lease is None else lease.deadline_epoch)
-            with alarm_guard(off.remaining_s()):
-                result = off.release(pressure_compressed_local=args.pressure_compressed_local)
-        finally:
-            if lease is not None:
-                lease.close()
-        print(json.dumps(result, sort_keys=True))
-        return 0
+        return run_release(args, runner=runner, state_probe=probe, lease=lease)
     except Refusal as exc:
         print(json.dumps({"outcome": type(exc).__name__, "reason": str(exc)}))
         return exc.code

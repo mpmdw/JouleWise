@@ -6,7 +6,8 @@ Opus build (`ops/2026-11-08-air-offload-opus` @ `7e0c264e0`) with the Sol build'
 This document replaces `AIR-OFFLOAD-opus.md` (deleted here) and Sol's `AIR-OFFLOAD.md` (on its own branch).
 
 Code: `scripts/offload_window.py` (standard library only, Python >= 3.11), tests `tests/test_offload_window.py`
-(96 tests); operator setup `scripts/offload_setup_air.sh` (sudo, Air) and `scripts/offload_setup_mbp.sh` (no sudo,
+(96 tests) and `tests/test_offload_review_fixes.py` (20 tests: the two Sol review seats' findings as required
+properties, §11); operator setup `scripts/offload_setup_air.sh` (sudo, Air) and `scripts/offload_setup_mbp.sh` (no sudo,
 MBP); benchmark `scripts/offload_bench.py`; seed rates `configs/ops/air_offload_rates.json`.
 
 **Status: built and tested off the MBP; nothing installed.** No ssh, no MBP contact, no account, key or
@@ -28,8 +29,10 @@ LaunchAgent was created. The operator steps in §3 need Ed (sudo on the Air) and
   estimate (×1.5) for this tool's part: about 2.2 min, against a 15-25 min cool-down.
 - **Custody:** the MBP deletes a window only after (1) a sealed Air receipt that every raw file matched the
   record's own sha256 digests, (2) a sealed second-copy receipt (default: iCloud, server-confirmed by an
-  evict/re-download/sha256 round trip, off-site), and (3) a **fresh** receipt: at release time the Air re-hashes the
-  compressed parts and both manifests for the MBP's nonce. The deletion is journaled and resumable.
+  evict/re-download/sha256 round trip, off-site), (3) a **fresh** receipt: at release time the Air re-hashes the
+  compressed parts and both manifests for the MBP's nonce, (4) a restorable Air copy (every byte-bound closure
+  input travels in it), and (5) **each file to delete re-hashed on the MBP and equal to its own bound digest** (by
+  path; never by size). Any difference refuses the whole release. The deletion is journaled and resumable.
 - **The Air's landing store** is `/Volumes/JW-EXT/jw-offload`, bound by APFS volume UUID at an explicit
   `init-store` step. Every gate call refuses if the volume is not mounted, is a different volume, lost its marker,
   ignores ownership, or (for writes) is below the free floor (default 100 GiB). The Air's internal disk keeps no
@@ -97,6 +100,21 @@ matching bytes, and every bound marker must exist. A marker present but unbound 
 absent or changed is exit 3. The magistrate's N1 native census confirms which layout is real; declaring the inputs
 is a harvest-off finalize change, not this tool's.
 
+## 1b. Release safety after the Sol reviews (2026-11-08, both seats HOLD on `175f0c8b9`)
+
+| Finding | Fix |
+|---|---|
+| F1 / S1-01 (HIGH, data loss): a same-size, different-content file in a `--duplicate-root` was deleted | Every file to delete, in the record and in every duplicate root, is re-hashed and must equal **its own** bound digest (and the record's sealed size and mtime). Links must have their bound text. Any difference (size or content, record or duplicate) refuses the whole release before the first unlink; the journaled resume re-hashes the same way. Each file is re-stat'ed right before its unlink |
+| F2 (HIGH): release unlinked whatever sat at a reused local pack path | Every local pack object (parts, `payload.tar.zst`, `MANIFEST.json`) is re-hashed against this window's sealed digest **before any deletion**; a different object refuses the release and is kept. Pack deletion is journaled (`deleting-parts.json`; a resume re-hashes). Adoption claims the pack path for (window_id, finalize digest, payload digest) in `S/pack-claims/`; another window's unreleased claim refuses |
+| F3 / S1-02 (MEDIUM): standalone `release` bypassed the lock, the receipts and the deadline | `release` now runs under the same supervision as `run`: the state lock triage reads, `timing/release-start.json` and `release-span.json`, a state-wide `activity-start.json`/`activity-span.json` that triage checks for **any** offload activity (run or release, any window), the probe and the lease when wired, `--deadline-epoch` (or a 600 s budget), the admission prediction and the alarm. The probe (and lease) is re-checked after the receipt round trip, right before deletion |
+| S1-03 (MEDIUM): a failed `ps` census read as a quiet machine | Fail closed: a `ps` that cannot run, times out, exits nonzero, prints nothing, prints an unparseable line, or does not list this process, and an unreadable LaunchAgents directory, all count as not quiet |
+| S1-04 (MEDIUM): external terminal inputs omitted from the pack | A consumed pack must carry every byte-bound closure input of the pinned finalize manifest (external terminal evidence, the ledger, any byte-bound link target) as an external; adoption refuses otherwise, the Air verify refuses otherwise, and release re-checks it before any deletion. Today the harvest-off CLI `pack` passes only the ledger (`_ledger_input`) and reads the terminal record from `plan['custody_root']/night/`; if that is outside the session root, its finalize and pack must declare and carry those files (a harvest-off code change) |
+| LOW (both): the Air setup's recursive owner repair of `backups/` | Stated explicitly in §3a: it runs `chown -R` on `backups/` only when its top-level owner is `_unknown` (uid 99) after `enableOwnership`; it changes ownership metadata of every file below, never contents |
+
+Cost of F1: release re-reads the bytes it deletes. Measured 1.2 GB/s on the Air (seed 800 MB/s), so a D window's
+release, usually in the next turnaround's `release_older`, adds about 22 s (seed: 33 s) of MBP hashing at the start
+of cool-down. The admission prediction includes it.
+
 ## 2. Design
 
 ```
@@ -140,9 +158,11 @@ point, volume UUID, store id and free floor.
    ```
    It is idempotent and does, in order:
    - **`diskutil enableOwnership /Volumes/JW-EXT`.** The volume currently ignores ownership (`noowners`), which
-     would let any account write anywhere on it. If enabling it leaves `/Volumes/JW-EXT` or `backups/` owned by
-     `_unknown` (uid 99), it chowns them back to Ed. This is the only change near `backups/`: its owner, never its
-     contents. `mdutil -i off` stays.
+     would let any account write anywhere on it. If enabling it leaves `/Volumes/JW-EXT` owned by `_unknown`
+     (uid 99), it chowns that directory (not recursively) back to Ed; if it leaves `backups/` owned by `_unknown`,
+     it runs **`chown -R Ed:staff` on `backups/`**, which changes the owner of every file below it (ownership
+     metadata only, never contents) so the git backup stays writable. Check `ls -ln /Volumes/JW-EXT/backups` first
+     if that matters. `mdutil -i off` stays.
    - Creates the hidden, non-admin account `jw-offload` (shell `/bin/sh` so `ForceCommand` can run; root-owned home,
      so no rc files or keys), and adds it to `com.apple.access_ssh` if that group exists.
    - Installs `offload_window.py` root-owned at `/usr/local/libexec/jw-offload/` (it refuses a checkout whose copy
@@ -192,7 +212,8 @@ point, volume UUID, store id and free floor.
 | Dwell, arm | unchanged | |
 
 The next turnaround's `run` releases older windows whose second copy has landed (`release_older`), each with a
-fresh receipt; `release --state-root S --window-id K` does the same for one window by hand.
+fresh receipt and the content proof. `release --state-root S --window-id K --deadline-epoch <dwell − 120>` does the
+same for one window by hand, under the same lock, receipts and deadline as `run` (triage sees it).
 
 ## 5. Interlock: active today, and the magistrate contract
 
@@ -335,6 +356,21 @@ cool-down lengthens measurably.
 - The sshd snippet was checked with `sshd -t` and `sshd -T -C user=...` against a scratch copy of this Air's
   `sshd_config` with a temporary host key; nothing was installed.
 
+## 11. Review fixes: tests
+
+`tests/test_offload_review_fixes.py` holds each seat's defect witnesses inverted into required properties, plus
+their controls (replayed nonce, volume UUID switch, decayed part, wrong finalize pin, byte-identical consumed pack):
+F1/S1-01 (same-size different duplicate kept and refused, also on resume; nonempty member; different size; record
+content change with kept size and mtime), F2 (replaced local part or harvest payload kept and refused; resumed pack
+deletion re-hashes; a second window cannot claim an unreleased pack path), F3/S1-02 (the CLI release holds the
+lock, triage reports it during and after; it refuses while another offload holds the lock; it is bounded and
+stops before the dwell; an arm during the receipt round trip stops the deletion), S1-03 (six census failure modes
+refuse; a good census passes) and S1-04 (a pack omitting bound terminal inputs refuses; release refuses a copy that
+is not restorable; with the pinned native `harvest_offload` blob `d279ab46`, a pack carrying the external terminal
+inputs is offloaded, released, and restored natively from the Air copy). Run against this tree, the reviewers'
+original witness modules fail as they should and their controls pass; seat 1's "different-size duplicate is
+preserved" control is superseded by the lead's refuse-on-any-mismatch rule.
+
 ## 10. Before the first real window
 
 1. **Ed:** §3a on the Air (sudo), including Remote Login; this also enables ownership on JW-EXT.
@@ -344,7 +380,9 @@ cool-down lengthens measurably.
    (§1a); until then the run refuses clearly (`terminal_not_in_manifest` / `terminal_not_in_closure`).
 4. **One pack (ruled, built):** the harvest-off runbook's step 1c should pass `--threads 4` (its CLI default is
    `--threads 0`, every core), and its step 1d becomes `run --harvest-pack` here plus the in-place `unpack` (§1a).
-   Both are harvest-off runbook edits.
+   Its `pack` must also carry **every** byte-bound closure input as an external (S1-04: otherwise this tool refuses
+   the pack); its CLI passes only the ledger today, and its terminal record lives under `plan['custody_root']`.
+   That is a harvest-off code change if N1 shows the custody root outside the session root.
 5. **Magistrate wiring of the lease and loop lock** (§5): a magistrate change with its own review. Until then the
    probe is the active exclusion.
 6. **Real-data calibration:** the first real offload's span and `rates.json` replace the seed rates; record the
