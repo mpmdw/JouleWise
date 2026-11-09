@@ -572,6 +572,10 @@ def analyze(payload, *, workers=1, frozen_thresholds=None):
         attempt = w['attempt_id']
         if not isinstance(attempt, str) or slot_of(attempt) != name:
             raise ValueError('attempt id must bind its window slot (Cn or Cn#integer)')
+        if strict_ids and 'terminal_result' in w and 'terminal_result_source' not in w:
+            # R23j P1: non-synthetic input takes terminal results only as
+            # loaded from a digest-bound terminal_result_source (io.load).
+            raise ValueError('inline terminal_result refused on non-synthetic input')
         # Reserves are optional, frozen-order replacements after C8. T may
         # follow any completed reserve prefix; its scoring gate is below.
         if name == 'T1' and 8 <= current <= len(CALIBRATION_ORDER):

@@ -17,12 +17,37 @@ The engine runs offline analysis from its own pinned commit and never arms. Its 
 
 ## Guard
 
-`tests/align/test_v4_calibration_port_pin.py` pins, by sha256, the source of:
-- `calibration_stop`;
-- every helper it calls (`slot_of`, `_validated_rulings`, `_is_digest`);
-- every module constant it reads;
-- `scripts/align_v4_kit.valid_lead_signature` and `UNSIGNED`.
+`tests/align/test_v4_calibration_port_pin.py` audits `calibration_stop` in
+`v4_cadence.py` and `valid_lead_signature` in `scripts/align_v4_kit.py`. The
+audit follows every module-scope name the pinned functions read, at call time
+or def time: helpers, constants, imports such as `re`, and any shadowed
+builtin.
 
-The pins hold the sources as they are at r11 `bbfccb70ab993c395f254058694906610547651d`. A second test checks that the pin covers every module name `calibration_stop` reaches. If r11 changes any pinned source, the test fails, and the engine must re-port it before landing.
+- **Pinning.** Each reached name must have exactly one module-level binding.
+  That statement is pinned by sha256 of its full source lines, including
+  decorators and anything else on those lines. The pins were computed with the
+  same audit on the files at r11 `bbfccb70ab993c395f254058694906610547651d`.
+- **Refused drift paths:**
+  - a second binding: assignment, augassign, subscript or attribute mutation,
+    `del`, import, or rebinding def or wrapper;
+  - a `global` or `nonlocal` declaration of a reached name;
+  - `globals()`/`vars()` keyed by a reached name, or `setattr`/`delattr`;
+  - module-level `exec`/`eval`/`compile`.
+- **Mutation witnesses.** Each of these fails the test:
+  - an added decorator, including Sol's `@lru_cache()`;
+  - `CAL_TARGET_PER_PAIR += 1`;
+  - an appended or same-line `CAL_WINDOWS += 1`;
+  - `calibration_stop = wrapper(calibration_stop)`;
+  - a helper redefinition;
+  - global, `globals()` and `setattr` rebinding;
+  - a shadowed `len`;
+  - a `re` import alias;
+  - `del`;
+  - a value change;
+  - module `exec`.
+- **What it does not pin.** An unrelated edit to r11-owned triage code passes
+  the audit, as intended.
+
+If r11 changes anything reached, the engine must re-port it before landing.
 
 The engine's own R22-2 bar predicate is `engine._structural_bar`, ported from r11's `scripts/align_v4_next_arm_packet.py` (`WindowRecord.structural_bar`). It lives in the engine and is not part of this pin. R23j makes it stricter than r11: declared bars must be reproduced.

@@ -289,10 +289,14 @@ manifest for synthetic release inputs.
 on main FIRST. When `engine-r23*` lands later, r11's `v4_cadence.py` and its
 whole v4 arm stack (session, kit, registration, protocol text and their tests)
 win on every conflict. The engine never arms, so its older arm stack is inert.
-`tests.align.test_v4_calibration_port_pin` pins by sha256 the source of
-`calibration_stop`, its helpers and constants, and the kit's lead-signature
-check, all equal to r11 `bbfccb70a`. Drift fails the test and forces a
+`tests.align.test_v4_calibration_port_pin` audits `calibration_stop` and the
+kit's lead-signature check against r11 `bbfccb70a`. It covers everything they
+reach, including decorators, one binding per reached name, and no rebinding,
+augassign, global or namespace writes. Drift fails the test and forces a
 re-port. See `docs/analysis/v4/MERGE-ORDER.md`.
+(P1, r23j-sol F1) The release path reads terminal results only from the
+digest-bound `terminal_result_source`. An inline `terminal_result` refuses in
+`io.load` and in non-synthetic `analyze`; it survives only on the synthetic API.
 Witnesses: `tests.align.test_v4_r23j_engine`.
 
 R23h (lead rulings on the Opus review of r23g, 2026-11-08):

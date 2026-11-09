@@ -88,6 +88,37 @@ class ReleaseTerminalResultTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'lacks terminal_result_source: C3'):
                 load(path)
 
+    def test_inline_terminal_result_never_substitutes_for_the_source(self):
+        # r23j-sol F1: GO and non-GO inline substitutes, with and without a declared bar.
+        for inline, declared in ((dict(verdict='GO', chain_exit_code=0), None),
+                                 (dict(verdict='HOLD', chain_exit_code=0), 'whole_window_capture_failure'),
+                                 (dict(verdict='HOLD', chain_exit_code=0), None)):
+            for keep_source in (False, True):
+                with self.subTest(inline=inline, declared=declared, keep_source=keep_source):
+                    with tempfile.TemporaryDirectory() as tmp:
+                        path = write_export(Path(tmp), native_payload())
+                        document = json.loads(path.read_text())
+                        c2 = next(w for w in document['windows'] if w['window'] == 'C2')
+                        if not keep_source:
+                            c2.pop('terminal_result_source')
+                        c2['terminal_result'] = inline
+                        if declared:
+                            c2['barred'] = declared
+                        path.write_text(json.dumps(document))
+                        with self.assertRaisesRegex(ValueError, 'inline terminal_result refused'):
+                            load(path)
+
+    def test_non_synthetic_analyze_refuses_inline_terminal_result(self):
+        p = native_payload()
+        win(p, 'C2')['terminal_result'] = dict(verdict='HOLD', chain_exit_code=0)
+        with self.assertRaisesRegex(ValueError, 'inline terminal_result refused on non-synthetic input'):
+            analyze(p)
+        # The synthetic API keeps inline terminal results (a named non-release seam).
+        q = series(turns=4, reserves=1)
+        win(q, 'C2')['terminal_result'] = dict(verdict='HOLD', chain_exit_code=0)
+        fill, _ = analyze(q)
+        self.assertEqual(fill['calibration']['barred_windows'], ['C2#1'])
+
     def test_zero_capture_attempt_needs_no_terminal_result(self):
         p = native_payload()
         i = next(i for i, w in enumerate(p['windows']) if w['window'] == 'C3')

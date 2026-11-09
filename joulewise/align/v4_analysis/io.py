@@ -126,6 +126,10 @@ def load(path, *, calibration_only=False, through_window=None, cache_dir=None, w
     for window in payload['windows']:
         if calibration_only and window['window'].startswith('T'):
             continue
+        if 'terminal_result' in window:
+            # R23j P1: the terminal result is read only from its digest-bound
+            # source; an inline value could substitute or manufacture a bar.
+            raise ValueError('inline terminal_result refused on release input; use terminal_result_source')
         if 'terminal_result_source' in window:
             ref = window['terminal_result_source']
             identity = (ref['path'], ref['sha256'])
@@ -179,7 +183,7 @@ def load(path, *, calibration_only=False, through_window=None, cache_dir=None, w
         # R22-2 bars are recomputed from the committed terminal result, so
         # every captured calibration window must carry it on the release path.
         if (window['window'].startswith('C') and any(m['captured'] for m in window.get('members', []))
-                and 'terminal_result' not in window):
+                and 'terminal_result_source' not in window):
             raise ValueError('release C window lacks terminal_result_source: ' + window['window'])
     if calibration_only:
         payload['windows'] = [w for w in payload['windows'] if not w['window'].startswith('T')]
