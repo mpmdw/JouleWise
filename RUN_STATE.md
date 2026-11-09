@@ -1042,6 +1042,30 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+241. **Laptop lead (interactive session 1544c617), 2026-11-08 16:27 PST: v4 release tooling, exact AGREE with no holds; engine frozen at r23h; R25 U3 restated; offload fixes.**
+- **v4 primary engine FROZEN at `engine-r23h` @ `244ef6f39`.** The Opus delta reviews of r23 through r23g are closed, and the Sol review of r23h (the Opus patch) is ADMIT.
+  - r23h makes sealed U1/U2 and battery aggregates `{status: sealed}` with no hash, because value hashes of small integers were reversible. It also adds `attempt_id` on per-member rows, H* off-grid doses, and refusal of string stamps and of exports without owned flags on the release path.
+- **Release rehearsal (synthetic): exact AGREE, no holds.**
+  - Recompute: `align/2026-11-08-v4-recompute-opus` @ `de553c002`, program sha `343f417b…`.
+  - Release tools: `align/2026-11-08-v4-release-tools` @ `99875485d`. `release_v4.py` pins the engine commit, the recompute commit and the program sha, and refuses any other.
+  - Full plan: 62 families, 0 unmapped of 258,145 leaves, `release_v4` exit 0 in about 12 s at 4 workers.
+  - Probe plan (G1-timeout X2 anchor): AGREE.
+  - Fixtures: C3/T2 zero-capture retries; seams at 238 ns (2026), 954 ns (4.3e9 s, snapped) and 1,907 ns (9e9 s, kept, members excluded); A2(4) owned-time exclusion in both directions; battery screens; a 24-member T3.
+  - Two Sol review seats on the release tools and recompute are running.
+- **R25 restated:** `align/2026-11-08-u3-inputs-n22` @ `c3fd88654`. At n = 7, β = .05, q rises 4.0898 → 4.2793, and the familywise false-fail rate stays .05. Inherited R15 pool prose is to be reconciled before the U3 signature.
+- **v4 line `33932b391`:** the delta6 fixes (contention disclosure-only in every desk path, the balance count, one structural-bar predicate, the R25 roster N 16 → 22, the drift prose).
+  - Regression found by the lead: `tests.align.test_r1_round7_install` signal-handler tests pass at the armed R1 commit `20e9edbc4` and fail on the v4 line (`KeyError 'mode'`; the W1 install path's automatic-power-mode restore). It is being bisected and fixed, with a sweep for other regressions since 20e9edbc4.
+  - The running R1 is unaffected.
+- **Air-offload:** fix round `66b7da341` closes both Sol seats' findings:
+  - same-size, different-content deletion (DATA LOSS);
+  - pack-path reuse;
+  - a standalone release that bypassed the lock and deadline;
+  - a fail-open ps census;
+  - an Air copy that might not be restorable.
+
+  Release now re-hashes every deleted byte against its own digest (about 22 s MBP per D window). Two Sol re-review seats are running. Harvest-off pack is to carry every byte-bound closure input.
+- **R1** armed at 01:17 PST, ceiling 105,427 s (ends at terminal completion, by about 06:34 Monday at the latest). The magistrate has not reported close yet.
+
 240. **Laptop lead (interactive session 1544c617), 2026-11-08 15:56 PST: harvest-off and smoke kit ADMITTED (software); Air-offload built; engine line at r23g/r23h.**
 - **Harvest-off (R17) ADMITTED in software at `align/2026-11-08-harvest-off-fix` @ `d3933432c`.**
   - Six Sol review seats ran: delta 1/2, final delta2 1/2 and a confirmation seat. Their witness modules are all green, except seat-1's raise-in-hook test, which is ruled wrong (D8).
