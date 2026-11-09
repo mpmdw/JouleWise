@@ -39,7 +39,10 @@ class SeriesTests(unittest.TestCase):
         for o in (23, 24):
             rid = f"align-v4-t3-e{o}"
             shutil.copytree(cls.root / "windows/T3/members" / late["run_id"], cls.root / "windows/T3/members" / rid)
-            win["members"].append(dict(late, ordinal=o, run_id=rid))
+            # Its own planned config (production: the escalation sentinel has its own run_id).
+            sha = synth.write_config(cls.root / "windows/T3/members" / rid, rid, late["seed_index"], late["pair"],
+                                     late["condition"], late["model"])
+            win["members"].append(dict(late, ordinal=o, run_id=rid, config_sha256=sha))
             win["identity"][rid] = "identical"
         wpath.write_text(json.dumps(win))
         cls.out = rc.recompute(cls.root, workers=4)

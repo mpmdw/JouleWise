@@ -161,16 +161,32 @@ def design(c, p, d):
     return (1.0, float(p), float(d), (c + p) * d + d * d / 2, c * p + p * p / 2)
 
 
-def write_config(base, seed_index, pair, model_tag="qwen3.8-27b", thinking=True):
-    """A producer-shaped config.json subset (BenchmarkConfig: model.name, run_metadata.tags,
-    workload_profile.prompt_text = the episode spec JSON) carrying the production seed inputs."""
-    spec = {"schema": "joulewise.align.apple.episode_spec.v1", "seed": seed_index, "condition": "benign",
+MODEL_TAGS = {"D": "qwen3.8-27b", "30B": "qwen3-30b-a3b"}
+
+
+def seed_law_model(model_tag, seed_index, pair):
+    """Production sampling.episode_seed for any model tag (thinking_on)."""
+    name = "spam_filter_update" if pair == "spam" else "bank_transfer_2"
+    text = json.dumps(["align-p4-v1", model_tag, "thinking_on", "shade/" + name, seed_index],
+                      separators=(",", ":"), ensure_ascii=True)
+    return int.from_bytes(hashlib.sha256(text.encode("utf-8")).digest()[:8], "big")
+
+
+def write_config(base, run_id, seed_index, pair, condition, model="D", thinking=True, sampler=True):
+    """A producer-shaped config.json subset (BenchmarkConfig: run_id, model.name, run_metadata.tags,
+    workload_profile.prompt_text = the episode spec JSON with task_kwargs.task_pair, condition, seed index and
+    sampler). Returns its sha256 (the plan's config_sha256)."""
+    spec = {"schema": "joulewise.align.apple.episode_spec.v1", "seed": seed_index, "condition": condition,
             "task_kwargs": {"task_pair": "spam_filter_update" if pair == "spam" else "bank_transfer_2"}}
     if thinking is not None:
         spec["enable_thinking"] = thinking
-    dump(Path(base) / "config.json", {
-        "model": {"name": "synthetic/Qwen"}, "run_metadata": {"project": "joulewise", "tags": [f"align-model={model_tag}"]},
-        "workload_profile": {"name": "align_episode", "prompt_text": json.dumps(spec, sort_keys=True)}})
+    if sampler:
+        spec["sampler"] = {"min_p": 0, "temperature": 1.0, "top_k": 20, "top_p": 0.95}
+    path = Path(base) / "config.json"
+    dump(path, {"run_id": run_id.split(":", 1)[-1], "model": {"name": "synthetic/Qwen"},
+                "run_metadata": {"project": "joulewise", "tags": [f"align-model={MODEL_TAGS[model]}"]},
+                "workload_profile": {"name": "align_episode", "prompt_text": json.dumps(spec, sort_keys=True)}})
+    return sha256_file(path)
 
 
 def write_member(root, wid, m, epoch_offset_ns, delta=(1.0, 1.0), big=False, full_frames=None, extra=None):
@@ -254,8 +270,7 @@ def window_roster(wid, role, index):
              "pair": "spam" if a["pair"] == "spam_filter_update" else "bank", "condition": a["condition"],
              "run_id": (f"{wid}:align-pilot-v3-episodes-a-e{o:02d}" if kind == "anchor"
                         else f"align-v4-{wid.lower()}-e{o:02d}")}
-        if model == "D":
-            r.update(seed_index=a["seed_index"], expected_episode_seed=a["episode_seed"])
+        r.update(seed_index=a["seed_index"], expected_episode_seed=a["episode_seed"])
         roster.append(r)
     return roster
 
@@ -279,8 +294,8 @@ def w1_roster():
                "run_id": (f"W1:align-v4-w1-e{o:02d}" if kind == "anchor" else f"align-v4-w1-e{o:02d}")}
         if contrast:
             row["contrast"] = {"template": contrast[0], "arm": contrast[1], "stage": 0 if o <= 11 else 1}
-        if model == "D":
-            row["seed_index"] = 93 if o == 18 else 1
+        row["seed_index"] = (93 if o == 18 else 1) if model == "D" else ({"X": 16, "Y": 14}[contrast[0]] if contrast else 1)
+        row["expected_episode_seed"] = seed_law_model(MODEL_TAGS[model], row["seed_index"], pair)
         out.append(row)
     return out
 
@@ -352,21 +367,23 @@ def write_series(root, windows=None, members_per_window=None, period_ns=100_000_
                     t["_energy"] += 8.0
             extra = {"identity_sha256": hashlib.sha256(
                 (f"traj-{identical}" if identical is not None else r["run_id"]).encode()).hexdigest()}
+            if "seed_index" not in r:
+                if r["model"] == "D" and r["kind"] != "sentinel":
+                    r["seed_index"] = next_index[r["pair"]]
+                    next_index[r["pair"]] += 1
+                else:
+                    r["seed_index"] = 1
+            # Producer shape (seed ruling (a)): the Episode records the seed INDEX (workload.py:722); the roster
+            # carries the derived expected_episode_seed and the planned config_sha256; config.json carries the
+            # member's identity and seed inputs.
+            r.setdefault("expected_episode_seed", seed_law_model(MODEL_TAGS[r["model"]], r["seed_index"], r["pair"]))
+            assert r["expected_episode_seed"] == seed_law_model(MODEL_TAGS[r["model"]], r["seed_index"], r["pair"])
+            extra.update(seed=r["seed_index"])
             if r["model"] == "D":
-                if "seed_index" not in r:
-                    if r["kind"] == "sentinel":
-                        r["seed_index"] = 1
-                    else:
-                        r["seed_index"] = next_index[r["pair"]]
-                        next_index[r["pair"]] += 1
-                # Producer shape (seed ruling (a)): the Episode records the seed INDEX (workload.py:722); the
-                # roster carries the derived expected_episode_seed; config.json carries the seed inputs.
-                extra.update(seed=r["seed_index"], cohort_sha256=COHORT)
-                r.setdefault("expected_episode_seed", seed_law(r["seed_index"], r["pair"]))
-                assert r["expected_episode_seed"] == seed_law(r["seed_index"], r["pair"])
+                extra.update(cohort_sha256=COHORT)
             write_member(root, wid, m, epoch_offset, extra=extra)
-            if r["model"] == "D":
-                write_config(root / "windows" / wid / "members" / r["run_id"], r["seed_index"], r["pair"])
+            r["config_sha256"] = write_config(root / "windows" / wid / "members" / r["run_id"], r["run_id"],
+                                              r["seed_index"], r["pair"], r["condition"], r["model"])
             clock = m.end_ns + 60 * NS
         streams = {}
         if meter:

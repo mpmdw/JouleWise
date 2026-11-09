@@ -613,7 +613,7 @@ def allocation_roster_check(wid, slot, members, rows):
         model = "D" if a.get("model_id") == ALLOC_D_MODEL else "30B"
         need(m["pair"] == ALLOC_PAIRS.get(a.get("pair")) and m["condition"] == a.get("condition")
              and m["model"] == model, "allocation_roster_differs", f"{wid}: ordinal {o} pair/condition/model")
-        if model == "D":
+        if model == "D" or "seed_index" in m:
             need(m.get("seed_index") == a.get("seed_index") and m.get("expected_episode_seed") == a.get("episode_seed"),
                  "allocation_roster_differs", f"{wid}: ordinal {o} seed")
         if slot != "W1" and o <= 22 and m["kind"] != "anchor":
@@ -675,9 +675,10 @@ def load_series(root):
                 anchor_runs.add(m["run_id"])
             else:
                 need(":" not in m["run_id"], "window_malformed", f"{wid}: prefixed non-anchor run id")
-            if m["model"] == "D" and is_int(m.get("seed_index")):
-                need(is_int(m.get("expected_episode_seed")), "window_malformed",
-                     f"{wid}: D member without expected_episode_seed (seed ruling (a))")
+            if is_int(m.get("seed_index")):
+                need(is_int(m.get("expected_episode_seed")) and isinstance(m.get("config_sha256"), str)
+                     and len(m["config_sha256"]) == 64, "window_malformed",
+                     f"{wid}: member without expected_episode_seed / planned config_sha256")
             if m["kind"] == "contrast":
                 c = m.get("contrast")
                 need(isinstance(c, dict) and c.get("template") in ("X", "Y") and c.get("arm") in ("S", "G")
@@ -963,6 +964,14 @@ def process_member(task):
         out["captured"] = False
         return out
     out["captured"] = True
+    # Seed ruling (a) and config identity (lead ruling on the r23k review): config.json is a digest-bound
+    # member input; its identity, seed inputs and spec are summarized here and checked in stage X.
+    out["config"] = None
+    if (mdir / "config.json").is_file():
+        cfg, out["inputs"]["config_sha256"] = read_json_bytes_sha(mdir / "config.json")
+        out["config"] = config_summary(cfg)
+    else:
+        flags.append("member_config_missing")
     try:
         meta, out["inputs"]["metadata_sha256"] = read_json(mdir / "metadata.json", "member_metadata")
         ep, out["inputs"]["episode_sha256"] = read_json(mdir / "outputs/align_episode.json", "member_episode")
@@ -971,18 +980,6 @@ def process_member(task):
         flags.append(r.code)
         out["usable"] = False
         return out
-    # Seed ruling (a): config.json is a digest-bound member input; its derived seed is checked in stage X.
-    out["config"] = None
-    if (mdir / "config.json").is_file():
-        try:
-            cfg, out["inputs"]["config_sha256"] = read_json(mdir / "config.json", "member_config")
-            need(isinstance(cfg, dict) and isinstance(cfg.get("model"), dict) and isinstance(cfg.get("run_metadata"), dict)
-                 and isinstance(cfg.get("workload_profile"), dict), "member_config_malformed")
-            out["config"] = {"seed_inputs": list(config_seed_inputs(cfg))}
-        except (Refusal, ValueError, KeyError, TypeError, AttributeError):
-            flags.append("member_config_malformed")
-    else:
-        flags.append("member_config_missing")
     hw = ep.get("hardware", {}) or {}
     span = hw.get("registered_span_ns")
     out["episode"] = {"condition": ep["condition"], "n_turns": len(ep["turns"]), "flags": list(ep.get("flags", [])),
@@ -1201,11 +1198,48 @@ def config_seed_inputs(config):
                       else "template_default")
 
 
+def read_json_bytes_sha(path):
+    """(parsed JSON or None when unparseable, sha256 of the bytes): a malformed config is an exclusion
+    (config_invalid), never a refusal; its digest is still checked against the plan."""
+    raw = Path(path).read_bytes()
+    try:
+        doc = json.loads(raw)
+    except ValueError:
+        doc = None
+    return doc, hashlib.sha256(raw).hexdigest()
+
+
+def config_summary(cfg):
+    """The member config's identity fields (lead ruling on the r23k review): run_id, the align-model tag, the
+    production seed inputs and the episode spec's own task pair, condition, seed index and sampler presence.
+    Anything malformed, or a spec without a sampler, is ``invalid`` (config_invalid)."""
+    try:
+        need(isinstance(cfg, dict) and isinstance(cfg.get("model"), dict) and isinstance(cfg.get("run_metadata"), dict)
+             and isinstance(cfg.get("workload_profile"), dict), "member_config_malformed")
+        seed_inputs = config_seed_inputs(cfg)
+        spec = json.loads(cfg["workload_profile"]["prompt_text"] or "")
+        kw = spec.get("task_kwargs")
+        need(isinstance(kw, dict) and isinstance(kw.get("task_pair"), str) and spec.get("condition") in
+             ("benign", "sabotage") and is_int(spec.get("seed")) and isinstance(cfg.get("run_id"), str),
+             "member_config_malformed")
+        need(isinstance(spec.get("sampler"), dict), "member_config_malformed", "no sampler")
+        tag = next((t.split("=", 1)[1] for t in cfg["run_metadata"].get("tags", []) if t.startswith("align-model=")),
+                   None)
+        return {"invalid": False, "run_id": cfg["run_id"], "model_tag": tag, "seed_inputs": list(seed_inputs),
+                "pair": kw["task_pair"], "condition": spec["condition"], "seed": spec["seed"]}
+    except (Refusal, ValueError, KeyError, TypeError, AttributeError):
+        return {"invalid": True}
+
+
+MODEL_TAGS = {"D": "qwen3.8-27b", "30B": "qwen3-30b-a3b"}
+
+
 def derived_episode_seed(seed_inputs, pair, seed_index):
     """episode_seed(*seed_inputs(config, enable_thinking), task_pair, seed_index), production law
     (sampling.leading_seed over ["align-p4-v1", model_id, thinking, task_pair, seed_index])."""
     model_id, thinking = seed_inputs
-    text = json.dumps(["align-p4-v1", model_id, thinking, "shade/" + TASK_NAMES[pair], seed_index],
+    task = TASK_NAMES.get(pair, pair)                       # a short roster pair or the spec's full name
+    text = json.dumps(["align-p4-v1", model_id, thinking, "shade/" + task, seed_index],
                       separators=(",", ":"), ensure_ascii=True, allow_nan=False)
     return int.from_bytes(hashlib.sha256(text.encode("utf-8")).digest()[:8], "big")
 
@@ -1272,23 +1306,36 @@ def derive_exclusions(window, results):
         # A29 + seed ruling (a), lead 2026-11-08: (1) the Episode records the seed INDEX (production
         # workload.py), which must equal the roster's seed_index; (2) independently, the production derivation
         # over the member's digest-bound config.json must equal the roster's expected_episode_seed.
-        seed_reasons = []
-        if m["model"] == "D" and is_int(m.get("seed_index")):
-            if m["expected_episode_seed"] != episode_seed(m["seed_index"], m["pair"]):
+        # Config identity (lead ruling on the r23k review): the config.json bytes must be the frozen plan's
+        # (config_digest_not_planned refuses); a malformed config or one without a sampler is config_invalid;
+        # its run_id, align-model tag and spec pair / condition / seed must be the slot's
+        # (config_identity_differs with sub-reasons). Seed ruling (a): Episode.seed = the slot's seed_index;
+        # the derived seed from the CONFIG SPEC's own pair and seed must equal expected_episode_seed.
+        seed_reasons, config_reasons = [], []
+        if is_int(m.get("seed_index")):
+            if m["model"] == "D" and m["expected_episode_seed"] != episode_seed(m["seed_index"], m["pair"]):
                 notes.append("seed_law_disagrees_with_export")
+            need(res.get("inputs", {}).get("config_sha256") == m["config_sha256"], "config_digest_not_planned",
+                 f"{rid}: config.json is not the planned bytes")
+            cfg = res.get("config") or {"invalid": True}
             if res.get("episode", {}).get("seed") != m["seed_index"]:
                 seed_reasons.append("seed_index_differs")
-            cfg = res.get("config")
-            derived = None
-            if cfg is not None:
-                try:
-                    derived = derived_episode_seed(cfg["seed_inputs"], m["pair"], m["seed_index"])
-                except (Refusal, ValueError, KeyError, TypeError, AttributeError):
-                    derived = None
-            if derived != m["expected_episode_seed"]:
-                seed_reasons.append("derived_seed_differs")
+            if cfg["invalid"]:
+                classes.add("config_invalid")
+            else:
+                for key, want, code in (("run_id", rid.split(":", 1)[-1], "config_run_id_differs"),
+                                        ("model_tag", MODEL_TAGS[m["model"]], "config_model_differs"),
+                                        ("pair", TASK_NAMES[m["pair"]], "config_pair_differs"),
+                                        ("condition", m["condition"], "config_condition_differs"),
+                                        ("seed", m["seed_index"], "config_seed_differs")):
+                    if cfg[key] != want:
+                        config_reasons.append(code)
+                if derived_episode_seed(cfg["seed_inputs"], cfg["pair"], cfg["seed"]) != m["expected_episode_seed"]:
+                    seed_reasons.append("derived_seed_differs")
             if seed_reasons:
                 classes.add("seed_identity_differs")
+            if config_reasons:
+                classes.add("config_identity_differs")
         if m["model"] == "D" and cohort is not None and res.get("episode", {}).get("cohort_sha256") != cohort:
             classes.add("cohort_changed")
         if adjudicated.get(rid):
@@ -1298,7 +1345,7 @@ def derive_exclusions(window, results):
         out[rid] = {"captured": True, "classes": sorted(classes), "eligible": not classes,
                     "rederived": sorted(rederived), "recorded": sorted(recorded), "mismatch": mismatch,
                     "adjudicated": sorted(adjudicated.get(rid, [])), "flags": sorted(set(notes)),
-                    "seed_reasons": seed_reasons,
+                    "seed_reasons": seed_reasons, "config_reasons": config_reasons,
                     "member_flags": sorted(set(res.get("flags", []))),
                     "custody_problems": res.get("custody_problems", [])}
     return out

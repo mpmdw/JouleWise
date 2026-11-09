@@ -785,9 +785,12 @@ class ThermalSummaryTests(unittest.TestCase):
 
 class ExclusionTests(unittest.TestCase):
     def res(self, intervals=(), flags=(), registered=(0,), states=(0,), usable=True, seed=None, cohort="c",
-            completed=True, custody=(), seed_inputs=("qwen3.8-27b", "thinking_on")):
+            completed=True, custody=(), seed_inputs=("qwen3.8-27b", "thinking_on"), rid=None, **cfg):
+        config = None if seed_inputs is None else dict(
+            {"invalid": False, "run_id": rid, "model_tag": "qwen3.8-27b", "seed_inputs": list(seed_inputs),
+             "pair": "spam_filter_update", "condition": "benign", "seed": 2}, **cfg)
         return {"captured": True, "usable": usable, "flags": [], "custody_problems": list(custody),
-                "config": None if seed_inputs is None else {"seed_inputs": list(seed_inputs)},
+                "inputs": {"config_sha256": "c" * 64}, "config": config,
                 "episode": {"flags": list(flags), "seed": seed, "cohort_sha256": cohort, "identity_sha256": None,
                             "completed": completed},
                 "thermal": {"intervals": [{"kind": k, "outcome": o} for k, o in intervals],
@@ -799,14 +802,15 @@ class ExclusionTests(unittest.TestCase):
         seed = 2
         derived = rc.episode_seed(2, "spam")
         names = ["ok", "g1", "os", "nospan", "pm", "unknown", "batt", "unobs", "adj", "flagonly", "lost", "dead",
-                 "seed", "cohort", "incomplete", "custody", "cfg", "nocfg"]
-        members = [{"run_id": r, "ordinal": 30 + i, "model": "D", "pair": "spam", "seed_index": 2,
-                    "expected_episode_seed": derived} for i, r in enumerate(names)]
+                 "seed", "cohort", "incomplete", "custody", "cfg", "nocfg", "sabcfg", "runcfg", "badcfg"]
+        members = [{"run_id": r, "ordinal": 30 + i, "model": "D", "pair": "spam", "condition": "benign",
+                    "seed_index": 2, "expected_episode_seed": derived, "config_sha256": "c" * 64}
+                   for i, r in enumerate(names)]
         window = {"role": "calibration", "members": members,
                   "record": {"adjudication": {"excluded": {"adj": ["identity.divergent"]}}, "cohort_sha256": "c",
                              "battery": {"batt": ["battery.accumulator_excursion"], "unobs": ["battery.unobserved"]},
                              "identity": {}}}
-        r = self.res
+        r = lambda **k: self.res(**k)
         results = {"ok": r(seed=seed), "g1": r(intervals=[("G1", "timeout")], seed=seed),
                    "os": r(registered=(0, 1), seed=seed), "nospan": r(registered=None, seed=seed),
                    "pm": r(states=(0, 2), seed=seed), "unknown": r(states=(-1,), seed=seed), "batt": r(seed=seed),
@@ -816,18 +820,34 @@ class ExclusionTests(unittest.TestCase):
                    "cfg": r(seed=seed, seed_inputs=("qwen3.8-27b", "thinking_off")),
                    "nocfg": r(seed=seed, seed_inputs=None),
                    "cohort": r(seed=seed, cohort="d"), "incomplete": r(seed=seed, completed=False),
-                   "custody": r(seed=seed, custody=["g1_meets_owned_work"])}
+                   "custody": r(seed=seed, custody=["g1_meets_owned_work"]),
+                   # Config identity (lead ruling on the r23k review): a SABOTAGE config under a benign slot,
+                   # another member's run id, and a malformed config (no sampler).
+                   "sabcfg": r(seed=seed, condition="sabotage"), "runcfg": r(seed=seed),
+                   "badcfg": dict(r(seed=seed), config={"invalid": True})}
+        for k, v in results.items():
+            if v.get("config") and not v["config"].get("invalid"):
+                v["config"]["run_id"] = "other" if k == "runcfg" else k
         out = rc.derive_exclusions(window, results)
         want = {"ok": [], "g1": ["X2"], "os": ["X1"], "nospan": [], "pm": ["X3"], "unknown": [], "batt": ["B"],
                 "unobs": [], "adj": ["adjudicated"], "flagonly": ["X2"], "lost": ["not_captured"], "dead": ["X7"],
                 "seed": ["seed_identity_differs"], "cohort": ["cohort_changed"], "incomplete": ["incomplete"],
-                "custody": ["custody_invalid"], "cfg": ["seed_identity_differs"], "nocfg": ["seed_identity_differs"]}
+                "custody": ["custody_invalid"], "cfg": ["seed_identity_differs"], "nocfg": ["config_invalid"],
+                "sabcfg": ["config_identity_differs"], "runcfg": ["config_identity_differs"],
+                "badcfg": ["config_invalid"]}
         self.assertEqual({k: out[k]["classes"] for k in names}, want)
         # Sub-reasons: an episode carrying the DERIVED seed (the old fixture shape) is seed_index_differs; a
         # config whose seed inputs do not reproduce the roster's expected seed is derived_seed_differs.
         self.assertEqual((out["seed"]["seed_reasons"], out["cfg"]["seed_reasons"], out["nocfg"]["seed_reasons"],
                           out["ok"]["seed_reasons"]),
-                         (["seed_index_differs"], ["derived_seed_differs"], ["derived_seed_differs"], []))
+                         (["seed_index_differs"], ["derived_seed_differs"], [], []))
+        self.assertEqual((out["sabcfg"]["config_reasons"], out["runcfg"]["config_reasons"], out["ok"]["config_reasons"]),
+                         (["config_condition_differs"], ["config_run_id_differs"], []))
+        # The config bytes must be the plan's: an unplanned digest refuses.
+        bad = dict(results, ok=dict(results["ok"], inputs={"config_sha256": "d" * 64}))
+        with self.assertRaises(rc.Refusal) as cm:
+            rc.derive_exclusions(window, bad)
+        self.assertEqual(cm.exception.code, "config_digest_not_planned")
         self.assertEqual(out["g1"]["mismatch"], ["X2"])
         self.assertEqual(out["nospan"]["flags"], ["registered_span_missing"])     # A10
         self.assertEqual(out["unobs"]["flags"], ["battery.unobserved"])           # A28: kept, flagged
