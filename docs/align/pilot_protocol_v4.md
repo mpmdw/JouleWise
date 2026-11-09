@@ -650,7 +650,8 @@ R1's adjacent D_spam a/b pair as a transfer screen (`scripts/align_v4_u3_export.
 s₀ is the RMS of the relative differences about zero (df = n); q solves the series
 false-fail E_U[1−(1−P(|Z|>qU))^N] = β, integrating the shared scale uncertainty once,
 with β = .05 (halved if any pilot difference exceeds 3× the leave-one-out RMS) and
-N = 16 (W1 30B:4 + D:1, C1-C8 and T1-T3 D:1 each; RUN_STATE 226 R15). A pair fails if
+N = 22 (W1 30B:4 + D:1, C1-C14 and T1-T3 D:1 each; RUN_STATE 239 R25,
+prospectively expanded from N = 16 before signing). A pair fails if
 |ΔE| > q·s₀·Ē for 30B and f·q·s₀·Ē for D, f = 1.5 with a digest-bound written
 justification. A refuted or missing R1 screen leaves D U3 inconclusive. There is
 no multiplier outside this recomputed derivation: no k=3, 2.576 or floor. `validate_u3`

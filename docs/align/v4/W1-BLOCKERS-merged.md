@@ -10,6 +10,7 @@ It implements the lead's rulings on
 [W1-BLOCKERS-AGREEMENT](W1-BLOCKERS-AGREEMENT.md) (on
 `align/2026-11-08-w1-blockers-opus`). Two of those rulings changed later: ruling 2
 was revised from N = 19 back to N = 16 by RUN_STATE 226 R15 (three test windows),
+then prospectively expanded to N = 22 by RUN_STATE 239 R25 (C9-C14 reserves),
 and ruling 9 is the lead's modified version. Design background:
 [W1-BLOCKERS-sol](W1-BLOCKERS-sol.md) and `W1-BLOCKERS-opus.md` on the Opus branch.
 A Sol executing review follows.
@@ -33,8 +34,9 @@ A Sol executing review follows.
   the RMS about zero, with df = n.
 - **Ruling 2 (revised).** q solves E_U[1−(1−P(|Z|>qU))^N] = β. This is exact
   under the normal model, and it integrates the uncertainty in s₀, which all
-  later tests share, once. N = Σ `checks_by_window` = **16**: W1 has 30B:4 and
-  D:1; C1-C8 and T1-T3 have D:1 each (RUN_STATE 226 R15).
+  later tests share, once. N = Σ `checks_by_window` = **22**: W1 has 30B:4 and
+  D:1; C1-C14 and T1-T3 have D:1 each (RUN_STATE 239 R25, prospective expansion
+  from N = 16 before signing).
 - **Rulings 1 and 7.** β = .05. It is halved if any pilot |r_i| is more than 3×
   the RMS of the *other* sessions.
   - *Implementation note:* computed against s₀ itself, |r_i|/s₀ can never
