@@ -52,7 +52,7 @@ RECOMPUTE_PROGRAM_SHA256 = "0e79439d1a7888d61036203987429c24fe028c84a4f4a1db008d
 ENGINE_RECORD_SCHEMA = "joulewise.v4_engine_run_record.v1"
 # The builds this release check certifies (the commits the synthetic rehearsal agreed on). Any other
 # commit refuses; re-pin only with a fresh AGREE rehearsal (RELEASE-RUNBOOK-v4.md section 5).
-RELEASE_ENGINE_COMMIT = "555b3a664b9941613b127ce37f4aebc13791b89d"   # origin/engine-r23j
+RELEASE_ENGINE_COMMIT = "7da631c3fbc37589d4f69f89d0f65afbb15e8394"   # origin/engine-r23j
 RELEASE_RECOMPUTE_COMMIT = "9f8a8749eda8387a827fe6c96afb942ceec89df5"   # align/2026-11-08-v4-recompute-opus
 HEX40, HEX64 = re.compile(r"[0-9a-f]{40}"), re.compile(r"[0-9a-f]{64}")
 FLOAT_TOKEN = re.compile(r"(?<![A-Za-z0-9])(?:\d+\.\d+(?:[eE][+-]?\d+)?|\d+[eE][+-]?\d+)(?![A-Za-z0-9])")

@@ -19,7 +19,7 @@
 
 | Build | Branch | Commit | Output |
 |---|---|---|---|
-| Sol primary engine | `engine-r23j` (R21 + A37 + R23-R26 + R23h + R22-2/R24/R25 + reproducible bars) | `555b3a664` | `fill.json`, `verdict.json`, `thresholds.json` |
+| Sol primary engine | `engine-r23j` (R21 + A37 + R23-R26 + R23h + R22-2/R24/R25 + reproducible bars) | `7da631c3f` | `fill.json`, `verdict.json`, `thresholds.json` |
 | Opus independent recompute | `align/2026-11-08-v4-recompute-opus` | `9f8a8749e` (program sha256 `0e79439d…`) | one JSON (`RECOMPUTE-opus.md`) |
 
 History: the first rehearsal (engine `8eb7982f0` vs recompute `c0d1efcae`) held on five families and found
@@ -214,7 +214,11 @@ An `agree` says nothing about these families except integrity.
 - zero-capture first attempts retried in their slots (C3 and T2);
 - the bar-plus-reserve scenario (R22-2/R24): C4 ordinal 7 releases G0 4 C warm, C4 fails U2 for D, the export
   declares `barred: u1_u3_fail` (reproduced on both sides), C4 contributes nothing and the reserve C9 (seeds
-  100-107 per pair) replaces it; with C3's zero-capture retry;
+  100-107 per pair) replaces it; with C3's zero-capture retry; and C1's first attempt AND its retry are
+  zero captures, so the slot is barred (recompute `zero_capture_beyond_retry`, engine `zero_capture_refusal`
+  in `calibration.barred_windows`; the record-level `barred`/`structural_bar` stay null) and the reserve C10
+  replaces it. The comparator maps the bar codes 1:1 (`BAR_CODE`, `RECORD_BAR`; `BarCodeTests` reads both
+  pinned sources);
 - the r23j export: the full 18-window R24 allocation (engine `series_source`, analysis form; recompute
   `allocation_source`, the frozen native manifest, sha256 `21313cc2…`) and a GO terminal result bound by
   digest for every captured C attempt;
@@ -245,38 +249,48 @@ for m in test_compare_v4 test_release_v4 test_rehearsal_v4 test_review_sol1 test
 - **Tests need the pinned commits' objects.** A shallow clone skips the tests that need them.
 - **Rehearsal caching.** Each plan is built once (generation, the two-stage engine run at 4 workers and the
   recompute) and cached read-only under the system temporary folder, keyed by the commits and the generator
-  bytes. A cold plan takes 3-5 min, almost all of it the engine.
+  bytes. A cold plan takes 2.5-5 min (both plans built in parallel), almost all of it the engine.
 
 - **Per-module run times** (Air, 2026-11-08, rehearsals cached, load 12-21):
 
   | Module | Tests | Time |
   |---|---|---|
-  | `test_compare_v4` | 18 | 32 s |
-  | `test_release_v4` | 13 | 17 s |
-  | `test_rehearsal_v4` | 8 | 4-5 min (one engine re-run for its code mutation) |
+  | `test_compare_v4` | 19 | 27 s |
+  | `test_release_v4` | 16 | 27 s |
+  | `test_rehearsal_v4` | 11 | 2 min (one engine re-run for its code mutation, one forged-bar prefix run) |
+  | `test_review_sol1` | 12 | 18 s |
+  | `test_review_sol2` | 14 | 20 s |
 
-**Release runtime on the synthetic series** (306 roster rows, 262 captured members, 418 MB). These are
-`release_v4.py` wall times, stages (a)-(c), at load average 12-21 (a test module ran beside them):
+**Release runtime on the synthetic series** (16 engine attempts, 284 captured members). These are
+`release_v4.py` wall times, stages (a)-(c), 4 workers, 2026-11-08 (r23j):
 
-| Workers | Total | Recompute (two stages) | Comparator |
+| Plan | Total | Recompute (two stages) | Comparator |
 |---|---|---|---|
-| 4 | 12.3 s and 12.7 s (two runs) | 8.0 s and 8.4 s | 1.9 s and 2.1 s |
-| 1 | 24.3 s | 19.2 s | 2.6 s |
+| full | 10.5 s | 6.6 s | 1.5 s |
+| probes | 11.0 s | 7.2 s | 1.3 s |
 
-Stage (a) re-hashes 748 files; stage (b) confirms 262 members read the same raw bytes. The engine's own run
+Stage (a) re-hashes 823 files and verifies the producer identity; stage (b) confirms 284 members read the
+same raw bytes. The engine's own run
 is not part of the release: it runs incrementally as windows land.
 
 ## 6. Findings on the synthetic series
 
-**Final rehearsal, 2026-11-08: exact AGREE on both plans.** Engine `244ef6f39` (engine-r23h) against
-recompute `de553c002`:
+**Final rehearsal, 2026-11-08: exact AGREE on both plans.** Engine `7da631c3f` (engine-r23j) against
+recompute `9f8a8749e`:
 
 | Plan | Comparator | Families | Unmapped | `release_v4.py` |
 |---|---|---|---|---|
-| full | exit 0, `agree` | 62 compared, 0 expected-empty, 0 unexplained-empty | 0 of 258,145 engine leaves | exit 0, `agree` |
-| probes | exit 0, `agree` | 62 compared, 0 expected-empty, 0 unexplained-empty | 0 of 258,145 | (test plan) |
+| full | exit 0, `agree` | 64 compared, 0 expected-empty, 0 unexplained-empty | 0 of 266,566 engine leaves | exit 0, `agree` |
+| probes | exit 0, `agree` | 64 compared, 0 expected-empty, 0 unexplained-empty | 0 | exit 0, `agree` |
 
-No holds remain. The rulings that settled them, all blind, 2026-11-08:
+The forged declared bar refuses on both sides; both seats' witnesses pass inverted. No holds remain. The
+rulings that settled them, all blind, 2026-11-08:
+- **Release reviews F1-F7** (seats 1 and 2 on `99875485d`): R22-2/R24 admitted-window calibration with
+  reserves, R25 N = 22, row completeness, the W1 reason_code, pinned producer identity, journal rehash and
+  census audit, fixed-code refusals for malformed shapes, the runbook command, the U5 |beta| x delta mapping.
+- **R26 amendment**: whenever h_star is null, every unobserved grid dose is listed (found by this rehearsal:
+  short C carriers with no exceedance; the engine's reading was adopted).
+- **r23j exports**: reproducible declared bars, digest-bound terminal results, the full R24 allocation.
 - **E1** (engine): a zero-capture raw window crashed the analysis; fixed in engine-r23.
 - **P1** (engine bug): a G1/H timeout that stops the episode re-derives X2 (A9 union); fixed in engine-r23e.
 - **P2 / A21**: seconds are the RECORDED value (binary float taken exactly, never a decimal lexeme);

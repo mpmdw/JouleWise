@@ -74,6 +74,9 @@ COUNCIL_GRID = (0, 128, 256, 300, 512, 1024, 2048, "full")
 H_STAR_GRID = (128, 256, 384, 512, 768, 1024, 1536, 2048)
 FULL_GRID = tuple(sorted(set(COUNCIL_GRID[:-1]) | set(H_STAR_GRID))) + ("full",)
 CURVE_GRID = tuple(sorted(set(COUNCIL_GRID[:-1]) | set(H_STAR_GRID)))
+# The engine's ledger ``barred`` and window ``structural_bar`` carry the RECORD-level bar only (U1-U3 FAIL or a
+# capture failure); the slot-level zero-capture bar appears in ``calibration.barred_windows`` (cadence).
+RECORD_BAR = dict(BAR_CODE, zero_capture_beyond_retry=None)
 U3_BUDGET = {"W1": {"30B": 4, "D": 1}, **{w: {"30B": 0, "D": 1} for w in
              [f"C{i}" for i in range(1, 15)] + ["T1", "T2", "T3"]}}
 class _Missing:
@@ -315,10 +318,11 @@ class Comparison:
                 if k not in m:
                     raise Refused("crosswalk_malformed", k)
         self.by_attempt = {(m["attempt_id"], m["engine_run_id"]): m for m in self.cross}
-        # A window name resolves to its last captured attempt (a zero-capture refusal retries the slot).
+        # A window name resolves to its last captured attempt (a zero-capture refusal retries the slot); a slot
+        # with no captured attempt (zero capture beyond the retry, R22-2) resolves to its last attempt.
         self.counted = {}
         for m in self.cross:
-            if m["captured"]:
+            if m["captured"] or not any(c["captured"] for c in self.cross if c["window"] == m["window"]):
                 self.counted[m["window"]] = m["attempt_id"]
         self.by_window = {(m["window"], m["engine_run_id"]): m for m in self.cross
                           if m["attempt_id"] == self.counted.get(m["window"])}
@@ -493,7 +497,7 @@ class Comparison:
                      captured, unit=attempt)
             sr = stop_rows.get(rwid)
             self.add("calibration_stop", (attempt, "barred"), E.get("fill", "ledger", i, "barred", default=None),
-                     BAR_CODE.get(sr["bar_reason"]) if sr else None, unit=attempt)
+                     RECORD_BAR.get(sr["bar_reason"]) if sr else None, unit=attempt)
             for p in ("spam", "bank"):
                 rv = sr["eligible_benign"][p] if sr else (0 if attempt[0] == "T" else MISSING)
                 self.add("ledger", (attempt, "eligible_benign", p),
@@ -549,7 +553,7 @@ class Comparison:
             rw = next((m["recompute_window_id"] for m in self.cross if m["attempt_id"] == attempt), None)
             srow = next((w for w in rget(self.R, "calibration", "stop", "windows") or [] if w.get("window_id") == rw), None)
             self.add("calibration_stop", (attempt, "structural_bar"), E.get("fill", "windows", i, "structural_bar"),
-                     BAR_CODE.get(srow["bar_reason"]) if srow else None, unit=attempt)
+                     RECORD_BAR.get(srow["bar_reason"]) if srow else None, unit=attempt)
             members = [m for m in self.cross if m["attempt_id"] == attempt]
             if not members:
                 raise Refused("crosswalk_attempt_unknown", attempt)
@@ -1788,6 +1792,7 @@ def row_manifest(cross, rec):
     planned units a structural exclusion removes (an excluded member or a pool-barred window, as the
     recompute records them: booleans, never values)."""
     non_w1 = [m for m in cross if m["window"] != "W1"]
+    last = {m["window"]: m["attempt_id"] for m in cross}
     counted = {}
     for m in cross:
         if m["captured"]:
@@ -1823,7 +1828,11 @@ def row_manifest(cross, rec):
         "u6": (2, 2),
         "carrier_curve": (2, 2),
         "supplemental_sentinels": (len([m for m in cross if m["ordinal"] in (23, 24)]),) * 2,
-        "dc_sealed": (sum(1 for m in cross if m["condition"] != "benign" and m["attempt_id"] == counted.get(m["window"])),) * 2,
+        # A27: a slot with no captured attempt (zero capture beyond the retry) still prints its scored C-sabotage
+        # members sealed with captured: false, from its last attempt.
+        "dc_sealed": (sum(1 for m in cross if m["condition"] != "benign" and m["attempt_id"] == counted.get(m["window"]))
+                      + sum(1 for m in cross if m["window"] not in counted and m["attempt_id"] == last.get(m["window"])
+                            and m["window"].startswith("C") and m["role"] == "sabotage"),) * 2,
         "dc_benign_status": (sum(1 for m in cross if m["condition"] == "benign"
                                  and m["attempt_id"] == counted.get(m["window"])),) * 2,
     }

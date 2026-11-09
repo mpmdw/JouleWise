@@ -1,7 +1,7 @@
 """Comparator mechanics on the synthetic rehearsal (no real data): coverage, families, R-C1..R-C6, R22-3.
 
-The baseline is the full rehearsal (zero-capture retries in C3 and T2, the A37 <= 1 us seam window, the
-W1/B screen fixtures). Both builds agree exactly on it, so each planted mutation below must turn a named
+The baseline is the full rehearsal (zero-capture retries in C3 and T2, C1 zero-capture twice and barred, C4
+barred by U2, reserves C9 and C10, the A37 <= 1 us seam window, the W1/B screen fixtures). Both builds agree exactly on it, so each planted mutation below must turn a named
 family away from agree.
 """
 import copy
@@ -196,6 +196,35 @@ class ComparatorTests(unittest.TestCase):
         fill["U5"]["beta_T_j_per_c"] = None
         code, pub, _ = self.run_with("u5", fill=fill)
         self.assertEqual(self.fam(pub, "sensitivity_lines"), "hold")
+
+
+@unittest.skipUnless(support.have_commits(), "pinned build commits unavailable in this clone")
+class BarCodeTests(unittest.TestCase):
+    def test_bar_codes_map_one_to_one(self):
+        # R22-2 / R24: the recompute's bar reasons and the engine's structural bar codes, read from the pinned
+        # sources (text only, nothing imported), map 1:1 through BAR_CODE.
+        import ast
+        import subprocess
+        def source(commit, rel):
+            return subprocess.run(["git", "-C", str(support.REPO), "show", f"{commit}:{rel}"], capture_output=True,
+                                  check=True).stdout.decode()
+        tree = ast.parse(source(support.ENGINE_COMMIT, "joulewise/align/apple/v4_cadence.py"))
+        consts = {t.id: ast.literal_eval(n.value) for n in tree.body if isinstance(n, ast.Assign)
+                  for t in n.targets if isinstance(t, ast.Name) and t.id in ("STRUCTURAL_BARS", "ZERO_CAPTURE_BAR")}
+        engine_codes = set(consts["STRUCTURAL_BARS"]) | {consts["ZERO_CAPTURE_BAR"]}
+        rec = source(support.RECOMPUTE_COMMIT, "scripts/independent_recompute_v4.py")
+        rec_reasons = {r for r in ("u1_u3_fail", "capture_failure", "zero_capture_beyond_retry")
+                       if f'reason = "{r}"' in rec}
+        mapped = {k: v for k, v in cmp.BAR_CODE.items() if k is not None}
+        self.assertEqual(set(mapped), rec_reasons)
+        self.assertEqual(set(mapped.values()), engine_codes)
+        self.assertEqual(len(set(mapped.values())), len(mapped))           # 1:1
+        self.assertIsNone(cmp.BAR_CODE[None])
+        # The record-level fields (ledger barred, window structural_bar) carry only the record's own bar; the
+        # slot-level zero-capture bar is in calibration.barred_windows.
+        record = {k: v for k, v in cmp.RECORD_BAR.items() if v is not None}
+        self.assertEqual(set(record.values()), set(consts["STRUCTURAL_BARS"]))
+        self.assertIsNone(cmp.RECORD_BAR["zero_capture_beyond_retry"])
 
 
 class BarTests(unittest.TestCase):

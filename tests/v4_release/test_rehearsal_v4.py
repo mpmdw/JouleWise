@@ -36,7 +36,7 @@ class RehearsalTests(unittest.TestCase):
     def test_series_shape(self):
         cross = json.loads((self.full / "crosswalk.json").read_text())["members"]
         attempts = {m["attempt_id"] for m in cross}
-        self.assertEqual(len({m["window"] for m in cross}), 13)          # W1 + C1-C9 + T1-T3
+        self.assertEqual(len({m["window"] for m in cross}), 14)          # W1 + C1-C10 + T1-T3
         for w in ("C3", "T2"):
             self.assertIn(w + "#1", attempts)
             self.assertIn(w + "#2", attempts)
@@ -49,19 +49,30 @@ class RehearsalTests(unittest.TestCase):
                          ["W1", *[f"C{i}" for i in range(1, 15)], "T1", "T2", "T3"])          # full R24 allocation
         series = json.loads((self.full / "recompute" / "series.json").read_text())
         self.assertEqual(series["allocation_source"]["sha256"], support.common_series.ALLOCATION_SHA256)
-        captured_c = [w for w in payload["windows"] if w["window"].startswith("C") and w["attempt_id"] != "C3#1"]
+        zero = {m["attempt_id"] for m in cross} - {m["attempt_id"] for m in cross if m["captured"]}
+        self.assertEqual(zero, {"C1#1", "C1#2", "C3#1", "T2#1"})
+        captured_c = [w for w in payload["windows"] if w["window"].startswith("C") and w["attempt_id"] not in zero]
         self.assertTrue(captured_c and all("terminal_result_source" in w for w in captured_c))
+        self.assertFalse(any("terminal_result" in w for w in payload["windows"]))      # digest-bound only
         self.assertEqual([w["attempt_id"] for w in payload["windows"] if w.get("barred")], ["C4#1"])
 
     def test_bar_plus_reserve_on_both_sides(self):
-        # R22-2 / R24: C4 is barred (U2 FAIL, declared and reproduced), contributes nothing, and C9 replaces it.
+        # R22-2 / R24: C1 (zero capture beyond the retry) and C4 (U2 FAIL, declared and reproduced) are barred,
+        # contribute nothing, and the reserves C9 and C10 replace them, in order.
         rec = json.loads((self.full / "recompute-out.json").read_text())["calibration"]["stop"]
-        fill = json.loads((self.full / "engine-out" / "fill.json").read_text())["calibration"]
-        self.assertEqual((rec["barred_windows"], rec["replacements_used"], rec["admitted_windows"]), (["C4"], 1, 8))
-        self.assertEqual((fill["barred_windows"], fill["replacements_used"], fill["decision"]),
-                         (["C4#1"], 1, "calibration_complete"))
+        fill = json.loads((self.full / "engine-out" / "fill.json").read_text())
+        cal = fill["calibration"]
+        self.assertEqual((rec["barred_windows"], rec["replacements_used"], rec["admitted_windows"], rec["status"]),
+                         (["C1-z2", "C4"], 2, 8, "calibration_complete"))
+        self.assertEqual((sorted(cal["barred_windows"]), cal["replacements_used"], cal["decision"]),
+                         (["C1#2", "C4#1"], 2, "calibration_complete"))
+        reasons = {w["window_id"]: w["bar_reason"] for w in rec["windows"] if w["barred"]}
+        self.assertEqual(reasons, {"C1-z2": "zero_capture_beyond_retry", "C4": "u1_u3_fail"})
+        ledger = {r["window"]: r.get("barred") for r in fill["ledger"]}
+        # The ledger's barred field is the RECORD-level bar; the slot-level zero-capture bar is in barred_windows.
+        self.assertEqual((ledger["C1#2"], ledger["C4#1"], ledger["C1#1"]), (None, "u1_u3_fail", None))
         c4 = next(w for w in rec["windows"] if w["window_id"] == "C4")
-        self.assertEqual((c4["bar_reason"], c4["eligible_benign"]), ("u1_u3_fail", {"spam": 0, "bank": 0}))
+        self.assertEqual(c4["eligible_benign"], {"spam": 0, "bank": 0})
 
     def test_short_trajectory_h_star_rows(self):
         # Permanent fixture (R26 amendment, lead ruling 2026-11-08): C carriers whose trajectories are too

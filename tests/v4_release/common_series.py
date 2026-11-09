@@ -155,7 +155,9 @@ def default_plan(zero_capture=True, escalated=True, a37=True, screens=True, prob
     Structural bar fixture (``bar``, R22-2 / R24): C4 ordinal 7 (D benign) releases G0 4 C warm, so C4's D
     model-window fails U2(a); the export declares C4 ``barred: u1_u3_fail`` (reproducible on both sides); C4
     is barred, contributes nothing, does not count, and the reserve C9 (seeds 100-107 per pair) runs after C8
-    to replace it. With C3's zero-capture retry this is the bar-plus-reserve scenario.
+    to replace it. With C3's zero-capture retry this is the bar-plus-reserve scenario. C1's first attempt AND
+    its retry are zero captures: the slot is barred (zero capture beyond the retry) and the reserve C10
+    replaces it.
 
     Every export binds the full 18-window R24 allocation (``ALLOCATION``, sha256 21313cc2...) and, for every
     captured C attempt, a GO completed-chain terminal result by digest (``terminal_result_source``).
@@ -169,8 +171,16 @@ def default_plan(zero_capture=True, escalated=True, a37=True, screens=True, prob
                  late_first_support=[8] if screens else [], divergent_contrast=[6] if probes else [])]
     order = list(ORDER)
     if bar:
-        order.insert(order.index("C8") + 1, RESERVES[0])
+        # Two structural bars (C1's double zero capture, C4's U2 FAIL) -> reserves C9 and C10, in order.
+        order[order.index("C8") + 1:order.index("C8") + 1] = list(RESERVES[:2] if zero_capture else RESERVES[:1])
     for w in order:
+        if w == "C1" and bar and zero_capture:
+            # R22-2: a zero-capture refusal beyond the retry bars the slot (recompute
+            # zero_capture_beyond_retry, engine zero_capture_refusal); C2 captures before C3's zero capture,
+            # so no two consecutive zero-capture refusals of different slots escalate.
+            plan.append(dict(window=w, attempt=1, zero_capture=True, escalated=False))
+            plan.append(dict(window=w, attempt=2, zero_capture=True, escalated=False))
+            continue
         if w in ("C3", "T2") and zero_capture:
             plan.append(dict(window=w, attempt=1, zero_capture=True, escalated=False))
             plan.append(dict(window=w, attempt=2, zero_capture=False, escalated=False,
