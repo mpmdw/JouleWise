@@ -1042,6 +1042,34 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+244. **Laptop lead (interactive session 1544c617), 2026-11-08 18:01 PST: v4 engine final at `engine-r23j` @ `50f4958b6`; release tooling exact AGREE; W1 line integrating.**
+- **Engine, r23i to r23j:**
+  - R22-2/R24 calibration (exactly 8 admitted windows; bars contribute nothing; C9-C14 reserves; ORDER C1-C14 then T) and R25 U3 N = 22.
+  - Declared bars must be reproduced (a forged `u1_u3_fail` refuses).
+  - Release requires a digest-bound `terminal_result_source` (inline refuses) and the full 18-window R24 allocation.
+  - MERGE-ORDER: the v4 line lands on main first and wins every arm-stack conflict.
+  - Static calibration pin audit, plus a RUNTIME calibration identity check: the live `calibration_stop` code and its reached globals are hashed against r11 `bbfccb70a` pins, refusing `calibration_identity_drift` (about 0.55 ms).
+  - **The release interpreter is pinned to CPython 3.13.**
+  - Reviews: Opus delta on r23i (ADMIT-WITH-FIXES, fixed); Sol on r23j (HOLD P1/P2, fixed; Sol's drift probes are now runtime witnesses).
+- **Release tooling:** `align/2026-11-08-v4-release-tools` @ `8ba59ac55`. Pins: engine `50f4958b6`, recompute `9f8a8749e` (program sha `0e79439d…`), bars `17a26815…`.
+  - Synthetic rehearsal, exact AGREE on both plans: 64 families, 0 of 266,566 leaves unmapped, `release_v4` exit 0.
+  - Scenarios:
+    - bar plus reserve: C1 zero-capture beyond retry replaced by C10, and C4 U2-fail replaced by C9, giving 8 admitted with 2 replacements;
+    - a forged bar refused on both sides;
+    - an unavailable W1 contrast;
+    - U5 with a negative slope and delta 2 C;
+    - R26 short-trajectory carriers;
+    - all three epoch seam cases;
+    - A2(4) both directions.
+  - Both Sol release seats' F1-F7 are fixed, and their witnesses are green (inverted): the shared pre-R22 rule, row_completeness, W1 reason_code, producer identity, the journal census, malformed refusals with exit 2, the runbook pins, the U5 mapping.
+  - A Sol confirmation seat is running.
+- **W1 line** `align/2026-11-08-v4-r11` @ `94d3dcb3e`: smoke kit (`0ad6f29f3`) and U3 N = 22 inputs (`c3fd88654`) merged.
+  - The R15 pool prose is reconciled.
+  - PREQUAL's series check now accepts the C9-C14 reserves.
+  - Packet tamper covers 362 changes.
+  - PREQUAL fails only the 5 R1-dependent or projection checks.
+  - Harvest-off and Air-offload merges are in progress, plus a timing-receipts review record and the CANONICAL.md v4 citations.
+
 243. **Laptop lead (interactive session 1544c617), 2026-11-08 17:05 PST: Air-offload and harvest-off ADMITTED in software; R26 amendment; main CI green.**
 - **Air-offload ADMITTED in software** at `ops/2026-11-08-air-offload-merged` @ `b5af05e12`.
   - Review chain: Sol seats 1/2, then re-review delta seats 1/2, then final delta2 seats 1/2. Every finding is fixed, and the seats' witnesses are inverted into required-property tests.
