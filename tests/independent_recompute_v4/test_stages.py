@@ -156,6 +156,10 @@ class OwnershipTests(unittest.TestCase):
         self.assertEqual((problems, flags), ([], []))
         self.assertEqual(energy["turn_owned_gpu_j"], 6.0)        # 1 W over [0, 3) and [5, 8)
         self.assertEqual(trace.gaps(*(ep["start_ns"], ep["end_ns"])), [(4 * NS, 4 * NS + 2000)])   # disclosed
+        pm = rc.pm_summary(trace, NS, ep, intervals, [])
+        # A2(3): the print-only gross integrates the native supports; the 2 us of gate gap counts as idle 0.
+        self.assertFalse(pm["episode_covered"])
+        self.assertAlmostEqual(pm["gross_episode_gpu_j"], 8.5 - 2000 / NS, places=12)
 
     def test_custody_problems(self):
         ep = self.episode([self.turn(0, 10, 20, first=15)])

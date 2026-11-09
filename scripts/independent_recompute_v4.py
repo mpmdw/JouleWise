@@ -1037,8 +1037,10 @@ def pm_summary(trace, period, ep, intervals, flags):
                      "ok": max(gap, trace.widest(a, b)) <= limit})
     episode = (ep["start_ns"], ep["end_ns"])
     covered = not trace.gaps(*episode)
+    # A2(3): energy = sum over native supports of mean power x overlap, idle (uncovered) time = 0. The gross is
+    # print-only (A1); uncovered episode time is disclosed by episode_covered, never filled.
     return {"gap_limit_ns": limit, "spans": rows, "episode_covered": covered,
-            "gross_episode_gpu_j": math.fsum(trace.energy_terms("gpu_mw", [episode])) if covered else None,
+            "gross_episode_gpu_j": math.fsum(trace.energy_terms("gpu_mw", [episode])),
             "gross_episode_s": (episode[1] - episode[0]) / NS}
 
 
