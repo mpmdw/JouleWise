@@ -354,8 +354,14 @@ class ProducerTests(unittest.TestCase):
                     if refused:
                         raise ValueError('synthetic disk refusal')
                     return {'status': 'pass'}
+                def arm_checks(*args, pre_dwell=None, **kwargs):
+                    # R17: the powermode check, the W1 disk gate and the record write run in ``pre_dwell``,
+                    # before the dwell stamp; the stand-in invokes the arm's own hook, then stamps the dwell.
+                    pre_dwell(record)
+                    record['quiet_dwell'] = {**record['quiet_dwell'], 'start_ns': 1}
+                    return record
                 with timing.bind(writer(rows, clock)), \
-                     patch.object(session, 'arm_checks', return_value=record), \
+                     patch.object(session, 'arm_checks', side_effect=arm_checks), \
                      patch('scripts.align_v4_series.bind_packet', return_value={}) as bind, \
                      patch.object(session, 'w1_disk_check', side_effect=gate), \
                      patch.object(session.kit, 'arm_powermode_check'), \
