@@ -122,11 +122,12 @@ def w1_roster():
     return rows
 
 
+G0_SPAN_NS = 42_460_000_000       # a real, non-integer G0 span (42.46 s); EXP-D1 permanent fixture
 A37_EPOCH_S = 9_000_000_000        # float seconds grid 1.907 us: interior seams 1,907/1,908 ns (> 1 us, kept)
 A37_SNAP_EPOCH_S = 4_300_000_000   # float seconds grid 954 ns: interior seams 953/954 ns (<= 1 us, snapped)
 
 
-def default_plan(zero_capture=True, escalated=True, a37=True, screens=True, probes=False, bar=True):
+def default_plan(zero_capture=True, escalated=True, a37=True, screens=True, probes=False, bar=True, through=None):
     """W1, C1-C8 and T1-T3. C3's and T2's first attempts are zero-capture refusals, each retried in its slot;
     T3 is escalated to 24 members.
 
@@ -196,7 +197,12 @@ def default_plan(zero_capture=True, escalated=True, a37=True, screens=True, prob
                 step["epoch_s"] = A37_EPOCH_S
             if a37 and w == "C7":
                 step["seams"] = True
+                step["subpoll_prefill"], step["stall_gate"] = [8], [10]     # D6 permanent fixtures
                 step["epoch_s"] = A37_SNAP_EPOCH_S
+            if w == "C9":
+                step["g0_missing"], step["meter_late_ns"] = [13], 5 * NS      # r23m review fixtures
+            if w == "C10":
+                step["g0_missing_all"] = True
             if bar and w == "C4":
                 step["g0_warm"] = [7]
                 step["declared_bar"] = "u1_u3_fail"
@@ -206,6 +212,11 @@ def default_plan(zero_capture=True, escalated=True, a37=True, screens=True, prob
                 # is W1 ordinal 8: that member's uncovered G0 time also fails U1(c), which would bar a C window.
                 step["gate_seam"] = [12]
             plan.append(step)
+    if through is not None:
+        # D7 prefix series (incremental per-window analysis is a supported mode): W1 and the windows up to and
+        # including ``through``, nothing after.
+        last = max(k for k, st in enumerate(plan) if st["window"] == through)
+        plan = plan[:last + 1]
     return plan
 
 
@@ -290,6 +301,7 @@ def write_series(root, synth, *, plan=None, seed=7, period_ns=NS, saboteur_extra
         w_start = clock
         rec_members, identity, engine_records, battery_codes = [], {}, [], {}
         plan_rows, kit_refs = [], {}
+        stalls, first_start = [], None
         for slot in slots:
             rid = slot["run_id"]                  # engine-layout id
             local = slot["local_run_id"]          # R15 id
@@ -367,6 +379,16 @@ def write_series(root, synth, *, plan=None, seed=7, period_ns=NS, saboteur_extra
             ep_path = base / "outputs" / "align_episode.json"
             ep = json.loads(ep_path.read_text())
             g0 = ep["hardware"]["thermal"]["intervals"][0]
+            # Producer shapes the synthetic writer missed (exporter e2e sweep): a non-integer G0 span (real
+            # spans are not whole seconds; EXP-D1), production cache statistics (EXP-G4), and on scheduled
+            # members a sub-poll owned prefill segment (first token 40 ms after the turn start; D6).
+            g0["start_ns"] = g0["end_ns"] - G0_SPAN_NS
+            ep["hardware"]["cache"] = production_cache_statistics(ep, ident)
+            if slot["ordinal"] in step.get("subpoll_prefill", []):
+                ep["turns"][1]["first_token_ns"] = ep["turns"][1]["start_ns"] + 40_000_000
+            if slot["ordinal"] in step.get("stall_gate", []):
+                g1 = next(g for g in ep["hardware"]["thermal"]["intervals"] if g["kind"] == "G1")
+                stalls.append((g1["start_ns"] + NS, g1["start_ns"] + NS + 600_000_000))
             if slot["ordinal"] in step.get("g0_warm", []):
                 g0["release"]["slow_c"] += 4.0        # U2(a): G0 release range 4 C > 3 C -> U2 FAIL -> bar
             for g in ep["hardware"]["thermal"]["intervals"]:
@@ -383,6 +405,15 @@ def write_series(root, synth, *, plan=None, seed=7, period_ns=NS, saboteur_extra
                 ep["hardware"]["registered_span_ns"] = [ep["start_ns"], ep["end_ns"]]
             # The export carries production's clock offset (t_monotonic = t_epoch + offset_ns); every synthetic
             # stamp is exact, so offset = monotonic - epoch.
+            # Producer shape: v3 anchors are UNGATED (their kit spec has no thermal policy, so production writes
+            # no thermal block); r23m review fixtures: a D member's planned G0 removed, or a window's G0s all removed.
+            if slot["series_role"] == "anchor":
+                ep["hardware"].pop("thermal")      # production omits the key (attribution reads .get('thermal', {}))
+                (base / "outputs" / "align_thermal.jsonl").unlink()     # and an ungated member writes no sidecar
+            elif slot["ordinal"] in step.get("g0_missing", []) or step.get("g0_missing_all"):
+                ep["hardware"]["thermal"]["intervals"] = [g for g in ep["hardware"]["thermal"]["intervals"]
+                                                          if g["kind"] != "G0"]
+            first_start = ep["start_ns"] if first_start is None else first_start
             st = ep["hardware"]["paired_clock_stamps_ns"][0]
             ep["hardware"]["production_offset_ns"] = st["monotonic_before_ns"] - st["epoch_ns"]
             ep_path.write_text(json.dumps(ep, indent=1, sort_keys=True) + "\n")
@@ -403,7 +434,11 @@ def write_series(root, synth, *, plan=None, seed=7, period_ns=NS, saboteur_extra
         meter_rel = None
         if not step["zero_capture"]:
             mpath = rec / "windows" / rec_wid / "meter" / "km003c-0.jsonl"
-            synth.write_meter(mpath, (w_start - 20 * NS, clock))
+            # D6 permanent fixture: VARIABLE power, and on scheduled windows a > 300 ms stall inside a member's
+            # first G1 gate (not owned time): the sample-and-hold rule and the dropped-sample check meet it.
+            # r23m review fixture: a meter that starts after the first member did (its span overhangs the stream).
+            m_start = first_start + step["meter_late_ns"] if step.get("meter_late_ns") else w_start - 20 * NS
+            synth.write_meter(mpath, (m_start, clock), watts=_meter_watts, stalls=stalls)
             streams["km003c-0.jsonl"] = synth.sha256_file(mpath)
             meter_rel = dict(path=str(mpath.relative_to(root)), sha256=streams["km003c-0.jsonl"])
             for rec_row, er in zip(rec_members, engine_records):
@@ -503,6 +538,9 @@ def write_series(root, synth, *, plan=None, seed=7, period_ns=NS, saboteur_extra
 
 
 # Real kit member configs (production BenchmarkConfig bytes) used as templates for the bundle config.json.
+# Production Episode.agent_model is config.model.name (workload.py:721): the W1 kit configs' model names.
+MODEL_NAMES = {"qwen3.8-27b": "Qwen3.8-27B-8bit", "qwen3-30b-a3b": "Qwen3-30B-A3B-4bit"}
+CONTRAST_TEMPLATE = "configs/campaigns/align_v4/stages/episodes-a/align-v4-episodes-a-e06.json"   # gated 30B
 CONFIG_TEMPLATES = {D_MODEL: "configs/campaigns/align_v4/stages/episodes-a/align-v4-episodes-a-e05.json",
                     A_MODEL: "configs/campaigns/align_v4/stages/episodes-a/align-pilot-v3-episodes-a-e01.json"}
 
@@ -512,12 +550,14 @@ def _kit_config_bytes(slot):
     scripts/align_v4_series.py:build_files (run_id, spec condition, seed index and task_pair; the
     align-condition/align-task tags), serialized as the kit writes it (indent-2, sorted keys, newline)."""
     repo = Path(__file__).resolve().parents[2]
-    cfg = json.loads((repo / CONFIG_TEMPLATES[slot["model_id"]]).read_text())
+    template = (CONTRAST_TEMPLATE if slot["model_id"] == A_MODEL and slot["series_role"] != "anchor"
+                else CONFIG_TEMPLATES[slot["model_id"]])
+    cfg = json.loads((repo / template).read_text())
     cfg["run_id"] = slot["local_run_id"]
     spec = json.loads(cfg["workload_profile"]["prompt_text"])
     spec.update(condition=slot["condition"], seed=slot["seed_index"])
     spec["task_kwargs"]["task_pair"] = slot["task_pair"]
-    if slot["model_id"] == D_MODEL:
+    if isinstance(spec.get("thermal"), dict):
         # The kit's per-session instantiation (scripts/align_v4_kit.py ~1425: R1 B_D, T_dead and the R1
         # thermal policy) fills these in a real kit; the synthetic values match the fixture's episodes.
         spec.update(max_episode_decode_tokens=COHORT["configuration"]["max_episode_decode_tokens"],
@@ -557,6 +597,32 @@ def _write_bundle_config(root, base, kit_raw):
     return dict(path=str(path.relative_to(root)), sha256=sha256_bytes(raw))
 
 
+def _meter_watts(t_ns):
+    """A variable DC-in power profile (W) on the monotonic clock."""
+    return 30.0 + 4.0 * math.sin(t_ns / 7.3e9) + 1.5 * math.sin(t_ns / 0.9e9)
+
+
+def turn_rows(ep, ident):
+    """Producer-shaped outputs/align_turns.jsonl generation rows (endpoint.py:612-615, diagnostics.py:257):
+    token ids plus the episode-prefix cache fields."""
+    return [dict(generation=dict(
+        prompt_token_ids=[int(ident[2 * k:2 * k + 2], 16) for k in range(8)] + [t["index"]],
+        output_token_ids=[int(ident[2 * k + 16:2 * k + 18], 16) for k in range(8)] + [t["index"]],
+        cache_policy="episode_prefix", cached_prompt_tokens=t["context_tokens"], prefill_tokens=t["prefill_tokens"],
+        prompt_tokens=t["context_tokens"] + t["prefill_tokens"], cache_trimmed_tokens=0, cache_rebuilt=False))
+        for t in ep["turns"]]
+
+
+def production_cache_statistics(ep, ident):
+    """Production diagnostics.cache_statistics over the member's turn rows (EXP-G4: the real key set)."""
+    import sys
+    repo = Path(__file__).resolve().parents[2]
+    if str(repo) not in sys.path:
+        sys.path.insert(0, str(repo))
+    from joulewise.align.apple.diagnostics import cache_statistics
+    return cache_statistics(turn_rows(ep, ident))
+
+
 def _owned_gpu_j(m):
     """Turn-owned GPU J of a synthetic member: piecewise-constant power on whole-second samples (synth
     write_member), turn spans at the turn's mean power plus its own 2 s tool span at 2 W."""
@@ -572,9 +638,9 @@ def _owned_gpu_j(m):
 def _engine_member(root, base, slot, ep, meta, ident, step, wid, w_start):
     """The engine's raw-source row for one captured member, over the same raw files."""
     hw = ep["hardware"]
-    th = hw["thermal"]
-    policy = th["policy"]
-    sensors = {"s_fast": policy["sensors"]["s_fast"], "s_slow": policy["sensors"]["s_slow"], "fan_keys": []}
+    th = hw.get("thermal")
+    policy = th["policy"] if th else None
+    sensors = {"s_fast": policy["sensors"]["s_fast"], "s_slow": policy["sensors"]["s_slow"], "fan_keys": []} if th else None
     turns = []
     for t in ep["turns"]:
         turns.append(dict(index=t["index"], start_ns=t["start_ns"], end_ns=t["end_ns"],
@@ -585,7 +651,7 @@ def _engine_member(root, base, slot, ep, meta, ident, step, wid, w_start):
                                            args_bytes=c["args_bytes"], result_bytes=c["result_bytes"])
                                       for c in t["tool_calls"]]))
     intervals = []
-    for g in th["intervals"]:
+    for g in (th["intervals"] if th else []):
         stamp = dict(epoch_ns=g["start_ns"], monotonic_before_ns=g["start_ns"], monotonic_after_ns=g["start_ns"])
         intervals.append(dict(kind=g["kind"], start_ns=g["start_ns"], end_ns=g["end_ns"], turn=g["turn"],
                               outcome=g["outcome"], entry_stamp=stamp, exit_stamp=stamp,
@@ -593,18 +659,20 @@ def _engine_member(root, base, slot, ep, meta, ident, step, wid, w_start):
                               reference=dict(g["reference"])))
     # A captured anchor Episode keeps its local R15 id (engine-r23b binds it to the exported id).
     episode = dict(schema=RECORDS_SCHEMA, episode_id=slot["local_run_id"], task_pair="shade/" + slot["task_pair"],
-                   condition=slot["condition"], agent_model=slot["model_id"], endpoint="mock",
+                   condition=slot["condition"], agent_model=MODEL_NAMES[slot["model_id"]], endpoint="mock",
                    seed=ep["seed"], clock_domain="host", start_ns=ep["start_ns"], end_ns=ep["end_ns"],
                    turns=turns, flags=list(ep["flags"]),
-                   hardware=dict(thermal=dict(policy=dict(sensors=sensors, delta_fast_c=policy["delta_fast_c"],
-                                                          delta_slow_c=policy["delta_slow_c"]),
-                                              intervals=intervals, episode_reference=th["episode_reference"]),
+                   hardware=dict(**({"thermal": dict(policy=dict(sensors=sensors, delta_fast_c=policy["delta_fast_c"],
+                                                                delta_slow_c=policy["delta_slow_c"]),
+                                                    intervals=intervals, episode_reference=th["episode_reference"])}
+                                    if th else {}),
                                  registered_span_ns=hw["registered_span_ns"], cache=hw["cache"]))
     ep_bytes = (json.dumps(episode, sort_keys=True, separators=(",", ":")) + "\n").encode()
     ep_file = base / "engine-episode.json"
     ep_file.write_bytes(ep_bytes)
     raw = base / "raw" / "powermetrics.plist"
-    rows = [json.loads(line) for line in (base / "outputs" / "align_thermal.jsonl").read_text().splitlines() if line]
+    sidecar = base / "outputs" / "align_thermal.jsonl"
+    rows = ([json.loads(line) for line in sidecar.read_text().splitlines() if line] if sidecar.exists() else [])
     journal = [dict(kind="sample", monotonic_ns=r["monotonic_ns"],
                     finished=dict(monotonic_after_ns=r["monotonic_ns"]), sensors=r["sensors"], errors={})
                for r in rows]
@@ -629,11 +697,8 @@ def _engine_member(root, base, slot, ep, meta, ident, step, wid, w_start):
                   battery=dict(status="observed", flags=[], soc_pct=[100.0, 100.0], charger_w=[80.0, 80.0],
                                source_sha256="c" * 64),
                   cohort_identity=COHORT["identity"], configuration=COHORT["configuration"],
-                  cache_statistics=dict(rebuilds=0, rewinds=0), member_span_ns=[ep["start_ns"], ep["end_ns"]],
-                  turn_rows=[dict(generation=dict(
-                      prompt_token_ids=[int(ident[2 * k:2 * k + 2], 16) for k in range(8)] + [t["index"]],
-                      output_token_ids=[int(ident[2 * k + 16:2 * k + 18], 16) for k in range(8)] + [t["index"]]))
-                      for t in ep["turns"]])
+                  cache_statistics=hw["cache"], member_span_ns=[ep["start_ns"], ep["end_ns"]],
+                  turn_rows=turn_rows(ep, ident))
     if slot["series_role"] == "sentinel":
         record["identical_work_group"] = "sentinel"
     if "contrast" in slot:

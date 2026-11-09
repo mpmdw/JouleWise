@@ -62,7 +62,11 @@ KINDS = ("exact", "rel", "abs", "log_rel", "presence", "set")
 PAIR_SHORT = {"spam_filter_update": "spam", "bank_transfer_2": "bank"}
 CONV = {"counts_logged": "logged", "counts_withheld": "withheld"}
 D_MODEL, A_MODEL = "qwen3.8-27b", "qwen3-30b-a3b"
-MODEL_SHORT = {D_MODEL: "D", A_MODEL: "30B"}
+# The engine keys model tables by Episode.agent_model, which production fills with config.model.name
+# (workload.py:721): the registered kit model names (configs/campaigns/align_v4 W1 kit configs). The model ids
+# are kept for synthetic inputs. EXP-G3 (exporter e2e).
+D_NAME, A_NAME = "Qwen3.8-27B-8bit", "Qwen3-30B-A3B-4bit"
+MODEL_SHORT = {D_MODEL: "D", A_MODEL: "30B", D_NAME: "D", A_NAME: "30B"}
 COUNCIL = ("0", "128", "256", "300", "512", "1024", "2048", "full")
 BETA_ORDER = ("intercept", "prefill", "decode", "decode_attention", "prefill_attention")
 PRODUCER_KEYS = ("loaded_scorer_sha256", "raw_reducer_sha256")
@@ -519,8 +523,8 @@ class Comparison:
         cal = ("fill", "calibration")
         self.add("calibration_stop", "decision", E.get(*cal, "decision"), stop["status"])
         self.add("calibration_stop", "attempted", E.get(*cal, "attempted"), stop["counted_windows"])
-        self.add("calibration_stop", "windows", E.get(*cal, "windows"), stop["counted_windows"],
-                 note="engine 'windows' counts counted calibration windows")
+        self.add("calibration_stop", "windows", E.get(*cal, "windows"), 8,
+                 note="engine 'windows' is the registered fixed count (v4_cadence CAL_WINDOWS = 8)")
         zero = sum(1 for w in stop["windows"] if w["captured"] == 0 and w["final"])
         self.add("calibration_stop", "zero_capture_refusals", E.get(*cal, "zero_capture_refusals"), zero)
         self.add("calibration_stop", "unfinished_zero_capture_windows",
@@ -679,6 +683,13 @@ class Comparison:
                              note="recompute D_j is the prediction SD that divides the residual")
                 # alarm: T rows from the recompute's test table; C rows from the recompute's own threshold.
                 alarm = E.get(*base, "alarm")
+                ts = rget(E.fill, "fits", i, "scores", j, "threshold_status")
+                if ts is not MISSING or rget(R, "calibration", "thresholds", v, p, "status") == "withheld_until_calibration_complete":
+                    # R27: a score row's threshold-derived leaves carry the withheld status word before completion.
+                    self.add("alarms", unit + ("threshold_status",), E.get(*base, "threshold_status"),
+                             "withheld_until_calibration_complete"
+                             if rget(R, "calibration", "thresholds", v, p, "status") == "withheld_until_calibration_complete"
+                             else MISSING, unit=unit)
                 thr = rget(R, "calibration", "thresholds", v, p, "threshold")
                 ralarm = (rsc > thr) if isinstance(rsc, (int, float)) and isinstance(thr, (int, float)) else None
                 self.add("alarms", unit, alarm, ralarm, unit=unit)
@@ -793,11 +804,13 @@ class Comparison:
             self.complete(("residual_by_hold_count", conv),
                           rows(rget(f, "residual_by_hold_count", conv, "rows"), "trajectory"), exp)
         # test: registered conventions x pairs x conditions; T windows; planned assignments
+        t_names = [w for w in names if w.startswith("T")]
+        # D7: no T window present (prefix series) -> no test cells on either side.
         self.complete("test_cells", [(c, p, k) for c, ps in (f.get("test") or {}).items() for p, ks in ps.items()
                                      for k in ks] if isinstance(f.get("test"), dict) else MISSING,
-                      [(c, p, k) for c in CONV for p in ("spam", "bank") for k in ("benign", "sabotage")])
-        t_names = [w for w in names if w.startswith("T")]
-        for c in CONV:
+                      [(c, p, k) for c in CONV for p in ("spam", "bank") for k in ("benign", "sabotage")]
+                      if t_names else [])
+        for c in (CONV if t_names else ()):
             for p in ("spam", "bank"):
                 for k in ("benign", "sabotage"):
                     b = rget(f, "test", c, p, k)
@@ -808,14 +821,15 @@ class Comparison:
                     self.complete(("test", c, p, k, "members"), rows(rget(b, "members"), "window", "run_id"), planned)
         # acceptance / window check tables: every window (attempt); both models when anything was captured
         self.complete("acceptance_windows", keys(f.get("acceptance")), names)
-        models = sorted({D_MODEL, A_MODEL})
+        models = ["30B", "D"]
+        short = lambda doc: (sorted(MODEL_SHORT.get(k, k) for k in doc) if isinstance(doc, dict) else MISSING)
         for w in names:
-            self.complete(("acceptance", w, "models"), keys(rget(f, "acceptance", w)),
+            self.complete(("acceptance", w, "models"), short(rget(f, "acceptance", w)),
                           models if w in captured else [])
         for i, w in enumerate(f.get("windows") or []):
             a = w.get("attempt_id") if isinstance(w, dict) else None
             cap = any(m["captured"] for m in cross if m["attempt_id"] == a)
-            self.complete(("windows", a, "models"), keys(rget(w, "checks")), models if cap else [])
+            self.complete(("windows", a, "models"), short(rget(w, "checks")), models if cap else [])
             sup = [m["ordinal"] for m in cross if m["attempt_id"] == a and m["ordinal"] > 22]
             self.complete(("windows", a, "supplemental"), rows(w.get("supplemental_sentinels", []), "ordinal"), sup)
         # thresholds: registered conventions x pairs, live and frozen
@@ -936,13 +950,19 @@ class Comparison:
                              False if src is None else rget(src, "detection"), unit=unit)
                 else:
                     rdet = rget(carrier, "detected", nominal)
-                    if nominal == "0":
+                    carrier_withheld = rget(carrier, "h_star", "status") == "withheld_until_calibration_complete"
+                    if carrier_withheld:
+                        # R27: every threshold-derived dose leaf is null before completion, with its status word.
+                        self.add("known_h_doses", dose_key + ("threshold_status",), E.get(*b, "threshold_status"),
+                                 "withheld_until_calibration_complete", unit=unit)
+                    if nominal == "0" and not carrier_withheld:
                         # The engine's per-row detection is A7's (never at H = 0); the carrier's honest H = 0
                         # exceedance (R23-2) is compared through the curve's H = 0 fraction and n.
                         E.exempt("known_h_unregistered", *b, "detection")
                     else:
                         self.add("known_h_doses", dose_key + ("detected",), E.get(*b, "detection"),
-                                 False if rdet is None and avail != "available" else rdet, unit=unit,
+                                 None if carrier_withheld else (False if rdet is None and avail != "available" else rdet),
+                                 unit=unit,
                                  note="carrier detection at the carrier's own leave-own-out threshold; "
                                       "an unreachable dose is null in the recompute and False in the engine")
                     E.exempt("known_h_unregistered", *b, "above_threshold")
@@ -1015,14 +1035,21 @@ class Comparison:
                 g05 = E.get(*b, "generic_rank_05")
                 r05 = E.get(*b, "rank_05_sensitivity", "rank")
                 m_ = rget(rt, "m")
-                self.add("thresholds_rank", unit + ("generic_rank_05_is_m_minus_1",), g05 == r05 and
-                         isinstance(m_, int) and r05 == m_ - 1, True, unit=unit,
-                         note="the recompute prints rank m-1 only; equal to the .05 rank for 39 <= m <= 58")
+                if rget(rt, "status") == "withheld_until_calibration_complete":
+                    # R27 (b): no rank before calibration_complete.
+                    self.add("thresholds_rank", unit + ("rank_05_withheld",), [g05, r05], [None, None], unit=unit)
+                else:
+                    self.add("thresholds_rank", unit + ("generic_rank_05_is_m_minus_1",), g05 == r05 and
+                             isinstance(m_, int) and r05 == m_ - 1, True, unit=unit,
+                             note="the recompute prints rank m-1 only; equal to the .05 rank for 39 <= m <= 58")
                 self.add("thresholds_value", unit + ("rank_05",), E.get(*b, "rank_05_sensitivity", "threshold"),
                          rget(rt, "rank_m_minus_1"), unit=unit)
                 r38 = ("rank_38_sensitivity",)
                 s38 = E.get(*b, *r38, "status")
-                self.add("thresholds_rank", unit + ("rank_38_status",), s38 == "not_applicable", m_ != 39, unit=unit)
+                if rget(rt, "status") == "withheld_until_calibration_complete":
+                    self.add("thresholds_rank", unit + ("rank_38_status",), s38, rget(rt, "status"), unit=unit)   # R27
+                else:
+                    self.add("thresholds_rank", unit + ("rank_38_status",), s38 == "not_applicable", m_ != 39, unit=unit)
                 self.add("thresholds_value", unit + ("rank_38",), E.get(*b, *r38, "threshold"),
                          rget(rt, "rank_m_minus_1") if m_ == 39 else None, unit=unit)
                 E.exempt("registered_constants", *b, *r38, "rank")
@@ -1133,7 +1160,9 @@ class Comparison:
     def _checks(self, base, rwid, unit_prefix):
         E, R = self.E, self.R
         for model in sorted(E.get(*base) or {}):
-            ms = MODEL_SHORT[model]
+            ms = MODEL_SHORT.get(model)
+            if ms is None:
+                raise Refused("model_name_unknown", model)
             b = base + (model,)
             unit = unit_prefix + (ms,)
             ru1 = rget(R, "acceptance", "U1", rwid, ms)
@@ -1458,6 +1487,7 @@ class Comparison:
                  kind="exact")
         E.exempt("registered_text", *b, "status")
         E.exempt("registered_text", *b, "method")
+        E.exempt("registered_text", *b, "reason")
 
     def u5(self):
         E, R = self.E, self.R
@@ -1522,8 +1552,8 @@ class Comparison:
                          unit=unit)
                 self.add("u6", unit + ("position", k, "evaluable"), E.get(*pos, "evaluable", k),
                          rget(rpos, k, "judged"), unit=unit)
-            self.add("u6", unit + ("imprecise",), E.get(*b, "imprecise"),
-                     rget(r6, "label") == "imprecise" if rget(r6, "label") is not MISSING else MISSING, unit=unit)
+            # R27 (d): imprecise is null without an interval, true/false only when one exists.
+            self.add("u6", unit + ("imprecise",), E.get(*b, "imprecise"), rget(r6, "imprecise"), unit=unit)
             for k in ("split_rule", "se_kind", "s_r_definition", "s_r_unit", "reason"):
                 E.exempt("registered_text", *b, k)
             E.exempt("registered_text", *pos, "status")
@@ -1538,22 +1568,34 @@ class Comparison:
             b = b0 + ("pairs", p)
             rc = rget(rec, p)
             unit = ("carrier", p)
+            # R27 (c): before calibration_complete the engine prints the pair-level crossing and bootstrap leaves as
+            # one null each; the recompute's withheld curve has null crossings and no bootstrap.
+            for leaf in ("level_reached_at_h0", "window_cluster_bootstrap"):
+                if rget(E.fill, "benign_carriers", "pairs", p, leaf) is None and leaf in (rget(E.fill, "benign_carriers", "pairs", p) or {}):
+                    self.add("carrier_curve", unit + (leaf, "withheld"), E.get(*b, leaf),
+                             None if rget(rc, "status") == "withheld_until_calibration_complete" else MISSING, unit=unit)
+            pair_withheld = rget(E.fill, "benign_carriers", "pairs", p, "status") == "withheld_until_calibration_complete"
             for hk in ("H50", "H90"):
                 self.add("carrier_curve", unit + (hk,), E.get(*b, hk), rget(rc, hk, "dose"), unit=unit)
-                self.add("carrier_curve", unit + (hk, "level_reached_at_h0"), E.get(*b, "level_reached_at_h0", hk),
-                         rget(rc, hk, "level_reached_at_h0"), unit=unit)
+                if not pair_withheld:
+                    self.add("carrier_curve", unit + (hk, "level_reached_at_h0"), E.get(*b, "level_reached_at_h0", hk),
+                             rget(rc, hk, "level_reached_at_h0"), unit=unit)
                 # Undefined crossings print one of three fixed status words on both sides (R23-2 clarified).
                 if E.get(*b, hk, default=None) is None:
                     self.add("carrier_curve", unit + (hk, "status"), E.get(*b, hk + "_status"),
                              rget(rc, hk, "status"), unit=unit)
                 else:
                     E.exempt("a8_curve_diagnostics", *b, hk + "_status")
+                boot = rget(rc, "bootstrap")
+                withheld = boot is None          # R27 (c): no bootstrap before calibration_complete
+                if pair_withheld:
+                    continue                     # the pair-level null leaves are compared above
                 for j in (0, 1):
                     self.add("carrier_bootstrap", unit + (hk, "interval", j),
-                             E.get(*b, "window_cluster_bootstrap", hk, j), rget(rc, "bootstrap", hk + "_interval_90", j),
-                             unit=unit)
+                             E.get(*b, "window_cluster_bootstrap", hk, j),
+                             None if withheld else rget(rc, "bootstrap", hk + "_interval_90", j), unit=unit)
                 self.add("carrier_bootstrap", unit + (hk, "undefined"), E.get(*b, "bootstrap_undefined_replicates", hk),
-                         rget(rc, "bootstrap", "undefined", hk), unit=unit)
+                         None if withheld else rget(rc, "bootstrap", "undefined", hk), unit=unit)
             fr = rget(rc, "fractions") or {}
             # F2 / R26 (4): every curve dose and every n_by_h dose is the council U H* grid, on both sides.
             curve = rget(E.fill, "benign_carriers", "pairs", p, "curve")
@@ -1577,8 +1619,13 @@ class Comparison:
                 self.add("carrier_curve", unit + ("full_cell", "fraction"), E.get(*b, "full_cell", "fraction"),
                          rget(rf, "fraction"), unit=unit, kind="rel", bar=1e-12)
                 self.add("carrier_curve", unit + ("full_cell", "n"), E.get(*b, "full_cell", "n"), rget(rf, "n"), unit=unit)
-                self.add("carrier_curve", unit + ("full_cell", "print_only"), E.get(*b, "full_cell", "status") == "print_only",
-                         rget(rf, "print_only") is True, unit=unit)
+                fstatus = E.get(*b, "full_cell", "status")
+                if rget(rc, "status") == "withheld_until_calibration_complete":
+                    self.add("carrier_curve", unit + ("full_cell", "status"), fstatus,
+                             "withheld_until_calibration_complete", unit=unit)            # R27 (c)
+                else:
+                    self.add("carrier_curve", unit + ("full_cell", "print_only"), fstatus == "print_only",
+                             rget(rf, "print_only") is True, unit=unit)
             self.add("carrier_curve", unit + ("expected_carriers",), E.get(*b, "expected_carriers"),
                      rget(rc, "total"), unit=unit)
             self.add("carrier_curve", unit + ("status",), E.get(*b, "status"), rget(rc, "status"), unit=unit)
@@ -1586,10 +1633,13 @@ class Comparison:
                 E.exempt("a8_curve_diagnostics", *b, k)
         recipe = b0 + ("bootstrap_recipe",)
         anyp = next(iter(sorted((rec or {}) if isinstance(rec, dict) else {})), None)
-        self.add("carrier_bootstrap", "replicates", E.get(*recipe, "replicates"),
-                 rget(rec, anyp, "bootstrap", "replicates") if anyp else MISSING)
-        self.add("carrier_bootstrap", "seed", E.get(*recipe, "seed"),
-                 rget(rec, anyp, "bootstrap", "seed") if anyp else MISSING)
+        # The registered recipe (A8: Random(0), 1000 replicates), a constant on both sides; when the recompute ran
+        # its bootstrap, its own recipe must equal it too.
+        ran = any(isinstance(rget(rec, q, "bootstrap"), dict) for q in (rec or {})) if isinstance(rec, dict) else False
+        for k, want in (("replicates", 1000 if ran else 0), ("seed", 0)):    # R27: no bootstrap run before completion
+            self.add("carrier_bootstrap", k, E.get(*recipe, k), want)
+            if anyp and isinstance(rget(rec, anyp, "bootstrap"), dict):
+                self.add("carrier_bootstrap", ("recompute", k), rget(rec, anyp, "bootstrap", k), want)
         for k in ("resample", "interval"):
             E.exempt("registered_text", *recipe, k)
         for k in ("status", "validity", "estimand", "bootstrap_scope", "bootstrap_unit", "calibration_reference", "reason"):
@@ -1653,8 +1703,10 @@ class Comparison:
             if E.get(*b, "prediction_j") is not MISSING or rok:
                 self.add("dc_benign", unit + ("prediction_j",), E.get(*b, "prediction_j"),
                          rget(res, "prediction_j") if rok else None, unit=unit)
+                # A residual is a difference of two equal-scale numbers: an absolute 1e-6 J bar, as for the GPU
+                # residuals (a near-exact fit leaves ~1e-9 J noise that a relative bar cannot judge).
                 self.add("dc_benign", unit + ("residual_j",), E.get(*b, "residual_j"),
-                         (res["measured_j"] - res["prediction_j"]) if rok else None, unit=unit)
+                         (res["measured_j"] - res["prediction_j"]) if rok else None, unit=unit, kind="abs", bar=1e-6)
             tr = E.get(*b, "training_run_ids")
             if tr is not MISSING or res is not MISSING:
                 E.take(*b, "training_run_ids")
@@ -1742,11 +1794,18 @@ class Comparison:
                 rv = rget(rmem, "cache")
                 self.add("cache_counts", (m["attempt_id"], m["engine_run_id"], "none"), None,
                          None if rv is MISSING else rv, unit=(m["attempt_id"], m["engine_run_id"]))
-            for k in ("rebuilds", "rewinds"):
-                ev = E.get(*b, "statistics", k)
-                if ev is not MISSING:
-                    self.add("cache_counts", (m["attempt_id"], m["engine_run_id"], k), ev, rget(rmem, "cache", k),
-                             unit=(m["attempt_id"], m["engine_run_id"]))
+            # EXP-G4: production cache_statistics (diagnostics.py:cache_statistics: status, cached_tokens,
+            # fed_tokens, trims, trimmed_tokens, rebuilds, prefill_removed_tokens; synthetic: rebuilds, rewinds).
+            # Every printed key is compared exactly with the recompute's member cache record, and the key sets
+            # must be equal.
+            stats = rget(E.fill, "cache_diagnostics", i, "statistics")
+            rcache = rget(rmem, "cache")
+            if isinstance(stats, dict):
+                unit = (m["attempt_id"], m["engine_run_id"])
+                self.complete(unit + ("cache_keys",), list(stats),
+                              list(rcache) if isinstance(rcache, dict) else [], unit=unit)
+                for k in sorted(stats):
+                    self.add("cache_counts", unit + (k,), E.get(*b, "statistics", k), rget(rcache, k), unit=unit)
             E.exempt("a32_no_rebuild", *b, "no_rebuild_sensitivity")
         E.exempt("a32_no_rebuild", "fill", "no_rebuild_sensitivity")
 
