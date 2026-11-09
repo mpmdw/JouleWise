@@ -36,7 +36,8 @@ class ClockTests(unittest.TestCase):
         # ruling's "float midpoint, then seconds_ns"): (980e-9 + 995e-9)/2 is 987.4999...e-9 in binary64,
         # so the offset is -987, not the exact half's -988. The exporter's production offset settles it (A37).
         meta = {"uncertainty_evidence": {"clock_anchor": {"status": "bounded",
-                                                          "wall_minus_monotonic_bounds_ns": [980, 995]}}}
+                                                          "wall_minus_monotonic_lower_s": 980e-9,
+                                                          "wall_minus_monotonic_upper_s": 995e-9}}}
         m = rc.stamp_mapping(ep, meta)
         self.assertEqual((m["lower_ns"], m["upper_ns"], m["anchor_widened"]), (980, 995, True))
         self.assertEqual(m["offset_ns"], round(-((980 / 1e9 + 995 / 1e9) / 2.0) * 1e9))

@@ -868,10 +868,11 @@ def stamp_mapping(ep, meta):
     lower, upper = min(lows), max(highs)
     anchor = (meta.get("uncertainty_evidence", {}) or {}).get("clock_anchor", {}) or {}
     widened = False
-    bounds = anchor.get("wall_minus_monotonic_bounds_ns")
-    if anchor.get("status") == "bounded" and isinstance(bounds, list) and len(bounds) == 2 \
-            and all(is_int(b) for b in bounds):
-        lower, upper = min(lower, bounds[0]), max(upper, bounds[1])
+    # Production metadata (sampler.stamp_mapping ~99-109): a bounded anchor widens the bracket by its recorded
+    # wall_minus_monotonic_{lower,upper}_s, taken exactly.
+    lo_s, hi_s = anchor.get("wall_minus_monotonic_lower_s"), anchor.get("wall_minus_monotonic_upper_s")
+    if anchor.get("status") == "bounded" and finite(lo_s) and finite(hi_s):
+        lower, upper = min(lower, seconds_ns(float(lo_s))), max(upper, seconds_ns(float(hi_s)))
         widened = True
     midpoint_s = (lower / NS + upper / NS) / 2.0
     return {"offset_ns": seconds_ns(-midpoint_s), "lower_ns": lower, "upper_ns": upper, "stamps": len(stamps),
@@ -1042,6 +1043,9 @@ def process_member(task):
     if (mdir / "config.json").is_file():
         cfg, out["inputs"]["config_sha256"] = read_json_bytes_sha(mdir / "config.json")
         out["config"] = config_summary(cfg)
+        # Production period (workload.py:916): round(1e9 / config.sampling.power_hz); metadata carries none.
+        hz = (cfg.get("sampling") or {}).get("power_hz") if isinstance(cfg, dict) else None
+        out["power_period_ns"] = round(NS / hz) if finite(hz) and hz > 0 else None
     else:
         flags.append("member_config_missing")
     try:
@@ -1112,7 +1116,7 @@ def process_member(task):
         flags.append("clock_offset_differs_from_production")
     out["clock"] = mapping
     trace = Trace(reduced["columns"], anchor_s, mapping["offset_ns"])
-    period = meta.get("sampling", {}).get("power_period_ns")
+    period = out.get("power_period_ns")
     out["pm"] = pm_summary(trace, period, ep, intervals, flags)
     out["turns"], out["energy"] = turn_energies(trace, ep, owned, decode, walls, flags)
     out["usable"] = out["energy"] is not None

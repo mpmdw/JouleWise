@@ -173,7 +173,7 @@ def seed_law_model(model_tag, seed_index, pair):
 
 
 def write_config(base, run_id, seed_index, pair, condition, model="D", thinking=True, sampler=True, root=None,
-                 gated=True):
+                 gated=True, power_hz=10.0):
     """The member's kit config (a producer-shaped BenchmarkConfig subset: run_id, model.name,
     run_metadata.tags, workload_profile.prompt_text = the episode spec JSON) and the bundle config.json
     RunBundleWriter.create writes for it (indent-2, sorted keys, newline). Returns (planned_config reference
@@ -188,7 +188,7 @@ def write_config(base, run_id, seed_index, pair, condition, model="D", thinking=
         spec["thermal"] = {"sensors": {"s_fast": "Tg0f", "s_slow": "Th0x", "fan_keys": [], "r0_sha256": "0" * 64},
                            "delta_fast_c": 1.0, "delta_slow_c": 1.0, "per_turn": True, "heavy": True}
     local = run_id.split(":", 1)[-1]
-    kit = {"run_id": local, "model": {"name": "synthetic/Qwen"},
+    kit = {"run_id": local, "model": {"name": "synthetic/Qwen"}, "sampling": {"power_hz": power_hz},
            "run_metadata": {"project": "joulewise", "tags": [f"align-model={MODEL_TAGS[model]}"]},
            "workload_profile": {"name": "align_episode", "prompt_text": json.dumps(spec, sort_keys=True)}}
     raw = (json.dumps(kit, indent=2, sort_keys=True) + "\n").encode("utf-8")
@@ -234,7 +234,7 @@ def write_member(root, wid, m, epoch_offset_ns, delta=(1.0, 1.0), big=False, ful
         "first_sample_end_point_epoch_s": (first_end + epoch_offset_ns) / NS,
         "clock_stamps": {"pre_spawn": stamp_s(span_start), "sampling_started": stamp_s(span_start + NS),
                          "sampling_stopped": stamp_s(m.end_ns + 9 * NS), "post_parse": stamp_s(m.end_ns + 10 * NS)}}},
-        "sampling": {"power_period_ns": period}})
+        })
     (base / "events.jsonl").write_text("\n".join(json.dumps(e, sort_keys=True) for e in (
         {"event_type": "stage_started", "phase": "idle_baseline", "metadata": {"monotonic_ns": span_start - 2 * NS}},
         {"event_type": "stage_completed", "phase": "idle_drift_sentinel",
@@ -415,7 +415,7 @@ def write_series(root, windows=None, members_per_window=None, period_ns=100_000_
             write_member(root, wid, m, epoch_offset, extra=extra)
             r["planned_config"], ksha = write_config(root / "windows" / wid / "members" / r["run_id"], r["run_id"],
                                                      r["seed_index"], r["pair"], r["condition"], r["model"], root=root,
-                                                     gated=r["kind"] != "anchor")
+                                                     gated=r["kind"] != "anchor", power_hz=NS / period_ns)
             plan_rows.append({"ordinal": r["ordinal"], "run_id": r["run_id"].split(":", 1)[-1],
                               "config_path": r["planned_config"]["path"], "config_sha256": ksha})
             clock = m.end_ns + 60 * NS

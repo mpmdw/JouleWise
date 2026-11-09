@@ -41,7 +41,8 @@ class SeriesTests(unittest.TestCase):
             shutil.copytree(cls.root / "windows/T3/members" / late["run_id"], cls.root / "windows/T3/members" / rid)
             # Its own planned config (production: the escalation sentinel has its own run_id).
             ref, sha = synth.write_config(cls.root / "windows/T3/members" / rid, rid, late["seed_index"], late["pair"],
-                                          late["condition"], late["model"], root=cls.root)
+                                          late["condition"], late["model"], root=cls.root,
+                                          power_hz=1e9 / SMALL["period_ns"])
             win["members"].append(dict(late, ordinal=o, run_id=rid, planned_config=ref))
             plan_path = cls.root / win["plan_source"]["path"]
             plan = json.loads(plan_path.read_text())
