@@ -1,5 +1,6 @@
 """Refusals on missing or malformed required inputs (exit 2, nothing written), and member-level
 defects that exclude a member without refusing the run. Synthetic only."""
+import hashlib
 import json
 import shutil
 import tempfile
@@ -90,9 +91,50 @@ class RefusalTests(unittest.TestCase):
         (root / "series.json").write_text(json.dumps(dict(series, h_star_grid=[128, 256])))
         self.refused(root, "h_star_grid_differs")                                   # R26 (1)
         (root / "series.json").write_text(json.dumps(series))
-        for bad in ({"slot": "C3"}, {"chain_go": "no"}):                            # R24 export fields
+        for bad in ({"slot": "C3"}, {"barred": "low_m"}):                            # R24 export fields
             path.write_text(json.dumps(dict(record, **bad)))
             self.refused(root, "window_malformed")
+        # R22-2: a declared whole-window capture failure needs non-GO terminal-result evidence; the terminal
+        # result binds by digest; every captured C window carries one.
+        path.write_text(json.dumps(dict(record, barred="whole_window_capture_failure")))
+        self.refused(root, "capture_failure_unevidenced")
+        tref = record["terminal_result_source"]
+        tpath = root / tref["path"]
+        good = tpath.read_bytes()
+        tpath.write_text(json.dumps({"verdict": "NO_GO", "chain_exit_code": 3}))
+        path.write_text(json.dumps(record))
+        self.refused(root, "terminal_result_digest_differs")
+        # With its digest bound, a non-GO terminal result bars the window (no declaration needed) and admits
+        # a declared whole_window_capture_failure.
+        nogo = dict(record, barred="whole_window_capture_failure",
+                    terminal_result_source=dict(tref, sha256=hashlib.sha256(tpath.read_bytes()).hexdigest()))
+        path.write_text(json.dumps(nogo))
+        out = rc.recompute(root, workers=1, stage="calibration")
+        row = next(r for r in out["calibration"]["stop"]["windows"] if r["window_id"] == record["window_id"])
+        self.assertEqual((row["barred"], row["bar_reason"], row["admitted"]), (True, "capture_failure", False))
+        tpath.write_bytes(good)
+        path.write_text(json.dumps({k: v for k, v in record.items() if k != "terminal_result_source"}))
+        self.refused(root, "terminal_result_missing")
+        # A declared U1-U3 FAIL this recompute does not reproduce refuses (a forged bar).
+        path.write_text(json.dumps(dict(record, barred="u1_u3_fail")))
+        self.refused(root, "declared_bar_not_reproduced")
+        path.write_text(json.dumps(record))
+        # R24 allocation: the series binds the 18-window manifest; any other shape refuses.
+        series = json.loads((root / "series.json").read_text())
+        (root / "series.json").write_text(json.dumps({k: v for k, v in series.items() if k != "allocation_source"}))
+        self.refused(root, "allocation_missing")
+        alloc = root / series["allocation_source"]["path"]
+        full = alloc.read_bytes()
+        doc = json.loads(full)
+        doc["windows"] = [w for w in doc["windows"] if w["id"] not in rc.CAL_SLOTS[8:]]
+        doc["order"] = [w for w in doc["order"] if w not in rc.CAL_SLOTS[8:]]
+        alloc.write_text(json.dumps(doc))                                            # an 11-window shape
+        (root / "series.json").write_text(json.dumps(dict(series, allocation_source=dict(
+            series["allocation_source"], sha256=hashlib.sha256(alloc.read_bytes()).hexdigest()))))
+        self.refused(root, "allocation_missing")
+        (root / "series.json").write_text(json.dumps(series))
+        self.refused(root, "allocation_differs")
+        alloc.write_bytes(full)
         path.write_text(json.dumps(record))
         u3 = root / "u3_bar.json"
         bar = json.loads(u3.read_text())

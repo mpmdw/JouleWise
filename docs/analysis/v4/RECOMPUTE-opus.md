@@ -218,7 +218,9 @@ The comparator can also read it from `members.*.clock`.
 | A15 (R21) | OLS with intercept on actual G0 release temperature; INCONCLUSIVE U5 never triggers R20 | x = `g0_release_slow_c`; `triggers_sentinels: false` | `u5` | `test_u5_hand` |
 | A16 | Per pair over pool-entered C1-C8 benign LOTO residuals, logged; chronological; late half takes the extra; CR0 sandwich; ±1.645; FAIL iff \|point\| > margin; s_r = √(ΣRSS/Σdf) | rewritten | `u6_pair`, `recompute` | `test_u6_hand` |
 | A17 | `v4_cadence` vocabulary; no C6 refusal | `continue` / `pending_final_eligibility` / `calibration_complete` / `insufficient_calibration` / `escalate_to_lead`; contradictory row (> 8 admitted) refuses | `calibration_stop` | `test_fixed_eight_vocabulary` |
-| R22-2 / R24 | Exactly 8 ADMITTED windows; structural bars (U1-U3 FAIL, `chain_go: false` capture failure, zero capture beyond the retry) contribute nothing and do not count; reserves C9-C14 in frozen order only to replace bars; insufficient below 39 after 8 or at C14 with < 8; escalate on two consecutive zero-capture refusals of different slots or a zero-capture bar once all six reserves are used; provisional holds at `pending_final_eligibility`; `barred_windows`, `replacements_used` disclosed | rewritten from the text | `calibration_stop`, `load_series` (`slot`, `chain_go`) | `test_structural_bar_is_replaced_by_the_next_reserve`, `test_insufficient_and_escalation`, e2e C2 → C9 |
+| R22-2 / R24 | Exactly 8 ADMITTED windows; structural bars (U1-U3 FAIL, a non-GO or nonzero-exit terminal result = whole-window capture failure, zero capture beyond the retry) contribute nothing and do not count; reserves C9-C14 in frozen order only to replace bars; insufficient below 39 after 8 or at C14 with < 8; escalate on two consecutive zero-capture refusals of different slots or a zero-capture bar once all six reserves are used; provisional holds at `pending_final_eligibility`; `barred_windows`, `replacements_used` disclosed | rewritten from the text | `calibration_stop`, `load_series` (`slot`, `barred`, `terminal_result_source`) | `test_structural_bar_is_replaced_by_the_next_reserve`, `test_insufficient_and_escalation`, e2e C2 → C9 |
+| R22-2 (r23j export) | Declared bars reproducible: a declared `u1_u3_fail` this recompute's U1-U3 does not reproduce refuses (`declared_bar_not_reproduced`); a declared `whole_window_capture_failure` needs non-GO terminal-result evidence (`capture_failure_unevidenced`); every captured C window binds `terminal_result_source` by digest (`terminal_result_missing`, `terminal_result_digest_differs`) | `load_series`, `recompute` | `test_window_record_defects` |
+| R24 allocation | The series binds the full 18-window manifest (`series.json` `allocation_source`, sha256 `21313cc2…`, order W1, C1-C14, T1-T3); a missing, re-hashed or 11-window allocation refuses (`allocation_missing`, `allocation_differs`); every exported slot must be allocated. Member rosters are checked by the engine and by release_v4 stage (a) | `load_series` | `test_window_record_defects` |
 | R25 | U3 N = 22 (W1 30B 4 + D 1, C1-C14 D 1 each, T1-T3 D 1 each) | bar N must equal 22, else refuse | `u3_bar` | `test_acceptance` (q at N 22) |
 | A18 | CP bound | unchanged | `binomial_upper` | `test_binomial_upper` |
 | A19/A31 | Exactly 8 identical eligible runs or INCONCLUSIVE; stage = second-stage indicator; admission within 2 s; recorded-wait rule; always compute; verdict words | all | `w1_contrast`, `thermal_summary` | `ContrastTests`, `test_registered_span_and_admission_window` |
@@ -273,8 +275,10 @@ should treat a mismatch here as a request for the restated text, not as a bug.
 - **A17 `continue`.** The word for fewer than 8 admitted windows (none provisional) comes from P:853
   ("continue until 8 counted windows").
 - **R24 slot export.** A calibration attempt names its slot (`slot`, default the window id with a
-  `-z<k>` zero-capture suffix stripped); a whole-window capture failure is exported as
-  `chain_go: false` on the window record. Both are recompute readings of the export.
+  `-z<k>` zero-capture suffix stripped). The completed-chain terminal result is a JSON file
+  `{verdict, chain_exit_code}` bound by `terminal_result_source: {path, sha256}` on the window record; a
+  declared bar is `barred` (`u1_u3_fail` or `whole_window_capture_failure`). These are recompute readings of
+  the export (r23j).
 - **A20 battery sign.** Battery power = −B0AC·B0AV/1e6 per poll, as a signed print-only integral.
   The sign convention is unverified.
 - **A20 seal.** The sealed hash is sha256 of this program's canonical row, which cannot equal the

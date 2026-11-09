@@ -223,6 +223,9 @@ def write_member(root, wid, m, epoch_offset_ns, delta=(1.0, 1.0), big=False, ful
     (base / "outputs" / "align_thermal.jsonl").write_text("\n".join(rows) + "\n")
 
 
+ALLOCATION = Path(__file__).resolve().parent / "fixtures" / "series_manifest_r24.json"
+
+
 def window_roster(wid, role, index):
     """D shape: anchors 1-4, sentinels 5 and 22, sabotage at 9 and 18, pairs alternating."""
     roster = []
@@ -355,11 +358,21 @@ def write_series(root, windows=None, members_per_window=None, period_ns=100_000_
         if meter:
             write_meter(root / "windows" / wid / "meter" / "km003c-0.jsonl", (w_start - 20 * NS, clock))
             streams["km003c-0.jsonl"] = sha256_file(root / "windows" / wid / "meter" / "km003c-0.jsonl")
+        terminal = {}
+        if role == "calibration":    # R22-2: every captured C window binds its completed-chain terminal result
+            tpath = root / "windows" / wid / "terminal_result.json"
+            dump(tpath, {"verdict": "GO", "chain_exit_code": 0})
+            terminal = {"terminal_result_source": {"path": f"windows/{wid}/terminal_result.json",
+                                                   "sha256": sha256_file(tpath)}}
         dump(root / "windows" / wid / "window.json", {
             "schema": "joulewise.v4_recompute_input.window.v1", "window_id": wid, "role": role,
             "members": roster, "adjudication": {"final": True, "excluded": {}},
             "identity": identity, "battery": {}, "meter": {"streams": streams}, "cohort_sha256": COHORT,
-            **({"sentinel_ordinals": [5, 17]} if wid == "W1" else {})})
+            **({"sentinel_ordinals": [5, 17]} if wid == "W1" else {}), **terminal})
+    # R24 allocation: the frozen 18-window manifest, byte for byte (fixtures/series_manifest_r24.json).
+    (root / "allocation").mkdir(parents=True, exist_ok=True)
+    (root / "allocation" / "series_manifest.json").write_bytes(ALLOCATION.read_bytes())
+    series["allocation_source"] = {"path": "allocation/series_manifest.json", "sha256": sha256_file(ALLOCATION)}
     dump(root / "series.json", series)
     if u3:
         dump(root / "u3_bar.json", {"signed": True, "beta": 0.05, "N": 22, "f": 1.5, "r1_d_screen": 0.004,

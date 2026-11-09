@@ -584,12 +584,35 @@ def need(cond, code, detail=""):
         raise Refusal(code, detail)
 
 
+def safe_path(root, rel):
+    """A relative reference under the series root: no absolute path, traversal or symbolic link."""
+    p = Path(rel)
+    need(not p.is_absolute() and p.parts and not any(x in ("", ".", "..") for x in p.parts), "reference_unsafe", rel)
+    cur = Path(root)
+    for part in p.parts:
+        cur = cur / part
+        need(not cur.is_symlink(), "reference_unsafe", rel)
+    return cur
+
+
 def load_series(root):
     root = Path(root)
     series, series_sha = read_json(root / "series.json", "series")
     need(isinstance(series, dict) and isinstance(series.get("windows"), list) and series["windows"],
          "series_malformed", "windows list required")
     windows, anchor_runs = [], set()
+    for entry in series["windows"]:
+        need(isinstance(entry, dict) and isinstance(entry.get("window_id"), str)
+             and entry.get("role") in ("W1", "calibration", "test"), "series_malformed", "window entry")
+    # R24 allocation (c): the export binds the full 18-window frozen manifest; any other shape refuses.
+    aref = series.get("allocation_source")
+    need(isinstance(aref, dict) and isinstance(aref.get("path"), str) and aref.get("sha256") == ALLOCATION_SHA256,
+         "allocation_missing", "series.json allocation_source with the R24 manifest digest")
+    allocation, asha = read_json(safe_path(root, aref["path"]), "allocation")
+    need(asha == ALLOCATION_SHA256 and isinstance(allocation, dict) and allocation.get("order") == ALLOCATION_ORDER
+         and [w.get("id") for w in allocation.get("windows", []) if isinstance(w, dict)] == ALLOCATION_ORDER,
+         "allocation_differs", "the R24 allocation is 18 windows W1, C1-C14, T1-T3")
+    allocated = set(ALLOCATION_ORDER)
     for entry in series["windows"]:
         need(isinstance(entry, dict) and isinstance(entry.get("window_id"), str)
              and entry.get("role") in ("W1", "calibration", "test"), "series_malformed", "window entry")
@@ -638,13 +661,31 @@ def load_series(root):
         # "<slot>-z<k>" for its zero-capture attempt k and the slot itself for the committed attempt.
         zsplit = wid.rsplit("-z", 1)
         slot = record.get("slot", zsplit[0] if len(zsplit) == 2 and zsplit[1].isdigit() else wid)
-        need(isinstance(slot, str) and (wid == slot or (wid.startswith(slot + "-z") and wid[len(slot) + 2:].isdigit()))
-             and type(record.get("chain_go", True)) is bool, "window_malformed", wid + ": slot / chain_go")
+        need(isinstance(slot, str) and (wid == slot or (wid.startswith(slot + "-z") and wid[len(slot) + 2:].isdigit())),
+             "window_malformed", wid + ": slot")
         need(entry["role"] != "calibration" or slot in CAL_SLOTS, "window_malformed", wid + ": calibration slot")
+        need(slot in allocated, "allocation_differs", wid + ": slot not in the R24 allocation")
+        # R22-2 / R24 structural evidence: a declared bar must be reproducible. The completed-chain terminal
+        # result binds by digest (terminal_result_source); a non-GO verdict or a nonzero exit is a whole-window
+        # capture failure, and only that evidence admits a declared whole_window_capture_failure.
+        declared = record.get("barred")
+        need(declared is None or declared in DECLARED_BARS, "window_malformed", wid + ": declared bar")
+        terminal = None
+        if "terminal_result_source" in record:
+            ref = record["terminal_result_source"]
+            need(isinstance(ref, dict) and isinstance(ref.get("path"), str) and isinstance(ref.get("sha256"), str),
+                 "terminal_result_malformed", wid)
+            terminal, tsha = read_json(safe_path(root, ref["path"]), "terminal_result")
+            need(tsha == ref["sha256"], "terminal_result_digest_differs", wid)
+            need(isinstance(terminal, dict) and isinstance(terminal.get("verdict"), str)
+                 and is_int(terminal.get("chain_exit_code")), "terminal_result_malformed", wid)
+        non_go = terminal is not None and (terminal["verdict"] != "GO" or terminal["chain_exit_code"] != 0)
+        need(declared != "whole_window_capture_failure" or non_go, "capture_failure_unevidenced", wid)
         adj = record.get("adjudication")
         need(isinstance(adj, dict) and type(adj.get("final")) is bool
              and isinstance(adj.get("excluded", {}), dict), "window_malformed", wid + ": adjudication")
         windows.append({"window_id": wid, "slot": slot, "role": entry["role"], "record": record, "sha256": record_sha,
+                        "declared_bar": declared, "terminal": terminal, "capture_failure": non_go,
                         "members": sorted(members, key=lambda m: m["ordinal"])})
     optional = {}
     for name in ("u3_bar", "references"):
@@ -1404,6 +1445,11 @@ def threshold_summary(scores, complete):
 RESERVE_WINDOWS = 6     # R24: C9-C14
 CAL_SLOTS = [f"C{i}" for i in range(1, CALIBRATION_WINDOWS + RESERVE_WINDOWS + 1)]   # frozen order
 U3_N_REGISTERED = 22    # R25: W1 30B 4 + D 1, C1-C14 D 1 each, T1-T3 D 1 each
+# R24 allocation: the frozen 18-window series manifest (configs/campaigns/align_v4/series/series_manifest.json
+# at origin/align/2026-11-08-v4-r11, RUN_STATE 242 "manifest 21313cc2... unchanged"). An export binds it.
+ALLOCATION_SHA256 = "21313cc2791865e01f322c24606db62ba2ac6a65adda6d737e5b7432bef2ad5c"
+ALLOCATION_ORDER = ["W1"] + CAL_SLOTS + ["T1", "T2", "T3"]
+DECLARED_BARS = ("u1_u3_fail", "whole_window_capture_failure")
 
 
 def calibration_stop(windows, eligibility, pool_barred, resets=()):
@@ -1412,8 +1458,8 @@ def calibration_stop(windows, eligibility, pool_barred, resets=()):
     236, 238, 239):
 
     - Calibration is EXACTLY 8 ADMITTED windows. A window is structurally BARRED by a U1-U3 FAIL, by a
-      whole-window capture failure (its committed terminal result is not a completed GO chain:
-      ``chain_go: false``), or by a zero-capture refusal beyond the retry (the slot's retry is also a zero
+      whole-window capture failure (its digest-bound terminal result is not a completed GO chain: a non-GO
+      verdict or a nonzero chain exit), or by a zero-capture refusal beyond the retry (the slot's retry is also a zero
       capture). A barred window contributes NOTHING (no partial use) and is not counted; it is replaced by the
       next reserve, C9-C14 in order. A window with few eligible members that is not barred counts.
     - A first zero-capture attempt does not count and is retried in its slot (``slot``); a provisional one
@@ -1441,7 +1487,7 @@ def calibration_stop(windows, eligibility, pool_barred, resets=()):
         retried = any(slots[j] == slot for j in range(k + 1, len(cal)))
         is_retry = any(slots[j] == slot for j in range(k))
         reason = None
-        if w["record"].get("chain_go", True) is False:
+        if w.get("capture_failure"):
             reason = "capture_failure"
         elif pool_barred.get(w["window_id"]):
             reason = "u1_u3_fail"
@@ -2408,7 +2454,13 @@ def recompute(root, workers=1, cache_dir=None, timings=None, stage="full", freez
             verdicts = (acceptance["U1"][wid].get("D", {}).get("verdict"),
                         acceptance["U2"][wid].get("D", {}).get("verdict"), acceptance["U3"][wid]["verdict"])
             # A23: only a U1-U3 FAIL bars on the acceptance side; R22-2 adds a whole-window capture failure.
-            pool_barred[wid] = "fail" in verdicts or w["record"].get("chain_go", True) is False
+            own_fail = "fail" in verdicts
+            # A declared bar must be reproducible: a declared u1_u3_fail this recompute's U1-U3 does not
+            # reproduce refuses (a forged bar would silently drop a window).
+            need(w["declared_bar"] != "u1_u3_fail" or own_fail, "declared_bar_not_reproduced", wid)
+            if w["role"] == "calibration" and any(e["captured"] for e in elig.values()):
+                need(w["terminal"] is not None, "terminal_result_missing", wid)    # every captured C window
+            pool_barred[wid] = own_fail or w["capture_failure"]
         stop = calibration_stop(windows, eligibility, pool_barred, resets)
         complete = stop["status"] == "calibration_complete"
         admitted_ids = {r["window_id"] for r in stop["windows"] if r["admitted"]}   # R24: barred contribute nothing

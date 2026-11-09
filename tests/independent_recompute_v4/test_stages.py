@@ -298,7 +298,7 @@ class CalibrationTests(unittest.TestCase):
                          "withheld_until_calibration_complete")
 
     def stop(self, specs, resets=()):
-        """specs: (captured, benign, final, u_fail[, slot[, chain_go]]); the slot defaults to the next one."""
+        """specs: (captured, benign, final, u_fail[, slot[, capture_failure]]); the slot defaults to the next one."""
         windows, elig, barred, seen = [], {}, {}, []
         for spec in specs:
             captured, benign, final, bar = spec[:4]
@@ -309,13 +309,12 @@ class CalibrationTests(unittest.TestCase):
             members = [{"run_id": f"{wid}-{p}{j}", "kind": "benign", "model": "D", "pair": p}
                        for p in ("spam", "bank") for j in range(7)]
             record = {"adjudication": {"final": final}}
-            if len(spec) > 5:
-                record["chain_go"] = spec[5]
+            failure = len(spec) > 5 and spec[5]
             windows.append({"window_id": wid, "slot": slot, "role": "calibration", "members": members,
-                            "record": record})
+                            "record": record, "capture_failure": failure})
             elig[wid] = {m["run_id"]: {"captured": captured, "eligible": captured and int(m["run_id"][-1]) < benign}
                          for m in members}
-            barred[wid] = bar or record.get("chain_go") is False
+            barred[wid] = bar or failure
         return rc.calibration_stop(windows, elig, barred, resets)
 
     def test_fixed_eight_vocabulary(self):
@@ -341,7 +340,7 @@ class CalibrationTests(unittest.TestCase):
         self.assertEqual(out["eligible_benign_totals"]["spam"], 56)
         self.assertEqual([r["bar_reason"] for r in out["windows"]][3], "u1_u3_fail")
         # A whole-window capture failure (not a completed GO chain) bars the same way.
-        out = self.stop([ok] * 2 + [(True, 7, True, False, "C3", False)] + [ok] * 6)
+        out = self.stop([ok] * 2 + [(True, 7, True, False, "C3", True)] + [ok] * 6)
         self.assertEqual((out["status"], out["barred_windows"], out["windows"][2]["bar_reason"]),
                          ("calibration_complete", ["C3"], "capture_failure"))
         # A zero-capture refusal beyond the retry bars the slot.
