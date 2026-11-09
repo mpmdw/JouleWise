@@ -35,6 +35,30 @@ class ContractTests(unittest.TestCase):
     def test_bars_pin_matches_the_tracked_bars(self):
         self.assertEqual(release_v4.sha256_file(release_v4.RELEASE_BARS), release_v4.RELEASE_BARS_SHA256)
 
+    def test_runbook_command_matches_pins(self):
+        # Seat 2 F6: the documented command passes no commit flag (the wrapper defaults to its pins), and every
+        # flag it accepts exists; the runbook's build table names the pinned commits.
+        text = (support.REPO / "docs/analysis/v4/RELEASE-RUNBOOK-v4.md").read_text()
+        block = text.split("```bash", 1)[1].split("```", 1)[0]
+        self.assertNotIn("-commit", block)
+        flags = set(__import__("re").findall(r"(--[a-z-]+)", block))
+        parser_flags = {"--engine-input", "--engine-out", "--engine-record", "--recompute-root", "--crosswalk",
+                        "--restricted-out", "--workers", "--python", "--programs-repo"}
+        self.assertLessEqual(flags, parser_flags)
+        for pin in (release_v4.RELEASE_ENGINE_COMMIT, release_v4.RELEASE_RECOMPUTE_COMMIT):
+            self.assertIn(pin[:9], text)
+
+    def test_malformed_nested_shapes_refuse_with_fixed_codes(self):
+        # Seat 2 F5: never an uncaught exception (exit 1 would read as hold); structure-only stdout.
+        self.assertEqual(release_v4.member_refs({"journal": {"path": "j.json", "sha256": "a" * 64},
+                                                 "dc_streams": [{"path": "m", "sha256": "b" * 64}]}),
+                         [("journal", {"path": "j.json", "sha256": "a" * 64}),
+                          ("dc_streams", {"path": "m", "sha256": "b" * 64})])
+        for bad in ({"journal": {"path": "j.json"}}, {"x": [{"sha256": "zz"}]}):
+            with self.assertRaises(release_v4.Refused) as ctx:
+                release_v4.member_refs(bad)
+            self.assertEqual(ctx.exception.code, "engine_census_malformed")
+
 
 @unittest.skipUnless(support.have_commits(), "pinned build commits unavailable in this clone")
 class ReleaseTests(unittest.TestCase):
@@ -136,6 +160,30 @@ class ReleaseTests(unittest.TestCase):
         p.unlink()
         p.write_text(json.dumps(doc))
         self._refuses("o-cross", c, "crosswalk_differs_from_roster")
+
+    def test_malformed_engine_shapes_refuse_2(self):
+        # Seat 2 F5 end to end: valid JSON, malformed nesting -> exit 2 with a fixed code, never exit 1.
+        cases = (("input_census", [None], "engine_census_malformed"),
+                 ("input_census", [{"path": 3, "sha256": "x"}], "engine_census_malformed"),
+                 ("input_census", "rows", "engine_census_missing"))
+        for k, (key, value, want) in enumerate(cases):
+            c = self.custody_copy(f"t-shape-{k}")
+            p = c / "engine-out" / "fill.json"
+            fill = json.loads(p.read_text())
+            fill[key] = value
+            body = {kk: v for kk, v in fill.items() if kk != "leaf_inventory"}
+            sys.path.insert(0, str(support.REPO / "scripts"))
+            import compare_v4_recompute as cmp
+            fill["leaf_inventory"] = [dict(pointer=q, kind="null" if v is None else "bool" if type(v) is bool else
+                                           "number" if type(v) in (int, float) else "string")
+                                      for q, v in cmp.leaves(body).items()]
+            p.unlink()
+            p.write_text(json.dumps(fill))
+            (c / "engine-run-record.json").unlink()
+            support.write_record(c)
+            code, v, _ = support.run_release(self.checkout, c, self.dir / f"o-shape-{k}", workers=1)
+            self.assertEqual((code, v["verdict"], v["reason"]), (2, "refused", want))
+            self.assertEqual(release_v4.guard(v), v)
 
     def test_existing_restricted_out_refuses(self):
         (self.dir / "exists").mkdir()

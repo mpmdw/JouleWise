@@ -6,9 +6,13 @@ Modelled on scripts/release_b5.py (DLE-1). It runs BEFORE anything is unsealed a
 Stages:
 - (a) digests. The release checkout is clean; the bars file hashes to RELEASE_BARS_SHA256; the engine run
   record names the pinned engine commit and the engine input; the engine's fill, verdict and threshold freeze
-  hash to the record; every engine input-census row and every raw-source reference inside it re-hashes at
-  the engine input root; the crosswalk agrees with both builds' rosters (structure only); the recompute
-  program extracted at the pinned recompute commit hashes to RECOMPUTE_PROGRAM_SHA256.
+  hash to the record; every series- and window-level engine source is an input-census row, every census
+  row re-hashes at the engine input root, and so does every {path, sha256} reference inside each raw-source
+  manifest's member rows (episode, powermetrics, a referenced thermal journal, DC streams, any other); the
+  engine's printed producer identity (loaded_scorer_sha256, raw_reducer_sha256 in the fill and the freeze)
+  equals the identity computed from the PINNED engine tree under the release interpreter; the crosswalk
+  agrees with both builds' rosters (structure only); the recompute program extracted at the pinned recompute
+  commit hashes to RECOMPUTE_PROGRAM_SHA256.
 - (b) recompute. The A25 two-stage contract: ``--stage calibration --freeze-out``, then the full run with
   ``--freeze-in``. After it, every member's raw sha256 in the recompute output must equal the engine's
   raw-source reference for the same member (both builds read the same bytes).
@@ -19,7 +23,9 @@ Exit (precedence refused 2 > hold 1 > agree 0):
 - 1 ``hold``: the comparator held (a family disagreed, an unexplained empty family, a manifest count out of
   range, an uncomputable sensitivity line).
 - 2 ``refused``: any stage (a) failure, a recompute failure, a comparator refusal (unmapped leaf, eligible-m
-  mismatch, malformed input), or a verdict that is not structure-only.
+  mismatch, malformed input), or a verdict that is not structure-only. A malformed input of any nested
+  shape refuses with a fixed code (``release_input_malformed`` when no narrower code applies), never an
+  uncaught exception.
 
 ``verdict.json`` (also stdout) carries only fixed codes, family names, counts and hex digests. Values stay in
 ``--restricted-out`` (mode 0700, must not exist): recompute.json, freeze.json, comparison.json, the stage
@@ -38,16 +44,16 @@ import time
 SCHEMA = "joulewise.v4_release_verdict.v1"
 ROOT = Path(__file__).resolve().parents[1]
 RELEASE_BARS = ROOT / "configs" / "analysis" / "v4" / "recompute_bars.json"
-RELEASE_BARS_SHA256 = "e9529bd960169ed8720633be68c99a5c7cdbe1666087782a5fdc669a8dd63f34"
+RELEASE_BARS_SHA256 = "17a268152f709fd075035598805b70cbe030361d74147c893351161e7b6fbcd4"
 COMPARATOR = ROOT / "scripts" / "compare_v4_recompute.py"
 RECOMPUTE_PROGRAM_PATH = "scripts/independent_recompute_v4.py"
-# The recompute's own pin (tests/independent_recompute_v4/test_hygiene.py at de553c002, R23-R26 + R23h).
-RECOMPUTE_PROGRAM_SHA256 = "343f417ba660787452ab822c4eca8af740402646a4abf5d54a4551d286b2ec2c"
+# The recompute's own pin (tests/independent_recompute_v4/test_hygiene.py at 9f8a8749e, R23-R26 + R23h + R22-2/R24/R25 + r23j exports + R26 amendment).
+RECOMPUTE_PROGRAM_SHA256 = "0e79439d1a7888d61036203987429c24fe028c84a4f4a1db008d9b5d9b6cc719"
 ENGINE_RECORD_SCHEMA = "joulewise.v4_engine_run_record.v1"
 # The builds this release check certifies (the commits the synthetic rehearsal agreed on). Any other
 # commit refuses; re-pin only with a fresh AGREE rehearsal (RELEASE-RUNBOOK-v4.md section 5).
-RELEASE_ENGINE_COMMIT = "244ef6f395e8ad13c836ceb23fef10530861eb86"   # origin/engine-r23h
-RELEASE_RECOMPUTE_COMMIT = "de553c002879f93cdd32f15861f638a18dbd74f0"   # align/2026-11-08-v4-recompute-opus
+RELEASE_ENGINE_COMMIT = "555b3a664b9941613b127ce37f4aebc13791b89d"   # origin/engine-r23j
+RELEASE_RECOMPUTE_COMMIT = "9f8a8749eda8387a827fe6c96afb942ceec89df5"   # align/2026-11-08-v4-recompute-opus
 HEX40, HEX64 = re.compile(r"[0-9a-f]{40}"), re.compile(r"[0-9a-f]{64}")
 FLOAT_TOKEN = re.compile(r"(?<![A-Za-z0-9])(?:\d+\.\d+(?:[eE][+-]?\d+)?|\d+[eE][+-]?\d+)(?![A-Za-z0-9])")
 CODE = re.compile(r"[a-z0-9_:]+")
@@ -103,6 +109,37 @@ def local(root, rel):
     return cursor
 
 
+SERIES_SOURCE_KEYS = ("series_source", "selection_source")
+WINDOW_SOURCE_KEYS = ("raw_source", "thermal_source", "residual_source", "terminal_result_source")
+CROSSWALK_KEYS = ("window", "attempt_id", "ordinal", "engine_run_id", "recompute_window_id", "recompute_run_id",
+                  "captured")
+
+
+def is_ref(ref):
+    return (isinstance(ref, dict) and isinstance(ref.get("path"), str) and isinstance(ref.get("sha256"), str)
+            and HEX64.fullmatch(ref["sha256"]) is not None)
+
+
+def member_refs(member, key=None):
+    """Every {path, sha256} reference anywhere in a raw-source member row, with its top-level key."""
+    out = []
+    def walk(value, top):
+        if isinstance(value, dict):
+            if "path" in value or "sha256" in value:
+                if not is_ref(value):
+                    raise Refused("engine_census_malformed", "member reference")
+                out.append((top, value))
+                return
+            for v in value.values():
+                walk(v, top)
+        elif isinstance(value, list):
+            for v in value:
+                walk(v, top)
+    for k, v in member.items():
+        walk(v, k)
+    return out
+
+
 def git(repo, *args):
     r = subprocess.run(["git", "-C", str(repo), *args], capture_output=True)
     if r.returncode:
@@ -156,41 +193,66 @@ def stage_digests(a, restricted):
     if not isinstance(verdict, dict) or verdict.get("status") == "refused":
         raise Refused("engine_run_refused")
     fill = strict_json(eo / "fill.json", "engine_output_unreadable")
-    # Engine input census, and every reference inside each raw-source manifest.
+    # Engine input census, and every file reference the engine's raw adapter reads (seat 2 F4): window- and
+    # series-level sources must each be a census row; inside each raw-source manifest every member
+    # reference ({path, sha256}: episode, powermetrics, a referenced thermal journal, DC streams, and any
+    # other) is rehashed at the engine input root.
     root = Path(a.engine_input).resolve().parent
-    rows = fill.get("input_census")
+    rows = fill.get("input_census") if isinstance(fill, dict) else None
     if not isinstance(rows, list) or not rows:
         raise Refused("engine_census_missing")
+    if not all(is_ref(row) and set(row) == {"path", "sha256"} for row in rows):
+        raise Refused("engine_census_malformed")
+    engine_doc = strict_json(a.engine_input, "engine_input_invalid")
+    windows = engine_doc.get("windows") if isinstance(engine_doc, dict) else None
+    if not isinstance(windows, list) or not windows or not all(isinstance(w, dict) for w in windows):
+        raise Refused("engine_input_invalid")
+    census = {(row["path"], row["sha256"]) for row in rows}
+    declared = [engine_doc[k] for k in SERIES_SOURCE_KEYS if k in engine_doc]
+    declared += [w[k] for w in windows for k in WINDOW_SOURCE_KEYS if k in w]
+    if not all(is_ref(ref) for ref in declared):
+        raise Refused("engine_input_invalid", "source reference")
+    if any((ref["path"], ref["sha256"]) not in census for ref in declared):
+        raise Refused("engine_census_incomplete")
+    raw_paths = {w["raw_source"]["path"] for w in windows if "raw_source" in w}
     raw_refs = {}
     files = 0
     for row in rows:
-        target = local(root, row.get("path", ""))
-        if sha256_file(target) != row.get("sha256"):
-            raise Refused("release_digest_differs_from_record", row.get("path"))
+        target = local(root, row["path"])
+        if sha256_file(target) != row["sha256"]:
+            raise Refused("release_digest_differs_from_record", row["path"])
         files += 1
+        if row["path"] not in raw_paths:
+            continue
         manifest = strict_json(target, "engine_census_unreadable")
-        for m in manifest.get("members", []) if isinstance(manifest, dict) else []:
-            for key in ("episode", "powermetrics"):
-                ref = m.get(key)
-                if isinstance(ref, dict):
-                    if sha256_file(local(root, ref["path"])) != ref["sha256"]:
-                        raise Refused("release_digest_differs_from_record", ref["path"])
-                    files += 1
-                    if key == "powermetrics":
-                        raw_refs[(row["path"], m["run_id"])] = ref["sha256"]
-            for ref in m.get("dc_streams", []) or []:
+        members = manifest.get("members") if isinstance(manifest, dict) else None
+        if not isinstance(members, list) or not all(isinstance(m, dict) and isinstance(m.get("run_id"), str)
+                                                     for m in members):
+            raise Refused("engine_census_malformed", row["path"])
+        for m in members:
+            for key, ref in member_refs(m):
                 if sha256_file(local(root, ref["path"])) != ref["sha256"]:
                     raise Refused("release_digest_differs_from_record", ref["path"])
                 files += 1
+                if key == "powermetrics":
+                    raw_refs[(row["path"], m["run_id"])] = ref["sha256"]
     out["engine_files_rehashed"] = files
+    # Producer identity: the loaded scorer and raw reducer the engine printed must be the pinned build's.
+    ident = engine_identity(a.programs_repo, a.engine_commit, a.python, restricted)
+    check_producer_identity(ident, fill, strict_json(eo / "thresholds.json", "engine_output_unreadable"))
+    (Path(restricted) / "engine-identity.json").write_text(json.dumps(ident, sort_keys=True) + "\n")
+    out["engine_producer_identity"] = "verified"
     # Crosswalk: structure-only agreement with both rosters.
     cross = strict_json(a.crosswalk, "crosswalk_invalid")
     members = cross.get("members") if isinstance(cross, dict) else None
     if not isinstance(members, list) or not members:
         raise Refused("crosswalk_invalid")
-    engine_doc = strict_json(a.engine_input, "engine_input_invalid")
-    eng_roster = {(w["attempt_id"], s["run_id"], s["ordinal"]) for w in engine_doc.get("windows", [])
-                  for s in w.get("roster", [])}
+    if not all(isinstance(m, dict) and all(k in m for k in CROSSWALK_KEYS) for m in members):
+        raise Refused("crosswalk_invalid")
+    if not all(isinstance(w.get("attempt_id"), str) and isinstance(w.get("roster"), list)
+               and all(isinstance(r, dict) and "run_id" in r and "ordinal" in r for r in w["roster"]) for w in windows):
+        raise Refused("engine_input_invalid", "roster")
+    eng_roster = {(w["attempt_id"], s["run_id"], s["ordinal"]) for w in windows for s in w["roster"]}
     if {(m["attempt_id"], m["engine_run_id"], m["ordinal"]) for m in members} != eng_roster:
         raise Refused("crosswalk_differs_from_roster", "engine")
     rec_roster = set()
@@ -199,10 +261,13 @@ def stage_digests(a, restricted):
     rec_rows = set()
     for wid in sorted(rec_roster):
         win = strict_json(local(a.recompute_root, f"windows/{wid}/window.json"), "recompute_input_invalid")
-        rec_rows |= {(wid, r["run_id"], r["ordinal"]) for r in win.get("members", [])}
+        wm = win.get("members") if isinstance(win, dict) else None
+        if not isinstance(wm, list) or not all(isinstance(r, dict) and "run_id" in r and "ordinal" in r for r in wm):
+            raise Refused("recompute_input_invalid", wid)
+        rec_rows |= {(wid, r["run_id"], r["ordinal"]) for r in wm}
     if {(m["recompute_window_id"], m["recompute_run_id"], m["ordinal"]) for m in members} != rec_rows:
         raise Refused("crosswalk_differs_from_roster", "recompute")
-    a.attempt_sources = {w["attempt_id"]: (w.get("raw_source") or {}).get("path") for w in engine_doc.get("windows", [])}
+    a.attempt_sources = {w["attempt_id"]: (w.get("raw_source") or {}).get("path") for w in windows}
     out["crosswalk_members"] = len(members)
     out["crosswalk_sha256"] = sha256_file(a.crosswalk)
     # Recompute program at the pinned commit.
@@ -216,6 +281,46 @@ def stage_digests(a, restricted):
         raise Refused("recompute_program_differs")
     out["recompute_program_sha256"] = RECOMPUTE_PROGRAM_SHA256
     return out, program, raw_refs, members
+
+
+PRODUCER_KEYS = ("loaded_scorer_sha256", "raw_reducer_sha256")
+IDENTITY_SNIPPET = (
+    "import json, sys; sys.path.insert(0, sys.argv[1]); "
+    "from joulewise.align.v4_analysis.engine import scorer_identity; "
+    "from joulewise.align.apple.reduce_sol import producer_sha256; "
+    "print(json.dumps(dict(loaded_scorer_sha256=scorer_identity(), raw_reducer_sha256=producer_sha256(), "
+    "python=sys.version.split()[0])))")
+
+
+def engine_identity(repo, commit, python, workdir):
+    """The engine's producer identity (seat 1 F4 / seat 2 F3), computed from the PINNED engine tree under the
+    release interpreter: its own scorer_identity() (loaded function code, which depends on the Python
+    version) and its raw reducer digest. The engine is run as a subprocess; nothing here imports it."""
+    tree = Path(workdir) / "engine-tree"
+    tree.mkdir(mode=0o700)
+    try:
+        archive = git(repo, "archive", commit, "joulewise")
+    except Refused:
+        raise Refused("pinned_commit_unavailable", "engine_tree")
+    r = subprocess.run(["tar", "-x", "-C", str(tree)], input=archive, capture_output=True)
+    if r.returncode:
+        raise Refused("pinned_commit_unavailable", "engine_tree")
+    r = subprocess.run([python, "-B", "-I", "-c", IDENTITY_SNIPPET, str(tree)], capture_output=True,
+                       env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
+    try:
+        ident = json.loads(r.stdout) if r.returncode == 0 else None
+    except ValueError:
+        ident = None
+    if not isinstance(ident, dict) or not all(HEX64.fullmatch(str(ident.get(k))) for k in PRODUCER_KEYS):
+        raise Refused("engine_identity_unavailable")
+    return ident
+
+
+def check_producer_identity(ident, fill, freeze):
+    """Refuse unless the engine's printed producer identity is the pinned build's."""
+    for doc in (fill.get("threshold_freeze") if isinstance(fill, dict) else None, freeze):
+        if not isinstance(doc, dict) or any(doc.get(k) != ident[k] for k in PRODUCER_KEYS):
+            raise Refused("engine_producer_identity_differs")
 
 
 # ------------------------------------------------------------------------------------------------ stages (b), (c)
@@ -259,7 +364,8 @@ def stage_compare(a, restricted):
     eo = Path(a.engine_out)
     code = run([a.python, "-B", "-I", str(COMPARATOR), "--fill", str(eo / "fill.json"), "--verdict",
                 str(eo / "verdict.json"), "--recompute", str(r / "recompute.json"), "--crosswalk", str(a.crosswalk),
-                "--bars", str(RELEASE_BARS), "--out", str(r / "comparison.json")], r, "comparator")
+                "--bars", str(RELEASE_BARS), "--engine-identity", str(r / "engine-identity.json"),
+                "--out", str(r / "comparison.json")], r, "comparator")
     status = {"exit": code, "wall_ms": int((time.monotonic() - started) * 1000), "bars_sha256": RELEASE_BARS_SHA256}
     try:
         public = json.loads((r / "comparator.stdout").read_text())
@@ -328,6 +434,9 @@ def release(a):
     except Refused as r:
         verdict["verdict"], verdict["reason"] = "refused", r.code
         (restricted / "refusal-location.txt").write_text(str(r.location or "") + "\n")
+    except Exception as e:      # seat 2 F5: a malformed input never escapes as an uncaught exit 1 (= hold)
+        verdict["verdict"], verdict["reason"] = "refused", "release_input_malformed"
+        (restricted / "refusal-location.txt").write_text(type(e).__name__ + "\n")
     return verdict
 
 
@@ -356,6 +465,8 @@ def main(argv=None):
         verdict = release(a)
     except Refused as r:
         verdict = {"schema": SCHEMA, "verdict": "refused", "reason": r.code}
+    except Exception:
+        verdict = {"schema": SCHEMA, "verdict": "refused", "reason": "release_input_malformed"}
     verdict = guard(verdict)
     text = json.dumps(verdict, sort_keys=True)
     restricted = Path(a.restricted_out)

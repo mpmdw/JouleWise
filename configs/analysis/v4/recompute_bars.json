@@ -6,6 +6,12 @@
    "reason": "a Clopper-Pearson bound over sabotage alarms is not a registered quantity",
    "ruling": "R21 A18"
   },
+  "a19_insufficient_prints": {
+   "classification": "exempt",
+   "kind": "exact",
+   "reason": "with an insufficient A19 roster (reason_code insufficient_contrast_runs) the engine's delivery block is an implementation check over incomplete cells; only reason_code and the common absence of fit statistics are compared",
+   "ruling": "seat 1 F3 (lead, 2026-11-08)"
+  },
   "a28_not_captured_flags": {
    "classification": "exempt",
    "kind": "exact",
@@ -261,6 +267,12 @@
    "kind": "rel",
    "reason": "fitted prediction J (RECOMPUTE-opus: J at 1e-9 relative)"
   },
+  "producer_identity": {
+   "classification": "recomputed",
+   "gating": "refuse",
+   "kind": "exact",
+   "reason": "seat 1 F4 / seat 2 F3: the engine's printed loaded_scorer_sha256 and raw_reducer_sha256 equal the identity computed from the pinned engine tree under the release interpreter; a mismatch or a missing identity REFUSES"
+  },
   "registered_constants": {
    "classification": "exempt",
    "kind": "exact",
@@ -284,6 +296,12 @@
    "classification": "recomputed",
    "kind": "abs",
    "reason": "measured - predicted J: a difference of two ~1e3 J terms each at 1e-9 relative"
+  },
+  "row_completeness": {
+   "classification": "recomputed",
+   "gating": "refuse",
+   "kind": "exact",
+   "reason": "F2: exact engine row sets per family and member, derived from the roster, the registered dose grids (council and H*) and the recomputed turn counts, with explicit structural exclusions; a missing or extra row REFUSES"
   },
   "score_identity": {
    "classification": "recomputed",
@@ -489,7 +507,7 @@
     "reason": "no W1 window in the series"
    },
    "kind": "rel",
-   "reason": "A19/A31 W1 contrast: verdict and reason exact, numbers 1e-6 relative"
+   "reason": "A19/A31 W1 contrast: verdict and structural reason_code exact (reason strings are print-only, never compared); numbers 1e-6 relative; an insufficient roster compares the common absence of fit statistics"
   },
   "w1_turn_tables": {
    "classification": "exempt",

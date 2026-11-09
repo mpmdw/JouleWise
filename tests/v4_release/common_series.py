@@ -26,6 +26,11 @@ PAIRS = ("spam_filter_update", "bank_transfer_2")
 SHORT = {"spam_filter_update": "spam", "bank_transfer_2": "bank"}
 D_MODEL, A_MODEL = "qwen3.8-27b", "qwen3-30b-a3b"
 ORDER = tuple(f"C{i}" for i in range(1, 9)) + tuple(f"T{i}" for i in range(1, 4))
+RESERVES = tuple(f"C{i}" for i in range(9, 15))    # R24: admitted in frozen order, only to replace a bar
+# The R24 allocation (configs/campaigns/align_v4/series/series_manifest.json at origin/align/2026-11-08-v4-r11,
+# sha256 21313cc2...), kept byte for byte beside this module.
+ALLOCATION = Path(__file__).resolve().parent / "fixtures" / "series_manifest_r24.json"
+ALLOCATION_SHA256 = "21313cc2791865e01f322c24606db62ba2ac6a65adda6d737e5b7432bef2ad5c"
 RECORDS_SCHEMA = "joulewise.align.records.v1"
 ENGINE_SCHEMA = "joulewise.align_v4.analysis_input.v1"
 COHORT = dict(identity=dict(model_source="synthetic/Qwen", model_revision="synthetic",
@@ -36,6 +41,8 @@ EXPORT_NOTES = (
     "R23: anchor run ids (and a retried slot's repeated ids) are series-unique '<window_id>:<run_id>' in the "
     "recompute layout; the engine keeps the R15 ids; the crosswalk maps them",
     "R23: the W1 window record carries sentinel_ordinals [5, 17]; the recompute checks them against R15",
+    "R24 allocation (r23j): the engine binds the analysis-form manifest (series_source: W1, C1-C14, T1-T3 slots "
+    "with run ids); the recompute binds the frozen native manifest (allocation_source, sha256 21313cc2...)",
     "clock stamps: the engine takes ClockStamp seconds, the recompute paired_clock_stamps_ns; every synthetic "
     "stamp is a whole second, so both are exact",
     "U3 pilot evidence: the engine takes energy pairs, the recompute relative differences; pairs are written "
@@ -58,7 +65,9 @@ def episode_seed(model, pair, index):
 def r15_roster(window, escalated=False):
     """R15 allocation (RUN_STATE 226), enumerated for the fixture. The engine re-checks it field by field."""
     number = int(window[1:])
-    start = 2 + 8 * (number - 1) if window[0] == "C" else 66 + 8 * (number - 1)
+    # R15 seeds: C1-C8 2-65, T1-T3 66-89; R24 reserves C9-C14 100-147 per pair (C9 100-107, ...).
+    start = (2 + 8 * (number - 1) if window[0] == "C" and number <= 8 else
+             100 + 8 * (number - 9) if window[0] == "C" else 66 + 8 * (number - 1))
     nxt = dict.fromkeys(PAIRS, start)
     first = PAIRS[(number - 1) % 2]
     second = PAIRS[1] if first == PAIRS[0] else PAIRS[0]
@@ -101,7 +110,8 @@ W1_ROWS = (  # protocol v4 W1 roster (as in synth.W1_ROSTER): ordinal, kind, mod
 def w1_roster():
     rows = []
     for o, kind, model, pair, cond, contrast in W1_ROWS:
-        index = 93 if o == 18 else 1
+        # R24 allocation (series manifest W1 rows): contrast X seeds 16, Y seeds 14; ordinal 18 seed 93.
+        index = 93 if o == 18 else ({"X": 16, "Y": 14}[contrast[0]] if contrast else 1)
         row = dict(ordinal=o, task_pair=pair, condition=cond, model_id=model, seed_index=index,
                    expected_episode_seed=episode_seed(model, pair, index), held_out=False,
                    series_role=kind, run_id=f"align-v4-w1-episodes-e{o:02}")
@@ -115,7 +125,7 @@ A37_EPOCH_S = 9_000_000_000        # float seconds grid 1.907 us: interior seams
 A37_SNAP_EPOCH_S = 4_300_000_000   # float seconds grid 954 ns: interior seams 953/954 ns (<= 1 us, snapped)
 
 
-def default_plan(zero_capture=True, escalated=True, a37=True, screens=True, probes=False):
+def default_plan(zero_capture=True, escalated=True, a37=True, screens=True, probes=False, bar=True):
     """W1, C1-C8 and T1-T3. C3's and T2's first attempts are zero-capture refusals, each retried in its slot;
     T3 is escalated to 24 members.
 
@@ -142,12 +152,25 @@ def default_plan(zero_capture=True, escalated=True, a37=True, screens=True, prob
     leading power frames so its first turn starts before the first support (edge partial coverage of an
     owned segment: excluded).
 
+    Structural bar fixture (``bar``, R22-2 / R24): C4 ordinal 7 (D benign) releases G0 4 C warm, so C4's D
+    model-window fails U2(a); the export declares C4 ``barred: u1_u3_fail`` (reproducible on both sides); C4
+    is barred, contributes nothing, does not count, and the reserve C9 (seeds 100-107 per pair) runs after C8
+    to replace it. With C3's zero-capture retry this is the bar-plus-reserve scenario.
+
+    Every export binds the full 18-window R24 allocation (``ALLOCATION``, sha256 21313cc2...) and, for every
+    captured C attempt, a GO completed-chain terminal result by digest (``terminal_result_source``).
+
     Probe plan (``probes``): the same series, with W1 anchor 2's B code replaced by a G1 timeout that stops
-    its episode (P: "Timeout stops the episode (X2)"; lead ruling on P1: X2 is re-derived)."""
+    its episode (P: "Timeout stops the episode (X2)"; lead ruling on P1: X2 is re-derived); W1 contrast
+    ordinal 6 is not token-identical, so the A19 contrast is unavailable (7 runs:
+    ``insufficient_contrast_runs``); and the U5 references carry a negative slope and delta = 2 C (F7)."""
     plan = [dict(window="W1", attempt=1, zero_capture=False, escalated=False,
                  battery_b=[2] if screens and not probes else [], g1_timeout=[2] if probes else [],
-                 late_first_support=[8] if screens else [])]
-    for w in ORDER:
+                 late_first_support=[8] if screens else [], divergent_contrast=[6] if probes else [])]
+    order = list(ORDER)
+    if bar:
+        order.insert(order.index("C8") + 1, RESERVES[0])
+    for w in order:
         if w in ("C3", "T2") and zero_capture:
             plan.append(dict(window=w, attempt=1, zero_capture=True, escalated=False))
             plan.append(dict(window=w, attempt=2, zero_capture=False, escalated=False,
@@ -163,6 +186,9 @@ def default_plan(zero_capture=True, escalated=True, a37=True, screens=True, prob
             if a37 and w == "C7":
                 step["seams"] = True
                 step["epoch_s"] = A37_SNAP_EPOCH_S
+            if bar and w == "C4":
+                step["g0_warm"] = [7]
+                step["declared_bar"] = "u1_u3_fail"
             if screens and w == "C8":
                 # A2(4) at owned-time level (lead ruling): ordinal 12 has > 1 us seams only inside a G1 gate
                 # (eligible). Its opposite, a first turn that starts before the first power support (excluded),
@@ -221,18 +247,23 @@ def canonical(value):
 
 
 def write_series(root, synth, *, plan=None, seed=7, period_ns=NS, saboteur_extra=25.0, sigma=3.0,
-                 beta=(40.0, 0.004, 0.25, 2e-6, 1e-7), turns=(3, 6)):
+                 beta=(40.0, 0.004, 0.25, 2e-6, 1e-7), turns=(3, 6), u5_negative=None, u5_delta_slow_c=None):
     """Write ``root/recompute`` (RECOMPUTE-opus.md layout), ``root/engine-input.json`` (engine raw-source
     manifest, its sources under ``root``) and ``root/crosswalk.json``. Returns the crosswalk."""
     root = Path(root)
     rec = root / "recompute"
     plan = plan or default_plan()
+    # F7 probe: the U5 references with a negative slope and delta = 2 C (default: the probe plan's choice).
+    probes = any(step.get("g1_timeout") for step in plan)
+    u5_negative = probes if u5_negative is None else u5_negative
+    u5_delta = (2.0 if probes else 1.0) if u5_delta_slow_c is None else u5_delta_slow_c
     rng = random.Random(seed)
     template = synth.FrameTemplate(n_tasks=0, seed=seed, clusters=0)
     clock = 0
     series = {"schema": "joulewise.v4_recompute_input.series.v1", "windows": [],
               "h_star_grid": [128, 256, 384, 512, 768, 1024, 1536, 2048]}       # R26 (1), registered text
     engine_windows, crosswalk, used_rec_runs = [], [], set()
+    manifest_slots = {}
     w1_sentinel_j = {}
     seam_stats = {}
     for step in plan:
@@ -281,6 +312,8 @@ def write_series(root, synth, *, plan=None, seed=7, period_ns=NS, saboteur_extra
                 identical, n_turns = 5, 4
             elif "contrast" in slot:
                 identical, n_turns = (16 if slot["contrast"]["template"] == "X" else 14), 3
+                if slot["ordinal"] in step.get("divergent_contrast", []):
+                    identical = None          # A19 probe: this contrast run is not token-identical
             if identical is not None:
                 identity[rec_rid] = "identical"
             m = synth.Member(rec_rid, short, slot["condition"], kind, model, clock, rng, n_turns,
@@ -308,6 +341,8 @@ def write_series(root, synth, *, plan=None, seed=7, period_ns=NS, saboteur_extra
             ep_path = base / "outputs" / "align_episode.json"
             ep = json.loads(ep_path.read_text())
             g0 = ep["hardware"]["thermal"]["intervals"][0]
+            if slot["ordinal"] in step.get("g0_warm", []):
+                g0["release"]["slow_c"] += 4.0        # U2(a): G0 release range 4 C > 3 C -> U2 FAIL -> bar
             for g in ep["hardware"]["thermal"]["intervals"]:
                 g["reference"] = dict(g0["release"])
             if slot["ordinal"] in step.get("g1_timeout", []):
@@ -345,30 +380,68 @@ def write_series(root, synth, *, plan=None, seed=7, period_ns=NS, saboteur_extra
             for rec_row, er in zip(rec_members, engine_records):
                 if er.get("captured") and rec_row["condition"] == "benign":
                     er["dc_streams"] = [meter_rel]
+        bound = {}
+        terminal_ref = None
+        if role == "calibration" and not step["zero_capture"]:
+            # R22-2 / r23j export: a captured C attempt binds its completed-chain terminal result by digest.
+            tdoc = canonical(dict(verdict=step.get("terminal_verdict", "GO"),
+                                  chain_exit_code=step.get("terminal_exit", 0)))
+            tpath = root / "terminal" / f"{wid}-a{attempt}.json"
+            tpath.parent.mkdir(parents=True, exist_ok=True)
+            tpath.write_bytes(tdoc)
+            rpath = rec / "windows" / rec_wid / "terminal_result.json"
+            rpath.parent.mkdir(parents=True, exist_ok=True)
+            rpath.write_bytes(tdoc)
+            terminal_ref = dict(path=str(tpath.relative_to(root)), sha256=sha256_bytes(tdoc))
+            bound["terminal_result_source"] = dict(path=str(rpath.relative_to(rec)), sha256=sha256_bytes(tdoc))
+        if step.get("declared_bar"):
+            bound["barred"] = step["declared_bar"]
         synth.dump(rec / "windows" / rec_wid / "window.json", {
             "schema": "joulewise.v4_recompute_input.window.v1", "window_id": rec_wid, "role": role,
             "members": rec_members, "adjudication": {"final": True, "excluded": {}}, "identity": identity,
             "battery": battery_codes, "meter": {"streams": streams}, "cohort_sha256": synth.COHORT,
-            **({"sentinel_ordinals": [5, 17]} if wid == "W1" else {})})
+            **({"sentinel_ordinals": [5, 17]} if wid == "W1" else {}),
+            **({"slot": wid} if role == "calibration" else {}), **bound})
         raw_doc = canonical(dict(members=engine_records))
         raw_path = root / "engine" / f"{wid}-a{attempt}.json"
         raw_path.parent.mkdir(parents=True, exist_ok=True)
         raw_path.write_bytes(raw_doc)
-        engine_windows.append(dict(window=wid, attempt_id=f"{wid}#{attempt}", status="final",
-                                   roster=[{k: v for k, v in s.items() if k not in ("contrast", "local_run_id")}
-                                           for s in slots],
-                                   raw_source=dict(path=str(raw_path.relative_to(root)),
-                                                   sha256=sha256_bytes(raw_doc))))
+        manifest_slots[wid] = [{k: v for k, v in sl.items() if k not in ("contrast", "local_run_id")} for sl in slots]
+        ewin = dict(window=wid, attempt_id=f"{wid}#{attempt}", status="final",
+                    roster=[{k: v for k, v in s.items() if k not in ("contrast", "local_run_id")} for s in slots],
+                    raw_source=dict(path=str(raw_path.relative_to(root)), sha256=sha256_bytes(raw_doc)))
+        if terminal_ref:
+            ewin["terminal_result_source"] = terminal_ref
+        if step.get("declared_bar"):
+            ewin["barred"] = step["declared_bar"]
+        engine_windows.append(ewin)
+    # R24 allocation: the frozen 18-window manifest, byte for byte, bound by digest in both layouts.
+    alloc = ALLOCATION.read_bytes()
+    target = rec / "allocation" / "series_manifest.json"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(alloc)
+    series["allocation_source"] = dict(path="allocation/series_manifest.json", sha256=sha256_bytes(alloc))
     synth.dump(rec / "series.json", series)
     pilot = [0.004, -0.006, 0.003, 0.005, -0.002, 0.001, -0.004]
-    synth.dump(rec / "u3_bar.json", {"signed": True, "beta": 0.05, "N": 16, "f": 1.5, "r1_d_screen": 0.004,
+    synth.dump(rec / "u3_bar.json", {"signed": True, "beta": 0.05, "N": 22, "f": 1.5, "r1_d_screen": 0.004,
                                      "pilot_relative_differences": pilot})
     designed = [(38.0, 38.0, 1500.0), (40.0, 40.0, 1501.0), (42.0, 42.0, 1502.5)]
-    synth.dump(rec / "references.json", {"r1_replay_pair_j": [1500.0, 1510.0], "delta_slow_c": 1.0,
+    if u5_negative:
+        designed = [(38.0, 38.0, 1502.5), (40.0, 40.0, 1501.0), (42.0, 42.0, 1500.0)]
+    synth.dump(rec / "references.json", {"r1_replay_pair_j": [1500.0, 1510.0], "delta_slow_c": u5_delta,
                                          "r1_designed_start_states": [
                                              {"designed_slow_c": d, "g0_release_slow_c": g, "energy_j": e}
                                              for d, g, e in designed]})
+    # Engine layout (engine-r23j io.load): the analysis-form R24 manifest, W1, C1-C14, T1-T3, each window's slots
+    # as exported (anchors "<window>:" prefixed), unrun reserves from the frozen roster.
+    order = ["W1", *[f"C{i}" for i in range(1, 15)], "T1", "T2", "T3"]
+    eman = dict(windows=[dict(window=w, members=manifest_slots.get(w) or [
+        dict(sl, run_id=f"{w}:{sl['run_id']}") if sl["series_role"] == "anchor" else sl
+        for sl in r15_roster(w)]) for w in order])
+    eman_bytes = canonical(eman)
+    (root / "engine" / "series-manifest.json").write_bytes(eman_bytes)
     payload = dict(schema=ENGINE_SCHEMA, synthetic=True, cohort=COHORT, windows=engine_windows,
+                   series_source=dict(path="engine/series-manifest.json", sha256=sha256_bytes(eman_bytes)),
                    u3_evidence=dict(pilot_pairs=[dict(session=f"synthetic-pilot-{i}", ordinals=[2, 7],
                                                       prespecified=True, token_identical=True,
                                                       energies_j=[1000.0 * (1 - r / 2), 1000.0 * (1 + r / 2)])
@@ -378,7 +451,7 @@ def write_series(root, synth, *, plan=None, seed=7, period_ns=NS, saboteur_extra
                    reference=dict(qualified=True, r1_replay_j=[1500.0, 1510.0], w1_sentinel_j=w1_sentinel_j),
                    r1_sensitivity=dict(states=[dict(token_identical=True, g0_slow_c=g, turn_owned_j=e,
                                                     designed_target_c=d) for d, g, e in designed],
-                                       r1_replay_j=[1500.0, 1510.0], delta_slow_c=1.0),
+                                       r1_replay_j=[1500.0, 1510.0], delta_slow_c=u5_delta),
                    delta_slow_c=1.0, u6_split_rule="within_pair_episode_order",
                    custody="synthetic only; no native qualification")
     (root / "engine-input.json").write_bytes(canonical(payload))
@@ -470,7 +543,8 @@ def _engine_member(root, base, slot, ep, meta, ident, step, wid, w_start):
         record["identical_work_group"] = "sentinel"
     if "contrast" in slot:
         record.update(template=slot["contrast"]["template"], arm=slot["contrast"]["arm"],
-                      stage=slot["contrast"]["stage"], pilot7_token_identical=True)
+                      stage=slot["contrast"]["stage"],
+                      pilot7_token_identical=slot["ordinal"] not in step.get("divergent_contrast", []))
     return record
 
 

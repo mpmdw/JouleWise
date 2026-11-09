@@ -10,6 +10,7 @@ engine (calibration-only, freeze, then the full run against the freeze, as ENGIN
 writes the engine run record. Results are cached per process and, read-only, across processes under the
 system temporary folder, keyed by the commits, the generator bytes and the plan.
 """
+import atexit
 import hashlib
 import importlib.util
 import json
@@ -26,8 +27,8 @@ REPO = HERE.parents[1]
 sys.path.insert(0, str(HERE))
 import common_series  # noqa: E402
 
-ENGINE_COMMIT = "244ef6f395e8ad13c836ceb23fef10530861eb86"      # origin/engine-r23h (R21 + A37 + R23-R26 + R23h)
-RECOMPUTE_COMMIT = "de553c002879f93cdd32f15861f638a18dbd74f0"   # align/2026-11-08-v4-recompute-opus (R23-R26 + R23h)
+ENGINE_COMMIT = "555b3a664b9941613b127ce37f4aebc13791b89d"      # origin/engine-r23j (R21 + A37 + R23-R26 + R23h + R23i + R23j)
+RECOMPUTE_COMMIT = "9f8a8749eda8387a827fe6c96afb942ceec89df5"   # align/2026-11-08-v4-recompute-opus (R23-R26 + R23h + R22-2/R24/R25 + r23j exports + R26 amendment)
 PY = sys.executable
 _TREES = {}
 
@@ -44,6 +45,7 @@ def tree(commit):
     """The build tree at a pinned commit, extracted once per process."""
     if commit not in _TREES:
         base = Path(tempfile.mkdtemp(prefix="jw-v4-tree-"))
+        atexit.register(shutil.rmtree, base, True)          # per-process extraction; never left behind
         archive = subprocess.run(["git", "-C", str(REPO), "archive", commit], capture_output=True, check=True).stdout
         subprocess.run(["tar", "-x", "-C", str(base)], input=archive, check=True)
         _TREES[commit] = base
@@ -66,15 +68,18 @@ def sha256(path):
     return h.hexdigest()
 
 
-def run_engine(root, *, input_name="engine-input.json", out="engine-out", tree_dir=None, workers=1):
-    """Engine calibration-only, then the full run against that freeze. Returns (exit, verdict)."""
+def run_engine(root, *, input_name="engine-input.json", out="engine-out", tree_dir=None, workers=1,
+               through_window=None):
+    """Engine calibration-only, then the full run against that freeze. Returns (exit, verdict). With
+    ``through_window`` only the calibration-only prefix runs (a refusal probe)."""
     eng = tree_dir or tree(ENGINE_COMMIT)
     cli = str(eng / "scripts" / "analyze_align_v4.py")
     cal, full = root / (out + "-cal"), root / out
     env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
+    prefix = ["--through-window", through_window] if through_window else []
     r = subprocess.run([PY, "-B", cli, "--input", input_name, "--output", cal.name, "--calibration-only",
-                        "--workers", str(workers)], cwd=root, capture_output=True, env=env)
-    if r.returncode:
+                        *prefix, "--workers", str(workers)], cwd=root, capture_output=True, env=env)
+    if r.returncode or through_window:
         return r.returncode, json.loads(r.stdout or b"{}")
     r = subprocess.run([PY, "-B", cli, "--input", input_name, "--output", full.name, "--thresholds",
                         str(cal / "thresholds.json"), "--workers", str(workers)], cwd=root, capture_output=True, env=env)
@@ -95,6 +100,8 @@ def run_recompute(root, out="recompute-out.json", tree_dir=None, workers=4):
     r = subprocess.run([PY, "-B", "-I", str(rec / "scripts" / "independent_recompute_v4.py"), "--root",
                         str(root / "recompute"), "--out", str(root / out), "--workers", str(workers)],
                        capture_output=True)
+    if r.returncode:
+        (root / "recompute-stderr.txt").write_bytes(r.stderr)
     return r.returncode
 
 
@@ -121,7 +128,7 @@ def rehearsal(plan_name):
     common_series.write_series(work, synth_module(), plan=common_series.default_plan(**PLANS[plan_name]))
     timings["generate_s"] = time.monotonic() - t
     t = time.monotonic()
-    code, verdict = run_engine(work)
+    code, verdict = run_engine(work, workers=4)      # the engine parallelizes; byte-identical to serial
     timings["engine_s"] = time.monotonic() - t
     (work / "engine-exit.json").write_text(json.dumps(dict(exit=code, verdict=verdict)) + "\n")
     if code == 0:
@@ -167,7 +174,28 @@ def run_release(checkout, rehearsal_dir, restricted, *, engine_commit=ENGINE_COM
     return p.returncode, json.loads(p.stdout or b"{}"), wall
 
 
-def compare(rehearsal_dir, out, *, fill=None, verdict=None, recompute=None, crosswalk=None, bars=None):
+_IDENTITY = {}
+
+
+def engine_identity_file():
+    """The pinned engine's producer identity under this interpreter (release_v4.engine_identity), computed
+    once per process into a private temporary file."""
+    if "path" not in _IDENTITY:
+        sys.path.insert(0, str(REPO / "scripts"))
+        import release_v4
+        work = Path(tempfile.mkdtemp(prefix="jw-v4-identity-"))
+        atexit.register(shutil.rmtree, work, True)
+        ident = release_v4.engine_identity(REPO, ENGINE_COMMIT, PY, work)
+        shutil.rmtree(work / "engine-tree", ignore_errors=True)
+        (work / "engine-identity.json").write_text(json.dumps(ident, sort_keys=True) + "\n")
+        _IDENTITY["path"] = work / "engine-identity.json"
+    return _IDENTITY["path"]
+
+
+def compare(rehearsal_dir, out, *, fill=None, verdict=None, recompute=None, crosswalk=None, bars=None,
+            identity=True):
+    """The comparator CLI. ``identity`` True passes the pinned engine identity, a path passes that file,
+    None passes none (the producer identity leaves then refuse)."""
     r = rehearsal_dir
     cmd = [PY, "-B", str(REPO / "scripts" / "compare_v4_recompute.py"),
            "--fill", str(fill or r / "engine-out" / "fill.json"),
@@ -175,5 +203,7 @@ def compare(rehearsal_dir, out, *, fill=None, verdict=None, recompute=None, cros
            "--recompute", str(recompute or r / "recompute-out.json"),
            "--crosswalk", str(crosswalk or r / "crosswalk.json"),
            "--bars", str(bars or REPO / "configs" / "analysis" / "v4" / "recompute_bars.json"), "--out", str(out)]
+    if identity is not None:
+        cmd += ["--engine-identity", str(engine_identity_file() if identity is True else identity)]
     p = subprocess.run(cmd, capture_output=True)
     return p.returncode, json.loads(p.stdout or b"{}"), (json.loads(Path(out).read_text()) if Path(out).exists() else None)

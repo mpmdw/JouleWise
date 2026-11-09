@@ -19,12 +19,14 @@
 
 | Build | Branch | Commit | Output |
 |---|---|---|---|
-| Sol primary engine | `engine-r23h` (R21 + A37 + R23-R26 + R23h) | `244ef6f39` | `fill.json`, `verdict.json`, `thresholds.json` |
-| Opus independent recompute | `align/2026-11-08-v4-recompute-opus` | `de553c002` (program sha256 `343f417b…`) | one JSON (`RECOMPUTE-opus.md`) |
+| Sol primary engine | `engine-r23j` (R21 + A37 + R23-R26 + R23h + R22-2/R24/R25 + reproducible bars) | `555b3a664` | `fill.json`, `verdict.json`, `thresholds.json` |
+| Opus independent recompute | `align/2026-11-08-v4-recompute-opus` | `9f8a8749e` (program sha256 `0e79439d…`) | one JSON (`RECOMPUTE-opus.md`) |
 
 History: the first rehearsal (engine `8eb7982f0` vs recompute `c0d1efcae`) held on five families and found
 engine bug E1. Lead rulings R23 (with R23b-h), R26 (H*) and the A21/P1/P2/A2(4)/A27 rulings of 2026-11-08
-resolved every hold; each round re-ran the full rehearsal and the probe plan.
+resolved every hold; each round re-ran the full rehearsal and the probe plan. The two release reviews of
+`99875485d` (Sol seats 1 and 2: F1-F7) were folded in on 2026-11-08 with engine-r23i/r23j; their witness
+modules are kept INVERTED in `tests/v4_release/test_review_sol{1,2}.py` (green = defect fixed).
 
 Like B5, the verdict carries only agree or hold per family, with pass and fail counts, structure codes and
 counts. It never carries an energy, a difference or an outcome word. Unsealing is a separate step and needs
@@ -47,11 +49,16 @@ holding both pinned commits; it defaults to the checkout. The recompute program 
 
 ```bash
 python3.13 -B scripts/release_v4.py --engine-input "$ENGINE_INPUT" --engine-out "$ENGINE_OUT" \
-    --engine-record "$ENGINE_RECORD" --engine-commit <40 hex> --recompute-root "$RECOMPUTE_ROOT" \
-    --recompute-commit c0d1efcae85d4eae5967b2073ea0213f3a8a4d91 --crosswalk "$CROSSWALK" \
+    --engine-record "$ENGINE_RECORD" --recompute-root "$RECOMPUTE_ROOT" --crosswalk "$CROSSWALK" \
     --restricted-out "$OUT" --workers 4
 echo "exit=$?"
 ```
+
+The command passes no commit flags: `--engine-commit` and `--recompute-commit` default to the pins
+(`RELEASE_ENGINE_COMMIT`, `RELEASE_RECOMPUTE_COMMIT`), and any other value refuses. Run it with the same
+`python3.13` that ran the engine: stage (a) recomputes the engine's producer identity (its loaded scorer
+code depends on the Python version) from the pinned engine tree under this interpreter (`--python`).
+`test_release_v4.test_runbook_command_matches_pins` keeps this block in step with the pins.
 
 ## 1. Stages
 
@@ -61,8 +68,16 @@ echo "exit=$?"
 - the engine record names the pinned engine commit and the input;
 - fill, verdict and thresholds hash to the record;
 - the engine verdict is not `refused`;
-- every `input_census` row re-hashes at the engine input root, and so does every `episode`, `powermetrics` and
-  `dc_streams` reference inside each raw-source manifest;
+- every series- and window-level engine source (`series_source`, `raw_source`, `thermal_source`,
+  `residual_source`, `terminal_result_source`) is an `input_census` row (else `engine_census_incomplete`);
+  every census row re-hashes at the engine input root, and so does EVERY `{path, sha256}` reference inside
+  each raw-source manifest's member rows (episode, powermetrics, a referenced thermal `journal`, DC streams,
+  any other); a malformed row or reference refuses `engine_census_malformed`;
+- the engine's printed producer identity (`loaded_scorer_sha256`, `raw_reducer_sha256`, in the fill's
+  `threshold_freeze` and in `thresholds.json`) equals the identity computed from the PINNED engine tree under
+  the release interpreter (`git archive` of `joulewise/`, the engine's own `scorer_identity()` and
+  `producer_sha256()` in a subprocess); else `engine_producer_identity_differs`. The identity is passed to
+  the comparator (`--engine-identity`, family `producer_identity`, refusing);
 - the crosswalk equals the engine roster as (attempt, run id, ordinal) and every recompute `window.json` as
   (window id, run id, ordinal);
 - the recompute program hashes to its pin.
@@ -82,7 +97,7 @@ engine manifest's `powermetrics` digest for the same member. Otherwise it refuse
 | 0 | `agree` | null | (a) verified; recompute exited 0 twice; every recomputed family agrees or is expected-empty with its predicate satisfied; 0 unmapped; every manifest count is in range | Ask Ed for the unseal OK |
 | 1 | `hold` | `comparator_disagreement` | A family failed, an empty family is unexplained, a manifest count is out of range, or a sensitivity line is uncomputable | Trace blind and structure-only from `$OUT/comparison.json`; classify each failing row as an open interpretation (name the R21 row) or a bug in one build |
 | 2 | `refused` | `comparator_refused` | The comparator refused: an unmapped leaf, an `eligible_m_per_pair` mismatch (R-C5), malformed input, or an engine refusal | Tooling or coverage defect |
-| 2 | `refused` | `release_digest_differs_from_record`, `engine_run_refused`, `crosswalk_differs_from_roster`, `builds_read_different_bytes`, `recompute_program_differs`, `pinned_commit_*`, `release_bars_differ`, `release_checkout_not_clean`, `restricted_out_exists`, `recompute_failed`, `comparison_output_unreadable`, `comparison_vacuous`, `verdict_not_structure_only` | Custody, binding or tooling | Fix it, then re-run into a new `$OUT` |
+| 2 | `refused` | `release_digest_differs_from_record`, `engine_census_malformed`, `engine_census_incomplete`, `engine_producer_identity_differs`, `engine_identity_unavailable`, `release_input_malformed` (any other malformed nested shape: never an uncaught exit 1), `engine_run_refused`, `crosswalk_differs_from_roster`, `builds_read_different_bytes`, `recompute_program_differs`, `pinned_commit_*`, `release_bars_differ`, `release_checkout_not_clean`, `restricted_out_exists`, `recompute_failed`, `comparison_output_unreadable`, `comparison_vacuous`, `verdict_not_structure_only` | Custody, binding or tooling | Fix it, then re-run into a new `$OUT` |
 
 Precedence is refused 2 > hold 1 > agree 0. The final guard replaces any verdict whose text contains a decimal
 or exponent number with `verdict_not_structure_only`. The comparator's public line reads "N families compared,
@@ -154,7 +169,7 @@ closes those holes as follows.
 
 ## 4. Families and bars
 
-There are 62 recomputed families and 20 that are not recomputed. Each family's reason is in
+There are 64 recomputed families and 21 that are not recomputed. Each family's reason is in
 `recompute_bars.json`. Per-row overrides are fixed in the program: margin_relative 1e-9 rel, E_ref 1e-9 rel,
 carrier fractions 1e-12 rel, T member scores 1e-6 abs.
 
@@ -171,6 +186,7 @@ carrier fractions 1e-12 rel, T member scores 1e-6 abs.
 | rel 1e-3 | `dc_benign` (A20, print-only) |
 | exact / set | `verdict_structure`, `ledger`, `calibration_stop`, `eligible_m_per_pair` (refuse), `pool_entry`, `member_eligibility`, `member_flags`, `score_method`, `score_identity`, `alarms`, `hold_count`, `fit_dof`, `fit_training_sets`, `known_h_doses`, `thresholds_rank`, `test_counts`, `test_members`, `u1`, `u2`, `u3`, `u3_bar`, `u4`, `u5`, `u6`, `carrier_curve`, `carrier_bootstrap`, `dc_benign_status`, `dc_training_sets`, `turn_counts`, `cache_counts`, `claim_licensing`, `sensitivity_lines`, `balance_by_condition` |
 | presence | `dc_sealed`, `sealed_presence` |
+| exact, REFUSING | `row_completeness` (F2: exact row sets from the roster, the registered council and H* grids and the recomputed turn counts: window attempts, eligibility members, scored rows per attempt/pair/convention, every logged row's council grid and full H grid, an H* block on exactly the C benign carriers and T sabotage rows, per-turn residual counts, every curve and n_by_h dose, U3 replay pairs in both print locations), `producer_identity` (F4) |
 
 The families that are not recomputed:
 
@@ -179,7 +195,9 @@ The families that are not recomputed:
   - with an R21 ruling: `a3_attribution_bounds`, `a9_reason_vocabulary`, `a9_class_components`,
     `a28_not_captured_flags`, `a18_sabotage_bound`, `a32_no_rebuild`, `a36_battery_bar`,
     `u5_intercept_print`, `dc_model_print`, `w1_turn_tables`, `known_h_unregistered`,
-    `known_h_dose_residual`, `fit_support_cov`, `a8_curve_diagnostics`;
+    `known_h_dose_residual`, `fit_support_cov`, `a8_curve_diagnostics`, `a19_insufficient_prints` (seat 1
+    F3: with `reason_code: insufficient_contrast_runs` only the code and the common absence of fit
+    statistics are compared; reason strings never are);
   - none open: R26 ruled the H* grid and the carrier-curve doses, so `h_star`, every curve dose and the
     print-only `full_cell` are compared, and A27 ruled token counts sealed, so a token-count leaf on a sealed
     member refuses as unmapped;
@@ -194,6 +212,14 @@ An `agree` says nothing about these families except integrity.
 (`synth.py` at the pinned recompute commit) for members, frames, sidecar and meter, and adds:
 - the R15 22-member allocation and the R20 24-member escalation (T3);
 - zero-capture first attempts retried in their slots (C3 and T2);
+- the bar-plus-reserve scenario (R22-2/R24): C4 ordinal 7 releases G0 4 C warm, C4 fails U2 for D, the export
+  declares `barred: u1_u3_fail` (reproduced on both sides), C4 contributes nothing and the reserve C9 (seeds
+  100-107 per pair) replaces it; with C3's zero-capture retry;
+- the r23j export: the full 18-window R24 allocation (engine `series_source`, analysis form; recompute
+  `allocation_source`, the frozen native manifest, sha256 `21313cc2…`) and a GO terminal result bound by
+  digest for every captured C attempt;
+- C benign carriers too short to reach the upper H* grid with no exceedance (permanent; R26 amendment:
+  h_star null, `bounded_above` false, the unobserved tail listed on both sides);
 - the A37 seam windows (permanent): frame elapsed values of 1 s + 333/777 ns under the registered A21
   float-seconds accumulation with exact recorded-float conversion. C5 at the 2026 epoch: 238/239 ns gaps
   (snapped). C7 at 4.3e9 s: 953/954 ns seams (snapped). C6 at 9e9 s: 1,907/1,908 ns gaps (kept; every C6
@@ -206,15 +232,18 @@ An `agree` says nothing about these families except integrity.
   series-unique anchor ids, W1 as a window record, numeric (never string) seconds.
 
 The PROBE plan is the same series with W1 anchor 2's B code replaced by a G1 timeout that stops its episode
-(P1: X2 re-derived; `W1_anchor_block: excluded:X2`). Both plans must agree.
+(P1: X2 re-derived; `W1_anchor_block: excluded:X2`), W1 contrast ordinal 6 not token-identical (the A19
+contrast is unavailable: `insufficient_contrast_runs` on both sides), and U5 references with a negative slope
+and delta = 2 C (seat 2 F7). Both plans must agree. A forged declared bar (C2 `barred: u1_u3_fail` with
+passing U1-U3) must refuse on both sides (`test_forged_declared_bar_refuses_on_both_sides`).
 
 ```bash
-for m in test_compare_v4 test_release_v4 test_rehearsal_v4; do
+for m in test_compare_v4 test_release_v4 test_rehearsal_v4 test_review_sol1 test_review_sol2; do
   python3.13 -B -m unittest tests.v4_release.$m; done
 ```
 
 - **Tests need the pinned commits' objects.** A shallow clone skips the tests that need them.
-- **Rehearsal caching.** Each plan is built once (generation, the serial two-stage engine run and the
+- **Rehearsal caching.** Each plan is built once (generation, the two-stage engine run at 4 workers and the
   recompute) and cached read-only under the system temporary folder, keyed by the commits and the generator
   bytes. A cold plan takes 3-5 min, almost all of it the engine.
 
@@ -271,7 +300,7 @@ and the engine's A37 hand tests); the rehearsal brackets it with 954 ns (snapped
 The exporter writes one custody in both layouts. Both adapters hold to these rules, and so does the
 synthetic writer (`tests/v4_release/common_series.py`).
 
-| Rule | Engine side (`engine-r23h`) | Recompute side (`independent_recompute_v4.py` @ `de553c002`) |
+| Rule | Engine side (`engine-r23j`) | Recompute side (`independent_recompute_v4.py` @ `9f8a8749e`) |
 |---|---|---|
 | Sensor keys are production `policy.sensors.{s_fast, s_slow}` | production `Episode` layout, unchanged | `thermal_summary` reads `s_fast`/`s_slow` |
 | Anchors are exactly ordinals 1-4 (W1 included) with strictly series-unique ids `"<window_id>:<run_id>"`; bare, mixed, wrong-prefix and duplicate anchor ids refuse, and so does a prefixed non-anchor | engine window name as `window_id` (`C3:` in both C3 attempts); it strips a matching prefix for the R15 check | window RECORD id as `window_id` (`C3-z1:` for the zero-capture record); non-anchor ids repeat only across a retried slot's attempts; two captured members never share an id |
@@ -285,6 +314,10 @@ synthetic writer (`tests/v4_release/common_series.py`).
 | A27: the scored C-sabotage roster is hash-only (30B anchor-sabotage replays are anchors and print); a not-captured sealed member prints `captured: false`; U1/U2 (and battery) aggregates involving it print `{status: sealed}` (no hash) beside `benign_only` | rows `status: sealed` + member hash | `members`/`exclusions` sealed rows; `{status: sealed}` aggregate fields |
 | Member rows carry `attempt_id`; not-counted attempts print `captured: false` | DC, cache, realized-count, T missing-assignment rows | attempts are separate window records (`C3-z1`) |
 | `h_star_grid` = {128, 256, 384, 512, 768, 1024, 1536, 2048} (R26) | registered grid | `series.json` `h_star_grid`, any other refuses |
+| R24 allocation: the full 18-window frozen manifest (W1, C1-C14, T1-T3); an 11-window shape refuses | `series_source` (analysis form) | `series.json` `allocation_source` = the native manifest, sha256 `21313cc2…` (`allocation_missing`, `allocation_differs`) |
+| Calibration attempts name their slot; a zero-capture attempt and its retry share it | attempt ids `C3#1`, `C3#2` | window records `C3-z1` and `C3`, `slot: C3` |
+| Every captured C window binds its completed-chain terminal result `{verdict, chain_exit_code}` by digest; non-GO or a nonzero exit is a whole-window capture failure | `terminal_result_source` | `terminal_result_source` (`terminal_result_missing`, `terminal_result_digest_differs`) |
+| A declared bar must be reproducible: a declared `u1_u3_fail` the window's own U1-U3 does not reproduce refuses; a declared `whole_window_capture_failure` needs non-GO evidence | `barred` on the window record | `barred` on the window record (`declared_bar_not_reproduced`, `capture_failure_unevidenced`) |
 
 **A27 token-count seal scope (lead ruling).** The scored C-sabotage member is hash-only on both sides, token
 counts included; the comparator compares the seals by presence, and any token-count leaf the engine printed for

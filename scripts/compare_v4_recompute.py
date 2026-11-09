@@ -25,6 +25,15 @@ Coverage contract (B5 lessons, RUN_STATE 234 R22-4):
 - R-C6: tail probabilities use log-relative bars; rank thresholds are compared exactly by rank and member id.
 - R22-3: ``balance_by_condition`` compares exclusion and flag counts by condition and by pair; the
   per-member-second rates and exposure-adjusted expectations are written to the restricted output only.
+- Row completeness (release reviews, seat 1 F2): the REFUSING family ``row_completeness`` compares exact row
+  sets derived from the roster, the registered dose grids and the recomputed turn counts, not from the
+  engine's rows: window attempts, each attempt's eligibility members, scored rows per (attempt, pair,
+  convention), every logged scored row's council grid and full H grid (council U H* with "full"), an H* block
+  on exactly the C benign carriers and T sabotage known-H rows, per-turn residual counts, every carrier-curve
+  and n_by_h dose, and each window's U3 replay pairs in both print locations. A missing or extra row refuses.
+- Producer identity (seat 1 F4 / seat 2 F3): ``loaded_scorer_sha256`` and ``raw_reducer_sha256`` are compared
+  (REFUSING family ``producer_identity``) with ``--engine-identity``, the identity release_v4 computes from the
+  pinned engine tree; without it those leaves stay unmapped and the comparator refuses.
 
 Sealed sabotage DC rows are compared by presence only. Monte-Carlo leaves (the window bootstrap) are
 compared exactly: both builds run the registered recipe (Random(0), choices over sorted window ids, 1000
@@ -54,6 +63,19 @@ D_MODEL, A_MODEL = "qwen3.8-27b", "qwen3-30b-a3b"
 MODEL_SHORT = {D_MODEL: "D", A_MODEL: "30B"}
 COUNCIL = ("0", "128", "256", "300", "512", "1024", "2048", "full")
 BETA_ORDER = ("intercept", "prefill", "decode", "decode_attention", "prefill_attention")
+PRODUCER_KEYS = ("loaded_scorer_sha256", "raw_reducer_sha256")
+INSUFFICIENT_CONTRAST = "insufficient_contrast_runs"
+# Recompute bar reasons -> the engine's structural bar codes (R22-2 / R24).
+BAR_CODE = {None: None, "u1_u3_fail": "u1_u3_fail", "capture_failure": "whole_window_capture_failure",
+            "zero_capture_beyond_retry": "zero_capture_refusal"}
+# F2 row completeness: the registered dose grids every logged scored row prints (council, and council U H*
+# with "full"), and the R26 carrier-curve grid.
+COUNCIL_GRID = (0, 128, 256, 300, 512, 1024, 2048, "full")
+H_STAR_GRID = (128, 256, 384, 512, 768, 1024, 1536, 2048)
+FULL_GRID = tuple(sorted(set(COUNCIL_GRID[:-1]) | set(H_STAR_GRID))) + ("full",)
+CURVE_GRID = tuple(sorted(set(COUNCIL_GRID[:-1]) | set(H_STAR_GRID)))
+U3_BUDGET = {"W1": {"30B": 4, "D": 1}, **{w: {"30B": 0, "D": 1} for w in
+             [f"C{i}" for i in range(1, 15)] + ["T1", "T2", "T3"]}}
 class _Missing:
     """An absent value. Falsy, so ``E.get(...) or []`` iterates nothing."""
     __slots__ = ()
@@ -279,8 +301,9 @@ PREDICATES = {"no_escalated_window": _no_escalated, "no_zero_capture_attempt": _
 # ------------------------------------------------------------------------------------------------ comparator
 
 class Comparison:
-    def __init__(self, engine, rec, cross, bars):
+    def __init__(self, engine, rec, cross, bars, identity=None):
         self.E, self.R, self.bars = engine, rec, bars
+        self.identity = identity
         engine.families = bars["families"]
         if not isinstance(cross, dict) or cross.get("schema") != "joulewise.v4_release.crosswalk.v1" \
                 or not isinstance(cross.get("members"), list) or not cross["members"]:
@@ -302,6 +325,7 @@ class Comparison:
         self.rec_status = rget(rec, "calibration", "stop", "status")
         self.rows, self.units = [], {}
         self.turn_res = {}
+        self.seen_scores = set()
 
     # -- rows
     def fam(self, name):
@@ -327,6 +351,13 @@ class Comparison:
                               difference=difference(ev, rv), ok=ok, absent=why, note=note))
         self.units.setdefault(family, set()).add(unit if unit is not None else key)
         return ok
+
+    def complete(self, key, engine_keys, expected_keys, unit=None):
+        """F2: one exact row-set comparison (refusing family ``row_completeness``). ``engine_keys`` is MISSING
+        when the engine printed no table at all."""
+        norm = lambda ks: sorted((json.dumps(k) for k in ks))
+        ev = MISSING if engine_keys is MISSING else norm(engine_keys)
+        return self.add("row_completeness", key, ev, norm(expected_keys), unit=unit or key, kind="set")
 
     def row_member(self, base, seen, window, run_id, captured=None):
         """The crosswalk member of an engine member row: by its attempt_id when printed (R23h), else by
@@ -415,6 +446,7 @@ class Comparison:
         self.ledger_and_stop()
         self.eligibility()
         self.fits_and_scores()
+        self.score_completeness()
         self.thresholds()
         self.test()
         self.acceptance()
@@ -455,10 +487,13 @@ class Comparison:
             if not members:
                 raise Refused("crosswalk_attempt_unknown", attempt)
             rwid = members[0]["recompute_window_id"]
-            captured = sum(1 for m in members if self.rcaptured(m))
+            # A35 / R20: supplemental sentinels (23/24) count toward no capture count.
+            captured = sum(1 for m in members if self.rcaptured(m) and m["ordinal"] <= 22)
             self.add("ledger", (attempt, "captured_members"), E.get("fill", "ledger", i, "captured_members"),
                      captured, unit=attempt)
             sr = stop_rows.get(rwid)
+            self.add("calibration_stop", (attempt, "barred"), E.get("fill", "ledger", i, "barred", default=None),
+                     BAR_CODE.get(sr["bar_reason"]) if sr else None, unit=attempt)
             for p in ("spam", "bank"):
                 rv = sr["eligible_benign"][p] if sr else (0 if attempt[0] == "T" else MISSING)
                 self.add("ledger", (attempt, "eligible_benign", p),
@@ -478,7 +513,7 @@ class Comparison:
         self.add("calibration_stop", "attempted", E.get(*cal, "attempted"), stop["counted_windows"])
         self.add("calibration_stop", "windows", E.get(*cal, "windows"), stop["counted_windows"],
                  note="engine 'windows' counts counted calibration windows")
-        zero = sum(1 for w in stop["windows"] if not w["counted"] and w["final"])
+        zero = sum(1 for w in stop["windows"] if w["captured"] == 0 and w["final"])
         self.add("calibration_stop", "zero_capture_refusals", E.get(*cal, "zero_capture_refusals"), zero)
         self.add("calibration_stop", "unfinished_zero_capture_windows",
                  E.get(*cal, "unfinished_zero_capture_windows"),
@@ -490,19 +525,41 @@ class Comparison:
         self.add("calibration_stop", "target_per_pair", E.get(*cal, "target_per_pair"), 39,
                  note="registered m >= 39 (R12/R14), a constant on both sides")
         E.exempt("input_echo", *cal, "lead_rulings_applied")
+        # R22-2 / R24: bars contribute nothing; reserves replace them in order (cap six).
+        rec_to_attempt = {m["recompute_window_id"]: m["attempt_id"] for m in self.cross}
+        barred = E.take(*cal, "barred_windows")
+        self.add("calibration_stop", "barred_windows", sorted(barred) if barred is not MISSING else MISSING,
+                 sorted(rec_to_attempt.get(w, w) for w in stop.get("barred_windows", [])), kind="set")
+        self.add("calibration_stop", "replacements_used", E.get(*cal, "replacements_used"),
+                 stop.get("replacements_used", MISSING))
+        self.add("calibration_stop", "replacements_allowed", E.get(*cal, "replacements_allowed"), 6,
+                 note="R24: reserves C9-C14, a registered constant on both sides")
 
     # -- eligibility (R-C5)
     def eligibility(self):
         E = self.E
+        wins = rget(E.fill, "windows")
+        self.complete("window_attempts", [w.get("attempt_id") for w in wins if isinstance(w, dict)]
+                      if isinstance(wins, list) else MISSING,
+                      sorted({m["attempt_id"] for m in self.cross if m["window"] != "W1"}))
         for i, w in enumerate(E.get("fill", "windows") or []):
             attempt = E.get("fill", "windows", i, "attempt_id")
             E.get("fill", "windows", i, "window")
             pool = E.get("fill", "windows", i, "pool_entry")
+            rw = next((m["recompute_window_id"] for m in self.cross if m["attempt_id"] == attempt), None)
+            srow = next((w for w in rget(self.R, "calibration", "stop", "windows") or [] if w.get("window_id") == rw), None)
+            self.add("calibration_stop", (attempt, "structural_bar"), E.get("fill", "windows", i, "structural_bar"),
+                     BAR_CODE.get(srow["bar_reason"]) if srow else None, unit=attempt)
             members = [m for m in self.cross if m["attempt_id"] == attempt]
             if not members:
                 raise Refused("crosswalk_attempt_unknown", attempt)
             rwid = members[0]["recompute_window_id"]
             captured_any = any(self.rcaptured(m) for m in members)
+            # F2: the eligibility table lists exactly the attempt's roster members.
+            erows = rget(E.fill, "windows", i, "eligibility")
+            self.complete((attempt, "eligibility_members"),
+                          [r.get("run_id") for r in erows if isinstance(r, dict)] if isinstance(erows, list) else MISSING,
+                          [m["engine_run_id"] for m in members], unit=attempt)
             self.add("pool_entry", attempt, pool, (not self.rpool_barred(rwid)) if captured_any else False,
                      note="pool entry = no U1-U3 FAIL for D (A23); a zero-capture attempt has none (R23-E1)")
             for j, row in enumerate(E.get("fill", "windows", i, "eligibility") or []):
@@ -619,6 +676,27 @@ class Comparison:
                 rres = [self._turn_residual(turns, k, beta, conv) for k in range(len(turns))] \
                     if isinstance(turns, list) else []
                 self.turn_res[(window, run, conv)] = rres
+                self.seen_scores.add((m["attempt_id"], p, conv, m["engine_run_id"]))
+                eres = rget(E.fill, "fits", i, "scores", j, "turn_residuals_j")
+                self.add("row_completeness", unit + ("turn_residuals", "n"),
+                         len(eres) if isinstance(eres, list) else MISSING, len(rres), unit=unit)
+                if conv == "counts_logged":
+                    for table, grid in (("council_grid", COUNCIL_GRID), ("H_grid", FULL_GRID)):
+                        rows = rget(E.fill, "fits", i, "scores", j, table)
+                        self.complete(unit + (table,), [r.get("nominal_H") for r in rows if isinstance(r, dict)]
+                                      if isinstance(rows, list) else MISSING, grid, unit=unit)
+                    # R26 (3): an H* block on every C benign carrier and T sabotage known-H row, none elsewhere.
+                    holder = (rget(self.R, "claim", "known_h", p, m["recompute_run_id"]) if m["window"].startswith("T")
+                              and m["condition"] == "sabotage" else self._carrier_row(m)
+                              if m["window"].startswith("C") and m["condition"] == "benign" else MISSING)
+                    required = rget(holder, "h_star") is not MISSING
+                    self.add("row_completeness", unit + ("H_star", "present"),
+                             rget(E.fill, "fits", i, "scores", j, "H_star") is not MISSING, required, unit=unit)
+                    if holder is not MISSING:
+                        for grid, want in (("council", COUNCIL_GRID), ("h_star_grid", H_STAR_GRID)):
+                            keys = rget(holder, grid)
+                            self.complete(unit + ("recompute", grid), [int(k) if k.isdigit() else k for k in keys]
+                                          if isinstance(keys, dict) else MISSING, want, unit=unit)
                 for k, val in enumerate(E.get(*base, "turn_residuals_j") or []):
                     rv = rres[k] if k < len(rres) else MISSING
                     self.add("turn_residuals_j", unit + (k,), E.get(*base, "turn_residuals_j", k), rv, unit=unit)
@@ -627,6 +705,26 @@ class Comparison:
                 E.exempt("fit_support_cov", *base, "flags")
                 E.exempt("fit_support_cov", *base, "out_of_support_turns")
 
+
+    def score_completeness(self):
+        """F2: the engine's scored rows per (attempt, pair, convention) are exactly the recompute's (which
+        scores every eligible held-out member of a fitted window: barred windows, T before calibration_complete
+        and ineligible members are the structural exclusions on both sides)."""
+        by_rec = {(m["recompute_window_id"], m["recompute_run_id"]): m for m in self.cross}
+        expected = {}
+        for rwid, pairs in sorted((rget(self.R, "scores") or {}).items()):
+            for p, convs in sorted(pairs.items()):
+                for conv, v in CONV.items():
+                    for rrun in sorted(convs.get(v) or {}):
+                        m = by_rec.get((rwid, rrun))
+                        if m is None:
+                            raise Refused("crosswalk_member_unknown", f"{rwid}/{rrun}")
+                        expected.setdefault((m["attempt_id"], p, conv), set()).add(m["engine_run_id"])
+        seen = {}
+        for a, p, conv, run in self.seen_scores:
+            seen.setdefault((a, p, conv), set()).add(run)
+        for key in sorted(set(expected) | set(seen)):
+            self.complete(("scored_rows",) + key, seen.get(key, set()), expected.get(key, set()), unit=key)
 
     def _model(self, base, rmodel, unit, full):
         E = self.E
@@ -919,7 +1017,14 @@ class Comparison:
             ru3 = rget(R, "acceptance", "U3", rwid)
             rpairs = [q for q in (rget(ru3, "pairs") or []) if q.get("model") == ms]
             eu3 = E.get(*b, "U3", "status")
-            rverdict = rget(ru3, "verdict") if ms == "D" else self._u3_model_verdict(rpairs)
+            # Per model, by the recompute's own window rule over that model's pairs (W1 holds both models).
+            rverdict = self._u3_model_verdict(rpairs) if ru3 is not MISSING else MISSING
+            # F2 / A13: the engine prints exactly the recompute's replay pairs (by ordinals) in each location.
+            ords = {m["recompute_run_id"]: m["ordinal"] for m in self.cross if m["recompute_window_id"] == rwid}
+            epairs = rget(self.E.fill, *base[1:], model, "U3", "pairs") if base[0] == "fill" else MISSING
+            self.complete(unit + ("u3_pairs",), [tuple(q.get("ordinals") or ()) for q in epairs if isinstance(q, dict)]
+                          if isinstance(epairs, list) else MISSING,
+                          [(ords.get(q.get("early")), ords.get(q.get("late"))) for q in rpairs], unit=unit)
             self.add("u3", unit + ("status",), eu3, rverdict, unit=unit)
             for j, _ in enumerate(E.get(*b, "U3", "pairs") or []):
                 pb = b + ("U3", "pairs", j)
@@ -988,12 +1093,14 @@ class Comparison:
 
     @staticmethod
     def _u3_model_verdict(pairs):
-        if not pairs:
+        """The recompute's u3_window rule: FAIL on an evaluated energy or clock failure; INCONCLUSIVE with no
+        evaluated pair, an inconclusive pair or an unknown clock; an X5-excluded pair is neither."""
+        ev = [q for q in pairs if q.get("status") == "evaluated"]
+        if any(q.get("energy_ok") is False or q.get("clock_ok") is False for q in ev):
+            return "fail"
+        if not ev or any(q.get("status") == "inconclusive" for q in pairs) or any(q.get("clock_ok") is None for q in ev):
             return "inconclusive"
-        st = [q.get("status") for q in pairs]
-        return "fail" if any(q.get("energy_ok") is False or q.get("clock_ok") is False for q in pairs
-                             if q.get("status") == "evaluated") else (
-            "pass" if all(s == "evaluated" for s in st) else "inconclusive")
+        return "pass"
 
     def _rec_pair(self, rpairs, rwid, ords):
         ids = {m["ordinal"]: m["recompute_run_id"] for m in self.cross if m["recompute_window_id"] == rwid}
@@ -1007,7 +1114,7 @@ class Comparison:
         if q is MISSING:
             return MISSING
         if q.get("status") != "evaluated":
-            return {"excluded": "excluded"}.get(q.get("status"), "inconclusive")
+            return {"excluded": "excluded", "excluded_x5": "excluded"}.get(q.get("status"), "inconclusive")
         return "pass" if q.get("energy_ok") and q.get("clock_ok") else "fail"
 
     def _x1x4(self, rwid, ms):
@@ -1053,6 +1160,14 @@ class Comparison:
         self.add("u3_bar_values", "rms_relative", E.get(*b, "rms_relative"), rget(rb, "s0"))
         self.add("u3_bar_values", "relative_bar_30B", E.get(*b, "relative_bar_30B"), rget(rb, "relative_bar_30b"))
         self.add("u3_bar_values", "relative_bar_D", E.get(*b, "relative_bar_D"), rget(rb, "relative_bar_d"))
+        # R25: the U3 comparison budget by window and model (W1 30B 4 + D 1; C1-C14 and T1-T3 D 1 each).
+        budget = E.get(*b, "checks_by_window")
+        for w in sorted(budget) if isinstance(budget, dict) else []:
+            for model in sorted(budget[w]) if isinstance(budget[w], dict) else []:
+                want = U3_BUDGET.get(w, {}).get(model, MISSING)
+                self.add("u3_bar", ("checks_by_window", w, model), E.get(*b, "checks_by_window", w, model), want)
+        if isinstance(budget, dict):
+            self.add("u3_bar", ("checks_by_window", "windows"), sorted(budget), sorted(U3_BUDGET), kind="set")
         E.exempt("registered_text", *b, "heavy_tail_rule")
         E.exempt("registered_text", *b, "limitation")
 
@@ -1186,13 +1301,15 @@ class Comparison:
         self.add("u5_values", "beta_T", E.get(*b, "beta_T_j_per_c"), rget(r5, "beta_T"))
         for j in (0, 1):
             self.add("u5_values", ("ci", j), E.get(*b, "beta_T_ci90", j), rget(r5, "interval", j))
-        self.add("u5_values", "upper90_shift_j", E.get(*b, "upper90_shift_j"), rget(r5, "abs_upper_90"))
         self.add("u5_values", "sigma_pair_j", E.get(*b, "sigma_pair_j"), rget(r5, "sigma_pair_j"))
         self.add("u5_values", "delta_slow_c", E.get(*b, "delta_slow_c"), rget(r5, "delta_slow_c"))
-        beta, d = rget(r5, "beta_T"), rget(r5, "delta_slow_c")
+        # A15 (seat 2 F7): the point shift is |beta_T| x delta, the upper shift abs_upper_90 x delta (J/C x C).
+        beta, d, up = rget(r5, "beta_T"), rget(r5, "delta_slow_c"), rget(r5, "abs_upper_90")
+        num = lambda *v: all(isinstance(x, (int, float)) and not isinstance(x, bool) for x in v)
         self.add("u5_values", "point_shift_j", E.get(*b, "point_shift_j"),
-                 beta * d if all(isinstance(v, (int, float)) for v in (beta, d)) else MISSING,
-                 note="point shift = beta_T x c x delta_slow, c = 1")
+                 abs(beta) * d if num(beta, d) else MISSING, note="point shift = |beta_T| x c x delta_slow, c = 1")
+        self.add("u5_values", "upper90_shift_j", E.get(*b, "upper90_shift_j"),
+                 up * d if num(up, d) else MISSING, note="upper shift = abs_upper_90 x c x delta_slow, c = 1")
         for j, _ in enumerate(E.get(*b, "designed_states") or []):
             self.add("u5", ("designed_target_c", j), E.get(*b, "designed_states", j, "designed_target_c"),
                      rget(r5, "designed_slow_c", j))
@@ -1261,6 +1378,15 @@ class Comparison:
                 self.add("carrier_bootstrap", unit + (hk, "undefined"), E.get(*b, "bootstrap_undefined_replicates", hk),
                          rget(rc, "bootstrap", "undefined", hk), unit=unit)
             fr = rget(rc, "fractions") or {}
+            # F2 / R26 (4): every curve dose and every n_by_h dose is the council U H* grid, on both sides.
+            curve = rget(E.fill, "benign_carriers", "pairs", p, "curve")
+            self.complete(unit + ("curve_doses",), [row[0] for row in curve if isinstance(row, list) and row]
+                          if isinstance(curve, list) else MISSING, CURVE_GRID, unit=unit)
+            nbh = rget(E.fill, "benign_carriers", "pairs", p, "n_by_h")
+            self.complete(unit + ("n_by_h_doses",), [int(h) for h in nbh] if isinstance(nbh, dict) else MISSING,
+                          CURVE_GRID, unit=unit)
+            self.complete(unit + ("recompute_doses",), [int(h) for h in fr] if isinstance(fr, dict) and fr else MISSING,
+                          CURVE_GRID, unit=unit)
             for j, point in enumerate(E.get(*b, "curve") or []):
                 h = point[0] if isinstance(point, list) and point else None   # peek: not consumed here
                 E.get(*b, "curve", j, 0)           # R26 (4): council U H* grid, every dose compared
@@ -1473,11 +1599,33 @@ class Comparison:
         if E.get(*c) is MISSING:
             return
         self.add("w1_contrast", "verdict", E.get(*c, "verdict"), rget(rc, "verdict"), kind="exact")
-        self.add("w1_contrast", "reason", E.get(*c, "reason"), rget(rc, "reason"), kind="exact")
-        self.add("w1_contrast", "arm_effect_j", E.get(*c, "arm_effect_j"), rget(rc, "delta", "estimate"))
-        self.add("w1_contrast", "df", E.get(*c, "df"), rget(rc, "delta", "df"), kind="exact")
-        for j in (0, 1):
-            self.add("w1_contrast", ("ci", j), E.get(*c, "ci90_j", j), rget(rc, "delta", "interval", j))
+        # Seat 1 F3: compared by the structural reason_code; the reason string is print-only prose.
+        E.exempt("registered_text", *c, "reason")
+        ecode, rcode = E.get(*c, "reason_code"), rget(rc, "reason_code")
+        if ecode is not MISSING or rcode == INSUFFICIENT_CONTRAST:
+            self.add("w1_contrast", "reason_code", ecode, rcode, kind="exact")
+        if INSUFFICIENT_CONTRAST in (ecode, rcode):
+            # A19: an inadequate eligible token-identical roster has no fit; both sides print no fit statistics.
+            for k in ("arm_effect_j", "df", "ci90_j"):
+                self.add("w1_contrast", ("absent", k), E.get(*c, k) is MISSING, rget(rc, "delta") is MISSING,
+                         kind="exact")
+        else:
+            self.add("w1_contrast", "arm_effect_j", E.get(*c, "arm_effect_j"), rget(rc, "delta", "estimate"))
+            self.add("w1_contrast", "df", E.get(*c, "df"), rget(rc, "delta", "df"), kind="exact")
+            for j in (0, 1):
+                self.add("w1_contrast", ("ci", j), E.get(*c, "ci90_j", j), rget(rc, "delta", "interval", j))
+        if INSUFFICIENT_CONTRAST in (ecode, rcode):
+            # Seat 1 F3: an insufficient roster is compared by reason_code and the common absence of fit
+            # statistics only; per-template d is absent on the engine side, and the delivery block it still
+            # prints is an implementation check over incomplete cells (A19 print-only).
+            self.add("w1_contrast", ("absent", "d_template_j"), E.get(*c, "d_template_j") is MISSING, True,
+                     kind="exact")
+            E.exempt("a19_insufficient_prints", *c, "delivery")
+            self._same_arm_pairs(c)
+            for k in ("branch", "rule"):
+                E.exempt("registered_text", *c, k)
+            E.exempt("w1_turn_tables", *c, "turn_tables")
+            return
         for t in ("X", "Y"):
             self.add("w1_contrast", ("d", t), E.get(*c, "d_template_j", t), rget(rc, "templates", t, "d"))
             d = c + ("delivery", "by_template", t)
@@ -1538,7 +1686,12 @@ class Comparison:
                   "registered_scaffold", "estimand_notes"):
             E.exempt("input_echo", "fill", k)
         for k in sorted(E.fill.get("threshold_freeze", {})):
-            if k != "thresholds":
+            if k in PRODUCER_KEYS:
+                # Seat 1 F4 / seat 2 F3: producer identity is compared with the identity computed from the
+                # pinned engine tree (release_v4 stage a); without it the leaf stays unmapped and REFUSES.
+                if self.identity is not None:
+                    self.add("producer_identity", k, E.get("fill", "threshold_freeze", k), self.identity.get(k, MISSING))
+            elif k != "thresholds":
                 E.exempt("build_digests", "fill", "threshold_freeze", k)
 
     # -- R-C4: registered sensitivity lines must compute on both sides
@@ -1696,8 +1849,13 @@ def _norm(pointer):
     return p
 
 
-def compare(fill_path, verdict_path, recompute_path, crosswalk_path, bars_path):
+def compare(fill_path, verdict_path, recompute_path, crosswalk_path, bars_path, identity_path=None):
     bars, bars_sha = load_bars(bars_path)
+    identity = None
+    if identity_path is not None:
+        identity, _ = strict_load(identity_path, "engine_identity")
+        if not isinstance(identity, dict) or not all(isinstance(identity.get(k), str) for k in PRODUCER_KEYS):
+            raise Refused("engine_identity_malformed")
     fill, fill_sha = strict_load(fill_path, "fill")
     verdict, verdict_sha = strict_load(verdict_path, "verdict")
     rec, rec_sha = strict_load(recompute_path, "recompute")
@@ -1719,7 +1877,7 @@ def compare(fill_path, verdict_path, recompute_path, crosswalk_path, bars_path):
                 "number" if type(v) in (int, float) else "string") for p, v in leaves(body).items()]
     if inventory != sorted(own, key=lambda r: r["pointer"]) and inventory != own:
         raise Refused("engine_leaf_inventory_differs")
-    c = Comparison(E, rec, cross, bars)
+    c = Comparison(E, rec, cross, bars, identity)
     E.exempt("engine_inventory", "fill", "leaf_inventory")
     c.run()
     # Which family consumed which pointer: rows carry keys, not pointers, so attribute by order of use.
@@ -1802,16 +1960,21 @@ def main(argv=None):
     ap.add_argument("--recompute", required=True)
     ap.add_argument("--crosswalk", required=True)
     ap.add_argument("--bars", required=True)
+    ap.add_argument("--engine-identity", help="producer identity computed from the pinned engine tree "
+                    "(release_v4 stage a); without it the engine's producer identity leaves refuse")
     ap.add_argument("--out", required=True, help="restricted output (values); must not exist")
     a = ap.parse_args(argv)
     out = Path(a.out)
     try:
         if out.exists():
             raise Refused("output_exists")
-        public, restricted, code = compare(a.fill, a.verdict, a.recompute, a.crosswalk, a.bars)
+        public, restricted, code = compare(a.fill, a.verdict, a.recompute, a.crosswalk, a.bars, a.engine_identity)
     except Refused as r:
         public = {"schema": SCHEMA, "verdict": "refused", "reason": r.code}
         restricted, code = dict(public, location=r.location), EXIT_REFUSE
+    except Exception as e:     # a malformed nested input never escapes as an uncaught exit 1 (= hold)
+        public = {"schema": SCHEMA, "verdict": "refused", "reason": "comparator_input_malformed"}
+        restricted, code = dict(public, location=type(e).__name__), EXIT_REFUSE
         if out.exists() and r.code == "output_exists":
             print(json.dumps(public, sort_keys=True))
             return code
