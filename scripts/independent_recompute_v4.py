@@ -684,13 +684,7 @@ def load_plan_custody(root, wid, slot, record, members):
                       if isinstance(obj, dict) else None)
             planned[m["run_id"]] = (m["planned_config"]["sha256"],
                                     hashlib.sha256(bundle).hexdigest() if bundle is not None else None)
-            # EXP-D2 ruling: the REGISTERED plan says whether this member is gated (its kit spec carries a
-            # thermal policy, hence a planned G0); production anchors are ungated.
-            try:
-                spec = json.loads(obj["workload_profile"]["prompt_text"]) if isinstance(obj, dict) else None
-                m["planned_g0"] = isinstance(spec, dict) and isinstance(spec.get("thermal"), dict)
-            except (ValueError, KeyError, TypeError):
-                m["planned_g0"] = None
+
     return plan, planned
 
 
@@ -789,6 +783,10 @@ def load_series(root):
         need(isinstance(adj, dict) and type(adj.get("final")) is bool
              and isinstance(adj.get("excluded", {}), dict), "window_malformed", wid + ": adjudication")
         allocation_roster_check(wid, slot, members, alloc_rows.get(slot, {}))
+        # EXP-D2 / r23m review ruling: the registered plan gates every member except the anchors (ordinals 1-4,
+        # production v3 anchors are ungated): a planned G0 is any ordinal outside 1-4.
+        for m in members:
+            m["planned_g0"] = not 1 <= m["ordinal"] <= 4
         plan, planned = load_plan_custody(root, wid, slot, record, members)
         windows.append({"window_id": wid, "slot": slot, "role": entry["role"], "record": record, "sha256": record_sha,
                         "declared_bar": declared, "terminal": terminal, "capture_failure": non_go,
@@ -1692,7 +1690,8 @@ def threshold_summary(scores, complete):
     if not complete:
         # R27 (lead ruling): every threshold-dependent leaf is null under one status word before completion;
         # the marginal / iid bounds are not printed either.
-        out.update(status="withheld_until_calibration_complete", marginal_fpr_bound=None, tolerance_90_upper=None)
+        out.update(status="withheld_until_calibration_complete", marginal_fpr_bound=None, tolerance_90_upper=None,
+                   conformal_rank_alpha_025=None)
         return out
     if len(vals) < m:
         out.update(status="held", codes=["nonfinite_calibration_score"])
