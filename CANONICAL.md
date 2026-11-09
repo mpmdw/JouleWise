@@ -40,7 +40,7 @@ The magistrate on the MacBook Pro owns running, re-running and arming windows
 
 ## ALIGN v4 window line (W1, C1-C14, T1-T3): agreements and records
 
-The v4 arm stack, kit, series and PREQUAL live on the integration line `align/2026-11-08-v4-r11` @ `e8ea97d22`
+The v4 arm stack, kit, series and PREQUAL live on the integration line `align/2026-11-08-v4-r11` @ `57c34f5ab`
 (these paths are on that line or on the lane branches below, not on `main` yet; the line lands on `main` FIRST,
 see MERGE-ORDER). The lanes were built separately by Sol and Opus and merged against an agreement report;
 timing receipts is the exception and has a review record instead. Read the agreement before changing a lane.
