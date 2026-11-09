@@ -370,6 +370,201 @@ synthetic writer (`tests/v4_release/common_series.py`).
 counts included; the comparator compares the seals by presence, and any token-count leaf the engine printed for
 a sealed member would be unmapped and REFUSE.
 
+### 6a.1 The native exporter (`scripts/export_v4_series.py`)
+
+```bash
+python3.13 -B scripts/export_v4_series.py export --config EXPORT.json --window C3#2   # as each window lands
+python3.13 -B scripts/export_v4_series.py export --config EXPORT.json --all           # every configured attempt
+```
+
+**Config** (`joulewise.v4_export.config.v1`; unknown keys refuse). It holds:
+- `export_root`;
+- `records_repo`;
+- `kit_root`: the measurement checkout that holds the kit configs at the plan rows' `config_path`;
+- `allocation` (the frozen manifest; its sha256 must be `21313cc2…`);
+- `u3_bar`, `registration_inputs` and `r1_references`, each `{path, sha256}`;
+- `engine_route`: `raw_source` only. Lead ruling 4 refuses `thermal_source` with `thermal_source_refused`;
+- `windows[]` in series order, each with:
+  - `attempt_id` (`C3#2`);
+  - `record_commit` and `record_path` (read with `git show` through `WindowRecord`);
+  - `session_root`: the harvest-off restore, which must equal the finalized manifest's `source_root`;
+  - optionally `final_record`: the successor record whose `previous_final` makes this one final.
+
+**What it reads.** Only the committed record and the files of the restored session. Every file is checked three ways:
+- lexically, with no traversal;
+- with lstat on each component, so no symlink;
+- by its sha256 and size in the record-bound finalized manifest.
+
+The capture descriptor (`captures[run_id]`, locator or blob) must carry the member's `raw/powermetrics.plist` sha256
+and bytes. A planned member whose bundle holds a plist but whose capture is `null` refuses. A record that is not
+final refuses, since the release reads final adjudications only.
+
+**What it writes.**
+- Per window, immutable once landed:
+  - `engine/windows/<record id>/` holds `raw.json`, each member's production `align_episode.json` (hard link) and
+    its `journal.json` (the sidecar rows as one JSON array);
+  - `recompute/windows/<record id>/` holds the RECOMPUTE-opus layout;
+  - `state/<record id>.json`.
+- Rebuilt after every landing: `engine-input.json`, `engine/series-manifest.json`, `recompute/series.json`,
+  `u3_bar.json`, `references.json`, `allocation/`, `crosswalk.json` and `census.json`.
+- A re-export must reproduce a landed window byte for byte, or it refuses `window_already_exported_differs`.
+- Two attempts resolving to one record id refuse `anchor_id_collision`.
+
+**Same bytes.** The engine's `powermetrics`, `config` and `dc_streams` references and both builds'
+`terminal_result_source` point at the same placed files under `recompute/`. Placement is a hard link, or a byte copy
+re-hashed after placing.
+
+**Mapping** (production source → engine raw row / recompute layout). No arithmetic of the exporter's own except
+where noted.
+
+| Field | Production source | Engine (`raw.json` row) | Recompute |
+|---|---|---|---|
+| config chain | the plan row by ordinal, whose `run_id` must be the member's local id → kit bytes must match `config_sha256` (refuses) → a kit that is not a JSON object or fails BenchmarkConfig normalization is exported unjudged (the builds' `config_invalid`) → otherwise bundle `config.json` = `align_v4_kit.bundle_config_bytes(BenchmarkConfig.from_mapping(kit))` (joulewise/bundle.py:964-967), or `config_digest_not_planned`. Config identity against the roster is never judged by the exporter (the builds' `config_identity_differs`) | checked again by the engine | checked again by the recompute |
+| roster | record `sources.collection_plan.members[]`, checked field by field against the frozen manifest (pair, condition, seed_index, episode_seed, model_id; W1 role) | `roster` rows with series_role/held_out from the manifest `pool` (W1: anchor 1-4, sentinel 5/17, contrast X-/Y-, development) | `members[]` kind/model/pair/condition/contrast; `seed_index` and `expected_episode_seed` for EVERY member (30B included) |
+| run ids | collection plan, verbatim; C/T non-anchors must be `align-v4-<slot>-eNN` by ordinal (align_v4_series.py:38, :285) | anchors `<slot>:<id>` | anchors `<record id>:<id>` (`C3-z1:`) |
+| Episode | `outputs/align_episode.json` (records.py:181-202) | `episode` `{path, sha256}`, unmodified bytes | the same JSON with contract fields added, nothing removed (below) |
+| plist | `raw/powermetrics.plist` | `powermetrics` ref | `raw/powermetrics.plist` (same file) |
+| config | `config.json` (lead ruling (a), seed check) | `config` ref | `config.json` (same file) |
+| plan | record `sources.collection_plan` bytes, verbatim, header included (every attempt). It must be this window's plan: C/T `schema_version` `joulewise.align_v4.series_window.v1`, `plan_id` `align-v4-<window>`, `window_id`, `series_manifest_sha256` (align_v4_series.py:339-340); W1 `joulewise.align_v4.v1` / `align-v4`. A plan `attempt_id` must equal the record's | window `plan_source` ref | window.json `plan_source` (same file) |
+| kit config | `kit_root/<plan row config_path>`, sha256 = plan row `config_sha256` (align_v4_series.py:302); copied into the export (it lies outside custody) | `planned_config` ref (captured members) | member row `planned_config` (same file) |
+| stamps | Episode `hardware.paired_clock_stamps_ns` via `sampler._restore_stamp` (sampler.py:56, as workload.read_episode_bundle:900) | `stamps` (ClockStamp seconds, floats) | `paired_clock_stamps_ns` verbatim |
+| clock evidence | metadata `uncertainty_evidence` | `clock_evidence` verbatim | metadata verbatim + `clock_anchor.wall_minus_monotonic_bounds_ns` = exact(lower_s, upper_s) (Fraction, ties to even) |
+| offset | `sampler.stamp_mapping` (sampler.py:83) over the restored stamps and that evidence | `offset_ns` | `hardware.production_offset_ns` |
+| endpoint | metadata `clock_anchor.first_sample_end_point_epoch_s`, as recorded (int/float only) | `first_record_endpoint_s` | metadata verbatim |
+| period | `round(1e9 / config.sampling.power_hz)` = workload.read_episode_bundle:916 | `nominal_interval_ns` | metadata `sampling.power_period_ns` |
+| registered span | WP22 rule (align_v4_w1_synthetic.py:353): first G0 start (else episode start), episode end | `registered_span_ns` | `hardware.registered_span_ns` |
+| sidecar | `outputs/align_thermal.jsonl` (gated members only; absent for ungated 30B anchors, as read_bundle_record reads it) | `journal` ref (JSON array of the rows) | `outputs/align_thermal.jsonl` = `thermal_desk.normalize_journal` rows (thermal_desk.py:118) |
+| OS readings | `normalize_journal` rows' `status.os_level` (read_bundle_record:811-813) | `os_readings`, `registered_os_readings` | derived by the recompute from the rows |
+| turn rows | `outputs/align_turns.jsonl` | `turn_rows` (inline) | (not read) |
+| identity | `[[prompt_token_ids, output_token_ids], …]` per turn (below) | `identity_sha256` | Episode `identity_sha256` |
+| reasoning | Episode turn `hidden_tokens` | Episode bytes | turn `reasoning_tokens` = `hidden_tokens` |
+| status | `enrich_record` (align_v4_thermal_desk.py:74): token_budget.incomplete | `status` | Episode `completed` = status == completed |
+| cache | `diagnostics.cache_statistics(turn rows)` (diagnostics.py:257) | `cache_statistics` | `hardware.cache` |
+| cohort | `v4_registration.cohort_identity` (v4_registration.py:698) + spec four slots (enrich_record:68-73) | `cohort_identity`, `configuration`; series `cohort` = W1 ordinal 5, bound to the U3 bar's `d_configuration_sha256` | Episode and window `cohort_sha256` (below) |
+| battery | `v4_battery.bundle_evidence` over custody `hazards/monitor/battery.jsonl` (v4_battery.py:46) | `battery` | `battery {run_id: flags + battery.unobserved}` |
+| exclusions | record `sources.exclusions.members_excluded` (final), `v4_contention.split_codes` (R22-1) | `exclusion_codes` | `adjudication.excluded` |
+| identity map | committed desk: `pilot7_token_identical` (align_v4_thermal_desk.py:133, align_v4_session.py:333) for contrast runs; desk `tokens` equality for the registered replay pairs (WindowRecord.eligibility rule) | (re-derived) | `identity` |
+| DC | custody `night/hazard_result.json` `meter.streams` (path, sha256; km003c.py:211-245) | benign `dc_streams` refs + `member_span_ns` = [episode start, end] | `meter/<name>` + `meter.streams` |
+| terminal | record `sources.result` (schema `joulewise.unattended_night_result.v1`), cross-checked with `chain_exited.exit_code` and `courier_sent` and with the restored custody `night/result.json` bytes | `terminal_result_source` (captured C only) | `terminal_result_source` (same file) |
+| bar | record `barred`, passed through only if it equals `WindowRecord.structural_bar` | `barred` | `barred` |
+| U3 / R1 / delta | registered U3 bar (`v4_u3.policy_checks`, `relative_pairs`), registration `inputs.json` R1 policy, R1 references file | `u3_evidence`, `reference`, `r1_sensitivity`, `delta_slow_c`, `u6_split_rule` (A16 constant) | `u3_bar.json`, `references.json` |
+
+**Exporter-defined digests (export contract).**
+- `identity_sha256` = SHA-256 of `json.dumps([[p0, o0], [p1, o1], …], separators=(',', ':'), ensure_ascii=True,
+  allow_nan=False).encode('ascii')`, with no trailing newline. The pairs are in turn order from
+  `outputs/align_turns.jsonl` `generation.{prompt_token_ids, output_token_ids}`. It is null when a turn lacks either
+  list. Unit: `test_exporter_units.test_identity_sha256_is_the_registered_canonicalization`.
+- `cohort_sha256` = SHA-256 of `json.dumps({"configuration": …, "identity": …}, sort_keys=True,
+  separators=(',', ':'), ensure_ascii=True, allow_nan=False)`.
+- `Episode.seed` is carried verbatim (the seed index). The seed check is the builds' own (lead ruling (a)).
+
+**Not real producers in the synthetic end-to-end test** (`tests/v4_release/test_exporter_e2e.py`, built by
+`native_series.py`):
+- the raw powermetrics plist. WP22's synthetic GPU rail writes none, so the test writes one frame per
+  `power_trace.csv` row with the pinned recompute's FrameTemplate. Real custody without a plist refuses
+  `member_file_missing`;
+- the KM003C stream;
+- the U3 bar;
+- the R1 references file.
+
+Everything else comes from real producers:
+- WP22's world, controller, kit and series kit;
+- the real thermal desk;
+- the harvest-off finalize, pack and unpack;
+- the WindowRecord reader.
+
+**Refusal codes** (exit 2; stdout is `{"status": "refused", "code": …}`):
+
+| Code | Cause |
+|---|---|
+| `config_invalid` | The config is malformed |
+| `unknown_contract_key` | An unknown key where a contract key is expected: config, record, `v4_series`, `policy.sensors`, or a projected field already present |
+| `thermal_source_refused` | The config asks for the thermal_source route |
+| `record_unreadable` | The window record cannot be read |
+| `record_window_differs` | The record's window or role differs from the configured attempt |
+| `record_not_final` | The record is not final |
+| `session_unavailable`, `session_root_differs`, `session_window_differs` | The restored session is missing, is not at the finalized `source_root`, or names another window |
+| `path_refused`, `path_outside_session` | A symlink, a traversal, or a path outside the session |
+| `file_not_in_finalized_manifest`, `digest_mismatch` | A file is not bound by the finalized manifest, or its bytes differ |
+| `member_file_missing` | A member bundle file is missing |
+| `member_malformed`, `turn_rows_mismatch` | A member file is malformed, or its turn rows do not match the Episode |
+| `seconds_not_numeric` | Recorded seconds are not a number |
+| `roster_differs_from_manifest` | The collection plan differs from the frozen manifest |
+| `roster_differs_from_plan` | The night plan, a bundle config or the Episode differs from the collection plan |
+| `capture_missing_from_record`, `capture_digest_differs` | A capture is null while a plist exists, or its digest differs from the plist |
+| `terminal_evidence_missing`, `terminal_evidence_mismatch` | Terminal evidence is missing, or result, chain.exited and custody disagree |
+| `config_digest_not_planned` | The plan row's `config_path`/`config_sha256`, the kit bytes and the bundle `config.json` do not form the writer chain |
+| `config_digest_not_planned:wrong_window` | The committed plan is not this window's producer plan (header, or `attempt_id`) |
+| `desk_record_differs` | The committed desk's battery, cohort, configuration, status or cache differs from the derivation |
+| `owned_energy_flags_unexpected` | The desk record carries `owned_energy_flags` |
+| `declared_bar_inconsistent` | A declared bar does not match the committed structural bar |
+| `cohort_unbound` | The W1 ordinal-5 cohort is missing, or its digest is not the U3 bar's |
+| `meter_custody_invalid` | The KM003C stream listing is invalid |
+| `allocation_differs` | The allocation is not the frozen manifest |
+| `u3_bar_invalid`, `r1_references_invalid`, `registration_inputs_invalid` | A series input is invalid |
+| `window_order_gap` | An earlier configured window has not landed |
+| `window_already_exported_differs` | A re-export does not reproduce the landed window |
+| `anchor_id_collision` | Two attempts resolve to one record id, or captured ids or anchors repeat |
+| `export_layout_collision` | Two outputs would land at the same path |
+
+### 6a.2 Real-producer end-to-end: findings (2026-11-08, synthetic only)
+
+**Run.** The series was W1, C1, a C2#1 zero capture and a C2#2 retry, built with the real producers of 6a.1.
+The table below records the engine-r23j / recompute-9f8a8749e run. `test_exporter_e2e` now pins engine-r23k
+(`72410b0b4`) and the recompute at `7b06c6058`, which implement `plan_source`, `planned_config` and the plan owner
+check. The recompute
+derives the bundle bytes as `json.dumps(json.loads(kit), indent=2, sort_keys=True)` and the engine through
+`BenchmarkConfig`. These agree only because the writer's normalization is the identity on real kit configs (checked on
+the C1 kit and on the repository's W1 kit configs). A kit field that `to_dict()` normalizes would split the builds.
+- The exporter landed every window, and re-export was byte-identical.
+- The recompute ran (exit 0).
+- engine-r23j read all 62 captured members through `io.load` and the raw adapter. That includes the exact
+  exported production `offset_ns` check on non-integer stamps. `analyze()` then refused (EXP-G2).
+- A DIAGNOSTIC run patched the engine's `roster()` run ids to the production names and the comparator's
+  `MODEL_SHORT` to the production display names. It never feeds a release.
+- In that run the comparator still refuses `unmapped_leaf` and holds the families below.
+- `test_exporter_e2e.test_release_agrees` stays an expected failure until EXP-G1 to EXP-G4 are closed.
+
+| Id | Item | Class | Evidence |
+|---|---|---|---|
+| EXP-G1 | `Episode.seed` is the seed index; both builds compared it with the derived seed | contract gap, ruled (a) 2026-11-08 | workload.py:722 vs engine.py:255, recompute `derive_exclusions`; fixture common_series.py:338 |
+| EXP-G2 | C/T run ids are `align-v4-c1-e06` in production, while the engine's frozen `roster()` expects `align-v4-c1-episodes-a-e06` | engine (contract gap) | align_v4_series.py:38,285 vs engine.py:70-71; fixture common_series.py:85-86 |
+| EXP-G3 | `Episode.agent_model` is the config display name (`Qwen3-30B-A3B-4bit`). The engine keys acceptance by it, and the comparator's `MODEL_SHORT` (compare_v4_recompute.py:65) holds only model ids, so it raises KeyError and refuses `comparator_input_malformed` | comparator (release tools) | workload.py:721; fixture common_series.py:511 (`agent_model=model_id`) |
+| EXP-G4 | Production `cache_statistics` keys `{status, cached_tokens, fed_tokens, trims, trimmed_tokens, rebuilds, prefill_removed_tokens}` are unmapped in the comparator's `cache_diagnostics`, giving `unmapped_leaf`. Production has no `rewinds` | comparator | diagnostics.py:257-265; fixture common_series.py:547 `{rebuilds, rewinds}` |
+| EXP-D1 | U1(c) sidecar coverage. The recompute counts `ceil(span/1 s)` cells from the span start. A real G0 span is non-integer (42.46 s), so it covers 42/43 cells = 0.977 < 0.99, and U1 FAILs for every gated model in every window, which bars C1 and C2. The engine (production `temperature.Coverage` on the collector grid) passes | build disagreement (A11 reading), needs a ruling | recompute `thermal_summary.coverage` (independent_recompute_v4.py:1018), `u1_model_window`; synth spans are whole seconds |
+| EXP-D2 | U2(a) for a model with no G0 at all (ungated 30B anchors in C windows): the engine says `inconclusive`, the recompute `not_applicable` | build disagreement (A12) | synth writes a G0 for every member, so the fixture never shows it |
+| EXP-D3 | A13 replay eligibility. The engine makes a 5/22 pair inconclusive when either member has ANY class (here `seed_identity_differs`). The recompute excludes only `REPLAY_INELIGIBLE` classes and computes the pair (`pass`) | build disagreement, surfaced by EXP-G1 | recompute `REPLAY_INELIGIBLE` |
+| EXP-D4 | A29 scope: the engine applies the seed check to every member (30B anchors too), the recompute to D only | build disagreement | engine.py:255 vs recompute `derive_exclusions` |
+| EXP-D5 | Not-captured members: the engine adds class `incomplete` (`raw.member` status for `captured: false`), the recompute prints only `not_captured` | build disagreement | raw.py:37-38 (r23j) |
+| EXP-D6 | DC for 30B benign members (ungated, no thermal): the engine prints `meter.turn_uncovered`, while the recompute integrates DC | build disagreement, print-only family | `dc.capture` |
+| EXP-D7 | A prefix series (no T landed): the engine prints T rows from the manifest and the recompute none (`row_completeness`). An empty W1 anchor block: the engine prints `anchor_sigma_w` nulls and the recompute nothing | comparator/build empty-state rows | |
+| EXP-F1 | The W1 30B anchors' first turn starts as sampling starts, so it is not PM-covered and `energy_unavailable` in BOTH builds. The cause is the WP22 synthetic rail plus the test-side plist; a real powermetrics capture has pre-roll | fixture limitation (not a build disagreement) | tests/align/w1_synthetic.py:405 |
+
+**Synthetic fixture vs real producer** (every difference found in this sweep; fixture = `tests/v4_release/common_series.py`
+and the pinned recompute's `tests/independent_recompute_v4/synth.py`):
+
+| Field | Synthetic fixture | Real producer | Exporter / status |
+|---|---|---|---|
+| Episode `seed` | derived episode seed (common_series.py:338, :512) | seed index (workload.py:722) | verbatim; EXP-G1 ruled |
+| non-anchor run ids | engine naming `align-v4-c1-episodes-a-e06` (common_series.py:85-86) | `align-v4-c1-e06` (align_v4_series.py:285) | verbatim; EXP-G2 |
+| `agent_model` | model id (common_series.py:511) | config display name (workload.py:721) | Episode bytes; EXP-G3 |
+| `cache_statistics` | `{rebuilds, rewinds}` (common_series.py:547) | diagnostics.py:257-265 keys | production value; EXP-G4 |
+| reasoning | `reasoning_tokens` (synth turns) | Episode `hidden_tokens` | recompute alias = hidden_tokens |
+| `registered_span_ns`, `production_offset_ns`, `identity_sha256`, `cohort_sha256`, `completed`, `hardware.cache` | written into the episode by synth/common_series | absent from the production Episode | exporter contract fields (6a.1) |
+| metadata | `sampling.power_period_ns`, anchor only (synth.py:190-192) | no `sampling`; `clock_anchor.wall_minus_monotonic_{lower,upper}_s`; power_hz in config.json | `power_period_ns` from config; `bounds_ns` exact |
+| clock stamps, spans | whole seconds (common_series EXPORT_NOTES) | non-integer (WP22: 4387.603199999 s) | verbatim; the offset check passes; EXP-D1 |
+| power cadence | 1 Hz frames (common_series `period_ns=NS`) | 10 Hz (kit config `power_hz`) | verbatim |
+| thermal sidecar | pre-normalized `kind: sample` rows for EVERY member (synth; common_series.py:522-525) | `joulewise.align_thermal.v1` reading/session rows, gated members only | engine: raw rows (JSON); recompute: `normalize_journal` rows; anchors: none (recompute flag `thermal_journal_missing`) |
+| G0 / thermal policy on 30B anchors | present (synth writes a G0 for all) | absent for ungated 30B anchors | EXP-D2 |
+| gate `reference` | copy of the G0 release (common_series.py:356-357) | production reference `{fast_c, slow_c, source_member, span_ns}` | Episode bytes |
+| turn rows | token ids fabricated from the identity hash (common_series.py:548-551) | full generation rows with cache fields | inline verbatim |
+| battery | static `{observed, soc 100, charger 80, 'c'*64}` (common_series.py:544-545) | `v4_battery.bundle_evidence` (spans, assist, per-reading lists) | production value, cross-checked with the desk |
+| DC span | `[episode start, end]` (common_series.py:547) | production desk: `harvest.member_spans(metadata, events)` (km003c.py:256) | `[episode start, end]` (the recompute's span); open item |
+| meter stream | `km003c-0.jsonl` in the window dir | custody `hazards/meter/stream-NNN.jsonl`, listed with sha256 in `night/hazard_result.json` | placed under `recompute/windows/<W>/meter/` |
+| terminal result | derived `{verdict, chain_exit_code}` file (common_series.py:397-406) | `night/result.json` (`joulewise.unattended_night_result.v1`, more keys) | result.json bytes by digest; both builds accept the extra keys |
+| identity map | `identical` for every sentinel/contrast run (common_series.py:327-328) | desk `pilot7_token_identical` and desk token equality | from the committed desk |
+| W1 desk | n/a | WP22's dry-run desk also lists the two pilot-7 references | the fixture drops them from the record (the session desk covers only the roster) |
+
 ## 7. Before the real release
 
 1. The exporter writes the engine manifest, the recompute layout and the crosswalk from one custody, with the
