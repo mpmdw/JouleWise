@@ -19,7 +19,7 @@
 
 | Build | Branch | Commit | Output |
 |---|---|---|---|
-| Sol primary engine | `engine-r23j` (R21 + A37 + R23-R26 + R23h + R22-2/R24/R25 + reproducible bars) | `7da631c3f` | `fill.json`, `verdict.json`, `thresholds.json` |
+| Sol primary engine | `engine-r23j` (R21 + A37 + R23-R26 + R23h + R22-2/R24/R25 + reproducible bars) | `50f4958b6` | `fill.json`, `verdict.json`, `thresholds.json` |
 | Opus independent recompute | `align/2026-11-08-v4-recompute-opus` | `9f8a8749e` (program sha256 `0e79439d…`) | one JSON (`RECOMPUTE-opus.md`) |
 
 History: the first rehearsal (engine `8eb7982f0` vs recompute `c0d1efcae`) held on five families and found
@@ -56,7 +56,9 @@ echo "exit=$?"
 
 The command passes no commit flags: `--engine-commit` and `--recompute-commit` default to the pins
 (`RELEASE_ENGINE_COMMIT`, `RELEASE_RECOMPUTE_COMMIT`), and any other value refuses. Run it with the same
-`python3.13` that ran the engine: stage (a) recomputes the engine's producer identity (its loaded scorer
+`python3.13` that ran the engine (CPython 3.13.x is REQUIRED: engine-r23j's runtime calibration identity
+check refuses `calibration_identity_drift` under any other version, and release_v4 refuses
+`release_python_not_3_13`): stage (a) recomputes the engine's producer identity (its loaded scorer
 code depends on the Python version) from the pinned engine tree under this interpreter (`--python`).
 `test_release_v4.test_runbook_command_matches_pins` keeps this block in step with the pins.
 
@@ -97,7 +99,7 @@ engine manifest's `powermetrics` digest for the same member. Otherwise it refuse
 | 0 | `agree` | null | (a) verified; recompute exited 0 twice; every recomputed family agrees or is expected-empty with its predicate satisfied; 0 unmapped; every manifest count is in range | Ask Ed for the unseal OK |
 | 1 | `hold` | `comparator_disagreement` | A family failed, an empty family is unexplained, a manifest count is out of range, or a sensitivity line is uncomputable | Trace blind and structure-only from `$OUT/comparison.json`; classify each failing row as an open interpretation (name the R21 row) or a bug in one build |
 | 2 | `refused` | `comparator_refused` | The comparator refused: an unmapped leaf, an `eligible_m_per_pair` mismatch (R-C5), malformed input, or an engine refusal | Tooling or coverage defect |
-| 2 | `refused` | `release_digest_differs_from_record`, `engine_census_malformed`, `engine_census_incomplete`, `engine_producer_identity_differs`, `engine_identity_unavailable`, `release_input_malformed` (any other malformed nested shape: never an uncaught exit 1), `engine_run_refused`, `crosswalk_differs_from_roster`, `builds_read_different_bytes`, `recompute_program_differs`, `pinned_commit_*`, `release_bars_differ`, `release_checkout_not_clean`, `restricted_out_exists`, `recompute_failed`, `comparison_output_unreadable`, `comparison_vacuous`, `verdict_not_structure_only` | Custody, binding or tooling | Fix it, then re-run into a new `$OUT` |
+| 2 | `refused` | `release_digest_differs_from_record`, `engine_census_malformed`, `engine_census_incomplete`, `engine_producer_identity_differs`, `engine_identity_unavailable`, `release_python_not_3_13`, `release_input_malformed` (any other malformed nested shape: never an uncaught exit 1), `engine_run_refused`, `crosswalk_differs_from_roster`, `builds_read_different_bytes`, `recompute_program_differs`, `pinned_commit_*`, `release_bars_differ`, `release_checkout_not_clean`, `restricted_out_exists`, `recompute_failed`, `comparison_output_unreadable`, `comparison_vacuous`, `verdict_not_structure_only` | Custody, binding or tooling | Fix it, then re-run into a new `$OUT` |
 
 Precedence is refused 2 > hold 1 > agree 0. The final guard replaces any verdict whose text contains a decimal
 or exponent number with `verdict_not_structure_only`. The comparator's public line reads "N families compared,
@@ -256,18 +258,18 @@ for m in test_compare_v4 test_release_v4 test_rehearsal_v4 test_review_sol1 test
   | Module | Tests | Time |
   |---|---|---|
   | `test_compare_v4` | 19 | 27 s |
-  | `test_release_v4` | 16 | 27 s |
+  | `test_release_v4` | 17 | 18-27 s |
   | `test_rehearsal_v4` | 11 | 2 min (one engine re-run for its code mutation, one forged-bar prefix run) |
   | `test_review_sol1` | 12 | 18 s |
   | `test_review_sol2` | 14 | 20 s |
 
 **Release runtime on the synthetic series** (16 engine attempts, 284 captured members). These are
-`release_v4.py` wall times, stages (a)-(c), 4 workers, 2026-11-08 (r23j):
+`release_v4.py` wall times, stages (a)-(c), 4 workers, 2026-11-08 (r23j; two sessions on the Air):
 
 | Plan | Total | Recompute (two stages) | Comparator |
 |---|---|---|---|
-| full | 10.5 s | 6.6 s | 1.5 s |
-| probes | 11.0 s | 7.2 s | 1.3 s |
+| full | 10.5 s (7da631c3f) / 23.2 s (50f4958b6, loaded host) | 6.6 s / 16.7 s | 1.5 s / 2.4 s |
+| probes | 11.0 s / 23.2 s | 7.2 s / 16.5 s | 1.3 s / 2.5 s |
 
 Stage (a) re-hashes 823 files and verifies the producer identity; stage (b) confirms 284 members read the
 same raw bytes. The engine's own run
@@ -275,7 +277,7 @@ is not part of the release: it runs incrementally as windows land.
 
 ## 6. Findings on the synthetic series
 
-**Final rehearsal, 2026-11-08: exact AGREE on both plans.** Engine `7da631c3f` (engine-r23j) against
+**Final rehearsal, 2026-11-08: exact AGREE on both plans.** Engine `50f4958b6` (engine-r23j) against
 recompute `9f8a8749e`:
 
 | Plan | Comparator | Families | Unmapped | `release_v4.py` |

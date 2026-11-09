@@ -52,7 +52,7 @@ RECOMPUTE_PROGRAM_SHA256 = "0e79439d1a7888d61036203987429c24fe028c84a4f4a1db008d
 ENGINE_RECORD_SCHEMA = "joulewise.v4_engine_run_record.v1"
 # The builds this release check certifies (the commits the synthetic rehearsal agreed on). Any other
 # commit refuses; re-pin only with a fresh AGREE rehearsal (RELEASE-RUNBOOK-v4.md section 5).
-RELEASE_ENGINE_COMMIT = "7da631c3fbc37589d4f69f89d0f65afbb15e8394"   # origin/engine-r23j
+RELEASE_ENGINE_COMMIT = "50f4958b6ded78f5f9f38e7d2cec9587e8f7f2e2"   # origin/engine-r23j
 RELEASE_RECOMPUTE_COMMIT = "9f8a8749eda8387a827fe6c96afb942ceec89df5"   # align/2026-11-08-v4-recompute-opus
 HEX40, HEX64 = re.compile(r"[0-9a-f]{40}"), re.compile(r"[0-9a-f]{64}")
 FLOAT_TOKEN = re.compile(r"(?<![A-Za-z0-9])(?:\d+\.\d+(?:[eE][+-]?\d+)?|\d+[eE][+-]?\d+)(?![A-Za-z0-9])")
@@ -237,7 +237,9 @@ def stage_digests(a, restricted):
                 if key == "powermetrics":
                     raw_refs[(row["path"], m["run_id"])] = ref["sha256"]
     out["engine_files_rehashed"] = files
-    # Producer identity: the loaded scorer and raw reducer the engine printed must be the pinned build's.
+    # Producer identity: the loaded scorer and raw reducer the engine printed must be the pinned build's,
+    # computed under CPython 3.13 (the engine's runtime calibration identity check pins it).
+    check_python(a.python)
     ident = engine_identity(a.programs_repo, a.engine_commit, a.python, restricted)
     check_producer_identity(ident, fill, strict_json(eo / "thresholds.json", "engine_output_unreadable"))
     (Path(restricted) / "engine-identity.json").write_text(json.dumps(ident, sort_keys=True) + "\n")
@@ -290,6 +292,22 @@ IDENTITY_SNIPPET = (
     "from joulewise.align.apple.reduce_sol import producer_sha256; "
     "print(json.dumps(dict(loaded_scorer_sha256=scorer_identity(), raw_reducer_sha256=producer_sha256(), "
     "python=sys.version.split()[0])))")
+
+
+ENGINE_PYTHON = (3, 13)      # engine-r23j's runtime calibration identity check pins CPython 3.13.x
+
+
+def check_python(python):
+    """The release interpreter must be CPython 3.13.x: engine-r23j refuses calibration_identity_drift under any
+    other version, and the loaded-scorer identity is version-specific."""
+    r = subprocess.run([python, "-c", "import json, platform, sys; print(json.dumps([platform.python_implementation(), "
+                                      "list(sys.version_info[:2])]))"], capture_output=True)
+    try:
+        impl, ver = json.loads(r.stdout) if r.returncode == 0 else (None, None)
+    except ValueError:
+        impl, ver = None, None
+    if impl != "CPython" or tuple(ver or ()) != ENGINE_PYTHON:
+        raise Refused("release_python_not_3_13")
 
 
 def engine_identity(repo, commit, python, workdir):

@@ -48,6 +48,12 @@ class ContractTests(unittest.TestCase):
         for pin in (release_v4.RELEASE_ENGINE_COMMIT, release_v4.RELEASE_RECOMPUTE_COMMIT):
             self.assertIn(pin[:9], text)
 
+    def test_release_requires_cpython_3_13(self):
+        release_v4.check_python(sys.executable if sys.version_info[:2] == (3, 13) else "python3.13")
+        with self.assertRaises(release_v4.Refused) as ctx:
+            release_v4.check_python("/usr/bin/false")
+        self.assertEqual(ctx.exception.code, "release_python_not_3_13")
+
     def test_malformed_nested_shapes_refuse_with_fixed_codes(self):
         # Seat 2 F5: never an uncaught exception (exit 1 would read as hold); structure-only stdout.
         self.assertEqual(release_v4.member_refs({"journal": {"path": "j.json", "sha256": "a" * 64},
