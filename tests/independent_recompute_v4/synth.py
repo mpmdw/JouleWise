@@ -362,7 +362,7 @@ def write_series(root, windows=None, members_per_window=None, period_ns=100_000_
             **({"sentinel_ordinals": [5, 17]} if wid == "W1" else {})})
     dump(root / "series.json", series)
     if u3:
-        dump(root / "u3_bar.json", {"signed": True, "beta": 0.05, "N": 16, "f": 1.5, "r1_d_screen": 0.004,
+        dump(root / "u3_bar.json", {"signed": True, "beta": 0.05, "N": 22, "f": 1.5, "r1_d_screen": 0.004,
                                     "pilot_relative_differences": [0.004, -0.006, 0.003, 0.005, -0.002, 0.001,
                                                                    -0.004]})
     if references:

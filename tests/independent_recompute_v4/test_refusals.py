@@ -90,7 +90,14 @@ class RefusalTests(unittest.TestCase):
         (root / "series.json").write_text(json.dumps(dict(series, h_star_grid=[128, 256])))
         self.refused(root, "h_star_grid_differs")                                   # R26 (1)
         (root / "series.json").write_text(json.dumps(series))
+        for bad in ({"slot": "C3"}, {"chain_go": "no"}):                            # R24 export fields
+            path.write_text(json.dumps(dict(record, **bad)))
+            self.refused(root, "window_malformed")
+        path.write_text(json.dumps(record))
         u3 = root / "u3_bar.json"
+        bar = json.loads(u3.read_text())
+        u3.write_text(json.dumps(dict(bar, N=16)))
+        self.refused(root, "u3_bar_n_mismatch")                                     # R25
         u3.write_text("[")
         self.refused(root, "u3_bar_malformed")
 
@@ -170,11 +177,14 @@ class RefusalTests(unittest.TestCase):
             self.assertFalse(excl["align-v4-c1-" + rid]["eligible"])
         self.assertEqual(excl["align-v4-c1-e12"]["classes"], ["not_captured"])
         # e11's truncated PM is a U1(c) PM gap: the D model-window fails U1, so C1 is barred and, under
-        # R21 A24, never fitted or scored; it still counts toward the 8 with zero calibrators.
+        # R21 A24, never fitted or scored; under R22-2 / R24 it is structurally barred, contributes nothing,
+        # does not count toward the 8 and is replaced by the next reserve.
         self.assertFalse(out["acceptance"]["U1"]["C1"]["D"]["parts"]["c_pm_gaps"])
         self.assertNotIn("C1", out["fits"])
         row = out["calibration"]["stop"]["windows"][0]
-        self.assertEqual((row["counted"], row["pool_barred"], row["eligible_benign"]), (True, True, {"bank": 0, "spam": 0}))
+        self.assertEqual((row["counted"], row["pool_barred"], row["barred"], row["bar_reason"], row["eligible_benign"]),
+                         (False, True, True, "u1_u3_fail", {"bank": 0, "spam": 0}))
+        self.assertEqual(out["calibration"]["stop"]["barred_windows"], ["C1"])
 
 
 if __name__ == "__main__":

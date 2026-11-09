@@ -133,14 +133,15 @@ No real v4 data exists, and none was read. Every number here and in the tests is
 | 2 fits | Five-term design per window × pair. Benign members LOTO; **T** sabotage on the full fit. Never fitted: barred windows (A24), C sabotage (A27), T before `calibration_complete` (A25), W1 | `window_fits`, `householder_fit`, `fit_quadratic`, `score_episode`, `turn_design` |
 | 3b thresholds | Per-pair sample maximum at m ≥ 39, strict `>`. **Held** on an undefined calibrator score (A26); **null** until complete (A25); freeze record | `threshold_summary`, `freeze_record` |
 | 4 test | T1-T3 benign exceedances and the exact CP bound; T sabotage at H = 0 descriptive | `test_summary`, `binomial_upper` |
-| 5b U4-U6 | U4 cumulative over W1 + C + T, first verdict at W ≥ 3, inadmissible sentinels skipped (A14). U5 on actual G0 release temperatures, never triggering sentinels (A15/R21). U6 per pair over C1-C8 with pooled s_r (A16) | `u4_series`, `sentinel_admissible`, `anchor_sigma_w`, `u5`, `u6_pair` |
+| 5b U4-U6 | U4 cumulative over W1 + C + T, first verdict at W ≥ 3, inadmissible sentinels skipped (A14). U5 on actual G0 release temperatures, never triggering sentinels (A15/R21). U6 per pair over the 8 admitted C windows with pooled s_r (A16) | `u4_series`, `sentinel_admissible`, `anchor_sigma_w`, `u5`, `u6_pair` |
 | 6 claim | W1 contrast on exactly 8 runs, numbers always printed (A19/A31). Known-H: first-k rows plus the exact sub-turn strip at nominal doses (A7). Benign-carrier curve: prefix crossings and the registered bootstrap recipe (A8) | `w1_contrast`, `known_h`, `subturn_strips`, `known_h_summary`, `carrier_curve`, `crossing`, `window_bootstrap`, `claim_status` |
 | DC | SECONDARY KM003C DC-in, print-only: member and turn-owned integrals, the battery-assist disclosure, and the benign DC residual (A20). Non-benign rows sealed | `dc_window`, `meter_stream`, `envelope_fit`, `rectangle`, `dc_residuals`, `seal` |
 
 Exit codes:
 - **0**: recompute written.
-- **2**: refused. A required input is missing or malformed, more than 8 counted calibration windows
-  were found, or `--freeze-in` does not reproduce. Nothing is written.
+- **2**: refused. A required input is missing or malformed, more than 8 admitted calibration windows
+  were found, calibration slots break the frozen C1-C14 order, a reserve was run without a bar to
+  replace (`reserve_not_owed`), the U3 bar's N is not 22 (`u3_bar_n_mismatch`), or `--freeze-in` does not reproduce. Nothing is written.
 
 Member-level defects never refuse: the member gets a class and is excluded. Stdout carries structure
 only; values go to `--out`. A future `release_v4.py` keeps B5's refused 2 > hold 1 > agree 0.
@@ -216,7 +217,9 @@ The comparator can also read it from `members.*.clock`.
 | A14 | T counts; first verdict at W ≥ 3; cumulative; skip inadmissible windows (installation 15) | all four | `u4_series`, `sentinel_admissible` | `U4Tests` |
 | A15 (R21) | OLS with intercept on actual G0 release temperature; INCONCLUSIVE U5 never triggers R20 | x = `g0_release_slow_c`; `triggers_sentinels: false` | `u5` | `test_u5_hand` |
 | A16 | Per pair over pool-entered C1-C8 benign LOTO residuals, logged; chronological; late half takes the extra; CR0 sandwich; ±1.645; FAIL iff \|point\| > margin; s_r = √(ΣRSS/Σdf) | rewritten | `u6_pair`, `recompute` | `test_u6_hand` |
-| A17 | `v4_cadence` vocabulary; no C6 refusal | `continue` / `pending_final_eligibility` / `calibration_complete` / `insufficient_calibration` / `escalate_to_lead`; contradictory row (> 8 counted) refuses | `calibration_stop` | `test_fixed_eight_vocabulary` |
+| A17 | `v4_cadence` vocabulary; no C6 refusal | `continue` / `pending_final_eligibility` / `calibration_complete` / `insufficient_calibration` / `escalate_to_lead`; contradictory row (> 8 admitted) refuses | `calibration_stop` | `test_fixed_eight_vocabulary` |
+| R22-2 / R24 | Exactly 8 ADMITTED windows; structural bars (U1-U3 FAIL, `chain_go: false` capture failure, zero capture beyond the retry) contribute nothing and do not count; reserves C9-C14 in frozen order only to replace bars; insufficient below 39 after 8 or at C14 with < 8; escalate on two consecutive zero-capture refusals of different slots or a zero-capture bar once all six reserves are used; provisional holds at `pending_final_eligibility`; `barred_windows`, `replacements_used` disclosed | rewritten from the text | `calibration_stop`, `load_series` (`slot`, `chain_go`) | `test_structural_bar_is_replaced_by_the_next_reserve`, `test_insufficient_and_escalation`, e2e C2 → C9 |
+| R25 | U3 N = 22 (W1 30B 4 + D 1, C1-C14 D 1 each, T1-T3 D 1 each) | bar N must equal 22, else refuse | `u3_bar` | `test_acceptance` (q at N 22) |
 | A18 | CP bound | unchanged | `binomial_upper` | `test_binomial_upper` |
 | A19/A31 | Exactly 8 identical eligible runs or INCONCLUSIVE; stage = second-stage indicator; admission within 2 s; recorded-wait rule; always compute; verdict words | all | `w1_contrast`, `thermal_summary` | `ContrastTests`, `test_registered_span_and_admission_window` |
 | A20 | Benign DC analysed, residual (five-term on DC turn-owned J, same LOTO, h=0), battery assist disclosed; sealed rows by presence | residual + disclosure | `dc_window`, `dc_residuals` | `test_dc_in` |
@@ -267,8 +270,11 @@ should treat a mismatch here as a request for the restated text, not as a bug.
 - **A19 identity source.** A contrast run counts as token-identical when the window `identity` record
   says `identical` for it (the exporter's WP19/identity evidence).
 - **A9 `incomplete`.** Taken from an episode `completed: false`.
-- **A17 `continue`.** The word for fewer than 8 counted windows comes from P:853 ("continue until 8
-  counted windows").
+- **A17 `continue`.** The word for fewer than 8 admitted windows (none provisional) comes from P:853
+  ("continue until 8 counted windows").
+- **R24 slot export.** A calibration attempt names its slot (`slot`, default the window id with a
+  `-z<k>` zero-capture suffix stripped); a whole-window capture failure is exported as
+  `chain_go: false` on the window record. Both are recompute readings of the export.
 - **A20 battery sign.** Battery power = −B0AC·B0AV/1e6 per poll, as a signed print-only integral.
   The sign convention is unverified.
 - **A20 seal.** The sealed hash is sha256 of this program's canonical row, which cannot equal the
@@ -301,7 +307,7 @@ should treat a mismatch here as a request for the restated text, not as a bug.
 | `test.<variant>.<pair>.{status, n, exceedances, benign[*].exceeds, fpr_upper_95}` | exact; bound 1e-9 |
 | `acceptance.U1/U2.<W>.<model>.{verdict, parts}`; `U3.<W>.{verdict, pairs[*].{status, reason}}`; `U4.{series_verdict, per_window.<W>}`; `U5`; `U6.<pair>` | exact verdicts and parts; statistics 1e-6 |
 | `acceptance.U3_bar.{q, s0, s0_leave_one_out, beta_used, beta_halved, r1_screen}` | q 1e-6 relative; others exact or 1e-12 |
-| `claim.w1_contrast.{verdict, reason, templates, delta}` | exact verdict; numbers 1e-6 |
+| `claim.w1_contrast.{verdict, reason_code, templates, delta}` | exact verdict and `reason_code` (`insufficient_contrast_runs`, `treatment_not_delivered`, `arm_effect_not_identifiable`, `decided`); numbers 1e-6; reason strings never compared |
 | `claim.known_h.<pair>.<run>.{first_k, council, h_star}` | exact k/H; scores 1e-6 |
 | `claim.carrier_curve.<pair>.{total, fractions, H50, H90, carriers[*].threshold, bootstrap}` | exact, **including the bootstrap** (registered recipe; `*_replicate_counts` printed); `H50/H90.level_reached_at_h0` exact (R23-2) |
 | `acceptance.U4.anchor_sigma_w_print_only.{W, ms_window, ms_interaction, sigma_w2_raw, sigma_w2}` | W exact; others 1e-6 relative (R23-1) |
@@ -374,10 +380,10 @@ for m in test_reducer test_stages test_refusals test_hygiene test_end_to_end; do
 | Module | Tests | Covers |
 |---|---:|---|
 | `test_reducer` | 10 | fast == plistlib on 150 randomized frames; fallbacks; NUL framing; cache binding |
-| `test_stages` | 38 | Hand cases for every R21 row in the table above, plus the fit, rank, quantile, CP, meter and seed-law cases |
-| `test_refusals` | 4 | exit 2 on missing or malformed inputs; member defects exclude; a PM gap bars the window (A24) |
+| `test_stages` | 45 | Hand cases for every R21 row in the table above, plus the fit, rank, quantile, CP, meter and seed-law cases |
+| `test_refusals` | 5 | exit 2 on missing or malformed inputs; member defects exclude; a PM gap bars the window (A24) |
 | `test_hygiene` | 4 | AST stdlib-only, no `joulewise`; pinned digest; serial == parallel == cache-miss == cache-hit bytes; structure-only stdout |
-| `test_end_to_end` | 11 | W1 + C1-C8 + T1-T3 with: a re-derived X2; a U2-failed barred window; an INCONCLUSIVE-U3 window that still pools; 24-member T3; the two-stage freeze, including a tampered freeze refused; incomplete calibration withholding T |
+| `test_end_to_end` | 12 | W1 + C1-C9 + T1-T3 with: a re-derived X2; a U2-failed barred window replaced by reserve C9; an INCONCLUSIVE-U3 window that still pools; 24-member T3; the two-stage freeze, including a tampered freeze refused; incomplete calibration withholding T |
 
 **Failing-first (planted mutations).** Revision 1 planted 10 mutations; all turned red. Revision 2
 planted 32 more, one or more per R21 rule. Each mutation was run against its named module, and the

@@ -298,34 +298,86 @@ class CalibrationTests(unittest.TestCase):
                          "withheld_until_calibration_complete")
 
     def stop(self, specs, resets=()):
-        windows, elig, barred = [], {}, {}
-        for i, (captured, benign, final, bar) in enumerate(specs):
-            wid = f"C{i + 1}"
+        """specs: (captured, benign, final, u_fail[, slot[, chain_go]]); the slot defaults to the next one."""
+        windows, elig, barred, seen = [], {}, {}, []
+        for spec in specs:
+            captured, benign, final, bar = spec[:4]
+            slot = spec[4] if len(spec) > 4 else rc.CAL_SLOTS[len(dict.fromkeys(seen))]
+            k = seen.count(slot)
+            seen.append(slot)
+            wid = slot if k == 0 else f"{slot}-r{k}"
             members = [{"run_id": f"{wid}-{p}{j}", "kind": "benign", "model": "D", "pair": p}
                        for p in ("spam", "bank") for j in range(7)]
-            windows.append({"window_id": wid, "role": "calibration", "members": members,
-                            "record": {"adjudication": {"final": final}}})
+            record = {"adjudication": {"final": final}}
+            if len(spec) > 5:
+                record["chain_go"] = spec[5]
+            windows.append({"window_id": wid, "slot": slot, "role": "calibration", "members": members,
+                            "record": record})
             elig[wid] = {m["run_id"]: {"captured": captured, "eligible": captured and int(m["run_id"][-1]) < benign}
                          for m in members}
-            barred[wid] = bar
+            barred[wid] = bar or record.get("chain_go") is False
         return rc.calibration_stop(windows, elig, barred, resets)
 
     def test_fixed_eight_vocabulary(self):
-        self.assertEqual(self.stop([(True, 7, True, False)] * 8)["status"], "calibration_complete")
+        ok, zero = (True, 7, True, False), (False, 0, True, False)
+        self.assertEqual(self.stop([ok] * 8)["status"], "calibration_complete")
         self.assertEqual(self.stop([(True, 4, True, False)] * 8)["status"], "insufficient_calibration")
-        out = self.stop([(True, 7, True, False)] * 7 + [(False, 0, True, False)])
+        out = self.stop([ok] * 7 + [zero])                      # C8's first zero capture owes its retry
         self.assertEqual((out["status"], out["counted_windows"]), ("continue", 7))
-        self.assertEqual(self.stop([(True, 7, True, False)] * 7 + [(True, 7, False, False)])["status"],
-                         "pending_final_eligibility")
-        # A17: no C6 refusal in analysis; a provisional earlier window is simply pending.
-        self.assertEqual(self.stop([(True, 7, False, False)] + [(True, 7, True, False)] * 6)["status"], "continue")
-        out = self.stop([(True, 7, True, False)] * 7 + [(True, 7, True, True)])
-        self.assertEqual((out["status"], out["eligible_benign_totals"]["spam"]), ("calibration_complete", 49))
-        two = [(True, 7, True, False)] * 2 + [(False, 0, True, False)] * 2
-        self.assertEqual(self.stop(two)["status"], "escalate_to_lead")
-        self.assertEqual(self.stop(two, resets={"C4"})["status"], "continue")
+        self.assertEqual(self.stop([ok] * 7 + [(True, 7, False, False)])["status"], "pending_final_eligibility")
+        # R22-2: a provisional window holds the gate at pending_final_eligibility.
+        self.assertEqual(self.stop([(True, 7, False, False)] + [ok] * 6)["status"], "pending_final_eligibility")
         with self.assertRaises(rc.Refusal):
-            self.stop([(True, 7, True, False)] * 9)
+            self.stop([ok] * 9)
+
+    def test_structural_bar_is_replaced_by_the_next_reserve(self):
+        ok, zero = (True, 7, True, False), (False, 0, True, False)
+        # A U1-U3 FAIL bars C4: it contributes nothing, does not count, and C9 replaces it.
+        out = self.stop([ok] * 3 + [(True, 7, True, True)] + [ok] * 4)
+        self.assertEqual((out["status"], out["admitted_windows"], out["barred_windows"]), ("continue", 7, ["C4"]))
+        out = self.stop([ok] * 3 + [(True, 7, True, True)] + [ok] * 5)
+        self.assertEqual((out["status"], out["admitted_windows"], out["replacements_used"]),
+                         ("calibration_complete", 8, 1))
+        self.assertEqual(out["eligible_benign_totals"]["spam"], 56)
+        self.assertEqual([r["bar_reason"] for r in out["windows"]][3], "u1_u3_fail")
+        # A whole-window capture failure (not a completed GO chain) bars the same way.
+        out = self.stop([ok] * 2 + [(True, 7, True, False, "C3", False)] + [ok] * 6)
+        self.assertEqual((out["status"], out["barred_windows"], out["windows"][2]["bar_reason"]),
+                         ("calibration_complete", ["C3"], "capture_failure"))
+        # A zero-capture refusal beyond the retry bars the slot.
+        out = self.stop([ok] + [zero, (False, 0, True, False, "C2")] + [ok] * 7)
+        self.assertEqual((out["status"], out["barred_windows"], out["replacements_used"]),
+                         ("calibration_complete", ["C2-r1"], 1))
+        # A first zero capture retried successfully is neither a bar nor a replacement.
+        out = self.stop([ok] * 2 + [zero, (True, 7, True, False, "C3")] + [ok] * 5)
+        self.assertEqual((out["status"], out["barred_windows"], out["replacements_used"]),
+                         ("calibration_complete", [], 0))
+        # A reserve is admitted only to replace a bar; frozen order is enforced.
+        with self.assertRaises(rc.Refusal) as cm:
+            self.stop([ok] * 7 + [(True, 7, True, True)] + [ok, ok])
+        self.assertEqual(cm.exception.code, "reserve_not_owed")
+        with self.assertRaises(rc.Refusal) as cm:
+            self.stop([ok] * 2 + [(True, 7, True, False, "C4")])
+        self.assertEqual(cm.exception.code, "calibration_slot_order")
+
+    def test_insufficient_and_escalation(self):
+        ok, fail, zero = (True, 7, True, False), (True, 7, True, True), (False, 0, True, False)
+        # C14 reached with fewer than 8 admitted: seven bars over fourteen slots.
+        out = self.stop([fail] * 7 + [ok] * 7)
+        self.assertEqual((out["status"], out["admitted_windows"], out["replacements_used"]),
+                         ("insufficient_calibration", 7, 6))
+        out = self.stop([fail] * 6 + [ok] * 7)                   # C13 admitted, C14 still owed
+        self.assertEqual(out["status"], "continue")
+        # Two consecutive zero-capture refusals of different slots escalate; a lead ruling resets it.
+        two = [ok, ok, zero, (False, 0, True, False, "C3"), zero]
+        self.assertEqual(self.stop(two)["status"], "escalate_to_lead")
+        self.assertEqual(self.stop([ok, ok, zero, zero])["status"], "escalate_to_lead")
+        self.assertEqual(self.stop([ok, ok, zero, zero], resets={"C4"})["status"], "continue")
+        # The same slot's zero-capture retry is a bar, not an escalation.
+        self.assertEqual(self.stop([ok, ok, zero, (False, 0, True, False, "C3")])["status"], "continue")
+        # A zero-capture bar once all six reserves are used escalates.
+        late = [fail] * 6 + [ok] * 7 + [zero, (False, 0, True, False, "C14")]
+        self.assertEqual(self.stop(late)["status"], "escalate_to_lead")
 
 
 class StatisticsTests(unittest.TestCase):
@@ -341,18 +393,18 @@ class StatisticsTests(unittest.TestCase):
         # A22. r = 0.001 x 4, 0.01: whole-sample s0 = sqrt(1.04e-4/5) = 0.00456, 0.01/s0 = 2.19 < 3,
         # but leave-one-out s0(-5) = 0.001 and 0.01 > 3 x 0.001: halve beta.
         r = [0.001] * 4 + [0.01]
-        bar = rc.u3_bar({"signed": True, "beta": 0.05, "N": 16, "f": 1.5, "pilot_relative_differences": r,
+        bar = rc.u3_bar({"signed": True, "beta": 0.05, "N": 22, "f": 1.5, "pilot_relative_differences": r,
                          "r1_d_screen": 0.0})
         self.assertAlmostEqual(bar["s0"], math.sqrt(1.04e-4 / 5), places=15)
         self.assertLess(0.01 / bar["s0"], 3)
         self.assertAlmostEqual(bar["s0_leave_one_out"][4], 0.001, places=15)
         self.assertEqual((bar["beta_halved"], bar["beta_used"]), (True, 0.025))
         self.assertEqual(bar["r1_screen"], "not_refuted")
-        even = rc.u3_bar({"signed": True, "beta": 0.05, "N": 16, "f": 1.5,
+        even = rc.u3_bar({"signed": True, "beta": 0.05, "N": 22, "f": 1.5,
                           "pilot_relative_differences": [0.003, -0.004, 0.0, 0.004, -0.003], "r1_d_screen": 1.0})
         self.assertFalse(even["beta_halved"])     # max |r_i| / s0(-i) = 0.004 / sqrt(34e-6/4) = 1.37
         self.assertEqual(even["r1_screen"], "refuted")
-        self.assertEqual(rc.u3_bar({"signed": True, "beta": 0.05, "N": 16, "f": 1.5,
+        self.assertEqual(rc.u3_bar({"signed": True, "beta": 0.05, "N": 22, "f": 1.5,
                                     "pilot_relative_differences": r})["r1_screen"], "missing")
         self.assertEqual(rc.u3_bar(None)["status"], "unavailable")
 
@@ -511,7 +563,7 @@ class U3Tests(unittest.TestCase):
         return w, {"a": a, "b": b}, {"a": ea, "b": eb}
 
     def test_pair_rules(self):
-        bar = rc.u3_bar({"signed": True, "beta": 0.05, "N": 16, "f": 1.5, "r1_d_screen": 0.0,
+        bar = rc.u3_bar({"signed": True, "beta": 0.05, "N": 22, "f": 1.5, "r1_d_screen": 0.0,
                          "pilot_relative_differences": [0.003, -0.004, 0.002, 0.004, -0.003]})
         w, res, elig = self.window()
         out = rc.u3_window(w, res, elig, bar)
@@ -594,11 +646,13 @@ class ContrastTests(unittest.TestCase):
         self.assertEqual((out["delta"]["df"], out["verdict"]), (3, "T CONFIRMED"))
         self.assertEqual(rc.w1_contrast(*self.window(0.0, 1.0))["verdict"], "T REJECTED")
         out = rc.w1_contrast(*self.window(20.0, 0.4))
-        self.assertEqual((out["verdict"], out["reason"]), ("INCONCLUSIVE", "treatment not delivered"))
+        self.assertEqual((out["verdict"], out["reason"], out["reason_code"]),
+                         ("INCONCLUSIVE", "treatment not delivered", "treatment_not_delivered"))
         self.assertIn("delta", out)                                  # A19/A31: numbers always computed
         out = rc.w1_contrast(*self.window(20.0, 1.0, drop=16))
         self.assertEqual((out["verdict"], out["reason"]),
                          ("INCONCLUSIVE", "not exactly 8 eligible token-identical runs"))
+        self.assertEqual(out["reason_code"], "insufficient_contrast_runs")
         self.assertNotIn("delta", out)
         self.assertAlmostEqual(out["templates"]["X"]["d"], 20.0, places=12)
 
