@@ -55,23 +55,32 @@ class RehearsalTests(unittest.TestCase):
         seams = json.loads((self.full / "seams.json").read_text())
         self.assertGreater(seams["C5#1"]["gap_le_1us"] + seams["C5#1"]["overlap_le_1us"], 0)
         self.assertEqual(seams["C5#1"]["gap_gt_1us"] + seams["C5#1"]["overlap_gt_1us"], 0)
-        self.assertNotIn("C6#1", seams)
-        probe = json.loads((support.rehearsal("probes") / "seams.json").read_text())
-        self.assertGreater(probe["C6#1"]["gap_gt_1us"], 0)
-        self.assertEqual(probe["C6#1"]["gap_le_1us"] + probe["C6#1"]["overlap_le_1us"], 0)
+        # Permanent large-epoch windows (lead ruling on P2): C7 at 4.3e9 s stays <= 1 us, C6 at 9e9 s > 1 us.
+        self.assertEqual(seams["C7#1"]["gap_gt_1us"] + seams["C7#1"]["overlap_gt_1us"], 0)
+        self.assertEqual(seams["C7#1"]["max_abs_seam_ns"], 954)
+        self.assertGreater(seams["C6#1"]["gap_gt_1us"], 0)
+        self.assertEqual(seams["C6#1"]["gap_le_1us"] + seams["C6#1"]["overlap_le_1us"], 0)
 
-    def test_probe_series_holds_only_on_the_classified_findings(self):
-        # The probe plan adds a G1 timeout to W1 anchor 2 and > 1 us A37 seams to C6 (RELEASE-RUNBOOK-v4
-        # section 6, P1 and P2). Each is a classified cross-build hold, so this series must not agree.
+    def test_probe_series_agrees(self):
+        # The probe plan swaps W1 anchor 2's B code for a G1 timeout that stops its episode (lead ruling on P1:
+        # X2 is re-derived, A9 union). Both builds must exclude it: W1_anchor_block "excluded:X2" (K = 10 with C6).
         probes = support.rehearsal("probes")
         self.assertEqual(json.loads((probes / "engine-exit.json").read_text())["exit"], 0)
         code, pub, res = support.compare(probes, self.dir / "probes.json")
-        self.assertEqual((code, pub["verdict"], pub["reason"]), (2, "refused", "refusing_family_disagrees"))
-        self.assertEqual(pub["unmapped_leaves"], 0)
-        fails = [r for r in res["rows"] if not r["ok"]]
-        self.assertIn(["W1", "30B", "thermal_excluded_members"], [r["key"] for r in fails])      # P1
-        self.assertIn("W1_anchor_block", [r["key"] for r in fails])                                # P1
-        self.assertTrue(any(r["family"] == "member_eligibility" and r["key"][0] == "C6#1" for r in fails))  # P2
+        self.assertEqual((code, pub["verdict"], pub["unmapped_leaves"]), (0, "agree", 0))
+        rec = json.loads((probes / "recompute-out.json").read_text())
+        self.assertEqual(rec["acceptance"]["U4"]["anchor_sigma_w_print_only"]["W1_anchor_block"], "excluded:X2")
+
+    def test_owned_time_and_large_epoch_fixtures(self):
+        # A2(4) at owned-time level and the permanent large-epoch A37 windows (lead rulings, 2026-11-08).
+        rec = json.loads((self.full / "recompute-out.json").read_text())
+        ex = rec["exclusions"]
+        self.assertEqual(ex["W1"]["align-v4-w1-episodes-e08"]["classes"], ["energy_unavailable"])   # edge partial
+        self.assertTrue(ex["C8"]["align-v4-c8-episodes-b-e12"]["eligible"])                       # gate-only seams
+        self.assertFalse(rec["members"]["C8"]["align-v4-c8-episodes-b-e12"]["pm"]["episode_covered"])  # disclosed
+        self.assertTrue(all(not e.get("eligible") for e in ex["C6"].values()))                     # > 1 us seams
+        self.assertTrue(any(e.get("eligible") for e in ex["C7"].values()))                         # 954 ns snapped
+        self.assertEqual(rec["acceptance"]["U4"]["anchor_sigma_w_print_only"]["W1_anchor_block"], "excluded:B")
 
     def _patched(self, commit, rel, old, new):
         src = support.tree(commit)

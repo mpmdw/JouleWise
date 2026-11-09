@@ -328,14 +328,26 @@ class Comparison:
         self.units.setdefault(family, set()).add(unit if unit is not None else key)
         return ok
 
-    def occurrence(self, seen, window, run_id, captured_only=False):
+    def row_member(self, base, seen, window, run_id, captured=None):
+        """The crosswalk member of an engine member row: by its attempt_id when printed (R23h), else by
+        occurrence order within the window."""
+        aid = self.E.get(*base, "attempt_id")
+        if aid is not MISSING:
+            m = self.by_attempt.get((aid, run_id))
+            if m is None or m["window"] != window:
+                raise Refused("crosswalk_member_unknown", f"{aid}/{run_id}")
+            return m
+        return self.occurrence(seen, window, run_id, captured=captured)
+
+    def occurrence(self, seen, window, run_id, captured_only=False, captured=None):
         """The crosswalk member of the k-th engine row for (window, run id). Engine member tables keyed by
         window name list the attempts of a retried slot in series order (the DC table lists captured
         attempts only), so occurrence k is the k-th such attempt."""
-        k = seen.get((window, run_id), 0)
-        seen[(window, run_id)] = k + 1
+        key = (window, run_id, captured)
+        k = seen.get(key, 0)
+        seen[key] = k + 1
         hits = [m for m in self.cross if m["window"] == window and m["engine_run_id"] == run_id
-                and (m["captured"] or not captured_only)]
+                and (m["captured"] or not captured_only) and (captured is None or m["captured"] == captured)]
         if k >= len(hits):
             raise Refused("crosswalk_member_unknown", f"{window}/{run_id}")
         return hits[k]
@@ -352,6 +364,35 @@ class Comparison:
 
     def rexcl(self, m):
         return rget(self.R, "exclusions", m["recompute_window_id"], m["recompute_run_id"])
+
+    def rsealed(self, m):
+        """A27: the recompute prints a sealed member as status sealed + sealed_sha256 only."""
+        return (self.rexcl(m) or {}).get("status") == "sealed"
+
+    def rcaptured(self, m):
+        rx = self.rexcl(m) or {}
+        if rx.get("status") == "sealed":
+            return rx.get("captured", True) is not False
+        return rx.get("captured") is True
+
+    def sealed_pair(self, family, key, base, m, unit):
+        """Compare a sealed engine row (status sealed + sha256) with the recompute's seal, by presence."""
+        E = self.E
+        self._role(base, m, key, unit)
+        st, sha = E.get(*base, "status"), E.get(*base, "sha256")
+        cap = E.get(*base, "captured", default=None)
+        rx = self.rexcl(m) or {}
+        self.add(family, key, st == "sealed" and isinstance(sha, str) and len(sha) == 64 and cap is not True,
+                 self.rsealed(m) and isinstance(rx.get("sealed_sha256"), str), unit=unit, kind="presence")
+        if cap is not None or rx.get("captured") is False:
+            self.add(family, key + ("captured",), cap if cap is not None else True,
+                     rx.get("captured", True), unit=unit, kind="exact")
+
+    def _role(self, base, m, key, unit):
+        """A printed series_role must be the roster's (R23d: W1 and C/T anchors are ordinals 1-4)."""
+        sr = self.E.get(*base, "series_role")
+        if sr is not MISSING:
+            self.add("score_identity", key + ("series_role",), sr, m["role"], unit=unit)
 
     def rscore(self, m, conv):
         return rget(self.R, "scores", m["recompute_window_id"], m["pair"], CONV[conv], m["recompute_run_id"])
@@ -414,7 +455,7 @@ class Comparison:
             if not members:
                 raise Refused("crosswalk_attempt_unknown", attempt)
             rwid = members[0]["recompute_window_id"]
-            captured = sum(1 for m in members if (self.rexcl(m) or {}).get("captured") is True)
+            captured = sum(1 for m in members if self.rcaptured(m))
             self.add("ledger", (attempt, "captured_members"), E.get("fill", "ledger", i, "captured_members"),
                      captured, unit=attempt)
             sr = stop_rows.get(rwid)
@@ -461,7 +502,7 @@ class Comparison:
             if not members:
                 raise Refused("crosswalk_attempt_unknown", attempt)
             rwid = members[0]["recompute_window_id"]
-            captured_any = any((self.rexcl(m) or {}).get("captured") for m in members)
+            captured_any = any(self.rcaptured(m) for m in members)
             self.add("pool_entry", attempt, pool, (not self.rpool_barred(rwid)) if captured_any else False,
                      note="pool entry = no U1-U3 FAIL for D (A23); a zero-capture attempt has none (R23-E1)")
             for j, row in enumerate(E.get("fill", "windows", i, "eligibility") or []):
@@ -470,6 +511,28 @@ class Comparison:
                 rx = self.rexcl(m)
                 base = ("fill", "windows", i, "eligibility", j)
                 unit = (attempt, run)
+                aid = E.get(*base, "attempt_id")
+                if aid is not MISSING:          # R23h: member rows carry their attempt
+                    self.add("score_identity", (attempt, run, "attempt_id"), aid, attempt, unit=unit)
+                cap = E.get(*base, "captured")
+                if cap is not MISSING:
+                    self.add("score_identity", (attempt, run, "captured"), cap, self.rcaptured(m), unit=unit)
+                if E.get(*base, "status") == "sealed" or self.rsealed(m):
+                    self.sealed_pair("sealed_presence", (attempt, run, "eligibility"), base, m, unit)
+                    continue
+                self._role(base, m, (attempt, run, "eligibility"), unit)
+                rpm = rget(self.rmember(m), "pm")
+                if rget(rx, "eligible") is not True:
+                    # An excluded member's disclosures are moot (it is out); A2(4) disclosure applies to eligible ones.
+                    E.exempt("a9_reason_vocabulary", *base, "coverage_disclosures")
+                    disc = MISSING
+                else:
+                    disc = E.take(*base, "coverage_disclosures")
+                if rget(rx, "eligible") is True and (disc is not MISSING or (isinstance(rpm, dict)
+                                                                             and rpm.get("episode_covered") is False)):
+                    # A2(4) at owned-time level: uncovered gate/pre-turn time is disclosed, not excluded.
+                    self.add("member_eligibility", (attempt, run, "coverage_disclosed"), bool(disc),
+                             isinstance(rpm, dict) and rpm.get("episode_covered") is False, unit=unit)
                 self.add("member_eligibility", (attempt, run, "eligible"), E.get(*base, "eligible"),
                          rget(rx, "eligible"), unit=unit)
                 eclasses = E.take(*base, "classes")
@@ -563,7 +626,7 @@ class Comparison:
                 E.exempt("a3_attribution_bounds", *base, "diagnostic_bounds")
                 E.exempt("fit_support_cov", *base, "flags")
                 E.exempt("fit_support_cov", *base, "out_of_support_turns")
-                E.exempt("a7_hstar_grid", *base, "H_star")
+
 
     def _model(self, base, rmodel, unit, full):
         E = self.E
@@ -615,12 +678,22 @@ class Comparison:
         is_t_sab = m["window"].startswith("T") and m["condition"] == "sabotage"
         is_c_benign = m["window"].startswith("C") and m["condition"] == "benign"
         carrier = self._carrier_row(m) if is_c_benign and conv == "counts_logged" else MISSING
-        for j, _ in enumerate(E.get(*base, "council_grid") or []):
-            b = base + ("council_grid", j)
+        holder = rkh if is_t_sab else carrier if is_c_benign else MISSING
+
+        def point(nominal):
+            # The same exact sub-turn strip is printed at council doses and at H* grid doses (R26).
+            for grid in ("council", "h_star_grid"):
+                pts = rget(holder, grid)
+                if isinstance(pts, dict) and nominal in pts:
+                    return pts[nominal]
+            return MISSING
+        for table in ("council_grid", "H_grid"):
+          for j, _ in enumerate(E.get(*base, table) or []):
+            b = base + (table, j)
             nominal = str(E.get(*b, "nominal_H"))
-            src = rget(rkh, "council", nominal) if is_t_sab else rget(carrier, "council", nominal) if is_c_benign else MISSING
+            src = point(nominal) if holder is not MISSING else MISSING
             if (is_t_sab or is_c_benign) and conv == "counts_logged":
-                dose_key = unit + ("council", nominal)
+                dose_key = unit + (table, nominal)
                 avail = E.get(*b, "status")
                 self.add("known_h_doses", dose_key + ("status",), avail == "available", src is not None and src is not MISSING,
                          unit=unit)
@@ -666,8 +739,15 @@ class Comparison:
         if is_t_sab and conv == "counts_logged":
             n = len(E.get(*base, "known_H_first_k") or [])
             self.add("known_h_doses", unit + ("first_k", "count"), n, len(rget(rkh, "first_k") or []), unit=unit)
-        # The full H grid repeats the council doses and adds the A7 H* grid doses (exempt below).
-        E.exempt("a7_hstar_grid", *base, "H_grid")
+        # R26 (3): H* rides on the C benign carriers and the T sabotage known-H rows. Any other row's H* block
+        # (T benign, the withheld convention) is left unmapped, so it REFUSES.
+        if (is_t_sab or is_c_benign) and conv == "counts_logged" and E.get(*base, "H_star") is not MISSING:
+            rh = rget(holder, "h_star")
+            for k in ("h_star", "bounded_above", "status", "estimand"):
+                self.add("h_star", unit + (k,), E.get(*base, "H_star", k), rget(rh, k), unit=unit)
+            for k in ("grid", "undefined_missing_grid_doses", "off_grid_doses"):
+                ev = E.take(*base, "H_star", k)
+                self.add("h_star", unit + (k,), [] if ev is MISSING else ev, rget(rh, k), unit=unit)
 
     def _carrier_row(self, m):
         for c in rget(self.R, "claim", "carrier_curve", m["pair"], "carriers") or []:
@@ -802,9 +882,18 @@ class Comparison:
                     for j, _ in enumerate(E.get(*b, "members") or []):
                         mb = b + ("members", j)
                         key = (E.get(*mb, "window"), E.get(*mb, "run_id"))
-                        r = rmap.get(key, MISSING)
-                        if r is MISSING and (self.rexcl(self.member(*key)) or {}).get("eligible") is not True:
-                            r = {"score": None, "exceeds": None}     # an excluded assignment: no score either side
+                        aid = E.get(*mb, "attempt_id")
+                        mm = self.by_attempt.get((aid, key[1])) if aid is not MISSING else self.member(*key)
+                        if mm is None:
+                            raise Refused("crosswalk_member_unknown", f"{aid}/{key[1]}")
+                        if aid is not MISSING:
+                            key = (aid, key[1])
+                            cap = E.get(*mb, "captured")
+                            if cap is not MISSING:
+                                self.add("test_counts", unit + key + ("captured",), cap, mm["captured"], unit=unit + key)
+                        r = rmap.get((mm["window"], mm["engine_run_id"]), MISSING) if mm["captured"] else MISSING
+                        if r is MISSING and (not mm["captured"] or (self.rexcl(mm) or {}).get("eligible") is not True):
+                            r = {"score": None, "exceeds": None}     # an excluded/not-captured assignment: no score
                         self.add("test_members", unit + key + ("score",), E.get(*mb, "score"), rget(r, "score")
                                  if r is not MISSING else MISSING, unit=unit + key, kind="abs", bar=1e-6)
                         self.add("test_members", unit + key + ("alarm",), E.get(*mb, "alarm"),
@@ -820,23 +909,13 @@ class Comparison:
             b = base + (model,)
             unit = unit_prefix + (ms,)
             ru1 = rget(R, "acceptance", "U1", rwid, ms)
-            self.add("u1", unit + ("status",), E.get(*b, "U1", "status"), rget(ru1, "verdict"), unit=unit)
-            self.add("u1", unit + ("g0_timeouts",), E.get(*b, "U1", "g0_timeouts"), rget(ru1, "g0_timeouts"), unit=unit)
-            self.add("u1", unit + ("g1_h_timeouts",), E.get(*b, "U1", "g1_h_timeouts"), rget(ru1, "g1h_timeouts"),
-                     unit=unit)
-            self.add("u1", unit + ("turn_admissions",), E.get(*b, "U1", "turn_admissions"), rget(ru1, "g1h_entries"),
-                     unit=unit)
-            self.add("u1", unit + ("thermal_excluded_members",), E.get(*b, "U1", "thermal_excluded_members"),
-                     self._x1x4(rwid, ms), unit=unit)
             ru2 = rget(R, "acceptance", "U2", rwid, ms)
-            self.add("u2", unit + ("status",), E.get(*b, "U2", "status"), rget(ru2, "verdict"), unit=unit)
-            self.add("u2_values", unit + ("g0_slow_range_c",), E.get(*b, "U2", "g0_slow_range_c"),
-                     rget(ru2, "g0_slow_range_c"), unit=unit)
-            for part, rk in (("a", "a_g0_slow_range_le_3c"), ("b", "b_releases_verified_within_delta")):
-                rv = rget(ru2, "parts", rk)
-                self.add("u2", unit + ("parts", part), E.get(*b, "U2", "parts", part),
-                         {True: "pass", False: "fail", None: "not_applicable"}.get(rv, rv) if rv is not MISSING else MISSING,
-                         unit=unit)
+            self._u1(b + ("U1",), ru1, unit)
+            self._u2(b + ("U2",), ru2, unit)
+            if E.get(*b, "U1", "benign_only") is not MISSING or rget(ru1, "benign_only") is not MISSING:
+                # A27(b): aggregates involving scored C sabotage print sealed beside a benign-only aggregate.
+                self._u1(b + ("U1", "benign_only"), rget(ru1, "benign_only"), unit + ("benign_only",))
+                self._u2(b + ("U2", "benign_only"), rget(ru2, "benign_only"), unit + ("benign_only",))
             ru3 = rget(R, "acceptance", "U3", rwid)
             rpairs = [q for q in (rget(ru3, "pairs") or []) if q.get("model") == ms]
             eu3 = E.get(*b, "U3", "status")
@@ -848,24 +927,64 @@ class Comparison:
                 rq = self._rec_pair(rpairs, rwid, ords)
                 pu = unit + ("pair", ords)
                 self.add("u3", pu + ("status",), E.get(*pb, "status"), self._u3_status(rq), unit=unit)
-                self.add("u3_values", pu + ("relative_difference",), E.get(*pb, "relative_difference"),
-                         rget(rq, "relative_difference"), unit=unit)
-                dj = (rget(rq, "energy_late_j") - rget(rq, "energy_early_j")) if rq is not MISSING and \
-                    isinstance(rget(rq, "energy_late_j"), (int, float)) else MISSING
-                self.add("u3_energy_j", pu + ("delta_j",), E.get(*pb, "delta_j"), dj, unit=unit)
-                self.add("u3_values", pu + ("margin_relative",), E.get(*pb, "margin_relative"), rget(rq, "relative_bar"),
+                evaluated = rq is not MISSING and rget(rq, "status") == "evaluated"
+                # A pair that was not evaluated (an ineligible or X5 member) prints no values on either side.
+                rv = (lambda k: rget(rq, k)) if evaluated else (lambda k: None)
+                ev = lambda k: E.get(*pb, k, default=None)
+                self.add("u3_values", pu + ("relative_difference",), ev("relative_difference"),
+                         rv("relative_difference"), unit=unit)
+                dj = (rq["energy_late_j"] - rq["energy_early_j"]) if evaluated else None
+                self.add("u3_energy_j", pu + ("delta_j",), ev("delta_j"), dj, unit=unit)
+                self.add("u3_values", pu + ("margin_relative",), ev("margin_relative"), rv("relative_bar"),
                          unit=unit, kind="rel", bar=1e-9)
-                self.add("u3_values", pu + ("active_clock",), E.get(*pb, "active_clock_difference_fraction"),
-                         rget(rq, "clock_relative"), unit=unit)
-                self.add("u3", pu + ("token_identical",), E.get(*pb, "token_identical"),
-                         rq is not MISSING and rget(rq, "status") != "excluded", unit=unit)
-                if rq is not MISSING and isinstance(rget(rq, "energy_late_j"), (int, float)):
-                    mean = (rq["energy_late_j"] + rq["energy_early_j"]) / 2
-                    self.add("u3_energy_j", pu + ("margin_j",), E.get(*pb, "margin_j"), rq["relative_bar"] * mean,
-                             unit=unit, note="margin_j = relative bar x pair mean energy")
-                else:
-                    self.add("u3_energy_j", pu + ("margin_j",), E.get(*pb, "margin_j"), MISSING, unit=unit)
+                self.add("u3_values", pu + ("active_clock",), ev("active_clock_difference_fraction"),
+                         rv("clock_relative"), unit=unit)
+                tok = E.get(*pb, "token_identical")
+                if tok is not MISSING or evaluated:
+                    self.add("u3", pu + ("token_identical",), tok,
+                             rq is not MISSING and rget(rq, "status") not in ("excluded", "excluded_x5"), unit=unit)
+                mean = (rq["energy_late_j"] + rq["energy_early_j"]) / 2 if evaluated else None
+                self.add("u3_energy_j", pu + ("margin_j",), ev("margin_j"),
+                         rq["relative_bar"] * mean if evaluated else None, unit=unit,
+                         note="margin_j = relative bar x pair mean energy")
                 E.exempt("registered_text", *pb, "reason")
+
+    def _sealed_or(self, family, key, ebase, field, rdoc, rfield, unit, derive=None):
+        """One aggregate field. A sealed engine field ({status: sealed}, no hash since R23h) pairs with the
+        recompute's sealed field (presence); otherwise the values are compared."""
+        E = self.E
+        ev = E.get(*ebase, field)
+        rf = rget(rdoc, rfield if rfield else "x1_x4_members")
+        if isinstance(ev, dict) and "status" in ev:
+            self.add("sealed_presence", key, E.get(*ebase, field, "status") == "sealed",
+                     isinstance(rf, dict) and rf.get("status") == "sealed", unit=unit, kind="presence")
+            return        # a value hash beside it would stay unmapped and REFUSE (R23h: reversible)
+        rv = rget(rdoc, rfield) if derive is None else derive(rdoc)
+        self.add(family, key, ev, rv, unit=unit)
+
+    def _u1(self, eb, ru1, unit):
+        E = self.E
+        self.add("u1", unit + ("status",), E.get(*eb, "status"), rget(ru1, "verdict"), unit=unit)
+        self._sealed_or("u1", unit + ("g0_timeouts",), eb, "g0_timeouts", ru1, "g0_timeouts", unit)
+        self._sealed_or("u1", unit + ("g1_h_timeouts",), eb, "g1_h_timeouts", ru1, "g1h_timeouts", unit)
+        self._sealed_or("u1", unit + ("turn_admissions",), eb, "turn_admissions", ru1, "g1h_entries", unit)
+        self._sealed_or("u1", unit + ("thermal_excluded_members",), eb, "thermal_excluded_members", ru1, None, unit,
+                        derive=lambda r: len(rget(r, "x1_x4_members")) if isinstance(rget(r, "x1_x4_members"), list)
+                        else MISSING)
+
+    def _u2(self, eb, ru2, unit):
+        E = self.E
+        self.add("u2", unit + ("status",), E.get(*eb, "status"), rget(ru2, "verdict"), unit=unit)
+        ev = E.get(*eb, "g0_slow_range_c")
+        if isinstance(ev, dict) and "status" in ev:
+            self._sealed_or("u2_values", unit + ("g0_slow_range_c",), eb, "g0_slow_range_c", ru2, "g0_slow_range_c", unit)
+        else:
+            self.add("u2_values", unit + ("g0_slow_range_c",), ev, rget(ru2, "g0_slow_range_c"), unit=unit)
+        for part, rk in (("a", "a_g0_slow_range_le_3c"), ("b", "b_releases_verified_within_delta")):
+            rv = rget(ru2, "parts", rk)
+            self.add("u2", unit + ("parts", part), E.get(*eb, "parts", part),
+                     {True: "pass", False: "fail", None: "not_applicable"}.get(rv, rv) if rv is not MISSING else MISSING,
+                     unit=unit)
 
     @staticmethod
     def _u3_model_verdict(pairs):
@@ -954,7 +1073,10 @@ class Comparison:
             self.add("u4", unit + ("skipped",), skipped, rget(rp, "status") == "skipped", unit=unit)
             self.add("u4", unit + ("status",), E.get(*pb, "status"),
                      rget(rp, "verdict") if rget(rp, "status") != "skipped" else "inconclusive", unit=unit)
-            self.add("u4", unit + ("window_count",), E.get(*pb, "window_count"), rget(rp, "W"), unit=unit)
+            rw = rget(rp, "W")
+            if rget(rp, "status") == "skipped":       # a skipped window keeps the count of windows evaluated so far
+                rw = self._rec_count_before(per, rwid)
+            self.add("u4", unit + ("window_count",), E.get(*pb, "window_count"), rw, unit=unit)
             df = E.get(*pb, "df")
             if df is not MISSING:
                 self.add("u4", unit + ("df",), df, rget(rp, "W") - 1 if isinstance(rget(rp, "W"), int) else MISSING,
@@ -1020,6 +1142,15 @@ class Comparison:
         if per.get("W1") and "shift" not in per["W1"]:
             pass
         return out
+
+    def _rec_count_before(self, per, rwid):
+        n = 0
+        for w in self._rec_order(per):
+            if w == rwid:
+                return n
+            if per[w].get("status") != "skipped":
+                n = per[w].get("W", n)
+        return MISSING
 
     def _rec_last_evaluated(self, per):
         last = MISSING
@@ -1132,17 +1263,19 @@ class Comparison:
             fr = rget(rc, "fractions") or {}
             for j, point in enumerate(E.get(*b, "curve") or []):
                 h = point[0] if isinstance(point, list) and point else None   # peek: not consumed here
-                if str(h) in fr:
-                    E.get(*b, "curve", j, 0)
-                    self.add("carrier_curve", unit + ("fraction", h), E.get(*b, "curve", j, 1),
-                             rget(fr, str(h), "fraction"), unit=unit, kind="rel", bar=1e-12)
-                else:
-                    E.exempt("a8_noncouncil_doses", *b, "curve", j)
+                E.get(*b, "curve", j, 0)           # R26 (4): council U H* grid, every dose compared
+                self.add("carrier_curve", unit + ("fraction", h), E.get(*b, "curve", j, 1),
+                         rget(fr, str(h), "fraction"), unit=unit, kind="rel", bar=1e-12)
             for h in sorted(E.get(*b, "n_by_h") or {}, key=int):
-                if h in fr:
-                    self.add("carrier_curve", unit + ("n", h), E.get(*b, "n_by_h", h), rget(fr, h, "n"), unit=unit)
-                else:
-                    E.exempt("a8_noncouncil_doses", *b, "n_by_h", h)
+                self.add("carrier_curve", unit + ("n", h), E.get(*b, "n_by_h", h), rget(fr, h, "n"), unit=unit)
+            if E.get(*b, "full_cell") is not MISSING or rget(rc, "full_cell") is not MISSING:
+                # R26 (4): "full" is a separate print-only cell, compared.
+                rf = rget(rc, "full_cell")
+                self.add("carrier_curve", unit + ("full_cell", "fraction"), E.get(*b, "full_cell", "fraction"),
+                         rget(rf, "fraction"), unit=unit, kind="rel", bar=1e-12)
+                self.add("carrier_curve", unit + ("full_cell", "n"), E.get(*b, "full_cell", "n"), rget(rf, "n"), unit=unit)
+                self.add("carrier_curve", unit + ("full_cell", "print_only"), E.get(*b, "full_cell", "status") == "print_only",
+                         rget(rf, "print_only") is True, unit=unit)
             self.add("carrier_curve", unit + ("expected_carriers",), E.get(*b, "expected_carriers"),
                      rget(rc, "total"), unit=unit)
             self.add("carrier_curve", unit + ("status",), E.get(*b, "status"), rget(rc, "status"), unit=unit)
@@ -1166,7 +1299,9 @@ class Comparison:
         for i, _ in enumerate(E.get("fill", "dc_secondary") or []):
             b = ("fill", "dc_secondary", i)
             wname, run = E.get(*b, "window"), E.get(*b, "run_id")
-            m = self.occurrence(seen, wname, run, captured_only=True)
+            # The DC table lists captured attempts, plus not-captured SEALED members as captured: false (A27c).
+            m = self.row_member(b, seen, wname, run, captured=E.get(*b, "captured", default=True) is not False)
+            self._role(b, m, ("dc", wname, run), ("dc", wname, run))
             pair = E.get(*b, "pair")
             if pair is not MISSING:
                 self.add("dc_benign_status", ("dc", wname, run, "pair"), PAIR_SHORT.get(pair, pair), m["pair"],
@@ -1174,8 +1309,14 @@ class Comparison:
             rm = rget(R, "dc_in", "windows", m["recompute_window_id"], "members", m["recompute_run_id"])
             unit = ("dc", wname, run)
             status = E.get(*b, "status")
+            if status == "sealed" and E.get(*b, "captured", default=True) is False:
+                # A27(c): a not-captured scored member prints status sealed + captured: false; the recompute
+                # has no DC row for it (nothing was captured), so its member seal is the counterpart.
+                self.sealed_pair("dc_sealed", unit + ("not_captured",), b, m, unit)
+                continue
             if status == "sealed":
-                self.add("dc_sealed", unit, bool(E.get(*b, "sealed")) and isinstance(E.get(*b, "sha256"), str),
+                sealed_flag, sha = E.get(*b, "sealed"), E.get(*b, "sha256")
+                self.add("dc_sealed", unit, sealed_flag is not False and isinstance(sha, str),
                          rm is not MISSING and isinstance(rget(rm, "sealed_sha256"), str), unit=unit, kind="presence")
                 continue
             v = b + ("value",)
@@ -1231,20 +1372,22 @@ class Comparison:
         for i, _ in enumerate(E.get("fill", "realized_counts") or []):
             b = ("fill", "realized_counts", i)
             wname, run = E.get(*b, "window"), E.get(*b, "run_id")
-            m = self.occurrence(seen, wname, run)
+            m = self.row_member(b, seen, wname, run)
             rmem = self.rmember(m)
             turns = rget(rmem, "turns")
             unit = (m["attempt_id"], run)
             rows = E.get(*b, "rows") or []
-            if not m["captured"]:
-                self.add("turn_counts", unit + ("not_captured",), len(rows) == 0,
-                         rget(rmem, "captured") is False, unit=unit)
+            if E.get(*b, "status") != "sealed" and rget(rmem, "status") != "sealed":
+                self._role(b, m, unit + ("counts",), unit)
+            if E.get(*b, "status") == "sealed" or rget(rmem, "status") == "sealed":
+                # A27 (lead ruling 2026-11-08): a sealed member is hash-only on BOTH sides, token counts
+                # included. The seal's presence is compared; any token-count leaf the engine still prints for
+                # it is left unmapped, so the comparator REFUSES.
+                self.sealed_pair("sealed_presence", unit + ("counts",), b, m, unit)
                 continue
-            if rget(rmem, "sealed") is not MISSING and turns is MISSING:
-                # A27: the recompute seals a non-scored sabotage member's turns; compare presence only.
-                self.add("sealed_presence", unit, bool(rows), isinstance(rget(rmem, "sealed", "sealed_sha256"), str),
-                         unit=unit)
-                E.exempt("a27_sealed_counts", *b, "rows")
+            if not m["captured"]:
+                self.add("turn_counts", unit + ("not_captured",), len(rows) == 0 and E.get(*b, "captured") is not True,
+                         rget(rmem, "captured") is False, unit=unit)
                 continue
             self.add("turn_counts", unit + ("n",), len(rows), len(turns) if isinstance(turns, list) else 0, unit=unit)
             for j, _ in enumerate(rows):
@@ -1276,8 +1419,16 @@ class Comparison:
         seen = {}
         for i, _ in enumerate(E.get("fill", "cache_diagnostics") or []):
             b = ("fill", "cache_diagnostics", i)
-            m = self.occurrence(seen, E.get(*b, "window"), E.get(*b, "run_id"))
+            m = self.row_member(b, seen, E.get(*b, "window"), E.get(*b, "run_id"))
             rmem = self.rmember(m)
+            if E.get(*b, "status") == "sealed" or self.rsealed(m):
+                self.sealed_pair("sealed_presence", (m["attempt_id"], m["engine_run_id"], "cache"), b, m,
+                                 (m["attempt_id"], m["engine_run_id"]))
+                continue
+            self._role(b, m, (m["attempt_id"], m["engine_run_id"], "cache"), (m["attempt_id"], m["engine_run_id"]))
+            if E.get(*b, "captured") is not MISSING:
+                self.add("cache_counts", (m["attempt_id"], m["engine_run_id"], "captured"), E.get(*b, "captured"),
+                         m["captured"], unit=(m["attempt_id"], m["engine_run_id"]))
             if E.get(*b, "statistics") is None:      # not captured: no statistics on either side
                 rv = rget(rmem, "cache")
                 self.add("cache_counts", (m["attempt_id"], m["engine_run_id"], "none"), None,
@@ -1435,8 +1586,8 @@ class Comparison:
         strata = {}
         exposure = {}
         for m in self.cross:
-            if m["window"] == "W1" or m["model"] != "D" or m["role"] not in ("benign", "sabotage"):
-                continue
+            if m["window"] == "W1" or m["model"] != "D" or m["role"] not in ("benign", "sabotage") or self.rsealed(m):
+                continue      # sealed members' eligibility is hash-only on both sides (A27)
             ex = self.rexcl(m)
             rmem = self.rmember(m)
             eng = self._engine_elig(m)
@@ -1498,20 +1649,22 @@ def row_manifest(cross, rec):
     counted_members = [m for m in non_w1 if m["attempt_id"] == counted.get(m["window"])]
     uncaptured = [m for m in non_w1 if not m["captured"]]
     # A27: members whose turns the recompute seals (structure: the presence of its seal record).
-    sealed = [m for m in counted_members
-              if isinstance(rget(rec, "members", m["recompute_window_id"], m["recompute_run_id"], "sealed"), dict)]
+    sealed = [m for m in non_w1
+              if rget(rec, "members", m["recompute_window_id"], m["recompute_run_id"], "status") == "sealed"]
+    sealed_aggs = len({m["attempt_id"] for m in sealed if m["captured"]})
     scored = [m for m in held if not (m["window"].startswith("C") and m["condition"] == "sabotage")]
     declared = sum(1 for m in scored if excluded(m))
     out = {
-        "member_eligibility": (len(non_w1), len(non_w1)),
+        "member_eligibility": (len(non_w1) - len(sealed), len(non_w1) - len(sealed)),
         "eligible_m_per_pair": (2, 2),
         "ledger": (len({m["attempt_id"] for m in non_w1}), len({m["attempt_id"] for m in non_w1})),
         "pool_entry": (len({m["attempt_id"] for m in non_w1}), len({m["attempt_id"] for m in non_w1})),
         "turn_owned_energy_j": (2 * (len(scored) - declared), 2 * len(scored)),
         "scores": (2 * (len(scored) - declared), 2 * len(scored)),
-        "turn_counts": (len(counted_members) - len(sealed) + len(uncaptured),
-                        len(counted_members) - len(sealed) + len(uncaptured)),
-        "sealed_presence": (len(sealed), len(sealed)),
+        "turn_counts": (len(non_w1) - len(sealed), len(non_w1) - len(sealed)),
+        # A27: one unit per sealed member, plus the sealed U1/U2 aggregate of each captured calibration attempt
+        # holding scored sabotage, printed in both engine check tables (acceptance and windows).
+        "sealed_presence": (len(sealed) + 2 * sealed_aggs, len(sealed) + 2 * sealed_aggs),
         "thresholds_rank": (8, 8),
         "test_counts": (8, 8),
         "u6": (2, 2),

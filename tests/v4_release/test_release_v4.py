@@ -107,10 +107,13 @@ class ReleaseTests(unittest.TestCase):
         self._refuses("o-ref", c, "engine_run_refused")
 
     def test_wrong_commits_refuse(self):
-        self._refuses("o-ec", self.base, "release_digest_differs_from_record",
-                      engine_commit=support.RECOMPUTE_COMMIT)
-        self._refuses("o-rc", self.base, "pinned_commit_unavailable", recompute_commit=support.ENGINE_COMMIT)
+        self._refuses("o-ec", self.base, "engine_commit_not_pinned", engine_commit=support.RECOMPUTE_COMMIT)
+        self._refuses("o-rc", self.base, "recompute_commit_not_pinned", recompute_commit=support.ENGINE_COMMIT)
         self._refuses("o-hex", self.base, "pinned_commit_invalid", recompute_commit="c0d1efcae")
+
+    def test_release_pins_the_rehearsed_builds(self):
+        self.assertEqual((release_v4.RELEASE_ENGINE_COMMIT, release_v4.RELEASE_RECOMPUTE_COMMIT),
+                         (support.ENGINE_COMMIT, support.RECOMPUTE_COMMIT))
 
     def test_dirty_checkout_and_changed_bars_refuse(self):
         co = support.release_checkout(self.dir / "co2")

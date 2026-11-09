@@ -6,12 +6,6 @@
    "reason": "a Clopper-Pearson bound over sabotage alarms is not a registered quantity",
    "ruling": "R21 A18"
   },
-  "a27_sealed_counts": {
-   "classification": "exempt",
-   "kind": "exact",
-   "reason": "token counts of members the recompute seals; the engine prints them. OPEN: A27 seal scope",
-   "ruling": "R21 A27 (open: seal scope for token counts)"
-  },
   "a28_not_captured_flags": {
    "classification": "exempt",
    "kind": "exact",
@@ -36,23 +30,11 @@
    "reason": "attribution half-widths are print-only diagnostics",
    "ruling": "R21 A3"
   },
-  "a7_hstar_grid": {
-   "classification": "exempt",
-   "kind": "exact",
-   "reason": "H* grid doses and the H* estimand: IR names H_STAR_GRID without its doses; the recompute leaves H* undefined. OPEN interpretation",
-   "ruling": "R21 A7 (open: H* grid text)"
-  },
   "a8_curve_diagnostics": {
    "classification": "exempt",
    "kind": "exact",
    "reason": "crossing-status text, monotonicity flag and all-carrier prefix list",
    "ruling": "R21 A8"
-  },
-  "a8_noncouncil_doses": {
-   "classification": "exempt",
-   "kind": "exact",
-   "reason": "carrier doses 384/768/1536 outside the council grid have no recompute counterpart. OPEN interpretation",
-   "ruling": "R21 A7/A8 (open: carrier grid)"
   },
   "a9_class_components": {
    "classification": "exempt",
@@ -200,6 +182,11 @@
    "kind": "rel",
    "reason": "A1 gross episode GPU J, print-only; same integral bar"
   },
+  "h_star": {
+   "classification": "recomputed",
+   "kind": "exact",
+   "reason": "R26: H*_i on the C benign carriers and the T sabotage known-H rows (grid, h_star, bounded_above, missing and off-grid lists, status) compared exactly"
+  },
   "hold_count": {
    "classification": "recomputed",
    "kind": "exact",
@@ -239,7 +226,7 @@
   "known_h_unregistered": {
    "classification": "exempt",
    "kind": "exact",
-   "reason": "known-H rows outside the registered estimands (T benign, withheld convention, the engine's full-threshold flag on carriers)",
+   "reason": "known-H rows outside the registered estimands (T benign doses, the withheld convention, the engine's full-threshold flag on carriers); a T-benign or withheld H* block is NOT exempt (R26: unmapped, refuses)",
    "ruling": "R21 A7/A8"
   },
   "ledger": {
@@ -317,7 +304,7 @@
   "sealed_presence": {
    "classification": "recomputed",
    "kind": "presence",
-   "reason": "A27: members the recompute seals (non-scored sabotage) are compared by presence only"
+   "reason": "A27 (lead ruling 2026-11-08): sealed members are hash-only on both sides, token counts included; the seal's presence is compared and any engine token-count leaf on a sealed member refuses as unmapped"
   },
   "sensitivity_lines": {
    "classification": "recomputed",

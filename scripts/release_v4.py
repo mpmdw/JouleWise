@@ -38,12 +38,16 @@ import time
 SCHEMA = "joulewise.v4_release_verdict.v1"
 ROOT = Path(__file__).resolve().parents[1]
 RELEASE_BARS = ROOT / "configs" / "analysis" / "v4" / "recompute_bars.json"
-RELEASE_BARS_SHA256 = "0875d452b7b1132e86feab5202035a4ea9960283daf1794084906b7f96406744"
+RELEASE_BARS_SHA256 = "e9529bd960169ed8720633be68c99a5c7cdbe1666087782a5fdc669a8dd63f34"
 COMPARATOR = ROOT / "scripts" / "compare_v4_recompute.py"
 RECOMPUTE_PROGRAM_PATH = "scripts/independent_recompute_v4.py"
-# The recompute's own pin (tests/independent_recompute_v4/test_hygiene.py at fdd02a96b, R23).
-RECOMPUTE_PROGRAM_SHA256 = "48d7752bdecf546d85b1f30d4ef7b0bbc10bba4f630ba90b75020fd595e85fee"
+# The recompute's own pin (tests/independent_recompute_v4/test_hygiene.py at de553c002, R23-R26 + R23h).
+RECOMPUTE_PROGRAM_SHA256 = "343f417ba660787452ab822c4eca8af740402646a4abf5d54a4551d286b2ec2c"
 ENGINE_RECORD_SCHEMA = "joulewise.v4_engine_run_record.v1"
+# The builds this release check certifies (the commits the synthetic rehearsal agreed on). Any other
+# commit refuses; re-pin only with a fresh AGREE rehearsal (RELEASE-RUNBOOK-v4.md section 5).
+RELEASE_ENGINE_COMMIT = "244ef6f395e8ad13c836ceb23fef10530861eb86"   # origin/engine-r23h
+RELEASE_RECOMPUTE_COMMIT = "de553c002879f93cdd32f15861f638a18dbd74f0"   # align/2026-11-08-v4-recompute-opus
 HEX40, HEX64 = re.compile(r"[0-9a-f]{40}"), re.compile(r"[0-9a-f]{64}")
 FLOAT_TOKEN = re.compile(r"(?<![A-Za-z0-9])(?:\d+\.\d+(?:[eE][+-]?\d+)?|\d+[eE][+-]?\d+)(?![A-Za-z0-9])")
 CODE = re.compile(r"[a-z0-9_:]+")
@@ -124,6 +128,10 @@ def stage_digests(a, restricted):
     for name in ("engine_commit", "recompute_commit"):
         if not HEX40.fullmatch(getattr(a, name) or ""):
             raise Refused("pinned_commit_invalid", name)
+    if a.engine_commit != RELEASE_ENGINE_COMMIT:
+        raise Refused("engine_commit_not_pinned")
+    if a.recompute_commit != RELEASE_RECOMPUTE_COMMIT:
+        raise Refused("recompute_commit_not_pinned")
     repo = a.programs_repo
     for name in ("engine_commit", "recompute_commit"):
         try:
@@ -335,9 +343,9 @@ def main(argv=None):
     ap.add_argument("--engine-input", required=True, help="engine input manifest (its sources resolve beside it)")
     ap.add_argument("--engine-out", required=True, help="engine output folder: fill.json, verdict.json, thresholds.json")
     ap.add_argument("--engine-record", required=True, help="engine run record (" + ENGINE_RECORD_SCHEMA + ")")
-    ap.add_argument("--engine-commit", required=True)
+    ap.add_argument("--engine-commit", default=RELEASE_ENGINE_COMMIT)
     ap.add_argument("--recompute-root", required=True)
-    ap.add_argument("--recompute-commit", required=True)
+    ap.add_argument("--recompute-commit", default=RELEASE_RECOMPUTE_COMMIT)
     ap.add_argument("--crosswalk", required=True)
     ap.add_argument("--restricted-out", required=True)
     ap.add_argument("--programs-repo", default=str(ROOT), help="git repository holding the pinned commits")

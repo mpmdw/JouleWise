@@ -111,7 +111,8 @@ def w1_roster():
     return rows
 
 
-A37_EPOCH_S = 9_000_000_000   # float seconds grid 1.907 us: every interior seam > 1 us under either ns conversion
+A37_EPOCH_S = 9_000_000_000        # float seconds grid 1.907 us: interior seams 1,907/1,908 ns (> 1 us, kept)
+A37_SNAP_EPOCH_S = 4_300_000_000   # float seconds grid 954 ns: interior seams 953/954 ns (<= 1 us, snapped)
 
 
 def default_plan(zero_capture=True, escalated=True, a37=True, screens=True, probes=False):
@@ -126,18 +127,26 @@ def default_plan(zero_capture=True, escalated=True, a37=True, screens=True, prob
     - the zero-capture attempts' members are not captured; the retry's exclusions come only from the
       counted attempt (e).
 
-    A37 seam fixture (``a37``): C5 has non-integer sample placement (frame elapsed values of 1 s + 333 ns
-    and 1 s + 777 ns, alternating). At the 2026 epoch the A21 float support rule leaves interior gaps of
-    238-256 ns (<= 1 us: snapped).
+    A37 seam fixtures (``a37``, permanent): C5, C6 and C7 have non-integer sample placement (frame elapsed
+    values of 1 s + 333 ns and 1 s + 777 ns, alternating). Under the A21 float support rule with exact
+    seconds -> ns (lead ruling on P2):
+    - C5 at the 2026 epoch: interior gaps of 238/239 ns (<= 1 us: snapped);
+    - C7 at a synthetic 4.3e9 s epoch (float grid 954 ns): seams of 953/954 ns (<= 1 us: snapped);
+    - C6 at a synthetic 9e9 s epoch (float grid 1.907 us): gaps of 1,907/1,908 ns (> 1 us: uncovered owned
+      time, A2(4), so every C6 member is excluded).
+    Raw bytes cannot place a > 1 us seam at a 2026 epoch under the A21 rule (start = end - own elapsed),
+    hence the epochs. ``seams.json`` counts them.
 
-    Probe plan (``probes``), kept apart from the AGREE rehearsal because each probe exposes a classified
-    cross-build hold: W1 anchor 2 ALSO has a G1 timeout that stops its episode (P: "Timeout stops the
-    episode (X2)"), and C6 takes the other side of the A37 bar: C6 with the same jitter
-    at a synthetic epoch of 9e9 s, where the float seconds grid is 1.907 us, so its interior gaps are
-    1-2 us (> 1 us: uncovered owned time). Raw bytes cannot place a > 1 us seam at a 2026 epoch under the
-    A21 rule (start = end - own elapsed), hence the epoch. ``seams.json`` counts them."""
+    A2(4) owned-time fixtures (``screens``): C8 ordinal 12 sits at the 9e9 s epoch with jittered supports
+    inside its first G1 gate only (> 1 us seams in gate time: eligible, disclosed); W1 ordinal 8 loses its
+    leading power frames so its first turn starts before the first support (edge partial coverage of an
+    owned segment: excluded).
+
+    Probe plan (``probes``): the same series, with W1 anchor 2's B code replaced by a G1 timeout that stops
+    its episode (P: "Timeout stops the episode (X2)"; lead ruling on P1: X2 is re-derived)."""
     plan = [dict(window="W1", attempt=1, zero_capture=False, escalated=False,
-                 battery_b=[2] if screens and not probes else [], g1_timeout=[2] if probes else [])]
+                 battery_b=[2] if screens and not probes else [], g1_timeout=[2] if probes else [],
+                 late_first_support=[8] if screens else [])]
     for w in ORDER:
         if w in ("C3", "T2") and zero_capture:
             plan.append(dict(window=w, attempt=1, zero_capture=True, escalated=False))
@@ -148,9 +157,17 @@ def default_plan(zero_capture=True, escalated=True, a37=True, screens=True, prob
                         battery_b=[6] if screens and w == "T1" else [])
             if a37 and w == "C5":
                 step["seams"] = True
-            if probes and w == "C6":
+            if a37 and w == "C6":
                 step["seams"] = True
                 step["epoch_s"] = A37_EPOCH_S
+            if a37 and w == "C7":
+                step["seams"] = True
+                step["epoch_s"] = A37_SNAP_EPOCH_S
+            if screens and w == "C8":
+                # A2(4) at owned-time level (lead ruling): ordinal 12 has > 1 us seams only inside a G1 gate
+                # (eligible). Its opposite, a first turn that starts before the first power support (excluded),
+                # is W1 ordinal 8: that member's uncovered G0 time also fails U1(c), which would bar a C window.
+                step["gate_seam"] = [12]
             plan.append(step)
     return plan
 
@@ -185,7 +202,7 @@ def _jitter_supports(base, stats):
         if i:
             cumulative += length
         end_s = anchor + cumulative
-        start, end = round((end_s - length) * NS), round(end_s * NS)
+        start, end = _exact_ns(end_s - length), _exact_ns(end_s)
         if prev_end is not None and start != prev_end:
             d = abs(start - prev_end)
             stats[("gap" if start > prev_end else "overlap") + ("_le_1us" if d <= 1000 else "_gt_1us")] += 1
@@ -213,7 +230,8 @@ def write_series(root, synth, *, plan=None, seed=7, period_ns=NS, saboteur_extra
     rng = random.Random(seed)
     template = synth.FrameTemplate(n_tasks=0, seed=seed, clusters=0)
     clock = 0
-    series = {"schema": "joulewise.v4_recompute_input.series.v1", "windows": []}
+    series = {"schema": "joulewise.v4_recompute_input.series.v1", "windows": [],
+              "h_star_grid": [128, 256, 384, 512, 768, 1024, 1536, 2048]}       # R26 (1), registered text
     engine_windows, crosswalk, used_rec_runs = [], [], set()
     w1_sentinel_j = {}
     seam_stats = {}
@@ -276,10 +294,16 @@ def write_series(root, synth, *, plan=None, seed=7, period_ns=NS, saboteur_extra
             ident = hashlib.sha256((f"traj-{identical}" if identical is not None else local).encode()).hexdigest()
             extra = {"identity_sha256": ident, "seed": slot["expected_episode_seed"],
                      "cohort_sha256": synth.COHORT}
-            synth.write_member(rec, rec_wid, m, step.get("epoch_s", synth.EPOCH0_S) * NS, extra=extra)
+            gate_seam = slot["ordinal"] in step.get("gate_seam", [])
+            epoch_s = A37_EPOCH_S if gate_seam else step.get("epoch_s", synth.EPOCH0_S)
+            synth.write_member(rec, rec_wid, m, epoch_s * NS, extra=extra)
             base = rec / "windows" / rec_wid / "members" / rec_rid
             if step.get("seams"):
                 seam_stats[f"{wid}#{attempt}"] = _jitter_supports(base, seam_stats.get(f"{wid}#{attempt}"))
+            if gate_seam:
+                seam_stats[f"{wid}#{attempt}:o{slot['ordinal']}"] = _gate_seam(base, m)
+            if slot["ordinal"] in step.get("late_first_support", []):
+                _late_first_support(base, m)
             # The recompute layout's episode gets the production gate "reference" too (ignored there).
             ep_path = base / "outputs" / "align_episode.json"
             ep = json.loads(ep_path.read_text())
@@ -296,6 +320,10 @@ def write_series(root, synth, *, plan=None, seed=7, period_ns=NS, saboteur_extra
                 ep["hardware"]["thermal"]["intervals"] = [g for g in ivs if g["kind"] == "G0" or g["turn"] <= g1["turn"]]
                 ep["end_ns"] = g1["end_ns"]
                 ep["hardware"]["registered_span_ns"] = [ep["start_ns"], ep["end_ns"]]
+            # The export carries production's clock offset (t_monotonic = t_epoch + offset_ns); every synthetic
+            # stamp is exact, so offset = monotonic - epoch.
+            st = ep["hardware"]["paired_clock_stamps_ns"][0]
+            ep["hardware"]["production_offset_ns"] = st["monotonic_before_ns"] - st["epoch_ns"]
             ep_path.write_text(json.dumps(ep, indent=1, sort_keys=True) + "\n")
             meta = json.loads((base / "metadata.json").read_text())
             engine_records.append(_engine_member(root, base, slot, ep, meta, ident, step, wid, w_start))
@@ -429,7 +457,7 @@ def _engine_member(root, base, slot, ep, meta, ident, step, wid, w_start):
                                                         effective_clock_anchor_bound_s=1e-6)),
                   journal=journal, os_readings=os_readings,
                   registered_os_readings=[r for r in os_readings if span[0] <= r[0] <= span[1]],
-                  registered_span_ns=span, identity_sha256=ident,
+                  registered_span_ns=span, identity_sha256=ident, offset_ns=hw["production_offset_ns"],
                   battery=dict(status="observed", flags=[], soc_pct=[100.0, 100.0], charger_w=[80.0, 80.0],
                                source_sha256="c" * 64),
                   cohort_identity=COHORT["identity"], configuration=COHORT["configuration"],
@@ -444,6 +472,58 @@ def _engine_member(root, base, slot, ep, meta, ident, step, wid, w_start):
         record.update(template=slot["contrast"]["template"], arm=slot["contrast"]["arm"],
                       stage=slot["contrast"]["stage"], pilot7_token_identical=True)
     return record
+
+
+def _frames(raw):
+    return [f for f in raw.read_bytes().split(b"\x00") if f]
+
+
+def _write_frames(raw, frames):
+    raw.write_bytes(b"".join(f + b"\x00" for f in frames))
+
+
+def _gate_seam(base, m):
+    """Jitter the frames strictly inside turn 1's G1 gate (elapsed 1 s + 333/777 ns) of a member placed at
+    the 9e9 s epoch: the A21 rule then leaves > 1 us seams in gate time only; every frame elsewhere is 1 s."""
+    raw = base / "raw" / "powermetrics.plist"
+    frames = _frames(raw)
+    ep = json.loads((base / "outputs" / "align_episode.json").read_text())
+    g1 = next(g for g in ep["hardware"]["thermal"]["intervals"] if g["kind"] == "G1")
+    span_start = m.start_ns - 10 * NS
+    out, k = [], 0
+    for i, f in enumerate(frames):
+        end = span_start + (i + 1) * m.period_ns
+        if g1["start_ns"] + 2 * NS <= end - m.period_ns and end <= g1["end_ns"] - 2 * NS:
+            e = NS + JITTER_NS[k % 2]
+            k += 1
+            assert f.count(_ELAPSED) == 1
+            f = f.replace(_ELAPSED, _ELAPSED.replace(b"1000000000", str(e).encode()))
+        out.append(f)
+    _write_frames(raw, out)
+    return {"jittered_gate_frames": k, "g1_turn": g1["turn"]}
+
+
+def _late_first_support(base, m):
+    """Drop the leading frames so the first power support ends 2 s after turn 0 starts (edge partial
+    coverage of an owned segment); the clock anchor moves to the new first frame's end."""
+    raw = base / "raw" / "powermetrics.plist"
+    frames = _frames(raw)
+    ep = json.loads((base / "outputs" / "align_episode.json").read_text())
+    t0 = ep["turns"][0]["start_ns"]
+    span_start = m.start_ns - 10 * NS
+    drop = (t0 + 2 * NS - span_start) // m.period_ns - 1
+    _write_frames(raw, frames[drop:])
+    meta_path = base / "metadata.json"
+    meta = json.loads(meta_path.read_text())
+    meta["uncertainty_evidence"]["clock_anchor"]["first_sample_end_point_epoch_s"] += drop * m.period_ns // NS
+    meta_path.write_text(json.dumps(meta, indent=1, sort_keys=True) + "\n")
+
+
+def _exact_ns(x):
+    """Seconds -> ns from the exact value (lead ruling on P2), half to even."""
+    n, d = x.as_integer_ratio()
+    q, r = divmod(n * NS, d)
+    return q + (1 if 2 * r > d or (2 * r == d and q % 2) else 0)
 
 
 def _sha256_file(path):

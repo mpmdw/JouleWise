@@ -123,7 +123,7 @@ class ComparatorTests(unittest.TestCase):
     def test_balance_family_sees_an_eligibility_flip(self):       # R22-3
         fill = copy.deepcopy(self.fill)
         w = next(w for w in fill["windows"] if w["window"] == "C2")
-        row = next(r for r in w["eligibility"] if r["eligible"] and r["pool_eligible"])
+        row = next(r for r in w["eligibility"] if r.get("eligible") and r.get("pool_eligible"))
         row["eligible"] = False
         code, pub, res = self.run_with("balance", fill=fill)
         self.assertEqual(self.fam(pub, "member_eligibility"), "hold")
