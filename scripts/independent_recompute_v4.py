@@ -595,6 +595,32 @@ def safe_path(root, rel):
     return cur
 
 
+ALLOC_PAIRS = {"spam_filter_update": "spam", "bank_transfer_2": "bank"}
+ALLOC_D_MODEL = "qwen3.8-27b"
+
+
+def allocation_roster_check(wid, slot, members, rows):
+    """R24 roster lead ruling (2026-11-08): the frozen manifest is the authority. Every exported member of
+    ordinal 1-22 must match its allocation row on pair, condition and model; a D member on seed_index and
+    expected_episode_seed (= the manifest's episode_seed); a C/T non-anchor carries the production run id
+    ``align-v4-<slot>-eNN`` (scripts/align_v4_series.py:pack_id). Supplemental sentinels (23/24, R20) are
+    copies of ordinal 5. Anchors keep their W1 kit ids (prefix checked elsewhere)."""
+    by_ord = {m["ordinal"]: m for m in members}
+    need(sorted(o for o in by_ord if o <= 22) == sorted(rows), "allocation_roster_differs", f"{wid}: ordinals")
+    for o, m in by_ord.items():
+        a = rows.get(o if o <= 22 else 5)
+        need(a is not None, "allocation_roster_differs", f"{wid}: ordinal {o}")
+        model = "D" if a.get("model_id") == ALLOC_D_MODEL else "30B"
+        need(m["pair"] == ALLOC_PAIRS.get(a.get("pair")) and m["condition"] == a.get("condition")
+             and m["model"] == model, "allocation_roster_differs", f"{wid}: ordinal {o} pair/condition/model")
+        if model == "D":
+            need(m.get("seed_index") == a.get("seed_index") and m.get("expected_episode_seed") == a.get("episode_seed"),
+                 "allocation_roster_differs", f"{wid}: ordinal {o} seed")
+        if slot != "W1" and o <= 22 and m["kind"] != "anchor":
+            need(m["run_id"] == f"align-v4-{slot.lower()}-e{o:02d}", "allocation_roster_differs",
+                 f"{wid}: ordinal {o} run id is not the production name")
+
+
 def load_series(root):
     root = Path(root)
     series, series_sha = read_json(root / "series.json", "series")
@@ -613,6 +639,8 @@ def load_series(root):
          and [w.get("id") for w in allocation.get("windows", []) if isinstance(w, dict)] == ALLOCATION_ORDER,
          "allocation_differs", "the R24 allocation is 18 windows W1, C1-C14, T1-T3")
     allocated = set(ALLOCATION_ORDER)
+    alloc_rows = {w["id"]: {m.get("ordinal"): m for m in w.get("members", []) if isinstance(m, dict)}
+                  for w in allocation["windows"]}
     for entry in series["windows"]:
         need(isinstance(entry, dict) and isinstance(entry.get("window_id"), str)
              and entry.get("role") in ("W1", "calibration", "test"), "series_malformed", "window entry")
@@ -647,6 +675,9 @@ def load_series(root):
                 anchor_runs.add(m["run_id"])
             else:
                 need(":" not in m["run_id"], "window_malformed", f"{wid}: prefixed non-anchor run id")
+            if m["model"] == "D" and is_int(m.get("seed_index")):
+                need(is_int(m.get("expected_episode_seed")), "window_malformed",
+                     f"{wid}: D member without expected_episode_seed (seed ruling (a))")
             if m["kind"] == "contrast":
                 c = m.get("contrast")
                 need(isinstance(c, dict) and c.get("template") in ("X", "Y") and c.get("arm") in ("S", "G")
@@ -684,6 +715,7 @@ def load_series(root):
         adj = record.get("adjudication")
         need(isinstance(adj, dict) and type(adj.get("final")) is bool
              and isinstance(adj.get("excluded", {}), dict), "window_malformed", wid + ": adjudication")
+        allocation_roster_check(wid, slot, members, alloc_rows.get(slot, {}))
         windows.append({"window_id": wid, "slot": slot, "role": entry["role"], "record": record, "sha256": record_sha,
                         "declared_bar": declared, "terminal": terminal, "capture_failure": non_go,
                         "members": sorted(members, key=lambda m: m["ordinal"])})
@@ -939,6 +971,18 @@ def process_member(task):
         flags.append(r.code)
         out["usable"] = False
         return out
+    # Seed ruling (a): config.json is a digest-bound member input; its derived seed is checked in stage X.
+    out["config"] = None
+    if (mdir / "config.json").is_file():
+        try:
+            cfg, out["inputs"]["config_sha256"] = read_json(mdir / "config.json", "member_config")
+            need(isinstance(cfg, dict) and isinstance(cfg.get("model"), dict) and isinstance(cfg.get("run_metadata"), dict)
+                 and isinstance(cfg.get("workload_profile"), dict), "member_config_malformed")
+            out["config"] = {"seed_inputs": list(config_seed_inputs(cfg))}
+        except (Refusal, ValueError, KeyError, TypeError, AttributeError):
+            flags.append("member_config_malformed")
+    else:
+        flags.append("member_config_missing")
     hw = ep.get("hardware", {}) or {}
     span = hw.get("registered_span_ns")
     out["episode"] = {"condition": ep["condition"], "n_turns": len(ep["turns"]), "flags": list(ep.get("flags", [])),
@@ -1142,6 +1186,30 @@ def episode_seed(seed_index, pair):
     return int.from_bytes(hashlib.sha256(text.encode("utf-8")).digest()[:8], "big")
 
 
+def config_seed_inputs(config):
+    """Production ``sampling.seed_inputs`` restated as text (seed ruling (a), lead 2026-11-08; the A21
+    stamp_mapping precedent): model_id = the value of the first ``align-model=`` run_metadata tag, else
+    ``model.name``; thinking = "thinking_on" / "thinking_off" / "template_default" for the episode spec's
+    ``enable_thinking`` true / false / absent. The spec is ``workload_profile.prompt_text`` (JSON)."""
+    tags = config["run_metadata"].get("tags", [])
+    need(isinstance(tags, list) and all(isinstance(t, str) for t in tags), "member_config_malformed", "tags")
+    model_id = next((t.split("=", 1)[1] for t in tags if t.startswith("align-model=")), config["model"]["name"])
+    spec = json.loads(config["workload_profile"]["prompt_text"] or "")
+    need(isinstance(spec, dict), "member_config_malformed", "episode spec")
+    thinking = spec.get("enable_thinking")
+    return model_id, ("thinking_on" if thinking is True else "thinking_off" if thinking is False
+                      else "template_default")
+
+
+def derived_episode_seed(seed_inputs, pair, seed_index):
+    """episode_seed(*seed_inputs(config, enable_thinking), task_pair, seed_index), production law
+    (sampling.leading_seed over ["align-p4-v1", model_id, thinking, task_pair, seed_index])."""
+    model_id, thinking = seed_inputs
+    text = json.dumps(["align-p4-v1", model_id, thinking, "shade/" + TASK_NAMES[pair], seed_index],
+                      separators=(",", ":"), ensure_ascii=True, allow_nan=False)
+    return int.from_bytes(hashlib.sha256(text.encode("utf-8")).digest()[:8], "big")
+
+
 def replay_pairs(window):
     members = {m["ordinal"]: m for m in window["members"]}
     fixed = ((5, 17), (6, 16), (9, 13), (7, 15), (10, 12)) if window["role"] == "W1" else ((5, 22),)
@@ -1201,12 +1269,25 @@ def derive_exclusions(window, results):
             classes.add("custody_invalid")
         if not res.get("usable"):
             classes.add("energy_unavailable")
-        # A29: seed law and cohort identity, for D members carrying a held-out or development index.
+        # A29 + seed ruling (a), lead 2026-11-08: (1) the Episode records the seed INDEX (production
+        # workload.py), which must equal the roster's seed_index; (2) independently, the production derivation
+        # over the member's digest-bound config.json must equal the roster's expected_episode_seed.
+        seed_reasons = []
         if m["model"] == "D" and is_int(m.get("seed_index")):
-            want = episode_seed(m["seed_index"], m["pair"])
-            if is_int(m.get("expected_episode_seed")) and m["expected_episode_seed"] != want:
+            if m["expected_episode_seed"] != episode_seed(m["seed_index"], m["pair"]):
                 notes.append("seed_law_disagrees_with_export")
-            if res.get("episode", {}).get("seed") != want:
+            if res.get("episode", {}).get("seed") != m["seed_index"]:
+                seed_reasons.append("seed_index_differs")
+            cfg = res.get("config")
+            derived = None
+            if cfg is not None:
+                try:
+                    derived = derived_episode_seed(cfg["seed_inputs"], m["pair"], m["seed_index"])
+                except (Refusal, ValueError, KeyError, TypeError, AttributeError):
+                    derived = None
+            if derived != m["expected_episode_seed"]:
+                seed_reasons.append("derived_seed_differs")
+            if seed_reasons:
                 classes.add("seed_identity_differs")
         if m["model"] == "D" and cohort is not None and res.get("episode", {}).get("cohort_sha256") != cohort:
             classes.add("cohort_changed")
@@ -1217,6 +1298,7 @@ def derive_exclusions(window, results):
         out[rid] = {"captured": True, "classes": sorted(classes), "eligible": not classes,
                     "rederived": sorted(rederived), "recorded": sorted(recorded), "mismatch": mismatch,
                     "adjudicated": sorted(adjudicated.get(rid, [])), "flags": sorted(set(notes)),
+                    "seed_reasons": seed_reasons,
                     "member_flags": sorted(set(res.get("flags", []))),
                     "custody_problems": res.get("custody_problems", [])}
     return out

@@ -161,6 +161,18 @@ def design(c, p, d):
     return (1.0, float(p), float(d), (c + p) * d + d * d / 2, c * p + p * p / 2)
 
 
+def write_config(base, seed_index, pair, model_tag="qwen3.8-27b", thinking=True):
+    """A producer-shaped config.json subset (BenchmarkConfig: model.name, run_metadata.tags,
+    workload_profile.prompt_text = the episode spec JSON) carrying the production seed inputs."""
+    spec = {"schema": "joulewise.align.apple.episode_spec.v1", "seed": seed_index, "condition": "benign",
+            "task_kwargs": {"task_pair": "spam_filter_update" if pair == "spam" else "bank_transfer_2"}}
+    if thinking is not None:
+        spec["enable_thinking"] = thinking
+    dump(Path(base) / "config.json", {
+        "model": {"name": "synthetic/Qwen"}, "run_metadata": {"project": "joulewise", "tags": [f"align-model={model_tag}"]},
+        "workload_profile": {"name": "align_episode", "prompt_text": json.dumps(spec, sort_keys=True)}})
+
+
 def write_member(root, wid, m, epoch_offset_ns, delta=(1.0, 1.0), big=False, full_frames=None, extra=None):
     """Write metadata, episode, thermal journal and the raw plist of one member."""
     base = Path(root) / "windows" / wid / "members" / m.run_id
@@ -227,28 +239,24 @@ ALLOCATION = Path(__file__).resolve().parent / "fixtures" / "series_manifest_r24
 
 
 def window_roster(wid, role, index):
-    """D shape: anchors 1-4, sentinels 5 and 22, sabotage at 9 and 18, pairs alternating."""
+    """The frozen R24 allocation's roster of a C/T window (fixtures/series_manifest_r24.json), in the
+    recompute layout: production run ids ``align-v4-<window>-eNN`` (anchors "<window>:<W1 kit id>"), the
+    manifest's seed_index and episode_seed (expected_episode_seed) for D members."""
+    kinds = {"anchor": "anchor", "sentinel": "sentinel", "calibration": "benign", "known_h": "sabotage"}
+    doc = json.loads(ALLOCATION.read_text())
+    rows = next(w for w in doc["windows"] if w["id"] == wid)["members"]
     roster = []
-    first = PAIRS[index % 2]
-    other = PAIRS[1 - index % 2]
-    benign_slots = [o for o in range(6, 22) if o not in (9, 18)]
-    for o in range(1, 23):
-        if o <= 4:
-            roster.append({"ordinal": o, "kind": "anchor", "model": "30B", "pair": PAIRS[(o + 1) // 2 % 2],
-                           "condition": "benign" if o in (1, 4) else "sabotage"})
-        elif o in (5, 22):
-            roster.append({"ordinal": o, "kind": "sentinel", "model": "D", "pair": "spam", "condition": "benign"})
-        elif o in (9, 18):
-            roster.append({"ordinal": o, "kind": "sabotage", "model": "D", "pair": first if o == 9 else other,
-                           "condition": "sabotage"})
-        else:
-            pos = benign_slots.index(o)
-            roster.append({"ordinal": o, "kind": "benign", "model": "D", "pair": first if pos % 2 == 0 else other,
-                           "condition": "benign"})
-    for r in roster:
-        r["run_id"] = f"align-v4-{wid.lower()}-e{r['ordinal']:02d}"
-        if r["kind"] == "anchor":   # R23 export contract: anchor run ids are series-unique "<window_id>:<run_id>"
-            r["run_id"] = f"{wid}:{r['run_id']}"
+    for a in sorted(rows, key=lambda a: a["ordinal"]):
+        o = a["ordinal"]
+        kind = kinds.get(a["pool"]) or ("sabotage" if a["condition"] == "sabotage" else "benign")
+        model = "D" if a["model_id"] == "qwen3.8-27b" else "30B"
+        r = {"ordinal": o, "kind": kind, "model": model,
+             "pair": "spam" if a["pair"] == "spam_filter_update" else "bank", "condition": a["condition"],
+             "run_id": (f"{wid}:align-pilot-v3-episodes-a-e{o:02d}" if kind == "anchor"
+                        else f"align-v4-{wid.lower()}-e{o:02d}")}
+        if model == "D":
+            r.update(seed_index=a["seed_index"], expected_episode_seed=a["episode_seed"])
+        roster.append(r)
     return roster
 
 
@@ -351,8 +359,14 @@ def write_series(root, windows=None, members_per_window=None, period_ns=100_000_
                     else:
                         r["seed_index"] = next_index[r["pair"]]
                         next_index[r["pair"]] += 1
-                extra.update(seed=seed_law(r["seed_index"], r["pair"]), cohort_sha256=COHORT)
+                # Producer shape (seed ruling (a)): the Episode records the seed INDEX (workload.py:722); the
+                # roster carries the derived expected_episode_seed; config.json carries the seed inputs.
+                extra.update(seed=r["seed_index"], cohort_sha256=COHORT)
+                r.setdefault("expected_episode_seed", seed_law(r["seed_index"], r["pair"]))
+                assert r["expected_episode_seed"] == seed_law(r["seed_index"], r["pair"])
             write_member(root, wid, m, epoch_offset, extra=extra)
+            if r["model"] == "D":
+                write_config(root / "windows" / wid / "members" / r["run_id"], r["seed_index"], r["pair"])
             clock = m.end_ns + 60 * NS
         streams = {}
         if meter:

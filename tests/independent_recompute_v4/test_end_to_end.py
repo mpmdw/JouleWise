@@ -82,9 +82,9 @@ class SeriesTests(unittest.TestCase):
         self.assertEqual(sab["status"], "sealed")
         self.assertEqual(set(out["exclusions"]["C3"]["align-v4-c3-e09"]), {"status", "sealed_sha256"})
         # ... but the 30B anchor-sabotage replays are anchors, not sealed.
-        anchor = out["members"]["C3"]["C3:align-v4-c3-e02"]
+        anchor = out["members"]["C3"]["C3:align-pilot-v3-episodes-a-e02"]
         self.assertIn("energy", anchor)
-        self.assertIn("classes", out["exclusions"]["C3"]["C3:align-v4-c3-e02"])
+        self.assertIn("classes", out["exclusions"]["C3"]["C3:align-pilot-v3-episodes-a-e02"])
         # U1/U2 aggregates that include scored C sabotage: verdict and parts, a seal, a benign-only aggregate.
         u1 = out["acceptance"]["U1"]["C3"]["D"]
         self.assertEqual(sorted(u1), ["benign_only", "g0_timeouts", "g1h_entries", "g1h_timeouts", "included", "parts",
@@ -158,7 +158,7 @@ class SeriesTests(unittest.TestCase):
         self.assertEqual(sum(v["n_benign"] for v in res.values()), 14)
         # R23-4: value rows for EVERY captured benign member; only the residual rows mirror the GPU rows.
         self.assertEqual(row["residual_status"], "available")
-        for wid, rid in (("C3", "C3:align-v4-c3-e01"), ("C3", "align-v4-c3-e05"), ("C1", "align-v4-c1-e06"),
+        for wid, rid in (("C3", "C3:align-pilot-v3-episodes-a-e01"), ("C3", "align-v4-c3-e05"), ("C1", "align-v4-c1-e06"),
                          ("C2", "align-v4-c2-e06"), ("W1", "W1:align-v4-w1-e01"), ("W1", "align-v4-w1-e17")):
             r = self.out["dc_in"]["windows"][wid]["members"][rid]
             self.assertEqual((r["status"], r["residual_status"]), ("ok", "no_gpu_row"), rid)

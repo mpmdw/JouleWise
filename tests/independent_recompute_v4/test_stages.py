@@ -785,8 +785,9 @@ class ThermalSummaryTests(unittest.TestCase):
 
 class ExclusionTests(unittest.TestCase):
     def res(self, intervals=(), flags=(), registered=(0,), states=(0,), usable=True, seed=None, cohort="c",
-            completed=True, custody=()):
+            completed=True, custody=(), seed_inputs=("qwen3.8-27b", "thinking_on")):
         return {"captured": True, "usable": usable, "flags": [], "custody_problems": list(custody),
+                "config": None if seed_inputs is None else {"seed_inputs": list(seed_inputs)},
                 "episode": {"flags": list(flags), "seed": seed, "cohort_sha256": cohort, "identity_sha256": None,
                             "completed": completed},
                 "thermal": {"intervals": [{"kind": k, "outcome": o} for k, o in intervals],
@@ -794,11 +795,13 @@ class ExclusionTests(unittest.TestCase):
                 "turns": [{"pm_states": list(states), "context": 0, "prefill": 1, "decode": 2}]}
 
     def test_classes(self):
-        seed = rc.episode_seed(2, "spam")
+        # Seed ruling (a): the producer Episode records the seed INDEX; the roster carries the derived seed.
+        seed = 2
+        derived = rc.episode_seed(2, "spam")
         names = ["ok", "g1", "os", "nospan", "pm", "unknown", "batt", "unobs", "adj", "flagonly", "lost", "dead",
-                 "seed", "cohort", "incomplete", "custody"]
-        members = [{"run_id": r, "ordinal": 30 + i, "model": "D", "pair": "spam", "seed_index": 2}
-                   for i, r in enumerate(names)]
+                 "seed", "cohort", "incomplete", "custody", "cfg", "nocfg"]
+        members = [{"run_id": r, "ordinal": 30 + i, "model": "D", "pair": "spam", "seed_index": 2,
+                    "expected_episode_seed": derived} for i, r in enumerate(names)]
         window = {"role": "calibration", "members": members,
                   "record": {"adjudication": {"excluded": {"adj": ["identity.divergent"]}}, "cohort_sha256": "c",
                              "battery": {"batt": ["battery.accumulator_excursion"], "unobs": ["battery.unobserved"]},
@@ -809,15 +812,22 @@ class ExclusionTests(unittest.TestCase):
                    "pm": r(states=(0, 2), seed=seed), "unknown": r(states=(-1,), seed=seed), "batt": r(seed=seed),
                    "unobs": r(seed=seed), "adj": r(seed=seed),
                    "flagonly": r(flags=["thermal.gate_timeout:3"], seed=seed), "lost": {"captured": False},
-                   "dead": r(intervals=[("H", "deadman")], seed=seed), "seed": r(seed=seed + 1),
+                   "dead": r(intervals=[("H", "deadman")], seed=seed), "seed": r(seed=derived),
+                   "cfg": r(seed=seed, seed_inputs=("qwen3.8-27b", "thinking_off")),
+                   "nocfg": r(seed=seed, seed_inputs=None),
                    "cohort": r(seed=seed, cohort="d"), "incomplete": r(seed=seed, completed=False),
                    "custody": r(seed=seed, custody=["g1_meets_owned_work"])}
         out = rc.derive_exclusions(window, results)
         want = {"ok": [], "g1": ["X2"], "os": ["X1"], "nospan": [], "pm": ["X3"], "unknown": [], "batt": ["B"],
                 "unobs": [], "adj": ["adjudicated"], "flagonly": ["X2"], "lost": ["not_captured"], "dead": ["X7"],
                 "seed": ["seed_identity_differs"], "cohort": ["cohort_changed"], "incomplete": ["incomplete"],
-                "custody": ["custody_invalid"]}
+                "custody": ["custody_invalid"], "cfg": ["seed_identity_differs"], "nocfg": ["seed_identity_differs"]}
         self.assertEqual({k: out[k]["classes"] for k in names}, want)
+        # Sub-reasons: an episode carrying the DERIVED seed (the old fixture shape) is seed_index_differs; a
+        # config whose seed inputs do not reproduce the roster's expected seed is derived_seed_differs.
+        self.assertEqual((out["seed"]["seed_reasons"], out["cfg"]["seed_reasons"], out["nocfg"]["seed_reasons"],
+                          out["ok"]["seed_reasons"]),
+                         (["seed_index_differs"], ["derived_seed_differs"], ["derived_seed_differs"], []))
         self.assertEqual(out["g1"]["mismatch"], ["X2"])
         self.assertEqual(out["nospan"]["flags"], ["registered_span_missing"])     # A10
         self.assertEqual(out["unobs"]["flags"], ["battery.unobserved"])           # A28: kept, flagged
@@ -826,6 +836,16 @@ class ExclusionTests(unittest.TestCase):
         # P:166-170 with the literal compact JSON bytes.
         text = b'["align-p4-v1","qwen3.8-27b","thinking_on","shade/spam_filter_update",2]'
         self.assertEqual(rc.episode_seed(2, "spam"), int.from_bytes(hashlib.sha256(text).digest()[:8], "big"))
+        # Production seed_inputs restated (seed ruling (a)): the align-model= tag wins over model.name; the
+        # spec's enable_thinking maps to thinking_on / thinking_off / template_default.
+        cfg = {"model": {"name": "m"}, "run_metadata": {"tags": ["x=1", "align-model=qwen3.8-27b"]},
+               "workload_profile": {"prompt_text": json.dumps({"enable_thinking": True})}}
+        self.assertEqual(rc.config_seed_inputs(cfg), ("qwen3.8-27b", "thinking_on"))
+        self.assertEqual(rc.derived_episode_seed(rc.config_seed_inputs(cfg), "spam", 2), rc.episode_seed(2, "spam"))
+        cfg2 = dict(cfg, run_metadata={"tags": []}, workload_profile={"prompt_text": json.dumps({})})
+        self.assertEqual(rc.config_seed_inputs(cfg2), ("m", "template_default"))
+        cfg3 = dict(cfg, workload_profile={"prompt_text": json.dumps({"enable_thinking": False})})
+        self.assertEqual(rc.config_seed_inputs(cfg3)[1], "thinking_off")
 
 
 class MeterTests(unittest.TestCase):

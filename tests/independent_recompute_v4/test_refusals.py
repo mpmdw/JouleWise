@@ -119,6 +119,16 @@ class RefusalTests(unittest.TestCase):
         path.write_text(json.dumps(dict(record, barred="u1_u3_fail")))
         self.refused(root, "declared_bar_not_reproduced")
         path.write_text(json.dumps(record))
+        # R24 roster ruling: the frozen manifest is the authority, production run ids included; the old
+        # engine naming, a wrong pair or a wrong seed refuses.
+        nd = next(i for i, m in enumerate(record["members"]) if m["kind"] == "benign")
+        for change in ({"run_id": record["members"][nd]["run_id"].replace("-e", "-episodes-a-e")},
+                       {"pair": "bank" if record["members"][nd]["pair"] == "spam" else "spam"},
+                       {"expected_episode_seed": record["members"][nd]["expected_episode_seed"] + 1}):
+            bad = dict(record, members=[dict(m, **change) if i == nd else m for i, m in enumerate(record["members"])])
+            path.write_text(json.dumps(bad))
+            self.refused(root, "allocation_roster_differs")
+        path.write_text(json.dumps(record))
         # R24 allocation: the series binds the 18-window manifest; any other shape refuses.
         series = json.loads((root / "series.json").read_text())
         (root / "series.json").write_text(json.dumps({k: v for k, v in series.items() if k != "allocation_source"}))
