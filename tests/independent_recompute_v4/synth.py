@@ -172,7 +172,8 @@ def seed_law_model(model_tag, seed_index, pair):
     return int.from_bytes(hashlib.sha256(text.encode("utf-8")).digest()[:8], "big")
 
 
-def write_config(base, run_id, seed_index, pair, condition, model="D", thinking=True, sampler=True, root=None):
+def write_config(base, run_id, seed_index, pair, condition, model="D", thinking=True, sampler=True, root=None,
+                 gated=True):
     """The member's kit config (a producer-shaped BenchmarkConfig subset: run_id, model.name,
     run_metadata.tags, workload_profile.prompt_text = the episode spec JSON) and the bundle config.json
     RunBundleWriter.create writes for it (indent-2, sorted keys, newline). Returns (planned_config reference
@@ -183,6 +184,9 @@ def write_config(base, run_id, seed_index, pair, condition, model="D", thinking=
         spec["enable_thinking"] = thinking
     if sampler:
         spec["sampler"] = {"min_p": 0, "temperature": 1.0, "top_k": 20, "top_p": 0.95}
+    if gated:     # the planned thermal policy (production v3 anchors are ungated: no thermal block)
+        spec["thermal"] = {"sensors": {"s_fast": "Tg0f", "s_slow": "Th0x", "fan_keys": [], "r0_sha256": "0" * 64},
+                           "delta_fast_c": 1.0, "delta_slow_c": 1.0, "per_turn": True, "heavy": True}
     local = run_id.split(":", 1)[-1]
     kit = {"run_id": local, "model": {"name": "synthetic/Qwen"},
            "run_metadata": {"project": "joulewise", "tags": [f"align-model={MODEL_TAGS[model]}"]},
@@ -401,7 +405,8 @@ def write_series(root, windows=None, members_per_window=None, period_ns=100_000_
                 extra.update(cohort_sha256=COHORT)
             write_member(root, wid, m, epoch_offset, extra=extra)
             r["planned_config"], ksha = write_config(root / "windows" / wid / "members" / r["run_id"], r["run_id"],
-                                                     r["seed_index"], r["pair"], r["condition"], r["model"], root=root)
+                                                     r["seed_index"], r["pair"], r["condition"], r["model"], root=root,
+                                                     gated=r["kind"] != "anchor")
             plan_rows.append({"ordinal": r["ordinal"], "run_id": r["run_id"].split(":", 1)[-1],
                               "config_path": r["planned_config"]["path"], "config_sha256": ksha})
             clock = m.end_ns + 60 * NS

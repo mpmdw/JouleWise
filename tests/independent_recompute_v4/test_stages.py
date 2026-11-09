@@ -881,6 +881,40 @@ class ExclusionTests(unittest.TestCase):
         self.assertEqual(rc.config_seed_inputs(cfg3)[1], "thinking_off")
 
 
+class PreCompletionTests(unittest.TestCase):
+    def test_r27_withheld_carrier_curve_and_thresholds(self):
+        # R27: before calibration_complete, threshold-independent quantities print, threshold-dependent leaves
+        # are null under withheld_until_calibration_complete.
+        strip = lambda h, score: {"H": h, "score": score}
+        carriers = [{"run_id": f"r{i}", "window_id": "C1",
+                     "known_h": {"first_k": [{"score": 1.0}], "council": {"0": strip(0, 1.0), "128": strip(128, 2.0)},
+                                 "h_star_grid": {"128": strip(128, 2.0), "256": None}}} for i in range(3)]
+        out = rc.carrier_curve(carriers, complete=False)
+        self.assertEqual((out["status"], out["bootstrap"], out["H50"]["status"]), (rc.WITHHELD, None, rc.WITHHELD))
+        self.assertEqual((out["fractions"]["128"]["n"], out["fractions"]["256"]["n"], out["fractions"]["128"]["fraction"]),
+                         (3, 0, None))
+        h = out["carriers"][0]["h_star"]
+        self.assertEqual((h["h_star"], h["bounded_above"], h["undefined_missing_grid_doses"], h["status"]),
+                         (None, None, None, rc.WITHHELD))
+        thr = rc.threshold_summary([1.0, 2.0], complete=False)
+        self.assertEqual((thr["status"], thr["rank_used"], thr["threshold"], thr["marginal_fpr_bound"],
+                          thr["tolerance_90_upper"]), (rc.WITHHELD, None, None, None, None))
+        self.assertIsNone(rc.u6_pair([], 1.0)["imprecise"])
+
+    def test_u2_over_planned_g0s_and_g0_missing(self):
+        # r23m review ruling (1): U2(a) over the PLANNED G0s present; an ungated member's G0 is not one.
+        def res(slow):
+            return {"captured": True, "thermal": {"observed": True, "episode_reference": {}, "delta_fast_c": 1.0,
+                                                  "delta_slow_c": 1.0, "intervals": [
+                {"kind": "G0", "outcome": "released", "release": {"slow_c": slow}, "journal_matched": True}]}}
+        members = [{"run_id": "a", "planned_g0": True}, {"run_id": "b", "planned_g0": False}]
+        elig = {r: {"captured": True, "classes": []} for r in "ab"}
+        out = rc.u2_model_window(members, {"a": res(40.0), "b": res(45.0)}, elig)
+        self.assertEqual((out["g0_slow_range_c"], out["parts"]["a_g0_slow_range_le_3c"]), (0.0, True))
+        out = rc.u2_model_window([dict(m, planned_g0=False) for m in members], {"a": res(40.0), "b": res(45.0)}, elig)
+        self.assertEqual(out["parts"]["a_g0_slow_range_le_3c"], "not_applicable")
+
+
 class DcRuleTests(unittest.TestCase):
     def test_sample_and_hold_and_whole_member(self):
         # D6 ruling (A20): turn-owned DC-in is a sample-and-hold; a hold > 300 ms is uncovered; the whole member
@@ -952,7 +986,7 @@ class MeterTests(unittest.TestCase):
         self.assertIsNone(row["dc_turn_j"][0])
         self.assertAlmostEqual(row["dc_turn_j"][1], 600.0, places=6)
         self.assertIsNone(row["dc_in_turn_owned_j"])
-        self.assertEqual(row["unavailable_reasons"], ["meter.dropped_sample_in_span:member",
+        self.assertEqual(row["unavailable_reasons"], ["meter.member_uncovered_or_gap",
                                                       "meter.dropped_sample_in_span:turn:0"])
 
 

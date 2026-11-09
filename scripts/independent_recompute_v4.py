@@ -1420,6 +1420,10 @@ def derive_exclusions(window, results):
             classes.add("incomplete")
         if res.get("custody_problems"):
             classes.add("custody_invalid")
+        # r23m review ruling (1): a captured member whose PLANNED G0 is missing is excluded at member level.
+        if m.get("planned_g0") is True and not any(iv.get("kind") == "G0" for iv in
+                                                   (res.get("thermal") or {}).get("intervals", [])):
+            classes.add("g0_missing")
         if not res.get("usable"):
             classes.add("energy_unavailable")
         # A29 + seed ruling (a), lead 2026-11-08: (1) the Episode records the seed INDEX (production
@@ -1686,7 +1690,9 @@ def threshold_summary(scores, complete):
            "rank_m": None, "rank_m_minus_1": None, "benign_mean": None, "benign_sd": None,
            "max_over_1p5_next": None}
     if not complete:
-        out["status"] = "withheld_until_calibration_complete"
+        # R27 (lead ruling): every threshold-dependent leaf is null under one status word before completion;
+        # the marginal / iid bounds are not printed either.
+        out.update(status="withheld_until_calibration_complete", marginal_fpr_bound=None, tolerance_90_upper=None)
         return out
     if len(vals) < m:
         out.update(status="held", codes=["nonfinite_calibration_score"])
@@ -1872,12 +1878,16 @@ def u2_model_window(members, results, elig):
                 and not set(elig[m["run_id"]]["classes"]) & EXCLUDES_FROM_U
                 and (results[m["run_id"]].get("thermal") or {}).get("observed")]
     g0_slow, release_ok, checked = [], True, 0
+    planned_of = {m["run_id"]: m.get("planned_g0") for m in members}
     for rid in included:
         th = results[rid]["thermal"]
         ref = th["episode_reference"] or {}
         for iv in th["intervals"]:
             rel = iv.get("release") or {}
-            if iv["kind"] == "G0" and iv["outcome"] == "released" and finite(rel.get("slow_c")):
+            # r23m review ruling (1): U2(a) runs over the PLANNED G0s present (a G0 the member's kit does not
+            # plan, e.g. an ungated anchor's, is not one).
+            if (iv["kind"] == "G0" and iv["outcome"] == "released" and finite(rel.get("slow_c"))
+                    and planned_of.get(rid, True) is not False):
                 g0_slow.append(rel["slow_c"])
             if iv["kind"] in ("G1", "H") and iv["outcome"] == "released":
                 checked += 1
@@ -2090,7 +2100,9 @@ def anchor_sigma_w(windows, results, eligibility=None):
                 w1_block = "unavailable:W1 anchor energy missing"
     W = len(table)
     if W < 3:
-        return {"W": W, "status": "insufficient_windows", "W1_anchor_block": w1_block}
+        # R27 (e): the empty state prints the same keys, null.
+        return {"W": W, "ms_window": None, "ms_interaction": None, "sigma_w2_raw": None, "sigma_w2": None,
+                "status": "insufficient_windows", "W1_anchor_block": w1_block}
     grand = mean([v for row in table for v in row])
     wmeans = [mean(row) for row in table]
     amean = [mean([row[j] for row in table]) for j in range(4)]
@@ -2137,7 +2149,9 @@ def u6_pair(trajectories, s_r):
     half; interval +-1.645 SE; PASS iff inside +-0.5 s_r; FAIL iff |point| > 0.5 s_r; else imprecise.
     """
     if len(trajectories) < 4 or not finite(s_r):
-        return {"verdict": "inconclusive", "status": "insufficient_trajectories", "n": len(trajectories)}
+        # R27 (d): imprecise is null when no interval exists.
+        return {"verdict": "inconclusive", "status": "insufficient_trajectories", "n": len(trajectories),
+                "imprecise": None}
     half = len(trajectories) // 2
     groups = (trajectories[:half], trajectories[half:])
     means, variances = [], []
@@ -2163,7 +2177,7 @@ def u6_pair(trajectories, s_r):
         for j, r in enumerate(res):
             positions.setdefault(j, []).append(r)
     pos = {str(j): {"n": len(v_), "mean": mean(v_), "judged": len(v_) >= 6} for j, v_ in sorted(positions.items())}
-    return {"verdict": v, "label": label, "difference": diff, "se": se, "interval": [lo, hi], "margin": margin,
+    return {"verdict": v, "label": label, "imprecise": label is not None, "difference": diff, "se": se, "interval": [lo, hi], "margin": margin,
             "s_r": s_r, "n_trajectories": len(trajectories), "early": [r for r, _ in groups[0]],
             "late": [r for r, _ in groups[1]], "per_position_print_only": pos}
 
@@ -2279,10 +2293,41 @@ def h_star_points(kh):
     return merged
 
 
-def carrier_curve(carriers):
+WITHHELD = "withheld_until_calibration_complete"
+
+
+def withheld_carrier_curve(carriers, usable):
+    """R27 (lead ruling, pre-completion print semantics): before calibration_complete every
+    threshold-independent quantity prints and every threshold-dependent leaf is null under one status word.
+    Per-dose n (carriers with a scored strip at the dose) and full_cell.n print; fractions, crossings and the
+    bootstrap are null; every carrier row carries its strips and an H* block with h_star, bounded_above and
+    undefined_missing_grid_doses null."""
+    detail, n_by = [], {g: 0 for g in [str(x) for x in CURVE_GRID] + ["full"]}
+    for c in usable:
+        points = dict(c["known_h"].get("h_star_grid", {}))
+        points.update(c["known_h"]["council"])
+        for g in n_by:
+            p = points.get(g)
+            if p is not None and p.get("score") is not None:
+                n_by[g] += 1
+        h = h_star_estimand(h_star_points(c["known_h"]), None)
+        h.update(h_star=None, bounded_above=None, undefined_missing_grid_doses=None, status=WITHHELD)
+        detail.append({"run_id": c["run_id"], "window_id": c["window_id"], "threshold": None, "rank": None,
+                       "m": None, "council": c["known_h"]["council"], "h_star_grid": c["known_h"].get("h_star_grid"),
+                       "detected": {g: None for g in n_by}, "h_star": h})
+    fractions = {str(g): {"detected": None, "n": n_by[str(g)], "missing": None, "fraction": None} for g in CURVE_GRID}
+    nothing = {"dose": None, "status": WITHHELD, "level_reached_at_h0": None}
+    return {"status": WITHHELD, "fractions": fractions, "carriers": detail, "H50": dict(nothing), "H90": dict(nothing),
+            "bootstrap": None, "full_cell": {"detected": None, "n": n_by["full"], "missing": None, "fraction": None,
+                                             "print_only": True}}
+
+
+def carrier_curve(carriers, complete=True):
     """Benign-carrier curve (P:589-596; R21 A8) on nominal sub-turn grid doses."""
     usable = [c for c in carriers if c["known_h"]["first_k"][0]["score"] is not None]
     out = {"total": len(usable), "excluded_undefined_score": len(carriers) - len(usable)}
+    if not complete:
+        return dict(out, **withheld_carrier_curve(carriers, usable))
     if len(usable) < 40:
         return dict(out, status="insufficient_carriers")
     detail = []
@@ -2578,14 +2623,17 @@ def dc_window(task):
     for rid, span, by_turn in members:
         row = {"status": "missing_dc"}
         for s in ok:
-            covered = bool(s["times"]) and s["times"][0] <= span[0] < span[1] <= s["times"][-1]
+            if not s["times"] or s["times"][-1] < span[0] or s["times"][0] > span[1]:
+                continue                                       # this stream does not reach the member at all
+            covered = s["times"][0] <= span[0] < span[1] <= s["times"][-1]
             e = km003c_integrate(s["times"], s["powers"], span[0], span[1]) if covered else None
-            if e is not None:
-                # A dropped sample inside a span makes that span's DC value unavailable, with a reason (R23).
+            if True:
+                # r23m review ruling (3): a member span partly outside the stream or with dropped samples prints
+                # a null whole-member DC-in with meter.member_uncovered_or_gap; never an extrapolated number.
                 reasons = []
-                if dropped_in(s, [span]):
+                if not covered or dropped_in(s, [span]):
                     e = None
-                    reasons.append("meter.dropped_sample_in_span:member")
+                    reasons.append("meter.member_uncovered_or_gap")
                 per_turn = []
                 for k, own in enumerate(by_turn):
                     if own and dropped_in(s, own):
@@ -2846,7 +2894,7 @@ def recompute(root, workers=1, cache_dir=None, timings=None, stage="full", freez
             if variant == "logged":
                 for c in carriers:      # R26 (2): H* against the pair's detection threshold
                     c["pair_threshold"] = thr["threshold"]
-                claim["carrier_curve"][pair] = carrier_curve(carriers)
+                claim["carrier_curve"][pair] = carrier_curve(carriers, complete)
                 claim["known_h"][pair] = known_h_summary(windows, fits, pair, thr)
     calibration["freeze"] = freeze_record(stop, calibration["thresholds"])
     if freeze_in is not None:
