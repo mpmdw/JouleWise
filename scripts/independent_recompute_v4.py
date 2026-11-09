@@ -636,8 +636,8 @@ def load_plan_custody(root, wid, record, members):
     """Config custody loop (lead ruling on the r23k review; export contract ``plan_source`` and
     ``planned_config``). The window's committed collection_plan.json binds each member's kit config by
     ``config_sha256`` (scripts/align_v4_series.py:302); the bundle config.json must be the bytes
-    RunBundleWriter.create writes for that kit config: indent-2, sorted-key JSON plus a newline (joulewise/
-    bundle.py). Returns ({(local run id, ordinal): plan row}, {run_id: (kit sha256, expected bundle sha256)})."""
+    RunBundleWriter.create writes for that kit config: indent-2, sorted-key JSON plus a newline (the production
+    bundle writer). Returns ({(local run id, ordinal): plan row}, {run_id: (kit sha256, expected bundle sha256)})."""
     plan, planned = None, {}
     if "plan_source" in record:
         doc = json.loads(ref_bytes(root, record["plan_source"], "config_digest_not_planned", wid + ": plan_source"))
