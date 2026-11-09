@@ -23,9 +23,14 @@ def native_payload():
                 run = w['window']+':'+m['slot']['run_id']
                 m['slot']['run_id'] = m['thermal']['id'] = run
     p['synthetic'] = False
-    p['series_manifest'] = dict(windows=[dict(window=w['window'],
-        members=copy.deepcopy([m['slot'] for m in w['members']])) for w in p['windows']])
+    p['series_manifest'] = r24_manifest(p)
     return p
+
+
+def r24_manifest(p):
+    """R23j: the full frozen R24 allocation (W1, C1-C14, T1-T3), anchors prefixed."""
+    from joulewise.align.v4_analysis.synthetic import release_manifest
+    return release_manifest(p['windows'])
 
 
 def write_export(root, payload):
@@ -37,11 +42,16 @@ def write_export(root, payload):
         return dict(path=name, sha256=digest(data))
     p['series_source'] = write('series.json', p.pop('series_manifest'))
     for w in p['windows']:
+        # R23j: every captured C window carries its committed terminal result.
+        if w['window'].startswith('C') and 'terminal_result_source' not in w:
+            w['terminal_result_source'] = write(w['attempt_id'].replace('#', '_')+'-terminal.json',
+                w.pop('terminal_result', dict(verdict='GO', chain_exit_code=0)))
         members = w.pop('members')
         rows = [{**m['thermal'], 'run_id': m['slot']['run_id'],
                  'summary': m['summary'], 'captured': m['captured'],
                  'exclusion_codes': m.get('source_flags', [])} for m in members]
-        source = write(w['window']+'.json', dict(members=rows))
+        # Attempt-named, so a zero-capture attempt and its retry never collide.
+        source = write(w.get('attempt_id', w['window']).replace('#', '_')+'.json', dict(members=rows))
         w.update(roster=[m['slot'] for m in members], thermal_source=source, residual_source=source)
     path = root/'input.json'
     path.write_bytes(canonical(p))

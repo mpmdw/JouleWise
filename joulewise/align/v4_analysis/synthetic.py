@@ -82,3 +82,23 @@ def series(*, turns=12, identity_tokens=8, reserves=0):
                                         designed_target_c=t) for t in (50., 55., 60.)],
                             r1_replay_j=[reference_j]*2, delta_slow_c=1.),
         u6_split_rule='within_pair_episode_order', custody='synthetic only; no native qualification')
+
+
+def release_manifest(windows=()):
+    """Synthetic analysis-form R24 manifest (W1, C1-C14, T1-T3) for release input.
+
+    Slots of supplied windows are used as given; absent windows come from the
+    frozen roster, anchors prefixed ``<window>:``. Synthetic W1 is C1's anchors
+    and replay at ordinals 5 and 17 (the shape of the hand-test W1 window).
+    """
+    from copy import deepcopy
+    from .engine import R24_SERIES_ORDER
+    present = {w['window']: [m['slot'] for m in w['members']] for w in windows if 'members' in w}
+    w1 = [dict(s) for s in roster('C1')[:5]] + [dict(roster('C1')[21], ordinal=17)]
+    out = []
+    for name in R24_SERIES_ORDER:
+        slots = present.get(name) or [
+            {**s, 'run_id': name+':'+s['run_id']} if s['series_role'] == 'anchor' else s
+            for s in (w1 if name == 'W1' else roster(name))]
+        out.append(dict(window=name, members=deepcopy(slots)))
+    return dict(windows=out)

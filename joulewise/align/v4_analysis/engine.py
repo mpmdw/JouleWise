@@ -30,6 +30,12 @@ KEYS = dict(zip(PAIRS, ('spam', 'bank')))
 CALIBRATION_ORDER = tuple(f'C{i}' for i in range(1, 15))
 TEST_ORDER = tuple(f'T{i}' for i in range(1, 4))
 ORDER = CALIBRATION_ORDER + TEST_ORDER
+# R24 frozen allocation (W1, C1-C14, T1-T3): series_manifest.json sha256 below on
+# align/2026-11-08-v4-r11; roster() reproduces it (tests.align.test_v4_r23j_engine).
+R24_SERIES_ORDER = ('W1',) + ORDER
+R24_SERIES_MANIFEST_SHA256 = '21313cc2791865e01f322c24606db62ba2ac6a65adda6d737e5b7432bef2ad5c'
+# NON-RELEASE seam: pre-R24 in-memory manifests without reserves (io.load refuses).
+LEGACY_R15_MANIFEST_ORDER = CALIBRATION_ORDER[:8] + TEST_ORDER
 D_MODEL = 'qwen3.8-27b'
 CONVENTIONS = ('counts_logged', 'counts_withheld')
 CLAIM_CODES = ('claim_contract_unresolved', 'scorer_validity_unresolved',
@@ -449,24 +455,33 @@ def selection_report(desk, derivation, delta_slow_c, predeclared):
 
 def _structural_bar(window, checks, captured):
     """R22-2 predicate from e36b096fe:scripts/align_v4_next_arm_packet.py,
-    WindowRecord.structural_bar. Exported bars are committed-record judgments;
-    terminal_result, when supplied, is the exported completed-chain evidence.
+    WindowRecord.structural_bar, recomputed from evidence (R23j).
+
+    A bar is never an exporter choice: an exported ``barred`` is accepted only
+    when this predicate reproduces it. ``u1_u3_fail`` needs a recomputed U1-U3
+    FAIL; ``whole_window_capture_failure`` needs terminal_result evidence that
+    is not a completed GO chain (non-GO verdict or non-zero chain exit).
     Zero captures are handled by calibration_stop, including their retry.
     """
     declared = window.get('barred')
     if declared is not None and declared not in STRUCTURAL_BARS:
         raise ValueError('window barred must name a registered structural bar')
     if not captured:
+        if declared is not None:
+            raise ValueError('declared bar on a zero-capture window is not reproducible')
         return None
-    if any(r.get(f'U{k}', {}).get('status') == 'fail' for r in checks.values() for k in (1, 2, 3)):
-        return 'u1_u3_fail'
+    u_fail = any(r.get(f'U{k}', {}).get('status') == 'fail' for r in checks.values() for k in (1, 2, 3))
+    chain_failed = False
     if 'terminal_result' in window:
         result = window['terminal_result']
         if not isinstance(result, dict):
             raise ValueError('terminal_result must be a completed-chain result object')
-        if result.get('verdict') != 'GO' or result.get('chain_exit_code') != 0:
-            return 'whole_window_capture_failure'
-    return declared
+        chain_failed = result.get('verdict') != 'GO' or result.get('chain_exit_code') != 0
+    if declared == 'u1_u3_fail' and not u_fail:
+        raise ValueError('declared u1_u3_fail is not reproduced by the recomputed U1-U3')
+    if declared == 'whole_window_capture_failure' and not chain_failed:
+        raise ValueError('declared whole_window_capture_failure needs non-GO terminal_result evidence')
+    return 'u1_u3_fail' if u_fail else 'whole_window_capture_failure' if chain_failed else None
 
 
 def _calibration_rulings(payload, rows, *, final=False):
@@ -514,9 +529,10 @@ def analyze(payload, *, workers=1, frozen_thresholds=None):
             for slot in w['members']:
                 slot_run_id(slot, w.get('window', w.get('id')), strict=strict_ids)
         later = [w for w in planned if w.get('window', w.get('id')) != 'W1']
-        # Older source-bound exports may omit the unarmed reserves. A new
-        # registration carries the complete R24 allocation, including C9-C14.
-        if tuple(w.get('window', w.get('id')) for w in later) not in (ORDER, ORDER[:8]+TEST_ORDER):
+        # Release input (io.load) requires the full R24 allocation. The R15
+        # shape without reserves survives only on this in-memory API seam,
+        # never on the release loader (LEGACY_R15_MANIFEST_ORDER).
+        if tuple(w.get('window', w.get('id')) for w in later) not in (ORDER, LEGACY_R15_MANIFEST_ORDER):
             raise ValueError('series manifest order differs from R15')
         if any(w['window'] not in {p.get('window', p.get('id')) for p in later} for w in windows):
             raise ValueError('window missing from frozen series manifest')

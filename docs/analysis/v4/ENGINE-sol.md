@@ -1,4 +1,4 @@
-# V4 primary engine (Sol), R23i
+# V4 primary engine (Sol), R23i + R23j
 
 2026-11-08. **PROVISIONAL: synthetic qualification, no live study validation.**
 Authority: the lead's engine-r23 brief (A37 and R23-E1/R23-1–4), on
@@ -269,6 +269,28 @@ with full member records (`slot`, `captured`, `thermal`, `summary`, and any
 `selection_desk.anchor_members` does not restore that retired compatibility
 route. There is no legacy selection-only input API. If a redundant snapshot is
 present with a W1 window, the window supplies all W1 analysis evidence.
+
+R23j (lead rulings on the Opus review of r23i, 2026-11-08):
+(1) A bar is never an exporter choice. `_structural_bar` recomputes it, and a
+declared `barred` must be reproduced. A `u1_u3_fail` needs a recomputed U1-U3
+FAIL. A `whole_window_capture_failure` needs `terminal_result` that is non-GO
+or has a non-zero `chain_exit_code`. A bar declared on a zero-capture window
+refuses.
+(2) `io.load` (release) requires `terminal_result_source` for every captured
+C window. Zero-capture attempts need none.
+(3) `io.load` requires the full R24 allocation, `R24_SERIES_ORDER` (W1,
+C1-C14, T1-T3). The R15 shape without reserves survives only on the in-memory
+API seam `LEGACY_R15_MANIFEST_ORDER`. A pinned fixture
+(`tests/fixtures/align_v4/r24_series_manifest.json`, sha256
+`R24_SERIES_MANIFEST_SHA256` = 21313cc2…) proves `roster()` reproduces the
+frozen manifest. `synthetic.release_manifest` builds the analysis-form
+manifest for synthetic release inputs.
+(4) NOT applied. A byte-identical r11 `v4_cadence.py` breaks this branch's
+older arm stack (`scripts/align_v4_session.py`, `align_v4_kit.py`,
+`v4_registration.py`), which needs r11's arm clock and `meter_reader_live`
+wiring and its `joulewise.timing_receipts`. `calibration_stop` here is already
+identical to r11 (`e36b096fe`/`bbfccb70a`). Lead ruling pending.
+Witnesses: `tests.align.test_v4_r23j_engine`.
 
 R23h (lead rulings on the Opus review of r23g, 2026-11-08):
 (1) A27 sealed aggregates print `{status: sealed}` only. Unsalted hashes of

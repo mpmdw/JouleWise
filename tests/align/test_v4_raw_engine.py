@@ -18,13 +18,9 @@ from joulewise.align.records import to_json
 class RawTests(unittest.TestCase):
     def test_contract_export_with_series_unique_anchor_ids_and_sensor_keys(self):
         p = series(turns=4)
-        planned = []
-        for name in e.ORDER:
-            slots = e.roster(name)
-            for slot in slots[:4]:
-                slot['run_id'] = name+':'+slot['run_id']
-            planned.append(dict(window=name, members=slots))
-        slots = planned[0]['members']
+        from joulewise.align.v4_analysis.synthetic import release_manifest
+        planned = release_manifest()['windows']  # R23j: full R24 allocation incl. W1
+        slots = next(w['members'] for w in planned if w['window'] == 'C1')
         ep = replace(synthetic_episode(), episode_id=slots[0]['run_id'],
                      agent_model=slots[0]['model_id'], seed=slots[0]['expected_episode_seed'],
                      task_pair=slots[0]['task_pair'], condition=slots[0]['condition'],
@@ -46,7 +42,9 @@ class RawTests(unittest.TestCase):
                               finished=dict(monotonic_after_ns=ep.start_ns), sensors={'F': 50., 'S': 45.})])
             p['synthetic'] = False
             p['windows'] = [dict(window='C1', attempt_id='C1#1', status='final', roster=slots,
-                                 raw_source=write('raw.json', canonical(dict(members=sources))))]
+                                 raw_source=write('raw.json', canonical(dict(members=sources))),
+                                 terminal_result_source=write('terminal.json', canonical(
+                                     dict(verdict='GO', chain_exit_code=0))))]
             p['series_source'] = write('series.json', canonical(dict(windows=planned)))
             path = root/'input.json'
             path.write_bytes(canonical(p))
@@ -150,7 +148,9 @@ class RawTests(unittest.TestCase):
             (path.parent/'C3.json').unlink()
             payload = load(path, through_window='C2')
             self.assertEqual([w['window'] for w in payload['windows']], ['C1','C2'])
-            self.assertEqual(len(payload['input_census']), 2)
+            # R23j: series manifest + C1/C2 desks + C1/C2 terminal results only.
+            self.assertEqual(sorted(r['path'] for r in payload['input_census']),
+                             ['C1-terminal.json', 'C1.json', 'C2-terminal.json', 'C2.json', 'series.json'])
             a, _ = analyze(payload)
             self.assertEqual(a['thresholds']['counts_logged/spam']['threshold'], None)
 

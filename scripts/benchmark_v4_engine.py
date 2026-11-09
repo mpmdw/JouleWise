@@ -18,19 +18,29 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from joulewise.align.v4_analysis import analyze, canonical
 from joulewise.align.v4_analysis.io import digest, input_path, load
-from joulewise.align.v4_analysis.synthetic import series
+from joulewise.align.v4_analysis.synthetic import release_manifest, series
 
 
 def write_fixture(root, *, full_ids=True):
     root.mkdir(parents=True, exist_ok=False)
     payload = series(identity_tokens='full' if full_ids else 8)
+    def write(filename, value):
+        raw = canonical(value)
+        (root/filename).write_bytes(raw)
+        return dict(path=filename, sha256=digest(raw))
     for w in payload['windows']:
+        for m in w['members']:
+            if m['slot']['series_role'] == 'anchor':
+                m['slot']['run_id'] = m['thermal']['id'] = w['window']+':'+m['slot']['run_id']
+    # R23j release input: the full R24 allocation and each C window's terminal result.
+    payload['series_source'] = write('series.json', release_manifest(payload['windows']))
+    for w in payload['windows']:
+        if w['window'].startswith('C'):
+            w['terminal_result_source'] = write(w['window']+'-terminal.json',
+                                                dict(verdict='GO', chain_exit_code=0))
         records = []
         slots = []
         for m in w.pop('members'):
-            if m['slot']['series_role'] == 'anchor':
-                run = w['window']+':'+m['slot']['run_id']
-                m['slot']['run_id'] = m['thermal']['id'] = run
             slots.append(m['slot'])
             records.append({**m['thermal'], 'run_id': m['slot']['run_id'],
                 'summary': m['summary'], 'captured': m['captured'], 'dc_secondary': m['dc']})

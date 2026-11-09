@@ -114,7 +114,12 @@ def load(path, *, calibration_only=False, through_window=None, cache_dir=None, w
             sources[identity] = read_source(root, ref)
         payload['series_manifest'] = sources[identity]
         census.append(dict(path=ref['path'], sha256=ref['sha256']))
-    from .engine import slot_run_id
+    from .engine import slot_run_id, R24_SERIES_ORDER
+    manifest = payload.get('series_manifest')
+    if manifest is None:
+        raise ValueError('release input requires the frozen R24 series manifest (series_source)')
+    if tuple(w.get('window', w.get('id')) for w in manifest.get('windows', [])) != R24_SERIES_ORDER:
+        raise ValueError('release series manifest must carry the full R24 allocation (W1, C1-C14, T1-T3)')
     for window in (payload.get('series_manifest') or {}).get('windows', []):
         for slot in window['members']:
             slot_run_id(slot, window.get('window', window.get('id')), strict=True)
@@ -170,6 +175,12 @@ def load(path, *, calibration_only=False, through_window=None, cache_dir=None, w
                 summary=native.get('summary'), captured=captured,
                 dc=native.get('dc_secondary'), source_flags=native.get('exclusion_codes', [])))
         window.pop('roster')
+    for window in payload['windows']:
+        # R22-2 bars are recomputed from the committed terminal result, so
+        # every captured calibration window must carry it on the release path.
+        if (window['window'].startswith('C') and any(m['captured'] for m in window.get('members', []))
+                and 'terminal_result' not in window):
+            raise ValueError('release C window lacks terminal_result_source: ' + window['window'])
     if calibration_only:
         payload['windows'] = [w for w in payload['windows'] if not w['window'].startswith('T')]
     payload['input_census'] = census

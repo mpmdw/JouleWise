@@ -293,7 +293,8 @@ class CLITests(unittest.TestCase):
                 with contextlib.redirect_stdout(io.StringIO()) as output:
                     rc = main(['--input', str(path), '--output', str(root/'out')])
             self.assertEqual(rc, 2)
-            self.assertEqual(reads.call_count, 8)
+            # R23j: series manifest + 8 C desks + 8 C terminal results; never T.
+            self.assertEqual(reads.call_count, 17)
             self.assertEqual(json.loads(output.getvalue())['codes'], ['input_refused'])
 
     def test_symlink_and_external_user_paths_refuse_before_read(self):

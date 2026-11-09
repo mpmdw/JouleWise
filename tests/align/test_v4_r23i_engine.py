@@ -10,7 +10,7 @@ from joulewise.align.v4_analysis import analyze, acceptance as ac, engine as e, 
 from joulewise.align.v4_analysis.io import canonical, digest, load
 from joulewise.align.v4_analysis.synthetic import series
 from tests.align.test_thermal_desk import contrast
-from tests.align.test_v4_r23c_engine import write_export
+from tests.align.test_v4_r23c_engine import r24_manifest, write_export
 
 
 def row(name, *, barred=None, captured=22, n=7, status='final'):
@@ -163,8 +163,11 @@ class EngineReplacementTests(unittest.TestCase):
                 self.assertIsNone(e._structural_bar({}, checks, 0))
         checks = {e.D_MODEL: {u: dict(status='inconclusive') for u in ('U1', 'U2', 'U3')}}
         self.assertIsNone(e._structural_bar(dict(terminal_result=dict(verdict='GO', chain_exit_code=0)), checks, 1))
-        self.assertEqual(e._structural_bar(dict(barred='whole_window_capture_failure'), checks, 1),
-                         'whole_window_capture_failure')
+        # R23j: a declared bar must be reproduced by its evidence.
+        with self.assertRaisesRegex(ValueError, 'needs non-GO terminal_result'):
+            e._structural_bar(dict(barred='whole_window_capture_failure'), checks, 1)
+        self.assertEqual(e._structural_bar(dict(barred='whole_window_capture_failure',
+            terminal_result=dict(verdict='GO', chain_exit_code=2)), checks, 1), 'whole_window_capture_failure')
 
     def test_seventh_zero_bar_requires_lead_disposition_then_is_insufficient(self):
         p = series(turns=4, reserves=6)
@@ -223,8 +226,7 @@ class ReserveExportTests(unittest.TestCase):
             for m in w['members'][:4]:
                 m['slot']['run_id'] = m['thermal']['id'] = w['window']+':'+m['slot']['run_id']
         p['synthetic'] = False
-        p['series_manifest'] = dict(windows=[dict(window=w['window'], members=[m['slot'] for m in w['members']])
-                                            for w in p['windows']])
+        p['series_manifest'] = r24_manifest(p)  # R23j: release needs the full R24 allocation
         p['windows'] = p['windows'][:9]+p['windows'][14:]
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
