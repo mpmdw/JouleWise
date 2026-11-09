@@ -913,6 +913,14 @@ class PreCompletionTests(unittest.TestCase):
         self.assertEqual((out["g0_slow_range_c"], out["parts"]["a_g0_slow_range_le_3c"]), (0.0, True))
         out = rc.u2_model_window([dict(m, planned_g0=False) for m in members], {"a": res(40.0), "b": res(45.0)}, elig)
         self.assertEqual(out["parts"]["a_g0_slow_range_le_3c"], "not_applicable")
+        # A g0_missing member feeds neither part; with no planned G0 present the window is INCONCLUSIVE.
+        def nog0():
+            r = res(40.0)
+            r["thermal"]["intervals"] = [{"kind": "G1", "outcome": "released", "release": {"fast_c": 99.0, "slow_c": 99.0},
+                                          "journal_matched": True}]
+            return r
+        out = rc.u2_model_window(members, {"a": nog0(), "b": res(45.0)}, elig)
+        self.assertEqual((out["verdict"], out["parts"]["b_releases_verified_within_delta"]), ("inconclusive", None))
 
 
 class DcRuleTests(unittest.TestCase):

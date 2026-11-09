@@ -1882,6 +1882,14 @@ def u2_model_window(members, results, elig):
                 and (results[m["run_id"]].get("thermal") or {}).get("observed")]
     g0_slow, release_ok, checked = [], True, 0
     planned_of = {m["run_id"]: m.get("planned_g0") for m in members}
+    # Lead ruling: a member whose planned G0 is missing (g0_missing) feeds neither U2(a) nor U2(b); U2(b) runs
+    # over the members whose planned G0 is present (an ungated member, planned no G0, keeps its own releases).
+    observed = included
+    included = [rid for rid in included if not (planned_of.get(rid) is True and not any(
+        iv["kind"] == "G0" for iv in results[rid]["thermal"]["intervals"]))]
+    # Planned G0s exist among the observed members but none is present: U2(b) is INCONCLUSIVE, never FAIL.
+    none_present = (any(planned_of.get(r) is True for r in observed)
+                    and not any(planned_of.get(r) is True for r in included))
     for rid in included:
         th = results[rid]["thermal"]
         ref = th["episode_reference"] or {}
@@ -1906,7 +1914,7 @@ def u2_model_window(members, results, elig):
     # (by design, e.g. ungated anchors); a planned but absent G0 stays inconclusive.
     planned = any(m.get("planned_g0", True) is not False for m in members)
     parts = {"a_g0_slow_range_le_3c": (rng <= 3.0) if rng is not None else (None if planned else "not_applicable"),
-             "b_releases_verified_within_delta": release_ok if checked else "not_applicable"}
+             "b_releases_verified_within_delta": None if none_present else (release_ok if checked else "not_applicable")}
     return {"verdict": verdict(parts), "parts": parts, "g0_slow_range_c": rng, "releases_checked": checked}
 
 
