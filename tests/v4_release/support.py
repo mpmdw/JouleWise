@@ -75,13 +75,15 @@ def run_engine(root, *, input_name="engine-input.json", out="engine-out", tree_d
     eng = tree_dir or tree(ENGINE_COMMIT)
     cli = str(eng / "scripts" / "analyze_align_v4.py")
     cal, full = root / (out + "-cal"), root / out
-    env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
+    env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONFAULTHANDLER="1")   # workers dump a trace too
     prefix = ["--through-window", through_window] if through_window else []
-    r = subprocess.run([PY, "-B", cli, "--input", input_name, "--output", cal.name, "--calibration-only",
+    r = subprocess.run([PY, "-X", "faulthandler", "-B", cli, "--input", input_name, "--output", cal.name, "--calibration-only",
                         *prefix, "--workers", str(workers)], cwd=root, capture_output=True, env=env)
+    if r.returncode < 0:      # a signal (e.g. SIGSEGV): keep the faulthandler trace for the lead
+        (root / "engine-crash-stderr.txt").write_bytes(r.stderr)
     if r.returncode or through_window:
         return r.returncode, json.loads(r.stdout or b"{}")
-    r = subprocess.run([PY, "-B", cli, "--input", input_name, "--output", full.name, "--thresholds",
+    r = subprocess.run([PY, "-X", "faulthandler", "-B", cli, "--input", input_name, "--output", full.name, "--thresholds",
                         str(cal / "thresholds.json"), "--workers", str(workers)], cwd=root, capture_output=True, env=env)
     return r.returncode, json.loads(r.stdout or b"{}")
 
