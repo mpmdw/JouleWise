@@ -21,6 +21,7 @@ import math
 import os
 from pathlib import Path
 import platform
+import re
 import subprocess
 import sys
 import tempfile
@@ -367,6 +368,54 @@ def _load_module(path, name):
     return module
 
 
+# Runner flags a launcher may add without changing what R0 measures (origin/main 274e1e7a7 added a
+# default --keep-going; R0-L1 passes a --checks subset). Anything that skips, fakes or forces is refused.
+RUNNER_OPTIONAL_FLAGS = {"--keep-going": 0, "--checks": 1}
+RUNNER_FORBIDDEN_PREFIXES = ("--skip", "--allow", "--force", "--synthetic", "--fake", "--dry-run", "--no-quiet",
+                             "--python", "--unsafe")
+
+
+def check_runner_argv(runner, *, python_bin, script, required):
+    """Semantic runner.json check (not an exact list): the unresolved venv interpreter, the runner
+    script, every required flag with its value, and no forbidden flag. Unknown flags are listed."""
+    problems, extra = [], []
+    if not isinstance(runner, list) or len(runner) < 2 or not all(isinstance(a, str) for a in runner):
+        return {"problems": ["runner.json is not an argv list of strings"], "extra_flags": [], "optional": []}
+    if runner[0] != python_bin:
+        problems.append(f"runner interpreter {runner[0]!r} is not the unresolved --python-bin {python_bin!r}")
+    if runner[1] != script:
+        problems.append(f"runner script {runner[1]!r} != {script!r}")
+    seen, optional, rest = {}, [], runner[2:]
+    i = 0
+    while i < len(rest):
+        flag = rest[i]
+        if not flag.startswith("--"):
+            problems.append(f"stray positional runner argument {flag!r}")
+            i += 1
+            continue
+        name, has_inline, inline = flag.partition("=")
+        if name.startswith(RUNNER_FORBIDDEN_PREFIXES):
+            problems.append(f"forbidden runner flag {flag!r}")
+        if name in required:
+            value = inline if has_inline else (rest[i + 1] if i + 1 < len(rest) else None)
+            if name in seen:
+                problems.append(f"runner flag {name} given twice")
+            seen[name] = value
+            i += 1 if has_inline else 2
+            continue
+        arity = RUNNER_OPTIONAL_FLAGS.get(name)
+        if arity is not None:
+            optional.append(flag if has_inline or arity == 0 else f"{flag} {rest[i + 1] if i + 1 < len(rest) else ''}")
+            i += 1 if has_inline or arity == 0 else 2
+            continue
+        extra.append(flag)
+        i += 1
+    for name, value in required.items():
+        if seen.get(name) != value:
+            problems.append(f"runner flag {name} is {seen.get(name)!r}, expected {value!r}")
+    return {"problems": problems, "optional": optional, "extra_flags": extra}
+
+
 def check_launcher(ctx):
     """Run the real ``launch`` with launchd faked, then the real ``run`` with the spec's interpreter."""
     launcher_path, provenance = _launcher_files(ctx)
@@ -416,10 +465,11 @@ def check_launcher(ctx):
     import plistlib
     plist = plistlib.loads(next(job.glob("*.plist")).read_bytes())
     unresolved = os.path.abspath(python_bin)
-    expected = [unresolved, str(ctx.repo.resolve() / "scripts/align_r0_checks.py"), "--config",
-                str((ctx.repo / "configs/align/v4/r0_desk.json").resolve()), "--output", str(output.resolve())]
-    if runner != expected:
-        problems.append(f"runner.json {runner} != expected {expected}")
+    runner_check = check_runner_argv(runner, python_bin=unresolved,
+                                     script=str(ctx.repo.resolve() / "scripts/align_r0_checks.py"),
+                                     required={"--config": str((ctx.repo / "configs/align/v4/r0_desk.json").resolve()),
+                                               "--output": str(output.resolve())})
+    problems += runner_check["problems"]
     if plist["ProgramArguments"][3] != unresolved:
         problems.append("plist interpreter argument is not the unresolved --python-bin")
     wrapper = Path(plist["ProgramArguments"][1])
@@ -453,13 +503,21 @@ def check_launcher(ctx):
     # The real `run` subcommand, bounded, with the same interpreter and runner but --help.
     spec = root / "runner-help.json"
     spec.write_text(json.dumps([*runner[:2], "--help"]))
-    run = subprocess.run([sys.executable, "-B", str(launcher_path), "run", "--deadline", str(time.time() + 120),
-                          "--runner-spec", str(spec)], capture_output=True, text=True, timeout=180,
-                         cwd=str(ctx.repo))
+    run_argv = [sys.executable, "-B", str(launcher_path), "run", "--deadline", str(time.time() + 120),
+                "--runner-spec", str(spec)]
+    run_env = dict(os.environ)
+    launcher_text = launcher_path.read_text()
+    if "--pmset-bin" in launcher_text and "DISPLAY_DWELL_TEST_ENV" in launcher_text:
+        # Launchers with the RUN_STATE 206 display dwell (origin/main 9f56fe78d): never sleep the
+        # Air's display (pmset is /usr/bin/true) and use the launcher's own test seam for the dwell.
+        run_argv += ["--pmset-bin", "/usr/bin/true"]
+        run_env[re.search(r'DISPLAY_DWELL_TEST_ENV\s*=\s*"([^"]+)"', launcher_text).group(1)] = "0.1"
+    run = subprocess.run(run_argv, capture_output=True, text=True, timeout=180, cwd=str(ctx.repo), env=run_env)
     if run.returncode or "--checks" not in run.stdout:
         problems.append(f"launcher run of the runner --help exited {run.returncode}")
     return {"status": "fail" if problems else "pass", "problems": problems, "launcher": provenance,
-            "runner_json": runner, "interpreter": interpreter, "run_help_exit": run.returncode,
+            "runner_json": runner, "runner_semantics": runner_check, "interpreter": interpreter,
+            "run_help_exit": run.returncode,
             "launch_stdout": printed.getvalue().strip(),
             "substitutions": {"--repo": str(ctx.repo), "--python-bin": str(python_bin),
                               "--output/--disk-path/--custody-root": str(root),

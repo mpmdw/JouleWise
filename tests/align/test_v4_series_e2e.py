@@ -72,7 +72,8 @@ class SeriesCadenceEndToEnd(unittest.TestCase):
         with cls.synthetic_inputs():
             kit.generate(m, source_root=m)                       # synthetic-ready W1 kit (ac_powermode 0)
             for window in s.load(m)['windows'][1:]:
-                s.generate(m, window['id'])                      # materialize every C/T kit
+                if window.get('armable') is not False:           # C11/C12 hold reserve seeds only (cap C10)
+                    s.generate(m, window['id'])                  # materialize every armable C/T kit
         passed = write(cls.shared, 'synthetic-clearance.json', 'pass')
         manifest = s.load(m)
         write(m, s.ADMISSION, dict(
@@ -147,9 +148,11 @@ class SeriesCadenceEndToEnd(unittest.TestCase):
         if s.selected(self.manifest, window)['role'] == 'calibration' and captured:
             spam = bank = 0 if u_pass is False else 7     # U1-U3 FAIL bars pool entry (R15)
             spam = max(0, spam - excluded)
-        row = dict(window_id=window, attempt_id=f'{window}-a{n}', captured_members=captured,
+        row = dict(window_id=window, attempt_id=window if n == 1 else f'{window}#{n}', captured_members=captured,
                    eligible_benign=dict(spam=spam, bank=bank), status=status)
-        path = write(self.tmp / 'receipts', row['attempt_id'] + '.json', row)
+        if s.selected(self.manifest, window)['role'] == 'calibration' and captured and u_pass is False:
+            row['barred'] = 'u1_u3_fail'           # R22-2: a U1-U3 FAIL is a structural bar, replaced not counted
+        path = write(self.tmp / 'receipts', row['attempt_id'].replace('#', '-') + '.json', row)
         entry = dict(row, evidence=ref(path))
         if desk is not None:
             entry['desk_eligible_benign'] = desk
@@ -287,22 +290,51 @@ class SeriesCadenceEndToEnd(unittest.TestCase):
             self.assertTrue(any(r.startswith(f'series_binding: {window}') for r in record['reasons']))
 
     def test_escalation_refuses_until_a_lead_release(self):
-        self.advance(4)
-        self.outcome('C5', captured=0)
-        valid = self.packet('C5')                         # attempt 2 is still allowed
-        self.outcome('C5', captured=0)
+        # R22-2 / R24: a zero-capture refusal beyond the retry is a structural bar replaced by C9-C14, not an
+        # escalation, until all six replacements are owed; the seventh bar escalates.
+        self.outcome('W1', captured=18)
+        for window in ('C1', 'C2'):
+            self.outcome(window, captured=0)
+            self.packet(window)                           # the retry is still allowed
+            self.outcome(window, captured=0)              # barred, replacement owed
+        valid = self.packet('C3')
+        for window in ('C3', 'C4', 'C5', 'C6', 'C7'):
+            self.outcome(window, captured=0)
+            self.packet(window)
+            self.outcome(window, captured=0)              # the seventh bar exhausts all six replacements
         with self.assertRaisesRegex(ValueError, 'escalate_to_lead'):
-            self.packet('C5')
+            self.packet('C8')
         forged = deepcopy(valid)
-        forged['series_history'] = deepcopy(self.history)
-        root, record, error, calls = self.arm('C5', forged, n=1)
+        forged.update(series_history=deepcopy(self.history), next_window_id='C8')
+        root, record, error, calls = self.arm('C8', forged, n=1)
         self.assertEqual(calls, 0)
         self.assertTrue(any('escalate_to_lead' in r for r in record['reasons']))
         self.history.append({'lead_release': dict(
             ruling_id='RUN_STATE synthetic', text_sha256='c' * 64, resets='zero_capture_escalation',
-            after_window='C5-a2', lead_signature=SIGNATURE)})
-        root, record, error, calls = self.arm('C5', self.packet('C5'), n=2)
-        self.assert_armed('C5', record, error, calls, root)
+            after_window='C7#2', lead_signature=SIGNATURE)})
+        with self.assertRaisesRegex(ValueError, 'insufficient_calibration'):     # a release cannot repair 8 windows
+            self.packet('C8')
+
+    def test_replacement_windows_arm_only_after_a_structural_bar(self):
+        self.advance(8)
+        self.assertEqual(self.next_window(), 'T1')              # nothing barred: C9/C10 are never armed
+        with self.assertRaisesRegex(ValueError, 'does not arm the next frozen window'):
+            self.packet('C9')
+        self.history.clear()
+        self.outcome('W1', captured=18)
+        self.outcome('C1', u_pass=False)                         # U1-U3 FAIL: barred, replaced, not counted
+        for i in range(2, 9):
+            self.outcome(f'C{i}')
+        self.assertEqual(self.next_window(), 'C9')
+        with self.assertRaisesRegex(ValueError, 'does not arm the next frozen window|calibration_stop'):
+            self.packet('T1')                                    # only 7 counted windows
+        root, record, error, calls = self.arm('C9', self.packet('C9'), n=1)
+        self.assert_armed('C9', record, error, calls, root)
+        self.outcome('C9')
+        self.assertEqual(self.next_window(), 'T1')
+        self.freeze()
+        root, record, error, calls = self.arm('T1', self.packet('T1'), n=2)
+        self.assert_armed('T1', record, error, calls, root)
 
     def test_t1_refuses_on_pending_or_insufficient_calibration(self):
         self.advance(7)
@@ -318,20 +350,22 @@ class SeriesCadenceEndToEnd(unittest.TestCase):
 
     def test_insufficient_calibration_is_terminal(self):
         self.outcome('W1', captured=18)
-        for i in range(1, 9):
-            self.outcome(f'C{i}', u_pass=(i % 2 == 0))   # four U1-U3 FAIL windows: 28 < 39
+        for i in range(1, 8):
+            self.outcome(f'C{i}', u_pass=False)          # seven U1-U3 FAIL windows: more than six bars, 8 admitted unreachable
         with self.assertRaisesRegex(ValueError, 'insufficient_calibration'):
             self.packet('T1')
+        with self.assertRaisesRegex(ValueError, 'insufficient_calibration'):
+            self.packet('C8')
 
-    def test_c6_fence_and_d_alias(self):
+    def test_r17_k_plus_2_finality_and_d_alias(self):
         self.outcome('W1', captured=18)
         root, record, error, calls = self.arm('D1', self.packet('C1'), n=1)    # D1 is C1
         self.assert_armed('C1', record, error, calls, root)
         self.outcome('C1', status='provisional')
-        for i in range(2, 6):
-            self.outcome(f'C{i}')
-        with self.assertRaisesRegex(ValueError, 'C6 onward'):
-            self.packet('C6')
+        self.packet('C2')                       # R17: the previous window may be provisional
+        self.outcome('C2')
+        with self.assertRaisesRegex(ValueError, 'R17: window k final'):
+            self.packet('C3')                   # C1 is still provisional at the arm of C1+2
 
     def test_desk_routes_the_window_kit(self):
         root = self.tmp / 'session-desk'

@@ -241,6 +241,9 @@ def build_checkout(root: Path, *, behavior: dict[str, Any] | None = None, git: b
         (scripts / name).write_text(source)
     (measurement / "joulewise").mkdir()
     (measurement / "joulewise/__init__.py").write_text("# fake measurement package\n")
+    # The settle process uses the production marker writer; the tools stay fake.
+    (measurement / "joulewise/timing_receipts.py").write_bytes(
+        (REPO_ROOT / "joulewise/timing_receipts.py").read_bytes())
     set_behavior(measurement, behavior or {})
     if git:
         environment = dict(os.environ, GIT_AUTHOR_NAME="fixture", GIT_AUTHOR_EMAIL="fixture@example.invalid",

@@ -172,3 +172,29 @@ window journal, breaks continuity as before. Amendment allowlist unchanged.
 | S1 F3 / S2 F2 attempt id vs slot id | `slot_of` normalizes a validated `<slot>#<k>` to its slot for the previous-window comparison; full attempt ids stay in records, chain and rulings | `align_v4_series.bind_packet` |
 | S2 F3 desk provisional ceiling dropped | The builder reads each calibration record's committed `series_desk_row` (mandatory) and carries `desk_eligible_benign` into the history; the series check refuses final counts above it | builder `desk_ceiling` |
 | S2 F5 22-member ceiling | `CAPTURED_MAX` is 22 (supplemental sentinels count toward nothing); the series binding remains a second guard | `v4_cadence.CAPTURED_MAX` |
+
+## R22 (RUN_STATE 234): Block 5 lessons applied to v4
+
+| Item | Change | Where |
+|---|---|---|
+| R22-1 contention disclosure-only | Every member records its outside-tree CPU-seconds over its member span; a `contention.unmeasured` gap over 30 s is flagged and disclosed, never excluded; no `contention.*` code can exclude a member (desk and committed-record reader strip them; test over the catalog codes) | `v4_contention.py`, `align_v4_session.powermode_desk_check`, builder |
+| R22-2 / R24 blind replacement windows | Six pre-declared windows C9-C14 (R24 cap C14: qualification 52.6 % at C10, 84.2 % at C12, 96.2 % at C14 at bar rate 1/4, e = .10; gate-admitted FPR invariant to the cap at b = 0; RUN_STATE 238 correction: with T after the stop C14 RAISES it by +0.03 to +0.17 pp under b = .05, maximum rule, disclosed not gated); T1-T3 keep their R15 seeds (66-89); contiguous reserve pool 100-147 (91-99 are reserved development indices; C13 132-139, C14 140-147), 8 per pair per window; armed in order ONLY to replace a STRUCTURAL bar (U1-U3 FAIL, whole-window capture failure, zero-capture refusal beyond the retry), never on scores, counts or to repair low m; a barred window contributes nothing (no partial use); exactly 8 admitted windows; `insufficient_calibration` if a pair is below 39 after 8 admitted or C14 is reached with fewer than 8 admitted; wired into the manifest generator, `calibration_stop` (`barred`) and the triage. Manifest bytes changed: the paired Sol seed check runs on the new sha | `align_v4_series.py`, `v4_cadence.py`, builder |
+| R22-3 balance check | Exclusions + flags per member-second by condition and pair against the exposure-adjusted expectation, printed and disclosed (`balance_check`) | `v4_balance.py` |
+| R22-5 tau_rel | 0.13 % (stress 0.21 %) of cell energy recorded as the Block 5 between-window prior; B3's tau = 0.5 s_r conversion to be checked at the first benign residual SD | `pilot_protocol_v4.md` |
+
+## Delta6 (Sol seats 1 and 2 HOLD c742e5722)
+
+| Finding | Change | Where |
+|---|---|---|
+| S1 F1 / S2 F1 contention fails the common desk | The common desk takes an `exclusion_policy`; v4 passes `v4_contention.split_codes`, so a member whose harvest codes are ALL contention is not excluded (raw codes kept as `disclosed_exclusion_codes`), the exclusion-derived checks, eligible-member list and `harvest_status` use the effective exclusions, and `full_desk_gate_pass` neutralizes contention-only (and charging-only) members. The packet reader reconciles a desk that still lists a contention-only member with the committed harvest exclusions (`effective_desk`). v3 behavior is unchanged | `align_pilot_session.apply_exclusion_policy`, `align_v4_session`, builder |
+| S1 F2 / S2 F4 balance drops contention | Disclosed contention codes and the coverage-gap flag count as balance events (union, counted once) | `v4_balance._events` |
+| S2 F3 terminal-barred pool | One shared structural-bar predicate (`WindowRecord.structural_bar`) feeds history, pool admission and calibration: a barred window admits an empty pool only | builder `cohort()` |
+| S2 F2 / R25 U3 scope for reserves | U3 policy template declares C1-C14; N 16 to 22 (pre-signature design change), prospective roster | `align_v4_u3_export.ROSTER`, DEVIATIONS R25 |
+| S1 doc | R24 drift prose corrected to RUN_STATE 238 | protocol, this table |
+
+## Delta7 (Sol confirmation seat HOLD e36b096fe)
+
+| Finding | Change | Where |
+|---|---|---|
+| F1 `effective_desk` upgraded a mismatched desk | A desk is neutralized ONLY when the committed harvest holds nothing but disclosure-only codes AND the desk's own record of exclusions (`members_excluded` plus the new desk's `members_disclosure_only`) is the SAME set: same members, same codes. Any desk/harvest mismatch (a stale desk recording a real exclusion, another member, other codes, a missing or malformed record) is an inconsistent window record and REFUSES; it never passes. A harvest with a real exclusion leaves the desk's own verdict. The native desk now writes `members_disclosure_only` into `desk.json`. Probes: contention/contention passes; runtime/runtime fails; runtime-desk/contention-harvest refuses; contention for a different member refuses | `align_v4_next_arm_packet.effective_desk`, `align_pilot_session.desk` |
+

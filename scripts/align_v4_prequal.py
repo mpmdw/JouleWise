@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Off-measurement-Mac pre-qualification for ALIGN v4; see docs/align/v4/PREQUAL.md.
 
+With --w1-next {r1,w1}: the next-arm extension (docs/align/v4/W1-SMOKE.md) instead.
+
 Exit codes: 0 pass (every check ran and passed), 1 fail, 3 incomplete (no failure,
 but a check did not run, e.g. no model backend or --offline), 2 usage error.
 """
@@ -21,6 +23,11 @@ EXIT = {"pass": 0, "fail": 1, "incomplete": 3}
 
 
 def main(argv=None):
+    raw = list(sys.argv[1:] if argv is None else argv)
+    if any(a.split('=', 1)[0] in ('--w1-next', '--w1-probe') for a in raw):
+        # W1 / next-arm extension (docs/align/v4/W1-SMOKE.md): its own checks, table and report.
+        from joulewise.align import w1_prequal
+        return w1_prequal.cli(raw, script=Path(__file__).resolve())
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--output", type=Path, required=True, help="new report directory")
     parser.add_argument("--work", type=Path, help="scratch dir (default: <output>.work)")

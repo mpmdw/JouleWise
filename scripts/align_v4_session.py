@@ -14,6 +14,7 @@ declares 2 and restores Automatic when that night closes. Every session start
 (prepare, install) first restores a marker it does not own, never while a
 measuring night holds the host night lock.
 """
+from functools import wraps
 import json
 import os
 from pathlib import Path
@@ -26,6 +27,7 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+from joulewise import timing_receipts
 from scripts import align_pilot_session as pilot, align_v4_kit as kit
 
 
@@ -47,7 +49,7 @@ def prepare(measurement_root, session_root, *, power_runner=None, window_id=None
     kit.generate(measurement_root, check=True, source_root=measurement_root)
     series_state = None
     if extra_sentinels not in (0, 2) or (extra_sentinels and window_id in (None, 'W1')):
-        raise ValueError('escalation sentinels (R20) apply to a C/T window after a U4/U5-inconclusive window only')
+        raise ValueError('escalation sentinels (R20) apply to a C/T window after a U4-inconclusive window only')
     if window_id is not None:
         from scripts import align_v4_series as series
         manifest = series.load(measurement_root)
@@ -184,6 +186,19 @@ def charging_only_exclusion(member):
     return bool(member.get('excluded')) and bool(codes) and codes <= set(EXCLUDE)
 
 
+def neutral_exclusion(member):
+    """True iff the member is excluded and every code is a charging B code or a disclosure-only contention code.
+
+    R22-1: no ``contention.*`` code may affect any desk verdict, gate or count; ruling 9: B alone never fails the
+    full desk. Real (other) exclusions keep failing it.
+    """
+    from joulewise.align.apple import v4_contention
+    from joulewise.align.apple.v4_battery import EXCLUDE
+    codes = _exclusion_codes(member)
+    return (bool(member.get('excluded')) and bool(codes)
+            and all(c in set(EXCLUDE) or v4_contention.is_disclosure_only(c) for c in codes))
+
+
 def full_desk_gate_pass(checks, members=None):
     """The ``full_desk_gate`` verdict.
 
@@ -196,7 +211,7 @@ def full_desk_gate_pass(checks, members=None):
     if members is not None and any(k in gated for k in EXCLUSION_DERIVED):
         # Charging-only members stay in the window evidence (readability, prechecks);
         # only their B exclusion stops counting against the desk.
-        neutral = [{**m, 'excluded': False} if charging_only_exclusion(m) else m for m in members]
+        neutral = [{**m, 'excluded': False} if neutral_exclusion(m) else m for m in members]
         recomputed, _, _ = pilot.instrument_checks(neutral)
         others = any(m.get('excluded') for m in neutral)
         if 'no_member_exclusions' in gated:
@@ -276,7 +291,7 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
     # Keep the common v3 desk unchanged. V4 adds its registered thermal desk.
     from scripts.align_v4_thermal_desk import registration_evidence, enrich_record, r1_soak_c, contrast_predeclaration
     from joulewise.align.apple.thermal_desk import read_bundle_record, window_report
-    from joulewise.align.apple import v4_registration
+    from joulewise.align.apple import v4_registration, light_triage
     registration_dir = Path(state.get('registration_dir', Path(state['measurement_root'])/kit.KIT/'registration'))
     try:
         bar, wp19 = registration_evidence(registration_dir)
@@ -290,6 +305,10 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
     except (OSError, ValueError):
         battery_policy = None
     journal = v4_battery.load_journal(Path(custody)/'hazards/monitor/battery.jsonl') if custody else ([], None, 1)
+    from joulewise.align.apple import v4_contention
+    # R22-1: in-window contention is disclosure-only; every member records its outside-tree CPU-seconds.
+    contention_journal = (v4_contention.load_journal(Path(custody)/'hazards/monitor/contention.jsonl')
+                          if custody else ([], None, 1))
     records = []
     pilot_members = {m['run_id']: m for m in members}
     for row in plan['members']:
@@ -301,10 +320,11 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
                  'flags': ['member.runtime_failure'], 'tokens': None, 'intervals': [],
                  'turn_observation': [], 'coverage': [], 'releases': [], 'turn_admissions': 0,
                  'pm_period_s': .1, 'calibration_exclusions': ['member.runtime_failure'], 'error': str(exc)}
-        r.update({k: row[k] for k in ('ordinal', 'role', 'pool_role') if k in row},
+        r.update({k: row[k] for k in ('ordinal', 'role', 'pool_role', 'condition', 'task_pair') if k in row},
                  window=(state.get('v4_series') or {}).get('window_id', state.get('window_id', 'W1')),
                  stage=row.get('stage_id'))
         v4_battery.attach(r, path, journal)
+        v4_contention.attach(r, path, contention_journal)
         assign_work_group(r, row)
         if row.get('role', '').startswith(('X-', 'Y-')):
             r.update(template=row['role'][0], arm=row['role'][-1])
@@ -312,10 +332,12 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
             expected = [{k: t[k] for k in ('prompt_token_ids', 'output_token_ids')} for t in fixture['turns']]
             r['pilot7_token_identical'] = r.get('tokens') == expected
         p = pilot_members.get(row['run_id'], {})
-        codes = p.get('exclusion_codes', [])
-        if any(str(c).startswith('battery.member_span') for c in codes):
-            r['flags'].append('battery.member_span')
-        r['excluded'] = bool(codes) or bool(r.get('calibration_exclusions'))
+        codes, disclosed = v4_contention.split_codes(p.get('exclusion_codes', []))
+        if disclosed:
+            r['contention']['disclosed_codes'] = sorted(set(r['contention']['disclosed_codes']) | set(disclosed))
+        # The only harvest input of the thermal section (light_triage proves U1-U3 ignore it); contention is
+        # disclosure-only (R22-1) so only the effective codes reach it.
+        light_triage.apply_harvest_codes(r, codes)
         records.append(r)
     policy = (kit.read_inputs(state['measurement_root']).get('R1') or {}).get('thermal_policy') or {}
     report['thermal'] = window_report(records, v4=True, u3_bar=bar,
@@ -329,11 +351,14 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
             'candidates': {r['ordinal']: sentinel_admissibility(r) for r in records
                            if r.get('pool_role') == 'sentinel' and not r.get('supplemental')},
             'reference_status': 'requires authenticated R1/W1 E_ref for cross-window U4'}
+    # R22-3: the printed balance check by condition (exclusions + flags per member-second); print only.
+    from joulewise.align.apple import v4_balance
+    report['balance_check'] = v4_balance.balance_check(records)
+    for line in v4_balance.lines(report['balance_check']):
+        print(line)
     if supplemental_report(records):
         report['supplemental_sentinels'] = supplemental_report(records)
-    for model, result in report['thermal']['model_windows'].items():
-        for n in (1, 2, 3):
-            checks[f'v4_{model}_U{n}'] = result[f'U{n}']['status'] == 'pass'
+    checks.update(light_triage.u_checks(report['thermal']))
     checks['v4_B_bar'] = battery_windows_pass(report['registration_diagnostics']['battery_windows'])
     for name, row in report['registration_diagnostics']['battery_windows'].items():
         print(f'{name} battery: '+json.dumps({k: row[k] for k in
@@ -362,6 +387,8 @@ def desk(session_root, **kwargs):
     kwargs.setdefault('kit', kit.KIT)
     kwargs.setdefault('desk_schema', kit.DESK_SCHEMA)
     kwargs.setdefault('extra_checks', powermode_desk_check)
+    from joulewise.align.apple import v4_contention
+    kwargs.setdefault('exclusion_policy', v4_contention.split_codes)      # R22-1: contention is disclosure-only
     status = pilot.desk(session_root, **kwargs)
     # Evidence-aware full-desk verdict (ruling 9) beside the common desk status.
     try:
@@ -369,8 +396,10 @@ def desk(session_root, **kwargs):
     except (OSError, ValueError, KeyError, TypeError, AttributeError):
         members = None
     removed = [m.get('run_id') for m in members or () if charging_only_exclusion(m)]
+    disclosed = [m.get('run_id') for m in members or () if m.get('disclosed_exclusion_codes')]
     status['full_desk_gate'] = {'pass': members is not None and full_desk_gate_pass(status.get('checks'), members),
                                 'charging_only_members_removed': removed,
+                                'contention_disclosed_members': disclosed,
                                 'rule': 'all desk checks except v4_B_bar; charging-only exclusions removed (ruling 9)'}
     if status.get('pilot'):
         pilot.h.write(Path(status['pilot']).parent/'desk.json', status)
@@ -398,6 +427,7 @@ def validate_series_state(state):
 
 
 ARM_RECORD_SCHEMA = 'joulewise.align_v4_arm.v1'
+ARM_DWELL_SCHEMA = 'joulewise.align_v4_arm_dwell.v1'   # the dwell stamp, written alone after it is taken
 
 
 def _sha256(raw):
@@ -476,11 +506,20 @@ def _record_bound(root, packet):
             and packet.get('series_sha256') == _sha256(ledger.stdout))
 
 
+@timing_receipts.timed("arm", "v4_arm_checks")
 def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=None, owner=None,
                obc_off_attested_by=None, battery_runner=None, battery_log=None, window_battery_journal=None,
                now=None, next_arm_triage=None, commit_check=None, record_check=None,
-               packet_builder=None, meter_probe=None, dwell_start=None):
+               packet_builder=None, meter_probe=None, dwell_start=None, series_bind=None, pre_dwell=None):
     """W1/D arm evidence: ruling 7 AC powermode and ruling 20 volumes.
+
+    R17 review F7: every Git check (record commit, record binding) and the frozen-series binding
+    (``series_bind(built) -> [reasons]``, from ``_arm_and_install``) run BEFORE the meter probe and
+    before ``dwell_start_ns`` is recorded, so no Git or binding work falls inside the quiet dwell.
+    Lead ruling on R17 review open item 5: ``pre_dwell(record)`` (from ``_arm_and_install``: the
+    powermode check, the W1 disk gate and the arm-record write) also runs before the stamp. The
+    stamp is the LAST step here; only in-memory work that depends on it (the probe-before-dwell
+    order) follows, and it lands in ``record['quiet_dwell']``.
 
     Ruling 7: the AC-profile powermode must equal the plan's frozen series
     value; an R1 High Power marker under the measurement root is restored to
@@ -548,35 +587,37 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
             supplied = None
     current_digest = v4_registration.artifact_set_digest(measurement_root)
     built, matches, rebuild_error = None, False, None
-    try:
-        if packet_builder is not None:
-            built, matches = packet_builder(measurement_root, supplied, now_epoch_s=now_s,
-                                            current_artifact_set_sha256=current_digest)
-        else:
-            from scripts import align_v4_next_arm_packet as builder
-            built, matches = builder.rebuild_and_compare(measurement_root, supplied, now_epoch_s=now_s,
-                                                         current_artifact_set_sha256=current_digest)
-    except (ValueError, KeyError, TypeError, AttributeError, OSError) as exc:
-        rebuild_error = f'{type(exc).__name__}: {exc}'
+    with timing_receipts.span("arm", "v4_packet_rebuild"):
+        try:
+            if packet_builder is not None:
+                built, matches = packet_builder(measurement_root, supplied, now_epoch_s=now_s,
+                                                current_artifact_set_sha256=current_digest)
+            else:
+                from scripts import align_v4_next_arm_packet as builder
+                built, matches = builder.rebuild_and_compare(measurement_root, supplied, now_epoch_s=now_s,
+                                                             current_artifact_set_sha256=current_digest)
+        except (ValueError, KeyError, TypeError, AttributeError, OSError) as exc:
+            rebuild_error = f'{type(exc).__name__}: {exc}'
+        # R17 review F7: the Git subprocesses and the series binding finish here, before the probe and dwell.
+        identity = None
+        if built is not None:
+            commit = built.get('record_commit')
+            identity = {'artifact_set_sha256': current_digest,
+                        'record_commit_exists': (commit_check or _commit_exists)(measurement_root, commit),
+                        'record_bound': bool((record_check or _record_bound)(measurement_root, built))}
+        series_binding = list(series_bind(built)) if series_bind is not None else None
     # The 3 s monitor launch is USB and process activity: it runs BEFORE the quiet/display dwell
     # starts, never during it (lead ruling 2026-11-08). The arm stamps the probe's end and the dwell
     # start on one monotonic clock and refuses unless the probe ended strictly earlier.
-    probe_started_ns = time.monotonic_ns()
-    try:
-        meter = dict((meter_probe or _probe_meter_live)(measurement_root))
-    except Exception as exc:  # noqa: BLE001 - an unverifiable meter refuses; it never raises out of the arm
-        meter = {'live': False, 'reason': f'{type(exc).__name__}: {exc}'}
+    with timing_receipts.span("arm", "v4_meter_probe"):
+        probe_started_ns = time.monotonic_ns()
+        try:
+            meter = dict((meter_probe or _probe_meter_live)(measurement_root))
+        except Exception as exc:  # noqa: BLE001 - an unverifiable meter refuses; it never raises out of the arm
+            meter = {'live': False, 'reason': f'{type(exc).__name__}: {exc}'}
     meter.setdefault('probe_started_ns', probe_started_ns)
     meter.setdefault('probe_ended_ns', time.monotonic_ns())
     meter.setdefault('probe_ended_epoch_s', now_s)
-    dwell_start_ns = (dwell_start or time.monotonic_ns)()
-    dwell_ordered = (type(meter['probe_ended_ns']) is int and type(dwell_start_ns) is int
-                     and meter['probe_ended_ns'] < dwell_start_ns)
-    quiet_dwell = {'start_ns': dwell_start_ns, 'start_epoch_s': now_s, 'meter_probe_ended_ns': meter['probe_ended_ns'],
-                   'meter_probe_before_dwell': dwell_ordered}
-    if not dwell_ordered:
-        reasons.append('quiet_dwell: the meter probe did not end before the quiet dwell started '
-                       '(it must run before the dwell, never during it)')
     internal = {'series_powermode': bool(power['admitted']),
                 'external_volume': volumes['verdict'] == external_volume.PASS,
                 'charging_battery': bool(battery['admitted']),
@@ -586,10 +627,6 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
         triage['reasons'].append(f'packet could not be rebuilt from its named sources: {rebuild_error}')
         triage['admitted'] = False
     else:
-        commit = built.get('record_commit')
-        identity = {'artifact_set_sha256': current_digest,
-                    'record_commit_exists': (commit_check or _commit_exists)(measurement_root, commit),
-                    'record_bound': bool((record_check or _record_bound)(measurement_root, built))}
         triage = v4_cadence.next_arm_triage(built, internal, identity, now_epoch_s=now_s)
         if not matches:
             triage['admitted'] = False
@@ -603,11 +640,29 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
                                           'triage charging_battery', 'triage meter_reader_live'))]
     reasons += ([] if internal['meter_reader_live'] else
                 ['next_arm_triage: triage meter_reader_live failed'])
-    return {'schema': ARM_RECORD_SCHEMA, 'admitted': not reasons, 'reasons': reasons,
-            'next_arm_triage': triage, 'quiet_dwell': quiet_dwell,
+    record = {'schema': ARM_RECORD_SCHEMA, 'admitted': not reasons, 'reasons': reasons,
+            'next_arm_triage': triage,
             'ac_powermode': power, 'external_volumes': volumes, 'battery': battery,
             # Lead ruling R7-10: the host state directory this arm used.
             'host_state_dir': powermode.host_state_dir()}
+    if series_binding is not None:
+        record['series_binding'] = series_binding
+    if pre_dwell is not None:
+        pre_dwell(record)        # every remaining check, read, disk_usage and write (lead ruling, item 5)
+    # The quiet dwell starts HERE, after every subprocess, file write and disk_usage of the arm.
+    dwell_start_ns = (dwell_start or time.monotonic_ns)()
+    # In memory only from here on: the one value that depends on the stamp.
+    dwell_ordered = (type(meter['probe_ended_ns']) is int and type(dwell_start_ns) is int
+                     and meter['probe_ended_ns'] < dwell_start_ns)
+    record['quiet_dwell'] = {'start_ns': dwell_start_ns, 'start_epoch_s': now_s,
+                             'meter_probe_ended_ns': meter['probe_ended_ns'], 'meter_probe_before_dwell': dwell_ordered,
+                             'git_and_series_binding_before_dwell': True,
+                             'record_checks_and_writes_before_dwell': pre_dwell is not None}
+    if not dwell_ordered:
+        record['reasons'].append('quiet_dwell: the meter probe did not end before the quiet dwell started '
+                                 '(it must run before the dwell, never during it)')
+        record['admitted'] = False
+    return record
 
 
 def _disk_config_digest(config):
@@ -717,6 +772,27 @@ def _require_night_job_absent(runner=None):
         raise ValueError('v4 install refused: launchd job state unavailable')
 
 
+def _install_timing(operation):
+    @wraps(operation)
+    def wrapped(*args, **kwargs):
+        # The session CLI already owns stdout. Buffer throughout arm/install,
+        # then append there after the unmeasured operation. No sidecar, file
+        # open, or marker write can enter the quiet start-state preparation.
+        rows = []
+        try:
+            with timing_receipts.bind(timing_receipts.Writer(rows.append, producer="v4_arm")), \
+                 timing_receipts.span("arm", "v4_install"):
+                return operation(*args, **kwargs)
+        finally:
+            for row in rows:
+                try:
+                    sys.stdout.write(json.dumps(row, sort_keys=True) + "\n")
+                except OSError as error:
+                    sys.stderr.write(f"timing receipt missing: {error}\n")
+    return wrapped
+
+
+@_install_timing
 def install(session_root, *, runner=None, volume_runner=None, now=None, w1_disk_config=None,
             disk_gate=None, **kwargs):
     session = Path(session_root)
@@ -837,57 +913,108 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
                      obc_off_attested_by=None, battery_runner=None, battery_log=None,
                      window_battery_journal=None, next_arm_triage=None, commit_check=None, record_check=None,
                      packet_builder=None, meter_probe=None, dwell_start=None, **kwargs):
+    # RUN_STATE 226 R15: every arm, W1 included, binds the frozen series. W1 binds an empty history after
+    # R1; a C/T window the next frozen window. The packet bound is the arm's OWN rebuild (a supplied
+    # packet is only a pointer), whose history is derived from the hash-chained, authenticated records.
+    # R17 review F7: arm_checks runs this binding before the meter probe and the recorded dwell start.
+    from scripts import align_v4_series as series
+    window_id = (state.get('v4_series') or {}).get('window_id', 'W1')
+    binding_root = state.get('source_measurement_root') or measurement_root
+
+    def series_bind(built):
+        try:
+            if not isinstance(built, dict):
+                raise ValueError('the arm could not rebuild the packet')
+            series.bind_packet(binding_root, window_id, built, authenticated_by_rebuild=True)
+            return []
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            return [f'series_binding: {window_id}: {exc}']
+
+    # Every arm records what it saw, admitted or not (ruling 7: "every arm and every bundle records
+    # it"), before the shared installer can run. Lead ruling (R17 review open item 5): that record
+    # write, the powermode check and the W1 disk gate run BEFORE the dwell stamp (``pre_dwell``).
+    attempt = 1
+    while (session / f'staging/v4-arm-{attempt:03d}.json').exists():
+        attempt += 1
+    path = session / f'staging/v4-arm-{attempt:03d}.json'
+    dwell_path = session / f'staging/v4-arm-{attempt:03d}.dwell.json'
+
+    def refuse(record, reason):
+        record['admitted'] = False
+        record['reasons'] = [reason] + record['reasons']
+
+    def pre_dwell(record):
+        built = (record.get('next_arm_triage') or {}).get('rebuilt_packet')
+        binding = record.pop('series_binding', None)
+        if binding is None:            # an arm_checks stand-in that did not run the hook
+            binding = series_bind(built)
+        record['series_window'] = window_id
+        record['series_binding'] = binding
+        record['series_packet'] = built
+        if binding:
+            record['admitted'] = False
+            record['reasons'] = binding + record['reasons']
+        if high is not None:
+            record['high_power_enter'] = high
+            if not high['ok']:
+                refuse(record, 'high_power_enter: ' + str(high['reason']))
+        record['epoch_s'] = (now or time.time)()
+        receipt = None
+        if record['admitted']:
+            try:
+                kit.arm_powermode_check(plan, record['ac_powermode'].get('observed'))
+            except ValueError as exc:
+                refuse(record, f'ac_powermode: {exc}')
+        if record['admitted']:
+            try:
+                with timing_receipts.span("arm", "v4_disk_gate"):
+                    receipt = w1_disk_check(w1_disk_config, gate=disk_gate)
+                record['w1_disk_gate'] = receipt
+            except (OSError, ValueError) as exc:
+                refuse(record, f'w1_disk_gate: {exc}')
+        # The dwell stamp is the one value that depends on the dwell: it is held in memory and written
+        # alone, to the dwell record, after the stamp (``quiet_dwell`` here only names that file).
+        record['quiet_dwell'] = {'start_ns': None, 'stamped_after_this_record': True, 'dwell_record': str(dwell_path)}
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open('x') as handle:
+            handle.write(json.dumps(record, indent=2, sort_keys=True) + '\n')
+        state.setdefault('v4_arm_records', []).append({'path': str(path), 'admitted': record['admitted'],
+                                                        'ac_powermode': record['ac_powermode'].get('observed'),
+                                                        'reasons': record['reasons'],
+                                                        'dwell_record': str(dwell_path)})
+        pilot.h.write(session / 'session.json', state)
+        if receipt is not None:
+            pilot.h.write(session / 'staging/w1_disk_gate.json', receipt)
+
     record = arm_checks(measurement_root, plan, runner=runner, volume_runner=volume_runner, lock=lock,
                         owner=owner, obc_off_attested_by=obc_off_attested_by, battery_runner=battery_runner,
                         battery_log=battery_log, window_battery_journal=window_battery_journal, now=now,
                         next_arm_triage=next_arm_triage, commit_check=commit_check,
                         record_check=record_check, packet_builder=packet_builder, meter_probe=meter_probe,
-                        dwell_start=dwell_start)
-    # RUN_STATE 226 R15: every arm, W1 included, binds the frozen series. W1 binds an empty history after
-    # R1; a C/T window the next frozen window. The packet bound is the arm's OWN rebuild (a supplied
-    # packet is only a pointer), whose history is derived from the hash-chained, authenticated records.
-    from scripts import align_v4_series as series
-    built = (record.get('next_arm_triage') or {}).get('rebuilt_packet')
-    window_id = (state.get('v4_series') or {}).get('window_id', 'W1')
-    binding_root = state.get('source_measurement_root') or measurement_root
-    try:
-        if not isinstance(built, dict):
-            raise ValueError('the arm could not rebuild the packet')
-        series.bind_packet(binding_root, window_id, built, authenticated_by_rebuild=True)
-        binding = []
-    except (OSError, ValueError, KeyError, TypeError) as exc:
-        binding = [f'series_binding: {window_id}: {exc}']
-    record['series_window'] = window_id
-    record['series_binding'] = binding
-    record['series_packet'] = built
-    if binding:
-        record['admitted'] = False
-        record['reasons'] = binding + record['reasons']
-    if high is not None:
-        record['high_power_enter'] = high
-        if not high['ok']:
-            record['admitted'] = False
-            record['reasons'] = ['high_power_enter: ' + str(high['reason'])] + record['reasons']
-    record['epoch_s'] = (now or time.time)()
-    # Every arm records what it saw, admitted or not (ruling 7: "every arm and
-    # every bundle records it"), before the shared installer can run.
-    attempt = 1
-    while (session / f'staging/v4-arm-{attempt:03d}.json').exists():
-        attempt += 1
-    path = session / f'staging/v4-arm-{attempt:03d}.json'
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open('x') as handle:
-        handle.write(json.dumps(record, indent=2, sort_keys=True) + '\n')
-    state.setdefault('v4_arm_records', []).append({'path': str(path), 'admitted': record['admitted'],
-                                                    'ac_powermode': record['ac_powermode'].get('observed'),
-                                                    'reasons': record['reasons']})
-    pilot.h.write(session / 'session.json', state)
+                        dwell_start=dwell_start, series_bind=series_bind, pre_dwell=pre_dwell)
+    # After the stamp: the single in-memory dwell value, written once, then the handoff (or refusal).
+    dwell = {'schema': ARM_DWELL_SCHEMA, 'arm_record': str(path), 'admitted': record['admitted'],
+             'quiet_dwell': record['quiet_dwell']}
+    with dwell_path.open('x') as handle:
+        handle.write(json.dumps(dwell, indent=2, sort_keys=True) + '\n')
     if not record['admitted']:
         raise ValueError('v4 arm refused: ' + '; '.join(record['reasons']))
-    kit.arm_powermode_check(plan, record['ac_powermode']['observed'])
-    receipt = w1_disk_check(w1_disk_config, gate=disk_gate)
-    pilot.h.write(session / 'staging/w1_disk_gate.json', receipt)
-    return pilot.install(session, now=now or time.time, **kwargs)
+    # R17: the powermode and W1 disk checks and their receipt write ran BEFORE the dwell (pre_dwell).
+    # Lead ruling: also record when the installer's launchctl calls returned, on the dwell's monotonic
+    # clock, so analysis can disclose the post-stamp installer interval (a later rule may trim it).
+    outcome = 'raised'
+    try:
+        with timing_receipts.span("arm", "v4_installer_handoff"):
+            installed = pilot.install(session, now=now or time.time, **kwargs)
+        outcome = 'returned'
+        return installed
+    finally:
+        dwell['quiet_dwell'] = {**dwell['quiet_dwell'], 'installer_end_ns': time.monotonic_ns(),
+                                'installer_outcome': outcome}
+        temporary = dwell_path.with_name(dwell_path.name + '.tmp')
+        with temporary.open('x') as handle:
+            handle.write(json.dumps(dwell, indent=2, sort_keys=True) + '\n')
+        os.replace(temporary, dwell_path)
 
 
 def main(argv=None):
@@ -897,7 +1024,7 @@ def main(argv=None):
                       prepare_options=(('--window-id', dict(help='frozen series window or D alias; requires series admission')),
                                        ('--extra-sentinels', dict(type=int, default=0, choices=(0, 2),
                                            help='R20: two supplemental escalation sentinels (ordinals 23, 24) '
-                                                'after a U4/U5-inconclusive window; ceiling 62,400 s'))),
+                                                'after a U4-inconclusive window; ceiling 62,400 s'))),
                       desk_extra_checks=powermode_desk_check,
                       install_options=(('--w1-disk-config', dict(
                           type=Path, required=True,

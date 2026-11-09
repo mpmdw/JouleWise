@@ -1729,8 +1729,8 @@ The packet is a pointer: the arm rebuilds it (scripts/align_v4_next_arm_packet.p
 names, requires equality ignoring only pushed_tip/packet_preflight, requires an unexpired valid_until_epoch_s
 and computes the live meter (before the quiet dwell, never during it), powermode, volume and battery
 checks itself; nothing is lead-entered.
-Calibration is a fixed 8 counted windows (v4_cadence.calibration_stop, RUN_STATE 217): no
-early stop, 39 eligible benign per pair after 8, else insufficient_calibration.
+Calibration is exactly 8 admitted windows (v4_cadence.calibration_stop, RUN_STATE 217; R22-2 / R24: C9-C14 replace
+structurally barred windows only): no early stop, 39 eligible benign per pair after 8, else insufficient_calibration.
 require_w1_ready also requires registration_receipt.json, bound to current and
 committed protocol/kit/desk/estimand/deviation/U3/WP19 bytes, two admitted gate
 reports and the lead signature. The committed pending template never admits.

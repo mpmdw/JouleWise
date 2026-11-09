@@ -208,23 +208,26 @@ class ArmWitnesses(Base):
         self.assertFalse(self.arm(scenario, edited)['admitted'])
 
     def test_c3_attempt_ruling_is_bound_to_committed_text_and_preserves_counts(self):
-        scenario = self.calibration_series([
-            ('C1', True, True), ('C2', True, True), ('C3#1', False, True), ('C3#2', False, True)])
+        # R22-2: a zero-capture refusal beyond the retry is a structural bar that a replacement window absorbs;
+        # escalation needs a seventh bar (R24: six replacements). The ruling's committed text digest, forgery and omission behaviour are
+        # unchanged; the ruling resets the trailing count but cannot repair an unreachable eight.
+        scenario = self.calibration_series([(f'C{n}#{k}', False, True) for n in range(1, 8) for k in (1, 2)])
         before = scenario.build()
         self.assertEqual(before['calibration_decision']['decision'], 'escalate_to_lead')
         self.assertFalse(self.arm(scenario, before)['admitted'])
-        text = b'SYNTHETIC lead: resume C3#3, with frozen counts unchanged.\n'
+        text = b'SYNTHETIC lead: seven zero-capture bars, counts frozen unchanged.\n'
         ref = scenario.write('rulings/c3.txt', text)
-        scenario.series['lead_rulings'] = [{'ruling_id': 'C3-RESUME', 'after_window': 'C3#2',
+        scenario.series['lead_rulings'] = [{'ruling_id': 'C3-RESUME', 'after_window': 'C7#2',
             'text': ref, 'lead_signature': 'lead: synthetic 2026-11-08'}]
         scenario.write(scenario.series_path, scenario.series)
         scenario.series_commit = scenario.commit()
         ruled = scenario.build()
         self.assertEqual(ruled['lead_rulings'][0]['text_sha256'], hashlib.sha256(text).hexdigest())
-        self.assertEqual(ruled['calibration_decision']['attempted'], 2)
+        self.assertEqual(ruled['calibration_decision']['attempted'], 0)
         self.assertEqual(ruled['calibration_decision']['eligible_by_pair'],
                          before['calibration_decision']['eligible_by_pair'])
-        self.assertTrue(self.arm(scenario, ruled)['admitted'])
+        self.assertEqual(ruled['calibration_decision']['decision'], 'insufficient_calibration')
+        self.assertFalse(self.arm(scenario, ruled)['admitted'])
         forged = copy.deepcopy(ruled)
         forged['lead_rulings'][0]['text_sha256'] = 'a' * 64
         self.assertFalse(self.arm(scenario, forged)['admitted'])

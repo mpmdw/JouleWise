@@ -5,7 +5,7 @@ Builds the explicit ``pairs`` + ``policy`` input that ``align_v4_u3_bar.py``
 derives from. Reads only the bundle directories named on the command line; no
 discovery. Pilot replay energies are pilot data, not v4 outcomes (lead ruling).
 
-policy-template  Write the ruled policy (beta .05, N = 16, f = 1.5) with the
+policy-template  Write the ruled policy (beta .05, N = 22 after R25, f = 1.5) with the
                  three configuration/justification digests left to fill.
 pilot            One prespecified pair per session (ruling 3). The selection file
                  lists each session's candidate replay pairs IN DESIGN ORDER; the
@@ -29,8 +29,12 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-ROSTER = {'W1': {'30B': 4, 'D': 1}, **{f'C{i}': {'30B': 0, 'D': 1} for i in range(1, 9)},
-          **{f'T{i}': {'30B': 0, 'D': 1} for i in range(1, 4)}}     # ruling 2 as updated by RUN_STATE 226 R15: 3 test windows, N = 16
+# R25 (pre-signature design change, the U3 bar is not signed yet): the roster expands PROSPECTIVELY to every
+# window that can be run, including the six armable R24 reserve windows C9-C14, so the familywise false-fail
+# budget (beta over N comparisons) holds for every possible comparison. N = W1 (30B 4 + D 1) + C1-C14 (D 1 each)
+# + T1-T3 (D 1 each) = 5 + 14 + 3 = 22 (it was 16 = 5 + 8 + 3 before the reserve windows, RUN_STATE 226 R15).
+ROSTER = {'W1': {'30B': 4, 'D': 1}, **{f'C{i}': {'30B': 0, 'D': 1} for i in range(1, 15)},
+          **{f'T{i}': {'30B': 0, 'D': 1} for i in range(1, 4)}}
 FILL = 'FILL_SHA256'
 
 

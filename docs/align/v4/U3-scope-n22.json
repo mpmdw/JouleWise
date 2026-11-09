@@ -1,0 +1,3293 @@
+{
+  "cases": [
+    {
+      "N": 16,
+      "bar_30B_in_s0_units": 4.089789546325004,
+      "bar_D_in_s0_units": 6.134684319487505,
+      "beta_over_N_reference_only": 0.003125,
+      "n": 7,
+      "normal_model": [
+        {
+          "D_pair_failure_probability": 0.000474608594041198,
+          "D_shift_pilot_sd": 0.0,
+          "D_true_scale": 1.0,
+          "series_failure_probability": 0.019207883820753963
+        },
+        {
+          "D_pair_failure_probability": 0.00463218017141868,
+          "D_shift_pilot_sd": 0.0,
+          "D_true_scale": 1.5,
+          "series_failure_probability": 0.04999999999999999
+        },
+        {
+          "D_pair_failure_probability": 0.01813514640477715,
+          "D_shift_pilot_sd": 0.0,
+          "D_true_scale": 2.0,
+          "series_failure_probability": 0.14807829520877458
+        },
+        {
+          "D_pair_failure_probability": 0.08013190498946565,
+          "D_shift_pilot_sd": 0.0,
+          "D_true_scale": 3.0,
+          "series_failure_probability": 0.4884400890762022
+        },
+        {
+          "D_pair_failure_probability": 0.014181649521518272,
+          "D_shift_pilot_sd": 2.0,
+          "D_true_scale": 1.0,
+          "series_failure_probability": 0.08923067796957611
+        },
+        {
+          "D_pair_failure_probability": 0.8622590193291151,
+          "D_shift_pilot_sd": 8.0,
+          "D_true_scale": 1.0,
+          "series_failure_probability": 0.9802327954960061
+        }
+      ],
+      "oc": {
+        "limitation": "Model sensitivity only; no hardware validation or D transfer guarantee. Conditional rates for the realized small-sample scale can exceed marginal rates.",
+        "scenarios": [
+          {
+            "monte_carlo_se": 0.0009503010049452753,
+            "name": "normal_iid",
+            "pair_failure_rate": 0.0015,
+            "population_pair_failure_rates": {
+              "30B": 0.0045125,
+              "D": 0.0004958333333333334
+            },
+            "series_failure_rate": 0.0184,
+            "series_failures": 368,
+            "window_failure_rates": {
+              "C1": 0.00055,
+              "C2": 0.00035,
+              "C3": 0.00045,
+              "C4": 0.0007,
+              "C5": 0.00055,
+              "C6": 0.00045,
+              "C7": 0.0007,
+              "C8": 0.00055,
+              "T1": 0.00015,
+              "T2": 0.00055,
+              "T3": 0.00035,
+              "W1": 0.0162
+            }
+          },
+          {
+            "monte_carlo_se": 0.000920663823010332,
+            "name": "normal_window_rho_0.5",
+            "pair_failure_rate": 0.001540625,
+            "population_pair_failure_rates": {
+              "30B": 0.0046375,
+              "D": 0.0005083333333333333
+            },
+            "series_failure_rate": 0.01725,
+            "series_failures": 345,
+            "window_failure_rates": {
+              "C1": 0.00065,
+              "C2": 0.00065,
+              "C3": 0.0006,
+              "C4": 0.0007,
+              "C5": 0.0004,
+              "C6": 0.00025,
+              "C7": 0.00055,
+              "C8": 0.00045,
+              "T1": 0.00025,
+              "T2": 0.00065,
+              "T3": 0.0005,
+              "W1": 0.01415
+            }
+          },
+          {
+            "monte_carlo_se": 0.000645346418600119,
+            "name": "normal_series_rho_0.9",
+            "pair_failure_rate": 0.00135,
+            "population_pair_failure_rates": {
+              "30B": 0.003975,
+              "D": 0.000475
+            },
+            "series_failure_rate": 0.0084,
+            "series_failures": 168,
+            "window_failure_rates": {
+              "C1": 0.00045,
+              "C2": 0.0004,
+              "C3": 0.0005,
+              "C4": 0.00055,
+              "C5": 0.0005,
+              "C6": 0.0005,
+              "C7": 0.0005,
+              "C8": 0.0005,
+              "T1": 0.0004,
+              "T2": 0.0004,
+              "T3": 0.00045,
+              "W1": 0.0084
+            }
+          },
+          {
+            "monte_carlo_se": 0.001406208332716031,
+            "name": "normal_correlated_training_rho_0.5",
+            "pair_failure_rate": 0.003484375,
+            "population_pair_failure_rates": {
+              "30B": 0.010025,
+              "D": 0.0013041666666666666
+            },
+            "series_failure_rate": 0.04125,
+            "series_failures": 825,
+            "window_failure_rates": {
+              "C1": 0.0015,
+              "C2": 0.0013,
+              "C3": 0.0013,
+              "C4": 0.0011,
+              "C5": 0.0013,
+              "C6": 0.00135,
+              "C7": 0.0015,
+              "C8": 0.00125,
+              "T1": 0.00135,
+              "T2": 0.001,
+              "T3": 0.0008,
+              "W1": 0.03605
+            }
+          },
+          {
+            "monte_carlo_se": 0.002542424998893773,
+            "name": "student_t3_unit_variance",
+            "pair_failure_rate": 0.011871875,
+            "population_pair_failure_rates": {
+              "30B": 0.02225,
+              "D": 0.0084125
+            },
+            "series_failure_rate": 0.15255,
+            "series_failures": 3051,
+            "window_failure_rates": {
+              "C1": 0.00855,
+              "C2": 0.0086,
+              "C3": 0.0079,
+              "C4": 0.00785,
+              "C5": 0.0083,
+              "C6": 0.0087,
+              "C7": 0.00795,
+              "C8": 0.0093,
+              "T1": 0.0081,
+              "T2": 0.00815,
+              "T3": 0.0088,
+              "W1": 0.0897
+            }
+          },
+          {
+            "monte_carlo_se": 0.0022511241358485765,
+            "name": "centered_exponential",
+            "pair_failure_rate": 0.008121875,
+            "population_pair_failure_rates": {
+              "30B": 0.01745,
+              "D": 0.0050125
+            },
+            "series_failure_rate": 0.11445,
+            "series_failures": 2289,
+            "window_failure_rates": {
+              "C1": 0.0048,
+              "C2": 0.0057,
+              "C3": 0.0055,
+              "C4": 0.0048,
+              "C5": 0.00485,
+              "C6": 0.0038,
+              "C7": 0.00575,
+              "C8": 0.00485,
+              "T1": 0.0056,
+              "T2": 0.00385,
+              "T3": 0.0054,
+              "W1": 0.0708
+            }
+          },
+          {
+            "monte_carlo_se": 0.0009503010049452753,
+            "name": "D_true_scale_1.0",
+            "pair_failure_rate": 0.0015,
+            "population_pair_failure_rates": {
+              "30B": 0.0045125,
+              "D": 0.0004958333333333334
+            },
+            "series_failure_rate": 0.0184,
+            "series_failures": 368,
+            "window_failure_rates": {
+              "C1": 0.00055,
+              "C2": 0.00035,
+              "C3": 0.00045,
+              "C4": 0.0007,
+              "C5": 0.00055,
+              "C6": 0.00045,
+              "C7": 0.0007,
+              "C8": 0.00055,
+              "T1": 0.00015,
+              "T2": 0.00055,
+              "T3": 0.00035,
+              "W1": 0.0162
+            }
+          },
+          {
+            "monte_carlo_se": 0.0015256784966040519,
+            "name": "D_true_scale_1.5",
+            "pair_failure_rate": 0.004678125,
+            "population_pair_failure_rates": {
+              "30B": 0.0045125,
+              "D": 0.004733333333333333
+            },
+            "series_failure_rate": 0.04895,
+            "series_failures": 979,
+            "window_failure_rates": {
+              "C1": 0.0053,
+              "C2": 0.00445,
+              "C3": 0.00495,
+              "C4": 0.0049,
+              "C5": 0.0052,
+              "C6": 0.00435,
+              "C7": 0.00485,
+              "C8": 0.00435,
+              "T1": 0.0039,
+              "T2": 0.0051,
+              "T3": 0.00445,
+              "W1": 0.01975
+            }
+          },
+          {
+            "monte_carlo_se": 0.002504259346593319,
+            "name": "D_true_scale_2.0",
+            "pair_failure_rate": 0.014703125,
+            "population_pair_failure_rates": {
+              "30B": 0.0045125,
+              "D": 0.0181
+            },
+            "series_failure_rate": 0.14705,
+            "series_failures": 2941,
+            "window_failure_rates": {
+              "C1": 0.01795,
+              "C2": 0.01825,
+              "C3": 0.01885,
+              "C4": 0.01785,
+              "C5": 0.0177,
+              "C6": 0.0175,
+              "C7": 0.0188,
+              "C8": 0.0181,
+              "T1": 0.01735,
+              "T2": 0.0189,
+              "T3": 0.01805,
+              "W1": 0.0313
+            }
+          },
+          {
+            "monte_carlo_se": 0.0035349986562939455,
+            "name": "D_true_scale_3.0",
+            "pair_failure_rate": 0.061390625,
+            "population_pair_failure_rates": {
+              "30B": 0.0045125,
+              "D": 0.08035
+            },
+            "series_failure_rate": 0.4913,
+            "series_failures": 9826,
+            "window_failure_rates": {
+              "C1": 0.0848,
+              "C2": 0.07725,
+              "C3": 0.0828,
+              "C4": 0.0787,
+              "C5": 0.0777,
+              "C6": 0.0801,
+              "C7": 0.083,
+              "C8": 0.0798,
+              "T1": 0.07865,
+              "T2": 0.08155,
+              "T3": 0.0815,
+              "W1": 0.089
+            }
+          },
+          {
+            "monte_carlo_se": 0.0019902818581798913,
+            "name": "D_drift_two_pilot_sd",
+            "pair_failure_rate": 0.011865625,
+            "population_pair_failure_rates": {
+              "30B": 0.0045125,
+              "D": 0.014316666666666667
+            },
+            "series_failure_rate": 0.08675,
+            "series_failures": 1735,
+            "window_failure_rates": {
+              "C1": 0.01495,
+              "C2": 0.0138,
+              "C3": 0.01435,
+              "C4": 0.01345,
+              "C5": 0.01505,
+              "C6": 0.014,
+              "C7": 0.0148,
+              "C8": 0.01315,
+              "T1": 0.01365,
+              "T2": 0.0146,
+              "T3": 0.0148,
+              "W1": 0.02755
+            }
+          },
+          {
+            "monte_carlo_se": 0.0009814244112513186,
+            "name": "D_drift_eight_pilot_sd",
+            "pair_failure_rate": 0.648875,
+            "population_pair_failure_rates": {
+              "30B": 0.0045125,
+              "D": 0.8636625
+            },
+            "series_failure_rate": 0.98035,
+            "series_failures": 19607,
+            "window_failure_rates": {
+              "C1": 0.8621,
+              "C2": 0.86415,
+              "C3": 0.8632,
+              "C4": 0.8622,
+              "C5": 0.86455,
+              "C6": 0.8644,
+              "C7": 0.8633,
+              "C8": 0.8662,
+              "T1": 0.8634,
+              "T2": 0.86225,
+              "T3": 0.865,
+              "W1": 0.86325
+            }
+          }
+        ],
+        "seed": 20261108,
+        "simulations": 20000
+      },
+      "pair_false_fail_at_assumed_scale": 0.004632180171418678,
+      "series_beta": 0.05,
+      "series_false_fail_at_assumed_scale": 0.04999999999999997,
+      "series_quantile_q": 4.089789546325004
+    },
+    {
+      "N": 16,
+      "bar_30B_in_s0_units": 4.692761254734707,
+      "bar_D_in_s0_units": 7.039141882102061,
+      "beta_over_N_reference_only": 0.0015625,
+      "n": 7,
+      "normal_model": [
+        {
+          "D_pair_failure_probability": 0.00020433549460723588,
+          "D_shift_pilot_sd": 0.0,
+          "D_true_scale": 1.0,
+          "series_failure_probability": 0.00923839556981598
+        },
+        {
+          "D_pair_failure_probability": 0.0022272893668416013,
+          "D_shift_pilot_sd": 0.0,
+          "D_true_scale": 1.5,
+          "series_failure_probability": 0.02499999999999998
+        },
+        {
+          "D_pair_failure_probability": 0.009733256435123688,
+          "D_shift_pilot_sd": 0.0,
+          "D_true_scale": 2.0,
+          "series_failure_probability": 0.08387632067856833
+        },
+        {
+          "D_pair_failure_probability": 0.05136032219404325,
+          "D_shift_pilot_sd": 0.0,
+          "D_true_scale": 3.0,
+          "series_failure_probability": 0.3486636960025003
+        },
+        {
+          "D_pair_failure_probability": 0.0067632982021981446,
+          "D_shift_pilot_sd": 2.0,
+          "D_true_scale": 1.0,
+          "series_failure_probability": 0.04515230791770173
+        },
+        {
+          "D_pair_failure_probability": 0.7239047220252278,
+          "D_shift_pilot_sd": 8.0,
+          "D_true_scale": 1.0,
+          "series_failure_probability": 0.922924402810835
+        }
+      ],
+      "oc": {
+        "limitation": "Model sensitivity only; no hardware validation or D transfer guarantee. Conditional rates for the realized small-sample scale can exceed marginal rates.",
+        "scenarios": [
+          {
+            "monte_carlo_se": 0.0006947998812607844,
+            "name": "normal_iid",
+            "pair_failure_rate": 0.00075,
+            "population_pair_failure_rates": {
+              "30B": 0.0024375,
+              "D": 0.0001875
+            },
+            "series_failure_rate": 0.00975,
+            "series_failures": 195,
+            "window_failure_rates": {
+              "C1": 0.0001,
+              "C2": 0.00015,
+              "C3": 0.00025,
+              "C4": 0.0002,
+              "C5": 0.0002,
+              "C6": 0.00025,
+              "C7": 0.00035,
+              "C8": 0.00015,
+              "T1": 5e-05,
+              "T2": 0.00015,
+              "T3": 0.00015,
+              "W1": 0.00885
+            }
+          },
+          {
+            "monte_carlo_se": 0.0006585376792560924,
+            "name": "normal_window_rho_0.5",
+            "pair_failure_rate": 0.000740625,
+            "population_pair_failure_rates": {
+              "30B": 0.0023875,
+              "D": 0.00019166666666666667
+            },
+            "series_failure_rate": 0.00875,
+            "series_failures": 175,
+            "window_failure_rates": {
+              "C1": 0.0002,
+              "C2": 0.00025,
+              "C3": 0.0003,
+              "C4": 0.0003,
+              "C5": 0.0002,
+              "C6": 0.0001,
+              "C7": 0.0003,
+              "C8": 0.0001,
+              "T1": 0.00015,
+              "T2": 0.00015,
+              "T3": 0.0001,
+              "W1": 0.00765
+            }
+          },
+          {
+            "monte_carlo_se": 0.0004085815402095401,
+            "name": "normal_series_rho_0.9",
+            "pair_failure_rate": 0.00064375,
+            "population_pair_failure_rates": {
+              "30B": 0.0018,
+              "D": 0.00025833333333333334
+            },
+            "series_failure_rate": 0.00335,
+            "series_failures": 67,
+            "window_failure_rates": {
+              "C1": 0.0002,
+              "C2": 0.00025,
+              "C3": 0.00025,
+              "C4": 0.00035,
+              "C5": 0.00025,
+              "C6": 0.0002,
+              "C7": 0.0003,
+              "C8": 0.0003,
+              "T1": 0.0003,
+              "T2": 0.00025,
+              "T3": 0.0002,
+              "W1": 0.00335
+            }
+          },
+          {
+            "monte_carlo_se": 0.0010150590500064515,
+            "name": "normal_correlated_training_rho_0.5",
+            "pair_failure_rate": 0.001684375,
+            "population_pair_failure_rates": {
+              "30B": 0.0051,
+              "D": 0.0005458333333333333
+            },
+            "series_failure_rate": 0.02105,
+            "series_failures": 421,
+            "window_failure_rates": {
+              "C1": 0.00065,
+              "C2": 0.00035,
+              "C3": 0.0006,
+              "C4": 0.0004,
+              "C5": 0.0007,
+              "C6": 0.00075,
+              "C7": 0.0007,
+              "C8": 0.00055,
+              "T1": 0.0004,
+              "T2": 0.0004,
+              "T3": 0.0002,
+              "W1": 0.0182
+            }
+          },
+          {
+            "monte_carlo_se": 0.002233019004621322,
+            "name": "student_t3_unit_variance",
+            "pair_failure_rate": 0.008278125,
+            "population_pair_failure_rates": {
+              "30B": 0.0159,
+              "D": 0.0057375
+            },
+            "series_failure_rate": 0.11235,
+            "series_failures": 2247,
+            "window_failure_rates": {
+              "C1": 0.00605,
+              "C2": 0.0056,
+              "C3": 0.00555,
+              "C4": 0.0055,
+              "C5": 0.00555,
+              "C6": 0.0054,
+              "C7": 0.0054,
+              "C8": 0.00675,
+              "T1": 0.0053,
+              "T2": 0.00575,
+              "T3": 0.006,
+              "W1": 0.0652
+            }
+          },
+          {
+            "monte_carlo_se": 0.0018934748149896264,
+            "name": "centered_exponential",
+            "pair_failure_rate": 0.005328125,
+            "population_pair_failure_rates": {
+              "30B": 0.0122375,
+              "D": 0.003025
+            },
+            "series_failure_rate": 0.07775,
+            "series_failures": 1555,
+            "window_failure_rates": {
+              "C1": 0.00305,
+              "C2": 0.0032,
+              "C3": 0.0031,
+              "C4": 0.00305,
+              "C5": 0.00275,
+              "C6": 0.00225,
+              "C7": 0.0035,
+              "C8": 0.00315,
+              "T1": 0.0035,
+              "T2": 0.00245,
+              "T3": 0.003,
+              "W1": 0.04975
+            }
+          },
+          {
+            "monte_carlo_se": 0.0006947998812607844,
+            "name": "D_true_scale_1.0",
+            "pair_failure_rate": 0.00075,
+            "population_pair_failure_rates": {
+              "30B": 0.0024375,
+              "D": 0.0001875
+            },
+            "series_failure_rate": 0.00975,
+            "series_failures": 195,
+            "window_failure_rates": {
+              "C1": 0.0001,
+              "C2": 0.00015,
+              "C3": 0.00025,
+              "C4": 0.0002,
+              "C5": 0.0002,
+              "C6": 0.00025,
+              "C7": 0.00035,
+              "C8": 0.00015,
+              "T1": 5e-05,
+              "T2": 0.00015,
+              "T3": 0.00015,
+              "W1": 0.00885
+            }
+          },
+          {
+            "monte_carlo_se": 0.0011061191165511969,
+            "name": "D_true_scale_1.5",
+            "pair_failure_rate": 0.002296875,
+            "population_pair_failure_rates": {
+              "30B": 0.0024375,
+              "D": 0.00225
+            },
+            "series_failure_rate": 0.0251,
+            "series_failures": 502,
+            "window_failure_rates": {
+              "C1": 0.00265,
+              "C2": 0.00195,
+              "C3": 0.0025,
+              "C4": 0.00255,
+              "C5": 0.0024,
+              "C6": 0.00215,
+              "C7": 0.00215,
+              "C8": 0.0023,
+              "T1": 0.00155,
+              "T2": 0.0025,
+              "T3": 0.00205,
+              "W1": 0.01045
+            }
+          },
+          {
+            "monte_carlo_se": 0.0019464999357821722,
+            "name": "D_true_scale_2.0",
+            "pair_failure_rate": 0.00788125,
+            "population_pair_failure_rates": {
+              "30B": 0.0024375,
+              "D": 0.009695833333333334
+            },
+            "series_failure_rate": 0.0826,
+            "series_failures": 1652,
+            "window_failure_rates": {
+              "C1": 0.01005,
+              "C2": 0.01035,
+              "C3": 0.0098,
+              "C4": 0.0094,
+              "C5": 0.00955,
+              "C6": 0.00985,
+              "C7": 0.0098,
+              "C8": 0.00965,
+              "T1": 0.00845,
+              "T2": 0.0098,
+              "T3": 0.0096,
+              "W1": 0.01765
+            }
+          },
+          {
+            "monte_carlo_se": 0.0033780837578426025,
+            "name": "D_true_scale_3.0",
+            "pair_failure_rate": 0.039184375,
+            "population_pair_failure_rates": {
+              "30B": 0.0024375,
+              "D": 0.05143333333333333
+            },
+            "series_failure_rate": 0.35245,
+            "series_failures": 7049,
+            "window_failure_rates": {
+              "C1": 0.0532,
+              "C2": 0.04865,
+              "C3": 0.053,
+              "C4": 0.04985,
+              "C5": 0.0511,
+              "C6": 0.05235,
+              "C7": 0.053,
+              "C8": 0.05115,
+              "T1": 0.0508,
+              "T2": 0.0511,
+              "T3": 0.0522,
+              "W1": 0.05725
+            }
+          },
+          {
+            "monte_carlo_se": 0.001456513645662134,
+            "name": "D_drift_two_pilot_sd",
+            "pair_failure_rate": 0.0056875,
+            "population_pair_failure_rates": {
+              "30B": 0.0024375,
+              "D": 0.0067708333333333336
+            },
+            "series_failure_rate": 0.0444,
+            "series_failures": 888,
+            "window_failure_rates": {
+              "C1": 0.0073,
+              "C2": 0.0072,
+              "C3": 0.0073,
+              "C4": 0.00615,
+              "C5": 0.0071,
+              "C6": 0.00625,
+              "C7": 0.0065,
+              "C8": 0.0061,
+              "T1": 0.00655,
+              "T2": 0.00705,
+              "T3": 0.0066,
+              "W1": 0.01435
+            }
+          },
+          {
+            "monte_carlo_se": 0.001876645111628728,
+            "name": "D_drift_eight_pilot_sd",
+            "pair_failure_rate": 0.545590625,
+            "population_pair_failure_rates": {
+              "30B": 0.0024375,
+              "D": 0.7266416666666666
+            },
+            "series_failure_rate": 0.92375,
+            "series_failures": 18475,
+            "window_failure_rates": {
+              "C1": 0.7246,
+              "C2": 0.72895,
+              "C3": 0.7271,
+              "C4": 0.7281,
+              "C5": 0.7302,
+              "C6": 0.7249,
+              "C7": 0.7248,
+              "C8": 0.73005,
+              "T1": 0.72395,
+              "T2": 0.72545,
+              "T3": 0.72835,
+              "W1": 0.72325
+            }
+          }
+        ],
+        "seed": 20261108,
+        "simulations": 20000
+      },
+      "pair_false_fail_at_assumed_scale": 0.0022272893668416013,
+      "series_beta": 0.025,
+      "series_false_fail_at_assumed_scale": 0.02499999999999998,
+      "series_quantile_q": 4.692761254734707
+    },
+    {
+      "N": 16,
+      "bar_30B_in_s0_units": 4.657468892217366,
+      "bar_D_in_s0_units": 6.98620333832605,
+      "beta_over_N_reference_only": 0.003125,
+      "n": 5,
+      "normal_model": [
+        {
+          "D_pair_failure_probability": 0.000925828380770498,
+          "D_shift_pilot_sd": 0.0,
+          "D_true_scale": 1.0,
+          "series_failure_probability": 0.02214139245223391
+        },
+        {
+          "D_pair_failure_probability": 0.0055454850306890366,
+          "D_shift_pilot_sd": 0.0,
+          "D_true_scale": 1.5,
+          "series_failure_probability": 0.04999999999999999
+        },
+        {
+          "D_pair_failure_probability": 0.01741330375458659,
+          "D_shift_pilot_sd": 0.0,
+          "D_true_scale": 2.0,
+          "series_failure_probability": 0.12523084398605686
+        },
+        {
+          "D_pair_failure_probability": 0.06731805210493626,
+          "D_shift_pilot_sd": 0.0,
+          "D_true_scale": 3.0,
+          "series_failure_probability": 0.3897415283622115
+        },
+        {
+          "D_pair_failure_probability": 0.016287720892520403,
+          "D_shift_pilot_sd": 2.0,
+          "D_true_scale": 1.0,
+          "series_failure_probability": 0.0832088780496193
+        },
+        {
+          "D_pair_failure_probability": 0.7244108023364434,
+          "D_shift_pilot_sd": 8.0,
+          "D_true_scale": 1.0,
+          "series_failure_probability": 0.903323958311376
+        }
+      ],
+      "oc": {
+        "limitation": "Model sensitivity only; no hardware validation or D transfer guarantee. Conditional rates for the realized small-sample scale can exceed marginal rates.",
+        "scenarios": [
+          {
+            "monte_carlo_se": 0.0010349007198760661,
+            "name": "normal_iid",
+            "pair_failure_rate": 0.0019625,
+            "population_pair_failure_rates": {
+              "30B": 0.0053,
+              "D": 0.00085
+            },
+            "series_failure_rate": 0.0219,
+            "series_failures": 438,
+            "window_failure_rates": {
+              "C1": 0.001,
+              "C2": 0.0013,
+              "C3": 0.0009,
+              "C4": 0.0008,
+              "C5": 0.0009,
+              "C6": 0.0006,
+              "C7": 0.00055,
+              "C8": 0.00065,
+              "T1": 0.0009,
+              "T2": 0.0007,
+              "T3": 0.00105,
+              "W1": 0.01875
+            }
+          },
+          {
+            "monte_carlo_se": 0.0009765167049262393,
+            "name": "normal_window_rho_0.5",
+            "pair_failure_rate": 0.002028125,
+            "population_pair_failure_rates": {
+              "30B": 0.0054125,
+              "D": 0.0009
+            },
+            "series_failure_rate": 0.01945,
+            "series_failures": 389,
+            "window_failure_rates": {
+              "C1": 0.0009,
+              "C2": 0.00105,
+              "C3": 0.0009,
+              "C4": 0.00125,
+              "C5": 0.00085,
+              "C6": 0.00055,
+              "C7": 0.0009,
+              "C8": 0.0006,
+              "T1": 0.00115,
+              "T2": 0.00095,
+              "T3": 0.0009,
+              "W1": 0.016
+            }
+          },
+          {
+            "monte_carlo_se": 0.0007104913792580457,
+            "name": "normal_series_rho_0.9",
+            "pair_failure_rate": 0.001909375,
+            "population_pair_failure_rates": {
+              "30B": 0.0053625,
+              "D": 0.0007583333333333333
+            },
+            "series_failure_rate": 0.0102,
+            "series_failures": 204,
+            "window_failure_rates": {
+              "C1": 0.0007,
+              "C2": 0.00085,
+              "C3": 0.00075,
+              "C4": 0.00085,
+              "C5": 0.001,
+              "C6": 0.0007,
+              "C7": 0.00085,
+              "C8": 0.0007,
+              "T1": 0.00055,
+              "T2": 0.0007,
+              "T3": 0.0008,
+              "W1": 0.01015
+            }
+          },
+          {
+            "monte_carlo_se": 0.0013536689033881218,
+            "name": "normal_correlated_training_rho_0.5",
+            "pair_failure_rate": 0.0036375,
+            "population_pair_failure_rates": {
+              "30B": 0.00955,
+              "D": 0.0016666666666666668
+            },
+            "series_failure_rate": 0.0381,
+            "series_failures": 762,
+            "window_failure_rates": {
+              "C1": 0.0021,
+              "C2": 0.00195,
+              "C3": 0.0013,
+              "C4": 0.00165,
+              "C5": 0.00155,
+              "C6": 0.00185,
+              "C7": 0.0015,
+              "C8": 0.00175,
+              "T1": 0.0017,
+              "T2": 0.0016,
+              "T3": 0.00145,
+              "W1": 0.03245
+            }
+          },
+          {
+            "monte_carlo_se": 0.002486516614663976,
+            "name": "student_t3_unit_variance",
+            "pair_failure_rate": 0.01205625,
+            "population_pair_failure_rates": {
+              "30B": 0.022675,
+              "D": 0.008516666666666667
+            },
+            "series_failure_rate": 0.14455,
+            "series_failures": 2891,
+            "window_failure_rates": {
+              "C1": 0.0085,
+              "C2": 0.0087,
+              "C3": 0.00915,
+              "C4": 0.0085,
+              "C5": 0.0077,
+              "C6": 0.00835,
+              "C7": 0.00825,
+              "C8": 0.00855,
+              "T1": 0.00795,
+              "T2": 0.0086,
+              "T3": 0.0082,
+              "W1": 0.08765
+            }
+          },
+          {
+            "monte_carlo_se": 0.002095622938412347,
+            "name": "centered_exponential",
+            "pair_failure_rate": 0.006984375,
+            "population_pair_failure_rates": {
+              "30B": 0.0154625,
+              "D": 0.004158333333333333
+            },
+            "series_failure_rate": 0.0973,
+            "series_failures": 1946,
+            "window_failure_rates": {
+              "C1": 0.0038,
+              "C2": 0.0037,
+              "C3": 0.00375,
+              "C4": 0.0047,
+              "C5": 0.00405,
+              "C6": 0.00425,
+              "C7": 0.00415,
+              "C8": 0.0048,
+              "T1": 0.00385,
+              "T2": 0.0053,
+              "T3": 0.0036,
+              "W1": 0.06145
+            }
+          },
+          {
+            "monte_carlo_se": 0.0010349007198760661,
+            "name": "D_true_scale_1.0",
+            "pair_failure_rate": 0.0019625,
+            "population_pair_failure_rates": {
+              "30B": 0.0053,
+              "D": 0.00085
+            },
+            "series_failure_rate": 0.0219,
+            "series_failures": 438,
+            "window_failure_rates": {
+              "C1": 0.001,
+              "C2": 0.0013,
+              "C3": 0.0009,
+              "C4": 0.0008,
+              "C5": 0.0009,
+              "C6": 0.0006,
+              "C7": 0.00055,
+              "C8": 0.00065,
+              "T1": 0.0009,
+              "T2": 0.0007,
+              "T3": 0.00105,
+              "W1": 0.01875
+            }
+          },
+          {
+            "monte_carlo_se": 0.0015476562522084806,
+            "name": "D_true_scale_1.5",
+            "pair_failure_rate": 0.005425,
+            "population_pair_failure_rates": {
+              "30B": 0.0053,
+              "D": 0.0054666666666666665
+            },
+            "series_failure_rate": 0.05045,
+            "series_failures": 1009,
+            "window_failure_rates": {
+              "C1": 0.00515,
+              "C2": 0.0061,
+              "C3": 0.00545,
+              "C4": 0.00565,
+              "C5": 0.00555,
+              "C6": 0.00515,
+              "C7": 0.0046,
+              "C8": 0.0055,
+              "T1": 0.00545,
+              "T2": 0.00595,
+              "T3": 0.006,
+              "W1": 0.0219
+            }
+          },
+          {
+            "monte_carlo_se": 0.0023292829100390535,
+            "name": "D_true_scale_2.0",
+            "pair_failure_rate": 0.014221875,
+            "population_pair_failure_rates": {
+              "30B": 0.0053,
+              "D": 0.017195833333333334
+            },
+            "series_failure_rate": 0.12385,
+            "series_failures": 2477,
+            "window_failure_rates": {
+              "C1": 0.01785,
+              "C2": 0.01775,
+              "C3": 0.0163,
+              "C4": 0.01795,
+              "C5": 0.01745,
+              "C6": 0.0168,
+              "C7": 0.01535,
+              "C8": 0.01845,
+              "T1": 0.01685,
+              "T2": 0.01855,
+              "T3": 0.017,
+              "W1": 0.03105
+            }
+          },
+          {
+            "monte_carlo_se": 0.003441165772670651,
+            "name": "D_true_scale_3.0",
+            "pair_failure_rate": 0.050546875,
+            "population_pair_failure_rates": {
+              "30B": 0.0053,
+              "D": 0.06562916666666667
+            },
+            "series_failure_rate": 0.38525,
+            "series_failures": 7705,
+            "window_failure_rates": {
+              "C1": 0.06585,
+              "C2": 0.06805,
+              "C3": 0.06445,
+              "C4": 0.06455,
+              "C5": 0.0632,
+              "C6": 0.0658,
+              "C7": 0.06575,
+              "C8": 0.06805,
+              "T1": 0.0663,
+              "T2": 0.0673,
+              "T3": 0.06405,
+              "W1": 0.0761
+            }
+          },
+          {
+            "monte_carlo_se": 0.0019475716931604853,
+            "name": "D_drift_two_pilot_sd",
+            "pair_failure_rate": 0.013575,
+            "population_pair_failure_rates": {
+              "30B": 0.0053,
+              "D": 0.01633333333333333
+            },
+            "series_failure_rate": 0.0827,
+            "series_failures": 1654,
+            "window_failure_rates": {
+              "C1": 0.01715,
+              "C2": 0.01685,
+              "C3": 0.0142,
+              "C4": 0.01645,
+              "C5": 0.01595,
+              "C6": 0.01705,
+              "C7": 0.01605,
+              "C8": 0.0162,
+              "T1": 0.01685,
+              "T2": 0.0171,
+              "T3": 0.0158,
+              "W1": 0.0298
+            }
+          },
+          {
+            "monte_carlo_se": 0.0021432974303628514,
+            "name": "D_drift_eight_pilot_sd",
+            "pair_failure_rate": 0.538390625,
+            "population_pair_failure_rates": {
+              "30B": 0.0053,
+              "D": 0.7160875
+            },
+            "series_failure_rate": 0.89765,
+            "series_failures": 17953,
+            "window_failure_rates": {
+              "C1": 0.71475,
+              "C2": 0.7133,
+              "C3": 0.7172,
+              "C4": 0.7191,
+              "C5": 0.7165,
+              "C6": 0.71445,
+              "C7": 0.7152,
+              "C8": 0.7198,
+              "T1": 0.71335,
+              "T2": 0.71485,
+              "T3": 0.7168,
+              "W1": 0.71775
+            }
+          }
+        ],
+        "seed": 20261108,
+        "simulations": 20000
+      },
+      "pair_false_fail_at_assumed_scale": 0.0055454850306890366,
+      "series_beta": 0.05,
+      "series_false_fail_at_assumed_scale": 0.04999999999999998,
+      "series_quantile_q": 4.657468892217366
+    },
+    {
+      "N": 16,
+      "bar_30B_in_s0_units": 4.317244522501862,
+      "bar_D_in_s0_units": 6.475866783752792,
+      "beta_over_N_reference_only": 0.003125,
+      "n": 6,
+      "normal_model": [
+        {
+          "D_pair_failure_probability": 0.0006439562885132713,
+          "D_shift_pilot_sd": 0.0,
+          "D_true_scale": 1.0,
+          "series_failure_probability": 0.020462260234819014
+        },
+        {
+          "D_pair_failure_probability": 0.004997766621174742,
+          "D_shift_pilot_sd": 0.0,
+          "D_true_scale": 1.5,
+          "series_failure_probability": 0.04999999999999998
+        },
+        {
+          "D_pair_failure_probability": 0.01773288207524166,
+          "D_shift_pilot_sd": 0.0,
+          "D_true_scale": 2.0,
+          "series_failure_probability": 0.137355416021352
+        },
+        {
+          "D_pair_failure_probability": 0.07421785241067726,
+          "D_shift_pilot_sd": 0.0,
+          "D_true_scale": 3.0,
+          "series_failure_probability": 0.44392592147730764
+        },
+        {
+          "D_pair_failure_probability": 0.015082586419436808,
+          "D_shift_pilot_sd": 2.0,
+          "D_true_scale": 1.0,
+          "series_failure_probability": 0.08653525697751448
+        },
+        {
+          "D_pair_failure_probability": 0.8062583919549624,
+          "D_shift_pilot_sd": 8.0,
+          "D_true_scale": 1.0,
+          "series_failure_probability": 0.9556681051654335
+        }
+      ],
+      "oc": {
+        "limitation": "Model sensitivity only; no hardware validation or D transfer guarantee. Conditional rates for the realized small-sample scale can exceed marginal rates.",
+        "scenarios": [
+          {
+            "monte_carlo_se": 0.001030269624904083,
+            "name": "normal_iid",
+            "pair_failure_rate": 0.001834375,
+            "population_pair_failure_rates": {
+              "30B": 0.0051,
+              "D": 0.0007458333333333334
+            },
+            "series_failure_rate": 0.0217,
+            "series_failures": 434,
+            "window_failure_rates": {
+              "C1": 0.00075,
+              "C2": 0.00055,
+              "C3": 0.00105,
+              "C4": 0.0011,
+              "C5": 0.00085,
+              "C6": 0.00065,
+              "C7": 0.0004,
+              "C8": 0.0009,
+              "T1": 0.00045,
+              "T2": 0.001,
+              "T3": 0.00065,
+              "W1": 0.01855
+            }
+          },
+          {
+            "monte_carlo_se": 0.0009271933455326349,
+            "name": "normal_window_rho_0.5",
+            "pair_failure_rate": 0.001690625,
+            "population_pair_failure_rates": {
+              "30B": 0.0047375,
+              "D": 0.000675
+            },
+            "series_failure_rate": 0.0175,
+            "series_failures": 350,
+            "window_failure_rates": {
+              "C1": 0.0008,
+              "C2": 0.0005,
+              "C3": 0.0008,
+              "C4": 0.0007,
+              "C5": 0.0009,
+              "C6": 0.0006,
+              "C7": 0.00045,
+              "C8": 0.00085,
+              "T1": 0.00075,
+              "T2": 0.0005,
+              "T3": 0.00045,
+              "W1": 0.01485
+            }
+          },
+          {
+            "monte_carlo_se": 0.0006841307440833222,
+            "name": "normal_series_rho_0.9",
+            "pair_failure_rate": 0.001828125,
+            "population_pair_failure_rates": {
+              "30B": 0.0053125,
+              "D": 0.0006666666666666666
+            },
+            "series_failure_rate": 0.00945,
+            "series_failures": 189,
+            "window_failure_rates": {
+              "C1": 0.00075,
+              "C2": 0.00045,
+              "C3": 0.0007,
+              "C4": 0.0008,
+              "C5": 0.00075,
+              "C6": 0.00075,
+              "C7": 0.0006,
+              "C8": 0.00055,
+              "T1": 0.0008,
+              "T2": 0.00075,
+              "T3": 0.0006,
+              "W1": 0.00945
+            }
+          },
+          {
+            "monte_carlo_se": 0.0014344162575765792,
+            "name": "normal_correlated_training_rho_0.5",
+            "pair_failure_rate": 0.00393125,
+            "population_pair_failure_rates": {
+              "30B": 0.0107,
+              "D": 0.001675
+            },
+            "series_failure_rate": 0.043,
+            "series_failures": 860,
+            "window_failure_rates": {
+              "C1": 0.00195,
+              "C2": 0.0016,
+              "C3": 0.00235,
+              "C4": 0.0019,
+              "C5": 0.0016,
+              "C6": 0.00135,
+              "C7": 0.0017,
+              "C8": 0.00165,
+              "T1": 0.00145,
+              "T2": 0.0013,
+              "T3": 0.0016,
+              "W1": 0.03735
+            }
+          },
+          {
+            "monte_carlo_se": 0.0025403733731481286,
+            "name": "student_t3_unit_variance",
+            "pair_failure_rate": 0.01216875,
+            "population_pair_failure_rates": {
+              "30B": 0.0231125,
+              "D": 0.008520833333333333
+            },
+            "series_failure_rate": 0.15225,
+            "series_failures": 3045,
+            "window_failure_rates": {
+              "C1": 0.0085,
+              "C2": 0.00765,
+              "C3": 0.0089,
+              "C4": 0.00825,
+              "C5": 0.00865,
+              "C6": 0.0083,
+              "C7": 0.0089,
+              "C8": 0.0092,
+              "T1": 0.0082,
+              "T2": 0.0093,
+              "T3": 0.0079,
+              "W1": 0.0911
+            }
+          },
+          {
+            "monte_carlo_se": 0.0021951673911116665,
+            "name": "centered_exponential",
+            "pair_failure_rate": 0.0076875,
+            "population_pair_failure_rates": {
+              "30B": 0.0167875,
+              "D": 0.004654166666666667
+            },
+            "series_failure_rate": 0.10805,
+            "series_failures": 2161,
+            "window_failure_rates": {
+              "C1": 0.0052,
+              "C2": 0.00415,
+              "C3": 0.0048,
+              "C4": 0.00455,
+              "C5": 0.0044,
+              "C6": 0.00545,
+              "C7": 0.00445,
+              "C8": 0.00495,
+              "T1": 0.00495,
+              "T2": 0.00435,
+              "T3": 0.0043,
+              "W1": 0.0674
+            }
+          },
+          {
+            "monte_carlo_se": 0.001030269624904083,
+            "name": "D_true_scale_1.0",
+            "pair_failure_rate": 0.001834375,
+            "population_pair_failure_rates": {
+              "30B": 0.0051,
+              "D": 0.0007458333333333334
+            },
+            "series_failure_rate": 0.0217,
+            "series_failures": 434,
+            "window_failure_rates": {
+              "C1": 0.00075,
+              "C2": 0.00055,
+              "C3": 0.00105,
+              "C4": 0.0011,
+              "C5": 0.00085,
+              "C6": 0.00065,
+              "C7": 0.0004,
+              "C8": 0.0009,
+              "T1": 0.00045,
+              "T2": 0.001,
+              "T3": 0.00065,
+              "W1": 0.01855
+            }
+          },
+          {
+            "monte_carlo_se": 0.0015577817160950375,
+            "name": "D_true_scale_1.5",
+            "pair_failure_rate": 0.005090625,
+            "population_pair_failure_rates": {
+              "30B": 0.0051,
+              "D": 0.0050875
+            },
+            "series_failure_rate": 0.05115,
+            "series_failures": 1023,
+            "window_failure_rates": {
+              "C1": 0.0057,
+              "C2": 0.0043,
+              "C3": 0.0053,
+              "C4": 0.00495,
+              "C5": 0.0054,
+              "C6": 0.0052,
+              "C7": 0.00455,
+              "C8": 0.0064,
+              "T1": 0.0045,
+              "T2": 0.00555,
+              "T3": 0.0046,
+              "W1": 0.0215
+            }
+          },
+          {
+            "monte_carlo_se": 0.0024487913089930717,
+            "name": "D_true_scale_2.0",
+            "pair_failure_rate": 0.014821875,
+            "population_pair_failure_rates": {
+              "30B": 0.0051,
+              "D": 0.0180625
+            },
+            "series_failure_rate": 0.13935,
+            "series_failures": 2787,
+            "window_failure_rates": {
+              "C1": 0.0184,
+              "C2": 0.0179,
+              "C3": 0.0171,
+              "C4": 0.019,
+              "C5": 0.0177,
+              "C6": 0.0193,
+              "C7": 0.01705,
+              "C8": 0.019,
+              "T1": 0.0181,
+              "T2": 0.01835,
+              "T3": 0.01705,
+              "W1": 0.03295
+            }
+          },
+          {
+            "monte_carlo_se": 0.003517274779570115,
+            "name": "D_true_scale_3.0",
+            "pair_failure_rate": 0.05745,
+            "population_pair_failure_rates": {
+              "30B": 0.0051,
+              "D": 0.0749
+            },
+            "series_failure_rate": 0.44925,
+            "series_failures": 8985,
+            "window_failure_rates": {
+              "C1": 0.07815,
+              "C2": 0.0758,
+              "C3": 0.07365,
+              "C4": 0.07625,
+              "C5": 0.07525,
+              "C6": 0.0758,
+              "C7": 0.07355,
+              "C8": 0.0746,
+              "T1": 0.07245,
+              "T2": 0.07655,
+              "T3": 0.0729,
+              "W1": 0.0857
+            }
+          },
+          {
+            "monte_carlo_se": 0.001995979834567474,
+            "name": "D_drift_two_pilot_sd",
+            "pair_failure_rate": 0.012371875,
+            "population_pair_failure_rates": {
+              "30B": 0.0051,
+              "D": 0.014795833333333333
+            },
+            "series_failure_rate": 0.0873,
+            "series_failures": 1746,
+            "window_failure_rates": {
+              "C1": 0.01505,
+              "C2": 0.0145,
+              "C3": 0.0144,
+              "C4": 0.0158,
+              "C5": 0.01565,
+              "C6": 0.01455,
+              "C7": 0.0146,
+              "C8": 0.015,
+              "T1": 0.0132,
+              "T2": 0.0152,
+              "T3": 0.0149,
+              "W1": 0.02885
+            }
+          },
+          {
+            "monte_carlo_se": 0.001441563344081695,
+            "name": "D_drift_eight_pilot_sd",
+            "pair_failure_rate": 0.6089125,
+            "population_pair_failure_rates": {
+              "30B": 0.0051,
+              "D": 0.8101833333333334
+            },
+            "series_failure_rate": 0.95655,
+            "series_failures": 19131,
+            "window_failure_rates": {
+              "C1": 0.80855,
+              "C2": 0.80945,
+              "C3": 0.81225,
+              "C4": 0.8109,
+              "C5": 0.80795,
+              "C6": 0.8095,
+              "C7": 0.8121,
+              "C8": 0.80885,
+              "T1": 0.8117,
+              "T2": 0.808,
+              "T3": 0.8111,
+              "W1": 0.81185
+            }
+          }
+        ],
+        "seed": 20261108,
+        "simulations": 20000
+      },
+      "pair_false_fail_at_assumed_scale": 0.004997766621174739,
+      "series_beta": 0.05,
+      "series_false_fail_at_assumed_scale": 0.04999999999999996,
+      "series_quantile_q": 4.317244522501862
+    },
+    {
+      "N": 22,
+      "bar_30B_in_s0_units": 4.279312748900953,
+      "bar_D_in_s0_units": 6.418969123351429,
+      "beta_over_N_reference_only": 0.002272727272727273,
+      "n": 7,
+      "normal_model": [
+        {
+          "D_pair_failure_probability": 0.00036071593713949443,
+          "D_shift_pilot_sd": 0.0,
+          "D_true_scale": 1.0,
+          "series_failure_probability": 0.01600786744877482
+        },
+        {
+          "D_pair_failure_probability": 0.003658464870799722,
+          "D_shift_pilot_sd": 0.0,
+          "D_true_scale": 1.5,
+          "series_failure_probability": 0.04999999999999999
+        },
+        {
+          "D_pair_failure_probability": 0.014868701635282686,
+          "D_shift_pilot_sd": 0.0,
+          "D_true_scale": 2.0,
+          "series_failure_probability": 0.15894032601185965
+        },
+        {
+          "D_pair_failure_probability": 0.06966964270664874,
+          "D_shift_pilot_sd": 0.0,
+          "D_true_scale": 3.0,
+          "series_failure_probability": 0.5316245118422136
+        },
+        {
+          "D_pair_failure_probability": 0.011173679530158305,
+          "D_shift_pilot_sd": 2.0,
+          "D_true_scale": 1.0,
+          "series_failure_probability": 0.08690955678385287
+        },
+        {
+          "D_pair_failure_probability": 0.8224056043756248,
+          "D_shift_pilot_sd": 8.0,
+          "D_true_scale": 1.0,
+          "series_failure_probability": 0.9743033213209357
+        }
+      ],
+      "oc": {
+        "limitation": "Model sensitivity only; no hardware validation or D transfer guarantee. Conditional rates for the realized small-sample scale can exceed marginal rates.",
+        "scenarios": [
+          {
+            "monte_carlo_se": 0.0008953856710937471,
+            "name": "normal_iid",
+            "pair_failure_rate": 0.0009931818181818182,
+            "population_pair_failure_rates": {
+              "30B": 0.0038,
+              "D": 0.00036944444444444443
+            },
+            "series_failure_rate": 0.0163,
+            "series_failures": 326,
+            "window_failure_rates": {
+              "C1": 0.0003,
+              "C10": 0.00055,
+              "C11": 0.0004,
+              "C12": 0.0004,
+              "C13": 0.00025,
+              "C14": 0.0005,
+              "C2": 0.00015,
+              "C3": 0.0004,
+              "C4": 0.00045,
+              "C5": 0.00045,
+              "C6": 0.0004,
+              "C7": 0.0003,
+              "C8": 0.00045,
+              "C9": 0.0003,
+              "T1": 0.00055,
+              "T2": 0.0002,
+              "T3": 0.00035,
+              "W1": 0.01395
+            }
+          },
+          {
+            "monte_carlo_se": 0.0008509967685015026,
+            "name": "normal_window_rho_0.5",
+            "pair_failure_rate": 0.0009886363636363636,
+            "population_pair_failure_rates": {
+              "30B": 0.0039,
+              "D": 0.00034166666666666666
+            },
+            "series_failure_rate": 0.0147,
+            "series_failures": 294,
+            "window_failure_rates": {
+              "C1": 0.00025,
+              "C10": 0.00035,
+              "C11": 0.0006,
+              "C12": 0.0004,
+              "C13": 0.0002,
+              "C14": 0.0001,
+              "C2": 0.00035,
+              "C3": 0.0005,
+              "C4": 0.00045,
+              "C5": 0.0003,
+              "C6": 0.00055,
+              "C7": 0.0003,
+              "C8": 0.00025,
+              "C9": 0.00045,
+              "T1": 0.00035,
+              "T2": 0.0004,
+              "T3": 0.0003,
+              "W1": 0.0125
+            }
+          },
+          {
+            "monte_carlo_se": 0.0005276665613813329,
+            "name": "normal_series_rho_0.9",
+            "pair_failure_rate": 0.0007477272727272727,
+            "population_pair_failure_rates": {
+              "30B": 0.0029625,
+              "D": 0.0002555555555555556
+            },
+            "series_failure_rate": 0.0056,
+            "series_failures": 112,
+            "window_failure_rates": {
+              "C1": 0.0003,
+              "C10": 0.00015,
+              "C11": 0.0002,
+              "C12": 0.0002,
+              "C13": 0.00025,
+              "C14": 0.00025,
+              "C2": 0.0003,
+              "C3": 0.0003,
+              "C4": 0.00025,
+              "C5": 0.00025,
+              "C6": 0.0004,
+              "C7": 0.0002,
+              "C8": 0.0002,
+              "C9": 0.0002,
+              "T1": 0.0003,
+              "T2": 0.0003,
+              "T3": 0.00025,
+              "W1": 0.0056
+            }
+          },
+          {
+            "monte_carlo_se": 0.0013680807267847904,
+            "name": "normal_correlated_training_rho_0.5",
+            "pair_failure_rate": 0.0025363636363636365,
+            "population_pair_failure_rates": {
+              "30B": 0.0089,
+              "D": 0.0011222222222222222
+            },
+            "series_failure_rate": 0.03895,
+            "series_failures": 779,
+            "window_failure_rates": {
+              "C1": 0.0013,
+              "C10": 0.00135,
+              "C11": 0.00075,
+              "C12": 0.001,
+              "C13": 0.0012,
+              "C14": 0.0014,
+              "C2": 0.0009,
+              "C3": 0.0013,
+              "C4": 0.00095,
+              "C5": 0.0012,
+              "C6": 0.00085,
+              "C7": 0.00075,
+              "C8": 0.0013,
+              "C9": 0.00135,
+              "T1": 0.0014,
+              "T2": 0.00095,
+              "T3": 0.0013,
+              "W1": 0.0318
+            }
+          },
+          {
+            "monte_carlo_se": 0.002630689999790929,
+            "name": "student_t3_unit_variance",
+            "pair_failure_rate": 0.009686363636363637,
+            "population_pair_failure_rates": {
+              "30B": 0.0199125,
+              "D": 0.007413888888888889
+            },
+            "series_failure_rate": 0.16595,
+            "series_failures": 3319,
+            "window_failure_rates": {
+              "C1": 0.0072,
+              "C10": 0.0077,
+              "C11": 0.008,
+              "C12": 0.0071,
+              "C13": 0.00675,
+              "C14": 0.0076,
+              "C2": 0.00735,
+              "C3": 0.0073,
+              "C4": 0.0062,
+              "C5": 0.0076,
+              "C6": 0.0077,
+              "C7": 0.0074,
+              "C8": 0.00745,
+              "C9": 0.0072,
+              "T1": 0.0082,
+              "T2": 0.0071,
+              "T3": 0.0082,
+              "W1": 0.07845
+            }
+          },
+          {
+            "monte_carlo_se": 0.002319151137808832,
+            "name": "centered_exponential",
+            "pair_failure_rate": 0.006509090909090909,
+            "population_pair_failure_rates": {
+              "30B": 0.0161875,
+              "D": 0.004358333333333333
+            },
+            "series_failure_rate": 0.1226,
+            "series_failures": 2452,
+            "window_failure_rates": {
+              "C1": 0.0047,
+              "C10": 0.00495,
+              "C11": 0.00365,
+              "C12": 0.00455,
+              "C13": 0.0044,
+              "C14": 0.0042,
+              "C2": 0.00505,
+              "C3": 0.0042,
+              "C4": 0.0046,
+              "C5": 0.0037,
+              "C6": 0.00445,
+              "C7": 0.0039,
+              "C8": 0.0039,
+              "C9": 0.00425,
+              "T1": 0.0042,
+              "T2": 0.0049,
+              "T3": 0.00495,
+              "W1": 0.06515
+            }
+          },
+          {
+            "monte_carlo_se": 0.0008953856710937471,
+            "name": "D_true_scale_1.0",
+            "pair_failure_rate": 0.0009931818181818182,
+            "population_pair_failure_rates": {
+              "30B": 0.0038,
+              "D": 0.00036944444444444443
+            },
+            "series_failure_rate": 0.0163,
+            "series_failures": 326,
+            "window_failure_rates": {
+              "C1": 0.0003,
+              "C10": 0.00055,
+              "C11": 0.0004,
+              "C12": 0.0004,
+              "C13": 0.00025,
+              "C14": 0.0005,
+              "C2": 0.00015,
+              "C3": 0.0004,
+              "C4": 0.00045,
+              "C5": 0.00045,
+              "C6": 0.0004,
+              "C7": 0.0003,
+              "C8": 0.00045,
+              "C9": 0.0003,
+              "T1": 0.00055,
+              "T2": 0.0002,
+              "T3": 0.00035,
+              "W1": 0.01395
+            }
+          },
+          {
+            "monte_carlo_se": 0.0015440200775896666,
+            "name": "D_true_scale_1.5",
+            "pair_failure_rate": 0.0036045454545454545,
+            "population_pair_failure_rates": {
+              "30B": 0.0038,
+              "D": 0.0035611111111111112
+            },
+            "series_failure_rate": 0.0502,
+            "series_failures": 1004,
+            "window_failure_rates": {
+              "C1": 0.0038,
+              "C10": 0.00355,
+              "C11": 0.0031,
+              "C12": 0.0034,
+              "C13": 0.0038,
+              "C14": 0.00395,
+              "C2": 0.0037,
+              "C3": 0.00405,
+              "C4": 0.0036,
+              "C5": 0.0031,
+              "C6": 0.0034,
+              "C7": 0.003,
+              "C8": 0.00415,
+              "C9": 0.0037,
+              "T1": 0.0032,
+              "T2": 0.0035,
+              "T3": 0.004,
+              "W1": 0.0161
+            }
+          },
+          {
+            "monte_carlo_se": 0.002587696949026296,
+            "name": "D_true_scale_2.0",
+            "pair_failure_rate": 0.012702272727272727,
+            "population_pair_failure_rates": {
+              "30B": 0.0038,
+              "D": 0.014680555555555556
+            },
+            "series_failure_rate": 0.1593,
+            "series_failures": 3186,
+            "window_failure_rates": {
+              "C1": 0.0145,
+              "C10": 0.01555,
+              "C11": 0.014,
+              "C12": 0.0148,
+              "C13": 0.01475,
+              "C14": 0.0161,
+              "C2": 0.0145,
+              "C3": 0.0153,
+              "C4": 0.0131,
+              "C5": 0.01385,
+              "C6": 0.0145,
+              "C7": 0.01465,
+              "C8": 0.0151,
+              "C9": 0.0163,
+              "T1": 0.0136,
+              "T2": 0.0139,
+              "T3": 0.01515,
+              "W1": 0.02615
+            }
+          },
+          {
+            "monte_carlo_se": 0.0035261008919201388,
+            "name": "D_true_scale_3.0",
+            "pair_failure_rate": 0.05783863636363636,
+            "population_pair_failure_rates": {
+              "30B": 0.0038,
+              "D": 0.06984722222222223
+            },
+            "series_failure_rate": 0.5365,
+            "series_failures": 10730,
+            "window_failure_rates": {
+              "C1": 0.06895,
+              "C10": 0.07255,
+              "C11": 0.06935,
+              "C12": 0.06855,
+              "C13": 0.0688,
+              "C14": 0.07185,
+              "C2": 0.06955,
+              "C3": 0.072,
+              "C4": 0.0668,
+              "C5": 0.06895,
+              "C6": 0.0684,
+              "C7": 0.0713,
+              "C8": 0.0709,
+              "C9": 0.0714,
+              "T1": 0.06925,
+              "T2": 0.0666,
+              "T3": 0.073,
+              "W1": 0.07855
+            }
+          },
+          {
+            "monte_carlo_se": 0.0019985619517543106,
+            "name": "D_drift_two_pilot_sd",
+            "pair_failure_rate": 0.009693181818181818,
+            "population_pair_failure_rates": {
+              "30B": 0.0038,
+              "D": 0.011002777777777778
+            },
+            "series_failure_rate": 0.08755,
+            "series_failures": 1751,
+            "window_failure_rates": {
+              "C1": 0.01135,
+              "C10": 0.01135,
+              "C11": 0.0107,
+              "C12": 0.0105,
+              "C13": 0.01,
+              "C14": 0.0119,
+              "C2": 0.01085,
+              "C3": 0.0115,
+              "C4": 0.01055,
+              "C5": 0.01055,
+              "C6": 0.011,
+              "C7": 0.0106,
+              "C8": 0.0118,
+              "C9": 0.012,
+              "T1": 0.01065,
+              "T2": 0.0104,
+              "T3": 0.0114,
+              "W1": 0.022
+            }
+          },
+          {
+            "monte_carlo_se": 0.0010866084851500102,
+            "name": "D_drift_eight_pilot_sd",
+            "pair_failure_rate": 0.6748613636363636,
+            "population_pair_failure_rates": {
+              "30B": 0.0038,
+              "D": 0.8239861111111111
+            },
+            "series_failure_rate": 0.9758,
+            "series_failures": 19516,
+            "window_failure_rates": {
+              "C1": 0.8241,
+              "C10": 0.82325,
+              "C11": 0.8259,
+              "C12": 0.81985,
+              "C13": 0.82255,
+              "C14": 0.8248,
+              "C2": 0.82435,
+              "C3": 0.8257,
+              "C4": 0.8261,
+              "C5": 0.8249,
+              "C6": 0.82525,
+              "C7": 0.82285,
+              "C8": 0.82295,
+              "C9": 0.82255,
+              "T1": 0.8259,
+              "T2": 0.8265,
+              "T3": 0.8233,
+              "W1": 0.82095
+            }
+          }
+        ],
+        "seed": 20261108,
+        "simulations": 20000
+      },
+      "pair_false_fail_at_assumed_scale": 0.0036584648707997203,
+      "series_beta": 0.05,
+      "series_false_fail_at_assumed_scale": 0.04999999999999999,
+      "series_quantile_q": 4.279312748900953
+    },
+    {
+      "N": 22,
+      "bar_30B_in_s0_units": 4.901051164556903,
+      "bar_D_in_s0_units": 7.351576746835354,
+      "beta_over_N_reference_only": 0.0011363636363636365,
+      "n": 7,
+      "normal_model": [
+        {
+          "D_pair_failure_probability": 0.00015571848954725872,
+          "D_shift_pilot_sd": 0.0,
+          "D_true_scale": 1.0,
+          "series_failure_probability": 0.007638998266169245
+        },
+        {
+          "D_pair_failure_probability": 0.0017510183208224249,
+          "D_shift_pilot_sd": 0.0,
+          "D_true_scale": 1.5,
+          "series_failure_probability": 0.025000000000000012
+        },
+        {
+          "D_pair_failure_probability": 0.007903527095746932,
+          "D_shift_pilot_sd": 0.0,
+          "D_true_scale": 2.0,
+          "series_failure_probability": 0.09027147879379653
+        },
+        {
+          "D_pair_failure_probability": 0.04407327248035473,
+          "D_shift_pilot_sd": 0.0,
+          "D_true_scale": 3.0,
+          "series_failure_probability": 0.3831267585470159
+        },
+        {
+          "D_pair_failure_probability": 0.00530109304330673,
+          "D_shift_pilot_sd": 2.0,
+          "D_true_scale": 1.0,
+          "series_failure_probability": 0.04398943608562501
+        },
+        {
+          "D_pair_failure_probability": 0.6710657958879934,
+          "D_shift_pilot_sd": 8.0,
+          "D_true_scale": 1.0,
+          "series_failure_probability": 0.9079234321485674
+        }
+      ],
+      "oc": {
+        "limitation": "Model sensitivity only; no hardware validation or D transfer guarantee. Conditional rates for the realized small-sample scale can exceed marginal rates.",
+        "scenarios": [
+          {
+            "monte_carlo_se": 0.0006299206299209449,
+            "name": "normal_iid",
+            "pair_failure_rate": 0.00048181818181818184,
+            "population_pair_failure_rates": {
+              "30B": 0.001775,
+              "D": 0.00019444444444444443
+            },
+            "series_failure_rate": 0.008,
+            "series_failures": 160,
+            "window_failure_rates": {
+              "C1": 0.00015,
+              "C10": 0.00035,
+              "C11": 0.0002,
+              "C12": 0.0003,
+              "C13": 0.00015,
+              "C14": 0.00025,
+              "C2": 0.00015,
+              "C3": 0.0002,
+              "C4": 0.00015,
+              "C5": 0.00015,
+              "C6": 0.00025,
+              "C7": 0.00015,
+              "C8": 0.00035,
+              "C9": 0.00015,
+              "T1": 0.0002,
+              "T2": 0.00015,
+              "T3": 0.00015,
+              "W1": 0.0066
+            }
+          },
+          {
+            "monte_carlo_se": 0.0005936998399865037,
+            "name": "normal_window_rho_0.5",
+            "pair_failure_rate": 0.00046363636363636366,
+            "population_pair_failure_rates": {
+              "30B": 0.0018625,
+              "D": 0.00015277777777777777
+            },
+            "series_failure_rate": 0.0071,
+            "series_failures": 142,
+            "window_failure_rates": {
+              "C1": 0.00015,
+              "C10": 0.00025,
+              "C11": 0.0003,
+              "C12": 0.0002,
+              "C13": 5e-05,
+              "C14": 5e-05,
+              "C2": 0.00015,
+              "C3": 0.00035,
+              "C4": 5e-05,
+              "C5": 0.00015,
+              "C6": 0.0002,
+              "C7": 0.00015,
+              "C8": 0.00015,
+              "C9": 0.0002,
+              "T1": 0.0002,
+              "T2": 0.0001,
+              "T3": 5e-05,
+              "W1": 0.00615
+            }
+          },
+          {
+            "monte_carlo_se": 0.0003802361108574513,
+            "name": "normal_series_rho_0.9",
+            "pair_failure_rate": 0.00032045454545454543,
+            "population_pair_failure_rates": {
+              "30B": 0.0014875,
+              "D": 6.111111111111111e-05
+            },
+            "series_failure_rate": 0.0029,
+            "series_failures": 58,
+            "window_failure_rates": {
+              "C1": 5e-05,
+              "C10": 5e-05,
+              "C11": 5e-05,
+              "C12": 0.00015,
+              "C13": 0.0,
+              "C14": 5e-05,
+              "C2": 0.0001,
+              "C3": 0.0001,
+              "C4": 0.0,
+              "C5": 0.0,
+              "C6": 5e-05,
+              "C7": 5e-05,
+              "C8": 0.0,
+              "C9": 0.0001,
+              "T1": 0.00015,
+              "T2": 0.0001,
+              "T3": 5e-05,
+              "W1": 0.0029
+            }
+          },
+          {
+            "monte_carlo_se": 0.0009728183283635234,
+            "name": "normal_correlated_training_rho_0.5",
+            "pair_failure_rate": 0.0012068181818181817,
+            "population_pair_failure_rates": {
+              "30B": 0.0045125,
+              "D": 0.00047222222222222224
+            },
+            "series_failure_rate": 0.0193,
+            "series_failures": 386,
+            "window_failure_rates": {
+              "C1": 0.0004,
+              "C10": 0.0006,
+              "C11": 0.0005,
+              "C12": 0.0004,
+              "C13": 0.0004,
+              "C14": 0.00055,
+              "C2": 0.00035,
+              "C3": 0.0006,
+              "C4": 0.0004,
+              "C5": 0.0006,
+              "C6": 0.00045,
+              "C7": 0.00035,
+              "C8": 0.00055,
+              "C9": 0.00055,
+              "T1": 0.00045,
+              "T2": 0.00045,
+              "T3": 0.0006,
+              "W1": 0.01625
+            }
+          },
+          {
+            "monte_carlo_se": 0.002312625780363092,
+            "name": "student_t3_unit_variance",
+            "pair_failure_rate": 0.0067954545454545455,
+            "population_pair_failure_rates": {
+              "30B": 0.0145125,
+              "D": 0.005080555555555555
+            },
+            "series_failure_rate": 0.1218,
+            "series_failures": 2436,
+            "window_failure_rates": {
+              "C1": 0.00535,
+              "C10": 0.00535,
+              "C11": 0.00505,
+              "C12": 0.00485,
+              "C13": 0.0043,
+              "C14": 0.0052,
+              "C2": 0.00485,
+              "C3": 0.0048,
+              "C4": 0.0045,
+              "C5": 0.00515,
+              "C6": 0.00515,
+              "C7": 0.00435,
+              "C8": 0.0059,
+              "C9": 0.00485,
+              "T1": 0.0059,
+              "T2": 0.00485,
+              "T3": 0.006,
+              "W1": 0.05775
+            }
+          },
+          {
+            "monte_carlo_se": 0.001928692529927982,
+            "name": "centered_exponential",
+            "pair_failure_rate": 0.004120454545454545,
+            "population_pair_failure_rates": {
+              "30B": 0.0109125,
+              "D": 0.002611111111111111
+            },
+            "series_failure_rate": 0.08095,
+            "series_failures": 1619,
+            "window_failure_rates": {
+              "C1": 0.0029,
+              "C10": 0.0029,
+              "C11": 0.0021,
+              "C12": 0.0029,
+              "C13": 0.00285,
+              "C14": 0.0026,
+              "C2": 0.00295,
+              "C3": 0.00225,
+              "C4": 0.0027,
+              "C5": 0.0022,
+              "C6": 0.00255,
+              "C7": 0.0023,
+              "C8": 0.0022,
+              "C9": 0.00265,
+              "T1": 0.0027,
+              "T2": 0.0028,
+              "T3": 0.00315,
+              "W1": 0.0442
+            }
+          },
+          {
+            "monte_carlo_se": 0.0006299206299209449,
+            "name": "D_true_scale_1.0",
+            "pair_failure_rate": 0.00048181818181818184,
+            "population_pair_failure_rates": {
+              "30B": 0.001775,
+              "D": 0.00019444444444444443
+            },
+            "series_failure_rate": 0.008,
+            "series_failures": 160,
+            "window_failure_rates": {
+              "C1": 0.00015,
+              "C10": 0.00035,
+              "C11": 0.0002,
+              "C12": 0.0003,
+              "C13": 0.00015,
+              "C14": 0.00025,
+              "C2": 0.00015,
+              "C3": 0.0002,
+              "C4": 0.00015,
+              "C5": 0.00015,
+              "C6": 0.00025,
+              "C7": 0.00015,
+              "C8": 0.00035,
+              "C9": 0.00015,
+              "T1": 0.0002,
+              "T2": 0.00015,
+              "T3": 0.00015,
+              "W1": 0.0066
+            }
+          },
+          {
+            "monte_carlo_se": 0.0010756000650799535,
+            "name": "D_true_scale_1.5",
+            "pair_failure_rate": 0.0017068181818181817,
+            "population_pair_failure_rates": {
+              "30B": 0.001775,
+              "D": 0.0016916666666666666
+            },
+            "series_failure_rate": 0.0237,
+            "series_failures": 474,
+            "window_failure_rates": {
+              "C1": 0.0018,
+              "C10": 0.0015,
+              "C11": 0.0014,
+              "C12": 0.0017,
+              "C13": 0.0016,
+              "C14": 0.0021,
+              "C2": 0.0014,
+              "C3": 0.0016,
+              "C4": 0.00155,
+              "C5": 0.00165,
+              "C6": 0.00185,
+              "C7": 0.0014,
+              "C8": 0.00205,
+              "C9": 0.00185,
+              "T1": 0.0016,
+              "T2": 0.00205,
+              "T3": 0.0019,
+              "W1": 0.0077
+            }
+          },
+          {
+            "monte_carlo_se": 0.002025129347720782,
+            "name": "D_true_scale_2.0",
+            "pair_failure_rate": 0.006620454545454546,
+            "population_pair_failure_rates": {
+              "30B": 0.001775,
+              "D": 0.0076972222222222225
+            },
+            "series_failure_rate": 0.09015,
+            "series_failures": 1803,
+            "window_failure_rates": {
+              "C1": 0.00775,
+              "C10": 0.0081,
+              "C11": 0.0074,
+              "C12": 0.0077,
+              "C13": 0.0078,
+              "C14": 0.00815,
+              "C2": 0.0076,
+              "C3": 0.0083,
+              "C4": 0.0072,
+              "C5": 0.007,
+              "C6": 0.00755,
+              "C7": 0.00705,
+              "C8": 0.00795,
+              "C9": 0.00895,
+              "T1": 0.0071,
+              "T2": 0.0076,
+              "T3": 0.00785,
+              "W1": 0.01315
+            }
+          },
+          {
+            "monte_carlo_se": 0.0034397430136566885,
+            "name": "D_true_scale_3.0",
+            "pair_failure_rate": 0.03591590909090909,
+            "population_pair_failure_rates": {
+              "30B": 0.001775,
+              "D": 0.04350277777777778
+            },
+            "series_failure_rate": 0.3844,
+            "series_failures": 7688,
+            "window_failure_rates": {
+              "C1": 0.04305,
+              "C10": 0.0456,
+              "C11": 0.04175,
+              "C12": 0.0415,
+              "C13": 0.0423,
+              "C14": 0.0463,
+              "C2": 0.0435,
+              "C3": 0.0442,
+              "C4": 0.04025,
+              "C5": 0.04255,
+              "C6": 0.0415,
+              "C7": 0.04415,
+              "C8": 0.04495,
+              "C9": 0.0459,
+              "T1": 0.0442,
+              "T2": 0.042,
+              "T3": 0.04635,
+              "W1": 0.0477
+            }
+          },
+          {
+            "monte_carlo_se": 0.0014360081824279414,
+            "name": "D_drift_two_pilot_sd",
+            "pair_failure_rate": 0.004406818181818182,
+            "population_pair_failure_rates": {
+              "30B": 0.001775,
+              "D": 0.004991666666666667
+            },
+            "series_failure_rate": 0.0431,
+            "series_failures": 862,
+            "window_failure_rates": {
+              "C1": 0.00515,
+              "C10": 0.00515,
+              "C11": 0.00485,
+              "C12": 0.0053,
+              "C13": 0.0047,
+              "C14": 0.0056,
+              "C2": 0.00465,
+              "C3": 0.00535,
+              "C4": 0.00475,
+              "C5": 0.00405,
+              "C6": 0.0054,
+              "C7": 0.00475,
+              "C8": 0.00545,
+              "C9": 0.00545,
+              "T1": 0.0044,
+              "T2": 0.00485,
+              "T3": 0.0049,
+              "W1": 0.01055
+            }
+          },
+          {
+            "monte_carlo_se": 0.0020377198040947633,
+            "name": "D_drift_eight_pilot_sd",
+            "pair_failure_rate": 0.5500522727272728,
+            "population_pair_failure_rates": {
+              "30B": 0.001775,
+              "D": 0.6718916666666667
+            },
+            "series_failure_rate": 0.9086,
+            "series_failures": 18172,
+            "window_failure_rates": {
+              "C1": 0.6707,
+              "C10": 0.67135,
+              "C11": 0.6734,
+              "C12": 0.67255,
+              "C13": 0.6706,
+              "C14": 0.67365,
+              "C2": 0.6707,
+              "C3": 0.6702,
+              "C4": 0.67525,
+              "C5": 0.67035,
+              "C6": 0.6709,
+              "C7": 0.67285,
+              "C8": 0.6704,
+              "C9": 0.6695,
+              "T1": 0.6743,
+              "T2": 0.67385,
+              "T3": 0.67155,
+              "W1": 0.67195
+            }
+          }
+        ],
+        "seed": 20261108,
+        "simulations": 20000
+      },
+      "pair_false_fail_at_assumed_scale": 0.0017510183208224233,
+      "series_beta": 0.025,
+      "series_false_fail_at_assumed_scale": 0.024999999999999994,
+      "series_quantile_q": 4.901051164556903
+    },
+    {
+      "N": 22,
+      "bar_30B_in_s0_units": 4.8865973639412035,
+      "bar_D_in_s0_units": 7.329896045911806,
+      "beta_over_N_reference_only": 0.002272727272727273,
+      "n": 5,
+      "normal_model": [
+        {
+          "D_pair_failure_probability": 0.0007418257037096458,
+          "D_shift_pilot_sd": 0.0,
+          "D_true_scale": 1.0,
+          "series_failure_probability": 0.019192908162873532
+        },
+        {
+          "D_pair_failure_probability": 0.0045276907533002035,
+          "D_shift_pilot_sd": 0.0,
+          "D_true_scale": 1.5,
+          "series_failure_probability": 0.04999999999999998
+        },
+        {
+          "D_pair_failure_probability": 0.014520486990814803,
+          "D_shift_pilot_sd": 0.0,
+          "D_true_scale": 2.0,
+          "series_failure_probability": 0.13248619376154266
+        },
+        {
+          "D_pair_failure_probability": 0.05841683616199154,
+          "D_shift_pilot_sd": 0.0,
+          "D_true_scale": 3.0,
+          "series_failure_probability": 0.4192602322104684
+        },
+        {
+          "D_pair_failure_probability": 0.013307886792548492,
+          "D_shift_pilot_sd": 2.0,
+          "D_true_scale": 1.0,
+          "series_failure_probability": 0.08099349112518262
+        },
+        {
+          "D_pair_failure_probability": 0.673474072146209,
+          "D_shift_pilot_sd": 8.0,
+          "D_true_scale": 1.0,
+          "series_failure_probability": 0.8847763777857004
+        }
+      ],
+      "oc": {
+        "limitation": "Model sensitivity only; no hardware validation or D transfer guarantee. Conditional rates for the realized small-sample scale can exceed marginal rates.",
+        "scenarios": [
+          {
+            "monte_carlo_se": 0.0009616308413315371,
+            "name": "normal_iid",
+            "pair_failure_rate": 0.0013227272727272727,
+            "population_pair_failure_rates": {
+              "30B": 0.0043,
+              "D": 0.0006611111111111111
+            },
+            "series_failure_rate": 0.01885,
+            "series_failures": 377,
+            "window_failure_rates": {
+              "C1": 0.0009,
+              "C10": 0.0006,
+              "C11": 0.00095,
+              "C12": 0.0007,
+              "C13": 0.00085,
+              "C14": 0.00085,
+              "C2": 0.0005,
+              "C3": 0.00055,
+              "C4": 0.00045,
+              "C5": 0.0006,
+              "C6": 0.00065,
+              "C7": 0.00045,
+              "C8": 0.0006,
+              "C9": 0.0005,
+              "T1": 0.0004,
+              "T2": 0.0011,
+              "T3": 0.0006,
+              "W1": 0.01495
+            }
+          },
+          {
+            "monte_carlo_se": 0.0009452184932596273,
+            "name": "normal_window_rho_0.5",
+            "pair_failure_rate": 0.0013386363636363637,
+            "population_pair_failure_rates": {
+              "30B": 0.0046375,
+              "D": 0.0006055555555555556
+            },
+            "series_failure_rate": 0.0182,
+            "series_failures": 364,
+            "window_failure_rates": {
+              "C1": 0.00065,
+              "C10": 0.0007,
+              "C11": 0.00065,
+              "C12": 0.00055,
+              "C13": 0.00085,
+              "C14": 0.00055,
+              "C2": 0.00055,
+              "C3": 0.0003,
+              "C4": 0.0008,
+              "C5": 0.00055,
+              "C6": 0.00045,
+              "C7": 0.0007,
+              "C8": 0.0007,
+              "C9": 0.0005,
+              "T1": 0.00055,
+              "T2": 0.0006,
+              "T3": 0.0005,
+              "W1": 0.0138
+            }
+          },
+          {
+            "monte_carlo_se": 0.0006769208779466031,
+            "name": "normal_series_rho_0.9",
+            "pair_failure_rate": 0.0017386363636363636,
+            "population_pair_failure_rates": {
+              "30B": 0.0052125,
+              "D": 0.0009666666666666667
+            },
+            "series_failure_rate": 0.00925,
+            "series_failures": 185,
+            "window_failure_rates": {
+              "C1": 0.00085,
+              "C10": 0.00105,
+              "C11": 0.00085,
+              "C12": 0.0009,
+              "C13": 0.0006,
+              "C14": 0.0011,
+              "C2": 0.001,
+              "C3": 0.00115,
+              "C4": 0.001,
+              "C5": 0.00075,
+              "C6": 0.00105,
+              "C7": 0.00105,
+              "C8": 0.00105,
+              "C9": 0.0011,
+              "T1": 0.00105,
+              "T2": 0.00105,
+              "T3": 0.00095,
+              "W1": 0.0092
+            }
+          },
+          {
+            "monte_carlo_se": 0.0013579263142748212,
+            "name": "normal_correlated_training_rho_0.5",
+            "pair_failure_rate": 0.002984090909090909,
+            "population_pair_failure_rates": {
+              "30B": 0.0086375,
+              "D": 0.0017277777777777777
+            },
+            "series_failure_rate": 0.03835,
+            "series_failures": 767,
+            "window_failure_rates": {
+              "C1": 0.0016,
+              "C10": 0.0014,
+              "C11": 0.0019,
+              "C12": 0.0019,
+              "C13": 0.0023,
+              "C14": 0.0015,
+              "C2": 0.00155,
+              "C3": 0.00195,
+              "C4": 0.00145,
+              "C5": 0.0018,
+              "C6": 0.00165,
+              "C7": 0.00165,
+              "C8": 0.0018,
+              "C9": 0.00145,
+              "T1": 0.00185,
+              "T2": 0.00175,
+              "T3": 0.0014,
+              "W1": 0.02975
+            }
+          },
+          {
+            "monte_carlo_se": 0.0025516150767700054,
+            "name": "student_t3_unit_variance",
+            "pair_failure_rate": 0.009777272727272726,
+            "population_pair_failure_rates": {
+              "30B": 0.02,
+              "D": 0.007505555555555555
+            },
+            "series_failure_rate": 0.1539,
+            "series_failures": 3078,
+            "window_failure_rates": {
+              "C1": 0.0077,
+              "C10": 0.00745,
+              "C11": 0.0072,
+              "C12": 0.0069,
+              "C13": 0.0079,
+              "C14": 0.0077,
+              "C2": 0.00735,
+              "C3": 0.0074,
+              "C4": 0.0079,
+              "C5": 0.0082,
+              "C6": 0.0079,
+              "C7": 0.00815,
+              "C8": 0.00685,
+              "C9": 0.00775,
+              "T1": 0.0064,
+              "T2": 0.00825,
+              "T3": 0.0076,
+              "W1": 0.0768
+            }
+          },
+          {
+            "monte_carlo_se": 0.0021066276071009795,
+            "name": "centered_exponential",
+            "pair_failure_rate": 0.0052590909090909094,
+            "population_pair_failure_rates": {
+              "30B": 0.0134625,
+              "D": 0.003436111111111111
+            },
+            "series_failure_rate": 0.09845,
+            "series_failures": 1969,
+            "window_failure_rates": {
+              "C1": 0.0035,
+              "C10": 0.0034,
+              "C11": 0.0041,
+              "C12": 0.0031,
+              "C13": 0.00405,
+              "C14": 0.0029,
+              "C2": 0.0032,
+              "C3": 0.00395,
+              "C4": 0.00325,
+              "C5": 0.00315,
+              "C6": 0.00345,
+              "C7": 0.0039,
+              "C8": 0.0033,
+              "C9": 0.0034,
+              "T1": 0.0035,
+              "T2": 0.00325,
+              "T3": 0.00305,
+              "W1": 0.0542
+            }
+          },
+          {
+            "monte_carlo_se": 0.0009616308413315371,
+            "name": "D_true_scale_1.0",
+            "pair_failure_rate": 0.0013227272727272727,
+            "population_pair_failure_rates": {
+              "30B": 0.0043,
+              "D": 0.0006611111111111111
+            },
+            "series_failure_rate": 0.01885,
+            "series_failures": 377,
+            "window_failure_rates": {
+              "C1": 0.0009,
+              "C10": 0.0006,
+              "C11": 0.00095,
+              "C12": 0.0007,
+              "C13": 0.00085,
+              "C14": 0.00085,
+              "C2": 0.0005,
+              "C3": 0.00055,
+              "C4": 0.00045,
+              "C5": 0.0006,
+              "C6": 0.00065,
+              "C7": 0.00045,
+              "C8": 0.0006,
+              "C9": 0.0005,
+              "T1": 0.0004,
+              "T2": 0.0011,
+              "T3": 0.0006,
+              "W1": 0.01495
+            }
+          },
+          {
+            "monte_carlo_se": 0.0015763723782786856,
+            "name": "D_true_scale_1.5",
+            "pair_failure_rate": 0.004470454545454546,
+            "population_pair_failure_rates": {
+              "30B": 0.0043,
+              "D": 0.004508333333333333
+            },
+            "series_failure_rate": 0.05245,
+            "series_failures": 1049,
+            "window_failure_rates": {
+              "C1": 0.00435,
+              "C10": 0.00465,
+              "C11": 0.005,
+              "C12": 0.0041,
+              "C13": 0.0051,
+              "C14": 0.0042,
+              "C2": 0.0046,
+              "C3": 0.0045,
+              "C4": 0.00385,
+              "C5": 0.0045,
+              "C6": 0.0046,
+              "C7": 0.00495,
+              "C8": 0.00445,
+              "C9": 0.0044,
+              "T1": 0.0033,
+              "T2": 0.0044,
+              "T3": 0.005,
+              "W1": 0.0182
+            }
+          },
+          {
+            "monte_carlo_se": 0.002403065100033705,
+            "name": "D_true_scale_2.0",
+            "pair_failure_rate": 0.012702272727272727,
+            "population_pair_failure_rates": {
+              "30B": 0.0043,
+              "D": 0.014569444444444444
+            },
+            "series_failure_rate": 0.13325,
+            "series_failures": 2665,
+            "window_failure_rates": {
+              "C1": 0.0139,
+              "C10": 0.0145,
+              "C11": 0.0149,
+              "C12": 0.01395,
+              "C13": 0.0152,
+              "C14": 0.0144,
+              "C2": 0.01485,
+              "C3": 0.01555,
+              "C4": 0.0136,
+              "C5": 0.0151,
+              "C6": 0.01485,
+              "C7": 0.01645,
+              "C8": 0.0156,
+              "C9": 0.0135,
+              "T1": 0.01355,
+              "T2": 0.01485,
+              "T3": 0.0136,
+              "W1": 0.0258
+            }
+          },
+          {
+            "monte_carlo_se": 0.003494832453065526,
+            "name": "D_true_scale_3.0",
+            "pair_failure_rate": 0.049036363636363635,
+            "population_pair_failure_rates": {
+              "30B": 0.0043,
+              "D": 0.058977777777777775
+            },
+            "series_failure_rate": 0.42435,
+            "series_failures": 8487,
+            "window_failure_rates": {
+              "C1": 0.05805,
+              "C10": 0.0614,
+              "C11": 0.0582,
+              "C12": 0.0577,
+              "C13": 0.0596,
+              "C14": 0.0591,
+              "C2": 0.06,
+              "C3": 0.06015,
+              "C4": 0.05705,
+              "C5": 0.05775,
+              "C6": 0.06045,
+              "C7": 0.0604,
+              "C8": 0.0603,
+              "C9": 0.0573,
+              "T1": 0.05895,
+              "T2": 0.05815,
+              "T3": 0.05825,
+              "W1": 0.0686
+            }
+          },
+          {
+            "monte_carlo_se": 0.0019319476895092165,
+            "name": "D_drift_two_pilot_sd",
+            "pair_failure_rate": 0.011484090909090909,
+            "population_pair_failure_rates": {
+              "30B": 0.0043,
+              "D": 0.013080555555555555
+            },
+            "series_failure_rate": 0.08125,
+            "series_failures": 1625,
+            "window_failure_rates": {
+              "C1": 0.0131,
+              "C10": 0.015,
+              "C11": 0.01255,
+              "C12": 0.0128,
+              "C13": 0.01235,
+              "C14": 0.01285,
+              "C2": 0.01385,
+              "C3": 0.01355,
+              "C4": 0.01315,
+              "C5": 0.01195,
+              "C6": 0.01245,
+              "C7": 0.01395,
+              "C8": 0.01285,
+              "C9": 0.01255,
+              "T1": 0.0141,
+              "T2": 0.01235,
+              "T3": 0.01295,
+              "W1": 0.0245
+            }
+          },
+          {
+            "monte_carlo_se": 0.002264756029906974,
+            "name": "D_drift_eight_pilot_sd",
+            "pair_failure_rate": 0.5523886363636363,
+            "population_pair_failure_rates": {
+              "30B": 0.0043,
+              "D": 0.6741861111111112
+            },
+            "series_failure_rate": 0.88395,
+            "series_failures": 17679,
+            "window_failure_rates": {
+              "C1": 0.6777,
+              "C10": 0.6754,
+              "C11": 0.67265,
+              "C12": 0.6744,
+              "C13": 0.67555,
+              "C14": 0.6725,
+              "C2": 0.6722,
+              "C3": 0.6749,
+              "C4": 0.6787,
+              "C5": 0.6735,
+              "C6": 0.674,
+              "C7": 0.67,
+              "C8": 0.6742,
+              "C9": 0.6776,
+              "T1": 0.674,
+              "T2": 0.67245,
+              "T3": 0.67545,
+              "W1": 0.67015
+            }
+          }
+        ],
+        "seed": 20261108,
+        "simulations": 20000
+      },
+      "pair_false_fail_at_assumed_scale": 0.004527690753300202,
+      "series_beta": 0.05,
+      "series_false_fail_at_assumed_scale": 0.04999999999999999,
+      "series_quantile_q": 4.8865973639412035
+    },
+    {
+      "N": 22,
+      "bar_30B_in_s0_units": 4.522890218951504,
+      "bar_D_in_s0_units": 6.7843353284272565,
+      "beta_over_N_reference_only": 0.002272727272727273,
+      "n": 6,
+      "normal_model": [
+        {
+          "D_pair_failure_probability": 0.0005016567478484032,
+          "D_shift_pilot_sd": 0.0,
+          "D_true_scale": 1.0,
+          "series_failure_probability": 0.01736744729787481
+        },
+        {
+          "D_pair_failure_probability": 0.004005304740697856,
+          "D_shift_pilot_sd": 0.0,
+          "D_true_scale": 1.5,
+          "series_failure_probability": 0.049999999999999996
+        },
+        {
+          "D_pair_failure_probability": 0.014636510105086889,
+          "D_shift_pilot_sd": 0.0,
+          "D_true_scale": 2.0,
+          "series_failure_probability": 0.1464267346732583
+        },
+        {
+          "D_pair_failure_probability": 0.06442016133980204,
+          "D_shift_pilot_sd": 0.0,
+          "D_true_scale": 3.0,
+          "series_failure_probability": 0.48078227072689156
+        },
+        {
+          "D_pair_failure_probability": 0.012080428768635819,
+          "D_shift_pilot_sd": 2.0,
+          "D_true_scale": 1.0,
+          "series_failure_probability": 0.08424315580250143
+        },
+        {
+          "D_pair_failure_probability": 0.7600054903788626,
+          "D_shift_pilot_sd": 8.0,
+          "D_true_scale": 1.0,
+          "series_failure_probability": 0.94466328394242
+        }
+      ],
+      "oc": {
+        "limitation": "Model sensitivity only; no hardware validation or D transfer guarantee. Conditional rates for the realized small-sample scale can exceed marginal rates.",
+        "scenarios": [
+          {
+            "monte_carlo_se": 0.0009297913744491288,
+            "name": "normal_iid",
+            "pair_failure_rate": 0.0012113636363636363,
+            "population_pair_failure_rates": {
+              "30B": 0.0041875,
+              "D": 0.00055
+            },
+            "series_failure_rate": 0.0176,
+            "series_failures": 352,
+            "window_failure_rates": {
+              "C1": 0.0004,
+              "C10": 0.0007,
+              "C11": 0.00045,
+              "C12": 0.0004,
+              "C13": 0.00045,
+              "C14": 0.00045,
+              "C2": 0.00055,
+              "C3": 0.0005,
+              "C4": 0.0009,
+              "C5": 0.00055,
+              "C6": 0.0008,
+              "C7": 0.00045,
+              "C8": 0.0007,
+              "C9": 0.00045,
+              "T1": 0.00035,
+              "T2": 0.00045,
+              "T3": 0.00075,
+              "W1": 0.0148
+            }
+          },
+          {
+            "monte_carlo_se": 0.0008707135005270103,
+            "name": "normal_window_rho_0.5",
+            "pair_failure_rate": 0.0012227272727272727,
+            "population_pair_failure_rates": {
+              "30B": 0.0041625,
+              "D": 0.0005694444444444445
+            },
+            "series_failure_rate": 0.0154,
+            "series_failures": 308,
+            "window_failure_rates": {
+              "C1": 0.0004,
+              "C10": 0.00075,
+              "C11": 0.00055,
+              "C12": 0.0008,
+              "C13": 0.0005,
+              "C14": 0.0007,
+              "C2": 0.0004,
+              "C3": 0.00045,
+              "C4": 0.00075,
+              "C5": 0.0004,
+              "C6": 0.0005,
+              "C7": 0.0004,
+              "C8": 0.0007,
+              "C9": 0.0007,
+              "T1": 0.00055,
+              "T2": 0.00035,
+              "T3": 0.0006,
+              "W1": 0.01225
+            }
+          },
+          {
+            "monte_carlo_se": 0.0006060214517655295,
+            "name": "normal_series_rho_0.9",
+            "pair_failure_rate": 0.0008977272727272727,
+            "population_pair_failure_rates": {
+              "30B": 0.0036875,
+              "D": 0.0002777777777777778
+            },
+            "series_failure_rate": 0.0074,
+            "series_failures": 148,
+            "window_failure_rates": {
+              "C1": 0.00035,
+              "C10": 0.00025,
+              "C11": 0.0003,
+              "C12": 0.0004,
+              "C13": 0.00035,
+              "C14": 0.0003,
+              "C2": 0.00035,
+              "C3": 0.0004,
+              "C4": 0.0002,
+              "C5": 0.0,
+              "C6": 0.0002,
+              "C7": 0.0003,
+              "C8": 0.0003,
+              "C9": 0.0002,
+              "T1": 0.0004,
+              "T2": 0.0003,
+              "T3": 0.0002,
+              "W1": 0.0074
+            }
+          },
+          {
+            "monte_carlo_se": 0.0013057637133111028,
+            "name": "normal_correlated_training_rho_0.5",
+            "pair_failure_rate": 0.0025295454545454545,
+            "population_pair_failure_rates": {
+              "30B": 0.00815,
+              "D": 0.0012805555555555556
+            },
+            "series_failure_rate": 0.03535,
+            "series_failures": 707,
+            "window_failure_rates": {
+              "C1": 0.0009,
+              "C10": 0.00155,
+              "C11": 0.00115,
+              "C12": 0.0011,
+              "C13": 0.00155,
+              "C14": 0.00125,
+              "C2": 0.0014,
+              "C3": 0.00115,
+              "C4": 0.0013,
+              "C5": 0.0015,
+              "C6": 0.00105,
+              "C7": 0.0017,
+              "C8": 0.0011,
+              "C9": 0.0008,
+              "T1": 0.00105,
+              "T2": 0.00145,
+              "T3": 0.0017,
+              "W1": 0.0285
+            }
+          },
+          {
+            "monte_carlo_se": 0.0026166384685317153,
+            "name": "student_t3_unit_variance",
+            "pair_failure_rate": 0.009818181818181818,
+            "population_pair_failure_rates": {
+              "30B": 0.0208,
+              "D": 0.007377777777777777
+            },
+            "series_failure_rate": 0.16375,
+            "series_failures": 3275,
+            "window_failure_rates": {
+              "C1": 0.00715,
+              "C10": 0.00735,
+              "C11": 0.0063,
+              "C12": 0.0074,
+              "C13": 0.00815,
+              "C14": 0.0071,
+              "C2": 0.00835,
+              "C3": 0.0071,
+              "C4": 0.0073,
+              "C5": 0.00745,
+              "C6": 0.0067,
+              "C7": 0.0065,
+              "C8": 0.00915,
+              "C9": 0.00705,
+              "T1": 0.00665,
+              "T2": 0.00785,
+              "T3": 0.008,
+              "W1": 0.08215
+            }
+          },
+          {
+            "monte_carlo_se": 0.002259660345051884,
+            "name": "centered_exponential",
+            "pair_failure_rate": 0.006115909090909091,
+            "population_pair_failure_rates": {
+              "30B": 0.0156125,
+              "D": 0.004005555555555556
+            },
+            "series_failure_rate": 0.11545,
+            "series_failures": 2309,
+            "window_failure_rates": {
+              "C1": 0.0042,
+              "C10": 0.0035,
+              "C11": 0.0037,
+              "C12": 0.0034,
+              "C13": 0.0036,
+              "C14": 0.0052,
+              "C2": 0.00385,
+              "C3": 0.0035,
+              "C4": 0.0041,
+              "C5": 0.00345,
+              "C6": 0.00355,
+              "C7": 0.00455,
+              "C8": 0.00485,
+              "C9": 0.0037,
+              "T1": 0.00465,
+              "T2": 0.0042,
+              "T3": 0.00415,
+              "W1": 0.0631
+            }
+          },
+          {
+            "monte_carlo_se": 0.0009297913744491288,
+            "name": "D_true_scale_1.0",
+            "pair_failure_rate": 0.0012113636363636363,
+            "population_pair_failure_rates": {
+              "30B": 0.0041875,
+              "D": 0.00055
+            },
+            "series_failure_rate": 0.0176,
+            "series_failures": 352,
+            "window_failure_rates": {
+              "C1": 0.0004,
+              "C10": 0.0007,
+              "C11": 0.00045,
+              "C12": 0.0004,
+              "C13": 0.00045,
+              "C14": 0.00045,
+              "C2": 0.00055,
+              "C3": 0.0005,
+              "C4": 0.0009,
+              "C5": 0.00055,
+              "C6": 0.0008,
+              "C7": 0.00045,
+              "C8": 0.0007,
+              "C9": 0.00045,
+              "T1": 0.00035,
+              "T2": 0.00045,
+              "T3": 0.00075,
+              "W1": 0.0148
+            }
+          },
+          {
+            "monte_carlo_se": 0.00156925456029288,
+            "name": "D_true_scale_1.5",
+            "pair_failure_rate": 0.004252272727272727,
+            "population_pair_failure_rates": {
+              "30B": 0.0041875,
+              "D": 0.004266666666666667
+            },
+            "series_failure_rate": 0.05195,
+            "series_failures": 1039,
+            "window_failure_rates": {
+              "C1": 0.0039,
+              "C10": 0.00485,
+              "C11": 0.00395,
+              "C12": 0.0042,
+              "C13": 0.00465,
+              "C14": 0.00425,
+              "C2": 0.004,
+              "C3": 0.00415,
+              "C4": 0.00455,
+              "C5": 0.00435,
+              "C6": 0.0037,
+              "C7": 0.00415,
+              "C8": 0.00445,
+              "C9": 0.0037,
+              "T1": 0.0041,
+              "T2": 0.0049,
+              "T3": 0.00475,
+              "W1": 0.01755
+            }
+          },
+          {
+            "monte_carlo_se": 0.0025017904588514202,
+            "name": "D_true_scale_2.0",
+            "pair_failure_rate": 0.012922727272727273,
+            "population_pair_failure_rates": {
+              "30B": 0.0041875,
+              "D": 0.014863888888888888
+            },
+            "series_failure_rate": 0.1467,
+            "series_failures": 2934,
+            "window_failure_rates": {
+              "C1": 0.0144,
+              "C10": 0.01575,
+              "C11": 0.0141,
+              "C12": 0.0152,
+              "C13": 0.0154,
+              "C14": 0.01515,
+              "C2": 0.01435,
+              "C3": 0.01425,
+              "C4": 0.0142,
+              "C5": 0.01565,
+              "C6": 0.0133,
+              "C7": 0.01505,
+              "C8": 0.0158,
+              "C9": 0.01495,
+              "T1": 0.0149,
+              "T2": 0.0154,
+              "T3": 0.0148,
+              "W1": 0.02715
+            }
+          },
+          {
+            "monte_carlo_se": 0.003534015969828094,
+            "name": "D_true_scale_3.0",
+            "pair_failure_rate": 0.05392045454545454,
+            "population_pair_failure_rates": {
+              "30B": 0.0041875,
+              "D": 0.06497222222222222
+            },
+            "series_failure_rate": 0.48535,
+            "series_failures": 9707,
+            "window_failure_rates": {
+              "C1": 0.06525,
+              "C10": 0.06545,
+              "C11": 0.06535,
+              "C12": 0.0648,
+              "C13": 0.06455,
+              "C14": 0.06645,
+              "C2": 0.06495,
+              "C3": 0.06275,
+              "C4": 0.06325,
+              "C5": 0.06615,
+              "C6": 0.06485,
+              "C7": 0.06495,
+              "C8": 0.06695,
+              "C9": 0.065,
+              "T1": 0.063,
+              "T2": 0.0638,
+              "T3": 0.0658,
+              "W1": 0.07605
+            }
+          },
+          {
+            "monte_carlo_se": 0.0019840385265916588,
+            "name": "D_drift_two_pilot_sd",
+            "pair_failure_rate": 0.0109,
+            "population_pair_failure_rates": {
+              "30B": 0.0041875,
+              "D": 0.012391666666666667
+            },
+            "series_failure_rate": 0.08615,
+            "series_failures": 1723,
+            "window_failure_rates": {
+              "C1": 0.01375,
+              "C10": 0.01205,
+              "C11": 0.0129,
+              "C12": 0.0123,
+              "C13": 0.01365,
+              "C14": 0.01155,
+              "C2": 0.0123,
+              "C3": 0.011,
+              "C4": 0.0108,
+              "C5": 0.012,
+              "C6": 0.01125,
+              "C7": 0.01355,
+              "C8": 0.01355,
+              "C9": 0.0128,
+              "T1": 0.0129,
+              "T2": 0.01135,
+              "T3": 0.0125,
+              "W1": 0.02405
+            }
+          },
+          {
+            "monte_carlo_se": 0.0015974886149829057,
+            "name": "D_drift_eight_pilot_sd",
+            "pair_failure_rate": 0.6228454545454546,
+            "population_pair_failure_rates": {
+              "30B": 0.0041875,
+              "D": 0.760325
+            },
+            "series_failure_rate": 0.94605,
+            "series_failures": 18921,
+            "window_failure_rates": {
+              "C1": 0.7642,
+              "C10": 0.76,
+              "C11": 0.7599,
+              "C12": 0.7629,
+              "C13": 0.7557,
+              "C14": 0.75825,
+              "C2": 0.7603,
+              "C3": 0.75885,
+              "C4": 0.76195,
+              "C5": 0.75845,
+              "C6": 0.7628,
+              "C7": 0.75785,
+              "C8": 0.7555,
+              "C9": 0.76185,
+              "T1": 0.7647,
+              "T2": 0.75985,
+              "T3": 0.7642,
+              "W1": 0.7586
+            }
+          }
+        ],
+        "seed": 20261108,
+        "simulations": 20000
+      },
+      "pair_false_fail_at_assumed_scale": 0.004005304740697856,
+      "series_beta": 0.05,
+      "series_false_fail_at_assumed_scale": 0.04999999999999996,
+      "series_quantile_q": 4.522890218951504
+    }
+  ],
+  "label": "SYNTHETIC DESIGN ONLY; no measurements, adoption or hardware validation",
+  "limitation": "Fixed-beta sensitivity; the OC does not reapply the leave-one-out trigger in each replicate. Probabilities integrate calibration scale; they are not guarantees conditional on a realized scale or trigger.",
+  "policies": {
+    "16": {
+      "checks_by_window": {
+        "C1": {
+          "30B": 0,
+          "D": 1
+        },
+        "C2": {
+          "30B": 0,
+          "D": 1
+        },
+        "C3": {
+          "30B": 0,
+          "D": 1
+        },
+        "C4": {
+          "30B": 0,
+          "D": 1
+        },
+        "C5": {
+          "30B": 0,
+          "D": 1
+        },
+        "C6": {
+          "30B": 0,
+          "D": 1
+        },
+        "C7": {
+          "30B": 0,
+          "D": 1
+        },
+        "C8": {
+          "30B": 0,
+          "D": 1
+        },
+        "T1": {
+          "30B": 0,
+          "D": 1
+        },
+        "T2": {
+          "30B": 0,
+          "D": 1
+        },
+        "T3": {
+          "30B": 0,
+          "D": 1
+        },
+        "W1": {
+          "30B": 4,
+          "D": 1
+        }
+      },
+      "d_configuration_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "d_transfer_factor": 1.5,
+      "method": "session_zero_rms_series_exact_v1",
+      "r1_D_qualification": "adjacent_matched_predecessor_screen_only",
+      "r1_configuration_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "seed": 20261108,
+      "selection": "one_prespecified_pair_per_session",
+      "series_alpha": 0.05,
+      "simulations": 20000,
+      "transfer_justification_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "22": {
+      "checks_by_window": {
+        "C1": {
+          "30B": 0,
+          "D": 1
+        },
+        "C10": {
+          "30B": 0,
+          "D": 1
+        },
+        "C11": {
+          "30B": 0,
+          "D": 1
+        },
+        "C12": {
+          "30B": 0,
+          "D": 1
+        },
+        "C13": {
+          "30B": 0,
+          "D": 1
+        },
+        "C14": {
+          "30B": 0,
+          "D": 1
+        },
+        "C2": {
+          "30B": 0,
+          "D": 1
+        },
+        "C3": {
+          "30B": 0,
+          "D": 1
+        },
+        "C4": {
+          "30B": 0,
+          "D": 1
+        },
+        "C5": {
+          "30B": 0,
+          "D": 1
+        },
+        "C6": {
+          "30B": 0,
+          "D": 1
+        },
+        "C7": {
+          "30B": 0,
+          "D": 1
+        },
+        "C8": {
+          "30B": 0,
+          "D": 1
+        },
+        "C9": {
+          "30B": 0,
+          "D": 1
+        },
+        "T1": {
+          "30B": 0,
+          "D": 1
+        },
+        "T2": {
+          "30B": 0,
+          "D": 1
+        },
+        "T3": {
+          "30B": 0,
+          "D": 1
+        },
+        "W1": {
+          "30B": 4,
+          "D": 1
+        }
+      },
+      "d_configuration_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "d_transfer_factor": 1.5,
+      "method": "session_zero_rms_series_exact_v1",
+      "r1_D_qualification": "adjacent_matched_predecessor_screen_only",
+      "r1_configuration_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "seed": 20261108,
+      "selection": "one_prespecified_pair_per_session",
+      "series_alpha": 0.05,
+      "simulations": 20000,
+      "transfer_justification_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  },
+  "roster_source": "origin/align/2026-11-08-v4-r11 @ 33932b391:scripts/align_v4_u3_export.py"
+}

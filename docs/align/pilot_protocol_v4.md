@@ -503,8 +503,10 @@ entry. Apply the registered escalation ladder before the next window, never
 in-place: idle 300→450 s; loosen δ_slow in 0.5 °C steps up to 2.0 °C
 for timeout-driven failures, tighten for spread-driven failures; then one
 quantization step down. Holds are already on for heavy D and are not another step. U4/U5 failure means state not
-controlled; inconclusive adds two sentinels to remaining windows, never a
-looser margin. U6 is reported, never a window-admission gate; imprecision bars
+controlled; a **U4** inconclusive adds the two R20 escalation sentinels (below), never a
+looser margin. A U5 inconclusive does NOT (A15 / R21: U5, an OLS with intercept on three
+R1 designed states with df 1, is inconclusive by construction, the sentinels cannot resolve
+it and would cost about an hour of MBP per window; U5 is reported descriptively). U6 is reported, never a window-admission gate; imprecision bars
 a stability claim, and FAIL bars a detection-rate claim from that cell. Any revised sizing
 and configuration must be recorded before use. `F:400–409; A:129–149`
 
@@ -559,7 +561,7 @@ F:430,654–659`
 
 Ed's registration-grade ruling requires m≥39 eligible benign per pair plus a
 separately locked test cohort (about seven calibration windows, then T1–T3;
-fixed 8 calibration windows: R12 B3 below; the exact C/T manifest remains lead-owned). Thresholds are the
+fixed 8 admitted calibration windows, with up to six structural-bar replacements C9-C14: R12 B3 and R22-2 / R24 below; the frozen C/T manifest and its reserve seeds are in `configs/campaigns/align_v4/series/`). Thresholds are the
 per-channel sample maximum at that rank. Under exchangeability the marginal
 FPR is ≤1/(m+1), at most 2.5% at m=39; this is not a conditional realized 2.5%
 guarantee. Under iid continuous scores the 90% upper tolerance bound is
@@ -657,7 +659,7 @@ R1's adjacent D_spam a/b pair as a transfer screen (`scripts/align_v4_u3_export.
 s₀ is the RMS of the relative differences about zero (df = n); q solves the series
 false-fail E_U[1−(1−P(|Z|>qU))^N] = β, integrating the shared scale uncertainty once,
 with β = .05 (halved if any pilot difference exceeds 3× the leave-one-out RMS) and
-N = 16 (W1 30B:4 + D:1, C1-C8 and T1-T3 D:1 each; RUN_STATE 226 R15). A pair fails if
+N = 22 (**R25**, RUN_STATE 239, a pre-signature design change: W1 30B:4 + D:1, C1-C14 D:1 each, T1-T3 D:1 each; it was 16 = 5 + 8 + 3 under RUN_STATE 226 R15 before the six R24 reserve windows C9-C14 existed). The U3 bar is not signed yet, so the roster expands prospectively to every window that can be run, and the familywise false-fail budget stays β over every possible comparison. `docs/align/v4/U3-transfer.md` restates the inputs at N = 22 (n = 7, β = .05: q 4.0898 to 4.2793, D bar multiplier 6.1347 to 6.4190) with regenerated OC evidence (`docs/align/v4/U3-scope-n22.json`). A pair fails if
 |ΔE| > q·s₀·Ē for 30B and f·q·s₀·Ē for D, f = 1.5 with a digest-bound written
 justification. A refuted or missing R1 screen leaves D U3 inconclusive. There is
 no multiplier outside this recomputed derivation: no k=3, 2.576 or floor. `validate_u3`
@@ -868,9 +870,9 @@ from the committed record before the arm; the arm waits for them.
 | `capture_faults` | sidecar/powermetrics coverage, collector, OOM/Metal, deadman, unobserved-state faults (X1-X8) |
 | `thermal_escalation` | U1-U3 result and the registered escalation ladder, recorded before use, never in place |
 | `cohort_pool_rules` | U1-U3 failure bars pool entry; one frozen cohort; no pooling across a changed configuration |
-| `sentinel_roster` | U4/U5 inconclusive adds two sentinels to the remaining windows |
-| `member_eligibility` | final eligibility adjudication (identity X5, U3 pairs, exclusions); counts are provisional until it passes |
-| `calibration_stop` | the B3 fixed-8 predicate over the packet counts (derived, not asserted): continue until 8 counted windows, `calibration_complete` before a test arm |
+| `sentinel_roster` | a U4 inconclusive (not U5; A15 / R21) adds the two R20 escalation sentinels to the next window |
+| `member_eligibility` | eligibility adjudication (identity X5, U3 pairs, exclusions). Lead ruling R17 (RUN_STATE 228): at the arm it passes on the light triage's **provisional** adjudication (no harvest) unless the full desk is due; window k's **final** eligibility (the off-MBP harvest and full desk, carried by record k or by record k+1's `previous_final`) is required before the arm of k+2 and before any arm the full desk gates |
+| `calibration_stop` | the B3 fixed-8 predicate over the packet counts (derived, not asserted): continue until 8 counted windows (a structurally barred window is replaced by C9-C14, R22-2 / R24), `calibration_complete` before a test arm |
 | `battery_window` | previous window's B bar (rule `zero_B_auto_resume_v1`, W1-BLOCKERS lead ruling 9): pass, or the first non-passing window in a row resumes automatically on fresh admissible top-up + OBC attestation (`charging_battery`); a second consecutive non-passing window needs a signed `battery_rulings` row |
 | `full_desk_gate` | the full desk; a false `v4_B_bar` alone does not fail it (`battery_window` governs) |
 
@@ -922,7 +924,8 @@ triage fits in five minutes, and the 30-45 minute turnaround, are targets, not
 measurements.
 
 **B3 - fixed 8 calibration windows (RUN_STATE 217; supersedes the count stop of
-214/215).** Calibration is exactly 8 counted windows, C1-C8, run in one frozen order
+214/215).** Calibration is exactly 8 admitted (counted) windows: C1-C8 run in one frozen order,
+with C9-C14 armed only to replace a structurally barred window (R22-2 / R24, below)
 (the series manifest's order; held-out seed indices are consumed in kit order by
 window order) with the default D shape: 4 anchors, 2 sentinels, 14 fresh benign (7
 per pair) and 2 sabotage (1 per pair). There is no early stop and no minimum below 8:
@@ -934,9 +937,12 @@ on calibration; no calibration window is repurposed as test or fit. The predicat
 reads window status and eligible benign counts per pair only, never a score, alarm,
 residual or energy field (`v4_cadence.calibration_stop`):
 
-1. Eligibility is final before the decision. Counts are provisional until
-   `member_eligibility` passes; provisional counts schedule windows 1-7, and with 8
-   counted windows any provisional one gives `pending_final_eligibility`.
+1. Eligibility is final before the decision. Counts are provisional until the full
+   desk's final adjudication is recorded (lead ruling R17: window k's final eligibility
+   before the arm of k+2, so at most the previous window is provisional); provisional
+   counts schedule windows 1-7, and with 8 counted windows any provisional one gives
+   `pending_final_eligibility`. RUN_STATE 216's "from window 6" fence is withdrawn
+   (R17; it belonged to the superseded count stop).
 2. After 8 final counted windows: if **both** pairs (spam and bank) have at least 39
    eligible benign summed over the 8, calibration is complete (`calibration_complete`)
    and test windows may follow. Every eligible calibrator counts; there is no
@@ -944,9 +950,10 @@ residual or energy field (`v4_cadence.calibration_stop`):
 3. Cap accounting (lead ruling, RUN_STATE 216): a window that captured **zero**
    members (a zero-capture refusal) does not count toward the 8 and carries no
    eligible members; a window with at least one captured member counts, whether lost,
-   failed or in flight. Two consecutive zero-capture refusals escalate to the lead
-   (`escalate_to_lead`; nothing is armed until a signed `lead_ruling` row resets the
-   count). A zero-capture window that is still provisional is unfinished, not a
+   failed or in flight, **unless it is structurally barred (R22-2, below)**. Two consecutive
+   zero-capture refusals of different slots, or a zero-capture bar once all six replacement
+   windows are used, escalate to the lead (`escalate_to_lead`; nothing is armed until a
+   signed `lead_ruling` row resets the count). A zero-capture window that is still provisional is unfinished, not a
    refusal: it holds the gate at `pending_final_eligibility`. Count rows are checked
    for consistency (integers, at most the 22-member roster captured, eligible benign
    members no more than captured, `eligible_total` and any `calibration_totals` equal
@@ -988,17 +995,17 @@ shape and no v5 content. Every C/T window has 22 members: anchors 1-4 (original 
 sentinel at ordinal 5, sixteen fresh held-out D members at 6-21 alternating pair by pair (odd windows
 start with spam, even windows with bank), sabotage at ordinals 9 and 18, and the late sentinel at 22;
 the midpoint follows ordinal 11. Held-out seed indices are distinct and consumed per pair in kit order
-from 2, skipping 1 and 91-99 (C1-C8 use 2-65, T1-T3 use 66-89); a zero-capture re-arm reuses the same
-seeds. A C-window sabotage member is pool `known_h` and counts toward nothing. A U1-U3 fail bars the
-window from the pool but the window still counts toward the eight. Final adjudication may lower the
+from 2, skipping 1 and 91-99 (C1-C8 use 2-65 and T1-T3 66-89, exactly as paired-seed checked; the reserve windows C9-C14 use 100-147, see R22-2 / R24); a zero-capture
+re-arm reuses the same seeds. A C-window sabotage member is pool `known_h` and counts toward nothing. A
+U1-U3 fail bars the window from the pool (R22-2: and the window is then replaced, not counted). Final adjudication may lower the
 desk's provisional counts, never raise them. The manifest is
 `configs/campaigns/align_v4/series/series_manifest.json` (bound and strict; its bytes were paired-seed
-checked, MATCH) and is built by `scripts/align_v4_series.py`. **Every arm binds the series, W1
+checked, MATCH, before R22-2 / R24 added the reserve windows C9-C14, which needs a new paired check) and is built by `scripts/align_v4_series.py`. **Every arm binds the series, W1
 included**; the arm binds its own rebuild of the packet (a supplied packet is only a pointer), whose
 history is derived from the hash-chained records. An ordinary window may run to **59,520 s**; a window
 that carries the two escalation sentinels below may run to **62,400 s**.
 
-**R20 - escalation sentinels (RUN_STATE 226).** When a window's U4/U5 is inconclusive, the next window
+**R20 - escalation sentinels (RUN_STATE 226).** When a window's **U4** is inconclusive (A15 / R21: a U5 inconclusive is expected by construction and does NOT trigger them), the next window
 (never W1) appends two sentinels at **ordinals 23 and 24**, after the late sentinel at 22 and before
 the closing reference/scaffold (`align_v4_series.py materialize --window-id Cn --extra-sentinels 2`,
 `align_v4_session.py prepare --window-id Cn --extra-sentinels 2`). Both replay the admitted W1:5
@@ -1009,7 +1016,47 @@ unchanged, they join no identical-work group (U3's frozen comparison scope is un
 held-out seed, they never count toward the window's captured members or any calibration count, and the
 desk reports them descriptively (`supplemental_sentinels`). The committed-record reader likewise counts them toward nothing anywhere: not in `captured_members` (so the count-only ceiling is 22 and a window holding only supplemental captures consumes no calibration slot), not in the eligible counts (only the frozen calibration pool enters m), while their captures stay authenticated in custody. The desk's committed provisional counts (`series_desk_row`) are an upper bound the final counts may lower, never raise; the arm's rebuild carries and enforces it. The frozen manifest bytes do not change; the
 24-member plan is derived from it at materialization. The packet's `sentinel_roster` check requires the
-roster to include them after a U4/U5-inconclusive window.
+roster to include them after a U4-inconclusive window.
+
+**R22 - Block 5 lessons applied to v4 (RUN_STATE 234; decided blind, with no v4 data).**
+
+* **R22-1, contention is disclosure-only.** Block 5's rule (0.05 CPU-s/s per 10 s, applied as an
+  exclusion) is never used in v4: at v4's roughly 830 s active episodes it would flag more than 99.7 % of
+  members. Each member records its outside-tree CPU-seconds over its member span (from the monitor's
+  contention journal; `joulewise/align/apple/v4_contention.py`, desk record `contention`). A
+  `contention.unmeasured` coverage gap is bounded: a gap over 30 s is flagged and disclosed, never
+  excluded. **No `contention.*` code can exclude a member**: the desk and the committed-record reader
+  both strip them from every exclusion list and keep them as disclosed codes.
+* **R22-2 / R24, blind replacement calibration windows C9-C14 (reserve cap C14).** Calibration stays
+  **exactly 8 ADMITTED (counted) windows**. Up to **six** pre-declared blind replacement windows, C9 through
+  C14, are armed in order, each ONLY to replace a window barred for a STRUCTURAL reason: a U1-U3 FAIL, a
+  whole-window capture failure (the committed terminal result is not a completed GO chain: a non-GO verdict or a
+  non-zero chain exit), or a zero-capture refusal beyond the retry (the retry `C3#2` is also a zero capture).
+  A replacement never depends on scores or on eligible counts and is never armed to repair low m. A barred
+  window enters no pool and is not counted: it is replaced, not added (this supersedes R15's rule that a
+  U1-U3-failed window still counts toward the eight). A barred window contributes **nothing** to calibration,
+  including the members it did capture (no partial use); its records stay in custody (the hash-linked chain)
+  and are disclosed (`barred_windows`, `replacements_used`). **Cap (R24, from Sol's reserve-cap sweep at bar
+  rate 1/4, e = .10):** qualification is 52.6 % at C10, 84.2 % at C12 and 96.2 % at C14, so the cap is C14,
+  pre-registered; gate-admitted FPR is invariant to the cap at b = 0. **Drift disclosure (RUN_STATE 238 correction):** with the T windows placed after the stop, C14 RAISES gate-admitted FPR slightly under drift b = .05, by +0.03 to +0.17 percentage points (maximum rule) relative to C10; this is disclosed, not gated, and C14 stands. **Seeds:** T1-T3 keep
+  exactly their R15 seeds (66-89 per pair, already MATCHed by the Sol seed check). The reserve seeds are one
+  contiguous pool allocated after the T range and after the reserved development indices: indices 91-99 are
+  skipped because the protocol reserves them (W1 uses 1 and 93, R0 uses 91-92, and 94-99 are held in reserve),
+  so the pool is **100-147**, 8 seeds per pair per window: C9 100-107, C10 108-115, C11 116-123, C12 124-131,
+  C13 132-139, C14 140-147. The window order is C1-C8, then C9-C14 only as owed, then T1-T3. The outcome is
+  `insufficient_calibration` if a pair is below 39 eligible benign after 8 admitted windows, or if C14 is reached
+  with fewer than 8 admitted (more than six windows barred). The rule is **not a count stop**: a window with few
+  eligible members that is not structurally barred counts. It is wired into the series manifest generator
+  (`scripts/align_v4_series.py`), `v4_cadence.calibration_stop` (`barred`, `replacements_used`) and the triage
+  (the packet builder derives each bar from the committed record). The manifest bytes changed, so a paired Sol
+  seed check follows, and the Sol simulation of the rule's FPR effect is part of the registration evidence.
+* **R22-3, balance check by condition.** Exclusions and flags per member-second are compared benign
+  against sabotage, and per task pair, against the exposure-adjusted pooled expectation
+  (`joulewise/align/apple/v4_balance.py`). The result is printed in the desk report and disclosed
+  (`balance_check`, `status: print_only`); it gates nothing and selects nothing.
+* **R22-5, between-window prior.** Record tau_rel = 0.13 % (stress 0.21 %) of cell energy as the Block 5
+  between-window prior. Check B3's tau = 0.5 s_r conversion once W1 or C1 yields the first benign residual
+  SD; until then the 0.5 s_r margin stays an open statistics item (above), not an adopted rule.
 
 ## Discrepancies
 

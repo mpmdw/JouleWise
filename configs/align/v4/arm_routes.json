@@ -1,0 +1,215 @@
+{
+  "schema": "joulewise.align_v4.arm_routes.v1",
+  "authority": "RUN_STATE 219 (an arm route exists end to end for the next measurement is a PREQUAL item) and 220 (routes are built by Sol and Opus independently, agreed, then ruled)",
+  "note": "Checked by scripts/align_v4_prequal.py --w1-next (arm-route check). A route is 'declared' only after a lead ruling names it; every step's entry point must exist and answer. A route with 'commit' is pinned: its files are verified at that commit and its probes run in a scratch clone of it.",
+  "routes": {
+    "r1": {
+      "status": "declared",
+      "armed": {
+        "plan_id": "align-r1-20261108T0917Z",
+        "t0_utc": "2026-11-08T09:17Z",
+        "window_max_s": 105427,
+        "authority": "RUN_STATE 224 (lead ruling R13: Sol HAZARD_PACK route), 225 (arm exactly this commit), 227 (armed)"
+      },
+      "ref": "lane/2026-11-08-r1-arm-fixes",
+      "commit": "20e9edbc446a9f89a68badc1bd32bb0934cbb86d",
+      "receipt_class": "HAZARD_PACK",
+      "runbook": "docs/align/r1_arm_runbook.md",
+      "note": "Pinned: the route lives at this commit, not on the v4 branch; arm-route verifies its files at the commit and runs its probes in a scratch clone of it. Follow RUN_STATE 225 N1, not the runbook fetch line.",
+      "steps": [
+        {
+          "id": "arm-r1",
+          "requires": [
+            "scripts/arm_align_r1.py",
+            "joulewise/align/r1_arm.py",
+            "docs/align/r1_arm_runbook.md"
+          ],
+          "probe": {
+            "argv": [
+              "{python}",
+              "-B",
+              "scripts/arm_align_r1.py",
+              "--help"
+            ],
+            "expect_text": [
+              "prepare",
+              "size"
+            ]
+          }
+        },
+        {
+          "id": "night-agent-installer",
+          "requires": [
+            "scripts/install_night_agent.sh",
+            "scripts/b6_courier.sh"
+          ]
+        },
+        {
+          "id": "run-night",
+          "requires": [
+            "scripts/run_night.py",
+            "joulewise/night_gate.py",
+            "joulewise/b5/driver.py"
+          ],
+          "probe": {
+            "argv": [
+              "{python}",
+              "-B",
+              "scripts/run_night.py",
+              "run",
+              "--help"
+            ],
+            "expect_text": [
+              "--plan PLAN.json"
+            ]
+          }
+        },
+        {
+          "id": "r1-runtime",
+          "requires": [
+            "scripts/align_r1_runtime.py",
+            "configs/align/v4/r1_runtime.json",
+            "scripts/km003c_monitor.py"
+          ]
+        }
+      ]
+    },
+    "w1": {
+      "status": "declared",
+      "receipt_class": "HAZARD_PACK",
+      "runbook": "docs/align/v4/W1-SMOKE.md",
+      "steps": [
+        {
+          "id": "prepare",
+          "requires": [
+            "scripts/align_v4_session.py",
+            "scripts/align_v4_kit.py",
+            "scripts/bytes_h_session.py"
+          ],
+          "probe": {
+            "argv": [
+              "{python}",
+              "-B",
+              "scripts/align_v4_session.py",
+              "prepare",
+              "--help"
+            ],
+            "expect_text": [
+              "--measurement-root",
+              "--session-root"
+            ]
+          }
+        },
+        {
+          "id": "arm-install",
+          "requires": [
+            "joulewise/align/apple/v4_cadence.py",
+            "joulewise/align/apple/v4_registration.py",
+            "joulewise/align/apple/v4_topup.py",
+            "scripts/align_v4_battery_log.py"
+          ],
+          "probe": {
+            "argv": [
+              "{python}",
+              "-B",
+              "scripts/align_v4_session.py",
+              "install",
+              "--help"
+            ],
+            "expect_text": [
+              "--w1-disk-config",
+              "--obc-off-attested-by",
+              "--battery-log",
+              "--next-arm-triage"
+            ]
+          }
+        },
+        {
+          "id": "night-agent-installer",
+          "requires": [
+            "scripts/install_night_agent.sh",
+            "scripts/b6_courier.sh"
+          ],
+          "probe": {
+            "argv": [
+              "/bin/zsh",
+              "scripts/install_night_agent.sh"
+            ],
+            "expect_rc": [
+              2
+            ],
+            "expect_text": [
+              "--plan PLAN.json",
+              "--python ABS_PATH",
+              "--courier-bin ABS_PATH"
+            ]
+          }
+        },
+        {
+          "id": "run-night",
+          "requires": [
+            "scripts/run_night.py",
+            "joulewise/night_gate.py"
+          ],
+          "probe": {
+            "argv": [
+              "{python}",
+              "-B",
+              "scripts/run_night.py",
+              "run",
+              "--help"
+            ],
+            "expect_text": [
+              "--plan PLAN.json",
+              "--courier-bin",
+              "--dry-arm"
+            ]
+          }
+        },
+        {
+          "id": "hazard-pack-driver",
+          "requires": [
+            "joulewise/b5/driver.py",
+            "joulewise/b5/chain.py",
+            "scripts/hazard_monitor.py"
+          ]
+        },
+        {
+          "id": "km003c-reader",
+          "requires": [
+            "scripts/km003c_monitor.py"
+          ],
+          "probe": {
+            "argv": [
+              "{python}",
+              "-B",
+              "scripts/km003c_monitor.py",
+              "--help"
+            ],
+            "expect_text": [
+              "--out OUT"
+            ]
+          }
+        },
+        {
+          "id": "desk",
+          "requires": [
+            "scripts/align_v4_thermal_desk.py"
+          ],
+          "probe": {
+            "argv": [
+              "{python}",
+              "-B",
+              "scripts/align_v4_session.py",
+              "desk",
+              "--help"
+            ],
+            "expect_text": [
+              "--session-root"
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

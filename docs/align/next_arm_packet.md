@@ -95,6 +95,23 @@ do not enter triage pass/fail values or eligible totals in the index:
   `pilot_status`, `harvest_status`. A later off-machine desk may instead record
   `status: running_off_mbp` while deferred. `sources.exclusions` is the final
   harvest `exclusions.json`, with `members_excluded[].run_id` and `codes`.
+* **Final adjudication (R17 review F4).** `pilot`, `desk` and `exclusions` (the
+  record's own, or the successor's `previous_final`) count as final only when
+  they evidence a completed, plan-bound harvest: `desk.harvest_status` is `ok` or
+  `members_excluded` (never the `running_off_mbp` placeholder), `desk.plan_id` and
+  `PILOT.json`'s `plan_id` equal this record's `sources.plan.plan_id`,
+  `PILOT.json`'s `status` is `instrument_ok` or `instrument_incomplete`, and any
+  `members_excluded` the desk or PILOT recorded equals the exclusions source.
+  A completed desk that did not pass stays final. Window binding is the thermal
+  section's `model/window` keys and roster. Otherwise the record is provisional
+  (it needs `sources.light_triage`), and every window of the hash chain other than
+  the previous one, test windows included, must be final (R17: k final before
+  the arm of k+2), or `member_eligibility` fails.
+* `finalized_manifest` (required after R1, R17 review F2): descriptor of the
+  record-bound tree manifest `harvest_offload.finalized_manifest` wrote at
+  finalize (`joulewise.align_v4.finalized_manifest.v2`, canonical JSON bytes, so
+  its SHA-256 is the digest `unpack --finalized-sha256` checks). It binds the
+  restore namespace, every tree entry and the finite external-input closure.
 * `captures`: an exhaustive map from every planned run id to a descriptor for
   its captured measurement artifact, or null for no capture. A nonempty captured
   artifact counts even if its member later fails; eligibility is separate.
@@ -165,7 +182,7 @@ No native collection readiness is claimed by the synthetic tests.
 | capture_faults | exact roster sidecar/powermetrics coverage, flags and exclusion lists | capture coverage or X1-X8 tabulation missing |
 | thermal_escalation | U1–U3 per gated model; prospective ladder when failed/unevaluated | U1-U3 failure needs prospective recorded escalation |
 | cohort_pool_rules | native D slot/identity assertion; failed/excluded pool bar; next configuration equality | previous D four-slot cohort inconsistent; U1-U3 failure bars pool entry |
-| sentinel_roster | U4/U5 consequence and exact next roster | next frozen roster must include two extra sentinels after U4/U5 inconclusive |
+| sentinel_roster | U4 consequence (A15 / R21: U5 never triggers) and exact next roster | next frozen roster must include two extra sentinels after a U4 inconclusive |
 | member_eligibility | final exclusions, X5/token comparisons and capture inventory | desk and final exclusions disagree; identity X5/U3 pair unresolved |
 | calibration_stop | count-only fixed-eight predicate over authenticated history | escalate_to_lead; pending_final_eligibility; insufficient_calibration; role mismatch |
 | battery_window | the desk's `v4_B_bar` for the previous record; `consecutive_non_pass` is the trailing non-passing run on the hash-linked chain (missing evidence is a non-pass; R1 has no B bar); the consumer turns a first non-pass into an automatic resume and needs a signed `battery_rulings` row for the second | previous B window did not pass; no signed battery ruling after the second |
@@ -224,3 +241,14 @@ calibration record must commit the desk's provisional `series_desk_row` (`pilot.
 `desk_eligible_benign` is carried into the history as an upper bound that the final counts may lower,
 never raise. A retry's previous window (`C1#2`) is compared with the series by its slot (`C1`), while
 the full attempt id stays in the chain, the records and any ruling.
+
+## Replacement windows (R22-2)
+
+A calibration record can be **barred for a structural reason only**: `u1_u3_fail` (the desk's U1-U3 verdict FAILed
+for a gated model), `whole_window_capture_failure` (the committed terminal result is not a completed GO chain),
+or a zero-capture refusal beyond the retry (`C3` and `C3#2` both captured nothing). The builder derives each bar
+from the committed record (never from a score or an eligible count), zeroes the barred window's eligible counts and
+carries `barred` into `calibration_windows` and `series_history`. A barred window is not counted and owes one of up to six
+replacement windows (R24), C9 through C14 in order, which the series arms only after C8 and only while fewer than 8
+windows are counted. `calibration_decision` reports `barred_windows` and `replacements_used`.
+

@@ -92,7 +92,7 @@ class IndependentArithmeticTests(unittest.TestCase):
     def test_ruled_roster_and_relative_only_margin(self):
         template = align_v4_u3_export.policy_template()
         self.assertEqual(template['checks_by_window'], export()['policy']['checks_by_window'])
-        self.assertEqual(sum(sum(w.values()) for w in template['checks_by_window'].values()), 16)
+        self.assertEqual(sum(sum(w.values()) for w in template['checks_by_window'].values()), 22)      # R25: 16 + C9-C14
         self.assertEqual((template['series_alpha'], template['d_transfer_factor']), (.05, 1.5))
         bar = signed_bar()
         for energy in (1e-6, 1000., 1e6):

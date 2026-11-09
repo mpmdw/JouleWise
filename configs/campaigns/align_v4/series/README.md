@@ -4,8 +4,13 @@
 code base with Opus's allocation. It still needs one paired seed check before
 the lead signs `series/admission.json`.
 
-**Order.** W1, then C1–C8, then T1–T3. D_k is C_k, so `--window-id D3` selects
-C3; there are no separate fit windows.
+**Order.** W1, then C1–C8, then C9–C14 only as owed, then T1–T3. D_k is C_k, so
+`--window-id D3` selects C3; there are no separate fit windows. C9–C14 are the six
+pre-declared blind replacement calibration windows (R22-2 / R24, cap C14): each armed, in order,
+ONLY to replace a STRUCTURAL bar of a C window (U1–U3 FAIL, whole-window capture failure,
+zero-capture refusal beyond the retry), never on scores, counts or to repair low m;
+calibration stays exactly 8 admitted windows (`insufficient_calibration` if a pair is below 39
+after 8, or C14 is reached with fewer than 8 admitted).
 
 **Window shape.** Every C/T window has 22 members:
 
@@ -22,13 +27,14 @@ C3; there are no separate fit windows.
 - The midpoint follows ordinal 11.
 
 **Seeds.** Held-out seeds are distinct and consumed per pair in kit order: C1–C8
-use 2–65, T1–T3 use 66–89, never 1 or 91–99. A zero-capture re-arm reuses the
+use 2–65, T1–T3 use 66–89 (exactly R15), and the contiguous reserve pool for C9–C14 is 100–147 (8 per pair per window; C13 132–139, C14 140–147), never 1 or 91–99. A zero-capture re-arm reuses the
 same seeds.
 
 **Ceiling.** An ordinary window may run to 59,520 s. A window carrying the two
 escalation sentinels may run to 62,400 s (`window_ceiling_s`).
 
-**Escalation sentinels (R20).** After a window whose U4/U5 is inconclusive, the next
+**Escalation sentinels (R20).** After a window whose **U4** is inconclusive (A15 / R21: not U5, which is inconclusive by
+construction), the next
 window appends two sentinels at ordinals 23 and 24 (after the late sentinel at 22, before
 the closing reference/scaffold): `materialize --window-id C3 --extra-sentinels 2`, or
 `align_v4_session.py prepare --window-id C3 --extra-sentinels 2`. Both are exact replays
@@ -66,7 +72,8 @@ The packet's `S.json` carries `history`, `checks`, `record_commit` and
 The arm refuses, before the installer runs, any packet that:
 - names another window, or skips or reorders windows;
 - carries hand-edited counts;
-- skips the C6 fence (prior calibration eligibility must be final from C6 on);
+- leaves any attempt other than the previous one provisional (R17: window k's final
+  eligibility is due before the arm of k+2; the RUN_STATE 216 "from window 6" fence is withdrawn);
 - arrives while calibration is pending or insufficient;
 - arrives during an unreleased escalation;
 - reaches a test window without the C1–C8 threshold freeze.

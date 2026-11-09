@@ -266,8 +266,26 @@ def cross_pilot_identity(members, compare_session):
     return dict(result)
 
 
-def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None,
-         kit=KIT, desk_schema=SCHEMA, extra_checks=None):
+def apply_exclusion_policy(entries, policy=None):
+    """(excluded, disclosed): run id -> effective exclusion codes, and run id -> disclosure-only codes.
+
+    ``policy(codes) -> (effective, disclosed)``. A member whose codes are ALL disclosure-only is not excluded
+    (v4 R22-1: contention.*); a member listed with no codes at all stays excluded; the default keeps every
+    code an exclusion (v3).
+    """
+    excluded, disclosed_only = {}, {}
+    for entry in entries or ():
+        raw_codes = entry.get('codes', [])
+        effective, disclosed = policy(raw_codes) if policy else (list(raw_codes), [])
+        if disclosed:
+            disclosed_only[entry['run_id']] = disclosed
+        if effective or not disclosed:
+            excluded[entry['run_id']] = effective
+    return excluded, disclosed_only
+
+
+def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None, exclusion_policy=None,
+         kit=KIT, desk_schema=SCHEMA, extra_checks=None, harvest_workers=None):
     session = Path(session_root).resolve()
     state = h.read(session / 'session.json')
     plan = h.read(state['plan_path'])
@@ -312,6 +330,12 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
             '--plan', state['plan_path'], '--archive-root', str(session / 'archive'),
             '--registration-dir', state['registration_dir'], '--pack-records-root', str(session / 'private'),
             '--export-dir', str(session / 'export'), '--non-claim']
+    if harvest_workers is not None:
+        # Member assessment pool (HARVEST-OFF-opus): order-preserving, byte-identical
+        # to one worker; absent keeps the recorded argv of a one-worker desk.
+        if type(harvest_workers) is not int or harvest_workers < 1:
+            raise ValueError('harvest_workers must be a positive integer')
+        argv += ['--workers', str(harvest_workers)]
     if harvest:
         result = run(argv, check=False, capture_output=True, text=True, timeout=h.HARVEST_TIMEOUT_S)
         (session / 'staging/harvest.stdout').write_text(result.stdout or '')
@@ -326,10 +350,14 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
                                        dir=inspection))
     exclusion_path = session / 'archive/derived/exclusions.json'
     exclusions = h.read(exclusion_path) if exclusion_path.is_file() else None
-    excluded = {m['run_id']: m.get('codes', []) for m in (exclusions or {}).get('members_excluded', [])}
+    # ``exclusion_policy(codes) -> (effective, disclosed)``: a pack whose ruling makes some harvest codes
+    # disclosure-only (v4 R22-1: contention.*) moves them out of every exclusion decision here; the raw
+    # codes stay in ``disclosed_exclusion_codes``. The v3 default leaves every code an exclusion.
+    excluded, disclosed_only = apply_exclusion_policy((exclusions or {}).get('members_excluded', []), exclusion_policy)
     for member in members:
         codes = excluded.get(member['run_id'], [])
-        member.update(excluded=member['run_id'] in excluded, exclusion_codes=codes)
+        member.update(excluded=member['run_id'] in excluded, exclusion_codes=codes,
+                      disclosed_exclusion_codes=disclosed_only.get(member['run_id'], []))
         if member['summary'] is not None:
             summary = member['summary']
             summary.update(excluded=member['excluded'], exclusion_codes=codes)
@@ -376,7 +404,9 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
              'episode_scope_alternative_eligible_members': [m['run_id'] for m in members if m.get('summary') and episode_eligible(m)],
              'episode_scope_alternative_ineligible_reasons': {m['run_id']: episode_ineligibility_reasons(m)
                  for m in members if m.get('summary') and not episode_eligible(m)},
-             'exclusions_path': str(exclusion_path), 'members_excluded': (exclusions or {}).get('members_excluded', []),
+             'exclusions_path': str(exclusion_path),
+             'members_excluded': [e for e in (exclusions or {}).get('members_excluded', []) if e.get('run_id') in excluded],
+             'members_disclosure_only': {k: v for k, v in disclosed_only.items()},
              'cross_pilot_token_identity': comparison,
              'session_harvest_flags': harvest_flags.get(None, []),
              'harvest_flags_status': 'recorded' if flag_path.is_file() else 'not_recorded',
@@ -389,6 +419,7 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
               'pilot': str(output / 'PILOT.json'), 'pilot_status': pilot['status'], 'checks': checks,
               'harvest_argv': argv, 'harvest_exit': result.returncode,
               'members_excluded': pilot['members_excluded'],
+              'members_disclosure_only': pilot['members_disclosure_only'],
               'harvest_status': ('not_run' if not harvest else 'program_fault' if result.returncode not in (0, 6)
                                  else 'members_excluded' if excluded else 'exclusions_unavailable' if exclusions is None else 'ok')}
     h.write(output / 'desk.json', status)
@@ -449,6 +480,8 @@ def main(argv=None, *, kit=KIT, pack_id=PACK_ID, desk_schema=SCHEMA,
         commands.add_parser(name).add_argument('--session-root', type=Path, required=True)
     commands.choices['desk'].add_argument('--no-harvest', action='store_true', help='Extract to session/inspection/<utc>-<unique>/; preserve harvest files and skip archive/compression.')
     commands.choices['desk'].add_argument('--compare-session', type=Path)
+    commands.choices['desk'].add_argument('--harvest-workers', type=int,
+                                          help='harvest member-assessment workers (off-MBP desk; default one)')
     # Kit-specific install arguments (flag, argparse options), forwarded as keywords.
     for flag, options in install_options:
         commands.choices['install'].add_argument(flag, **options)
@@ -466,6 +499,7 @@ def main(argv=None, *, kit=KIT, pack_id=PACK_ID, desk_schema=SCHEMA,
         else:
             status = (desk_fn or desk)(args.session_root, harvest=not args.no_harvest, compare_session=args.compare_session,
                           kit=kit, desk_schema=desk_schema,
+                          **({'harvest_workers': args.harvest_workers} if args.harvest_workers is not None else {}),
                           **({'extra_checks': desk_extra_checks} if desk_extra_checks is not None else {}))
             return 0 if status['harvest_status'] in ('ok', 'not_run') and status['pilot_status'] == 'instrument_ok' else 2
         return 0

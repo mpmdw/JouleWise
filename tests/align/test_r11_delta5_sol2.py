@@ -76,6 +76,9 @@ class CommittedSeriesTests(unittest.TestCase):
             except ValueError as exc:
                 error = str(exc)
             record = json.loads((target / 'staging/v4-arm-001.json').read_bytes())
+            # Lead ruling (R17 review open item 5): the arm record is written before the dwell stamp;
+            # the stamp and the order it proves are written alone, after it, to the dwell record.
+            record['quiet_dwell'] = json.loads((target / 'staging/v4-arm-001.dwell.json').read_bytes())['quiet_dwell']
             return record, error, install.call_count
 
     def test_honest_r1_to_w1_and_w1_to_c1_reach_installer(self):
@@ -220,12 +223,17 @@ class CommittedSeriesTests(unittest.TestCase):
 
 class FrozenSeriesTests(unittest.TestCase):
     def test_seed_checked_manifest_bytes_still_match(self):
-        checked = subprocess.run(['git', 'show',
+        # The R15 bytes were paired-seed checked (sha eba6fb07...). R22-2 appends the reserve windows C9-C12 (seeds
+        # 100-131) and leaves every checked window untouched; the new bytes need a new paired check.
+        checked_raw = subprocess.run(['git', 'show',
             '79777d261:docs/align/v4/seed-check/series_manifest.json'],
             cwd=ROOT, check=True, capture_output=True).stdout
-        raw = (ROOT / series.MANIFEST).read_bytes()
-        self.assertEqual(raw, checked)
-        self.assertEqual(series.sha(raw), 'eba6fb0732ec26996a0c63bb679a899b71dc2009474502e59048dd67d764f0c7')
+        self.assertEqual(series.sha(checked_raw), 'eba6fb0732ec26996a0c63bb679a899b71dc2009474502e59048dd67d764f0c7')
+        checked, current = json.loads(checked_raw), json.loads((ROOT / series.MANIFEST).read_bytes())
+        by_id = {w['id']: w for w in current['windows']}
+        for window in checked['windows']:                  # W1, C1-C8 AND T1-T3: all exactly as seed-checked (R15)
+            self.assertEqual(by_id[window['id']], window, window['id'])
+        self.assertNotEqual(series.sha((ROOT / series.MANIFEST).read_bytes()), series.sha(checked_raw))
 
     def test_series_binding_refuses_a_23rd_counted_member(self):
         history = [{'window_id': 'C1', 'attempt_id': 'C1', 'status': 'final',

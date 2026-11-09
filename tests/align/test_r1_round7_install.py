@@ -88,7 +88,7 @@ from unittest.mock import patch
 from joulewise.align.apple import powermode
 from scripts import align_pilot_session as pilot, align_v4_kit as kit, align_v4_session as session
 from tests.align import test_r1_round6_power as power_tests
-from tests.align.test_v4_kit import FakeArmHost, W1DiskGateTests
+from tests.align.test_v4_kit import FakeArmHost, W1DiskGateTests, topup
 case = power_tests.V4SessionHighPowerTests("test_the_w1_marker_is_host_level_and_names_its_session")
 case.setUp()
 _measurement, root = case.make_session()
@@ -99,8 +99,13 @@ def parked(*args, **kwargs):
     raise AssertionError("not signalled")
 outcome = {}
 try:
-    with patch.object(kit, "require_w1_ready"), patch.object(pilot, "install", side_effect=parked):
-        session.install(root, runner=host, volume_runner=host, w1_disk_config=W1DiskGateTests.config(case, case.tmp),
+    # The arm now needs its registered evidence (OBC attestation, battery top-up log, next-arm triage with the
+    # arm's own packet rebuild, live meter, dwell order) before High Power is entered, exactly as the in-process
+    # V4SessionHighPowerTests.install helper supplies it; kit.generate is patched there too.
+    with patch.object(kit, "require_w1_ready"), patch.object(kit, "generate"), \
+            patch.object(pilot, "install", side_effect=parked):
+        session.install(root, runner=host, volume_runner=host, obc_off_attested_by="synthetic",
+                        w1_disk_config=W1DiskGateTests.config(case, case.tmp), **topup(),
                         disk_gate=lambda c: {"status": "pass", "offloads": []})
 except BaseException as error:
     outcome["raised"] = type(error).__name__ + ": " + str(error)

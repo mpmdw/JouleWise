@@ -1794,9 +1794,10 @@ class BackoffAndEventTests(WatchdogTestCase):
         state = wd.initial_state()
         wd.transition(self.harness.storage, state, "FENCED", "first", self.base)
         wd.transition(self.harness.storage, state, "FENCED", "same state", self.base)
-        events = (self.harness.storage.root / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        events = [json.loads(line) for line in (self.harness.storage.root / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        events = [event for event in events if event.get("kind") == "transition"]
         self.assertEqual(len(events), 1)
-        self.assertEqual(json.loads(events[0])["to"], "FENCED")
+        self.assertEqual(events[0]["to"], "FENCED")
 
     def test_notice_ack_clears_only_the_current_activation(self) -> None:
         state = wd.initial_state()
