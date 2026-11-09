@@ -197,3 +197,9 @@ The full list of modules run:
 - **The regression:** an unchanged session chain (`S/selected.json` → external alias → `S/current.json` → `data.json`) failed to restore. On the Air, the hop back into `S` was inspected at the absent publish path.
 - **The fix:** during verification, a hop whose resolved parent lies in the restore namespace is now resolved inside the staged tree (`_rebase`), and the target is reported under the namespace, exactly as at finalize.
 - **Tests:** `tests/align/test_hoff_confirm_sol.py` is brought in unmodified and passes. `test_a_nested_session_chain_is_resolved_in_the_staged_tree_and_still_bound` checks both that the honest layout restores and that a retargeted alias still refuses.
+
+**Air-offload S1-04 (lead ruling, separate commit): the Air copy restores on its own.**
+- CLI `pack` carries `harvest_offload.byte_bound_inputs(finalized)`, every byte-bound closure input.
+- `finalize-manifest` declares the terminal evidence (`night/result.json`, `night/chain.*`, `night/courier.sent`) when `custody_root` lies outside the session root.
+- `unpack` refuses a pack missing any byte-bound input. It places the carried inputs (append-only, at their finalized real paths) and only then verifies the closure.
+- Test: `FreshAirRestoreTests` finalizes, packs, deletes every MBP-side external file and custody, then restores on the "Air"; every digest matches.

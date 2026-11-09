@@ -520,10 +520,30 @@ def _verify_closure(closure: dict[str, Any], root: Path, *, mirror_identity: dic
                                      f'manifest: {name}')
 
 
+def byte_bound_inputs(finalized: dict[str, Any]) -> list[str]:
+    """Every byte-bound closure input (Air-offload S1-04): declared inputs (the ledger, external terminal
+    evidence), byte-bound link targets and byte-bound ignored content. A pack carries them all, so the
+    Air copy restores on its own, without the MBP's external files."""
+    closure = finalized['closure']
+    return sorted(set(closure['files']) | set(closure['ignored']))
+
+
+def _bound_row(finalized: dict[str, Any], path: str):
+    closure = finalized['closure']
+    return closure['files'].get(path) or closure['ignored'].get(path)
+
+
+def _bound_real(finalized: dict[str, Any], path: str) -> str:
+    """The real path a transported input is placed at: a declared input's bound resolution, else the
+    closure key itself (link targets and ignored content are keyed by their real paths)."""
+    row = finalized['closure']['inputs'].get(path)
+    return row['real'] if row is not None else path
+
+
 def _closure_external(finalized: dict[str, Any], path: str, sha256: str, size: int) -> None:
-    if path not in finalized['closure']['inputs']:
+    row = _bound_row(finalized, path) if isinstance(path, str) else None
+    if row is None:
         raise OffloadRefused(f'external file is not bound by the finalized record manifest: {path}')
-    row = finalized['closure']['files'].get(path)
     if row != {'sha256': sha256, 'size': size}:
         raise OffloadRefused(f'external input differs from the finalized record manifest: {path}')
 
@@ -551,8 +571,8 @@ def pack(source_root: Path | str, out_dir: Path | str, *, finalized: dict[str, A
     if str(source) != finalized['source_root']:
         raise OffloadRefused('source root differs from the finalized record manifest')
     for path in external:
-        if str(Path(path)) not in finalized['closure']['inputs']:
-            raise OffloadRefused(f'external file is not a declared input of the finalized record manifest: {path}')
+        if _bound_row(finalized, str(Path(path))) is None:
+            raise OffloadRefused(f'external file is not a byte-bound input of the finalized record manifest: {path}')
     if source.is_dir() and not source.is_symlink():
         _verify_closure(finalized['closure'], source, mirror_identity=mirror_identity, where='pack')
 
@@ -803,13 +823,22 @@ def _unpack(offload: Path, dest_root, *, finalized, mirror_identity) -> dict[str
         if external_seen != expected_external:
             raise OffloadRefused('external files differ from manifest')
         if finalized is not None:
-            # The external closure must hold on THIS host before the tree is published (R17 review F1).
-            _verify_closure(finalized['closure'], staging, mirror_identity=mirror_identity,
-                            transported=frozenset(row['path'] for row in externals.values()), where='unpack',
-                            namespace=finalized['source_root'])
+            missing_inputs = sorted(set(byte_bound_inputs(finalized)) - {row['path'] for row in externals.values()})
+            if missing_inputs:
+                # Air-offload S1-04: the Air copy must restore on its own, without the MBP's external files.
+                raise OffloadRefused(f'pack does not carry every byte-bound closure input: {missing_inputs[:5]}')
+            mirror = finalized['closure']['mirror']
+            if mirror is not None and mirror_identity != mirror['identity']:
+                raise OffloadRefused('unpack: measurement checkout mirror differs from the finalized record manifest')
+        # Place the bound external inputs (append-only, each at its finalized real path, re-checked right
+        # before the write), so a fresh Air without the MBP's external files holds the whole closure; then
+        # verify that closure on THIS host before the tree is published (R17 review F1).
         for name, row in sorted(externals.items()):
-            real = finalized['closure']['inputs'][row['path']]['real'] if finalized is not None else None
+            real = _bound_real(finalized, row['path']) if finalized is not None else None
             _place_external(staging / EXTERNAL_STAGING / name.rsplit('/', 1)[1], Path(row['path']), real=real)
+        if finalized is not None:
+            _verify_closure(finalized['closure'], staging, mirror_identity=mirror_identity, where='unpack',
+                            namespace=finalized['source_root'])
         shutil.rmtree(staging / EXTERNAL_STAGING, ignore_errors=True)
         os.rename(staging, target)
     except BaseException:

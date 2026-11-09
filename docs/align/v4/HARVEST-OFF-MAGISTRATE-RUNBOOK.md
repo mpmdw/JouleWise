@@ -50,6 +50,7 @@ What it binds (R17 review F1 and delta D1-D4), besides every tree entry and the 
 - **The calibration ledger** the window appended (a declared input): its bytes and its real path. Its resolved parent directories must be the same on the Air immediately before it is placed, or the restore refuses (D1).
 - **Byte-bound ignored directories** also bind their membership: the sorted relative names and sizes. The Air re-enumerates them, and an added or removed file refuses (delta2, lead ruling 3).
 - **Any other link that leaves `$S`**: the bytes it reaches (a file, or every regular file below a directory), at most 4,096 files, 4,096 directories, 1 GiB and 256 MiB per file. The bounds apply during the walk, before the offending file is hashed, and a directory linked many times is enumerated once. A target past those bounds, an unreadable directory (D4), or one that reaches a further link, refuses. Bind it through `M` instead. Model weights are never hashed or copied.
+- **Terminal evidence outside `$S`** (Air-offload S1-04, lead ruling): if the plan's `custody_root` lies outside the session root, finalize declares `night/result.json`, `night/chain.*` and `night/courier.sent` as byte-bound inputs.
 - **A link to a missing path** stays bound as missing.
 - **The name `.external-staged`** is reserved; a session containing it refuses.
 
@@ -64,6 +65,10 @@ $RUN pack --session-root "$S" --out "$OUT/offload" --finalized-manifest "$OUT/fi
 - Measured: about 69 s for a 26.4 GB D window (`docs/ops/AIR-OFFLOAD.md` §8).
 - If cool-down lengthens measurably, drop to `--level 1 --threads 2`.
 - Do not copy anything else into `$OUT/offload/`: the offload tool sends the finalized manifest itself.
+- **The pack carries every byte-bound closure input** as an external (Air-offload S1-04): the ledger, external terminal evidence, byte-bound link targets and byte-bound ignored content. The Air copy therefore restores on its own, before the MBP copy is released.
+  - Unpack refuses a pack that omits one.
+  - Unpack places each carried input append-only at its finalized real path, then verifies the whole closure before publishing.
+  - If that final verification refuses, the placed inputs stay: they are exactly the finalized bytes at the finalized paths.
 
 Pack re-verifies the closure on the MBP (checkout identity, ledger and other closure bytes) before it writes anything.
 

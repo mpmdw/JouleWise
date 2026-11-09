@@ -302,7 +302,7 @@ class R17ReviewCustodyTests(unittest.TestCase):
         shutil.rmtree(self.checkout / '.git')    # no mirror here: a plain linked directory
         final = self.finalize()           # no mirror: the linked directory is bound by its bytes
         self.assertEqual(set(final['closure']['files']), {str(self.checkout / 'joulewise.py'), str(self.ledger)})
-        self.off.pack(self.src, self.root / 'o', finalized=final)
+        self.off.pack(self.src, self.root / 'o', finalized=final, external=tuple(self.off.byte_bound_inputs(final)))
         shutil.move(self.src, self.root / 'kept')
         digest = self.off.manifest_sha256(final)
         for change, undo in ((lambda: (self.checkout / 'joulewise.py').write_bytes(b'Air code\n'),
@@ -310,7 +310,9 @@ class R17ReviewCustodyTests(unittest.TestCase):
                              (lambda: (self.checkout / 'extra.py').write_bytes(b''),
                               lambda: (self.checkout / 'extra.py').unlink())):
             change()
-            with self.assertRaisesRegex(self.off.OffloadRefused, 'differs from the finalized record manifest'):
+            # A carried input with other bytes on the Air is not an append-only extension; an added file
+            # changes the bound listing. Either way nothing is published.
+            with self.assertRaisesRegex(self.off.OffloadRefused, 'differs from the finalized record manifest|append-only'):
                 self.off.unpack(self.root / 'o', finalized=final, finalized_sha256=digest)
             self.assertFalse(self.src.exists())
             undo()
@@ -645,6 +647,95 @@ class RunnerTests(unittest.TestCase):
                                           str(root / 'M.json'), '--finalized-sha256', finalized['sha256']],
                                          run=self.fake_run('a' * 40)), 0)
         self.assertEqual(inventory(session), inventory(root / 'session.mbp'))
+
+
+class FreshAirRestoreTests(unittest.TestCase):
+    """Air-offload S1-04 (lead ruling): the Air copy restores ON ITS OWN, without the MBP's external files."""
+
+    def fake_run(self, head):
+        import subprocess
+
+        def run(argv, **_):
+            out = {'rev-parse': head + '\n', 'status': ''}.get(argv[3], 'Python 3.13.x\nabc\n')
+            return subprocess.CompletedProcess(argv, 0, stdout=out, stderr='')
+        return run
+
+    @unittest.skipUnless(shutil.which('zstd'), 'zstd CLI required')
+    def test_cli_pack_carries_every_byte_bound_input_and_a_fresh_air_restores_every_digest(self):
+        import io
+        from scripts import align_v4_harvest_off as runner
+        from joulewise.align.apple import harvest_offload as off
+        root = Path(tempfile.mkdtemp(prefix='fresh-air-', dir=REAL_TMP))
+        self.addCleanup(shutil.rmtree, root, True)
+        session, checkout, custody = root / 'session', root / 'checkout', root / 'custody'
+        (session / 'runs/m1').mkdir(parents=True)
+        (session / 'runs/m1/raw.txt').write_bytes(b'raw bytes\n')
+        (checkout / '.venv/bin').mkdir(parents=True)
+        (checkout / '.venv/bin/python').write_text('')
+        ledger = checkout / 'runs/ledger.jsonl'
+        ledger.parent.mkdir()
+        ledger.write_bytes(b'{"row": 1}\n{"row": 2}\n')
+        # Terminal evidence OUTSIDE the session root, and two byte-bound link targets.
+        (custody / 'night').mkdir(parents=True)
+        for name, raw in (('result.json', b'{"verdict": "GO"}\n'), ('chain.started', b'1\n'),
+                          ('chain.exited', b'0\n'), ('courier.sent', b'{"message_id": "m"}\n')):
+            (custody / 'night' / name).write_bytes(raw)
+        journal = root / 'external/journal.jsonl'
+        journal.parent.mkdir()
+        journal.write_bytes(b'{"t": 1}\n')
+        (root / 'external-dir/sub').mkdir(parents=True)
+        (root / 'external-dir/sub/a.json').write_bytes(b'{"a": 1}\n')
+        (session / 'journal').symlink_to(journal)
+        (session / 'inputs').symlink_to(root / 'external-dir', target_is_directory=True)
+        (session / 'plan.json').write_text(json.dumps({'custody_root': str(custody),
+                                                       'hazard_window': {'bindings': {'ledger_path': str(ledger)}}}))
+        (session / 'session.json').write_text(json.dumps({'plan_path': str(session / 'plan.json'),
+                                                          'measurement_root': str(session / 'measurement'),
+                                                          'source_measurement_root': str(checkout)}))
+
+        def cli(*argv):
+            with contextlib.redirect_stdout(io.StringIO()) as out, contextlib.redirect_stderr(io.StringIO()) as err:
+                code = runner.main(list(map(str, argv)), run=self.fake_run('a' * 40))
+            self.assertEqual(code, 0, err.getvalue())
+            return json.loads(out.getvalue())
+        printed = cli('finalize-manifest', '--session-root', session, '--out', root / 'M.json')
+        final = json.loads((root / 'M.json').read_bytes())
+        terminal = {str(custody / 'night' / n) for n in ('result.json', 'chain.started', 'chain.exited', 'courier.sent')}
+        self.assertLessEqual(terminal, set(final['closure']['inputs']))
+        bound = off.byte_bound_inputs(final)
+        self.assertEqual(set(bound), terminal | {str(ledger), str(journal), str(root / 'external-dir/sub/a.json')})
+        digests = {name: hashlib.sha256(Path(name).read_bytes()).hexdigest() for name in bound}
+        packed = cli('pack', '--session-root', session, '--out', root / 'o', '--finalized-manifest', root / 'M.json')
+        self.assertEqual(sorted(packed['external']), bound)
+        before = inventory(session)
+        # A fresh "Air": the session and EVERY MBP-side external file are gone.
+        shutil.move(session, root / 'session.mbp')
+        for name in bound:
+            Path(name).unlink()
+        shutil.rmtree(custody)
+        shutil.rmtree(root / 'external-dir')
+        cli('unpack', '--offload', root / 'o', '--finalized-manifest', root / 'M.json',
+            '--finalized-sha256', printed['sha256'])
+        self.assertEqual(inventory(session), before)
+        self.assertEqual(off.verify_tree(session, json.loads((root / 'o' / off.MANIFEST).read_bytes())), [])
+        self.assertEqual({name: hashlib.sha256(Path(name).read_bytes()).hexdigest() for name in bound}, digests)
+        self.assertEqual((session / 'journal').read_bytes(), b'{"t": 1}\n')
+
+    @unittest.skipUnless(shutil.which('zstd'), 'zstd CLI required')
+    def test_a_pack_that_omits_a_byte_bound_input_refuses_to_restore(self):
+        from joulewise.align.apple import harvest_offload as off
+        root = Path(tempfile.mkdtemp(prefix='fresh-air-', dir=REAL_TMP))
+        self.addCleanup(shutil.rmtree, root, True)
+        session = root / 'session'
+        session.mkdir()
+        (root / 'journal').write_bytes(b'j\n')
+        (session / 'journal').symlink_to(root / 'journal')
+        final = off.finalized_manifest(session)
+        off.pack(session, root / 'o', finalized=final)            # carries nothing
+        shutil.move(session, root / 'kept')
+        with self.assertRaisesRegex(off.OffloadRefused, 'does not carry every byte-bound closure input'):
+            off.unpack(root / 'o', finalized=final, finalized_sha256=off.manifest_sha256(final))
+        self.assertFalse(session.exists())
 
 
 PM_FIXTURES = ('powermetrics_sample.plist', 'replay/envelope-01/raw/powermetrics-idle-1.plist',

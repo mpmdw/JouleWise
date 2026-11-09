@@ -86,6 +86,21 @@ def _ledger_input(session, plan):
     return (ledger,) if ledger.is_file() and session_real not in ledger.parents else ()
 
 
+TERMINAL_EVIDENCE = ('result.json', 'chain.*', 'courier.sent')   # under <custody_root>/night/
+
+
+def _terminal_inputs(session, plan):
+    """The terminal evidence, declared as byte-bound inputs when custody lies outside the session (S1-04)."""
+    import os
+    custody = Path(os.path.realpath(plan['custody_root']))
+    session_real = Path(os.path.realpath(session))
+    if custody == session_real or session_real in custody.parents:
+        return ()
+    night = custody / 'night'
+    found = {Path(os.path.realpath(p)) for pattern in TERMINAL_EVIDENCE for p in night.glob(pattern)}
+    return tuple(sorted(p for p in found if p.is_file() and session_real not in p.parents))
+
+
 def _consumed_inputs(session, plan_path, mirror):
     """Every file the harvest selects for this plan that the mirror identity does not cover (delta2, ruling 1).
 
@@ -143,9 +158,11 @@ def cmd_pack(args, run=subprocess.run):
     finalized = _read(args.finalized_manifest)
     identity = checkout_identity(_mirror_root(state), run=run)
     started = time.time()
+    # Air-offload S1-04 (lead ruling): carry EVERY byte-bound closure input (the ledger, external terminal
+    # evidence, any byte-bound link target), so the Air copy restores without the MBP.
     manifest = harvest_offload.pack(session.absolute(), args.out, level=args.level, threads=args.threads,
-                                    external=_ledger_input(session, plan), finalized=finalized,
-                                    mirror_identity=identity)
+                                    external=tuple(harvest_offload.byte_bound_inputs(finalized)),
+                                    finalized=finalized, mirror_identity=identity)
     return {'packed': manifest['source_root'], 'files': manifest['files'], 'bytes': manifest['bytes'],
             'payload_bytes': manifest['payload']['size'], 'payload_sha256': manifest['payload']['sha256'],
             'external': [row['path'] for row in manifest['external'].values()],
@@ -429,7 +446,7 @@ def cmd_finalize_manifest(args, run=subprocess.run):
                                              + json.dumps(identity, sort_keys=True))
     declared = _read(IGNORED_INPUTS)
     policy = {key: declared[key] for key in harvest_offload.DEFAULT_IGNORED_POLICY if key in declared}
-    inputs = list(_ledger_input(session, plan))
+    inputs = list(_ledger_input(session, plan)) + [p for p in _terminal_inputs(session, plan)]
     consumed = _consumed_inputs(session, state['plan_path'], mirror)
     if consumed is None:
         # The harvest's selection cannot be enumerated from this plan: nothing below a declared directory is

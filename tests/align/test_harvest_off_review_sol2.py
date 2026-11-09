@@ -115,9 +115,11 @@ class CustodyTests(Scratch):
         code.write_bytes(b'')
         finalized = off.finalized_manifest(self.source, inputs=(self.ledger,))
         committed = off.manifest_sha256(finalized)
-        manifest = off.pack(self.source, self.transport, finalized=finalized, external=(self.ledger,))
+        # Air-offload S1-04: the pack carries every byte-bound closure input (here also the checkout files).
+        manifest = off.pack(self.source, self.transport, finalized=finalized,
+                            external=tuple(off.byte_bound_inputs(finalized)))
         honest = (self.transport / off.MANIFEST).read_bytes()
-        next(iter(manifest['external'].values()))['path'] = str(code)
+        next(row for row in manifest['external'].values() if row['path'] == str(self.ledger))['path'] = str(code)
         self.edit_manifest(manifest)
         self.source.rename(self.root / 'kept')
         with self.assertRaises(off.OffloadRefused):
