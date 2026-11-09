@@ -505,6 +505,7 @@ Everything else comes from real producers:
 | `terminal_evidence_missing`, `terminal_evidence_mismatch` | Terminal evidence is missing, or result, chain.exited and custody disagree |
 | `config_digest_not_planned` | The plan row's `config_path`/`config_sha256`, the kit bytes and the bundle `config.json` do not form the writer chain |
 | `config_digest_not_planned:wrong_window` | The committed plan is not this window's producer plan (header, or `attempt_id`) |
+| `kit_not_normalized` | A valid kit config whose bytes differ from `json.dumps(BenchmarkConfig.from_mapping(kit).to_dict(), indent=2, sort_keys=True) + "\n"` (lead ruling), which would split the builds' bundle-byte derivations |
 | `desk_record_differs` | The committed desk's battery, cohort, configuration, status or cache differs from the derivation |
 | `owned_energy_flags_unexpected` | The desk record carries `owned_energy_flags` |
 | `declared_bar_inconsistent` | A declared bar does not match the committed structural bar |
@@ -520,7 +521,18 @@ Everything else comes from real producers:
 ### 6a.2 Real-producer end-to-end: findings (2026-11-08, synthetic only)
 
 **Run.** The series was W1, C1, a C2#1 zero capture and a C2#2 retry, built with the real producers of 6a.1.
-The table below records the engine-r23j / recompute-9f8a8749e run. `test_exporter_e2e` now pins engine-r23k
+
+**Status at the release pins (engine-r23k `72410b0b4`, recompute `7b06c6058`).**
+- The exporter lands every window, and re-export is byte-identical.
+- release_v4 stage (a) verifies: 490 engine files rehashed, producer identity verified, crosswalk equals both rosters.
+- Stage (b): the recompute runs twice, and both builds read the same raw bytes for all 62 captured members.
+- The engine completes; EXP-G1 and EXP-G2 are closed in r23k.
+- The comparator refuses (`comparator_input_malformed`) on EXP-G3.
+- Diagnostically past EXP-G3 it refuses `unmapped_leaf` on EXP-G4.
+- Past both, EXP-D1 dominates. The recompute bars C1 and C2 (U1 FAIL) while the engine fits them, so every fit,
+  score, threshold, known-H and carrier family holds, and `eligible_m_per_pair` refuses (R-C5).
+
+The table below was first recorded on the engine-r23j / recompute-9f8a8749e run. `test_exporter_e2e` now pins engine-r23k
 (`72410b0b4`) and the recompute at `7b06c6058`, which implement `plan_source`, `planned_config` and the plan owner
 check. The recompute
 derives the bundle bytes as `json.dumps(json.loads(kit), indent=2, sort_keys=True)` and the engine through
@@ -537,8 +549,8 @@ the C1 kit and on the repository's W1 kit configs). A kit field that `to_dict()`
 
 | Id | Item | Class | Evidence |
 |---|---|---|---|
-| EXP-G1 | `Episode.seed` is the seed index; both builds compared it with the derived seed | contract gap, ruled (a) 2026-11-08 | workload.py:722 vs engine.py:255, recompute `derive_exclusions`; fixture common_series.py:338 |
-| EXP-G2 | C/T run ids are `align-v4-c1-e06` in production, while the engine's frozen `roster()` expects `align-v4-c1-episodes-a-e06` | engine (contract gap) | align_v4_series.py:38,285 vs engine.py:70-71; fixture common_series.py:85-86 |
+| EXP-G1 | `Episode.seed` is the seed index; both builds compared it with the derived seed | contract gap, ruled (a) 2026-11-08; closed in r23k / 7b06c6058 | workload.py:722 vs engine.py:255, recompute `derive_exclusions`; fixture common_series.py:338 |
+| EXP-G2 | C/T run ids are `align-v4-c1-e06` in production, while the engine's frozen `roster()` expects `align-v4-c1-episodes-a-e06` | engine (contract gap); closed in r23k | align_v4_series.py:38,285 vs engine.py:70-71; fixture common_series.py:85-86 |
 | EXP-G3 | `Episode.agent_model` is the config display name (`Qwen3-30B-A3B-4bit`). The engine keys acceptance by it, and the comparator's `MODEL_SHORT` (compare_v4_recompute.py:65) holds only model ids, so it raises KeyError and refuses `comparator_input_malformed` | comparator (release tools) | workload.py:721; fixture common_series.py:511 (`agent_model=model_id`) |
 | EXP-G4 | Production `cache_statistics` keys `{status, cached_tokens, fed_tokens, trims, trimmed_tokens, rebuilds, prefill_removed_tokens}` are unmapped in the comparator's `cache_diagnostics`, giving `unmapped_leaf`. Production has no `rewinds` | comparator | diagnostics.py:257-265; fixture common_series.py:547 `{rebuilds, rewinds}` |
 | EXP-D1 | U1(c) sidecar coverage. The recompute counts `ceil(span/1 s)` cells from the span start. A real G0 span is non-integer (42.46 s), so it covers 42/43 cells = 0.977 < 0.99, and U1 FAILs for every gated model in every window, which bars C1 and C2. The engine (production `temperature.Coverage` on the collector grid) passes | build disagreement (A11 reading), needs a ruling | recompute `thermal_summary.coverage` (independent_recompute_v4.py:1018), `u1_model_window`; synth spans are whole seconds |

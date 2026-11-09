@@ -407,6 +407,11 @@ def planned_kit(kit_root, plan_row):
     require(cursor.is_file(), 'config_digest_not_planned', 'kit config missing: ' + rel)
     raw = cursor.read_bytes()
     require(sha256_bytes(raw) == digest, 'config_digest_not_planned', 'kit config digest: ' + rel)
+    # Lead ruling (2026-11-08): a real kit config must already be the writer's normalized form, so the builds'
+    # two bundle-byte derivations (the engine through BenchmarkConfig, the recompute as indent-2 sorted JSON of the
+    # kit) can never split. A kit that is not a valid config is not judged here (the builds' config_invalid).
+    normalized = writer_config_bytes(raw)
+    require(normalized is None or normalized == raw, 'kit_not_normalized', rel)
     return raw
 
 

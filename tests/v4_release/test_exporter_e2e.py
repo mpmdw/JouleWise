@@ -9,10 +9,10 @@ KM003C stream, the U3 bar and the R1 references (RELEASE-RUNBOOK-v4.md section 6
 Plan: W1, C1 (captured, GO), C2#1 (zero capture), C2#2 (captured retry, GO). Each window exports as it lands; then the
 recompute and the pinned engine read the export, and release_v4 runs when the engine produces a run.
 
-Builds: engine-r23k (72410b0b4) and the recompute at 7b06c6058, the commits that implement the r23k-review
-export contract (plan_source, planned_config). release_v4.py still pins engine-r23j and recompute 9f8a8749e, so
-``test_release_agrees`` is an expected failure until the release pins move and the classified gaps close
-(RELEASE-RUNBOOK-v4.md section 6a.2); an unexpected success means flip it.
+Builds: the release pins (engine-r23k 72410b0b4, recompute 7b06c6058). release_v4 runs end to end: stage (a)
+verifies, the recompute reads the same raw bytes for all 62 captured members, and the comparator refuses on the
+classified gaps of RELEASE-RUNBOOK-v4.md section 6a.2, so ``test_release_agrees`` is an expected failure; an
+unexpected success means flip it.
 """
 import copy
 import hashlib
@@ -34,8 +34,10 @@ import support  # noqa: E402
 import native_series  # noqa: E402
 
 EXPORTER = REPO / 'scripts' / 'export_v4_series.py'
-ENGINE_COMMIT = '72410b0b4f725d770298a301a55802e70d466537'      # origin/engine-r23k (R23l + plan owner refinement)
-RECOMPUTE_COMMIT = '7b06c6058efa211fd14acb14838cc84c13694012'   # align/2026-11-08-v4-recompute-opus (config custody)
+ENGINE_COMMIT = support.ENGINE_COMMIT          # origin/engine-r23k 72410b0b4 (release_v4 RELEASE_ENGINE_COMMIT)
+RECOMPUTE_COMMIT = support.RECOMPUTE_COMMIT    # 7b06c6058 (release_v4 RELEASE_RECOMPUTE_COMMIT)
+assert (ENGINE_COMMIT, RECOMPUTE_COMMIT) == ('72410b0b4f725d770298a301a55802e70d466537',
+                                             '7b06c6058efa211fd14acb14838cc84c13694012')
 # Engine refusals classified in RELEASE-RUNBOOK-v4.md section 6a.2 (a refusal outside this list fails the test).
 KNOWN_ENGINE_REFUSALS = {'series manifest roster differs from R15': 'EXP-G2',
                          'roster differs from R15 allocation': 'EXP-G2'}
@@ -247,9 +249,9 @@ class ExporterEndToEnd(unittest.TestCase):
 
     @unittest.expectedFailure
     def test_release_agrees(self):
-        """AGREE on real-producer data (exit 0). Expected to fail: this checkout's release_v4 pins engine-r23j, and
-        with the release-tools pins (72410b0b4 / 7b06c6058) the comparator still refuses on EXP-G3 (display-name
-        model keys) and EXP-G4 (unmapped production cache_statistics); see RELEASE-RUNBOOK-v4.md section 6a.2."""
+        """AGREE on real-producer data (exit 0). Expected to fail: the comparator refuses on EXP-G3 (display-name
+        model keys) and EXP-G4 (unmapped production cache_statistics), and past them the recompute bars every
+        window on EXP-D1 (U1(c) sidecar coverage of non-integer G0 spans); RELEASE-RUNBOOK-v4.md section 6a.2."""
         self.assertEqual(self.engine_exit, 0)
         support.write_record(self.root, commit=ENGINE_COMMIT)
         checkout = support.release_checkout(self.work / 'checkout')
@@ -462,6 +464,24 @@ class ExporterRefusals(unittest.TestCase):
         doc = json.loads((self.work / 'invalid-kit/engine/windows/C1/raw.json').read_text())
         member = next(m for m in doc['members'] if m['run_id'] == 'align-v4-c1-e07')
         self.assertEqual(member['planned_config']['sha256'], hashlib.sha256(raw).hexdigest())
+
+    def test_a_kit_config_that_is_not_writer_normalized_refuses(self):
+        """Lead ruling: kit bytes must equal json.dumps(BenchmarkConfig.from_mapping(kit).to_dict(), indent=2,
+        sort_keys=True) + newline; here the planned kit is the same config spelled compactly."""
+        kit_root = Path(self.value['kit_root'])
+        record = json.loads(native_series.git(self.repo, 'show', f"{self.c1['record_commit']}:{self.c1['record_path']}"))
+        plan = json.loads(native_series.git(self.repo, 'show', f"{self.c1['record_commit']}:"
+                                            f"{record['sources']['collection_plan']['path']}"))
+        row = plan['members'][6]
+        raw = json.dumps(json.loads((kit_root / row['config_path']).read_bytes()), sort_keys=True).encode()
+        rel = 'mutations/kit-compact.json'
+        (kit_root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (kit_root / rel).write_bytes(raw)
+
+        def change(_):
+            row.update(config_path=rel, config_sha256=hashlib.sha256(raw).hexdigest())
+            return json.dumps(plan).encode()
+        self.refused('kit_not_normalized', self.record(lambda r: None, {'collection_plan': change}))
 
     def test_unknown_record_key(self):
         def mutate(record):
