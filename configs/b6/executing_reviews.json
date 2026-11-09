@@ -1180,5 +1180,41 @@
     "paper": "docs/align/reviews/2026-11-05-retro-executing-review-b29c25c59.md"
    }
   ]
- }
+ },
+  {
+    "commit": "b9fedca2a1591bc875ff403e07e5f6b3d9629dac",
+    "number_bearing_paths": [
+      "joulewise/adapters/powermetrics.py"
+    ],
+    "change": "harvest-off Opus build: powermetrics.document_memo (scoped in-run memo, post-window harvest only) and harvest.assess_member opening it per member",
+    "executing_reviews": [
+      {
+        "reviewer": "Sol 6.1 seat 1 (non-author; the build was Opus 5.5 plus the Sol port), R17 harvest-off review of candidate 720398640",
+        "covered": "candidate 720398640 contains this commit; verdict HOLD for the production route (custody, finality) with no finding against these hunks; report docs/align/v4/harvest-off-review-sol1.md sha256 67131fc0f252b50f367cd8c4a1457792b0ed5b63171f912187965abbb730c5f4; paper sha256 53cc6040e7fa457502e994decd22928dcdf1ee7498bdf3176fbb67be1d6c51d8",
+        "paper": "docs/align/reviews/2026-11-08-harvest-off-review-citations.md"
+      },
+      {
+        "reviewer": "Opus 5.5 / Sol 6.1 independent builds and agreement report (design comparison, not an executing review); Sol seat 2 witness module only (run cut off before its report)",
+        "covered": "docs/align/v4/HARVEST-OFF-AGREEMENT.md sha256 6b1e1bf68e49aaef4fd6d258dd7122356d5c9935a04ea961eaf57739f8614666; tests/align/test_harvest_off_review_sol2.py @ c15b59993; paper sha256 53cc6040e7fa457502e994decd22928dcdf1ee7498bdf3176fbb67be1d6c51d8",
+        "paper": "docs/align/reviews/2026-11-08-harvest-off-review-citations.md"
+      }
+    ]
+  },
+  {
+    "commit": "c6ea47ebe13514fabc9233cf1e370ed5fda22f33",
+    "number_bearing_paths": [],
+    "change": "harvest-off merged build (R17): harvest.tree_inventory(workers), Seams.io_workers and stage_observer (post-window harvest only; verdict/calibration path joulewise/b5/harvest.py)",
+    "executing_reviews": [
+      {
+        "reviewer": "Sol 6.1 seat 1 (non-author; the build was Opus 5.5 plus the Sol port), R17 harvest-off review of candidate 720398640",
+        "covered": "candidate 720398640 contains this commit; verdict HOLD for the production route (custody, finality) with no finding against these hunks; report docs/align/v4/harvest-off-review-sol1.md sha256 67131fc0f252b50f367cd8c4a1457792b0ed5b63171f912187965abbb730c5f4; paper sha256 53cc6040e7fa457502e994decd22928dcdf1ee7498bdf3176fbb67be1d6c51d8",
+        "paper": "docs/align/reviews/2026-11-08-harvest-off-review-citations.md"
+      },
+      {
+        "reviewer": "Opus 5.5 / Sol 6.1 independent builds and agreement report (design comparison, not an executing review); Sol seat 2 witness module only (run cut off before its report)",
+        "covered": "docs/align/v4/HARVEST-OFF-AGREEMENT.md sha256 6b1e1bf68e49aaef4fd6d258dd7122356d5c9935a04ea961eaf57739f8614666; tests/align/test_harvest_off_review_sol2.py @ c15b59993; paper sha256 53cc6040e7fa457502e994decd22928dcdf1ee7498bdf3176fbb67be1d6c51d8",
+        "paper": "docs/align/reviews/2026-11-08-harvest-off-review-citations.md"
+      }
+    ]
+  }
 ]

@@ -347,7 +347,10 @@ class FenceWitnesses(Scratch):
                                    check=True, capture_output=True, text=True)
         self.assertEqual(json.loads(child.stdout), [], 'the parent patch is absent in spawned interpreters')
 
-    # Lead ruling 2026-11-08 (D8 as built: record, then FAIL at teardown): this raise-in-hook form is WRONG; expected red.
+    # Lead ruling 2026-11-08 (D8 as built: record, then FAIL at teardown; RUN_STATE 240 on main: "seat-1's raise-in-hook
+    # test ... is ruled wrong (D8)"; HARVEST-OFF-MERGED.md item 1): this raise-in-hook form is WRONG. It contradicts seat 2's
+    # test_audit_must_report_filesystem_bytes_paths, so it stays an expected failure rather than a silent red.
+    @unittest.expectedFailure
     def test_a_forbidden_open_audit_event_must_fail_the_test_not_only_log(self):
         # Deliver a fabricated event directly: no path is touched. Keep the
         # module's real audit counters separate from this simulated violation.

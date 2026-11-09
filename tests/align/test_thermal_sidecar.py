@@ -17,6 +17,7 @@ from tests.hazards.test_temperature import FakeSensors, POLICY
 from tests.align.test_apple_campaign import base_config, episode_spec
 
 ROOT = Path(__file__).resolve().parents[2]
+# joulewise/b5/harvest.py moved to 42cad8de... with the reviewed harvest-off lane d5dc1198c (docs/align/v4/HARVEST-OFF-MERGED.md): post-window harvest only.
 PINNED = {'joulewise/hazards/smc.py': 'c1896f0c4fd8510ab4a2273927d4d71d8cc7a1a6940928117ba50d8441f70351', 'joulewise/hazards/monitor.py': '9ed83410fc2fe7bdbf8e8acffcf913af5bd4442bb23adc14ed61430e0a3c957b', 'joulewise/schemas.py': '344b12ce178b8acb212059097a4ade507812a4be1673a6552ec221a83055e1d1', 'joulewise/b5/driver.py': 'd8780edb8e5806535291b32ace77cdf9a7acd7c8546a36fffebd119c311c0d5e', 'joulewise/b5/harvest.py': '42cad8dec4295eef530b71374a8e4d0158a17028f5418c1507a56678ac49ab47'}
 
 class PlacementTests(unittest.TestCase):
