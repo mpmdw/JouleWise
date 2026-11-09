@@ -1042,6 +1042,344 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+240. **Laptop lead (interactive session 1544c617), 2026-11-08 15:56 PST: harvest-off and smoke kit ADMITTED (software); Air-offload built; engine line at r23g/r23h.**
+- **Harvest-off (R17) ADMITTED in software at `align/2026-11-08-harvest-off-fix` @ `d3933432c`.**
+  - Six Sol review seats ran: delta 1/2, final delta2 1/2 and a confirmation seat. Their witness modules are all green, except seat-1's raise-in-hook test, which is ruled wrong (D8).
+  - The final regression (an honest alias through a session-internal hop failing restore on the Air) is fixed in verification only. Finalize and pack are unchanged, and a negative control was added.
+  - **Remaining gates are native and the magistrate's:** the N1 ignored-input census (first finalize refuses until it is declared), native finalize/pack/restore timing, N2 cross-host, the RSS sweep, and a real dwell plus installer run (`installer_end_ns` is disclosed).
+- **W1 smoke kit ADMITTED in software at `align/2026-11-08-w1-smoke-merged` @ `0ad6f29f3`.** The Sol delta5 check ADMITs the F6 rework: patching deleted, production prepare in a bounded child, CLI-only. Seven adapted witnesses are mapped in W1-SMOKE-AGREEMENT §10.
+  - PREQUAL `--w1-next w1` fails only the five checks that wait on R1 outputs or uncommitted inputs.
+  - The native MBP smoke follows R1 close.
+- **Air-offload merged build** at `ops/2026-11-08-air-offload-merged` @ `967a406eb`: agreement items 1-9 on the Opus base, landing on JW-EXT, iCloud round-trip as the second copy. 87 tests pass, and an end-to-end run on the real SSD works.
+  - **Lead rulings:**
+    - ONE pack per window: the harvest-off pack is canonical, and the offload consumes its parts.
+    - Terminal evidence (`result.json`, chain.*, courier.sent) must be inside the finalized closure, confirmed by the N1 census.
+  - The single-pack integration is in progress, followed by two Sol review seats.
+  - Ed's sudo setup (`offload_setup_air.sh`: JW-EXT ownership, the `jw-offload` account, the sshd Match block, the iCloud agent) waits for review.
+- **Engine line:**
+  - `engine-r23f` and `engine-r23g` (@ `caea768b7`): recorded-float conversion, A21 float-seconds accumulation exactly as the production adapter does it, A2(4) owned-time exclusion, the A27 scope, and R26 H*. The Opus delta review is ADMIT-WITH-FIXES.
+  - **Ruling:** sealed U1/U2 and battery aggregates print `status: sealed` with NO hash, because value hashes of small integers are reversible. Benign-only aggregates print beside them, and per-member whole-record seals stay.
+  - Opus patch `engine-r23h`: that ruling, `attempt_id` on per-member rows, H* off-grid doses, refusal of string stamps, and refusal of a legacy thermal_source export without owned flags in release mode. Then a Sol check and the comparator rehearsal.
+
+239. **Laptop lead (interactive session 1544c617), 2026-11-08 15:38 PST: lead rulings R25 and R26 (blind; synthetic), the P2 correction, the A2(4) scope and the A27 scope.**
+- **R25, U3 scope for reserves (pre-signature design change).** The production U3 policy template scoped only W1, C1-C8 and T1-T3 (N = 16 comparisons), so a healthy C9-C14 reserve would be U3-inconclusive and contribute zero calibrators (Sol r11-delta6 seat 2, F2).
+  - The U3 bar is not yet signed (it is due after R1), so the roster expands prospectively: C9-C14 get U3 scopes.
+  - The comparison count is scaled to cover every possible comparison, so the familywise false-fail budget stays β.
+  - The exact N before and after comes back from the v4 fixer and is logged in DEVIATIONS as R25.
+  - Also fixed, from both delta6 seats:
+    - contention-only codes may no longer affect any desk verdict (R22-1);
+    - the balance check counts disclosed contention events;
+    - a terminal bar forbids pool entry, through one shared bar predicate.
+  - The manifest bytes stay 21313cc2….
+- **P2 corrected (supersedes item 238's "exact from the raw value" wording).** The raw value is what the harness RECORDED. A binary float is converted exactly as `Fraction(float(lexeme))` and then to ns, matching production `stamp_mapping` (A21). The Opus delta review showed the decimal-lexeme reading disagrees by up to about 119 ns at epoch scale, which would refuse every real export on the offset check.
+- **A2(4) scope.** A member is excluded iff OWNED turn time (turn span plus own tool calls, minus gates and holds) has uncovered time, whether an interior gap or edge partial coverage. Uncovered gate or pre-turn time is disclosed and does not exclude.
+- **A27 scope:**
+  - The 30B anchor-sabotage replays (ordinals 2/3) are anchors, not scored sabotage, so they are exempt from sealing.
+  - A27 seals the scored C-sabotage roster.
+  - Printed U1/U2 aggregates that include scored C-sabotage thermal fields are sealed (hash) and shown beside benign-only aggregates. Verdicts are unchanged.
+  - A not-captured sealed member shows `captured: false`.
+- **R26, A7 H* registered as text.**
+  - Grid: `H_STAR_GRID` = {128, 256, 384, 512, 768, 1024, 1536, 2048}.
+  - H*_i is the smallest grid dose, ascending, whose exact sub-turn stripped score is strictly above the pair's detection threshold, provided every earlier grid dose was observed and at or below threshold.
+    - Otherwise it is undefined, with the missing doses listed.
+    - With no exceedance it is null, `bounded_above: false`.
+    - Off-grid doses are listed and ignored.
+  - Rows: C benign carriers and T sabotage (not T benign).
+  - Carrier-curve doses are the council grid ∪ the H* grid, and H50/H90 are searched over them. "full" is a print-only `full_cell` in both builds.
+- **Engine line:** `engine-r23f` (P2 corrected, A2(4), the A27 scope) is with Sol now, followed by `engine-r23g` (R26). The recompute and comparator are aligned to the same rulings by the comparator builder, and the rehearsal reruns on r23g.
+- **Smoke kit:** the F6 rework is at `0ad6f29f3`. Patching is deleted, the production prepare runs in a bounded child, and the kit is CLI-only. Seven review witnesses that asserted the deleted patch were adapted, by name, to the same property and are mapped in W1-SMOKE-AGREEMENT §10. A final quick Sol check is running.
+- **Air disk:** 42 pushed, clean Sol clones were pruned (+15 GiB), and new Sol clones go to `/Volumes/JW-EXT/jw-wt/`. The SSD link is USB4 40 Gb/s on the M4 Air.
+
+238. **Laptop lead (interactive session 1544c617), 2026-11-08 15:13 PST: R24 correction (blind; synthetic); SSD on the Air; v4 rehearsal exact AGREE.**
+- **R24 correction.** Item 236 said that a larger cap lowers gate-admitted FPR under b = .05 drift. That holds only for a fixed common T horizon. The Sol confirmation (`align/2026-11-08-r24-c14-confirm-sol` @ `f5226e11b`) puts T immediately after the stop, the registered calendar. In that case **C14 RAISES gate-admitted FPR versus C10 at every b = .05 setting, by +0.03 to +0.17 pp** (maximum rule). Some pointwise intervals include 0. At b = 0 the cap has no effect.
+  - Example: q = .25, e = .10, hot-correlated, τ/s_r = .81, b = .05, maximum rule, T after the stop.
+    - C13: qualification 91.98%, gate-admitted FPR 4.628%.
+    - C14: qualification 96.17%, gate-admitted FPR 4.650%.
+    - Most of that FPR inflation comes from the drift itself, not the cap.
+  - **Ruling: C14 stands.** A qualification gain of 52.6% → 96.2% at q = 1/4 is worth ≤ 0.17 pp under a drift stress. The drift sensitivity (the effect of b and of T placement after the stop) is a v4 claim DISCLOSURE item alongside item 236's clustering note. It is not a gate.
+  - Reproduction on supported Python 3.11/3.13 + NumPy is still owed.
+- **SSD.** Ed plugged the OWC enclosure with the borrowed WD SN7100 2 TB into the **Air**.
+  - It arrived blank and was formatted APFS `JW-EXT` (GPT). Measured: about 2.6 GB/s write, about 3 GB/s read. Ed turned Spotlight off for the volume.
+  - The Air hosts the "SSD + compressed offload" route. The MBP eject rule does not apply to this drive.
+  - The 2026-11-08 git backup (mirror + bundles, sha `f6f566e6…`) now has a second, physically separate copy at `/Volumes/JW-EXT/backups/` (diff identical). The off-site Dropbox copy is still owed by Ed.
+  - The merged Air-offload build (agreement items 1-9 on the Opus base, landing on JW-EXT, iCloud round-trip as the second copy) is in progress on `ops/2026-11-08-air-offload-merged`.
+- **v4 release rehearsal: exact AGREE.** The comparator (`align/2026-11-08-v4-release-tools` @ `dff411c11`) runs engine-r23d against the recompute (`fdd02a961`, program sha `48d7752b…`) on the full synthetic series. The series has W1, C1-C8 and T1-T3, with C3 and T2 zero-capture retries, an A37 seam window and T3 at 24 members.
+  - Result: 61 families compared, 0 unmapped of 274,099 leaves, `release_v4` exit 0 in 11 s at 4 workers.
+  - The probe plan's two holds were ruled:
+    - **P1** is an engine bug: a G1/H timeout that stops the episode re-derives X2 (A9 union).
+    - **P2**: seconds → ns conversion is EXACT from the raw value in both builds. A37 snaps only ≤ 1,000 ns. Under A2(4), uncovered owned time beyond that excludes the member. There is no 2026-epoch impact; large-epoch fixtures become permanent rehearsal cases.
+  - **A27:** the engine seals C-sabotage token counts. A27 as written: hash only.
+  - These are being fixed on Sol `engine-r23e`, followed by a rehearsal rerun. The A7 H* item is awaiting specifics from the comparator builder.
+
+237. **Laptop lead (interactive session 1544c617), 2026-11-08 15:01 PST: checkpoint — v4 engine settled; R24 manifest frozen; review-bound threat-model ruling.**
+- **v4 primary engine settled at `engine-r23d` @ `a2e36bc19`.**
+  - Line of fixes: `engine-r23` (A37 + R23), then `engine-r23b`, `engine-r23c` and `engine-r23d`.
+  - Opus cold review of r23, then Opus deltas on r23b and r23c, each ADMIT-WITH-FIXES, with all findings closed.
+  - The last patch (Opus) got a Sol review: ADMIT.
+  - R23-4 clarified: only the DC residual row set mirrors the GPU benign rows. DC-in VALUE rows print for every captured benign member, with `residual_status: no_gpu_row` (Ed's KM003C rule).
+  - Export contract extended: W1 is delivered as a window record (A34), and a selection-only W1 is refused. Anchor ids are strictly `<window_id>:<run_id>`. W1 anchors are ordinals 1-4 with `series_role: anchor`. `W1_anchor_block` discloses whether W1 entered σ_w.
+  - The final comparator rehearsal against r23d is with the comparator builder.
+- **R24 applied on `align/2026-11-08-v4-r11` @ `10d889d12`.**
+  - Manifest sha256 `21313cc2791865e01f322c24606db62ba2ac6a65adda6d737e5b7432bef2ad5c`.
+  - The paired independent Sol seed check MATCHes with zero differences on both seats (`align/2026-11-08-seedcheck-r24-sol1` @ `79c8e7e57`, `-sol2` @ `558c867a8`): 18 windows, 392 members, 3,294 leaves.
+  - W1, C1-C8 and T1-T3 are byte-identical to R15. **The manifest is frozen.**
+- **Lead ruling (review bound, binding on the harvest-off and smoke-kit lanes):** these tools defend against operator and host mistakes, functional bugs and stale state, NOT against a deliberate same-user adversary racing renames or planting links. After the current fix rounds, a new finding HOLDs only with a plausible operator, host or functional failure path; adversarial-only races are LOW.
+- **Harvest-off (R17):** Opus fix `6938c3733`. Sol delta seats 1 and 2 both HOLD on the same findings:
+  - an external-parent write-through into a tracked checkout file;
+  - link-to-link and mirror-target binding;
+  - ignored inputs;
+  - walk errors;
+  - sweep identity;
+  - the child fence;
+  - finality predicate drift.
+
+  Both seats rule the builder's two disputed witnesses WRONG.
+  - **Ruling:** the no-harvest finality exemption applies only to actual capture absence. A window with only supplemental captures still needs a harvest. cmd_final and WindowRecord share one predicate.
+  - The ignored-input census is a lead-owned native N1 gate. Fixes are in progress.
+- **Smoke kit:** delta3 is fixed at `80bbfa2cd`. Delta4 seat 1 says ADMIT-WITH-FIXES and seat 2 HOLDs, both on F6: the module-level `subprocess.run` patching leaks.
+  - **Ruling:** delete the patching. Production prepare runs in a child process under the process-group-killing `grouped_run` with the remaining budget. The smoke kit is CLI-only.
+- **Main CI:** #706's timing fix exposed `tests.b5_analysis.test_mint_kept_units`. It fails standalone on clean main and passed in CI only on state leaked from `test_launch_lineage`. It is being fixed as a hidden dependency; no reweighting.
+
+236. **Laptop lead (interactive session 1544c617), 2026-11-08 14:13 PST: lead ruling R24 (blind; synthetic simulation only), the reserve cap for the R22-2 structural replacements.**
+- **Evidence:** Sol R22-2 sim (`align/2026-11-08-r22-sim-sol` @ `8f81bf7bd`) and cap sweep (`align/2026-11-08-r22-cap-sweep-sol` @ `53556a3d6`).
+  - Bars that correlate with a hot state bias thresholds relative to an all-states oracle: maximum-rule FPR 4.04% vs 2.32% against the unscorable all-future-states population. On the population that passes the same frozen structural gate, R22 is at oracle level (2.245%).
+  - R22 still beats both no-replacement (4.44%) and the old count stop (4.64%) on that counterfactual.
+  - At b = 0, the gate-admitted FPR is invariant to the cap. Under b = .05 drift, a larger cap lowers it slightly (C12 vs C10: −0.05 to −0.26 pp).
+  - Qualification at bar rate 1/4 and e = .10: C10 52.6%, C11 71.3%, C12 84.2%, C14 96.2%.
+- **Ruling:**
+  - The registered FPR population is benign windows that pass the frozen structural gate. Barred T windows are unavailable and never credited as no-alarm.
+  - The reserve cap is **C14**, pre-registered: C9-C14 are armed in order, only to replace a structural bar, never to repair low m. Calibration is still exactly 8 admitted windows.
+  - Seeds: one contiguous reserve pool from 100 per pair (C9 100-107 … C14 140-147). T1-T3 stay byte-identical to R15. 91-99 stay the development reserve.
+  - A Sol C13/C14 confirmation sim is running (`r24-c14-confirm`), and the paired Sol seed check runs on the R24 manifest.
+- **Disclosed:** the sims say nominal (exact conformal) FPR control under window-shared state is not established, because clustering at τ/s_r = .5 is a model assumption. This feeds the v4 claim's disclosure, not a gate.
+- **Also from the v4 fixer at `align/2026-11-08-v4-r11` @ `f25654e97`:**
+  - R22 is implemented: contention is disclosure-only, there is a balance check, and C9/C10 bars are derived from committed records.
+  - A U1-U3 FAIL is now a bar (DEVIATIONS `R22-2-bar`, superseding R15).
+  - A barred window contributes nothing to calibration.
+  - The time-of-day dependency in the R1 chain test is removed.
+
+235. **Laptop lead (interactive session 1544c617), 2026-11-08 13:43 PST: lead ruling R23 (blind; synthetic evidence only, no v4 data exists) on the first v4 release-tool rehearsal.** The Opus comparator plus `release_v4.py` (`align/2026-11-08-v4-release-tools` @ `698a3f490`) covers all 282,691 engine leaves with 0 unmapped. On the synthetic series it HOLDS (exit 1): 56 of 61 recomputed families agree exactly. The planted mutations each move their intended family.
+- **R23-E1, engine bug:** a zero-capture window crashes `thermal_desk.acceptance` (`KeyError pm_period_s`). Not-captured members never enter acceptance, fits, U-units or claims. The zero-capture attempt is a final, not-counted record, and its retry takes the slot.
+- **R23-1, anchor σ_w (print-only):** it uses the same anchor set as U4, so W1 is included (K = 12). Both the raw method-of-moments σ_w² and max(0, raw) are printed, with K ≥ 3.
+- **R23-2, carrier curve at H = 0 (A8):** the H = 0 point is the honest leave-one-carrier-out false-alarm fraction and is never forced to 0. H50/H90 crossings use doses > 0 only. `level_reached_at_h0` is flagged and leaves that crossing undefined.
+- **R23-3, carrier status:** `ok` whenever m ≥ 40 and the thresholds are defined. The engine's `insufficient_calibration` there is a mapping bug.
+- **R23-4, benign DC residual (A20):** it mirrors the GPU benign residual rows and the LOTO training sets exactly. The engine's W1 DC fit over 30B and development members is deleted.
+- **A2 restated:** a G0 that overlaps the episode makes the member custody-invalid in both builds.
+- **A20:** the recompute adds the dropped-sample check.
+- **Export contract:**
+  - production sensor keys `s_fast`/`s_slow`;
+  - series-unique anchor run ids `<window_id>:<run_id>`;
+  - the export carries the W1 sentinel ordinals, and the recompute re-derives them from the R15 roster and refuses on mismatch;
+  - A27 seal scope applied as written.
+- **Engine base correction:** the A37 job was briefed on `c8da9ee40`, which lacks the R21 streaming reducer, and it stopped on NEEDS_RULING. A37 plus R23 are now applied on `engine-fix` @ `8eb7982f0`, in the Sol job `engine-r23`. The recompute fixes and the rehearsal rerun go to the comparator builder. **Target:** exact AGREE including the C3 zero-capture retry and an A37 seam fixture.
+
+234. **Laptop lead (interactive session 1544c617), 2026-11-08 13:10 PST: lead ruling R22, Block 5 lessons applied to v4 before W1 registration.** Decided blind, with no v4 data. Source: `docs/analysis/b5/LESSONS-FOR-V4-V5.md` on `analysis/2026-11-08-b5-lessons` @ `7fdd43912`.
+- **R22-1, contention:** in-window contention in v4 is DISCLOSURE-ONLY. Block 5's rule (0.05 CPU-s/s per 10 s, applied as an exclusion) is never used. At v4's roughly 830 s active episodes it would flag more than 99.7 % of members.
+  - Each member records its outside-tree CPU-seconds.
+  - A `contention.unmeasured` monitor gap is bounded: a gap over 30 s is flagged and disclosed, never excluded.
+  - This goes into the registration text.
+- **R22-2, whole-window loss under fixed-8:** add up to **two pre-declared blind replacement calibration windows, C9 and C10**.
+  - They are armed ONLY when a C window is barred for a STRUCTURAL reason: a U1-U3 FAIL, a whole-window capture failure, or a zero-capture refusal beyond the retry. A replacement never depends on scores or on eligible counts.
+  - Seeds for C9 and C10 are pre-allocated now, in kit order after C8, skipping 1 and 91-99.
+  - The total stays at 8 counted calibration windows. A barred window is replaced, not added.
+  - If both replacements are used and a pair still has fewer than 39, the outcome is `insufficient_calibration`.
+  - A Sol simulation must confirm that this rule keeps FPR at the fixed-8 level under drift, before registration. The rule is not a count stop.
+- **R22-3, balance check by condition:** exclusions and flags per member-second are compared benign against sabotage and per pair, against the exposure-adjusted expectation. The result is printed and disclosed.
+- **R22-4, comparator rules R-C1 to R-C6** (lessons §5) are required in `compare_v4_recompute.py` and `release_v4.py` before the synthetic rehearsal:
+  - an empty family holds unless declared expected-empty;
+  - a blind row-count manifest;
+  - a recompute/integrity/exempt marking for every family;
+  - registered sensitivity lines computed on hard-case fixtures;
+  - eligibility re-derived from raw journals;
+  - log-relative bars on p-values.
+- **R22-5:** record τ_rel = 0.13 % (stress 0.21 %) of cell energy as the Block 5 between-window prior. Check B3's τ = 0.5 s_r conversion once W1 or C1 gives the first benign residual SD.
+- **R22-6, MBP host hygiene before the W1 arm.** The sudo and Settings items need Ed's OK:
+  - keep photoanalysisd and mediaanalysisd stopped, with a PREQUAL check;
+  - turn off Significant Locations, Analytics and Siri Suggestions;
+  - `mdutil -a -i off`;
+  - `softwareupdate --schedule off`.
+- **R22-7:** Block 5 is unsealed, so its harvest archives (`~/night-archive/harvest-v5-b5-*`) may now be read for process and timing fields only, to build the guard-replay corpus and the culprit table. All other night-archive content stays sealed.
+
+233. **Laptop lead (interactive session 1544c617), 2026-11-08 12:45 PST: the v5 DESIGN RULING IS SIGNED; A37 ruled; post-move resume.**
+- **v5:** `docs/align/squeeze/v5-design/RULING-DRAFT.md` revision 7 is adopted as the v5 design ruling, at `align/2026-11-08-v5design-ruling` @ `4078c0850`. It went through seven rounds, each with two independent Sol reviews. Round 7 got SIGN from both seats (`-delta7-sol1` @ `d8344de4e`, `-delta7-sol2` @ `66f698303`). Opus wrote it, and the lead has the final say on design.
+  - **Design:** the hybrid. Native attacks run on Sol2's ground-up backbone, reusing v4's engineering and fresh calibration.
+  - **Primary endpoint:** R11 D09. For H1-H4, an attempt-level betting test (predictable conditional-mean null, Holm across the four hypotheses).
+  - **Sizing:** prospective. G12 measures regression and unknown rates. 28 windows at baseline; under stress, the ladder H4 reallocation → +8 → +16 → +24 → +32. If capacity falls short, the claim narrows.
+  - **Other rules:** the honest gate is a gross-inflation check (≤22/280 per rule). Batching is allowed only for unmeasured work.
+  - **Still open for Ed (§7):** the monitor spend cap, the model ladder, the cloud pre-screen, a 4 TB custody drive, the desktop meter, MBP time Dec-Feb, and a possible March extension.
+- **A37 (blind):** consecutive power samples with an interior gap or overlap of 1 µs or less are treated as contiguous. The later sample's start snaps to the previous sample's end. Edge gaps always count. Both v4 analysis builds apply this.
+- **The laptop moved about 12:00-12:35.** Four agents stopped on network loss. Their state is in `docs/handoff/2026-11-08-laptop-move/RESUME.md`, and all were resumed at 12:40. R1 was unaffected.
+- **Needs Ed:**
+  - the prune's tag-protection ruleset and the off-machine bundle copy. The auto-mode classifier refused both for the agent; commands are in `ops/2026-11-08-prune-execution`.
+  - the SSD choice.
+
+232. **Laptop lead (interactive session 1544c617), 2026-11-08 12:15 PST: Block 5 results and Ed's paper ruling.**
+- **Results** are in `docs/analysis/b5/RESULTS.md` on `analysis/2026-11-08-b5-results` @ `0b0658a20`. Both primary contrasts in the Holm family (m=2) are `direction_supported`, with claim ceiling L2.
+  - **Decode, 8B − 1.7B:** +146.63 J. Decision interval 141.36-151.90 J, which includes the timing bound. 6 of 10 quads.
+  - **Prefill p2048:** +101.81 J. Decision interval 95.81-107.81 J. 5 of 10 quads.
+  - **Caveats to disclose:**
+    - it is one session;
+    - 45 % of quads were lost, mostly to contention, with losses skewed toward the 8B arm;
+    - the SoC rails carry about 36 % of whole-machine energy;
+    - "sensitivity clean" covers only the Erratum-3 bracket;
+    - `window_edge_s` compared 0 rows.
+- **Ed, verbatim:** "yeah including it as validation/the path to the useful paper yeah i buy your rec". Block 5 goes into the mid-December paper as the instrument-validation section. It is not a model-efficiency claim. PAPER-PLAN-v2's exclusion of Block 5 is superseded.
+- **Still open before any rendered number is published:**
+  - the paper-placement ruling (§14 Q4), now settled by Ed's ruling above;
+  - the Results cold gate required by the 2026-10-20 renderer obligation;
+  - item 37's requirement that Block 5 and Block 6 appear side by side, which is satisfied once Block 6 releases or is ruled out of scope.
+- **Lessons work:** forensics on contention culprits, exclusion against condition, between-window τ, the timing-bound decomposition and comparator coverage are running on `analysis/2026-11-08-b5-lessons`, aimed at v4, v5 and BYTES. New tracked metric from W1 onward: contention loss rate per window, by condition.
+
+231. **Laptop lead (interactive session 1544c617), 2026-11-08 11:17 PST: ED'S UNSEAL OK FOR BLOCK 5. Recorded BEFORE any outcome is read.**
+- **Ed, verbatim:** "sounds good on all 3", followed by "unseal". This answers the lead's question: unseal, then a results write-up, then the post-release prune.
+- **Basis:** the release check agreed at exit 0. It ran on main `02ef89f5c` with the analysis pinned to `b5/analysis-r4` = `ab1e0098d`, over dry-m custody. Stages: digests verified; recompute ok (`d49103e8…`); comparator agree across 24 families; 0 undetermined; 0 absent (item 229). The procedure is RELEASE-RUNBOOK-lean §1: unsealing is a separate step after (a)-(c) agree, and needs Ed's OK.
+- **Scope: Block 5 only.** That means `/Users/edr/jw-b5-custody/dry-m` and the release-check output `release-check-final-20261108T0942Z`, read-only.
+- **Still sealed, unchanged:** BYTES held-out, ALIGN v4 (R1 is measuring), Block 6, every `night-*` / night-custody / night-archive path, and every other restricted directory.
+- **Next:** read the registered claim evaluation and the result families. Publish them per the registration, together with DLE-1 to DLE-5 as disclosed. Write up the results. Then run the post-release prune (`ops/2026-11-08-prune-plan`, with the Opus review fixes).
+
+230. **Laptop lead (interactive session 1544c617), 2026-11-08 03:25 PST: lead ruling R21, the v4 analysis interpretations, made BLIND (no v4 data exists).** Source: `docs/analysis/v4/INTERPRETATION-RULINGS-DRAFT.md` on `align/2026-11-08-v4-interpretation-rulings` @ `a3465eda8`. It is an Opus reconciliation of the Sol primary engine (`align/2026-11-08-v4-analysis-engine-sol` @ `77b1ab60f`) and the Opus independent recompute (`align/2026-11-08-v4-recompute-opus` @ `9085cb1b8`), reading code and docs only.
+- **Adopted as drafted:** every recommended ruling in A0-A36. The high-impact ones:
+  - **A1:** the scored total is the turn-owned GPU-energy sum, over the same rows the fit uses. The whole-episode gross is printed only.
+  - **A3:** half-widths are zero (OLS). Attribution bounds are print-only.
+  - **A4:** one fit per window × pair. Benign members are scored LOTO, sabotage on the full benign fit, T windows on their own fits. Only thresholds carry from C to T. This is the registered scorer, and the claim stays conditional on its validity.
+  - **A22:** the heavy-tail rule uses leave-one-out RMS.
+  - **A23:** only a U1-U3 FAIL bars pool entry; INCONCLUSIVE does not, and is disclosed.
+  - **A16:** U6 is per pair over the C1-C8 benign residuals only.
+  - **A20:** the drafted benign DC residual spec, print-only; sealed rows are compared by presence.
+  - **A14:** the first U4 verdict comes at W ≥ 3.
+  - **A21:** clocks use production `stamp_mapping`.
+- **Changed from the draft, A15:** U5 (OLS with intercept on three R1 designed states, df 1) is expected to be inconclusive by construction. **A U5 inconclusive does NOT trigger the R20 escalation sentinels.** They cannot resolve U5 and would cost about 1 h of MBP per window. U5 is reported descriptively, and that is disclosed. R20 sentinels trigger on U4 only.
+- **Speed:**
+  - Sol rebuilds its reducer as a targeted byte scanner with a plistlib fallback, proven equal to plistlib.
+  - Both builds use one streaming read for hash plus parse, a columnar observation cache keyed by raw sha256, and per-turn energy tables recomputed fresh each run.
+  - Analysis runs incrementally per window on the Air as each window lands.
+- **Next:**
+  - Both builds apply their §7 fix lists.
+  - A blinded comparator plus `release_v4.py` follow, with B5's exit contract (refused 2 > hold 1 > agree 0).
+  - Then a synthetic full-series rehearsal: engine against recompute, exact agreement.
+
+229. **Laptop lead (interactive session 1544c617), 2026-11-08 03:10 PST: Block 5 release check AGREE; ruling R20; integration plan updates.**
+- **Block 5 release check: exit 0, verdict `agree`.** It ran on main `02ef89f5c`, which includes #704's comparator, with the analysis pinned to `b5/analysis-r4` = `ab1e0098d` and dry-m custody. The independent recompute sha256 is `d49103e8…`. Wall time 523 s. Output is in `/Users/edr/jw-b5-custody/release-check-final-20261108T0942Z` and was not read.
+  - A structure-only masked read shows: digests `verified`; recompute `ok`; comparator `agree` across 24 families; 0 undetermined holds; 0 absent sources; release checkout clean.
+  - #704 merged at `02ef89f5c` with a complete gate ledger. Reviews: Opus cold, Sol, two rounds of two Sol delta seats each, and Fable final (ADMIT).
+  - Block 5 stays sealed until Ed's explicit unseal OK.
+- **R20, escalation sentinels:** the Sol seed check (`align/2026-11-08-series-seed-check-sol` @ `79777d261`, MATCH) recommended this placement, and it is adopted.
+  - When a window's U4/U5 is inconclusive, the two extra sentinels are appended at ordinals 23 and 24, after the late sentinel at 22 and before the closing reference/scaffold.
+  - Both replay the admitted W1:5 trajectory exactly. Each is a separate batch-1 member with the normal gates.
+  - They are SUPPLEMENTAL diagnostics, reported descriptively. U4's W and its W−1 df are unchanged, and no held-out seeds are consumed. The ceiling is 62,400 s (R15).
+- **Integration plan (item 228) updates:**
+  - Item 5, condition waits, is OUT of the W1 line. The Opus review HOLDs it: the sampler's 1 Hz disk census perturbs the start state it measures, and there are seven HIGH findings. W1 runs on today's cool-down. Fixes for the C windows are on `align/2026-11-08-condition-waits-impl`. Any `condition_waits_policy.json` stays banned until a delta review and a native dry arm pass.
+  - Item 4, the series, is cleared: seed check MATCH.
+  - Item 8, the smoke kit, is on HOLD pending fixes.
+  - Items 1-3 are merged on `align/2026-11-08-v4-r11` (`48a4d1d76` → `1a2574b49`). The arm now rebuilds the triage packet, so a forged packet refuses.
+
+228. **Laptop lead (interactive session 1544c617), 2026-11-08 01:45 PST: lead rulings R17-R19 and the W1 integration plan.** All are decided blind; none concerns data.
+- **R17, harvest off the MBP.** Paired builds on `align/2026-11-08-harvest-off-{sol,opus}`, agreement `docs/align/v4/HARVEST-OFF-AGREEMENT.md` @ `ea5612686`. Opus has the final say.
+  - **Adopted:** the MBP does finalize, light triage and pack. The Air restores the verified raw copy at the same path, then runs the harvest, the full desk and reduce-once while the next window measures. Archive byte-identity between the MBP and the Air is proven (177 files). Parse dedupe plus workers give 5-6.5× on the whole harvest. `pm_reduce` equals plistlib on 1,735 documents.
+  - **Eligibility:** at the arm, `member_eligibility` passes on the light triage's provisional adjudication. Window k's FINAL eligibility must be in before the arm of k+2, and before any arm the full-desk rule already gates (after W1, or after any code or config change). Item 216's "from window 6 on" clause is withdrawn; it belonged to the superseded count stop.
+  - **Memo:** a scoped in-run memo of parsed content, keyed by content sha256, is derived data and therefore allowed. Refusals are never kept, and the cache is dropped at run end. The toolbox wording gets amended to match.
+  - **Workers:** auto-size to min(free cores, free memory / measured peak per worker), and sweep 2/4/6/8/10 on the Air to find the knee.
+- **R18, guard replay** (`ops/2026-11-08-guard-replay`, Opus review on `ops/2026-11-08-opus-review-anti-idle` @ `00c1cdf5b`).
+  - **F-G4, bound:** exposure is sized per guard (arm guards about 55 h). SHADOW MODE is the default route: a new or changed guard only flags on real runs until replay plus shadow exposure clears a one-sided false-refusal bound, then it is promoted. An INSUFFICIENT replay needs a ruling before the guard may refuse.
+  - **F-G3:** R0 attempts that ran idle under protocol are labelled idle, not unknown.
+  - **Recorder:** on HOLD until it is rebuilt with self-exit on any run_night/chain/hazard/km003c or loaded night agent, a maximum lifetime, a stop step in the pre-arm runbook before the R16 cool-down, and no battery fields (F-G5/F-G6).
+- **R19, readiness gate.** It merges to main as an ADVISORY check after F-R1 to F-R4 and F-R6. That means accepted expected failures are bound to rulings (for example WP22 F3), a PENDING_UPSTREAM state, UNKNOWN on timeout, and a CI zsh/python setup. It binds scheduling only after those land. Until then, the binding pre-arm check is the merged-smoke `--w1-next` PREQUAL PASS on the exact commit to be armed.
+- **W1 integration plan.** Every merge goes onto `align/2026-11-08-v4-r11` (the v4 fixer owns it), each only after its own review admits:
+  1. the R0 fill (`5d9b66dd4`, `d9d1098c6`, from `lane/2026-11-07-r1-kit-r0fill`);
+  2. R0-L3 (#699, `9c40e4e5d`);
+  3. W1 blockers (`align/2026-11-08-w1-blockers-merged`, after its Sol fixes);
+  4. the D/C/T series (`align/2026-11-08-dct-series-merged`, after its paired seed check);
+  5. condition waits (`align/2026-11-08-condition-waits-impl`, after Opus review);
+  6. timing receipts (after Opus review);
+  7. harvest-off (R17, after its integration review);
+  8. the merged smoke kit (`align/2026-11-08-w1-smoke-merged`, after its two Sol reviews);
+  9. the R14-R17 agreement docs.
+  
+  Then one full-suite run plus `JW_WP22_FULL=1`, then PREQUAL `--w1-next w1` on that exact commit. That commit is pinned for BOTH the native W1 smoke and W1. It is the blind registration gate's candidate (with Fable's final look) after the U3 bar, the battery policy and the receipt are signed.
+
+227. **Magistrate activation b17edfbb (Opus 5.5, headless, 2026-11-08 00:57 PST): R1 ARMED under ruling R13 / item 225. t0 01:17 PST (09:17 UTC), `window_max_s` 105,427 s (one 11:45 crossing), latest end Mon 11-09 06:39 PST.**
+- **Plan:** `align-r1-20261108T0917Z`, custody `/Users/edr/night-align/r1-20261108T085636Z`. The install exited 0 and both night agents are loaded: `com.joulewise.night` and `.deadman`, with plists in `~/Library/LaunchAgents`.
+- **Item 225 N1 checks:**
+  - `$M` (`JouleWise-measurement-20261102-align-pilot2`) was fetched at the exact sha and switched detached. `rev-parse HEAD`, `repo_head` and `measurement_head` in `night_plan.json` are all `20e9edbc446a9f89a68badc1bd32bb0934cbb86d`.
+  - `status --short` was empty before prepare.
+  - The D5 literal in `chain.zsh` is `40a49bde…6be0`, equal to the source's sha256.
+  - mlx 0.31.2, mlx_lm 0.31.3, transformers 5.12.1.
+- **Host at arm:** on AC, battery 100 % charged, no external volume, sudo rules present. `df -g` 115 GB free (`$S/df-arm.txt`). Flag: `disk.allocation_unsized`.
+- **Arm notice:** sent to Ed before install (Gmail `1a1ba5fe5fe0e091`); `notice.ack` written. There were no pending notices.
+- **Trial prepare:** an earlier scratch prepare, never installed, was moved to `~/night-archive/seats-b17edfbb/r1-trialprep-20261108T084902Z`.
+- **Display:** the magistrate runs `pmset displaysleepnow` and exits before t0.
+
+**Next activation (replaces item 223's pointer; items 202-204, 207, 209, 210, 212-222, 224-226 hold):**
+(1) While the plan is armed (until `chain.exited`, latest Mon 11-09 06:39 PST): never move `$M` or the canonical root. Run no git operation in `$M`. No `[QUIET-MAC]` work and no agent alive on the MBP.
+(2) After R1, follow the runbook §4 on `20e9edbc4`:
+  - restore network time with `sudo -n systemsetup -setusingnetworktime on`;
+  - read `$S/night/align-r1/r1_result.json`, `r1_slots.json` and `$S/night/result.json`;
+  - check `pmset -g custom` for the Automatic restore and check the KM003C capture (item 211 (2));
+  - look for stray `km003c_monitor.py` and `hazard_monitor.py` (D7);
+  - run `arm_align_r1.py uninstall --custody-root $S`;
+  - record per item 202 (5) and mail Ed.
+(3) Item 205 (4) holds.
+
+226. **Laptop lead (interactive session 1544c617), 2026-11-08 01:05 PST: lead rulings R14-R16 for the post-R1 critical path.** Each rests on paired Sol and Opus builds plus an agreement report (item 220). All are made blind. v4 is unregistered, so these go into the registration text.
+- **R14, W1 blockers** (`align/2026-11-08-w1-blockers-{sol,opus}`; agreement `docs/align/v4/W1-BLOCKERS-AGREEMENT.md`):
+  - **U3:** β = .05 series false-fail.
+    - **N = 16** (W1: 4×30B + 1×D; one D pair in each of C1-C8 and T1-T3, with 3 test windows per R15).
+    - One prespecified pilot pair per session, at least 5 sessions, no substitution.
+    - Zero-centred RMS with the exact series quantile. Relative-only.
+    - D transfer f = 1.5. A missing or failed R1 screen makes D U3 inconclusive, so the W1 desk fails and the lead disposes.
+    - If any pilot |r|/s₀ > 3, halve β before signing.
+    - One bar for the whole series, never re-derived.
+  - **B:** zero charging members (accumulator excursions count).
+    - A fail is an operational stop with **automatic resume**: charging members are excluded, the rest kept, and the next arm needs fresh admissible top-up evidence and OBC attestation.
+    - A lead disposition is needed only after two consecutive B fails.
+    - Assist is disclosed only.
+- **R15, D/C/T series** (`align/2026-11-08-dct-series-{sol,opus}`; agreement `docs/align/v4/DCT-SERIES-AGREEMENT.md`):
+  - **Code base and allocation:** Sol's code base with Opus's allocation.
+    - D_k = C_k, so there are no separate fit windows.
+    - Distinct held-out seeds in kit order: C uses 2-65, T uses 66-89, skipping 1 and 91-99. A zero-capture re-arm reuses its seeds.
+    - Sabotage sits at ordinals 9 and 18, under the Amendment 1 order.
+  - **Test cohort: 3 windows** (T1-T3), D shape, no v5 content. This settles the open item from 214/215. Neither 3 nor 6 windows can verify a 2.5 % FPR, so v4's FPR statement stays conditional (item 217).
+  - **Window rules:**
+    - Keep the C6 fence.
+    - A U1-U3 fail bars that window from the pool, but it still counts toward the 8.
+    - Final adjudication may lower counts, never raise them.
+    - Sabotage members in C windows count toward nothing. Their DC rows stay sealed for v5.
+    - A sentinel-alternate regeneration happens before C1 if W1 rejects ordinal 5.
+    - D members are sized at the largest W1 D member time.
+    - The series binding is required on the W1 arm too.
+    - Resume after escalation is via a `lead_release` ledger entry.
+  - **Escalated-window ceiling:** a window carrying the +2 sentinels may run to **62,400 s**. Ordinary windows keep 59,520 s.
+  - **Bug to fix before W1:** `bytes_h_session.measurement_view` labels D models `neg8_reference`, which affects W1 too. It gets fixed and reviewed on the W1 side.
+  - **Seed check:** the merged manifest changes bytes, so it needs one more paired seed check before signing.
+- **R16, condition-based waits** (`align/2026-11-08-condition-waits-{sol,opus}`; agreement `docs/align/v4/CONDITION-WAITS-AGREEMENT.md`):
+  - **P1 cool-down, in Sol's form:** release on a measured start state, not elapsed time.
+    - A two-sided ±δ temperature band around a reference Q, tied to R1's final power mode and sensors.
+    - The G0 slope rule.
+    - Fan, idle-power, display, OS/PM and battery checks.
+    - 180 s of stability, shared with the arm guard's clean run.
+    - Floor: 300 s after the last disruptive work (finalize, harvest and offload count as disruptive). Ceiling: 1,800 s per attempt.
+    - **Never arm at the ceiling.** Retry once after an ambient check, then the lead decides.
+    - The `quiet_start_state` triage entry binds the receipt digest.
+  - **P2:** one shared interval. The display stays asleep for at least 300 s, overlapping the cool-down. Guard READY, and nothing extra after READY.
+  - **Unchanged:** member idle stays 300 s; G0/G1/H, chain settles and countdowns stay.
+  - **CW-1:** one characterization run of at most 2 h on the MBP, after R1.
+  - **Fallback:** if Q or CW-1 is missing at registration, W1 keeps today's cool-down, with the band recorded as print-only.
+  - **Planning credit:** 0 minutes until a before/after measurement exists.
+
+225. **Laptop lead (interactive session 1544c617), 2026-11-08 01:00 PST: R1 ARM GO. Arm exactly `20e9edbc446a9f89a68badc1bd32bb0934cbb86d`, at the earliest t0 (item 224).** The lead's Opus executing review returned ADMIT_WITH_FIXES with no BLOCKER and no HIGH. The record is `docs/align/reviews/2026-11-08-r1-arm-fixes-lead-opus-review.md` on `lane/2026-11-08-r1-arm-fixes-review` @ `1a94ffb69`.
+- **REQUIRED (N1): do NOT follow the runbook's fetch line.** Runbook §1 fetches `refs/heads/lane/2026-11-08-r1-arm`, which is `5c0b79d31` and has none of D2/D3/D5. Instead:
+  1. `git -C "$M" fetch origin 20e9edbc446a9f89a68badc1bd32bb0934cbb86d` (or `lane/2026-11-08-r1-arm-fixes`), then `git -C "$M" switch --detach 20e9edbc446a9f89a68badc1bd32bb0934cbb86d`.
+  2. Before `install`, confirm that `git -C "$M" rev-parse HEAD`, and both `repo_head` and `measurement_head` in `night_plan.json`, are all `20e9edbc4…`.
+  3. Confirm `git -C "$M" status --short` is empty before `prepare` (this also covers N3). After `prepare`, confirm that the D5 literal in `$S/chain.zsh` is `40a49bde4475c583719dc178d5f66963abe29918350b288a829c91bf54946be0`.
+- **t0:** at least now + 15 min, sized with `arm_align_r1.py size --t0 <epoch>`. A t0 tonight gives 105,427 s with one 11:45 crossing. The review checked worst case one crossing, no redo, every pre-R1 step at its cap: R1 ends at t0 + 101,862 s against a deadline of t0 + 105,727 s.
+- **Known, not blocking:**
+  - N2: a load redo fits only if admission and the bookends come in under their caps (disclosed, meets item 216).
+  - N4: the display-dwell helper fails closed.
+  - N5: the bookends write their ledger rows to `$M/runs`.
+  - `test_run_night` has one pre-existing error (`Ruling76DriverTests...observer_faults`, also at `e901eb2a4`).
+  - Runbook text fix later.
+- **Unchanged:** the arm notice to Ed before install; display asleep; no external volume; exit before t0; item 222 (3) after R1, including checking the KM003C capture and the Automatic restore.
+
 224. **Laptop lead (interactive session 1544c617), 2026-11-08 00:55 PST: LEAD RULING R13, R1 route. Sol's HAZARD_PACK route, `lane/2026-11-08-r1-arm-fixes` @ `20e9edbc4`. Arm at the EARLIEST t0, not 13:20-14:00.**
 - **Route:** the agreement report (`docs/align/R1-ARM-AGREEMENT.md` on `lane/2026-11-08-r1-arm-opus` @ `fa7b8bae1`, Opus with final say) recommends Sol's route with D2, D3 and D5. Adopted, at `20e9edbc4`, which holds those fixes and the runbook lines (item 223). The Opus route (`d5882a34e`) is not used.
 - **Arm condition:** the lead's independent Opus executing review of `20e9edbc4` (item 219) is running on the laptop now. When it reports, the lead posts item 225 with the verdict and the exact sha:

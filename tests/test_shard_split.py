@@ -185,13 +185,25 @@ class SplitDeclarationLoadingTests(unittest.TestCase):
         runs with --split.  Here it fails the suite the moment the rename
         lands, which is the point of the guard.  An empty split_modules block
         passes trivially, so this holds before anything is declared too.
+
+        A module that is not in this tree is accepted only as a FORWARD
+        declaration carrying ``awaiting_lane`` (the lane that adds it, so the
+        timing map can be ready before that lane merges); anything else naming
+        an absent module is a typo or a stale entry and fails.  Once the module
+        is discovered its declaration is verified in full, and the marker must
+        be gone: awaiting_lane expires when the module arrives.
         """
 
         splits = shard_tests.load_split_declarations()
         discovered_modules = set(shard_tests.discover_test_modules())
+        self.assertEqual(
+            shard_tests.forward_declaration_problems(splits, discovered_modules),
+            [],
+        )
         for module, declaration in splits.items():
             with self.subTest(module=module):
-                self.assertIn(module, discovered_modules)
+                if module not in discovered_modules:
+                    continue
                 self.assertEqual(declaration["granularity"], "test")
                 self.assertIsNone(
                     shard_tests.verify_split_declaration(
@@ -200,10 +212,16 @@ class SplitDeclarationLoadingTests(unittest.TestCase):
                 )
 
     def test_checked_in_declarations_schedule_every_test_exactly_once(self):
-        splits = shard_tests.load_split_declarations()
+        modules = shard_tests.discover_test_modules()
+        # Forward declarations (awaiting_lane, module not in this tree) are
+        # inert here exactly as in CI; the guard above polices them.
+        splits = {
+            module: declaration
+            for module, declaration in shard_tests.load_split_declarations().items()
+            if module in set(modules)
+        }
         if not splits:
             self.skipTest("no split_modules declared in the checked-in timing map")
-        modules = shard_tests.discover_test_modules()
         units, weights = shard_tests.expand_units(
             modules,
             shard_tests.load_timing_map(),
@@ -243,6 +261,41 @@ class SplitDeclarationLoadingTests(unittest.TestCase):
         self.assertEqual(loaded[ALPHA]["remainder_weight_seconds"], 5.0)
         for weight in loaded[ALPHA]["declared"].values():
             self.assertIsInstance(weight, float)
+
+    def test_awaiting_lane_is_optional_and_round_trips(self):
+        block = _declaration(ALPHA, ALPHA_HEAVY)
+        with tempfile.TemporaryDirectory() as directory:
+            path = _write_timings(directory, split_modules=block)
+            self.assertIsNone(
+                shard_tests.load_split_declarations(path)[ALPHA]["awaiting_lane"]
+            )
+        block[ALPHA]["awaiting_lane"] = "lane/example-adds-alpha"
+        with tempfile.TemporaryDirectory() as directory:
+            path = _write_timings(directory, split_modules=block)
+            loaded = shard_tests.load_split_declarations(path)
+        self.assertEqual(loaded[ALPHA]["awaiting_lane"], "lane/example-adds-alpha")
+
+    def test_awaiting_lane_expires_once_the_module_is_discovered(self):
+        """A forward marker on a module that has arrived is stale and fails."""
+
+        waiting = {ALPHA: {"awaiting_lane": "lane/example-adds-alpha"}}
+        settled = {ALPHA: {"awaiting_lane": None}}
+        problems = shard_tests.forward_declaration_problems(waiting, {ALPHA, BETA})
+        self.assertEqual(len(problems), 1)
+        self.assertIn(ALPHA, problems[0])
+        self.assertIn("awaiting_lane", problems[0])
+        self.assertIn("lane/example-adds-alpha", problems[0])
+        self.assertEqual(
+            shard_tests.forward_declaration_problems(settled, {ALPHA, BETA}), []
+        )
+
+    def test_absent_module_needs_awaiting_lane(self):
+        waiting = {ALPHA: {"awaiting_lane": "lane/example-adds-alpha"}}
+        unmarked = {ALPHA: {"awaiting_lane": None}}
+        self.assertEqual(shard_tests.forward_declaration_problems(waiting, {BETA}), [])
+        problems = shard_tests.forward_declaration_problems(unmarked, {BETA})
+        self.assertEqual(len(problems), 1)
+        self.assertIn("names no awaiting_lane", problems[0])
 
     def test_remainder_weight_is_optional(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -296,6 +349,30 @@ class SplitDeclarationLoadingTests(unittest.TestCase):
                 "superseded units key",
                 {ALPHA: {"granularity": "test", "reason": "r", "units": declared}},
                 "unrecognized keys",
+            ),
+            (
+                "blank awaiting_lane",
+                {
+                    ALPHA: {
+                        "granularity": "test",
+                        "reason": "r",
+                        "declared": declared,
+                        "awaiting_lane": " ",
+                    }
+                },
+                "awaiting_lane",
+            ),
+            (
+                "non-string awaiting_lane",
+                {
+                    ALPHA: {
+                        "granularity": "test",
+                        "reason": "r",
+                        "declared": declared,
+                        "awaiting_lane": True,
+                    }
+                },
+                "awaiting_lane",
             ),
             (
                 "foreign unit id",

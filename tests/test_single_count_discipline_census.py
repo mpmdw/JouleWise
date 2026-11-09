@@ -1108,13 +1108,33 @@ MANIFEST += [
   "('Constant', (('value', 'single_count_discipline'),))", 1)]
 
 
-# Reviewed reader inventory: the block-5 recompute comparator declares the attribution-floor
-# diagnostic and single-count discipline words as uncovered (it reads and compares nothing there).
+# Reviewed reader inventory: the block-5 recompute comparator declares the single-count discipline's words
+# as uncovered (it reads and compares nothing there; DLE-5 extends the rule to the claim evaluation's copy), and
+# its DLE-5 test fixture prints the discipline object where the producers print it (synthetic fill rows).
 MANIFEST += [
- ('scripts/compare_b5_recompute.py', '<grep>', 'grep', '(F + r"floor/(resolutions/\\*/)?(point_floor_diagnostics/(label|published_claim_floor)|single_count_discipline/[a-z_]+)",', 1),
- ('scripts/compare_b5_recompute.py', '<grep>', 'grep', 'UNCOVERED + "attribution-floor diagnostic label and flag, and the single-count discipline\'s words"),', 1),
- ('scripts/compare_b5_recompute.py', 'COVERAGE', 'text-token', '(\'Constant\', ((\'value\', "attribution-floor diagnostic label and flag, and the single-count discipline\'s words"),))', 1),
- ('scripts/compare_b5_recompute.py', 'COVERAGE', 'text-token', "('Constant', (('value', 'floor/(resolutions/\\\\*/)?(point_floor_diagnostics/(label|published_claim_floor)|single_count_discipline/[a-z_]+)'),))", 1),
+ ('scripts/compare_b5_recompute.py', '<grep>', 'grep', '(F + r"(floor/(resolutions/\\*/)?|claim_evaluation/floor_limit/)single_count_discipline/[a-z_]+",', 1),
+ ('scripts/compare_b5_recompute.py', '<grep>', 'grep', 'UNCOVERED + "the single-count discipline\'s words (a fixed registered object: rule id, roles, flags, note); "', 1),
+ ('scripts/compare_b5_recompute.py', 'COVERAGE', 'text-token', '(\'Constant\', ((\'value\', "the single-count discipline\'s words (a fixed registered object: rule id, roles, flags, note); no number, and it gates nothing (gating false)"),))', 1),
+ ('scripts/compare_b5_recompute.py', 'COVERAGE', 'text-token', "('Constant', (('value', '(floor/(resolutions/\\\\*/)?|claim_evaluation/floor_limit/)single_count_discipline/[a-z_]+'),))", 1),
+ ('tests/independent_recompute/test_floor_limit.py', '<grep>', 'grep', '"planning_sizing_expression": "floor_j + claim_side_bound_j",', 1),
+ ('tests/independent_recompute/test_floor_limit.py', '<grep>', 'grep', '"point_floor_diagnostics": copy.deepcopy(diagnostics), "single_count_discipline": dict(DISCIPLINE)}', 1),
+ ('tests/independent_recompute/test_floor_limit.py', '<grep>', 'grep', 'DISCIPLINE = {"rule_id": "attribution_floor_plus_claim_side_bound.v2",', 1),
+ ('tests/independent_recompute/test_floor_limit.py', '<grep>', 'grep', 'floor.update(words, point_floor_diagnostics=copy.deepcopy(diagnostics), single_count_discipline=dict(DISCIPLINE))', 1),
+ ('tests/independent_recompute/test_floor_limit.py', '<grep>', 'grep', 'resolution.update(words, point_floor_diagnostics=own, single_count_discipline=dict(DISCIPLINE))', 1),
+ ('tests/independent_recompute/test_floor_limit.py', 'DISCIPLINE', 'text-token', "('Constant', (('value', 'planning_sizing_expression'),))", 1),
+ ('tests/independent_recompute/test_floor_limit.py', 'DISCIPLINE', 'version', "('Constant', (('value', 'attribution_floor_plus_claim_side_bound.v2'),))", 1),
+ ('tests/independent_recompute/test_floor_limit.py', 'with_floor_limit', 'output', "('Call', (('func', ('Name', (('id', 'dict'), ('ctx', ('Load', ()))))), ('args', (('Name', (('id', 'DISCIPLINE'), ('ctx', ('Load', ())))),))))", 1),
+ ('tests/independent_recompute/test_floor_limit.py', 'with_floor_limit', 'output', "('Constant', (('value', 'single_count_discipline'),))", 1),
+ ('tests/independent_recompute/test_floor_limit.py', 'with_floor_limit', 'output', "('keyword', (('arg', 'single_count_discipline'), ('value', ('Call', (('func', ('Name', (('id', 'dict'), ('ctx', ('Load', ()))))), ('args', (('Name', (('id', 'DISCIPLINE'), ('ctx', ('Load', ())))),)))))))", 2),
+ ('scripts/compare_b5_recompute.py', '<grep>', 'grep', 'FLOOR_LIMIT_KEYS = ("floor_source", "floor_limit_class", "point_floor_diagnostics", "single_count_discipline")', 1),
+ ('scripts/compare_b5_recompute.py', 'FLOOR_LIMIT_KEYS', 'key-token', "('Constant', (('value', 'single_count_discipline'),))", 1),
+ ('tests/independent_recompute/test_sol_delta_review_704.py', '<grep>', 'grep', '"single_count_discipline": detection_floor.attribution_single_count_discipline()} if printed else None)', 1),
+ ('tests/independent_recompute/test_sol_delta_review_704.py', '<grep>', 'grep', 'single_count_discipline=detection_floor.attribution_single_count_discipline())', 1),
+ ('tests/independent_recompute/test_sol_delta_review_704.py', 'equality_case', 'delegate', "('Call', (('func', ('Attribute', (('value', ('Name', (('id', 'detection_floor'), ('ctx', ('Load', ()))))), ('attr', 'attribution_single_count_discipline'), ('ctx', ('Load', ()))))),))", 1),
+ ('tests/independent_recompute/test_sol_delta_review_704.py', 'equality_case', 'output', "('Call', (('func', ('Attribute', (('value', ('Name', (('id', 'detection_floor'), ('ctx', ('Load', ()))))), ('attr', 'attribution_single_count_discipline'), ('ctx', ('Load', ()))))),))", 1),
+ ('tests/independent_recompute/test_sol_delta_review_704.py', 'equality_case', 'output', "('Constant', (('value', 'single_count_discipline'),))", 1),
+ ('tests/independent_recompute/test_sol_delta_review_704.py', 'mixed_floor', 'delegate', "('Call', (('func', ('Attribute', (('value', ('Name', (('id', 'detection_floor'), ('ctx', ('Load', ()))))), ('attr', 'attribution_single_count_discipline'), ('ctx', ('Load', ()))))),))", 1),
+ ('tests/independent_recompute/test_sol_delta_review_704.py', 'mixed_floor', 'output', "('keyword', (('arg', 'single_count_discipline'), ('value', ('Call', (('func', ('Attribute', (('value', ('Name', (('id', 'detection_floor'), ('ctx', ('Load', ()))))), ('attr', 'attribution_single_count_discipline'), ('ctx', ('Load', ()))))),)))))", 1),
 ]
 
 class SingleCountCensusTests(unittest.TestCase):

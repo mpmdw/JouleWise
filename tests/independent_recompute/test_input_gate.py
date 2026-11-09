@@ -431,14 +431,17 @@ class ExemptionTests(GateCase):
                 self.setUp()
                 self.files[FILL]["gamma"]["contrasts"][0]["floor"][field] = value
                 self.assertEqual(len(self.shipped()["coverage"]["unmapped"]), 1)
+        # DLE-5: a diagnostic directly under point_floor_diagnostics is no producer shape (the engine keys it by source
+        # cell then form, or by form in an exact resolution); its numbers are no longer named exemptions but refuse.
+        # The producer shapes are compared row by row (test_floor_limit.py).
         self.setUp()
         self.files[FILL]["gamma"]["contrasts"][0]["floor"]["point_floor_diagnostics"] = {
             "label": "diagnostic", "published_claim_floor": False, "unguarded_floor_j": 1.0, "guard_factor": 1.0,
             "guarded_floor_j": 1.0}
         result = self.shipped()
-        self.assertEqual(result["coverage"]["unmapped"], [])
         self.assertIn("fill:gamma/contrasts/*/floor/point_floor_diagnostics/guarded_floor_j",
-                      result["coverage"]["uncovered_numeric"])
+                      result["coverage"]["unmapped"])
+        self.assertFalse([p for p in result["coverage"]["uncovered_numeric"] if "point_floor_diagnostics" in p])
 
     def test_named_exemptions_are_listed_by_rule(self):
         out = self.exit_code(CODED)[2]["coverage"]

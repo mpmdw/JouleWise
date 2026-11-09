@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tests.git_fixture import GIT_MAINTENANCE_CONTROLS, init_git_fixture
+from tests.git_fixture import GIT_MAINTENANCE_CONTROLS, clone_git_fixture, init_git_fixture
 
 
 TESTS_ROOT = Path(__file__).resolve().parent
@@ -259,6 +259,39 @@ def _git_init_violations(tests_root: Path) -> dict[str, tuple[int, ...]]:
 
 
 class GitFixtureMaintenanceTests(unittest.TestCase):
+    def test_clone_disables_detached_writers_before_checkout_hooks_run(self) -> None:
+        """The clone's own checkout must already have the maintenance fence."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source, target = root / "source", root / "target"
+            source.mkdir()
+            init_git_fixture(source, "-q")
+            subprocess.run(
+                ("git", "-C", str(source), "-c", "user.name=Fixture",
+                 "-c", "user.email=fixture@example.invalid", "commit",
+                 "-q", "--allow-empty", "-m", "fixture"),
+                check=True, capture_output=True,
+            )
+            hooks = root / "template" / "hooks"
+            hooks.mkdir(parents=True)
+            hook = hooks / "post-checkout"
+            hook.write_text(
+                "#!/bin/sh\n"
+                "git config --local --get-regexp '^(maintenance|gc)\\.' "
+                "> .git/checkout-maintenance.txt\nexit 0\n",
+                encoding="utf-8",
+            )
+            hook.chmod(0o755)
+            clone_git_fixture(source, target, "--template", str(hooks.parent))
+            observed = dict(
+                line.split(maxsplit=1) for line in
+                (target / ".git/checkout-maintenance.txt").read_text().splitlines()
+            )
+            self.assertEqual(
+                observed,
+                {key.lower(): value for key, value in EXPECTED_MAINTENANCE_CONTROLS},
+            )
+
     def test_shared_helper_installs_the_exact_four_key_tuple(self) -> None:
         self.assertEqual(GIT_MAINTENANCE_CONTROLS, EXPECTED_MAINTENANCE_CONTROLS)
         with tempfile.TemporaryDirectory() as temporary:

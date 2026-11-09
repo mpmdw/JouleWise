@@ -1,0 +1,87 @@
+{
+  "notice": "LOCAL SYNTHETIC inputs only; no measurement data, MLX, model weights, network, full suite or hardware collection. These timings do not measure hosted CI.",
+  "python": "3.13.18",
+  "clone_fixture": {
+    "input_bytes": 65536,
+    "samples_seconds": {
+      "before": [
+        0.18522829201538116,
+        0.19377437501680106,
+        0.20800195797346532,
+        0.2004882909823209,
+        0.20654095790814608,
+        0.19675870798528194,
+        0.19307979196310043,
+        0.18029662501066923,
+        0.19970620796084404
+      ],
+      "after": [
+        0.07337212492711842,
+        0.06659816694445908,
+        0.08419645810499787,
+        0.0765023750718683,
+        0.07904970902018249,
+        0.07758224999997765,
+        0.09501108305994421,
+        0.06714495900087059,
+        0.0737071669427678
+      ]
+    },
+    "median_seconds": {
+      "before": 0.19675870798528194,
+      "after": 0.0765023750718683
+    },
+    "working_tree_sha256": "7daca2095d0438260fa849183dfc67faa459fdf4936e1bc91eec6b281b27e4c2",
+    "effective_maintenance_controls_equal": true
+  },
+  "campaign_reply_regression": {
+    "notice": "Doubles supply synthetic CLI/analysis replies. All aggregation code and assertions are from the pinned original class. Both variants run sequentially here; no native campaign or parallel speedup is measured.",
+    "samples_seconds": {
+      "before": [
+        0.023788667051121593,
+        0.022631291998550296,
+        0.020126959076151252,
+        0.021291499957442284,
+        0.020662833005189896,
+        0.02256512502208352,
+        0.02545762504450977,
+        0.022041707998141646,
+        0.026740374974906445
+      ],
+      "after": [
+        0.022576333954930305,
+        0.020065374905243516,
+        0.01813870796468109,
+        0.019452832988463342,
+        0.022167166927829385,
+        0.0245557080488652,
+        0.020735207945108414,
+        0.026672540931031108,
+        0.03221229091286659
+      ]
+    },
+    "median_seconds": {
+      "before": 0.02256512502208352,
+      "after": 0.022167166927829385
+    },
+    "canonical_aggregate_sha256": "536209571286ee3d05a528aa57bc92d4075585e7623463ea9f335f62fbcd245d",
+    "canonical_aggregate_bytes": 32604,
+    "campaigns_per_run": 60
+  },
+  "full_align_source_patch_check": {
+    "source_commit": "9c40e4e5d9fa453cce3c70984e11fa382b7d4591",
+    "original_tests": 112,
+    "patched_tests": 114,
+    "unchanged_tests": 111,
+    "patch_applies_and_full_module_compiles": true
+  },
+  "workflow_plan_replay": {
+    "ordinary_jobs": 12,
+    "crash_matrix_jobs": 2,
+    "calibration_exit_jobs": 1,
+    "modules": 486,
+    "units": 491,
+    "exhaustive_and_disjoint": true,
+    "tests_executed_by_replay": 0
+  }
+}
