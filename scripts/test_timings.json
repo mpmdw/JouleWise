@@ -621,6 +621,7 @@
     "tests.test_night_gate": 0.624,
     "tests.test_night_kinds": 57.003,
     "tests.test_night_plan_writer": 0.023,
+    "tests.test_nightly_optin": 7.21,
     "tests.test_node_client": 4.879,
     "tests.test_node_worker": 36.325,
     "tests.test_node_worker_subprocess": 11.86,
