@@ -66,3 +66,16 @@ added to the registered closure. `joulewise/align/apple/harvest_offload.py` and 
 (arm-only invocations). This departs from SPEED-TOOLBOX's "create no new files" and is ACCEPTED: losing those
 markers is worse, and the file is written after the operation closes, never during a window or a dwell. A run
 with a `night.log` appends to it as before. Recorded in `docs/align/v4/DEVIATIONS.md` (TR-spill-LOW-2).
+
+## Shared terminal checks with the exporter
+
+`scripts/align_v4_next_arm_packet.py` now carries the exporter lane's two extracted functions,
+`terminal_release_check(record, plan, now_epoch_s)` and `watchdog_latch_check(record, plan)`, with signatures and
+bodies identical to `align/2026-11-08-v4-exporter` @ `4c4b76e3a`; `build_packet`'s nested `terminal()` calls them
+(AST-identical to the exporter's). The arm and the exporter therefore share one implementation after the merge.
+The exporter snapshot lacked the later r11 changes to this file (shared exclusion comparison in `effective_desk`,
+R17 provisional/finality, structural bars); those are all kept. Equivalence witness:
+`tests/align/test_v4_terminal_equivalence.py` (Sol, `docs/align/v4/ARM-REFACTOR-REVIEW-sol.md`), whose reference is
+the complete pre-extraction `terminal()` at r11 `52f36f1d8` and whose candidate is extracted from the installed
+`build_packet`; it passes unmodified here. The file is in the registered closure, so this is covered by the
+STRICT re-registration already noted above.

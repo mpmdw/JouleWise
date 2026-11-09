@@ -157,6 +157,40 @@ class GitEvidence:
         return len(raw)
 
 
+def terminal_release_check(record, plan, now_epoch_s):
+    """B1 custody-file terminal release: the record's authenticated result, chain markers and courier delivery
+    pass the production ``terminal_window_release`` decision for this plan at ``now_epoch_s``, and a recorded
+    chain closure agrees with the result's exit code. Returns the release Decision; any non-release raises
+    ValueError with the production reason (or KeyError/TypeError/AttributeError on malformed evidence). The
+    next-arm ``terminal()`` check and the exporter call this same function (lead ruling, exporter admission)."""
+    result = record.source('result')
+    require(result.get('schema') == 'joulewise.unattended_night_result.v1', 'terminal result schema missing')
+    names = record.record['sources']
+    started, exited = names.get('chain_started') is not None, names.get('chain_exited') is not None
+    courier = record.source('courier')
+    record.source('courier_sent', json_value=False)  # native courier creates an empty marker with touch
+    require(courier.get('sent') is True, 'courier delivery missing')
+    decision = terminal_window_release(result, plan_id=plan['plan_id'], receipt_class=plan['receipt_class'],
+                now_epoch_s=now_epoch_s, chain_started=started, chain_exited=exited, courier_sent=True)
+    require(decision.allowed, decision.reason)
+    if exited:
+        require(record.source('chain_exited').get('exit_code') == result.get('chain_exit_code'),
+                'chain closure and terminal result disagree')
+    return decision
+
+
+def watchdog_latch_check(record, plan):
+    """B1 watchdog latch: the record's digest-authenticated ``watchdog_state`` snapshot releases exactly this
+    plan's result (``plan_id:custody_root:sha256(result.json)``). This is the watchdog's proof of the empty
+    agent/driver/plan-process census (next_arm_packet.md). A missing, digest-failing or unparseable source,
+    a snapshot without the release list, or a list without this key raises ValueError/KeyError/TypeError/
+    AttributeError; there is no optional path. The exporter calls this same function (lead ruling CF1)."""
+    key = f"{plan['plan_id']}:{plan['custody_root']}:{digest(record.source('result', json_value=False))}"
+    latch = record.source('watchdog_state').get('released_terminal_windows', [])
+    require(isinstance(latch, list) and key in latch,
+            'watchdog empty-process terminal latch missing or for another result')
+
+
 class WindowRecord:
     def __init__(self, evidence, commit, path):
         self.evidence, self.commit, self.path = evidence, evidence.commit(commit), path
@@ -634,23 +668,10 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
                 'pushed_ref': pushed_ref, 'pushed_tip': tip}
 
     def terminal():
-        plan, result = previous.source('plan'), previous.source('result')
-        require(result.get('schema') == 'joulewise.unattended_night_result.v1', 'terminal result schema missing')
-        names = previous.record['sources']
-        started, exited = names.get('chain_started') is not None, names.get('chain_exited') is not None
-        courier = previous.source('courier')
-        previous.source('courier_sent', json_value=False)  # native courier creates an empty marker with touch
-        require(courier.get('sent') is True, 'courier delivery missing')
-        decision = terminal_window_release(result, plan_id=plan['plan_id'], receipt_class=plan['receipt_class'],
-                    now_epoch_s=prepared, chain_started=started, chain_exited=exited, courier_sent=True)
-        require(decision.allowed, decision.reason)
-        if exited:
-            require(previous.source('chain_exited').get('exit_code') == result.get('chain_exit_code'),
-                    'chain closure and terminal result disagree')
-        key = f"{plan['plan_id']}:{plan['custody_root']}:{digest(evidence.source(previous.commit, names['result'], json_value=False))}"
-        latch = previous.source('watchdog_state').get('released_terminal_windows', [])
-        require(isinstance(latch, list) and key in latch,
-                'watchdog empty-process terminal latch missing or for another result')
+        plan = previous.source('plan')
+        decision = terminal_release_check(previous, plan, prepared)
+        watchdog_latch_check(previous, plan)
+        started = previous.record['sources'].get('chain_started') is not None
         captured = previous.captures()
         require(started or not captured, 'null window carries captured members')
         return {'basis': 'B1 authenticated terminal result, chain closure, delivery and watchdog latch',
