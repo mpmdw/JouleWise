@@ -4,16 +4,18 @@ import random
 import math
 from .io import canonical, digest
 
-from .engine import SCHEMA, ORDER, D_MODEL, roster
+from .engine import SCHEMA, CALIBRATION_ORDER, TEST_ORDER, D_MODEL, roster
 from .residual import design_row
 
 
-def series(*, turns=12, identity_tokens=8):
+def series(*, turns=12, identity_tokens=8, reserves=0):
+    if type(reserves) is not int or not 0 <= reserves <= 6:
+        raise ValueError('synthetic reserves must be in 0..6')
     cohort = dict(identity=dict(model_source='synthetic/Qwen', model_revision='synthetic',
         runtime_sha256='a'*64, execution_policy_sha256='b'*64), configuration=dict(
         max_episode_decode_tokens=16384, deadman_s=1200., max_tokens=4096, max_turns=12))
     windows = []
-    for wi, name in enumerate(ORDER):
+    for wi, name in enumerate(CALIBRATION_ORDER[:8+reserves]+TEST_ORDER):
         members = []
         for slot in roster(name):
             run = slot['run_id']

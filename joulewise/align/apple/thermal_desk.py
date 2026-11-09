@@ -380,7 +380,8 @@ def deciding_experiment(runs, *, v4=False, delta_slow_c=None, predeclared=None):
                      and not calibration_exclusions(r)]
              for t in ('X', 'Y') for a in ('S', 'G')}
     if any(len(c) != 2 for c in cells.values()):
-        return {**result, 'reason': 'requires 2 token-identical eligible runs in each template/arm'}
+        return {**result, **({'reason_code': 'insufficient_contrast_runs'} if v4 else {}),
+                'reason': 'requires 2 token-identical eligible runs in each template/arm'}
     selected = [r for cell in cells.values() for r in cell]
     if len({r['id'] for r in selected}) != 8:
         return {**result, 'reason': 'duplicate contrast members'}

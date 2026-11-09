@@ -71,7 +71,7 @@ def main(argv=None):
     parser.add_argument('--workers', type=int, choices=range(0, 9), default=0, help='0: conservative free-core/memory auto size')
     parser.add_argument('--calibration-only', action='store_true')
     parser.add_argument('--thresholds', type=Path)
-    parser.add_argument('--through-window', choices=['W1', *('C'+str(i) for i in range(1,9)), *('T'+str(i) for i in range(1,4))],
+    parser.add_argument('--through-window', choices=['W1', *('C'+str(i) for i in range(1,15)), *('T'+str(i) for i in range(1,4))],
                         help='recompute only the landed prefix; never open later exports')
     parser.add_argument('--cache', type=input_path, help='observation columns only; no decision cache')
     return run(parser.parse_args(argv))

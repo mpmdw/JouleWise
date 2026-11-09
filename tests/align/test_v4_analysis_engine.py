@@ -104,13 +104,13 @@ class SeriesTests(unittest.TestCase):
         self.assertNotIn('987654321', canonical(verdict).decode())
         self.assertTrue(any(x['status'] == 'sealed' for x in fill['dc_secondary']))
 
-    def test_window_failure_counts_without_pool_entry(self):
+    def test_window_failure_is_replaced_without_pool_entry(self):
         payload = self.payload_copy()
         for m in payload['windows'][0]['members']:
             if m['slot']['model_id'] == 'qwen3.8-27b':
                 m['thermal']['registered_os_nonzero'] = True
         fill, _ = analyze(payload)
-        self.assertEqual(fill['calibration']['attempted'], 8)
+        self.assertEqual(fill['calibration']['attempted'], 7)
         self.assertEqual(fill['calibration']['eligible_by_pair'], {'spam': 49, 'bank': 49})
         self.assertEqual(fill['ledger'][0]['eligible_benign'], {'spam': 0, 'bank': 0})
 
@@ -206,7 +206,7 @@ class SeriesTests(unittest.TestCase):
                 if m['slot']['model_id'] == 'qwen3.8-27b':
                     m['thermal']['registered_os_nonzero'] = True
         fill, verdict = analyze(payload)
-        self.assertEqual(fill['calibration']['decision'], 'insufficient_calibration')
+        self.assertEqual(fill['calibration']['decision'], 'continue')
         self.assertEqual(fill['calibration']['eligible_by_pair'], {'spam': 35, 'bank': 35})
         self.assertFalse(any(f['window'].startswith('T') for f in fill['fits']))
         self.assertIn('test_entry_not_authorized', verdict['codes'])
@@ -230,25 +230,27 @@ class SeriesTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'frozen threshold'):
             analyze(payload, frozen_thresholds=altered)
 
-    def test_zero_capture_retry_reuses_slot_and_escalates(self):
+    def test_zero_capture_retry_reuses_slot_then_bars_it(self):
         zero = self.payload_copy()['windows'][0]
         for m in zero['members']:
             m['captured'] = False
             m['thermal']['status'] = 'incomplete'
             m['summary'] = None
-        zero['attempt_id'] = 'C1#zero1'
+        zero['attempt_id'] = 'C1#1'
         payload = self.payload_copy()
+        payload['windows'][0]['attempt_id'] = 'C1#2'
         payload['windows'] = [zero, *payload['windows'][:1]]
         fill, _ = analyze(payload)
         self.assertEqual(fill['calibration']['attempted'], 1)
         self.assertEqual(fill['calibration']['zero_capture_refusals'], 1)
         again = copy.deepcopy(zero)
-        again['attempt_id'] = 'C1#zero2'
+        again['attempt_id'] = 'C1#2'
         payload['windows'] = [zero, again]
         fill, _ = analyze(payload)
-        self.assertEqual(fill['calibration']['decision'], 'escalate_to_lead')
+        self.assertEqual(fill['calibration']['decision'], 'continue')
+        self.assertEqual(fill['calibration']['barred_windows'], ['C1#2'])
         payload['windows'].append(self.payload_copy()['windows'][0])
-        with self.assertRaisesRegex(ValueError, 'lead_release'):
+        with self.assertRaisesRegex(ValueError, 'window order'):
             analyze(payload)
 
 

@@ -1,4 +1,4 @@
-# V4 primary engine (Sol), R23g + R23h
+# V4 primary engine (Sol), R23i
 
 2026-11-08. **PROVISIONAL: synthetic qualification, no live study validation.**
 Authority: the lead's engine-r23 brief (A37 and R23-E1/R23-1–4), on
@@ -13,6 +13,51 @@ not scientific certification.
 No Opus recompute code was read. Only the rulings were used for reconciliation.
 No network, model weights, live measurements or Block 5 outcomes were used.
 Coordination state is untouched, per the assignment.
+
+R23i applies release-review F1/F3 and the registered R22-2/R24/R25 rules.
+Authority: `origin/main:RUN_STATE.md` items 234, 236, 238, 239 and 240;
+`origin/align/2026-11-08-v4-r11` at `e36b096fe`,
+`docs/align/pilot_protocol_v4.md` (R22-2/R24). The calibration predicate and
+`slot_of` are ported from that commit's
+`joulewise/align/apple/v4_cadence.py:calibration_stop`; the structural predicate
+follows `scripts/align_v4_next_arm_packet.py:WindowRecord.structural_bar`.
+U3's scope roster follows the same commit's `scripts/align_v4_u3_export.py:ROSTER`.
+
+Calibration now requires **exactly eight admitted windows**. A U1–U3 FAIL,
+failed whole-window capture chain, or a zero-capture slot whose retry is also
+zero bars the entire window, including every member it captured. Barred members
+enter no GPU fit, threshold or U6 pool. C9–C14 replace structural bars only,
+in frozen order after C8; low eligible counts never authorize a reserve. Their
+per-pair seeds are 100–147; T1–T3 retain seeds 66–89. After eight admitted
+windows, either pair below 39 gives `insufficient_calibration`. A seventh bar
+also makes eight unreachable within C14 and returns insufficient, except that
+the cadence's zero-capture escalation takes precedence until a signed lead
+ruling resets it. One zero-capture slot plus its failed retry is one bar;
+it does not itself escalate while replacements remain. Two consecutive
+unretried zero-capture slots still escalate. Provisional bars hold eligibility.
+Supplemental sentinels 23/24 count toward neither capture counts nor calibration.
+
+The export may retain its committed structural `barred` code, or supply the
+completed-chain result as `terminal_result` (`verdict`, `chain_exit_code`). File
+inputs may bind it through `terminal_result_source: {path, sha256}`; a non-GO
+verdict or nonzero exit bars a captured window. The loader verifies and inventories
+that source. Older desk exports without terminal evidence still rely on the
+exporter's committed bar judgment; this engine does not authenticate a native
+terminal chain. Native manifests accept the full C1–C14/T1–T3 allocation and
+retain compatibility with older manifests omitting all unarmed reserves.
+`--through-window` accepts C9–C14. A normal synthetic fixture omits reserves;
+`synthetic.series(reserves=1..6)` materializes them for replacement witnesses.
+
+R25 budgets **22 U3 comparisons**: W1's five, one per C1–C14, and one per
+T1–T3. Every reserve uses the same D sentinel check as a primary C window.
+An A19 W1 contrast with an inadequate eligible token-identical run roster
+returns `verdict: INCONCLUSIVE` and fixed structural
+`reason_code: insufficient_contrast_runs` before fitting. The separate `reason`
+is print-only prose; no arm effect, interval, df or other fit statistics exist
+on that return. Full eight-run delivery/fit behavior is unchanged.
+
+Synthetic witnesses and commands are recorded in
+[`2026-11-08-engine-r23i.md`](../../run_reports/2026-11-08-engine-r23i.md).
 
 R23b applies the 2026-11-08 ADMIT-WITH-FIXES brief on `d3a133cc7`.
 The clarification restricts DC **residuals** to GPU rows; DC-in values print
@@ -155,13 +200,13 @@ exclusions mean modules in `v4_analysis/`.
 | A14 | `acceptance.u4`: cumulative results including T, first evaluation at W≥3; unavailable/ineligible/<3-turn/divergent sentinels skip that window. |
 | A15 | `acceptance.u5`: three actual R1 G0 temperatures, energy OLS with intercept, df=1, 90% t interval, replay sample SD floored at 2.97 J. Designed targets printed; triggers_R20=false. |
 | A16 | Logged pair-level U6 over pool-entered C benign LOTO residuals only; chronological split with extra in late half, CR0 sandwich, 1.645 interval, point-outside FAIL. Scale √(Σ full-fit RSS / Σ full-fit df). Position means need ≥6 trajectories. |
-| A17 | `apple.v4_cadence.calibration_stop` vocabulary/counts; no C6 refusal. Provisional eligibility → pending_final_eligibility. Zero capture does not consume a slot. |
+| A17 | R22-2/R24 `apple.v4_cadence.calibration_stop`: exactly eight admitted windows, C9–C14 only replace structural bars, no low-m top-up. Bars contribute nothing. Provisional eligibility → pending_final_eligibility. A final zero capture awaits its retry; a second zero bars that slot. |
 | A18 | `_test_summary`: one-sided 95% Clopper–Pearson via production incomplete beta; missing assignments retained. |
-| A19 | Exactly eight eligible token-identical W1 runs, second-stage indicator, admission within 2 s. Recorded G1 waiting is an above-E+δ sidecar sample before release. Numbers print even if treatment was not delivered. |
+| A19 | Exactly eight eligible token-identical W1 runs, second-stage indicator, admission within 2 s. Insufficient runs → fixed `insufficient_contrast_runs`, print-only `reason`, no fit statistics. Recorded G1 waiting is an above-E+δ sidecar sample before release. With eight runs, numbers print even if treatment was not delivered. |
 | A20 | `dc.capture/analyze_windows`: benign DC desk actually runs; whole-member and owned integrals, battery-assist disclosure, own five-term h=0 LOTO model. GPU coefficients never transfer. Non-benign rows sealed; comparison presence/status only. Missing DC never selects GPU. |
 | A21 | `raw.member` calls production stamp_mapping over all recorded stamps, anchor widened; optional exported offset_ns checked exactly. `io.strict_json` recovers recorded binary floats; standalone exact conversion retains strings/integers. SampleColumns reproduces adapter float-second elapsed accumulation, epoch addition and start subtraction before Fraction(float) → ns; source lines are cited above. |
-| A22 | U3 heavy-tail trigger uses each difference's zero-centred leave-one-out RMS. |
-| A23 | Only U1–U3 FAIL bars pool entry; INCONCLUSIVE prints and counts. |
+| A22 | U3 heavy-tail trigger uses each difference's zero-centred leave-one-out RMS. R25 includes C9–C14 scopes and N=22 in the series-tail quantile. |
+| A23 | U1–U3 FAIL and R22-2 whole-window capture failure bar pool entry; INCONCLUSIVE prints and counts when otherwise unbarred. |
 | A24 | Barred windows have no GPU fits/scores and no U6 contribution. DC residual fits withhold barred/ineligible members. |
 | A25 | T fits/scores withheld and thresholds null until calibration_complete; prospective freeze checked before opening T sources. |
 | A26 | Undefined eligible C score holds the threshold with nonfinite_calibration_score; m never silently shrinks. |

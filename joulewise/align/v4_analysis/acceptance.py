@@ -11,6 +11,13 @@ from joulewise.align.apple import thermal_desk as td
 from joulewise.align.apple import v4_estimands as estimands
 from . import exclusions as ex
 
+# R25, RUN_STATE 239; e36b096fe:scripts/align_v4_u3_export.py:ROSTER.
+# Budget every possible comparison, including reserves even when unarmed.
+U3_SCOPES = {'W1': {'30B': 4, 'D': 1},
+             **{f'C{i}': {'30B': 0, 'D': 1} for i in range(1, 15)},
+             **{f'T{i}': {'30B': 0, 'D': 1} for i in range(1, 4)}}
+U3_COMPARISONS = sum(sum(row.values()) for row in U3_SCOPES.values())
+
 
 def _series_tail(q, n, tests):
     # w=sqrt(v) removes the chi-square density's origin singularity.
@@ -52,14 +59,15 @@ def u3_derivation(evidence):
     lo, hi = 0., 200.
     for _ in range(64):
         mid = (lo+hi)/2
-        lo, hi = (mid, hi) if _series_tail(mid, len(r), 16) > beta else (lo, mid)
+        lo, hi = (mid, hi) if _series_tail(mid, len(r), U3_COMPARISONS) > beta else (lo, mid)
     bar = hi*s0
     screen = evidence.get('r1_d_screen')
     screen_pass = bool(screen and screen.get('token_identical') is True
                        and screen.get('eligible') is True
                        and abs(screen['relative_difference']) <= 1.5*bar)
     return dict(status='available', n=len(r), rms_relative=s0, q=hi, beta=beta,
-                comparisons=16, d_transfer_factor=1.5, heavy_tail_rule_applied=heavy,
+                comparisons=U3_COMPARISONS, checks_by_window={w: dict(r) for w, r in U3_SCOPES.items()},
+                d_transfer_factor=1.5, heavy_tail_rule_applied=heavy,
                 heavy_tail_rule='R21 A22: abs(r_i) > 3 * zero-centred leave-one-out RMS',
                 relative_bar_30B=bar, relative_bar_D=1.5*bar,
                 d_screen='not_refuted' if screen_pass else 'missing_or_refuted',
@@ -123,7 +131,7 @@ def window_checks(members, derivation, *, window=None):
                         'D' if model == 'qwen3.8-27b' else '30B') if a in by_ordinal and b in by_ordinal else
                  dict(status='inconclusive', reason='fixed replay missing'))
             pairs.append(dict(ordinals=[a, b], **p))
-        # Anchors in C/T are bridge diagnostics, not extra U3 tests (N=16).
+        # Anchors in C/T are bridge diagnostics, not extra U3 tests (R25 N=22).
         check = td.acceptance(rows, v4=True)
         check['U3'] = dict(status=td.combine([p['status'] for p in pairs if p['status'] != 'excluded'])
                           if any(p['status'] != 'excluded' for p in pairs) else 'inconclusive', pairs=pairs)

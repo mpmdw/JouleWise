@@ -234,9 +234,9 @@ class CalibrationStopTests(unittest.TestCase):
         short = [window(f'C{i}', 7, 5) for i in range(1, 8)] + [window('C8', 7, 3)]       # bank 38
         self.assertEqual(cad.calibration_stop(short)['decision'], 'insufficient_calibration')
 
-    def test_lost_whole_window_still_counts_and_can_leave_the_target_unmet(self):
-        # One whole-window loss: 7 x 7 = 49 >= 39 still completes; losing 2 of 8 leaves 42 and completes;
-        # five losses leave 21 and fail closed.
+    def test_captured_unbarred_zero_yield_still_counts_and_can_leave_target_unmet(self):
+        # No structural bar: eligible-member losses alone never arm reserves.
+        # One zero-yield window leaves 49, two leave 42, and five leave 21.
         lost = lambda n: [window(f'C{i}', 7, 7) for i in range(1, 9-n)] + [window(f'L{i}', 0, 0) for i in range(n)]
         self.assertEqual(cad.calibration_stop(lost(1))['decision'], 'calibration_complete')
         self.assertEqual(cad.calibration_stop(lost(2))['decision'], 'calibration_complete')
@@ -294,13 +294,13 @@ class CalibrationStopTests(unittest.TestCase):
                 cad.calibration_stop([bad])
         self.assertEqual(cad.calibration_stop([dict(window('C1', 3, 3), eligible_total=6)])['attempted'], 1)
 
-    def test_two_added_sentinels_do_not_make_capture_counts_impossible(self):
-        # delta2 S2 M1: 22 + 2 added sentinels = 24 captured, still 7 eligible benign per pair.
-        rows = [window(f'C{i}', 7, 7, captured=24) for i in range(1, 9)]
+    def test_two_added_sentinels_count_toward_nothing(self):
+        # R20 delta5: supplemental captures are authenticated but do not count.
+        rows = [window(f'C{i}', 7, 7, captured=22) for i in range(1, 9)]
         self.assertEqual(cad.calibration_stop(rows)['decision'], 'calibration_complete')
-        self.assertEqual(cad.CAPTURED_MAX, 24)
+        self.assertEqual(cad.CAPTURED_MAX, 22)
         with self.assertRaises(ValueError):
-            cad.calibration_stop([window('C1', 7, 7, captured=25)])      # beyond any authorized roster
+            cad.calibration_stop([window('C1', 7, 7, captured=24)])      # includes supplemental captures
 
     def test_calibration_totals_in_the_packet_must_sum_from_the_rows(self):
         rows = [window(f'C{i}', 7, 7) for i in range(1, 9)]

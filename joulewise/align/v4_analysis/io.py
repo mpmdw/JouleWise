@@ -101,7 +101,8 @@ def load(path, *, calibration_only=False, through_window=None, cache_dir=None, w
             and not any(w['window'] == 'W1' for w in payload['windows'])):
         raise ValueError('selection-only W1 refused; W1 must be a window record')
     if through_window is not None:
-        order = ['W1', *('C'+str(i) for i in range(1,9)), *('T'+str(i) for i in range(1,4))]
+        from .engine import ORDER
+        order = ['W1', *ORDER]
         if through_window not in order:
             raise ValueError('window prefix differs')
         payload['windows'] = [w for w in payload['windows'] if order.index(w['window']) <= order.index(through_window)]
@@ -120,6 +121,14 @@ def load(path, *, calibration_only=False, through_window=None, cache_dir=None, w
     for window in payload['windows']:
         if calibration_only and window['window'].startswith('T'):
             continue
+        if 'terminal_result_source' in window:
+            ref = window['terminal_result_source']
+            identity = (ref['path'], ref['sha256'])
+            if identity not in sources:
+                sources[identity] = read_source(root, ref)
+            window['terminal_result'] = sources[identity]
+            if not any(r['path'] == ref['path'] and r['sha256'] == ref['sha256'] for r in census):
+                census.append(dict(path=ref['path'], sha256=ref['sha256']))
         if 'members' in window:
             raise ValueError('file input requires source-bound desk exports')
         for slot in window['roster']:
