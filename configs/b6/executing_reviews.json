@@ -1216,5 +1216,59 @@
         "paper": "docs/align/reviews/2026-11-08-harvest-off-review-citations.md"
       }
     ]
+  },
+  {
+    "commit": "3c9c47a4e47a272429d37685d1b136918b9e5610",
+    "number_bearing_paths": [
+      "joulewise/b5/driver.py",
+      "joulewise/bundle.py",
+      "joulewise/controller.py"
+    ],
+    "change": "timing receipts build (Sol 6.1): boundary-only markers in the driver, bundle writer and controller",
+    "executing_reviews": [
+      {
+        "reviewer": "Opus 5.5 cold review of the timing-receipts fix delta (non-author; the build and fix are Sol 6.1), ADMIT-WITH-FIXES; summarised from the lead's relay (the report is not on a branch)",
+        "covered": "fix delta ed9fd3ca1/bec6c8ae3 against build 3c9c47a4e: the three HIGH findings of the first Opus review (53740ab65, HOLD) closed, capture bytes unchanged; MEDIUM-1/2 and LOW-1/2/3/5/6 fixed at f455366162ffab6bcf7ecc4b5039f3b7d37f0c15 (not re-reviewed); paper sha256 7d526b2db8b9fcb4844bb778fb3fdc75dea4ac2516bfa8b3c610e3c84f7e1baf",
+        "paper": "docs/align/reviews/2026-11-08-timing-receipts-opus-cold-review.md"
+      },
+      {
+        "reviewer": "Sol 6.1 delta re-review (non-author of the Opus review; Sol built the change), aba58bdf0, ADMIT_WITH_FIXES",
+        "covered": "docs/perf/timing-receipts-rereview-sol.md sha256 17a710e751b8762f8d4bb6f810b75fb16b325198a1c9a18fb2fd6528f4b0e690 on perf/2026-11-08-timing-receipts-rereview @ 9c4758dc9, cited in the paper below; paper sha256 7d526b2db8b9fcb4844bb778fb3fdc75dea4ac2516bfa8b3c610e3c84f7e1baf",
+        "paper": "docs/align/reviews/2026-11-08-timing-receipts-opus-cold-review.md"
+      }
+    ]
+  },
+  {
+    "commit": "ed9fd3ca16fa7c634657be03dc4f0a5c4cf22fc6",
+    "number_bearing_paths": [
+      "joulewise/b5/chain.py",
+      "joulewise/bundle.py",
+      "joulewise/controller.py"
+    ],
+    "change": "timing receipts fix (Sol 6.1): receipt ordering, journal ownership, synthetic timing attribution",
+    "executing_reviews": [
+      {
+        "reviewer": "Opus 5.5 cold review of the timing-receipts fix delta (non-author; the build and fix are Sol 6.1), ADMIT-WITH-FIXES; summarised from the lead's relay (the report is not on a branch)",
+        "covered": "fix delta ed9fd3ca1/bec6c8ae3 against build 3c9c47a4e: the three HIGH findings of the first Opus review (53740ab65, HOLD) closed, capture bytes unchanged; MEDIUM-1/2 and LOW-1/2/3/5/6 fixed at f455366162ffab6bcf7ecc4b5039f3b7d37f0c15 (not re-reviewed); paper sha256 7d526b2db8b9fcb4844bb778fb3fdc75dea4ac2516bfa8b3c610e3c84f7e1baf",
+        "paper": "docs/align/reviews/2026-11-08-timing-receipts-opus-cold-review.md"
+      },
+      {
+        "reviewer": "Sol 6.1 delta re-review (non-author of the Opus review; Sol built the change), aba58bdf0, ADMIT_WITH_FIXES",
+        "covered": "docs/perf/timing-receipts-rereview-sol.md sha256 17a710e751b8762f8d4bb6f810b75fb16b325198a1c9a18fb2fd6528f4b0e690 on perf/2026-11-08-timing-receipts-rereview @ 9c4758dc9, cited in the paper below; paper sha256 7d526b2db8b9fcb4844bb778fb3fdc75dea4ac2516bfa8b3c610e3c84f7e1baf",
+        "paper": "docs/align/reviews/2026-11-08-timing-receipts-opus-cold-review.md"
+      }
+    ]
+  },
+  {
+    "commit": "c84df94bfd38e7c29b083fe6629217eddaab94b3",
+    "number_bearing_paths": [],
+    "change": "merge of the harvest-off lane d5dc1198c into the v4 line (combines the lane's harvest/powermetrics changes with the timing-receipts bundle/controller/driver/chain changes)",
+    "executing_reviews": [
+      {
+        "reviewer": "Sol 6.1 review of the merge (non-author), HOLD on F1 (R17 finality vs R22-1 disclosure records); repaired at f455366162ffab6bcf7ecc4b5039f3b7d37f0c15, not re-reviewed",
+        "covered": "docs/align/v4/MERGE-C84-REVIEW-sol.md sha256 fdfef957a8307a9ec67db3b3ceb77392e9972f9e9fc7159b6c5e3e43a4e68ca5 on align/2026-11-08-merge-c84-sol @ 71a18a46b; all other changed paths byte-identical to their parent, five conflict resolutions preserved; paper sha256 f9b4410c4d15d77dfc137222af6d1425690113a9039075ba8ae33c137f71e94a",
+        "paper": "docs/align/reviews/2026-11-08-merge-c84-sol-review.md"
+      }
+    ]
   }
 ]
