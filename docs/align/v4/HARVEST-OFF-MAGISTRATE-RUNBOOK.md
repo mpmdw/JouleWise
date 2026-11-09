@@ -53,25 +53,46 @@ What it binds (R17 review F1 and delta D1-D4), besides every tree entry and the 
 - **A link to a missing path** stays bound as missing.
 - **The name `.external-staged`** is reserved; a session containing it refuses.
 
-**1c. Pack the verified compressed copy.** The calibration ledger the window appended travels with it. `--finalized-manifest` is required: without it, pack refuses.
+**1c. Pack the verified compressed copy: the window's ONE pack** (lead ruling 2026-11-08). The Air-offload tool consumes this pack; it does not pack again. The calibration ledger the window appended travels with it. `--finalized-manifest` is required: without it, pack refuses.
 
 ```sh
-$RUN pack --session-root "$S" --out "$OUT/offload" --finalized-manifest "$OUT/finalized_manifest.json"
-cp "$OUT/finalized_manifest.json" "$OUT/offload/"
+$RUN pack --session-root "$S" --out "$OUT/offload" --finalized-manifest "$OUT/finalized_manifest.json" \
+          --level 3 --threads 4
 ```
+
+- zstd level 3 with 4 threads, which are also the CLI defaults. They limit cool-down CPU and heat on the MBP.
+- Measured: about 69 s for a 26.4 GB D window (`docs/ops/AIR-OFFLOAD.md` §8).
+- If cool-down lengthens measurably, drop to `--level 1 --threads 2`.
+- Do not copy anything else into `$OUT/offload/`: the offload tool sends the finalized manifest itself.
 
 Pack re-verifies the closure on the MBP (checkout identity, ledger and other closure bytes) before it writes anything.
 
-**1d. Offload** `$OUT/offload/` to the Air during cool-down. Use the air-offload lane's authenticated route (`ops/2026-11-08-air-offload`, under its cool-down lease). The payload is about 0.3-2.6 GB.
-- The transfer must finish before the dwell starts.
-- The MBP originals stay until the lane's two verified copies exist; nothing here deletes them.
+**1d. Offload with the Air-offload tool** at cool-down start. This replaces the earlier separate transfer.
+- The tool is on `ops/2026-11-08-air-offload-merged`, and its runbook is `docs/ops/AIR-OFFLOAD.md`: §4 has the per-window sequence and §1a the consumed pack.
+- From the MBP, in one call:
+
+```sh
+offload_window.py run --state-root "$OFFLOAD_STATE" --window-id "$K" --record-root "$S" \
+    --record-manifest "$OUT/finalized_manifest.json" --record-manifest-sha256 "$H" \
+    --harvest-pack "$OUT/offload" --terminal "$TERMINAL" \
+    --deadline-epoch "$PLANNED_DWELL_START_MINUS_120"
+# exit 0 = verified on the Air; it prints the span. Without a planned dwell start, t_c + 900 - 120 is safe.
+```
+
+- `$TERMINAL` is the window's `result.json`. It must lie inside the finalized manifest's closure, as that runbook's §1a requires (for example `night/result.json`, relative to the record root).
+
+- The tool checks the pack against the committed digest `H` before sending anything. It pushes the payload, `MANIFEST.json` and the finalized manifest (as `record-manifest.bin`) into `/Volumes/JW-EXT/jw-offload/inbox/$K` on the Air, and the Air verifies every member there.
+- Commit the span (`$OFFLOAD_STATE/$K/timing/offload-span.json`) into the record branch, as its §4 says.
+- The transfer must finish before the dwell starts. Before the arm, run its `triage --dwell-start-epoch` check.
+- The MBP originals and the custody objects stay until the tool's two verified copies exist. Its release step deletes them; nothing here does.
 
 ## 2. Air, during the MBP cool-down
 
-**2a. Restore** at the same path, record-bound. `H` is the digest from 1b. Both binding arguments are required:
+**2a. Restore** at the same path, record-bound, **in place from the offload tool's verified copy** (`docs/ops/AIR-OFFLOAD.md` §1a). `H` is the digest from 1b. Both binding arguments are required:
 
 ```sh
-$RUN unpack --offload "$OUT/offload" --finalized-manifest "$OUT/offload/finalized_manifest.json" \
+$RUN unpack --offload "/Volumes/JW-EXT/jw-offload/inbox/$K" \
+            --finalized-manifest "/Volumes/JW-EXT/jw-offload/inbox/$K/record-manifest.bin" \
             --finalized-sha256 "$H"
 ```
 

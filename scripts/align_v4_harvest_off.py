@@ -2,7 +2,7 @@
 """Harvest off the MBP for one finalized ALIGN v4 window (docs/align/v4/HARVEST-OFF-opus.md).
 
 MBP, at finalize:      finalize-manifest --session-root S --out M.json (commit M.json's sha256 with the record)
-MBP, after finalize:   pack    --session-root S --out O --finalized-manifest M.json (verified compressed raw copy)
+MBP, after finalize:   pack    --session-root S --out O --finalized-manifest M.json (the window's one pack; zstd -3 -T4)
 Air, during cool-down: unpack  --offload O --finalized-manifest M.json --finalized-sha256 H (same path, record-bound)
 The record binding is REQUIRED on pack and unpack (R17 review F2): without it they refuse.
                        triage  --session-root S --window-id W (light: thermal_escalation, member_eligibility)
@@ -483,7 +483,9 @@ def main(argv=None, run=subprocess.run):
     p.add_argument('--session-root', type=Path, required=True)
     p.add_argument('--out', type=Path, required=True)
     p.add_argument('--level', type=int, default=harvest_offload.DEFAULT_LEVEL)
-    p.add_argument('--threads', type=int, default=0)
+    # Lead ruling 2026-11-08 (one pack per window): zstd -3 with 4 threads, not every core, to limit
+    # cool-down CPU and heat on the MBP; the Air-offload tool consumes this pack.
+    p.add_argument('--threads', type=int, default=4)
     p.add_argument('--finalized-manifest', type=Path)
     p = sub.add_parser('unpack')
     p.add_argument('--offload', type=Path, required=True)
