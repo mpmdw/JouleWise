@@ -142,7 +142,9 @@ class ConfigPinKitChecks(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             row = prequal.check_kit(ctx(tmp))
             self.assertEqual(row["status"], "pass", row["problems"])
-            self.assertIn("R0.reasoning_effort", row["pending_inputs"])
+            # R0 passed and its rung is filled (RUN_STATE 218); R1 values stay pending until R1 closes.
+            self.assertNotIn("R0.reasoning_effort", row["pending_inputs"])
+            self.assertIn("R1.B_D", row["pending_inputs"])
             self.assertFalse([p for p in row["pending_inputs"] if p.startswith("WP11.")])
             self.assertEqual(row["d_identity_folded_sha256"],
                              "a8d1c5c963787dd9dc524912e05d409172124da773d196e8f5123820b4c36b30")
@@ -391,6 +393,41 @@ class LauncherDryRun(unittest.TestCase):
                     patch.object(prequal, "MODEL_CHECKS", ()):
                 report = prequal.run(ctx(tmp))
         self.assertEqual(report["status"], "fail")
+
+
+class RunnerArgvSemantics(unittest.TestCase):
+    """The launcher check compares runner.json semantically (opt-in audit 2026-11-08: origin/main
+    274e1e7a7 added a default --keep-going and the exact-list check false-failed)."""
+
+    PY, SCRIPT = "/v/bin/python", "/repo/scripts/align_r0_checks.py"
+    REQUIRED = {"--config": "/repo/c.json", "--output": "/out"}
+
+    def check(self, runner):
+        return prequal.check_runner_argv(runner, python_bin=self.PY, script=self.SCRIPT, required=self.REQUIRED)
+
+    def base(self):
+        return [self.PY, self.SCRIPT, "--config", "/repo/c.json", "--output", "/out"]
+
+    def test_exact_old_list_and_keep_going_and_checks_subset_pass(self):
+        for runner in (self.base(), self.base() + ["--keep-going"], self.base() + ["--checks", "load,smc", "--keep-going"],
+                       [self.PY, self.SCRIPT, "--keep-going", "--output=/out", "--config", "/repo/c.json"]):
+            with self.subTest(runner=runner):
+                self.assertEqual(self.check(runner)["problems"], [])
+
+    def test_wrong_interpreter_missing_or_wrong_required_and_forbidden_flags_fail(self):
+        cases = {"resolved interpreter": ["/opt/homebrew/bin/python3.13", *self.base()[1:]],
+                 "missing --config": [self.PY, self.SCRIPT, "--output", "/out"],
+                 "wrong --output": [self.PY, self.SCRIPT, "--config", "/repo/c.json", "--output", "/elsewhere"],
+                 "forbidden flag": self.base() + ["--skip-quiet-guard"],
+                 "wrong script": [self.PY, "/repo/scripts/other.py", *self.base()[2:]],
+                 "duplicate": self.base() + ["--output", "/out"]}
+        for name, runner in cases.items():
+            with self.subTest(name):
+                self.assertTrue(self.check(runner)["problems"], name)
+
+    def test_unknown_flags_are_listed_not_failed(self):
+        row = self.check(self.base() + ["--verbose"])
+        self.assertEqual((row["problems"], row["extra_flags"]), ([], ["--verbose"]))
 
 
 class Cli(unittest.TestCase):

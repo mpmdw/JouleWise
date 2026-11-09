@@ -1,0 +1,38 @@
+{
+  "schema": "joulewise.align_v4.w1_smoke.v1",
+  "label": "smoke",
+  "registrable": false,
+  "pooled": false,
+  "analysed": false,
+  "authority": "RUN_STATE 219 (native W1 smoke kit, <=45 min, labelled, non-registrable) and 220 (Sol and Opus build independently, then agree)",
+  "budget_s": 2700,
+  "min_lead_at_arm_s": 240,
+  "keep": {
+    "align-v4-reference-start": 1,
+    "align-v4-episodes-a": 1
+  },
+  "keep_note": "reference-start keeps one 1.5B NEG-8 window reference (idle 57.6 s; the meter-kill target); episodes-a keeps W1 ordinal 1 (anchor, 30B, idle 300 s, planning member_s 783 s; the CPU-contender target and the clean KM003C member, recorded in the restarted stream). Bound collection, bound derivation, midpoint, episodes-b and reference-end are removed by joulewise.b6.smoke.reduce_tree; the bracket reservation, both calibration captures, the whole-window verdict and backup stay.",
+  "fault_volume_name": "JWSMOKE",
+  "in_window_faults": {
+    "meter_kill": {
+      "stage": "align-v4-reference-start",
+      "after_bundle_s": 90,
+      "note": "reference idle is 57.6 s (about 75 s of capture); +90 s is inside its request"
+    },
+    "cpu_contender": {
+      "stage": "align-v4-episodes-a",
+      "after_bundle_s": 390,
+      "duration_s": 45,
+      "note": "anchor idle is 300 s (sampling.idle_seconds); +90 s lands inside the measured request"
+    },
+    "note": "the meter is killed in the first member, so the W1 member runs in the restarted stream, which is SIGTERM-closed with a trailer: its DC must be available. A reader killed later would void DC for every earlier member of its stream (PREQUAL km003c-crash-radius)."
+  },
+  "production_roots": [
+    "~/night-align",
+    "~/night-custody",
+    "~/night-archive"
+  ],
+  "production_roots_note": "Besides the measurement checkout and wherever its runs/ resolves: production window run, custody and archive parents. Compared as strings only, never opened or listed.",
+  "arm_reserve_s": 1800,
+  "arm_reserve_note": "the main window is armed only with at least this much of budget_s left (t0 lead, dwell, calibrations, two members, close); otherwise the smoke stops unarmed"
+}
