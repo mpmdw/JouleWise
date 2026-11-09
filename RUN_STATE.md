@@ -1042,6 +1042,36 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+243. **Laptop lead (interactive session 1544c617), 2026-11-08 17:05 PST: Air-offload and harvest-off ADMITTED in software; R26 amendment; main CI green.**
+- **Air-offload ADMITTED in software** at `ops/2026-11-08-air-offload-merged` @ `b5af05e12`.
+  - Review chain: Sol seats 1/2, then re-review delta seats 1/2, then final delta2 seats 1/2. Every finding is fixed, and the seats' witnesses are inverted into required-property tests.
+  - 173 tests across six modules pass, and the real-SSD end-to-end run passes.
+  - Deletion path:
+    - one global state-root lock (pid-owned, so fork re-entry is refused);
+    - detach-by-rename into a journaled quarantine with re-verification before unlink;
+    - lstat type checks;
+    - the consumed pack must carry every `byte_bound_inputs()` entry and the bound directory list;
+    - `.external` is reserved;
+    - the pressure route is deleted (pressure only holds).
+  - The accepted residual is LOW: a same-inode write through an already-open fd that resets mtime. Finalized records are immutable.
+  - **Before the first real window:**
+    - Ed runs `sudo bash scripts/offload_setup_air.sh` (JW-EXT ownership, the `jw-offload` account, the sshd Match block, the iCloud agent) and turns on Remote Login for that account;
+    - the magistrate runs the MBP setup, smoke and one iCloud round trip;
+    - the N1 census;
+    - the magistrate wires the lease and loop lock (until then the fail-closed probe is the only exclusion).
+- **Harvest-off** at `align/2026-11-08-harvest-off-fix` @ `d5dc1198c`:
+  - one pack per window (zstd -3 -T4), consumed by the offload tool;
+  - the pack carries every byte-bound closure input and the bound directories, including empty ones;
+  - terminal evidence outside the session is declared;
+  - `.external` is reserved;
+  - fresh-Air restore with every MBP-side external deleted is proven.
+- **R26 amendment (blind):** whenever h_star is null, `undefined_missing_grid_doses` lists EVERY unobserved grid dose, ascending. A null with an empty list means the whole grid was observed with no exceedance. This came from the r23i rehearsal's three short-trajectory C-carrier rows; the engine already does this, and the recompute changes.
+- **Main CI green:** #706 (157a1d4c0) fixed the timing map and the duplicate-module-identity fixture-cache defect in `test_floor_kept_units` (no product change). #705 (8101567f1) adds the nightly opt-in workflow and closes the opt-in-only gap.
+- **Engine:** `engine-r23j` (Opus patch on r23i) is in progress:
+  - declared bars must be reproducible;
+  - release requires `terminal_result_source` and the full 18-window R24 allocation;
+  - `v4_cadence.py` is byte-identical to the v4 line.
+
 242. **Laptop lead (interactive session 1544c617), 2026-11-08 16:52 PST: CORRECTION to item 241 ("engine FROZEN at r23h"); release reviews HOLD on a shared calibration defect; v4 line and offload progress.**
 - **Correction.** Both Sol release-tools review seats (`align/2026-11-08-release-tools-sol{1,2}`) found that BOTH builds still applied the PRE-R22 calibration rule. A barred window counted, and C9-C14 were refused.
   - Example: C1 barred plus C2-C8 healthy reported `calibration_complete` with 7 admitted windows, and a valid C9 was refused as a ninth.
