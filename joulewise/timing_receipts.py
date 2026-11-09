@@ -1,9 +1,13 @@
 """Boundary observations only. Ledger construction belongs to the offline reader.
 
-Writers receive an already-open journal's append callback. They never open a
-file, flush, fsync, launch a process or start a thread. The owner retains its
-existing durability boundaries. Missing ends (including process death) stay
-missing; an emission error is reported on stderr, never an admission decision.
+Writers receive an already-open journal's append callback. A Writer itself never
+opens a file, fsyncs, launches a process or starts a thread. Inside a measured
+member the callback only buffers in memory and the owner's existing drain
+persists it. Turnaround owners outside measured time (the driver's night.log
+appends, the chain's settle markers, the controller's drain) may flush the line
+they append; none adds an fsync. The owner retains its existing durability
+boundaries. Missing ends (including process death) stay missing; an emission
+error is reported on stderr, never an admission decision.
 """
 from __future__ import annotations
 

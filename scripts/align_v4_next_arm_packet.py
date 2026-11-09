@@ -518,18 +518,6 @@ def attempts(chain):
                 consumed[slot] = 'barred'
 
 
-def _exclusion_map(entries):
-    """run id -> sorted distinct codes, or None when the entries are not a well-formed list."""
-    if not isinstance(entries, list):
-        return None
-    out = {}
-    for entry in entries:
-        if not isinstance(entry, dict) or not isinstance(entry.get('run_id'), str) or not isinstance(entry.get('codes'), list):
-            return None
-        out[entry['run_id']] = sorted(set(out.get(entry['run_id'], [])) | {str(c) for c in entry['codes']})
-    return out
-
-
 def effective_desk(desk, exclusions):
     """The native desk with disclosure-only (contention) exclusions neutralized (R22-1), or a refusal.
 
@@ -544,14 +532,10 @@ def effective_desk(desk, exclusions):
     from joulewise.align.apple import v4_contention
     if not isinstance(desk, dict) or not isinstance(exclusions, dict) or not isinstance(exclusions.get('members_excluded'), list):
         return desk
-    harvest = _exclusion_map(exclusions['members_excluded'])
+    harvest = v4_contention.exclusion_map(exclusions['members_excluded'])
     if not harvest or any(v4_contention.split_codes(codes)[0] or not codes for codes in harvest.values()):
         return desk                                     # nothing excluded, or a real/unknown exclusion: the desk's verdict stands
-    own = _exclusion_map(desk.get('members_excluded') if 'members_excluded' in desk else [])
-    disclosed = desk.get('members_disclosure_only')
-    if own is not None and isinstance(disclosed, dict):
-        for run_id, codes in disclosed.items():
-            own[run_id] = sorted(set(own.get(run_id, [])) | {str(c) for c in (codes if isinstance(codes, list) else [])})
+    own = v4_contention.recorded_exclusion_map(desk)       # the shared, disclosure-aware record (also used by R17 finality)
     require(own == harvest, 'desk and committed harvest exclusions disagree (inconsistent window record): '
             f'desk {own!r} vs harvest {harvest!r}')
     checks = dict(desk.get('checks') or {})

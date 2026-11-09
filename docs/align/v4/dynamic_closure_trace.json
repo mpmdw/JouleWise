@@ -27,6 +27,7 @@
    "joulewise/align/apple/external_volume.py",
    "joulewise/align/apple/generation.py",
    "joulewise/align/apple/km003c.py",
+   "joulewise/align/apple/light_triage.py",
    "joulewise/align/apple/pilot.py",
    "joulewise/align/apple/powermode.py",
    "joulewise/align/apple/prompt_cache.py",
@@ -160,6 +161,7 @@
    "joulewise/salvage_dangler.py",
    "joulewise/sampler_teardown.py",
    "joulewise/schemas.py",
+   "joulewise/session_structure.py",
    "joulewise/suite.py",
    "joulewise/t0_rehearsal.py",
    "joulewise/timing_receipts.py",
@@ -210,6 +212,7 @@
    "joulewise/align/apple/external_volume.py",
    "joulewise/align/apple/generation.py",
    "joulewise/align/apple/km003c.py",
+   "joulewise/align/apple/light_triage.py",
    "joulewise/align/apple/pilot.py",
    "joulewise/align/apple/powermode.py",
    "joulewise/align/apple/prompt_cache.py",
@@ -341,6 +344,7 @@
    "joulewise/salvage_dangler.py",
    "joulewise/sampler_teardown.py",
    "joulewise/schemas.py",
+   "joulewise/session_structure.py",
    "joulewise/suite.py",
    "joulewise/t0_rehearsal.py",
    "joulewise/timing_receipts.py",
@@ -365,6 +369,7 @@
    "scripts/bytes_h_session.py",
    "scripts/fixture_orphan_census.py",
    "scripts/generate_matrix.py",
+   "scripts/run_night.py",
    "scripts/validate_align_v4_w1_plan.py"
   ],
   "opened": [
@@ -398,8 +403,10 @@
    "joulewise/align/apple/external_volume.py",
    "joulewise/align/apple/generation.py",
    "joulewise/align/apple/km003c.py",
+   "joulewise/align/apple/light_triage.py",
    "joulewise/align/apple/pilot.py",
    "joulewise/align/apple/pilot_analysis.py",
+   "joulewise/align/apple/pm_reduce.py",
    "joulewise/align/apple/powermode.py",
    "joulewise/align/apple/prompt_cache.py",
    "joulewise/align/apple/r1_runtime.py",
@@ -414,6 +421,7 @@
    "joulewise/align/apple/thermal.py",
    "joulewise/align/apple/thermal_desk.py",
    "joulewise/align/apple/thermal_gates.py",
+   "joulewise/align/apple/turn_table.py",
    "joulewise/align/apple/v4_balance.py",
    "joulewise/align/apple/v4_battery.py",
    "joulewise/align/apple/v4_cadence.py",
@@ -475,6 +483,8 @@
    "joulewise/align/shade/upstream.py",
    "joulewise/align/stats.py",
    "joulewise/align/tamper.py",
+   "joulewise/align/w1_prequal.py",
+   "joulewise/align/w1_smoke.py",
    "joulewise/align/window_timing.py",
    "joulewise/analysis_engine/__init__.py",
    "joulewise/analysis_engine/artifact.py",
@@ -585,6 +595,7 @@
    "joulewise/floor_extraction.py",
    "joulewise/floor_mint_estimator.py",
    "joulewise/gensuite/__init__.py",
+   "joulewise/harvest_profile.py",
    "joulewise/hazards/__init__.py",
    "joulewise/hazards/arm.py",
    "joulewise/hazards/base.py",
@@ -680,7 +691,9 @@
    "scripts/align_v4_thermal_desk.py",
    "scripts/align_v4_u3_bar.py",
    "scripts/align_v4_u3_export.py",
+   "scripts/align_v4_u3_scope_comparison.py",
    "scripts/align_v4_verify_d_pins.py",
+   "scripts/align_v4_w1_smoke.py",
    "scripts/align_v4_w1_synthetic.py",
    "scripts/align_v4_wp18_fixtures.py",
    "scripts/align_v4_wp19.py",
@@ -793,6 +806,10 @@
    "scripts/night_chains/align_r1_rehearsal.zsh",
    "scripts/night_chains/calibration_derivation_only.zsh",
    "scripts/night_chains/quiet_predicate_evidence.zsh",
+   "scripts/offload_bench.py",
+   "scripts/offload_setup_air.sh",
+   "scripts/offload_setup_mbp.sh",
+   "scripts/offload_window.py",
    "scripts/pack_capsule.py",
    "scripts/pack_stopping.py",
    "scripts/package_bundle_pack.py",
@@ -1011,6 +1028,7 @@
   "joulewise/align/apple/external_volume.py",
   "joulewise/align/apple/generation.py",
   "joulewise/align/apple/km003c.py",
+  "joulewise/align/apple/light_triage.py",
   "joulewise/align/apple/pilot.py",
   "joulewise/align/apple/powermode.py",
   "joulewise/align/apple/prompt_cache.py",
@@ -1144,6 +1162,7 @@
   "joulewise/salvage_dangler.py",
   "joulewise/sampler_teardown.py",
   "joulewise/schemas.py",
+  "joulewise/session_structure.py",
   "joulewise/suite.py",
   "joulewise/t0_rehearsal.py",
   "joulewise/timing_receipts.py",
@@ -1180,12 +1199,12 @@
   "arm_install_session": {
    "new_paths": 1,
    "ok": true,
-   "tests_run": 145
+   "tests_run": 161
   },
   "dct_series_window": {
-   "new_paths": 145,
+   "new_paths": 146,
    "ok": true,
-   "tests_run": 52
+   "tests_run": 56
   },
   "desk_dc_session": {
    "new_paths": 1,
@@ -1205,7 +1224,12 @@
   "r1_to_w1_chain": {
    "new_paths": 2,
    "ok": true,
-   "tests_run": 47
+   "tests_run": 49
+  },
+  "timing_receipts_delta": {
+   "new_paths": 1,
+   "ok": true,
+   "tests_run": 3
   },
   "wp22_synthetic_w1_chain": {
    "new_paths": 29,

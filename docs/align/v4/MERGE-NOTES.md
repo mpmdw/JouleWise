@@ -26,3 +26,36 @@ lane changed one of them after `5cce0c677`.
 `tests/align/test_measurement_core_boundary.py` and `tests/align/test_thermal_sidecar.py`. The merge to `main`
 also needs a cited `repin` for the sealed packs that pin `joulewise/adapters/powermetrics.py`
 (`document_memo`); `python3 scripts/repin.py --check` is stale for them until then.
+
+## Timing receipts: chain settle text changed (STRICT re-registration needed)
+
+The Opus cold review of the timing-receipts fix delta (`docs/align/reviews/2026-11-08-timing-receipts-opus-cold-review.md`)
+led to a change of the generated chain text: `settle()` in `joulewise/b5/chain.py` is now an unconditional
+`/bin/sleep "$SETTLE_S"` with two marker writes around it from an inline stdlib-only helper
+(`B5_SETTLE_MARK_PY`, from `SETTLE_MARK_HELPER`), replacing the earlier `B5_SETTLE_PY` package-importing helper.
+`joulewise/b5/chain.py`, `scripts/run_night.py`, `scripts/align_v4_session.py` and `joulewise/hazards/arm.py` are
+all in the registered closure, so their bytes changed under the registration: the STRICT re-registration (the
+receipt over the artifact set, with the regenerated chain/night plan text) must be redone from this commit
+before any window arms. Nothing was re-registered here.
+
+## Merge c84df94bf: R17 finality and R22-1 disclosure-only records
+
+The Sol review of the harvest-off merge (`docs/align/v4/MERGE-C84-REVIEW-sol.md`, branch
+`align/2026-11-08-merge-c84-sol` @ `71a18a46b`) held on one defect: R17 finality
+(`light_triage.final_adjudication_error`, shared by `cmd_final` and `WindowRecord`) compared the desk's
+`members_excluded` with `exclusions.json` directly, so a valid contention-only desk (`members_excluded: []`,
+`members_disclosure_only` set) could never be final. The comparison is now one function,
+`v4_contention.recorded_exclusion_map` / `records_agree_with_harvest`, used by both finality and
+`effective_desk`: the desk's and PILOT's `members_excluded` union `members_disclosure_only` must equal the
+harvest's exclusions (same members, same codes). Real exclusions still have to agree exactly. The witness module
+`tests/align/test_merge_c84_sol.py` is in unmodified and green; `tests/align/test_final_disclosure_agreement.py`
+adds the mixed and real-exclusion controls.
+
+## Dynamic closure trace
+
+The trace was regenerated with the `timing_receipts_delta` scenario restored (Opus LOW-5). Executed paths grew by
+`joulewise/align/apple/light_triage.py` and `joulewise/session_structure.py`, which the harvest-off lane already
+added to the registered closure. `joulewise/align/apple/harvest_offload.py` and `scripts/align_v4_harvest_off.py`
+(post-window pack tooling the lane deliberately kept out of `EXECUTED_CLOSURE`) are imported by
+`tests/align/test_v4_next_arm_packet.py` only to assert equal constants, so the trace script now lists them in
+`EXCLUDED_FILES` rather than reporting them executed-but-unbound. The closure itself is unchanged.

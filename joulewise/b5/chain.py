@@ -934,29 +934,43 @@ def runbook_screen(runbook_text: str) -> str:
     return block
 
 
-SETTLE_HELPER = r"""
+# The settle never depends on a package import (Opus cold review MEDIUM-1): the sleep is an unconditional
+# /bin/sleep for the registered duration. Two marker writes surround it from this inline stdlib-only writer
+# (os/time/json/sys only); every marker operation is inside try/except, so a failure can only make the helper
+# exit 1 (the chain then notes ``settle_marker_failed``) and never touches the sleep. Rows have the
+# ``joulewise.timing_boundary.v1`` shape that ``joulewise.timing_receipts.project`` reads. The ``start``
+# call prints the producer id; ``end`` takes it back with the sleep's return code.
+SETTLE_MARK_HELPER = r"""
 import json, os, sys, time
-from joulewise import timing_receipts
-journal = None
-writer = None
 try:
+    action, log, requested = sys.argv[1], sys.argv[2], float(sys.argv[3])
+    before = time.monotonic_ns()
+    epoch = time.time_ns()
+    after = time.monotonic_ns()
+    producer_id = f"chain:{os.getpid()}:{before}" if action == "start" else sys.argv[4]
+    row = {"schema": "joulewise.timing_boundary.v1", "kind": "timing_boundary", "producer": "chain",
+           "plan_id": None, "member": None, "attempt": None, "boot_session_id": None,
+           "clock_domain": "host-monotonic", "producer_id": producer_id,
+           "wall_resolution_s": time.get_clock_info("time").resolution,
+           "monotonic_resolution_s": time.get_clock_info("monotonic").resolution,
+           "sequence": 1 if action == "start" else 2, "event": action, "span_id": producer_id + ":1",
+           "parent_span_id": None, "phase": "idle", "activity": "chain_settle", "stage": None,
+           "epoch_ns": epoch, "monotonic_before_ns": before, "monotonic_after_ns": after}
+    if action == "start":
+        row["requested_s"] = requested
+    else:
+        rc = int(sys.argv[5])
+        row.update(status="complete" if rc == 0 else "error", rc=rc)
+    fd = os.open(log, os.O_WRONLY | os.O_APPEND)
     try:
-        journal = os.fdopen(os.open(sys.argv[1], os.O_WRONLY | os.O_APPEND), "w")
-        def append(row):
-            journal.write(json.dumps(row, sort_keys=True) + "\n")
-            journal.flush()
-        writer = timing_receipts.Writer(append, producer="chain")
-    except Exception as error:
-        sys.stderr.write(f"timing journal unavailable: {error}\n")
-    with timing_receipts.bind(writer), \
-         timing_receipts.span("idle", "chain_settle", requested_s=float(sys.argv[2])):
-        time.sleep(float(sys.argv[2]))
-finally:
-    if journal is not None:
-        try:
-            journal.close()
-        except OSError as error:
-            sys.stderr.write(f"timing journal close failed: {error}\n")
+        os.write(fd, (json.dumps(row, sort_keys=True) + "\n").encode())
+    finally:
+        os.close(fd)
+    if action == "start":
+        sys.stdout.write(producer_id)
+except Exception as error:
+    sys.stderr.write(f"settle marker unavailable: {error}\n")
+    sys.exit(1)
 """
 
 
@@ -964,9 +978,18 @@ finally:
 _PRELUDE_FUNCTIONS = r"""stamp() { TZ=UTC /bin/date '+%Y-%m-%dT%H:%M:%SZ'; }
 timestamp() { stamp; }
 note() { print -r -- "$(stamp) $*" >> "$CHAIN_LOG"; }
-# Replace the existing sleep process with a stamped sleep: still one process,
-# outside every member, writing only the chain's already-existing log.
-settle() { "$PY" -B -c "$B5_SETTLE_PY" "$CHAIN_LOG" "$SETTLE_S"; }
+# The registered settle is an unconditional /bin/sleep. Two markers surround it, written by an inline
+# stdlib-only helper into the chain's already-existing log; a marker failure is noted and never affects the sleep.
+settle() {
+  local token rc
+  token="$("$PY" -B -c "$B5_SETTLE_MARK_PY" start "$CHAIN_LOG" "$SETTLE_S" 2>/dev/null)"
+  (( $? == 0 )) || note settle_marker_failed
+  /bin/sleep "$SETTLE_S"
+  rc=$?
+  "$PY" -B -c "$B5_SETTLE_MARK_PY" end "$CHAIN_LOG" "$SETTLE_S" "$token" "$rc" 2>/dev/null
+  (( $? == 0 )) || note settle_marker_failed
+  return $rc
+}
 # journal STAGE_ID KIND RC STARTED: one JSON line per stage (identifiers are [A-Za-z0-9._-]).
 journal() {
   print -r -- "{\"stage_id\":\"$1\",\"kind\":\"$2\",\"rc\":$3,\"started_epoch_s\":$4,\"ended_epoch_s\":$(/bin/date +%s)}" >> "$STAGE_JOURNAL"
@@ -1141,7 +1164,7 @@ def render_chain(*, tree: Mapping[str, Any], tree_sha256: str, stages: Sequence[
         f"BOUND_RUNS_ROOT={_literal(bindings['bound_runs_root'])}",
         'CHAIN_LOG="$OPERATOR_LOG_ROOT/window-chain.log"',
         f'STAGE_JOURNAL="$NIGHT_DIR/{STAGE_JOURNAL}"',
-        "B5_SETTLE_PY=" + shlex.quote(SETTLE_HELPER),
+        "B5_SETTLE_MARK_PY=" + shlex.quote(SETTLE_MARK_HELPER),
         'TRANSCRIPT_ROOT="$NIGHT_DIR/transcript"',
         *heredoc("B5_PRUNE_PY", PRUNE_HELPER),
         *heredoc("B5_BUDGET_PY", BUDGET_HELPER),

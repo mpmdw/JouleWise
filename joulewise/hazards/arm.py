@@ -282,8 +282,10 @@ def run(config: ArmConfig, seams: Seams | None = None) -> ArmResult:
             ctx, thresholds["contention"], tree_roots=config.tree_roots,
             on_tick=lambda: samples.append(clock_sample()),
             tick_s=config.dwell_tick_s, host_reader=seams.host_cpu)
-    samples.append(clock_sample())
-    boot_end = _boot(seams, ctx)
+        # The closing clock sample and boot read belong to the dwell: the end marker lands after them
+        # (Opus cold review LOW-3), so no marker write sits between the dwell and its closing reads.
+        samples.append(clock_sample())
+        boot_end = _boot(seams, ctx)
     contention_verdict = recorder.hazard(
         "dwell", dwell, contention.judge(dwell, thresholds["contention"]))
     refused = refusals("dwell", [contention_verdict])

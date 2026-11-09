@@ -14,6 +14,7 @@ declares 2 and restores Automatic when that night closes. Every session start
 (prepare, install) first restores a marker it does not own, never while a
 measuring night holds the host night lock.
 """
+from contextvars import ContextVar
 from functools import wraps
 import json
 import os
@@ -772,24 +773,54 @@ def _require_night_job_absent(runner=None):
         raise ValueError('v4 install refused: launchd job state unavailable')
 
 
+class _InstallReceipts:
+    """Buffered install/arm boundary markers (Opus cold review MEDIUM-2: no stdout during the dwell).
+
+    Rows only accumulate in memory while the install runs. ``take()`` hands out the rows not yet persisted:
+    the pre-stamp rows go into the arm record that ``pre_dwell`` already writes before the dwell stamp, and
+    the post-stamp rows (``v4_arm_checks`` end, ``v4_installer_handoff``) into the ``dwell.json`` writes the
+    arm already makes. Nothing is written to stdout or any new file. The envelope's own ``v4_install`` end
+    is emitted after the handoff has returned, so it is not persisted (an open envelope: a missing end stays
+    missing). If the install fails before any record could carry the rows (no arm record was written), they
+    go to stderr, outside any dwell.
+    """
+
+    def __init__(self):
+        self.rows, self.persisted, self.carried = [], 0, False
+
+    def take(self):
+        rows = self.rows[self.persisted:]
+        self.persisted = len(self.rows)
+        self.carried = True
+        return rows
+
+
+_receipts = ContextVar('v4_install_receipts', default=None)
+
+
 def _install_timing(operation):
     @wraps(operation)
     def wrapped(*args, **kwargs):
-        # The session CLI already owns stdout. Buffer throughout arm/install,
-        # then append there after the unmeasured operation. No sidecar, file
-        # open, or marker write can enter the quiet start-state preparation.
-        rows = []
+        buffer = _InstallReceipts()
+        token = _receipts.set(buffer)
         try:
-            with timing_receipts.bind(timing_receipts.Writer(rows.append, producer="v4_arm")), \
+            with timing_receipts.bind(timing_receipts.Writer(buffer.rows.append, producer="v4_arm")), \
                  timing_receipts.span("arm", "v4_install"):
                 return operation(*args, **kwargs)
         finally:
-            for row in rows:
-                try:
-                    sys.stdout.write(json.dumps(row, sort_keys=True) + "\n")
-                except OSError as error:
-                    sys.stderr.write(f"timing receipt missing: {error}\n")
+            _receipts.reset(token)
+            if not buffer.carried:
+                for row in buffer.rows:
+                    try:
+                        sys.stderr.write(json.dumps(row, sort_keys=True) + "\n")
+                    except OSError:
+                        pass
     return wrapped
+
+
+def _take_receipts():
+    buffer = _receipts.get()
+    return buffer.take() if buffer is not None else []
 
 
 @_install_timing
@@ -974,6 +1005,7 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
                 refuse(record, f'w1_disk_gate: {exc}')
         # The dwell stamp is the one value that depends on the dwell: it is held in memory and written
         # alone, to the dwell record, after the stamp (``quiet_dwell`` here only names that file).
+        record['timing_receipts'] = _take_receipts()      # pre-stamp boundary markers (MEDIUM-2)
         record['quiet_dwell'] = {'start_ns': None, 'stamped_after_this_record': True, 'dwell_record': str(dwell_path)}
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open('x') as handle:
@@ -994,7 +1026,7 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
                         dwell_start=dwell_start, series_bind=series_bind, pre_dwell=pre_dwell)
     # After the stamp: the single in-memory dwell value, written once, then the handoff (or refusal).
     dwell = {'schema': ARM_DWELL_SCHEMA, 'arm_record': str(path), 'admitted': record['admitted'],
-             'quiet_dwell': record['quiet_dwell']}
+             'quiet_dwell': record['quiet_dwell'], 'timing_receipts': _take_receipts()}
     with dwell_path.open('x') as handle:
         handle.write(json.dumps(dwell, indent=2, sort_keys=True) + '\n')
     if not record['admitted']:
@@ -1011,6 +1043,7 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
     finally:
         dwell['quiet_dwell'] = {**dwell['quiet_dwell'], 'installer_end_ns': time.monotonic_ns(),
                                 'installer_outcome': outcome}
+        dwell['timing_receipts'] = dwell['timing_receipts'] + _take_receipts()   # the installer-handoff markers
         temporary = dwell_path.with_name(dwell_path.name + '.tmp')
         with temporary.open('x') as handle:
             handle.write(json.dumps(dwell, indent=2, sort_keys=True) + '\n')

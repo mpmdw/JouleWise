@@ -319,6 +319,32 @@ class ProducerTests(unittest.TestCase):
                 self.assertEqual(warnings, [])
                 self.assertEqual([d['activity'] for d in docs].count('hazard_clean_dwell'), int(not refused))
 
+    def test_hazard_dwell_end_marker_follows_the_closing_clock_and_boot_reads(self):
+        """Opus LOW-3: no marker write between the dwell and its closing clock sample / boot read."""
+        from tests.hazards.test_arm import Rig
+        from joulewise.hazards import arm, instrument
+        with tempfile.TemporaryDirectory() as tmp:
+            rig = Rig(Path(tmp))
+            events, clock = [], FakeClock()
+            stamp = rig.clocks.stamp()
+            capture = instrument.Measurement('instrument', 'instant', dict(
+                returncode=0, count_expected=300, frames=300, elapsed_s=30,
+                median_ms=100, max_ms=100, group_gone=True), (), stamp, stamp)
+            original_boot = arm._boot
+            def boot(*args, **kwargs):
+                events.append('boot')
+                return original_boot(*args, **kwargs)
+            def append(row):
+                if row['activity'] == 'hazard_clean_dwell':
+                    events.append(row['event'])
+            sink = timing.Writer(append, producer="synthetic", stamp=lambda: timing.clock_stamp(clock),
+                                 wall_resolution_s=0, monotonic_resolution_s=0)
+            with timing.bind(sink), patch.object(arm.instrument, 'measure', return_value=capture), \
+                 patch.object(arm, '_boot', side_effect=boot):
+                result = rig.run()
+            self.assertTrue(result.go, result.reasons)
+            self.assertEqual(events[events.index('start'):events.index('end') + 1], ['start', 'boot', 'boot', 'end'])
+
     def test_v4_arm_probe_and_packet_markers_precede_the_dwell_landmark(self):
         from tests.align.test_v4_next_arm_packet import ArmRebuildTests
         rig = ArmRebuildTests()
@@ -381,22 +407,157 @@ class ProducerTests(unittest.TestCase):
                     ['v4_disk_gate'] if refused else ['v4_disk_gate', 'v4_installer_handoff'])
                 self.assertEqual(documents[0]['end_boundary']['status'], 'error' if refused else 'complete')
 
-    def test_chain_settle_uses_one_sleep_process_and_the_existing_chain_log(self):
-        from joulewise.b5.chain import SETTLE_HELPER, _PRELUDE_FUNCTIONS
-        self.assertNotIn('/bin/sleep', _PRELUDE_FUNCTIONS)
+    def test_install_markers_never_reach_stdout_and_ride_the_arm_and_dwell_records(self):
+        """Opus MEDIUM-2: pre-stamp rows in the arm record, post-stamp rows in dwell.json, nothing on stdout."""
+        from scripts import align_v4_session as session
+        for refused in (False, True):
+            with self.subTest(refused=refused), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                record = dict(admitted=True, reasons=[], ac_powermode=dict(observed=0),
+                              next_arm_triage=dict(rebuilt_packet={'synthetic': 'rebuilt packet'}))
+                def arm_checks(*args, pre_dwell=None, **kwargs):
+                    with timing.span('arm', 'v4_arm_checks'):
+                        pre_dwell(record)
+                    record['quiet_dwell'] = {**record['quiet_dwell'], 'start_ns': 1}
+                    return record
+                def install_refusal(*args, **kwargs):
+                    if refused:
+                        raise ValueError('synthetic installer refusal')
+                    return {'exit_code': 0}
+                @session._install_timing
+                def operation():
+                    return session._arm_and_install(root, {}, root, {}, None, runner=None, volume_runner=None,
+                        now=lambda: 100, w1_disk_config=None, disk_gate=None)
+                out, err = io.StringIO(), io.StringIO()
+                with redirect_stdout(out), redirect_stderr(err), \
+                     patch.object(session, 'arm_checks', side_effect=arm_checks), \
+                     patch('scripts.align_v4_series.bind_packet', return_value={}), \
+                     patch.object(session, 'w1_disk_check', return_value={'status': 'pass'}), \
+                     patch.object(session.kit, 'arm_powermode_check'), \
+                     patch.object(session.pilot, 'install', side_effect=install_refusal):
+                    if refused:
+                        with self.assertRaisesRegex(ValueError, 'synthetic installer refusal'):
+                            operation()
+                    else:
+                        operation()
+                self.assertEqual(out.getvalue(), '')
+                self.assertEqual(err.getvalue(), '')
+                arm = json.loads((root/'staging/v4-arm-001.json').read_text())
+                dwell = json.loads((root/'staging/v4-arm-001.dwell.json').read_text())
+                pre = [(r['activity'], r['event']) for r in arm['timing_receipts']]
+                post = [(r['activity'], r['event']) for r in dwell['timing_receipts']]
+                self.assertIn(('v4_disk_gate', 'end'), pre)
+                self.assertNotIn(('v4_installer_handoff', 'start'), pre)
+                self.assertEqual(post, [('v4_arm_checks', 'end'), ('v4_installer_handoff', 'start'),
+                                        ('v4_installer_handoff', 'end')])
+                self.assertEqual(dwell['timing_receipts'][-1]['status'], 'error' if refused else 'complete')
+
+    def settle_shell(self, tmp, *, settle_s, python=None, pythonpath=None):
+        """Run the chain's own prelude ``settle`` function in zsh; return (elapsed_s, chain_log_text)."""
+        import time
+        from joulewise.b5.chain import SETTLE_MARK_HELPER, _PRELUDE_FUNCTIONS
+        log = Path(tmp)/'window-chain.log'
+        log.write_text('synthetic chain start\n')
+        script = (f'set -u\nPY={python or sys.executable}\nCHAIN_LOG={log}\nSETTLE_S={settle_s}\n'
+                  f'B5_SETTLE_MARK_PY=$(<{Path(tmp)/"mark.py"})\n' + _PRELUDE_FUNCTIONS + '\nsettle\n')
+        (Path(tmp)/'mark.py').write_text(SETTLE_MARK_HELPER)
+        env = {k: v for k, v in os.environ.items() if k != 'PYTHONPATH'}
+        if pythonpath is not None:
+            env['PYTHONPATH'] = pythonpath
+        started = time.monotonic()
+        subprocess.run(['/bin/zsh', '-c', script], check=True, env=env, cwd=tmp, capture_output=True, text=True)
+        return time.monotonic() - started, log.read_text()
+
+    def test_chain_settle_is_an_unconditional_sleep_with_stdlib_markers_in_the_existing_chain_log(self):
+        from joulewise.b5.chain import SETTLE_MARK_HELPER, _PRELUDE_FUNCTIONS
+        self.assertIn('/bin/sleep "$SETTLE_S"', _PRELUDE_FUNCTIONS)
+        self.assertNotIn('import joulewise', SETTLE_MARK_HELPER)
+        self.assertNotIn('timing_receipts', SETTLE_MARK_HELPER)
         with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp)/'window-chain.log'
-            missing = subprocess.run([sys.executable, '-B', '-c', SETTLE_HELPER, str(path), '0'],
-                capture_output=True, text=True)
-            self.assertEqual(missing.returncode, 0, missing.stderr)
-            self.assertFalse(path.exists())
-            path.write_text('synthetic chain start\n')
-            subprocess.run([sys.executable, '-B', '-c', SETTLE_HELPER, str(path), '0'], check=True)
-            rows = [json.loads(line) for line in path.read_text().splitlines()[1:]]
+            elapsed, text = self.settle_shell(tmp, settle_s=1)
+            self.assertGreaterEqual(elapsed, 1.0)
+            self.assertNotIn('settle_marker_failed', text)
+            rows = [json.loads(line) for line in text.splitlines()[1:]]
             documents, warnings = timing.project(rows)
             self.assertEqual(warnings, [])
             self.assertEqual([d['activity'] for d in documents], ['chain_settle'])
-            self.assertEqual(documents[0]['start_boundary']['requested_s'], 0)
+            self.assertEqual(documents[0]['start_boundary']['requested_s'], 1.0)
+            self.assertEqual(documents[0]['end_boundary']['status'], 'complete')
+            self.assertGreaterEqual(documents[0]['ended_ns'] - documents[0]['started_ns'], 1_000_000_000)
+
+    def test_chain_settle_sleeps_the_full_duration_without_the_package(self):
+        # An empty PYTHONPATH, a broken joulewise package ahead of the repo on the path, and an interpreter
+        # that does not exist: the registered settle still runs for its full duration (Opus MEDIUM-1).
+        with tempfile.TemporaryDirectory() as tmp:
+            broken = Path(tmp)/'broken'
+            (broken/'joulewise').mkdir(parents=True)
+            (broken/'joulewise/__init__.py').write_text('raise ImportError("broken package")\n')
+            for label, kwargs in (('empty PYTHONPATH', dict(pythonpath='')),
+                                  ('broken package', dict(pythonpath=str(broken))),
+                                  ('no interpreter', dict(python='/nonexistent/python'))):
+                with self.subTest(label), tempfile.TemporaryDirectory() as run:
+                    elapsed, text = self.settle_shell(run, settle_s=1, **kwargs)
+                    self.assertGreaterEqual(elapsed, 1.0)
+                    self.assertEqual(text.count('settle_marker_failed'), 2 if label == 'no interpreter' else 0)
+
+    def test_refused_launch_closes_the_barrier_marker_as_refused(self):
+        """Opus LOW-1: a launcher that exits before the start signal leaves chain_launch_barrier 'refused'."""
+        import socket
+        from joulewise import night_gate
+        from tests.test_run_night import _load_driver, HEAD, _probe
+        from tests.fixtures.b5_plan import fake_window
+        import time as clock
+        driver = _load_driver()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            now = clock.time()
+            plan = night_gate.NightPlan.from_mapping(fake_window.hazard_plan_mapping(
+                root, plan_id="b5-alpha-1", t0_epoch_s=float(int(now)), window_max_s=3600,
+                authored_epoch_s=now - 60))
+            night = Path(plan.custody_root)/"night"
+            night.mkdir(parents=True)
+            chain = Path(plan.chain_path)
+            chain.write_text("exit 0\n")
+            probes = night_gate.Probes(
+                run=lambda argv: _probe(tuple(argv), exit_code=1), now_epoch_s=clock.time,
+                monotonic_ns=clock.monotonic_ns, read_text=lambda path: Path(path).read_text(),
+                checkout_head=lambda: HEAD, measurement_head=lambda _root: HEAD)
+            rows = []
+            parent, child = socket.socketpair()
+            self.addCleanup(parent.close)
+            with timing.bind(timing.Writer(rows.append, producer="synthetic")):
+                outcome = driver._run_chain_once_impl(
+                    chain, plan, probes, night, None, command=["/bin/zsh", "-f", str(chain)],
+                    abort_on_census=True, shutdown_monotonic=None, channel=parent, child_channel=child,
+                    start_fd_env="JW_START_FD")
+            self.assertIsNotNone(outcome[1])          # the launch was refused
+            ends = [r for r in rows if r['activity'] == 'chain_launch_barrier' and r['event'] == 'end']
+            self.assertEqual([r['status'] for r in ends], ['refused'])
+
+    def test_arm_only_markers_without_a_night_log_spill_to_the_session_after_the_operation(self):
+        """Opus LOW-2: markers with no night.log are retained, not dropped."""
+        from tests.test_run_night import _load_driver
+        driver = _load_driver()
+        plan = SimpleNamespace(plan_id="W1", hazard_window=None)
+        for logged in (False, True):
+            with self.subTest(night_log=logged), tempfile.TemporaryDirectory() as tmp:
+                custody = Path(tmp)
+                night = custody/"night"
+                night.mkdir()
+                if logged:
+                    (custody/"night.log").write_text("night driver started\n")
+                with driver._timing_journal(night, plan):
+                    with timing.span("arm", "arm_only_admission"):
+                        self.assertFalse((night/"timing-receipts.jsonl").exists())   # nothing created mid-operation
+                spill = night/"timing-receipts.jsonl"
+                if logged:
+                    self.assertFalse(spill.exists())
+                    rows = [json.loads(l) for l in (custody/"night.log").read_text().splitlines()[1:]]
+                else:
+                    rows = [json.loads(l) for l in spill.read_text().splitlines()]
+                documents, warnings = timing.project(rows)
+                self.assertEqual(warnings, [])
+                self.assertEqual([d['activity'] for d in documents], ['arm_only_admission'])
 
     def test_watchdog_reason_change_and_release_reuse_transition_sync(self):
         from scripts import magistrate_watchdog as wd

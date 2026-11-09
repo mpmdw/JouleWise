@@ -33,7 +33,11 @@ ROOT = Path(__file__).resolve().parents[1]
 SUFFIXES = ('.py', '.zsh', '.sh')
 SCHEMA = 'joulewise.align_v4.dynamic_closure_trace.v1'
 EXCLUDED_PREFIXES = ('tests/', '.git/', 'docs/')
-EXCLUDED_FILES = ('scripts/align_v4_dynamic_trace.py',)
+# The harvest-off pack tooling runs after a window on the verified copy, never on the arm or window path (its
+# lane kept it out of EXECUTED_CLOSURE on purpose); tests/align/test_v4_next_arm_packet.py imports both only to
+# assert that shared constants are equal, which would otherwise list them as executed-but-unbound.
+EXCLUDED_FILES = ('scripts/align_v4_dynamic_trace.py', 'joulewise/align/apple/harvest_offload.py',
+                  'scripts/align_v4_harvest_off.py')
 
 # (scenario id, environment, unittest ids). Each is a synthetic path of the W1/D/R1 chain.
 SCENARIOS = (
@@ -48,6 +52,9 @@ SCENARIOS = (
                              'tests.align.test_v4_topup', 'tests.align.test_v4_record_binding']),
     ('arm_install_session', {}, ['tests.align.test_v4_kit', 'tests.align.test_v4_next_arm_packet']),
     ('night_driver_hazard_pack', {}, ['tests.align.test_km003c.NightChainTests']),
+    # LOW-5 (Opus cold review of the timing-receipts fix): the single-module minimal W1 execution that binds
+    # joulewise/timing_receipts.py in the trace; the earlier regeneration dropped it.
+    ('timing_receipts_delta', {}, ['tests.align.test_timing_receipts_opus_witnesses']),
 )
 
 

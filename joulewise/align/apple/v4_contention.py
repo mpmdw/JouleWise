@@ -34,6 +34,42 @@ def split_codes(codes):
     return ([c for c in codes if not is_disclosure_only(c)], [c for c in codes if is_disclosure_only(c)])
 
 
+def exclusion_map(entries):
+    """run id -> sorted distinct codes, or None when the entries are not a well-formed list."""
+    if not isinstance(entries, list):
+        return None
+    out = {}
+    for entry in entries:
+        if not isinstance(entry, dict) or not isinstance(entry.get('run_id'), str) or not isinstance(entry.get('codes'), list):
+            return None
+        out[entry['run_id']] = sorted(set(out.get(entry['run_id'], [])) | {str(c) for c in entry['codes']})
+    return out
+
+
+def recorded_exclusion_map(record):
+    """A desk's or PILOT.json's own record of exclusions, disclosure-aware (R22-1), or None if malformed.
+
+    ``members_excluded`` plus the common desk's ``members_disclosure_only`` ({run id: contention codes}),
+    merged per member. The ONE definition shared by the packet builder's ``effective_desk`` and by R17
+    finality (``light_triage.final_adjudication_error``): contention is recorded as disclosure, never as an
+    exclusion, so the record must be read together with its disclosure map before it is compared with the
+    committed harvest exclusions. A missing ``members_excluded`` reads as no exclusions.
+    """
+    own = exclusion_map(record.get('members_excluded') if 'members_excluded' in record else [])
+    disclosed = record.get('members_disclosure_only')
+    if own is not None and isinstance(disclosed, dict):
+        for run_id, codes in disclosed.items():
+            own[run_id] = sorted(set(own.get(run_id, [])) | {str(c) for c in (codes if isinstance(codes, list) else [])})
+    return own
+
+
+def records_agree_with_harvest(record, harvest_entries):
+    """Whether the record's exclusions (disclosure included) equal the harvest's: same members, same codes."""
+    harvest = exclusion_map(harvest_entries)
+    own = recorded_exclusion_map(record)
+    return harvest is not None and own is not None and own == harvest
+
+
 def load_journal(path):
     """Explicit closed contention journal: (interval values, sha256, malformed-line count)."""
     from joulewise.desk_compress import read_bytes

@@ -145,7 +145,12 @@ def final_adjudication_error(desk, pilot, exclusions, plan_id, *, captured):
         return 'PILOT.json carries no completed desk adjudication (status ' + str(pilot.get('status')) + ')'
     if not isinstance(exclusions, dict) or not isinstance(exclusions.get('members_excluded'), list):
         return 'final exclusions missing'
-    if any(value is not None and value != exclusions['members_excluded']
-           for value in (desk.get('members_excluded'), pilot.get('members_excluded'))):
+    # R22-1: contention is disclosure-only, so each record's exclusions are read together with its
+    # ``members_disclosure_only`` map (the same comparison ``effective_desk`` makes) before they are compared
+    # with the committed harvest exclusions. A real exclusion must still agree exactly (members and codes).
+    from joulewise.align.apple import v4_contention
+    if any(record.get('members_excluded') is not None
+           and not v4_contention.records_agree_with_harvest(record, exclusions['members_excluded'])
+           for record in (desk, pilot)):
         return 'desk, PILOT.json and exclusions disagree'
     return None

@@ -1104,8 +1104,12 @@ def _run_chain_once_impl(chain_path, plan, probes, night_dir, claim_descriptor,
                 raise ValueError("pack launcher environment keys")
             environment.update(extra_env)
         launch_options = {}
+        barrier = None
         if child_channel is not None:
-            launch_timing.enter_context(timing_receipts.span("arm", "chain_launch_barrier"))
+            # Closed as 'refused' unless the launcher's start signal is accepted (status 'complete' is set
+            # only where the chain is released); an exception closes it as error/interrupted.
+            barrier = launch_timing.enter_context(timing_receipts.span("arm", "chain_launch_barrier"))
+            barrier.status = "refused"
             environment[start_fd_env] = str(child_channel.fileno())
             launch_options["pass_fds"] = (child_channel.fileno(),)
         if _CHAIN_HOST_LOCK is not None and _CHAIN_HOST_LOCK.held:
@@ -1259,6 +1263,8 @@ def _run_chain_once_impl(chain_path, plan, probes, night_dir, claim_descriptor,
                     pgid = _complete_chain_start(descriptor, process, night_dir)
                     claimed = True
                     awaiting_start = False
+                    if barrier is not None:
+                        barrier.status = "complete"
                     launch_timing.close()  # before releasing any collection
                     try:
                         channel.sendall(b"G")
@@ -2546,8 +2552,10 @@ def _author_pack_arm(plan: NightPlan, prepared):
 def _timing_journal(night, plan):
     """Use the driver's existing log; never create a child stage journal.
 
-    Arm-only invocations without a driver log retain observations in memory.
-    No new file is created just to persist a timing receipt.
+    With the driver's ``night.log`` present, boundaries append to it. Without one (arm-only invocations, or a
+    missing log) they are held in memory and, when the scope closes, spilled to ``night/timing-receipts.jsonl``
+    in the session's custody (Opus cold review LOW-2). That happens after the operation, outside any measured
+    segment; nothing is created while a window runs.
     """
     rows = []
     scope = ExitStack()
@@ -2576,6 +2584,13 @@ def _timing_journal(night, plan):
             scope.close()
         except Exception as error:
             sys.stderr.write(f"timing journal close failed: {error}\n")
+        if rows:
+            try:
+                with open(night / "timing-receipts.jsonl", "a", encoding="utf-8") as spill:
+                    for row in rows:
+                        spill.write(json.dumps(row, sort_keys=True) + "\n")
+            except OSError as error:
+                sys.stderr.write(f"timing receipts spill failed: {error}\n")
 
 
 def arm_only(context_path: Path) -> dict[str, Any]:
