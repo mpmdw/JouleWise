@@ -326,7 +326,7 @@ class PacketCoverage(previous.DeltaFixture):
                     with self.subTest(path=path, action=action):
                         self.assertIn(json.dumps(edited, sort_keys=True), mutations)
 
-    def test_production_packet_has_362_mutations_and_an_admitted_control(self):      # 358 before R22-2 .. R25 grew the packet
+    def test_production_packet_has_440_mutations_and_an_admitted_control(self):      # 358 before R22-2 .. R25; 362 before R17 harvest-off (final_record etc.)
         ctx = wp.Context(previous.ROOT, self.tmp / 'packet-work', 'w1')
         ctx.work.mkdir()
         _root, _scenario, _now, _pointer, arm, packet = wp._rebuild(ctx, 'coverage')
@@ -337,7 +337,7 @@ class PacketCoverage(previous.DeltaFixture):
         _holed, removed = wp._omit_attempt(packet, attempt)
         self.assertEqual(attempt, 'C3')
         self.assertGreater(removed, 0)
-        self.assertEqual(len(mutations) + 1, 362)  # the omission is the final probe (358 before the R24/R25 packet fields)
+        self.assertEqual(len(mutations) + 1, 440)  # the omission is the final probe (358 before the R24/R25 packet fields, 362 before the R17 harvest-off fields)
 
 
 if __name__ == '__main__':
