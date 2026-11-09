@@ -11,7 +11,7 @@ because nobody could see which tool was current. The 2026-11-06 prune
 ([run report](docs/run_reports/2026-11-06-repo-prune.md)) removed about 8,100 stale files so
 that cannot happen again.
 
-Last updated: 2026-11-06 (lane/2026-11-06-repo-prune, merged with `main` at `a07134b8`; entries checked against the triage of `sol/burn-canon`).
+Last updated: 2026-11-08 (v4 line section added; the rest as of 2026-11-06, lane/2026-11-06-repo-prune, merged with `main` at `a07134b8`; entries checked against the triage of `sol/burn-canon`).
 
 ## Project state
 
@@ -37,6 +37,27 @@ The magistrate on the MacBook Pro owns running, re-running and arming windows
 | v4 kit and sessions | `scripts/align_v4_kit.py`, `scripts/align_v4_session.py` on the R1 integration line (`lane/2026-11-06-v4-r1-integrated`); the WP17 versions are also on the measurement lane. Not on `main` | — |
 | Window records | Record branches `records/<date>-align-*` and `docs/align/r0/<date>/` (cited from `RUN_STATE.md`) | — |
 | Block-5 window harvest (collection finished) | `scripts/harvest_b5_window.py` + `joulewise/b5/**` | `scripts/harvest_g2a_window.py` (kept only because `joulewise/v5_qualification.py` imports it); the CA-42 arm/T-0 route (`scripts/launch_window.py`, `scripts/capture_t0_step.py`, retiring in PR #668) |
+
+## ALIGN v4 window line (W1, C1-C14, T1-T3): agreements and records
+
+The v4 arm stack, kit, series and PREQUAL live on the integration line `align/2026-11-08-v4-r11` @ `e8ea97d22`
+(these paths are on that line or on the lane branches below, not on `main` yet; the line lands on `main` FIRST,
+see MERGE-ORDER). The lanes were built separately by Sol and Opus and merged against an agreement report;
+timing receipts is the exception and has a review record instead. Read the agreement before changing a lane.
+Each lane's own branch and sha are given so the text can be checked there.
+
+| Job | Canonical | Branch @ sha |
+|---|---|---|
+| W1 blockers (R14) | `docs/align/v4/W1-BLOCKERS-AGREEMENT.md` | `align/2026-11-08-w1-blockers-opus` @ `a589a1576` (the doc is also on the v4 line; the `-merged` branch `6d20e787a` lacks it) |
+| D/C/T series (R15; frozen manifest, calibration windows C1-C8 with reserves C9-C14 per R22-2/R24, T1-T3) | `docs/align/v4/DCT-SERIES-AGREEMENT.md`; frozen bytes `configs/campaigns/align_v4/series/series_manifest.json` (sha256 `21313cc2791865e01f322c24606db62ba2ac6a65adda6d737e5b7432bef2ad5c`) | `align/2026-11-08-dct-series-merged` @ `25860dcaf` (agreement from `align/2026-11-08-dct-series-opus` @ `f9f9f7c4c`) |
+| W1 smoke kit and PREQUAL `--w1-next w1` | `docs/align/v4/W1-SMOKE-AGREEMENT.md`, `docs/align/v4/W1-SMOKE.md` | `align/2026-11-08-w1-smoke-merged` @ `0ad6f29f3` |
+| Harvest off the MBP (one pack per window, provisional arm eligibility, k+2 finality, R17) | `docs/align/v4/HARVEST-OFF-AGREEMENT.md`, `HARVEST-OFF-MERGED.md`, `HARVEST-OFF-MAGISTRATE-RUNBOOK.md` | `align/2026-11-08-harvest-off-fix` @ `d5dc1198c` |
+| Between-window MBP -> Air offload (two verified copies before the MBP deletes) | `docs/ops/AIR-OFFLOAD.md` and its agreement `docs/ops/AIR-OFFLOAD-AGREEMENT.md`; tool `scripts/offload_window.py`. Consumes the harvest-off pack | `ops/2026-11-08-air-offload-merged` @ `b5af05e12` |
+| Timing receipts (boundary markers only, no in-window computation; Ed 2026-11-08) | `docs/align/v4/TIMING-RECEIPTS-REVIEW-RECORD.md` (no agreement report: Sol build, Opus HOLD, Sol re-review) | `perf/2026-11-08-timing-receipts` @ `bcd4fd3c2`, review `perf/2026-11-08-timing-receipts-opus-review` @ `53740ab65`, re-review `perf/2026-11-08-timing-receipts-rereview` @ `9c4758dc9` |
+| v4 release (stages a-c, comparator, pins) | `docs/analysis/v4/RELEASE-RUNBOOK-v4.md` | `align/2026-11-08-v4-release-tools` @ `8ba59ac55` |
+| v4 analysis engine, merge order (the v4 line lands on `main` first and wins every arm-stack conflict) | `docs/analysis/v4/MERGE-ORDER.md` | `engine-r23j` @ `50f4958b6` |
+
+Held, not canonical yet: the condition-waits lane (`align/2026-11-08-condition-waits-*`).
 
 ## Block-5 analysis
 
