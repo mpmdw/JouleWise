@@ -4,6 +4,8 @@ Author: Opus 5.5 (laptop lead's delegate), 2026-11-08. This is the agreement ste
 
 **Implemented:** the merged build of items 1-9 is `docs/ops/AIR-OFFLOAD.md` on `ops/2026-11-08-air-offload-merged`.
 The Opus-only doc `AIR-OFFLOAD-opus.md` named below was deleted there (retrievable at `44c264f69`).
+Later lead ruling (2026-11-08, delta review S1-D03): the opt-in `--pressure-compressed-local` route kept below was
+removed; under disk pressure the policy is HOLD only.
 
 | Build | Branch and sha | Files |
 |---|---|---|

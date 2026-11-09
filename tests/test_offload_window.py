@@ -19,6 +19,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from contextlib import redirect_stderr as contextlib_redirect_stderr
 from types import SimpleNamespace
 import unittest
 
@@ -189,7 +190,7 @@ class Fixture(unittest.TestCase):
                       duplicate_root=[], codec="auto", level=3, threads=2, part_mib=1, hash_on_mbp=False,
                       deadline_epoch=None, budget_s=600.0, safety=1.5, release_older=True, rates_seed=None,
                       harvest_pack=None, pack=True,
-                      min_free_gib=0.0, pressure_compressed_local=False)
+                      min_free_gib=0.0)
         values.update(over)
         return SimpleNamespace(**values)
 
@@ -1138,18 +1139,24 @@ class TwoCopyRule(Fixture):
         for rel in self.files:
             self.assertFalse((self.record / rel).exists())
 
-    def test_pressure_rule_keeps_two_verified_copies(self):
-        result = self.offload().release(pressure_compressed_local=True)
-        self.assertEqual(result["rule"], "pressure_compressed_local")
-        for rel in self.files:
-            self.assertFalse((self.record / rel).exists())
+    def test_disk_pressure_never_deletes(self):
+        # Lead ruling 2026-11-08: the pressure-release route is gone; under pressure the policy is HOLD.
+        self.assertEqual(self.run_offload(min_free_gib=1e9), 0)
+        span = self.span()
+        self.assertTrue(span["disk_pressure"])
+        self.assertEqual(span["release_held"], "second_copy_not_confirmed")
+        self.assert_nothing_deleted()
+        with self.assertRaises(TypeError):
+            self.offload().release(pressure_compressed_local=True)
+        with self.assertRaises(SystemExit), open(os.devnull, "w") as sink, _redirect(sink), \
+                contextlib_redirect_stderr(sink):
+            ow.main(["run", "--state-root", str(self.state), "--window-id", "w1-test", "--record-root",
+                     str(self.record), "--record-manifest", str(self.manifest), "--record-manifest-sha256",
+                     self.manifest_sha, "--terminal", TERMINAL, "--pack", "--pressure-compressed-local"])
+        self.assertFalse(any(p.name == "raw-released.json" for p in (self.state / "w1-test").iterdir()))
         parts = list((self.state / "w1-test/parts").glob("part-*.tar.zst"))
-        self.assertTrue(parts)  # the MBP keeps the Air-verified compressed copy
-        self.assertFalse((self.state / "w1-test/released.json").exists())
-        self.confirm_second_copy()
-        final = self.offload().release()
-        self.assertEqual(final["rule"], "two_verified_copies")
-        self.assertFalse(list((self.state / "w1-test/parts").glob("part-*.tar.zst")))
+        self.assertTrue(parts)
+        self.assert_nothing_deleted()
 
 
 class DeletionJournal(Fixture):
@@ -1174,7 +1181,10 @@ class DeletionJournal(Fixture):
             off.release()
         journal = json.loads((self.state / "w1-test/deleting.json").read_text())
         self.assertEqual(journal["state"], "deleting")
-        self.assertEqual(sum(1 for rel in self.files if not (self.record / rel).exists()), after)
+        # `after` objects removed, one more detached into the private quarantine when the crash hit.
+        self.assertEqual(sum(1 for rel in self.files if not (self.record / rel).exists()), after + 1)
+        held = [p for q in journal["quarantine"].values() if Path(q).is_dir() for p in Path(q).iterdir()]
+        self.assertEqual(len(held), 1)
 
     def test_resume_completes_from_the_journal(self):
         self.interrupted()

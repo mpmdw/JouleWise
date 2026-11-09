@@ -31,8 +31,13 @@ LaunchAgent was created. The operator steps in §3 need Ed (sudo on the Air) and
   record's own sha256 digests, (2) a sealed second-copy receipt (default: iCloud, server-confirmed by an
   evict/re-download/sha256 round trip, off-site), (3) a **fresh** receipt: at release time the Air re-hashes the
   compressed parts and both manifests for the MBP's nonce, (4) a restorable Air copy (every byte-bound closure
-  input travels in it), and (5) **each file to delete re-hashed on the MBP and equal to its own bound digest** (by
-  path; never by size). Any difference refuses the whole release. The deletion is journaled and resumable.
+  input travels in it), and (5) **each object to delete proven on the MBP to be its own bound object**: a file is
+  hashed through its own no-follow fd against its bound digest, a link must still be a link with its bound text;
+  each object is then detached into a private quarantine and re-verified there (type, inode identity or digest)
+  before it is unlinked, so a concurrent replacement is never deleted (§1c). Any difference refuses the release.
+  Everything runs under one global single-instance lock per state root. The deletion is journaled and resumable.
+  **There is no pressure route:** under disk pressure the policy is HOLD, never a deletion without two verified,
+  restorable copies.
 - **The Air's landing store** is `/Volumes/JW-EXT/jw-offload`, bound by APFS volume UUID at an explicit
   `init-store` step. Every gate call refuses if the volume is not mounted, is a different volume, lost its marker,
   ignores ownership, or (for writes) is below the free floor (default 100 GiB). The Air's internal disk keeps no
@@ -57,7 +62,8 @@ LaunchAgent was created. The operator steps in §3 need Ed (sudo on the Air) and
 
 Kept from the Opus build without change: zstd -3 -T4 in tar parts (2 GiB raw), no raw hashing on the MBP by
 default (`--hash-on-mbp` stays), the `rates.json` prediction (now seeded from `configs/ops/air_offload_rates.json`),
-the 120 s pre-dwell margin, the default pressure policy `hold` with opt-in `--pressure-compressed-local`, the
+the 120 s pre-dwell margin, the pressure policy `hold` (the opt-in `--pressure-compressed-local` route was removed
+by the lead's ruling of 2026-11-08: pressure never deletes), the
 append-only resumable `put`/`commit` transport, and the timing receipts `timing/offload-start.json` and
 `timing/offload-span.json` (`kind: backup`) plus the `triage` command for `quiet_start_state`.
 
@@ -108,12 +114,27 @@ is a harvest-off finalize change, not this tool's.
 | F2 (HIGH): release unlinked whatever sat at a reused local pack path | Every local pack object (parts, `payload.tar.zst`, `MANIFEST.json`) is re-hashed against this window's sealed digest **before any deletion**; a different object refuses the release and is kept. Pack deletion is journaled (`deleting-parts.json`; a resume re-hashes). Adoption claims the pack path for (window_id, finalize digest, payload digest) in `S/pack-claims/`; another window's unreleased claim refuses |
 | F3 / S1-02 (MEDIUM): standalone `release` bypassed the lock, the receipts and the deadline | `release` now runs under the same supervision as `run`: the state lock triage reads, `timing/release-start.json` and `release-span.json`, a state-wide `activity-start.json`/`activity-span.json` that triage checks for **any** offload activity (run or release, any window), the probe and the lease when wired, `--deadline-epoch` (or a 600 s budget), the admission prediction and the alarm. The probe (and lease) is re-checked after the receipt round trip, right before deletion |
 | S1-03 (MEDIUM): a failed `ps` census read as a quiet machine | Fail closed: a `ps` that cannot run, times out, exits nonzero, prints nothing, prints an unparseable line, or does not list this process, and an unreadable LaunchAgents directory, all count as not quiet |
-| S1-04 (MEDIUM): external terminal inputs omitted from the pack | A consumed pack must carry every byte-bound closure input of the pinned finalize manifest (external terminal evidence, the ledger, any byte-bound link target) as an external; adoption refuses otherwise, the Air verify refuses otherwise, and release re-checks it before any deletion. Today the harvest-off CLI `pack` passes only the ledger (`_ledger_input`) and reads the terminal record from `plan['custody_root']/night/`; if that is outside the session root, its finalize and pack must declare and carry those files (a harvest-off code change) |
+| S1-04 (MEDIUM): external terminal inputs omitted from the pack | A consumed pack must carry every byte-bound closure input of the pinned finalize manifest (external terminal evidence, the ledger, any byte-bound link target) as an external; adoption refuses otherwise, the Air verify refuses otherwise, and release re-checks it before any deletion. The harvest-off lane made the matching change at `4c292637d` (§1c, D3) |
 | LOW (both): the Air setup's recursive owner repair of `backups/` | Stated explicitly in §3a: it runs `chown -R` on `backups/` only when its top-level owner is `_unknown` (uid 99) after `enableOwnership`; it changes ownership metadata of every file below, never contents |
 
 Cost of F1: release re-reads the bytes it deletes. Measured 1.2 GB/s on the Air (seed 800 MB/s), so a D window's
 release, usually in the next turnaround's `release_older`, adds about 22 s (seed: 33 s) of MBP hashing at the start
 of cool-down. The admission prediction includes it.
+
+## 1c. Release safety after the Sol delta re-reviews (2026-11-08, both seats HOLD on `66b7da341`)
+
+| Finding | Fix |
+|---|---|
+| D1 / S1-D01 (HIGH): a pack path reused during cleanup (or a resume that hashed an old open inode) deleted a new pack | **One global single-instance lock per state root** (`S/.lock`, re-entrant within the process) covers run, adopt, pack, release, resume and cleanup. Every object to delete is proven through its own no-follow fd (fstat, hash through that fd, `st_nlink == 1`), then **detached** by `rename` into a private quarantine directory next to its root (same filesystem, named in the journal before it exists, written by nothing else), re-verified there (still a regular single-link file with the proven (dev, ino, size, mtime), or else re-hashed to its bound digest), and only then unlinked. A replacement is put back at its path (never over a newer object) or kept in the quarantine, and the release stops (`changed_during_deletion`). A crash resume re-acquires the lock, drains the quarantine with the same check, and re-proves everything else |
+| D2 / S1-D02 (HIGH): a verified symlink replaced by a regular file was deleted | Release compares the lstat **type** as well as content: a bound link must still be a link with its bound text (pass 1, and again on the detached object), and is removed with `unlink` (never followed); a bound file must still be a regular single-link file with its digest. A type change refuses the release and the new object is kept |
+| D3 (MEDIUM): native restore refused carried inputs whose link targets were absent on the Air | Relies on the harvest-off lane's fix (`origin/align/2026-11-08-harvest-off-fix` @ `4c292637d`, `harvest_offload.py` blob `aaf28b28`): its pack carries every `byte_bound_inputs()` entry and its `unpack` places them append-only at their finalized real paths before verifying. This tool's adoption, Air verify and release require the consumed pack to carry exactly that set (closure files and ignored content, with the bound digests). Tested by restoring from each copy with every MBP-side external file deleted, for a link to a carried file and to a carried directory |
+| S1-D03 (HIGH) + lead ruling: pressure release could finish with only the Air copy | The pressure-release route (`--pressure-compressed-local`) is **deleted**. Under pressure the span reports `disk_pressure: true` and the policy is HOLD: no deletion without two verified, restorable copies, ever |
+| LOW (both): a replacement in the last stat/unlink gap; a duplicate root that repeats or nests the record | Closed by the quarantine (what is unlinked is what was verified); duplicate roots that equal, contain or sit inside the record or each other refuse at pack/adopt time (`duplicate_root_overlaps`) |
+
+Residual, stated: an in-place writer that modifies the same inode through an already-open fd, and resets its mtime,
+in the microseconds between the last pathname check and the detach, is not detected (rename changes ctime on APFS,
+so ctime cannot be compared afterwards). Closed records must stay immutable; nothing in the windows' pipeline
+writes into a finalized record.
 
 ## 2. Design
 
@@ -264,7 +285,7 @@ lease is the primary exclusion and the probe a second opinion. The contract (fro
 | 2 `window_armed` / `window_measuring` / `lease_*` / `loop_lock_busy` | Not in a clean cool-down | Do not offload now; the next turnaround retries |
 | 2 `envelope_*` / `terminal_*` / `record_is_not_terminal` / `record_manifest_unsupported` | The record is not a closed, terminal envelope | Fix the finalize manifest (lead); nothing was sent |
 | 2 `offload_already_running` | Another run holds the lock | Wait; triage refuses the arm until it ends |
-| 3 `*_mismatch`, `record_changed*`, `raw_digest:*`, `air_part_decayed:*`, `fresh_receipt_*`, `changed_during_deletion:*`, `window_id_conflict*` | Integrity failure; nothing deleted | Keep everything. Report to the lead with the span and `offload-journal.jsonl`. Do not retry blindly |
+| 3 `*_mismatch`, `record_changed*`, `raw_digest:*`, `air_part_decayed:*`, `fresh_receipt_*`, `content_differs_*`, `type_or_link_changed:*`, `local_pack_changed:*`, `changed_during_deletion:*…:kept_at:<path>`, `quarantine_holds_unbound_object:*`, `window_id_conflict*` | Integrity failure; nothing unverified is deleted | Keep everything. A kept object is at its original path or in the named `.jw-offload-q-*` directory beside its root. Report to the lead with the span and `offload-journal.jsonl`. Do not retry blindly |
 | 4 `deadline:*`, `deadline_alarm`, `interrupted_sigterm` | Predicted or actual overrun, or killed | State kept; the next turnaround resumes |
 | 5 `air:store_*`, `air_ssd_space`, `transport_*` | Air asleep or unreachable, SSD unmounted or a different volume, below the free floor | The MBP keeps the window; the next turnaround resumes. A UUID mismatch needs Ed |
 | 6 `io_error` | e.g. ENOSPC on the MBP | Disk guard; the arm's own disk checks still apply |
@@ -366,10 +387,21 @@ deletion re-hashes; a second window cannot claim an unreleased pack path), F3/S1
 lock, triage reports it during and after; it refuses while another offload holds the lock; it is bounded and
 stops before the dwell; an arm during the receipt round trip stops the deletion), S1-03 (six census failure modes
 refuse; a good census passes) and S1-04 (a pack omitting bound terminal inputs refuses; release refuses a copy that
-is not restorable; with the pinned native `harvest_offload` blob `d279ab46`, a pack carrying the external terminal
+is not restorable; with the pinned native `harvest_offload` blob (now `aaf28b28`, harvest-off @ `4c292637d`), a pack carrying the external terminal
 inputs is offloaded, released, and restored natively from the Air copy). Run against this tree, the reviewers'
 original witness modules fail as they should and their controls pass; seat 1's "different-size duplicate is
 preserved" control is superseded by the lead's refuse-on-any-mismatch rule.
+
+`tests/test_offload_delta_fixes.py` (24 tests) does the same for both delta seats: a new native pack published at
+the validated path (fresh and after a crash) is kept; a reused `MANIFEST.json` after the payload's removal is kept;
+a resume whose hash read an old open inode never deletes the replacement; links materialized as regular files in a
+duplicate or in the record (fresh and after a crash) are kept and refuse; a last-moment replacement is kept;
+duplicate-root aliases refuse; pressure never deletes (the route is gone); a native restore with every MBP-side
+external deleted succeeds from each copy, for links to a carried file and to a carried directory and for external
+terminal evidence; a pack missing a byte-bound input refuses. Run against this tree, both delta seats' original
+witnesses fail as they should and their controls pass, except two that test removed or relocated mechanisms: seat 1's
+pressure control (the route is gone) and seat 1's crash-on-resume control, whose hook keys on the pre-quarantine path
+(its inverted version here passes).
 
 ## 10. Before the first real window
 
@@ -380,9 +412,8 @@ preserved" control is superseded by the lead's refuse-on-any-mismatch rule.
    (§1a); until then the run refuses clearly (`terminal_not_in_manifest` / `terminal_not_in_closure`).
 4. **One pack (ruled, built):** the harvest-off runbook's step 1c should pass `--threads 4` (its CLI default is
    `--threads 0`, every core), and its step 1d becomes `run --harvest-pack` here plus the in-place `unpack` (§1a).
-   Its `pack` must also carry **every** byte-bound closure input as an external (S1-04: otherwise this tool refuses
-   the pack); its CLI passes only the ledger today, and its terminal record lives under `plan['custody_root']`.
-   That is a harvest-off code change if N1 shows the custody root outside the session root.
+   Since harvest-off @ `4c292637d` its `pack` carries every `byte_bound_inputs()` entry and its finalize declares
+   external terminal files as byte-bound inputs; this tool requires exactly that set.
 5. **Magistrate wiring of the lease and loop lock** (§5): a magistrate change with its own review. Until then the
    probe is the active exclusion.
 6. **Real-data calibration:** the first real offload's span and `rates.json` replace the seed rates; record the

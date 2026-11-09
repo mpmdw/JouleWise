@@ -23,8 +23,10 @@ from unittest import mock
 from tests import test_offload_window as fixtures
 
 ow = fixtures.ow
-HARVEST_BLOB = "d279ab46f8cb3eae288545c8265948e325b24eba"  # harvest_offload.py on the harvest-off lane
-HARVEST_SHA256 = "1ba0cc107aaa8c0b63b598ed46e0b89b97d04a314d513f54f40d7b9964e28293"
+# harvest_offload.py at origin/align/2026-11-08-harvest-off-fix @ 4c292637d: its pack carries every
+# byte_bound_inputs() entry and its unpack places them append-only at their finalized real paths.
+HARVEST_BLOB = "aaf28b28761aea5201f7b15d0997cd06b064f3d1"
+HARVEST_SHA256 = "a767a4642f559d755b2b212fbcfc91eb0b13e7fc8f8d8d1cdff6c6549806f5c4"
 
 
 def native_harvest():
@@ -121,9 +123,9 @@ class Release(fixtures.Fixture):
         calls = {"n": 0}
 
         def flaky(path, *a, **kw):
-            if isinstance(path, Path) and path.name.startswith("part-"):
+            if isinstance(path, Path) and "part-" in path.name:
                 calls["n"] += 1
-                if calls["n"] == 2:
+                if calls["n"] == 1:  # the first part is detached, its unlink is lost
                     raise OSError(5, "simulated power loss")
             return os.unlink(path, *a, **kw)
         off.unlink = flaky
