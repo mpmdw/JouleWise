@@ -203,3 +203,11 @@ The full list of modules run:
 - `finalize-manifest` declares the terminal evidence (`night/result.json`, `night/chain.*`, `night/courier.sent`) when `custody_root` lies outside the session root.
 - `unpack` refuses a pack missing any byte-bound input. It places the carried inputs (append-only, at their finalized real paths) and only then verifies the closure.
 - Test: `FreshAirRestoreTests` finalizes, packs, deletes every MBP-side external file and custody, then restores on the "Air"; every digest matches.
+
+**Air-offload delta2 (lead rulings, separate commit).**
+- **(1) Empty directories.** Byte-bound directory targets, including byte-bound ignored directories, record `directories` (`'.'` and every subdirectory, empty ones included).
+  - The pack carries `external_directories` (`bound_directories(finalized)`).
+  - Unpack checks that list against the finalized manifest, then recreates each directory append-only at its finalized real path (refusing creation through a link) before placing files and verifying.
+  - Verification re-enumerates the files and the directories in one walk.
+- **(2) Reserved names.** `.external` (the transport namespace) joins `.external-staged` as a reserved session-root name. finalize refuses it with `reserved_transport_name`, and pack and unpack refuse it as well.
+- **Tests:** `FreshAirRestoreTests.test_an_empty_external_directory_target_restores_on_a_fresh_air` and `test_a_session_entry_under_the_transport_namespace_refuses_at_finalize`.

@@ -722,6 +722,52 @@ class FreshAirRestoreTests(unittest.TestCase):
         self.assertEqual((session / 'journal').read_bytes(), b'{"t": 1}\n')
 
     @unittest.skipUnless(shutil.which('zstd'), 'zstd CLI required')
+    def test_an_empty_external_directory_target_restores_on_a_fresh_air(self):
+        # Air-offload delta2 (lead ruling 1): directory entries, empty ones included, are carried and recreated.
+        from joulewise.align.apple import harvest_offload as off
+        root = Path(tempfile.mkdtemp(prefix='fresh-air-', dir=REAL_TMP))
+        self.addCleanup(shutil.rmtree, root, True)
+        session, empty = root / 'session', root / 'external-empty'
+        session.mkdir()
+        (session / 'raw.txt').write_bytes(b'raw\n')
+        (empty / 'nested/deeper').mkdir(parents=True)
+        (empty / 'with-file').mkdir()
+        (empty / 'with-file/a.json').write_bytes(b'{"a": 1}\n')
+        (session / 'inputs').symlink_to(empty, target_is_directory=True)
+        final = off.finalized_manifest(session)
+        row = final['closure']['links']['inputs']
+        self.assertEqual(row['directories'], ['.', 'nested', 'nested/deeper', 'with-file'])
+        expected = off.bound_directories(final)
+        manifest = off.pack(session, root / 'o', finalized=final, external=tuple(off.byte_bound_inputs(final)))
+        self.assertEqual(manifest['external_directories'], expected)
+        shutil.move(session, root / 'session.mbp')
+        shutil.rmtree(empty)                                   # the MBP-side external directory is gone
+        off.unpack(root / 'o', finalized=final, finalized_sha256=off.manifest_sha256(final))
+        self.assertTrue((empty / 'nested/deeper').is_dir())
+        self.assertEqual((session / 'inputs/with-file/a.json').read_bytes(), b'{"a": 1}\n')
+        self.assertEqual(off.verify_tree(session, manifest), [])
+        # A pack whose transport manifest drops the directory entries refuses before publishing.
+        shutil.move(session, root / 'again')
+        manifest['external_directories'] = []
+        (root / 'o' / off.MANIFEST).write_text(json.dumps(manifest))
+        with self.assertRaisesRegex(off.OffloadRefused, 'directory entries'):
+            off.unpack(root / 'o', finalized=final, finalized_sha256=off.manifest_sha256(final))
+        self.assertFalse(session.exists())
+
+    def test_a_session_entry_under_the_transport_namespace_refuses_at_finalize(self):
+        # Air-offload delta2 (lead ruling 2): .external/ is reserved (the carried inputs' tar namespace).
+        from joulewise.align.apple import harvest_offload as off
+        root = Path(tempfile.mkdtemp(prefix='reserved-', dir=REAL_TMP))
+        self.addCleanup(shutil.rmtree, root, True)
+        session = root / 'session'
+        (session / '.external').mkdir(parents=True)
+        (session / '.external/x').write_bytes(b'collides with .external/0000\n')
+        with self.assertRaisesRegex(off.OffloadRefused, 'reserved_transport_name'):
+            off.finalized_manifest(session)
+        with self.assertRaisesRegex(off.OffloadRefused, 'reserved name'):
+            off.pack_unbound(session, root / 'o')
+
+    @unittest.skipUnless(shutil.which('zstd'), 'zstd CLI required')
     def test_a_pack_that_omits_a_byte_bound_input_refuses_to_restore(self):
         from joulewise.align.apple import harvest_offload as off
         root = Path(tempfile.mkdtemp(prefix='fresh-air-', dir=REAL_TMP))

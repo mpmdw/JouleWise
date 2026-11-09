@@ -52,7 +52,8 @@ What it binds (R17 review F1 and delta D1-D4), besides every tree entry and the 
 - **Any other link that leaves `$S`**: the bytes it reaches (a file, or every regular file below a directory), at most 4,096 files, 4,096 directories, 1 GiB and 256 MiB per file. The bounds apply during the walk, before the offending file is hashed, and a directory linked many times is enumerated once. A target past those bounds, an unreadable directory (D4), or one that reaches a further link, refuses. Bind it through `M` instead. Model weights are never hashed or copied.
 - **Terminal evidence outside `$S`** (Air-offload S1-04, lead ruling): if the plan's `custody_root` lies outside the session root, finalize declares `night/result.json`, `night/chain.*` and `night/courier.sent` as byte-bound inputs.
 - **A link to a missing path** stays bound as missing.
-- **The name `.external-staged`** is reserved; a session containing it refuses.
+- **The names `.external/` and `.external-staged`** are reserved at the session root (Air-offload delta2, lead ruling 2). `.external/` is the transport namespace of the carried inputs. finalize refuses either one (`reserved_transport_name`), and so do pack and unpack.
+- **Byte-bound directory targets bind their directory entries**, empty ones included. The pack carries them (`external_directories`), and unpack recreates them append-only at their finalized real paths before it verifies (Air-offload delta2, lead ruling 1).
 
 **1c. Pack the verified compressed copy: the window's ONE pack** (lead ruling 2026-11-08). The Air-offload tool consumes this pack; it does not pack again. The calibration ledger the window appended travels with it. `--finalized-manifest` is required: without it, pack refuses.
 
