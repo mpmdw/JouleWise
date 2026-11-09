@@ -285,11 +285,14 @@ API seam `LEGACY_R15_MANIFEST_ORDER`. A pinned fixture
 `R24_SERIES_MANIFEST_SHA256` = 21313cc2…) proves `roster()` reproduces the
 frozen manifest. `synthetic.release_manifest` builds the analysis-form
 manifest for synthetic release inputs.
-(4) NOT applied. A byte-identical r11 `v4_cadence.py` breaks this branch's
-older arm stack (`scripts/align_v4_session.py`, `align_v4_kit.py`,
-`v4_registration.py`), which needs r11's arm clock and `meter_reader_live`
-wiring and its `joulewise.timing_receipts`. `calibration_stop` here is already
-identical to r11 (`e36b096fe`/`bbfccb70a`). Lead ruling pending.
+(4) MERGE ORDER (lead ruling, option c): `align/2026-11-08-v4-r11` lands
+on main FIRST. When `engine-r23*` lands later, r11's `v4_cadence.py` and its
+whole v4 arm stack (session, kit, registration, protocol text and their tests)
+win on every conflict. The engine never arms, so its older arm stack is inert.
+`tests.align.test_v4_calibration_port_pin` pins by sha256 the source of
+`calibration_stop`, its helpers and constants, and the kit's lead-signature
+check, all equal to r11 `bbfccb70a`. Drift fails the test and forces a
+re-port. See `docs/analysis/v4/MERGE-ORDER.md`.
 Witnesses: `tests.align.test_v4_r23j_engine`.
 
 R23h (lead rulings on the Opus review of r23g, 2026-11-08):
