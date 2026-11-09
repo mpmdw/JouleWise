@@ -1042,6 +1042,31 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+248. **Laptop lead (interactive session 1544c617), 2026-11-08 23:56 PST: the v4 ANALYSIS STACK is ADMITTED in software, end to end through the native exporter.**
+- **Pins:**
+  - engine `engine-r23m` @ `de4a54db9`;
+  - recompute `align/2026-11-08-v4-recompute-opus` @ `7b9d215ff` (program `f01e7dbe…`);
+  - release tools `align/2026-11-08-v4-release-tools` @ `b2c0681cd`;
+  - exporter `align/2026-11-08-v4-exporter` @ `4c4b76e3a`.
+  - Release interpreter: CPython 3.13 (with -X faulthandler).
+- **Rehearsal:** exact AGREE on all five plans: full, probes, and three prefix plans (W1+C1, W1+C1+C2, W1+C1-8+T1).
+  - Fixtures are producer-shaped: real kit configs, seed index, production run ids, plan custody, ungated v3 anchors, a variable-power meter, a 42.46 s G0, a sub-poll prefill, a >300 ms stall, g0_missing cases, a short member and a meter overhang.
+- **Exporter:** the real-producer e2e (WP22 W1 plus series-kit C1, C2#1 zero-capture and C2#2) runs through finalize, pack, unpack, the exporter and `release_v4` to AGREE. Exporter time is about 16 s for 4 windows; analysis about 100 s.
+  - Reviews:
+    - Sol seats 1/2 HOLD F1-F6 (silent capture loss from an all-null inventory, stale incremental reuse, optional digests, terminal-result plan ownership, unverified W1 stages), all fixed;
+    - Sol confirmation seats 1/2 HOLD on a watchdog-latch bypass, fixed with the production `watchdog_latch_check`;
+    - the production `terminal_release_check` was added, so the exporter accepts exactly the windows the arm would release. Its clock is the record's committed `finalized_at_epoch_s`, so export is deterministic;
+    - the arm-path refactor got a Sol review: ADMIT, behaviour-identical over 5,340 differential cases.
+  - Integration of the shared functions into the W1 line, preserving later r11 changes, is in progress.
+- **Rulings this stretch (blind):**
+  - A20 whole-member DC span = production `harvest.member_spans(...)['member']`, computed by EACH build from digest-bound metadata/events. The exporter ships no span.
+  - U2(b) excludes `g0_missing` members, and is inconclusive when no planned G0 is present.
+  - R27 leaks closed (detection and held-T totals are null before completion), with a registry-based threshold-leaf sweep guard.
+- **One-off SIGSEGV:** not reproduced in 30 faulthandler runs; treated as an interpreter/OS event.
+- **Air disk:** recovered from 29 GB to 47 GB free by pruning finished Sol scratch and 35 clean, pushed worktrees.
+  - Lesson: the prune removed a clean parent repo (align-v4-assembly) that three agent worktrees depended on. Nothing was lost. The prune now checks worktree dependents first.
+- **Before the first real release:** a real W1 window; the native N1 census; the harvest-off/offload native setup (Ed's sudo on the Air); STRICT re-registration; then PREQUAL.
+
 247. **Laptop lead (interactive session 1544c617), 2026-11-08 20:34 PST: rulings from the exporter's real-producer e2e (blind; synthetic): D1, D2, D5, D6, D7, the U2(a) G0 rule and R27.**
 - **D1 (U1(c) sidecar coverage).** The registered definition is production `thermal.Coverage` (thermal.py:195, the A21 precedent): nominal ticks on the sampling grid, 100 ms tolerance, the edge-cell rule. The recompute's whole-second cells failed every real non-integer G0 span; the engine already used production Coverage.
 - **D6 (A20, turn-owned DC-in).** A piecewise-constant SAMPLE-AND-HOLD: each KM003C sample holds over [t_i, t_{i+1}). A hold longer than 300 ms is uncovered. Energy is Σ power × overlap over owned segments (the A2(3) principle). This replaces the per-segment `km003c_parse.integrate`, which made sub-poll segments (for example a 39.6 ms prefill) unavailable.
