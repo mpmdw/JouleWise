@@ -1247,7 +1247,7 @@ class Comparison:
         for part, rk in (("a", "a_g0_slow_range_le_3c"), ("b", "b_releases_verified_within_delta")):
             rv = rget(ru2, "parts", rk)
             self.add("u2", unit + ("parts", part), E.get(*eb, "parts", part),
-                     {True: "pass", False: "fail", None: "not_applicable"}.get(rv, rv) if rv is not MISSING else MISSING,
+                     {True: "pass", False: "fail", None: "inconclusive"}.get(rv, rv) if rv is not MISSING else MISSING,
                      unit=unit)
 
     @staticmethod
@@ -1590,10 +1590,12 @@ class Comparison:
                 withheld = boot is None          # R27 (c): no bootstrap before calibration_complete
                 if pair_withheld:
                     continue                     # the pair-level null leaves are compared above
+                riv = None if withheld else rget(rc, "bootstrap", hk + "_interval_90")
                 for j in (0, 1):
+                    # An undefined crossing has no interval: the recompute prints null, the engine [null, null].
                     self.add("carrier_bootstrap", unit + (hk, "interval", j),
                              E.get(*b, "window_cluster_bootstrap", hk, j),
-                             None if withheld else rget(rc, "bootstrap", hk + "_interval_90", j), unit=unit)
+                             None if riv is None else rget(riv, j), unit=unit)
                 self.add("carrier_bootstrap", unit + (hk, "undefined"), E.get(*b, "bootstrap_undefined_replicates", hk),
                          None if withheld else rget(rc, "bootstrap", "undefined", hk), unit=unit)
             fr = rget(rc, "fractions") or {}

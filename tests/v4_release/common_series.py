@@ -169,7 +169,9 @@ def default_plan(zero_capture=True, escalated=True, a37=True, screens=True, prob
     ordinal 6 is not token-identical, so the A19 contrast is unavailable (7 runs:
     ``insufficient_contrast_runs``); and the U5 references carry a negative slope and delta = 2 C (F7)."""
     plan = [dict(window="W1", attempt=1, zero_capture=False, escalated=False,
-                 battery_b=[2] if screens and not probes else [], g1_timeout=[2] if probes else [],
+                 # Probe: a G1 timeout that stops a GATED W1 member's episode (production anchors are ungated,
+                 # so the timeout sits on the development D member at ordinal 11).
+                 battery_b=[2] if screens and not probes else [], g1_timeout=[11] if probes else [],
                  late_first_support=[8] if screens else [], divergent_contrast=[6] if probes else [])]
     order = list(ORDER)
     if bar:
@@ -186,7 +188,8 @@ def default_plan(zero_capture=True, escalated=True, a37=True, screens=True, prob
         if w in ("C3", "T2") and zero_capture:
             plan.append(dict(window=w, attempt=1, zero_capture=True, escalated=False))
             plan.append(dict(window=w, attempt=2, zero_capture=False, escalated=False,
-                             battery_b=[6] if screens and w == "T2" else []))
+                             battery_b=[6] if screens and w == "T2" else [],
+                             short_member=[14] if w == "C3" else []))
         else:
             step = dict(window=w, attempt=1, zero_capture=False, escalated=escalated and w == "T3",
                         battery_b=[6] if screens and w == "T1" else [])
@@ -281,7 +284,7 @@ def write_series(root, synth, *, plan=None, seed=7, period_ns=NS, saboteur_extra
     u5_delta = (2.0 if probes else 1.0) if u5_delta_slow_c is None else u5_delta_slow_c
     rng = random.Random(seed)
     template = synth.FrameTemplate(n_tasks=0, seed=seed, clusters=0)
-    clock = 0
+    clock = 100 * NS          # monotonic clocks are never negative: the first member hull (pre_spawn) stays >= 0
     series = {"schema": "joulewise.v4_recompute_input.series.v1", "windows": [],
               "h_star_grid": [128, 256, 384, 512, 768, 1024, 1536, 2048]}       # R26 (1), registered text
     engine_windows, crosswalk, used_rec_runs = [], [], set()
@@ -384,6 +387,11 @@ def write_series(root, synth, *, plan=None, seed=7, period_ns=NS, saboteur_extra
             # members a sub-poll owned prefill segment (first token 40 ms after the turn start; D6).
             g0["start_ns"] = g0["end_ns"] - G0_SPAN_NS
             ep["hardware"]["cache"] = production_cache_statistics(ep, ident)
+            if slot["ordinal"] in step.get("short_member", []):
+                # R26 amendment permanent fixture: a C benign carrier whose trajectory is too short to reach any
+                # H* grid dose (every dose unobserved: h_star null, the whole grid listed).
+                for t in ep["turns"]:
+                    t["decode_tokens"], t["reasoning_tokens"] = 9, min(t["reasoning_tokens"], 4)
             if slot["ordinal"] in step.get("subpoll_prefill", []):
                 ep["turns"][1]["first_token_ns"] = ep["turns"][1]["start_ns"] + 40_000_000
             if slot["ordinal"] in step.get("stall_gate", []):
@@ -444,6 +452,13 @@ def write_series(root, synth, *, plan=None, seed=7, period_ns=NS, saboteur_extra
             for rec_row, er in zip(rec_members, engine_records):
                 if er.get("captured") and rec_row["condition"] == "benign":
                     er["dc_streams"] = [meter_rel]
+                    # engine-r23m de4a54db9: the engine computes the production member hull itself from the
+                    # bundle's digest-bound metadata.json and events.jsonl (no exported member_span_ns).
+                    mb = rec / "windows" / rec_wid / "members" / rec_row["run_id"]
+                    er["metadata"] = dict(path=str((mb / "metadata.json").relative_to(root)),
+                                          sha256=synth.sha256_file(mb / "metadata.json"))
+                    er["events"] = dict(path=str((mb / "events.jsonl").relative_to(root)),
+                                        sha256=synth.sha256_file(mb / "events.jsonl"))
         bound = {}
         terminal_ref = None
         if role == "calibration" and not step["zero_capture"]:
@@ -565,6 +580,8 @@ def _kit_config_bytes(slot):
         spec["thermal"].update(sensors={"s_fast": "Tg0f", "s_slow": "Th0x", "fan_keys": [], "r0_sha256": "0" * 64},
                                delta_fast_c=1.0, delta_slow_c=1.0, turn_cap_s=120, chunk_tokens=2048)
     cfg["workload_profile"]["prompt_text"] = json.dumps(spec, sort_keys=True, separators=(",", ":"))
+    # The fixture's synthetic power frames are 1 s apart; the production period is round(1e9 / power_hz).
+    cfg["sampling"]["power_hz"] = 1.0
     cfg["run_metadata"]["tags"] = [t for t in cfg["run_metadata"]["tags"]
                                    if not t.startswith(("align-condition=", "align-task="))] + [
         f"align-condition={slot['condition']}", f"align-task={slot['task_pair']}"]
@@ -686,7 +703,7 @@ def _engine_member(root, base, slot, ep, meta, ident, step, wid, w_start):
                   episode=dict(path=str(ep_file.relative_to(root)), sha256=sha256_bytes(ep_bytes)),
                   powermetrics=dict(path=str(raw.relative_to(root)), sha256=_sha256_file(raw)),
                   first_record_endpoint_s=meta["uncertainty_evidence"]["clock_anchor"]["first_sample_end_point_epoch_s"],
-                  nominal_interval_ns=meta["sampling"]["power_period_ns"], stamps=stamps,
+                  nominal_interval_ns=NS, stamps=stamps,
                   clock_evidence=dict(clock_anchor=dict(status="bounded", method="synthetic",
                                                         wall_minus_monotonic_lower_s=offset_s,
                                                         wall_minus_monotonic_upper_s=offset_s,
@@ -697,7 +714,7 @@ def _engine_member(root, base, slot, ep, meta, ident, step, wid, w_start):
                   battery=dict(status="observed", flags=[], soc_pct=[100.0, 100.0], charger_w=[80.0, 80.0],
                                source_sha256="c" * 64),
                   cohort_identity=COHORT["identity"], configuration=COHORT["configuration"],
-                  cache_statistics=hw["cache"], member_span_ns=[ep["start_ns"], ep["end_ns"]],
+                  cache_statistics=hw["cache"],
                   turn_rows=turn_rows(ep, ident))
     if slot["series_role"] == "sentinel":
         record["identical_work_group"] = "sentinel"

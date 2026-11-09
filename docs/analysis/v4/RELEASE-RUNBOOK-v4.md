@@ -19,8 +19,8 @@
 
 | Build | Branch | Commit | Output |
 |---|---|---|---|
-| Sol primary engine | `engine-r23m` (R21 + A37 + R23-R26 + R23h-j + R23k seeds/roster names + R23l config custody + R23m D2/D5/D6/D7) | `2344ec9b8` | `fill.json`, `verdict.json`, `thresholds.json` |
-| Opus independent recompute | `align/2026-11-08-v4-recompute-opus` | `189aa6d84` (program sha256 `f222c947…`) | one JSON (`RECOMPUTE-opus.md`) |
+| Sol primary engine | `engine-r23m` (R21 + A37 + R23-R26 + R23h-j + R23k seeds/roster names + R23l config custody + R23m D2/D5/D6/D7) | `de4a54db9` | `fill.json`, `verdict.json`, `thresholds.json` |
+| Opus independent recompute | `align/2026-11-08-v4-recompute-opus` | `7b9d215ff` (program sha256 `f01e7dbe…`) | one JSON (`RECOMPUTE-opus.md`) |
 
 History: the first rehearsal (engine `8eb7982f0` vs recompute `c0d1efcae`) held on five families and found
 engine bug E1. Lead rulings R23 (with R23b-h), R26 (H*) and the A21/P1/P2/A2(4)/A27 rulings of 2026-11-08

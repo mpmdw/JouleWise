@@ -48,12 +48,12 @@ RELEASE_BARS_SHA256 = "17a268152f709fd075035598805b70cbe030361d74147c893351161e7
 COMPARATOR = ROOT / "scripts" / "compare_v4_recompute.py"
 RECOMPUTE_PROGRAM_PATH = "scripts/independent_recompute_v4.py"
 # The recompute's own pin (tests/independent_recompute_v4/test_hygiene.py at 9f8a8749e, R23-R26 + R23h + R22-2/R24/R25 + r23j exports + R26 amendment).
-RECOMPUTE_PROGRAM_SHA256 = "f222c94798ddd4f0a073a70935397fbad5493a9024d05c1f36742ab33ddc35a7"
+RECOMPUTE_PROGRAM_SHA256 = "f01e7dbe46a106025b61ba9717306fec5a39617026b4d3955ddd7a1e1d84c55a"
 ENGINE_RECORD_SCHEMA = "joulewise.v4_engine_run_record.v1"
 # The builds this release check certifies (the commits the synthetic rehearsal agreed on). Any other
 # commit refuses; re-pin only with a fresh AGREE rehearsal (RELEASE-RUNBOOK-v4.md section 5).
-RELEASE_ENGINE_COMMIT = "2344ec9b890b8eabf58e6e1001fd0b599e809984"   # origin/engine-r23k
-RELEASE_RECOMPUTE_COMMIT = "189aa6d84f89ae21104dbcd56d955ead34b5b99d"   # align/2026-11-08-v4-recompute-opus
+RELEASE_ENGINE_COMMIT = "de4a54db9d3c863805c1ba019732dc521e507cba"   # origin/engine-r23k
+RELEASE_RECOMPUTE_COMMIT = "7b9d215ff833e727c98a1e6a5b2c4b2cac01c8f3"   # align/2026-11-08-v4-recompute-opus
 HEX40, HEX64 = re.compile(r"[0-9a-f]{40}"), re.compile(r"[0-9a-f]{64}")
 FLOAT_TOKEN = re.compile(r"(?<![A-Za-z0-9])(?:\d+\.\d+(?:[eE][+-]?\d+)?|\d+[eE][+-]?\d+)(?![A-Za-z0-9])")
 CODE = re.compile(r"[a-z0-9_:]+")

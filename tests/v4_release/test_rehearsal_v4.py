@@ -305,7 +305,8 @@ class RehearsalTests(unittest.TestCase):
         code, pub, res = support.compare(probes, self.dir / "probes.json")
         self.assertEqual((code, pub["verdict"], pub["unmapped_leaves"]), (0, "agree", 0))
         rec = json.loads((probes / "recompute-out.json").read_text())
-        self.assertEqual(rec["acceptance"]["U4"]["anchor_sigma_w_print_only"]["W1_anchor_block"], "excluded:X2")
+        # The timeout now sits on the gated W1 development member (ordinal 11): X2 re-derived on both sides.
+        self.assertIn("X2", rec["exclusions"]["W1"]["align-v4-episodes-b-e11"]["classes"])
         # A19 unavailable contrast (ordinal 6 not token-identical) on both sides, by reason_code (seat 1 F3).
         fill = json.loads((probes / "engine-out" / "fill.json").read_text())
         self.assertEqual(fill["W1"]["contrast"]["reason_code"], "insufficient_contrast_runs")

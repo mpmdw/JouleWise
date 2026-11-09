@@ -27,8 +27,8 @@ REPO = HERE.parents[1]
 sys.path.insert(0, str(HERE))
 import common_series  # noqa: E402
 
-ENGINE_COMMIT = "2344ec9b890b8eabf58e6e1001fd0b599e809984"      # origin/engine-r23k (R21 + A37 + R23-R26 + R23h-k)
-RECOMPUTE_COMMIT = "189aa6d84f89ae21104dbcd56d955ead34b5b99d"   # align/2026-11-08-v4-recompute-opus (R23-R26 + R23h + R22-2/R24/R25 + r23j exports + R26 amendment)
+ENGINE_COMMIT = "de4a54db9d3c863805c1ba019732dc521e507cba"      # origin/engine-r23k (R21 + A37 + R23-R26 + R23h-k)
+RECOMPUTE_COMMIT = "7b9d215ff833e727c98a1e6a5b2c4b2cac01c8f3"   # align/2026-11-08-v4-recompute-opus (R23-R26 + R23h + R22-2/R24/R25 + r23j exports + R26 amendment)
 PY = sys.executable
 _TREES = {}
 
@@ -75,13 +75,15 @@ def run_engine(root, *, input_name="engine-input.json", out="engine-out", tree_d
     eng = tree_dir or tree(ENGINE_COMMIT)
     cli = str(eng / "scripts" / "analyze_align_v4.py")
     cal, full = root / (out + "-cal"), root / out
-    env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
+    env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONFAULTHANDLER="1")   # workers dump a trace too
     prefix = ["--through-window", through_window] if through_window else []
-    r = subprocess.run([PY, "-B", cli, "--input", input_name, "--output", cal.name, "--calibration-only",
+    r = subprocess.run([PY, "-X", "faulthandler", "-B", cli, "--input", input_name, "--output", cal.name, "--calibration-only",
                         *prefix, "--workers", str(workers)], cwd=root, capture_output=True, env=env)
+    if r.returncode < 0:      # a signal (e.g. SIGSEGV): keep the faulthandler trace for the lead
+        (root / "engine-crash-stderr.txt").write_bytes(r.stderr)
     if r.returncode or through_window:
         return r.returncode, json.loads(r.stdout or b"{}")
-    r = subprocess.run([PY, "-B", cli, "--input", input_name, "--output", full.name, "--thresholds",
+    r = subprocess.run([PY, "-X", "faulthandler", "-B", cli, "--input", input_name, "--output", full.name, "--thresholds",
                         str(cal / "thresholds.json"), "--workers", str(workers)], cwd=root, capture_output=True, env=env)
     return r.returncode, json.loads(r.stdout or b"{}")
 
