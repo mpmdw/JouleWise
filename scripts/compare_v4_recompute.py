@@ -67,6 +67,7 @@ COUNCIL = ("0", "128", "256", "300", "512", "1024", "2048", "full")
 BETA_ORDER = ("intercept", "prefill", "decode", "decode_attention", "prefill_attention")
 PRODUCER_KEYS = ("loaded_scorer_sha256", "raw_reducer_sha256")
 INSUFFICIENT_CONTRAST = "insufficient_contrast_runs"
+SEED_REASONS = ("seed_index_differs", "derived_seed_differs")
 # Recompute bar reasons -> the engine's structural bar codes (R22-2 / R24).
 BAR_CODE = {None: None, "u1_u3_fail": "u1_u3_fail", "capture_failure": "whole_window_capture_failure",
             "zero_capture_beyond_retry": "zero_capture_refusal"}
@@ -607,6 +608,19 @@ class Comparison:
                 rpool = (rget(rx, "eligible") is True and held and not self.rpool_barred(rwid))
                 self.add("member_eligibility", (attempt, run, "pool_eligible"), E.get(*base, "pool_eligible"),
                          rpool, unit=unit)
+                # Seed ruling (a): the seed sub-reasons are compared exactly (the rest of the reason vocabulary is
+                # A9 text): seed_index_differs / derived_seed_differs.
+                ereasons = rget(E.fill, *base[1:], "reasons")
+                eseed = sorted(r for r in (ereasons if isinstance(ereasons, list) else []) if r in SEED_REASONS)
+                rseed = rget(rx, "seed_reasons")
+                self.add("member_eligibility", (attempt, run, "seed_reasons"), eseed,
+                         sorted(rseed) if isinstance(rseed, list) else [], unit=unit, kind="set")
+                # Config identity (r23l): config_identity_differs:{pair,condition,seed,run_id,model}, exactly.
+                ecfg = sorted(r for r in (ereasons if isinstance(ereasons, list) else [])
+                              if isinstance(r, str) and r.startswith("config_identity_differs:"))
+                rcfg = rget(rx, "config_reasons")
+                self.add("member_eligibility", (attempt, run, "config_reasons"), ecfg,
+                         sorted(rcfg) if isinstance(rcfg, list) else [], unit=unit, kind="set")
                 E.exempt("a9_reason_vocabulary", *base, "reasons")
                 # R21 A9: the comparator checks eligible and the CLASS SET; the re-derived/recorded split is
                 # build bookkeeping (where a code was found), printed but not compared.
