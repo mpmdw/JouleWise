@@ -19,6 +19,7 @@ import unittest
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import support  # noqa: E402
+import common_series  # noqa: E402
 
 
 @unittest.skipUnless(support.have_commits(), "pinned build commits unavailable in this clone")
@@ -86,6 +87,177 @@ class RehearsalTests(unittest.TestCase):
         code, pub, _ = support.compare(self.full, self.dir / "full.json")
         self.assertEqual((code, pub["verdict"], pub["families"]["h_star"]["verdict"]), (0, "agree", "agree"))
 
+    def test_seed_probes_agree_with_their_sub_reasons(self):
+        # Seed ruling (a) probes, both sub-reasons on one custody: C2 ordinal 6 records the DERIVED seed in its
+        # Episode (the old fixture shape: seed_index_differs); C2 ordinal 7's config.json says
+        # enable_thinking false (derived_seed_differs). Both builds exclude both and the comparator agrees.
+        import hashlib
+
+        def no_thinking(kit):
+            d = json.loads(kit)
+            spec = json.loads(d["workload_profile"]["prompt_text"])
+            spec["enable_thinking"] = False
+            d["workload_profile"]["prompt_text"] = json.dumps(spec, sort_keys=True, separators=(",", ":"))
+            return (json.dumps(d, indent=2, sort_keys=True) + "\n").encode()
+        # Ordinal 7: the planned kit config itself says enable_thinking false (custody loop closed).
+        c, _ = self._config_mutation("seeds", 7, kit_fn=no_thinking)
+        payload_path = c / "engine-input.json"
+        payload = json.loads(payload_path.read_text())
+        win = next(w for w in payload["windows"] if w["attempt_id"] == "C2#1")
+        raw_path = c / win["raw_source"]["path"]
+        raw = json.loads(raw_path.read_text())
+        rows = {r["run_id"]: r for r in raw["members"]}
+        roster = {s["ordinal"]: s for s in win["roster"]}
+
+        def rewrite(path, fn, binary=False):
+            data = json.loads(path.read_text())
+            fn(data)
+            path.unlink()
+            text = (json.dumps(data, indent=1, sort_keys=True) + "\n").encode()
+            path.write_bytes(text)
+            return hashlib.sha256(text).hexdigest()
+        s6, s7 = roster[6], roster[7]
+        rec = c / "recompute" / "windows" / "C2" / "members"
+        r6 = rows[s6["run_id"]]
+        r6["episode"]["sha256"] = rewrite(c / r6["episode"]["path"],
+                                          lambda d: d.update(seed=s6["expected_episode_seed"]))
+        rewrite(rec / s6["run_id"] / "outputs" / "align_episode.json",
+                lambda d: d.update(seed=s6["expected_episode_seed"]))
+        raw_bytes = (json.dumps(raw, sort_keys=True, separators=(",", ":")) + "\n").encode()
+        raw_path.unlink()
+        raw_path.write_bytes(raw_bytes)
+        win["raw_source"]["sha256"] = hashlib.sha256(raw_bytes).hexdigest()
+        payload_path.unlink()
+        payload_path.write_bytes((json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n").encode())
+        code, verdict = support.run_engine(c, workers=4)
+        self.assertEqual(code, 0, verdict)
+        self.assertEqual(support.run_recompute(c), 0)
+        code, pub, res = support.compare(c, self.dir / "seeds.json")
+        self.assertEqual((code, pub["verdict"]), (0, "agree"))
+        rx = json.loads((c / "recompute-out.json").read_text())["exclusions"]["C2"]
+        self.assertEqual((rx[s6["run_id"]]["seed_reasons"], rx[s7["run_id"]]["seed_reasons"]),
+                         (["seed_index_differs"], ["derived_seed_differs"]))
+        fill = json.loads((c / "engine-out" / "fill.json").read_text())
+        el = {r["run_id"]: r for w in fill["windows"] if w["attempt_id"] == "C2#1" for r in w["eligibility"]}
+        self.assertIn("seed_index_differs", el[s6["run_id"]]["reasons"])
+        self.assertIn("derived_seed_differs", el[s7["run_id"]]["reasons"])
+
+    def _config_mutation(self, name, ordinal, kit_fn=None, bundle_fn=None, plan_fn=None):
+        """A C2#1 custody copy with one member's config custody changed; every digest that binds the changed
+        files is updated in both layouts (one kit, bundle and plan file serve both)."""
+        import hashlib
+        sha = lambda b: hashlib.sha256(b).hexdigest()
+        c = self._custody(name)
+        payload_path = c / "engine-input.json"
+        payload = json.loads(payload_path.read_text())
+        win = next(w for w in payload["windows"] if w["attempt_id"] == "C2#1")
+        slot = next(sl for sl in win["roster"] if sl["ordinal"] == ordinal)
+        raw_path = c / win["raw_source"]["path"]
+        raw = json.loads(raw_path.read_text())
+        row = next(r for r in raw["members"] if r["run_id"] == slot["run_id"])
+        rwin_path = c / "recompute" / "windows" / "C2" / "window.json"
+        rwin = json.loads(rwin_path.read_text())
+        rrow = next(m for m in rwin["members"] if m["ordinal"] == ordinal)
+
+        def put(path, data):
+            path.unlink()
+            path.write_bytes(data)
+            return sha(data)
+        kit_path, bundle_path, plan_path = (c / row["planned_config"]["path"], c / row["config"]["path"],
+                                           c / win["plan_source"]["path"])
+        kit = kit_path.read_bytes()
+        if kit_fn:
+            kit = kit_fn(kit)
+            row["planned_config"]["sha256"] = rrow["planned_config"]["sha256"] = put(kit_path, kit)
+            bundle_fn = bundle_fn or (lambda _: common_series._production_bundle(kit))
+        if bundle_fn:
+            row["config"]["sha256"] = put(bundle_path, bundle_fn(bundle_path.read_bytes()))
+        plan = json.loads(plan_path.read_text())
+        prow = next(r for r in plan["members"] if r["ordinal"] == ordinal)
+        prow["config_sha256"] = sha(kit)
+        if plan_fn:
+            plan_fn(prow)
+        win["plan_source"]["sha256"] = rwin["plan_source"]["sha256"] = put(
+            plan_path, common_series.canonical(plan))
+        win["raw_source"]["sha256"] = put(raw_path, common_series.canonical(raw))
+        put(payload_path, common_series.canonical(payload))
+        put(rwin_path, (json.dumps(rwin, indent=1, sort_keys=True) + "\n").encode())
+        return c, slot
+
+    def test_config_identity_probe_sabotage_config_under_benign_slot(self):
+        # r23l / recompute: a SABOTAGE config under a benign slot (custody loop closed) never calibrates: both
+        # builds exclude it as config_identity_differs (:condition) and the comparator agrees.
+        def sabotage(kit):
+            d = json.loads(kit)
+            spec = json.loads(d["workload_profile"]["prompt_text"])
+            spec["condition"] = "sabotage"
+            d["workload_profile"]["prompt_text"] = json.dumps(spec, sort_keys=True, separators=(",", ":"))
+            return (json.dumps(d, indent=2, sort_keys=True) + "\n").encode()
+        c, slot = self._config_mutation("sabcfg", 8, kit_fn=sabotage)
+        self.assertEqual(slot["condition"], "benign")
+        code, verdict = support.run_engine(c, workers=4)
+        self.assertEqual(code, 0, verdict)
+        self.assertEqual(support.run_recompute(c), 0)
+        code, pub, _ = support.compare(c, self.dir / "sabcfg.json")
+        self.assertEqual((code, pub["verdict"]), (0, "agree"))
+        rx = json.loads((c / "recompute-out.json").read_text())["exclusions"]["C2"][slot["run_id"]]
+        self.assertEqual((rx["eligible"], rx["config_reasons"]), (False, ["config_identity_differs:condition"]))
+        fill = json.loads((c / "engine-out" / "fill.json").read_text())
+        el = next(r for w in fill["windows"] if w["attempt_id"] == "C2#1" for r in w["eligibility"]
+                  if r["run_id"] == slot["run_id"])
+        self.assertIn("config_identity_differs:condition", el["reasons"])
+
+    def test_config_custody_refusals_on_both_sides(self):
+        # Each broken link of the custody loop refuses (config_digest_not_planned) on both sides: bundle bytes
+        # that are not the writer's, and a plan row whose config_sha256 is not the kit's.
+        cases = (("bundle-bytes", dict(bundle_fn=lambda b: json.dumps(json.loads(b)).encode())),
+                 ("plan-digest", dict(plan_fn=lambda prow: prow.update(config_sha256="0" * 64))))
+        for name, kw in cases:
+            c, _ = self._config_mutation(name, 10, **kw)
+            code, verdict = support.run_engine(c, through_window="C2")
+            self.assertEqual((code, verdict.get("status")), (2, "refused"), name)
+            self.assertNotEqual(support.run_recompute(c), 0, name)
+            self.assertEqual(json.loads((c / "recompute-stderr.txt").read_text()),
+                             {"refused": "config_digest_not_planned"}, name)
+
+    def test_config_invalid_kit_excludes_only_that_member(self):
+        # r23l: a planned kit config (digest matches the plan) that is not a JSON object excludes that member
+        # alone as config_invalid on both sides; the comparator agrees.
+        c, slot = self._config_mutation("badkit", 12, kit_fn=lambda kit: b"[]\n", bundle_fn=lambda b: b)
+        code, verdict = support.run_engine(c, workers=4)
+        self.assertEqual(code, 0, verdict)
+        self.assertEqual(support.run_recompute(c), 0)
+        code, pub, _ = support.compare(c, self.dir / "badkit.json")
+        self.assertEqual((code, pub["verdict"]), (0, "agree"))
+        rx = json.loads((c / "recompute-out.json").read_text())["exclusions"]["C2"]
+        self.assertEqual(rx[slot["run_id"]]["classes"], ["config_invalid"])
+        self.assertTrue(sum(1 for r in rx.values() if r.get("eligible")) > 10)
+
+    def test_foreign_window_plan_refuses_on_both_sides(self):
+        # r23l: C2's plan_source pointing at C3's committed plan (digests valid) refuses as
+        # config_digest_not_planned:wrong_window on both sides.
+        import hashlib
+        c = self._custody("foreign-plan")
+        payload_path = c / "engine-input.json"
+        payload = json.loads(payload_path.read_text())
+        wins = {w["attempt_id"]: w for w in payload["windows"]}
+        wins["C2#1"]["plan_source"] = dict(wins["C3#2"]["plan_source"])
+        payload_path.unlink()
+        payload_path.write_bytes(common_series.canonical(payload))
+        rwin_path = c / "recompute" / "windows" / "C2" / "window.json"
+        rwin = json.loads(rwin_path.read_text())
+        other = json.loads((c / "recompute" / "windows" / "C3" / "window.json").read_text())
+        rwin["plan_source"] = other["plan_source"]
+        rwin_path.unlink()
+        rwin_path.write_text(json.dumps(rwin))
+        code, verdict = support.run_engine(c, through_window="C2")
+        self.assertEqual((code, verdict.get("status")), (2, "refused"))
+        detail = json.loads((c / "engine-out-cal" / "refusal-detail.json").read_text())
+        self.assertIn("config_digest_not_planned:wrong_window", detail["detail"])
+        self.assertNotEqual(support.run_recompute(c), 0)
+        self.assertEqual(json.loads((c / "recompute-stderr.txt").read_text()),
+                         {"refused": "config_digest_not_planned:wrong_window"})
+
     def test_forged_declared_bar_refuses_on_both_sides(self):
         # r23j export rule (a): a declared u1_u3_fail that the window's own U1-U3 does not reproduce refuses.
         c = self._custody("forged")
@@ -148,9 +320,9 @@ class RehearsalTests(unittest.TestCase):
         # A2(4) at owned-time level and the permanent large-epoch A37 windows (lead rulings, 2026-11-08).
         rec = json.loads((self.full / "recompute-out.json").read_text())
         ex = rec["exclusions"]
-        self.assertEqual(ex["W1"]["align-v4-w1-episodes-e08"]["classes"], ["energy_unavailable"])   # edge partial
-        self.assertTrue(ex["C8"]["align-v4-c8-episodes-b-e12"]["eligible"])                       # gate-only seams
-        self.assertFalse(rec["members"]["C8"]["align-v4-c8-episodes-b-e12"]["pm"]["episode_covered"])  # disclosed
+        self.assertEqual(ex["W1"]["align-v4-episodes-a-e08"]["classes"], ["energy_unavailable"])   # edge partial
+        self.assertTrue(ex["C8"]["align-v4-c8-e12"]["eligible"])                       # gate-only seams
+        self.assertFalse(rec["members"]["C8"]["align-v4-c8-e12"]["pm"]["episode_covered"])  # disclosed
         self.assertTrue(all(not e.get("eligible") for e in ex["C6"].values()))                     # > 1 us seams
         self.assertTrue(any(e.get("eligible") for e in ex["C7"].values()))                         # 954 ns snapped
         self.assertEqual(rec["acceptance"]["U4"]["anchor_sigma_w_print_only"]["W1_anchor_block"], "excluded:B")

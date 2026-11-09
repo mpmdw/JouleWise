@@ -27,8 +27,8 @@ REPO = HERE.parents[1]
 sys.path.insert(0, str(HERE))
 import common_series  # noqa: E402
 
-ENGINE_COMMIT = "50f4958b6ded78f5f9f38e7d2cec9587e8f7f2e2"      # origin/engine-r23j (R21 + A37 + R23-R26 + R23h + R23i + R23j)
-RECOMPUTE_COMMIT = "9f8a8749eda8387a827fe6c96afb942ceec89df5"   # align/2026-11-08-v4-recompute-opus (R23-R26 + R23h + R22-2/R24/R25 + r23j exports + R26 amendment)
+ENGINE_COMMIT = "72410b0b4f725d770298a301a55802e70d466537"      # origin/engine-r23k (R21 + A37 + R23-R26 + R23h-k)
+RECOMPUTE_COMMIT = "7b06c6058efa211fd14acb14838cc84c13694012"   # align/2026-11-08-v4-recompute-opus (R23-R26 + R23h + R22-2/R24/R25 + r23j exports + R26 amendment)
 PY = sys.executable
 _TREES = {}
 

@@ -19,8 +19,8 @@
 
 | Build | Branch | Commit | Output |
 |---|---|---|---|
-| Sol primary engine | `engine-r23j` (R21 + A37 + R23-R26 + R23h + R22-2/R24/R25 + reproducible bars) | `50f4958b6` | `fill.json`, `verdict.json`, `thresholds.json` |
-| Opus independent recompute | `align/2026-11-08-v4-recompute-opus` | `9f8a8749e` (program sha256 `0e79439d…`) | one JSON (`RECOMPUTE-opus.md`) |
+| Sol primary engine | `engine-r23k` (R21 + A37 + R23-R26 + R23h-j + R23k seeds/roster names + R23l config custody) | `72410b0b4` | `fill.json`, `verdict.json`, `thresholds.json` |
+| Opus independent recompute | `align/2026-11-08-v4-recompute-opus` | `7b06c6058` (program sha256 `f4a06738…`) | one JSON (`RECOMPUTE-opus.md`) |
 
 History: the first rehearsal (engine `8eb7982f0` vs recompute `c0d1efcae`) held on five families and found
 engine bug E1. Lead rulings R23 (with R23b-h), R26 (H*) and the A21/P1/P2/A2(4)/A27 rulings of 2026-11-08
@@ -271,7 +271,13 @@ The PROBE plan is the same series with W1 anchor 2's B code replaced by a G1 tim
 (P1: X2 re-derived; `W1_anchor_block: excluded:X2`), W1 contrast ordinal 6 not token-identical (the A19
 contrast is unavailable: `insufficient_contrast_runs` on both sides), and U5 references with a negative slope
 and delta = 2 C (seat 2 F7). Both plans must agree. A forged declared bar (C2 `barred: u1_u3_fail` with
-passing U1-U3) must refuse on both sides (`test_forged_declared_bar_refuses_on_both_sides`).
+passing U1-U3) must refuse on both sides (`test_forged_declared_bar_refuses_on_both_sides`). The fixtures are
+producer-shaped (Episode seed = index, production run ids, real kit configs with RunBundleWriter bundle bytes,
+producer plan headers). Probes, each on both sides: an episode carrying the derived seed (`seed_index_differs`), a
+kit with enable_thinking false (`derived_seed_differs`), a SABOTAGE kit under a benign slot
+(`config_identity_differs:condition`), a non-object kit (`config_invalid`), bundle bytes that are not the
+writer's and a plan row whose digest is not the kit's (`config_digest_not_planned`), and a foreign window's plan
+(`config_digest_not_planned:wrong_window`).
 
 ```bash
 for m in test_compare_v4 test_release_v4 test_rehearsal_v4 test_review_sol1 test_review_sol2 test_confirm_sol; do
@@ -289,7 +295,7 @@ for m in test_compare_v4 test_release_v4 test_rehearsal_v4 test_review_sol1 test
   |---|---|---|
   | `test_compare_v4` | 19 | 27 s |
   | `test_release_v4` | 17 | 18-27 s |
-  | `test_rehearsal_v4` | 11 | 2 min (one engine re-run for its code mutation, one forged-bar prefix run) |
+  | `test_rehearsal_v4` | 16 | 8 min (engine re-runs for its code mutation and the seed/config probes, prefix runs for refusals) |
   | `test_review_sol1` | 12 | 18 s |
   | `test_review_sol2` | 14 | 20 s |
   | `test_confirm_sol` | 6 | 55 s (inverted confirmation-seat witnesses) |
@@ -361,6 +367,10 @@ synthetic writer (`tests/v4_release/common_series.py`).
 | A27: the scored C-sabotage roster is hash-only (30B anchor-sabotage replays are anchors and print); a not-captured sealed member prints `captured: false`; U1/U2 (and battery) aggregates involving it print `{status: sealed}` (no hash) beside `benign_only` | rows `status: sealed` + member hash | `members`/`exclusions` sealed rows; `{status: sealed}` aggregate fields |
 | Member rows carry `attempt_id`; not-counted attempts print `captured: false` | DC, cache, realized-count, T missing-assignment rows | attempts are separate window records (`C3-z1`) |
 | `h_star_grid` = {128, 256, 384, 512, 768, 1024, 1536, 2048} (R26) | registered grid | `series.json` `h_star_grid`, any other refuses |
+| Producer shape (lead rulings 2026-11-08, from the exporter build): the Episode records the seed INDEX (workload.py:722); C/T non-anchors carry production run ids `align-v4-<window>-eNN` (align_v4_series.py:pack_id), W1 non-anchors `align-v4-episodes-{a,b}-eNN`, anchors their v3 kit ids; the frozen manifest is the roster authority | engine-r23k | `allocation_roster_check`; every row carries seed_index and expected_episode_seed |
+| Scope (lead ruling 2026-11-08, amending A29): the seed and config identity checks apply to EVERY captured member, anchors and 30B included (anchors feed σ_w and U4) | every captured member | every captured member carrying a seed index (all rows carry one) |
+| Seed ruling (a): `Episode.seed` = roster seed_index (`seed_index_differs`); production `episode_seed(*seed_inputs(config, enable_thinking), 'shade/'+spec pair, spec seed)` over the bundle config = roster expected_episode_seed (`derived_seed_differs`); both under `seed_identity_differs` | engine-r23k | restated as text over `config.json` |
+| Config custody (r23l): window `plan_source` = the window's OWN committed collection_plan.json (series_window.v1 header, W1 kit plan); member `planned_config` = its kit config; plan row by ordinal with run_id = local id and config_sha256 = kit digest; bundle `config.json` = RunBundleWriter's bytes for the kit; breaks refuse `config_digest_not_planned` (`:wrong_window` for another window's plan); a non-object kit or bundle is that member's `config_invalid`; config run_id / align-model tag / spec pair, condition, seed must be the slot's (`config_identity_differs:{run_id,model,pair,condition,seed}`) | engine-r23k @ 72410b0b4 (`plan_source`, raw row `config`, `planned_config`) | window `plan_source`, row `planned_config`, member `config.json` |
 | R24 allocation: the full 18-window frozen manifest (W1, C1-C14, T1-T3); an 11-window shape refuses | `series_source` (analysis form) | `series.json` `allocation_source` = the native manifest, sha256 `21313cc2…` (`allocation_missing`, `allocation_differs`) |
 | Calibration attempts name their slot; a zero-capture attempt and its retry share it | attempt ids `C3#1`, `C3#2` | window records `C3-z1` and `C3`, `slot: C3` |
 | Every captured C window binds its completed-chain terminal result `{verdict, chain_exit_code}` by digest; non-GO or a nonzero exit is a whole-window capture failure | `terminal_result_source` | `terminal_result_source` (`terminal_result_missing`, `terminal_result_digest_differs`) |

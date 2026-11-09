@@ -81,9 +81,9 @@ def r15_roster(window, escalated=False):
         index = nxt[pair] if held else 1
         if held:
             nxt[pair] += 1
-        stage = "a" if o <= 11 else "b"
-        run = (f"align-pilot-v3-episodes-a-e{o:02}" if o <= 4 else
-               f"align-v4-{window.lower()}-episodes-{stage}-e{o:02}")
+        # Production naming (scripts/align_v4_series.py:pack_id, :285): non-anchors are align-v4-<window>-eNN;
+        # anchors keep their W1 kit ids. The frozen R24 manifest is the authority (lead ruling 2026-11-08).
+        run = (f"align-pilot-v3-episodes-a-e{o:02}" if o <= 4 else f"align-v4-{window.lower()}-e{o:02}")
         rows.append(dict(ordinal=o, task_pair=pair, condition=cond, model_id=model, seed_index=index,
                          expected_episode_seed=episode_seed(model, pair, index), held_out=held,
                          series_role="anchor" if o <= 4 else "sentinel" if not held else
@@ -91,7 +91,7 @@ def r15_roster(window, escalated=False):
     if escalated:
         for o in (23, 24):
             rows.append({**rows[4], "ordinal": o, "series_role": "supplemental_sentinel",
-                         "run_id": f"align-v4-{window.lower()}-episodes-b-e{o:02}"})
+                         "run_id": f"align-v4-{window.lower()}-e{o:02}"})     # align_v4_series.py:572
     return rows
 
 
@@ -114,7 +114,8 @@ def w1_roster():
         index = 93 if o == 18 else ({"X": 16, "Y": 14}[contrast[0]] if contrast else 1)
         row = dict(ordinal=o, task_pair=pair, condition=cond, model_id=model, seed_index=index,
                    expected_episode_seed=episode_seed(model, pair, index), held_out=False,
-                   series_role=kind, run_id=f"align-v4-w1-episodes-e{o:02}")
+                   series_role=kind, run_id=(f"align-pilot-v3-episodes-a-e{o:02}" if kind == "anchor" else
+                                             f"align-v4-episodes-{'a' if o <= 9 else 'b'}-e{o:02}"))   # align_v4_kit.py:1392,1408
         if contrast:
             row["contrast"] = dict(template=contrast[0], arm=contrast[1], stage=0 if o <= 11 else 1)
         rows.append(row)
@@ -288,6 +289,7 @@ def write_series(root, synth, *, plan=None, seed=7, period_ns=NS, saboteur_extra
         series["windows"].append({"window_id": rec_wid, "role": role})
         w_start = clock
         rec_members, identity, engine_records, battery_codes = [], {}, [], {}
+        plan_rows, kit_refs = [], {}
         for slot in slots:
             rid = slot["run_id"]                  # engine-layout id
             local = slot["local_run_id"]          # R15 id
@@ -303,8 +305,18 @@ def write_series(root, synth, *, plan=None, seed=7, period_ns=NS, saboteur_extra
             model = "D" if slot["model_id"] == D_MODEL else "30B"
             rrow = dict(ordinal=slot["ordinal"], run_id=rec_rid, kind=kind, model=model, pair=short,
                         condition=slot["condition"])
-            if model == "D":
-                rrow["seed_index"] = slot["seed_index"]
+            rrow["seed_index"] = slot["seed_index"]
+            rrow["expected_episode_seed"] = slot["expected_episode_seed"]
+            # Config custody (engine-r23l contract): every planned member has a kit config, bound by the
+            # window's collection_plan.json; one file serves both layouts.
+            kit_raw = _kit_config_bytes(slot)
+            kpath = rec / "kit" / rec_wid / f"{local}.json"
+            kpath.parent.mkdir(parents=True, exist_ok=True)
+            kpath.write_bytes(kit_raw)
+            kit_refs[rid] = (kpath, kit_raw)
+            rrow["planned_config"] = dict(path=str(kpath.relative_to(rec)), sha256=sha256_bytes(kit_raw))
+            plan_rows.append(dict(ordinal=slot["ordinal"], run_id=local, config_path=str(kpath.relative_to(rec)),
+                                  config_sha256=sha256_bytes(kit_raw)))
             if "contrast" in slot:
                 rrow["contrast"] = slot["contrast"]
             rec_members.append(rrow)
@@ -335,12 +347,16 @@ def write_series(root, synth, *, plan=None, seed=7, period_ns=NS, saboteur_extra
                 for t in m.turns:
                     t["_energy"] += 8.0
             ident = hashlib.sha256((f"traj-{identical}" if identical is not None else local).encode()).hexdigest()
-            extra = {"identity_sha256": ident, "seed": slot["expected_episode_seed"],
+            # Producer shape (seed ruling (a)): the Episode records the seed INDEX (workload.py:722).
+            extra = {"identity_sha256": ident, "seed": slot["seed_index"],
                      "cohort_sha256": synth.COHORT}
             gate_seam = slot["ordinal"] in step.get("gate_seam", [])
             epoch_s = A37_EPOCH_S if gate_seam else step.get("epoch_s", synth.EPOCH0_S)
             synth.write_member(rec, rec_wid, m, epoch_s * NS, extra=extra)
             base = rec / "windows" / rec_wid / "members" / rec_rid
+            # Producer shape: every member bundle has config.json carrying the production seed inputs
+            # (seed ruling (a): the derived seed is checked from it, never stored in the Episode).
+            cfg_ref = _write_bundle_config(root, base, kit_refs[rid][1])
             if step.get("seams"):
                 seam_stats[f"{wid}#{attempt}"] = _jitter_supports(base, seam_stats.get(f"{wid}#{attempt}"))
             if gate_seam:
@@ -372,6 +388,9 @@ def write_series(root, synth, *, plan=None, seed=7, period_ns=NS, saboteur_extra
             ep_path.write_text(json.dumps(ep, indent=1, sort_keys=True) + "\n")
             meta = json.loads((base / "metadata.json").read_text())
             engine_records.append(_engine_member(root, base, slot, ep, meta, ident, step, wid, w_start))
+            engine_records[-1]["config"] = cfg_ref        # engine-r23k: the bundle config.json, digest-bound
+            kp, kr = kit_refs[rid]
+            engine_records[-1]["planned_config"] = dict(path=str(kp.relative_to(root)), sha256=sha256_bytes(kr))
             if slot["ordinal"] in step.get("battery_b", []):
                 engine_records[-1]["battery"] = dict(engine_records[-1]["battery"], flags=["battery.member_span"])
                 battery_codes[rec_rid] = ["battery.member_span"]
@@ -406,6 +425,16 @@ def write_series(root, synth, *, plan=None, seed=7, period_ns=NS, saboteur_extra
             bound["terminal_result_source"] = dict(path=str(rpath.relative_to(rec)), sha256=sha256_bytes(tdoc))
         if step.get("declared_bar"):
             bound["barred"] = step["declared_bar"]
+        # The window's committed collection_plan.json (engine-r23l plan_source), one file for both layouts.
+        # Producer header (scripts/align_v4_series.py:build_files ~339; the W1 kit plan for W1); no attempt_id.
+        header = (dict(schema_version="joulewise.align_v4.v1", plan_id="align-v4") if wid == "W1" else
+                  dict(schema_version="joulewise.align_v4.series_window.v1", plan_id="align-v4-" + wid.lower(),
+                       window_id=wid, series_manifest_sha256=ALLOCATION_SHA256))
+        plan_raw = canonical(dict(header, members=plan_rows))
+        plan_path = rec / "windows" / rec_wid / "collection_plan.json"
+        plan_path.parent.mkdir(parents=True, exist_ok=True)
+        plan_path.write_bytes(plan_raw)
+        bound["plan_source"] = dict(path=str(plan_path.relative_to(rec)), sha256=sha256_bytes(plan_raw))
         synth.dump(rec / "windows" / rec_wid / "window.json", {
             "schema": "joulewise.v4_recompute_input.window.v1", "window_id": rec_wid, "role": role,
             "members": rec_members, "adjudication": {"final": True, "excluded": {}}, "identity": identity,
@@ -422,6 +451,7 @@ def write_series(root, synth, *, plan=None, seed=7, period_ns=NS, saboteur_extra
                     raw_source=dict(path=str(raw_path.relative_to(root)), sha256=sha256_bytes(raw_doc)))
         if terminal_ref:
             ewin["terminal_result_source"] = terminal_ref
+        ewin["plan_source"] = dict(path=str(plan_path.relative_to(root)), sha256=sha256_bytes(plan_raw))
         if step.get("declared_bar"):
             ewin["barred"] = step["declared_bar"]
         engine_windows.append(ewin)
@@ -470,6 +500,61 @@ def write_series(root, synth, *, plan=None, seed=7, period_ns=NS, saboteur_extra
     (root / "crosswalk.json").write_bytes(canonical(doc))
     (root / "seams.json").write_bytes(canonical(seam_stats))
     return doc
+
+
+# Real kit member configs (production BenchmarkConfig bytes) used as templates for the bundle config.json.
+CONFIG_TEMPLATES = {D_MODEL: "configs/campaigns/align_v4/stages/episodes-a/align-v4-episodes-a-e05.json",
+                    A_MODEL: "configs/campaigns/align_v4/stages/episodes-a/align-pilot-v3-episodes-a-e01.json"}
+
+
+def _kit_config_bytes(slot):
+    """The member's kit config in production shape: a real kit config with the production per-member edits of
+    scripts/align_v4_series.py:build_files (run_id, spec condition, seed index and task_pair; the
+    align-condition/align-task tags), serialized as the kit writes it (indent-2, sorted keys, newline)."""
+    repo = Path(__file__).resolve().parents[2]
+    cfg = json.loads((repo / CONFIG_TEMPLATES[slot["model_id"]]).read_text())
+    cfg["run_id"] = slot["local_run_id"]
+    spec = json.loads(cfg["workload_profile"]["prompt_text"])
+    spec.update(condition=slot["condition"], seed=slot["seed_index"])
+    spec["task_kwargs"]["task_pair"] = slot["task_pair"]
+    if slot["model_id"] == D_MODEL:
+        # The kit's per-session instantiation (scripts/align_v4_kit.py ~1425: R1 B_D, T_dead and the R1
+        # thermal policy) fills these in a real kit; the synthetic values match the fixture's episodes.
+        spec.update(max_episode_decode_tokens=COHORT["configuration"]["max_episode_decode_tokens"],
+                    deadman_s=COHORT["configuration"]["deadman_s"])
+        spec["thermal"].update(sensors={"s_fast": "Tg0f", "s_slow": "Th0x", "fan_keys": [], "r0_sha256": "0" * 64},
+                               delta_fast_c=1.0, delta_slow_c=1.0, turn_cap_s=120, chunk_tokens=2048)
+    cfg["workload_profile"]["prompt_text"] = json.dumps(spec, sort_keys=True, separators=(",", ":"))
+    cfg["run_metadata"]["tags"] = [t for t in cfg["run_metadata"]["tags"]
+                                   if not t.startswith(("align-condition=", "align-task="))] + [
+        f"align-condition={slot['condition']}", f"align-task={slot['task_pair']}"]
+    return (json.dumps(cfg, indent=2, sort_keys=True) + "\n").encode()
+
+
+def _production_bundle(kit_raw):
+    """The bytes production RunBundleWriter.create writes as config.json for a kit config."""
+    import sys
+    repo = Path(__file__).resolve().parents[2]
+    if str(repo) not in sys.path:
+        sys.path.insert(0, str(repo))
+    from joulewise.schemas import BenchmarkConfig
+    return (json.dumps(BenchmarkConfig.from_mapping(json.loads(kit_raw)).to_dict(), indent=2, sort_keys=True)
+            + "\n").encode("utf-8")
+
+
+def _write_bundle_config(root, base, kit_raw):
+    """The bundle config.json exactly as production RunBundleWriter.create writes it for that kit config
+    (joulewise/bundle.py: BenchmarkConfig.from_mapping(kit).to_dict(), indent-2, sorted keys, newline)."""
+    import sys
+    repo = Path(__file__).resolve().parents[2]
+    if str(repo) not in sys.path:
+        sys.path.insert(0, str(repo))
+    from joulewise.schemas import BenchmarkConfig
+    raw = (json.dumps(BenchmarkConfig.from_mapping(json.loads(kit_raw)).to_dict(), indent=2, sort_keys=True)
+           + "\n").encode("utf-8")
+    path = Path(base) / "config.json"
+    path.write_bytes(raw)
+    return dict(path=str(path.relative_to(root)), sha256=sha256_bytes(raw))
 
 
 def _owned_gpu_j(m):
