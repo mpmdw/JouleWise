@@ -142,8 +142,22 @@ def window_checks(members, derivation, *, window=None):
         if not g0_planned[model]:
             check['U2']['parts']['a'] = 'not_applicable'
             check['U2']['g0_slow_range_c'] = None
-            applicable = [v for v in check['U2']['parts'].values() if v != 'not_applicable']
-            check['U2']['status'] = td.combine(applicable) if applicable else 'not_applicable'
+        else:
+            # R23n: U2(b) runs only over members whose planned G0 is present.
+            # A g0_missing member's G1/H releases have no planned-G0 reference.
+            # With no planned G0 present, U2(b) is inconclusive, never fail.
+            present = [r for o, r in by_ordinal.items() if o not in (1, 2, 3, 4)
+                       and any(i.get('kind') == 'G0' for i in r.get('intervals', ()))]
+            if not present:
+                check['U2']['parts']['b'] = 'inconclusive'
+            else:
+                ids = {id(r) for r in present}
+                releases = [v['journal_verified'] for r in rows if id(r) in ids and r.get('gated')
+                            and not td.thermal_exclusions(r) for v in r['releases'] if v.get('kind') != 'G0']
+                check['U2']['parts']['b'] = (td.combine(['inconclusive' if v is None else 'pass' if v else 'fail'
+                                                         for v in releases]) if releases else 'not_applicable')
+        applicable = [v for v in check['U2']['parts'].values() if v != 'not_applicable']
+        check['U2']['status'] = td.combine(applicable) if applicable else 'not_applicable'
         check['U3'] = dict(status=td.combine([p['status'] for p in pairs if p['status'] != 'excluded'])
                           if any(p['status'] != 'excluded' for p in pairs) else 'inconclusive', pairs=pairs)
         result[model] = {k: check[k] for k in ('U1', 'U2', 'U3')}

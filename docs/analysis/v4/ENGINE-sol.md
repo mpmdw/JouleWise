@@ -21,6 +21,10 @@ R23n (lead rulings on the Opus review of r23m, 2026-11-08):
   unobserved start state, so it is excluded as `g0_missing` (a new class) and
   never enters the pool. U2(a) is computed per window over the planned G0s
   that are present. It is `inconclusive` only when none is present.
+  U2(b) likewise runs only over members whose planned G0 is present: a
+  `g0_missing` member's G1/H releases have no planned-G0 reference. With no
+  planned G0 present, U2(b) is `inconclusive`, never `fail`, so the window is
+  not barred.
 - **D7.** `test.*.by_window` lists only the T windows present. U4's
   `per_window['W1']` is the R1/W1 REFERENCE row, built from
   `reference.w1_sentinel_j`, not from a W1 window. It therefore appears even

@@ -68,6 +68,35 @@ class PlannedG0Tests(unittest.TestCase):
         self.assertEqual(fill['windows'][0]['eligibility'][6]['classes'], ['not_captured'])
 
 
+class U2bPlannedG0Tests(unittest.TestCase):
+    """R23n: U2(b) runs over members whose planned G0 is present."""
+
+    def run_c1(self, removed, poison=()):
+        p = series(turns=4)
+        p['windows'] = p['windows'][:1]
+        for i in removed:
+            drop_g0(p['windows'][0]['members'][i])
+        for i in poison:                   # releases that would FAIL U2(b) if they counted
+            for release in p['windows'][0]['members'][i]['thermal']['releases']:
+                release['journal_verified'] = False
+        fill, _ = analyze(p)
+        return fill, fill['windows'][0]['checks'][e.D_MODEL]['U2']
+
+    def test_g0_missing_member_releases_do_not_enter_u2b(self):
+        fill, u2 = self.run_c1([6], poison=[6])
+        self.assertEqual(u2['parts']['b'], 'pass')
+        self.assertEqual(u2['status'], 'pass')
+        self.assertIsNone(fill['windows'][0]['structural_bar'])
+        _, control = self.run_c1([], poison=[6])          # the same releases with G0 present fail
+        self.assertEqual(control['parts']['b'], 'fail')
+
+    def test_no_planned_g0_present_makes_u2b_inconclusive_and_never_bars(self):
+        fill, u2 = self.run_c1(range(4, 22), poison=[6])
+        self.assertEqual(u2['parts'], dict(a='inconclusive', b='inconclusive'))
+        self.assertEqual(u2['status'], 'inconclusive')
+        self.assertIsNone(fill['windows'][0]['structural_bar'])
+        self.assertTrue(fill['windows'][0]['pool_entry'])
+
 class PrefixTestRowsTests(unittest.TestCase):
     def test_by_window_lists_only_present_t_windows(self):
         p = series(turns=4)
