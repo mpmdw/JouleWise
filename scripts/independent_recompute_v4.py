@@ -1470,7 +1470,7 @@ def calibration_stop(windows, eligibility, pool_barred, resets=()):
       fewer than 8 admitted (more than six windows barred).
     More than 8 admitted windows is a contradictory row and refuses."""
     cal = [w for w in windows if w["role"] == "calibration"]
-    slots = [w["slot"] for w in cal]
+    slots = [w.get("slot", w["window_id"]) for w in cal]          # load_series sets it; unit callers may not
     distinct = list(dict.fromkeys(slots))
     need(distinct == CAL_SLOTS[:len(distinct)], "calibration_slot_order",
          "calibration slots must run C1-C8 then C9-C14 in frozen order")
