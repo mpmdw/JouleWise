@@ -59,3 +59,10 @@ added to the registered closure. `joulewise/align/apple/harvest_offload.py` and 
 (post-window pack tooling the lane deliberately kept out of `EXECUTED_CLOSURE`) are imported by
 `tests/align/test_v4_next_arm_packet.py` only to assert equal constants, so the trace script now lists them in
 `EXCLUDED_FILES` rather than reporting them executed-but-unbound. The closure itself is unchanged.
+
+## Deviation: the LOW-2 spill file (lead ruling, accepted)
+
+`scripts/run_night.py:_timing_journal` now creates `night/timing-receipts.jsonl` when a run has no `night.log`
+(arm-only invocations). This departs from SPEED-TOOLBOX's "create no new files" and is ACCEPTED: losing those
+markers is worse, and the file is written after the operation closes, never during a window or a dwell. A run
+with a `night.log` appends to it as before. Recorded in `docs/align/v4/DEVIATIONS.md` (TR-spill-LOW-2).

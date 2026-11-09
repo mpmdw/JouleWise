@@ -1270,5 +1270,24 @@
         "paper": "docs/align/reviews/2026-11-08-merge-c84-sol-review.md"
       }
     ]
+  },
+  {
+    "commit": "f455366162ffab6bcf7ecc4b5039f3b7d37f0c15",
+    "number_bearing_paths": [
+      "joulewise/b5/chain.py"
+    ],
+    "change": "timing-receipts cold-review fixes (settle with stdlib markers, install markers off stdout, launch-barrier status, spill file, dwell end marker, trace scenario) and the R17 finality repair reading R22-1 disclosure records",
+    "executing_reviews": [
+      {
+        "reviewer": "Opus 5.5 delta review of the timing-receipts fixes (non-author), ADMIT; summarised from the lead's relay (the report is not on a branch)",
+        "covered": "range 0b2d4d9b2..43af8f007: MEDIUM-1 (settle full duration in the good, broken-package, shadowed-json and no-interpreter cases), MEDIUM-2 and LOW-1..LOW-6 closed, nothing new inside a measured member or the dwell, CaptureEqualityTests pass; paper sha256 eadd3f7422367b67eaed0bcdd7c93fc7e18a9eb771cc071c2e99c11f04b6cf1d",
+        "paper": "docs/align/reviews/2026-11-08-timing-receipts-opus-delta-review.md"
+      },
+      {
+        "reviewer": "Sol 6.1 merge-c84 review (non-author) with its witness module, for the R17 finality part (light_triage.py, v4_contention.py, align_v4_next_arm_packet.py)",
+        "covered": "docs/align/v4/MERGE-C84-REVIEW-sol.md sha256 fdfef957a8307a9ec67db3b3ceb77392e9972f9e9fc7159b6c5e3e43a4e68ca5 (HOLD on F1) on align/2026-11-08-merge-c84-sol @ 71a18a46b; the repair is evidenced by tests/align/test_merge_c84_sol.py passing UNMODIFIED (3 tests) and tests/align/test_final_disclosure_agreement.py (6 real-exclusion and mixed controls); the repair itself was not re-read by that reviewer; paper sha256 f9b4410c4d15d77dfc137222af6d1425690113a9039075ba8ae33c137f71e94a",
+        "paper": "docs/align/reviews/2026-11-08-merge-c84-sol-review.md"
+      }
+    ]
   }
 ]
