@@ -2691,7 +2691,10 @@ def dc_window(task):
                 # r23m review ruling (3): a member span partly outside the stream or with dropped samples prints
                 # a null whole-member DC-in with meter.member_uncovered_or_gap; never an extrapolated number.
                 reasons = []
-                if not covered or dropped_in(s, [tuple(span)]):    # covered implies a hull
+                if span is None:
+                    e = None
+                    reasons.append("meter.member_span_missing")          # no production member hull
+                elif not covered or dropped_in(s, [tuple(span)]):
                     e = None
                     reasons.append("meter.member_uncovered_or_gap")
                 per_turn = []
