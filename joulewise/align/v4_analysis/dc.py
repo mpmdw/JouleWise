@@ -1,8 +1,10 @@
 """Fresh benign DC observations and independent five-term LOTO diagnostic.
 
-Uses the production KM003C clock/coverage rules and the production ownership
-partition. No DC leaf is an input to GPU selection, fits or thresholds.
+Uses the production KM003C clock fit and ownership partition. Turn energy
+uses the registered sample-and-hold coverage rule; whole-member energy keeps
+the production integral. No DC leaf selects GPU fits or thresholds.
 """
+from bisect import bisect_right
 from dataclasses import asdict
 import math
 
@@ -10,6 +12,28 @@ from joulewise.align.attribution import _segments
 from joulewise.external import km003c_parse as kp
 from . import residual
 from .io import canonical, digest
+
+
+MAX_HOLD_NS = 3 * 100_000_000  # R23m D6: three nominal 100 ms poll periods.
+
+
+def _hold_integral(times_ns, watts, start, end):
+    """Power at t_i holds on [t_i, t_i+1); never extend stream edges.
+
+    A hold longer than MAX_HOLD_NS is entirely uncovered, even when only a
+    short part overlaps owned time. Inputs are after the production clock fit.
+    """
+    if not times_ns or not times_ns[0] <= start < end <= times_ns[-1]:
+        return None
+    i = bisect_right(times_ns, start)-1
+    parts = []
+    while times_ns[i] < end:
+        a, b = times_ns[i], times_ns[i+1]
+        if b-a > MAX_HOLD_NS:
+            return None
+        parts.append(watts[i] * ((min(b, end)-max(a, start))/1e9))
+        i += 1
+    return math.fsum(parts)
 
 
 def capture(streams, episode, member_span):
@@ -21,8 +45,9 @@ def capture(streams, episode, member_span):
             continue
         a, b = (v+offset for v in member_span)
         if not stream.host_ns[0] <= a < b <= stream.host_ns[-1] or kp.span_has_drops(stream, a, b):
+            # Whole-span defects remain disclosed. Only uncovered OWNED time
+            # makes the turn integral unavailable (D6); gaps/gates/holds do not.
             flags.append('meter.member_uncovered_or_gap')
-            continue
         if any(e.get('rx') is None or a <= e['rx'] < b for e in stream.errors):
             flags.append('meter.member_error')
             continue
@@ -32,13 +57,11 @@ def capture(streams, episode, member_span):
             continue
         owned = {t.index: [] for t in episode.logged_turns()}
         segments = _segments(episode, [])
-        def integral(start, end):
-            return kp.integrate(stream.host_ns, stream.watts, start+offset, end+offset)[0]
         for turn, kind, start, end in segments:
             if turn in owned:
-                owned[turn].append(integral(start,end))
-        whole = integral(*member_span)
-        if whole is None or any(v is None for parts in owned.values() for v in parts):
+                owned[turn].append(_hold_integral(stream.host_ns, stream.watts, start+offset, end+offset))
+        whole = kp.integrate(stream.host_ns, stream.watts, a, b)[0]
+        if any(v is None for parts in owned.values() for v in parts):
             flags.append('meter.turn_uncovered')
             continue
         energies = {i: (math.fsum(parts), 0.) for i, parts in owned.items()}

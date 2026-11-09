@@ -1,4 +1,4 @@
-# V4 primary engine (Sol), R23k + R23l
+# V4 primary engine (Sol), R23k + R23l + R23m
 
 2026-11-08. **PROVISIONAL: synthetic qualification, no live study validation.**
 Authority: the lead's engine-r23 brief (A37 and R23-E1/R23-1–4), on
@@ -13,6 +13,63 @@ not scientific certification.
 No Opus recompute code was read. Only the rulings were used for reconciliation.
 No network, model weights, live measurements or Block 5 outcomes were used.
 Coordination state is untouched, per the assignment.
+
+R23m applies the lead's four real-producer reconciliation rulings on
+`72410b0b4` (2026-11-08). Qualification here remains synthetic only:
+
+- **D6 / A20:** After the production clock fit and RAW/monotonic offset,
+  KM003C power at sample `t_i` holds over `[t_i, t_i+1)`. A hold **longer
+  than 300 ms** (three nominal 100 ms poll periods) is entirely uncovered.
+  `dc._hold_integral` sums power × overlap on production `_segments` ownership:
+  turn span plus its own tools, minus gates and holds. A 39.6 ms prefill inside
+  a covered hold is defined. Only an uncovered hold intersecting owned time,
+  or owned time outside the stream, causes `meter.turn_uncovered`; no power
+  is extrapolated before the first or after the last sample. Whole-span gaps
+  remain `meter.member_uncovered_or_gap` disclosures and do not invalidate
+  covered owned time. The whole-member value still calls production
+  `km003c_parse.integrate` on the member span, without changing its mean-sample
+  arithmetic. Clock-fit and meter-error checks remain in force.
+- **D2 / U2(a):** G0 applicability follows the registered slots, before
+  capture filtering. Ordinals 1–4 are the unchanged ungated anchors; W1
+  contrast slots, D and sentinels plan G0. A model with only planned anchor
+  slots has U2(a) `not_applicable`, regardless of stale observed fields.
+  Planned-but-absent G0 remains `inconclusive`, including when its capture is
+  missing or its observed `gated` field is false. Inapplicable parts do not
+  enter the combined U2 status; both parts inapplicable gives `not_applicable`.
+- **D5:** An uncaptured member has exactly `classes: ["not_captured"]`.
+  Recorded placeholder exclusions do not add classes, and an uncaptured W1
+  anchor does not add `incomplete` to its block's exclusion reason. Captured
+  incomplete episodes retain `incomplete`.
+- **D7:** Incremental prefixes are supported, including W1 alone, W1+C1,
+  then W1+C1+C2. Window/member result rows exist only for present windows;
+  the full frozen allocation and U3 comparison budget remain registration
+  metadata. With no T window, `test` is `{}` and contains no test summaries.
+
+`anchor_sigma_w` always reports the number `K` of eligible four-anchor blocks.
+With fewer than three blocks, all five moment/scale fields are null, and the
+empty-state structure is fixed (W1's block disclosure and K reflect the input):
+
+```json
+{
+  "status": "print_only",
+  "W1_anchor_block": "unavailable:W1 window unavailable",
+  "K": 0,
+  "anchor_sigma_j": null,
+  "ms_window_j2": null,
+  "ms_error_j2": null,
+  "sigma_w2_raw_j2": null,
+  "sigma_w2_reported_j2": null,
+  "method": "balanced crossed-anchor moment",
+  "reason": "requires K >= 3 anchor sessions"
+}
+```
+
+Eligible W1+C1 reports `K: 2`, `W1_anchor_block: "included"` with those null
+moments; adding eligible C2 reports K=3 and computes the registered moments.
+No calibration predicate, calibration identity pin or frozen allocation changed.
+Scorer provenance does change; prior threshold freezes must be regenerated.
+Hand witnesses: `tests.align.test_v4_r23m_engine`; verification and handoff:
+[`2026-11-08-engine-r23m.md`](../../run_reports/2026-11-08-engine-r23m.md).
 
 R23l (lead rulings on the Opus review of r23k, 2026-11-08):
 (1) A captured member's bundle config is bound to its slot. The derived seed
@@ -267,7 +324,7 @@ exclusions mean modules in `v4_analysis/`.
 | A9 | `exclusions.FLAG_TO_CLASS/CLASSES`; union of re-derived and recorded classes. `thermal_desk.thermal_timeout_exclusions` derives X2 from G1/H timeout intervals or a positive timeout count on a stopped episode. Component sets, reasons and mismatch print for unsealed members. |
 | A10 | `raw.member` limits registered OS readings to registered_span_ns; production desk derives registered-span X1; episode observations remain visible. |
 | A11 | `apple.thermal_desk.member_record/acceptance`: wall spans through tool ends include holds; collector-grid episode/G0 coverage; PM uncovered-gap or wide-support union. G1+H entries/timeouts over captured members with sidecars, including X1–X4. |
-| A12 | Journal-matched one-sided release checks; released G0 values only; no G1/H releases → U2(b) not_applicable. |
+| A12 | Journal-matched one-sided release checks; released G0 values only. No registered G0 for the model → U2(a) not_applicable; planned but absent → inconclusive. No G1/H releases → U2(b) not_applicable. |
 | A13 | `acceptance.window_checks/u3_pair`: W1 5/17 plus 6/16, 9/13, 7/15, 10/12; C/T 5/22. Tags must agree if present. Equal identity digest AND per-turn C/P/D; divergence is X5. Ineligible replay inconclusive. Decode-owned active-weighted clock and R1 D screen retained. |
 | A14 | `acceptance.u4`: cumulative results including T, first evaluation at W≥3; unavailable/ineligible/<3-turn/divergent sentinels skip that window. |
 | A15 | `acceptance.u5`: three actual R1 G0 temperatures, energy OLS with intercept, df=1, 90% t interval, replay sample SD floored at 2.97 J. Designed targets printed; triggers_R20=false. |
@@ -275,7 +332,7 @@ exclusions mean modules in `v4_analysis/`.
 | A17 | R22-2/R24 `apple.v4_cadence.calibration_stop`: exactly eight admitted windows, C9–C14 only replace structural bars, no low-m top-up. Bars contribute nothing. Provisional eligibility → pending_final_eligibility. A final zero capture awaits its retry; a second zero bars that slot. |
 | A18 | `_test_summary`: one-sided 95% Clopper–Pearson via production incomplete beta; missing assignments retained. |
 | A19 | Exactly eight eligible token-identical W1 runs, second-stage indicator, admission within 2 s. Insufficient runs → fixed `insufficient_contrast_runs`, print-only `reason`, no fit statistics. Recorded G1 waiting is an above-E+δ sidecar sample before release. With eight runs, numbers print even if treatment was not delivered. |
-| A20 | `dc.capture/analyze_windows`: benign DC desk actually runs; whole-member and owned integrals, battery-assist disclosure, own five-term h=0 LOTO model. GPU coefficients never transfer. Non-benign rows sealed; comparison presence/status only. Missing DC never selects GPU. |
+| A20 | `dc.capture/analyze_windows`: benign DC desk actually runs; whole-member production `km003c_parse.integrate`, owned sample-and-hold integral (holds >300 ms uncovered), battery-assist disclosure, own five-term h=0 LOTO model. GPU coefficients never transfer. Non-benign rows sealed; comparison presence/status only. Missing DC never selects GPU. |
 | A21 | `raw.member` calls production stamp_mapping over all recorded stamps, anchor widened; optional exported offset_ns checked exactly. `io.strict_json` recovers recorded binary floats; standalone exact conversion retains strings/integers. SampleColumns reproduces adapter float-second elapsed accumulation, epoch addition and start subtraction before Fraction(float) → ns; source lines are cited above. |
 | A22 | U3 heavy-tail trigger uses each difference's zero-centred leave-one-out RMS. R25 includes C9–C14 scopes and N=22 in the series-tail quantile. |
 | A23 | U1–U3 FAIL and R22-2 whole-window capture failure bar pool entry; INCONCLUSIVE prints and counts when otherwise unbarred. |

@@ -109,6 +109,12 @@ def u3_pair(a, b, derivation, population):
 
 
 def window_checks(members, derivation, *, window=None):
+    # The registered roster leaves ordinals 1-4 unchanged/ungated. All
+    # contrast, D and sentinel slots plan G0. Decide from planned slots BEFORE
+    # filtering captures, never from the presence of a recorded G0 interval.
+    g0_planned = {model: any(m['slot'].get('ordinal') not in (1, 2, 3, 4)
+                            for m in members if m['slot']['model_id'] == model)
+                  for model in {m['slot']['model_id'] for m in members}}
     members = [m for m in members if m.get('captured', m['thermal'].get('captured', True))]
     result = {}
     for model in sorted({m['slot']['model_id'] for m in members}):
@@ -133,6 +139,11 @@ def window_checks(members, derivation, *, window=None):
             pairs.append(dict(ordinals=[a, b], **p))
         # Anchors in C/T are bridge diagnostics, not extra U3 tests (R25 N=22).
         check = td.acceptance(rows, v4=True)
+        if not g0_planned[model]:
+            check['U2']['parts']['a'] = 'not_applicable'
+            check['U2']['g0_slow_range_c'] = None
+            applicable = [v for v in check['U2']['parts'].values() if v != 'not_applicable']
+            check['U2']['status'] = td.combine(applicable) if applicable else 'not_applicable'
         check['U3'] = dict(status=td.combine([p['status'] for p in pairs if p['status'] != 'excluded'])
                           if any(p['status'] != 'excluded' for p in pairs) else 'inconclusive', pairs=pairs)
         result[model] = {k: check[k] for k in ('U1', 'U2', 'U3')}
@@ -168,10 +179,11 @@ def anchor_diagnostic(windows, selection=None):
         else:
             reasons = set()
             for r in anchors:
-                reasons.update(ex.classes([*td.calibration_exclusions(r),
-                    *r.get('calibration_exclusions', []), *r.get('analysis_classes', [])]))
                 if not r.get('captured', True):
                     reasons.add('not_captured')
+                    continue
+                reasons.update(ex.classes([*td.calibration_exclusions(r),
+                    *r.get('calibration_exclusions', []), *r.get('analysis_classes', [])]))
                 if r.get('status') != 'completed':
                     reasons.add('incomplete')
                 if r.get('anchor_eligible') is not True and not reasons:
@@ -188,8 +200,11 @@ def anchor_diagnostic(windows, selection=None):
         anchors = [m for m in w['members'] if m['slot']['series_role'] == 'anchor']
         if len(anchors) == 4 and all(m['captured'] and m['eligible'] for m in anchors):
             sessions[w['window']] = {str(m['slot']['ordinal']): m['thermal']['turn_owned_j'] for m in anchors}
-    result = td._anchor_moments(sessions)
-    if 'K' in result:
+    result = dict(K=len(sessions), anchor_sigma_j=None, ms_window_j2=None, ms_error_j2=None,
+                  sigma_w2_raw_j2=None, sigma_w2_reported_j2=None,
+                  method='balanced crossed-anchor moment')
+    result.update(td._anchor_moments(sessions))
+    if result['ms_window_j2'] is not None:
         raw = (result['ms_window_j2']-result['ms_error_j2'])/4
         result.update(sigma_w2_raw_j2=raw, sigma_w2_reported_j2=max(0., raw))
     # The historical helper has a 6J veto; v4 expressly demotes it to print-only.

@@ -316,10 +316,10 @@ def _screen_member(member, cohort, *, divergent=False):
     m = member
     m['reasons'] = _member_reasons(m, cohort)
     m['rederived_classes'] = ex.classes(m['reasons'])
-    if divergent:
+    if divergent and m['captured']:
         m['rederived_classes'] = sorted(set([*m['rederived_classes'], 'X5']))
     m['recorded_classes'] = ex.classes([*m['thermal'].get('calibration_exclusions', []),
-                                       *m.get('source_flags', [])])
+                                       *m.get('source_flags', [])]) if m['captured'] else []
     m['classes'] = sorted(set(m['rederived_classes']) | set(m['recorded_classes']))
     m['eligible'] = not m['classes']
     t = m['thermal']
@@ -483,7 +483,8 @@ def selection_report(desk, derivation, delta_slow_c, predeclared):
         return dict(status='inconclusive', reason='W1 desk snapshot unavailable')
     rows = [r for r in desk['members'] if r.get('captured', True)]
     checks = ac.window_checks([dict(slot={'model_id': D_MODEL if r.get('ordinal') in (5, 8, 11, 14, 17, 18)
-                                        else r['model'], 'ordinal': r.get('ordinal')}, thermal=r) for r in rows], derivation, window='W1')
+                                        else r['model'], 'ordinal': r.get('ordinal')}, thermal=r)
+                              for r in desk['members']], derivation, window='W1')
     contrasts = [r for r in rows if r.get('template') in ('X', 'Y') and r.get('arm') in ('S', 'G')]
     contrast = td.deciding_experiment(contrasts, v4=True, delta_slow_c=delta_slow_c, predeclared=predeclared)
     for key in list(contrast.get('same_arm_pairs', {})):
@@ -784,7 +785,8 @@ def analyze(payload, *, workers=1, frozen_thresholds=None):
             member_ids=[m['slot']['run_id'] for m in selected],
             scores=[{k: r[k] for k in ('run_id', 'score', 'predicted_j', 'residual_j', 'training_trajectories')}
                     for r in refit['scores']], same_fit_inputs=len(selected) == len(members)))
-    test = {c: {KEYS[p]: {} for p in PAIRS} for c in CONVENTIONS}
+    has_tests = any(w['window'].startswith('T') for w in windows)
+    test = {c: {KEYS[p]: {} for p in PAIRS} for c in CONVENTIONS} if has_tests else {}
     monitoring = {}
     carrier_rows = []
     carrier_full = defaultdict(list)
@@ -820,7 +822,7 @@ def analyze(payload, *, workers=1, frozen_thresholds=None):
                     for r in f['scores'] if r['condition'] == condition)
     for convention in CONVENTIONS:
         for pair in PAIRS:
-            for condition in ('benign', 'sabotage'):
+            for condition in (('benign', 'sabotage') if has_tests else ()):
                 rows = test[convention][KEYS[pair]].get(condition, [])
                 present = {(r['window'], r['run_id']) for r in rows}
                 # Zero-capture retries consume no assignment. Only the last
