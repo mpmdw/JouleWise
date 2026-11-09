@@ -135,6 +135,8 @@ def candidate():
                                                   'STRUCTURAL bar of a C window (U1-U3 fail, whole-window capture '
                                                   'failure, zero-capture refusal beyond the retry); never on scores, '
                                                   'counts or to repair low m'),
+    # NOTE (R17, RUN_STATE 228): ``fence_from`` stays in the seed-checked frozen bytes, but the
+    # RUN_STATE 216 fence it records is WITHDRAWN; bind_packet enforces R17's k+2 rule instead.
                 seed_allocation=dict(held_out_start=HELD_OUT_START, reserved=sorted(RESERVED_INDICES),
                                      order='per pair, kit order: C1-C8, T1-T3 (as R15), then the reserve pool for '
                                            'C9-C14; distinct indices',
@@ -635,9 +637,11 @@ def bind_packet(root, name, packet, *, authenticated_by_rebuild=False):
     cal_attempts = {r['window'] for r in rows}
     if packet.get('lead_rulings', []) != [r for r in releases if r['after_window'] in cal_attempts]:
         raise ValueError('lead_rulings disagree with the lead_release entries of the series history')
-    # R216 final-eligibility fence starts at the sixth calibration arm (kept by R15).
-    if target['role'] == 'calibration' and int(target['id'][1:]) >= 6 and any(r['status'] != 'final' for r in rows):
-        raise ValueError('C6 onward requires final eligibility for prior calibration windows')
+    # R17 (RUN_STATE 228; replaces the withdrawn RUN_STATE 216 "from window 6" fence): only the previous
+    # attempt may still be provisional. Window k's final eligibility is due before the arm of k+2.
+    attempts = _attempts(history)
+    if any(a.get('status') != 'final' for a in attempts[:-1]):
+        raise ValueError('R17: window k final eligibility must be recorded before the arm of k+2')
     if not authenticated_by_rebuild:
         for check in packet.get('checks', {}).values():
             if evidence(check.get('evidence')) != check.get('status'):

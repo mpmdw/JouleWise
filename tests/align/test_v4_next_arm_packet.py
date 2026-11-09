@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -32,7 +33,7 @@ class Scenario:
     """One window record (and the series state that points at it) in a synthetic Git repository."""
 
     def __init__(self, directory, window='W1', *, previous=None, captured=True, eligible=True,
-                 b_bar=True):
+                 b_bar=True, provisional=False, previous_final=False):
         self.root = Path(directory)
         if previous is None:
             self.git('init', '-q')
@@ -53,7 +54,7 @@ class Scenario:
             'chain_started': {'pgid': 123}, 'chain_exited': {'exit_code': 0},
             'courier': {'sent': True}, 'courier_sent': b'',
             'watchdog_state': {},
-            'pilot': {'status': 'instrument_ok', 'checks': {'synthetic_check': True}, 'extra_checks': {
+            'pilot': {'plan_id': plan_id, 'status': 'instrument_ok', 'checks': {'synthetic_check': True}, 'extra_checks': {
                 'thermal': {'schema': 'joulewise.align.thermal_desk.v1',
                     'model_windows': {f'tiny/{window}': {f'U{k}': {'status': 'pass' if k < 4 else 'inconclusive'}
                                                         for k in range(1, 6)}},
@@ -87,6 +88,7 @@ class Scenario:
         self.absent_captures = set() if captured else set(ids)
         self.omit_sources = set()
         self.raw_custody = False
+        self.provisional, self.previous_final = provisional, previous_final
         if not captured:
             self.sources['result'].update(verdict='REFUSED', chain_exit_code=None, chain_sha256=None)
             self.omit_sources.update(('chain_started', 'chain_exited'))
@@ -122,6 +124,22 @@ class Scenario:
         self.sources['watchdog_state'].setdefault('released_terminal_windows', [
             f"{self.sources['plan']['plan_id']}:/DO-NOT-FOLLOW/custody:"
             f"{builder.digest((json.dumps(self.sources['result'], sort_keys=True) + chr(10)).encode())}"])
+        if self.provisional:
+            # R17: committed before the Air full desk finished; the light triage stands in.
+            self.final_sources = {k: copy.deepcopy(self.sources[k]) for k in builder.FINAL_SOURCES}
+            light_thermal = copy.deepcopy(self.thermal)
+            for m in light_thermal['members']:
+                m['excluded'] = bool(m['calibration_exclusions'])
+            self.sources['light_triage'] = {'schema': builder.LIGHT_TRIAGE_SCHEMA, 'window': self.window,
+                'thermal': light_thermal, 'checks': {'v4_B_bar': self.sources['desk']['checks']['v4_B_bar']},
+                'km003c': self.sources['pilot']['extra_checks']['km003c'],
+                'series_desk_row': self.sources['pilot']['extra_checks'].get('series_desk_row')}
+            self.sources['desk'] = {'plan_id': self.sources['plan']['plan_id'], 'status': 'running_off_mbp'}
+            self.omit_sources.update(('pilot', 'exclusions'))
+        if self.previous_final:
+            prior = self.previous
+            self.record['previous_final'] = {'record_sha256': prior.link['sha256'], 'sources': {
+                k: self.write(f'{d}/previous-final/{k}.json', v) for k, v in prior.final_sources.items()}}
         self.record['sources'] = {k: self.write(f'{d}/evidence/{k}.json', v)
                                   for k, v in self.sources.items() if k not in self.omit_sources}
         pairs = [m['run_id'] for m in self.members]
@@ -130,6 +148,14 @@ class Scenario:
             if self.raw_custody else self.write(f'{d}/captures/{i}.jsonl', b'{"monotonic_ns":1,"power_w":1}\n'))
             for i in pairs}
         self.record['raw_evidence'] = [self.write(f'{d}/raw/sidecar.jsonl', b'{"temperature_c":30}\n')]
+        if self.window != 'R1' and not getattr(self, 'omit_finalized_manifest', False):
+            # R17 review F2: the record binds the finalized (record-bound) tree manifest, canonical bytes.
+            finalized = {'schema': builder.FINALIZED_MANIFEST_SCHEMA, 'source_root': '/DO-NOT-FOLLOW/session-' + d,
+                         'entries': {'raw/sidecar.jsonl': {'sha256': 'f' * 64, 'size': 21}},
+                         'closure': {'links': {}, 'files': {}, 'inputs': [], 'mirror': None}}
+            self.record['finalized_manifest'] = self.write(
+                f'{d}/evidence/finalized_manifest.json',
+                json.dumps(finalized, sort_keys=True, separators=(',', ':')).encode())
         if self.raw_custody:
             self.record['raw_evidence'].extend(self.record['captures'].values())
         self.record_path = f'{d}/record.json'
@@ -138,6 +164,14 @@ class Scenario:
         self.git('update-ref', 'refs/remotes/synthetic/records', self.record_commit)
         self.link = {'commit': self.record_commit, 'path': self.record_path, 'sha256': index['sha256']}
         self.series['last_passed_record'] = dict(self.link)
+        if self.provisional:
+            # Its desk has not passed yet: the last desk-passed state is the previous record's.
+            prior = self.previous
+            self.series['last_passed_record'] = dict(prior.passed_ref)
+        self.passed_ref = dict(self.series['last_passed_record'])
+        if self.previous_final:
+            # The previous window's desk passed off the MBP and rides in this record.
+            self.previous.passed_ref = {**self.previous.link, 'final_record': dict(self.link)}
         if change_code:
             self.write(CODE_PATH, b'synthetic-code-v2\n')       # the working tree (the arm's code) moves on
         self.series.update(previous_record=dict(self.link),
@@ -749,6 +783,308 @@ class ArmRebuildTests(Base):
                 return subprocess.CompletedProcess(argv, 0, b'', b'')
             self.assertFalse(session._probe_meter_live(tmp, runner=absent)['live'])
             self.assertFalse(session._probe_meter_live(tmp, runner=lambda argv, **k: subprocess.CompletedProcess(argv, 2, b'', b''))['live'])
+
+
+class ArmOrderWitness(Base):
+    """Lead ruling on R17 review open item 5: the full order of one real arm through _arm_and_install.
+
+    Every subprocess, file write and disk_usage of the arm precedes the dwell stamp. After it come
+    only the single dwell-record write (the stamp value) and the installer handoff. Recorded with a
+    Python audit hook (subprocess.Popen, open-for-write, os.rename/replace/remove/mkdir) plus the
+    host-observation seams, which stand for subprocesses on the MBP.
+    """
+
+    def test_every_subprocess_write_and_disk_usage_precedes_the_dwell_stamp(self):
+        import shutil
+        import sys
+        from scripts import align_v4_session as session, align_v4_kit as kit
+        from tests.align.test_v4_cadence import write_battery_log
+        from scripts import align_v4_series as series
+        s = self.scenario()
+        s.write(series.MANIFEST.as_posix(), series.raw_json(series.candidate()))   # W1 -> C1 binds the frozen series
+        s.finish()
+        packet = s.build()
+        target = Path(tempfile.mkdtemp(dir=s.root.parent)) / 'session'
+        target.mkdir()
+        log = write_battery_log(target.parent / 'battery.jsonl', NOW)
+        events, state = [], {'on': False}
+        write_flags = os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_APPEND | os.O_TRUNC
+
+        def hook(event, args):
+            if not state['on']:
+                return
+            if event == 'subprocess.Popen':
+                events.append(('subprocess', ' '.join(map(str, args[1] or [args[0]]))[:60]))
+            elif event == 'open' and len(args) >= 3:
+                mode, flags = args[1], args[2]
+                if (isinstance(mode, str) and any(c in mode for c in 'wxa+')) or (
+                        mode is None and isinstance(flags, int) and flags & write_flags):
+                    events.append(('write', str(args[0])))
+            elif event in ('os.rename', 'os.replace', 'os.remove', 'os.mkdir', 'shutil.copyfile'):
+                events.append(('write', f'{event}:{args[0]}'))
+        sys.addaudithook(hook)
+        real_usage = shutil.disk_usage
+
+        def usage(path):
+            events.append(('disk_usage', str(path)))
+            return real_usage(path)
+
+        def seam(name, value):
+            def call(*_args, **_kwargs):
+                events.append(('subprocess', 'seam:' + name))
+                return value
+            return call
+
+        def disk_gate(config, gate=None):
+            Path(log).read_bytes()                       # the gate's reads
+            shutil.disk_usage(target)
+            return {'status': 'pass'}
+
+        def stamp():
+            events.append(('DWELL', 'stamp'))
+            return time.monotonic_ns()
+        good = dict(passed=True, probe_error=False, external_connected=True, is_charging=False,
+                    current_capacity_pct=100, instant_amperage_ma=0, update_age_s=1)
+        arm_state = {'v4_series': {'window_id': 'C1'}, 'source_measurement_root': str(s.root)}
+        with patch.dict(os.environ, {'JOULEWISE_HOST_STATE_DIR': str(target.parent / 'host')}), \
+             patch('joulewise.align.apple.powermode.admit_ac_powermode',
+                   side_effect=seam('powermode', {'admitted': True, 'observed': 0})), \
+             patch('joulewise.align.apple.external_volume.census', side_effect=seam('volumes', {})), \
+             patch('joulewise.align.apple.external_volume.arm_check',
+                   return_value={'verdict': 'PASS', 'reasons': []}), \
+             patch('joulewise.battery_float.observe', side_effect=seam('battery', (good, b'synthetic'))), \
+             patch.object(kit, 'arm_powermode_check', side_effect=seam('powermode_check', None)), \
+             patch.object(session, 'w1_disk_check', side_effect=disk_gate), \
+             patch('shutil.disk_usage', side_effect=usage), \
+             patch.object(session.pilot, 'install', side_effect=seam('INSTALL', {'synthetic': True})):
+            state['on'] = True
+            try:
+                session._arm_and_install(target, arm_state, s.root, s.next_plan, None,
+                    runner=lambda argv: subprocess.CompletedProcess(argv, 0, '', ''), volume_runner=None,
+                    now=lambda: NOW, w1_disk_config=None, disk_gate=None, battery_log=log,
+                    obc_off_attested_by='synthetic', next_arm_triage=packet,
+                    meter_probe=seam('meter_probe', {'live': True, 'samples': 40}), dwell_start=stamp)
+            finally:
+                state['on'] = False
+        kinds = [kind for kind, _ in events]
+        self.assertEqual(kinds.count('DWELL'), 1, events)
+        cut = kinds.index('DWELL')
+        before, after = events[:cut], events[cut + 1:]
+        dwell_record = str(target / 'staging/v4-arm-001.dwell.json')
+        # After the stamp: exactly the one dwell-record write, then the installer handoff; after the
+        # installer returns, only that same dwell record is rewritten with installer_end_ns (lead ruling).
+        def dwell_write(event):
+            return event[0] == 'write' and dwell_record in event[1]
+        install = after.index(('subprocess', 'seam:INSTALL'))
+        self.assertEqual(after[:install], [('write', dwell_record)], after)
+        self.assertTrue(after[install + 1:] and all(dwell_write(e) for e in after[install + 1:]), after)
+        # Before it: the Git work, every host seam, the disk gate's disk_usage and every record write.
+        self.assertTrue(any(k == 'subprocess' and 'git' in v for k, v in before), before)
+        for name in ('powermode', 'volumes', 'battery', 'meter_probe', 'powermode_check'):
+            self.assertIn(('subprocess', 'seam:' + name), before)
+        self.assertIn(('disk_usage', str(target)), before)
+        written = {v for k, v in before if k == 'write'}
+        for name in ('staging/v4-arm-001.json', 'session.json', 'staging/w1_disk_gate.json'):
+            # pilot.h.write publishes through a hidden temporary and a rename
+            self.assertTrue(any(name.rsplit('/', 1)[-1] in v for v in written), (name, sorted(written)))
+        dwell = json.loads(Path(dwell_record).read_bytes())
+        self.assertTrue(dwell['admitted'])
+        self.assertTrue(dwell['quiet_dwell']['meter_probe_before_dwell'])
+        self.assertTrue(dwell['quiet_dwell']['record_checks_and_writes_before_dwell'])
+        self.assertEqual(dwell['quiet_dwell']['installer_outcome'], 'returned')
+        self.assertGreater(dwell['quiet_dwell']['installer_end_ns'], dwell['quiet_dwell']['start_ns'])
+        record = json.loads((target / 'staging/v4-arm-001.json').read_bytes())
+        self.assertIsNone(record['quiet_dwell']['start_ns'])
+        self.assertEqual(record['quiet_dwell']['dwell_record'], dwell_record)
+
+
+class R17ProvisionalTests(Base):
+    """RUN_STATE 228 R17: provisional eligibility at the arm; window k final before the arm of k+2."""
+
+    def series_of(self, specs):
+        temp = tempfile.TemporaryDirectory(prefix='jw-triage-r17-')
+        self.addCleanup(temp.cleanup)
+        previous = Scenario(temp.name, 'W1').finish()
+        for window, kwargs in specs:
+            previous = Scenario(temp.name, window, previous=previous, **kwargs).finish()
+        return previous
+
+    def test_previous_window_arms_on_the_light_triage(self):
+        s = self.series_of([('C1', {}), ('C2', {'provisional': True})])
+        packet = s.build()
+        self.assertTrue(packet['packet_preflight']['ready'], packet['packet_preflight'])
+        self.assertEqual([r['status'] for r in packet['calibration_windows']], ['final', 'provisional'])
+        self.assertIn('R17 provisional', packet['checks']['member_eligibility']['basis'])
+        self.assertEqual(packet['checks']['full_desk_gate']['status'], 'deferred')
+        self.assertTrue(evaluate(s, packet)['admitted'])
+
+    def test_window_k_must_be_final_before_the_arm_of_k_plus_2(self):
+        stale = self.series_of([('C1', {'provisional': True}), ('C2', {})])
+        packet = stale.build()
+        self.assertFalse(packet['packet_preflight']['ready'])
+        self.assertIn('R17: final eligibility of C1', packet['calibration_error'])
+        bound = self.series_of([('C1', {'provisional': True}), ('C2', {'previous_final': True})])
+        packet = bound.build()
+        self.assertTrue(packet['packet_preflight']['ready'], packet['packet_preflight'])
+        self.assertEqual([r['status'] for r in packet['calibration_windows']], ['final', 'final'])
+
+    def test_final_counts_come_from_the_successor_and_may_only_be_lower(self):
+        temp = tempfile.TemporaryDirectory(prefix='jw-triage-r17b-')
+        self.addCleanup(temp.cleanup)
+        w1 = Scenario(temp.name, 'W1').finish()
+        c1 = Scenario(temp.name, 'C1', previous=w1, provisional=True)
+        c1.sources['exclusions']['members_excluded'] = [{'run_id': c1.members[0]['run_id'], 'codes': ['clock.step']}]
+        c1.thermal['members'][0]['excluded'] = True          # the harvest excluded one member
+        c1.finish()
+        c2 = Scenario(temp.name, 'C2', previous=c1, previous_final=True).finish()
+        rows = c2.build()['calibration_windows']
+        self.assertEqual(rows[0]['status'], 'final')
+        self.assertEqual(sum(rows[0]['eligible_benign'].values()), 1)
+        self.assertEqual(sum(c1.build()['calibration_windows'][0]['eligible_benign'].values()), 2)  # provisional
+
+    def test_full_desk_due_refuses_the_provisional_adjudication(self):
+        temp = tempfile.TemporaryDirectory(prefix='jw-triage-r17d-')
+        self.addCleanup(temp.cleanup)
+        w1 = Scenario(temp.name, 'W1').finish()
+        w1.passed_ref = dict(w1.link)
+        c1 = Scenario(temp.name, 'C1', previous=w1, provisional=True).finish()
+        changed = c1.build(current='f' * 64)          # code/config moved since the last desk pass
+        self.assertFalse(changed['packet_preflight']['ready'])
+        self.assertIn('member_eligibility', ' '.join(changed['packet_preflight']['reasons']))
+        provisional_w1 = Scenario(tempfile.mkdtemp(prefix='jw-triage-r17w-', dir=temp.name), 'W1')
+        provisional_w1.provisional = True
+        provisional_w1.previous = w1                  # only for its passed_ref; W1 always needs the full desk
+        packet = provisional_w1.finish().build()
+        self.assertFalse(packet['packet_preflight']['ready'])
+
+    def test_previous_final_must_name_the_record_it_finalizes(self):
+        temp = tempfile.TemporaryDirectory(prefix='jw-triage-r17e-')
+        self.addCleanup(temp.cleanup)
+        w1 = Scenario(temp.name, 'W1').finish()
+        c1 = Scenario(temp.name, 'C1', previous=w1, provisional=True).finish()
+        c2 = Scenario(temp.name, 'C2', previous=c1, previous_final=True).finish()
+        record = copy.deepcopy(c2.record)
+        record['previous_final']['record_sha256'] = '0' * 64
+        index = c2.write(c2.record_path, record)
+        c2.record_commit = c2.commit()
+        c2.git('update-ref', 'refs/remotes/synthetic/records', c2.record_commit)
+        c2.series['previous_record'] = {'commit': c2.record_commit, 'path': c2.record_path, 'sha256': index['sha256']}
+        c2.write(c2.series_path, c2.series)
+        c2.series_commit = c2.commit()
+        packet = c2.build()
+        self.assertFalse(packet['packet_preflight']['ready'])
+        self.assertIn('previous_final must name this record', packet['calibration_error'])
+
+    def test_schema_constants_match_the_light_triage_module(self):
+        from joulewise.align.apple import light_triage
+        self.assertEqual(builder.LIGHT_TRIAGE_SCHEMA, light_triage.SCHEMA)
+
+
+class R17ReviewFinalityTests(Base):
+    """R17 review (Sol seats 1 and 2): what counts as final, and the record-bound manifest."""
+
+    def root(self):
+        temp = tempfile.TemporaryDirectory(prefix='jw-triage-r17r-')
+        self.addCleanup(temp.cleanup)
+        return temp.name
+
+    def test_constants_match_the_runner_and_the_offload_module(self):
+        from joulewise.align.apple import harvest_offload
+        from scripts import align_v4_harvest_off as runner
+        self.assertEqual(builder.COMPLETED_HARVEST, runner.COMPLETED_HARVEST)
+        self.assertEqual(builder.FINALIZED_MANIFEST_SCHEMA, harvest_offload.FINALIZED_SCHEMA)
+
+    def light_with_stale_final_sources(self, root, w1):
+        # F4: PILOT/exclusions present, desk still running off the MBP, honest light triage.
+        c1 = Scenario(root, 'C1', previous=w1)
+        light = copy.deepcopy(c1.thermal)
+        for m in light['members']:
+            m['excluded'] = bool(m['calibration_exclusions'])
+        c1.sources['light_triage'] = {'schema': builder.LIGHT_TRIAGE_SCHEMA, 'window': 'C1', 'thermal': light,
+            'checks': {'v4_B_bar': True}, 'km003c': c1.sources['pilot']['extra_checks']['km003c'],
+            'series_desk_row': c1.sources['pilot']['extra_checks']['series_desk_row']}
+        c1.sources['desk'] = {'plan_id': c1.sources['plan']['plan_id'], 'status': 'running_off_mbp'}
+        c1.finish()
+        c1.series['last_passed_record'] = dict(w1.passed_ref)
+        c1.passed_ref = dict(w1.passed_ref)
+        c1.write(c1.series_path, c1.series)
+        c1.series_commit = c1.commit()
+        return c1
+
+    def test_stale_final_sources_with_a_running_desk_are_provisional_not_final(self):
+        root = self.root()
+        w1 = Scenario(root, 'W1').finish()
+        c1 = self.light_with_stale_final_sources(root, w1)
+        first = c1.build()
+        self.assertEqual(first['calibration_windows'][-1]['status'], 'provisional')
+        self.assertTrue(evaluate(c1, first)['admitted'])          # the one allowed unfinished window
+        c2 = Scenario(root, 'C2', previous=c1).finish()
+        packet = c2.build()
+        self.assertIn('R17: final eligibility of C1', packet['calibration_error'])
+        self.assertIn('no completed harvest', packet['calibration_error'])
+        self.assertFalse(evaluate(c2, packet)['admitted'])
+
+    def test_a_completed_non_passing_desk_is_final(self):
+        root = self.root()
+        w1 = Scenario(root, 'W1').finish()
+        c1 = Scenario(root, 'C1', previous=w1)
+        c1.sources['pilot']['status'] = 'instrument_incomplete'
+        c1.sources['desk'].update(pilot_status='instrument_incomplete', checks={'synthetic_check': False})
+        c1.finish()
+        c1.series['last_passed_record'] = dict(w1.passed_ref)
+        c1.write(c1.series_path, c1.series)
+        c1.series_commit = c1.commit()
+        c2 = Scenario(root, 'C2', previous=c1).finish()
+        packet = c2.build()
+        self.assertNotIn('calibration_error', packet)
+        self.assertEqual([r['status'] for r in packet['calibration_windows']], ['final', 'final'])
+
+    def test_a_zero_capture_attempt_needs_no_harvest_to_be_final(self):
+        root = self.root()
+        w1 = Scenario(root, 'W1').finish()
+        c1 = Scenario(root, 'C1', previous=w1, captured=False)
+        c1.sources['desk']['harvest_status'] = 'not_run'        # nothing was captured, so nothing harvested
+        c1.finish()
+        c1.series['last_passed_record'] = dict(w1.passed_ref)
+        c1.write(c1.series_path, c1.series)
+        c1.series_commit = c1.commit()
+        c2 = Scenario(root, 'C1#2', previous=c1).finish()
+        packet = c2.build()
+        self.assertNotIn('calibration_error', packet)
+        self.assertNotEqual(packet['checks']['member_eligibility']['status'], 'fail')
+        self.assertEqual([r['status'] for r in packet['calibration_windows']], ['final', 'final'])
+
+    def test_previous_final_sources_must_evidence_a_completed_plan_bound_harvest(self):
+        for label, change in (('running desk', lambda c: c.final_sources.__setitem__(
+                                   'desk', {'plan_id': c.sources['plan']['plan_id'], 'status': 'running_off_mbp'})),
+                              ('program fault', lambda c: c.final_sources['desk'].update(harvest_status='program_fault')),
+                              ('other plan', lambda c: c.final_sources['desk'].update(plan_id='synthetic-other')),
+                              ('other pilot', lambda c: c.final_sources['pilot'].update(plan_id='synthetic-other'))):
+            with self.subTest(label):
+                root = self.root()
+                w1 = Scenario(root, 'W1').finish()
+                c1 = Scenario(root, 'C1', previous=w1, provisional=True).finish()
+                change(c1)
+                c2 = Scenario(root, 'C2', previous=c1, previous_final=True).finish()
+                packet = c2.build()
+                self.assertIn('R17: final eligibility of C1', packet['calibration_error'])
+                self.assertFalse(evaluate(c2, packet)['admitted'])
+
+    def test_record_must_bind_a_canonical_finalized_manifest(self):
+        root = self.root()
+        w1 = Scenario(root, 'W1').finish()
+        c1 = Scenario(root, 'C1', previous=w1)
+        c1.omit_finalized_manifest = True
+        c1.finish()
+        with self.assertRaisesRegex(ValueError, 'must bind the finalized tree manifest'):
+            c1.build()
+        c1b = Scenario(self.root(), 'W1')
+        c1b.omit_finalized_manifest = True
+        c1b.record['finalized_manifest'] = c1b.write('w-W1/evidence/finalized_manifest.json', {
+            'schema': builder.FINALIZED_MANIFEST_SCHEMA, 'source_root': '/x', 'entries': {}, 'closure': {}})
+        c1b.finish()
+        with self.assertRaisesRegex(ValueError, 'not a canonical'):
+            c1b.build()
 
 
 if __name__ == '__main__':

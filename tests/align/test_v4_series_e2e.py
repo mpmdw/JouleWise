@@ -357,15 +357,15 @@ class SeriesCadenceEndToEnd(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'insufficient_calibration'):
             self.packet('C8')
 
-    def test_c6_fence_and_d_alias(self):
+    def test_r17_k_plus_2_finality_and_d_alias(self):
         self.outcome('W1', captured=18)
         root, record, error, calls = self.arm('D1', self.packet('C1'), n=1)    # D1 is C1
         self.assert_armed('C1', record, error, calls, root)
         self.outcome('C1', status='provisional')
-        for i in range(2, 6):
-            self.outcome(f'C{i}')
-        with self.assertRaisesRegex(ValueError, 'C6 onward'):
-            self.packet('C6')
+        self.packet('C2')                       # R17: the previous window may be provisional
+        self.outcome('C2')
+        with self.assertRaisesRegex(ValueError, 'R17: window k final'):
+            self.packet('C3')                   # C1 is still provisional at the arm of C1+2
 
     def test_desk_routes_the_window_kit(self):
         root = self.tmp / 'session-desk'

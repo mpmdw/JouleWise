@@ -72,7 +72,8 @@ The packet's `S.json` carries `history`, `checks`, `record_commit` and
 The arm refuses, before the installer runs, any packet that:
 - names another window, or skips or reorders windows;
 - carries hand-edited counts;
-- skips the C6 fence (prior calibration eligibility must be final from C6 on);
+- leaves any attempt other than the previous one provisional (R17: window k's final
+  eligibility is due before the arm of k+2; the RUN_STATE 216 "from window 6" fence is withdrawn);
 - arrives while calibration is pending or insufficient;
 - arrives during an unreleased escalation;
 - reaches a test window without the C1–C8 threshold freeze.

@@ -1589,17 +1589,42 @@ def number_bearing(inventory: Mapping[str, Any] | None) -> dict[str, Any] | None
     return {key: value for key, value in inventory.items() if not _os_metadata(key)}
 
 
-def tree_inventory(root: Path) -> dict[str, dict[str, Any]]:
+def tree_inventory(root: Path, *, workers: int = 1) -> dict[str, dict[str, Any]]:
     """Relative path -> {sha256, size} for every regular file; links kept literal."""
+    if type(workers) is not int or not 1 <= workers <= 8:
+        raise ValueError("inventory workers must be in 1..8")
     rows: dict[str, dict[str, Any]] = {}
     if root.is_file():
         return {".": {"sha256": sha256_file(root), "size": root.stat().st_size}}
-    for path in sorted(root.rglob("*")):
-        name = path.relative_to(root).as_posix()
+    paths = sorted(root.rglob("*"))
+
+    def entry(path):
         if path.is_symlink():
-            rows[name] = {"link": os.readlink(path)}
-        elif path.is_file():
-            rows[name] = {"sha256": sha256_file(path), "size": path.stat().st_size}
+            return {"link": os.readlink(path)}
+        if path.is_file():
+            return {"sha256": sha256_file(path), "size": path.stat().st_size}
+        return None
+
+    def ordered_entries():
+        # Bound outstanding reads; consume in path order, including exceptions.
+        # Every inventory is fresh: no cache can hide a changed source later.
+        if workers == 1:
+            yield from map(entry, paths)
+            return
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+            pending = []
+            iterator = iter(paths)
+            for path in iterator:
+                pending.append(pool.submit(entry, path))
+                if len(pending) == 2 * workers:
+                    yield pending.pop(0).result()
+            for future in pending:
+                yield future.result()
+
+    for path, value in zip(paths, ordered_entries()):
+        name = path.relative_to(root).as_posix()
+        if value is not None:
+            rows[name] = value
     return rows
 
 
@@ -1623,16 +1648,29 @@ def clone_tree(source: Path, target: Path) -> None:
 
 
 def archive_sources(sources: Mapping[str, Path], destination: Path, *,
-                    clone: Callable[[Path, Path], None] = clone_tree) -> dict[str, dict[str, Any]]:
+                    clone: Callable[[Path, Path], None] = clone_tree,
+                    workers: int = 1, observer: Callable[[dict[str, Any]], None] | None = None
+                    ) -> dict[str, dict[str, Any]]:
     """Copy each source under ``destination/sources/<name>`` and prove the copy."""
+    def measured(stage, function):
+        started, cpu, failed = time.monotonic(), time.process_time(), True
+        try:
+            result = function()
+            failed = False
+            return result
+        finally:
+            if observer is not None:
+                observer({'stage': stage, 'source': name, 'wall_s': time.monotonic()-started,
+                          'parent_cpu_s': time.process_time()-cpu, 'failed': failed})
+
     original: dict[str, dict[str, Any]] = {}
     for name, source in sources.items():
         if not source.exists():
             continue
-        original[name] = tree_inventory(source)
+        original[name] = measured('archive.source_hash', lambda: tree_inventory(source, workers=workers))
         target = destination / "sources" / name
-        clone(source, target)
-        if tree_inventory(target) != original[name]:
+        measured('archive.copy', lambda: clone(source, target))
+        if measured('archive.copy_hash', lambda: tree_inventory(target, workers=workers)) != original[name]:
             raise HarvestFault(f"archive_copy_mismatch:{name}")
     lines = "".join(f"{row['sha256']}  {name}{'' if rel == '.' else '/' + rel}\n"
                     for name, rows in original.items() for rel, row in rows.items() if "sha256" in row)
@@ -2206,10 +2244,13 @@ def strict_problems(bundle: Path, cache: dict[str, float]) -> list[str]:
 
 def assess_member(task: Mapping[str, Any]) -> dict[str, Any]:
     """Strict validation, re-reduction, anchor recompute and identity for one bundle."""
+    from joulewise.adapters.powermetrics import document_memo
     from joulewise.desk_restore import readable_run
 
     bundle = Path(task["bundle_path"])
-    with readable_run(bundle, compression_records=task.get("compression_records")) as readable:
+    # One member's raw plists are parsed once, not about 18 times (HARVEST-OFF-opus
+    # dedupe; the scope ends with the member, so nothing outlives it).
+    with readable_run(bundle, compression_records=task.get("compression_records")) as readable, document_memo():
         return _assess_plain_member(task, readable)
 
 
@@ -3725,6 +3766,7 @@ HARVEST_CHECKOUT_SCHEMA = "joulewise.b5_harvest_checkout.v1"
 # the harvest runs from (a desk checkout, never the measurement checkout).
 HARVEST_PROGRAM_FILES = ("joulewise/b5/harvest.py", "joulewise/whole_window.py", "scripts/harvest_b5_window.py")
 B6_HARVEST_PROGRAM_FILES = ("scripts/harvest_b6_session.py", "joulewise/b6/archive.py",
+                            "joulewise/adapters/powermetrics.py", "joulewise/harvest_profile.py",
                             "joulewise/b6/courier.py", "joulewise/b6/analysis_lane.py",
                             "joulewise/flags/exclusions.py", "joulewise/b6/session.py",
                             "joulewise/b6/acceptance.py", "joulewise/b6/export_runs.py",
@@ -3793,6 +3835,9 @@ class Seams:
     monotonic_ns: Callable[[], int] = time.monotonic_ns
     boot_session_uuid: Callable[[], str | None] = boot_session_uuid
     workers: int = 1
+    # Separate from parse/reducer processes. Default remains serial on the MBP.
+    io_workers: int = 1
+    stage_observer: Callable[[dict[str, Any]], None] | None = None
     python: str = sys.executable
     # The desk verdict child (DeskVerdictChild).  ``runner`` is not used for it:
     # it runs concurrently with the member assessment, in its own session.
@@ -3889,11 +3934,19 @@ class _Harvest:
     # -- step wrappers ------------------------------------------------------
     def step(self, name: str, function: Callable[[], Any], *, fault: bool = True) -> Any:
         started = time.monotonic()
+        cpu_started = time.process_time()
+        failed = False
         try:
             return function()
         except Exception as exc:
+            failed = True
             self._record_error(name, exc, round(time.monotonic() - started, 3), fault=fault)
             return None
+        finally:
+            if self.seams.stage_observer is not None:
+                self.seams.stage_observer({"stage": name, "wall_s": time.monotonic() - started,
+                                          "parent_cpu_s": time.process_time() - cpu_started,
+                                          "failed": failed})
 
     def _record_error(self, name: str, exc: BaseException, elapsed_s: float, *, fault: bool) -> None:
         """The type goes to the structure summary; the message (which can quote
@@ -3966,7 +4019,8 @@ class _Harvest:
         for relative, path in sorted(repo_files.items()):
             sources[f"repo/{relative}"] = path
         self.sources = {name: path for name, path in sources.items() if path.exists()}
-        self.original = archive_sources(self.sources, self.archive, clone=self.seams.clone)
+        self.original = archive_sources(self.sources, self.archive, clone=self.seams.clone,
+                                        workers=self.seams.io_workers, observer=self.seams.stage_observer)
         self.repo_copy = self.archive / "sources" / "repo"
 
     def _acceptance_path(self) -> Path:
@@ -7623,7 +7677,8 @@ class _Harvest:
     # -- outputs ---------------------------------------------------------------
     def sources_unchanged(self) -> None:
         changed = [name for name, path in self.sources.items()
-                   if number_bearing(tree_inventory(path)) != number_bearing(self.original.get(name))]
+                   if number_bearing(tree_inventory(path, workers=self.seams.io_workers))
+                   != number_bearing(self.original.get(name))]
         if changed:
             self.emit("records.source_changed_during_harvest", level="window", collector="archive",
                       observed={"sources": sorted(changed)})
@@ -7875,6 +7930,17 @@ def _harvest(inputs: WindowInputs, archive_root: Path | str, *, seams: Seams | N
             raise HarvestFault("archive_overlaps_source")
     archive.mkdir(parents=True)
     run = _Harvest(inputs, archive, seams, prepare_desk=prepare_desk, run_g3=run_g3)
+
+    def finish(verdict):
+        started, cpu, failed = time.monotonic(), time.process_time(), True
+        try:
+            result = run.finish(verdict)
+            failed = False
+            return result
+        finally:
+            if seams.stage_observer is not None:
+                seams.stage_observer({'stage': 'finish', 'wall_s': time.monotonic()-started,
+                                     'parent_cpu_s': time.process_time()-cpu, 'failed': failed})
     if run.block_six:
         from joulewise.b6.archive import registration_digests
         # Explicit paths from the block-six caller, plus the shared harvester's
@@ -7888,7 +7954,7 @@ def _harvest(inputs: WindowInputs, archive_root: Path | str, *, seams: Seams | N
         run.step("archive", run.archive_inputs)
         run.step("arm_records", run.arm_and_desk_records)
         run.step("not_launched", run.window_not_launched, fault=False)
-        return run.finish(NULL)
+        return finish(NULL)
     run.step("thresholds", run.record_thresholds)
     run.step("runs_roots", run.check_runs_roots)
     if prepare_desk:
@@ -7900,7 +7966,7 @@ def _harvest(inputs: WindowInputs, archive_root: Path | str, *, seams: Seams | N
     run.step("archive", run.archive_inputs)
     run.step("arm_records", run.arm_and_desk_records)
     if run.step("roster", run.build_roster) is None and not run.roster:
-        return run.finish(HARVEST_FAULT)
+        return finish(HARVEST_FAULT)
     run.step("roster_dispatch", run.roster_dispatch)
     collected = run.step("collection", run.collection_presence, fault=False) is not False
     run.step("members", run.assess)
@@ -7932,7 +7998,7 @@ def _harvest(inputs: WindowInputs, archive_root: Path | str, *, seams: Seams | N
     run.step("g3", lambda: run.g3(skipped=not run_g3), fault=False)
     run.step("diagnostics", run.diagnostics, fault=False)
     run.step("sources_unchanged", run.sources_unchanged)
-    return run.finish(COLLECTED if collected else NO_COLLECTION)
+    return finish(COLLECTED if collected else NO_COLLECTION)
 
 
 def harvest(inputs: WindowInputs, archive_root: Path | str, *, seams: Seams | None = None,
