@@ -129,6 +129,23 @@ class RefusalTests(unittest.TestCase):
             path.write_text(json.dumps(bad))
             self.refused(root, "allocation_roster_differs")
         path.write_text(json.dumps(record))
+        # Config custody loop: a re-hashed plan_source, a tampered kit config, a tampered bundle config.
+        plan = root / record["plan_source"]["path"]
+        good_plan = plan.read_bytes()
+        plan.write_bytes(good_plan + b" ")
+        self.refused(root, "config_digest_not_planned")
+        plan.write_bytes(good_plan)
+        nd = next(m for m in record["members"] if "planned_config" in m)
+        kit = root / nd["planned_config"]["path"]
+        good_kit = kit.read_bytes()
+        kit.write_bytes(good_kit.replace(b"benign", b"sabotage", 1))
+        self.refused(root, "config_digest_not_planned")
+        kit.write_bytes(good_kit)
+        bundle = root / "windows" / record["window_id"] / "members" / nd["run_id"] / "config.json"
+        good_bundle = bundle.read_bytes()
+        bundle.write_bytes(json.dumps(json.loads(good_bundle)).encode())     # same content, not the writer's bytes
+        self.refused(root, "config_digest_not_planned")
+        bundle.write_bytes(good_bundle)
         # R24 allocation: the series binds the 18-window manifest; any other shape refuses.
         series = json.loads((root / "series.json").read_text())
         (root / "series.json").write_text(json.dumps({k: v for k, v in series.items() if k != "allocation_source"}))

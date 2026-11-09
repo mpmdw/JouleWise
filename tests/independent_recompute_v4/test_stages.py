@@ -804,12 +804,14 @@ class ExclusionTests(unittest.TestCase):
         names = ["ok", "g1", "os", "nospan", "pm", "unknown", "batt", "unobs", "adj", "flagonly", "lost", "dead",
                  "seed", "cohort", "incomplete", "custody", "cfg", "nocfg", "sabcfg", "runcfg", "badcfg"]
         members = [{"run_id": r, "ordinal": 30 + i, "model": "D", "pair": "spam", "condition": "benign",
-                    "seed_index": 2, "expected_episode_seed": derived, "config_sha256": "c" * 64}
-                   for i, r in enumerate(names)]
+                    "seed_index": 2, "expected_episode_seed": derived} for i, r in enumerate(names)]
         window = {"role": "calibration", "members": members,
                   "record": {"adjudication": {"excluded": {"adj": ["identity.divergent"]}}, "cohort_sha256": "c",
                              "battery": {"batt": ["battery.accumulator_excursion"], "unobs": ["battery.unobserved"]},
-                             "identity": {}}}
+                             "identity": {}},
+                  # Config custody loop: plan row config_sha256 = kit sha; the bundle sha = RunBundleWriter's bytes.
+                  "plan": {(m["run_id"], m["ordinal"]): {"config_sha256": "k" * 64} for m in members},
+                  "planned": {m["run_id"]: ("k" * 64, "c" * 64) for m in members}}
         r = lambda **k: self.res(**k)
         results = {"ok": r(seed=seed), "g1": r(intervals=[("G1", "timeout")], seed=seed),
                    "os": r(registered=(0, 1), seed=seed), "nospan": r(registered=None, seed=seed),
@@ -842,12 +844,18 @@ class ExclusionTests(unittest.TestCase):
                           out["ok"]["seed_reasons"]),
                          (["seed_index_differs"], ["derived_seed_differs"], [], []))
         self.assertEqual((out["sabcfg"]["config_reasons"], out["runcfg"]["config_reasons"], out["ok"]["config_reasons"]),
-                         (["config_condition_differs"], ["config_run_id_differs"], []))
-        # The config bytes must be the plan's: an unplanned digest refuses.
-        bad = dict(results, ok=dict(results["ok"], inputs={"config_sha256": "d" * 64}))
-        with self.assertRaises(rc.Refusal) as cm:
-            rc.derive_exclusions(window, bad)
-        self.assertEqual(cm.exception.code, "config_digest_not_planned")
+                         (["config_identity_differs:condition"], ["config_identity_differs:run_id"], []))
+        # Each link of the custody loop refuses: bundle bytes not RunBundleWriter's of the kit config, a plan row
+        # whose config_sha256 is not the kit's, a member missing from the plan, a member without planned_config.
+        for label, w, res in (
+                ("bundle", window, dict(results, ok=dict(results["ok"], inputs={"config_sha256": "d" * 64}))),
+                ("plan_digest", dict(window, plan={**window["plan"], ("ok", 30): {"config_sha256": "x" * 64}}),
+                 results),
+                ("plan_row", dict(window, plan={k: v for k, v in window["plan"].items() if k[0] != "ok"}), results),
+                ("planned", dict(window, planned={k: v for k, v in window["planned"].items() if k != "ok"}), results)):
+            with self.assertRaises(rc.Refusal, msg=label) as cm:
+                rc.derive_exclusions(w, res)
+            self.assertEqual(cm.exception.code, "config_digest_not_planned", label)
         self.assertEqual(out["g1"]["mismatch"], ["X2"])
         self.assertEqual(out["nospan"]["flags"], ["registered_span_missing"])     # A10
         self.assertEqual(out["unobs"]["flags"], ["battery.unobserved"])           # A28: kept, flagged

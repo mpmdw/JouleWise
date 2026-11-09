@@ -172,21 +172,29 @@ def seed_law_model(model_tag, seed_index, pair):
     return int.from_bytes(hashlib.sha256(text.encode("utf-8")).digest()[:8], "big")
 
 
-def write_config(base, run_id, seed_index, pair, condition, model="D", thinking=True, sampler=True):
-    """A producer-shaped config.json subset (BenchmarkConfig: run_id, model.name, run_metadata.tags,
-    workload_profile.prompt_text = the episode spec JSON with task_kwargs.task_pair, condition, seed index and
-    sampler). Returns its sha256 (the plan's config_sha256)."""
+def write_config(base, run_id, seed_index, pair, condition, model="D", thinking=True, sampler=True, root=None):
+    """The member's kit config (a producer-shaped BenchmarkConfig subset: run_id, model.name,
+    run_metadata.tags, workload_profile.prompt_text = the episode spec JSON) and the bundle config.json
+    RunBundleWriter.create writes for it (indent-2, sorted keys, newline). Returns (planned_config reference
+    relative to ``root``, kit sha256 = the plan's config_sha256)."""
     spec = {"schema": "joulewise.align.apple.episode_spec.v1", "seed": seed_index, "condition": condition,
             "task_kwargs": {"task_pair": "spam_filter_update" if pair == "spam" else "bank_transfer_2"}}
     if thinking is not None:
         spec["enable_thinking"] = thinking
     if sampler:
         spec["sampler"] = {"min_p": 0, "temperature": 1.0, "top_k": 20, "top_p": 0.95}
-    path = Path(base) / "config.json"
-    dump(path, {"run_id": run_id.split(":", 1)[-1], "model": {"name": "synthetic/Qwen"},
-                "run_metadata": {"project": "joulewise", "tags": [f"align-model={MODEL_TAGS[model]}"]},
-                "workload_profile": {"name": "align_episode", "prompt_text": json.dumps(spec, sort_keys=True)}})
-    return sha256_file(path)
+    local = run_id.split(":", 1)[-1]
+    kit = {"run_id": local, "model": {"name": "synthetic/Qwen"},
+           "run_metadata": {"project": "joulewise", "tags": [f"align-model={MODEL_TAGS[model]}"]},
+           "workload_profile": {"name": "align_episode", "prompt_text": json.dumps(spec, sort_keys=True)}}
+    raw = (json.dumps(kit, indent=2, sort_keys=True) + "\n").encode("utf-8")
+    (Path(base) / "config.json").write_bytes(raw)
+    root = Path(root) if root is not None else Path(base).parents[3]
+    kpath = root / "kit" / Path(base).parts[-3] / (local + ".json")
+    kpath.parent.mkdir(parents=True, exist_ok=True)
+    kpath.write_bytes(raw)
+    sha = hashlib.sha256(raw).hexdigest()
+    return {"path": str(kpath.relative_to(root)), "sha256": sha}, sha
 
 
 def write_member(root, wid, m, epoch_offset_ns, delta=(1.0, 1.0), big=False, full_frames=None, extra=None):
@@ -348,6 +356,7 @@ def write_series(root, windows=None, members_per_window=None, period_ns=100_000_
         series["windows"].append({"window_id": wid, "role": role})
         w_start = clock
         identity = {}
+        plan_rows = []
         for r in roster:
             n_turns = rng.randrange(turns[0], turns[1] + 1)
             identical = None
@@ -382,14 +391,20 @@ def write_series(root, windows=None, members_per_window=None, period_ns=100_000_
             if r["model"] == "D":
                 extra.update(cohort_sha256=COHORT)
             write_member(root, wid, m, epoch_offset, extra=extra)
-            r["config_sha256"] = write_config(root / "windows" / wid / "members" / r["run_id"], r["run_id"],
-                                              r["seed_index"], r["pair"], r["condition"], r["model"])
+            r["planned_config"], ksha = write_config(root / "windows" / wid / "members" / r["run_id"], r["run_id"],
+                                                     r["seed_index"], r["pair"], r["condition"], r["model"], root=root)
+            plan_rows.append({"ordinal": r["ordinal"], "run_id": r["run_id"].split(":", 1)[-1],
+                              "config_path": r["planned_config"]["path"], "config_sha256": ksha})
             clock = m.end_ns + 60 * NS
         streams = {}
         if meter:
             write_meter(root / "windows" / wid / "meter" / "km003c-0.jsonl", (w_start - 20 * NS, clock))
             streams["km003c-0.jsonl"] = sha256_file(root / "windows" / wid / "meter" / "km003c-0.jsonl")
         terminal = {}
+        # The window's committed collection_plan.json (plan_source): each member's planned kit config digest.
+        ppath = root / "windows" / wid / "collection_plan.json"
+        dump(ppath, {"window": wid, "members": plan_rows})
+        plan_ref = {"plan_source": {"path": f"windows/{wid}/collection_plan.json", "sha256": sha256_file(ppath)}}
         if role == "calibration":    # R22-2: every captured C window binds its completed-chain terminal result
             tpath = root / "windows" / wid / "terminal_result.json"
             dump(tpath, {"verdict": "GO", "chain_exit_code": 0})
@@ -399,7 +414,7 @@ def write_series(root, windows=None, members_per_window=None, period_ns=100_000_
             "schema": "joulewise.v4_recompute_input.window.v1", "window_id": wid, "role": role,
             "members": roster, "adjudication": {"final": True, "excluded": {}},
             "identity": identity, "battery": {}, "meter": {"streams": streams}, "cohort_sha256": COHORT,
-            **({"sentinel_ordinals": [5, 17]} if wid == "W1" else {}), **terminal})
+            **({"sentinel_ordinals": [5, 17]} if wid == "W1" else {}), **terminal, **plan_ref})
     # R24 allocation: the frozen 18-window manifest, byte for byte (fixtures/series_manifest_r24.json).
     (root / "allocation").mkdir(parents=True, exist_ok=True)
     (root / "allocation" / "series_manifest.json").write_bytes(ALLOCATION.read_bytes())

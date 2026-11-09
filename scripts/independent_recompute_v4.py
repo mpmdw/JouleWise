@@ -621,6 +621,41 @@ def allocation_roster_check(wid, slot, members, rows):
                  f"{wid}: ordinal {o} run id is not the production name")
 
 
+def ref_bytes(root, ref, code, where):
+    need(isinstance(ref, dict) and isinstance(ref.get("path"), str) and isinstance(ref.get("sha256"), str),
+         code, where)
+    try:
+        raw = safe_path(root, ref["path"]).read_bytes()
+    except OSError:
+        raise Refusal(code, where) from None
+    need(hashlib.sha256(raw).hexdigest() == ref["sha256"], code, where + ": digest")
+    return raw
+
+
+def load_plan_custody(root, wid, record, members):
+    """Config custody loop (lead ruling on the r23k review; export contract ``plan_source`` and
+    ``planned_config``). The window's committed collection_plan.json binds each member's kit config by
+    ``config_sha256`` (scripts/align_v4_series.py:302); the bundle config.json must be the bytes
+    RunBundleWriter.create writes for that kit config: indent-2, sorted-key JSON plus a newline (joulewise/
+    bundle.py). Returns ({(local run id, ordinal): plan row}, {run_id: (kit sha256, expected bundle sha256)})."""
+    plan, planned = None, {}
+    if "plan_source" in record:
+        doc = json.loads(ref_bytes(root, record["plan_source"], "config_digest_not_planned", wid + ": plan_source"))
+        rows = doc.get("members") if isinstance(doc, dict) else None
+        need(isinstance(rows, list) and all(isinstance(r, dict) for r in rows), "config_digest_not_planned",
+             wid + ": plan members")
+        plan = {(r.get("run_id"), r.get("ordinal")): r for r in rows}
+    for m in members:
+        if "planned_config" in m:
+            kit = ref_bytes(root, m["planned_config"], "config_digest_not_planned", f"{wid}: {m['run_id']}")
+            try:
+                bundle = (json.dumps(json.loads(kit), indent=2, sort_keys=True) + "\n").encode("utf-8")
+            except ValueError:
+                raise Refusal("config_digest_not_planned", f"{wid}: {m['run_id']}: kit config") from None
+            planned[m["run_id"]] = (m["planned_config"]["sha256"], hashlib.sha256(bundle).hexdigest())
+    return plan, planned
+
+
 def load_series(root):
     root = Path(root)
     series, series_sha = read_json(root / "series.json", "series")
@@ -676,9 +711,8 @@ def load_series(root):
             else:
                 need(":" not in m["run_id"], "window_malformed", f"{wid}: prefixed non-anchor run id")
             if is_int(m.get("seed_index")):
-                need(is_int(m.get("expected_episode_seed")) and isinstance(m.get("config_sha256"), str)
-                     and len(m["config_sha256"]) == 64, "window_malformed",
-                     f"{wid}: member without expected_episode_seed / planned config_sha256")
+                need(is_int(m.get("expected_episode_seed")), "window_malformed",
+                     f"{wid}: member without expected_episode_seed")
             if m["kind"] == "contrast":
                 c = m.get("contrast")
                 need(isinstance(c, dict) and c.get("template") in ("X", "Y") and c.get("arm") in ("S", "G")
@@ -717,8 +751,10 @@ def load_series(root):
         need(isinstance(adj, dict) and type(adj.get("final")) is bool
              and isinstance(adj.get("excluded", {}), dict), "window_malformed", wid + ": adjudication")
         allocation_roster_check(wid, slot, members, alloc_rows.get(slot, {}))
+        plan, planned = load_plan_custody(root, wid, record, members)
         windows.append({"window_id": wid, "slot": slot, "role": entry["role"], "record": record, "sha256": record_sha,
                         "declared_bar": declared, "terminal": terminal, "capture_failure": non_go,
+                        "plan": plan, "planned": planned,
                         "members": sorted(members, key=lambda m: m["ordinal"])})
     optional = {}
     for name in ("u3_bar", "references"):
@@ -1315,7 +1351,13 @@ def derive_exclusions(window, results):
         if is_int(m.get("seed_index")):
             if m["model"] == "D" and m["expected_episode_seed"] != episode_seed(m["seed_index"], m["pair"]):
                 notes.append("seed_law_disagrees_with_export")
-            need(res.get("inputs", {}).get("config_sha256") == m["config_sha256"], "config_digest_not_planned",
+            # Custody loop: plan row (local run id, ordinal) -> its config_sha256 = the planned kit config's
+            # digest -> the bundle config.json = RunBundleWriter's bytes of that kit config.
+            local = rid.split(":", 1)[-1]
+            row = (window.get("plan") or {}).get((local, m["ordinal"]))
+            kit = (window.get("planned") or {}).get(rid)
+            need(row is not None and kit is not None and row.get("config_sha256") == kit[0]
+                 and res.get("inputs", {}).get("config_sha256") == kit[1], "config_digest_not_planned",
                  f"{rid}: config.json is not the planned bytes")
             cfg = res.get("config") or {"invalid": True}
             if res.get("episode", {}).get("seed") != m["seed_index"]:
@@ -1323,11 +1365,11 @@ def derive_exclusions(window, results):
             if cfg["invalid"]:
                 classes.add("config_invalid")
             else:
-                for key, want, code in (("run_id", rid.split(":", 1)[-1], "config_run_id_differs"),
-                                        ("model_tag", MODEL_TAGS[m["model"]], "config_model_differs"),
-                                        ("pair", TASK_NAMES[m["pair"]], "config_pair_differs"),
-                                        ("condition", m["condition"], "config_condition_differs"),
-                                        ("seed", m["seed_index"], "config_seed_differs")):
+                for key, want, code in (("run_id", local, "config_identity_differs:run_id"),
+                                        ("model_tag", MODEL_TAGS[m["model"]], "config_identity_differs:model"),
+                                        ("pair", TASK_NAMES[m["pair"]], "config_identity_differs:pair"),
+                                        ("condition", m["condition"], "config_identity_differs:condition"),
+                                        ("seed", m["seed_index"], "config_identity_differs:seed")):
                     if cfg[key] != want:
                         config_reasons.append(code)
                 if derived_episode_seed(cfg["seed_inputs"], cfg["pair"], cfg["seed"]) != m["expected_episode_seed"]:
