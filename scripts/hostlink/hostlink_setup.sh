@@ -17,7 +17,7 @@
 #   4. Turns Remote Login (sshd) on and checks that port 22 is listening.
 #   5. Creates an ed25519 key for the user if there is none, and prints the public half.
 #   6. Power, on AC only: never system-sleep (displays may still sleep), wake for
-#      network access, restart after a power loss.
+#      network access/keepalive where supported (no battery policy changes).
 #   7. --wired: static IPs on Thunderbolt Bridge (air 10.77.0.1, mbp 10.77.0.2), so a
 #      USB-C/Thunderbolt cable between the Macs is a path that does not depend on Wi-Fi.
 #   8. --nopasswd-sudo: /etc/sudoers.d/jw-hostlink-<user> (NOPASSWD: ALL for this
@@ -50,17 +50,29 @@ listening() { /usr/sbin/lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1; }
 
 echo "== hostlink setup: role=$ROLE user=$U home=$UH host=$(/usr/sbin/scutil --get LocalHostName) $(/bin/date)"
 
-# 1. Firewall
+# 1. Firewall. Query failures/unknown output are failures, never evidence of success.
 F=/usr/libexec/ApplicationFirewall/socketfilterfw
-$F --setglobalstate on >/dev/null
-$F --setblockall off >/dev/null
-$F --setstealthmode on >/dev/null
-$F --setallowsigned on >/dev/null
+FW_START=$FAILS
+for args in '--setglobalstate on' '--setblockall off' '--setstealthmode on' '--setallowsigned on'; do
+  # Intentional splitting: these are constant flag/value pairs, never user input.
+  $F $args >/dev/null || fail "firewall $args"
+done
 for app in /usr/sbin/sshd /usr/libexec/sshd-keygen-wrapper \
   /System/Library/CoreServices/RemoteManagement/screensharingd.bundle/Contents/MacOS/screensharingd; do
-  [[ -e $app ]] && { $F --add "$app" >/dev/null 2>&1; $F --unblockapp "$app" >/dev/null 2>&1; }
+  if [[ -e $app ]]; then
+    $F --add "$app" >/dev/null 2>&1 && $F --unblockapp "$app" >/dev/null 2>&1 || fail "firewall allow $app"
+  fi
 done
-if $F --getblockall | /usr/bin/grep -q 'blocking all'; then fail "firewall still blocks all incoming"; else ok "firewall: on, stealth, block-all off, sshd/screensharing allowed"; fi
+firewall_state_ok() {
+  [[ $1 == 'Firewall is enabled. (State = 1)'* &&
+     $2 == 'Firewall has block all state set to disabled.' &&
+     $3 == 'Firewall stealth mode is on' &&
+     $4 == *'Automatically allow built-in signed software ENABLED.'* ]]
+}
+FW_GLOBAL=$($F --getglobalstate) && FW_BLOCK=$($F --getblockall) &&
+  FW_STEALTH=$($F --getstealthmode) && FW_SIGNED=$($F --getallowsigned) &&
+  firewall_state_ok "$FW_GLOBAL" "$FW_BLOCK" "$FW_STEALTH" "$FW_SIGNED" || fail "firewall readback not in expected macOS 15 state; check System Settings"
+[[ $FAILS != "$FW_START" ]] || ok "firewall on, stealth on, block-all off; built-in signed services allowed"
 
 # 2. sshd. 010 sorts before Apple's 100-macos.conf and the offload Match.
 # Stage OUTSIDE the Include wildcard (which also matches *.new and *.bak).
@@ -140,25 +152,52 @@ elif /usr/bin/sudo -u "$U" /bin/mkdir -p "$S" && /bin/chmod 700 "$S" &&
   fi
 else fail "could not prepare $AK"; fi
 
-# 4. Remote Login
+# 4. Remote Login. systemsetup needs FDA on macOS 15; sudo alone is insufficient.
+# launchd owns the listening socket and spawns per-connection sshd instances.
+# Never kickstart -k/bootout: existing sessions must survive a rerun.
 if ! listening 22; then
-  /usr/sbin/systemsetup -setremotelogin on >/dev/null 2>&1 || true
-  if ! listening 22; then /bin/launchctl enable system/com.openssh.sshd 2>/dev/null; /bin/launchctl bootstrap system /System/Library/LaunchDaemons/ssh.plist 2>/dev/null || /bin/launchctl kickstart -k system/com.openssh.sshd 2>/dev/null; fi
+  /usr/sbin/systemsetup -setremotelogin on > "$WORK/remotelogin.log" 2>&1 ||
+    warn "systemsetup: $(/bin/cat "$WORK/remotelogin.log")"
+  if ! listening 22; then
+    /bin/launchctl enable system/com.openssh.sshd || warn "launchctl enable failed"
+    if ! /bin/launchctl print system/com.openssh.sshd >/dev/null 2>&1; then
+      /bin/launchctl bootstrap system /System/Library/LaunchDaemons/ssh.plist || warn "launchctl bootstrap failed"
+    fi
+  fi
   /bin/sleep 2
 fi
-if listening 22; then ok "Remote Login on (port 22 listening)"; else fail "Remote Login not listening: turn it on in System Settings > General > Sharing > Remote Login"; fi
+if listening 22; then
+  ok "port 22 listening (listener alone does not prove SSH login authorization)"
+else fail "Remote Login not listening: System Settings > General > Sharing > Remote Login"; fi
+warn "Remote Login > Only these users must include $U (and jw-offload on the Air); test from the peer"
 
 # 5. own key
 if [[ -L $S ]]; then fail "refusing key generation through symlink $S"; elif [[ ! -f $S/id_ed25519 ]]; then /usr/bin/sudo -u "$U" /usr/bin/ssh-keygen -q -t ed25519 -N '' -C "$U@$(/usr/sbin/scutil --get LocalHostName).local" -f "$S/id_ed25519" && ok "generated $S/id_ed25519" || fail "own SSH key generation"; fi
 [[ -f $S/id_ed25519.pub ]] && echo "      this Mac's public key: $(/bin/cat "$S/id_ed25519.pub")"
 
-# 6. power on AC
-/usr/bin/pmset -c sleep 0 womp 1 tcpkeepalive 1 >/dev/null && /usr/bin/pmset -a autorestart 1 >/dev/null && ok "power (AC): no system sleep, wake-on-network, autorestart after power loss" || fail "pmset"
+# 6. AC only. Supported features vary; autorestart is absent on these notebooks.
+if /usr/bin/pmset -c sleep 0; then ok "power (AC): no idle system sleep"; else fail "pmset AC sleep"; fi
+CAPS=$(/usr/bin/pmset -g cap) || CAPS=''
+for feature in womp tcpkeepalive; do
+  if /usr/bin/grep -Eq "^[[:space:]]*$feature[[:space:]]*$" <<< "$CAPS"; then
+    /usr/bin/pmset -c "$feature" 1 && ok "power (AC): $feature enabled" || fail "pmset $feature"
+  else warn "pmset $feature unsupported; left unchanged"; fi
+done
+warn "idle sleep 0 does not defeat lid closure, battery exhaustion or FileVault preboot; keep AC attached and lid open"
 
-# 7. wired fallback
+# 7. Cable fallback. Use an existing service only; never alter Wi-Fi or service order.
 if [[ $WIRED == 1 ]]; then
   IP=10.77.0.1; [[ $ROLE == mbp ]] && IP=10.77.0.2
-  if /usr/sbin/networksetup -setmanual "Thunderbolt Bridge" $IP 255.255.255.0 2>/dev/null; then ok "Thunderbolt Bridge static $IP/24 (cable path)"; else fail "Thunderbolt Bridge service not found"; fi
+  SERVICE='Thunderbolt Bridge'
+  SERVICES=$(/usr/sbin/networksetup -listallnetworkservices) || SERVICES=''
+  if ! /usr/bin/grep -qxF "$SERVICE" <<< "$SERVICES" &&
+     ! /usr/bin/grep -qxF "*$SERVICE" <<< "$SERVICES"; then
+    fail "Thunderbolt Bridge service absent/renamed; inspect networksetup -listnetworkserviceorder locally"
+  elif /usr/sbin/networksetup -setmanual "$SERVICE" "$IP" 255.255.255.0 '' &&
+       /usr/sbin/networksetup -setnetworkserviceenabled "$SERVICE" on; then
+    ok "Thunderbolt Bridge configured $IP/24, no router (verify a Thunderbolt-capable cable and peer ping)"
+    /usr/sbin/networksetup -getinfo "$SERVICE" || fail "Thunderbolt Bridge readback"
+  else fail "Thunderbolt Bridge configuration failed; check locally"; fi
 fi
 
 # 8. passwordless sudo

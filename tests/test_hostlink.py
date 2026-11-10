@@ -109,5 +109,18 @@ fail() { echo "FAIL $*"; FAILS=$((FAILS+1)); }
         self.assertEqual(self.target.read_bytes(), previous)
 
 
+class FirewallTests(unittest.TestCase):
+    def test_exact_macos15_readback_and_fail_closed(self):
+        source = SETUP.read_text()
+        function = source[source.index('firewall_state_ok() {'):source.index('\nFW_GLOBAL=')]
+        good = ['Firewall is enabled. (State = 1)', 'Firewall has block all state set to disabled.', 'Firewall stealth mode is on', 'Automatically allow built-in signed software ENABLED.\nAutomatically allow downloaded signed software DISABLED.']
+        for index, wrong in [(0, 'Firewall is disabled. (State = 0)'), (1, 'Firewall is blocking all non-essential incoming connections.'), (1, ''), (1, 'unknown'), (2, 'Firewall stealth mode is off'), (3, 'Automatically allow built-in signed software DISABLED.')]:
+            values = good.copy()
+            values[index] = wrong
+            r = subprocess.run(['/bin/bash', '-c', function + '\nfirewall_state_ok "$@"', 'fixture', *values])
+            self.assertNotEqual(r.returncode, 0, values)
+        self.assertEqual(subprocess.run(['/bin/bash', '-c', function + '\nfirewall_state_ok "$@"', 'fixture', *good]).returncode, 0)
+
+
 if __name__ == '__main__':
     unittest.main()
