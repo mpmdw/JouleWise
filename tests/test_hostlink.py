@@ -122,5 +122,88 @@ class FirewallTests(unittest.TestCase):
         self.assertEqual(subprocess.run(['/bin/bash', '-c', function + '\nfirewall_state_ok "$@"', 'fixture', *good]).returncode, 0)
 
 
+class ClientTests(unittest.TestCase):
+    def test_fallback_order_bounded_final_connection_and_no_command_retry(self):
+        with tempfile.TemporaryDirectory(prefix='hostlink-client-') as d:
+            base = Path(d)
+            log = base / 'calls'
+            ssh = base / 'ssh'
+            ssh.write_text('''#!/bin/bash
+printf '%s\\n' "$*" >> "$CALL_LOG"
+[[ $* == *mbp-wired* ]] && exit 255
+[[ ${!#} == true ]] && exit 0
+exit 17
+''')
+            ssh.chmod(0o700)
+            wrapper = base / 'jwssh'
+            wrapper.write_text((ROOT / 'scripts/hostlink/jwssh').read_text().replace('/usr/bin/ssh', str(ssh)))
+            r = subprocess.run(['/bin/bash', str(wrapper), 'mbp', 'do-once'], env=dict(os.environ, CALL_LOG=str(log)))
+            self.assertEqual(r.returncode, 17)
+            calls = log.read_text().splitlines()
+            self.assertEqual(len(calls), 3)
+            self.assertIn('mbp-wired true', calls[0])
+            self.assertIn('mbp true', calls[1])
+            self.assertIn('ConnectTimeout=4', calls[2])
+            self.assertIn('BatchMode=yes', calls[2])
+            self.assertIn('mbp do-once', calls[2])
+
+    def test_invalid_peer_never_invokes_ssh(self):
+        r = subprocess.run(['/bin/bash', str(ROOT / 'scripts/hostlink/jwssh'), '-oProxyCommand=bad'], capture_output=True)
+        self.assertEqual(r.returncode, 2)
+
+    def test_shared_host_block_without_hostname_preserves_aliases(self):
+        with tempfile.TemporaryDirectory(prefix='hostlink-config-') as d:
+            config = Path(d) / 'config'
+            config.write_text('''Host mbp mbp-lan mbp-ip mbp-wired
+ User edr
+ IdentityFile /tmp/synthetic-key
+ IdentitiesOnly yes
+Host mbp mbp-lan
+ HostName synthetic-mbp.local
+Host mbp-ip
+ HostName 192.0.2.2
+Host mbp-wired
+ HostName 10.77.0.2
+''')
+            for alias, expected in [('mbp', 'synthetic-mbp.local'), ('mbp-ip', '192.0.2.2'), ('mbp-wired', '10.77.0.2')]:
+                r = subprocess.run(['/usr/bin/ssh', '-G', '-F', str(config), alias], capture_output=True, text=True, check=True)
+                self.assertIn('hostname ' + expected, r.stdout.splitlines())
+
+
+class SudoersTests(unittest.TestCase):
+    def test_candidate_validation_precedes_install_and_failed_full_check_rolls_back(self):
+        with tempfile.TemporaryDirectory(prefix='hostlink-sudoers-') as d:
+            base = Path(d)
+            drop = base / 'sudoers.d'
+            drop.mkdir()
+            config = base / 'sudoers'
+            config.write_text(f'@includedir {drop}\n')
+            target = drop / 'jw-hostlink-edr'
+            target.write_text('# previous rule\n')
+            previous = target.read_bytes()
+            work = base / 'work'
+            work.mkdir()
+            validator = base / 'visudo'
+            validator.write_text('''#!/bin/bash
+# Fixture: reject the complete policy only once the candidate was installed.
+if [[ $2 == "$POLICY" ]] && /usr/bin/grep -q NOPASSWD "$RULE"; then exit 1; fi
+if [[ $2 == *.new ]]; then echo checked > "$VALIDATED"; fi
+exit 0
+''')
+            validator.chmod(0o700)
+            source = SETUP.read_text()
+            function = source[source.index('install_sudoers() {'):source.index('\n[[ $NOPASSWD != 1 ]]')]
+            # Replace longer paths first, including the regex's literal directory.
+            function = function.replace('/etc/sudoers.d', str(drop)).replace('/etc/sudoers', str(config))
+            function = function.replace('/usr/sbin/chown', '/usr/bin/true').replace('/usr/bin/install -d -o root -g wheel -m 0755', '/bin/mkdir -p')
+            function = function.replace('/usr/sbin/visudo', str(validator))
+            prelude = 'FAILS=0; U=edr; WORK=$STAGE; ok() { :; }; fail() { FAILS=$((FAILS+1)); };\n'
+            env = dict(os.environ, STAGE=str(work), POLICY=str(config), RULE=str(target), VALIDATED=str(base / 'validated'))
+            r = subprocess.run(['/bin/bash', '-c', prelude + function + '\ninstall_sudoers\nexit "$FAILS"'], env=env, capture_output=True, text=True)
+            self.assertNotEqual(r.returncode, 0, r.stderr)
+            self.assertTrue((base / 'validated').exists())
+            self.assertEqual(target.read_bytes(), previous)
+
+
 if __name__ == '__main__':
     unittest.main()

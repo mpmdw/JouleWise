@@ -1,14 +1,17 @@
 #!/bin/bash
-# jwssh PEER [command...]: SSH to the other JouleWise Mac over the first path that answers.
-# PEER is mbp (from the Air) or air (from the MBP). Paths are tried in this order:
-# Thunderbolt cable, then the Bonjour name, then the fixed Wi-Fi IP.
-# Each alias is defined in ~/.ssh/config.
+# jwssh PEER [command...]: use the first authenticated path: cable, Bonjour, Wi-Fi.
+# Host aliases and trusted host keys must already be installed. No command retry:
+# a lost connection after execution starts must never duplicate a remote action.
 set -u
-P=${1:?usage: jwssh mbp|air [command...]}; shift
+P=${1:-}
+[[ $P == mbp || $P == air ]] || { echo "usage: jwssh mbp|air [command...]" >&2; exit 2; }
+shift
+opts=(-o BatchMode=yes -o ConnectTimeout=4 -o ConnectionAttempts=1
+      -o ServerAliveInterval=20 -o ServerAliveCountMax=3)
 for alias in "$P-wired" "$P" "$P-ip"; do
-  if /usr/bin/ssh -o BatchMode=yes -o ConnectTimeout=4 "$alias" true 2>/dev/null; then
-    exec /usr/bin/ssh "$alias" "$@"
+  if /usr/bin/ssh "${opts[@]}" "$alias" true 2>/dev/null; then
+    exec /usr/bin/ssh "${opts[@]}" "$alias" "$@"
   fi
 done
-echo "jwssh: $P unreachable on every path (wired, bonjour, ip)" >&2
+echo "jwssh: $P unreachable on every path (wired, bonjour, ip); verify host keys and aliases locally" >&2
 exit 255
