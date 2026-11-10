@@ -23,7 +23,7 @@ class PostWindowUnstrandTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
-        self.root = Path(self.temporary.name)
+        self.root = Path(self.temporary.name).resolve()
         self.home = self.root / "home"
         self.directory = self.home / "Library/LaunchAgents"
         self.directory.mkdir(parents=True)
@@ -90,7 +90,8 @@ sys.exit(int(os.environ.get("TEST_PS_RC", "0")))
         if wrapped:
             command = ["/bin/zsh", "-f", "-c", "cd /; export TEST_ANCESTOR_PID=$$; " +
                        shlex.join(command) + "; exit $?"]
-        return subprocess.run(command, cwd=cwd, env=self.env, capture_output=True, text=True, timeout=15)
+        return subprocess.run(command, cwd=cwd, env={**self.env, "PWD": str(cwd)},
+                              capture_output=True, text=True, timeout=15)
 
     def assert_blinded(self, result):
         self.assertNotIn("BLINDED_MARKER_PAYLOAD", result.stdout + result.stderr)
@@ -189,17 +190,32 @@ sys.exit(int(os.environ.get("TEST_PS_RC", "0")))
         self.assertIn("process is still present", result.stderr)
         self.assertFalse(self.log.exists())
 
-    def test_caffeinate_child_and_other_script_descendants_are_exempt(self):
+    def test_childless_caffeinate_helper_is_exempt(self):
         # macOS caffeinate execs the script in its parent, leaving its assertion
-        # helper as the script's child. Put a grandchild first to test the walk.
+        # helper as the script's child.
         self.env["TEST_PS_EXTRA_ROWS"] = (
-            f"4243 4242 helper.py --plan {self.plan}\n"
             f"4242 {{script}} /usr/bin/caffeinate -i {SCRIPT} {self.custody}\n")
         result = self.run_script()
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertIn("DRY RUN", result.stdout)
         self.assertFalse(self.log.exists())
         self.assert_blinded(result)
+
+    def test_inherited_worker_chain_and_caffeinate_with_a_child_refuse(self):
+        # A wrapper that execs the script retains its pre-existing children.
+        for rows in (
+                f"4242 {{script}} worker {self.custody}/night/align-r1\n",
+                "4242 {script} /bin/zsh /elsewhere/night_chains/chain.zsh\n",
+                f"4242 {{script}} /usr/bin/caffeinate -i {SCRIPT} {self.custody}\n"
+                "4243 4242 helper.py --idle\n"):
+            with self.subTest(rows=rows):
+                self.env["TEST_PS_EXTRA_ROWS"] = rows
+                result = self.run_script("--go")
+                self.assertNotEqual(0, result.returncode)
+                self.assertIn("process is still present", result.stderr)
+                self.assertFalse(self.log.exists())
+                self.assertTrue(all(self.plist(label).exists() for label in LABELS))
+                self.assert_blinded(result)
 
     def test_siblings_and_orphans_still_refuse_with_a_caffeinate_child(self):
         self.env["TEST_ANCESTOR_PID"] = "2000000001"
@@ -249,6 +265,7 @@ sys.exit(int(os.environ.get("TEST_PS_RC", "0")))
                                            (self.custody, alias, alias),
                                            (alias, alias, self.custody)):
             with self.subTest(argument=argument, declared=declared, named=named):
+                self.log.unlink(missing_ok=True)
                 self.plan.write_text(json.dumps({"plan_id": "synthetic-plan", "custody_root": str(declared)}))
                 self.env["TEST_PS_EXTRA_ROWS"] = f"4242 1 worker {named}/night/align-r1\n"
                 result = self.run_script("--go", custody=argument, cwd=self.root)

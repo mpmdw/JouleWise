@@ -78,7 +78,7 @@ try:
         processes[int(pid)] = (int(ppid), command)
         children.setdefault(int(ppid), []).append(int(pid))
     # Wrapping shells, ssh and sudo may name this custody in argv.
-    # Prove our ancestry, then exempt it and only our own descendants.
+    # Prove our ancestry before applying the narrow helper exemptions.
     ancestors = set()
     script_pid = int(sys.argv[2])
     pid = script_pid
@@ -90,15 +90,13 @@ try:
             break
         pid = processes[pid][0]
     # macOS caffeinate execs the script in its parent; its assertion helper
-    # becomes our child. Walk the same snapshot, excluding siblings/orphans.
-    descendants = {script_pid}
-    pending = [script_pid]
-    while pending:
-        for child in children.get(pending.pop(), ()):
-            if child not in descendants:
-                descendants.add(child)
-                pending.append(child)
-    exempt = ancestors | descendants | {os.getpid()}
+    # becomes our child. Exempt only that childless helper, never other
+    # children: a wrapper that execs this script keeps its earlier children.
+    helpers = {child for child in children.get(script_pid, ())
+               if processes[child][1].startswith("/usr/bin/caffeinate ")
+               and "post_window_unstrand.sh" in processes[child][1]
+               and not children.get(child)}
+    exempt = ancestors | helpers | {os.getpid()} | set(children.get(os.getpid(), ()))
     for pid, (_, command) in processes.items():
         if pid in exempt:
             continue
