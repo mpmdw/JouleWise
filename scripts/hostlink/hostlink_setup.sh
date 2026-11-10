@@ -29,7 +29,7 @@ export LC_ALL=C
 # Keep root's executable search path independent of the invoking user's PATH.
 PATH=/usr/bin:/bin:/usr/sbin:/sbin
 umask 077
-ROLE=${1:-}; shift || true
+ROLE=${1:-}; if [[ $# -gt 0 ]]; then shift; fi
 NOPASSWD=0; WIRED=0; KEY_ONLY=0
 for a in "$@"; do case $a in --nopasswd-sudo) NOPASSWD=1;; --wired) WIRED=1;; --key-only) KEY_ONLY=1;; *) echo "unknown option $a"; exit 2;; esac; done
 [[ $ROLE == air || $ROLE == mbp ]] || { echo "usage: sudo bash $0 air|mbp [--nopasswd-sudo] [--wired] [--key-only]"; exit 2; }
@@ -200,12 +200,36 @@ if [[ $WIRED == 1 ]]; then
   else fail "Thunderbolt Bridge configuration failed; check locally"; fi
 fi
 
-# 8. passwordless sudo
-if [[ $NOPASSWD == 1 ]]; then
+# 8. Passwordless sudo is deliberately broad and ONLY installed with the flag.
+# .new stays outside includedir; preserve a prior rule until full-policy validation.
+install_sudoers() {
   SF=/etc/sudoers.d/jw-hostlink-$U
-  printf '%s ALL=(ALL) NOPASSWD: ALL\n' "$U" > $SF.new; /bin/chmod 0440 $SF.new
-  if /usr/sbin/visudo -cf $SF.new >/dev/null; then /bin/mv $SF.new $SF; ok "passwordless sudo for $U ($SF)"; else /bin/rm -f $SF.new; fail "sudoers drop-in failed visudo"; fi
-fi
+  /usr/bin/grep -Eq '^[[:space:]]*[@#]includedir[[:space:]]+(/private)?/etc/sudoers.d[[:space:]]*$' /etc/sudoers || {
+    fail "sudoers has no standard sudoers.d include; no rule installed"; return;
+  }
+  /usr/sbin/visudo -cf /etc/sudoers > "$WORK/visudo.log" 2>&1 || {
+    fail "existing sudoers invalid; no rule installed: $(/bin/cat "$WORK/visudo.log")"; return;
+  }
+  /usr/bin/install -d -o root -g wheel -m 0755 /etc/sudoers.d || { fail "sudoers directory"; return; }
+  printf '%s ALL=(ALL) NOPASSWD: ALL\n' "$U" > "$WORK/sudoers.new" || { fail "sudoers staging"; return; }
+  /usr/sbin/chown root:wheel "$WORK/sudoers.new" && /bin/chmod 0440 "$WORK/sudoers.new" &&
+    /usr/sbin/visudo -cf "$WORK/sudoers.new" > "$WORK/visudo.log" 2>&1 || {
+      fail "sudoers candidate invalid; prior rule retained: $(/bin/cat "$WORK/visudo.log")"; return;
+    }
+  HAD_SUDOERS=0
+  if [[ -e $SF ]]; then
+    /bin/cp -p "$SF" "$WORK/previous-sudoers" || { fail "sudoers backup"; return; }
+    HAD_SUDOERS=1
+  fi
+  /bin/mv -f "$WORK/sudoers.new" "$SF" || { fail "sudoers install"; return; }
+  if /usr/sbin/visudo -cf /etc/sudoers > "$WORK/visudo.log" 2>&1; then
+    ok "passwordless sudo for $U ($SF); complete sudoers policy valid"
+  else
+    if [[ $HAD_SUDOERS == 1 ]]; then /bin/mv -f "$WORK/previous-sudoers" "$SF"; else /bin/rm -f "$SF"; fi
+    fail "sudoers policy invalid; restored prior rule: $(/bin/cat "$WORK/visudo.log")"
+  fi
+}
+[[ $NOPASSWD != 1 ]] || install_sudoers
 
 # 9. screen sharing
 if listening 5900; then ok "Screen Sharing listening on 5900"; else warn "Screen Sharing OFF: System Settings > General > Sharing > Screen Sharing (on)"; fi
