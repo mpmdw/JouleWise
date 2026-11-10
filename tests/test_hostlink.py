@@ -86,6 +86,14 @@ fail() { echo "FAIL $*"; FAILS=$((FAILS+1)); }
             self.assertEqual(effective['kbdinteractiveauthentication'], 'no')
             self.assertEqual(effective['pubkeyauthentication'], 'yes')
 
+    def test_rerun_without_flag_keeps_prior_key_only_policy(self):
+        self.target.write_text('PasswordAuthentication no\nKbdInteractiveAuthentication no\n')
+        r = self.install()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        owner = self.effective('edr')
+        self.assertEqual(owner['passwordauthentication'], 'no')
+        self.assertEqual(owner['kbdinteractiveauthentication'], 'no')
+
     def test_shadowed_global_keeps_previous_bytes(self):
         previous = b'# previous\nClientAliveInterval 30\n'
         self.target.write_bytes(previous)

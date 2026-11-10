@@ -97,6 +97,11 @@ EOF
   if [[ $KEY_ONLY == 1 ]]; then
     printf '%s\n' 'PasswordAuthentication no' 'KbdInteractiveAuthentication no' >> "$WORK/sshd/010-jw-hostlink.conf"
   else
+    # A rerun without the flag must not undo a previously installed key-only policy.
+    if [[ -f $C ]]; then
+      /usr/bin/awk 'tolower($1) ~ /^(passwordauthentication|kbdinteractiveauthentication)$/ && tolower($2) == "no" {print $1, "no"}' \
+        "$C" >> "$WORK/sshd/010-jw-hostlink.conf" || { fail "cannot preserve prior authentication policy"; return; }
+    fi
     warn "password policy preserved; use --key-only only AFTER verified key logins both ways"
   fi
   /usr/bin/sed "s|^Include[[:space:]]*/etc/ssh/sshd_config.d/\\*[[:space:]]*$|Include $WORK/sshd/*|" \
