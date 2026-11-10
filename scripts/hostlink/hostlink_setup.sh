@@ -2,14 +2,15 @@
 # hostlink_setup.sh: one-time setup so the M4 Air and the MBP can reach each other
 # without anyone at either machine. Run once on EACH Mac, as the logged-in user, with sudo:
 #
-#   sudo bash hostlink_setup.sh air  [--nopasswd-sudo] [--wired]
-#   sudo bash hostlink_setup.sh mbp  [--nopasswd-sudo] [--wired]
+#   sudo bash hostlink_setup.sh air  [--nopasswd-sudo] [--wired] [--key-only]
+#   sudo bash hostlink_setup.sh mbp  [--nopasswd-sudo] [--wired] [--key-only]
 #
 # What it does. Each step is idempotent, prints OK/WARN/FAIL, and later steps still run:
 #   1. Firewall: stays on with stealth mode, but stops blocking ALL incoming
 #      connections. Apple-signed built-in services are allowed, and sshd and
 #      screensharing are allowed explicitly.
-#   2. sshd: key-only authentication, no root login, keepalives
+#   2. sshd: no root login, keepalives; --key-only disables password authentication
+#      ONLY after the operator has verified peer key access in both directions
 #      (/etc/ssh/sshd_config.d/010-jw-hostlink.conf, checked with `sshd -t`).
 #   3. Adds the peer's public key to the user's ~/.ssh/authorized_keys. The Air's key
 #      is built in; the MBP's key is pulled by the Air over SSH once step 4 is live.
@@ -24,13 +25,22 @@
 #   9. Reports whether Screen Sharing is listening. Turning it ON is a System Settings
 #      click; macOS does not allow it from a script.
 set -u
+export LC_ALL=C
+# Keep root's executable search path independent of the invoking user's PATH.
+PATH=/usr/bin:/bin:/usr/sbin:/sbin
+umask 077
 ROLE=${1:-}; shift || true
-NOPASSWD=0; WIRED=0
-for a in "$@"; do case $a in --nopasswd-sudo) NOPASSWD=1;; --wired) WIRED=1;; *) echo "unknown option $a"; exit 2;; esac; done
-[[ $ROLE == air || $ROLE == mbp ]] || { echo "usage: sudo bash $0 air|mbp [--nopasswd-sudo] [--wired]"; exit 2; }
+NOPASSWD=0; WIRED=0; KEY_ONLY=0
+for a in "$@"; do case $a in --nopasswd-sudo) NOPASSWD=1;; --wired) WIRED=1;; --key-only) KEY_ONLY=1;; *) echo "unknown option $a"; exit 2;; esac; done
+[[ $ROLE == air || $ROLE == mbp ]] || { echo "usage: sudo bash $0 air|mbp [--nopasswd-sudo] [--wired] [--key-only]"; exit 2; }
 [[ $(id -u) == 0 ]] || { echo "run with sudo"; exit 2; }
 U=${SUDO_USER:-}; [[ -n $U && $U != root ]] || { echo "run via sudo from the normal user account"; exit 2; }
-UH=$(/usr/bin/dscl . -read "/Users/$U" NFSHomeDirectory | /usr/bin/awk '{print $2}')
+[[ $U =~ ^[a-zA-Z_][a-zA-Z0-9_-]*$ ]] || { echo "unsafe account name"; exit 2; }
+UH=$(/usr/bin/dscl . -read "/Users/$U" NFSHomeDirectory | /usr/bin/sed -n 's/^NFSHomeDirectory: //p')
+[[ $UH == /* && $UH != / && -d $UH ]] || { echo "cannot resolve a safe home directory for $U"; exit 2; }
+WORK=$(/usr/bin/mktemp -d /private/tmp/jw-hostlink.XXXXXX) || exit 1
+trap '/bin/rm -rf "$WORK"' EXIT
+trap 'exit 1' HUP INT TERM
 AIR_KEY='ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFYGhQ31kwQtg1BfCqRz4hk1laHwCPz46cu1Qzn7Soz1 edr@Edrs-MacBook-Air.local'
 FAILS=0
 ok()   { echo "OK    $*"; }
@@ -52,31 +62,83 @@ for app in /usr/sbin/sshd /usr/libexec/sshd-keygen-wrapper \
 done
 if $F --getblockall | /usr/bin/grep -q 'blocking all'; then fail "firewall still blocks all incoming"; else ok "firewall: on, stealth, block-all off, sshd/screensharing allowed"; fi
 
-# 2. sshd: key-only. The file name sorts before 050-jw-offload.conf (Match block), so these stay global.
+# 2. sshd. 010 sorts before Apple's 100-macos.conf and the offload Match.
+# Stage OUTSIDE the Include wildcard (which also matches *.new and *.bak).
+# Check the effective values too: an earlier drop-in can win even when -t passes.
 D=/etc/ssh/sshd_config.d; C=$D/010-jw-hostlink.conf
-/usr/bin/grep -q '^Include /etc/ssh/sshd_config.d/\*' /etc/ssh/sshd_config || warn "sshd_config has no sshd_config.d Include; drop-in will be ignored"
-/bin/mkdir -p $D
-/bin/cat > $C.new <<'EOF'
-# jw hostlink (hostlink_setup.sh): key-only access between the JouleWise Macs
-PasswordAuthentication no
-KbdInteractiveAuthentication no
+install_sshd() {
+  /usr/bin/grep -Eq '^Include[[:space:]]+/etc/ssh/sshd_config.d/\*[[:space:]]*$' /etc/ssh/sshd_config || {
+    fail "sshd Include is nonstandard; leaving configuration unchanged"; return;
+  }
+  /bin/mkdir -p "$D" "$WORK/sshd" || { fail "sshd staging directory"; return; }
+  for entry in "$D"/*; do
+    [[ -e $entry && $entry != "$C" ]] || continue
+    /bin/ln -s "$entry" "$WORK/sshd/${entry##*/}" || { fail "sshd staging link"; return; }
+  done
+  /bin/cat > "$WORK/sshd/010-jw-hostlink.conf" <<'EOF'
+# jw hostlink: retain existing password policy unless --key-only was requested.
 PermitRootLogin no
 PubkeyAuthentication yes
 ClientAliveInterval 30
 ClientAliveCountMax 4
 EOF
-/bin/chmod 0644 $C.new
-/bin/mv $C.new $C
-if /usr/sbin/sshd -t 2>/tmp/jw-sshd-t.err; then ok "sshd config valid ($C)"; else fail "sshd -t: $(/bin/cat /tmp/jw-sshd-t.err)"; /bin/rm -f $C; warn "removed $C to keep sshd startable"; fi
+  if [[ $KEY_ONLY == 1 ]]; then
+    printf '%s\n' 'PasswordAuthentication no' 'KbdInteractiveAuthentication no' >> "$WORK/sshd/010-jw-hostlink.conf"
+  else
+    warn "password policy preserved; use --key-only only AFTER verified key logins both ways"
+  fi
+  /usr/bin/sed "s|^Include[[:space:]]*/etc/ssh/sshd_config.d/\\*[[:space:]]*$|Include $WORK/sshd/*|" \
+    /etc/ssh/sshd_config > "$WORK/sshd_config" || { fail "sshd staging config"; return; }
+  if ! /usr/sbin/sshd -t -f "$WORK/sshd_config" 2> "$WORK/sshd.err"; then
+    fail "sshd candidate invalid: $(/bin/cat "$WORK/sshd.err"); old config retained"; return
+  fi
+  if ! /usr/sbin/sshd -T -f "$WORK/sshd_config" -C "user=$U,host=hostlink,addr=127.0.0.1" > "$WORK/effective" 2> "$WORK/sshd.err"; then
+    fail "cannot inspect sshd candidate; old config retained"; return
+  fi
+  for setting in 'permitrootlogin no' 'pubkeyauthentication yes' 'clientaliveinterval 30' 'clientalivecountmax 4'; do
+    /usr/bin/grep -qxF "$setting" "$WORK/effective" || { fail "sshd policy shadowed: $setting; old config retained"; return; }
+  done
+  if [[ $KEY_ONLY == 1 ]]; then
+    for setting in 'passwordauthentication no' 'kbdinteractiveauthentication no'; do
+      /usr/bin/grep -qxF "$setting" "$WORK/effective" || { fail "sshd policy shadowed: $setting; old config retained"; return; }
+    done
+  fi
+  # Preserve the old file for post-install validation failures, including reruns.
+  HAD_CONFIG=0
+  if [[ -e $C ]]; then
+    /bin/cp -p "$C" "$WORK/previous-sshd" || { fail "sshd backup"; return; }
+    HAD_CONFIG=1
+  fi
+  /bin/chmod 0644 "$WORK/sshd/010-jw-hostlink.conf" &&
+    /usr/sbin/chown root:wheel "$WORK/sshd/010-jw-hostlink.conf" &&
+    /bin/mv -f "$WORK/sshd/010-jw-hostlink.conf" "$C" || { fail "sshd install"; return; }
+  if /usr/sbin/sshd -t 2> "$WORK/sshd.err"; then
+    ok "sshd config valid; effective hostlink settings checked ($C)"
+  else
+    if [[ $HAD_CONFIG == 1 ]]; then /bin/mv -f "$WORK/previous-sshd" "$C"; else /bin/rm -f "$C"; fi
+    fail "sshd validation failed; restored prior config: $(/bin/cat "$WORK/sshd.err")"
+  fi
+}
+install_sshd
 
 # 3. authorized_keys
 S=$UH/.ssh; AK=$S/authorized_keys
-/usr/bin/sudo -u "$U" /bin/mkdir -p "$S"; /bin/chmod 700 "$S"; /usr/bin/sudo -u "$U" /usr/bin/touch "$AK"; /bin/chmod 600 "$AK"; /usr/sbin/chown "$U" "$S" "$AK"
-if [[ $ROLE == mbp ]]; then
-  if /usr/bin/grep -qF "${AIR_KEY% *}" "$AK"; then ok "Air key already authorized"; else printf '%s\n' "$AIR_KEY" >> "$AK" && ok "Air key added to $AK"; fi
-else
-  ok "air role: MBP key will be added by the Air agent over SSH (no step needed here)"
-fi
+# Do not follow a user's symlink as root when changing ownership/permissions.
+if [[ -L $S || -L $AK ]]; then
+  fail "symlink at $S or $AK; leaving keys unchanged"
+elif /usr/bin/sudo -u "$U" /bin/mkdir -p "$S" && /bin/chmod 700 "$S" &&
+     /usr/bin/sudo -u "$U" /usr/bin/touch "$AK" && /bin/chmod 600 "$AK" &&
+     /usr/sbin/chown "$U" "$S" "$AK"; then
+  if [[ $ROLE == mbp ]]; then
+    if /usr/bin/grep -qF "${AIR_KEY% *}" "$AK"; then
+      ok "Air key already present (verify an actual login)"
+    elif printf '\n%s\n' "$AIR_KEY" >> "$AK"; then
+      ok "Air key added to $AK"
+    else fail "could not authorize Air key"; fi
+  else
+    warn "Air still needs the MBP public key in $AK; setup alone is not bidirectional"
+  fi
+else fail "could not prepare $AK"; fi
 
 # 4. Remote Login
 if ! listening 22; then
@@ -87,7 +149,7 @@ fi
 if listening 22; then ok "Remote Login on (port 22 listening)"; else fail "Remote Login not listening: turn it on in System Settings > General > Sharing > Remote Login"; fi
 
 # 5. own key
-if [[ ! -f $S/id_ed25519 ]]; then /usr/bin/sudo -u "$U" /usr/bin/ssh-keygen -q -t ed25519 -N '' -C "$U@$(/usr/sbin/scutil --get LocalHostName).local" -f "$S/id_ed25519" && ok "generated $S/id_ed25519"; fi
+if [[ -L $S ]]; then fail "refusing key generation through symlink $S"; elif [[ ! -f $S/id_ed25519 ]]; then /usr/bin/sudo -u "$U" /usr/bin/ssh-keygen -q -t ed25519 -N '' -C "$U@$(/usr/sbin/scutil --get LocalHostName).local" -f "$S/id_ed25519" && ok "generated $S/id_ed25519" || fail "own SSH key generation"; fi
 [[ -f $S/id_ed25519.pub ]] && echo "      this Mac's public key: $(/bin/cat "$S/id_ed25519.pub")"
 
 # 6. power on AC
