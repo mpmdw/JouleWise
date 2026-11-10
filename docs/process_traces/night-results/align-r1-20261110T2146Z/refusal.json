@@ -1,0 +1,24 @@
+{
+  "plan_id": "align-r1-20261110T2146Z",
+  "receipt_class": "HAZARD_PACK",
+  "refusal": {
+    "detail": "hazard arm did not return GO; non-PASS: clock=REFUSE; clock REFUSE: measured rate gate: 58.5029 ms > 5.0 ms",
+    "evidence": {
+      "arm_decision": "night/arm_decision.json",
+      "reasons": [
+        "clock REFUSE: measured rate gate: 58.5029 ms > 5.0 ms"
+      ],
+      "verdicts": {
+        "battery": "PASS",
+        "clock": "REFUSE",
+        "contention": "PASS",
+        "disk": "PASS",
+        "instrument": "PASS",
+        "thermal": "PASS"
+      }
+    },
+    "reason": "night_refused_hazard"
+  },
+  "schema": "joulewise.night_refusal.v1",
+  "verdict": "REFUSED"
+}

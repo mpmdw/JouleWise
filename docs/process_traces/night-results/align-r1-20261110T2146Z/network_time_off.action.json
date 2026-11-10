@@ -1,0 +1,17 @@
+{
+  "argv": [
+    "/usr/bin/sudo",
+    "-n",
+    "/usr/sbin/systemsetup",
+    "-setusingnetworktime",
+    "off"
+  ],
+  "call": 1,
+  "error": null,
+  "ran_by": "arm",
+  "returncode": 0,
+  "schema": "joulewise.b5_network_time_off_action.v1",
+  "stderr": "2026-11-10 13:46:01.159 systemsetup[26588:90545904] ### Error:-99 File:/AppleInternal/Library/BuildRoots/4~CVSrugDU1y1BQluOAwbcrw5V7M6lsMeD-KfSuUA/Library/Caches/com.apple.xbs/TemporaryDirectory.4VW9ci/Sources/Admin/InternetServices.m Line:395\n",
+  "stdout": "setUsingNetworkTime: Off\n",
+  "timed_out": false
+}

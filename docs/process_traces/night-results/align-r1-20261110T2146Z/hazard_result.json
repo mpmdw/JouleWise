@@ -1,0 +1,61 @@
+{
+  "agent_pause": {
+    "episodes": [],
+    "stopped_by_limit": false,
+    "total_pause_s": 0.0
+  },
+  "arm": {
+    "go": false,
+    "reasons": [
+      "clock REFUSE: measured rate gate: 58.5029 ms > 5.0 ms"
+    ],
+    "record_path": "/Users/edr/night-align/r1-20261110T212531Z/hazards/arm.json",
+    "verdicts": {
+      "battery": "PASS",
+      "clock": "REFUSE",
+      "contention": "PASS",
+      "disk": "PASS",
+      "instrument": "PASS",
+      "thermal": "PASS"
+    }
+  },
+  "attempt": 1,
+  "census": {
+    "clean": true,
+    "exit_code": 1
+  },
+  "diagnostics": [],
+  "ended": {
+    "monotonic_ns": 2331719640989458,
+    "monotonic_raw_ns": 2331719640989291,
+    "wall_s": 1794347382.2274182
+  },
+  "flags_emitted": [
+    "network_time.off_output"
+  ],
+  "keep_awake": {
+    "pid": 26577,
+    "restarts": 0,
+    "verified_end": true,
+    "verified_start": true
+  },
+  "pack_id": "align-r1-runtime",
+  "plan_id": "align-r1-20261110T2146Z",
+  "receipt_class": "HAZARD_PACK",
+  "refusal": {
+    "detail": "hazard arm did not return GO; non-PASS: clock=REFUSE; clock REFUSE: measured rate gate: 58.5029 ms > 5.0 ms",
+    "reason": "night_refused_hazard"
+  },
+  "schema": "joulewise.b5_hazard_night.v1",
+  "sleep": {
+    "chain_slept_ns": null,
+    "runs_excluded": []
+  },
+  "stage_reached": "arm",
+  "started": {
+    "monotonic_ns": 2331498115872208,
+    "monotonic_raw_ns": 2331498115871708,
+    "wall_s": 1794347160.704493
+  },
+  "verdict": "REFUSED"
+}
