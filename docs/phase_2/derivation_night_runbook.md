@@ -1724,6 +1724,7 @@ can refuse first.
 
 | Refusal | Exit code | Condition / recovery |
 |---|---|---|
+| `night_ac_powermode_unenforced_on_this_head` | 3 | This head parses `ac_powermode: 2` for watchdog compatibility but cannot enforce it. Driver preflight/run and installer validation refuse until the lane's AC powermode enforcement merges. Absent and `0` retain their existing behavior. |
 | `install_span_closed` | 2 | `now >= install_close_epoch(plan)` or a later check reaches the initially selected span's close; do not install this plan late. Re-plan under the handback procedure. |
 | `install_outside_span` | 2 | `now` is outside every listed `INSTALL_SPANS` entry; use an allowed span before the plan's close. |
 | `plan_t0_in_the_past` | 2 | `t0 < now`; author a future plan. |
@@ -1876,6 +1877,7 @@ D-180 clause 2; A172 rulings R1–R3 and fix-round-1 R1–R4 (2026-09-15). Exact
 
 | Exact cause | Why A172 grants no retry exception |
 |---|---|
+| `night_ac_powermode_unenforced_on_this_head` | This head cannot enforce ac_powermode 2. Wait for the lane's AC powermode enforcement to merge; never a retry cause. |
 | `night_refused_agent_present` | Production census refusal, including a receipt at t0; never an idle arm event. Zero-capture successor route per D-182. |
 | `night_refused_not_quiet` | One-shot load refusal for v2, a terminal power/thermal predicate failure, or one named non-observer process at or above 0.5 busy cores over a single 30 s observation at t0 or at the arm check (registration v3; cold gate QPE01-DAEMON-CONTAMINATION-01 ruling 10 Q2, 2026-09-23). Also: more than two launchd spawns of corecaptured (the Wi-Fi log-capture helper) in the last 10 min at t0, detection only, or new spawns persisting 180 s after the arm check's one licensed Wi-Fi cycle (cold ruling 16 Q2, 2026-09-23). The detail names the process, its pid and its share, and the receipt's C3 row carries top_consumers_at_decision. For v4, load is diagnostic and the CPU cutoff is a sealed plan parameter with a named ruling. Zero-capture successor route per D-182. |
 | `night_refused_battery_float` | Battery-float predicate failed on a successfully observed reading (ExternalConnected/IsCharging/|InstantAmperage| ≤ 200 mA, directive #421); never waived. Zero-capture successor route per D-182. |
@@ -1909,6 +1911,7 @@ D-180 clause 2; A172 rulings R1–R3 and fix-round-1 R1–R4 (2026-09-15). Exact
 
 | Exact cause | Why A172 grants no retry exception |
 |---|---|
+| `night_ac_powermode_unenforced_on_this_head` | This head cannot enforce ac_powermode 2; installation and rendering are refused until the lane's enforcement merges. |
 | `install_span_closed` | The selected transaction ended; never switch spans mid-install or bypass the plan cutoff. |
 | `install_outside_span` | Wait for an allowed span before the cutoff; scheduling wait is not a fifth retry cause. |
 | `plan_t0_in_the_past` | Author a future plan through ordinary planning. |

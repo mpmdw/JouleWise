@@ -283,6 +283,7 @@ NIGHT_GATE_REASON_CODES = frozenset(
 # refuter's once-only finding are their forcing problems.
 NIGHT_DRIVER_REASON_CODES = frozenset(
     {
+        "night_ac_powermode_unenforced_on_this_head",  # temporary guard until lane HIGH-3 enforcement merges
         "night_refused_bind_expired",   # v4 bind deadline expired; D-182 successor route
         "night_aborted_agent_present",   # census hit while the chain ran; chain group terminated
         "night_chain_already_started",   # O_EXCL claim on chain.started failed: never start the chain twice (D-078)

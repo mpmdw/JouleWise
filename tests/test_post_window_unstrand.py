@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import plistlib
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -30,7 +31,7 @@ class PostWindowUnstrandTests(unittest.TestCase):
         self.night = self.custody / "night"
         self.night.mkdir(parents=True)
         self.plan = self.custody / "night_plan.json"
-        self.plan.write_text(json.dumps({"plan_id": "synthetic-plan"}))
+        self.plan.write_text(json.dumps({"plan_id": "synthetic-plan", "custody_root": str(self.custody)}))
         for name in ("chain.exited", "result.json", "courier.sent"):
             (self.night / name).write_text("BLINDED_MARKER_PAYLOAD_NOT_JSON\n")
         for label in LABELS:
@@ -40,7 +41,21 @@ class PostWindowUnstrandTests(unittest.TestCase):
         self.bin.mkdir()
         (self.bin / "python3").symlink_to(sys.executable)
         ps = self.bin / "ps"
-        ps.write_text('#!/bin/sh\nprintf "%s\\n" "${TEST_PS_ROWS-1 launchd}"\nexit "${TEST_PS_RC:-0}"\n')
+        ps.write_text('#!' + sys.executable + '\n' + '''import os, sys
+assert sys.argv[1:] == ["-axww", "-o", "pid=,ppid=,command="]
+script = os.environ["TEST_SCRIPT_PID"]
+parent = os.environ.get("TEST_ANCESTOR_PID", "1")
+rows = f"1 0 launchd\\n{script} {parent} /bin/bash\\n"
+if parent != "1":
+    # Every ancestor names custody, including a grandparent beyond the wrapper.
+    custody = os.environ["TEST_CUSTODY"]
+    rows += f"{parent} 2000000000 /bin/zsh -c {custody}\\n"
+    rows += f"2000000000 1 ssh host {custody}\\n"
+rows += os.environ.get("TEST_PS_EXTRA_ROWS", "")
+sys.stdout.write(os.environ.get("TEST_PS_ROWS", rows))
+sys.stderr.write(os.environ.get("TEST_PS_STDERR", ""))
+sys.exit(int(os.environ.get("TEST_PS_RC", "0")))
+''')
         ps.chmod(0o755)
         self.log = self.root / "launchctl.log"
         launchctl = self.bin / "launchctl"
@@ -62,15 +77,20 @@ class PostWindowUnstrandTests(unittest.TestCase):
             json.dumps({"kind": "transition", "from": "SECRET\nPAYLOAD", "to": "ACTIVE"}) + "\n")
         self.env = {**os.environ, "HOME": str(self.home),
                     "PATH": str(self.bin) + ":/usr/bin:/bin:/usr/sbin:/sbin",
+                    "UNSTRAND_PS": str(ps), "TEST_CUSTODY": str(self.custody),
                     "TEST_LAUNCHCTL_LOG": str(self.log)}
 
     def plist(self, label):
         return self.directory / (label + ".plist")
 
-    def run_script(self, *args):
-        return subprocess.run(["/bin/bash", str(SCRIPT), "--events", str(self.events),
-                               "--wait-seconds", "0", *args, str(self.custody)],
-                              cwd=REPO, env=self.env, capture_output=True, text=True, timeout=15)
+    def run_script(self, *args, custody=None, wrapped=False, cwd=REPO):
+        command = ["/bin/bash", "-c", 'export TEST_SCRIPT_PID=$$; exec "$@"', "unstrand-test",
+                   "/bin/bash", str(SCRIPT), "--events", str(self.events),
+                   "--wait-seconds", "0", *args, str(custody or self.custody)]
+        if wrapped:
+            command = ["/bin/zsh", "-f", "-c", "cd /; export TEST_ANCESTOR_PID=$$; " +
+                       shlex.join(command) + "; exit $?"]
+        return subprocess.run(command, cwd=cwd, env=self.env, capture_output=True, text=True, timeout=15)
 
     def assert_blinded(self, result):
         self.assertNotIn("BLINDED_MARKER_PAYLOAD", result.stdout + result.stderr)
@@ -125,21 +145,126 @@ class PostWindowUnstrandTests(unittest.TestCase):
     def test_live_chain_driver_monitor_and_custody_processes_refuse(self):
         for command in ("python /elsewhere/run_night.py dead-man", "zsh /elsewhere/chain.zsh",
                         "sh /elsewhere/chain.sh", "python /elsewhere/hazard_monitor.py",
-                        "python /elsewhere/km003c_monitor.py", f"worker {self.custody}/runs"):
+                        "python /elsewhere/km003c_monitor.py", f"worker {self.custody}/runs",
+                        "/bin/zsh -f /elsewhere/night_chains/align_r1_rehearsal.zsh"):
             with self.subTest(command=command):
-                self.env["TEST_PS_ROWS"] = "4242 " + command
+                self.env["TEST_PS_EXTRA_ROWS"] = "4242 1 " + command + "\n"
                 result = self.run_script("--go")
                 self.assertNotEqual(0, result.returncode)
                 self.assertIn("process is still present", result.stderr)
                 self.assertFalse(self.log.exists())
 
     def test_unknown_or_empty_process_table_refuses(self):
-        for rows, rc in (("", "0"), ("garbage", "0"), ("1 launchd", "2")):
+        for rows, rc in (("", "0"), ("garbage", "0"), ("1 0 launchd", "2"),
+                         ("1 0 launchd\n4242 1 ", "0"), ("x 1 command", "0"),
+                         ("1 0 launchd\n1 0 duplicate", "0"), ("1 0 launchd", "0")):
             with self.subTest(rows=rows, rc=rc):
                 self.env.update(TEST_PS_ROWS=rows, TEST_PS_RC=rc)
                 result = self.run_script("--go")
                 self.assertNotEqual(0, result.returncode)
                 self.assertFalse(self.log.exists())
+
+    @unittest.skipUnless(Path("/bin/zsh").exists(), "requires /bin/zsh")
+    def test_wrapping_zsh_and_its_whole_ancestor_chain_are_exempt(self):
+        result = self.run_script(wrapped=True)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("DRY RUN", result.stdout)
+        self.assertFalse(self.log.exists())
+        self.assert_blinded(result)
+
+    @unittest.skipUnless(Path("/bin/zsh").exists(), "requires /bin/zsh")
+    def test_nonancestor_naming_custody_still_refuses_under_wrapping_zsh(self):
+        self.env["TEST_PS_EXTRA_ROWS"] = f"4242 1 worker {self.custody}/night\n"
+        result = self.run_script("--go", wrapped=True)
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("process is still present", result.stderr)
+        self.assertFalse(self.log.exists())
+
+    @unittest.skipUnless(Path("/bin/zsh").exists(), "requires /bin/zsh")
+    def test_native_ps_clean_completed_window_under_wrapping_zsh(self):
+        try:
+            probe = subprocess.run(["/bin/ps", "-p", str(os.getpid()), "-o", "pid=,ppid="],
+                                   capture_output=True, text=True, timeout=5)
+        except PermissionError:
+            self.skipTest("sandbox denies /bin/ps")
+        if probe.returncode or probe.stderr.strip() or not probe.stdout.strip():
+            self.skipTest("native /bin/ps process visibility unavailable")
+        self.env.pop("UNSTRAND_PS")
+        command = ["/bin/bash", str(SCRIPT), "--events", str(self.events),
+                   "--wait-seconds", "0", str(self.custody)]
+        result = subprocess.run(["/bin/zsh", "-f", "-c", "cd /; " + shlex.join(command) + "; exit $?"],
+                                cwd=REPO, env=self.env, capture_output=True, text=True, timeout=15)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("DRY RUN", result.stdout)
+        self.assert_blinded(result)
+
+    def test_symlink_literal_and_declared_custody_aliases_refuse(self):
+        alias = self.root / "custody alias"
+        alias.symlink_to(self.custody, target_is_directory=True)
+        for argument, declared, named in ((alias, self.custody, alias),
+                                           (self.custody, alias, alias),
+                                           (alias, alias, self.custody)):
+            with self.subTest(argument=argument, declared=declared, named=named):
+                self.plan.write_text(json.dumps({"plan_id": "synthetic-plan", "custody_root": str(declared)}))
+                self.env["TEST_PS_EXTRA_ROWS"] = f"4242 1 worker {named}/night/align-r1\n"
+                result = self.run_script("--go", custody=argument)
+                self.assertNotEqual(0, result.returncode)
+                self.assertIn("process is still present", result.stderr)
+                self.assertFalse(self.log.exists())
+
+    def test_cdpath_and_leading_dash_relative_custody_do_not_break_resolution(self):
+        alias = self.root / "-custody"
+        alias.symlink_to(self.custody, target_is_directory=True)
+        self.env["CDPATH"] = str(self.root)
+        result = self.run_script(custody="-custody", cwd=self.root)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("DRY RUN", result.stdout)
+        self.assert_blinded(result)
+
+    def test_default_ps_is_absolute_even_when_path_has_a_substitute(self):
+        self.env.pop("UNSTRAND_PS")
+        # The PATH substitute cannot be used without the explicit test seam.
+        (self.bin / "ps").write_text('#!/bin/sh\necho PATH_PS_USED >&2\nexit 99\n')
+        result = self.run_script()
+        self.assertNotIn("PATH_PS_USED", result.stdout + result.stderr)
+        if result.returncode:
+            self.assertIn("unproven", result.stderr)
+
+    def test_unavailable_ps_or_stderr_refuses_before_uninstall(self):
+        self.env["TEST_PS_STDERR"] = "observation failed"
+        result = self.run_script("--go")
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("unproven", result.stderr)
+        self.assertFalse(self.log.exists())
+        self.env.pop("TEST_PS_STDERR")
+        self.env["UNSTRAND_PS"] = str(self.bin / "missing-ps")
+        result = self.run_script("--go")
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("unproven", result.stderr)
+        self.assertFalse(self.log.exists())
+
+    def test_follower_crash_after_verified_go_is_reported_but_successful(self):
+        self.events.write_text("[" * 30000 + "0" + "]" * 30000 + "\n")
+        result = self.run_script("--go")
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("Both night plists are gone", result.stdout)
+        self.assertIn("watchdog event follower failed", result.stderr)
+        self.assertTrue(all(not self.plist(label).exists() for label in LABELS))
+        self.assert_blinded(result)
+
+    def test_dry_run_follower_failure_remains_nonzero_and_read_only(self):
+        self.events.unlink()
+        self.events.mkdir()
+        result = self.run_script()
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("watchdog event follower failed", result.stderr)
+        self.assertFalse(self.log.exists())
+        self.assertTrue(all(self.plist(label).exists() for label in LABELS))
+
+    def test_usage_documents_prechain_refusal_limit(self):
+        result = self.run_script("--help")
+        self.assertEqual(2, result.returncode)
+        self.assertIn("refused before its chain started is not covered", result.stderr)
 
     def test_different_plan_or_unreadable_plist_refuses(self):
         for payload in (plistlib.dumps({"ProgramArguments": [

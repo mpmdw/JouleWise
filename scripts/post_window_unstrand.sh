@@ -8,6 +8,7 @@ set -euo pipefail
 
 usage() {
   echo "usage: $0 [--go] [--events PATH] [--wait-seconds N] PLAN_CUSTODY_DIR" >&2
+  echo "Completed windows only: a window refused before its chain started is not covered." >&2
   exit 2
 }
 go=0
@@ -24,8 +25,9 @@ while (( $# )); do
   esac
 done
 [[ -n "$custody" && -d "$custody" ]] || usage
-custody="$(cd "$custody" && pwd -P)"
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+literal_custody="$custody"
+custody="$(CDPATH= cd -- "$custody" >/dev/null && pwd -P)"
+script_dir="$(CDPATH= cd -- "$(dirname "${BASH_SOURCE[0]}")" >/dev/null && pwd -P)"
 plan="$custody/night_plan.json"
 [[ -f "$plan" ]] || { echo 'Refused: night_plan.json is missing.' >&2; exit 1; }
 for marker in chain.exited result.json courier.sent; do
@@ -37,7 +39,8 @@ done
 
 # A process-table failure is a hold. Print neither argv nor custody payloads.
 # Also refuse to remove jobs belonging to a different (possibly future) plan.
-python3 -B - "$custody" "$$" <<'PY'
+python3 -B - "$custody" "$$" "$literal_custody" <<'PY'
+import json
 import os
 from pathlib import Path
 import plistlib
@@ -51,17 +54,44 @@ def refuse(message):
 
 root = Path(sys.argv[1])
 try:
-    table = subprocess.run(["ps", "-axww", "-o", "pid=,command="],
+    metadata = json.loads((root / "night_plan.json").read_bytes())
+    custody_names = {str(root), sys.argv[3]}
+    declared = metadata.get("custody_root")
+    if declared is not None:
+        if not isinstance(declared, str) or not declared:
+            refuse("declared custody identity is unproven.")
+        custody_names.add(declared)
+    # UNSTRAND_PS is a test seam only; operators use the absolute system ps.
+    table = subprocess.run([os.environ.get("UNSTRAND_PS", "/bin/ps"),
+                            "-axww", "-o", "pid=,ppid=,command="],
                            capture_output=True, text=True, timeout=10)
     if table.returncode or table.stderr.strip() or not table.stdout.strip():
         refuse("process absence is unproven.")
     pattern = re.compile(r"(?:^|[/\s])(?:run_night\.py|chain\.(?:zsh|sh)|"
                          r"hazard_monitor\.py|km003c_monitor\.py)(?:\s|$)")
+    processes = {}
     for line in table.stdout.splitlines():
-        pid, command = line.strip().split(None, 1)
-        if int(pid) in (os.getpid(), int(sys.argv[2])):
+        pid, ppid, command = line.strip().split(None, 2)
+        if not pid.isdecimal() or not ppid.isdecimal() or int(pid) in processes:
+            refuse("process absence is unproven.")
+        processes[int(pid)] = (int(ppid), command)
+    # Wrapping shells, ssh, sudo and caffeinate may name this custody in argv.
+    # Exempt only our own ancestry, never siblings or other custody processes.
+    ancestors = set()
+    pid = int(sys.argv[2])
+    while True:
+        if pid in ancestors or pid not in processes:
+            refuse("process ancestry is unproven.")
+        ancestors.add(pid)
+        if pid == 1:
+            break
+        pid = processes[pid][0]
+    ancestors.add(os.getpid())
+    for pid, (_, command) in processes.items():
+        if pid in ancestors:
             continue
-        if str(root) in command or pattern.search(command):
+        if (any(name in command for name in custody_names)
+                or "night_chains/" in command or pattern.search(command)):
             refuse("a chain, driver or window process is still present.")
     directory = Path.home() / "Library/LaunchAgents"
     for label in ("com.joulewise.night", "com.joulewise.night.deadman"):
@@ -98,7 +128,7 @@ fi
 
 # Recent transition state words only; never emit reasons, alerts or payloads.
 # Observe up to one launchd interval after --go; never kickstart the watchdog.
-python3 -B - "$events" "$wait_seconds" <<'PY'
+if python3 -B - "$events" "$wait_seconds" <<'PY'
 import json
 from pathlib import Path
 import re
@@ -145,3 +175,12 @@ while True:
 if wait and not launched:
     print("No new launching transition observed; lead must check remaining watchdog gates.")
 PY
+then
+  :
+else
+  follower_rc=$?
+  echo "Warning: watchdog event follower failed (exit $follower_rc)." >&2
+  # Successful verified teardown remains successful even if observation fails.
+  (( go )) || exit "$follower_rc"
+fi
+exit 0

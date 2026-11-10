@@ -32,6 +32,7 @@ RETRY_CAUSES = {
 
 # Explicit assignments are intentional: registry additions must force review.
 COLD_GATE_CODES = {
+    "night_ac_powermode_unenforced_on_this_head": "This head cannot enforce ac_powermode 2. Wait for the lane's AC powermode enforcement to merge; never a retry cause.",
     "night_refused_agent_present": "Production census refusal, including a receipt at t0; never an idle arm event. Zero-capture successor route per D-182.",
     "night_refused_not_quiet": "One-shot load refusal for v2, a terminal power/thermal predicate failure, or one named non-observer process at or above 0.5 busy cores over a single 30 s observation at t0 or at the arm check (registration v3; cold gate QPE01-DAEMON-CONTAMINATION-01 ruling 10 Q2, 2026-09-23). Also: more than two launchd spawns of corecaptured (the Wi-Fi log-capture helper) in the last 10 min at t0, detection only, or new spawns persisting 180 s after the arm check's one licensed Wi-Fi cycle (cold ruling 16 Q2, 2026-09-23). The detail names the process, its pid and its share, and the receipt's C3 row carries top_consumers_at_decision. For v4, load is diagnostic and the CPU cutoff is a sealed plan parameter with a named ruling. Zero-capture successor route per D-182.",
     "night_refused_battery_float": "Battery-float predicate failed on a successfully observed reading (ExternalConnected/IsCharging/|InstantAmperage| ≤ 200 mA, directive #421); never waived. Zero-capture successor route per D-182.",
@@ -62,6 +63,7 @@ COLD_GATE_CODES = {
     "non_observer_process_busy": "Two CONSECUTIVE envelopes were excluded because one non-observer process held at least 30 busy-core-seconds inside each (registration v3's per-envelope integral; cold gate QPE01-DAEMON-CONTAMINATION-01 ruling 10 Q2, 2026-09-23). The chain ends about 31 minutes after t0 with a typed refusal naming the process, its pid and its core-seconds. This is a machine-state abort AFTER capture, so D-182's zero-capture route does not apply by itself; Ed's 2026-09-23 addendum to D-182 licenses ONE new-plan successor when fewer than minimum_retained envelopes were captured (installed by lane QPE01-ABORT-SUCCESSOR-01; until that lane lands the chain ends with no successor); the captured envelopes stay in the archive. One such envelope followed by a clean one never aborts; never an auto-retry cause.",
 }
 INSTALLER_REFUSALS = {
+    "night_ac_powermode_unenforced_on_this_head": "This head cannot enforce ac_powermode 2; installation and rendering are refused until the lane's enforcement merges.",
     "install_span_closed": "The selected transaction ended; never switch spans mid-install or bypass the plan cutoff.",
     "install_outside_span": "Wait for an allowed span before the cutoff; scheduling wait is not a fifth retry cause.",
     "plan_t0_in_the_past": "Author a future plan through ordinary planning.",

@@ -1644,6 +1644,7 @@ class NightGateTests(unittest.TestCase):
         self.assertEqual(
             night_gate.NIGHT_DRIVER_REASON_CODES,
             {
+                "night_ac_powermode_unenforced_on_this_head",
                 "night_calibration_refused",
                 "night_refused_bind_expired",
                 "night_aborted_agent_present",

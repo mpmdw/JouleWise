@@ -20,6 +20,7 @@ RETRY = {
 }
 # Independent literals, not derived from the implementation or renderer.
 COLD = {
+    "night_ac_powermode_unenforced_on_this_head",
     "night_refused_agent_present", "night_refused_not_quiet", "night_refused_battery_float", "night_refused_bind_expired",
     "night_refused_hid_idle", "night_refused_boot_clock",
     "night_refused_registration", "night_window_expired", "night_plan_stale",
@@ -40,6 +41,7 @@ COLD = {
     "non_observer_process_busy",
 }
 INSTALLER = {
+    "night_ac_powermode_unenforced_on_this_head",
     "install_span_closed", "install_outside_span", "plan_t0_in_the_past",
     "night_agent_already_loaded", "plan_outside_custody_root", "night_plan_malformed",
     "plan_schedule_unrepresentable", "install_spans_unresolvable_on_day",

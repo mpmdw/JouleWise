@@ -1231,6 +1231,9 @@ def validate_install(args, repo):
             raise PlanError("night_plan_stale", "plan is older than 36 hours")
     except (PlanError, ValueError) as exc:
         raise Refused(3, "{}: {}".format(getattr(exc, "reason", "night_plan_malformed"), exc))
+    if plan.ac_powermode == 2:
+        raise Refused(3, "night_ac_powermode_unenforced_on_this_head: "
+                      "ac_powermode 2 requires the lane's AC powermode enforcement")
     for name, root, expected in (("repo_head", repo, plan.repo_head),
                                  ("measurement_head", plan.measurement_root, plan.measurement_head)):
         result = subprocess.run(["/usr/bin/git", "-C", str(root), "rev-parse", "HEAD"],

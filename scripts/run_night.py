@@ -2068,6 +2068,14 @@ def _load_plan(path: Path) -> NightPlan:
     return NightPlan.from_mapping(json.loads(path.read_text(encoding="utf-8")))
 
 
+def _require_ac_powermode_support(plan: NightPlan) -> None:
+    # Readers must still parse 2 so installed watchdog plans cannot strand.
+    # Admission stays closed until the lane's HIGH-3 enforcement merges.
+    if plan.ac_powermode == 2:
+        raise PlanError("night_ac_powermode_unenforced_on_this_head",
+                        "ac_powermode 2 requires the lane's AC powermode enforcement")
+
+
 def _fallback_plan(plan_path: Path) -> NightPlan:
     now = time.time()
     raw: Mapping[str, Any] = {}
@@ -3987,6 +3995,11 @@ def run_night(
     if dry_arm:
         # A desk negative control: census first, never a launch, never a
         # write-once night record.
+        try:
+            _require_ac_powermode_support(plan)
+        except PlanError as error:
+            sys.stderr.write(f"dry-arm refused: {error.reason}: {error}\n")
+            return EXIT_REFUSED
         if plan.receipt_class != night_gate.HAZARD_PACK:
             sys.stderr.write("dry-arm refused: --dry-arm applies to HAZARD_PACK plans only\n")
             return EXIT_REFUSED
@@ -4013,6 +4026,16 @@ def run_night(
     started_epoch_s = time.time()
     started_monotonic_ns = time.monotonic_ns()
     _append_log(custody_root, "night driver started")
+    try:
+        _require_ac_powermode_support(plan)
+    except PlanError as error:
+        _write_standard_refusal_result(custody_root, night_dir, plan, error.reason,
+                                       str(error), started_epoch_s, started_monotonic_ns)
+        resolved, courier_error, substitution = _resolve_courier_bin(courier_bin)
+        _record_courier_substitution(custody_root, substitution)
+        return _finish_reporting(custody_root, night_dir, plan, EXIT_REFUSED, resolved,
+                                 courier_error=courier_error,
+                                 courier_bin_substitution=substitution)
     if plan.receipt_class == night_gate.HAZARD_PACK:
         if rehearsal:
             # `rehearse` never runs a real window; HAZARD_PACK has no stub mode.
@@ -5179,7 +5202,12 @@ def _main(argv: list[str] | None = None) -> int:
         print(json.dumps(derived, sort_keys=True))
         return EXIT_GO
     if args.command == "preflight":
-        _load_plan(args.plan)
+        plan = _load_plan(args.plan)
+        try:
+            _require_ac_powermode_support(plan)
+        except PlanError as error:
+            print(f"{error.reason}: {error}", file=sys.stderr)
+            return EXIT_REFUSED
         print(json.dumps({
             "preflight": "ok",
             "python": sys.executable,
