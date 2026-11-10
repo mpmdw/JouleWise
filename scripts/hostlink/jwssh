@@ -8,7 +8,7 @@ P=${1:-}
 shift
 opts=(-o BatchMode=yes -o ConnectTimeout=4 -o ConnectionAttempts=1
       -o ServerAliveInterval=20 -o ServerAliveCountMax=3)
-for alias in "$P-wired" "$P" "$P-ip"; do
+for alias in "$P-ts" "$P-wired" "$P" "$P-ip"; do
   if /usr/bin/ssh "${opts[@]}" "$alias" true 2>/dev/null; then
     exec /usr/bin/ssh "${opts[@]}" "$alias" "$@"
   fi

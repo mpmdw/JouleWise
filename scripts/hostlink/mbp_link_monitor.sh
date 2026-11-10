@@ -26,7 +26,7 @@ if [[ -f $ARMED_FILE ]]; then
   fi
 fi
 res=""; via=""
-for alias in mbp-wired mbp mbp-ip; do
+for alias in mbp-ts mbp-wired mbp mbp-ip; do
   if r=$(/usr/bin/ssh "${opts[@]}" "$alias" "$probe" 2>/dev/null); then res=$r; via=$alias; break; fi
 done
 prev_fails=0; [[ -f $STATUS ]] && prev_fails=$(/usr/bin/sed -n 's/.* fails=\([0-9]*\).*/\1/p' "$STATUS")
