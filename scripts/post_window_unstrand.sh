@@ -25,7 +25,7 @@ while (( $# )); do
   esac
 done
 [[ -n "$custody" && -d "$custody" ]] || usage
-literal_custody="$custody"
+logical_custody="$(CDPATH= cd -L -- "$custody" >/dev/null && pwd -L)"
 custody="$(CDPATH= cd -- "$custody" >/dev/null && pwd -P)"
 script_dir="$(CDPATH= cd -- "$(dirname "${BASH_SOURCE[0]}")" >/dev/null && pwd -P)"
 plan="$custody/night_plan.json"
@@ -39,7 +39,7 @@ done
 
 # A process-table failure is a hold. Print neither argv nor custody payloads.
 # Also refuse to remove jobs belonging to a different (possibly future) plan.
-python3 -B - "$custody" "$$" "$literal_custody" <<'PY'
+python3 -B - "$custody" "$$" "$logical_custody" <<'PY'
 import json
 import os
 from pathlib import Path
@@ -70,15 +70,18 @@ try:
     pattern = re.compile(r"(?:^|[/\s])(?:run_night\.py|chain\.(?:zsh|sh)|"
                          r"hazard_monitor\.py|km003c_monitor\.py)(?:\s|$)")
     processes = {}
+    children = {}
     for line in table.stdout.splitlines():
         pid, ppid, command = line.strip().split(None, 2)
         if not pid.isdecimal() or not ppid.isdecimal() or int(pid) in processes:
             refuse("process absence is unproven.")
         processes[int(pid)] = (int(ppid), command)
-    # Wrapping shells, ssh, sudo and caffeinate may name this custody in argv.
-    # Exempt only our own ancestry, never siblings or other custody processes.
+        children.setdefault(int(ppid), []).append(int(pid))
+    # Wrapping shells, ssh and sudo may name this custody in argv.
+    # Prove our ancestry, then exempt it and only our own descendants.
     ancestors = set()
-    pid = int(sys.argv[2])
+    script_pid = int(sys.argv[2])
+    pid = script_pid
     while True:
         if pid in ancestors or pid not in processes:
             refuse("process ancestry is unproven.")
@@ -86,9 +89,18 @@ try:
         if pid == 1:
             break
         pid = processes[pid][0]
-    ancestors.add(os.getpid())
+    # macOS caffeinate execs the script in its parent; its assertion helper
+    # becomes our child. Walk the same snapshot, excluding siblings/orphans.
+    descendants = {script_pid}
+    pending = [script_pid]
+    while pending:
+        for child in children.get(pending.pop(), ()):
+            if child not in descendants:
+                descendants.add(child)
+                pending.append(child)
+    exempt = ancestors | descendants | {os.getpid()}
     for pid, (_, command) in processes.items():
-        if pid in ancestors:
+        if pid in exempt:
             continue
         if (any(name in command for name in custody_names)
                 or "night_chains/" in command or pattern.search(command)):

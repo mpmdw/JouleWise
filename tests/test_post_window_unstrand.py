@@ -51,7 +51,7 @@ if parent != "1":
     custody = os.environ["TEST_CUSTODY"]
     rows += f"{parent} 2000000000 /bin/zsh -c {custody}\\n"
     rows += f"2000000000 1 ssh host {custody}\\n"
-rows += os.environ.get("TEST_PS_EXTRA_ROWS", "")
+rows += os.environ.get("TEST_PS_EXTRA_ROWS", "").replace("{script}", script).replace("{parent}", parent)
 sys.stdout.write(os.environ.get("TEST_PS_ROWS", rows))
 sys.stderr.write(os.environ.get("TEST_PS_STDERR", ""))
 sys.exit(int(os.environ.get("TEST_PS_RC", "0")))
@@ -96,6 +96,15 @@ sys.exit(int(os.environ.get("TEST_PS_RC", "0")))
         self.assertNotIn("BLINDED_MARKER_PAYLOAD", result.stdout + result.stderr)
         self.assertNotIn("SECRET", result.stdout + result.stderr)
         self.assertNotIn("PAYLOAD", result.stdout + result.stderr)
+
+    def require_native_ps(self):
+        try:
+            probe = subprocess.run(["/bin/ps", "-p", str(os.getpid()), "-o", "pid=,ppid="],
+                                   capture_output=True, text=True, timeout=5)
+        except PermissionError:
+            self.skipTest("sandbox denies /bin/ps")
+        if probe.returncode or probe.stderr.strip() or not probe.stdout.strip():
+            self.skipTest("native /bin/ps process visibility unavailable")
 
     def test_default_is_read_only_and_prints_only_transition_state_fields(self):
         before = {p: p.read_bytes() for p in self.directory.iterdir()}
@@ -180,15 +189,35 @@ sys.exit(int(os.environ.get("TEST_PS_RC", "0")))
         self.assertIn("process is still present", result.stderr)
         self.assertFalse(self.log.exists())
 
+    def test_caffeinate_child_and_other_script_descendants_are_exempt(self):
+        # macOS caffeinate execs the script in its parent, leaving its assertion
+        # helper as the script's child. Put a grandchild first to test the walk.
+        self.env["TEST_PS_EXTRA_ROWS"] = (
+            f"4243 4242 helper.py --plan {self.plan}\n"
+            f"4242 {{script}} /usr/bin/caffeinate -i {SCRIPT} {self.custody}\n")
+        result = self.run_script()
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("DRY RUN", result.stdout)
+        self.assertFalse(self.log.exists())
+        self.assert_blinded(result)
+
+    def test_siblings_and_orphans_still_refuse_with_a_caffeinate_child(self):
+        self.env["TEST_ANCESTOR_PID"] = "2000000001"
+        for parent in ("{parent}", "1"):
+            with self.subTest(parent=parent):
+                self.env["TEST_PS_EXTRA_ROWS"] = (
+                    f"4242 {{script}} /usr/bin/caffeinate -i {SCRIPT} {self.custody}\n"
+                    f"4243 {parent} worker {self.custody}/night\n")
+                result = self.run_script("--go")
+                self.assertNotEqual(0, result.returncode)
+                self.assertIn("process is still present", result.stderr)
+                self.assertFalse(self.log.exists())
+                self.assertTrue(all(self.plist(label).exists() for label in LABELS))
+                self.assert_blinded(result)
+
     @unittest.skipUnless(Path("/bin/zsh").exists(), "requires /bin/zsh")
     def test_native_ps_clean_completed_window_under_wrapping_zsh(self):
-        try:
-            probe = subprocess.run(["/bin/ps", "-p", str(os.getpid()), "-o", "pid=,ppid="],
-                                   capture_output=True, text=True, timeout=5)
-        except PermissionError:
-            self.skipTest("sandbox denies /bin/ps")
-        if probe.returncode or probe.stderr.strip() or not probe.stdout.strip():
-            self.skipTest("native /bin/ps process visibility unavailable")
+        self.require_native_ps()
         self.env.pop("UNSTRAND_PS")
         command = ["/bin/bash", str(SCRIPT), "--events", str(self.events),
                    "--wait-seconds", "0", str(self.custody)]
@@ -198,19 +227,44 @@ sys.exit(int(os.environ.get("TEST_PS_RC", "0")))
         self.assertIn("DRY RUN", result.stdout)
         self.assert_blinded(result)
 
+    @unittest.skipUnless(sys.platform == "darwin" and Path("/usr/bin/caffeinate").exists(),
+                         "requires macOS caffeinate")
+    def test_native_ps_clean_completed_window_under_caffeinate(self):
+        self.require_native_ps()
+        self.env.pop("UNSTRAND_PS")
+        result = subprocess.run(
+            ["/usr/bin/caffeinate", "-i", "/bin/bash", str(SCRIPT),
+             "--events", str(self.events), "--wait-seconds", "0", str(self.custody)],
+            cwd=REPO, env=self.env, capture_output=True, text=True, timeout=15)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("DRY RUN", result.stdout)
+        self.assertFalse(self.log.exists())
+        self.assert_blinded(result)
+
     def test_symlink_literal_and_declared_custody_aliases_refuse(self):
         alias = self.root / "custody alias"
         alias.symlink_to(self.custody, target_is_directory=True)
         for argument, declared, named in ((alias, self.custody, alias),
+                                           (alias.name, self.custody, alias),
                                            (self.custody, alias, alias),
                                            (alias, alias, self.custody)):
             with self.subTest(argument=argument, declared=declared, named=named):
                 self.plan.write_text(json.dumps({"plan_id": "synthetic-plan", "custody_root": str(declared)}))
                 self.env["TEST_PS_EXTRA_ROWS"] = f"4242 1 worker {named}/night/align-r1\n"
-                result = self.run_script("--go", custody=argument)
+                result = self.run_script("--go", custody=argument, cwd=self.root)
                 self.assertNotEqual(0, result.returncode)
                 self.assertIn("process is still present", result.stderr)
                 self.assertFalse(self.log.exists())
+
+    def test_short_relative_custody_does_not_match_unrelated_dotted_commands(self):
+        self.env["TEST_PS_EXTRA_ROWS"] = "4242 1 helper.py --config ../unrelated.json\n"
+        for argument, cwd in ((".", self.custody), ("./", self.custody), ("..", self.night)):
+            with self.subTest(argument=argument):
+                result = self.run_script(custody=argument, cwd=cwd)
+                self.assertEqual(0, result.returncode, result.stderr)
+                self.assertIn("DRY RUN", result.stdout)
+                self.assertFalse(self.log.exists())
+                self.assert_blinded(result)
 
     def test_cdpath_and_leading_dash_relative_custody_do_not_break_resolution(self):
         alias = self.root / "-custody"

@@ -2072,7 +2072,7 @@ def _require_ac_powermode_support(plan: NightPlan) -> None:
     # Readers must still parse 2 so installed watchdog plans cannot strand.
     # Admission stays closed until the lane's HIGH-3 enforcement merges.
     if plan.ac_powermode == 2:
-        raise PlanError("night_ac_powermode_unenforced_on_this_head",
+        raise PlanError(_CODES["ac_powermode_unenforced_on_this_head"],
                         "ac_powermode 2 requires the lane's AC powermode enforcement")
 
 
