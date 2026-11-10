@@ -10,6 +10,7 @@
   "_local_observation_2026_10_14_b6_busy_fraction_desk": "SUPERSEDED 2026-11-06 for scheduling: tests.test_b6_busy_fraction_desk now weighs 0.045 s, its hosted median from _hosted_observations_2026_11_06_cross_lane, which replaces the earlier hint recorded below (carried verbatim from lane/2026-11-05-align-pilot10-benign so this map is a key superset of every open lane's map and a merge can keep this file's values whole). Earlier hint: tests.test_b6_busy_fraction_desk: one local Python 3.13 unittest run, 6 tests in 0.026 s; scheduling hint, not hardware evidence.",
   "_local_observation_2026_10_15_b6_round_desk": "SUPERSEDED 2026-11-06 for scheduling: tests.b6.test_loop_round_desk now weighs 324.191 s, its hosted median from _hosted_observations_2026_11_06_cross_lane, which replaces the earlier hint recorded below (carried verbatim from lane/2026-11-05-align-pilot10-benign so this map is a key superset of every open lane's map and a merge can keep this file's values whole). Earlier hint: tests.b6.test_loop_round_desk: one local /opt/homebrew/bin/python3.13 unittest run on the M3 Max, 4 end-to-end scenarios in 160.727 s with the real harvest CLI's two-worker pool, JW_B5_SYNTHETIC_ONLY=1 and subprocess audit guarding; part of the run overlapped the required desk suite. Six strict bundles per session, four per smoke; all validators and reductions run. Scheduling hint only, not a hosted median or hardware evidence.",
   "_hosted_observation_2026_10_22_align_moe": "SUPERSEDED 2026-11-06 for scheduling: tests.align.test_moe_calibration now weighs 1376.959 s, its hosted median from _hosted_observations_2026_11_06_cross_lane, which replaces the earlier hint recorded below (carried verbatim from lane/2026-11-05-align-pilot10-benign so this map is a key superset of every open lane's map and a merge can keep this file's values whole). Earlier hint: ADDED for tests.align.test_moe_calibration: single hosted observation from CI run 39715696032, shard 9, MODULE PASS seconds=1451.183. This is a scheduling hint, not evidence; replace with hosted medians at the next timing harvest.",
+  "_local_observation_2026_11_10_watchdog_v5": "One local Python 3.13.18 unittest run per module, each in its own process with JW_B5_SYNTHETIC_ONLY=1 and -B: tests.test_night_ac_powermode (6 tests, 3.134 s), tests.test_magistrate_watchdog_v5 (4 tests, 0.032 s), tests.test_post_window_unstrand (24 tests, 8.438 s, including 2 native-ps skips). Scheduling hints only, not hosted medians or live hardware evidence.",
   "exclusive_modules": {
     "tests.test_calibration_exits": {
       "seconds": 820.019,
@@ -599,6 +600,7 @@
     "tests.test_magistrate_watchdog_b6": 0.119,
     "tests.test_magistrate_watchdog_cli": 11.319,
     "tests.test_magistrate_watchdog_span": 0.126,
+    "tests.test_magistrate_watchdog_v5": 0.032,
     "tests.test_magistrate_watchdog_yield": 5.344,
     "tests.test_measurement_liveness": 0.11,
     "tests.test_microdelta_generate_configs": 0.06,
@@ -617,6 +619,7 @@
     "tests.test_neg8_corpus_cap": 88.474,
     "tests.test_neg8_survivors": 156.38,
     "tests.test_network_time_off": 0.272,
+    "tests.test_night_ac_powermode": 3.134,
     "tests.test_night_agent_install": 568.336,
     "tests.test_night_gate": 0.624,
     "tests.test_night_kinds": 57.003,
@@ -652,6 +655,7 @@
     "tests.test_partial_record_enclosure": 15.841,
     "tests.test_phase_share": 0.01,
     "tests.test_pipeline_smoke_tail": 6.674,
+    "tests.test_post_window_unstrand": 8.438,
     "tests.test_powermetrics": 17.576,
     "tests.test_powermetrics_fiducial": 124.347,
     "tests.test_preflight": 0.225,

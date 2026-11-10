@@ -29,21 +29,35 @@ from joulewise.hazards import arm, base
 ATTEMPT3_ROOT = "/Users/edr/night-custody/b5-gamma-attempt3/custody"
 
 
+def _reap(process: subprocess.Popen) -> None:
+    if process.poll() is None:
+        process.kill()
+    process.wait(timeout=10)
+
+
 def _live(argv: list[str]) -> subprocess.Popen:
     process = subprocess.Popen(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    deadline = time.monotonic() + 10
-    while time.monotonic() < deadline:  # wait for the exec to land in the kernel's argv
-        info = agent_identity.inspect(process.pid)
-        if info is not None and info.argv and tuple(info.argv) == tuple(argv):
-            return process
-        time.sleep(0.02)
-    process.kill()
-    process.wait()
-    raise unittest.SkipTest("the kernel did not report the child's argv")
+    try:
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:  # wait for the exec to land in the kernel's argv
+            info = agent_identity.inspect(process.pid)
+            if info is not None and info.argv and tuple(info.argv) == tuple(argv):
+                return process
+            time.sleep(0.02)
+        raise unittest.SkipTest("the kernel did not report the child's argv")
+    except BaseException:
+        _reap(process)
+        raise
 
 
 def _line(process: subprocess.Popen) -> str:
     return f"{process.pid} {' '.join(process.args)}\n"
+
+
+def _owned_lines(stdout: str, *pids: int) -> str:
+    """Compare only this test's single-line fixture records on a shared runner."""
+    prefixes = tuple(f"{pid} " for pid in pids)
+    return "".join(line for line in stdout.splitlines(keepends=True) if line.startswith(prefixes))
 
 
 def _census_probes(stdout: str, exit_code: int = 0):
@@ -56,19 +70,12 @@ class AgentIdentityTests(unittest.TestCase):
     def setUp(self) -> None:
         if agent_identity.inspect(os.getpid()) is None:
             self.skipTest("no kernel process reader on this platform")
-        self.processes: list[subprocess.Popen] = []
         self.tmp = tempfile.TemporaryDirectory(prefix="agent-identity-")
         self.addCleanup(self.tmp.cleanup)
-        self.addCleanup(self._reap)
-
-    def _reap(self) -> None:
-        for process in self.processes:
-            process.kill()
-            process.wait()
 
     def spawn(self, argv: list[str]) -> subprocess.Popen:
         process = _live(argv)
-        self.processes.append(process)
+        self.addCleanup(_reap, process)
         return process
 
     def marker(self, name: str) -> str:
@@ -102,12 +109,15 @@ class AgentIdentityTests(unittest.TestCase):
         for name in ("claude", "codex"):
             with self.subTest(name=name):
                 agent = self.spawn([self.marker(name), "60"])
-                stdout = _line(window) + _line(agent)
-                observed, refusal = night_gate.agent_census(_census_probes(stdout))
-                self.assertEqual("night_refused_agent_present", refusal.reason)
-                self.assertEqual(_line(agent), observed.stdout)
-                self.assertIn(str(agent.pid), refusal.detail)
-                self.assertNotIn(str(window.pid), observed.stdout)
+                try:
+                    stdout = _line(window) + _line(agent)
+                    observed, refusal = night_gate.agent_census(_census_probes(stdout))
+                    self.assertEqual("night_refused_agent_present", refusal.reason)
+                    self.assertEqual(_line(agent), _owned_lines(observed.stdout, window.pid, agent.pid))
+                    self.assertIn(str(agent.pid), refusal.detail)
+                    self.assertNotIn(window.pid, _listed_pids(observed.stdout))
+                finally:
+                    _reap(agent)  # The previous subtest must not remain in a live census.
 
     def test_the_callers_own_tree_is_ignored_even_when_agent_named(self):
         agent = self.spawn([self.marker("codex"), "60"])
@@ -317,25 +327,74 @@ class AgentIdentityTests(unittest.TestCase):
         self.assertTrue(census["clean"], census)
         self.assertEqual((1, 0), (census["returncode"], census["raw_returncode"]))
         self.assertEqual([window.pid], [item["pid"] for item in census["ignored"]])
-        # The arm ignores its own tree, so the agent must be someone else's:
-        # a detached grandchild whose parent shell has exited.
-        marker = self.marker("claude")
-        shell = subprocess.run(["/bin/sh", "-c", f"'{marker}' 60 "
-                                "</dev/null >/dev/null 2>&1 & echo $!"],
-                               capture_output=True, text=True, start_new_session=True, check=True)
-        pid = int(shell.stdout.strip())
-        self.addCleanup(os.kill, pid, 9)
-        deadline = time.monotonic() + 10
-        while time.monotonic() < deadline:
-            info = agent_identity.inspect(pid)
-            if info is not None and info.argv and info.argv[0] == marker:
-                break
-            time.sleep(0.02)
-        line = f"{pid} {' '.join(agent_identity.inspect(pid).argv)}\n"
-        census = arm.agent_census(ctx_for((_line(window) + line).encode()))
+        # Run the arm in a sibling process: the agent is foreign to its own-tree
+        # rule, while unittest still owns both children and can kill AND wait.
+        agent = self.spawn([self.marker("claude"), "60"])
+        line = _line(agent)
+        child = subprocess.run(
+            [sys.executable, "-B", "-c", _HAZARD_CENSUS_CHILD],
+            input=_line(window) + line, capture_output=True, text=True, timeout=15,
+            cwd=Path(__file__).resolve().parents[1], check=True,
+        )
+        census = json.loads(child.stdout)
         self.assertFalse(census["clean"])
-        self.assertIn(str(pid), census["detail"])
-        self.assertEqual(line, census["stdout"])
+        self.assertIn(str(agent.pid), census["detail"])
+        self.assertEqual(line, _owned_lines(census["stdout"], window.pid, agent.pid))
+
+
+_HAZARD_CENSUS_CHILD = """
+import json
+import sys
+from types import SimpleNamespace
+from joulewise.hazards import arm, base
+
+stdout = sys.stdin.buffer.read()
+def run(argv, timeout):
+    return base.Completed(tuple(argv), 0, stdout, b"")
+stamp = SimpleNamespace(to_json=lambda: {})
+ctx = SimpleNamespace(run=run, stamp=lambda: stamp)
+print(json.dumps(arm.agent_census(ctx)))
+"""
+
+
+class ProcessFixtureCleanupTests(unittest.TestCase):
+    def assert_reaped(self, process):
+        self.assertIsNotNone(process.returncode)
+        with self.assertRaises(ChildProcessError):
+            os.waitpid(process.pid, os.WNOHANG)
+
+    def test_failed_inspection_reaps_the_child_before_reraising(self):
+        process = subprocess.Popen(["/bin/sleep", "60"])
+        self.addCleanup(_reap, process)
+        with mock.patch.object(subprocess, "Popen", return_value=process), \
+                mock.patch.object(agent_identity, "inspect", side_effect=RuntimeError("inspection failed")):
+            with self.assertRaisesRegex(RuntimeError, "inspection failed"):
+                _live(["/bin/sleep", "60"])
+        self.assert_reaped(process)
+
+    def test_failed_test_body_reaps_its_run_campaign_fixture(self):
+        case = AgentIdentityTests("test_an_agent_named_process_is_still_an_agent")
+        processes = []
+        popen = subprocess.Popen
+
+        def spawn(*args, **kwargs):
+            process = popen(*args, **kwargs)
+            processes.append(process)
+            self.addCleanup(_reap, process)
+            return process
+
+        result = unittest.TestResult()
+        result.failfast = True
+        with mock.patch.object(subprocess, "Popen", side_effect=spawn), \
+                mock.patch.object(case, "marker", side_effect=RuntimeError("body failed")):
+            case.run(result)
+        if result.skipped:
+            self.skipTest(result.skipped[0][1])
+        self.assertEqual(1, len(result.errors), result.errors)
+        self.assertIn("body failed", result.errors[0][1])
+        self.assertEqual(1, len(processes))
+        self.assertEqual("run_campaign", Path(processes[0].args[0]).name)
+        self.assert_reaped(processes[0])
 
 
 class CodexAppServerCensusTests(unittest.TestCase):
