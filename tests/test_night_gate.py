@@ -2202,6 +2202,17 @@ class HazardPackPlanTests(unittest.TestCase):
         self.assertFalse(night_gate.HAZARD_DRIVER_REASON_CODES
                          & (night_gate.NIGHT_GATE_REASON_CODES | night_gate.NIGHT_DRIVER_REASON_CODES))
 
+    def test_declared_ac_powermode_matches_the_r1_arming_contract(self):
+        self.assertIsNone(night_gate.NightPlan.from_mapping(self.mapping()).ac_powermode)
+        for mode in (0, 2):
+            self.assertEqual(mode, night_gate.NightPlan.from_mapping(
+                self.mapping(ac_powermode=mode)).ac_powermode)
+        for mode in (None, True, False, 0.0, 2.0, 1, -1, 3, "0", [], {}):
+            with self.subTest(mode=mode), self.assertRaisesRegex(night_gate.PlanError, "ac_powermode"):
+                night_gate.NightPlan.from_mapping(self.mapping(ac_powermode=mode))
+        with self.assertRaisesRegex(night_gate.PlanError, "keys are not exact"):
+            night_gate.NightPlan.from_mapping(self.mapping(ac_powermode=0, unknown=1))
+
     def test_block_six_bindings_are_optional_and_preserve_their_types(self):
         screen = {"alignment_reference_s": "0.036462861644980", "bracket_screen_s": "0.014531",
                   "operative_bound_stop_s": "0.092"}

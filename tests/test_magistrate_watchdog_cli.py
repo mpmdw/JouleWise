@@ -70,6 +70,13 @@ def _drop_field(path: Path, field: str) -> None:
 
 
 class HandoffCliDefectTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        home = mock.patch.object(wd.Path, "home", return_value=Path(temporary.name) / "home")
+        home.start()
+        self.addCleanup(home.stop)
+
     def invoke(self, rows, *args):
         output = io.StringIO()
         with mock.patch.object(wd.RealProcessTable, "snapshot", return_value=rows), \
@@ -174,6 +181,7 @@ class MagistrateWatchdogCliTests(unittest.TestCase):
         )
         git_stub.chmod(0o755)
         self.environment = os.environ.copy()
+        self.environment["HOME"] = str(self.root / "home")
         self.environment["MAGISTRATE_SESSION_BIN"] = str(self.session_bin)
         self.environment["PATH"] = (
             f"{self.bin_dir}:/usr/bin:/bin:/usr/sbin:/sbin"
@@ -253,6 +261,59 @@ class MagistrateWatchdogCliTests(unittest.TestCase):
             text=True,
             check=False,
         )
+
+    def test_real_cli_installed_r1_plan_fences_then_terminal_release_allows_launch(self):
+        # Real main/argv/Storage/service lock/dependency construction. Only
+        # process observations and the network seam are replaced; no launch.
+        import plistlib
+        from tests.fixtures.b5_plan import fake_window
+
+        now = time.time()
+        custody = self.root / "sessions" / "synthetic-r1" / "custody"
+        night = custody / "night"
+        night.mkdir(parents=True)
+        mapping = fake_window.hazard_plan_mapping(
+            custody, plan_id="synthetic-r1", t0_epoch_s=now - 60,
+            authored_epoch_s=now - 3600, custody_root=custody,
+            measurement_root=self.measurement_root, pack_root=self.root / "pack")
+        mapping["ac_powermode"] = 0
+        plan_path = custody / "night_plan.json"
+        plan_path.write_text(json.dumps(mapping))
+        directory = Path(self.environment["HOME"]) / "Library" / "LaunchAgents"
+        directory.mkdir(parents=True)
+        for label in ("com.joulewise.night", "com.joulewise.night.deadman"):
+            (directory / (label + ".plist")).write_bytes(plistlib.dumps({
+                "ProgramArguments": [sys.executable, str(REPO_ROOT / "scripts/run_night.py"),
+                                     "run", "--plan", str(plan_path)]}))
+        watchdog_root = self.root / "watchdog-parent" / "magistrate"
+        source = (
+            "import sys\nfrom unittest import mock\n"
+            "from scripts import magistrate_watchdog as wd\n"
+            "empty=wd.CensusObservation(True, 1, '', '')\n"
+            "with mock.patch.object(wd.RealProcessTable, 'snapshot', return_value=[]), "
+            "mock.patch.object(wd, 'production_census', return_value=empty), "
+            "mock.patch.object(wd, 'production_driver_probe', return_value=empty), "
+            "mock.patch.object(wd, 'remote_stop_probe', return_value=wd.StopObservation('CLEAR','fixture')):\n"
+            " raise SystemExit(wd.main(sys.argv[1:]))\n"
+        )
+        argv = [sys.executable, "-B", "-c", source, "tick", "--custody-root", str(watchdog_root)]
+        completed = subprocess.run(argv, cwd=REPO_ROOT, env=self.environment,
+                                   capture_output=True, text=True, timeout=20)
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertTrue((watchdog_root / "watchdog.lock").exists())
+        state = json.loads((watchdog_root / "state.json").read_text())
+        self.assertEqual("FENCED", state["state"], state["reason"])
+        for name in ("chain.started", "chain.exited", "courier.sent"):
+            (night / name).touch()
+        (night / "result.json").write_text(json.dumps({
+            "plan_id": mapping["plan_id"], "receipt_class": "HAZARD_PACK",
+            "verdict": "GO", "ended_epoch_s": now - 1}))
+        completed = subprocess.run(argv + ["--dry-run"], cwd=REPO_ROOT, env=self.environment,
+                                   capture_output=True, text=True, timeout=20)
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertIn("decision=LAUNCHING", completed.stdout)
+        self.assertIn("child spawn suppressed", completed.stdout)
+        self.assertEqual(2, len(list(directory.glob("*.plist"))))
 
     def test_real_cli_consumes_production_plan_set_and_fails_closed(self) -> None:
         custody_parent = self.root / "four-plan-custody"

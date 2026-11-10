@@ -98,6 +98,20 @@ class NightPlanWriterTests(unittest.TestCase):
         with self.assertRaises(PlanError):
             NightPlan.from_mapping(mapping)
 
+    def test_optional_powermode_preserves_legacy_bytes_and_round_trips(self):
+        for receipt_class in ("TRANSACTION_PACK", "REHEARSAL_STUB"):
+            plan = self.plan if receipt_class == "TRANSACTION_PACK" else dataclasses.replace(
+                self.plan, receipt_class=receipt_class, pack_night=None, registration_path="registration.json")
+            baseline = night_plan_mapping(plan)
+            self.assertNotIn("ac_powermode", baseline)
+            expected = (json.dumps(baseline, indent=2, sort_keys=True) + "\n").encode()
+            self.assertEqual(expected, night_plan_json_bytes(plan))
+            for mode in (0, 2):
+                declared = dataclasses.replace(plan, ac_powermode=mode)
+                mapping = night_plan_mapping(declared)
+                self.assertEqual({**baseline, "ac_powermode": mode}, mapping)
+                self.assertEqual(declared, NightPlan.from_mapping(mapping))
+
     def test_pack_root_absolute_basename_and_symlink_refusals(self):
         baseline = night_plan_mapping(self.plan)
         for root in ("relative/pack-test", str(self.root / "wrong-id"), None):

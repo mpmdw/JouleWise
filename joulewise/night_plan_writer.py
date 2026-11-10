@@ -21,7 +21,7 @@ def night_plan_mapping(plan: NightPlan) -> dict[str, Any]:
     if not isinstance(plan, NightPlan):
         raise TypeError("plan must be a NightPlan")
     fields = dataclasses.asdict(plan)
-    for name in ("previous_attempt", "block_archive_root", "null_reservation_restore"):
+    for name in ("previous_attempt", "block_archive_root", "null_reservation_restore", "ac_powermode"):
         if fields[name] is None:
             del fields[name]
     is_quiet = plan.quiet_admission is not None

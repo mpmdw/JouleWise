@@ -317,6 +317,9 @@ ORDER = (
     "night_refused_registration",
 )
 
+# Same AC-profile declaration as the R1 arming lane: Automatic or High Power.
+AC_POWERMODES = (0, 2)
+
 _PLAN_KEYS = {
     "schema",
     "schema_version",
@@ -436,6 +439,8 @@ class NightPlan:
     previous_attempt: dict[str, object] | None = None
     block_archive_root: str | None = None
     null_reservation_restore: dict[str, object] | None = None
+    # Optional in every class; keep absence distinct for legacy plan bytes.
+    ac_powermode: int | None = None
 
     @staticmethod
     def from_mapping(value: Mapping[str, object]) -> "NightPlan":
@@ -455,6 +460,8 @@ class NightPlan:
                 raise PlanError("night_plan_malformed", "attempt history requires a pack plan")
         if "null_reservation_restore" in keys:
             expected_keys |= history_keys | {"null_reservation_restore"}
+        if "ac_powermode" in keys:
+            expected_keys = expected_keys | {"ac_powermode"}
         if is_quiet:
             expected_keys = expected_keys | {"quiet_admission"}
         expected_schema = PACK_PLAN_SCHEMA if is_pack else PLAN_SCHEMA
@@ -590,6 +597,7 @@ class NightPlan:
                 "night_plan_malformed",
                 f"registration_path is required for {receipt_class}",
             )
+        ac_powermode = _plan_ac_powermode(value) if "ac_powermode" in keys else None
         previous = value.get("previous_attempt")
         archive_root = value.get("block_archive_root")
         restore = value.get("null_reservation_restore")
@@ -628,6 +636,7 @@ class NightPlan:
                 custody_root=custody_root,
                 registration_path=registration,
                 hazard_window=hazard_window,
+                ac_powermode=ac_powermode,
             )
         return NightPlan(
             plan_id=plan_id,
@@ -647,7 +656,16 @@ class NightPlan:
             previous_attempt=previous,
             block_archive_root=archive_root,
             null_reservation_restore=restore,
+            ac_powermode=ac_powermode,
         )
+
+
+def _plan_ac_powermode(value: Mapping[str, object]) -> int:
+    """The declared AC powermode (executing review HIGH-3): 0 or 2 only."""
+    mode = value.get("ac_powermode")
+    if type(mode) is not int or mode not in AC_POWERMODES:
+        raise PlanError("night_plan_malformed", "ac_powermode must be integer 0 or 2 when present")
+    return mode
 
 
 def validate_attempt_bindings(previous, archive_root, restore=None):
