@@ -2,6 +2,7 @@
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -10,7 +11,7 @@ SETUP = ROOT / 'scripts/hostlink/hostlink_setup.sh'
 SSHD = '/usr/sbin/sshd'
 
 
-@unittest.skipUnless(Path(SSHD).is_file(), 'native OpenSSH sshd required')
+@unittest.skipUnless(sys.platform == 'darwin' and Path(SSHD).is_file(), 'macOS native sshd required')
 class SSHConfigTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(prefix='hostlink-test-')
@@ -159,6 +160,7 @@ exit 17
         r = subprocess.run(['/bin/bash', str(ROOT / 'scripts/hostlink/jwssh'), '-oProxyCommand=bad'], capture_output=True)
         self.assertEqual(r.returncode, 2)
 
+    @unittest.skipUnless(Path('/usr/bin/ssh').is_file(), 'native SSH client required')
     def test_shared_host_block_without_hostname_preserves_aliases(self):
         with tempfile.TemporaryDirectory(prefix='hostlink-config-') as d:
             config = Path(d) / 'config'
@@ -176,6 +178,32 @@ Host mbp-wired
             for alias, expected in [('mbp', 'synthetic-mbp.local'), ('mbp-ip', '192.0.2.2'), ('mbp-wired', '10.77.0.2')]:
                 r = subprocess.run(['/usr/bin/ssh', '-G', '-F', str(config), alias], capture_output=True, text=True, check=True)
                 self.assertIn('hostname ' + expected, r.stdout.splitlines())
+
+
+class WiredTests(unittest.TestCase):
+    def test_disabled_bridge_enabled_with_empty_router_and_no_other_service_change(self):
+        with tempfile.TemporaryDirectory(prefix='hostlink-wired-') as d:
+            base = Path(d)
+            log = base / 'calls'
+            network = base / 'networksetup'
+            network.write_text('''#!/bin/bash
+printf '<%s>' "$@" >> "$CALL_LOG"; printf '\\n' >> "$CALL_LOG"
+case $1 in
+ -listallnetworkservices) printf 'An asterisk denotes disabled.\\n*Thunderbolt Bridge\\nWi-Fi\\n';;
+ -getinfo) echo 'IP address: 10.77.0.2';;
+esac
+''')
+            network.chmod(0o700)
+            source = SETUP.read_text()
+            block = source[source.index('# 7. Cable fallback.'):source.index('# 8. Passwordless sudo')]
+            block = block.replace('/usr/sbin/networksetup', str(network))
+            prelude = 'FAILS=0; WIRED=1; ROLE=mbp; ok() { :; }; fail() { FAILS=$((FAILS+1)); };\n'
+            r = subprocess.run(['/bin/bash', '-c', prelude + block + '\nexit "$FAILS"'], env=dict(os.environ, CALL_LOG=str(log)), capture_output=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            calls = log.read_text()
+            self.assertIn('<-setmanual><Thunderbolt Bridge><10.77.0.2><255.255.255.0><>', calls)
+            self.assertIn('<-setnetworkserviceenabled><Thunderbolt Bridge><on>', calls)
+            self.assertNotIn('<Wi-Fi>', calls)
 
 
 class SudoersTests(unittest.TestCase):

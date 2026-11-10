@@ -147,7 +147,10 @@ elif /usr/bin/sudo -u "$U" /bin/mkdir -p "$S" && /bin/chmod 700 "$S" &&
      /usr/bin/sudo -u "$U" /usr/bin/touch "$AK" && /bin/chmod 600 "$AK" &&
      /usr/sbin/chown "$U" "$S" "$AK"; then
   if [[ $ROLE == mbp ]]; then
-    if /usr/bin/grep -qF "${AIR_KEY% *}" "$AK"; then
+    if /usr/bin/awk -v blob="${AIR_KEY#ssh-ed25519 }" '
+      BEGIN {split(blob, key, " ")}
+      $1 == "ssh-ed25519" && $2 == key[1] {found=1}
+      END {exit !found}' "$AK"; then
       ok "Air key already present (verify an actual login)"
     elif printf '\n%s\n' "$AIR_KEY" >> "$AK"; then
       ok "Air key added to $AK"
