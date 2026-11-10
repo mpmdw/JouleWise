@@ -1042,6 +1042,32 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+249. **Magistrate activation 30693ba4 (Opus 5.5, headless, 2026-11-10 13:21 PST): R1 (item 227) NEVER MEASURED; cause fixed; R1 RE-ARMED, t0 13:46 PST 11-10, `window_max_s` 105,427 s, latest end Wed 11-11 19:03 PST.**
+- **What happened to item 227's R1** (`$S` = `/Users/edr/night-align/r1-20261108T085636Z`):
+  - At 01:20 PST 11-08, `night/align-r1/r1_result.json` recorded `status: refused`, `powermode.host_lock_unavailable: [Errno 13] Permission denied: '/Users/Shared/JouleWise/host-power'`, with `phases: []` and `powermode: []`. Nothing was measured and no power-mode change was made.
+  - The chain exited with code 3 at 01:25. `night/result.json` still says `verdict: GO` (the hazard pack's verdict) and the courier sent normally, so nothing flagged the loss.
+- **Cause:** `/Users/Shared/JouleWise` was created `root:wheel 755` at 11-07 15:42 by a root-run quiet-survey log (`os-quiet-20261107T234202Z.log`). The driver runs as edr, so `os.makedirs` of `host-power` failed. R0 and the rehearsals use the `JOULEWISE_HOST_STATE_DIR` test seam, so the production path was never exercised before R1.
+- **Why it sat 2.5 days:** the watchdog held in HOLD_UNSAFE from 11-08 00:57, because it could not parse the installed plists' `ac_powermode` key. That is the defect fixed on `ops/2026-11-10-watchdog-v5-installed`, which is not installed here yet. The plists were gone by 13:21 11-10, and then this activation launched.
+- **Post-window (runbook §4) on the old custody:**
+  - network time restored ON;
+  - powermode 0 (Automatic);
+  - no stray `km003c_monitor.py` or `hazard_monitor.py`;
+  - `arm_align_r1.py uninstall` exit 0 (`$S/uninstall-30693ba4.out`).
+  The custody is kept as is; it is a zero-capture tooling refusal.
+- **Fix:** `sudo -n install -d -o edr -g staff -m 700 /Users/Shared/JouleWise/host-power`. Then, from `$M`'s venv with `mark_production_entry` set, `HostLock()` acquired and released `/Users/Shared/JouleWise/host-power/night.lock`.
+- **Re-arm:** a zero-capture refusal retried under R13 / item 225 (A212).
+  - `$M` is unchanged at `20e9edbc446a9f89a68badc1bd32bb0934cbb86d` with a clean status (no git operation was run in it).
+  - Package versions: mlx 0.31.2, mlx_lm 0.31.3, transformers 5.12.1.
+  - Plan `align-r1-20261110T2146Z`, custody `/Users/edr/night-align/r1-20261110T212531Z`, `arm.json` plan sha256 `42d5ae81…e0e5`.
+  - The chain-source pin is `40a49bde…6be0`, equal to the source.
+  - Host: on AC, 100 % and charged, no external volume, 115 GB free. Flag: `disk.allocation_unsized`.
+  - The arm notice and fault report went to Ed before install (Gmail `1a1c75a71a834a2e`), and `notice.ack` is written. The install exited 0, and both `com.joulewise.night` and `.deadman` are loaded (the deadman fires daily at 20:09).
+- **Lesson for the W1 route (lead):** add a pre-arm check that the production host-state directory can be created and written by the driver's user. One `HostLock` acquire under `mark_production_entry`, as above, would have caught this.
+
+**Next activation (replaces item 227's pointer):**
+(1) While armed (until `chain.exited`, latest Wed 11-11 19:03 PST): do not move `$M` or the canonical root, run no git in `$M`, run no `[QUIET-MAC]` work, and keep no agent alive on the MBP. Install the watchdog-v5 code only after the chain exits.
+(2) The old watchdog will hold again on these plists (`ac_powermode`). After `chain.exited`, the lead runs `post_window_unstrand.sh` or a magistrate runs runbook §4 on `20e9edbc4` with `S=/Users/edr/night-align/r1-20261110T212531Z`. Read `r1_result.json` **status first**, since `result.json`'s GO is not R1's outcome. Then: network time ON, `pmset -g custom` Automatic restore, KM003C, stray monitors, uninstall, record, mail Ed.
+
 248. **Laptop lead (interactive session 1544c617), 2026-11-08 23:56 PST: the v4 ANALYSIS STACK is ADMITTED in software, end to end through the native exporter.**
 - **Pins:**
   - engine `engine-r23m` @ `de4a54db9`;
