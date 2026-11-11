@@ -2248,6 +2248,87 @@ fake arm would.
 
 ---
 
+# Decision request 22: Paper 1 seat 14, the bibliography audit of references 22 to 27 (2026-11-11 01:10 PST)
+
+**Read.** The seat's findings report, at the scratchpad path the lead gave (the one file; that directory is
+otherwise outside my rule). For the HC3 question I read the estimator and the registration as code and text:
+`joulewise/bytes_analysis.py:183-192` and `bytes_pack_v1.md` §9, on the BYTES lineage. No BYTES value was read.
+
+## RL-50. Seat 14 is admitted; four sentences change; the limits of the audit are recorded
+
+### Verdict: ADMIT
+
+All six references are the right works with the right authors, titles, venues and years. The corrected lines in
+the report are applied as written: DOIs for 22, 23, 25 and 27; volume 5, pages 606-624 and the arXiv number for
+24; the JSTOR stable address for 26. The "ADDED IN THIS DRAFT; verify" comments are removed.
+
+### The HC3 question: the code uses the leverage-scaled form, so the sentence says so
+
+I checked. The estimator computes the sandwich with each residual divided by (1 − leverage) and squared
+(`bytes_analysis.py:183, 191`), and the registration defines HC3 in the same words (§9, "each squared residual is
+divided by (1 − leverage)²"). That is the simplified form, not MacKinnon and White's full jackknife. The paper's
+sentence becomes:
+
+> "…primary intervals use HC3 heteroscedasticity-robust standard errors, in the form that divides each squared
+> residual by (1 − leverage)², a simplification of the jackknife estimator of MacKinnon and White [27], with
+> Student t at n − p degrees of freedom; the ordinary errors are printed beside them."
+
+No second reference is added. The auditor could not verify a page for Davidson and MacKinnon, and the sentence
+now defines the estimator in its own words.
+
+### The blinding sentences: "adapting", not "in the manner of"
+
+The cited literature hides an additive offset, often with a hidden sign. BYTES multiplies by a secret factor.
+
+- In the background section: "…protects against tuning toward an expected answer [22]; Part 2 hides energies
+  behind secret multiplicative factors, adapting that literature's hidden-offset method, and both parts
+  withhold energies until a recorded release."
+- In the BYTES method: "…each model configuration's by a secret factor uniform on [0.97, 1.03], adapting the
+  hidden-offset method of blind analysis [22] to multiplicative factors."
+
+The auditor could not read the 2005 review itself and judged from its companion. "Adapting" is true whichever
+way that review turns out. No precedent from cosmology is cited; none was verified.
+
+### The pre-registration sentence
+
+"…the public fixing of hypotheses and analyses **before outcomes are observed**, separates confirmatory from
+exploratory results [25]." This is what the source says, and it is also what this study did: BYTES commits its
+predictions before the held-out energies are unblinded, not before they are measured.
+
+### No change
+
+References 23, 24 and 26 as used. "Holm-adjusted p" stays.
+
+### What the audit could not do, recorded
+
+RL-24 asked that each reference be opened at its primary source. Three were not: Klein and Roodman 2005, Holm
+1979 and the Roofline article, whose publishers refused automated access. Their metadata comes from the DOI
+registry or index records, and the content judgments rest on a companion paper or on what is standard about
+the work. The sentences above are worded so that none depends on the unread text. Reading those three is on
+the list for the final read; Ed has library access.
+
+### Application
+
+- A small seat on `main`, after PR #715 and the F-4 move have merged. It applies the six lines and the four
+  sentences above, word for word, and regenerates the fill index.
+- The seat's report is committed with it as `docs/run_reports/2026-11-11-p1-seat14.md`, limits included.
+- The three method sentences are corrections of fact. They are added to `CORRECTIONS-2026-11-10.md` under a
+  dated heading for 11 November, and §1.2's clause changes from "On 10 November 2026" to "On 10 and
+  11 November 2026".
+- It does not come back to me if the diff is exactly this.
+
+**The standing rule of RL-47 is narrowed.** A new clause in §1.2 is owed for a new kind of change: a
+restructure, a rewritten section, a fill, a new section. Further corrections of fact extend the corrections
+file and the date in the existing clause. Reference metadata needs neither.
+
+**Reason.** A citation is a claim that the source says what we say it says. Two of ours said slightly more
+than the source does, and one named an estimator without saying which of two estimators by that name the code
+computes.
+
+**Blind status.** Blind to BYTES values. I read estimator code and registration text, not data.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
