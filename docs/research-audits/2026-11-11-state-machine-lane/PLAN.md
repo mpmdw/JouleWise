@@ -1,0 +1,135 @@
+# State-machine lane: inventory and plan
+
+Fable 5.2, lane lead. Written 2026-11-11 03:30 PST on the Air. Implements section 8 of
+`origin/audit/2026-11-10-fable:docs/research-audits/2026-11-10-fable/implicit-state-machines.md`.
+
+Refs read: `main` @ `41c7a1444`; the W1 line `align/2026-11-08-v4-r11` @ `b4a6c217f`;
+`ops/2026-11-10-hostlink` @ `f3d2d7882`. No MBP contact, no custody, no results branch was opened.
+
+## 1. What decides where an item goes
+
+- **The W1 line is ahead of `main` on the whole arm stack.** The reliability rounds (rel-r2 to r7), the
+  watchdog port and RL-37 landed there. `main` has none of it: its watchdog still has the single
+  `HOLD_UNSAFE`, and its driver has no `chain_exit_nonzero`.
+- **On the W1 line almost every operational file is bound.** `ARTIFACTS` is `_NAMED_ARTIFACTS` plus the whole
+  executed closure, and every bound path is strict. `scripts/magistrate_watchdog.py`, `scripts/run_night.py`,
+  `scripts/watchdog_status.py`, `scripts/post_window_unstrand.sh`, `scripts/align_v4_session.py`,
+  `joulewise/b5/driver.py`, `joulewise/night_gate.py`, `joulewise/arm_retry.py` and
+  `joulewise/align/apple/powermode.py` are all inside.
+- **New modules that no bound module imports are not bound.** They can land on `main` and reach the W1 line
+  when it next takes `main`, with no re-registration (RL-51's table).
+- **So the lane splits in two.**
+  - *Track M (`main`, no ruling needed):* new read-only or shadow-mode modules, Air-side tools, docs, CI checks.
+  - *Track W (W1 line, bound files):* each item is a question for the research lead, listed in section 4.
+    Nothing on track W is built into the line before its ruling.
+
+## 2. Inventory
+
+Status words: **done**, **partly**, **open**. "W1" means on the W1 line only; `main` does not have it.
+
+### 2.1 Quick wins
+
+| # | Item | Status | Evidence | Target | Bound file? | [rebind]? |
+|---|---|---|---|---|---|---|
+| Q1 | Results-branch watcher | open in the repo | A scratch script exists outside the repo; nothing under `scripts/` polls `night-results/*`. | `main` | No | No |
+| Q2 | One outcome function | open | No `window_outcome` on either ref. | `main` | No (new module) | No |
+| Q3 | Nonzero chain exit is a fault | done on W1 | `scripts/run_night.py:2309` appends `chain_exit_nonzero:<rc>`; tested in `tests/test_w1_reliability.py`. Not on `main`. | none owed | n/a | n/a |
+| Q4 | Watchdog acceptance at arm | partly | RL-35 item 4 makes the dry run a native arm check (procedure). No code in the arm helper runs it. | W1 line | Yes (`scripts/align_v4_session.py`) | Yes, question W-1 |
+| Q5 | Production-store preflight | partly, on W1 | `powermode.host_lock_preflight` runs at `prepare`. It covers the lock. The two `sudo -n` rules and the network-time permission are not probed. | W1 line | Yes | Yes, question W-2 |
+| Q6 | Unstrand covers pre-chain refusals and restores the host | open | `scripts/post_window_unstrand.sh` still requires `night/chain.exited` and says so in its usage text. | W1 line | Yes | Yes, question W-3 |
+| Q7 | Pointer rule | open | No rule in `docs/process/`. | `main`, with item 4 | No | No |
+| Q8 | Stale status files | open | `WINDOW_STATUS.md` last changed 2026-08-24; the kernel still says `AUTHORITATIVE_WORK_SELECTION_STATE`; `AGENTS.md` 42-47 unchanged. | `main` | No | No. The kernel string is the orchestrator's edit. |
+| Q9 | Hostlink monitor | partly, elsewhere | The watchdog now exports status to `watchdog-status/<host>` and `watchdog_status.py` has an Air-side poll with alarm reasons. `mbp_link_monitor.sh` is unmerged on `ops/2026-11-10-hostlink`; nothing writes `armed_until`. | `main` (Air side) | No | No |
+| Q10 | Offload and release fixes | open | `offload_window.py` is on the W1 line only; `compare_v4_recompute.py` is on the release-tools branch only. | their own branches | `align_v4_offloads.py` is bound; `offload_window.py` to be checked | Question W-5 |
+| Q11 | Honest courier name | done on W1 | `night/courier.delivery.json` is written and read by the release check (`run_night.py:1498, 1707, 1730`); RL-35 F-09. | none owed | n/a | n/a |
+| Q12 | Analysis-side hygiene | partly | `R1_FIX_BRANCH` is gone from `main`. Still open: a test that the four analysis-commit notions agree; `release_b5` HEAD against the pinned commit; the second `B5-ARM-RELEASED` line (RUN_STATE lines 21 and 3151); the stale ledger pin note; `archive/pre-prune-2026-11-06` is still both a tag and a branch. | `main` | No | Block 5 is released; RL-51 reasoning applies. RUN_STATE and the ref rename are the orchestrator's. |
+
+### 2.2 Structural items
+
+| # | Item | Status | What exists | What is left | Target |
+|---|---|---|---|---|---|
+| 1 | Explicit window lifecycle | open | Nothing. | Shadow step: `WindowState`, `derive_window_state`, violated invariants. Then readers adopt it. The journal and the result-schema split come last. | Shadow step: `main`. Writers: W1 line, question W-4. |
+| 2 | Watchdog dwell, split holds, voice | mostly done on W1 | Ten named holds, a 900 s dwell limit ending in `STRANDED`, a safety notice on every new reason, heartbeat and stream-growth liveness with a notice, status export with an Air poll. | A declared transition table; a tolerant fence reader; dwell limits on the states that are not holds (`ACTIVE` stale, `BACKOFF`, an open chain "without a clock limit"); a silence alarm. The Air notifier is not installed. | Air notifier and silence alarm: `main`, Air side. The rest: W1 line, question W-6. |
+| 3 | Host side-effect ledger | partly, on W1 | `powermode.restore_owed`, `_restore_owed_on_exit` on terminal paths, a network-time ON restore, a dead-man restore. | One ledger file with owner and deadline; non-W1 markers; one restorer per effect. | Shadow step (a read-only `owed_effects()` view): `main`. Writers: W1 line, question W-4. |
+| 4 | One head pointer | open | Nothing. | `CURRENT.json`, a check against RUN_STATE's top item, the pointer rule (Q7). | `main` |
+| 5 | Finality as one field | open | `desk_failed` appears in `align_v4_session.py` as a word only. | One writer, a lead-signed release for the k+2 deadlock. | W1 line. It changes what a record says: question W-7. Not built in this lane before a ruling. |
+| 6 | Chain exit contract | open | Nothing. | A declared table per chain; undeclared codes are failures. | Table and classifier: `main`. Driver adoption: W1 line, question W-4. |
+| 7 | Unseal as a recorded transition | open | Nothing. | `unseal.json` and the refusal in display tools. | The release-tools branch. Research design: question W-8. |
+| 8 | Fail-closed harvest for the next block | open | Nothing. | Belongs to the next block's registration, as the audit says. | Not this lane. |
+| 9 | One exit-code contract | open | Nothing. | Built with item 6. | `main` |
+
+### 2.3 Invariants (section 8.3)
+
+All fifteen are open as assertions. Eleven can be evaluated from files alone and go into the shadow module of
+item 1 as named checks. Two need live host state (network time, AC power mode) and go into the `owed_effects`
+view. Two are analysis-side (analysed attempt has all three verdicts; the four commit notions) and go with Q12.
+
+## 3. Order of work
+
+At most three seats at once. Every seat's work gets a cold Fable review before a PR.
+
+**Wave 1, now, all `main`, all new files:**
+
+| Seat | Builds | Audit section |
+|---|---|---|
+| `sm-window-state` | `joulewise/window_state.py`: `WindowState`, `derive_window_state`, `window_outcome`, the file-level invariants. Synthetic fixtures only. | Q2, 8.2 item 1 (shadow), 8.3 |
+| `sm-exit-contract` | `joulewise/exit_contract.py`: the nine existing exit vocabularies as data, one classifier, undeclared code is a failure. | 8.2 items 6 and 9 |
+| `sm-current-pointer` | `docs/process/CURRENT.json`, its generator and check, the pointer rule, retire `WINDOW_STATUS.md`, align `AGENTS.md`. | 8.2 item 4, Q7, Q8 |
+
+**Wave 2, after wave 1 is admitted, `main`:**
+
+| Seat | Builds | Audit section |
+|---|---|---|
+| `sm-air-watch` | The results-branch watcher and the silence alarm on the Air, built on `window_outcome`; folds in the watchdog-status poll's alarm reasons and replaces the scratch script. Structure-only fields. | Q1, Q9, 8.2 item 2 (voice) |
+| `sm-host-effects` | A read-only `owed_effects()` view over the host state directory and the night records, with the two host invariants. | 8.2 item 3 (shadow), 8.3 |
+| `sm-analysis-hygiene` | The four-commit agreement test and the `release_b5` HEAD check. | Q12 |
+
+**Wave 3, W1 line, after rulings:** Q6, Q4, Q5, the watchdog transition table and non-hold dwell limits, the
+adoption of the shadow modules by the bound writers. Each is built on a side branch off the W1 line, and its PR
+stays open until the ruling names it.
+
+## 4. Questions for the research lead
+
+One framing question, then the items. My recommendation is given with each.
+
+**W-0. When may bound bytes on the W1 line change for this lane?** The STRICT re-registration has not been
+signed: it waits on R1's slots. RL-35 placed bound-file edits before PREQUAL and the smoke for that reason.
+*Recommendation:* one batch of bound-file edits from this lane lands on the W1 line before the STRICT
+re-registration, limited to items that close a known stranding path and change no measured byte (W-1, W-2, W-3).
+Everything else stays off the line until the series ends or the next registration. The W1 line already carries
+what protects W1's data; what is left costs schedule, by RL-35's own split.
+
+| # | Change | Files | Alters a measured byte, verdict or registration? | Recommendation |
+|---|---|---|---|---|
+| W-1 | Q4: the arm helper runs the installed watchdog with `--dry-run` after install and refuses the arm on any `HOLD_*` or `STRANDED` | `scripts/align_v4_session.py` | No measured byte. Adds one arm refusal. | Land before registration. It is RL-35 item 4 made mechanical. |
+| W-2 | Q5: extend the prepare preflight to probe the two `sudo -n` rules and the network-time permission | `joulewise/align/apple/powermode.py` or `align_v4_session.py` | No. Adds one prepare refusal. | Land before registration. |
+| W-3 | Q6: unstrand accepts a delivered `REFUSED` result with no `chain.*`, and gains a separate explicit host-restore flag | `scripts/post_window_unstrand.sh` | No. Post-window tool. | Land before registration. This is the 11-10 stranding. |
+| W-4 | Bound writers adopt the shadow modules: the driver maps chain exits through the declared contract, terminal paths call one `restore_owed()`, a `window.journal.jsonl` is written | `scripts/run_night.py`, `joulewise/b5/driver.py`, `powermode.py` | The journal is a new custody file. The contract can change which fault reasons a result carries. | Not before W1. Build and prove in shadow on `main`; adopt at the next registration. |
+| W-5 | Q10: offload re-queue and re-push, `_supervised` exit code | `scripts/offload_window.py`, and whether it is in the closure | No measured byte; custody handling. | Land before registration if the file is bound; otherwise plain engineering. I will check the closure and report. |
+| W-6 | Watchdog: declared transition table, dwell limits on non-hold states, and a tolerant fence reader | `scripts/magistrate_watchdog.py`, `joulewise/night_gate.py` | No measured byte. The tolerant reader changes a fence decision: an unknown plan key would fence, not hold. The reliability round declined this ("no unknown key is ignored"). | Transition table and dwell limits: after W1. Tolerant reader: your call on the design. I recommend it, for fence arithmetic only, with admission still strict. |
+| W-7 | Finality as one field, `desk_failed`, a lead-signed release for the k+2 deadlock | `scripts/align_v4_next_arm_packet.py`, `align_v4_series.py` | Yes: it adds a way for the series to continue past a failed desk. | Research design. You decide whether the release exists at all; I build nothing until then. |
+| W-8 | `unseal.json` and outcome tools that refuse without it | release tools | It changes who may read outcomes and when. | Research design; your ruling first. |
+
+## 5. Decisions for the orchestrator (not research design)
+
+- **Q1 goes in the repo.** A watcher that only lives in scratch is the gap the audit named. I need the path of
+  the scratch script to fold its behaviour in.
+- **`CURRENT.json` adds one step to every RUN_STATE item:** run the generator in the same commit, or CI fails.
+  The seat ships the generator and an error message that prints the command. Say no before the PR if that cost
+  is not wanted now.
+- **Yours to edit, not Sol's:** the state kernel's `authority` string (Q8), the second `B5-ARM-RELEASED` line
+  (Q12), and renaming one of the two `archive/pre-prune-2026-11-06` refs (Q12).
+
+## 6. MBP install list for the post-R1 batch
+
+All remote (SSH after custody closes, no night label loaded). No physical step.
+
+| Item | What is installed | When |
+|---|---|---|
+| Wave 1 and 2 modules | Nothing on the MBP: they are read-only and run on the Air. `window_outcome` reaches the MBP when its checkout next moves. | n/a |
+| W-1, W-2, W-3 | Arrive with the W1 line checkout that gets registered. | With the W1 STRICT re-registration, before PREQUAL and the smoke |
+| Air notifier for the watchdog-status poll | Air only. | Before the W1 arm (closes W-01/W-02 of the measurement audit) |
+
+## 7. Log
+
+- 03:30 PST: plan written; wave 1 launching.
