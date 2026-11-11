@@ -213,3 +213,76 @@ It prints:
 - the before = after hashes.
 
 It prints no member value and writes nothing.
+
+---
+
+## Delta review: rounds 3 and 4 (RL-55)
+
+2026-11-11 04:15 PST (12:15Z) · same reviewer · target `analysis/2026-11-11-b5-ledger-ext` @
+`8dc82e24e17d3b00dfa3272e18328fecaa75c724`. The reported print authority is `ffe8137be`; its ledger and
+coverage table equal HEAD's. Ledger SHA-256 is `2f15d081…8469`, with 1,844 rows. I read RL-55 verbatim on
+the audit branch.
+
+### Delta verdict: ADMIT-WITH-FIXES
+
+All 425 round-4 rows are confirmed, with 0 MISMATCH and 0 `source-outside-unseal`. F1-F4 are closed. One
+Medium finding remains (D1): RL-55's five-decimal R_cm row does not exist. One Low finding (D2) concerns
+reason words.
+
+**Blind status.** Unchanged. In round 4 the seat opened RC, DISC and CMP (`round4_sources.tsv`). CMP is
+`release-check-final-20261108T0942Z/comparison.json`, `b12b7e1b32b27159be894221dcde7e334784061314fe91a39166faa36f72f4c9`,
+pinned in RESULTS.md §0. I added CMP to my pinned set and hashed it before reading. I opened the same seven
+files as before plus CMP. Every file's hash equalled its pin before and after (re-hashed 12:15Z). I listed no
+directory and followed no path.
+
+### Checks
+
+| # | Check | Result |
+|---|---|---|
+| 1 | Rows 1-1420 vs my reviewed commit `a1f916e9b` | byte-identical. `RESULTS.md` is unchanged. |
+| 2 | F1 | closed. `REDERIVATION.md` lines 757 and 814 and the run report now say **8B decode**; no "8B prefill differ" remains. |
+| 2 | F2 | closed. `fill_check_b5.py` asserts the 538-row prefix against `0b8763f0a` and the full hash `2f15d081…`. `--paper-ref origin/main` gives PASS: 69 filled ids, 111 rows. |
+| 2 | F3 | closed. `hand_check_rl52.py` and `hand_check_rl52_round2.py` both exit 0 at HEAD. |
+| 2 | F4 | closed. `REDERIVATION.md` line 775 has the pairing instruction for rows 647-651 with 1064-1065, and the coverage table's LOAD-LINE element carries it. |
+| 3 | Independent recompute of rows 1421-1845 | see the next table; 0 MISMATCH |
+| 4 | Coverage table vs `origin/main` `paper1.md` (`84ad2c5be`; `paper1.md` is unchanged to `6a7493f40`) | Every pending Block 5 placeholder is present: 65 ids, 1,581 elements, lines and descriptions identical. Every one of the 1,539 row elements cites the row whose key it names. No cited row is `not-printed` or MISMATCH. The other 42 elements carry an RL-55 reason. Placeholders not in the table are Block 6, BYTES, automation, the abstract's Part 2, or Appendix B historical counts (DX-010 to DX-013, DG-067/068/135/136); none is a Block 5 output. `fill_coverage_b5.py` passes. Exceptions: D1 and D2. |
+| 5 | R_cm 1.7B prefill 1.99975 row, and the double-row rule | The rule is documented (`REDERIVATION.md` lines 46-51). The row is **absent** (D1). |
+| - | Seat tests and replays | 58 tests OK. `hand_check_rl55_round4.py` exits 0, with counts 370 exact, 25 within-rounding, 30 recorded-judgment. |
+| - | Seat edit to my script | Round 3 added `--repo-only` and capped the rows-540-1420 loop. The logic is otherwise unchanged. My round-4 extension reads rows 1421 onward separately. |
+
+### Round-4 recompute
+
+The extension lives in `round4()` in the same script. It imports nothing from the seat's code. It derives:
+
+- **Battery counts and arm-unread counts:** from the second stored flag record (`RC.exclusions_rederivation.*.rederived.flag_counts.by_code`; `EXC.flag_counts.by_code` for GAMMA), not from the DISC line.
+- **GAMMA NEG-8 (both families):**
+  - the deciding corpus, from the status and physics codes plus the desk cap; it equals `corpus_ids`;
+  - the bound terms, statistic, excursion and allowance; the allowance equals `RC.windows.GAMMA.neg8.allowance_j`;
+  - the screen words;
+  - reference counts, lost run, slot and reason, and corpus counts.
+- **GAMMA physics counts and stage temperatures:** physics counts from the member codes; rise, plateau and producer flag from the stored readings.
+- **GAMMA attempt line:** count and causes, with collected and planned recounted from the member records.
+- **Removed-unit positions, stratum and unit ID:** from the stored exclusion records, RC rederived for the cells and EXC for the contrasts.
+- **Per-family compared, pass/fail, largest |L9 − recompute| and agreement word:** from `CMP.comparisons` itself. `window_edge_s` compares 0 rows, giving `not-compared`. This is the one family RL-52 asks the summary to name.
+
+| Group | Rows | Recomputed (exact / within-rounding) | Sourced only | MISMATCH |
+|---|---:|---|---:|---:|
+| Battery-count and arm-unread lines, all three packs | 21 | 21 / 0 | 0 | 0 |
+| All GAMMA rows: NEG-8, references, corpus, temperatures, arm, physics, attempt, contrast removed units | 182 | 120 / 12 | 50 (30 recorded-judgment, 10 stage names, 10 other identifiers) | 0 |
+| Rest: CMP summary, cell removed-unit structure, ALPHA/BETA stage names and lost reference | 229 | 146 / 13 | 70 (bars, stage names, identifiers) | 0 |
+| Seeded sample of the rest (`Random(20261115)`, k = 40) | 40 | 28 / 3 | 9 | 0 |
+| **All 425** | 425 | 280 / 25 | 120 | **0** |
+
+**Source-leaf equality:** 337 exact, 16 within-rounding, 0 MISMATCH. 72 derived rows have no single leaf, and
+all 72 are recomputed. All residuals have at most 2 significant figures. The whole-ledger count with row 249 as
+the only MISMATCH is reproduced by the seat's replay: 1,101 exact, 580 within-rounding, 128 recorded-judgment,
+34 single-source and 1 MISMATCH. The groups overlap: rows that are both GAMMA and battery or arm lines are
+counted in each. The "All 425" row is exact.
+
+### Delta findings
+
+| # | Severity | Finding | Required action |
+|---|---|---|---|
+| D1 | **Medium** (paper-bound) | **No ledger row prints 1.99975.** RL-55 assumed the ledger held R_cm for 1.7B prefill twice, "1.9997 from RESULTS.md and 1.99975 from the extension". In fact rows 570 and 848, and rows 277 and 502, all print **1.9997**, each with residual 0.000048. `REDERIVATION.md` line 48 says row 570 holds 1.99975, which is false. The coverage element "fullest-precision 1.7B prefill R_cm (RL-55)" under CP-X02-conclusion cites row 570 (1.9997). Under RL-52 every printed value is a row, so the second fill cannot print 1.99975 as things stand. The value itself is right: my own R_cm is 1.9997482608, which rounds to 1.99975. | Append one row: printed `1.99975`, key `RC.dominance.common_mode[Qwen3-1.7B-4bit/prefill].R_cm`, `within-rounding`, residual `-1.7e-6`. Re-point the coverage element to it and correct line 48. No existing row changes. |
+| D2 | Low | Five BYTES elements carry the reason "not a leaf of a registered output": P1-M-ACCEPT, P1-LEDGER, P1-DEV-LIST, P1-RELEASE and P1-AVAIL. That reason is inaccurate, because they are BYTES registered outputs; their own instructions say "sealed and outside this Block 5 output ledger". None of RL-55's three reasons fits. | Relabel them "outside Block 5 (BYTES; sealed)", or have the lead accept the label as a stand-in. This changes no row. |
+| D3 | Info | The coverage table pins `paper1.md` at `84ad2c5be`. Main is now `6a7493f40`, with `paper1.md` unchanged. | After main is merged into the branch, re-run `fill_coverage_b5.py` against the merged paper. |

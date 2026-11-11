@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Opus cold review of the RL-52 Block 5 ledger extension (rows 540-1420).
+"""Opus cold review of the RL-52 Block 5 ledger extension (rows 540-1420) and its
+RL-55 delta (round 4, rows 1421-1845; CMP added to the pinned files).
 
 Written independently of hand_check_phase2.py, hand_check_rl52.py and
 hand_check_rl52_round2.py: standard library only, no repository analysis,
@@ -51,6 +52,9 @@ FILES = {
                'ed3cadb1f0ac2fc137efab3f4528702c704055ffa5bdf24399c335081570f5bf'),
     'PROJ-B': (A + 'outputs/db6d525129f90ef24bb46f83ab5e66283424970c743f35d322c8961f9b683e2e-projection-beta.json',
                'db6d525129f90ef24bb46f83ab5e66283424970c743f35d322c8961f9b683e2e'),
+    # round 4 (RL-55) only; pinned in RESULTS.md 0
+    'CMP': ('release-check-final-20261108T0942Z/comparison.json',
+            'b12b7e1b32b27159be894221dcde7e334784061314fe91a39166faa36f72f4c9'),
 }
 LEDGER = Path(__file__).resolve().parent / 'rederivation.tsv'
 REVIEWED_COMMIT = 'a1f916e9b2ef645e2768ff916a7ffafcacedccb4'
@@ -392,6 +396,124 @@ def compute(src):
     return V
 
 
+# ---- round 4 (RL-55): rows 1421-1845 -----------------------------------
+def round4(src, V):
+    """Independent values for the round-4 rows, keyed by the exact ledger key."""
+    rc, disc, exc, cmp_ = src['RC'], src['DISC'], src['EXC'], src['CMP']
+    W = {}
+    WM = rc['disclosures']['whole_machine']['windows']
+    pk = {'alpha': 'ALPHA', 'beta': 'BETA', 'gamma': 'GAMMA'}
+    fam = {x['code']: x['family'] for p in disc['window_lines'].values() for x in p if x.get('label') == 'flag_count'}
+    rec = {'ALPHA': rc['exclusions_rederivation']['ALPHA']['rederived'],
+           'BETA': rc['exclusions_rederivation']['BETA']['rederived'], 'GAMMA': exc}
+    mc = {w: {m['run_id']: set(m['codes']) for m in r['members_excluded']} for w, r in rec.items()}
+    for p, w in pk.items():
+        by = rec[w]['flag_counts']['by_code']  # a second stored record, not the DISC line
+        for c in ('battery.assist', 'battery.assist_outside_request', 'battery.capture_pair_assist',
+                  'battery.smc_unavailable', 'calibration.capture_battery_assist',
+                  'calibration.capture_battery_pair_assist'):
+            W[f'DISC.window_lines.{p}[label=battery_counts].counts.{c}'] = by.get(c, 0)
+        W[f'DERIVE(DISC.window_lines.{p}).arm_unmeasured_count'] = sum(
+            v for c, v in by.items() if c.endswith('.arm_unmeasured'))
+    # GAMMA physics counts, references, corpus, NEG-8 (same rules as rounds 1-2)
+    pc = Counter(c for cs in mc['GAMMA'].values() for c in cs if fam.get(c) == 'PHYSICS_IN_SPAN')
+    for i, x in enumerate(disc['window_lines']['gamma']):
+        if x.get('label') == 'physics_counts':
+            for c in x['counts']:
+                W[f'DISC.window_lines.gamma[{i}].counts.{c}'] = pc.get(c, 0)
+    M = rc['members']['GAMMA']; n8 = rc['windows']['GAMMA']['neg8']; Wm = WM['GAMMA']['members']
+    surv = n8['survivor_ids']
+    planned = {'start': [f'neg8-window-start-r{k}' for k in (1, 2, 3)], 'midpoint': ['neg8-window-midpoint'],
+               'end': [f'neg8-window-end-r{k}' for k in (1, 2, 3)]}
+    slots = {s_: [i for i in ids if i in surv] for s_, ids in planned.items()}
+    g = 'DISC.window_lines.gamma'
+    for s_ in planned:
+        W[f'{g}[label=reference_counts].counts.{s_}'] = len(slots[s_])
+        W[f'{g}[label=reference_counts].planned.{s_}'] = len(planned[s_])
+    lost = [(s_, i) for s_, ids in planned.items() for i in ids if i not in surv]
+    for s_, i in lost:
+        W[f'{g}[label=reference_lost,run_id={i}].run_id'] = i
+        W[f'{g}[label=reference_lost,run_id={i}].slot'] = s_
+        W[f'{g}[label=reference_lost,run_id={i}].reason'] = sorted(mc['GAMMA'].get(i, set()))
+    W[f'count({g}[label=reference_lost])'] = len(lost)
+    W[f'count({g}[label=reference_spare])'] = 0
+    W[f'DERIVE({g}[label=reference_counts]).midpoint_lost'] = not slots['midpoint']
+    W[f'{g}[label=deciding_membership].deciding_references'] = len(surv)
+    W[f'{g}[label=deciding_membership].deciding_spares'] = 0
+    corpus = sorted(i for i in M if 'refcorpus' in i)
+    status = [i for i in corpus if mc['GAMMA'].get(i, set()) & {'member.admission_aborted', 'member.strict_validation_failed'}]
+    inwin = [i for i in corpus if i not in status]
+    phys = [i for i in inwin if any(fam.get(c) == 'PHYSICS_IN_SPAN' for c in mc['GAMMA'].get(i, set()))]
+    clean = [i for i in inwin if i not in phys]
+    W.update({f'{g}[label=corpus_counts].collected': len(corpus), f'{g}[label=corpus_counts].in_window': len(inwin),
+              f'{g}[label=corpus_counts].deciding': len(clean[:12]), f'{g}[label=corpus_counts].desk_cap': clean[12:],
+              f'{g}[label=corpus_counts].drop_counts.desk_cap': len(clean[12:]),
+              f'{g}[label=corpus_counts].drop_counts.status': len(status),
+              f'{g}[label=corpus_counts].drop_counts.contention.request_overlap':
+                  sum('contention.request_overlap' in mc['GAMMA'][i] for i in phys)})
+    for i in phys:
+        W[f'{g}[label=corpus_physics_drop,run_id={i}].codes'] = sorted(mc['GAMMA'][i])
+    W['chk.gamma.corpus_ids'] = clean[:12] == n8['corpus_ids']
+    for fm, f in (('gross_energy', lambda i: M[i]['E_j']['request']),
+                  ('idle_subtracted_energy', lambda i: Wm[i]['phases']['request']['rail_delta_J'])):
+        c = sorted(f(i) for i in clean[:12]); ns, ne = len(slots['start']), len(slots['end'])
+        env = max(mean(c[-ns:]) - mean(c[:ne]), mean(c[-ne:]) - mean(c[:ns]))
+        pred = T_TABLE[len(c) - 1] * sd(c) * math.sqrt(1 / ns + 1 / ne); bound = max(env, pred)
+        st, en, mid = (mean([f(i) for i in slots[k]]) for k in ('start', 'end', 'midpoint'))
+        stat = abs(en - st); exc_ = max(abs(en - st), abs(mid - st), abs(mid - en))
+        b = f'{g}[label=neg8_allowance].values_j[bracket.claim_families.{fm}.'
+        W.update({b + 'bound_envelope_j]': env, b + 'bound_prediction_j]': pred,
+                  b + 'derived_repeatability_bound_j]': bound, b + 'screen_statistic_j]': stat,
+                  b + 'trajectory_excursion_max_j]': exc_, b + 'drift_allowance_j]': max(bound, exc_),
+                  f'DERIVE({g}[label=neg8_allowance].values_j.bracket.claim_families.{fm}).screen_decision':
+                      'passed' if stat <= bound else 'failed'})
+    W[f'{g}[label=neg8_screen].decision'] = 'passed' if all(
+        W[f'DERIVE({g}[label=neg8_allowance].values_j.bracket.claim_families.{fm}).screen_decision'] == 'passed'
+        for fm in ('gross_energy', 'idle_subtracted_energy')) else 'failed'
+    W['chk.gamma.allowance_equals_RC'] = abs(W[f'{g}[label=neg8_allowance].values_j[bracket.claim_families.gross_energy.drift_allowance_j]'] - n8['allowance_j']) < 1e-9
+    # GAMMA stage temperatures from stored readings
+    for i, x in enumerate(disc['window_lines']['gamma']):
+        if x.get('label') == 'battery_temperature':
+            r = x['readings_centi_c']; rise = (r[-1] - r[0]) / 100 if len(r) >= 2 else None
+            plat = len(r) >= 3 and max(r[-3:]) - min(r[-3:]) <= 50
+            prod = rise is not None and rise > 3 and not plat
+            W.update({f'{g}[{i}].rise_k': None if rise is None else round(rise, 2), f'{g}[{i}].plateau': plat,
+                      f'{g}[{i}].producer_flag': prod, f'{g}[{i}].temperature_unmeasured': len(r) == 0,
+                      f'{g}[{i}].differs_from_harvest_flag': prod != x['harvest_flag']})
+    # GAMMA attempt line (rows 9-10): count, causes, and recounted collected / planned
+    W['DISC.block_lines[9].count'] = V['att.9.count']; W['DISC.block_lines[9].causes'] = V['att.9.causes']
+    W['DISC.block_lines[9].cause_counts[cause=None]'] = V.get('att.9.cause.None', 0)
+    W['DISC.block_lines[10].collected'] = len(WM['GAMMA']['members']); W['DISC.block_lines[10].planned'] = len(M)
+    # removed-unit structure: positions and stratum from the stored exclusion records (RC rederived, EXC)
+    for w, r in rec.items():
+        for cell in r['cells']:
+            for u in cell['dropped_units']:
+                cid = cell['cell_id']
+                if w == 'GAMMA':
+                    base = f'DISC.contrasts[label=removed unit,cell_id={cid},unit_id={u["unit_id"]}]'
+                else:
+                    base = f'DISC.cells[label=removed unit,cell_id=d117-reported-mean-{cid[3:]},unit_id={u["unit_id"]}]'
+                W[base + '.positions'] = [str(x) for x in u['positions']]
+                W[base + '.stratum'] = u['stratum']; W[base + '.unit_id'] = u['unit_id']
+    # comparator summary from the comparison rows themselves
+    fams = sorted(cmp_['counts'])
+    for f in fams:
+        rows_ = [x for x in cmp_['comparisons'] if x['family'] == f]
+        d = f'DERIVE(CMP.comparisons[family={f}])'
+        W[d + '.compared'] = len(rows_)
+        W[d + '.agreement_word'] = ('not-compared' if not rows_ else
+                                    'AGREE' if all(x['verdict'] == 'AGREE' for x in rows_) else 'DISAGREE')
+        num = [abs(x['l9'] - x['recompute']) for x in rows_
+               if isinstance(x.get('l9'), (int, float)) and isinstance(x.get('recompute'), (int, float))
+               and not isinstance(x.get('l9'), bool)]
+        if num:
+            W[d + '.largest_absolute_difference'] = max(num)
+        W[f'CMP.counts.{f}.pass'] = sum(x['verdict'] == 'AGREE' for x in rows_)
+        W[f'CMP.counts.{f}.fail'] = sum(x['verdict'] != 'AGREE' for x in rows_)
+    W['chk.cmp.families_with_no_rows'] = [f for f in fams if not any(x['family'] == f for x in cmp_['comparisons'])]
+    return W
+
+
 # ---- ledger key -> (independent id) --------------------------------------
 CELL_OF = lambda s: 'df-' + s.split('d117-reported-mean-')[1] if 'reported-mean' in s else s
 MP = {'qwen3-1p7b': 'Qwen3-1.7B-4bit', 'qwen3-8b': 'Qwen3-8B-4bit'}
@@ -588,12 +710,19 @@ def resolve(src, key):
     if alias not in src:
         return KeyError
     cur = src[alias]
-    for kind, tok in split_path(path):
+    toks = split_path(path); i = -1
+    while i + 1 < len(toks):
+        i += 1; kind, tok = toks[i]
         if kind == 'k':
             if tok == 'count' and isinstance(cur, list):
                 cur = len(cur); continue
             if isinstance(cur, dict) and tok in cur:
                 cur = cur[tok]; continue
+            j, joined = i, tok  # a dict key that itself contains dots (e.g. counts.battery.assist)
+            while isinstance(cur, dict) and j + 1 < len(toks) and toks[j + 1][0] == 'k' and joined not in cur:
+                j += 1; joined += '.' + toks[j][1]
+            if isinstance(cur, dict) and joined in cur:
+                cur = cur[joined]; i = j; continue
             return KeyError
         if isinstance(cur, list) and re.fullmatch(r'\d+', tok):
             cur = cur[int(tok)]; continue
@@ -788,6 +917,42 @@ def main():
     allw = Counter(r[col['match']] for r in rows[1:])
     print('whole-ledger words:', dict(allw), 'MISMATCH rows:',
           [i for i, r in enumerate(rows, start=1) if i > 1 and r[col['match']] == 'MISMATCH'])
+    # ---- round 4 (RL-55): rows 1421-1845 ----
+    W = round4(src, V)
+    r4 = list(csv.reader(LEDGER.read_text(encoding='utf-8').splitlines(), delimiter='\t', quoting=csv.QUOTE_NONE))
+    s4, h4, seat4, fl4, hr4 = Counter(), Counter(), Counter(), [], {}
+    for n in range(1421, len(r4) + 1):
+        r = r4[n - 1]; key, printed, sword = r[col['key/leaf']], r[col['printed_value']], r[col['match']]
+        seat4[sword] += 1
+        if not residual_sig_ok(r[col['difference']]):
+            fl4.append((n, 'residual>2sf'))
+        sv = resolve(src, key)
+        if key.endswith('.causes') and isinstance(sv, list):
+            sv = sorted(set('None' if x is None else x for x in sv))
+        sw = compare(printed, sv)[0]
+        hw, hr = compare(printed, W[key]) if key in W else (None, None)
+        s4[sw or 'n/a'] += 1; h4[hw or ('source-only' if sw else 'unchecked')] += 1
+        hr4[n] = hw or (f'source-{sw}' if sw else 'unchecked')
+        if 'MISMATCH' in (sw, hw) or (sw is None and hw is None):
+            fl4.append((n, key, sw, hw, sig2(hr)))
+    print('ROUND 4 rows:', len(r4) - 1420, 'seat words:', dict(seat4))
+    print('ROUND 4 source equality:', dict(s4))
+    print('ROUND 4 independent recompute:', dict(h4))
+    print('ROUND 4 checks:', {k: v for k, v in W.items() if k.startswith('chk.')})
+    for f in fl4:
+        print('FLAG4', *f)
+    groups = {'battery counts': lambda k: 'battery_counts' in k or 'arm_unmeasured' in k,
+              'GAMMA': lambda k: '.gamma' in k or 'block_lines[9]' in k or 'block_lines[10]' in k
+              or 'ctr-d117' in k}
+    for gname, pred in groups.items():
+        ns = [n for n in range(1421, len(r4) + 1) if pred(r4[n - 1][col['key/leaf']])]
+        print(f'ROUND 4 {gname}: {len(ns)} rows', dict(Counter(hr4[n] for n in ns)))
+    rest = [n for n in range(1421, len(r4) + 1)
+            if not any(p(r4[n - 1][col['key/leaf']]) for p in groups.values())]
+    samp4 = sorted(random.Random(a.seed + 4).sample(rest, min(40, len(rest))))
+    print(f'ROUND 4 sample of the rest (seed {a.seed + 4}, k={len(samp4)} of {len(rest)}):',
+          dict(Counter(hr4[n] for n in samp4)), samp4)
+    print('ROUND 4 rest, all rows:', dict(Counter(hr4[n] for n in rest)))
     after = {k: sha(ROOT + v[0]) for k, v in FILES.items()}
     print('hashes before = after = pin:', all(before[k] == after[k] == FILES[k][1] for k in FILES))
     for k in FILES:
