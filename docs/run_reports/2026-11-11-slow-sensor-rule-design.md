@@ -8,7 +8,8 @@ seats:
   `design/2026-11-11-slow-sensor-rule-sol`.
 
 This file is the one plan. Section D lists the disagreements with both positions, and section E the questions for the
-research lead. The Opus analysis in sections 0 to 6 was committed before the Sol plan was read.
+research lead. The Opus analysis in sections 0 to 6 was committed (`c0477f3d9`) before the Sol plan (`6a4d9c79e`) was
+read. Section 7 records what was taken from Sol afterwards.
 
 **Inputs.**
 
@@ -245,10 +246,84 @@ The gate sidecar is W1's and is not touched.
 
 ---
 
+## 7. Reconciliation: what the plan takes from the Sol seat
+
+**Agreed independently.** Both seats found the following:
+
+- 2a fails: Sol's arithmetic matches this plan's. A band of at least 6.59 °C would be needed for Tf08 to return
+  within 300 s.
+- Every D warmup-cooldown G0 on Tf08 exceeds the 616.50 s duty limit. The bar is in conditional breach if those
+  waits recur.
+- No option is expressible by policy data alone where it records a third key. Gating different pairs by gate kind is
+  not expressible either. Moving Tf08 into the fast slot changes the band but does not make Tf08 record-only.
+- `thermal_gates.py` stays byte-identical under every option.
+- The cooldowns are two-timescale. Sol's piecewise log fits on D give TV0h τ ≈ 18 / 212 / 320–385 s and Tf08
+  τ ≈ 52 / 260 / 330–410 s over 0–60, 60–300 and 300–600 s. At 600 s Tf08 is still 1.9–2.4 °C above its own
+  reference, against 0.17–0.23 °C for TV0h.
+- The replays agree to the 0.01 s on every shared row.
+
+**Adopted from Sol.**
+
+1. **Part B alone cannot decide on duty.** Part B is one D step, not three admitted turns with holds after a D
+   predecessor. The plan's third outcome row ("arm at 1.5 °C under fallback step 1") is therefore withdrawn as a
+   *decision*. It becomes a *prediction* printed with the table. S6, S7, duty and cap receipts are earned on the
+   follow-up's gated block for the keys actually picked, as Sol says. (The point that remains in dispute is D5.)
+2. **A second stability test.** A stable pick must also be the same key, or the same alias representative, with the
+   same class and heat-order reference, under both treatments of the borderline reads. The plan's numeric margins
+   (τ ≥ 5 s from each boundary; ≤ 6 s per 0.01 °C) stay beside it (D3).
+3. **The duty bar's other terms.** For the V candidates, Sol's G1/H allowance under the 616.50 s bound is: at 1.0 °C,
+   at most 186.7 s for TV0m and −55.3 s for TV0s; at 1.5 °C, 273.7 s and 138.7 s. Nothing shows that three turns fit.
+4. **Sol's deviation drafts** SS-1 (unchanged classifier, R0-fast slow pick), SS-2 (slow return ceiling 1,200 s) and
+   SS-3A (record-only lag key) are the alternatives to this plan's WP14(a)-R1-SLOW row, which combines SS-1 and
+   SS-3A. If Option 2 is chosen, SS-2's text is used, and not this plan's WP14(a)-RETURN.
+
+**One new finding, against SS-2 as written.** SS-2 keeps 60 < τ ≤ 300 s, noise ≤ 0.15 °C and the "longest t1" ranking,
+and changes the ceiling to t1 ≤ 1,200 s. On the 30B diagnostic (E1, gates removed, variant a), that rule selects
+**TVFm**, not Tf08:
+
+- TVFm: τ 208.9 s, rise 50.0 °C, t1 = 817 s, noise 0.0002 °C, rise below the D1(d) limit, unclamped.
+
+It ranks ahead of all the other admissible slow keys:
+
+| key | t1 (s) |
+|---|---|
+| TVFm | 817 |
+| TVFh | 814 |
+| TCHP | 661 |
+| Tf04 / Tf09 / Tf0A / Tf0B | 620–630 |
+| Tf08 | 565 |
+
+(TVS1 and TVS2, at τ ≈ 566–570 s, are outside τ ≤ 300 s.) Nobody has replayed TVFm as a gate. Its excess at 600 s,
+1.36 °C, is about a third of Tf08's. So "admit a truly slow key" by a ranking rule chooses a key whose waits are
+unknown. Landing on Tf08 would take a further criterion, and that criterion would be the choice. The plan's position
+stays: Option 2 is not recommended. If the lead prefers it, the D table must replay the amended winner as a gate
+before any night arms.
+
 ## D. Disagreements between the seats
 
-(Filled after reading the Sol plan; see below.)
+| # | topic | Opus | Sol | plan |
+|---|---|---|---|---|
+| D1 | recommendation | **3a.** The registered classifier's fast-family pair gates, named for what it controls (a near-die settling check), and Tf08 is recorded in every member. Option 2 buys slow-mass control at the price of every heavy cell, through the duty bar | **Option 2 (SS-2) is preferred scientifically.** The slow role should represent the long tail; amend only the slow return ceiling to 1,200 s, keeping G1/H at 300 s and the duty bar. Sol warns it is likely infeasible on duty, and offers 3A as the coherent alternative | 3a; Option 2 kept as the lead's alternative (E1) |
+| D2 | which key Option 2 selects | computed: TVFm on the 30B diagnostic (section 7), which has never been replayed as a gate | "may be another key, not Tf08"; winner not computed | the TVFm finding stands; Option 2 needs a gate replay of its winner in Part B |
+| D3 | pre-declared numeric criteria for the D table | τ margin ≥ 5 s at both class edges; ≤ 6 s per 0.01 °C at the armed band; G0 ≤ 616.5 s | no new numeric thresholds from a design seat; stability = the same pick across borderline-read views; the lead judges | both tests printed; the lead rules on whether the numbers bind (E4) |
+| D4 | recording mechanism for the third key | an additive `record_keys` field in `thermal.py` (the sidecar), with gates that never read it | a separately bound collector outside `thermal_gates.py`, with its own schema and accounting; a further approval, not a knob | either; the lead chooses (E3). If refused, the methods say the slow mass is unrecorded in W1 |
+| D5 | arming band for a V-key pick | at the registered default, with a prediction from Part B of whether 1.0 °C breaks the duty bar | receipts earned only on the night's gated block, never from Part B | Sol's rule is adopted: arm at the default. The cost is a possible second night if the default breaks the duty bar; the lead may waive (E5) |
+| D6 | which A-family keys count as distinct | TV0s and TV1s treated as identical in E1 (same values), though not in E1's alias list | treated as aliases on that record | one candidate on the 30B record; the D record's alias groups decide |
 
 ## E. Questions for the research lead
 
-(See below.)
+- **E1.** Which slow role: Option 3a (recommended; deviation row WP14(a)-R1-SLOW, or SS-1 + SS-3A), or Option 2 (SS-2).
+  If Option 2: note that it picks TVFm on the 30B diagnostic, and whether a further criterion is to be added to reach
+  Tf08.
+- **E2.** If the D table gives a null or unstable slow pick: is a pre-declared deterministic slow key acceptable,
+  namely the largest τ among R0-classified, unaliased keys with τ·ln(rise) ≤ 300 s on the D step? Or does it go to the
+  IOHID/X4 ruling?
+- **E3.** The record-only channel for the unused slow key: approve a `thermal.py` `record_keys` edit, or a separate
+  bound collector (D4), or neither.
+- **E4.** Whether this plan's numeric D-table criteria bind (D3).
+- **E5.** D5: accept the risk of a second night, or allow the arm band to follow Part B's prediction.
+- **E6. Sol-seat exposure, for the lead's ruling.** The Sol seat reports that its first audit command printed the
+  whole decision document. It returned unrelated Block 5 policy and outcome prose, including aggregate ledger and
+  check counts. A later RL-59 range also ran into the next decision request. Sol states that no Block 5 result file
+  was opened and that its thermal calculations use only thermal inputs. It asks whether its seat remains acceptable
+  for adoption. This plan's recommendation does not depend on Sol's: section 0 was committed first.
