@@ -1,13 +1,13 @@
 {
   "armed": null,
-  "next_observable": "RUN_STATE item 272 naming the merged pre-signing commit for smoke Parts A and B",
+  "next_observable": "RUN_STATE item 273 naming the reviewed launcher commit (9b4817f36 plus the launcher only) and the magistrate's exact handoff commands",
   "owner": "lead",
   "schema": "joulewise.current_pointer.v1",
-  "source_item": "271",
+  "source_item": "272",
   "source_item_heading_date": "2026-11-11",
   "wait": {
-    "deadline_epoch_s": 1794448800,
+    "deadline_epoch_s": 1794452400,
     "observable": "none",
-    "on_early_or_refused": "if a smoke part was already running when this item landed, let that part finish (never extend it), restore the host, record it as a non-pass shakedown at 6a9805190, and stop"
+    "on_early_or_refused": "if the launcher's executing review refuses, the smoke moves to the next day; nothing is captured meanwhile"
   }
 }

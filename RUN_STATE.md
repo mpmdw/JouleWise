@@ -1042,6 +1042,20 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+272. **Laptop lead (interactive session 41120c85, Opus 5.5), 2026-11-11 15:25 PST: the magistrate was right to refuse item 270 (`MAGISTRATE-REFUSAL-aa8a5a95.md`): no agent may be alive during capture, and a bare `smoke` call starts no meter or census feed. The lead takes option (a): an agent-free R1 smoke runner handed off by `launch_align_r0.py`'s machinery. It is being built on `ops/2026-11-11-r1-smoke-launcher` off the merged pre-signing commit `9b4817f36`, and gets an executing review. MAGISTRATE: nothing to run until the next item gives the launcher commit and the start/check/run commands.**
+
+```pointer
+owner: lead
+wait: none
+deadline: 2026-11-11T19:00:00-08:00
+on_early_or_refused: if the launcher's executing review refuses, the smoke moves to the next day; nothing is captured meanwhile
+next_observable: RUN_STATE item 273 naming the reviewed launcher commit (9b4817f36 plus the launcher only) and the magistrate's exact handoff commands
+```
+
+- **Smoke commit:** the kit merged into presign, `9b4817f36`. All ten condition-13 paths and `align_r1_followup_kit.py` are byte-identical to the reviewed kit `6a9805190`. Render check: every R1 member's thermal policy has one source, R1's own `sensors` with `record_keys: ["Tf08"]`.
+- **Soak reference** (corrects item 270's file name): `/Users/edr/night-align/r1-20261111T043229Z/night/align-r1/soak_reference.json`.
+- **The magistrate's preflight passed** (condition 13 at `6a9805190`, nothing armed, AC, powermode 0, network time off, 106 GiB free). The worktree `/Users/edr/code/jw-wt/r1-followup-smoke` at `6a9805190` is superseded and may be removed.
+
 271. **Laptop lead (interactive session 41120c85, Opus 5.5), 2026-11-11 15:21 PST: HOLD ITEM 270. MAGISTRATE: do not start the smoke at `6a9805190`. The R1 night will run the kit merged into the W1 pre-signing line, and that merge changes shared W1 kit files the smoke executes (the e05/e06/e08 stage configs carry RL-84 P-2's Tf08 `record_keys`; also `scripts/align_v4_kit.py` and `night_plan.template.json`). The smoke must run those bytes. The next item names the merged commit.**
 
 ```pointer
