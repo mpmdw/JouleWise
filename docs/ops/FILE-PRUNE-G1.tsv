@@ -1,5 +1,5 @@
 path	verdict	reason	reader_or_retaining_ref
-docs/legacy/strategy/2026-08-07-paper-portfolio/SYNTHESIS-IMPACT-FIRST.md	DELETE	superseded report/profile or legacy prose; exact blob retained	archive/process-traces-before-release-prune-2026-11-08:docs/legacy/strategy/2026-08-07-paper-portfolio/SYNTHESIS-IMPACT-FIRST.md
+docs/legacy/strategy/2026-08-07-paper-portfolio/SYNTHESIS-IMPACT-FIRST.md	KEEP	ALIGN provenance citation for the 0.0998 J/token design input	origin/align/2026-11-08-v4-r11:docs/align/apple_path.md:340
 docs/run_reports/2026-11-06-b5-robust-executing-review.md	DELETE	superseded report/profile or legacy prose; exact blob retained	archive/process-traces-before-release-prune-2026-11-08:docs/run_reports/2026-11-06-b5-robust-executing-review.md
 docs/run_reports/2026-11-06-b5-robust/e2e-resume-B/A-summary.json	DELETE	superseded report/profile or legacy prose; exact blob retained	archive/process-traces-before-release-prune-2026-11-08:docs/run_reports/2026-11-06-b5-robust/e2e-resume-B/A-summary.json
 docs/run_reports/2026-11-06-b5-robust/e2e-resume-B/A.stderr	DELETE	superseded report/profile or legacy prose; exact blob retained	archive/process-traces-before-release-prune-2026-11-08:docs/run_reports/2026-11-06-b5-robust/e2e-resume-B/A.stderr

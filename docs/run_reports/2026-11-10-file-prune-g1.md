@@ -12,22 +12,29 @@ its plan, census tools, historical evidence and rollback log. This also
 includes `dcaf2ca2c`; no duplicate cherry-pick was needed. Its equivalence
 test now requires the immutable `b5/analysis-r1-9bfix-ref` tag.
 
-Deleted 112 files: 111 dated run-report artifacts (93 under
+Deleted 111 dated run-report artifacts (93 under
 `2026-11-06-b5-under-90`, 17 under `2026-11-06-b5-robust`, and the old
-robust executing review) and one legacy portfolio synthesis. Every removed
+robust executing review). Every removed
 file's Git blob equals the blob at
 `archive/process-traces-before-release-prune-2026-11-08` (`901d7580d`).
 No original registration, calibration record, issued artifact, seal record,
 erratum, measurement bundle, or current runbook was selected for removal.
 
-`docs/ops/FILE-PRUNE-G1.tsv` records all 806 examined paths: 112 DELETE and
-694 KEEP decisions, including the specific reader or authority that caused
+`docs/ops/FILE-PRUNE-G1.tsv` records all 806 examined paths: 111 DELETE and
+695 KEEP decisions, including the specific reader or authority that caused
 each KEEP. All 651 remaining process traces stay: current/frozen tests,
 kernel/state pointers, seal/erratum/ruling authority, current runbooks and
 transitive authority still bind them. The estate-12 anchor specification
 stays as uncertain authority. Report/site-related capstone reports stay
 under the deliverable deferral; newly imported seat reports whose exact
 bytes are absent from the retaining tag also stay. Uncertain means KEEP.
+
+Fable review F5 restored
+`docs/legacy/strategy/2026-08-07-paper-portfolio/SYNTHESIS-IMPACT-FIRST.md`
+byte-for-byte from the archive tag: ALIGN's `docs/align/apple_path.md:340`
+cites it for the 0.0998 J/token design input. That provenance dependency makes
+the inventory row KEEP. The revised stack deletes 409 files and retains 4,762
+tracked files before adding the cold-review and fixes reports.
 
 Edited `CANONICAL.md`, extended `docs/ARCHIVE.md`, regenerated
 `configs/pins/registry.json`, and corrected the imported plan report's
@@ -80,7 +87,8 @@ G2 retains all nine D117 Qwen2.5 generations unless their live historical
 reader chain is migrated; G3 must preserve frozen `run_campaign.py` and
 `whole_window.py` bytes while integrating #668; G4 rechecks already-removed
 #654 candidates. Independent read-only review by task `prune_readers_review` (same clone, no
-write authority) checked all 112 blob identities, the inventory/deletion set,
+write authority) checked the original 112 blob identities (before F5 restored
+the synthesis), the inventory/deletion set,
 protected paths and preserved protected-P registry counts (23,594 rows,
 15,880 resolved checks). Its relative-citation findings were fixed as above;
 an already-missing `e2e-resume/RESULT.md` citation is outside this deletion

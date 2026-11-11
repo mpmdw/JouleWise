@@ -8,6 +8,8 @@ import sys
 import tempfile
 import unittest
 
+from tests.git_fixture import init_git_fixture
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts" / "ops"))
 import prune_inventory as census
 import prune_branch_names as names
@@ -21,7 +23,7 @@ class PruneOpsTest(unittest.TestCase):
         self.repo = Path(self.tmp.name) / "repo"
         self.repo.mkdir()
         self.out = Path(self.tmp.name) / "census"
-        self.git("init", "-b", "main")
+        init_git_fixture(self.repo, "-b", "main")
         self.git("config", "user.name", "Synthetic")
         self.git("config", "user.email", "synthetic@example.invalid")
         self.put("tools/code.py", "# ancestor\n")

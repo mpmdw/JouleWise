@@ -176,13 +176,16 @@ WINDOW_PLAN_ROOT/
 ```
 
 Each stage-list line is one current repository-relative config directory.
-The historical examples below are archived; retrieve their configs at the
-indicated tag to reproduce them:
+For example, a current v5 stage directory is:
 
 ```text
-archive/process-traces-before-release-prune-2026-11-08:configs/campaigns/p2_015_floors/04_phase_prefill_abba
-archive/process-traces-before-release-prune-2026-11-08:configs/campaigns/p2_015_floors/03_request_abba
+configs/campaigns/d117_floor_qwen3-1p7b_v5/04_phase_prefill_p2048_absolute
 ```
+
+The historical pair is retained at
+`archive/process-traces-before-release-prune-2026-11-08:configs/campaigns/p2_015_floors/04_phase_prefill_abba`
+and `archive/process-traces-before-release-prune-2026-11-08:configs/campaigns/p2_015_floors/03_request_abba`;
+retrieve those configs at the tag to reproduce that generation.
 
 Do not put the reference directories in those lists; the chain adds the
 governed 3+1+3 references itself.

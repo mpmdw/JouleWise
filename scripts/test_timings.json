@@ -658,6 +658,7 @@
     "tests.test_preregistration_chain_digest": 0.024,
     "tests.test_prewindow_check": 1.401,
     "tests.test_promote_calibration_candidate": 1.349,
+    "tests.test_prune_ops": 8.4,
     "tests.test_publication_privacy": 0.098,
     "tests.test_quick_suite": 0.129,
     "tests.test_quiet_admission": 0.007,

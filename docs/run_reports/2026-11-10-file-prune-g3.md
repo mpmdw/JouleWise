@@ -37,7 +37,7 @@ superseded or falsely claimed integrated. It must land only with its owning
 ALIGN inventory/registration migration, or after that lane releases the
 binding. No module was duplicated in the reviewable stack.
 
-## Attempted adaptation, retained for review only
+## Attempted adaptation (temporary scratch only)
 
 A local uncommitted merge of #668 was exercised, then safely aborted after
 this gate was found. That merge preserved frozen `scripts/run_campaign.py`,
@@ -47,9 +47,10 @@ pack generators, kept hazard import isolation strict, and migrated the active
 refusal table to extracted source paths while checking both original Git
 snapshots separately. Original digest literals were not rewritten.
 
-The non-landable tracked-source diff is preserved outside the stack at
+The non-landable tracked-source diff was written as temporary scratch at
 `/private/tmp/jwsol-file-prune/g3-unlanded.patch` (4,063,965 bytes, SHA-256
 `3c32b1ee5971b42e2d526f7ff596f6cfc993ccbd57d8f109816da7ba05e21263`).
+That `/private/tmp` file is not preserved and may disappear on cleanup or reboot.
 It is a prototype, not a tested landing candidate: registry/timing/citation
 cleanup was unfinished and the ALIGN gate is unresolved. The current branch
 has none of those code changes. Do not apply it directly to a live lane.
