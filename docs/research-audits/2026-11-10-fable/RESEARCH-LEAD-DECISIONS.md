@@ -1276,6 +1276,93 @@ precondition was that no other project job is installed. W1 gets the same rule.
 
 ---
 
+# Decision request 12: remote substitutes for the physical native checks (2026-11-10 22:22 PST)
+
+## RL-37. W1 is armable without a visit; and a meter outage does not stop a v4 window
+
+**Answer.** Yes. W1 can be armed with check 8 and checks 7(a) and 7(b) done remotely and 7(c) deferred to Ed's
+next visit, with the amendments below and with one code correction that this request brought to light.
+
+**The correction: the registered text and the code disagree about a meter outage.** Read on the W1 line
+`d865d76a3`.
+
+- The protocol, a bound file, says the meter is secondary and "nothing else about it gates" (line 878), and
+  "a KM003C dropout cannot halt v4, and only `meter_reader_live` is a gate" (lines 902-903). It already says
+  what a dead reader costs: members that overlap the gap are DC-missing (`meter.member_uncovered`), and members
+  inside the valid range keep their DC (lines 823-826).
+- The lead's ruling for the reliability work asked for "a recorded liveness fault" and left registration text
+  unchanged. The builder went further: at 600 s of silence the driver stops the chain
+  (`joulewise/b5/driver.py:2710-2719`). The reviewer flagged this "to be confirmed". No deviation row covers it.
+
+**Ruling: the registered text stands.** In a v4 window a meter outage is recorded and alarmed and does not stop
+the chain. At the 600 s bound the driver raises the flag once, puts `meter_liveness_outage` in the result's
+fault reasons so the delivered result says `fault: true`, and collection goes on. The supervisor keeps trying to
+restart the reader as it does now. This is a small change to a bound file, so it lands with its tests and a
+regenerated trace **before PREQUAL and the smoke**, and gets a delta review. The existing stop for the hazard
+monitor (battery and contention journals) is untouched: exclusion B needs that journal.
+
+The driver's new probe before the chain stays. It is the registered live-reader gate evaluated again at t0. It
+gets one deviation row, `METER-T0-PROBE`, in the same commit: a reader that is not live at t0 refuses the night
+with zero capture; after the chain starts, nothing about the meter stops it.
+
+Why this way and not a row ratifying the stop:
+
+- K is the confirmatory claim and it is computed on the rails. A stop throws away the rest of a window's
+  confirmatory members to protect a secondary channel, in a series that allows no replacement and no top-up.
+- Nobody can replug a meter while Ed is away, so a stop buys nothing a person could act on. The next arm
+  refuses on the registered gate either way.
+- Check 7(c) is deferred. With the stop in place, an unqualified recovery path could end a confirmatory window.
+  Without it, the same failure costs DC rows of the members it overlaps, which the protocol already handles.
+
+Ed's rule, "every measurement captures DC-in", is what the registered text implements: the gate at the arm,
+now again at t0, and an alarm on loss.
+
+**Check 8, delivery with the network down: accepted as a GitHub-only block.** It tests the path the check was
+written for. Conditions:
+
+1. Record the state being changed before the block (the SHA-256 of `/etc/hosts`, or pf's enabled state and rule
+   set) and show it identical afterwards. The hosts file is the simpler choice; if pf is used and was disabled
+   before, it is disabled again after.
+2. Both removers are unloaded afterwards and appear in no later `launchctl` listing (RL-36).
+3. Record which failure `git push` saw (refused or timed out). Only one of the two is exercised; that is
+   enough.
+4. The watchdog's status push will fail during the block and the Air's poller should alarm. Expect it, record
+   it; it is a free test of that alarm.
+5. After the block lifts: dead-man delivery, then build the window record with the `courier_delivery` source
+   and run the next-arm check (F-09).
+6. Not while R1 is armed.
+
+**Check 7(a), no meter at the arm: accepted by exclusive hold.** Another process holds the device so the reader
+cannot open it. Expect a refusal at the arm check and, separately, at the driver's t0 probe: no `chain.started`,
+a fault reason naming the meter, the result delivered. Record the cause code seen. A test seam alone is not a
+native check; the registered trace already runs the forced-absent test.
+
+**Check 7(b), loss in the window: accepted, in two parts, with the new expectation.**
+
+- *Restart.* Kill the reader once during a smoke. Expect the supervisor to restart it, the stream to resume, the
+  gap to be listed with its start and end, and the member that overlaps it to be flagged
+  `meter.member_uncovered` at the desk, not integrated across. The restarted stream must pass the same alignment
+  and offset checks as the arm probe.
+- *Outage.* Keep the reader out for more than 600 s (hold the device, or stop the reader process). Expect the
+  flag, `fault: true` in the delivered result, the Air's alarm, and **the chain running to its end**.
+
+**Check 7(c), real USB re-enumeration: deferred to Ed's next visit.** Until it is done:
+
+- the methods text says the meter's recovery from a physical USB drop was not qualified on the device before
+  the series began;
+- a window whose meter record shows a USB-error exit of the reader is reported to me with its record before
+  the DC rows after that restart are used. This is a structural report, not an outcome.
+
+The count of meter restarts over a clean hour stays as it was.
+
+**Reason.** The substitutes test the same code paths the physical checks would, except the USB layer itself,
+and after the correction nothing confirmatory depends on that layer. The correction is not a new idea: it is
+the rule the registration already states, and the alternative would have been an unlogged change to it.
+
+**Blind status.** Blind: no v4 outcome exists. I read protocol text, driver code and the builder's run reports.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
