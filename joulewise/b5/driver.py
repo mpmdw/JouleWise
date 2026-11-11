@@ -24,7 +24,8 @@ Inside the launchd job, after t0, this branch runs:
    Then the KM003C wall meter (``scripts/km003c_monitor.py``, plain QoS), a
    disclosed diagnostic supervised the same way, including retrying an absent
    reader while USB re-enumerates. A first valid DC-in batch gates the chain; a sustained
-   sample outage stops it under the instrument outage bound;
+   sample outage (600 s) is flagged once and recorded as fault ``meter_liveness_outage``,
+   and collection continues (research lead RL-37: a KM003C dropout cannot halt v4);
 6. the chain, launched once through the driver's no-pack path
    (``_claim_chain_start`` / ``_run_chain_once`` / ``_WindowDeadline`` /
    ``_terminate_process_group``), with the in-chain agent census kept as an
