@@ -125,11 +125,14 @@ print(count)
 
     @unittest.skipUnless(sys.platform == "darwin", "pinned USB protocol uses CommonCrypto")
     def test_source_pruning_preserves_raw_instrument_bytes(self):
-        """Predict: pruning expired waveform inputs preserves complete plist bytes and all meter poll bytes against the unpruned source."""
+        """Predict: waveform pruning and notification polling preserve complete plist bytes and every meter poll byte against unpruned, unthrottled inputs."""
         reference = prepare(Path(self.temp.name).resolve() / "unpruned-reference")
         source = (reference / "runtime.py").read_text()
         source = source.replace('                    self.intervals = [row for row in self.intervals if row["end_ns"] > clock.ns - 180_000_000]\n', '')
         source = source.replace('            intervals = [row for row in intervals if row["end_ns"] > endpoint]\n', '')
+        gate = 'if (self.stop_callbacks and not self.stop_delivered\n                and REAL_MONOTONIC() >= self.next_control_check):'
+        self.assertIn(gate, source)
+        source = source.replace(gate, 'if not self.stop_delivered:')
         (reference / "runtime.py").write_text(source)
         waves = [dict(start_ns=999_000_000_000, end_ns=999_500_000_000, power_mw=8000),
                  dict(start_ns=1_000_000_000_000, end_ns=1_000_500_000_000, power_mw=4000),
@@ -155,6 +158,35 @@ print(count)
             plists.append((root / "source.plist").read_bytes())
         self.assertEqual(payloads[0], payloads[1])
         self.assertEqual(plists[0], plists[1])
+
+    def test_notification_polling_does_not_cache_clock_values(self):
+        """Predict: 500 clock reads plus 60/30 s advances match the unthrottled reference byte for byte; another clock's advance is visible immediately."""
+        from types import MethodType
+        current = SharedClock(self.root / "clock.bin")
+        reference = SharedClock.create(self.root / "reference-clock.bin")
+        self.addCleanup(current.close)
+        self.addCleanup(reference.close)
+        def old_frontier(clock):
+            # Exact prior input-free read path; no chain function is replaced.
+            if not clock.stop_delivered and ((clock.path.parent / "source-stop.json").exists()
+                    or (clock.path.parent / "signal-inputs" / f"{os.getpid()}-{os.environ.get('R12_PROCESS_TOKEN','top')}.json").exists()):
+                raise AssertionError("this reference has no notification input")
+            with clock.lock():
+                return struct.unpack("!Q", clock.map[:])[0]
+        reference.frontier = MethodType(old_frontier, reference)
+        outputs = []
+        for clock in (current, reference):
+            data = [clock.monotonic_ns() for _ in range(500)]
+            for seconds in (60, 30):
+                clock.sleep(seconds)
+                data.append(clock.monotonic_ns())
+            outputs.append(b''.join(struct.pack('!Q', value) for value in data))
+        self.assertEqual(outputs[0], outputs[1])
+        other = SharedClock(self.root / "clock.bin")
+        self.addCleanup(other.close)
+        before = current.monotonic_ns()
+        other.sleep(1)
+        self.assertEqual(current.monotonic_ns(), before + 1_000_000_000)
 
     def test_public_model_input_drives_declared_science_sensor_script(self):
         """Predict: declared science input emits busy GPU/6 W; reference input emits clean GPU/0 W, using only raw source inputs."""

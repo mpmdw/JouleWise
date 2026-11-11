@@ -97,6 +97,7 @@ def prepare(root):
                     "time.time/time_ns/monotonic/monotonic_ns/clock_gettime_ns/sleep": "SharedClock",
                     "datetime.datetime.now/utcnow": "SharedClock wall time",
                     "subprocess._time / threading._time": "same shared monotonic clock, including stdlib aliases",
+                    "SharedClock notification transport": "only registered receivers poll stop inputs, nominal 10 ms real poll interval (OS scheduling may delay it); shared ns always reread under lock, never cached",
                     "zsh external /bin/date and /bin/sleep inputs": "SharedClock bootstrap CLI"}}
     (root / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
     return root

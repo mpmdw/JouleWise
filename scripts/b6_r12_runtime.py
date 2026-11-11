@@ -112,15 +112,22 @@ class SharedClock:
         self.processes = {}
         self.stop_callbacks = []
         self.stop_delivered = False
+        self.stop_input = self.path.parent / "source-stop.json"
+        self.signal_input = self.path.parent / "signal-inputs" / f"{os.getpid()}-{os.environ.get('R12_PROCESS_TOKEN', 'top')}.json"
+        self.next_control_check = 0.0
 
     def frontier(self):
-        stop_input = self.path.parent / "source-stop.json"
-        own_signal = self.path.parent / "signal-inputs" / f"{os.getpid()}-{os.environ.get('R12_PROCESS_TOKEN', 'top')}.json"
-        if not self.stop_delivered and (stop_input.exists() or own_signal.exists()):
-            self.stop_delivered = True
-            self.stopping = True
-            for callback in tuple(self.stop_callbacks):
-                callback()
+        # Only input receivers need notification polling. The nominal 10 ms
+        # transport poll interval is not a clock-value cache:
+        # every read below still acquires the lock and reads the shared ns.
+        if (self.stop_callbacks and not self.stop_delivered
+                and REAL_MONOTONIC() >= self.next_control_check):
+            self.next_control_check = REAL_MONOTONIC() + .01
+            if self.stop_input.exists() or self.signal_input.exists():
+                self.stop_delivered = True
+                self.stopping = True
+                for callback in tuple(self.stop_callbacks):
+                    callback()
         with self.lock():
             return struct.unpack("!Q", self.map[:])[0]
 
