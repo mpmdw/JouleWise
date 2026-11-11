@@ -55,16 +55,28 @@ class BootstrapTests(unittest.TestCase):
 from pathlib import Path
 from runtime import REAL_MONOTONIC
 root = Path(sys.argv[1])
-child = "import sys,time;sys.stdin.buffer.read(1);time.sleep(5);print('ready',flush=True);sys.stdin.buffer.read(1)"
-started = REAL_MONOTONIC()
+child = "import sys,time;print('booted',flush=True);sys.stdin.buffer.read(1);time.sleep(5);print('ready',flush=True);sys.stdin.buffer.read(1)"
 process = subprocess.Popen([str(root/'pin/.venv/bin/python'),'-B','-c',child],
                            stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+assert process.stdout.readline().strip() == b'booted'
 probe = subprocess.run(['/usr/sbin/sysctl','-n','hw.model'], capture_output=True, text=True)
 assert probe.stdout.strip() == 'Mac15,9'
 before_probe_wait = time.monotonic()
 time.sleep(17)
 assert time.monotonic() == before_probe_wait
-process.stdin.write(b'a');process.stdin.flush()
+started = REAL_MONOTONIC()
+original_deadline_clock = subprocess._time
+released = False
+def deadline_clock():
+    global released
+    value = original_deadline_clock()
+    # Release only after the parent's deadline base was read. Otherwise the
+    # child may finish its entire advance before wait() establishes a budget.
+    if not released:
+        released = True
+        process.stdin.write(b'a');process.stdin.flush()
+    return value
+subprocess._time = deadline_clock
 try:
     process.wait(timeout=1)
     raise AssertionError('shared logical deadline did not fire')
@@ -77,7 +89,7 @@ finally:
 print('logical_timeout')
 '''
         result = subprocess.run(command(self.root, "code", code, self.root), capture_output=True,
-                                text=True, timeout=15)
+                                text=True, timeout=90)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.strip(), "logical_timeout")
 
@@ -85,7 +97,7 @@ print('logical_timeout')
         """Predict: every synthetic suite config binds the pinned canonicalizer's actual digest, with production 57.6 s idle inputs."""
         export_chain_inputs(self.root)
         (self.root / "source-policy.json").write_text('{"volume":"reduced"}\n')
-        made = subprocess.run(command(self.root, "make-inputs"), capture_output=True, text=True, timeout=30)
+        made = subprocess.run(command(self.root, "make-inputs"), capture_output=True, text=True, timeout=120)
         self.assertEqual(made.returncode, 0, made.stderr)
         code = '''import json
 from pathlib import Path

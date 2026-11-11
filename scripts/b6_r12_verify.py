@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
@@ -94,11 +95,13 @@ def archive_pin(root, archive, metadata):
     return pin
 
 
-def prepare_run_inputs(root, *, counting_only=True):
+def prepare_run_inputs(root, *, counting_only=True, session_id=None, stem="run"):
     attempts_path = root / "loop/attempts.jsonl"
     attempts = [json.loads(line) for line in attempts_path.read_text().splitlines() if line]
     archives, pins = [], {}
     for attempt in attempts:
+        if session_id is not None and attempt["session_id"] != session_id:
+            continue
         if counting_only and not any(row.get("status") == "counting" for row in attempt.get("outcomes", {}).values()):
             continue
         metadata_path = root / "sessions" / attempt["session_id"] / "session.json"
@@ -108,7 +111,9 @@ def prepare_run_inputs(root, *, counting_only=True):
         pins[archive.name if archive.name != "archive" else str(archive)] = archive_pin(root, archive, metadata)
     # The production program selects pins by archive.name or full archive
     # spelling; repeated basename "archive" therefore needs explicit paths.
-    document = root / "run-inputs.json"
+    if not archives:
+        raise ValueError("no actual completed loop attempt selected")
+    document = root / (stem + "-inputs.json")
     document.write_text(json.dumps({"host": "Air", "l9_audit": "not_run", "sessions": pins,
         "external": {"loop_attempts": sha(attempts_path), "loop_state": sha(root / "loop/state.json")}},
         indent=2, sort_keys=True) + "\n")
@@ -147,14 +152,113 @@ def finalize_manifest(root):
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
 
 
-def run_option_c(root, workers=1, *, stem="option-c"):
+def rows(data):
+    return [json.loads(line) for line in data.splitlines() if line.strip()]
+
+
+def session_facts(root, session_id):
+    """Read actual archived writer outputs, never construct an expected result."""
+    from joulewise.b6_analysis_inputs import AuthenticatedInputs
+    metadata = json.loads((root / "sessions" / session_id / "session.json").read_bytes())
+    archive = child(root, metadata["paths"]["archive"])
+    pin = archive_pin(root, archive, metadata)
+    reader = AuthenticatedInputs(archive, pin)
+    acceptance = json.loads(reader.read(archive / "derived/b6-acceptance.json"))
+    roster = json.loads(reader.read(archive / "derived/roster.json"))
+    flags = []
+    for name in ("derived/flags.jsonl", "derived/b6-flags.jsonl"):
+        if name in reader.expected:
+            flags += rows(reader.read(archive / name))
+    campaign = rows(reader.read(archive / "sources/claim-runs/campaign_log.jsonl"))
+    kinds = set()
+    for row in campaign:
+        if row.get("record_type") == "idle_admission_whole_window_verdict":
+            kinds.add("evaluation")
+        elif row.get("config") and row.get("members"):
+            kinds.add("member")
+    attempts = [(int(match[1]), name) for name in reader.expected
+                if (match := re.search(r"rich_telemetry_idle_attempt_(\d+)\.jsonl$", name))]
+    log = Path(str(archive) + ".desk/compression.jsonl")
+    compressed = [row for row in rows(log.read_bytes()) if row.get("event") == "compress"] if log.exists() else []
+    arm = json.loads(reader.read(archive / "sources/night-custody/hazards/arm.json"))
+    # Keep the original record rather than assuming which nested action key
+    # a pinned arm version uses. The caller can inspect the whole raw action.
+    off_actions = []
+    def visit(value):
+        if isinstance(value, dict):
+            argv = value.get("argv", value.get("command", []))
+            if isinstance(argv, list) and "-setusingnetworktime" in argv and "off" in argv:
+                off_actions.append(value)
+            for item in value.values():
+                visit(item)
+        elif isinstance(value, list):
+            for item in value:
+                visit(item)
+    visit(arm)
+    return {"session_id": session_id, "archive": str(archive), "acceptance": acceptance,
+            "roster_members": len(roster["members"]),
+            "flags": sorted({row["code"] for row in flags}),
+            "max_idle_attempt": max((number for number, _ in attempts), default=0),
+            "attempt_telemetry": [name for _, name in sorted(attempts)],
+            "campaign_row_kinds": sorted(kinds), "campaign_rows": len(campaign),
+            "compressed_campaign_logs": sum(row["path"].endswith("campaign_log.jsonl") for row in compressed),
+            "compressed_plists": sum(row["path"].endswith(".plist") for row in compressed),
+            "off_actions": off_actions, "real_loop_attempt": True}
+
+
+def volume_facts(root, session_id):
+    """Count native frames/cadence and actual meter rows without refitting decisions.
+
+    Each source plist document has elapsed_ns. Counting those wire fields is
+    independent of the source-policy duration declaration. No bundle is edited.
+    """
+    from joulewise.b6_analysis_inputs import AuthenticatedInputs
+    from joulewise.external.km003c_parse import samples, drops
+    metadata = json.loads((root / "sessions" / session_id / "session.json").read_bytes())
+    archive = child(root, metadata["paths"]["archive"])
+    reader = AuthenticatedInputs(archive, archive_pin(root, archive, metadata))
+    plist = []
+    for name in sorted(reader.expected):
+        if not (name.startswith(("sources/claim-runs/", "sources/bound-runs/"))
+                and name.endswith("/raw/powermetrics.plist") and "instrument_validation/" not in name):
+            continue
+        data = reader.read(archive / name)
+        elapsed = [int(value) for value in re.findall(rb"<key>elapsed_ns</key>\s*<integer>(\d+)</integer>", data)]
+        frames = data.count(b"</plist>")
+        plist.append({"path": name, "bytes": len(data), "frames": frames,
+                      "elapsed_fields": len(elapsed), "duration_s": sum(elapsed) / 1e9,
+                      "cadence_ns": sorted(set(elapsed)),
+                      "cpu_fields": data.count(b"<key>cpu</key>")})
+    meter = []
+    for name in reader.expected:
+        if name.startswith("sources/night-custody/hazards/meter/stream-") and name.endswith(".jsonl"):
+            data = rows(reader.read(archive / name))
+            header = next(row for row in data if row.get("k") == "h")
+            batch = [row for row in data if row.get("k") == "b"]
+            parsed = samples(header, batch)
+            meter.append({"path": name, "sps": header["sps"], "poll_s": header["poll_s"],
+                          "polls": len(batch), "samples": len(parsed.dev_ms), "step_ms": parsed.step_ms,
+                          "span_s": (parsed.dev_ms[-1] - parsed.dev_ms[0]) / 1000 if parsed.dev_ms else 0,
+                          "drops": drops(parsed)})
+    monitor = {}
+    for name in reader.expected:
+        if name.startswith("sources/night-custody/hazards/monitor/") and name.endswith(".jsonl"):
+            data = rows(reader.read(archive / name))
+            monitor[name] = {"rows": len(data)}
+    return {"session_id": session_id, "primary_plists": plist, "meter": meter, "monitor": monitor,
+            "archive_pin_sha256": hashlib.sha256(json.dumps(reader.record, sort_keys=True).encode()).hexdigest()}
+
+
+def run_option_c(root, workers=1, *, stem="option-c", session_id=None):
     verifier_sha256 = sha(Path(__file__))
     verifier_commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO, text=True).strip()
-    archives, attempts, document = prepare_run_inputs(root)
+    archives, attempts, document = prepare_run_inputs(root, counting_only=session_id is None,
+                                                     session_id=session_id, stem=stem)
     numbers, public = root / (stem + "-numbers.json"), root / (stem + "-public.json")
     argv = [sys.executable, "-B", str(REPO / "scripts/independent_recompute_b6.py"), "block",
             *[value for archive in archives for value in ("--session", str(archive))],
-            "--closed", "--loop-attempts", str(attempts), "--loop-state", str(root / "loop/state.json"),
+            *(["--closed"] if session_id is None else []),
+            "--loop-attempts", str(attempts), "--loop-state", str(root / "loop/state.json"),
             "--inputs", str(document), "--inputs-sha256", sha(document), "--workers", str(workers),
             "--restricted-out", str(numbers), "--public-out", str(public)]
     program_argv = root / (stem + "-program-argv.json")
@@ -170,7 +274,7 @@ def run_option_c(root, workers=1, *, stem="option-c"):
                "verifier_sha256": verifier_sha256, "verifier_commit": verifier_commit,
                "process_measurement": child_receipt, "sessions": len(archives), "workers": workers,
                "program_sha256": sha(REPO / "scripts/independent_recompute_b6.py"),
-               "inputs_sha256": sha(document)}
+               "inputs_sha256": sha(document), "session_id": session_id}
     if numbers.exists():
         value = json.loads(numbers.read_bytes())
         receipt["option_c"] = value.get("block", {}).get("option_c")
@@ -200,6 +304,39 @@ def execute_argv(root, argv_file, stem):
     return result.returncode
 
 
+def write_observations(root, denied_root):
+    """Join verified program receipts and raw collection facts, never predictions."""
+    block_receipt = json.loads((root / "option-c-receipt.json").read_bytes())
+    block = json.loads((root / "option-c-numbers.json").read_bytes())
+    skipped_receipt = json.loads((root / "option-c-skips-receipt.json").read_bytes())
+    denied_receipt = json.loads((denied_root / "option-c-denied-receipt.json").read_bytes())
+    observed = {}
+    for label, sid in {"r12-waited": "r2-alpha", "r12-skips": "r1-alpha",
+                       "r12-anchor": "r2-beta", "r12-mixed": "r1-beta",
+                       "r12-compressed": "r1-beta", "r12-gamma-cross": "r1-gamma"}.items():
+        value = session_facts(root, sid)
+        receipt = skipped_receipt if label == "r12-skips" else block_receipt
+        value.update(production_exit=receipt["exit_code"],
+                     comparator_agrees=bool(receipt.get("option_c", {}).get("comparator", {}).get("pass")),
+                     program_receipt_sha256=sha(root / ("option-c-skips-receipt.json" if label == "r12-skips"
+                                                       else "option-c-receipt.json")))
+        if label == "r12-gamma-cross":
+            gamma = next(r for r in block["sessions"].values() if r["pack"] == "GAMMA" and r["round"] == 1)
+            value["pairing"] = gamma["pairing"]
+            value["cross_session_gamma"] = all(p.get("session_id") and p["session_id"] != gamma["session_id"]
+                                                for p in gamma["pairing"].values())
+        observed[label] = value
+    value = session_facts(denied_root, "r1-alpha")
+    value.update(production_exit=denied_receipt["exit_code"],
+                 comparator_agrees=bool(denied_receipt.get("option_c", {}).get("comparator", {}).get("pass")))
+    value["off_action_returncode"] = next((action.get("returncode") for action in value["off_actions"]), None)
+    observed["r12-denied-action"] = value
+    (root / "observations.json").write_text(json.dumps(observed, indent=2, sort_keys=True) + "\n")
+    full = {sid: volume_facts(root, sid) for sid in ("r3-alpha", "r1-beta", "r1-gamma")}
+    (root / "full-volume-observations.json").write_text(json.dumps(full, indent=2, sort_keys=True) + "\n")
+    return observed
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", required=True)
@@ -207,13 +344,19 @@ def main(argv=None):
     parser.add_argument("--workers", type=int, choices=(1, 2), default=1)
     parser.add_argument("--exec-argv")
     parser.add_argument("--stem", default="option-c")
+    parser.add_argument("--session-id", help="one actual loop attempt, including a non-counting shape")
+    parser.add_argument("--observe-denied-root", help="join final facts after both roots' option-(c) runs")
     args = parser.parse_args(argv)
     root = safe_root(args.root)
     if args.exec_argv:
         return execute_argv(root, args.exec_argv, args.stem)
     finalize_manifest(root)
+    if args.observe_denied_root:
+        write_observations(root, safe_root(args.observe_denied_root))
+        return 0
     if args.run_option_c:
-        return run_option_c(root, args.workers, stem="option-c" if args.workers == 1 else "option-c-pool")
+        return run_option_c(root, args.workers, session_id=args.session_id,
+                            stem=args.stem if args.workers == 1 else args.stem + "-pool")
     archives, _, document = prepare_run_inputs(root)
     print(json.dumps({"sessions": len(archives), "input_document": str(document)}))
     return 0
