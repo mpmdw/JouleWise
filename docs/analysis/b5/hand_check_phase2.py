@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """RL-38 reader: stdlib only; no analysis imports, custody writes or path chasing.
 
-Only the two explicitly unsealed roots may be read. Each JSON is authenticated
-before parsing; references inside JSON are inert text. Outputs contain aggregate
-checks and locators only, never member-level measurements.
+The custody mode requires separate authorization for the two RL-38 roots. Each
+JSON is authenticated before parsing; references inside JSON are inert text.
+Use --repo-only for RL-41/RL-42 dispositions and serialization checks against the
+frozen, committed phase-2 tables; this mode never instantiates CustodyReader and
+does not repeat custody arithmetic. Residuals emit at two significant figures.
 """
 from __future__ import annotations
 
@@ -200,7 +202,7 @@ def quad_difference(ms, phase):
 
 
 def printed_compare(printed, value):
-    """Match at printed precision, preserving raw residual separately."""
+    """Classify using the unrounded residual; emit it at two significant figures."""
     cleaned = printed.replace('−', '-').replace(',', '').lstrip('+')
     percent = cleaned.endswith('%')
     try:
@@ -216,7 +218,149 @@ def printed_compare(printed, value):
     rounded = actual.quantize(quantum)
     residual = actual-target
     status = 'exact' if residual == 0 else 'within-rounding' if rounded == target else 'MISMATCH'
-    return format(rounded, 'f')+('%' if percent else ''), str(residual), status
+    return format(rounded, 'f')+('%' if percent else ''), difference_text(str(residual)), status
+
+
+def difference_text(text):
+    """Round a residual, retaining an optional unit and exact zero."""
+    if not text:
+        return text
+    number, *unit = text.split(' ', 1)
+    value = Decimal(number)
+    if not value.is_finite():
+        raise ValueError('non-finite difference')
+    rounded = '0' if value == 0 else format(value, '.2g')
+    return rounded + (' ' + unit[0] if unit else '')
+
+
+def round_differences(rows):
+    for row in rows:
+        row['difference'] = difference_text(row['difference'])
+        if 'note' in row:
+            row['note'] = re.sub(
+                r'(?<=source difference=)[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?',
+                lambda m: difference_text(m[0]), row['note'])
+
+
+def dle5_leaf_counts(contrasts):
+    """Return normalized path count and scalar instances in DLE-5's three groups."""
+    paths = []
+
+    def visit(value, path):
+        if isinstance(value, dict):
+            for key, child in value.items():
+                visit(child, path + (key,))
+        elif isinstance(value, list):
+            for child in value:
+                visit(child, path + ('*',))
+        else:
+            paths.append(path)
+
+    for contrast in contrasts:
+        visit(contrast['floor']['point_floor_diagnostics'], ('floor', 'point_floor_diagnostics'))
+        for resolution in contrast['floor']['resolutions']:
+            visit(resolution['point_floor_diagnostics'], ('floor', 'resolutions', '*', 'point_floor_diagnostics'))
+        visit(contrast['claim_evaluation']['floor_limit'], ('claim_evaluation', 'floor_limit'))
+    return len(set(paths)), len(paths)
+
+
+RECORDED_ROWS = {341, 342, 525, 526, 532, 535}
+SINGLE_SOURCE_ROWS = {*range(236, 242), 348, 349, 350, 362, 367, 392, 393, 394}
+BOUND_ROWS = {388, 389, 390, 391, 395}
+EXPECTED_COUNTS = Counter({'exact': 261, 'within-rounding': 256,
+                           'recorded-judgment': 6, 'single-source': 14, 'MISMATCH': 1})
+REVIEW_BASE = '9159dbf05'
+
+
+def apply_print_rulings(rows):
+    """Install RL-41(b), as amended by RL-42, preserving historical phase1_match."""
+    for number, row in enumerate(rows, 2):
+        addition = None
+        if number in RECORDED_ROWS:
+            row.update(match='recorded-judgment', hand_check='recorded judgment; not re-derived')
+            addition = 'from the collection record; not re-derived; attribute the pinned source in the sentence or table note (§4.7)'
+        elif number in SINGLE_SOURCE_ROWS:
+            row.update(match='single-source', hand_check='single-source; not independently recomputed')
+            if number in {348, 349, 350}:
+                addition = 'from the registered disclosure record; not independently recomputed'
+            else:
+                addition = 'from the independent recomputation only'
+            if number not in {392, 393, 394}:
+                addition += '; never in the abstract or conclusion, never as support for a claim word'
+            if number in {236, 237}:
+                addition += '; duration ratios print to two significant figures (RL-39)'
+            if number in {362, 367}:
+                addition += '; print with any whole-machine phase energy, labelled'
+            if number in {392, 393, 394}:
+                addition += '; prefill duration bound does not decide the scaling factor'
+        elif number in BOUND_ROWS:
+            # Opus independently confirmed these values at printed precision;
+            # RL-42 accepts that check. No new custody read is implied here.
+            if row['source_match'] not in ('exact', 'within-rounding'):
+                raise ValueError(f'bound row {number}: unexpected source check word')
+            row.update(match=row['source_match'], hand_check='hand check: Opus cold review, bound argument')
+            addition = 'hand check: Opus cold review, bound argument'
+        elif number == 522:
+            row.update(rederived_value='84', source_value='84', source_match='exact',
+                       match='exact', difference='0', hand_check='normalized path count; Opus cold review')
+            row['note'] = ('SOURCED: count distinct normalized leaf paths (list indices collapsed to *) in '
+                           'FILL.gamma.contrasts[*].{floor.point_floor_diagnostics,'
+                           'floor.resolutions[*].point_floor_diagnostics,claim_evaluation.floor_limit}; '
+                           'DLE-5: 14 + 10C + 5R, C=6, R=2; source difference=0')
+            addition = '84 normalized leaf paths; 118 scalar leaves'
+        elif number in {242, 243, 244, 490, 491, 492, 528}:
+            row['match'] = 'exact'
+            if number == 528:
+                row['hand_check'] = 'count stored clean flags'
+            addition = 'over stored flags'
+        elif number == 529:
+            row.update(match='exact', hand_check='release comparator: 189 sensitivity rows agree')
+            addition = "compared by the release comparator; the acceptance record's alignment bounds are inputs"
+        elif number in {530, 531, 533, 534}:
+            row.update(match='exact', hand_check='registered outcome rule; Opus cold review; comparator agreement')
+            addition = ('prerequisites of the not-estimable codes are recorded judgments; '
+                        'estimate exceeds floor gate, both intervals exclude zero, Holm rejects, '
+                        'leave-one-out keeps sign and floor')
+        if addition:
+            row['note'] = row['note'].split('; HAND NOT DONE:')[0].split('; RL-41/RL-42:')[0]
+            row['note'] += '; RL-41/RL-42: ' + addition
+        row['paper1'] = ('not-printed' if 388 <= number <= 395 else
+                         'print-labelled' if row['match'] in ('recorded-judgment', 'single-source') else 'print')
+    counts = Counter(row['match'] for row in rows)
+    if counts != EXPECTED_COUNTS:
+        raise ValueError(f'STOP: RL-42 counts differ: actual={dict(counts)}, expected={dict(EXPECTED_COUNTS)}')
+    return counts
+
+
+def table_text(rows):
+    stream = io.StringIO(newline='')
+    writer = csv.DictWriter(stream, list(rows[0]), delimiter='\t', lineterminator='\n')
+    writer.writeheader()
+    writer.writerows(rows)
+    return stream.getvalue()
+
+
+def repository_tables(write=False):
+    """Replay the dispositions/rounding from frozen Git tables, never custody."""
+    dest = Path(__file__).absolute().parent
+    repo = dest.parents[2]
+    tables = {}
+    for name in ('rederivation.tsv', 'hand_checks_phase2.tsv'):
+        raw = subprocess.run(['git', 'show', f'{REVIEW_BASE}:docs/analysis/b5/{name}'],
+                             cwd=repo, check=True, capture_output=True, text=True).stdout
+        tables[name] = list(csv.DictReader(io.StringIO(raw), delimiter='\t'))
+    counts = apply_print_rulings(tables['rederivation.tsv'])
+    for rows in tables.values():
+        round_differences(rows)
+    rendered = {name: table_text(rows).encode() for name, rows in tables.items()}
+    for name, content in rendered.items():
+        if write:
+            (dest / name).write_bytes(content)
+        elif (dest / name).read_bytes() != content:
+            raise ValueError(f'{name}: committed table differs from repository-only output')
+    print(json.dumps({'mode': 'repository-only; no custody arithmetic rerun',
+                      'counts': dict(counts), 'total': sum(counts.values()),
+                      'tables': list(rendered), 'byte_identical': not write}, indent=2))
 
 
 def hand_calculations(d):
@@ -525,18 +669,11 @@ def source_bindings(d, calc):
     key='Qwen3-1.7B-4bit/prefill'
     bind(502,rc['dominance']['common_mode'][key]['R_cm'],f'RC.dominance.common_mode[{key}].R_cm',f'floor.{key}/comparative.R_cm')
     bind(521,calc[f'request.{models[2]}.median'],f'RC.disclosures.whole_machine.windows.GAMMA.members[model={models[2]}].phases.request',f'request.{models[2]}.median')
-    # DLE-5's "gap" defines the newly mapped groups: nested floor/resolution
-    # diagnostics and the whole claim_evaluation.floor_limit object. Count
-    # actual leaves, including the newly named discipline exemption. Do not
-    # turn the deviation's structural "can reach 84" into an observed count.
-    def leaves(v):
-        if isinstance(v,dict):return sum(leaves(x) for x in v.values())
-        if isinstance(v,list):return sum(leaves(x) for x in v)
-        return 1
-    new_leaves=sum(leaves(c['floor']['point_floor_diagnostics'])+
-                   sum(leaves(x['point_floor_diagnostics']) for x in c['floor']['resolutions'])+
-                   leaves(c['claim_evaluation']['floor_limit']) for c in fill)
-    bind(522,new_leaves,'count_leaves(FILL.gamma.contrasts[*].floor.point_floor_diagnostics) + count_leaves(FILL.gamma.contrasts[*].floor.resolutions[*].point_floor_diagnostics) + count_leaves(FILL.gamma.contrasts[*].claim_evaluation.floor_limit); DLE-5 §The gap (3)')
+    # RL-42: DLE-5 counts distinct paths, with all list indices collapsed.
+    normalized_paths, scalar_instances = dle5_leaf_counts(fill)
+    if (normalized_paths, scalar_instances) != (84, 118):
+        raise ValueError(f'STOP: DLE-5 count differs: {(normalized_paths, scalar_instances)}')
+    bind(522,normalized_paths,'count distinct normalized paths in FILL.gamma.contrasts[*] DLE-5 three groups; 84 normalized leaf paths; 118 scalar leaves')
     bind(525,'none' if not d['CV']['sampling_audit']['top_up_detected'] else 'detected','CV.sampling_audit.top_up_detected',hold='complete run/config inventory needed to establish absence of unregistered top-ups is outside §0 outputs')
     bind(526,'none' if not d['CV']['sampling_audit']['valid_replacements'] else 'present','CV.sampling_audit.valid_replacements',hold='complete run/config inventory needed to establish absence of replacements is outside §0 outputs')
     failures=sum(x['stored_verdict']['status']=='failed' for x in d['STEP']['windows'].values())
@@ -594,7 +731,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--inspect', nargs='*', choices=SOURCES)
     parser.add_argument('--write', action='store_true', help='write aggregate-only TSVs beside this script')
+    parser.add_argument('--repo-only', action='store_true',
+                        help='apply rulings/rounding from committed tables; no custody access; default checks byte equality')
     args = parser.parse_args()
+    if args.repo_only:
+        if args.inspect is not None:
+            parser.error('--repo-only cannot be combined with --inspect')
+        repository_tables(write=args.write)
+        return
     reader = CustodyReader()
     try:
         if args.inspect is not None:
@@ -670,6 +814,9 @@ def main():
                 x.update(rederived_value='3 distinct causes in 4 losses',source_value='3 distinct causes in 4 losses',source_match='MISMATCH',difference='-1 distinct cause',hand_check='count(EXC stage-opening cause categories)')
                 x['source']='EXC sha256='+reader.opened['EXC']['sha256_before']+'; configs/analysis/b5/analysed_windows.json (indexed second-seal GAMMA attempt)'
                 x['note']='DISCREPANCY: indexed GAMMA EXC.cells[*].dropped_units[unit_id ends b01 or b06].codes: contention twice, anchor failure once, admission abort once; RL-39 erratum; RESULTS unchanged'
+        apply_print_rulings(rows)
+        round_differences(rows)
+        round_differences(hand_rows)
         files=reader.finish()
         if args.write:
             dest=Path(__file__).absolute().parent
