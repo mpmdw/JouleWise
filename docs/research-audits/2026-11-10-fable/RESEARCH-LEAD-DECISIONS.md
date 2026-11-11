@@ -1092,6 +1092,41 @@ closed by round 2, and the tests that close them fail on the old code.
 
 ---
 
+# Two confirmations (2026-11-10 21:28 PST)
+
+## RL-34. R0's Kind line on PR #710, and the four paths bound under RL-29
+
+**R0's Kind: corrected in wording, confirmed in substance.** RL-30 did not classify R0; that gap was mine. At
+`3adb781d2` the builder wrote "The framing entry. RL-30's list does not classify it; by RL-25 flag 5 it is, with
+its deadline clause, the one deviation line for the late entries." The classification (framing entry) is right.
+The word "deviation" is not: in RL-30's Kind list it means one thing, a departure from the registered release
+procedure (R1 with §17-DLE2). R0 departs from no procedure. It discloses that the set was entered late. R0's Kind
+line reads:
+
+> "**Kind.** Framing entry. It states once that this set was entered after the Block 5 unseal (RL-25 flag 5). It
+> changes no rule, no number and no procedure."
+
+R0's Status line keeps its sentence citing RL-25 flag 5 as it stands; that is where the lateness is declared and
+it is accurate. The header quotes RL-30's list verbatim, so the quote stays untouched and one line is added beneath
+it: "R0: framing entry (RL-34)". With that, every entry is classified.
+
+**Effect on the verdict.** None. PR #710 stays ADMIT (RL-30). The edit is two lines of wording (R0's Kind line and the line beneath the header quote) and needs no
+further refuter pass. Make it on the PR while CI is pending; if the PR has merged by the time this is read, the
+edit goes in the PR that enters the entries into the Block 6 registration.
+
+**The four paths.** `scripts/watchdog_status.py`, `scripts/launch_align_r0.py`,
+`scripts/run_align_r0_launchagent.sh` and `scripts/post_window_unstrand.sh`, bound strict on
+`align/2026-11-10-w1-integration` @ `928976f8c` with deviation row `RL29-WATCHDOG-BIND`, fall under RL-29's
+standing ratification: each only adds an executed file to the closure. Noted; no ruling needed. I have not
+reviewed that head; the Fable reviewer's report on it comes to me before it becomes the W1 line.
+
+**Reason.** A reader checks the entries by their kinds. A kind word used for two different things cannot be
+checked.
+
+**Blind status.** Wording only. Blind to Block 6, BYTES and v4 outcomes; Block-5-aware.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
