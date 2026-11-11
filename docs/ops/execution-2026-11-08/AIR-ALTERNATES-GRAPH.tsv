@@ -1,0 +1,81 @@
+dir	kind	alternates_or_gitdir
+align-v4-assembly-tmp	nogit	
+align-v4-assembly	clone	/Users/edr/code/CapstoneProject/jw-wt/council-pr/.git/objects 
+b5-care-audit	worktree	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/worktrees/b5-care-audit
+b5-lean-A-out	nogit	
+b5-lean-A	worktree	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/worktrees/b5-lean-A
+b5-lean-data	nogit	
+b5-lean-spec	worktree	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/worktrees/b5-lean-spec
+b5-lean	worktree	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/worktrees/b5-lean
+b5-lr-sol-logs	nogit	
+b5-r3-assembly	worktree	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/worktrees/b5-r3-assembly
+b5-r3-run	worktree	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/worktrees/b5-r3-run
+b5-r4-run	worktree	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/worktrees/b5-r4-run
+b5-r4	worktree	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/worktrees/b5-r4
+b5-release-check	worktree	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/worktrees/b5-release-check
+b5-release-final	worktree	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/worktrees/b5-release-final
+b5-results	worktree	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/worktrees/b5-results
+b5-robust-fc	worktree	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/worktrees/b5-robust-fc
+b5-robust-rev-sol	clone	
+b5-robust-rev-solrun	nogit	
+b5-robust-rev	clone	
+b5-robust	worktree	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/worktrees/b5-robust
+b5-u90-r2	worktree	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/worktrees/b5-u90-r2
+b5-under-90	worktree	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/worktrees/b5-under-90
+capmerge	worktree	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/worktrees/capmerge
+ci-rootcause-b6-pr657	worktree	/Users/edr/code/CapstoneProject/jw-wt/ci-rootcause-b6/.git/worktrees/ci-rootcause-b6-pr657
+ci-rootcause-b6-pr661	worktree	/Users/edr/code/CapstoneProject/jw-wt/ci-rootcause-b6/.git/worktrees/ci-rootcause-b6-pr661
+ci-rootcause-b6-tmp	nogit	
+ci-rootcause-b6	clone	/Users/edr/code/CapstoneProject/jw-wt/council-pr/.git/objects 
+cloud-fixgold	clone	/Users/edr/code/CapstoneProject/jw-wt/council-pr/.git/objects 
+cmp-dryij	clone	/Users/edr/jw-b5-analysis/.git/objects 
+council-align9	clone	/Users/edr/jw-b5-analysis/.git/objects 
+council-pr	clone	
+d5	worktree	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/worktrees/d5
+fable-w1gate	worktree	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/worktrees/fable-w1gate
+fable686	worktree	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/worktrees/fable686
+gold-l3-run	worktree	/Users/edr/code/CapstoneProject/jw-wt/cloud-fixgold/.git/worktrees/gold-l3-run
+handoff	clone	
+opus-flashnext-twin	clone	/Users/edr/jw-b5-analysis/.git/objects 
+opus-port-evals	clone	/Users/edr/jw-b5-analysis/.git/objects 
+opus-port-perf	clone	/Users/edr/jw-b5-analysis/.git/objects 
+opus-port-upstream	clone	/Users/edr/jw-b5-analysis/.git/objects 
+opus-realparity	clone	
+p10-review	worktree	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/worktrees/p10-review
+prune-exec	worktree	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/worktrees/prune-exec
+prune-work	nogit	
+r0-load-ref-review	worktree	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/worktrees/r0-load-ref-review
+r0-load-reference	worktree	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/worktrees/r0-load-reference
+r0fix3	worktree	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/worktrees/r0fix3
+rec-l3ref	worktree	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/worktrees/rec-l3ref
+runstate-176	worktree	/Users/edr/code/CapstoneProject/jw-wt/align-v4-assembly/.git/worktrees/runstate-176
+runstate-196	worktree	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/worktrees/runstate-196
+sol-cw-fix	clone	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/objects 
+sol-cw-impl	clone	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/objects 
+sol-engine-fix	clone	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/objects 
+sol-fix-finalize	clone	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/objects 
+sol-prune-fixes	clone	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/objects 
+sol-r11-delta4-sol1	clone	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/objects 
+sol-r11-delta4-sol2	clone	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/objects 
+sol-r11-delta5-sol1	clone	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/objects 
+sol-r11-delta5-sol2	clone	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/objects 
+sol-receipts-fix	clone	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/objects 
+sol-receipts-rereview	clone	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/objects 
+sol-reduce-sol	clone	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/objects 
+sol-seed-check	clone	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/objects 
+sol-smoke-delta-sol1	clone	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/objects 
+sol-smoke-delta-sol2	clone	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/objects 
+sol-smoke-review-sol1	clone	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/objects 
+sol-smoke-review-sol2	clone	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/objects 
+sol-timing-receipts	clone	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/objects 
+sol-u90-item3	clone	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/objects 
+sol-u90-item5	clone	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/objects 
+sol-v4-engine-sol	clone	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/objects 
+sol-v4-plan	clone	/Users/edr/jw-b5-analysis/.git/objects 
+sol-v4-wp5	clone	/Users/edr/jw-b5-analysis/.git/objects 
+u90-item3-int	worktree	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/worktrees/u90-item3-int
+u90-item5-int	worktree	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/worktrees/u90-item5-int
+w1-smoke-merged	worktree	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/worktrees/w1-smoke-merged
+wp19-tools	nogit	
+wp7-review	worktree	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/worktrees/wp7-review
+wp8-cold	worktree	/Users/edr/code/CapstoneProject/jw-wt/handoff/.git/worktrees/wp8-cold
