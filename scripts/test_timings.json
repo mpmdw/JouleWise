@@ -224,6 +224,7 @@
     "tests.b5_analysis.test_floor_kept_units": 41.219,
     "tests.b5_analysis.test_frozen_files": 0.444,
     "tests.b5_analysis.test_gamma_flags": 3.232,
+    "tests.b5_analysis.test_hand_check_phase2": 2.0,
     "tests.b5_analysis.test_issuer": 129.789,
     "tests.b5_analysis.test_joined_probes": 0.001,
     "tests.b5_analysis.test_kept_units": 19.29,
