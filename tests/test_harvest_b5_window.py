@@ -239,8 +239,12 @@ def template() -> Path:
 
 
 def tearDownModule():  # noqa: N802 (unittest hook)
+    global _TEMPLATE
     if _TEMPLATE is not None:
         shutil.rmtree(_TEMPLATE, ignore_errors=True)
+        # Forget the deleted template: other modules (tests.align.test_harvest_off_review_sol2 calls this
+        # teardown) share the cache in one shard process, and a later template() must rebuild it.
+        _TEMPLATE = None
 
 
 # ``cp -c`` asks macOS for a clone of each file (clonefile(2) on APFS: the
