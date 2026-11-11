@@ -2971,6 +2971,119 @@ be the same file. A speed-up belongs in the code that wanted it.
 
 ---
 
+# Decision request 31: the R1 structural review (2026-11-11 04:53 PST)
+
+**Read.** The structural extract the lead named (`r1-structural-rl58.md`, the one file), which prints no energy
+and two temperatures, R_op's. In the repository: the protocol's W1 roster and WP14(b) on the W1 line, the head
+of `scripts/align_r1_rehearsal.py` at `da3187e6e`, the slot template, and the three identity codes in
+`joulewise/flags/catalog.py`. I opened nothing in R1's custody.
+
+## RL-59. No slot is admissible. The night failed on its reference, not on the machine
+
+### What the night shows
+
+- Complete, chain exit 0, no fault, AC present throughout, no agent, the old loop inert. Conditions 1, 2, 10,
+  11 and 12 of RL-32 hold.
+- step-30b released at 716 s at 1.5 °C against its own pre-warmup reference, first attempt, inside the
+  predicted range. Condition 3 holds, and S6 = 1.5 °C did what its receipt said it would.
+- **Every D-type member timed out at its start gate**: the three A-B-A legs, step-D twice, the planning turn
+  at R + 0 °C twice. The planning turn released at R + 2 and R + 4. The gated block was then skipped by rule,
+  so there is no duty bar, no G0 cap for W1, no U5, no A-B-A decision and no slots.
+
+### Why
+
+R1 gated every D member against R_op, the pre-warmup reading of the 30B model on a cold machine. W1 never does
+that. In W1 the window reference is captured in the first D member, ordinal 5, with D loaded and after four 30B
+anchors (WP14(b)), and every later member consumes that. A D model that releases at R + 2 and not at R + 0
+against a cold 30B reference is telling us where D's own idle sits, which is the question I left open in RL-23
+and RL-32. RL-32 corrected the reference for the gated block only. It should have corrected it for every D
+segment, and that was mine to see.
+
+So the night says nothing against W1. It says R1 rehearsed a gate W1 does not have.
+
+### The four questions
+
+**1. Slots: none.** Nothing is entered into the registration from this night.
+
+- `ac_powermode` is **not** fixed at Automatic by this result. The adoption rule was not evaluated; no leg ran
+  a turn. Under RL-32 condition 7 an inconclusive adoption comes to me, and my answer is that it is decided by
+  the follow-up night.
+- Admissible as diagnostics: step-30b's release time and attempt, R_op, the soak, the battery and presence
+  records.
+
+**2. `r1_slots.json`.** The night's proposal is not committed. The template on the line stays, with S6 = 1.5
+and its receipt. The proposal remains in R1's custody under the digest the result names. A short outcome
+record is committed: this structure and this ruling. The generator is fixed so that an inconclusive night
+cannot emit a proposal that drops an adopted tuning.
+
+**3. The arm-stage identity flags.** For R1 they do not matter: it is a rehearsal and its identity is the lane
+commit in its plan. **For W1 they have to be answered before the registration is signed.** On the W1 line
+`pack.identity_mismatch`, `code.executed_differs_from_sealed` and `model.identity_mismatch` carry the effect
+EXCLUDE_WINDOW in the flag catalog. They fired here because the shared driver compares against Block 5's
+sealed inventory and knows nothing of v4's packs and models. If W1's arm raises them too, and any bound v4
+consumer applies the catalog's effect, W1 is born excluded. The lane lead establishes, by reading and then by
+the W1 smoke: whether W1's arm raises each; what the window-flag collector, the desk and the next-arm packet do
+with each; and what stands in their place for v4 (the STRICT receipt check at arm). If any of them excludes or
+refuses in v4, the fix comes to me and precedes signing. If they are inert, one deviation row says they are
+expected and why.
+
+The 30B thermometry record is a separate worry. Its classifier returned no pick for the fast and slow sensors
+and flagged a changed pick. It is record-only, but the gate's sensors rest on that selection. It goes to the
+design round below with the classifier's inputs printed.
+
+**4. The follow-up night.**
+
+*The reference.* One rule, W1's: **a D member gates against a reference captured in a D member**, by WP14(b)'s
+mechanics, the last 60 s of idle before warmup.
+
+- step-D is the capture member, W1's ordinal 5. It follows a 30B run with W1's inter-member idle, not a precool
+  to cold. It captures R, gates its own G0 against it, and runs under the series mode the A-B-A adopted.
+- The planning turns at R + 0, + 2 and + 4, the gated D runs and X-G consume that R.
+- Each A-B-A leg captures its own reference under its own mode and gates against that. The release against the
+  soak before each leg is dropped; the leg's own gate is the settled start. Each leg's start temperature is
+  recorded.
+- step-30b is unchanged. R_op is kept as the cold diagnostic and gates nothing else.
+
+*The cap.* **1,200 s stays, for every R1 gate.** It is the registered R1 value and W1's cap can never exceed it.
+With the right reference, a D member that still does not release in 1,200 s is a finding about W1, and the
+registered fallback order answers it: δ_slow to 2.0 °C, then idle 450 s, then 4-bit, then screen-only.
+
+*A timeout no longer voids a segment.* In W1 a member whose G0 times out is flagged and runs. In R1 it did
+nothing, and one timeout emptied the night. In the follow-up a member whose gate times out runs, flagged, and
+its timings are recorded with the flag. step-D's timeout does not skip the gated block. I rule on the
+admissibility of any slot measured from an unreleased start. This is RL-23 item 2, generalised, and it is
+built before the arm as RL-32 required.
+
+*Before it is armed*, in this order:
+
+1. **A replay on the journals R1 already has.** A sanctioned desk script reads each member's thermal journal,
+   temperatures only, and prints for every D-type member: its own pre-warmup median minus R_op; at the timeout,
+   the slow reading minus the band and the slope; and whether the registered gate would have released against
+   the member's own pre-warmup median, and when. That costs minutes and says whether this design works before
+   a night is spent on it. If the members would not have released even against their own reference, it comes
+   to me before anything is built.
+2. **One design round**, per Ed's rule for measurement windows: an Opus seat and a Sol seat on the plan with
+   the replay in hand. One round; I close it.
+3. **A short native smoke on the measurement Mac**: one 30B run, then D with capture, warmup and gate. It
+   should release. Ed's rule before any long block.
+4. Cold review of the kit changes.
+
+The measurement Mac is free meanwhile. BYTES stage 1 and its commitment go now (RL-44, RL-45), then the native
+checks.
+
+**For Ed, plainly:** "R1 ran clean and produced no usable settings. It held the 27B model to a temperature
+taken from the 30B model on a cold machine, which W1 itself never does, so every 27B start gate timed out. The
+fix is to rehearse W1's own reference rule. A replay of last night's temperature logs will show within the hour
+whether that works; then one more rehearsal night. W1 moves back by about a day. BYTES stage 1 uses the gap."
+
+**Reason.** Two nights have now been lost to the rehearsal disagreeing with the thing it rehearses. The cheap
+evidence, a replay and a thirty-minute smoke, comes before the third.
+
+**Blind status.** Blind: R1 is a rehearsal and no v4 outcome exists. I read structure and two reference
+temperatures.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
