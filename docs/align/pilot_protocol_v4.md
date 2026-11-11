@@ -1398,9 +1398,15 @@ release run over the admitted C and T windows.
    Under honest logging this, not S, is where a literal energy cost of sabotage lives.
 7. *Placement prints.* Each window's sabotage ordinals and the condition of the predecessors of ordinal 22 (the
    late sentinel) and of ordinal 12 (the first member after the midpoint).
+8. *Inconclusive-window sensitivity (RL-19).* List every window whose U1, U2 or U3 is INCONCLUSIVE;
+   recompute thresholds, m, benign test alarm count and the T rule without those windows. This print
+   gates nothing and changes neither K, S nor eligibility.
 
 **B8. Not in scope.** Option C, a physical positive-control night with real unlogged decode on the 27B, is not
-part of v4. The engine's `positive_control_pending` code becomes `positive_control_out_of_scope`.
+part of v4. Chair ruling 2 stands **unmet**: Ed declined the night, not the gate. Any claim that the
+tripwire detects real unlogged compute still needs a physical positive control; v4 registers no such
+claim. The dose-response curves are "calibrated sensitivity (count withholding on measured episodes)".
+The engine's disclosure code is `positive_control_not_run` and always prints.
 
 **B9. Supersessions** (prospective and blind; recorded in [DEVIATIONS.md](v4/DEVIATIONS.md)):
 
@@ -1414,10 +1420,13 @@ part of v4. The engine's `positive_control_pending` code becomes `positive_contr
 - RUN_STATE 236 and the series ledger: "Barred T windows are unavailable" (unchanged: never credited) and "two
   consecutive zero-capture refusals of a test window: escalate_to_lead". Now T4-T5 replace structurally barred
   T windows.
-- Chair ruling 2 (council table row 2): "the D positive-control cell as a paper gate". Declined with option C.
-- The engine's interpretation "known log omission; no causal sabotage or free-running agent claim". S is a
-  randomized comparison of the sabotage instruction at logged counts in the gated reference state; "no
-  free-running agent claim" stands.
+- Chair ruling 2 (council table row 2): "the D positive-control cell as a paper gate" stands unmet.
+  The night was declined; the gate remains for any claim about detecting real unlogged compute.
+  v4 makes no such claim and always discloses `positive_control_not_run`.
+- The engine's interpretation becomes exactly (RL-18): "K: calibrated sensitivity to a known log omission
+  by count withholding; no physical positive control was run. S: a randomized comparison of the sabotage
+  instruction at logged counts in gated reference-state episodes; it is a statement about the instruction,
+  not about successful sabotage, intent or free-running agents."
 
 ## Discrepancies
 
@@ -1505,7 +1514,7 @@ in `docs/align/council-2026-11-06-v4-review/OC-TABLE.md` on
 | # | v4 | Blocks | What this document still lacks (section) |
 |---:|:---:|---|---|
 | 1 | | R1 | **Code (round 4):** (a)-(e) in the R1 driver, (f) as restated by L1 in the kit and on the R1 record, (g) in the roster above. Still lacks: D wall-time budget text: R1 prints deadman use by phase and predicted turns; a third gated **bank/benign** D run in R1; extended post-D cooldown; the pre-declared duty bar (no X7, ≥ 3 admitted turns, G0 + G1 + H ≤ 40 % of T_dead) and the named fallback order (S6 joint tuning with δ_slow ≤ 2.0 °C, idle 450 s after D, 4-bit, screen-only); the kit assertion I_D + 1.13544·T_dead + tail + 60 s ≤ 1,800; and **W1 ordinals 17 and 18 swapped** (roster table, balance text and fit rule's "drop ordinal 17", which becomes the last ordinal). (Sizing; W1 roster; R1) `C:16–40` |
-| 2 | v4 | paper; before W1 registration | Registered sub-turn H\* estimand (Sol's grid promoted from print-only), benign-carrier detection curve (H50/H90 with window-cluster bootstrap), preserve_thinking estimand statement plus a print-only full-omission variant, WP8 F1 resolved before D1, residual-vs-hold-count print; the D positive-control cell as a paper gate. **Claim contract (RUN_STATE 252):** option C declined, so v4 has no positive-control cell; the curves are worded as calibrated sensitivity (B4). (Known-H tamper) `C:42–56` |
+| 2 | v4 | paper; before W1 registration | Registered sub-turn H\* estimand (Sol's grid promoted from print-only), benign-carrier detection curve (H50/H90 with window-cluster bootstrap), preserve_thinking estimand statement plus a print-only full-omission variant, WP8 F1 resolved before D1, residual-vs-hold-count print; the D positive-control cell as a paper gate. **Claim contract (RUN_STATE 252):** the physical positive-control night was declined; chair ruling 2 stands unmet for any claim about detecting real unlogged compute. v4 makes no such claim, always discloses `positive_control_not_run`, and words the curves as calibrated sensitivity (B4; RL-18). (Known-H tamper) `C:42–56` |
 | 3 | v4 | D-series | **Claim contract B1/B6:** numeric test-cohort rule and test reserves T4-T5. Registration grade restates the old 21/3 target: each pair needs ≥39 eligible benign calibration members plus a separate held-out test cohort. Exact fit/calibration/test rosters, every stop condition and the cap need prospective series-plan authority. D7/D8 and ≥6 sabotage are proposals, not installed authority. At cap: insufficient calibration/unresolved; no outcome-driven top-up. The lead must rule the margin before W1 (RUN_STATE 212 R11-2). (Residual analysis; Ed's standing ruling) |
 | 4 | v4 | W1; D-series | **INSTALLED; evidence pending where named.** Battery arm/top-up/OBC attestation and B bar installed in W1 registration installation §4; native top-up/drain/charge-hold evidence PENDING. |
 | 5 | v4 | W1 | **INSTALLED; evidence pending where named.** R11/R03 removes the unruled k=3 bar. U3 derivation/predictive/OC block is PENDING; v4 cannot pass on a historical constant. |
