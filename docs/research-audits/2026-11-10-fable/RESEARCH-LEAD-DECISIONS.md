@@ -3917,6 +3917,40 @@ step this hot, and that has to be known before another night is spent.
 
 ---
 
+# Decision request 44: nothing compares the installed runtime stack with the registered pins (2026-11-11 05:49 PST)
+
+**Read.** The lane's reading of the W1 line, as the lead relayed it. I did not re-read the code.
+
+## RL-73. The prepare check is added; consistency between members is not the same as identity with the registration
+
+The cohort key does real work: a member whose `mlx`, `mlx-lm` or weights differ from the others' is caught by
+the configuration assertion and by the next-arm packet. Two things are left open by it. It does not see
+`transformers`, `tokenizers`, `mlx-metal`, `safetensors`, `numpy` or the Python version. And it compares
+members with one another, so a stack that changed before W1 and then stayed put would pass every check while
+differing from what was registered.
+
+**Ruling.**
+
+1. **A refuse-only check at prepare**, beside the weight digest: the installed runtime versions, measured by
+   the function the flag collector already uses, against the `runtime_versions` block of the registered
+   identity pins. A difference or an unreadable version refuses. It runs before the quiet dwell.
+2. **Required for every window; mechanised under RL-53's terms and cut-off.** If the code misses the batch, the
+   magistrate prints the versions beside the pins before each arm, records both in the arm notice, and does
+   not arm on a difference. The same pattern as the weights (RL-62).
+3. **The previous-window hold applies.** A mismatch found at one window's prepare holds the window before it
+   until it is shown when the stack changed.
+4. **The desk's own comparison joins the held reasons.** After a window, the desk already compares the
+   members' recorded versions with v4's pins and discloses a difference. That disclosed code is added to the
+   list in RL-71's last row: a window carrying it is held for a ruling.
+5. The same check runs at the follow-up R1 night's prepare, since that night is built from the W1 line.
+
+**Reason.** The registration names a stack. Until something compares the machine with that name, the series is
+only known to be consistent with itself.
+
+**Blind status.** Blind: no v4 outcome exists.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
