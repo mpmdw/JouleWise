@@ -953,7 +953,8 @@ class Round6KitTests(unittest.TestCase):
         # Sol critique of round 6: fail closed at the kit for every R6-2 segment.
         inputs, slots = ready_inputs()
         slots['inconclusive_segments'] = {'planning_turn_R_plus_2C': 'G0 did not release, twice'}
-        with self.assertRaisesRegex(ValueError, r'INCONCLUSIVE \(R6-2\): planning_turn_R_plus_2C'):
+        # a85ee8ec6: RL-72 bars flagged/inconclusive feeding members, including X-G.
+        with self.assertRaisesRegex(ValueError, r'INCONCLUSIVE \(RL-72\): planning_turn_R_plus_2C'):
             kit.require_ready(inputs, slots)
         del slots['inconclusive_segments']
         with self.assertRaisesRegex(ValueError, 'inconclusive_segments'):

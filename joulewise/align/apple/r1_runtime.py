@@ -110,6 +110,15 @@ INCOMPLETE_MEMBER_FLAGS = ("episode.deadman:", "episode.decode_budget:", "episod
 TIMEOUT_RUN_KINDS = ("step-30b", "step-d", *contract.HIGH_POWER_KINDS, *contract.PLANNING_KINDS)
 
 
+def smoke_post_g0_budget(quiet_s, rearm_s):
+    """Finite Part B watchdog, derived from the phases after G0 release."""
+    if rearm_s is None or not _finite(rearm_s) or rearm_s <= 0:
+        raise RuntimeFailure("smoke Part B requires a positive re-armed turn bound")
+    phases = {"quiet": quiet_s, "turn": rearm_s, "recovery": RECOVERY_CAP_S,
+              "classification_and_close": 120}
+    return {**phases, "total": sum(phases.values())}
+
+
 def allow_g0_timeout_run(session, row):
     """RL-72 E3: no fault, no pseudo-reference, observed timeouts only."""
     if row.get("outcome") != "timeout" or any(
@@ -1672,7 +1681,14 @@ class Segment:
                     (segment.out / "smoke_part_a.json").write_text(canonical(segment.smoke_gate) + "\n")
                     if row["outcome"] != "released" or elapsed > 1800:
                         raise RuntimeFailure("smoke Part A did not release within 1800 s")
-                    signal.setitimer(signal.ITIMER_REAL, 1200 if segment.smoke_part == "B" else 0)
+                    # The 1,200 s cap belongs to G0. After G0 the smoke must
+                    # fit quiet, the re-armed turn, recovery, and close. This
+                    # engineering watchdog does not decide RL-72 E5's total.
+                    budget = smoke_post_g0_budget(quiet_s, rearm_s) if segment.smoke_part == "B" else None
+                    if budget is not None:
+                        segment.smoke_gate["post_g0_budget_s"] = budget
+                        (segment.out / "smoke_part_a.json").write_text(canonical(segment.smoke_gate) + "\n")
+                    signal.setitimer(signal.ITIMER_REAL, budget["total"] if budget else 0)
                     if segment.smoke_part == "A":
                         rearm_deadman(deadman, 0, "R1_smoke_A_stop_after_G0")
                         return row

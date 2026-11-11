@@ -48,7 +48,7 @@ SCENARIOS = (
     ('wp22_synthetic_w1_chain', {'JW_WP22_FULL': '1'}, ['tests.align.test_v4_w1_synthetic']),
     # Follow-up paths plus a real runtime child/TERM/custody path. The full
     # night remains in default CI; trace generation need not repeat it.
-    ('r1_synthetic_arm', {}, ['tests.align.test_r1_followup', 'tests.align.test_r1_round2',
+    ('r1_synthetic_arm', {}, ['tests.align.test_r1_followup', 'tests.align.test_r1_round2', 'tests.align.test_r1_round3',
                             'tests.align.test_r1_rehearsal.PhaseTableIdentityTests',
                             'tests.align.test_r1_runtime_e2e.DriverRuntimeTests.test_term_reaches_the_runtime_which_closes_its_custody_before_exit']),
     ('r1_to_w1_chain', {}, ['tests.align.test_r1_turn_counts_export', 'tests.align.test_r1_to_w1_chain',

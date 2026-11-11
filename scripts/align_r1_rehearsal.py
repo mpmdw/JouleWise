@@ -1480,6 +1480,42 @@ def executed_commit(root):
     return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
 
 
+def require_prepare_packet(path, root=ROOT):
+    """Bind RL-62/73 prepare evidence to this driver's committed sources."""
+    cause = "r1.prepare_packet"
+    if path is None:
+        raise Refusal(f"{cause}.missing: --prepare-packet is required")
+    path = Path(path).resolve()
+    try:
+        raw = path.read_bytes()
+        packet = json.loads(raw)
+    except (OSError, ValueError) as error:
+        raise Refusal(f"{cause}.unreadable: {error}") from error
+    if (not isinstance(packet, dict) or packet.get("schema") != "joulewise.align.r1_followup_prepare.v1"
+            or packet.get("status") != "FOR_LEAD_ARM"):
+        raise Refusal(f"{cause}.status: requires FOR_LEAD_ARM prepare evidence")
+    if packet.get("executed_commit") != executed_commit(root):
+        raise Refusal(f"{cause}.executed_commit: prepare does not name this commit")
+    for name in ("weight_digests", "runtime_stack"):
+        check = packet.get(name)
+        if not isinstance(check, dict) or check.get("ok") is not True:
+            raise Refusal(f"{cause}.{name}: missing or not ok")
+    from joulewise.align.apple import v4_registration
+    bound = packet.get("bound_files")
+    if not isinstance(bound, dict):
+        raise Refusal(f"{cause}.bound_files: missing source hashes")
+    for name in v4_registration.R1_EXECUTED_SOURCES:
+        try:
+            digest = hashlib.sha256((Path(root) / name).read_bytes()).hexdigest()
+        except OSError as error:
+            raise Refusal(f"{cause}.bound_files: source unavailable: {name}") from error
+        if bound.get(name) != digest:
+            raise Refusal(f"{cause}.bound_files: source differs: {name}")
+    return {"path": str(path), "sha256": hashlib.sha256(raw).hexdigest(),
+            "executed_commit": packet["executed_commit"],
+            **{name: packet[name] for name in ("weight_digests", "runtime_stack")}}
+
+
 def inadmissible_slots(results, inconclusive, thermometry, duty, u5, g0_cap):
     """The plan's per-slot bars; candidates never become admitted evidence by omission."""
     step = results.get(STEP_D_NAME, {})
@@ -1619,6 +1655,7 @@ def run(args):
             raise Refusal(f"output directory already exists: {output}") from error
         created = True
         if not args.synthetic:
+            record["prepare_packet"] = require_prepare_packet(getattr(args, "prepare_packet", None))
             from joulewise.align.apple import v4_registration
             v4_registration.verify_r1_executed_sources(ROOT, {"executed_commit": executed_commit(ROOT)})
             if runtime_config_path(args.runtime).read_bytes() != (ROOT / DEFAULT_RUNTIME_CONFIG).read_bytes():
@@ -1982,6 +2019,8 @@ def main(argv=None):
                          help="read the runtime argv list from INPUTS_JSON WP15.runtime_entrypoint")
     parser.add_argument("--include-4bit", action="store_true")
     parser.add_argument("--synthetic", action="store_true")
+    parser.add_argument("--prepare-packet", type=Path,
+                        help="RL-62/73 FOR_LEAD_ARM packet from align_r1_followup_kit prepare")
     args = parser.parse_args(argv)
     if args.registration is None:
         args.registration = args.output / "r1_slots.json"

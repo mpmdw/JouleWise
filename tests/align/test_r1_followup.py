@@ -88,8 +88,8 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual(config["g0_timeout_s"], 1200)
 
     def test_gate_module_is_exactly_w1_base(self):
-        path = "joulewise/align/apple/thermal_gates.py"
-        self.assertEqual((r1.ROOT / path).read_bytes(), reg._committed_bytes(r1.ROOT, "82c14c9ea", [path])[path])
+        for path in ("joulewise/align/apple/thermal_gates.py", "joulewise/align/apple/smc_enumeration.py"):
+            self.assertEqual((r1.ROOT / path).read_bytes(), reg._committed_bytes(r1.ROOT, "b4a6c217f", [path])[path])
 
 
 class PrepareTests(unittest.TestCase):
@@ -219,6 +219,11 @@ class DispatchTests(unittest.TestCase):
 
 
 class DefaultBundleTests(unittest.TestCase):
+    def assert_bundle_bytes_equal(self, left, right):
+        self.assertEqual(set(left), set(right))
+        for name in left:
+            self.assertEqual(left[name], right[name], name)
+
     def test_default_member_bundle_equals_pre_callback_workload_bytes(self):
         # Run the actual old adapter and the new adapter against the same tiny
         # deterministic model/clock/config/path. Compare every bundle file.
@@ -237,23 +242,42 @@ class DefaultBundleTests(unittest.TestCase):
                                     turn_cap_s=300, chunk_tokens=256, heavy=False, per_turn=False)
             spec = rt.step_spec(tspec, {**config["step"], "decode_tokens": 8}, policy, deadman_s=1580)
             member = rt.member_config(template, spec, run_id="same-member", kind="step-d")
-            outputs = []
-            for adapter in (old.EpisodeRuntimeAdapter, workload.EpisodeRuntimeAdapter):
-                backend = syn.SyntheticBackend(config)
-                try:
-                    from joulewise import controller
-                    with patch.object(workload, "EpisodeRuntimeAdapter", adapter), patch.object(
-                            controller._Execution, "_battery_stamp", lambda execution: execution._clock.stamp()):
-                        bundle, summary = backend.run_member(member, root / "runs", hook=None)
-                    self.assertEqual(summary.status.value, "succeeded")
-                    outputs.append({p.relative_to(bundle).as_posix(): p.read_bytes()
-                                    for p in bundle.rglob("*") if p.is_file()})
-                finally:
-                    backend.close()
-                shutil.rmtree(root / "runs")
-            self.assertEqual(set(outputs[0]), set(outputs[1]))
-            for name in outputs[0]:
-                self.assertEqual(outputs[0][name], outputs[1][name], name)
+            # Sole exclusion: memory_snapshots[*].process_rss_bytes in
+            # metadata.json and events.jsonl. RSS measures this shared Python
+            # process's allocator/OS state, not the member's deterministic
+            # behavior. Patch its source; do not parse/re-serialize bundles or
+            # ignore timestamps, errors, other telemetry, or any other bytes.
+            for timed_out in (False, True):
+                outputs = []
+                for adapter in (old.EpisodeRuntimeAdapter, workload.EpisodeRuntimeAdapter):
+                    backend = syn.SyntheticBackend(config)
+                    try:
+                        from joulewise import controller
+                        def hook(session):
+                            session.reference = {"fast_c": 0., "slow_c": 0., "source_member": "synthetic"}
+                        with patch.object(workload, "EpisodeRuntimeAdapter", adapter), patch.object(
+                                controller._Execution, "_battery_stamp", lambda execution: execution._clock.stamp()), patch(
+                                "joulewise.adapters.mlx_runtime._process_rss_bytes", return_value=4242):
+                            bundle, summary = backend.run_member(member, root / "runs", hook=hook if timed_out else None)
+                        self.assertEqual(summary.status.value, "succeeded")
+                        ep = workload.read_episode_bundle(bundle)
+                        self.assertEqual(len(ep.turns), 0 if timed_out else 1)
+                        self.assertEqual("thermal.start_gate_timeout" in ep.flags, timed_out)
+                        self.assertNotIn("r1.g0_timeout_run", ep.flags)
+                        outputs.append({p.relative_to(bundle).as_posix(): p.read_bytes()
+                                        for p in bundle.rglob("*") if p.is_file()})
+                    finally:
+                        backend.close()
+                    shutil.rmtree(root / "runs")
+                self.assert_bundle_bytes_equal(*outputs)
+                # Exercise the same comparator on a one-byte mutant of EVERY
+                # file: even whitespace/telemetry bytes remain significant.
+                for name, raw in outputs[1].items():
+                    mutant = dict(outputs[1])
+                    mutant[name] = bytes([raw[0] ^ 1]) + raw[1:] if raw else b"x"
+                    with self.subTest(timeout=timed_out, mutant=name), self.assertRaises(AssertionError):
+                        self.assert_bundle_bytes_equal(outputs[0], mutant)
+
 
 
 if __name__ == "__main__":

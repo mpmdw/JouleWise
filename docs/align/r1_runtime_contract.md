@@ -14,6 +14,24 @@ Element 0 is a repo-relative Python script; the chain passes `--runtime-entrypoi
 
 The field table lives in `joulewise/align/apple/r1_runtime_contract.py` (`KIND_FIELDS`, `QUIET_FIELDS`, `NEEDS_SOAK_REFERENCE`). The driver checks every result against it at the seam. This document is the prose form of that table, and a test keeps the two in step.
 
+The production driver requires `--prepare-packet FILE` from
+`align_r1_followup_kit.py prepare` (the chain receives `ALIGN_R1_PREPARE_PACKET`).
+Before acquiring the host lock it checks `FOR_LEAD_ARM`, the current
+`executed_commit`, the bound source hashes, and both RL-62/73 checks (`weight_digests`
+and `runtime_stack`, each `ok: true`). Its arm record carries the packet path,
+SHA-256 and both results. A missing, stale or refused packet is a named refusal.
+The synthetic driver remains fixture-only.
+
+`capture-predecessor-30b` is the ordinary 30B capture predecessor introduced by
+`a85ee8ec6` for RL-72's indivisible predecessor/step-D admission unit.
+Its runtime fields remain defined by `KIND_FIELDS`.
+
+Smoke Part B's post-G0 engineering watchdog is the sum of the registered quiet,
+the re-armed turn deadman, recovery, and a 120 s classification/close margin
+(300 + 1,580 + 600 + 120 = 2,600 s with the current config). G0 keeps its
+1,200 s cap. This fixes the watchdog's phase coverage; whether Part B's twenty
+minutes is a hard total bound remains parked for the research lead.
+
 ## Arguments
 
 - `--output DIR` is always the canonical segment directory, `<R1 output>/<segment name>`. When the driver rejects an attempt (ruling 8 load, or soak slope), it renames that directory to `<segment name>.rejectedN` (the next free N from 1) before the next attempt starts. A step-d or designed start state whose G0 timed out is moved to `<segment name>.g0_timeout1` before its one retry (LEAD-RULINGS-2 R6-2). The accepted attempt therefore always ran in, and owns, the canonical directory. The runtime must write only inside `DIR` and use paths relative to it.

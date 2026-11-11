@@ -914,6 +914,7 @@ class R1Tests(unittest.TestCase):
             (td / "mroot").mkdir()
             env = dict(os.environ, PATH=f"{td / 'bin'}:{os.environ['PATH']}", PY=str(shim),
                        NIGHT_DIR=str(td / "night"), MEASUREMENT_ROOT=str(td / "mroot"),
+                       ALIGN_R1_PREPARE_PACKET=str(td / "synthetic-prepare.json"),
                        ALIGN_R1_RUNTIME="/usr/bin/true")
             proc = subprocess.run(["/bin/zsh", str(repo / "scripts/night_chains/align_r1_rehearsal.zsh")],
                                   env=env, start_new_session=True, capture_output=True, text=True,
@@ -1038,7 +1039,8 @@ class R1Tests(unittest.TestCase):
                 path.chmod(0o755)
             (td / "mroot").mkdir()
             env = dict(os.environ, PATH=f"{td / 'bin'}:{os.environ['PATH']}", PY=str(shim),
-                       NIGHT_DIR=str(td / "night"), MEASUREMENT_ROOT=str(td / "mroot"))
+                       NIGHT_DIR=str(td / "night"), MEASUREMENT_ROOT=str(td / "mroot"),
+                       ALIGN_R1_PREPARE_PACKET=str(td / "synthetic-prepare.json"))
             env.pop("ALIGN_R1_RUNTIME", None)
             chain = ["/bin/zsh", str(repo / "scripts/night_chains/align_r1_rehearsal.zsh")]
             proc = subprocess.run(chain, env=env, capture_output=True, text=True, timeout=60)
@@ -1189,11 +1191,25 @@ class R1Tests(unittest.TestCase):
         # 28,000 decode tokens in 7 admitted turns: <= 4,096 per turn, as a real run.
         # This fixture exercises evidence shape, using a synthetic command
         # boundary even on the hardware-source label; identity has its own tests.
+        from joulewise.align.apple import v4_registration as reg
+        import hashlib
+        packet_path = Path(td) / "synthetic-prepare.json"
+        packet_path.write_text(json.dumps({
+            "schema": "joulewise.align.r1_followup_prepare.v1", "status": "FOR_LEAD_ARM",
+            "executed_commit": r1.executed_commit(r1.ROOT),
+            "weight_digests": {"ok": True}, "runtime_stack": {"ok": True},
+            "bound_files": {name: hashlib.sha256((r1.ROOT / name).read_bytes()).hexdigest()
+                            for name in reg.R1_EXECUTED_SOURCES}}))
         with patch("joulewise.align.apple.v4_registration.verify_r1_executed_sources"), patch.object(
                 r1, "_run", FakeWorld(step_d_rate=40.0, gated_decode_tokens=28000, gated_admitted_turns=7)):
-            assert r1.run(R1Tests.args(None, td, synthetic=synthetic)) == 0
+            assert r1.run(R1Tests.args(None, td, synthetic=synthetic, prepare_packet=packet_path)) == 0
         raw = (Path(td) / "run/r1_result.json").read_bytes()
         slots = json.loads((Path(td) / "registration/r1_slots.json").read_text())
+        if not synthetic:
+            arm = json.loads(raw)["prepare_packet"]
+            assert arm["path"] == str(packet_path.resolve())
+            assert arm["sha256"] == hashlib.sha256(packet_path.read_bytes()).hexdigest()
+            assert arm["weight_digests"]["ok"] is True and arm["runtime_stack"]["ok"] is True
         for key in ("admitted_turns", "x7", "phases_s"):
             slots["x_g"].pop(key, None)
         for row in slots["deadman_budget"]:

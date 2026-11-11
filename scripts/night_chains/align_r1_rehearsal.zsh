@@ -3,6 +3,8 @@
 # run_night invokes the chain only after its ordinary admission gates.
 set -euo pipefail
 
+: "${ALIGN_R1_PREPARE_PACKET:?r1.prepare_packet.missing: lead must supply the RL-62/73 FOR_LEAD_ARM packet}"
+
 restore_automatic() {
   sudo -n /usr/bin/pmset -c powermode 0
 }
@@ -50,4 +52,5 @@ fi
   --output "$NIGHT_DIR/align-r1" \
   --registration "$REGISTRATION" \
   --power-marker "$POWER_MARKER" \
+  --prepare-packet "$ALIGN_R1_PREPARE_PACKET" \
   "${RUNTIME_ARGS[@]}"
