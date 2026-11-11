@@ -273,6 +273,25 @@ print(rows[-1]['values']['reason'])
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.strip(), "signal 15")
 
+    def test_original_harvest_readiness_uses_declared_absent_group(self):
+        """Predict: original readiness accepts a terminal synthetic unit input with an absent group; source returns ESRCH, never EPERM or a substituted verdict."""
+        code = '''import json,os,sys
+from pathlib import Path
+from types import SimpleNamespace
+from joulewise.b5.harvest import Seams,group_alive,readiness
+root=Path(sys.argv[1]);night=root/'readiness-unit-input';night.mkdir()
+(night/'chain.started').write_text(json.dumps({'pgid':987654319}))
+(night/'result.json').write_text('{}')
+assert group_alive(987654319) is False
+result=readiness(SimpleNamespace(night_dir=night),Seams())
+assert result == {'chain_started':True,'terminal_record':True,'group_alive':False}
+print('ready')
+'''
+        result = subprocess.run(command(self.root, "code", code, self.root), capture_output=True,
+                                text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "ready")
+
     @unittest.skipUnless(Path("/bin/zsh").is_file(), "rendered chain requires zsh")
     def test_shell_and_python_use_same_clock(self):
         """Predict: unedited zsh date/sleep commands and pinned child see the same 75 s advance."""

@@ -131,6 +131,7 @@ def declare_sources(root):
         "scheduler": "call actual run_night at plan t0; installer/uninstaller command results 0; no launchd job",
         "JOULEWISE_WHOLE_WINDOW_WORKERS": "1; pinned environment concurrency input; unchanged strict validator in its isolated verdict process, no spawned interpreter outside bootstrap",
         "os.kill/os.killpg and joulewise.b5.harvest.Seams.killpg": "only owned live child SIGTERM has declared success; no native signal executes; per-PID external signal input reaches the original registered meter/monitor handler; other actions denied and logged",
+        "os.killpg(pgid, 0)": "declared external group census: live owned Popen is present, otherwise ESRCH (not EPERM); original harvest readiness and teardown judge it",
         "zsh file utilities": "unchanged rendered program uses cat/mkdir/jq on its fixture-bound paths; date/sleep source functions and bootstrap interpreter isolate time and host commands",
         "Git, /bin/cp -c -pR and zstd": "actual fixture-scoped code/input Git, non-symlink fixture-only APFS copy writer and desk codec; no network Git; no simulated copying or compression"})
     value["actions"] = {"default": "deny rc 126, stdout empty, stderr RL-49 default deny; execute nothing",

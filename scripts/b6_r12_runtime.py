@@ -787,6 +787,16 @@ def install_sources(root, clock):
             return REAL_KILL(pid, 0)  # read-only existence check of a fixture marker's PID
         argv = ("os.killpg" if group else "os.kill", str(pid), str(number))
         process = sources.processes.get(pid)
+        if number == 0 and group:
+            # A probe is a process observation, not a requested action. The
+            # unchanged harvest interprets EPERM as "may still be alive";
+            # the declared absent observation must therefore return ESRCH.
+            alive = process is not None and process.poll() is None
+            sources.completed(argv, (0, b"", b"") if alive else (3, b"", b"declared fixture group absent"),
+                              "declared_owned_group_census")
+            if not alive:
+                raise ProcessLookupError(pid)
+            return None
         if process is None or number != signal.SIGTERM:
             sources.completed(argv, (126, b"", b"RL-49 undeclared signal denied"), "declared_action_denied")
             raise PermissionError("undeclared fixture signal")
