@@ -34,6 +34,7 @@ class WeightDigestTests(unittest.TestCase):
         self.root = Path(tmp.name)
         self.weights = self.root / 'tiny-weights'
         self.weights.mkdir()
+        (self.weights / 'model.safetensors').write_bytes(b'fixture')
         self.members = [{'model_id': 'tiny', 'run_id': 'one'}, {'model_id': 'tiny', 'run_id': 'two'}]
         self.observed = {'status': 'ok', 'kind': 'file_set', 'folded_sha256': 'a' * 64,
                          'files': {'model.safetensors': 'b' * 64},
@@ -126,6 +127,7 @@ class WeightDigestTests(unittest.TestCase):
     def test_member_and_inventory_order_independent(self):
         other = self.root / 'other-tiny-weights'
         other.mkdir()
+        (other / 'model.safetensors').write_bytes(b'fixture')
         self.inventory['artifacts']['tiny-two'] = dict(self.inventory['artifacts']['tiny-two'], root=str(other))
         self.write_inputs()
         with patch.object(session.time, 'time', return_value=10), \
@@ -170,6 +172,41 @@ class WeightDigestTests(unittest.TestCase):
                 self.assertEqual(stored['ok'], not mismatch)
                 identity.assert_called_once()
             arm.assert_not_called()
+
+    def test_early_model_presence_or_row_refusal_also_records_weight_evidence(self):
+        for fault in ('missing_shard', 'renamed_shard', 'unreadable_shard', 'missing_row'):
+            with self.subTest(fault=fault), ExitStack() as stack:
+                self.write_inputs()
+                observed = dict(self.observed, files={} if fault == 'missing_shard' else
+                                {'renamed.safetensors': 'b' * 64})
+                if fault == 'unreadable_shard':
+                    observed = {'status': 'unavailable', 'reason': 'synthetic unreadable shard'}
+                if fault == 'missing_row':
+                    del self.inventory['artifacts']['tiny-two']
+                    self.write_inputs()
+                target = self.root / fault
+                stack.enter_context(patch.object(powermode, 'host_lock_preflight', return_value={'ok': True}))
+                stack.enter_context(patch.object(session, 'session_start_restore', return_value={'action': 'none'}))
+                stack.enter_context(patch.object(session.kit, 'generate'))
+                stack.enter_context(patch.object(session, 'series_ac_powermode', return_value=0))
+                error = (KeyError('tiny-two') if fault == 'missing_row' else PermissionError('synthetic unreadable shard')
+                         if fault == 'unreadable_shard' else session.pilot.h.PhysicalHazard('models missing: synthetic'))
+                stack.enter_context(patch.object(session.pilot, 'prepare', side_effect=error))
+                code = ('no_inventory_row' if fault == 'missing_row' else 'unavailable'
+                        if fault == 'unreadable_shard' else 'file_set_differs')
+                with self.assertRaisesRegex(ValueError, 'weight_digest_preflight: ' + code):
+                    session.prepare(self.root, target, weight_identity_fn=lambda _: observed)
+                stored = session.pilot.h.read(target / 'session.json')['weight_digest_preflight']
+                self.assertFalse(stored['ok'])
+                if fault in ('missing_shard', 'renamed_shard'):
+                    self.assertIn('model.safetensors', stored['roots'][str(self.weights)]['file_set_diff']['missing'])
+                preserved = target / 'preserved.txt'
+                preserved.write_text('keep')
+                before = (target / 'session.json').read_bytes()
+                with self.assertRaises(type(error)):
+                    session.prepare(self.root, target, weight_identity_fn=lambda _: observed)
+                self.assertEqual(preserved.read_text(), 'keep')
+                self.assertEqual((target / 'session.json').read_bytes(), before)
 
 
 class WatchdogTests(unittest.TestCase):
