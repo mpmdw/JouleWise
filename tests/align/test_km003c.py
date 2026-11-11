@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from joulewise.align import energy_residual as er
 from joulewise.align.apple import km003c as meter
@@ -116,6 +116,8 @@ class MemberTests(unittest.TestCase):
         row = meter.capture_member([('one', first), ('two', second)],
                                    member_span=(NS, 4*NS), baseline_span=(NS, 2*NS), episode=episode())
         self.assertEqual(row['status'], 'missing')
+        self.assertIn('meter.member_uncovered', row['flags'])
+        self.assertIsNone(row['dc_in_energy_j'])
 
 
 class KitTests(unittest.TestCase):
@@ -185,6 +187,82 @@ class DeskTests(unittest.TestCase):
             row = meter.session_report(custody, plan, runs, summaries)['members']['member']
             self.assertEqual(row['status'], 'missing')
             self.assertIn('meter.custody_hash_mismatch', row['flags'])
+
+    def test_restart_lists_gap_and_desk_marks_overlapping_member_uncovered(self):
+        from joulewise.b5 import driver
+        with tempfile.TemporaryDirectory() as tmp:
+            custody, runs, first, plan, summaries = self.fixture(Path(tmp))
+            fake_stream(first, end=2500)
+            second = first.with_name('stream-002.jsonl')
+            fake_stream(second)
+            rows = [json.loads(line) for line in second.read_text().splitlines()]
+            second.write_text(''.join(json.dumps(r) + '\n' for r in rows
+                                     if r['k'] != 'b' or r['rx'] >= OFFSET + 3*NS))
+            # Drive the real supervisor's exit/backoff/restart bookkeeping;
+            # only the child processes and clocks are synthetic.
+            now = [2*NS]
+            child = Mock(pid=123, **{'poll.return_value': None})
+            restarted = Mock(pid=456, **{'poll.return_value': None})
+            supervisor = driver.MonitorSupervisor(['synthetic-reader'], night_dir=custody / 'night',
+                popen=Mock(side_effect=[child, restarted]), name='meter', restart_on_clean_exit=True)
+            with patch.object(driver.time, 'monotonic', side_effect=lambda: now[0] / NS), \
+                    patch.object(driver, 'stamp', side_effect=lambda: {'monotonic_ns': now[0]}):
+                self.assertTrue(supervisor.start())
+                child.poll.return_value = 3
+                now[0] = 2_500_000_000
+                supervisor.poll()
+                now[0] = 3*NS
+                supervisor.poll()
+            record = supervisor.summary()
+            self.assertEqual(record['restarts'], 1)
+            self.assertEqual(record['gaps'], [{'down_from': {'monotonic_ns': 2_500_000_000},
+                                             'up_at': {'monotonic_ns': 3*NS}}])
+            record['streams'] = [{'path': p.relative_to(custody).as_posix(),
+                                  'sha256': hashlib.sha256(p.read_bytes()).hexdigest()}
+                                 for p in (first, second)]
+            (custody / 'night/hazard_result.json').write_text(json.dumps({'meter': record}))
+            report = meter.session_report(custody, plan, runs, summaries)
+            self.assertEqual(len(report['sources']), 2)
+            row = report['members']['member']
+            self.assertEqual(row['status'], 'missing')
+            self.assertIn('meter.member_uncovered', row['flags'])
+            self.assertIsNone(row['dc_in_energy_j'])
+            self.assertFalse(summaries[0]['excluded'])
+            after = meter.capture_member([(p.name, kp.parse(p)) for p in (first, second)],
+                member_span=(3*NS, 5*NS), baseline_span=(3*NS, 4*NS),
+                episode=replace(episode(), start_ns=4*NS, end_ns=5*NS,
+                                turns=(Turn(0, 4*NS, 5*NS, 10, 2, 3),)))
+            self.assertEqual(after['status'], 'available', after['flags'])
+            self.assertEqual(after['stream'], second.name)
+            self.assertEqual(after['dc_in_energy_j'], 56)
+
+    def test_restarted_stream_repeats_arm_alignment_and_offset_checks(self):
+        from scripts import align_v4_session as session
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'stream-002.jsonl'
+            fake_stream(path)
+            valid = [json.loads(line) for line in path.read_text().splitlines()]
+            for kind in ('valid', 'offset-changed', 'unaligned'):
+                with self.subTest(kind=kind):
+                    rows = [dict(r) for r in valid]
+                    if kind == 'offset-changed':
+                        rows[-1]['end_mono_ns'] += 2_000_000
+                    elif kind == 'unaligned':
+                        rows = [rows[0], rows[1], rows[-1]]  # insufficient samples for a clock fit
+                    path.write_text(''.join(json.dumps(r) + '\n' for r in rows))
+                    def runner(argv, **kwargs):
+                        Path(argv[argv.index('--out') + 1]).write_bytes(path.read_bytes())
+                        return Mock(returncode=0)
+                    probe = session._probe_meter_live(Path(tmp), runner=runner)
+                    stream = kp.parse(path)
+                    row = meter.capture_member([(path.name, stream)], member_span=(NS, 4*NS),
+                                               baseline_span=(NS, 2*NS), episode=episode())
+                    self.assertEqual(probe['live'], kind == 'valid')
+                    self.assertEqual(row['status'], 'available' if kind == 'valid' else 'missing')
+                    if kind == 'valid':
+                        self.assertEqual(row['raw_offset_ns'], probe['raw_offset_ns'])
+                    else:
+                        self.assertIn('meter.clock_unresolved', row['flags'])
 
     def crashed_fixture(self, root, *, record_hash):
         """A stream cut mid-line after 3.4 s with no closing line; two members at 1-3 s and 3-4.5 s."""

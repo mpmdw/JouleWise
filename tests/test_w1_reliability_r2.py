@@ -106,22 +106,63 @@ class MeterGateTests(DriverCase):
         probe.assert_called_once_with(h.driver.REPO_ROOT)
         self.assertEqual(h.hazard()['meter_readiness'], {'live': False, 'samples': 0})
 
-    def test_in_window_usb_loss_stops_and_faults_all_terminal_records(self):
+    def test_600_second_meter_outage_flags_once_faults_delivery_and_chain_finishes(self):
         h, host = self.make()
         original = h.driver._run_chain_once
+        now = [1000.0]
+        live = hazard.MeterLiveness(h.root / 'silent-meter', clock=lambda: now[0],
+                                    raw_clock=lambda: int(now[0] * 1e9))
+        reached = []
 
         def outage(*args, **kwargs):
-            with mock.patch.object(hazard.MeterLiveness, 'check', return_value={
-                    'silent_s': {'meter': 600.0}, 'outage_s': 600.0}):
+            for elapsed in (590, 600, 610, 1200):
+                now[0] = 1000.0 + elapsed
                 abort = kwargs['supervise']()
-            code, _, count, hits, proven = original(*args, **kwargs)
-            return code, abort, count, hits, proven
+                reached.append(elapsed)
+                if abort is not None:
+                    code, _, count, hits, proven = original(*args, **kwargs)
+                    return code, abort, count, hits, proven
+            return original(*args, **kwargs)
         h.driver._run_chain_once = outage
-        self.assertEqual(h.run(), h.driver.EXIT_ABORTED)
+        with mock.patch.object(hazard, 'MeterLiveness', return_value=live), \
+                mock.patch.object(hazard, 'await_meter_ready', return_value={'ready': True}):
+            self.assertEqual(h.run(), h.driver.EXIT_GO)
+        self.assertEqual(reached, [590, 600, 610, 1200])
+        flags = [f for f in h.flags if f['code'] == 'meter.supervision_fault'
+                 and f['observed'].get('event') == 'liveness_outage']
+        self.assertEqual(len(flags), 1)
+        self.assertEqual(flags[0]['observed']['silent_s'], {'meter': 600.0})
+        self.assertNotIn('chain stopped', flags[0]['detail'])
         for row in (h.result(), h.driver.run_courier.call_args.kwargs['report']['facts']):
+            self.assertTrue(row['fault'])
+            self.assertEqual(row['chain_outcome'], 'COMPLETE')
             self.assertIn('meter_liveness_outage', row['fault_reasons'])
         self.assertIn('meter_liveness_outage', h.hazard()['faults']['reasons'])
+        self.assertFalse((h.night / 'refusal.json').exists())
         self.assertEqual(host.ntp, 'on')
+
+    def test_hazard_monitor_still_stops_even_during_a_meter_outage(self):
+        for channel in ('battery', 'contention'):
+            with self.subTest(channel=channel):
+                h, _ = self.make()
+                original = h.driver._run_chain_once
+                reading = {'silent_s': {channel: 600.0}, 'outage_s': 600.0}
+
+                def outage(*args, **kwargs):
+                    with mock.patch.object(hazard.MeterLiveness, 'check', return_value={
+                            'silent_s': {'meter': 600.0}, 'outage_s': 600.0}), \
+                            mock.patch.object(hazard.MonitorLiveness, 'check', return_value=reading):
+                        abort = kwargs['supervise']()
+                    code, _, count, hits, proven = original(*args, **kwargs)
+                    return code, abort, count, hits, proven
+
+                h.driver._run_chain_once = outage
+                self.assertEqual(h.run(), h.driver.EXIT_ABORTED)
+                self.assertEqual(h.result()['aborted_reason'], hazard.STOPPED_MONITOR_OUTAGE)
+                flags = [f for f in h.flags if f['code'] == 'monitor.outage']
+                self.assertEqual(len(flags), 1)
+                self.assertEqual(flags[0]['observed'], reading)
+                self.assertIn('meter_liveness_outage', h.result()['fault_reasons'])
 
 
 class MeterLivenessTests(unittest.TestCase):

@@ -2584,7 +2584,7 @@ def _run_hazard_night_body(rt: Any, plan_path: Path, plan: Any, probes: Any,
     liveness = MonitorLiveness(journal_dir)
 
     # 5b. The mandatory KM003C DC-in reader. The arm probe above gates
-    # admission; sample liveness below stops a window after the outage bound.
+    # admission; RL-37 makes an in-window outage a fault, never a chain stop.
     meter: MonitorSupervisor | None = None
     meter_liveness = MeterLiveness(custody.joinpath(*METER_STREAM_DIR))
     meter_faults: set[str] = set()
@@ -2708,15 +2708,13 @@ def _run_hazard_night_body(rt: Any, plan_path: Path, plan: Any, probes: Any,
         if meter is not None:
             guarded("meter", poll_meter)
         reading = meter_liveness.check()
-        if reading is not None:
+        if reading is not None and meter_outage is None:
             meter_outage = reading
             window.flag("meter.supervision_fault", "DIAGNOSTIC", "PHYSICS", stage="window",
                         observed={"event": "liveness_outage", **meter_outage},
                         expected={"outage_s": MONITOR_OUTAGE_S},
-                        detail="no valid DC-in sample batch within the instrument outage bound; chain stopped")
-            return rt._refusal_mapping(STOPPED_MONITOR_OUTAGE,
-                f"KM003C DC-in stream silent for {MONITOR_OUTAGE_S:g} s; the driver stopped the chain",
-                meter_outage)
+                        detail="no valid DC-in sample batch within the instrument outage bound; "
+                               "collection continued (RL-37)")
         reading = guarded("disk", disk.check)
         if reading is not None:
             window.flag("disk.low", "DIAGNOSTIC", "PHYSICS", stage="window",
