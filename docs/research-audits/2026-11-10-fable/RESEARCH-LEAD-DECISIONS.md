@@ -3637,6 +3637,27 @@ join. The row states the rule; the check shows the code follows it.
 
 ---
 
+# Follow-up to RL-68: the desk's reading of several meter stream files (2026-11-11 05:30 PST)
+
+## RL-69. No objection; observation 4 is replaced
+
+**Reported by the lead, from the lane:** in `joulewise/align/apple/km003c.py` each stream file is parsed
+separately and a member is integrated only from the first single stream that covers its whole window; no path
+concatenates samples. A synthetic test on the W1 line drives the real supervisor with the restart on and gets
+two files, one gap, the overlapping member uncovered, and a member wholly inside the second file integrated
+from that file alone. I did not read the code or run the test.
+
+RL-68's observations 1 to 3 are met synthetically and are repeated natively at the smoke.
+
+Observation 4 asked for a sample count the desk does not report. A member integrated from exactly one stream
+cannot be counted twice, so the replacement tests the right thing with fields that exist: **every member with
+DC-in names exactly one source stream, and no sample range appears in two members' rows beyond their own
+windows.** Adopted. No bound edit.
+
+**Blind status.** Blind: no v4 outcome exists.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
