@@ -450,3 +450,129 @@ bound.
 None in any module I ran. The native checks in sections 7 and D6 still apply. Two more for this round: confirm
 on the MBP that no status push occurs between the pre-span status and chain exit during a real armed span, and
 that the Air poller stays quiet through the span and alarms if the post-span status does not arrive.
+
+---
+
+# Rounds 6-7 check (Fable 5.2), 2026-11-10 20:48 PST
+
+Scope: the round-6 fixes for R5-1 to R5-5 and the round-7 changes under research-lead ruling RL-26, plus a
+merge and port preview against the W1 integration line at `7770d6a4f` (claim contract B). Same binding rules.
+This section is uncommitted.
+
+| Branch | Head | Final verdict |
+|---|---|---|
+| `ops/2026-11-10-w1-reliability` | `e2fca0096` | **ADMIT.** No code finding is left open. It merges cleanly with claim B. Native checks and STRICT re-registration at the integrated head still gate the arm. |
+| `ops/2026-11-10-watchdog-unknown-keys` | `6e0647a61` | **ADMIT.** R5-3 to R5-5 are closed. W-01/W-02 stay open until the launchd push and the Air alarm are proven natively. The port to the W1 line is more than the one textual conflict (section S4). |
+
+## S1. What I ran
+
+All passing, one module at a time.
+
+- **Branch 1 at `e2fca0096`** (about 6 minutes): `tests.test_w1_reliability` 11, `_r2` 18, `_r3` 14, `_r4` 42, `_r5` 7,
+  `_r6` 3 (new), `_r7` 10 (new); `tests.align.test_v4_executed_closure` 4; `tests.align.test_v4_dynamic_closure` 10;
+  `tests.align.test_w1_smoke` 28; `tests.align.test_v4_series.ProductionPathTests` 1; `tests.align.test_v4_series_e2e`;
+  `tests.align.test_v4_kit` (`SessionParameterTests`, `W1HighPowerTests`, `W1DiskGateTests`);
+  `tests.align.test_v4_next_arm_packet` 46; `tests.align.test_km003c.NightChainTests` 2;
+  `tests.test_b5_driver_p3.MeterWindowTests` 7; `tests.external.test_km003c_monitor` 12 with 1 live-device skip; the
+  nine selected `tests.test_run_night` tests.
+- **Branch 2 at `6e0647a61`** (temporary worktree, removed): `tests.test_watchdog_reliability` 45,
+  `tests.test_magistrate_watchdog_v5` 4, `tests.test_magistrate_watchdog` 155, `tests.test_install_magistrate_watchdog` 12.
+- **Dry-run merge of branch 1 with `7770d6a4f`** (temporary worktree, `git merge --no-commit`, aborted and removed;
+  about 11 minutes): `tests.align.test_v4_executed_closure` 4, `tests.align.test_v4_dynamic_closure` 10,
+  `tests.align.test_v4_registration` 22, `tests.align.test_v4_claim_b_packet` 15, `tests.align.test_v4_series` 16,
+  `tests.align.test_v4_test_reserves` 2, `tests.align.test_v4_replacement_windows` 20,
+  `tests.align.test_v4_next_arm_packet` 46, `tests.test_w1_reliability_r3` 14, `_r4` 42, `_r7` 10.
+
+Probes re-run at the new heads (scratchpad only, synthetic):
+
+1. **R5-1:** with the summary helper made to raise, the refused R1 night now writes `result.json` and
+   `hazard_result.json` and runs the courier.
+2. **R5-2:** the item-253 text yields `step_30b` with both `episode.g0_unreleased` and
+   `thermal.start_gate_timeout`.
+3. **R5-3 and W-F together:** across a 2 h window, zero pushes inside the span; no `status_export_failed`
+   notice on the first tick after install or on the first launch after the span (new activation id, earlier
+   notices acknowledged).
+
+## S2. Branch 1
+
+| Item | Closed? | Note |
+|---|---|---|
+| R5-1 | Yes | `except Exception` around the summary; both the primary and the fallback result writes are tested with a raising helper. |
+| R5-2 | Yes | Digits allowed inside a token segment; near-miss tokens are still rejected. |
+| D-01 | Yes (RL-26) | Deviation row in `docs/align/v4/DEVIATIONS.md` with the ruling quoted verbatim and its source commit. |
+| RL-26 condition (a) | Yes | Every preflight, including a no-op, records the installed helper's path and SHA-256 beside the receipt-bound source digest, and checks the source bytes against that digest. A needed helper that is missing or unreadable refuses as `clock.frequency_helper_unreadable` before the helper or the installer runs. An unbound or drifted source refuses as `clock.frequency_helper_source_unbound`. |
+| RL-26 condition (b) | Yes | `clock_frequency_pre_t0` in the arm record: a read-only in-process kernel read after the arm checks and the disk gate, before the quiet-dwell stamp, with read start and finish times and the plan's t0. It adds no threshold; it refuses only if the read fails or t0 has passed. |
+
+Notes, none of them findings:
+
+- The source-binding check does not add an ordering constraint: `prepare` already requires a signed
+  registration receipt (`require_w1_ready`), so the smoke and the arm both run after registration.
+- The helper digest pair shows which binary ran, not that it was built from the bound source. Build
+  provenance stays in the provisioning record (native check 4).
+- "Last pre-t0 word" is the session's last read before the dwell, not a read at t0. The hazard arm at t0 still
+  owns admission.
+- The dynamic closure trace regenerated byte-identical in round 7. Regenerate it again after the claim B merge.
+
+## S3. Branch 2
+
+| Item | Closed? | Note |
+|---|---|---|
+| R5-3 | Yes | Freshness is judged against the delivered record's own `next_status_expected_epoch_s`; "nothing attempted yet" is not a failure; the launch boundary checkpoints and flushes (still gated by the span test) before classifying. Probe 3. |
+| R5-4 | Yes | The Air poller prints `notifier_text` saying a stale status can mean an unreadable armed plan; the doc says the same. |
+| R5-5 | Yes | The expectation now covers the fence end plus one 300 s tick; the record carries `span_fence_end_epoch_s`, `span_end_margin_s` and `desk_fence_end_announced: false`. |
+
+Nothing new found. Still open by design: W-01/W-02 (native launchd push, Air scheduler and notifier), and W-E.
+
+## S4. For the integration seat
+
+### Branch 1 into `7770d6a4f`
+
+- **Textual merge is clean.** Three files changed on both sides and all auto-merge:
+  `scripts/align_v4_next_arm_packet.py`, `docs/align/v4/DEVIATIONS.md`, `tests/align/test_v4_series.py`.
+- **`scripts/align_v4_next_arm_packet.py`: no overlap.** Branch 1 touches only `terminal_release_check`
+  (the `courier_delivery` receipt, about line 172). Claim B touches `build_packet` (thermal rulings, lead-ruling
+  rows, test-window bars) and adds a constant near line 42. The merged file passed the claim B packet tests and
+  the next-arm packet tests.
+- **`tests/align/test_v4_series.py`:** claim B edits `ManifestTests` and `PacketTests`; branch 1 edits
+  `FakeWorld.replay`. The whole module passed on the merged tree, including the replay over the new manifest.
+- **`docs/align/v4/DEVIATIONS.md`:** both sides add rows; no ID collision (`D-01` versus `B-*`, `V4-*`, `RL16-*`,
+  `U5-closure`). It is a bound file.
+- **After the merge, regenerate `docs/align/v4/dynamic_closure_trace.json`** and re-run both closure modules;
+  claim B changes executed series and packet code. The receipt template needs no further edit from branch 1.
+- **Still owed from F-09:** no exporter on either line writes the `courier_delivery` source into a window
+  record.
+
+### Branch 2 onto `7770d6a4f`
+
+The W1 line did not change its watchdog in claim B, so the picture is the same as before, but it is larger than
+"one conflict":
+
+1. **`scripts/magistrate_watchdog.py`: one textual conflict, in `transition()`.** Keep the W1 line's
+   `[*boundaries, event]` append and add the status checkpoint after it.
+2. **Missing module.** The watchdog branch imports `scripts.launch_align_r0` (the desk fence: `FENCE_NAME`,
+   `fence_lock`, `read_fence`). That file is not on the W1 line, and the W1 watchdog has no desk-fence code. A
+   three-way merge carries the import through without a conflict, so the merged watchdog would fail at import:
+   a crash-looping watchdog and no magistrate. Either port `scripts/launch_align_r0.py` (and
+   `scripts/run_align_r0_launchagent.sh` if the fence is used) or strip the desk-fence paths. Decide which
+   before merging.
+3. **W1-only watchdog features that must survive:** the J4 High Power restore on a launch-abandoned release
+   (`powermode.restore_owed` through `deps.power_runner`), the timing-receipt hold boundaries
+   (`joulewise.timing_receipts`), and `mark_production_entry("magistrate_watchdog")` (R7-10). The watchdog branch
+   has none of them. A three-way merge keeps them; a file copy would silently drop them.
+4. **`joulewise/night_gate.py`: two conflict hunks** (both lines added `ac_powermode` differently). Take the
+   W1 line's file; I checked earlier that the two parsers differ only in reason codes and comments, and that the
+   watchdog branch's parser accepts a W1-line plan.
+5. **New files to bring:** `scripts/watchdog_status.py`, `tests/test_watchdog_reliability.py`,
+   `tests/test_magistrate_watchdog_v5.py`, and `scripts/post_window_unstrand.sh` if it is still wanted (branch 1's
+   close and dead-man now cover most of it).
+6. **Registration.** `scripts/watchdog_status.py` (and `scripts/launch_align_r0.py` if ported) are executed by a
+   bound script and must be added to `v4_registration.ARTIFACTS`. That is another registration-code edit: get
+   it ratified the way D-01 was. The bound `configs/launchd/com.joulewise.magistrate.plist.template` changes too.
+7. **Run on the integrated tree before anything else:** the four watchdog modules, both closure modules, and a
+   `--dry-run` tick. None of my watchdog results apply to the ported file.
+
+## S5. Remaining gates
+
+No code finding remains on either branch. What is left is outside these branches: the native checks in
+sections 7, D6 and R6; STRICT re-registration at the integrated head; the Air poller and notifier; the
+`courier_delivery` exporter; and the watchdog port above.

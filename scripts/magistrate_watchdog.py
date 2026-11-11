@@ -59,6 +59,14 @@ from scripts.run_night import (  # noqa: E402
     make_probes,
 )
 from scripts.fixture_orphan_census import launch_observation  # noqa: E402
+from scripts.watchdog_status import (  # noqa: E402
+    StatusExporter, TRANSPORT_BUDGET_S, MIN_PUSH_INTERVAL_S,
+)
+from scripts.launch_align_r0 import (  # noqa: E402
+    FENCE_NAME as DESK_FENCE_NAME,
+    fence_lock as desk_fence_lock,
+    read_fence as read_desk_fence,
+)
 
 
 SCHEMA = "joulewise.magistrate_watchdog_state.v1"
@@ -123,6 +131,16 @@ STOP_TERM_GRACE_S = 60
 CLOCK_SKEW_LIMIT_S = 60
 GENERIC_BACKOFF_S = (120, 300, 900, 1800, 3600)
 USAGE_BACKOFF_S = (900, 1800, 3600, 7200, 7200)
+# W-01 (measurement-system audit 2026-11-10): operational escalation,
+# never permission to launch over an unreadable/possibly armed plan.
+UNSAFE_HOLD_DWELL_S = 15 * 60
+HEARTBEAT_STALE_S = 15 * 60
+STATUS_TRANSPORT_GUARD_S = 2 * TRANSPORT_BUDGET_S
+STATUS_ANNOUNCE_LEAD_S = 300 + STATUS_TRANSPORT_GUARD_S + MIN_PUSH_INTERVAL_S
+UNSAFE_STATES = frozenset({"HOLD_UNSAFE", "HOLD_PLAN_UNREADABLE", "HOLD_PLAN_MALFORMED",
+                          "HOLD_PLIST_UNREADABLE", "HOLD_CONFLICT", "HOLD_LOCK",
+                          "HOLD_PROCESS_TABLE", "HOLD_DESK_FENCE", "HOLD_STATUS_EXPORT",
+                          "HOLD_MODEL_CHECK", "HOLD_MODEL_REJECTED", "STRANDED"})
 
 # Keep this launch shape in one place.  The magistrate can change one tuple
 # after the owed permission-prompt bench without touching supervisor logic.
@@ -135,7 +153,7 @@ SESSION_ARGV_AFTER_PROMPT = (
     "--permission-prompts",
     "none",
     "--model",
-    "opus",
+    "claude-fable-5-2",
     "--effort",
     "high",
     "--allowedTools",
@@ -296,6 +314,7 @@ class Storage:
         self.root = root.expanduser().resolve(strict=False)
         self.dry_run = dry_run
         self.would_write: list[str] = []
+        self.status_exporter: StatusExporter | None = None
 
     def _write_path(self, path: Path) -> Path:
         resolved = path.expanduser().resolve(strict=False)
@@ -334,6 +353,8 @@ class Storage:
     def atomic_json(self, path: Path, value: Mapping[str, Any]) -> None:
         data = (json.dumps(value, sort_keys=True, indent=2) + "\n").encode("utf-8")
         self.atomic_bytes(path, data)
+        if path == self.root / "state.json" and self.status_exporter is not None:
+            self.status_exporter.checkpoint(value)
 
     def atomic_bytes(self, path: Path, data: bytes) -> None:
         path = self._write_path(path)
@@ -818,6 +839,7 @@ def _installed_agent_plans(
         plist = directory / f"{label}.plist"
         if plist not in entries:
             continue
+        source = "plist"
         try:
             document = plistlib.loads(storage.read_bytes(plist))
             argv = document["ProgramArguments"]
@@ -828,7 +850,10 @@ def _installed_agent_plans(
             plan_path = Path(argv[argv.index("--plan") + 1])
             if not plan_path.is_absolute():
                 raise ValueError("installed --plan must be absolute")
-            plan = NightPlan.from_mapping(json.loads(storage.read_text(plan_path)))
+            source = "plan_unreadable"
+            raw = json.loads(storage.read_text(plan_path))
+            source = "plan"
+            plan = NightPlan.from_mapping(raw)
             if plan.authored_epoch_s > now.timestamp():
                 raise ValueError("installed plan authored_epoch_s is in the future")
             deadman_epoch(plan)
@@ -844,7 +869,7 @@ def _installed_agent_plans(
                 raise ValueError(f"unreadable installed agent {plist}: {exc}") from exc
             # Keep readable siblings for their absolute drain deadlines, while
             # the snapshot error still holds launches and drains the resident.
-            errors.append(f"installed_agent_fence: unreadable installed agent {plist}: {exc}")
+            errors.append(f"installed_agent_fence: unreadable installed agent {plist}: {source}: {exc}")
     return plans
 
 
@@ -1793,7 +1818,7 @@ def clock_uncertain(state: dict[str, Any], wall: dt.datetime, monotonic: float) 
 def _hold_boundaries(state, new_state, reason, *, stamp=None):
     """Observed watchdog holds only; never infer thermal/measurement idle."""
     hold_states = {"FENCED", "HOLD_CENSUS", "HOLD_UNSAFE", "CLOCK_UNCERTAIN",
-                   "NETWORK_UNCERTAIN", "BACKOFF", "BACKOFF_USAGE", "STOPPED"}
+                   "NETWORK_UNCERTAIN", "BACKOFF", "BACKOFF_USAGE", "STOPPED"} | UNSAFE_STATES
     plans = [row[0] for row in state.get("fenced_checkouts", [])]
     signature = [new_state, reason, plans, state.get("activation_id"), state.get("backoff_boot_id")]
     previous = state.get("timing_hold")
@@ -1864,6 +1889,8 @@ def transition(
         "epoch_s": now.timestamp(),
     }
     storage.append_jsonl(storage.root / "events.jsonl", [*boundaries, event])
+    if storage.status_exporter is not None:
+        storage.status_exporter.checkpoint(state, transition=True)
     if notice is not None:
         pending = state.setdefault("notice_pending", [])
         notice_id = f"transition-{sequence}-{notice}"
@@ -2006,8 +2033,67 @@ def reset_backoff_after_reboot(
     )
 
 
+def desk_fence_active(
+    storage: Storage,
+    deps: Dependencies,
+    now_epoch_s: float,
+    state: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    """A bounded desk job fences relaunches without exempting any agent census.
+
+    No fence means no extra process-table call, lock file, or state mutation.
+    A malformed/unreadable fence fails closed through the callers' unsafe hold.
+    Stale removal shares a lock with the magistrate/LaunchAgent PID handoff.
+
+    Only decide() passes ``state``: it alone removes a stale fence, records the
+    removal and queues a notice. The launcher clears its own fence on every
+    trapped exit path, so a fence the watchdog must remove means launcher
+    cleanup did not finish (SIGKILL, crash or a failed Spotlight resume) and
+    corespotlightd/spotlightknowledged may still be SIGSTOPped. Boundary
+    rechecks treat a stale fence as inactive without removing it; the next
+    tick's decide() removes it and queues the notice.
+    """
+    path = storage.root / DESK_FENCE_NAME
+    if not storage.exists(path):
+        return None
+    with desk_fence_lock(storage.root, dry_run=storage.dry_run):
+        record = read_desk_fence(storage.root)
+        if record is None:
+            return None
+        why = "deadline passed"
+        if record["deadline"] > now_epoch_s:
+            try:
+                rows = deps.processes.snapshot()
+            except Exception as exc:
+                raise RuntimeError(f"desk process table unavailable: {exc}") from exc
+            if any(row.pid == record["pid"] and "<defunct>" not in row.command.casefold()
+                   for row in rows):
+                return record
+            why = "owner pid dead before deadline"
+        if state is None:
+            return None
+        storage.unlink(path)
+        storage.append_jsonl(storage.root / "events.jsonl", {
+            "schema": EVENT_SCHEMA, "kind": "desk_fence_stale_removed", "why": why,
+            "fence": dict(record), "epoch_s": now_epoch_s,
+        })
+        notices = state.setdefault("notice_pending", [])
+        notice_id = f"desk-fence-stale-{record['purpose']}-{record['pid']}"
+        if not any(isinstance(item, dict) and item.get("id") == notice_id for item in notices):
+            notices.append({
+                "id": notice_id, "kind": "desk_fence_stale", "epoch_s": now_epoch_s,
+                "reason": (f"desk fence {record['purpose']} (pid {record['pid']}) removed by the "
+                           f"watchdog: {why}. Launcher cleanup did not finish; check that "
+                           "corespotlightd/spotlightknowledged are not stopped (ps -o stat=) and "
+                           "read r0-launches/<id>/spotlight-stopped and stderr.log under custody."),
+            })
+    return None
+
+
 def _remote_probe_allowed(storage: Storage, deps: Dependencies, state: Mapping[str, Any]) -> bool:
     now = deps.wall_now().astimezone()
+    if desk_fence_active(storage, deps, now.timestamp()):
+        return False
     snapshot = load_plans(storage, now_epoch_s=now.timestamp())
     if snapshot.errors:
         raise ValueError("; ".join(snapshot.errors))
@@ -2019,6 +2105,61 @@ def _remote_probe_allowed(storage: Storage, deps: Dependencies, state: Mapping[s
     )
 
 
+def _configure_status_export(storage, deps, state):
+    exporter = storage.status_exporter
+    if exporter is None:
+        return
+
+    def allowed():
+        try:
+            current = load_state(storage)
+            if not _remote_probe_allowed(storage, deps, current):
+                return False
+            # Leave enough time for the entire bounded transport before a span.
+            now = deps.wall_now().timestamp()
+            snapshot = load_plans(storage, now_epoch_s=now)
+            return not snapshot.errors and not any(
+                now < p.t0_epoch_s - PLAN_LEAD_S <= now + STATUS_TRANSPORT_GUARD_S
+                for p in snapshot.plans if plan_is_armed(p, now, storage, current))
+        except Exception:
+            return False  # an unknown span never licenses network Git
+
+    def span_bounds():
+        now = deps.wall_now().timestamp()
+        snapshot = load_plans(storage, now_epoch_s=now)
+        # Announce at the final pre-span tick, rather than suppressing Air
+        # alarms days early for a far-future authored plan.
+        current = load_state(storage)
+        plans = [p for p in snapshot.plans if plan_is_armed(p, now, storage, current)
+                 and p.t0_epoch_s - PLAN_LEAD_S <= now + STATUS_ANNOUNCE_LEAD_S]
+        return (max((plan_completion_epoch(p) for p in plans), default=None),
+                max((deadman_epoch(p) + COURIER_LOCK_FRESH_S for p in plans), default=None))
+
+    exporter.probe_allowed = allowed
+    exporter.span_bounds = span_bounds
+
+
+def _status_export_notice(storage, deps, state):
+    """W-H: delivery failure uses the magistrate channel without gating launch."""
+    try:
+        if storage.status_exporter is not None:
+            # Try the current checkpoint before classifying the delivery. The
+            # exporter's fresh plan/desk gate still forbids in-span transport.
+            storage.status_exporter.checkpoint(state)
+            storage.status_exporter.flush()
+        reason = (storage.status_exporter.launch_hold() if storage.status_exporter is not None
+                  else getattr(storage, "status_export_error", None))
+    except Exception as exc:
+        reason = f"status_export: {type(exc).__name__}"
+    if reason:
+        if any(isinstance(n, dict) and n.get("kind") == "status_export_failed"
+               for n in state.get("notice_pending", [])):
+            return
+        _queue_safety_notice(storage, state, deps.wall_now().astimezone(),
+            notice_id=f"status-export-failed-{state.get('activation_id') or 'pre-activation'}",
+            kind="status_export_failed", reason=str(reason))
+
+
 def _probe_remote_stop(storage: Storage, deps: Dependencies, state: Mapping[str, Any]) -> StopObservation:
     if deps.git_probe is remote_stop_probe:
         return remote_stop_probe(probe_allowed=lambda: _remote_probe_allowed(storage, deps, state))
@@ -2026,21 +2167,23 @@ def _probe_remote_stop(storage: Storage, deps: Dependencies, state: Mapping[str,
 
 
 def _launch_fence(storage: Storage, deps: Dependencies, state: Mapping[str, Any]) -> Decision | None:
-    """Refresh both fence sources and time at each launch boundary."""
+    """Refresh plan and desk fence sources at each launch boundary."""
     try:
         now = deps.wall_now().astimezone()
+        if desk_fence_active(storage, deps, now.timestamp()):
+            return Decision("FENCED", "desk fence active at launch boundary")
         snapshot = load_plans(storage, now_epoch_s=now.timestamp())
         if snapshot.errors:
             return Decision("HOLD_UNSAFE", "; ".join(snapshot.errors))
         now = deps.wall_now().astimezone()
         if any(plan_span_active(plan, now.timestamp(), storage, state) for plan in snapshot.plans):
             return Decision("FENCED", "plan span active at launch boundary")
-    except (OSError, ValueError, OverflowError) as exc:
+    except (OSError, ValueError, OverflowError, RuntimeError) as exc:
         return Decision("HOLD_UNSAFE", f"launch_fence: {exc}")
     return None
 
 
-def decide(
+def _decide(
     storage: Storage,
     deps: Dependencies,
     state: dict[str, Any],
@@ -2064,6 +2207,10 @@ def decide(
                 storage, state, [f"reader: {type(exc).__name__}: {exc}"], wall.timestamp())
     if snapshot.errors:
         return Decision("HOLD_UNSAFE", "; ".join(snapshot.errors))
+    try:
+        desk = desk_fence_active(storage, deps, wall.timestamp(), state)
+    except (OSError, ValueError, OverflowError, RuntimeError) as exc:
+        return Decision("HOLD_UNSAFE", f"desk_fence: {exc}")
     # Delivery is only a candidate for release. The courier and driver can
     # both outlive courier.sent; each has its own process-table observation.
     try:
@@ -2207,8 +2354,9 @@ def decide(
             lock = None
 
     active_plans = [plan for plan in plans if plan_span_active(plan, wall.timestamp(), storage, state)]
-    if probe_span_active:
-        stop = StopObservation("NOT_PROBED", "remote stop probe skipped during plan span")
+    if probe_span_active or desk:
+        stop = StopObservation("NOT_PROBED", "remote stop probe skipped during "
+                               + ("plan span" if probe_span_active else "desk span"))
     else:
         try:
             stop = _probe_remote_stop(storage, deps, state)
@@ -2239,11 +2387,14 @@ def decide(
         if not census.empty:
             return Decision("HOLD_CENSUS", "production census non-empty inside plan span")
         return Decision("FENCED", "plan span active and census empty")
+    if desk:
+        return Decision("FENCED", f"desk fence active: {desk['purpose']}", adopt=owner is not None)
     if stop.state == "STOPPED":
         return Decision("STOPPED", stop.detail, adopt=owner is not None)
     if stop.state not in {"CLEAR", "NOT_PROBED"}:
         return Decision("NETWORK_UNCERTAIN", stop.detail, adopt=owner is not None)
     if owner is not None:
+        _observe_magistrate_heartbeat(storage, state, wall, lock)
         return Decision("ACTIVE", f"owned pid {owner.pid} is live", adopt=True)
     if wall.timestamp() < float(state.get("next_eligible_epoch_s", 0.0)):
         waiting_state = (
@@ -2255,6 +2406,242 @@ def decide(
     if lock is not None:
         return Decision("HOLD_UNSAFE", "magistrate.lock could not be cleared")
     return _launch_fence(storage, deps, state) or Decision("LAUNCHING", "all launch predicates clear", launch=True)
+
+
+def _unsafe_state(reason):
+    if reason.startswith("desk_fence:"):
+        return "HOLD_DESK_FENCE"
+    if reason.startswith(("night_plan_unreadable ", "night_plan_unreadable:")):
+        return "HOLD_PLAN_UNREADABLE"
+    if reason.startswith(("night_plan_malformed ", "night_plan_malformed:")):
+        return "HOLD_PLAN_MALFORMED"
+    if reason.startswith("installed_agent_fence:"):
+        if ": plan_unreadable:" in reason:
+            return "HOLD_PLAN_UNREADABLE"
+        return "HOLD_PLAN_MALFORMED" if ": plan:" in reason else "HOLD_PLIST_UNREADABLE"
+    if reason.startswith("plan_conflict:"):
+        return "HOLD_CONFLICT"
+    if reason.startswith("process table unavailable:"):
+        return "HOLD_PROCESS_TABLE"
+    if reason.startswith(("corrupt_lock_", "dead_lock_", "magistrate.lock")):
+        return "HOLD_LOCK"
+    if reason.startswith("status_export:"):
+        return "HOLD_STATUS_EXPORT"
+    if reason.startswith("model_rejected:"):
+        return "HOLD_MODEL_REJECTED"
+    if reason.startswith("model_check:"):
+        return "HOLD_MODEL_CHECK"
+    return "HOLD_UNSAFE"
+
+
+def _queue_safety_notice(storage, state, now, *, notice_id, kind, reason):
+    """Use the existing notice_pending / notice.ack path immediately."""
+    seen = state.setdefault("safety_notice_ids", [])
+    if notice_id in seen:
+        return
+    pending = state.setdefault("notice_pending", [])
+    if not any(isinstance(item, dict) and item.get("id") == notice_id for item in pending):
+        pending.append({"id": notice_id, "kind": kind, "reason": reason, "epoch_s": now.timestamp()})
+    seen.append(notice_id)
+    storage.append_jsonl(storage.root / "events.jsonl", {
+        "schema": EVENT_SCHEMA, "kind": "safety_notice", "notice_id": notice_id,
+        "notice_kind": kind, "reason": reason, "epoch_s": now.timestamp(),
+    })
+
+
+def _observe_magistrate_heartbeat(storage, state, now, lock):
+    """W-02: a live PID alone is not session progress. Notice only; no kills.
+
+    Primary signal: growth in this supervisor's attempt-N.stream.jsonl.
+    The model's PID ACTIVATION_ID EPOCH_SECONDS heartbeat is a second input.
+    Old activations, unreadable/malformed/future stamps cannot prove liveness.
+    """
+    activation, pid = str(lock.get("activation_id")), lock.get("pid")
+    watch = state.get("heartbeat_watch")
+    if not isinstance(watch, dict) or (watch.get("activation_id"), watch.get("pid")) != (activation, pid):
+        watch = {"activation_id": activation, "pid": pid, "first_observed_epoch_s": now.timestamp(),
+                 "episode": 0, "notified": False}
+        state["heartbeat_watch"] = watch
+    launched = lock.get("activation_spawn_epoch_s", lock.get("launch_epoch_s"))
+    if isinstance(launched, bool) or not isinstance(launched, (int, float)) or not math.isfinite(launched):
+        launched = watch["first_observed_epoch_s"]
+    status, epoch = "missing", None
+    try:
+        raw = storage.read_bytes_bounded(storage.root / "heartbeat", 4096)
+        if len(raw) > 4096:
+            raise ValueError("heartbeat oversized")
+        fields = raw.decode("utf-8").split()
+        if len(fields) != 3:
+            raise ValueError("heartbeat shape")
+        if fields[0] != str(pid) or fields[1] != activation:
+            status = "identity_mismatch"
+        else:
+            candidate = float(fields[2])
+            if not math.isfinite(candidate) or candidate < launched or candidate > now.timestamp() + 5:
+                raise ValueError("heartbeat epoch")
+            epoch, status = candidate, "observed"
+    except FileNotFoundError:
+        pass
+    except (OSError, ValueError, UnicodeError):
+        status = "unreadable"
+    # Stat only the exact supervisor-owned output, never parse model text.
+    # First observation uses mtime rather than crediting discovery as progress;
+    # later observations credit only growth of the same inode. Replacement or
+    # truncation resets the baseline without manufacturing a fresh heartbeat.
+    stream_status = "missing"
+    stream_epoch = watch.get("stream_epoch_s")
+    attempt = state.get("attempt", 1)
+    if isinstance(attempt, int) and not isinstance(attempt, bool) and attempt > 0 and re.fullmatch(r"[A-Za-z0-9_-]+", activation):
+        path = storage.root / "attempts" / activation / f"attempt-{attempt}.stream.jsonl"
+        try:
+            metadata = path.lstat()
+            if not stat.S_ISREG(metadata.st_mode):
+                raise ValueError("stream not regular")
+            identity = [metadata.st_dev, metadata.st_ino]
+            previous = watch.get("stream_identity")
+            if previous is None and metadata.st_size > 0 and launched <= metadata.st_mtime <= now.timestamp() + 5:
+                stream_epoch = metadata.st_mtime
+            elif previous == identity and metadata.st_size > watch.get("stream_size", 0):
+                stream_epoch = now.timestamp()
+            elif previous != identity or metadata.st_size < watch.get("stream_size", 0):
+                stream_epoch = None
+            watch.update(stream_identity=identity, stream_size=metadata.st_size, stream_epoch_s=stream_epoch)
+            stream_status = "observed" if stream_epoch is not None else "awaiting_growth"
+        except FileNotFoundError:
+            pass
+        except (OSError, ValueError):
+            stream_status = "unreadable"
+    valid_epochs = [stamp for stamp in (epoch, stream_epoch) if stamp is not None]
+    progress_epoch = max(valid_epochs) if valid_epochs else launched
+    age = max(0.0, now.timestamp() - progress_epoch)
+    stale = age >= HEARTBEAT_STALE_S
+    state["magistrate_heartbeat"] = {"activation_id": activation, "pid": pid, "status": status,
+                                     "epoch_s": epoch, "age_s": age, "stale": stale,
+                                     "stream_status": stream_status, "stream_epoch_s": stream_epoch,
+                                     "observed_epoch_s": now.timestamp()}
+    if stale and not watch["notified"]:
+        watch["episode"] += 1
+        _queue_safety_notice(storage, state, now,
+                             notice_id=f"heartbeat-{activation}-{pid}-{watch['episode']}",
+                             kind="magistrate_heartbeat_stale",
+                             reason=f"activation {activation} pid {pid}: heartbeat {status}, age {age:.0f}s")
+        watch["notified"] = True
+    elif not stale:
+        watch["notified"] = False
+
+
+def _surface_unsafe_decision(storage, deps, state, decision, now):
+    if decision.state not in UNSAFE_STATES:
+        if decision.state not in {"CLOCK_UNCERTAIN", "NETWORK_UNCERTAIN"}:
+            state.pop("unsafe_hold", None)
+        return decision
+    category = _unsafe_state(decision.reason)
+    hold = state.get("unsafe_hold")
+    if not isinstance(hold, dict):
+        hold = {"since_epoch_s": now.timestamp(), "since_monotonic": deps.monotonic()}
+        state["unsafe_hold"] = hold
+    # Changing malformed bytes or switching unsafe categories does not restart
+    # the same continuous unsafe episode's dwell allowance.
+    elapsed = max(0.0, now.timestamp() - hold["since_epoch_s"],
+                  deps.monotonic() - hold["since_monotonic"])
+    hold.update(category=category, reason=decision.reason, elapsed_s=elapsed,
+                dwell_limit_s=UNSAFE_HOLD_DWELL_S)
+    digest = hashlib.sha256(decision.reason.encode("utf-8")).hexdigest()
+    activation = str(state.get("activation_id") or "pre-activation")
+    notice_id = f"unsafe-{hold['since_epoch_s']}-{category}-{digest}"
+    kind = category.lower()
+    if decision.reason.startswith("corrupt_lock_"):
+        notice_id = f"corrupt-lock-{activation}-{digest}"
+        kind = decision.reason.split(":", 1)[0]
+    elif category == "HOLD_CONFLICT":
+        kind = "plan_conflict"
+    _queue_safety_notice(storage, state, now, notice_id=notice_id, kind=kind, reason=decision.reason)
+    if elapsed >= UNSAFE_HOLD_DWELL_S:
+        _queue_safety_notice(storage, state, now,
+                             notice_id=f"stranded-{hold['since_epoch_s']}", kind="stranded",
+                             reason=f"unsafe hold exceeded {UNSAFE_HOLD_DWELL_S}s: {category}: {decision.reason}")
+        return Decision("STRANDED", f"{category}: dwell limit exceeded; {decision.reason}",
+                        launch=False, adopt=decision.adopt)
+    return dataclasses.replace(decision, state=category, launch=False)
+
+
+def decide(storage, deps, state, *, plan_snapshot=None):
+    decision = _decide(storage, deps, state, plan_snapshot=plan_snapshot)
+    if decision.launch:
+        reason = state.get("model_startup_hold")
+        _status_export_notice(storage, deps, state)
+        if reason:
+            decision = Decision("HOLD_UNSAFE", str(reason))
+    return _surface_unsafe_decision(storage, deps, state, decision, deps.wall_now().astimezone())
+
+
+class ModelStartupError(RuntimeError):
+    pass
+
+
+MODEL_STARTUP_WINDOW_S = 60
+
+
+def model_startup_check(stdout: str, stderr: str, *, elapsed_s=0, assistant_output=False) -> None:
+    """Check the supervised CLI's startup diagnostics; never spawn a probe.
+
+    A rejection latches until an operator verifies the CLI and clears the hold.
+    The real activation already has PID ownership and the stand-down ladder.
+    """
+    if assistant_output or not 0 <= elapsed_s <= MODEL_STARTUP_WINDOW_S:
+        return
+    model = SESSION_ARGV_AFTER_PROMPT[SESSION_ARGV_AFTER_PROMPT.index("--model") + 1]
+    diagnostics = []
+    for line in stderr.splitlines():
+        if re.match(r"^(?:error[: ]|api error[: ]|invalid model|unknown model|unsupported model|unrecognized model|there.s an issue with the selected model)", line.strip(), re.I):
+            diagnostics.append(line)
+    for line in stdout.splitlines():
+        try:
+            value = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(value, dict) and (value.get("type") == "error"
+                or value.get("type") == "result" and value.get("is_error") is True
+                or value.get("type") == "system" and value.get("subtype") == "error"):
+            diagnostics.append(json.dumps({key: value[key] for key in ("error", "errors", "result", "message") if key in value}))
+        if isinstance(value, dict) and value.get("type") == "assistant":
+            return
+    rejection = r"(?:invalid|unknown|unsupported|unrecognized|not[ _-](?:found|available|supported|exist)|does not exist|not have access)"
+    for diagnostic in diagnostics:
+        if re.search(r"\bmodel\b|model_", diagnostic, re.I) and re.search(rejection, diagnostic, re.I):
+            raise ModelStartupError(f"model_rejected: CLI rejected {model}; verify CLI/model before clearing hold")
+
+
+def session_output_tails(stdout_path: Path, stderr_path: Path) -> tuple[str, str]:
+    pieces = []
+    for path in (stdout_path, stderr_path):
+        try:
+            with path.open("rb") as handle:
+                handle.seek(0, os.SEEK_END)
+                handle.seek(max(0, handle.tell() - 4096))
+                pieces.append(handle.read(4096).decode("utf-8", errors="replace"))
+        except OSError:
+            pieces.append("")
+    return pieces[0], pieces[1]
+
+
+def session_has_assistant_output(path: Path) -> bool:
+    # Inspect the whole startup stream: an earlier assistant line may have
+    # scrolled beyond the diagnostic tail by the time the child exits.
+    try:
+        with path.open(encoding="utf-8", errors="replace") as source:
+            for line in source:
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(row, dict) and row.get("type") == "assistant":
+                    return True
+    except FileNotFoundError:
+        pass
+    except OSError:
+        return True  # unknown output cannot prove an unused startup
+    return False
 
 
 def resolve_session_binary(path: Path) -> Path:
@@ -2373,6 +2760,8 @@ class ResidentSupervisor:
         self.lock_record = lock_record
         self.stdout_path = stdout_path
         self.stderr_path = stderr_path
+        self.started_monotonic = deps.monotonic()
+        _configure_status_export(storage, deps, state)
         cached_stop = state.get("remote_stop")
         if isinstance(cached_stop, Mapping):
             cached_state = str(cached_stop.get("state", "NETWORK_UNCERTAIN"))
@@ -2447,13 +2836,7 @@ class ResidentSupervisor:
         return observation
 
     def _output_tail(self) -> str:
-        pieces: list[str] = []
-        for path in (self.stdout_path, self.stderr_path):
-            try:
-                pieces.append(self.storage.read_text(path)[-4096:])
-            except OSError:
-                pass
-        return "\n".join(pieces)
+        return "\n".join(session_output_tails(self.stdout_path, self.stderr_path))
 
     def _finish_child(self, exit_code: int, now: dt.datetime) -> bool:
         requested = self.storage.exists(self.storage.root / "standdown.request")
@@ -2461,6 +2844,26 @@ class ResidentSupervisor:
         self.state["resident_session"] = None
         self.state["clock_drain"] = False
         self.state["resident_hold_drain"] = None
+        # CLI model validation happens in the owned activation, before it can
+        # do useful work. Explicit rejection is terminal, even if CLI returns 0
+        # or a stand-down request arrived at the same time: no retry loop.
+        try:
+            launched = self.lock_record.get("activation_spawn_epoch_s", self.lock_record.get("launch_epoch_s", 0))
+            elapsed = max(now.timestamp() - launched, self.deps.monotonic() - self.started_monotonic)
+            model_startup_check(*session_output_tails(self.stdout_path, self.stderr_path),
+                                elapsed_s=elapsed, assistant_output=(elapsed <= MODEL_STARTUP_WINDOW_S
+                                    and session_has_assistant_output(self.stdout_path)))
+        except ModelStartupError as exc:
+            self.state["model_startup_hold"] = str(exc)
+            if requested:
+                self.storage.unlink(self.storage.root / "standdown.request")
+                self.state["standdown_phase"] = "COMPLETE"
+            decision = _surface_unsafe_decision(self.storage, self.deps, self.state,
+                                               Decision("HOLD_UNSAFE", str(exc)), now)
+            transition(self.storage, self.state, decision.state, decision.reason, now)
+            self.storage.atomic_json(self.storage.root / "state.json", self.state)
+            print(str(exc), file=sys.stderr)
+            return False
         if requested:
             self.storage.unlink(self.storage.root / "standdown.request")
             self.state["standdown_phase"] = "COMPLETE"
@@ -2687,7 +3090,14 @@ class ResidentSupervisor:
         self.storage.atomic_json(self.storage.root / "state.json", self.state)
         return True
 
-    def step(self) -> bool:
+    def step(self, *, publish_background: bool = True) -> bool:
+        try:
+            return self._step()
+        finally:
+            if publish_background and self.storage.status_exporter is not None:
+                self.storage.status_exporter.flush_background()
+
+    def _step(self) -> bool:
         now = self.deps.wall_now().astimezone()
         monotonic = self.deps.monotonic()
         # The email acknowledgement is durable evidence and must win even if
@@ -2696,6 +3106,7 @@ class ResidentSupervisor:
         exit_code = self.child.poll()
         if exit_code is not None:
             return self._finish_child(exit_code, now)
+        _observe_magistrate_heartbeat(self.storage, self.state, now, self.lock_record)
 
         uncertain = clock_uncertain(self.state, now, monotonic)
         if uncertain:
@@ -2723,11 +3134,13 @@ class ResidentSupervisor:
             )
         resident_hold = self.state.get("resident_hold_drain")
         if isinstance(resident_hold, Mapping):
+            decision = _surface_unsafe_decision(self.storage, self.deps, self.state,
+                Decision("HOLD_UNSAFE", str(resident_hold.get("reason", "durable unsafe-plan hold"))), now)
             return self._enforce_drain(
                 now,
                 monotonic,
                 reason=str(resident_hold.get("reason", "durable unsafe-plan hold")),
-                state_name="HOLD_UNSAFE",
+                state_name=decision.state,
                 plan=plan,
                 notice=(
                     str(resident_hold["notice"])
@@ -2749,13 +3162,15 @@ class ResidentSupervisor:
                 "stage": None,
                 "started": False,
             }
+            decision = _surface_unsafe_decision(self.storage, self.deps, self.state,
+                                                Decision("HOLD_UNSAFE", reason), now)
             return self._enforce_drain(
                 now,
                 monotonic,
                 reason=reason,
-                state_name="HOLD_UNSAFE",
+                state_name=decision.state,
                 plan=plan,
-                notice=notice,
+                notice=None,  # the immediate safety notice was already queued
                 record_resident_start=True,
             )
 
@@ -2797,6 +3212,8 @@ class ResidentSupervisor:
         while True:
             started = self.deps.monotonic()
             if not self.step():
+                if self.storage.status_exporter is not None:
+                    self.storage.status_exporter.finish()
                 return
             elapsed = max(0.0, self.deps.monotonic() - started)
             self.deps.sleep(max(0.0, SUPERVISOR_POLL_S - elapsed))
@@ -2808,7 +3225,7 @@ def start_session(
     state: dict[str, Any],
     *,
     binary_path: Path | None = None,
-) -> ResidentSupervisor:
+) -> ResidentSupervisor | None:
     now = deps.wall_now().astimezone()
     activation_id = str(uuid.uuid4())
     activation_spawn_epoch_s = now.timestamp()
@@ -2830,6 +3247,9 @@ def start_session(
     )
     binary = resolve_session_binary(requested_binary)
     binary_version = deps.version_probe(binary)
+    if state.get("model_startup_hold"):
+        raise ModelStartupError(str(state["model_startup_hold"]))
+    _status_export_notice(storage, deps, state)
     prompt = render_prompt(storage, state, now)
     attempt_dir = storage.root / "attempts" / activation_id
     storage.mkdir(attempt_dir)
@@ -2853,6 +3273,14 @@ def start_session(
         "binary_version": binary_version,
         "status": "STARTING",
     }
+    # Re-read every plan/desk source immediately before spawn; never rely on
+    # the tick's pre-fork observation after binary/version/prompt work.
+    fence = _launch_fence(storage, deps, state)
+    if fence is not None:
+        fence = _surface_unsafe_decision(storage, deps, state, fence, deps.wall_now().astimezone())
+        transition(storage, state, fence.state, fence.reason, deps.wall_now().astimezone())
+        storage.atomic_json(storage.root / "state.json", state)
+        return None
     storage.exclusive_json(storage.root / "magistrate.lock", starting_lock)
     try:
         child = deps.spawn(argv, CANONICAL_REPO, stdout_path, stderr_path)
@@ -2865,6 +3293,13 @@ def start_session(
         process = process_by_pid(deps.processes.snapshot(), child.pid)
         if process is not None:
             break
+        exit_code = child.poll()
+        if exit_code is not None:
+            storage.unlink(storage.root / "magistrate.lock")
+            model_startup_check(*session_output_tails(stdout_path, stderr_path),
+                elapsed_s=deps.wall_now().timestamp() - activation_spawn_epoch_s,
+                assistant_output=session_has_assistant_output(stdout_path))
+            raise RuntimeError(f"session exited during startup exit={exit_code}")
         deps.sleep(0.1)
     if process is None:
         raise RuntimeError(f"spawned pid {child.pid} absent from process table")
@@ -2906,6 +3341,14 @@ def start_session_guarded(
 ) -> ResidentSupervisor | None:
     try:
         return start_session(storage, deps, state, binary_path=binary_path)
+    except ModelStartupError as exc:
+        now = deps.wall_now().astimezone()
+        state["model_startup_hold"] = str(exc)
+        decision = _surface_unsafe_decision(storage, deps, state, Decision("HOLD_UNSAFE", str(exc)), now)
+        transition(storage, state, decision.state, decision.reason, now)
+        storage.atomic_json(storage.root / "state.json", state)
+        print(str(exc), file=sys.stderr)
+        return None
     except Exception as exc:
         now = deps.wall_now().astimezone()
         apply_backoff(
@@ -3070,6 +3513,15 @@ def service_lock(storage: Storage) -> Iterable[int | None]:
 
 
 def tick(storage: Storage, deps: Dependencies, *, dry_run: bool = False) -> Decision:
+    _configure_status_export(storage, deps, load_state(storage))
+    try:
+        return _tick(storage, deps, dry_run=dry_run)
+    finally:
+        if not dry_run and storage.status_exporter is not None:
+            storage.status_exporter.flush()
+
+
+def _tick(storage: Storage, deps: Dependencies, *, dry_run: bool = False) -> Decision:
     state = load_state(storage)
     observed_wall = deps.wall_now().astimezone()
     snapshot = load_plans(storage, now_epoch_s=observed_wall.timestamp())
@@ -3084,8 +3536,6 @@ def tick(storage: Storage, deps: Dependencies, *, dry_run: bool = False) -> Deci
     notice = None
     if decision.state in {"CLOCK_UNCERTAIN", "NETWORK_UNCERTAIN", "HOLD_CENSUS"}:
         notice = decision.state.lower()
-    elif decision.reason.startswith("plan_conflict:"):
-        notice = "plan_conflict"
     elif decision.reason.startswith("corrupt_lock_"):
         notice = decision.reason.split(":", 1)[0]
         # Keep event dedupe independent of notice acknowledgements, and reset
@@ -3118,7 +3568,7 @@ def tick(storage: Storage, deps: Dependencies, *, dry_run: bool = False) -> Deci
     storage.atomic_json(storage.root / "state.json", state)
     if dry_run:
         return decision
-    if decision.state == "HOLD_UNSAFE":
+    if decision.state in UNSAFE_STATES:
         supervisor = adopt_recorded_session_for_drain(
             storage,
             deps,
@@ -3127,7 +3577,7 @@ def tick(storage: Storage, deps: Dependencies, *, dry_run: bool = False) -> Deci
             notice=notice,
         )
         if supervisor is not None:
-            supervisor.step()
+            supervisor.step(publish_background=False)
         return decision
     if not decision.launch and not decision.adopt:
         return decision
@@ -3136,6 +3586,7 @@ def tick(storage: Storage, deps: Dependencies, *, dry_run: bool = False) -> Deci
         fence = _launch_fence(storage, deps, state)
         if fence is not None:
             now = deps.wall_now().astimezone()
+            fence = _surface_unsafe_decision(storage, deps, state, fence, now)
             transition(storage, state, fence.state, fence.reason, now)
             storage.atomic_json(storage.root / "state.json", state)
             return fence
@@ -3231,6 +3682,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 3
     storage = Storage(args.custody_root, dry_run=args.dry_run)
     deps = real_dependencies()
+    try:
+        storage.status_exporter = StatusExporter(storage, REPO_ROOT)
+    except ValueError:
+        # A broken export configuration cannot remove the magistrate channel.
+        storage.status_export_error = "status_export: MAGISTRATE_WATCHDOG_STATUS_HOST missing or invalid"
     if args.dry_run:
         storage.mkdir(storage.root)
         storage.would_write.append(f"open_and_flock {storage.root / 'watchdog.lock'}")

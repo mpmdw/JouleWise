@@ -802,6 +802,7 @@
    "scripts/issue_p8_pin_delta.py",
    "scripts/km003c_monitor.py",
    "scripts/land_window_records.py",
+   "scripts/launch_align_r0.py",
    "scripts/launch_window.py",
    "scripts/magistrate_watchdog.py",
    "scripts/make_figures.py",
@@ -825,6 +826,7 @@
    "scripts/paper_prefill_resolvability_projection.py",
    "scripts/paper_renumber_refs.py",
    "scripts/paper_terms_lint.py",
+   "scripts/post_window_unstrand.sh",
    "scripts/prewindow_check.sh",
    "scripts/produce_t0_rehearsal_bundle.py",
    "scripts/project_identity_pins.py",
@@ -850,6 +852,7 @@
    "scripts/reserve_calibration_window_bracket.py",
    "scripts/restore_run_to_scratch.py",
    "scripts/restore_v5_null_reservation.py",
+   "scripts/run_align_r0_launchagent.sh",
    "scripts/run_campaign.py",
    "scripts/run_night.py",
    "scripts/sample_quiet_predicate_evidence.py",
@@ -868,6 +871,7 @@
    "scripts/verify_family_marker.py",
    "scripts/verify_p8_replay.py",
    "scripts/verify_receipt_histsem.py",
+   "scripts/watchdog_status.py",
    "scripts/window_status.sh",
    "scripts/write_b5_identity_pins.py",
    "scripts/write_b5_window_plan.py",
@@ -1016,7 +1020,11 @@
   "scripts/align_w1_budget_procedure.py",
   "scripts/generate_matrix.py",
   "scripts/km003c_monitor.py",
-  "scripts/run_night.py"
+  "scripts/launch_align_r0.py",
+  "scripts/post_window_unstrand.sh",
+  "scripts/run_align_r0_launchagent.sh",
+  "scripts/run_night.py",
+  "scripts/watchdog_status.py"
  ],
  "executed": [
   "joulewise/__init__.py",
@@ -1202,11 +1210,20 @@
   "scripts/fixture_orphan_census.py",
   "scripts/generate_matrix.py",
   "scripts/km003c_monitor.py",
+  "scripts/launch_align_r0.py",
   "scripts/night_chains/align_r1_rehearsal.zsh",
+  "scripts/post_window_unstrand.sh",
+  "scripts/run_align_r0_launchagent.sh",
   "scripts/run_night.py",
-  "scripts/validate_align_v4_w1_plan.py"
+  "scripts/validate_align_v4_w1_plan.py",
+  "scripts/watchdog_status.py"
  ],
- "not_bound": [],
+ "not_bound": [
+  "scripts/launch_align_r0.py",
+  "scripts/post_window_unstrand.sh",
+  "scripts/run_align_r0_launchagent.sh",
+  "scripts/watchdog_status.py"
+ ],
  "not_strict": [],
  "scenarios": {
   "arm_install_session": {

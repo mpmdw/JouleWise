@@ -27,6 +27,23 @@ CANONICAL_REPO = Path("/Users/edr/code/JouleWise")
 
 
 class InstallMagistrateWatchdogTests(unittest.TestCase):
+    def test_missing_or_invalid_status_host_refuses_before_install_or_render_writes(self):
+        for host in ('', 'dynamic/name', 'bad..host', 'bad.lock'):
+            self.environment['MAGISTRATE_WATCHDOG_STATUS_HOST'] = host
+            for mode in (('--install',), ('--render-only', str(self.root / 'rendered'))):
+                result = self._run(self.shadow_script, *mode)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('MAGISTRATE_WATCHDOG_STATUS_HOST', result.stderr)
+                self.assertFalse((self.root / 'rendered').exists())
+                self.assertFalse((self.home / 'Library/LaunchAgents').exists())
+
+    def test_rendered_plist_pins_configured_status_host(self):
+        output = self.root / 'rendered'
+        result = self._run(self.shadow_script, '--render-only', str(output))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        plist = plistlib.loads((output / 'com.joulewise.magistrate.plist').read_bytes())
+        self.assertEqual(plist['EnvironmentVariables']['MAGISTRATE_WATCHDOG_STATUS_HOST'], 'synthetic-mbp')
+
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
@@ -61,6 +78,7 @@ class InstallMagistrateWatchdogTests(unittest.TestCase):
                 "PATH": f"{self.bin_dir}:/usr/bin:/bin:/usr/sbin:/sbin",
                 "LAUNCH_LOG": str(self.launch_log),
                 "MAGISTRATE_SESSION_BIN": str(self.session_bin),
+                "MAGISTRATE_WATCHDOG_STATUS_HOST": "synthetic-mbp",
                 "MAGISTRATE_WATCHDOG_CUSTODY_ROOT": str(
                     self.home / "night-custody" / "magistrate"
                 ),

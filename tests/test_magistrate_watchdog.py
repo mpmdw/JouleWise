@@ -783,7 +783,7 @@ class FenceTests(WatchdogTestCase):
         decision = wd.decide(
             self.harness.storage, self.harness.deps, wd.initial_state()
         )
-        self.assertEqual("HOLD_UNSAFE", decision.state)
+        self.assertEqual("HOLD_PLAN_UNREADABLE", decision.state)
         self.assertIn("night_plan_unreadable", decision.reason)
         snapshot = wd.load_plans(self.harness.storage)
         self.assertEqual(len(snapshot.errors), 1)
@@ -853,7 +853,7 @@ class FenceTests(WatchdogTestCase):
         mapping["receipt_class"] = "TRANSACTION_PACK"
         (Path(plan.custody_root) / "night_plan.json").write_text(json.dumps(mapping) + "\n")
         decision = wd.decide(self.harness.storage, self.harness.deps, wd.initial_state())
-        self.assertEqual("HOLD_UNSAFE", decision.state)
+        self.assertEqual("HOLD_PLAN_MALFORMED", decision.state)
         self.assertIn("night_plan_malformed", decision.reason)
         snapshot = wd.load_plans(self.harness.storage, now_epoch_s=self.base.timestamp())
         self.assertEqual((), snapshot.plans)
@@ -864,7 +864,7 @@ class FenceTests(WatchdogTestCase):
         decision = wd.decide(
             self.harness.storage, self.harness.deps, wd.initial_state()
         )
-        self.assertEqual("HOLD_UNSAFE", decision.state)
+        self.assertEqual("HOLD_PLAN_MALFORMED", decision.state)
         self.assertIn("night_plan_malformed", decision.reason)
         self.assertIn("authored_epoch_s is in the future", decision.reason)
 
@@ -881,7 +881,7 @@ class FenceTests(WatchdogTestCase):
         )
         state = wd.initial_state()
         decision = wd.decide(self.harness.storage, self.harness.deps, state)
-        self.assertEqual("HOLD_UNSAFE", decision.state)
+        self.assertEqual("HOLD_CONFLICT", decision.state)
         self.assertIn("plan_conflict", decision.reason)
         self.assertIn("overlapping spans", decision.reason)
 
@@ -919,7 +919,7 @@ class FenceTests(WatchdogTestCase):
         decision = wd.decide(
             self.harness.storage, self.harness.deps, wd.initial_state()
         )
-        self.assertEqual("HOLD_UNSAFE", decision.state)
+        self.assertEqual("HOLD_CONFLICT", decision.state)
         self.assertIn("multiple heads", decision.reason)
 
     def test_stale_gate_plan_remains_a_conservative_watchdog_fence(self) -> None:
@@ -1003,20 +1003,22 @@ class FenceTests(WatchdogTestCase):
     def test_unreadable_launch_agents_dir_holds_unsafe(self) -> None:
         with mock.patch.object(self.harness.storage, "list_directory", side_effect=PermissionError("denied")):
             decision = wd.decide(self.harness.storage, self.harness.deps, wd.initial_state())
-        self.assertEqual("HOLD_UNSAFE", decision.state)
+        self.assertEqual("HOLD_PLIST_UNREADABLE", decision.state)
         self.assertIn("denied", decision.reason)
 
     def test_unparseable_installed_plist_or_plan_holds_unsafe(self) -> None:
         directory = wd.Path.home() / "Library/LaunchAgents"
         directory.mkdir(parents=True)
         plist = directory / "com.joulewise.night.plist"
-        for payload in (b"bad plist", b'<?xml version="1.0"?><plist><dict>',
-                        plistlib.dumps({"ProgramArguments": ["--plan"]}),
-                        plistlib.dumps({"ProgramArguments": ["--plan", str(self.temp / "missing.json")]})):
+        for payload, expected in ((b"bad plist", "HOLD_PLIST_UNREADABLE"),
+                        (b'<?xml version="1.0"?><plist><dict>', "HOLD_PLIST_UNREADABLE"),
+                        (plistlib.dumps({"ProgramArguments": ["--plan"]}), "HOLD_PLIST_UNREADABLE"),
+                        (plistlib.dumps({"ProgramArguments": ["--plan", str(self.temp / "missing.json")]}),
+                         "HOLD_PLAN_UNREADABLE")):
             with self.subTest(payload=payload):
                 plist.write_bytes(payload)
                 decision = wd.decide(self.harness.storage, self.harness.deps, wd.initial_state())
-                self.assertEqual("HOLD_UNSAFE", decision.state)
+                self.assertEqual(expected, decision.state)
 
     def test_sequential_same_day_plans_do_not_conflict(self) -> None:
         first = self.make_plan(name="morning", t0=self.base.replace(hour=9).timestamp(),
@@ -1043,7 +1045,7 @@ class FenceTests(WatchdogTestCase):
                     plist.unlink()
                 with mock.patch.object(self.harness.storage, "glob_plans", return_value=[] if installed else [path]):
                     decision = wd.decide(self.harness.storage, self.harness.deps, wd.initial_state())
-                self.assertEqual("HOLD_UNSAFE", decision.state)
+                self.assertEqual("HOLD_PLAN_MALFORMED", decision.state)
                 self.assertFalse(decision.adopt)
                 self.assertIn("window_max_s", decision.reason)
                 if installed:
@@ -1475,7 +1477,7 @@ class SupervisorTests(WatchdogTestCase):
             decision = wd.tick(self.harness.storage, self.harness.deps)
             probe.assert_not_called()
 
-        self.assertEqual("HOLD_UNSAFE", decision.state)
+        self.assertEqual("HOLD_PLAN_UNREADABLE", decision.state)
         self.assertEqual(
             [(100, signal.SIGTERM), (100, signal.SIGKILL)],
             self.harness.processes.signals,
@@ -1506,7 +1508,7 @@ class SupervisorTests(WatchdogTestCase):
         self.assertEqual(60, wd.STOP_TERM_GRACE_S)
 
         first = wd.tick(self.harness.storage, self.harness.deps)
-        self.assertEqual("HOLD_UNSAFE", first.state)
+        self.assertEqual("HOLD_PLAN_UNREADABLE", first.state)
         persisted = json.loads(
             (self.harness.storage.root / "state.json").read_text(encoding="utf-8")
         )
@@ -1516,7 +1518,7 @@ class SupervisorTests(WatchdogTestCase):
         self.harness.clock.wall += dt.timedelta(seconds=wd.STOP_COOPERATIVE_S)
         self.harness.clock.mono += wd.STOP_COOPERATIVE_S
         second = wd.tick(self.harness.storage, self.harness.deps)
-        self.assertEqual("HOLD_UNSAFE", second.state)
+        self.assertEqual("HOLD_PLAN_UNREADABLE", second.state)
         persisted = json.loads(
             (self.harness.storage.root / "state.json").read_text(encoding="utf-8")
         )
@@ -1542,7 +1544,7 @@ class SupervisorTests(WatchdogTestCase):
         self.harness.clock.wall += dt.timedelta(seconds=wd.STOP_TERM_GRACE_S)
         self.harness.clock.mono += wd.STOP_TERM_GRACE_S
         third = wd.tick(self.harness.storage, self.harness.deps)
-        self.assertEqual("HOLD_UNSAFE", third.state)
+        self.assertEqual("HOLD_PLAN_UNREADABLE", third.state)
         self.assertEqual(
             [(100, signal.SIGTERM), (100, signal.SIGKILL)],
             self.harness.processes.signals,
@@ -1631,7 +1633,8 @@ class SupervisorTests(WatchdogTestCase):
         self.assertIn((100, signal.SIGKILL), self.harness.processes.signals)
         self.assertEqual(self.harness.census_calls, 1, "KILL must be followed by production census")
         self.assertEqual(supervisor.state["state"], "FENCED")
-        self.assertEqual([item["kind"] for item in supervisor.state["notice_pending"]], ["forced_standdown"])
+        self.assertEqual([item["kind"] for item in supervisor.state["notice_pending"]],
+                         ["magistrate_heartbeat_stale", "forced_standdown"])
 
     def test_forced_hold_polls_child_to_reap_defunct_owner(self) -> None:
         plan = self.make_plan()
@@ -2152,7 +2155,7 @@ class HandoffDefectTests(WatchdogTestCase):
         self.harness.processes.rows = [wd.ProcessInfo(71607, 1, "resumed", self.TWIN)]
         for _ in range(2):
             decision = wd.tick(self.harness.storage, self.harness.deps)
-            self.assertEqual("HOLD_UNSAFE", decision.state)
+            self.assertEqual("HOLD_LOCK", decision.state)
             self.assertIn("dead_lock_resumed_twin", decision.reason)
             self.assertEqual(lock, wd.read_lock(self.harness.storage))
             self.assertFalse(decision.launch)
@@ -2218,7 +2221,7 @@ class HandoffDefectTests(WatchdogTestCase):
                     # Prevent real forks even if the baseline wrongly allows launch.
                     with mock.patch.object(wd.os, "fork", return_value=12345):
                         decision = wd.tick(storage, self.harness.deps)
-                    self.assertEqual("HOLD_UNSAFE" if refusal else "LAUNCHING", decision.state)
+                    self.assertEqual("HOLD_LOCK" if refusal else "LAUNCHING", decision.state)
                     self.assertEqual(refusal is None, decision.launch)
                     self.assertEqual(refusal is not None, path.exists())
                     if refusal:
@@ -2247,7 +2250,7 @@ class HandoffDefectTests(WatchdogTestCase):
         def ticks(pid, count):
             self.harness.processes.rows = [wd.ProcessInfo(pid, 1, "twin", self.TWIN)]
             for _ in range(count):
-                self.assertEqual("HOLD_UNSAFE", wd.tick(storage, self.harness.deps, dry_run=True).state)
+                self.assertEqual("HOLD_LOCK", wd.tick(storage, self.harness.deps, dry_run=True).state)
             events = [json.loads(line) for line in (storage.root / "events.jsonl").read_text().splitlines()]
             return [item for item in events if item["kind"] == "corrupt_lock_refusal"], wd.load_state(storage)
         events, state = ticks(200, 10)
@@ -2697,7 +2700,7 @@ class ContractTests(WatchdogTestCase):
         ordered = (
             "normal gate ledger",
             "pull --ff-only",
-            "five pinned files",
+            "nine pinned files",
             "stop every background task",
             "magistrate_watchdog.py handoff-daemons",
             "claude daemon stop --any",
@@ -2712,10 +2715,14 @@ class ContractTests(WatchdogTestCase):
         self.assertEqual(positions, sorted(positions))
         for pinned in (
             "scripts/magistrate_watchdog.py",
+            "scripts/watchdog_status.py",
             "scripts/install_magistrate_watchdog.sh",
+            "scripts/launch_align_r0.py",
+            "scripts/run_align_r0_launchagent.sh",
             "docs/process/MAGISTRATE_WATCHDOG.md",
             "docs/process/MAGISTRATE_RELAUNCH_PROMPT.md",
             "docs/process/NIGHT_HANDBACK.md",
+            "docs/process/R0_HEADLESS_LAUNCH.md",
         ):
             self.assertIn(pinned, watchdog)
         self.assertIn("against the merge commit on `main`", watchdog)
@@ -2728,7 +2735,7 @@ class ContractTests(WatchdogTestCase):
         self.assertIn("FROM", handback)
         self.assertIn("plan's `measurement_root`", handback)
 
-    def test_documented_merge_commit_digest_gate_compares_all_five_files(self) -> None:
+    def test_documented_merge_commit_digest_gate_compares_all_nine_files(self) -> None:
         repo = Path(__file__).resolve().parents[1]
         watchdog = (repo / "docs" / "process" / "MAGISTRATE_WATCHDOG.md").read_text(
             encoding="utf-8"
@@ -2767,10 +2774,14 @@ class ContractTests(WatchdogTestCase):
         init_git_fixture(checkout, "-b", "main")
         pinned = (
             "scripts/magistrate_watchdog.py",
+            "scripts/watchdog_status.py",
             "scripts/install_magistrate_watchdog.sh",
+            "scripts/launch_align_r0.py",
+            "scripts/run_align_r0_launchagent.sh",
             "docs/process/MAGISTRATE_WATCHDOG.md",
             "docs/process/MAGISTRATE_RELAUNCH_PROMPT.md",
             "docs/process/NIGHT_HANDBACK.md",
+            "docs/process/R0_HEADLESS_LAUNCH.md",
         )
         for index, relative in enumerate(pinned):
             path = checkout / relative

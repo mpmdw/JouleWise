@@ -45,6 +45,7 @@ template="$repo/configs/launchd/com.joulewise.magistrate.plist.template"
 label="com.joulewise.magistrate"
 custody_root="${MAGISTRATE_WATCHDOG_CUSTODY_ROOT:-$HOME/night-custody/magistrate}"
 session_bin="${MAGISTRATE_SESSION_BIN:-/Users/edr/.local/bin/claude}"
+status_host="${MAGISTRATE_WATCHDOG_STATUS_HOST:-}"
 path_value="$HOME/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 python_bin=""
 if [[ "$mode" != "--uninstall" ]]; then
@@ -62,6 +63,14 @@ if [[ "$mode" != "--uninstall" ]]; then
     print "python3 did not report an executable absolute sys.executable: $python_bin" >&2
     exit 2
   }
+  "$python_bin" - "$status_host" <<'PY'
+import re
+import sys
+host = sys.argv[1]
+if (not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", host)
+        or ".." in host or host.endswith((".", ".lock"))):
+    raise SystemExit("MAGISTRATE_WATCHDOG_STATUS_HOST must name a stable status host before install/render")
+PY
 fi
 
 if [[ "$mode" == "--install" ]]; then
@@ -213,17 +222,18 @@ if [[ "$mode" == "--install" ]]; then
   plist_transaction_started=true
 fi
 
-"$python_bin" - "$template" "$plist" "$canonical_repo" "$custody_root" "$session_bin" "$path_value" "$python_bin" <<'PY'
+"$python_bin" - "$template" "$plist" "$canonical_repo" "$custody_root" "$session_bin" "$path_value" "$python_bin" "$status_host" <<'PY'
 from pathlib import Path
 import sys
 from xml.sax.saxutils import escape
 
-template, output, repo, custody, session_bin, path_value, python_bin = sys.argv[1:]
+template, output, repo, custody, session_bin, path_value, python_bin, status_host = sys.argv[1:]
 replacements = {
     "@@REPO@@": repo,
     "@@CUSTODY_ROOT@@": custody,
     "@@SESSION_BIN@@": session_bin,
     "@@PATH@@": path_value,
+    "@@STATUS_HOST@@": status_host,
 }
 text = Path(template).read_text(encoding="utf-8")
 for old, new in replacements.items():

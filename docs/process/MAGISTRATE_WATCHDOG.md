@@ -2,6 +2,11 @@
 
 `com.joulewise.magistrate` is a user LaunchAgent that evaluates a short Python tick at load and every 300 seconds. A safe tick forks a new session and leaves a resident supervisor running at 10-second resolution. The service never writes a repository tree. Its default mutable root is `~/night-custody/magistrate/`; `MAGISTRATE_WATCHDOG_CUSTODY_ROOT` or `--custody-root` may replace that root for a rehearsal.
 
+For the ALIGN R0 engineering desk, the magistrate can hand off to a one-shot
+LaunchAgent with a bounded [desk fence](R0_HEADLESS_LAUNCH.md). This also
+suppresses relaunches and remote-stop probes while the desk job is alive;
+the ordinary plan stand-down and R0 agent census remain in force.
+
 When the magistrate writes and sends a progress update with
 `scripts/window_status.sh`, that script first inventories recorded measurement
 processes: a **chain** runs the night's measurements and pauses; a **campaign**
@@ -17,6 +22,152 @@ when a recorded process has ended or its number has been assigned to a later
 process.
 
 ## Safety model and state machine
+
+**2026-11-10 measurement-system audit W-01:** unsafe decisions now report
+`HOLD_PLAN_UNREADABLE`, `HOLD_PLAN_MALFORMED`, `HOLD_PLIST_UNREADABLE`,
+`HOLD_CONFLICT`, `HOLD_LOCK`, `HOLD_PROCESS_TABLE`, or `HOLD_DESK_FENCE`;
+`HOLD_UNSAFE` remains the conservative fallback for an unclassified cause.
+Each new reason immediately enters the existing `notice_pending` queue and
+the event journal, even when the state word did not change. Identical notices
+do not flood subsequent ticks or reappear just because they were acknowledged.
+After 900 seconds of continuous unsafe hold the state is `STRANDED`, with an
+additional escalation notice. Changing bad plan bytes does not restart this
+allowance. The watchdog still holds and drains: this limit caps the ordinary
+hold state, **never** grants permission to launch. A possibly armed plan must
+be repaired/withdrawn by its owner and re-evaluated normally. No unknown key is
+ignored and no admission schema was relaxed.
+
+The notice/ack path remains local. The R2 status transport below also exports
+holds while launch is prohibited. W-01/W-02 remain **OPEN pending native
+launchd delivery and an installed Air alarm**; synthetic Git delivery does not
+prove either gate.
+
+**W-02 heartbeat:** both an ordinary tick observing an owned live process and
+the resident supervisor read `heartbeat` (maximum 4096 bytes). Its plain line
+is `PID ACTIVATION_ID EPOCH_SECONDS`. The PID and activation must match the
+owned lock, and the timestamp must be finite, no older than this activation,
+and at most five seconds in the future. The primary progress signal is growth
+of the supervisor-owned `attempts/<activation>/attempt-N.stream.jsonl` for the
+current activation and attempt. Only size growth of the same regular-file
+inode refreshes progress after the first observation; replacement, truncation,
+touching an unchanged file, or another attempt cannot refresh it. On the first
+observation a nonempty file's valid mtime supplies its actual age. The model
+heartbeat is a second input, so a long tool call no longer requires the model
+to rewrite a file every minute. After 900 seconds without either fresh signal
+(with activation-start grace for missing signals), a
+`magistrate_heartbeat_stale` notice is queued once per stale episode. Recovery
+re-arms the notice for another outage. `state.json` records the observation,
+status and age. Heartbeat staleness is reporting only: PID ownership, plan
+fences and the existing stand-down ladder still decide process actions.
+
+### Off-host status and Air polling (R2 / W-A)
+
+`scripts/watchdog_status.py` uses the W1 A-02 courier's transport: a temporary
+bare Git repository, read origin from the code clone, fetch only the status
+ref's parent, create a small snapshot commit, and push it without force. The
+dedicated ref is `refs/heads/watchdog-status/<host>`. Set the stable name
+explicitly with `MAGISTRATE_WATCHDOG_STATUS_HOST` before install or render;
+the installer refuses a missing/invalid value and embeds it in the plist's
+`EnvironmentVariables` under that same key. For example, set
+`MAGISTRATE_WATCHDOG_STATUS_HOST=joulewise-mbp` for the install command and use
+`--host joulewise-mbp` on the Air. There is no dynamic hostname fallback.
+A per-host ref avoids touching main, mixing hosts, or disclosing
+measurement records. Each commit contains only `status.json` and the pending
+`transitions.jsonl`; its parent retains earlier batches.
+
+Records carry state, named hold category, transition epoch/sequence, dwell,
+heartbeat age/staleness, last activation ID, host and observation epoch. They
+also carry the announced plan completion, computed fence end and Air deadline.
+`desk_fence_end_announced: false` explicitly means there is no announced desk
+fence end; a desk deadline does not extend the Air expectation. No raw
+reason, custody path, prompt, model output or outcome leaves the machine.
+Every transition enters a durable outbox immediately. A change in heartbeat
+staleness also enters the outbox even when the state word stays `ACTIVE`.
+Successful acknowledged push is the only action that clears those entries.
+
+Pushes share a 25-second deadline, use absolute Git/SSH executables, and
+disable terminal/askpass/SSH authentication prompts. They use origin's normal
+noninteractive credentials, which must be provisioned for the LaunchAgent.
+A separate flock permits one publisher across tick/resident/restart paths.
+Attempts are limited to one per 60 seconds; intermediate transitions remain
+queued. Keepalive becomes due after 3,250 seconds, leaving room for a
+300-second tick and the transport budget before an hour elapses. Host sleep,
+launchd scheduling delays and delivery failure can exceed that target: the
+Air's staleness alarm is the backstop.
+
+The launch path checkpoints and flushes once before judging export freshness,
+and the short tick also flushes after its safety action. The resident publishes on a
+background thread after its step, so transport never blocks REQUEST/TERM/KILL.
+All flush routes use `_remote_probe_allowed`; every Git subprocess rechecks
+that gate. No export runs during a plan span or desk fence, and a 50-second
+guard leaves room for the transport to finish before a known upcoming span.
+At the final pre-span tick (within 410 seconds of the span's start), a changed
+`span_end_epoch_s` queues one status push. `span_fence_end_epoch_s` records the
+rounded dead-man epoch plus the courier-lock tail. The
+`next_status_expected_epoch_s` is the later of completion plus 75 minutes and
+that fence end, plus one 300-second tick (`span_end_margin_s`). Outside an
+announced span, the expectation remains observation plus 75 minutes. The Air uses this
+explicit expectation for staleness; named holds and stale magistrate progress
+still alarm immediately. An unexpectedly open chain beyond that allowance
+therefore still alarms. No successful pre-span push means no alarm deferral.
+There is no code-tree/index mutation. Local
+records and receipts live below watchdog storage as `status.json`,
+`status-outbox/`, `status-attempt.json`, `status-delivery.json` and
+`status-export.lock`. The delivery receipt persists the acknowledged record's
+own `next_status_expected_epoch_s`; a newer unsent checkpoint cannot extend it.
+A failed export, an expired worker, an attempted delivery without an
+acknowledged receipt, or a missed delivered deadline queues `status_export_failed` in the
+next magistrate prompt. These conditions never block activation. The launch
+path checks again after binary/version work before rendering that prompt.
+Nothing attempted yet is not a delivery failure. Legacy receipts without an
+explicit deadline retain the previous one-hour freshness bound.
+Missing/invalid runtime host configuration disables export and uses the same
+notice channel. Retrying a failed export does not clear its delivery error
+until push succeeds. Plan and desk fences always retain priority.
+
+On the Air, schedule this command every five minutes with the MBP's configured
+host name and the Air clone's own origin. It prints JSON and exits 3 for an
+alarm, 0 for healthy status:
+
+```sh
+python3.13 -B scripts/watchdog_status.py poll \
+  --repository "$AIR_CODE_CLONE" --host "$MBP_STATUS_HOST" \
+  --cursor-file "$AIR_STATUS_CURSOR"
+```
+
+The cursor is Air-owned, outside measurement custody. Polling fetches only the
+status ref, follows commits since that cursor, and retains alarm transitions
+until `--ack` is supplied **after the Air notifier has delivered them**. Thus a
+hold and recovery between polls, or in one rate-limited batch, still alarms.
+The latest status alarms for any `HOLD_*`, `STRANDED`, uncertain clock/network,
+stale magistrate progress, missing/invalid status, or a missed next-status
+expectation (normally 75 minutes after the latest observation, extended across
+an announced span). If an armed plan is unparseable, its span is unknown and
+export is deferred. The Air therefore receives `watchdog_status_stale` at the
+last delivered deadline, rather than the plan's named hold. Poll output's
+`notifier_text` explains that stale status can mean an unreadable armed plan;
+the Air notifier should include that text. Fetch/authentication errors and an invalid cursor also
+exit 3. Cursor advance alone cannot acknowledge an alarm. Wire exit 3 to the
+Air's notifier and prove delivery before closing W-01/W-02; this branch does
+not install or send an Air notification. Update the Air poller before the MBP
+exporter: it accepts older records as well as the new fence and margin fields.
+
+### Model startup rejection (R2 / W-D)
+
+The ruled flag remains `--model claude-fable-5-2`. The supervisor checks actual
+CLI error diagnostics, including a child that exits before its PID is first
+observed. Latching requires exit within the 60-second startup window and no
+assistant output anywhere in that activation's stream. A later capacity error,
+or an error after assistant output, follows the existing backoff policy.
+An anchored stderr model-rejection diagnostic or a structured CLI
+error result queues a notice, prints the failure, and latches
+`HOLD_MODEL_REJECTED` (`STRANDED` retains that named category after the normal
+dwell limit). Normal assistant text and successful results cannot trigger it.
+There is no extra unsupervised model probe and no automatic model fallback or
+retry loop. Other failures retain existing backoff behavior. After verifying
+the native CLI/model, the lead must stop the watchdog and clear only
+`model_startup_hold` in its state before restarting. Native acceptance and
+actual installed-CLI rejection wording remain installation checks.
 
 **Updated 2026-09-15 — INSTALL-WINDOWS-MULTI-01, D-180 clause 1 / D-181
 clause 1 adopted design:** plan spans replace the fixed-clock relaunch fences;
@@ -42,7 +193,7 @@ The durable states are:
 Every state transition appends exactly one transition event. Re-evaluating the same state does not append another transition. Census, signal, drain-start, and plan diagnostics are separate typed events. Plan events use `plan_dir` (never the plan-declared `custody_root`) and are de-duplicated only for an identical activation-id/spawn-epoch/plan-directory/kind/detail-digest key.
 
 Unrepresentable derived epochs (for example `window_max_s=10**400`) enter
-`HOLD_UNSAFE` with `adopt=False`: installed-plan failures use the reason prefix
+`HOLD_PLAN_MALFORMED` with `adopt=False`: installed-plan failures use the reason prefix
 `installed_agent_fence:`, while discovery uses `night_plan_malformed`.
 The detail names `t0_epoch_s/window_max_s`; `decide()` returns a decision
 instead of allowing the arithmetic exception to escape. These are watchdog
@@ -225,7 +376,7 @@ No status branch, checkout, plan, night result, `courier.sent`, or repository fi
 
 Installation is authorized only after the built-artifact gauntlet and cold gate pass. The acting magistrate emails Ed the install notice, quotes the D-171 authorization and the stop instructions above, then follows this checklist without waiting for a reply. Do not arm any plan during this handoff.
 
-0. Land the watchdog branch on `main` through the normal gate ledger: replay the integration on `int/2026-09-04-watchdog`, open the PR, require CI and the merge gate, and merge only under the lead's authority. Then update the canonical checkout with `git -C /Users/edr/code/JouleWise pull --ff-only`. Before step 1 executes any pinned file, verify SHA-256 byte identity for the five pinned files against the merge commit on `main` that landed this branch, not against the earlier packet exhibits. Run these exact commands, record both digest/path lines for every file, and stop if any command fails. Do not substitute this development worktree for the canonical checkout.
+0. Land the watchdog branch on `main` through the normal gate ledger: replay the integration on `int/2026-09-04-watchdog`, open the PR, require CI and the merge gate, and merge only under the lead's authority. Then update the canonical checkout with `git -C /Users/edr/code/JouleWise pull --ff-only`. Before step 1 executes any pinned file, verify SHA-256 byte identity for the nine pinned files against the merge commit on `main` that landed this branch, not against the earlier packet exhibits. Run these exact commands, record both digest/path lines for every file, and stop if any command fails. Do not substitute this development worktree for the canonical checkout.
 
    ```zsh
    cd /Users/edr/code/JouleWise
@@ -235,10 +386,14 @@ Installation is authorized only after the built-artifact gauntlet and cold gate 
    test "$(/usr/bin/git show -s --format=%P "$merge_sha" | /usr/bin/awk '{print NF}')" -eq 2 || { echo "STEP0_FAIL HEAD is not a merge commit" >&2; exit 3; }
    pinned_files=(
      scripts/magistrate_watchdog.py
+     scripts/watchdog_status.py
      scripts/install_magistrate_watchdog.sh
+     scripts/launch_align_r0.py
+     scripts/run_align_r0_launchagent.sh
      docs/process/MAGISTRATE_WATCHDOG.md
      docs/process/MAGISTRATE_RELAUNCH_PROMPT.md
      docs/process/NIGHT_HANDBACK.md
+     docs/process/R0_HEADLESS_LAUNCH.md
    )
    for path in "${pinned_files[@]}"; do
      main_sha256="$(/usr/bin/git show "$merge_sha:$path" | /usr/bin/shasum -a 256 | /usr/bin/awk '{print $1}')"
@@ -291,7 +446,7 @@ Installation is authorized only after the built-artifact gauntlet and cold gate 
 4. Install from that same magistrate session and canonical checkout. The installer refuses any other resolved script repository or Git top level, renders the literal canonical checkout into both plist paths, and pins the installing `python3` process's absolute `sys.executable`. It seeds `magistrate.lock` with the interactive twin's PID and start token so the first resident observes it instead of launching a second session:
 
    ```zsh
-   scripts/install_magistrate_watchdog.sh --install
+   MAGISTRATE_WATCHDOG_STATUS_HOST=joulewise-mbp scripts/install_magistrate_watchdog.sh --install
    python3 -m json.tool "$HOME/night-custody/magistrate/magistrate.lock"
    ```
 
@@ -451,7 +606,7 @@ Run the focused checks and create a fake `REHEARSAL_STUB` plan at `t0 = now + 8 
 ```sh
 tmp_root="$(mktemp -d "${TMPDIR:-/tmp}/magistrate-watchdog.XXXXXX")"
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_magistrate_watchdog -v
-scripts/install_magistrate_watchdog.sh --render-only "$tmp_root/render"
+MAGISTRATE_WATCHDOG_STATUS_HOST=synthetic-mbp scripts/install_magistrate_watchdog.sh --render-only "$tmp_root/render"
 /usr/bin/plutil -lint "$tmp_root/render/com.joulewise.magistrate.plist"
 BENCH_CUSTODY="$tmp_root/custody" python3 - <<'PY'
 import os
@@ -535,7 +690,7 @@ PY
 Expected before: `empty=False`, with the Terminal-hosted interactive root visible and the daemon/hosts/spares absent. From that interactive magistrate session—not from the observer—run the authorized installation, then inspect the exclusive adoption record from the observer:
 
 ```sh
-scripts/install_magistrate_watchdog.sh --install
+MAGISTRATE_WATCHDOG_STATUS_HOST=joulewise-mbp scripts/install_magistrate_watchdog.sh --install
 python3 -m json.tool "$HOME/night-custody/magistrate/magistrate.lock"
 ```
 
