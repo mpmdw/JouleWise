@@ -1607,10 +1607,7 @@ QUIET_KINDS = ("idle", "step-30b", "step-d") + tuple(
 def run(args):
     global _R1_WORK_DEADLINE
     chain_started = time.monotonic()
-    # RL-72 E2: complete records must fit the exact span, including startup,
-    # bracket/harvest/restore overhead. Reserve the declared 900 s for close.
-    span_cap = night_worst_case_s(args.runtime)["programmed_span_s"]
-    _R1_WORK_DEADLINE = chain_started + span_cap - 900
+    span_cap = None   # set inside the refusal-handled region below (R7-2: a refusal is exit 3 with a record)
     marker = getattr(args, 'power_marker', None) or (args.output.parent / '.align-r1-high-power')
     marker = Path(marker).resolve()
     output = args.output.resolve()
@@ -1654,6 +1651,11 @@ def run(args):
         except FileExistsError as error:
             raise Refusal(f"output directory already exists: {output}") from error
         created = True
+        # RL-72 E2: complete records must fit the exact span, including startup,
+        # bracket/harvest/restore overhead. Reserve the declared 900 s for close.
+        # Read here, inside the handler, so a config error is a recorded refusal (R7-2).
+        span_cap = night_worst_case_s(args.runtime)["programmed_span_s"]
+        _R1_WORK_DEADLINE = chain_started + span_cap - 900
         if not args.synthetic:
             record["prepare_packet"] = require_prepare_packet(getattr(args, "prepare_packet", None))
             from joulewise.align.apple import v4_registration
@@ -1969,7 +1971,7 @@ def run(args):
         record["external_volumes"] = watch.records
         record["close_s"] = time.monotonic() - close_started
         record["chain_wall_s"] = time.monotonic() - chain_started
-        if record["close_s"] > 900 or record["chain_wall_s"] > span_cap:
+        if record["close_s"] > 900 or (span_cap is not None and record["chain_wall_s"] > span_cap):
             record.update(status="aborted", error="RL-72 E2: close/span overhead cap exceeded")
         _R1_WORK_DEADLINE = None
         _write_result(output, record, created)
