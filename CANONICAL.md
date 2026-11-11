@@ -21,6 +21,8 @@ Last updated: 2026-11-10 (Paper rows: Paper 1 landed under `docs/paper/paper1/`,
 | Machine-readable head pointer and Next activation rule | [`docs/process/CURRENT.json`](docs/process/CURRENT.json), generated from RUN_STATE's highest numbered item carrying a `pointer` block; [`docs/process/POINTER_RULE.md`](docs/process/POINTER_RULE.md) | Hand-maintained pointer JSON (`WINDOW_STATUS.md` remains publisher-owned status, not the intake pointer) |
 | Work queue | [`TASK_QUEUE.md`](TASK_QUEUE.md); its marker-fenced region is generated from `docs/process/state_kernel.json` by `scripts/gen_state.py` (`--check` in CI) | Hand-kept queue lists in session traces |
 | Decisions and rulings | [`docs/decision_log.md`](docs/decision_log.md) (D-numbers), [`docs/council_log.md`](docs/council_log.md); research-design and paper-bound rulings (RL-numbers, the binding record per `RUN_STATE.md` item 257): `audit/2026-11-10-fable:docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md` | — |
+| Owner unseal records (RL-53 W-8) | `joulewise/unseal_record.py`: strict schema, canonical digest and committed verdict-bound permission; records in `docs/unseals/` | Future unseals recorded only in prose; Block 5 predates the rule, BYTES keeps its commitment journal |
+| Outcome display permission (opt-in) | `scripts/show_outcomes_guard.py check --block B --verdict V [--path P]`: hashes only the explicit verdict; refuses without a matching committed unseal | — |
 
 ## Measurement windows (ALIGN v4: R0, R1, W1, D1-D3)
 

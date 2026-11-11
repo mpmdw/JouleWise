@@ -738,6 +738,7 @@
     "tests.test_t0_rehearsal": 6.762,
     "tests.test_uncertainty_evidence": 67.982,
     "tests.test_uncertainty_p2029": 2.067,
+    "tests.test_unseal_record": 21.977,
     "tests.test_v5_arm_abort": 4.937,
     "tests.test_v5_block4_clock": 3.143,
     "tests.test_v5_block4_composed": 1.093,
