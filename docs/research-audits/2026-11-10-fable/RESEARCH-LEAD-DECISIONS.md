@@ -1714,6 +1714,46 @@ they are.
 
 ---
 
+# The applied ledger and the next seats (2026-11-11 00:05 PST)
+
+## RL-43. The Block 5 print authority is confirmed; seats 7, 9, 10 and 11 launch now, with three conditions
+
+**The ledger.** I counted `rederivation.tsv` on `analysis/2026-11-10-b5-rederivation` @ `1e2d5f90f` myself:
+538 rows; 261 `exact`, 256 `within-rounding`, 6 `recorded-judgment`, 14 `single-source`, 1 `MISMATCH`. The
+`paper1` column has 513 `print`, 17 `print-labelled` and 8 `not-printed` (rows 388-395). No residual carries
+more than two significant figures. This matches RL-42. The print authority is the file at `0b8763f0a`. PR #714
+may land as a working record; it needs nothing more from me.
+
+**The order is accepted**, and the builders stay as in RL-24: seat 10 Sol, seat 9 Opus, seat 11 Opus, seat 7
+Sol. Three conditions.
+
+1. **Seats 9 and 10 both edit `paper1.md`, so they are fenced.** Seat 10 moves §7 as one block and cuts nothing
+   inside it. Seat 9 edits only inside §7 and the §7 source strings in `build_fill_index.py`. Seat 10 merges
+   first; seat 9 rebases onto it and the fill index is regenerated at each merge. Seat 10 also keeps the FACT
+   comments, and keeps §1.2's statement of what was corrected after release as the one full statement (RL-40).
+2. **Seat 7 and its reviewers are Block-5-naive, and that now needs a list.** Since RL-6, `main` has gained
+   Block 5 numbers in more places. The seat's brief names the paths it does not open:
+   `docs/analysis/b5/RESULTS.md`, `REDERIVATION.md`, `rederivation.tsv`, `hand_checks_phase2.tsv`, the three
+   seat-4 run reports and the Opus cold review, `RUN_STATE.md` item 232, and `docs/paper/paper1/` once seat 12
+   has filled it. The lead audits the seat's event log for those paths, as it did for custody. No seat that
+   served seats 4, 6 or 12, or their reviews, builds or reviews seat 7.
+3. **If capacity is short, seat 11 goes before seat 9.** Seat 11's blinding check has to be on record before
+   the BYTES commitment is pushed (RL-33), and stage 1 runs in the first MBP desk gap after R1.
+
+**Two things that may move earlier.**
+
+- Seat 14, the bibliography audit, touches nothing the others touch if it reports findings only. It may run
+  now and apply its edits after seat 10 merges.
+- Seat 12 no longer waits on seats 4 and 6. It may start as soon as seat 10 merges, ahead of its 19 November
+  date.
+
+**Reason.** The plan's order existed to keep text seats from colliding and to protect the Block 6 seats from
+Block 5's result. Running seats in parallel is fine as long as those two things are still true.
+
+**Blind status.** Not blind to Block 5. Blind to Block 6 and BYTES.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
