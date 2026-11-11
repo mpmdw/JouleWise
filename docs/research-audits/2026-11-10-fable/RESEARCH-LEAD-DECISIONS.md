@@ -4047,6 +4047,58 @@ night, and the cheap run that settles it comes first.
 
 ---
 
+# Follow-up to RL-74: how R0 classed the candidate slow keys (2026-11-11 06:00 PST)
+
+**The read**, by the lead, from the pinned R0 record, six keys, four fields each: TV0h and its alias TV1h are
+`die`; TV0m, TV0s and TV1s are also `die`; Tf08 is `heatsink`. All eligible, none clamped.
+
+## RL-75. The candidates may be named, and that is not the end of it: the sensor round starts now
+
+**May they be named?** Yes. R0 classified all of them, so the sentence in WP14(a) is satisfied on either
+reading. And the registered text makes R1's classification final: one model-free classifier supplies R0's
+provisional candidates and R1's selection, and a key's class is its time constant on the step it was measured
+on. A key that cooled in under 60 s on R0's light load and in 66 s on a heavy one has changed class by the
+rule's own arithmetic. Nothing forbids it.
+
+**But it changes what outcome 2 of RL-74 would mean.** Every candidate for the slow role on the heavy step is a
+key R0 put in the fast class, from the same family as the fast pick. A gate on TV0h and one of these would be
+watching one thermal mass twice, about 40 s and about 65 s, and not watching the mass Tf08 sees, which is
+still 3.8 °C above its baseline ten minutes after a step. Whether that is what a slow role is for is a question
+about the rule. So:
+
+- **RL-74's outcome 2 is narrowed.** It applies only if the smoke's slow pick is a key R0 did **not** class as
+  fast. If the slow pick is one of the R0-fast keys, the case is handled as outcome 3: it comes to me with the
+  table, and no night arms on it automatically.
+- **The design round on the sensor rule starts now**, without waiting for the smoke. On the print and the
+  candidate replay there is already enough to frame it, and the smoke's D table then decides between options
+  that have been worked out in advance.
+
+**The question for the round.** On this machine, at the step sizes the windows really run, what should the
+slow role be, and by what registered test is it chosen? It sets out at least these three, each with its
+consequence for the G0 and per-turn waits, the duty bar, the band and the cap, and for what W1's thermal
+control then means:
+
+1. the registered rule as it stands, with a slow pick from the fast family;
+2. an amended return-time test that admits a truly slow key such as Tf08, for example measured to the gate's
+   band and not to 1 °C, or against the gate's own cap; with the long waits that the last two nights measured;
+3. the fast-family key gating and the slow key recorded for every member, or the reverse.
+
+It uses the journals R1 already has, temperatures only, and says what the smoke's D table must show to choose.
+One round, an Opus seat and a Sol seat; I close it. Any change to the classifier or to which key gates is made
+blind, before any v4 window, as a deviation row against the protocol's WP14(a), and before the registration is
+signed.
+
+**Aliases.** TV0h and TV1h are one thermometer and cannot fill both roles; the classifier already treats them
+so.
+
+**Reason.** The rule lets the pick happen. It was written to find a slow sensor, and on a heavy step it can
+only find a slightly slower copy of the fast one. That should be decided on purpose, by the people who will
+have to explain what the gate controlled.
+
+**Blind status.** Blind: no v4 outcome exists.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
