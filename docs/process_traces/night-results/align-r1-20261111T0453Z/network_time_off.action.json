@@ -1,0 +1,17 @@
+{
+  "argv": [
+    "/usr/bin/sudo",
+    "-n",
+    "/usr/sbin/systemsetup",
+    "-setusingnetworktime",
+    "off"
+  ],
+  "call": 1,
+  "error": null,
+  "ran_by": "arm",
+  "returncode": 0,
+  "schema": "joulewise.b5_network_time_off_action.v1",
+  "stderr": "",
+  "stdout": "Network Time is already off.\n",
+  "timed_out": false
+}
