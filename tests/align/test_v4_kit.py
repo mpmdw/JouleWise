@@ -37,7 +37,11 @@ def topup():
         _LOG_DIR.append(tempfile.TemporaryDirectory(prefix='v4-kit-battery-'))
     path = Path(_LOG_DIR[0].name) / f'battery-{time.time_ns()}.jsonl'
     write_battery_log(path, time.time())
-    return dict(battery_log=path, next_arm_triage=w1_bound_packet(), **arm_seams())
+    # These legacy witnesses isolate battery/power/triage. Round 3 exercises
+    # the real frequency preflight separately with synthetic kernel probes.
+    return dict(battery_log=path, next_arm_triage=w1_bound_packet(),
+                frequency_preflight=lambda *a, **kw: {'ok': True, 'synthetic': True},
+                frequency_pre_t0=lambda *a, **kw: {'ok': True, 'synthetic': True}, **arm_seams())
 
 
 SERIES_MANIFEST = Path('configs/campaigns/align_v4/series/series_manifest.json')
@@ -526,6 +530,8 @@ class FakeArmHost:
                    f'      "UpdateTime" = {int(time.time())}\n'
                    '    }\n').encode()
             return subprocess.CompletedProcess(argv, 0, raw, b'')
+        if argv == ('/usr/bin/sudo', '-n', '/usr/sbin/systemsetup', '-getusingnetworktime'):
+            return subprocess.CompletedProcess(argv, 0, 'Network Time: Off\n', '')
         if argv == ('pmset', '-g', 'batt'):
             return subprocess.CompletedProcess(argv, 0, 'synthetic: 100%; AC; not charging', '')
         if argv == ('launchctl', 'print', f'gui/{os.getuid()}/com.joulewise.night'):
@@ -1757,7 +1763,7 @@ class W1HighPowerTests(unittest.TestCase):
             seed_series(measurement)
             (measurement / kit.KIT / 'collection_plan.json').write_text(json.dumps(
                 {'runtime_requirements': {'ac_powermode': 2}}))
-            with patch.object(kit, 'generate'), patch.object(pilot.h, 'prepare', return_value='ok') as prepare:
+            with patch.object(kit, 'generate'), patch.object(pilot.h, 'prepare', return_value={}) as prepare:
                 session.prepare(measurement, Path(tmp) / 'session')
             self.assertEqual(prepare.call_args.kwargs['ac_powermode'], 2)
 

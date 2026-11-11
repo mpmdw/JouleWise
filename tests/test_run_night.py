@@ -116,6 +116,11 @@ def _green_results() -> dict[tuple[str, ...], night_gate.ProbeResult]:
         ),
         # run_night's host-level AC powermode admission (HIGH-3, 2026-11-06).
         AC_POWERMODE_ARGV: _probe(AC_POWERMODE_ARGV, stdout=AC_AUTOMATIC),
+        RESTORE_AUTOMATIC_ARGV: _probe(RESTORE_AUTOMATIC_ARGV),
+        ("/usr/bin/sudo", "-n", "/usr/sbin/systemsetup", "-setusingnetworktime", "on"): _probe(
+            ("/usr/bin/sudo", "-n", "/usr/sbin/systemsetup", "-setusingnetworktime", "on")),
+        ("/usr/bin/sudo", "-n", "/usr/sbin/systemsetup", "-getusingnetworktime"): _probe(
+            ("/usr/bin/sudo", "-n", "/usr/sbin/systemsetup", "-getusingnetworktime"), stdout="Network Time: On\n"),
     }
 
 
@@ -802,7 +807,7 @@ runpy.run_path(script, run_name='__main__')
         self.assertEqual(refusal["reason"], "night_refused_ac_powermode")
         self.assertIn("AC powermode 2 != expected 0", refusal["detail"])
         self.assertEqual(refusal["evidence"]["observed"], 2)
-        self.assertNotIn("restore", host.calls)
+        self.assertIn("restore", host.calls)  # the refusal also restores Automatic (2026-11-10 ruling)
         result = json.loads((self.custody / "night/result.json").read_text())
         self.assertEqual(result["aborted_reason"], "night_refused_ac_powermode")
 
@@ -813,7 +818,7 @@ runpy.run_path(script, run_name='__main__')
         exit_code, calls = self._run_night()
         self.assertEqual(calls, [["/bin/zsh", str(self.chain)]])
         self.assertEqual(exit_code, 0)
-        self.assertEqual(host.calls, ["read", "restore", "read"])
+        self.assertEqual(host.calls, ["read", "restore", "read", "restore", "read"])
         self.assertEqual(host.mode, 0)
         self.assertFalse(marker.exists())
         self.assertIn("R1 High Power marker restored to Automatic",
@@ -917,7 +922,7 @@ runpy.run_path(script, run_name='__main__')
         marker = self._w1_host_marker(custody_root=self.root / "an-earlier-session" / "custody")
         exit_code, calls = self._run_night()
         self.assertEqual((exit_code, calls), (0, [["/bin/zsh", str(self.chain)]]))
-        self.assertEqual(host.calls, ["read", "restore", "read"])
+        self.assertEqual(host.calls, ["read", "restore", "read", "restore", "read"])
         self.assertEqual(host.mode, 0)
         self.assertFalse(marker.exists())
 
@@ -1099,10 +1104,10 @@ runpy.run_path(script, run_name='__main__')
         self.assertEqual((exit_code, calls), (3, []))
         self.assertTrue(marker.exists())
 
-    def test_automatic_plan_never_runs_the_close_restore(self) -> None:
+    def test_automatic_plan_also_runs_the_close_restore(self) -> None:
         host = self._power_host(0)
         self._run_night()
-        self.assertNotIn("restore", host.calls)
+        self.assertIn("restore", host.calls)
 
     def test_plan_declared_powermode_must_be_zero_or_two(self) -> None:
         mapping = json.loads(self.plan_path.read_text())
@@ -1115,7 +1120,7 @@ runpy.run_path(script, run_name='__main__')
         host = self._power_host(0, failed_reads=1)
         exit_code, calls = self._run_night()
         self.assertEqual(calls, [["/bin/zsh", str(self.chain)]])
-        self.assertEqual(host.calls, ["read", "read"])
+        self.assertEqual(host.calls, ["read", "read", "restore", "read"])
 
     def test_unobservable_powermode_refuses(self) -> None:
         self._power_host(0, failed_reads=2)
@@ -1959,12 +1964,14 @@ runpy.run_path(script, run_name='__main__')
         self.assertTrue(all(item["cwd"] == REPO_ROOT for item in self.popen_kwargs))
         self.assertTrue(all(item["start_new_session"] for item in self.popen_kwargs))
 
-    def test_dead_man_skips_when_courier_sent_exists(self) -> None:
+    def test_dead_man_restores_and_redelivers_when_courier_sent_exists(self) -> None:
         sent = self.custody / "night" / "courier.sent"
         sent.parent.mkdir()
         sent.write_text("sent\n", encoding="utf-8")
         self.assertEqual(self.driver.dead_man(self.plan_path), 0)
-        self.driver.run_courier.assert_not_called()
+        self.driver.run_courier.assert_called_once()
+        result = json.loads((self.custody / 'night/result.json').read_bytes())
+        self.assertTrue(json.loads(next((self.custody / 'night').glob('deadman_host_restoration-*.json')).read_bytes())['ok'])
 
     def test_dead_man_stands_down_immediately_after_t0_on_empty_night(self) -> None:
         night = self.custody / "night"
@@ -2676,7 +2683,7 @@ runpy.run_path(script, run_name='__main__')
         artifacts = self.driver._artifact_list(self.custody, night)
         self.assertIn("night/launch.pending", [row["path"] for row in artifacts])
         self.assertIn("night/launch.resolved", [row["path"] for row in artifacts])
-        self.assertEqual(self.driver._existing_record(night).name, "launch.pending")
+        self.assertEqual(self.driver._existing_record(night).name, "result.json")
 
     def test_dead_man_resolution_clears_later_census_number_collisions(self):
         from joulewise import measurement_liveness as live

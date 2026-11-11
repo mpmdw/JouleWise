@@ -65,6 +65,28 @@ def fake_monitor_argv(custody, *, life=600.0, code=0, extra=()):
     return [sys.executable, "-c", FAKE_MONITOR, str(custody), repr(float(life)), str(int(code)), *extra]
 
 
+FAKE_DC_METER = r'''
+import json, signal, sys, time
+stop = [False]
+for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+    signal.signal(sig, lambda *_: stop.__setitem__(0, True))
+raw = lambda: time.clock_gettime_ns(time.CLOCK_MONOTONIC_RAW)
+with open(sys.argv[1], 'x', buffering=1) as out:
+    out.write(json.dumps({'k': 'h', 'status': 'streaming', 'start_raw_ns': raw(),
+                          'start_mono_ns': time.monotonic_ns()}) + '\n')
+    while not stop[0]:
+        out.write(json.dumps({'k': 'b', 'n': 1, 'p': '00' * 20, 'rx': raw()}) + '\n')
+        time.sleep(0.05)
+    out.write(json.dumps({'k': 't', 'stop_reason': 'signal'}) + '\n')
+'''
+
+
+def fake_dc_meter_argv(request):
+    directory = Path(request.custody_root).joinpath(*b5_driver.METER_STREAM_DIR)
+    directory.mkdir(parents=True, exist_ok=True)
+    return [sys.executable, '-c', FAKE_DC_METER, str(b5_driver.next_meter_stream(directory))]
+
+
 def load_driver():
     spec = importlib.util.spec_from_file_location("run_night_b5_test_module", SCRIPT_PATH)
     module = importlib.util.module_from_spec(spec)
@@ -94,6 +116,14 @@ class Census:
             # run_night's host-level AC powermode admission (HIGH-3, 2026-11-06).
             return probe(argv, exit_code=0,
                          stdout="Battery Power:\n powermode 0\nAC Power:\n powermode 0\n")
+        if argv == ("sudo", "-n", "/usr/bin/pmset", "-c", "powermode", "0"):
+            return probe(argv, exit_code=0)
+        if argv[-2:] == ("-setusingnetworktime", "on"):
+            if hasattr(self, "network"):
+                self.network.state.write_text("on")
+            return probe(argv, exit_code=0)
+        if argv[-1:] == ("-getusingnetworktime",):
+            return probe(argv, exit_code=0, stdout="Network Time: On\n")
         raise AssertionError(f"unexpected probe {argv}")
 
     def probes(self):
@@ -198,6 +228,7 @@ class Harness:
         (self.home / "Library/LaunchAgents").mkdir(parents=True)
         self.census = Census()
         self.network = NetworkTime(self.root)
+        self.census.network = self.network
         self.arm = arm or FakeArm()
         self.lineage_calls = []
         self.flags = []
@@ -209,8 +240,10 @@ class Harness:
         self.collectors_factory = lambda request: list(self.collector_argv)
         # A callable gets the MonitorRequest; a list is used as it is.
         self.monitor_argv = lambda request: fake_monitor_argv(request.custody_root)
-        # The wall meter's command line (a callable getting the MonitorRequest); None runs without it.
-        self.meter_argv = None
+        # Synthetic reader; liveness and unavailable-reader cases have their
+        # own tests. No hardware or systemsetup is reached by this harness.
+        self.meter_argv = fake_dc_meter_argv
+        self.meter_probe = lambda root: {'live': True, 'synthetic': True}
         self.lineage_valid = True
         self.g10_source = ("import json, pathlib, sys; night = pathlib.Path(sys.argv[1]); "
                            "journal = (night / 'monitor_supervision.jsonl').read_text(); "
@@ -267,8 +300,8 @@ class Harness:
         fields = {field.name for field in dataclasses.fields(b5_driver.Seams)}
         if "verify_lineage" in fields:
             extra["verify_lineage"] = self.verify_lineage
-        if "meter_argv" in fields and self.meter_argv is not None:
-            extra["meter_argv"] = self.meter_argv
+        extra["meter_argv"] = self.meter_argv
+        extra["meter_probe"] = self.meter_probe
         return b5_driver.Seams(
             arm=self.arm, publish_lineage=self.publish_lineage,
             monitor_argv=lambda request: (self.monitor_argv(request) if callable(self.monitor_argv)
@@ -1277,7 +1310,7 @@ class B6ReviewRegressionTests(unittest.TestCase):
         from joulewise.b6 import sleep_guard
         harness = Harness(self, g10=False)
         harness.replace_chain("#!/bin/zsh -f\nexit 0\n")
-        monitor = mock.Mock(crash_loop=False)
+        monitor = mock.Mock(crash_loop=False, start_failures=0, errors=[])
         monitor.stop.return_value = {"restarts": 0, "stop": {"proven_stopped": True}}
         with (
             mock.patch.object(b5_driver, "MonitorSupervisor", return_value=monitor),

@@ -6,6 +6,14 @@
 
 This runbook covers one window k, from terminal completion to the arm of k+1. It also covers what record k+1 must carry for k, and the first-time native sweep.
 
+**Uninstall before prepare (D-04):** after terminal closure, uninstall the previous
+night and dead-man jobs with `install_night_agent.sh --plan <previous-plan> --uninstall`
+and verify that the night job is absent. Only then run `align_v4_session.py prepare`
+for the next window. A loaded night job refuses as `prepare.night_job_loaded`;
+an unavailable census refuses as `prepare.night_job_state_unavailable`. Preparation
+authenticates network time OFF for the frequency-word preflight. An early refusal
+may deliberately leave it OFF, recorded as `left_off` with a reason and read-back.
+
 **Never** pack, hash, transfer, triage, harvest or run a desk on the MBP while a window measures, or during the display/quiet dwell. Every MBP step below ends before the dwell starts. The quiet observation's `active_work` must be `[]`, and the arm refuses otherwise (`quiet_start_state`).
 
 ## 0. Names used below

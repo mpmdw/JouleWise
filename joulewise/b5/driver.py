@@ -22,8 +22,9 @@ Inside the launchd job, after t0, this branch runs:
 5. the hazard monitor (``scripts/hazard_monitor.py``) in its own process group
    under ``taskpolicy -b``; a one-second supervision pass restarts it if it dies.
    Then the KM003C wall meter (``scripts/km003c_monitor.py``, plain QoS), a
-   disclosed diagnostic supervised the same way except that its exit 0 (meter
-   absent) is final; it never refuses or stops the window;
+   disclosed diagnostic supervised the same way, including retrying an absent
+   reader while USB re-enumerates. A first valid DC-in batch gates the chain; a sustained
+   sample outage stops it under the instrument outage bound;
 6. the chain, launched once through the driver's no-pack path
    (``_claim_chain_start`` / ``_run_chain_once`` / ``_WindowDeadline`` /
    ``_terminate_process_group``), with the in-chain agent census kept as an
@@ -135,8 +136,8 @@ MONITOR_JOURNAL_DIR = ("hazards", "monitor")
 # the end of the post capture (the battery join needs a read at most
 # battery.SMC_MAX_GAP_S = 5 s after the span it judges).
 MONITOR_POST_CHAIN_HOLD_S = 5.0
-# The KM003C wall meter (scripts/km003c_monitor.py; WIRING.md): a disclosed
-# diagnostic supervised like the monitor. It never refuses or stops a window.
+# DC-in is mandatory (lead ruling 2026-11-10, I-01). Use the existing
+# instrument-liveness bound/cadence, including for USB errors and empty polls.
 METER_NAME = "meter"
 METER_STREAM_DIR = ("hazards", "meter")
 # PLAN2 row 9 (interim): one publication retry, then both locators re-read.
@@ -536,9 +537,10 @@ class Seams:
     emit_flag: Callable[[Path, Mapping[str, Any]], None] = _emit_flag_production
     boot_session_uuid: Callable[[], str | None] = _boot_session_uuid
     verify_lineage: Callable[[LineageRequest], Mapping[str, Any]] = _production_lineage_check
-    # The KM003C wall meter's command line; None runs the window without it.
+    # None is an unavailable reader and refuses before the chain.
     meter_argv: Callable[[MonitorRequest], Sequence[str]] | None = None
     keep_awake: Callable[[int], sleep_guard.KeepAwake] | None = None
+    meter_probe: Callable[[Path], Mapping[str, Any]] | None = None
 
 
 _STATUS_ORDER = {PASS: 0, "NOT_EVALUATED": 1, UNMEASURED: 2, REFUSE: 3}
@@ -1268,6 +1270,128 @@ class MonitorLiveness:
             if (isinstance(line, dict) and isinstance(line.get("kind"), str) and line["kind"] in kinds
                     and line.get("error") is None):
                 self.last_good[name] = now
+
+
+class MeterLiveness(MonitorLiveness):
+    """DC-in sample liveness using the monitor's 600 s bound and 10 s cadence.
+
+    Incrementally read every create-once stream, including restarts. Only a
+    nonempty, correctly sized sample batch under a streaming header counts;
+    USB errors, empty polls, partial/malformed lines and unreadable streams
+    never refresh liveness. A streaming header is required; fresh paired
+    RAW/monotonic clocks date the last complete batch, including after sleep,
+    so reading a backlog cannot turn old samples into current evidence.
+    """
+
+    def __init__(self, directory: Path, *, clock: Callable[[], float] = time.monotonic,
+                 raw_clock: Callable[[], int] | None = None) -> None:
+        super().__init__(directory, clock=clock)
+        self.raw_clock = raw_clock or (lambda: time.clock_gettime_ns(time.CLOCK_MONOTONIC_RAW))
+        self.offsets, self.partial, self.anchors = {}, {}, {}
+        self.last_good = {"meter": clock()}
+        self.last_sample = None
+        self.outage: dict[str, Any] | None = None
+
+    def check(self) -> dict[str, Any] | None:
+        now = self.clock()
+        if now < self.next_check:
+            return None
+        self.next_check = now + MONITOR_LIVENESS_CHECK_S
+        try:
+            for path in sorted(self.directory.glob("stream-*.jsonl")):
+                try:
+                    self._read_stream(path, now)
+                except Exception as error:  # noqa: BLE001 - unreadable is not sampling
+                    if len(self.errors) < 20:
+                        self.errors.append(f"{path.name}: {_error_text(error)}")
+        except Exception as error:  # noqa: BLE001 - directory loss also counts as silence
+            if len(self.errors) < 20:
+                self.errors.append(_error_text(error))
+        self.outage = self.outage or self.silent(now)
+        return self.outage
+
+    def _read_stream(self, path: Path, now: float) -> None:
+        name, size = path.name, path.stat().st_size
+        offset = self.offsets.get(name, 0)
+        if size < offset:
+            offset = 0
+            self.partial.pop(name, None)
+            self.anchors.pop(name, None)
+        if size == offset:
+            return
+        with path.open("rb") as handle:
+            handle.seek(offset)
+            data = handle.read(size - offset)
+        self.offsets[name] = offset + len(data)
+        lines = (self.partial.get(name, b"") + data).split(b"\n")
+        self.partial[name] = lines.pop()
+        # Locate headers and the final complete non-empty batch without decoding
+        # every sample payload. An invalid last non-empty batch is not
+        # replaced by an earlier (potentially stale) one.
+        last_batch = None
+        for raw in lines:
+            kind = re.search(rb'"k"\s*:\s*"([hbet])"', raw)
+            if kind is None:
+                continue
+            if kind[1] == b'b':
+                # Empty polls carry no samples; the preceding batch's own rx
+                # still determines freshness. Malformed batches remain fail-closed.
+                count = re.search(rb'"n"\s*:\s*(0)(?=\s*[,}])', raw)
+                if count is None:
+                    last_batch = raw
+                continue
+            if kind[1] != b'h':
+                continue
+            try:
+                row = json.loads(raw)
+                if not isinstance(row, dict):
+                    continue
+                if row.get("k") == "h":
+                    last_batch = None
+                    self.anchors.pop(name, None)
+                    if (row.get("status") == "streaming"
+                            and all(type(row.get(k)) is int for k in ("start_raw_ns", "start_mono_ns"))):
+                        self.anchors[name] = row["start_raw_ns"] - row["start_mono_ns"]
+            except (ValueError, TypeError):
+                continue
+        if last_batch is not None and name in self.anchors:
+            try:
+                row = json.loads(last_batch)
+                if row.get("k") == "b":
+                    n, payload, rx = row.get("n"), row.get("p"), row.get("rx")
+                    if (type(n) is int and n > 0 and isinstance(payload, str) and len(payload) == 40 * n
+                            and len(bytes.fromhex(payload)) == 20 * n and type(rx) is int):
+                        # RAW advances through sleep on macOS; monotonic may
+                        # pause. Re-project using the current paired clocks.
+                        raw_now = self.raw_clock()
+                        if rx > raw_now:
+                            return
+                        seen = now - (raw_now - rx) / 1e9
+                        self.last_sample = max(seen, self.last_sample if self.last_sample is not None else seen)
+                        if self.last_good["meter"] < seen <= now:
+                            gap = seen - self.last_good["meter"]
+                            if gap >= MONITOR_OUTAGE_S and self.outage is None:
+                                self.outage = {"silent_s": {"meter": round(gap, 1)},
+                                               "outage_s": MONITOR_OUTAGE_S, "recovered": True}
+                            self.last_good["meter"] = seen
+            except (ValueError, TypeError):
+                pass
+
+
+def await_meter_ready(meter: "MonitorSupervisor", liveness: MeterLiveness) -> dict[str, Any]:
+    """Require an actual fresh batch within the existing readiness timeout."""
+    deadline = time.monotonic() + MONITOR_READY_TIMEOUT_S
+    while True:
+        meter.poll()
+        liveness.next_check = 0
+        liveness.check()
+        now = time.monotonic()
+        if (liveness.last_sample is not None and now - liveness.last_sample < MONITOR_READY_TIMEOUT_S
+                and meter.process is not None and meter.process.poll() is None):
+            return {"ready": True, "last_sample_monotonic_s": liveness.last_sample}
+        if now >= deadline:
+            return {"ready": False, "errors": liveness.errors}
+        time.sleep(MONITOR_READY_POLL_S)
 
 
 # --------------------------------------------------------------------------
@@ -2158,6 +2282,9 @@ def _run_hazard_night_body(rt: Any, plan_path: Path, plan: Any, probes: Any,
     def refuse(stage: str, reason: str, detail: str, evidence: Any, *,
                fault_reasons: Sequence[str] = ()) -> int:
         verify_awake("end")
+        outcome = rt._chain_outcome(plan, night, "REFUSED", None, reason)
+        fault_reasons = tuple(dict.fromkeys([*fault_reasons, *outcome["fault_reasons"]]))
+        hazard.update(chain_outcome=outcome["chain_outcome"], measurement_outcome=outcome["measurement_outcome"])
         hazard.update(verdict="REFUSED", stage_reached=stage, refusal={"reason": reason, "detail": detail},
                       flags_emitted=list(window.flags), diagnostics=list(window.diagnostics), ended=stamp())
         if fault_reasons:
@@ -2170,6 +2297,8 @@ def _run_hazard_night_body(rt: Any, plan_path: Path, plan: Any, probes: Any,
                                           started_monotonic_ns, evidence=evidence)
         rt._append_log(custody, f"hazard window refused at {stage}: {reason}")
         report = _report(plan, rt.EXIT_REFUSED, {"verdict": "REFUSED", "stage_reached": stage,
+                                                 "chain_outcome": outcome["chain_outcome"],
+                                                 "measurement_outcome": outcome["measurement_outcome"],
                                                  "refusal_reason": reason, "detail": detail,
                                                  "arm_verdicts": hazard.get("arm", {}).get("verdicts"),
                                                  "yield_line": "collected 0 members: the window was refused "
@@ -2234,6 +2363,20 @@ def _run_hazard_night_body(rt: Any, plan_path: Path, plan: Any, probes: Any,
         return refuse("arm", REFUSED_HAZARD, detail,
                       {"verdicts": decision["verdicts"], "reasons": decision["reasons"],
                        "arm_decision": f"night/{ARM_DECISION}"})
+
+    # I-01: reuse the v4 arm's live probe semantics (aligned samples, RAW
+    # offset and closing line), never an operator-entered availability bit.
+    try:
+        from scripts.align_v4_session import _probe_meter_live
+        meter_probe = dict((seams.meter_probe or _probe_meter_live)(
+            Path(getattr(rt, "REPO_ROOT", plan.measurement_root))))
+    except Exception as error:  # noqa: BLE001 - an unverifiable reader refuses
+        meter_probe = {"live": False, "reason": _error_text(error)}
+    hazard["meter_readiness"] = meter_probe
+    if meter_probe.get("live") is not True or seams.meter_argv is None:
+        return refuse("meter", REFUSED_INSTRUMENT_NOT_SAMPLING,
+                      "KM003C DC-in reader is absent or unreadable; every measurement requires DC-in",
+                      meter_probe, fault_reasons=("meter_not_sampling",))
 
     # Final census immediately before any publication or launch.
     final = window.agent_census()
@@ -2440,10 +2583,10 @@ def _run_hazard_night_body(rt: Any, plan_path: Path, plan: Any, probes: Any,
                       {"attempts": readiness}, fault_reasons=("instrument_not_sampling",))
     liveness = MonitorLiveness(journal_dir)
 
-    # 5b. The KM003C wall meter (WIRING.md), supervised like the monitor but
-    # never awaited and never a refusal: an absent meter exits 0 once and is
-    # not restarted; its supervision failures are DISCLOSE flags.
+    # 5b. The mandatory KM003C DC-in reader. The arm probe above gates
+    # admission; sample liveness below stops a window after the outage bound.
     meter: MonitorSupervisor | None = None
+    meter_liveness = MeterLiveness(custody.joinpath(*METER_STREAM_DIR))
     meter_faults: set[str] = set()
 
     def meter_fault(event: str, observed: Mapping[str, Any]) -> None:
@@ -2453,14 +2596,14 @@ def _run_hazard_night_body(rt: Any, plan_path: Path, plan: Any, probes: Any,
         window.flag("meter.supervision_fault", "DIAGNOSTIC", "PHYSICS", stage="window",
                     observed={"event": event, **observed},
                     detail="the wall-meter process could not be supervised as planned (" + event + "); the "
-                           "meter is a disclosed diagnostic and collection went on")
+                           "sample liveness is checked independently against the instrument outage bound")
 
     if seams.meter_argv is not None:
         meter_argv = seams.meter_argv
         meter = MonitorSupervisor(
             lambda: meter_argv(monitor_request), night_dir=night, popen=seams.popen,
             group_census=getattr(rt, "_group_census", None), identity=getattr(rt, "observe_identity", None),
-            name=METER_NAME, restart_on_clean_exit=False)
+            name=METER_NAME, restart_on_clean_exit=True)
         meter.on_crash_loop = lambda details: meter_fault("crash_loop", details)
         meter.start()
 
@@ -2502,6 +2645,15 @@ def _run_hazard_night_body(rt: Any, plan_path: Path, plan: Any, probes: Any,
                                                "group_absent": stop_record.get("group_absent")})
         return {**summary, "streams": meter_streams(custody, digests=True)}
 
+    readiness = await_meter_ready(meter, meter_liveness)
+    hazard["meter_stream_readiness"] = readiness
+    if not readiness["ready"]:
+        hazard["monitor"] = monitor.stop()
+        hazard["meter"] = stop_meter()
+        return refuse("meter", REFUSED_INSTRUMENT_NOT_SAMPLING,
+                      "KM003C reader produced no first valid batch within the monitor readiness budget",
+                      readiness, fault_reasons=("meter_not_sampling",))
+
     thresholds = plan.hazard_window["thresholds"].get("disk", {})
     low = thresholds.get("low_bytes", DISK_LOW_BYTES_DEFAULT) if isinstance(thresholds, Mapping) else DISK_LOW_BYTES_DEFAULT
     disk = DiskFloor([Path(roots["claim"]), Path(roots["bound"]), custody], int(low), seams.disk_free_bytes,
@@ -2527,6 +2679,7 @@ def _run_hazard_night_body(rt: Any, plan_path: Path, plan: Any, probes: Any,
     # never ends the chain, it is flagged once per step and the pass goes on.
     supervision_faults: dict[str, int] = {}
     liveness_failing_since: list[float | None] = [None]
+    meter_outage: dict[str, Any] | None = None
 
     def supervision_fault(label: str, error: BaseException) -> None:
         supervision_faults[label] = supervision_faults.get(label, 0) + 1
@@ -2543,6 +2696,7 @@ def _run_hazard_night_body(rt: Any, plan_path: Path, plan: Any, probes: Any,
             return None
 
     def supervise() -> dict[str, Any] | None:
+        nonlocal meter_outage
         if keep is not None:
             restarted = guarded("keep_awake", keep.poll)
             if restarted and getattr(keep, "last_loss", True):
@@ -2553,6 +2707,16 @@ def _run_hazard_night_body(rt: Any, plan_path: Path, plan: Any, probes: Any,
         guarded("monitor", monitor.poll)
         if meter is not None:
             guarded("meter", poll_meter)
+        reading = meter_liveness.check()
+        if reading is not None:
+            meter_outage = reading
+            window.flag("meter.supervision_fault", "DIAGNOSTIC", "PHYSICS", stage="window",
+                        observed={"event": "liveness_outage", **meter_outage},
+                        expected={"outage_s": MONITOR_OUTAGE_S},
+                        detail="no valid DC-in sample batch within the instrument outage bound; chain stopped")
+            return rt._refusal_mapping(STOPPED_MONITOR_OUTAGE,
+                f"KM003C DC-in stream silent for {MONITOR_OUTAGE_S:g} s; the driver stopped the chain",
+                meter_outage)
         reading = guarded("disk", disk.check)
         if reading is not None:
             window.flag("disk.low", "DIAGNOSTIC", "PHYSICS", stage="window",
@@ -2617,11 +2781,19 @@ def _run_hazard_night_body(rt: Any, plan_path: Path, plan: Any, probes: Any,
             chain_path, plan, probes, night, claim, command=["/bin/zsh", "-f", str(chain_path)],
             abort_on_census=True, supervise=supervise, census_group_on_exit=True,
             census=hazard_census, append_census=hazard_census.append)
+    except KeyboardInterrupt as interrupt:
+        termination = getattr(interrupt, "chain_termination", None)
+        if (night / "chain.started").exists() and not (termination or {}).get("proven"):
+            rt._set_chain_termination_unproven({"path": "interrupt", "outcome": termination})
+        raise
     except Exception as error:  # noqa: BLE001 - recorded; the terminal record must still be written
         window.note(f"chain supervision raised {_error_text(error)}")
         abort = rt._refusal_mapping(rt._CODES["chain_alive"],
                                     f"the driver's chain supervision raised {_error_text(error)}", None)
         proven = False
+    if (night / "chain.started").exists() and not proven:
+        rt._set_chain_termination_unproven({"path": "hazard", "chain_exit_code": exit_code,
+                                           "abort": abort})
     # The chain exited no later than this instant (R3-5: the monitor stop is held from here).
     chain_returned = stamp()
     sleep_end = sleep_guard.safe_sleep_reading()
@@ -2766,6 +2938,8 @@ def _run_hazard_night_body(rt: Any, plan_path: Path, plan: Any, probes: Any,
                            if len(captures) >= 2 else "not_run")
     bound_derivation_failed = _stage_fault(journal, [*derivations, *(item + ".corpus" for item in derivations)])
     fault_reasons = []
+    if meter_outage is not None:
+        fault_reasons.append("meter_liveness_outage")
     if yield_status in {"EMPTY", "LOW"}:
         fault_reasons.append(f"yield_{yield_status.lower()}")
     if verdict == "CHAIN_STOPPED":
@@ -2781,6 +2955,11 @@ def _run_hazard_night_body(rt: Any, plan_path: Path, plan: Any, probes: Any,
         fault_reasons.append("post_bracket_failed")
     if bound_derivation_failed is True:
         fault_reasons.append("bound_derivation_failed")
+    # A-01 (2026-11-10 measurement-system audit §3.1 / Q3), reporting-only
+    # rebind: GO remains the arm verdict, including for an R1 refusal exit.
+    outcome = rt._chain_outcome(plan, night, verdict, exit_code, aborted_reason)
+    fault_reasons.extend(reason for reason in outcome["fault_reasons"] if reason not in fault_reasons)
+    hazard.update(chain_outcome=outcome["chain_outcome"], measurement_outcome=outcome["measurement_outcome"])
     hazard["faults"] = {"post_bracket_failed": post_bracket_failed,
                         "bound_derivation_failed": bound_derivation_failed, "reasons": fault_reasons}
     stages = hazard["chain"]["stages"]
@@ -2799,6 +2978,7 @@ def _run_hazard_night_body(rt: Any, plan_path: Path, plan: Any, probes: Any,
     report = _report(plan, base_exit, {
         "verdict": verdict, "stage_reached": stage_reached, "aborted_reason": aborted_reason,
         "chain_exit_code": exit_code,
+        "chain_outcome": outcome["chain_outcome"], "measurement_outcome": outcome["measurement_outcome"],
         "termination_proven": proven, "census_count": census_count, "arm_verdicts": decision["verdicts"],
         "stages_total": len(stages), "stages_nonzero": sum(1 for row in stages if row.get("rc") not in (0, None)),
         "chain_stop": chain_stop.get("kind") if chain_stop is not None else None,

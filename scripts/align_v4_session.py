@@ -41,7 +41,10 @@ def series_ac_powermode(measurement_root, kit_path=kit.KIT):
     return value
 
 
-def prepare(measurement_root, session_root, *, power_runner=None, window_id=None, extra_sentinels=0, **kwargs):
+def prepare(measurement_root, session_root, *, power_runner=None, window_id=None, extra_sentinels=0,
+            frequency_reader=None, frequency_runner=None, frequency_preflight=None, **kwargs):
+    from joulewise.align.apple import powermode
+    preflight = powermode.host_lock_preflight(role='v4-prepare-preflight')
     # Lead ruling R6-7: at every session start a host-level High Power marker
     # means an Automatic restore is owed. Restore it first (never under a
     # measuring night, which holds the host night lock and restores at its own
@@ -69,17 +72,195 @@ def prepare(measurement_root, session_root, *, power_runner=None, window_id=None
     kwargs.setdefault('pack_id', kit.PACK_ID)
     kwargs.setdefault('session_prefix', 'align-v4-')
     state = pilot.prepare(measurement_root, session_root, **kwargs)
+    state['host_state_preflight'] = preflight
+    if series_state is not None and state.get('preparation_status') == 'STAGED':
+        # Preserve the selected window even when the following preflight
+        # refuses; a later install must still bind the correct frozen series.
+        state['v4_series'] = series_state
+    # The prepared plan supplies the actual stream span and registered budget.
+    # A second, fresh check at install owns any intervening network-time ON.
+    frequency = None
+    if state.get('preparation_status') == 'STAGED':
+        lock = powermode.HostLock(role='v4-prepare-frequency')
+        try:
+            if not lock.acquire():
+                raise ValueError('clock.frequency_word_nonzero: another night holds the host night lock')
+            frequency = (frequency_preflight or frequency_word_preflight)(
+                state, reader=frequency_reader, runner=frequency_runner or power_runner)
+        finally:
+            lock.release()
+        state['clock_frequency_preflight'] = frequency
+    pilot.h.write(Path(session_root) / 'session.json', state)
+    if frequency is not None and not frequency['ok']:
+        raise ValueError(f"{frequency['cause']}: {frequency['reason']}")
     if series_state is not None:
         if state.get('preparation_status') != 'STAGED':
             raise ValueError('series prepare produced no armable plan; inspect session flags')
-        state['v4_series'] = series_state
-        pilot.h.write(Path(session_root) / 'session.json', state)
     if start['action'] != 'none':
         try:
             pilot.h.write(Path(session_root) / f'staging/v4-session-start-restore-{time.time_ns()}.json', start)
         except Exception:  # noqa: BLE001 - the restore itself is what matters
             pass
     return state
+
+
+# Fixed, root-owned native executable; no Python interpreter or writable repo
+# script is ever granted root. Provisioning and the exact sudoers rule are in
+# the round-3 report. This command accepts NO arguments.
+ZERO_FREQUENCY_ARGV = ('/usr/bin/sudo', '-n', '/Library/PrivilegedHelperTools/joulewise-zero-ntp-frequency')
+FREQUENCY_CAUSE = 'clock.frequency_word_nonzero'
+
+
+def frequency_word_preflight(state, *, reader=None, runner=None):
+    """Project a fresh kernel word through this arm's unchanged clock budget.
+
+    Caller holds HostLock. The launchd census must prove no night installed
+    before changing host state. Every passing arm authenticates network time
+    OFF; a failing projection also requires OFF before zeroing the word. All failures retain evidence
+    and refuse before the shared installer. This is preparation, not a
+    replacement for the hazard's measured-rate/dwell gates or OFF receipt.
+    """
+    from joulewise import kernel_clock, network_time_off
+    from joulewise.hazards import clock
+    record = {'ok': False, 'cause': FREQUENCY_CAUSE, 'action': 'refused',
+              'before': None, 'after': None, 'commands': [],
+              'next_arm_owns_zeroing': True}
+
+    def command(argv):
+        evidence = {'argv': list(argv)}
+        record['commands'].append(evidence)
+        try:
+            result = (runner(argv) if runner is not None else subprocess.run(
+                argv, check=False, capture_output=True, text=True, timeout=10))
+            evidence.update(exit_code=result.returncode, stdout=result.stdout or '', stderr=result.stderr or '')
+        except (OSError, subprocess.SubprocessError) as exc:
+            evidence['error'] = f'{type(exc).__name__}: {exc}'
+        return evidence
+
+    def read(point):
+        probe = dict(kernel_clock.validate_probe((reader or clock.read_frequency)()))
+        record[point] = probe
+        gate = clock.frequency_bound(probe['raw_word'], limits)
+        record[point + '_gate'] = gate
+        return gate
+
+    try:
+        # Use the plan bytes that will actually be installed, not cached
+        # prepare evidence or hard-coded 335/5764-second assumptions.
+        night_plan = pilot.h.read(state['plan_path'])
+        if pilot.h.locator(state['plan_path'])['sha256'] != state['plan_sha256']:
+            raise ValueError('prepared plan bytes changed')
+        t0 = night_plan.get('t0_epoch_s')
+        if not pilot.h.finite(t0) or t0 <= time.time():
+            raise ValueError('plan t0 has passed or is unavailable; prepare a fresh session')
+        try:
+            hazard = night_plan['hazard_window']
+            limits = dict(hazard['thresholds']['clock'], t_stream_max_s=hazard['T_stream_max_s'])
+        except (KeyError, TypeError) as exc:
+            record['cause'] = 'clock.frequency_plan_invalid'
+            raise ValueError(f'plan clock budget unavailable: {exc}') from exc
+        passes = read('before')['passes']
+        try:
+            _require_night_job_absent(runner)
+        except ValueError as exc:
+            record['cause'] = ('prepare.night_job_loaded' if 'already holds the night job' in str(exc)
+                               else 'prepare.night_job_state_unavailable')
+            raise
+        query_argv = ('/usr/bin/sudo', '-n', '/usr/sbin/systemsetup', '-getusingnetworktime')
+        query = command(query_argv) if passes else None
+        if (query is None or (query.get('exit_code') == 0
+                              and query.get('stdout', '').strip().casefold() == 'network time: on')):
+            off = command(network_time_off.OFF_ARGV)
+            if off.get('exit_code') != 0 or not network_time_off.off_stdout_admitted(off.get('stdout')):
+                raise ValueError('network time OFF setter unavailable or unverified')
+            query = command(query_argv)
+        if query.get('exit_code') != 0 or query.get('stdout', '').strip().casefold() != 'network time: off':
+            raise ValueError('network time OFF read-back failed')
+        record['network_time'] = {'observed': 'off', 'verified': True}
+        # RL-26: the receipt binds C source; sudo runs this installed binary.
+        # Keep both identities on every arm, including a no-op. The kit check
+        # already validated the receipt; use its binding, not a prepare cache.
+        from joulewise.align.apple import v4_registration
+        source_path = 'scripts/zero_ntp_frequency.c'
+        source_root = Path(state.get('source_measurement_root') or state.get('measurement_root') or ROOT)
+        helper = Path(ZERO_FREQUENCY_ARGV[-1])
+        identity = record['zero_helper'] = {'path': str(helper), 'sha256': None,
+                                          'source': {'path': source_path, 'sha256': None}}
+        try:
+            receipt = pilot.h.read(source_root / v4_registration.REGISTRATION / 'registration_receipt.json')
+            bound = receipt['artifacts'][source_path]
+            identity['source']['sha256'] = bound
+            if not v4_registration.is_digest(bound) or _sha256((source_root / source_path).read_bytes()) != bound:
+                raise ValueError('helper source differs from its registration binding')
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            record['cause'] = 'clock.frequency_helper_source_unbound'
+            raise ValueError(f'helper source binding unavailable: {exc}') from exc
+        try:
+            identity['sha256'] = _sha256(helper.read_bytes())
+        except OSError as exc:
+            identity['error'] = f'{type(exc).__name__}: {exc}'
+            if not passes:
+                record['cause'] = 'clock.frequency_helper_unreadable'
+                raise ValueError('needed installed frequency helper is missing or unreadable') from exc
+        if passes:
+            # A passing nonzero word also needs no correction: this preflight
+            # uses the existing budget, never an extra word==0 threshold.
+            read('after')
+            record['action'] = 'no_op'
+        else:
+            zero = command(ZERO_FREQUENCY_ARGV)
+            # Always retain the new word, including after helper denial/error.
+            gate = read('after')
+            if zero.get('exit_code') != 0:
+                raise ValueError('frequency zero helper unavailable or failed (sudo -n; no prompt)')
+            if record['after']['raw_word'] != 0 or not gate['passes']:
+                raise ValueError('frequency zero read-back failed or projected bound still fails')
+            record['action'] = 'zeroed'
+        if not record['after_gate']['passes']:
+            raise ValueError('frequency word changed to a failing bound during preflight')
+        if t0 <= time.time():
+            raise ValueError('plan t0 passed during preflight; prepare a fresh session')
+        record.update(ok=True, cause=None, reason=None)
+    except (OSError, ValueError, KeyError, TypeError, OverflowError) as exc:
+        record['reason'] = f'{type(exc).__name__}: {exc}'
+        # OFF/census failures still get a fresh after word when possible.
+        if record['before'] is not None and record['after'] is None:
+            try:
+                read('after')
+            except (OSError, ValueError, KeyError, TypeError, OverflowError) as after_error:
+                record['after_error'] = f'{type(after_error).__name__}: {after_error}'
+    return record
+
+
+def frequency_word_pre_t0(state, *, reader=None):
+    """Last read-only arm probe, after checks and before the quiet-dwell stamp.
+
+    RL-26 requires the actual last pre-t0 word, separate from prepare and the
+    correcting preflight. No new frequency threshold is introduced here.
+    """
+    from joulewise import kernel_clock
+    from joulewise.hazards import clock
+    record = {'ok': False, 'cause': 'clock.frequency_pre_t0_unavailable', 'reason': None,
+              'probe': None, 't0_epoch_s': None,
+              'read_started_epoch_s': None, 'read_finished_epoch_s': None}
+    try:
+        plan = pilot.h.read(state['plan_path'])
+        if pilot.h.locator(state['plan_path'])['sha256'] != state['plan_sha256']:
+            raise ValueError('prepared plan bytes changed')
+        t0 = record['t0_epoch_s'] = plan.get('t0_epoch_s')
+        if not pilot.h.finite(t0) or t0 <= time.time():
+            raise ValueError('plan t0 has passed or is unavailable; prepare a fresh session')
+        record['cause'] = 'clock.frequency_pre_t0_unreadable'
+        record['read_started_epoch_s'] = time.time()
+        record['probe'] = dict(kernel_clock.validate_probe((reader or clock.read_frequency)()))
+        record['read_finished_epoch_s'] = time.time()
+        record['cause'] = 'clock.frequency_pre_t0_unavailable'
+        if record['read_finished_epoch_s'] >= t0:
+            raise ValueError('plan t0 passed during the final frequency read')
+        record.update(ok=True, cause=None)
+    except (OSError, ValueError, KeyError, TypeError, OverflowError) as exc:
+        record['reason'] = f'{type(exc).__name__}: {exc}'
+    return record
 
 
 def _power_markers(measurement_root):
@@ -448,7 +629,7 @@ def _commit_exists(root, commit):
         return False
 
 
-def _probe_meter_live(root, *, runner=subprocess.run, seconds=3):
+def _probe_meter_live(root, *, runner=None, seconds=3):
     """Verify the KM003C reader live at arm time (never lead-entered): run the monitor briefly.
 
     Live means: a stream with status streaming, samples, a clock fit, a closing line and a
@@ -456,9 +637,10 @@ def _probe_meter_live(root, *, runner=subprocess.run, seconds=3):
     """
     import tempfile
     from joulewise.external import km003c_parse as kp
+    from joulewise import t0_rehearsal
     with tempfile.TemporaryDirectory(prefix='v4-meter-probe-') as tmp:
         out = Path(tmp) / 'probe.jsonl'
-        done = runner([sys.executable, '-B', str(Path(root) / 'scripts/km003c_monitor.py'), '--out', str(out),
+        done = (runner or t0_rehearsal.observed_run)([sys.executable, '-B', str(Path(root) / 'scripts/km003c_monitor.py'), '--out', str(out),
                        '--duration', str(seconds)], cwd=root, capture_output=True, timeout=seconds+60, check=False)
         if getattr(done, 'returncode', 1) != 0 or not out.is_file():
             return {'live': False, 'reason': f'monitor probe exit {getattr(done, "returncode", None)}'}
@@ -825,7 +1007,8 @@ def _take_receipts():
 
 @_install_timing
 def install(session_root, *, runner=None, volume_runner=None, now=None, w1_disk_config=None,
-            disk_gate=None, **kwargs):
+            disk_gate=None, frequency_reader=None, frequency_runner=None, frequency_preflight=None,
+            frequency_pre_t0=None, **kwargs):
     session = Path(session_root)
     state = pilot.h.read(session / 'session.json')
     measurement_root = state['measurement_root']
@@ -875,7 +1058,9 @@ def install(session_root, *, runner=None, volume_runner=None, now=None, w1_disk_
         if start['action'] != 'none':
             pilot.h.write(session / f'staging/v4-session-start-restore-{time.time_ns()}.json', start)
         try:
-            if entering:
+            frequency = (frequency_preflight or frequency_word_preflight)(
+                state, reader=frequency_reader, runner=frequency_runner or runner)
+            if entering and frequency['ok']:
                 # Lead ruling R5-6: W1 under an adopted High Power. The marker
                 # comes first (powermode.enter_high_power), so any later crash
                 # leaves the restore owed. Inside the try (round-5 executing
@@ -885,7 +1070,10 @@ def install(session_root, *, runner=None, volume_runner=None, now=None, w1_disk_
             result = _arm_and_install(session, state, measurement_root, plan, high, runner=runner,
                                       volume_runner=volume_runner, now=now, w1_disk_config=w1_disk_config,
                                       disk_gate=disk_gate, lock=lock,
-                                      owner=owner if any(owner.values()) else None, **kwargs)
+                                      owner=owner if any(owner.values()) else None,
+                                      frequency_preflight_record=frequency,
+                                      frequency_pre_t0_check=lambda: (frequency_pre_t0 or frequency_word_pre_t0)(
+                                          state, reader=frequency_reader), **kwargs)
             if entering and not (isinstance(result, dict) and result.get('exit_code') == 0):
                 # Round-5 cold pass MEDIUM-1 (R6-7): the shared installer
                 # returned without installing (launchd already holds a night
@@ -943,7 +1131,8 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
                      w1_disk_config, disk_gate, lock=None, owner=None,
                      obc_off_attested_by=None, battery_runner=None, battery_log=None,
                      window_battery_journal=None, next_arm_triage=None, commit_check=None, record_check=None,
-                     packet_builder=None, meter_probe=None, dwell_start=None, **kwargs):
+                     packet_builder=None, meter_probe=None, dwell_start=None,
+                     frequency_preflight_record=None, frequency_pre_t0_check=None, **kwargs):
     # RUN_STATE 226 R15: every arm, W1 included, binds the frozen series. W1 binds an empty history after
     # R1; a C/T window the next frozen window. The packet bound is the arm's OWN rebuild (a supplied
     # packet is only a pointer), whose history is derived from the hash-chained, authenticated records.
@@ -991,6 +1180,10 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
                 refuse(record, 'high_power_enter: ' + str(high['reason']))
         record['epoch_s'] = (now or time.time)()
         receipt = None
+        if frequency_preflight_record is not None:
+            record['clock_frequency_preflight'] = frequency_preflight_record
+            if not frequency_preflight_record['ok']:
+                refuse(record, f"{frequency_preflight_record['cause']}: {frequency_preflight_record['reason']}")
         if record['admitted']:
             try:
                 kit.arm_powermode_check(plan, record['ac_powermode'].get('observed'))
@@ -1003,6 +1196,11 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
                 record['w1_disk_gate'] = receipt
             except (OSError, ValueError) as exc:
                 refuse(record, f'w1_disk_gate: {exc}')
+        record['clock_frequency_pre_t0'] = None
+        if record['admitted'] and frequency_pre_t0_check is not None:
+            final_frequency = record['clock_frequency_pre_t0'] = frequency_pre_t0_check()
+            if not final_frequency['ok']:
+                refuse(record, f"{final_frequency['cause']}: {final_frequency['reason']}")
         # The dwell stamp is the one value that depends on the dwell: it is held in memory and written
         # alone, to the dwell record, after the stamp (``quiet_dwell`` here only names that file).
         record['timing_receipts'] = _take_receipts()      # pre-stamp boundary markers (MEDIUM-2)

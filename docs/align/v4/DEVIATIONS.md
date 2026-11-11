@@ -9,6 +9,7 @@ history; this statement cannot establish other sessions' blindness.
 
 | ID | Old rule | Installed rule / reason |
 |---|---|---|
+| D-01 | Round-4 seat scope excluded registration code ("no registration code") | Binding `scripts/zero_ntp_frequency.c` in `joulewise/align/apple/v4_registration.py` (`_NAMED_ARTIFACTS`) and adding its entry to the registration receipt template exceeded that scope. Ratified by research-lead RL-26 (2026-11-10), quoted below; both changes must be covered by W1 STRICT re-registration. Arm-side conditions: pair the installed sudoers-named helper binary's SHA-256 with the receipt-bound source digest; record the last pre-t0 kernel frequency read. A needed missing/unreadable binary refuses before install. |
 | D-14b-1 | Authenticated `unobserved` R proceeds with a timed G0 and X4 | Every consumer refuses before runtime.prepare, flag `thermal.window_reference_unobserved`. Avoids spending members with no possible reference |
 | D-17a | Chair 17 permits “δ_slow, G_turn, N_chunk, B_D, T_dead” revisions after W1 | Remove B_D/T_dead; add D G0 cap. Keep quantization, B_D, T_dead, max_tokens=4096, max_turns=12 fixed before W1. Protect sentinel and cohort identity |
 | D-25a | Chair 25 replaces seed-law tag with a quantization-bearing tag | Keep `qwen3.8-27b` hash input; use quantization-bearing name as label only. Preserve existing seed witnesses, never pool quantizations |
@@ -26,6 +27,16 @@ history; this statement cannot establish other sessions' blindness.
 | U5-closure | Synthesis proposed obligatory tightening/disclosure after U5 FAIL; text remained pending | PRE-SIGNATURE, blind (RL-20): W1 admitted on any R1 U5 verdict; U5 descriptive (R21 A15). FAIL is disclosed as "start-state sensitivity not shown controlled" with no obligatory policy change; lead may tighten δ_slow once before C1 under D-17a |
 | RL16-U3-N24 | R25 roster N = 22 omitted T4/T5 | PRE-SIGNATURE, blind (RL-16): N = 24 covers W1 30B 4 + D 1, C1-C14 D 1 each and T1-T5 D 1 each. At n = 7, β = .05, q = 4.3305 and D multiplier 6.4958; evidence `U3-scope-n24.json`. Roster and registered beta/transfer factor are checked before signing |
 | TR-spill-LOW-2 | SPEED-TOOLBOX (Ed 2026-11-08): timing receipts append to journals that are already open and create no new files | Lead deviation ruling, ACCEPTED: when arm-only or no-log runs have no `night.log`, `scripts/run_night.py:_timing_journal` holds the markers in memory and, when its scope closes after the operation, spills them to `night/timing-receipts.jsonl` in the session custody. Losing those markers is worse than one new file; the file is written after the operation, never during a window or a dwell, and the driver path with a `night.log` is unchanged (Opus cold review LOW-2) |
+
+**D-01 authority — RL-26, verbatim.** Source: `docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md`
+at local `origin/audit/2026-11-10-fable` commit `9f536d8764ebd4d35e6edf9e23e6f0a3fbc253d6`, §RL-26:
+
+> **Ruling.** The edit to `joulewise/align/apple/v4_registration.py` (`_NAMED_ARTIFACTS`) and to the receipt
+> template on `ops/2026-11-10-w1-reliability` is ratified. It gets a deviation-log row before the W1 STRICT
+> re-registration, saying that the seat's scope excluded registration code and that the change was ratified
+> here. Two conditions for the arm side, not for the receipt: the arm record carries the SHA-256 of the
+> installed helper binary beside the bound source digest, since the receipt binds the source and root runs the
+> binary; and it carries the frequency word read before t0.
 
 **D-C1 — INSTALLED under RUN_STATE 212 R11-2.** Contrast proof/cap on every
 path; failed/incomplete proof or identity is predeclared non-veto INCONCLUSIVE.

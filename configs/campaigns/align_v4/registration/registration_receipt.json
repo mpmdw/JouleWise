@@ -317,7 +317,8 @@
     "scripts/validate_powermetrics_fiducial.py": null,
     "scripts/verify_family_marker.py": null,
     "scripts/write_derivation_night_inputs.py": null,
-    "scripts/write_v5_qualification_plan.py": null
+    "scripts/write_v5_qualification_plan.py": null,
+    "scripts/zero_ntp_frequency.c": null
   },
   "commit": null,
   "gates": {

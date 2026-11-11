@@ -269,6 +269,25 @@ class HostLock:
         return (self.fd,)
 
 
+def host_lock_preflight(*, role):
+    """Exercise creation, write access and flock on the actual host-state path.
+
+    Production callers mark their entry before this call, so the test override
+    cannot conceal an unusable /Users/Shared/JouleWise/host-power directory.
+    Never changes power settings; an unavailable or busy lock refuses.
+    """
+    lock = HostLock(role=role)
+    try:
+        if not lock.acquire():
+            raise ValueError("host-state preflight refused: another night holds the host night lock")
+        return {"host_state_dir": host_state_dir(), "lock_path": lock.path,
+                "acquired": True, "released": True}
+    except OSError as exc:
+        raise ValueError(f"host-state preflight refused: {lock.path}: {exc}") from exc
+    finally:
+        lock.release()
+
+
 def restore_owed(markers, *, runner=None, lock=None, owner=None, reason):
     """Restore Automatic for a host-level marker on a non-measuring path
     (lead ruling R6-7). Never raises; returns the record.

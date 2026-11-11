@@ -1,5 +1,5 @@
 #!/bin/sh
-# The night driver keeps its courier protocol; block-six mail belongs to the loop.
+# Program delivery via the results ref; courier.sent always means delivered.
 exec /opt/homebrew/bin/python3.13 -B -c '
 import json, os, re, sys, time
 from pathlib import Path
@@ -22,6 +22,9 @@ stdin = sys.stdin.buffer.read()
     "transport": "file", "mail_sent": False}) + "\n")
 night = custody / "night"
 night.mkdir(parents=True, exist_ok=True)
-(night / "courier.heartbeat").write_text(str(os.getpid()) + " " + str(time.time()) + "\n")
-(night / "courier.sent").touch()
+from scripts import run_night
+plan = re.findall(r"(?m)^Custody root: .*; plan: ([A-Za-z0-9][A-Za-z0-9._-]*)\.$", prompt)
+if not plan:
+    raise SystemExit(2)
+raise SystemExit(run_night._program_courier_delivery(custody, plan[-1]))
 ' "$@"

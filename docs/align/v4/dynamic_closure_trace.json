@@ -4,6 +4,7 @@
    "scripts/align_r1_runtime.py",
    "scripts/align_r1_turn_counts_export.py",
    "scripts/align_w1_budget_procedure.py",
+   "scripts/km003c_monitor.py",
    "scripts/night_chains/align_r1_rehearsal.zsh"
   ],
   "compiled": [
@@ -129,6 +130,7 @@
    "joulewise/environment_admission.py",
    "joulewise/external/__init__.py",
    "joulewise/external/km003c_parse.py",
+   "joulewise/external/km003c_usb.py",
    "joulewise/flags/__init__.py",
    "joulewise/flags/catalog.py",
    "joulewise/flags/core.py",
@@ -187,6 +189,7 @@
    "scripts/bytes_h_session.py",
    "scripts/fixture_orphan_census.py",
    "scripts/generate_matrix.py",
+   "scripts/km003c_monitor.py",
    "scripts/run_night.py",
    "scripts/validate_align_v4_w1_plan.py"
   ],
@@ -313,6 +316,7 @@
    "joulewise/environment_admission.py",
    "joulewise/external/__init__.py",
    "joulewise/external/km003c_parse.py",
+   "joulewise/external/km003c_usb.py",
    "joulewise/flags/__init__.py",
    "joulewise/flags/catalog.py",
    "joulewise/flags/schema.py",
@@ -369,6 +373,7 @@
    "scripts/bytes_h_session.py",
    "scripts/fixture_orphan_census.py",
    "scripts/generate_matrix.py",
+   "scripts/km003c_monitor.py",
    "scripts/run_night.py",
    "scripts/validate_align_v4_w1_plan.py"
   ],
@@ -932,6 +937,7 @@
   "joulewise/analysis_manifest.py",
   "joulewise/analysis_manifest_v3.py",
   "joulewise/arm_readiness.py",
+  "joulewise/arm_readiness_evidence_t0.py",
   "joulewise/authentication_io.py",
   "joulewise/axi_decode_config.py",
   "joulewise/b5/__init__.py",
@@ -961,10 +967,12 @@
   "joulewise/desk_restore.py",
   "joulewise/detection_floor.py",
   "joulewise/detection_floor_registry.py",
+  "joulewise/dwell.py",
   "joulewise/environment.py",
   "joulewise/environment_admission.py",
   "joulewise/external/__init__.py",
   "joulewise/external/km003c_parse.py",
+  "joulewise/external/km003c_usb.py",
   "joulewise/flags/__init__.py",
   "joulewise/flags/catalog.py",
   "joulewise/flags/core.py",
@@ -992,6 +1000,7 @@
   "joulewise/sampler_teardown.py",
   "joulewise/schemas.py",
   "joulewise/suite.py",
+  "joulewise/t0_rehearsal.py",
   "joulewise/timing_receipts.py",
   "joulewise/tolerances.py",
   "joulewise/uncertainty_evidence.py",
@@ -1005,7 +1014,9 @@
   "scripts/align_v4_kit.py",
   "scripts/align_v4_w1_synthetic.py",
   "scripts/align_w1_budget_procedure.py",
-  "scripts/generate_matrix.py"
+  "scripts/generate_matrix.py",
+  "scripts/km003c_monitor.py",
+  "scripts/run_night.py"
  ],
  "executed": [
   "joulewise/__init__.py",
@@ -1130,6 +1141,7 @@
   "joulewise/environment_admission.py",
   "joulewise/external/__init__.py",
   "joulewise/external/km003c_parse.py",
+  "joulewise/external/km003c_usb.py",
   "joulewise/flags/__init__.py",
   "joulewise/flags/catalog.py",
   "joulewise/flags/core.py",
@@ -1189,6 +1201,7 @@
   "scripts/bytes_h_session.py",
   "scripts/fixture_orphan_census.py",
   "scripts/generate_matrix.py",
+  "scripts/km003c_monitor.py",
   "scripts/night_chains/align_r1_rehearsal.zsh",
   "scripts/run_night.py",
   "scripts/validate_align_v4_w1_plan.py"
@@ -1199,7 +1212,7 @@
   "arm_install_session": {
    "new_paths": 1,
    "ok": true,
-   "tests_run": 161
+   "tests_run": 162
   },
   "dct_series_window": {
    "new_paths": 146,
@@ -1225,6 +1238,11 @@
    "new_paths": 2,
    "ok": true,
    "tests_run": 49
+  },
+  "reliability_probe_and_courier": {
+   "new_paths": 2,
+   "ok": true,
+   "tests_run": 2
   },
   "timing_receipts_delta": {
    "new_paths": 1,
