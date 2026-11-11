@@ -2114,6 +2114,51 @@ def run_courier(
         optional("courier lock removal", lambda: (night_dir / "courier.lock").unlink(missing_ok=True))
 
 
+def _chain_outcome(plan, night_dir, verdict, chain_exit_code, aborted_reason=None):
+    """Reporting only: keep the registered arm verdict and exit policy intact.
+
+    A-01, measurement-system audit 2026-11-10 §3.1 / Q3 (cited rebind).
+    Read only R1's structural status, never its measurements or slot values.
+    """
+    reasons = []
+    started = (night_dir / "chain.started").exists()
+    payload = night_dir / "align-r1" / "r1_result.json"
+    is_r1 = (str(plan.plan_id).startswith("align-r1-")
+             or "align_r1_rehearsal" in str(getattr(plan, "chain_path", ""))
+             or payload.exists())
+    status = None
+    if is_r1 and started:
+        try:
+            raw = json.loads(payload.read_text(encoding="utf-8"))
+            status = raw.get("status") if isinstance(raw, dict) else None
+            if status not in ("complete", "refused", "aborted", "running"):
+                status = "invalid"
+        except FileNotFoundError:
+            status = "absent"
+        except (OSError, ValueError):
+            status = "unreadable"
+        if status != "complete":
+            reasons.append("r1_status:" + status)
+    if chain_exit_code not in (0, None):
+        reasons.append(f"chain_exit_nonzero:{chain_exit_code}")
+    if verdict == "REFUSED" and not started:
+        outcome = "REFUSED_PRE_CHAIN"
+        reasons.append("refusal:" + str(aborted_reason or "unknown"))
+    elif verdict == "ABORTED":
+        outcome = "ABORTED"
+        reasons.append("abort:" + str(aborted_reason or "unknown"))
+    elif reasons or verdict in ("REFUSED", "CHAIN_STOPPED"):
+        outcome = "CHAIN_FAILED"
+        if not reasons:
+            reasons.append("chain_verdict:" + verdict)
+    elif started and chain_exit_code == 0:
+        outcome = "COMPLETE"
+    else:
+        outcome = "UNKNOWN"
+    return {"chain_outcome": outcome, "measurement_outcome": status,
+            "fault": bool(reasons), "fault_reasons": reasons}
+
+
 @timing_receipts.timed('finalize', 'night_result')
 def _write_result(
     custody_root: Path,
@@ -2152,6 +2197,15 @@ def _write_result(
                               for path in _refusal_paths(night_dir)],
         "artifacts": _artifact_list(custody_root, night_dir),
     }
+    document.update(_chain_outcome(plan, night_dir, verdict, chain_exit_code, aborted_reason))
+    # Preserve pre-existing hazard faults as well as the new chain faults.
+    try:
+        hazard = json.loads((night_dir / "hazard_result.json").read_text(encoding="utf-8"))
+        reasons = hazard.get("faults", {}).get("reasons", [])
+        document["fault_reasons"] = list(dict.fromkeys([*document["fault_reasons"], *reasons]))
+        document["fault"] = bool(document["fault_reasons"])
+    except (OSError, ValueError, AttributeError, TypeError):
+        pass
     _write_json(night_dir / "result.json", document)
     return document
 

@@ -2158,6 +2158,9 @@ def _run_hazard_night_body(rt: Any, plan_path: Path, plan: Any, probes: Any,
     def refuse(stage: str, reason: str, detail: str, evidence: Any, *,
                fault_reasons: Sequence[str] = ()) -> int:
         verify_awake("end")
+        outcome = rt._chain_outcome(plan, night, "REFUSED", None, reason)
+        fault_reasons = tuple(dict.fromkeys([*fault_reasons, *outcome["fault_reasons"]]))
+        hazard.update(chain_outcome=outcome["chain_outcome"], measurement_outcome=outcome["measurement_outcome"])
         hazard.update(verdict="REFUSED", stage_reached=stage, refusal={"reason": reason, "detail": detail},
                       flags_emitted=list(window.flags), diagnostics=list(window.diagnostics), ended=stamp())
         if fault_reasons:
@@ -2170,6 +2173,8 @@ def _run_hazard_night_body(rt: Any, plan_path: Path, plan: Any, probes: Any,
                                           started_monotonic_ns, evidence=evidence)
         rt._append_log(custody, f"hazard window refused at {stage}: {reason}")
         report = _report(plan, rt.EXIT_REFUSED, {"verdict": "REFUSED", "stage_reached": stage,
+                                                 "chain_outcome": outcome["chain_outcome"],
+                                                 "measurement_outcome": outcome["measurement_outcome"],
                                                  "refusal_reason": reason, "detail": detail,
                                                  "arm_verdicts": hazard.get("arm", {}).get("verdicts"),
                                                  "yield_line": "collected 0 members: the window was refused "
@@ -2781,6 +2786,11 @@ def _run_hazard_night_body(rt: Any, plan_path: Path, plan: Any, probes: Any,
         fault_reasons.append("post_bracket_failed")
     if bound_derivation_failed is True:
         fault_reasons.append("bound_derivation_failed")
+    # A-01 (2026-11-10 measurement-system audit §3.1 / Q3), reporting-only
+    # rebind: GO remains the arm verdict, including for an R1 refusal exit.
+    outcome = rt._chain_outcome(plan, night, verdict, exit_code, aborted_reason)
+    fault_reasons.extend(reason for reason in outcome["fault_reasons"] if reason not in fault_reasons)
+    hazard.update(chain_outcome=outcome["chain_outcome"], measurement_outcome=outcome["measurement_outcome"])
     hazard["faults"] = {"post_bracket_failed": post_bracket_failed,
                         "bound_derivation_failed": bound_derivation_failed, "reasons": fault_reasons}
     stages = hazard["chain"]["stages"]
@@ -2799,6 +2809,7 @@ def _run_hazard_night_body(rt: Any, plan_path: Path, plan: Any, probes: Any,
     report = _report(plan, base_exit, {
         "verdict": verdict, "stage_reached": stage_reached, "aborted_reason": aborted_reason,
         "chain_exit_code": exit_code,
+        "chain_outcome": outcome["chain_outcome"], "measurement_outcome": outcome["measurement_outcome"],
         "termination_proven": proven, "census_count": census_count, "arm_verdicts": decision["verdicts"],
         "stages_total": len(stages), "stages_nonzero": sum(1 for row in stages if row.get("rc") not in (0, None)),
         "chain_stop": chain_stop.get("kind") if chain_stop is not None else None,
