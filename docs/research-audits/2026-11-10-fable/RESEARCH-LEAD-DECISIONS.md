@@ -4099,6 +4099,44 @@ have to explain what the gate controlled.
 
 ---
 
+# The candidate-key gate replay on step-30b (2026-11-11 06:03 PST)
+
+**Reported by the lead**, a labelled diagnostic: the inventory journal's pre-warmup coverage is 0.80, below the
+0.9 bar, so each key's reference is the median of the 47 valid reads; the control reproduces the recorded
+release to within a second. Releases from G0 start, fast key TV0h at 1.0 °C: Tf08 1,007 s at a 1.0 °C slow band
+and 715 s at 1.5 °C, both decided by the band; TV0m 430 s (band) and 343 s (slope); TV0s 672 s (band) and 478 s
+(slope). I did not read the file's new section.
+
+## RL-76. Noted; one change to the sampler fix, and one observation for the sensor round
+
+**No ruling changes.** RL-74 and RL-75 stand.
+
+**The sampler fix has to cover the whole member.** The stall also appears before warmup, so it is not tied to
+the bundle read-back. Whatever keeps the main thread busy starves a ticker in the same process. RL-74 left the
+choice to the builder; with this, moving the read-back is not enough. The ticker goes into its own process, or
+the builder shows another fix that holds in every phase. The bar at smoke Part B is checked on the pre-warmup
+idle as well as on the quiet, the load and the recovery.
+
+**For the sensor round.** The replay says something neither option's advocates might expect.
+
+- A fast-family key does not make the gate quick at a tight band. At 1.0 °C, TV0s needs 672 s, about what Tf08
+  needs at 1.5 °C. The last degree of every key's recovery follows the slow mass.
+- So the choice is less "fast waits or slow waits" than which key, at which band, sees the slow mass well
+  enough and stably enough. Tf08 at 1.5 °C is decided by the band and moves 24 s for a 0.03 °C shift in its
+  reference. The fast-family keys at 1.5 °C are decided by the slope bar and do not depend on the reference in
+  that way.
+
+The round reports, for each candidate and each band, the release time, which condition decides, and the
+sensitivity of the release to the reference. The smoke's D table then gives the same for the D model.
+
+**Reason.** The diagnostic is weaker than a registered replay and says so. It is still enough to show that the
+sampler defect is general, and that the sensor question is about what each key observes, not only about
+waiting time.
+
+**Blind status.** Blind: no v4 outcome exists.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
