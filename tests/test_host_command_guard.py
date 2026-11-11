@@ -143,6 +143,24 @@ class HostCommandGuardTests(unittest.TestCase):
         self.assertEqual([r["command"] for r in records], ["pmset"])
         self.assertNotEqual(records[0]["pid"], os.getpid())
 
+    def test_startup_child_gets_the_per_test_hook_when_it_imports_tests(self):
+        # The sitecustomize install runs before unittest is loaded; a child that later runs tests calls
+        # install() again, as scripts/shard_tests.py does, and must then turn a swallowed refusal into a failure.
+        source = ("import unittest, subprocess, sys\n"
+                  "assert 'tests.host_command_guard' in sys.modules\n"
+                  "from tests import host_command_guard; host_command_guard.install()\n"
+                  "class T(unittest.TestCase):\n"
+                  "    def runTest(self):\n"
+                  "        try: subprocess.run(['pmset', '-g'])\n"
+                  "        except Exception: pass\n"
+                  "r = unittest.TestResult(); T().run(r); print(len(r.failures))\n")
+        with guard.expect_refusals() as records:
+            child = subprocess.run([sys.executable, "-B", "-c", source], capture_output=True, text=True,
+                                   cwd=Path(__file__).resolve().parents[1])
+        self.assertEqual(child.returncode, 0, child.stderr)
+        self.assertEqual(child.stdout.strip(), "1")
+        self.assertEqual([r["command"] for r in records], ["pmset"])
+
     def test_swallowed_in_process_refusal_fails_test(self):
         class Leaky(unittest.TestCase):
             def runTest(self):
