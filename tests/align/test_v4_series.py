@@ -483,6 +483,8 @@ class FakeWorld:
                 return original_read(path, *args)
             stack.enter_context(patch.object(registration, 'load_identity_pins', side_effect=physical_pins))
             stack.enter_context(patch.object(h, 'read', side_effect=physical_inventory))
+            stack.enter_context(patch.object(session, 'frequency_word_preflight',
+                                            return_value={'ok': True, 'synthetic': True}))
             state = session.prepare(m, self.session, window_id=self.name, run=self.run_process,
                 now=lambda: time.time() - 480, statvfs=lambda _: SimpleNamespace(f_bavail=10**12, f_frsize=1),
                 capacity=lambda _: None)

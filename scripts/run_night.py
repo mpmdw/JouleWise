@@ -4410,7 +4410,9 @@ def _restore_network_time(probes: Probes) -> dict[str, Any]:
     The narrow systemsetup rule is used for both operations; failures remain
     explicit evidence and never conceal the power-mode restore.
     """
-    record: dict[str, Any] = {"ok": False, "requested": "on"}
+    record: dict[str, Any] = {"ok": False, "requested": "on",
+                              "next_arm_preflight": "clock.frequency_word_nonzero",
+                              "next_arm_owns_zeroing": True}
     for key, argv in (("set", NETWORK_TIME_ON_ARGV), ("read", NETWORK_TIME_QUERY_ARGV)):
         try:
             result = probes.run(argv)

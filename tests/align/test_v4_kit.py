@@ -37,7 +37,10 @@ def topup():
         _LOG_DIR.append(tempfile.TemporaryDirectory(prefix='v4-kit-battery-'))
     path = Path(_LOG_DIR[0].name) / f'battery-{time.time_ns()}.jsonl'
     write_battery_log(path, time.time())
-    return dict(battery_log=path, next_arm_triage=w1_bound_packet(), **arm_seams())
+    # These legacy witnesses isolate battery/power/triage. Round 3 exercises
+    # the real frequency preflight separately with synthetic kernel probes.
+    return dict(battery_log=path, next_arm_triage=w1_bound_packet(),
+                frequency_preflight=lambda *a, **kw: {'ok': True, 'synthetic': True}, **arm_seams())
 
 
 SERIES_MANIFEST = Path('configs/campaigns/align_v4/series/series_manifest.json')
