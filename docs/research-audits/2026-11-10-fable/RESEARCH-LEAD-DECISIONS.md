@@ -3593,6 +3593,50 @@ whether W1's data are the same kind of data as the pilots'. That is the question
 
 ---
 
+# Decision request 39: the one hunk that touches the meter stream (2026-11-11 05:29 PST)
+
+**Read.** The lane lead's classification of the driver diff and the draft row, as the lead relayed them, against
+the protocol's rule for a dead reader (W1 line, lines 823-826). I did not re-read the diff.
+
+## RL-68. The row goes in, with one sentence added; the join is shown by a native check
+
+The lane lead stopped at the right hunk and described it correctly. The restart after a clean exit changes no
+sample pilot 9 would have taken. It can only keep the wall-power channel alive where pilot 9 would have lost
+it, which is what Ed's rule asks for. So the statement RL-67 wanted is true of the member bundle and the rails,
+and the row says honestly where it is not true of DC-in.
+
+**The row, as drafted, with this added at the end:**
+
+> "Each stream file is read on its own. No member's DC-in is integrated across two files, and a member that
+> overlaps the gap between them is DC-missing (`meter.member_uncovered`), as the protocol states for a reader
+> that dies."
+
+That sentence is a rule, and the protocol only half states it: its text covers one stream that ends, not a
+second one that begins. The row is where the second case is written down.
+
+**The requirement is correct, and it is made specific.** It joins the restart check of RL-37, which already
+kills the reader once during a smoke. That check now shows:
+
+1. two stream files, each with its own header, offset and closing line or its registered salvage;
+2. a member wholly inside the first file and a member wholly inside the second each keep DC-in, and each
+   member's DC-in equals the integral taken from its own file alone;
+3. the member that overlaps the gap is flagged `meter.member_uncovered` and has no DC-in value;
+4. no sample is counted twice: the desk's sample count is the sum of the two files' counts.
+
+If the desk joins across files, bridges the gap, or double-counts, that is a defect in how DC-in is computed.
+It comes to me and is fixed before signing, since the code that reads the stream is bound.
+
+One more thing from the classification, noted and accepted: the new wait for a first valid meter batch delays
+the chain's start, inside the monitor's existing readiness budget, and refuses otherwise. That is before any
+member exists.
+
+**Reason.** A difference that only adds coverage is still a difference, and the place it can go wrong is the
+join. The row states the rule; the check shows the code follows it.
+
+**Blind status.** Blind: no v4 outcome exists.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
