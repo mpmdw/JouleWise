@@ -112,6 +112,12 @@ class HostCommandGuardTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "reserved"):
             namespace["misuse"]()
 
+    def test_expect_refusals_returns_records_without_failure(self):
+        with guard.expect_refusals() as records, patch("subprocess._fork_exec") as fork:
+            subprocess.run(["sudo", "true"])
+        fork.assert_not_called()
+        self.assertEqual([r["command"] for r in records], ["sudo"])
+
     def test_install_idempotent_and_uninstall_restores(self):
         before = subprocess.Popen.__init__
         guard.install()

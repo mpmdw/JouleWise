@@ -67,7 +67,7 @@ def classify(command, *, shell=False, executable=None):
     found = classify([executable]) if shell and executable is not None else []
     for raw in parts:
         argv = list(raw)
-        while argv and "=" in argv[0] and not argv[0].startswith(("/", "-")):
+        while shell and argv and "=" in argv[0] and not argv[0].startswith(("/", "-")):
             argv.pop(0)
         if not argv:
             if executable is None:
@@ -157,6 +157,8 @@ def expect_refusals():
     records = []
     try:
         yield records
+    except HostCommandRefused:
+        pass
     finally:
         records.extend(_since(snapshot))
         _expected.update(r["id"] for r in records)
