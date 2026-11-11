@@ -1068,6 +1068,28 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 (3) After `chain.exited`: runbook §4 on `20e9edbc4` with `S=/Users/edr/night-align/r1-20261111T014106Z`. Read `r1_result.json` status first. Then network time ON, the Automatic restore, KM003C, stray monitors, uninstall, record, mail Ed. **Before the NEXT arm after that, zero the frequency word again** (network time OFF, then the zero script, then measure the rate).
 (4) The watchdog-v5 fix (PR #707) is still open; install it only after the chain exits.
 
+259. **Laptop lead (interactive session 41120c85, Opus 5.5), 2026-11-10 21:35 PST: research lead rulings RL-32 (R1) and RL-33 (BYTES stage 1) for the magistrate.** Full text: `audit/2026-11-10-fable:docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md` @ `37c20df92`.
+- **RL-32, R1 at `da3187e6e`:**
+  - **δ_slow stays 1.5 °C** (slot S6, citing RL-32; S5 stays 1.0). The RL-23 hold is lifted. At 1.0 °C the fitted release is 907-1,299 s against the 1,200 s cap, so it is not a usable gate. Correction to item 255's disposition: only a 2.0 °C gate can be replayed from a 1.5 °C night, not a 1.0 °C one.
+  - **NR-1 decided:** the gated block must rehearse W1's reference rule. The first gated run captures by WP14(b); D_spam a, D_spam b and X-G consume that capture; the capturing run is recorded but not judged.
+  - **Tonight's run** gates against the cold R_op. A gated run or X-G whose G0 **released** is admissible as conservative. One whose G0 **did not release** says nothing about W1: no R10 fallback may be invoked on it, and **a short follow-up night (soak, capture, gated block) is owed**. Its design goes to the research lead before it is armed. The predicted D-after-D release against the cold reference is 1,600-1,900 s, beyond the cap, so expect that case.
+  - **R1's slots enter W1 STRICT re-registration only when ALL hold:**
+    (1) `r1_result.json` status complete and chain exit 0 (`verdict` is not evidence);
+    (2) step-30b's accepted attempt is 0;
+    (3) step-30b's G0 released inside the cap (predicted about 700-970 s);
+    (4) the gated block passes the admissibility rule above;
+    (5) `inconclusive_segments` is empty;
+    (6) U5 is evaluated at 1.5 °C and recorded (a FAIL is disclosed under RL-20);
+    (7) the A-B-A adoption is decided;
+    (8) a desk print of each member's pre-warmup 60 s median beside R_op;
+    (9) the research lead's structural review after custody closes, and then R10 maps model and budget.
+  - **Before ANY further R1 arm:** RL-23 item 2 goes in (an unreleased step-30b G0 is INCONCLUSIVE, not a refusal).
+  - **For the methods text:** W1's G0 is a consistency gate, not a return to cold idle.
+- **RL-33, BYTES seat 3 ADMIT.** `lane/2026-11-07-bytes-stage1-run` is now at `f161857fe` (probe fix and real commitment gate).
+  - **BYTES stage 1 may run in the next MBP desk gap** (RL-11: first in the R1-to-W1 gap). The driver's export root `$S1/export` holds no withheld store.
+  - **Before `record-push`:** the read-only GitHub check was done by the lead at 21:30 against `records/b6-pin-heads`. The activity API returns `ref`, `after`, `timestamp` and `activity_type`, and `ls-remote` equals `after`: PASS. Also record the RL-7(g) blinding check before the commitment commit. Riders are registered before it, or they are exploratory. Commitment due by 19 Nov.
+  - The known-bytes rule and the slot fill land by 15 Nov; that gates stage 2, not stage 1.
+
 258. **Laptop lead (interactive session 41120c85, Opus 5.5), 2026-11-10 20:58 PST: R1 was re-armed at 20:53 (magistrate item 256) BEFORE the research lead's RL-23 review that item 257 set as the final gate. Research lead ruling RL-31: R1 runs; the hold moves to registration.**
 - **Facts, from RL-31** (the armed build is `da3187e6e`):
   - The build has the 1,200 s G0 cap, R_op (the pre-warmup median) and δ_slow at 1.5 °C.
