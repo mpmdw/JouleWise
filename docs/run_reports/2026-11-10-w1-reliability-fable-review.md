@@ -661,3 +661,55 @@ unchanged by it.
   cannot be signed without them (R1's slots, RL-32).
 - The `courier_delivery` source in the window-record exporter (F-09).
 - Audit findings no branch addressed remain open: A-06, A-07, A-08, A-11, I-02 to I-05, W-03, W-04 and W-06.
+
+---
+
+# RL-37 delta review (Fable 5.2), 2026-11-10 22:43 PST
+
+Scope: `align/2026-11-10-meter-outage-rl37` at `248fd161e` (fix `5dc2d4b48`), based on the W1 line
+`align/2026-11-08-v4-r11` at `d865d76a3`. Research-lead ruling RL-37 reverses the round-2 behaviour I had flagged
+"to be confirmed": a meter outage no longer stops a v4 window.
+
+**Verdict: ADMIT. It can fast-forward the W1 line.** The W1 line is an ancestor of this head. The code does
+what RL-37 rules and nothing else. One condition sits outside the branch (M-1). Two wording fixes in bound files
+should land before the receipt is signed (M-2, M-3).
+
+## M1. Each expected behaviour
+
+| Expected | Result |
+|---|---|
+| At 600 s the flag is raised once and `meter_liveness_outage` reaches `fault_reasons`; the chain runs to its end | Yes. The driver change is ten lines in `supervise()`: it latches the first outage, raises one `meter.supervision_fault` (`event: liveness_outage`) and no longer returns a stop. The test drives the real `MeterLiveness` on an injected clock through 590, 600, 610 and 1,200 s on the real driver path: exit `EXIT_GO`, one flag, `fault: true` and `chain_outcome: COMPLETE` in both `result.json` and the courier facts, no `refusal.json`. |
+| The supervisor keeps restarting the reader | Yes. `MonitorSupervisor` and `restart_on_clean_exit=True` are unchanged. |
+| The hazard-monitor stop is unchanged | Yes, and it now works during a meter outage. Before, the meter branch returned first and the battery and contention check was never reached. Two new tests cover a battery-only and a contention-only outage while the meter is also down. |
+| The t0 probe is kept, with deviation row `METER-T0-PROBE` | Yes. One row citing RL-37. See M-3. |
+| Gaps are listed with start and end | For reader process gaps, yes: `MonitorSupervisor` records `down_from` and `up_at` and they reach `hazard_result.json` under `meter.gaps`. A reader that stays alive but silent has no endpoints in the night record. See M-4. |
+| Overlapped members are flagged `meter.member_uncovered` | Yes, at the desk, in unchanged code (`joulewise/align/apple/km003c.py:capture_member`). Streams are never spliced. I also checked the case the tests do not: a hole inside one stream is caught by the device counter (`span_has_drops`, flag `meter.member_gap`) and USB errors by `meter.member_error`, so no member gets an integral across a hole. |
+| A restarted stream passes the arm-probe alignment and offset checks | The check lives at the desk: `capture_member` runs the same parser alignment and `raw_offset_ns` comparison on every stream before its DC is used. A new test shows the arm probe and the desk accept and reject the same streams. |
+| Trace regenerated, both closures green | Yes. I regenerated the trace on this head: all nine scenarios pass (418 tests) and the output is byte-identical to the committed file. The only change from the W1 line is the desk scenario's test count, 44 to 46. |
+
+## M2. What I ran
+
+All passing, one module at a time, on `248fd161e`: the trace generator; `tests.align.test_v4_executed_closure` 4;
+`tests.align.test_v4_dynamic_closure` 10; `tests.align.test_v4_registration` 22; `tests.test_w1_reliability` 11, `_r2` 19,
+`_r3` 14, `_r4` 42, `_r5` 7, `_r6` 3, `_r7` 10; `tests.align.test_km003c` 25; `tests.test_b5_driver_p3.MeterWindowTests` 7;
+`tests.external.test_km003c_monitor` 12 with 1 live-device skip; `tests.test_w1_integration` 2;
+`tests.test_watchdog_reliability` 45; `tests.test_magistrate_watchdog` 158.
+
+## M3. Is there a new silent path?
+
+Not in the code. One dependency outside it needs proving.
+
+| ID | Sev | Path | Finding | Fix |
+|---|---|---|---|---|
+| M-1 | MED (to verify) | Air watcher (not in the repository); `joulewise/arm_retry.py:terminal_window_release` | With the stop gone, a meter outage ends as verdict `GO`, chain exit 0 and `chain_outcome: COMPLETE`. The only signal is `fault: true` with `meter_liveness_outage`. A watcher that alarms on a non-GO verdict or a non-zero exit code will stay quiet. Nothing in the repository turns `fault: true` into a notice: the program courier only publishes, and the watchdog still releases a window on the verdict alone (audit W-04, open). The alarm also arrives only at delivery, at the end of the window; RL-37 accepts that. | Native check 7(b) must show the Air alarm firing on `fault: true` with a GO verdict. A small follow-up would close the in-repository path: the watchdog queues a notice when a released window's result has `fault: true`. |
+| M-2 | LOW | `joulewise/b5/driver.py:25-27` | The module docstring still says "a sustained sample outage stops it under the instrument outage bound". That is now false and contradicts the registered text. | Correct the sentence. The file is bound, so do it before the receipt is signed. |
+| M-3 | LOW | `docs/align/v4/DEVIATIONS.md`, row `METER-T0-PROBE` | The row names the pre-chain probe (`_probe_meter_live`). The driver has a second pre-chain refusal, `await_meter_ready`: the window's own reader must deliver a first valid batch within 20 s. The row's sentence "a reader that is not live at t0 refuses with zero capture" covers it in spirit but does not name it. | Name both in the row, before registration. |
+| M-4 | LOW (for the research lead) | `joulewise/b5/driver.py` `supervise()` | Only the first outage is flagged and its end is not recorded by the driver. Losses shorter than 600 s, and a meter crash loop, do not set `fault` (the hazard monitor's crash loop does). They show in `hazard_result.json` (`meter.gaps`, `crash_loop`) and at the desk. This is within RL-37's wording. | If the research lead wants partial loss alarmed, add `meter_crash_loop` to the fault reasons and record each outage's end. Not required now. |
+
+## M4. Registration
+
+Bound paths changed: `joulewise/b5/driver.py`, `docs/align/v4/DEVIATIONS.md` and
+`docs/align/v4/dynamic_closure_trace.json`. If M-2 and M-3 are fixed, the first two change again and the trace
+does not (comment and document text only); re-run the two closure modules to confirm.
+
+My commit adds only this section; `docs/run_reports/` is not bound.
