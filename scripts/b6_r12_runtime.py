@@ -410,6 +410,18 @@ def audit_guard(root, pin):
         elif event == "os.rename":
             path_check(args[0], True)
             path_check(args[1], True)
+        elif event == "os.link":
+            # The pinned no-clobber publisher commits a sibling temporary
+            # file with a real hard link. Preserve that filesystem judgment;
+            # neither endpoint may escape the fixture or traverse a symlink.
+            if any(fd not in (-1, None) for fd in args[2:4]):
+                raise PermissionError("R12 hard-link dirfd is not declared")
+            path_check(args[0])
+            path_check(args[1], True)
+            for value in args[:2]:
+                path = Path(os.path.abspath(os.fsdecode(value)))
+                if not path.is_relative_to(root) or path != path.resolve():
+                    raise PermissionError("R12 hard link escapes the plain fixture tree")
         elif event == "os.symlink":
             source, destination = map(os.fsdecode, args[:2])
             path_check(destination, True)
@@ -417,7 +429,7 @@ def audit_guard(root, pin):
             if not allowed or ".venv" not in Path(destination).parts:
                 raise PermissionError("R12 symlink is not a fixture interpreter alias")
         elif event in {"socket.connect", "socket.bind", "socket.sendto", "socket.getaddrinfo", "socket.gethostbyname",
-                       "socket.gethostbyaddr", "socket.getnameinfo", "os.system", "os.posix_spawn", "os.exec", "os.fork", "os.link"}:
+                       "socket.gethostbyaddr", "socket.getnameinfo", "os.system", "os.posix_spawn", "os.exec", "os.fork"}:
             raise PermissionError("R12 native action denied: " + event)
         elif event == "os.killpg" or (event == "os.kill" and args[1] != 0):
             raise PermissionError("R12 native signal denied")
@@ -1286,7 +1298,7 @@ def install_usb_source(root, clock):
                         power = 10 + sum(row["power_mw"] / 1000 for row in self.intervals
                                          if row["start_ns"] <= point < row["end_ns"])
                         payload.extend(struct.pack("<HHiiHHHH", ((point - self.origin) // 1_000_000) % 65536,
-                                                   0, 20_000_000, round(power * 50_000), 0, 0, 0, 0))
+                                                   0, 28_000_000, round(power * 1_000_000 / 28), 0, 0, 0, 0))
                     self.queue.append(bytes([0x41, tid, 0, 0]) + struct.pack("<I", 2 | (10 << 16)) + payload)
                 else:
                     self.queue.append(bytes([0x05, tid, 0, 0]))

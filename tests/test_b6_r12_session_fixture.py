@@ -257,7 +257,7 @@ print(count)
 
     @unittest.skipUnless(sys.platform == "darwin", "pinned USB protocol uses CommonCrypto")
     def test_real_meter_writer_uses_synthetic_libusb_object(self):
-        """Predict: unchanged meter writes streaming header, 11 polls/110 samples and duration trailer; no native USB load."""
+        """Predict: unchanged meter writes 11 polls/110 samples at the registered 28 V EPR midpoint and a duration trailer; no native USB load."""
         relative = "scripts/km003c_monitor.py"
         source = subprocess.check_output(["git", "show", f"{PIN}:{relative}"], cwd=REPO)
         script = self.root / "pin" / relative
@@ -273,6 +273,10 @@ print(count)
         self.assertEqual(len(polls), 11)
         self.assertEqual(sum(row["n"] for row in polls), 110)
         self.assertTrue(all(len(bytes.fromhex(row["p"])) == 200 for row in polls))
+        from joulewise.external.km003c_parse import SAMPLE, VBUS_BAND_V
+        volts = [point[2] / 1e6 for row in polls for point in SAMPLE.iter_unpack(bytes.fromhex(row["p"]))]
+        self.assertEqual(set(volts), {28.0})
+        self.assertTrue(all(VBUS_BAND_V[0] <= value <= VBUS_BAND_V[1] for value in volts))
         from b6_r12_verify import meter_facts
         facts = meter_facts((self.root / "source-only-meter.jsonl").read_bytes())
         self.assertEqual(facts["samples"], 110)
@@ -280,6 +284,42 @@ print(count)
         self.assertEqual(facts["span_s"], 2.18)
         self.assertEqual(facts["drops"]["dropped"], 0)
         self.assertEqual(facts["duplicates"], 0)
+
+    def test_original_verdict_publisher_retains_no_clobber_and_root_fence(self):
+        """Predict: the pinned publisher writes exact bytes under its real lock, refuses overwrite, and an escaping hard link is denied before creation."""
+        export_chain_inputs(self.root)
+        code = '''import os,runpy,sys
+from pathlib import Path
+root=Path(sys.argv[1])
+module=runpy.run_path(str(root/'pin/scripts/run_campaign.py'),run_name='r12_original_campaign')
+token=module['acquire_campaign_lock'](root/'writer-input')
+target=root/'writer-input/verdict.json';payload=b'{"unit":"original-publisher"}\\n'
+try:
+    module['_publish_whole_window_verdict_output'](target,payload,lock_token=token)
+    assert target.read_bytes()==payload
+    try:
+        module['_publish_whole_window_verdict_output'](target,b'different',lock_token=token)
+    except FileExistsError:
+        pass
+    else:
+        raise AssertionError('original no-clobber judgment was bypassed')
+    assert target.read_bytes()==payload
+    outside=root.parent/'R12-outside-hardlink'
+    try:
+        os.link(target,outside,follow_symlinks=False)
+    except PermissionError:
+        pass
+    else:
+        raise AssertionError('hard link escaped fixture root')
+    assert not outside.exists()
+finally:
+    module['release_campaign_lock'](token)
+print('original_publisher_and_root_fence')
+'''
+        result = subprocess.run(command(self.root, "code", code, self.root), capture_output=True,
+                                text=True, timeout=60)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "original_publisher_and_root_fence")
 
     def test_pinned_j1_schema_mismatch_is_reported_without_patch(self):
         """Predict: f31's real producer/reader disagree on J1 schema; reader returns verdict_schema_mismatch."""

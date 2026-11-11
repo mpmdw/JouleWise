@@ -175,6 +175,8 @@ def loop_fixture(root, clock, pack="alpha", limit="1"):
                               primary_stream_duration_s=65, volume="reduced")
             else:
                 policy = session_policy(session["packs"][0], session["round"], base_policy) if pack == "all" else policy
+                if policy.get("volume") == "prerequisite":
+                    policy["volume"] = "reduced"
                 policy["scenario"] = session["id"]
             (root / "source-policy.json").write_text(json.dumps(policy, indent=2) + "\n")
             manifests = root / "fixture-manifests"
