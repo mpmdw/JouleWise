@@ -1,8 +1,10 @@
-# Block 6 registration §17 entries: draft for the research lead's review (2026-11-10)
+# Block 6 registration §17 entries: draft, ruled by the research lead (2026-11-10)
 
 **What this file is.** The drafted §17 change-log entries for `docs/registrations/block6_replication_DRAFT.md`
-(called **REG** below) that research-lead ruling RL-6 (b) orders and RL-24 seat 5 assigns. It is a draft. Nothing
-here is entered in REG yet, and REG is unchanged by the commit that adds this file. REG §17 ends with the
+(called **REG** below) that research-lead ruling RL-6 (b) orders and RL-24 seat 5 assigns. The research lead ruled
+the audit's open decisions 7, 8 and 9 and the drafter's flags in RL-25 (2026-11-10 20:07 PST, RL:643-730), and
+admitted this draft with edits; those edits are applied below. It is still a draft: nothing here is entered in REG
+yet, the Sol executing refuter checks it next (RL-24), and REG is unchanged by the commits that add this file. REG §17 ends with the
 2026-10-17 activation entry (`2a4e5149c`).
 
 **The rulings it implements.** RL-6 (b), RL:146-153:
@@ -21,12 +23,24 @@ RL-24 seat 5: "Verbatim from the 2026-11-07 audit's recommended options and DLE-
 option chosen where the audit chose none". Review: the research lead rules decisions 7, 8 and 9 by 13 November; one
 Sol executing refuter by 14 November.
 
+**RL-25's label and principle, verbatim (RL:648-656).**
+
+> Every ruling here carries the label **"decided after Block 5 outcomes were known"**, as RL-6 (b) requires.
+> I have seen Block 5's released per-phase whole-machine values and its scaled-allowance line
+> (`RESULTS.md` §4.4, §4.5). The choices below rest on the registered text and on which program computes what.
+> None was made by looking at what a value would favour.
+>
+> **One principle for all three decisions.** Where the Block 5 release's pinned program already computes a
+> quantity, Block 6 uses that program's rule, found by reading its code, and no Block 5 number is computed anew.
+> That is item 37's "block 5's registered arithmetic unchanged" applied to the labelled lines. Where no Block 5
+> rule exists, the registered text decides, and where it is silent the line is not added.
+
 **Sources and how they are cited.**
 
 | Alias | File | Commit | Notes |
 |---|---|---|---|
 | AUD | `docs/research-audits/2026-11-07/block6-design.md` | `07b9f704b` (2026-11-07 16:53:41 -0800) | On `origin/research/2026-11-07-block6-design`; merged into `research/2026-11-07-audit-burn` (PR #695, open) at `1572b2e62`. The blob (`9ebf356d2e3b`) is identical on both. Not on `main` |
-| RL | `docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md` | `5de56400f` (`origin/audit/2026-11-10-fable`) | The research lead's rulings; not on `main` |
+| RL | `docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md` | `9f536d876` (`origin/audit/2026-11-10-fable`) | The research lead's rulings; not on `main`. Lines 1-640 are byte-identical to `5de56400f`, which the first draft cited |
 | DLE | `docs/analysis/b5/DEVIATION-LOG.md` | `60d3225ee` (`origin/main`) | DLE-2 entered at `422576dc5` (2026-11-06); its text is byte-identical to `d8c17dff4` (2026-11-06 15:17 PST) |
 
 `AUD:489` means line 489 of AUD at `07b9f704b`. Every block quotation from AUD, DLE and RL below is copied from
@@ -37,19 +51,21 @@ those bytes by a script, line for line; the only change is the `> ` prefix.
 
 **Signing statement, for entry.** AUD:483 says each entry "is signed blind, extending the DLE signing statement to
 block 6". That statement can no longer be made about Block 5: Block 5 was unsealed on 2026-11-08 (`RUN_STATE.md` item
-231). The statement these entries carry is RL-6's own blind-status line, verbatim (RL:168-169):
+231). RL-25 flag 1 fixes the statement these entries carry (RL:701-704), verbatim:
 
-> **Blind status.** Blind to Block 6: nothing of it has been read. **Not blind to Block 5**, whose outcome words
-> the replication word compares against. The date in (d) was chosen from engineering state only.
+> Signed blind to Block 6: neither the signer nor the drafter has seen a Block 6 energy, floor, ratio, contrast or
+> outcome word. Not blind to Block 5, whose released outcome words and numbers both have seen. Entry texts marked
+> 'drafted pre-unseal' are quoted from texts dated 2026-11-06 and 2026-11-07.
 
 Drafter's disclosure (Opus 5.5, seat 5): I read no Block 6 outcome, result file or restricted path. I read the
 registration, the audits, the rulings, the deviation log and `RUN_STATE.md`; in doing so I saw Block 5's released
 outcome words and headline numbers (`RUN_STATE.md` item 232). Every entry text below was written on 2026-11-06 or
-2026-11-07, before the unseal; I wrote only the framing, the notes and the option layouts.
+2026-11-07, before the unseal, except the RL-25 rulings, which are quoted from the research lead's log; I wrote only
+the framing and the notes.
 
 **Status words.** **Default** means the audit's recommended option, or its text where no decision is attached, to be
-entered as drafted once reviewed. **AWAITING RESEARCH-LEAD RULING** means the audit chose no option; the options are
-set out and none is chosen.
+entered as drafted. **Ruled (RL-25)** means the audit chose no option and the research lead ruled it in RL-25; such
+an entry, or the ruled part of it, also carries "decided after Block 5 outcomes were known" (RL:648).
 
 **How the entries get into REG (proposed, for the research lead).** After the research lead's review and rulings and the refuter's check, each entry is
 appended to REG §17 as one dated line in the existing style, pointing at this file for the full text, and the slot
@@ -63,13 +79,13 @@ rows it fills (S-13, S-14, S-15, S-9, S-11) are updated in the same commit. That
 |---|---|---|---|
 | 1. Production architecture (AUD:95-113) | (c), with C3 mandatory | §17-R1 | Default |
 | 2. S-13 printed precision (AUD:114-134) | Strictest value per family | §17-R2 | Default |
-| 3. Amendment deadline (AUD:135-139) | Before the Block 5 unseal | §17-R0 | Missed; RL-6 (b) enters the set after the unseal. See the review points |
+| 3. Amendment deadline (AUD:135-139) | Before the Block 5 unseal | §17-R0 | Missed; RL-25 flags 2, 3 and 5 rule the deadline clause, later entries and the deviation line |
 | 4. The D5 r4 lane (AUD:140-143) | Push, review, tag `b5/analysis-r4` | §17-R4 | Default (the tag now exists) |
 | 5. Audit unfinished at release (AUD:144-145) | Hold | §17-R1 | Default (RL-6 (b) says the same) |
 | 6. Coverage, family by family (AUD:146-152) | (b) count-type, (a) both whole-machine lines | §17-R3 | Default |
-| 7. S-15 and §10's whole-machine Q (AUD:153-156) | None | §17-R8 | **AWAITING RESEARCH-LEAD RULING** |
-| 8. Estimand wording (AUD:157-161) | None | §17-R9, four items | **AWAITING RESEARCH-LEAD RULING** |
-| 9. Host and read path (AUD:162-166) | None | §17-R11, read path | **AWAITING RESEARCH-LEAD RULING** |
+| 7. S-15 and §10's whole-machine Q (AUD:153-156) | None | §17-R8 | Ruled (RL-25): 7a-i; 7b conditional |
+| 8. Estimand wording (AUD:157-161) | None | §17-R9, four items | Ruled (RL-25): 8a-i, 8b-i, 8c out, 8d label |
+| 9. Host and read path (AUD:162-166) | None | §17-R11, read path | Ruled (RL-25): 9a `desk_compress.read_bytes`; 9b the Air |
 | 10. L9-ENV-3 mirror deletion (AUD:167-168) | Hold it | none | Not registration text (code precondition C5) |
 | 11. One structure-only probe (AUD:169-176) | Run it, counts only | none | Not registration text; an action for the lead |
 
@@ -131,9 +147,13 @@ rows it fills (S-13, S-14, S-15, S-9, S-11) are updated in the same commit. That
 
 ## §17-R0. Framing entry
 
-- **Label.** Entered after the Block 5 unseal (2026-11-08); text drafted pre-unseal on 2026-11-07.
-- **Status.** Default, except the two clauses listed under the review points below.
-- **Source.** AUD:489 @ `07b9f704b`, with the section preamble AUD:483-485 and decision 3, AUD:135-139.
+- **Label.** Entered after the Block 5 unseal (2026-11-08); text drafted pre-unseal on 2026-11-07. The deadline
+  clause is ruled (RL-25 flag 2) and carries "decided after Block 5 outcomes were known".
+- **Status.** Default, with two clauses as ruled by RL-25: the signer statement is RL-25 flag 1's (in the header
+  above), and the deadline clause is flag 2's. By flag 5, R0 with that clause is the one deviation line for the late
+  entries.
+- **Source.** AUD:489 @ `07b9f704b`, with the section preamble AUD:483-485 and decision 3, AUD:135-139; RL-25 flags
+  2, 3 and 5 at RL:705-711 and RL:715-716.
 
 > - Each entry is signed blind, extending the DLE signing statement to block 6, and is checked by one executing refuter.
 > - No entry changes registered arithmetic.
@@ -142,6 +162,23 @@ rows it fills (S-13, S-14, S-15, S-9, S-11) are updated in the same commit. That
 > | # | Amendment | From | Resolves |
 > |---|---|---|---|
 > | R0 | **Framing entry.** Block 6 is collected and blinded, and these entries are made under §12.4 before release. The signer states that no block-5 or block-6 outcome has been seen. The deadline is decision 3. | seat 2 #1 | §0 premise |
+
+- **The deadline clause, as entered (RL-25 flag 2, RL:705-707), verbatim:** "The audit's deadline, before the Block 5
+  unseal, was not met. These entries are made after it, under §12.4, which allows entries until the Block 6 release.
+  Decided after Block 5 outcomes were known."
+
+- **RL-25 flags 2, 3 and 5 (verbatim, RL:705-711 and RL:715-716).**
+
+> 2. *R0's deadline.* Yes. R0's deadline clause reads: "The audit's deadline, before the Block 5 unseal, was not
+>    met. These entries are made after it, under §12.4, which allows entries until the Block 6 release. Decided
+>    after Block 5 outcomes were known."
+> 3. *Later entries.* The second half of the audit's decision 3 governs from the day this set is entered: only
+>    an entry that fixes a tooling defect and chooses no rule, labelled as such. Anything else needs a
+>    research-lead ruling, carries "decided after Block 5 outcomes were known", and prints the alternative where
+>    a number changes.
+
+> 5. *One deviation line for the late entries.* R0, with flag 2's clause, is that line. No separate entry. Paper
+>    1's deviation list names it.
 
 - **Decision 3, as the audit wrote it (AUD:135-139).**
 
@@ -156,8 +193,10 @@ rows it fills (S-13, S-14, S-15, S-9, S-11) are updated in the same commit. That
 ## §17-R1. Production program and second side (decisions 1 and 5)
 
 - **Label.** Entered after the Block 5 unseal (2026-11-08); text drafted pre-unseal on 2026-11-07.
-- **Status.** Default: decision 1's recommended option (c) with C3, and decision 5's recommended hold.
-- **Source.** AUD:490 @ `07b9f704b`; decision 1 at AUD:95-113; decision 5 at AUD:144-145.
+- **Status.** Default: decision 1's recommended option (c) with C3, and decision 5's recommended hold. RL-25 flag 6
+  adds the L9-audit wording below, which carries "decided after Block 5 outcomes were known".
+- **Source.** AUD:490 @ `07b9f704b`; decision 1 at AUD:95-113; decision 5 at AUD:144-145; RL-25 flag 6 at
+  RL:717-719.
 
 > | # | Amendment | From | Resolves |
 > |---|---|---|---|
@@ -195,6 +234,12 @@ rows it fills (S-13, S-14, S-15, S-9, S-11) are updated in the same commit. That
 > | # | Precondition | From |
 > |---|---|---|
 > | C3 | Re-derive block-6 exclusions in the lean program (R6). | seat 2 C3 |
+
+- **The L9 audit under option (c), as ruled (RL-25 flag 6, RL:717-719), verbatim.**
+
+> 6. *R1's audit wording.* Under option (c) the L9 audit is optional. "The audit run" in RL-6 (b) means the
+>    registered second side of option (c). Whether an L9 audit is run is decided and recorded before the blind
+>    dry run; if one is started, the release holds until it finishes.
 
 - **Drafting notes (not entry text).** RL-6 (b) states the same hold ("If the audit run has not finished when the
   numbers would be released, the release holds"). RL-24 seat 7 builds option (c). Under (c) the "printing program"
@@ -322,12 +367,14 @@ rows it fills (S-13, S-14, S-15, S-9, S-11) are updated in the same commit. That
 
 ---
 
-## §17-R8. S-15 fill (decision 7): AWAITING RESEARCH-LEAD RULING
+## §17-R8. S-15 fill (decision 7): ruled (RL-25)
 
-- **Label.** Entered after the Block 5 unseal (2026-11-08); text drafted pre-unseal on 2026-11-07. Once ruled, the
-  parts the audit left open also carry "decided after Block 5 outcomes were known" (RL-6 (b)).
-- **Status.** **AWAITING RESEARCH-LEAD RULING** (RL-24 seat 5; due 13 November). No option is chosen here.
-- **Source.** AUD:497 @ `07b9f704b`; decision 7 at AUD:153-156.
+- **Label.** Entered after the Block 5 unseal (2026-11-08); text drafted pre-unseal on 2026-11-07. The decision-7
+  parts are ruled and carry "decided after Block 5 outcomes were known" (RL:648).
+- **Status.** Ruled (RL-25). The first sentence stays the default, with its source made exact; 7a-i; 7b neither option
+  as written, on a structural condition settled before any Block 6 number is read. The structural answer to that
+  condition is still owed; the research lead takes a second look at it after the refuter (RL open items, RL:782).
+- **Source.** AUD:497 @ `07b9f704b`; decision 7 at AUD:153-156; RL-25 decision 7 at RL:658-670.
 
 > | # | Amendment | From | Resolves |
 > |---|---|---|---|
@@ -340,49 +387,47 @@ rows it fills (S-13, S-14, S-15, S-9, S-11) are updated in the same commit. That
 >    - Then rule on block 5's side of §10. Either block 5's per-phase value is computed after the block-5 release by
 >      block-6 code (a new block-5 number), or §10 prints "block 5: not computed".
 
-- **The options, set out.** The first sentence of decision 7 is written as an instruction ("Adopt DESIGN §8's
-  meter-only per-phase definition") and R8's text carries it, so the definition is drafted as the default. The
-  research lead may treat it as open too. The two choices the audit leaves open:
+- **The ruling, verbatim (RL:658-670).**
 
-  **7a. Who produces the per-phase line.**
-  - 7a-i. Label it single-implementation.
-  - 7a-ii. Name a second producer.
+> **Decision 7 (R8, slot S-15).**
+>
+> - *First sentence.* It stays the default, with its source made exact. Registration §9.5 item 5 says the
+>   definition "is the one committed for block 5". That is the per-phase whole-machine computation the Block 5
+>   release executed, in `scripts/independent_recompute_b5.py` at the release-pinned digest. DESIGN §8 is entered
+>   as its written statement. Where the two differ, the pinned code governs and the entry lists each difference.
+> - *7a: single implementation* (7a-i). The line prints with the label "single implementation; not independently
+>   recomputed". If a second producer is ever added, it enters as a tooling entry and the line is then compared.
+> - *7b: neither option as written.* Block 5's side of §10 for this quantity is the value its own release
+>   produced, which exists. This holds on one condition, settled by structure before any Block 6 number is read:
+>   Block 6's line is produced by the same pinned Block 5 function. If that function cannot produce Block 6's
+>   line unchanged, 7b-ii applies and §10 prints "block 5: not computed" for this quantity. 7b-i is refused: no
+>   Block 5 number is computed by Block 6 code.
 
-  **7b. Block 5's side of §10 (RL-24: "7 (second half)").**
-  - 7b-i. Block 5's per-phase value is computed after the Block 5 release by Block 6 code: a new Block 5 number.
-  - 7b-ii. §10 prints "block 5: not computed".
-
-- **What each seat proposed, for the record (not a recommendation of the audit).**
-  - Seat 1, A8 (AUD:695):
-
-> | A8 | **S-15 fill.** Adopt a written per-phase whole-machine definition (DESIGN §8 is the candidate), name both producers, label block 5's per-phase value as computed after the block-5 release by the block-6 code. | F9.1 | New disclosure line only |
-
-  - Seat 2, item 6, S-15 (AUD:905):
-
->    - S-15: the meter-only definition of design §8, labelled as a single-implementation descriptive line (or name a second implementation).
-
-  - The finding behind it, F10.2 (AUD:415-418):
+- **As entered.** The per-phase line prints with the label "single implementation; not independently recomputed".
+  Its definition is the per-phase whole-machine computation of `scripts/independent_recompute_b5.py` at the
+  release-pinned digest, with DESIGN §8 as its written statement; where the two differ, the pinned code governs and each
+  difference is listed. §10's Block 5 value for
+  this quantity is Block 5's released value if Block 6's line is produced by the same pinned function unchanged;
+  otherwise §10 prints "block 5: not computed". No Block 5 number is computed by Block 6 code.
+- **The finding behind it, F10.2 (AUD:415-418).**
 
 > 2. **§9.5 item 5 / S-15** (REG:1028-1035, :1208).
 >    - REG says the per-phase whole-machine definition is "the one committed for block 5". But B5-PLAN §8.2 is
 >      request-level ("the harvest computes no phase-level figures", `analysis_plan_block5.md:654`).
 >    - The per-phase line exists only in the recompute (DESIGN §0 item 5), and DESIGN §8 is the candidate definition.
 
-- **Bears on a printed number?** 7b-i creates a Block 5 number that Block 5's release did not print. 7a and 7b-ii
-  change no number.
-
 ---
 
-## §17-R9. Estimand text (decision 8): four items AWAITING RESEARCH-LEAD RULING
+## §17-R9. Estimand text (decision 8): ruled (RL-25)
 
-- **Label.** Entered after the Block 5 unseal (2026-11-08); text drafted pre-unseal on 2026-11-07. Once ruled, the
-  four open items also carry "decided after Block 5 outcomes were known" (RL-6 (b)).
-- **Status.** Split. The parts of R9 that decision 8 does not cover are the default: the §10 edge cases
-  (non-computable Q left out, with n reduced and named; n = 1 prints "not defined"; "block 5: not computed") and
-  "§11.2 excludes binding-defect `not_estimable`". The four items of decision 8 are **AWAITING RESEARCH-LEAD RULING**
-  (due 13 November). No option is chosen here.
+- **Label.** Entered after the Block 5 unseal (2026-11-08); text drafted pre-unseal on 2026-11-07. The four
+  decision-8 items are ruled and carry "decided after Block 5 outcomes were known" (RL:648).
+- **Status.** The parts of R9 that decision 8 does not cover are the default: the §10 edge cases (non-computable Q
+  left out, with n reduced and named; n = 1 prints "not defined"; "block 5: not computed") and "§11.2 excludes
+  binding-defect `not_estimable`". The four items of decision 8 are ruled (RL-25): 8a-i, 8b-i, 8c out (8c-ii), and the
+  8d label text.
 - **Source.** AUD:498 @ `07b9f704b`; decision 8 at AUD:157-161; findings F10.1, F10.3, F10.4 and F10.6 at
-  AUD:410-429.
+  AUD:410-429; RL-25 decision 8 at RL:672-687.
 
 > | # | Amendment | From | Resolves |
 > |---|---|---|---|
@@ -396,24 +441,28 @@ rows it fills (S-13, S-14, S-15, S-9, S-11) are updated in the same commit. That
 >    - The J6 timing-bound sensitivity line: in or out.
 >    - A §10 label for the block-5/block-6 s_bracket difference.
 
-- **The options, set out.**
+- **The ruling, verbatim (RL:672-687).**
 
-  **8a. §9.5 item 3's T** (REG:1018: "E and T are the cell's estimator-1 mean and mean phase length").
-  - 8a-i. Estimator-1 weights: 0.2 × the repeat mean + 0.8 × the quad-run mean (DESIGN :659-662).
-  - 8a-ii. The plain mean over kept repeat and quad members (RC-B6-1:560-561).
+> **Decision 8 (R9).**
+>
+> - *8a: estimator-1 weights* (8a-i). The registered sentence names "the cell's estimator-1 mean", and the same
+>   weights form E and the cell's bound B. Where the plain-mean factor would differ (a cell with unequal losses),
+>   it prints beside the registered one, labelled.
+> - *8b: stated exactly* (8b-i): E_ref and T_ref are the means of the start, midpoint and end references'
+>   request energy and length. This is a clarification to what both programs do; no alternative prints.
+> - *8c: out* (8c-ii). The J6 line is not among §9.5's eight labelled lines. A line is not added to a
+>   registration after the block it replicates was unsealed. If an optional L9 audit run prints it, it stays in
+>   that run's output.
+> - *8d: the label.* "Block 5's floors were formed under its own calibration acceptance (minimum bracket
+>   allowance 14.531 ms) and Block 6's under its own (10.818 ms). The difference, up to 3.713 ms of timing bound
+>   and up to 0.175 J of floor by the registration's sizing, comes from the registered rule and not from the
+>   machine. The summary over Block 6 sessions alone is printed beside the summary over all sessions." It sits on
+>   every §10 row whose quantity contains the operative timing bound: floors, attribution floors, the bound B,
+>   D, intervals, decision intervals and floor gates.
 
-  **8b. The E_ref/T_ref basis** (REG:1018-1019: "E_ref, T_ref the means over the surviving references that set the
-  allowance").
-  - 8b-i. State it as the start, midpoint and end references' request energy and length, which both implementations
-    use (F10.1, AUD:413-414). Seat 2's reason: "When the bound term binds, the corpus sets the allowance" (AUD:817).
-  - 8b-ii. Leave REG:1018-1019's wording as registered.
-
-  **8c. The J6 timing-bound sensitivity line.**
-  - 8c-i. In: printed for Block 6, as L9 run unchanged would print it.
-  - 8c-ii. Out: not printed for Block 6, as RC-B6-1 drops it (open issue 5).
-
-  **8d. A §10 label for the Block 5/Block 6 s_bracket difference.** R9's text puts "a labelled block-6-only summary
-  beside it". The audit gives no label wording, and the label's wording is the research lead's.
+- **Alternatives printed beside.** 8a: where the plain-mean factor differs (a cell with unequal losses), it prints
+  beside the registered one, labelled. 8b: none ("no alternative prints"). 8c: none; the J6 line stays in an optional
+  L9 audit run's output if one prints it. 8d: the Block-6-only summary prints beside the all-sessions summary.
 
 - **The findings behind it (verbatim).**
 
@@ -434,11 +483,6 @@ rows it fills (S-13, S-14, S-15, S-9, S-11) are updated in the same commit. That
 > 6. **The J6 timing-bound sensitivity line** (RC-B6-1 open issue 5) is not in REG §9.5, but L9 run unchanged would
 >    print it. Rule it in or out.
 
-- **Bears on a printed number?** 8a: yes. "The two are identical only for a complete cell" and "Any cell with
-  unequal losses differs" (AUD:411-413). This affects only §9.5 item 3's scaled-allowance line, one of the labelled
-  lines "none of which changes a registered number" (REG:1012). 8b: possibly, through E_ref and T_ref, on that same
-  line. 8c: it adds or removes a labelled line. 8d: no number changes.
-
 ---
 
 ## §17-R10. S-9, S-11 and S-8
@@ -456,14 +500,18 @@ rows it fills (S-13, S-14, S-15, S-9, S-11) are updated in the same commit. That
 
 ---
 
-## §17-R11. Inputs and reading (decision 9): read path AWAITING RESEARCH-LEAD RULING
+## §17-R11. Inputs and reading (decision 9): ruled (RL-25)
 
-- **Label.** Entered after the Block 5 unseal (2026-11-08); text drafted pre-unseal on 2026-11-07. Once ruled, the
-  read path also carries "decided after Block 5 outcomes were known" (RL-6 (b)).
-- **Status.** Split. Default: the citation of tag `b6/collection` and the S-3, S-4 and S-18 digests, the
-  vendoring into S-14, input authentication, and `trace_plist_missing` as a STOP. **AWAITING RESEARCH-LEAD RULING**
-  (decision 9, due 13 November): "one named path" for reading `.zst`, and the host. No option is chosen here.
-- **Source.** AUD:500 @ `07b9f704b`; decision 9 at AUD:162-166; the options at F5, AUD:327-331.
+- **Label.** Entered after the Block 5 unseal (2026-11-08); text drafted pre-unseal on 2026-11-07. The read path and
+  host are ruled and carry "decided after Block 5 outcomes were known" (RL:648).
+- **Status.** Default: the citation of tag `b6/collection` and the S-3, S-4 and S-18 digests, the vendoring into S-14,
+  input authentication, and `trace_plist_missing` as a STOP. Ruled (RL-25): the "one named path" is
+  `desk_compress.read_bytes` (the `zstd` binary, streamed, with each file's decompressed SHA-256 checked against the
+  desk-compression record before a byte is parsed; a missing binary or a digest mismatch is a STOP; the binary's path
+  and version go in the run record), and the host is the Air, from a custody copy verified against the archive's
+  `SHA256SUMS`.
+- **Source.** AUD:500 @ `07b9f704b`; decision 9 at AUD:162-166; the options at F5, AUD:327-331; RL-25 decision 9 at
+  RL:689-697.
 
 > | # | Amendment | From | Resolves |
 > |---|---|---|---|
@@ -477,26 +525,25 @@ rows it fills (S-13, S-14, S-15, S-9, S-11) are updated in the same commit. That
 >    - The read path: stdlib `compression.zstd` streaming, `desk_compress.read_bytes` (needs the zstd binary), or an
 >      APFS in-place restore.
 
-- **The options, set out.**
+- **The ruling, verbatim (RL:689-697).**
 
-  **9a. The read path** (F5, AUD:327-331):
+> **Decision 9 (R11).**
+>
+> - *9a: `desk_compress.read_bytes`.* The `zstd` binary, streamed, with each file's decompressed SHA-256 checked
+>   against the desk-compression record before a byte is parsed. A missing binary or a digest mismatch is a STOP.
+>   The binary's path and version go in the run record. Not `compression.zstd`: it needs Python 3.14 and would
+>   change the interpreter under every number. Not an in-place restore: it was exercised only on synthetic trees
+>   and needs the disk a streamed read does not.
+> - *9b: the Air* (9b-i), from a custody copy verified against the archive's `SHA256SUMS`. The MBP stays with the
+>   magistrate.
+
+- **The options the audit listed (F5, AUD:327-331).**
 
 > - **Options.**
 >   - `compression.zstd` streaming, with a SHA-256 check against the desk record. It is stdlib in Python 3.14.6, present
 >     on this Air, but python3.13, which the runbooks pin, lacks it (verified).
 >   - `desk_compress.read_bytes`.
 >   - An APFS in-place restore per unit (DESIGN §0 item 8). B6-AN-1 A7 exercised it on synthetic trees only.
-
-  **9b. The host.**
-  - 9b-i. The Air.
-  - 9b-ii. The MBP, which "belongs to the magistrate" (AUD:164).
-
-- **Facts recorded since 2026-11-07 (not a ruling).** RL-11 recommends that the magistrate make "one custody copy of
-  the Block 6 sessions to the Air", and RL-24 lists "the Block 6 custody copy to the Air by 15 November" as an MBP
-  desk step. Whether that settles 9b is the research lead's call. AUD's free-disk figure (54 GiB) is from
-  2026-11-07 and has not been re-measured for this draft.
-- **Bears on a printed number?** No, provided each decompressed file is checked against its recorded SHA-256, as R11
-  requires.
 
 ---
 
@@ -512,17 +559,46 @@ rows it fills (S-13, S-14, S-15, S-9, S-11) are updated in the same commit. That
 
 ---
 
-## Points for the research lead's review (not rulings; not among decisions 7, 8 and 9)
+## RL-25's dispositions of the drafter's flags
 
-1. **R0's signer statement.** R0 says "The signer states that no block-5 or block-6 outcome has been seen"
-   (AUD:489). That is not true after 2026-11-08. This draft puts RL-6's blind-status line in its place (above). The
-   research lead confirms or rewords.
-2. **R0's deadline (decision 3).** The recommended deadline, "land R1-R12 before the block-5 unseal" (AUD:138),
-   was missed. RL-6 (b) enters the set after the unseal, which departs from decision 3. By RL-6 (b)'s own rule a
-   departure is labelled "decided after Block 5 outcomes were known". This draft proposes that label for R0's
-   deadline clause only, for the research lead to confirm.
-3. **Decision 3's second half.** "After it, allow only entries that fix a tooling defect and choose no rule,
-   labelled as such" (AUD:138-139). Read literally, it would bar R1-R12 and the rulings on 7, 8 and 9. RL-6 (b)
-   supersedes it for this set. Whether it governs entries after this set is the research lead's call.
-4. **R1's "Correct §1.10 and `CANONICAL.md:48`".** The CANONICAL row correction is also NBD B6-02's proposal, and
-   RL-24 seat 1 edits `CANONICAL.md`. It is not drafted here, to avoid colliding with that seat.
+The first draft (`93c48941f`) raised four review points: R0's signer statement, R0's deadline, decision 3's second
+half, and R1's `CANONICAL.md:48` correction. RL-25 disposes of the flags as follows (RL:699-719), verbatim. Flags 1, 2,
+3, 5 and 6 are applied above (header, §17-R0, §17-R1); flag 4 is applied to DLE-10 in
+`docs/analysis/b5/DEVIATION-LOG.md`.
+
+> **The drafter's flags.**
+>
+> 1. *Signing statement.* Confirmed in substance, reworded for the entries: "Signed blind to Block 6: neither the
+>    signer nor the drafter has seen a Block 6 energy, floor, ratio, contrast or outcome word. Not blind to
+>    Block 5, whose released outcome words and numbers both have seen. Entry texts marked 'drafted pre-unseal'
+>    are quoted from texts dated 2026-11-06 and 2026-11-07."
+> 2. *R0's deadline.* Yes. R0's deadline clause reads: "The audit's deadline, before the Block 5 unseal, was not
+>    met. These entries are made after it, under §12.4, which allows entries until the Block 6 release. Decided
+>    after Block 5 outcomes were known."
+> 3. *Later entries.* The second half of the audit's decision 3 governs from the day this set is entered: only
+>    an entry that fixes a tooling defect and chooses no rule, labelled as such. Anything else needs a
+>    research-lead ruling, carries "decided after Block 5 outcomes were known", and prints the alternative where
+>    a number changes.
+> 4. *The DLE-10 sentence.* "A replication of this experiment in nine further sessions on later days (Block 6)
+>    was registered before any Block 5 number was seen and has been collected. Its results are sealed and are not
+>    yet released." On a slide: "Replication collected (nine sessions, registered blind); not yet released."
+> 5. *One deviation line for the late entries.* R0, with flag 2's clause, is that line. No separate entry. Paper
+>    1's deviation list names it.
+> 6. *R1's audit wording.* Under option (c) the L9 audit is optional. "The audit run" in RL-6 (b) means the
+>    registered second side of option (c). Whether an L9 audit is run is decided and recorded before the blind
+>    dry run; if one is started, the release holds until it finishes.
+
+R1's `CANONICAL.md:48` correction stays with the seats that edit `CANONICAL.md`; this file does not draft it.
+
+**RL-25 on this PR, for gate-ledger row 4 (RL:721-730), verbatim.**
+
+> **PR #710, for gate-ledger row 4: ADMIT, with these edits.** Apply the rulings above to the §17 draft and
+> update its status words. Replace DLE-10's "The required sentence" paragraph with flag 4's wording. Append to
+> DLE-6 the scope lines of RL-27 (1) and (2). The quotations I checked against my own text are exact. The Sol
+> refuter then checks the §17 draft as amended.
+>
+> **Reason.** These were the choices the pre-unseal audit left open, so no pre-unseal text can settle them. The
+> principle keeps them from becoming a second analysis of Block 5.
+>
+> **Blind status.** Blind to Block 6: nothing of it has been read. Not blind to Block 5, including the two
+> lines these decisions touch.

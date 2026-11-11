@@ -691,7 +691,9 @@ carry it.
 
 Each records a ruling of the research design lead (Fable 5.2) of 2026-11-10 18:44 PST, in
 `docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md` on `origin/audit/2026-11-10-fable` @ `5de56400f`
-(called **RL** below; `RL:42` is its line 42 at that commit). The lead's authority, RL:3-6:
+(called **RL** below; `RL:42` is its line 42 at that commit). Later rulings (RL-25 to RL-27, 2026-11-10 20:07 PST)
+are quoted from `9f536d876` on the same branch, whose lines 1-640 are byte-identical to `5de56400f`.
+The lead's authority, RL:3-6:
 
 > **Authority.** Ed, 2026-11-10 about 18:25 PST, recorded in `RUN_STATE.md` item 252: "def fable 5.2 should be the
 > final say for anything paper bound". That covers claim contracts, registrations, designs, analysis rulings, and
@@ -750,6 +752,24 @@ to the research lead for review before merge.
 
 - **Effect on estimands.** None. No estimand, estimator, decision rule or threshold changes. It governs when a
   released Block 5 number may be rendered.
+- **Scope (research-lead ruling RL-27 (1) and (2), 2026-11-10 20:07 PST, RL:751-758 @ `9f536d876`, verbatim; RL-25
+  directs that they be appended here).** RL-27 (1) replaces RL-3's word "internal" with "working records".
+
+> 1. **RL-3 is a quality gate, not a secrecy gate.** The repository is public, and `RESULTS.md` and `RUN_STATE.md`
+>    item 232 have carried the Block 5 numbers since 2026-11-08. "Any public page" in RL-3 means a presentation
+>    of Block 5 numbers as results to a reader: the paper, slides, the site, and the status pages (`README.md`,
+>    `PROJECT_STATUS.md`, `CLAIMS_STATUS.md`, the advisor status site). It does not mean the repository's working
+>    records: `RUN_STATE.md`, `RESULTS.md`, audits, the deviation and decision logs, review records. Those may
+>    carry the numbers, naming their source. RL-3's word "internal" is replaced by "working records".
+> 2. **Site builds are held** until RL-3's gate passes: no `build_site.py`, capsule or report build is published,
+>    and Pages is not enabled. The hold goes in `CANONICAL.md` beside the site row.
+
+- **Reason and blind status of RL-27 (verbatim, RL:769-772).**
+
+> **Reason.** A gate that pretends a public repository is private would be false on its face. What it can and
+> should control is what we present as a result.
+>
+> **Blind status.** Not blind to Block 5. Procedural.
 
 ---
 
@@ -903,7 +923,12 @@ to the research lead for review before merge.
 > **Blind status.** Blind to Block 6: nothing of it has been read. **Not blind to Block 5**, whose outcome words
 > the replication word compares against. The date in (d) was chosen from engineering state only.
 
-- **The required sentence.** RL-6 (e) requires the sentence "that a registered replication is collected and its
-  results are not yet released"; it does not fix the wording. The wording, where it prints, is the research lead's.
+- **The required sentence (research-lead ruling RL-25, flag 4, RL:712-714 @ `9f536d876`, verbatim).** It carries the
+  "decided after Block 5 outcomes were known" label of RL-25 (RL:648).
+
+> 4. *The DLE-10 sentence.* "A replication of this experiment in nine further sessions on later days (Block 6)
+>    was registered before any Block 5 number was seen and has been collected. Its results are sealed and are not
+>    yet released." On a slide: "Replication collected (nine sessions, registered blind); not yet released."
+
 - **Effect on estimands.** None. No Block 5 or Block 6 number changes. It changes what a draft, the talk or a Tier C
   submission prints beside Block 5.
