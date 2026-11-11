@@ -145,3 +145,188 @@ new scientific or naming ruling was made. Lead disposition of the orphan-census
 failure is still needed; a lead-owned fixture repair is recommended. It does
 not alter the A-D evidence, but this branch must not be described as passing
 every required check.
+
+## Round 2
+
+RL-54's two W-7 sections were read verbatim at audit ref `f0d9b0676`.
+Audit section 8 Q10 and the lane plan at `a119b5556` remain the scope.
+This round started at `c81ec9564` on the existing
+`test/2026-11-11-w1-finality-tests` branch, as the seat brief requires.
+Here k=C1, k+1=C2 and k+2=C3. ACCEPTED means the real packet build,
+rebuild comparison, latest-record check, cadence triage and series binding
+all accept. Hardware predicates retain the synthetic fixture inputs.
+
+| Question | Answer | Execution evidence |
+|---|---|---|
+| 1. Desk final before C2's first commit? | ACCEPTED for the C3 arm. | `test_order1_*`: C2 has one record commit and carries C1's `previous_final` at that commit; C1's late exclusion lowers its replayed count. |
+| 2. Desk final after C2's first commit; tail re-issued? | ACCEPTED after a new record commit, ledger commit and packet rebuild. | `test_order2_*`: decoded-record diff changes only `previous_final`; removing it restores the original record bytes exactly, including the newline. |
+| 3. C2 record held until C1's desk is final? | ACCEPTED for the C3 arm. No earlier C2-record dependency found for C2's own arm or eligibility receipt. | `test_order3_*`: C2's own final receipt runs with no C2 record; C2 is then committed exactly once with C1's final sources. |
+| 4. Analysis consumes a stale saved pool list? | No such reader found on this ref. Executed eligibility/count readers use roster membership plus exclusions. | `test_final_receipt_and_desk_counts_recompute_despite_stale_stored_pool`: saved lists still include the late-excluded member; final eligibility and both count paths drop it. |
+
+Order 2 compares the decoded old committed record with the new record before
+committing. Their changed-key set is exactly `{'previous_final'}`. It also
+compares both actual committed blobs with those checked bytes. The synthetic
+re-issue commit says `Re-issue C2: compared decoded records; only previous_final
+changed`. The original blob remains readable and is an ancestor. This is a
+test of the ruled procedure, not a new production restriction on record edits.
+The old packet fails `_record_bound`. Before the ledger is re-committed, the
+builder refuses exactly `series previous record binding mismatch`
+(`scripts/align_v4_next_arm_packet.py:633-634`). The repaired packet passes.
+
+**Every latest-record reader in the packet/arm path.** The search was
+`rg -n -i 'latest.*record|record.*latest|log.*--format=%H|last_passed_record|previous_record' scripts/align_v4_*.py joulewise/align -g '*.py'`.
+These are the readers and consumers reached between a window's end and the
+next arm; they do not discover an uncommitted future record:
+
+- `align_v4_next_arm_packet.build_packet`, `:628-634`, reads the explicitly
+  named previous record and its ledger binding. `committed`, `:660-675`,
+  proves that same record is finalized, byte-bound and reachable from the
+  named local remote-tracking ref. For C2's arm this is C1. For C3's packet
+  it must be C2: holding C2 starves that build until C2 is committed.
+- `last_desk_state`, `:743-764`, follows `last_passed_record` and any
+  `final_record` named by the ledger. The C2-arm fixture names W1 as the
+  last passed desk while C1 is provisional. Holding C2 does not starve it.
+- The builder's chain walk, `:924-966`, follows only predecessor links from
+  that named tail and pairs immediate successors. It needs C2 for C3's
+  history, including C1's finality. It does not need C2 for C2's arm.
+- `align_v4_session._record_bound`, `:675-689`, reads the packet's blob,
+  the latest commit **at that record path**, and the canonical ledger at
+  HEAD. `arm_checks`, `:780-791`, calls it after the rebuild. Before C2 is
+  committed, C1's record and HEAD ledger still bind the C2-arm packet.
+  After C2 and its ledger are committed, that old packet is stale.
+- `v4_cadence.next_arm_triage`, `:180-184,235-238`, consumes the record
+  identity/binding result. `align_v4_series.bind_packet`, `:694-724`,
+  consumes the rebuilt history and enforces k-final-before-k+2. Neither
+  independently reads a latest record. Both pass the held order after
+  release; neither needs C2 for C2's own arm.
+
+Order 3 replays the C2-arm packet after C2's synthetic result and own final
+receipt exist, while the C2 record path does not exist and has no Git history.
+No packet evidence names that path. An attempted C3 build naming the absent
+C2 blob refuses exactly `source is not a committed regular blob:
+w-C2/record.json`, at the regular-blob check `:119-121`. Only then does
+C1's final desk finish; C2 receives `previous_final` and is committed once.
+
+The own-window post-processing readers use session files, not the committed
+window-record chain. `align_v4_harvest_off.cmd_triage`, `:199-214`, and
+`cmd_final`, `:240-257`, read the session, collection roster, desk/thermal
+evidence and capture presence. Order 3 executes `cmd_final` before C2's
+record exists. By source inspection, `cmd_finalize_manifest`, `:435-459`,
+and `cmd_pack`, `:153-165`, require the terminal `night/result.json` and
+finalized manifest; `cmd_unpack`, `:173-185`, requires the named manifest
+and mirror identity. Their phrase "record binding" refers to those
+manifest bytes, not discovery of the latest committed window record.
+No offload, harvest, installer or hardware flow was executed in this round.
+
+**Pool-reader census.** This command returns exactly four matches:
+
+```
+rg -n -i 'pool_members|pool_list|pool_membership|pool_ids|calibration_pool' joulewise/align scripts/align_v4_*
+scripts/align_v4_session.py:449              # diagnostic writer
+scripts/align_v4_next_arm_packet.py:484      # template writer
+scripts/align_v4_next_arm_packet.py:844      # current-ledger roster check
+scripts/align_v4_next_arm_packet.py:965      # final-exclusion check
+```
+
+The broader `rg -n -i '\bpool\b|pool_|_pool' joulewise/align scripts/align_v4_*`
+returns 84 lines. Outside the packet builder, the relevant counting readers
+are `light_triage.is_calibrator/calibration_row`, `:103-120`, which read
+planned `pool_role` plus `member_eligibility`, and `align_v4_series.desk_row`,
+`:645-657`, which reads the frozen manifest's `pool` labels plus current
+captured/excluded rows. The new test executes both, and executes
+`align_v4_harvest_off.cmd_final` without replacing any of these readers.
+It writes a stale ledger list and stale PILOT diagnostic list, then applies
+a harvest exclusion. The member remains in both lists but leaves final
+eligibility with reason `harvest.excluded`; exactly its pair loses one count.
+Restoring only its exclusion bit restores the separate desk count.
+`align_v4_session.py:449` writes planned lists before exclusions; it is
+not an eligibility reader. Its desk count calls `desk_row` at `:550-563`.
+
+`pilot_analysis.py:189-205,270` accepts explicit member rows and uses their
+exclusion flags for its registered scope. Its `:88-93` "pool" strings are
+printed pilot-reference labels. `v4_estimands.py` accepts explicit score,
+carrier, member or diagnostic rows; it does not select a series pool or
+replay record finality. `v4_u3.py:137-162` accepts explicitly eligible
+prespecified pilot/R1 pairs; its roster is comparison scope, not a saved
+calibration-member list. None contains `pool_members` or a stored-pool-list
+reader. The other broad matches are allocation writers, worker pools or
+unrelated within-module statistics. This is not evidence that every
+row-based analysis function automatically filters late exclusions.
+
+The same pool search over the release/analysis entry points present here
+(`scripts/release_check.py`, `b6_release_subset.py`,
+`finalize_analysis_manifest.py`, `joulewise/analysis_engine/`, the three
+`analysis_manifest` modules, `b6/analysis_lane.py`, `bytes_analysis.py`)
+finds no series-pool-list reader. The only broad "pool" matches there are
+`analysis_engine/registry.py:327`'s speculation guard and
+`bytes_analysis.py:1433`'s no-pooling comment. These files were searched as
+code only; no analysis or release command ran. `compare_v4_recompute.py`
+and the separate v4 release-tool line are not on this ref. No claim is made
+about consumers on other refs.
+
+Both arm-stack generations were read again using `git show`, without
+checkout or network. `origin/main` remains `84ad2c5be`; it has neither
+`align_v4_session.py` nor `align_v4_series.py` nor the packet builder.
+W1 remains `b4a6c217f`. Its delivery receipt, nonzero-exit reason and named
+watchdog holds differ from main. All three orders mix main-era sent evidence
+and W1 digest-bound delivery evidence through the existing synthetic fixture.
+Production files and the two hygiene modules are byte-identical to W1.
+
+Round 2 changes only this report and the existing test module. There is no
+new module, timing-map insertion or CANONICAL row. Coordination state and
+the runbook remain lead-owned. No delegation, network, model weights,
+real custody or measurement data were used. The existing custody fence
+remains active. Empty synthetic bundle directories test capture-presence
+logic; they are not live hardware or harvest evidence.
+
+The order-1 and order-2 tests extend and rename the round-1 late-exclusion
+and tail-reissue tests. Order 3 and the outside-builder count test are new
+cases in the same module. No classifier or success fallback was added.
+
+All commands below used `TMPDIR=/private/tmp`, `GIT_CONFIG_GLOBAL=/dev/null`,
+`GIT_CONFIG_NOSYSTEM=1`, `JW_B5_SYNTHETIC_ONLY=1`,
+`JOULEWISE_BACKUP_ROOTS=''` and `PYTHONNOUSERSITE=1`. Unittest modules ran
+serially, under `/usr/bin/time -p`.
+
+- Baseline `python3.13 -B -m unittest -v tests.align.test_v4_finality_paths`:
+  6 tests passed in 183.635 s, before the additions.
+- Final `python3.13 -B -m unittest -v tests.align.test_v4_finality_paths`:
+  8 tests passed in 142.298 s. Both runs reported zero forbidden custody
+  accesses and zero home custody probes. This is a local observation, not
+  a throughput comparison under the machine's unrelated job.
+- `python3.13 -B -m unittest tests.test_fixture_orphan_census`:
+  16 tests in 0.177 s; 1 failure, 2 subtest errors, 2 skips. The unchanged
+  `test_launch_record_is_informational` again supplies a non-iterable
+  `Mock.glob_plans()` to W1's `_launch_fence`; see the round-1 traceback
+  above. No out-of-scope repair was made. The two live census tests skip
+  because this sandbox denies `ps`.
+- `python3.13 -B -m unittest tests.test_gen_state`:
+  44 tests passed in 5.951 s. Neither hygiene module approached 3 minutes.
+- `python3.13 -m compileall -q tests/align/test_v4_finality_paths.py` and
+  `python3.13 -m compileall -q joulewise tests scripts`: both passed.
+  `ast.parse` of the touched module with `feature_version=(3, 11)` passed;
+  no native Python 3.11 run was available.
+- `python3.13 -B scripts/fixture_orphan_census.py --fail-on-orphans`:
+  exit 2, `PermissionError: [Errno 1] Operation not permitted: 'ps'`.
+  No census rows or count were obtainable. This is not a clean live census.
+- `git diff --check`: passed. The W1 diff over `joulewise/` and `scripts/`
+  names only round 1's `scripts/test_timings.json` insertion. The watchdog,
+  finality readers and hygiene modules remain unchanged.
+
+Reported unittest time totals 332.061 s, under the 20-minute limit. The
+full suite was not run. No native MLX check is needed for these stdlib-only
+tests. The lead must repair or disposition the existing census mock fixture
+and run the live census checks where `ps` is available. The required hygiene
+gate remains red; the three ACCEPTED orders do not change that finding.
+
+Open questions: no new contract ruling is requested. Reader absence is
+limited to this ref. A separate analysis implementation or release-tool
+ref still needs its own consumer audit. Re-issue after a descendant record,
+real offload transport, real desks and hardware remain untested here.
+Next: the lead reviews and mutation-tests this two-file change, updates the
+runbook with the `previous_final`-only comparison and ledger/rebuild steps,
+then returns the three-order result to the research lead before registration.
+Round 2 implementation commit: `ea6ba14f9e429b95fcbc9d421c500bb8e99922a1`
+(`test(align): cover RL-54 finality orders and pool readers`). This report
+is committed separately after the verification results were recorded.
+Local commits only; no push or registration was performed.
