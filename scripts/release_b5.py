@@ -174,6 +174,24 @@ def check_checkout(repo):
     return head
 
 
+def checkout_relation(repo, head, pinned):
+    """Advisory ancestry only; unavailable history never establishes agreement.
+
+    `unrelated` includes a checkout behind the pin as well as divergent history.
+    This observation must not introduce a release refusal or change an exit code.
+    """
+    if not all(isinstance(value, str) and HEX40.fullmatch(value) for value in (head, pinned)):
+        return "unknown"
+    try:
+        result = subprocess.run(["git", "-C", str(repo), "merge-base", "--is-ancestor", pinned, head],
+                                capture_output=True)
+    except OSError:
+        return "unknown"
+    if result.returncode == 0:
+        return "equals_pinned" if head == pinned else "descends_from_pinned"
+    return "unrelated" if result.returncode == 1 else "unknown"
+
+
 def need(condition):
     if not condition:
         raise Refusal("dry_run_record_invalid")
@@ -440,12 +458,15 @@ def _release(custody, index_path, pinned, restricted_out, *, workers, repo, pyth
     restricted = Path(restricted_out)
     verdict = {"schema": SCHEMA, "verdict": "hold", "reason": None,
                "pinned_commit": pinned if isinstance(pinned, str) and HEX40.fullmatch(pinned) else None,
+               "checkout_head": None, "checkout_relation": "unknown",
                "stages": {"digests": {"status": "not_run"}, "recompute": {"status": "not_run"},
                           "comparator": {"status": "not_run"}}}
     stages = verdict["stages"]
     started = time.monotonic()
     try:
         verdict["release_checkout"] = {"commit": check_checkout(repo), "clean": True}
+        verdict["checkout_head"] = verdict["release_checkout"]["commit"]
+        verdict["checkout_relation"] = checkout_relation(repo, verdict["checkout_head"], pinned)
         if file_sha256(RELEASE_BARS) != RELEASE_BARS_SHA256:
             raise Refusal("release_bars_differ")
         record, entries, counts = verify_digests(custody, index_path, pinned, repo)

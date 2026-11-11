@@ -1042,6 +1042,35 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+267. **Laptop lead (interactive session 41120c85, Opus 5.5), 2026-11-11 09:40 PST: the BYTES twin anchor fix is ADMITTED (Opus cold review). MAGISTRATE: re-run stage-1 §3.8 with the fixed twin into a NEW `--out`, record the result, then stop. No commitment: the flags question still waits for the research lead.**
+
+```pointer
+owner: magistrate
+wait: results_branch_exists
+deadline: 2026-11-11T20:00:00-08:00
+on_early_or_refused: anything other than rc 0 or rc 7 with only flag fields above the bar: stop, record, mail the lead; never commit predictions
+next_observable: commit on main adding docs/process_traces/2026-11-11-bytes-stage1-twinfix-rerun/ (rc, above-bar field names and counts, predictions sha256)
+```
+
+- **The fix.** Branch `fix/2026-11-11-bytes-twin-anchor` @ `a0d5b19c4`, which is `df4c73e55` plus the twin fix, tests and reports.
+  - The twin now re-derives the decode-phase anchor term under §16's operative bound, as RL-80 directs: the twin departs from the text, so the twin is fixed.
+  - The cold review ADMITs: all 19 synthetic campaigns 0 above bar; failing-first confirmed; estimator unchanged at SHA-256 `18582818…0a71`; flags untouched.
+- **Steps.** Run on the MBP with `$W`, `$S1` and `$PY` as in item 264. The export and manifest stay the same.
+  1. Fetch the fix branch, then `git -C $W checkout --detach a0d5b19c4`. `$W` is a disposable stage-1 checkout, not the canonical root.
+  2. Confirm `shasum -a 256 $W/joulewise/bytes_analysis.py` starts with `18582818`. If it does not, STOP.
+  3. Run the twin's self-test (`tests.test_bytes_twin`) and `tests.test_bytes_stage1`. Run nothing else on the MBP.
+  4. Run §3.8 exactly as in plan §3.8, from the same `$S1` export and manifest, into a NEW `--out $S1/run-twinfix`. Do NOT reuse or overwrite `$S1/run`.
+  5. Expected result: rc 7, with ONLY `flags` fields above the bar (about 69 rows, all estimator-only and disclose-only). No `B_j`, `lower_j`, `upper_j`, `attribution_floor_j`, `B_kind:anchor` or `w`. The written predictions are byte-identical to the uncommitted rc-7 file (sha256 `a6cb172c…5f19`).
+  6. Record under `docs/process_traces/2026-11-11-bytes-stage1-twinfix-rerun/` on main:
+     - the rc;
+     - above-bar field NAMES and COUNTS by cell kind (no values, no signs);
+     - the new predictions' sha256, and whether it equals `a6cb172c…`.
+
+     Then mail the lead and stop.
+- **Do not commit any prediction or open any held-out key/store.** RL-80's flags branch still waits for the research lead's blind ruling.
+- **Test safety (item 265) still applies.** Run only the two test modules named above on the MBP.
+- **Host.** Nothing is armed. Network time stays OFF. The canonical root is untouched.
+
 266. **Magistrate activation 00da75c9 (Opus 5.5, headless), 2026-11-11 07:50 PST: the RL-80 attribution probe ran, rc 0. Its stdout is on main, verbatim. Stopped as item 265 says: no fix, no rerun, no commitment. The next step is the research lead's ruling RL-82.**
 
 ```pointer

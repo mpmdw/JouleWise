@@ -18,9 +18,11 @@ Last updated: 2026-11-10 (Paper rows: Paper 1 landed under `docs/paper/paper1/`,
 | Job | Canonical | Replaced |
 |---|---|---|
 | What is happening now, and what to do next | [`RUN_STATE.md`](RUN_STATE.md) (newest numbered item first; items from 150 on are current) | Dated `RESUME-*` files and session checkpoints under `docs/legacy/process_traces/` and `docs/process_traces/` (archived) |
-| Machine-readable head pointer and Next activation rule | [`docs/process/CURRENT.json`](docs/process/CURRENT.json), generated from RUN_STATE's highest numbered item carrying a `pointer` block; [`docs/process/POINTER_RULE.md`](docs/process/POINTER_RULE.md) | Hand-maintained pointer JSON (`WINDOW_STATUS.md` remains publisher-owned status, not the intake pointer) |
+| Machine-readable head pointer and Next activation rule | [`docs/process/CURRENT.json`](docs/process/CURRENT.json), generated from RUN_STATE's highest numbered item carrying a `pointer` block; [`docs/process/POINTER_RULE.md`](docs/process/POINTER_RULE.md) | Hand-maintained pointer JSON; `WINDOW_STATUS.md` and its publisher `scripts/window_status.sh` (superseded on `main`; retrieval in [docs/ARCHIVE.md](docs/ARCHIVE.md)) |
 | Work queue | [`TASK_QUEUE.md`](TASK_QUEUE.md); its marker-fenced region is generated from `docs/process/state_kernel.json` by `scripts/gen_state.py` (`--check` in CI) | Hand-kept queue lists in session traces |
 | Decisions and rulings | [`docs/decision_log.md`](docs/decision_log.md) (D-numbers), [`docs/council_log.md`](docs/council_log.md); research-design and paper-bound rulings (RL-numbers, the binding record per `RUN_STATE.md` item 257): `audit/2026-11-10-fable:docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md` | — |
+| Owner unseal records (RL-53 W-8) | `joulewise/unseal_record.py`: strict schema, canonical digest and committed verdict-bound permission; records in `docs/unseals/` | Future unseals recorded only in prose; Block 5 predates the rule, BYTES keeps its commitment journal |
+| Outcome display permission (opt-in) | `scripts/show_outcomes_guard.py check --block B --verdict V [--path P]`: hashes only the explicit verdict; refuses without a matching committed unseal | — |
 
 ## Measurement windows (ALIGN v4: R0, R1, W1, D1-D3)
 
@@ -38,6 +40,7 @@ The magistrate on the MacBook Pro owns running, re-running and arming windows
 | v4 kit and sessions | `scripts/align_v4_kit.py`, `scripts/align_v4_session.py` on the R1 integration line (`lane/2026-11-06-v4-r1-integrated`); the WP17 versions are also on the measurement lane. Not on `main` | — |
 | Window records | Record branches `records/<date>-align-*` and `docs/align/r0/<date>/` (cited from `RUN_STATE.md`) | — |
 | Window state and outcome (read-only shadow) | `joulewise/window_state.py`; `python3 -m joulewise.window_state <custody_root> [--json]` reads structural markers only; synthetic coverage in `tests/test_window_state.py` | — |
+| Owed host side effects (read-only shadow) | `joulewise/host_effects.py`; `python3 -m joulewise.host_effects --state-dir D [--json]` combines fixed-name records with caller-supplied live facts; synthetic coverage in `tests/test_host_effects.py` | — |
 | Air results watcher (structure only) | `scripts/air/night_results_watch.py`; `--once` or `--loop` polls results refs without checkout or SSH; usage and launchd text in `scripts/air/README.md`; synthetic coverage in `tests/test_night_results_watch.py` | Lead's scratch zsh watcher, only after the current chain exits |
 | Block-5 window harvest (collection finished) | `scripts/harvest_b5_window.py` + `joulewise/b5/**` | `scripts/harvest_g2a_window.py` (kept because `joulewise/v5_qualification.py` imports it); CA-42 arm/T-0 retirement (#668) is held by the live ALIGN v4 artifact/registration inventory; see `docs/run_reports/2026-11-10-file-prune-g3.md` |
 | Exit-code vocabularies and classification (shadow only) | `joulewise/exit_contract.py`: immutable tables, fail-closed classifier and future plan-contract parser; no existing tool adopts it | — |
@@ -74,6 +77,7 @@ Held, not canonical yet: the condition-waits lane (`align/2026-11-08-condition-w
 | Comparator (recompute against the heavy pipeline) | `scripts/compare_b5_recompute.py` (bars in `configs/analysis/b5/recompute_bars.json`) | `tools/normalized_compare.py` and its R1 original under `docs/process_traces/2026-11-01-l9-speedup-r1/` (deleted in the prune) |
 | D-188 equivalence gate (accepting a restructured heavy pipeline) | `tools/b5_equivalence/compare_b5_results.py` (result-equivalence comparator, `--mode blinded` by default). A different job from the comparator above | Byte-for-byte replays of the old pipeline |
 | Seal and digest pins | `scripts/digest_pin_census.py` (censuses every SHA-256 literal in `tests/` and `configs/`, writes `configs/pins/registry.json`); checked in CI by `python3 scripts/repin.py --check` | One-off seal verification scripts in process traces; hand repins |
+| Analysis commit identity and release checkout provenance | `tests/b5_analysis/test_analysis_commit_agreement.py`: frozen anchor/r4 ancestry and cited rebinds, record/runbook identity, remote-branch fence, and advisory `release_b5.py` checkout fields | — |
 
 ## Flash-Next (qwen4_exp) MLX port
 

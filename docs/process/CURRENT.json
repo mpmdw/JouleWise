@@ -1,13 +1,13 @@
 {
   "armed": null,
-  "next_observable": "research lead ruling on the BYTES stage-1 attribution probe (RL-82 or later) in audit/2026-11-10-fable RESEARCH-LEAD-DECISIONS.md",
-  "owner": "lead",
+  "next_observable": "commit on main adding docs/process_traces/2026-11-11-bytes-stage1-twinfix-rerun/ (rc, above-bar field names and counts, predictions sha256)",
+  "owner": "magistrate",
   "schema": "joulewise.current_pointer.v1",
-  "source_item": "266",
+  "source_item": "267",
   "source_item_heading_date": "2026-11-11",
   "wait": {
-    "deadline_epoch_s": 1794513600,
-    "observable": "ruling_recorded",
-    "on_early_or_refused": "if RL-82 rules a twin fix, the fixed twin reruns section 3.8 into a new --out from the same $S1 export and manifest; never commit the rc-7 predictions"
+    "deadline_epoch_s": 1794456000,
+    "observable": "results_branch_exists",
+    "on_early_or_refused": "anything other than rc 0 or rc 7 with only flag fields above the bar: stop, record, mail the lead; never commit predictions"
   }
 }
