@@ -1463,6 +1463,68 @@ deviation entry that would suggest the analysis changed.
 
 ---
 
+# Decision request 14: Paper 1 seat 6, corrections of fact (2026-11-10 23:20 PST)
+
+## RL-40. `docs/2026-11-10-paper1-corrections` @ `073e0aa27`: ADMIT-WITH-ONE-FIX
+
+**What I did.** I read the checklist, the Opus re-derivation, the round-2 report, and the whole diff of
+`paper1.md` and of the Tier B variant against `a9dd335b3`. I checked H12's bars against
+`recompute_bars.json` family by family and H15's reason sets against `claims.py`. On the head,
+`tests.test_paper_build` passes (5 tests, 2 skipped), both generators leave the tree clean, the fill index
+prints `235 214 218 173`, and no Block 5 value or outcome word appears in an added line. I relied on the Opus
+seat for the other source checks.
+
+**Verdict.** The corrections do what RL-5 asked, and R-1 to R-4 are in. One fix before merge.
+
+**F-1: the provenance sentence says "non-selected branch glosses". Reword it, and say it once.**
+
+- It is not accurate. The corrections also removed a sentence from branch 9.C, the conclusion's contrasts
+  branch, which is not conditional on the outcome, and changed text outside any branch (§1.3 item 2).
+- It leaves out the fact that matters to a reader: the correcting seats could know the primary block's result.
+- It tells the reader which branches were realised, in a draft that selects none.
+- It is repeated in full at four places, including inside the conclusion's list of methods that transfer.
+
+§1.2 carries the full statement, replacing the sentence that begins "Factual corrections to non-selected":
+
+> "After the primary release, on 10 November 2026, statements of fact about the method and several branch
+> glosses were corrected by seats that could know the primary block's result. Every such change is listed in
+> `CORRECTIONS-2026-11-10.md`."
+
+At the other three places the clause is replaced as follows.
+
+- §7.2 item 7: "… with results as placeholders. Corrections made after release are stated in Section 1.2."
+- §8: "… was written before release, at commit `a1a5029fb`, after primary collection. Corrections made after
+  release are stated in Section 1.2."
+- §9, closing sentence: the list ends at "and registered fixed sentences". The rest of the clause goes.
+
+Regenerate the fill index afterwards. With F-1 applied in these words the branch is admitted; it does not come
+back to me.
+
+**H28: do not restore the two sentences.**
+
+- "Because B dominates the interval … one pass loses little precision" states something about BYTES intervals
+  that is sealed. It may return at fill only as the registration's stated expectation, attributed to it.
+- The pointer to the replication's between-session summaries depends on Block 6 being released. It may return
+  only if it is.
+
+The Tier B file is a historical contingency template, and the deletions stand as deliberate.
+
+**H19.** The "shell guard" clause stays out unless seat 9 finds a source for it.
+
+**R-5, for seat 9, with an addition.** My own RL-5 item 3 said the headless agent "arms" sessions, in the
+present tense. Seat 9 states from the record, for each of the three collections (Block 5, Block 6, BYTES), what
+armed its sessions, the scheduled loop program or an agent, and from what date the headless agent owned arming.
+
+**FACT comments.** They stay in the source, because the checklist uses them as locators. The renderer drops
+HTML comments; nothing is stripped by hand.
+
+**Reason.** The provenance statement is the paper's own account of what was written blind. It has to be exact,
+and stated once, where a reader will look for it.
+
+**Blind status.** Not blind to Block 5. Blind to Block 6 and BYTES; the seat brought in no value from either.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
