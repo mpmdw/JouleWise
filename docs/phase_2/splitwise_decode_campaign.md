@@ -182,8 +182,8 @@ Two-model load pattern and its consequences:
   launch — see the §6 preflight addition.
 
 Disk: **113 GB free** on `/System/Volumes/Data` (verified `df -g`, 2026-07-29).
-The former status file's stale "13 GB free" line was retired with that file;
-current intake uses `docs/process/CURRENT.json`. The historical 113/115 GB figures exceed the
+`WINDOW_STATUS.md`'s "13 GB free" line is stale and should be corrected at
+bookkeeping; `RUN_STATE.md`'s 115 GB figure is the current one. Both far exceed the
 20 GB threshold in `scripts/prewindow_check.sh:115-123`. The window-C and a10 runs
 roots must not be pruned to make room — they are mint #1 inputs.
 
@@ -552,6 +552,6 @@ reading adopted here is that the field describes how that family behaves in its 
 *floor calibration*, not how the campaign uses two families against each other.
 Confirm or correct.
 
-**Q9 — Bookkeeping owed.** The stale status-file disk line is retired; a decision-log
+**Q9 — Bookkeeping owed.** `WINDOW_STATUS.md`'s stale 13 GB disk line; a decision-log
 entry for whichever option Q1 selects; registration of the mint-generalization and
 analysis-manifest-extension work items surfaced by §2.

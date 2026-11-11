@@ -1,9 +1,9 @@
 {
-  "schema": "joulewise.current_pointer.v1",
-  "run_state_top_item": 261,
-  "updated": "2026-11-11T11:26:50+00:00",
-  "owner": "lead",
   "armed": null,
-  "wait": null,
-  "next_observable": "Lead fills the next observable from the current item."
+  "next_observable": null,
+  "owner": null,
+  "schema": "joulewise.current_pointer.v1",
+  "source_item": null,
+  "source_item_heading_date": null,
+  "wait": null
 }
