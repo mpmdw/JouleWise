@@ -3,8 +3,6 @@
 # run_night invokes the chain only after its ordinary admission gates.
 set -euo pipefail
 
-: "${ALIGN_R1_PREPARE_PACKET:?r1.prepare_packet.missing: lead must supply the RL-62/73 FOR_LEAD_ARM packet}"
-
 restore_automatic() {
   sudo -n /usr/bin/pmset -c powermode 0
 }
@@ -37,6 +35,15 @@ POWER_MARKER="$MEASUREMENT_ROOT/.align-r1-high-power"
 # perform another restore before any runtime work and is cleared by the driver.
 if [[ -e "$POWER_MARKER" ]]; then
   restore_automatic
+fi
+
+# The arm pins MEASUREMENT_ROOT and these chain bytes. Derive the packet
+# location here, without an unregistered shell/plist environment override.
+# Check only after startup Automatic restore, including the SIGKILL backstop.
+ALIGN_R1_PREPARE_PACKET="$MEASUREMENT_ROOT/.align-r1-prepare.json"
+if [[ ! -f "$ALIGN_R1_PREPARE_PACKET" ]]; then
+  print -u2 -r -- "r1.prepare_packet.missing: lead must prepare $ALIGN_R1_PREPARE_PACKET"
+  exit 2
 fi
 
 # The WP15 runtime argv is the list inputs.WP15.runtime_entrypoint (a

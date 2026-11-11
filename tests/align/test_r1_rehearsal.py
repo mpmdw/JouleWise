@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import plistlib
 from pathlib import Path
 import signal
 import subprocess
@@ -10,10 +11,71 @@ import sys
 import tempfile
 import threading
 import time
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
 from scripts import align_r1_rehearsal as r1
+
+
+class ChainEnvironmentTests(unittest.TestCase):
+    def test_plist_environment_delivers_fixed_packet_and_restores_before_refusal(self):
+        from scripts import run_night
+        repo = Path(__file__).resolve().parents[2]
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bindir = root / 'bin'
+            bindir.mkdir()
+            measurement = root / 'measurement'
+            python = measurement / '.venv/bin/python'
+            python.parent.mkdir(parents=True)
+            calls, argv_path = root / 'sudo.calls', root / 'argv'
+            sudo = bindir / 'sudo'
+            sudo.write_text('#!/bin/zsh\n'
+                f'print -r -- "$*" >> "{calls}"\n'
+                'if [[ "$1 $2" == "-n -l" ]]; then\n'
+                '  print "(root) NOPASSWD: /usr/bin/pmset -c powermode 0, /usr/bin/pmset -c powermode 2"\n'
+                'fi\nexit 0\n')
+            python.write_text(f'#!/bin/zsh\nprint -r -l -- "$@" > "{argv_path}"\n')
+            sudo.chmod(0o755)
+            python.chmod(0o755)
+            template = (repo / 'configs/launchd/com.joulewise.night.plist.template').read_text()
+            for field in ('MONTH', 'DAY', 'HOUR', 'MINUTE'):
+                template = template.replace('@@' + field + '@@', '1')
+            template = template.replace('@@PATH@@', f'{bindir}:/usr/bin:/bin:/usr/sbin:/sbin')
+            plist = plistlib.loads(template.encode())
+            self.assertEqual(set(plist['EnvironmentVariables']), {'PATH'})
+            plan = SimpleNamespace(plan_id='synthetic-r1', measurement_root=str(measurement),
+                measurement_head='a'*40, receipt_class='DIAGNOSTIC_NO_PACK',
+                chain_path=str(repo / 'scripts/night_chains/align_r1_rehearsal.zsh'))
+            # Nothing is supplied by a desk shell; this is the installed
+            # LaunchAgent's PATH-only environment through the real builder.
+            with patch.dict(os.environ, plist['EnvironmentVariables'], clear=True):
+                env = run_night._chain_environment(plan, root / 'night')
+            self.assertNotIn('ALIGN_R1_PREPARE_PACKET', env)
+            packet = measurement / '.align-r1-prepare.json'
+            marker = measurement / '.align-r1-high-power'
+            marker.touch()
+            for exists in (True, False):
+                if exists:
+                    packet.write_text('{"synthetic": true}\n')
+                else:
+                    packet.unlink()
+                    argv_path.unlink(missing_ok=True)
+                calls.write_text('')
+                proc = subprocess.run(['/bin/zsh', plan.chain_path], env=env,
+                                      capture_output=True, text=True, timeout=15)
+                with self.subTest(packet_exists=exists):
+                    if exists:
+                        self.assertEqual(proc.returncode, 0, proc.stderr)
+                        argv = argv_path.read_text().splitlines()
+                        self.assertEqual(argv[argv.index('--prepare-packet') + 1], str(packet))
+                    else:
+                        self.assertNotEqual(proc.returncode, 0)
+                        self.assertIn('r1.prepare_packet.missing', proc.stderr)
+                        self.assertFalse(argv_path.exists())
+                    self.assertGreaterEqual(calls.read_text().splitlines().count(
+                        '-n /usr/bin/pmset -c powermode 0'), 3)
 
 
 def completed(argv, code=0, out="", err=""):
@@ -912,9 +974,9 @@ class R1Tests(unittest.TestCase):
             for path in (sudo, shim):
                 path.chmod(0o755)
             (td / "mroot").mkdir()
+            (td / "mroot/.align-r1-prepare.json").write_text('{"synthetic": true}\n')
             env = dict(os.environ, PATH=f"{td / 'bin'}:{os.environ['PATH']}", PY=str(shim),
                        NIGHT_DIR=str(td / "night"), MEASUREMENT_ROOT=str(td / "mroot"),
-                       ALIGN_R1_PREPARE_PACKET=str(td / "synthetic-prepare.json"),
                        ALIGN_R1_RUNTIME="/usr/bin/true")
             proc = subprocess.run(["/bin/zsh", str(repo / "scripts/night_chains/align_r1_rehearsal.zsh")],
                                   env=env, start_new_session=True, capture_output=True, text=True,
@@ -1038,9 +1100,9 @@ class R1Tests(unittest.TestCase):
             for path in (sudo, shim):
                 path.chmod(0o755)
             (td / "mroot").mkdir()
+            (td / "mroot/.align-r1-prepare.json").write_text('{"synthetic": true}\n')
             env = dict(os.environ, PATH=f"{td / 'bin'}:{os.environ['PATH']}", PY=str(shim),
-                       NIGHT_DIR=str(td / "night"), MEASUREMENT_ROOT=str(td / "mroot"),
-                       ALIGN_R1_PREPARE_PACKET=str(td / "synthetic-prepare.json"))
+                       NIGHT_DIR=str(td / "night"), MEASUREMENT_ROOT=str(td / "mroot"))
             env.pop("ALIGN_R1_RUNTIME", None)
             chain = ["/bin/zsh", str(repo / "scripts/night_chains/align_r1_rehearsal.zsh")]
             proc = subprocess.run(chain, env=env, capture_output=True, text=True, timeout=60)

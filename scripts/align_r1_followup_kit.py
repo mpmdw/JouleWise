@@ -204,10 +204,12 @@ def smoke_selection(classification, coverage, r0_keys):
 
     Keep the full classifier result unchanged in the table. Pre-warmup is an
     additional smoke phase; its failures also exclude a key from either role.
+    R0 membership is checked after selection, and restricts fallback candidates
+    only; an otherwise selected key outside R0 must be held for the lead.
     """
     from joulewise.align.apple.smc_enumeration import select_keys
     phases = coverage["phases"]
-    ranking = [row for row in classification["ranking"] if row["key"] in r0_keys and phases
+    ranking = [row for row in classification["ranking"] if phases
                and all(p.get(row["key"], {}).get("pass", False) for p in phases.values())]
     filtered = {**classification, "ranking": ranking, **select_keys(ranking),
                 "heatsink_candidates": [r["key"] for r in ranking if r["class"] == "heatsink"]}

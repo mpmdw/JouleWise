@@ -237,6 +237,8 @@ class DefaultBundleTests(unittest.TestCase):
         exec(compile(subprocess.check_output(["git", "show", "82c14c9ea:joulewise/align/apple/workload.py"],
                                             cwd=r1.ROOT), old.__name__, "exec"), old.__dict__)
         from joulewise.adapters import mlx_runtime
+        from joulewise import battery_float
+        from tests.battery_float_corpus import document, required
         rss_reader = mlx_runtime._process_rss_bytes
         def stable_rss(errors):
             # Retain the real reader's availability/error diagnostics.
@@ -251,11 +253,10 @@ class DefaultBundleTests(unittest.TestCase):
                                     turn_cap_s=300, chunk_tokens=256, heavy=False, per_turn=False)
             spec = rt.step_spec(tspec, {**config["step"], "decode_tokens": 8}, policy, deadman_s=1580)
             member = rt.member_config(template, spec, run_id="same-member", kind="step-d")
-            # Sole exclusion: memory_snapshots[*].process_rss_bytes in
-            # metadata.json and events.jsonl. RSS measures this shared Python
-            # process's allocator/OS state, not the member's deterministic
-            # behavior. Patch its source; do not parse/re-serialize bundles or
-            # ignore timestamps, errors, other telemetry, or any other bytes.
+            # Stabilize host RSS and the live battery read at their sources.
+            # Battery UpdateTime/Voltage (including raw/property-line copies
+            # and hashes) otherwise change independently of these adapters.
+            # Compare every emitted byte without parsing away any differences.
             for timed_out in (False, True):
                 outputs = []
                 for adapter in (old.EpisodeRuntimeAdapter, workload.EpisodeRuntimeAdapter):
@@ -264,10 +265,19 @@ class DefaultBundleTests(unittest.TestCase):
                         from joulewise import controller
                         def hook(session):
                             session.reference = {"fast_c": 0., "slow_c": 0., "source_member": "synthetic"}
+                        def stable_battery(argv):
+                            self.assertEqual(tuple(argv), battery_float.IOREG_BATTERY_ARGV)
+                            raw = document(required(int(backend.clock.stamp().epoch_s)) +
+                                           b'      "Voltage" = 12000\n')
+                            return subprocess.CompletedProcess(argv, 0, raw, b'')
                         with patch.object(workload, "EpisodeRuntimeAdapter", adapter), patch.object(
                                 controller._Execution, "_battery_stamp", lambda execution: execution._clock.stamp()), patch(
-                                "joulewise.adapters.mlx_runtime._process_rss_bytes", side_effect=stable_rss):
+                                "joulewise.adapters.mlx_runtime._process_rss_bytes", side_effect=stable_rss), patch.object(
+                                battery_float, "run_bundle_probe", side_effect=stable_battery) as battery_probe:
                             bundle, summary = backend.run_member(member, root / "runs", hook=hook if timed_out else None)
+                        self.assertEqual(battery_probe.call_count, 2)
+                        for record in json.loads((bundle / 'metadata.json').read_bytes())['battery_float'].values():
+                            self.assertTrue(record['passed'], record)
                         self.assertEqual(summary.status.value, "succeeded")
                         ep = workload.read_episode_bundle(bundle)
                         self.assertEqual(len(ep.turns), 0 if timed_out else 1)

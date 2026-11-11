@@ -90,6 +90,50 @@ class PerKeyCoverageTests(unittest.TestCase):
 
 
 class SelectionAndTableTests(unittest.TestCase):
+    def outside_r0_case(self, role):
+        c = classified()
+        # Use the production six-key allowlist, with synthetic classifier rows.
+        config, _ = rt.load_config(kit.ROOT / kit.r1.DEFAULT_RUNTIME_CONFIG)
+        r0 = config['r0_classified_keys']
+        fast = next(r for r in c['ranking'] if r['key'] == c['s_fast'])
+        slow = next(r for r in c['ranking'] if r['key'] == c['s_slow'])
+        fast['key'], slow['key'] = 'TV0h', 'Tf08'
+        c.update(s_fast='TV0h', s_slow='Tf08', alias_groups=[])
+        outside = deepcopy(fast if role == 's_fast' else slow)
+        outside['key'] = 'Txtr'
+        if role == 's_fast':
+            outside['observed_rise'] += 1.
+        else:
+            # Without Txtr the R0 key is a valid fallback. Txtr makes the
+            # registered heatsink class nonempty, so fallback is forbidden.
+            slow.update(tau_s=55., **{'class': 'die'})
+        c['ranking'].append(outside)
+        c[role] = 'Txtr'
+        c['heatsink_candidates'] = [r['key'] for r in c['ranking'] if r['class'] == 'heatsink']
+        keys = [r['key'] for r in c['ranking']]
+        coverage = {'phases': {p: {k: {'pass': True} for k in keys} for p in PHASES}}
+        return c, coverage, r0
+
+    def test_fast_pick_outside_six_is_held_for_lead_without_substitution(self):
+        c, coverage, r0 = self.outside_r0_case('s_fast')
+        original = deepcopy(c)
+        selected = kit.smoke_selection(c, coverage, r0)
+        self.assertFalse(selected['ok'], selected)
+        self.assertEqual(selected['s_fast'], 'Txtr')
+        self.assertFalse(selected['fallback'])
+        self.assertTrue(any('s_fast: Txtr' in reason for reason in selected['reasons']))
+        self.assertEqual(c, original)
+
+    def test_heatsink_outside_six_refuses_instead_of_falling_back(self):
+        c, coverage, r0 = self.outside_r0_case('s_slow')
+        original = deepcopy(c)
+        selected = kit.smoke_selection(c, coverage, r0)
+        self.assertFalse(selected['ok'], selected)
+        self.assertEqual(selected['s_slow'], 'Txtr')
+        self.assertFalse(selected['fallback'])
+        self.assertTrue(any('s_slow: Txtr' in reason for reason in selected['reasons']))
+        self.assertEqual(c, original)
+
     def test_smoke_refuses_failed_bars_or_selection_after_saving_diagnostics(self):
         from joulewise.align.apple import thermal_gates
         for coverage_ok, selection_ok in ((False, True), (True, False)):
