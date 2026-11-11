@@ -91,18 +91,6 @@
   },
   {
     "file": "joulewise/arm_readiness_evidence_t0.py",
-    "locator": "_derive_power:76a35a4bd9cb5cbb",
-    "command": "pmset",
-    "seam": "none"
-  },
-  {
-    "file": "joulewise/arm_readiness_evidence_t0.py",
-    "locator": "_derive_power:c463823381952a7c",
-    "command": "pmset",
-    "seam": "none"
-  },
-  {
-    "file": "joulewise/arm_readiness_evidence_t0.py",
     "locator": "_derive_powermetrics:650aa89ad0060b30",
     "command": "sudo",
     "seam": "none"
@@ -147,12 +135,6 @@
     "file": "joulewise/arm_readiness_evidence_t0.py",
     "locator": "_systemsetup_argv:e4cd6a3107d1f763",
     "command": "systemsetup",
-    "seam": "none"
-  },
-  {
-    "file": "joulewise/arm_readiness_evidence_t0.py",
-    "locator": "_thermal_probe:0d98ba3c3a592d02",
-    "command": "pmset",
     "seam": "none"
   },
   {
@@ -235,49 +217,13 @@
   },
   {
     "file": "joulewise/environment.py",
-    "locator": "collect_environment_guard_observation:6a35f73108e8f2f8",
-    "command": "pmset",
-    "seam": "patch module _run (environment probes)"
-  },
-  {
-    "file": "joulewise/environment.py",
     "locator": "collect_environment_guard_observation:9d2be7ac15275504",
     "command": "pmset",
     "seam": "patch module _run (environment probes)"
   },
   {
     "file": "joulewise/environment.py",
-    "locator": "collect_environment_snapshot:4227d8920c3e4625",
-    "command": "pmset",
-    "seam": "patch module _run (environment probes)"
-  },
-  {
-    "file": "joulewise/environment.py",
-    "locator": "collect_environment_snapshot:6a35f73108e8f2f8",
-    "command": "pmset",
-    "seam": "patch module _run (environment probes)"
-  },
-  {
-    "file": "joulewise/environment.py",
-    "locator": "collect_environment_snapshot:7ca0ad135e4bb0bf",
-    "command": "pmset",
-    "seam": "patch module _run (environment probes)"
-  },
-  {
-    "file": "joulewise/environment.py",
     "locator": "collect_environment_snapshot:9d2be7ac15275504",
-    "command": "pmset",
-    "seam": "patch module _run (environment probes)"
-  },
-  {
-    "file": "joulewise/environment.py",
-    "locator": "collect_environment_snapshot:c628e4f96dc8497b",
-    "command": "pmset",
-    "seam": "patch module _run (environment probes)"
-  },
-  {
-    "file": "joulewise/environment.py",
-    "locator": "probe_thermal_pressure:58f160265b9b3d7f",
     "command": "pmset",
     "seam": "patch module _run (environment probes)"
   },
@@ -422,12 +368,6 @@
   {
     "file": "joulewise/hazards/arm.py",
     "locator": "<module>:9ca949ef4f273656",
-    "command": "pmset",
-    "seam": "none: module docstring text (conservative scan); the executed argvs are module constants run through the arm runner seam"
-  },
-  {
-    "file": "joulewise/hazards/arm.py",
-    "locator": "<module>:9ca949ef4f273656",
     "command": "sudo",
     "seam": "none: module docstring text (conservative scan); the executed argvs are module constants run through the arm runner seam"
   },
@@ -436,12 +376,6 @@
     "locator": "<module>:9ca949ef4f273656",
     "command": "systemsetup",
     "seam": "none: module docstring text (conservative scan); the executed argvs are module constants run through the arm runner seam"
-  },
-  {
-    "file": "joulewise/hazards/arm.py",
-    "locator": "<module>:c463823381952a7c",
-    "command": "pmset",
-    "seam": "Context.run for command constants"
   },
   {
     "file": "joulewise/hazards/clock.py",
@@ -481,25 +415,7 @@
   },
   {
     "file": "joulewise/hazards/thermal.py",
-    "locator": "<module>:0d98ba3c3a592d02",
-    "command": "pmset",
-    "seam": "Context.run"
-  },
-  {
-    "file": "joulewise/hazards/thermal.py",
     "locator": "<module>:541443a289d468bd",
-    "command": "pmset",
-    "seam": "Context.run"
-  },
-  {
-    "file": "joulewise/hazards/thermal.py",
-    "locator": "<module>:8455f1787c1f0194",
-    "command": "pmset",
-    "seam": "Context.run"
-  },
-  {
-    "file": "joulewise/hazards/thermal.py",
-    "locator": "measure:c9c52123a1c26863",
     "command": "pmset",
     "seam": "Context.run"
   },
@@ -571,33 +487,9 @@
   },
   {
     "file": "joulewise/night_gate.py",
-    "locator": "<module>:0d98ba3c3a592d02",
-    "command": "pmset",
-    "seam": "none"
-  },
-  {
-    "file": "joulewise/night_gate.py",
     "locator": "<module>:541443a289d468bd",
     "command": "pmset",
     "seam": "none"
-  },
-  {
-    "file": "joulewise/night_gate.py",
-    "locator": "<module>:76a35a4bd9cb5cbb",
-    "command": "pmset",
-    "seam": "none"
-  },
-  {
-    "file": "joulewise/night_gate.py",
-    "locator": "<module>:bf6b444741079b85",
-    "command": "pmset",
-    "seam": "none"
-  },
-  {
-    "file": "joulewise/prewindow.py",
-    "locator": "t0_check:4227d8920c3e4625",
-    "command": "pmset",
-    "seam": "patch module subprocess.run (local probe)"
   },
   {
     "file": "joulewise/prewindow.py",
@@ -639,12 +531,6 @@
     "file": "joulewise/t0_rehearsal.py",
     "locator": "<module>:0672075787e402de",
     "command": "caffeinate",
-    "seam": "none"
-  },
-  {
-    "file": "joulewise/t0_rehearsal.py",
-    "locator": "<module>:0d98ba3c3a592d02",
-    "command": "pmset",
     "seam": "none"
   },
   {
@@ -699,24 +585,6 @@
     "file": "joulewise/t0_rehearsal.py",
     "locator": "<module>:742b3a650c01233f",
     "command": "sudo",
-    "seam": "none"
-  },
-  {
-    "file": "joulewise/t0_rehearsal.py",
-    "locator": "<module>:76a35a4bd9cb5cbb",
-    "command": "pmset",
-    "seam": "none"
-  },
-  {
-    "file": "joulewise/t0_rehearsal.py",
-    "locator": "<module>:bf6b444741079b85",
-    "command": "pmset",
-    "seam": "none"
-  },
-  {
-    "file": "joulewise/t0_rehearsal.py",
-    "locator": "<module>:c463823381952a7c",
-    "command": "pmset",
     "seam": "none"
   },
   {
@@ -1045,12 +913,6 @@
   },
   {
     "file": "scripts/launch_align_r0.py",
-    "locator": "preflight:1ce72457247d2496",
-    "command": "pmset",
-    "seam": "none"
-  },
-  {
-    "file": "scripts/launch_align_r0.py",
     "locator": "sleep_display:4d225195f0918490",
     "command": "pmset",
     "seam": "none"
@@ -1074,12 +936,6 @@
     "seam": "none"
   },
   {
-    "file": "scripts/prewindow_check.sh",
-    "locator": "shell:319adc4f9aae57fc",
-    "command": "pmset",
-    "seam": "none"
-  },
-  {
     "file": "scripts/quiet_guard.py",
     "locator": "privileged_command:650aa89ad0060b30",
     "command": "sudo",
@@ -1099,26 +955,8 @@
   },
   {
     "file": "scripts/quiet_mac_prep.sh",
-    "locator": "shell:2c084710e3f07ede",
-    "command": "pmset",
-    "seam": "none"
-  },
-  {
-    "file": "scripts/quiet_mac_prep.sh",
-    "locator": "shell:2f724750112f5cca",
-    "command": "pmset",
-    "seam": "none"
-  },
-  {
-    "file": "scripts/quiet_mac_prep.sh",
     "locator": "shell:be6240fd1089daca",
     "command": "sudo",
-    "seam": "none"
-  },
-  {
-    "file": "scripts/quiet_mac_prep.sh",
-    "locator": "shell:d2f3f88bbe41d978",
-    "command": "pmset",
     "seam": "none"
   },
   {

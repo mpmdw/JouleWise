@@ -20,6 +20,19 @@ _LAUNCH_WRITES = {"bootstrap", "bootout", "load", "unload", "kickstart", "enable
 _WRAPPERS = {"nohup", "nice", "timeout", "gtimeout", "time", "command", "exec", "builtin", "xargs",
              "stdbuf", "arch", "sandbox-exec", "chroot", "doas", "su", "watch"}
 _LAUNCH_EXEC = {"asuser", "bsexec"}
+# Read-only `pmset -g [getter]` (orchestrator decision). Strict: at most one further token, and it must be a
+# known getter name; anything else (a setter token after -g, extra arguments) stays refused, as does sudo.
+PMSET_GETTERS = frozenset({"live", "custom", "cap", "sched", "ups", "ps", "batt", "accps", "pslog", "rawlog",
+                           "therm", "thermlog", "assertions", "assertionslog", "sysload", "sysloadlog", "ac",
+                           "adapter", "log", "rawbatt", "uuid", "uuidlog", "history", "historydetailed",
+                           "hidnull", "useractivity", "powerstate", "stats", "systemstate", "everything",
+                           "disk", "dhistory"})
+
+
+def pmset_read_only(argv):
+    """True for bare `pmset -g` or `pmset -g <getter>`; the caller has already matched the pmset name."""
+    rest = list(argv[1:])
+    return rest[:1] == ["-g"] and (len(rest) == 1 or (len(rest) == 2 and rest[1] in PMSET_GETTERS))
 # Shell grouping and substitution open a new simple command (cold review F-3).
 _SHELL_OPENERS = ("$(", "`", "(", ")", "{", "}")
 _originals = []
@@ -139,6 +152,8 @@ def classify(command, *, shell=False, executable=None, path=None):
         if (denied or "launchctl" in names or names & {"networksetup", "scutil"}) and _is_temp_fake(
                 executable if executable is not None and not shell else argv[0], path):
             continue  # the test's own fake executable, resolved inside a temp directory
+        if denied == ["pmset"] and pmset_read_only(argv):
+            continue  # read-only getter; every setter, extra token and any sudo form stays refused
         if denied:
             found.append((denied[0], raw))
         elif "launchctl" in names and len(argv) > 1 and argv[1] in _LAUNCH_WRITES:

@@ -14,6 +14,18 @@ HOST = {"sudo", "systemsetup", "pmset", "caffeinate", "shutdown", "nvram", "kill
 LAUNCH = {"bootstrap", "bootout", "load", "unload", "kickstart", "enable", "disable", "remove"}
 
 
+def _read_only_pmset(tokens):
+    from tests.host_command_guard import PMSET_GETTERS
+    rest = [t.strip('"\'`$(){},') for t in tokens[1:4]]
+    # A literal site is read-only only if the getter ends the command: the next token, if any, must not
+    # continue the argv (a setter or more arguments after the getter keep it inventoried).
+    if rest[:1] != ["-g"]:
+        return False
+    if len(rest) == 1 or rest[1] in {";", "&&", "||", "|"}:
+        return True
+    return rest[1] in PMSET_GETTERS and (len(rest) == 2 or rest[2] in {";", "&&", "||", "|", ")"} or not rest[2].startswith("-"))
+
+
 def command_sites(tokens):
     """Conservative literal inventory, not a shell evaluation or data reader."""
     for index, token in enumerate(tokens):
@@ -21,6 +33,8 @@ def command_sites(tokens):
         if name not in HOST | {"launchctl", "networksetup", "scutil", "defaults", "sys.executable", "PY", "PYTHON", "$PY", "$PYTHON", "${PYTHON}", "${PY}"} and not re.fullmatch(r"python(?:\d+(?:\.\d+)*)?", name):
             continue
         rest = tokens[index + 1:]
+        if name == "pmset" and _read_only_pmset(tokens[index:]):
+            continue  # read-only getter: the runtime guard allows it (tests/host_command_guard.py)
         if (name in HOST or
             name == "launchctl" and (not rest or rest[0] not in {"print", "list", "blame"}) or
             name in {"networksetup", "scutil"} and any(a.startswith(("-set", "--set")) for a in rest) or

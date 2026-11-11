@@ -83,12 +83,12 @@ class HostCommandGuardTests(unittest.TestCase):
         for sub in ("bootstrap", "bootout", "load", "unload", "kickstart", "enable", "disable", "remove"):
             self.assertEqual(guard.classify(["/bin/launchctl", sub, "gui/501/fake"])[0][0], "launchctl", sub)
         refused = [
-            (["nohup", "sudo", "true"], {}), (["timeout", "-s", "KILL", "5", "pmset", "-g"], {}),
+            (["nohup", "sudo", "true"], {}), (["timeout", "-s", "KILL", "5", "pmset", "-a", "sleep", "0"], {}),
             (["nice", "-n", "10", "caffeinate", "-i", "true"], {}), (["xargs", "-n", "1", "sudo"], {}),
             (["/usr/bin/time", "systemsetup", "-getusingnetworktime"], {}),
             (["launchctl", "asuser", "501", "launchctl", "bootstrap", "gui/501", "x"], {}),
-            ("command sudo true", {"shell": True}), ("exec pmset -g", {"shell": True}),
-            ("(sudo true)", {"shell": True}), ("echo $(pmset -g)", {"shell": True}),
+            ("command sudo true", {"shell": True}), ("exec pmset -a sleep 0", {"shell": True}),
+            ("(sudo true)", {"shell": True}), ("echo $(pmset -c sleep 0)", {"shell": True}),
             ("echo `nvram -p`", {"shell": True}), ("{ shutdown -h now; }", {"shell": True}),
         ]
         for command, kwargs in refused:
@@ -130,10 +130,30 @@ class HostCommandGuardTests(unittest.TestCase):
                 forwarder.chmod(0o755)
                 self.assertTrue(guard.classify(["sudo", "-n", "x"], path=str(forwarder.parent)), body)
 
+    def test_pmset_getters_allowed_setters_and_sudo_refused(self):
+        # Orchestrator decision: bare `pmset -g [getter]` is read-only and allowed; nothing else is.
+        for command in (["pmset", "-g"], ["/usr/bin/pmset", "-g", "batt"], ["pmset", "-g", "systemstate"],
+                        ["pmset", "-g", "custom"], ["pmset", "-g", "log"], ["env", "pmset", "-g", "assertions"]):
+            self.assertEqual(guard.classify(command), [], command)
+        for command in (["pmset", "-a", "sleep", "0"], ["/usr/bin/pmset", "-c", "powermode", "0"], ["pmset", "-a"],
+                        ["pmset", "sleepnow"], ["pmset", "schedule", "wake", "x"], ["pmset", "displaysleepnow"],
+                        ["pmset", "-g", "batt", "-a", "sleep", "0"], ["pmset", "-g", "-a", "sleep", "0"],
+                        ["pmset", "-g", "notagetter"], ["pmset", "-g", "custom", "extra"],
+                        ["sudo", "-n", "/usr/bin/pmset", "-g"], ["sudo", "pmset", "-g", "batt"], ["pmset"],
+                        ["nohup", "pmset", "-b", "sleep", "1"]):
+            self.assertTrue(guard.classify(command), command)
+        self.assertTrue(guard.classify("pmset -g; pmset -a sleep 0", shell=True))
+        self.assertEqual(guard.classify("pmset -g therm | head -1", shell=True), [])
+        from tests import test_host_command_sites as sites
+        self.assertEqual(list(sites.command_sites(["pmset", "-g", "batt"])), [])
+        self.assertEqual(list(sites.command_sites(["pmset", "-g", "batt", "-a", "sleep"])), ["pmset"])
+        self.assertEqual(list(sites.command_sites(["pmset", "-a", "sleep", "0"])), ["pmset"])
+        self.assertEqual(list(sites.command_sites(["sudo", "-n", "/usr/bin/pmset", "-g"])), ["sudo"])
+
     def test_child_interpreter_reports_even_swallowed_refusal(self):
         class Leaky(unittest.TestCase):
             def runTest(self):
-                child = subprocess.run([sys.executable, "-B", "-c", "import subprocess\nfrom unittest.mock import patch\nwith patch('subprocess._fork_exec') as fork:\n try: subprocess.run(['pmset', '-g'])\n except Exception: pass\n fork.assert_not_called()"], capture_output=True, text=True)
+                child = subprocess.run([sys.executable, "-B", "-c", "import subprocess\nfrom unittest.mock import patch\nwith patch('subprocess._fork_exec') as fork:\n try: subprocess.run(['pmset', '-a', 'sleep', '0'])\n except Exception: pass\n fork.assert_not_called()"], capture_output=True, text=True)
                 self.assertEqual(child.returncode, 0, child.stderr)
         with guard.expect_refusals() as records:
             result = unittest.TestResult()
@@ -151,7 +171,7 @@ class HostCommandGuardTests(unittest.TestCase):
                   "from tests import host_command_guard; host_command_guard.install()\n"
                   "class T(unittest.TestCase):\n"
                   "    def runTest(self):\n"
-                  "        try: subprocess.run(['pmset', '-g'])\n"
+                  "        try: subprocess.run(['pmset', '-a', 'sleep', '0'])\n"
                   "        except Exception: pass\n"
                   "r = unittest.TestResult(); T().run(r); print(len(r.failures))\n")
         with guard.expect_refusals() as records:
