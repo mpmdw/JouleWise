@@ -667,10 +667,14 @@ cannot change the already-established refusal.
 
 The helper prints warnings with `WARN:` and refusals with `REFUSING:` to stderr,
 and returns rc `0` exactly when it has no refusals, otherwise rc `1`. The shell
-runs that helper before writing `WINDOW_STATUS.md` or doing Git work, and
+runs that helper before writing its legacy status file or doing Git work, and
 returns rc `1` if the helper fails. `courier.sent`, the file recording delivery
 of the night's handback message, is not inspected and cannot clear either
 chain or campaign contributions. [T6]
+
+The legacy status file is retired. The publisher remains covered by safety
+regression tests; current head-pointer intake uses
+[`CURRENT.json`](../process/CURRENT.json) and [the pointer rule](../process/POINTER_RULE.md).
 
 A **commit-freeze sentinel** is a file whose presence suppresses Git work;
 `JOULEWISE_COMMIT_FREEZE_SENTINEL` selects it, default

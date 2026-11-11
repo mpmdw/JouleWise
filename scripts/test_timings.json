@@ -499,6 +499,7 @@
     "tests.test_controller_retry_backoff": 5.437,
     "tests.test_corecaptured_loop": 0.001,
     "tests.test_corpus_strict_validation": 0.287,
+    "tests.test_current_pointer": 0.169,
     "tests.test_custody_durability": 0.038,
     "tests.test_custody_isolation_guard": 1.456,
     "tests.test_custody_mode_inventory": 88.499,
