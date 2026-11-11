@@ -576,3 +576,88 @@ The W1 line did not change its watchdog in claim B, so the picture is the same a
 No code finding remains on either branch. What is left is outside these branches: the native checks in
 sections 7, D6 and R6; STRICT re-registration at the integrated head; the Air poller and notifier; the
 `courier_delivery` exporter; and the watchdog port above.
+
+---
+
+# Integration review (Fable 5.2), 2026-11-10 21:42 PST
+
+Scope: `align/2026-11-10-w1-integration` at `928976f8c`, based on the claim-B W1 line `7770d6a4f`. It merges the
+admitted reliability head `e2fca0096`, ports the admitted watchdog head `6e0647a61`, and binds four new paths
+under RL-29. Same binding rules as before.
+
+**Verdict: READY.** This head can become `align/2026-11-08-v4-r11` and go to STRICT re-registration, pending
+only the native checks and R1's slots under RL-32. The port is faithful, the merges are correct, and the
+registration additions are consistent with the code and the trace. Three low notes follow in section I4; none
+blocks.
+
+## I1. Are the merges and the port faithful?
+
+| Check | Result |
+|---|---|
+| Reliability merge `978cbea59` | Its tree is `6f00f3ae6d9d`, the same tree my dry-run merge of `e2fca0096` with `7770d6a4f` produced. It is a pure auto-merge with no hand edits. |
+| Every changed source file on the head, compared blob for blob with the two admitted heads | All match one admitted head exactly, except six expected files: the watchdog, `scripts/align_v4_next_arm_packet.py` (the auto-merge), `v4_registration.py`, the receipt template, `DEVIATIONS.md` and the trace. |
+| `scripts/magistrate_watchdog.py` | Identical to my own three-way merge (base `d842f697f`, W1 line, watchdog head) except two places: the `transition()` conflict, resolved as specified (`[*boundaries, event]`, then the status checkpoint), and one added term, `| UNSAFE_STATES`, in `_hold_boundaries`. |
+| The added `| UNSAFE_STATES` | Correct and needed. Without it the W1 timing receipts would open hold spans only for the old `HOLD_UNSAFE` name and miss the new named holds. `tests/test_w1_integration.py` checks the start and end rows land before the status checkpoint. |
+| W1-only watchdog features | All present: `_restore_abandoned_high_power` with `powermode.restore_owed` and `deps.power_runner`, the timing-receipt boundaries, and `mark_production_entry("magistrate_watchdog")`. |
+| Branch-2 fixes | All present; the file is a three-way merge, not a copy. `scripts/watchdog_status.py`, `launch_align_r0.py`, the installer, the plist template, the docs and `tests/test_watchdog_reliability.py` are byte-identical to the watchdog head. |
+| `tests/test_magistrate_watchdog.py` | Identical to the three-way merge output. |
+| `joulewise/night_gate.py`, `joulewise/arm_retry.py`, `scripts/run_night.py` | Unchanged from the merge commit (the W1 line's files). |
+| Import and dry run | `import scripts.magistrate_watchdog` succeeds. The integration test drives the real CLI with `--dry-run`: no writes, no fork. |
+
+One thing the port fixed in passing: `tests/test_magistrate_desk_fence.py` on the watchdog branch still expected
+`HOLD_UNSAFE` for a desk-fence error. I never ran that module on the branch. It now expects `HOLD_DESK_FENCE`
+and passes.
+
+## I2. Do the registration additions match the trace?
+
+- **`ARTIFACTS` and the receipt template agree:** 322 paths each, identical sets.
+- **Static closure is complete.** I walked every import statement reachable from the watchdog, including
+  function-local ones: 235 repository files, all bound. The two new modules import nothing from the repository.
+- **The trace is reproducible.** I regenerated it with the registered generator on this head: exit 0, all nine
+  scenarios pass (416 tests), and the output is byte-identical to the committed file
+  (sha256 `acf4eba4f8f3...`). `not_bound` and `not_strict` are empty and every executed path is bound.
+- **The four additions are justified by the import rule, not by execution.** In the committed trace the
+  four paths, and the watchdog itself, appear only in the informational `opened` list. No registered scenario
+  executes the watchdog. Sol's earlier trace at `21029737a` listed the four as child-process opens; on the
+  committed tree the generator no longer does, and my run agrees with the committed bytes.
+
+## I3. What I ran
+
+All passing, one module at a time, on `928976f8c`.
+
+- The trace generator (about 6 minutes), which runs `tests.align.test_v4_series`, `test_v4_series_e2e`,
+  `test_v4_replacement_windows`, `test_v4_kit`, `test_v4_next_arm_packet` and the other scenario suites.
+- Closure and registration: `tests.align.test_v4_executed_closure` 4, `test_v4_dynamic_closure` 10,
+  `test_v4_registration` 22.
+- Watchdog: `tests.test_w1_integration` 2, `test_watchdog_reliability` 45, `test_magistrate_watchdog` 158,
+  `test_magistrate_watchdog_v5` 4, `test_install_magistrate_watchdog` 12, `test_magistrate_desk_fence` 42,
+  `test_post_window_unstrand` 24.
+- Reliability: `tests.test_w1_reliability` 11, `_r2` 18, `_r3` 14, `_r4` 42, `_r5` 7, `_r6` 3, `_r7` 10;
+  `tests.align.test_w1_smoke` 28; `tests.test_b5_driver_p3.MeterWindowTests` 7;
+  `tests.external.test_km003c_monitor` 12 with 1 live-device skip; the nine selected `tests.test_run_night` tests.
+- Claim B: `tests.align.test_v4_claim_b_packet` 15, `test_v4_test_reserves` 2.
+- My earlier probes, re-run here: zero status pushes inside an armed span and no false export notice; a
+  raising refusal summary still leaves `result.json`; the dead-man leaves a delivered night byte-stable; an
+  unproven hazard chain defers the restore; the real preflight passes on a plan from the real writer and
+  refuses with `clock.frequency_helper_unreadable` when a needed helper is not installed.
+
+## I4. Notes
+
+| ID | Sev | Path | Note |
+|---|---|---|---|
+| I-N1 | LOW | `docs/align/v4/DEVIATIONS.md`, row `RL29-WATCHDOG-BIND` | The row says `post_window_unstrand.sh` is "in the registered trace". It is there only as an informational open, like the other three. The file is bound, so correct the wording before registration or leave it; do not change it afterwards. |
+| I-N2 | LOW | `scripts/align_v4_dynamic_trace.py` | No scenario executes the watchdog, so the dynamic trace gives it no coverage; its binding rests on the static walk. Adding a watchdog scenario would change a bound generator and the trace, so decide before registration. Optional. |
+| I-N3 | LOW | `docs/process/MAGISTRATE_RELAUNCH_PROMPT.md`, `scripts/install_magistrate_watchdog.sh` | The bound watchdog reads the prompt file at launch, and the installer renders the bound plist template; neither is bound. This predates the integration. RL-29's rule covers imports, not data files; the research lead may want to say so. |
+
+My commit adds only this section. `docs/run_reports/` is not bound, so the bound bytes at `928976f8c` are
+unchanged by it.
+
+## I5. What still gates the arm
+
+- The native checks in sections 7, D6, R6 and S4, including the launchd status push, the Air poller and
+  notifier (W-01/W-02 stay open until then), helper provisioning, and the meter, delivery and restore checks.
+- The four bound registration inputs that do not exist yet: `u3_bar.json`, `w1_plan.json`,
+  `wp19_receipt.json` and `r1_soak_reference.json` under `configs/campaigns/align_v4/registration/`. The receipt
+  cannot be signed without them (R1's slots, RL-32).
+- The `courier_delivery` source in the window-record exporter (F-09).
+- Audit findings no branch addressed remain open: A-06, A-07, A-08, A-11, I-02 to I-05, W-03, W-04 and W-06.
