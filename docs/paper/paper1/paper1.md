@@ -93,7 +93,7 @@ We treat the instrument's limits as results. Every reported phase energy carries
 The registrations fixed the counting and exclusion rules, estimators and specified fixed sentences before the
 data they govern. Dated errata, interpretations and analysis-code changes are disclosed in Section 4.5.
 The draft's additional branch prose was written before release, at commit `a1a5029fb`, after primary collection;
-the blind draft is tagged `paper1/blind-draft-2026-10-27`. Factual corrections to non-selected branch glosses were made after release on 10 November 2026 and are listed in `CORRECTIONS-2026-11-10.md`. Energies stayed hidden until a recorded release;
+the blind draft is tagged `paper1/blind-draft-2026-10-27`. After the primary release, on 10 November 2026, statements of fact about the method and several branch glosses were corrected by seats that could know the primary block's result. Every such change is listed in `CORRECTIONS-2026-11-10.md`. Energies stayed hidden until a recorded release;
 the independent recomputation uses recorded collection-time judgments as inputs (Section 4).
 <!-- FACT H03: R2P P3/P5/P7; RL-1/RL-5; LEAN-COVERAGE-AUDIT.md §4. -->
 
@@ -1349,7 +1349,7 @@ these failure modes; each is mechanical, recorded, or both.
    never as zero.
 7. **Pre-written outcome text.** The registrations fix specified sentences, and the claims ladder caps claim
    strength (Section 3.10). The draft's additional branch prose was written before release, at commit `a1a5029fb`
-   (tag `paper1/blind-draft-2026-10-27`), after primary collection, with results as placeholders; factual corrections to non-selected branch glosses were made after release on 10 November 2026 and are listed in `CORRECTIONS-2026-11-10.md` (Section 1.2).
+   (tag `paper1/blind-draft-2026-10-27`), after primary collection, with results as placeholders. Corrections made after release are stated in Section 1.2.
 <!-- FACT H18: R2P P3/P5/P6; RL-1/RL-5; sources as H03/H09/H12. -->
 
 ### 7.3 Failures and lessons
@@ -1455,7 +1455,7 @@ dropped (Section 6.4). The KV cache size is averaged over the 512 decode passes 
 **Automation.** The agents that ran the study also wrote much of this paper. The controls of Section 7.2 constrain
 what an agent could change in the data and the analysis; they do not make the prose neutral. The registrations'
 specified sentences predate the data they govern; the draft's additional branch prose was written before
-release, at commit `a1a5029fb`, after primary collection; factual corrections to non-selected branch glosses were made after release on 10 November 2026 and are listed in `CORRECTIONS-2026-11-10.md` (Section 1.2).
+release, at commit `a1a5029fb`, after primary collection. Corrections made after release are stated in Section 1.2.
 <!-- FACT H20: R2P P5; RL-1/RL-5; H16 for extension status. -->
 
 ## 9. Conclusion
@@ -1475,7 +1475,7 @@ independent recomputation; the registered replication was collected in further s
 **[BRANCH 9.B — BYTES]** {{FILL: P1-BY-CONCLUSION | one sentence: the H1 words for the MoE models and the active-or-resident answer at rails and DC input, and the primary ε, in the registered wording; with the dense-model sentence}} **[END BRANCH 9.B]**
 
 The methods (timing bounds carried into every phase energy, floors that refuse rather than average away missing
-evidence, and registered fixed sentences supplemented by branch prose written before release, with factual corrections to non-selected branch glosses made after release on 10 November 2026 and listed in `CORRECTIONS-2026-11-10.md` (Section 1.2)) transfer to any software power counter with interval-average
+evidence, and registered fixed sentences) transfer to any software power counter with interval-average
 records. So does the lesson of the automation: agents could run this study because the rules that protected it
 were mechanical.
 
