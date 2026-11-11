@@ -321,3 +321,63 @@ All remote. Nothing here is physical.
 | W-5 offload repairs | Same (unbound file) | Remove one Air queue entry by hand, run `verify`, confirm it is recreated |
 | Estimator file restored (RL-58) | Same | `repin.py --check` and the calibration acceptance preflight on the MBP checkout |
 | Air watcher | Air only | One `--once --include-plan` poll on a finished rehearsal, by the orchestrator |
+
+## 11. The W1 line before signing (state at 05:35 PST)
+
+Rulings since section 9: RL-59 (identity flags, item for this lane), RL-61 (phase table moves out), RL-62
+(weight digests at prepare; bind the Block 6 flag catalog), RL-63 (identity-flags row), RL-65 (order of
+authority; held windows), RL-67 and RL-68 (the driver row).
+
+### 11.1 The pre-signing set: bound edits and rows that are not under RL-53's cut-off
+
+| Item | Ruling | Branch | State |
+|---|---|---|---|
+| Estimator file restored to the accepted bytes; parse memo moved into the harvest | RL-58 | `ops/2026-11-11-w1-est-restore` | Built (`MEMO: OUTSIDE`); confirmations running |
+| R1 phase table in a wait-free module, bound strict | RL-61 | `ops/2026-11-11-w1-phase-table` | Seat running |
+| `configs/b6/flag_catalog_b6.json` bound strict, with a test that the harvest resolves to it | RL-62 | integration commit | To do at integration |
+| CI debt: orphan-census test, decision log, 488 mutations, driver measurement-core pin | orchestrator | `ops/2026-11-11-w1-ci-debt` @ `e01743ae4` | Done |
+| Trace regenerated, both closure modules pass | RL-53, RL-61 | integration commit | To do at integration (about 18 minutes) |
+
+Deviation rows to add in one commit, in the research lead's wording:
+
+- **Identity flags** (RL-63): the three arm codes are raised by construction and reach no member's exclusion;
+  what stands in their place.
+- **Catalog and order of authority** (RL-62, RL-65): member exclusions in a v4 window are decided by
+  `configs/b6/flag_catalog_b6.json` at its bound digest plus the protocol's own rules; how the harvest selects
+  it; protocol first (R22-1), then the catalog's member effect by A9's union, `agent.*` included; where a
+  catalog code and a re-derived class describe one hazard on different spans, the union applies and the
+  mismatch is printed.
+- **Held windows** (RL-65): the rule and the list of window-level reasons that hold a window. The list waits
+  for the research lead's confirmation of the sorting.
+- **DRIVER-P9-W1** (RL-67, RL-68): as drafted and accepted, with the sentence on stream files appended.
+- **Post-install watchdog check inside the dwell** (RL-54), **phase-table module** (RL-61), **memo location**
+  (RL-58: one line saying the memo lives in the harvest).
+
+### 11.2 The batch under RL-53's terms (refuse-only arm and post-window edits)
+
+W-1 and W-2 (four rounds; round 4 fixes pre-install identification), W-3 (admitted), the weight-digest
+preflight (RL-62, seat running), and the arm refusal on a held previous window (RL-65 4b, queued).
+
+### 11.3 Native smoke observations owed (remote, by the lead or magistrate)
+
+1. The three identity codes are present in `flags/arm.jsonl`.
+2. `admitted` is unaffected by them.
+3. The desk's `harvest_status` is `ok`.
+4. No window-level refusal follows from them.
+5. On a clean smoke `members_excluded` is empty, and any code in it is explained (RL-65).
+6. The desk's recorded catalog digest equals the bound digest (RL-62).
+7. Meter restart check (RL-37, RL-68), killing the reader once:
+   two stream files, each with its own header, offset and closing line or its registered salvage; a member
+   wholly inside each file keeps DC-in equal to the integral from its own file; the member overlapping the gap
+   is `meter.member_uncovered` with no DC-in value; every member with DC-in names exactly one source stream,
+   and no member's DC-in row names two.
+8. W-1: a pre-install arm from a session under `~/night-align` (outside the watchdog's scan); a forced
+   post-install hold with both labels absent afterwards.
+9. W-3: a synthetic refused plan; a deferred restore and a retry.
+
+### 11.4 Other pre-existing failures found on the W1 line
+
+- `tests.align.test_w1_prequal`: five failures on the unmodified line. Two are one harness fault (no frequency
+  seam in the fake host; fixed in the armcheck branch). One is the sizing check that RL-61 answers. Two meter
+  cases wait for a quiet machine: four orphaned fake-meter fixture processes from 2026-11-08 are still running
+  on the Air, and the orchestrator has asked the owner about them.
