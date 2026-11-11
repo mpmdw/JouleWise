@@ -382,7 +382,7 @@ preflight (RL-62, seat running), and the arm refusal on a held previous window (
   cases wait for a quiet machine: four orphaned fake-meter fixture processes from 2026-11-08 are still running
   on the Air, and the orchestrator has asked the owner about them.
 
-## 12. Interim Opus lead (Fable usage limit reached), state at 09:25 PST
+## 12. Interim Opus lead (Fable usage limit reached), state at 09:17 PST
 
 Opus 5.5 took over the lane at 07:25. No research ruling could be obtained; items that need one are parked below.
 
