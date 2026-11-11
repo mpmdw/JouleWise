@@ -552,6 +552,7 @@
     "tests.test_gamma_unit_roster_guard": 0.416,
     "tests.test_gate_prune_integration": 0.655,
     "tests.test_gate_sensibility_rounding": 0.016,
+    "tests.test_gen_current": 0.131,
     "tests.test_gen_derivation_night": 21.308,
     "tests.test_gen_evidence_night": 1.647,
     "tests.test_gen_g2_phase_d": 1.299,

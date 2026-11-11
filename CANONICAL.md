@@ -18,6 +18,7 @@ Last updated: 2026-11-10 (Paper rows: Paper 1 landed under `docs/paper/paper1/`,
 | Job | Canonical | Replaced |
 |---|---|---|
 | What is happening now, and what to do next | [`RUN_STATE.md`](RUN_STATE.md) (newest numbered item first; items from 150 on are current) | Dated `RESUME-*` files and session checkpoints under `docs/legacy/process_traces/` and `docs/process_traces/` (archived) |
+| Machine-readable head pointer and Next activation rule | [`docs/process/CURRENT.json`](docs/process/CURRENT.json), generated from RUN_STATE's highest numbered item carrying a `pointer` block; [`docs/process/POINTER_RULE.md`](docs/process/POINTER_RULE.md) | Hand-maintained pointer JSON (`WINDOW_STATUS.md` remains publisher-owned status, not the intake pointer) |
 | Work queue | [`TASK_QUEUE.md`](TASK_QUEUE.md); its marker-fenced region is generated from `docs/process/state_kernel.json` by `scripts/gen_state.py` (`--check` in CI) | Hand-kept queue lists in session traces |
 | Decisions and rulings | [`docs/decision_log.md`](docs/decision_log.md) (D-numbers), [`docs/council_log.md`](docs/council_log.md); research-design and paper-bound rulings (RL-numbers, the binding record per `RUN_STATE.md` item 257): `audit/2026-11-10-fable:docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md` | — |
 
@@ -89,6 +90,8 @@ Held, not canonical yet: the condition-waits lane (`align/2026-11-08-condition-w
 | CI workflows | Three: `.github/workflows/ci.yml` (quick tier, fences, twelve ordinary `shard_tests.py` shards plus the two exclusive calibration jobs; docs-only ranges report success without running tests); `.github/workflows/gate-ledger.yml` + `scripts/check_gate_ledger.py` (**required** on `main`; validates the PR body's gate ledger); `.github/workflows/d117-production-proof.yml` (**dispatch-only**, `workflow_dispatch`, never runs on a PR) | — |
 | Pins | `python3 scripts/repin.py --check` (all families); `--write registry` after deleting or adding pinned files | Hand repins |
 | State kernel | `python3 scripts/gen_state.py --check` | — |
+| Current pointer generation, byte check, phone display | `python3.13 -B scripts/gen_current.py` (`--check`, `--show`); lead integration into `scripts/gen_state.py` pending | Hand-maintained pointer JSON |
+| Current pointer regression and repository drift gate | `python3.13 -B -m unittest tests.test_gen_current` (synthetic blocks/refusals and real generated-byte agreement) | — |
 
 ## Suite manifest producers
 

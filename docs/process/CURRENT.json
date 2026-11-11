@@ -1,0 +1,9 @@
+{
+  "armed": null,
+  "next_observable": null,
+  "owner": null,
+  "schema": "joulewise.current_pointer.v1",
+  "source_item": null,
+  "source_item_heading_date": null,
+  "wait": null
+}
