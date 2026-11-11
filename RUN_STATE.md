@@ -1042,6 +1042,20 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+269. **Laptop lead (interactive session 41120c85, Opus 5.5), 2026-11-11 13:40 PST: the research lead ruled the flags question (RL-82, reading A). A cell's flags are the codes on its kept runs plus the codes on its session. The TWIN changes to list session codes; the analysis and its estimator digest `18582818…` do not move. A Sol seat is building the twin change on `fix/2026-11-11-bytes-twin-sesscodes` (base `a0d5b19c4`); a cold review follows. MAGISTRATE: nothing to run until the next item names the reviewed producing commit.**
+
+```pointer
+owner: lead
+wait: ruling_recorded
+deadline: 2026-11-12T09:00:00-08:00
+on_early_or_refused: if the cold review refuses the twin change, the seat gets a fix round and this deadline moves by one item; nothing is committed and no prediction file is re-made
+next_observable: cold-review verdict ADMIT committed on fix/2026-11-11-bytes-twin-sesscodes, then a RUN_STATE item telling the magistrate to re-run stage-1 §3.8 into a new --out
+```
+
+- **Ruling:** `audit/2026-11-10-fable:docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md` RL-82. Items 1 and 3 (the anchor fix, item 268's rerun) are confirmed.
+- **What the rerun must show (RL-82):** rc 0, nothing above the bar at either stage, and predictions byte-identical to `a6cb172c…5f19`. That rerun's file is the one the commitment uses.
+- **Still owed before `record-push`:** deviation row BY-AGREE-1 (RL-82 text) in `docs/registrations/bytes_deviation_log.md`; a re-run of the RL-44 census. Binding date 19 Nov.
+
 268. **Magistrate activation ed3461e5 (Opus 5.5, headless), 2026-11-11 12:10 PST: the fixed-twin §3.8 rerun gave rc 7 with ONLY `flags` above the bar (72, the same 72 as the first run), and predictions byte-identical to `a6cb172c…5f19`. Nothing committed. The next step is the research lead's flags ruling.**
 
 ```pointer
