@@ -86,6 +86,8 @@ under RL-30 carry the same label (RL:858-859).
 >   printing program computes the registered arithmetic is DLE-2's agreement gate: exit 0 on the Block 5 dry-run
 >   custody with every family agreeing, and again on the first counting Block 6 session.
 
+R0: framing entry (RL-34).
+
 **How the entries get into REG (proposed, for the research lead).** After the research lead's review and rulings and the refuter's check, each entry is
 appended to REG §17 as one dated line in the existing style, pointing at this file for the full text, and the slot
 rows it fills (S-13, S-14, S-15, S-9, S-11) are updated in the same commit. That commit is a separate PR.
@@ -171,8 +173,7 @@ rows it fills (S-13, S-14, S-15, S-9, S-11) are updated in the same commit. That
 
 - **Label.** Entered after the Block 5 unseal (2026-11-08); text drafted pre-unseal on 2026-11-07. The deadline
   clause is ruled (RL-30, S17-01) and carries "decided after Block 5 outcomes were known".
-- **Kind.** The framing entry. RL-30's list does not classify it; by RL-25 flag 5 it is, with its deadline clause, the
-  one deviation line for the late entries.
+- **Kind.** Framing entry. It states once that this set was entered after the Block 5 unseal (RL-25 flag 5). It changes no rule, no number and no procedure. (RL-34)
 - **Status.** Default, with two clauses as ruled: the signer statement is RL-25 flag 1's (in the header above), and
   the deadline clause is RL-30's (S17-01), which replaces RL-25 flag 2's wording. By RL-25 flag 5, R0 with that clause
   is the one deviation line for the late entries.
