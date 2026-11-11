@@ -112,13 +112,78 @@ what protects W1's data; what is left costs schedule, by RL-35's own split.
 
 ## 5. Decisions for the orchestrator (not research design)
 
-- **Q1 goes in the repo.** A watcher that only lives in scratch is the gap the audit named. I need the path of
-  the scratch script to fold its behaviour in.
-- **`CURRENT.json` adds one step to every RUN_STATE item:** run the generator in the same commit, or CI fails.
-  The seat ships the generator and an error message that prints the command. Say no before the PR if that cost
-  is not wanted now.
-- **Yours to edit, not Sol's:** the state kernel's `authority` string (Q8), the second `B5-ARM-RELEASED` line
-  (Q12), and renaming one of the two `archive/pre-prune-2026-11-06` refs (Q12).
+- **Q1 goes in the repo.** A watcher that only lives in scratch is the gap the audit named.
+- **`CURRENT.json` is generated, never bumped by hand** (orchestrator, 03:40 PST). Format in section 5.1; it
+  is shown to the orchestrator before anything reaches `main`. Seat `sm-current-pointer` was launched with the
+  earlier manual-bump design; a round 2 converts it.
+- **Q1 scratch script:** `night_results_watch.sh` in the lead session's scratchpad (zsh; baseline ref set; prints
+  verdict, chain exit, fault, fault reasons). Wave 2 moves it into the repo as Python on `window_outcome`. The
+  running instance is not touched until R1's chain has exited.
+- **The orchestrator's edits, exact places:**
+  - Kernel authority: `docs/process/state_kernel.json:4` (`"authority": "AUTHORITATIVE_WORK_SELECTION_STATE"`).
+    The same word is the constant `AUTHORITY_NOTICE` at `scripts/gen_state.py:32` and is rendered into the
+    generated regions, so the string, the constant, the schema and `tests/test_gen_state.py` change together.
+  - `B5-ARM-RELEASED`: `RUN_STATE.md:21` (`beta gamma`) and `RUN_STATE.md:3151` (`alpha beta gamma`). No program
+    reads either. Delete line 3151's copy or mark it history, and drop "because a program reads it" from item 31
+    (`RUN_STATE.md:54`).
+  - Archive refs: `refs/heads/archive/pre-prune-2026-11-06` and the annotated tag
+    `refs/tags/archive/pre-prune-2026-11-06` both resolve to `eeea6d5cf`. Keep the tag (`docs/ARCHIVE.md`
+    retrieves by that name, and a tag does not move); delete the branch:
+    `git push origin :refs/heads/archive/pre-prune-2026-11-06`.
+
+### 5.1 `CURRENT.json`: proposed format (for the orchestrator's approval)
+
+**Source.** A small block directly under a numbered RUN_STATE item's heading line. It is visible in the
+rendered file, so a phone reader sees it too. The values below are made up for illustration.
+
+````
+262. **Laptop lead (...), 2026-11-11 04:10 PST: R1 re-armed.**
+
+```pointer
+owner: magistrate
+armed: align-r1-20261111T0453Z
+host: mbp
+t0: 2026-11-10T20:53:00-08:00
+latest_end: 2026-11-11T19:03:00-08:00
+wait: result_json_exists
+deadline: 2026-11-11T19:33:00-08:00
+on_early_or_refused: read verdict first; REFUSED means unstrand, restore network time, re-plan
+next_observable: branch night-results/align-r1-20261111T0453Z carrying result.json
+```
+````
+
+- `armed`, `host`, `t0`, `latest_end` are given together or all left out ("nothing armed").
+- `wait` comes from a closed list a program can check: `result_json_exists`, `results_branch_exists`,
+  `watchdog_status_state`, `pr_merged`, `ruling_recorded`, `none`. `chain_exited` is refused, because a window
+  refused before its chain never writes it (audit section 0).
+- `deadline` is required unless `wait: none`, and may not be earlier than `latest_end`.
+- Times are ISO with an offset. The generator converts them to epochs and refuses anything else.
+
+**Generated file.** `docs/process/CURRENT.json`, written by `python3 scripts/gen_state.py` and checked by
+`python3 scripts/gen_state.py --check`, which CI already runs (`.github/workflows/ci.yml:103`).
+
+```json
+{"schema": "joulewise.current_pointer.v1", "pointer_item": "262", "owner": "magistrate",
+ "armed": {"plan_id": "align-r1-20261111T0453Z", "host": "mbp", "t0_epoch_s": 1794372780,
+           "latest_end_epoch_s": 1794452580},
+ "wait": {"observable": "result_json_exists", "deadline_epoch_s": 1794454380,
+          "on_early_or_refused": "read verdict first; ..."},
+ "next_observable": "branch night-results/... carrying result.json"}
+```
+
+**One choice for the orchestrator.**
+
+- *(a) Newest block wins (recommended).* `pointer_item` is the highest-numbered item that carries a block. An
+  item without a block changes nothing, so an ordinary RUN_STATE commit never needs the generator and cannot
+  turn CI red. Only a commit that writes or edits a block must run `gen_state.py`. The cost: a new top item
+  that changes the pointer but forgets the block leaves the old pointer standing. The Air watcher covers that
+  from the other side, because it alarms when a `deadline` passes.
+- *(b) Top item must agree.* The file also records the top item's number, so every new item needs the
+  generator run. It never goes stale silently, and it breaks CI whenever someone forgets.
+
+`gen_state.py` and `tests/test_gen_state.py` are files Sol may not edit under the standing rules. Either the
+orchestrator lifts that for this seat, or the pointer generator lives in a new `scripts/gen_current.py` that
+`gen_state.py` calls through one added line, which I make myself in review.
 
 ## 6. MBP install list for the post-R1 batch
 
@@ -133,3 +198,4 @@ All remote (SSH after custody closes, no night label loaded). No physical step.
 ## 7. Log
 
 - 03:30 PST: plan written; wave 1 launching.
+- 03:45 PST: orchestrator answered section 5; section 4 went to the research lead as request 25 (RL-53). Section 5.1 added.
