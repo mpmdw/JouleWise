@@ -3658,6 +3658,109 @@ windows.** Adopted. No bound edit.
 
 ---
 
+# Decision request 41: the repaired Block 5 fill, read whole (2026-11-11 05:39 PST)
+
+**What I did.** On `docs/2026-11-11-paper1-b5-fill2` @ `d0eab051e`:
+
+- ran `fill_check_b5.py` (PASS: 54 sites, 122 filled ids, 1,090 ledger rows cited, 162 comparisons on ledger and
+  printed values), `licence_check_b5.py` (PASS, 0 findings), the fill index (`98 77 86 77`) and
+  `tests.test_paper_build` (pass);
+- read the whole diff of the licence checker between `3ddbfb981` and this head;
+- read, as printed, the abstract's limitation sentence, §1.2, §3.1, §3.4 with Table S1, §4.4 to §4.6, all of
+  §6.1 to §6.7 with Tables 1 to 5 and S2 to S8, the conclusion, and Appendix C.
+
+I did not re-derive values; the fill check does that against the ledger.
+
+## RL-70. Block 5's text is admitted with four edits. RL-3's gate is passed
+
+### The checker: the three edits match RL-66 and loosen nothing else
+
+- The list of captions that must carry the limitation is Tables 2, 3, 4, 5 and S5. That is RL-66's rule
+  applied; the other Block 5 tables print counts, flags, request-level quantities or comparator differences.
+- The two ruled sentences pass because the phrase before the forbidden pattern is "statement that" or "for
+  stating that". A third lead-in, "licenses the sentence that", covers the definition of branch A in §4.6. A
+  bare "timing attribution dominates the detection floor" is still caught, and there is now a test for it.
+- Table 5's kept-of-planned cell is parsed strictly; anything else raises.
+
+No other check changed. The author did edit its own gate, and the edits are what the ruling said. No
+independent re-run is needed.
+
+### The two open points
+
+**The 1.7B prefill R_cm terms at the ledger's precision: accepted.** That is the rule working. Rounded, the
+terms divide to a value above 2 while the ratio is below it, and the caption says so.
+
+**F07: the range is not enough, and no new ledger row is needed.** RL-4 (viii) asks for the repeatability-only
+floor beside each published floor. Table 4's denominators are those floors, one per floor, and they are ledger
+rows already. The sentence names them (edit 2).
+
+### Four edits
+
+**1. §6.4, the paragraph after Table 4.** It still carries two things from the blind draft that RL-66's J01
+removed elsewhere. "For these, repeatability contributes at least as much to the floor" is the mirror of the
+claim branch B forbids. And "no claim that the measurement as a whole is attribution-limited" uses the floor
+class's word for the dominance statement, one paragraph after §6.3 says all four floors are attribution-limited.
+A reader will take those as contradicting each other. The paragraph becomes:
+
+> "Timing movement did not at least double every detection floor. All eight independent-corner ratios R are
+> at least 2. Three of the four shared-sign replays are not: R_cm = 1.7046 for 1.7B decode (1.34 ÷ 0.785 J,
+> n = 8), R_cm = 1.99975 for 1.7B prefill (1.62854 ÷ 0.81437 J, n = 8) and R_cm = 1.7616 for 8B decode
+> (1.71 ÷ 0.972 J, n = 7). The registered condition for stating that timing attribution dominates the
+> detection floor is therefore not met, and no contingent subtitle is printed. Where a ratio is at least 2, it
+> is reported as that component's diagnostic only. This is a different question from the floor class of
+> Section 6.3: the class says which term sets each published floor, and the dominance branch requires every
+> one of the twelve ratios to reach 2."
+
+**2. §6.3, the sentence on repeatability-only floors:**
+
+> "Their repeatability-only floors are the point floors that Table 4 gives as denominators, before the
+> small-sample guard and the drift allowance. For the absolute forms, which set all four published floors,
+> these are 0.591, 0.945, 0.827 and 0.771 J; with the guard they lie between 0.59 and 1.01 J."
+
+**3. §6.1, after the attempts.** The 8B floor pack took six attempts and the sixth is analysed. The paragraph
+says which attempts are "inputs to no number" only for the first-seal ones. Add:
+
+> "Under the registered rules only the analysed attempt of each pack enters any number; the earlier attempts
+> of the 8B floor pack are listed with the registered cause that made each not claim-usable."
+
+This states the rule. It does not assert that the other attempts' energies were never read, which the
+re-derivation could not establish.
+
+**4. §3.4, "No session was clean".** The paper never says what clean means. After that sentence add:
+
+> "A session is clean, for this cross-check, when it carries no session-level meter flag and none of its
+> members carries the meter's battery-activity flag; the central band is set only from the first clean
+> session."
+
+That is analysis plan §8.2 item 5, with "session" for "window". Which flag each session carried is not a ledger
+row and is not stated.
+
+The fill check and the licence check are re-run after the edits. If both pass, the branch merges and does not
+come back to me.
+
+### For my 22 November read, not for this merge
+
+The attempts and hazards paragraphs print registered cause words and runs of "0, 0 and 0" as they come from
+the record; they need one gloss each and a table. Table S3 prints free disk space in bytes. The load-correlated
+line for the 8B decode cell reads "(refused, `…`) … recompute only; not compared," and wants one clean
+sentence. None of it is wrong.
+
+### RL-3 and RL-27
+
+With this merge RL-3 is passed for Block 5 in full: the results file on `main`, the re-derivation by two
+families, the hand checks, and the check of the paper's sentences. **RL-27's hold on site builds is lifted for
+Block 5 in one form only:** a page may carry the paper's Block 5 sentences and tables as they stand in
+`paper1.md` at the merged commit, with their captions. Any other presentation of a Block 5 number, a summary, a
+chart, a headline figure, comes to me first. Slides remain under RL-10. Nothing here releases Block 6 or BYTES.
+
+**Reason.** The numbers were right before this round; what the round fixed is that the paper now says them in
+the registration's words and at a precision it can defend. The four edits are the places where a careful
+reader would still stop.
+
+**Blind status.** Not blind to Block 5. Blind to Block 6, BYTES and v4.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
