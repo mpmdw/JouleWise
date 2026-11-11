@@ -1,4 +1,5 @@
 """Registration blockers: synthetic records only; no native probes or weights."""
+from tests.align.test_v4_arm_watchdog_check import acceptance as _watchdog_acceptance
 from copy import deepcopy
 import hashlib
 import json
@@ -185,7 +186,7 @@ class RegistrationTests(unittest.TestCase):
             stale = write_battery_log(Path(tmp) / 'stale.jsonl', 5000., completion_age=2400, end_age=900)
             arm = lambda **kw: session.arm_checks('.', {}, obc_off_attested_by=kw.pop('obc', 'synthetic'), runner=run,
                                                   now=lambda: 5000., **arm_seams(), **kw)
-            self.assertFalse(session.arm_checks('.', {}, runner=run, meter_probe=lambda root: {'live': False})['admitted'])
+            self.assertFalse(session.arm_checks('.', {}, watchdog_check=_watchdog_acceptance, runner=run, meter_probe=lambda root: {'live': False})['admitted'])
             self.assertFalse(arm(obc='', battery_log=log, next_arm_triage=packet)['admitted'])     # no attestation
             self.assertFalse(arm(next_arm_triage=packet)['admitted'])                              # no battery evidence
             record = arm(battery_log=log, next_arm_triage=packet)

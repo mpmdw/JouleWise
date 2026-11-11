@@ -1,4 +1,5 @@
 """Synthetic frequency-word preflight; no sudo, clock changes or study inputs."""
+from tests.align.test_v4_arm_watchdog_check import acceptance as _watchdog_acceptance
 import json
 import hashlib
 import os
@@ -247,7 +248,7 @@ class FrequencyPreflightTests(unittest.TestCase):
                     mock.patch.object(session, 'w1_disk_check', return_value={}), \
                     mock.patch.object(session.pilot, 'install', return_value={'exit_code': 0}) as install:
                 def arm():
-                    return session.install(target, runner=host, volume_runner=host, frequency_reader=host.read)
+                    return session.install(target, watchdog_check=_watchdog_acceptance, runner=host, volume_runner=host, frequency_reader=host.read)
                 if succeeds:
                     arm()
                 else:

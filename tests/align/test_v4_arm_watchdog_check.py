@@ -59,7 +59,8 @@ class WatchdogTests(unittest.TestCase):
         self.assertFalse(record['plan_read_proven'])
 
     def test_missing_unreadable_or_invalid_plist_refuses_without_running(self):
-        for raw in (None, b'broken', plistlib.dumps({}), plistlib.dumps(dict(self.document,
+        for raw in (None, b'broken', plistlib.dumps({}), plistlib.dumps(dict(self.document, Program='/bin/sh')),
+                plistlib.dumps(dict(self.document,
                 ProgramArguments=self.document['ProgramArguments'] + ['handoff-daemons']))):
             with self.subTest(raw=raw):
                 self.run.reset_mock()
@@ -111,6 +112,17 @@ class WatchdogTests(unittest.TestCase):
         self.assertEqual(argv.count('--custody-root'), 1)
         self.assertEqual(argv[-1], str(self.root / 'explicit'))
 
+    def test_absolute_interpreter_and_plist_parse_failure_are_bounded_refusals(self):
+        self.document['ProgramArguments'] = ['/synthetic/venv/bin/python3.13', '-B',
+            '/synthetic/installed/scripts/magistrate_watchdog.py']
+        self.write_plist()
+        self.assertTrue(self.check()['ok'])
+        self.assertEqual(self.run.call_args.args[0][:3], self.document['ProgramArguments'])
+        self.run.reset_mock()
+        with patch.object(session.plistlib, 'loads', side_effect=RuntimeError('bad XML date')):
+            self.assertFalse(self.check()['ok'])
+        self.run.assert_not_called()
+
 
 class PrivilegeTests(unittest.TestCase):
     def run_preflight(self, *, missing=None, network='Network Time: On\n', query_exit=0):
@@ -151,6 +163,14 @@ class PrivilegeTests(unittest.TestCase):
             self.assertFalse(record['ok'])
             self.assertIn('host_privilege_preflight: network_time_unreadable', record['reasons'])
 
+    def test_rule_timeout_is_a_named_refusal_and_query_is_not_a_setter(self):
+        def timeout(argv):
+            raise subprocess.TimeoutExpired(argv, 10)
+        record = session.host_privilege_preflight(runner=timeout)
+        self.assertFalse(record['ok'])
+        self.assertEqual(sum('sudo_rule_missing' in reason for reason in record['reasons']), 6)
+        self.assertIsNone(record['network_time'])
+
     def test_prepare_records_failure_and_keeps_old_host_lock_refusal(self):
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
             stack.enter_context(patch.object(powermode, 'host_state_override', return_value=None))
@@ -171,6 +191,25 @@ class PrivilegeTests(unittest.TestCase):
             lock.side_effect = ValueError('host-state preflight refused: synthetic')
             with self.assertRaisesRegex(ValueError, 'host-state preflight refused'):
                 session.prepare(tmp, tmp, power_runner=run)
+
+    def test_prepare_admits_readable_on_and_retains_the_frequency_gate(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            stack.enter_context(patch.object(powermode, 'host_state_override', return_value=None))
+            stack.enter_context(patch.object(powermode, 'HostLock'))
+            stack.enter_context(patch.object(powermode, 'host_lock_preflight', return_value={'acquired': True}))
+            stack.enter_context(patch.object(session, 'session_start_restore', return_value={'action': 'none'}))
+            stack.enter_context(patch.object(session.kit, 'generate'))
+            stack.enter_context(patch.object(session, 'series_ac_powermode', return_value=0))
+            stack.enter_context(patch.object(session.pilot, 'prepare', return_value={'preparation_status': 'STAGED'}))
+            frequency = Mock(return_value={'ok': True})
+            run = lambda argv: subprocess.CompletedProcess(argv, 0, 'Network Time: On\n', '')
+            state = session.prepare(tmp, tmp, power_runner=run, frequency_preflight=frequency)
+            self.assertTrue(state['host_privilege_preflight']['ok'])
+            self.assertEqual(state['host_privilege_preflight']['network_time']['observed'], 'on')
+            frequency.assert_called_once()
+            frequency.return_value = {'ok': False, 'cause': 'clock.frequency_word_nonzero', 'reason': 'synthetic'}
+            with self.assertRaisesRegex(ValueError, 'clock.frequency_word_nonzero'):
+                session.prepare(tmp, tmp, power_runner=run, frequency_preflight=frequency)
 
 
 class PreInstallTests(unittest.TestCase):
@@ -300,6 +339,32 @@ class ArmIntegrationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'install_undo_failed.*com.joulewise.night.deadman'):
             self.install(high=True)
         self.restore.assert_called_once()
+
+    def test_post_check_exception_still_undoes_the_install(self):
+        self.check.side_effect = OSError('synthetic watchdog failed')
+        with self.assertRaisesRegex(ValueError, 'watchdog_acceptance: post_install: UNAVAILABLE:.*install undone'):
+            self.install()
+        self.assertTrue(any('--uninstall' in event for event in self.events))
+        self.assertFalse(self.dwell()['watchdog_post_install']['ok'])
+
+    def test_uninstaller_failure_is_loud_even_if_labels_are_absent(self):
+        self.check.side_effect = lambda **kw: dict(acceptance(**kw), ok=False)
+        original = self.command
+
+        def command(argv, **kwargs):
+            if '--uninstall' in argv:
+                return subprocess.CompletedProcess(argv, 4, '', 'synthetic retained plists')
+            return original(argv, **kwargs)
+
+        self.run.side_effect = command
+        with self.assertRaisesRegex(ValueError, 'install_undo_failed.*com.joulewise.night.deadman'):
+            self.install()
+
+    def test_failed_host_restore_is_reported_loudly(self):
+        self.check.side_effect = lambda **kw: dict(acceptance(**kw), ok=False)
+        self.restore.return_value = {'ok': False, 'reason': 'synthetic restore failed'}
+        with self.assertRaisesRegex(ValueError, 'install_undo_failed: host Automatic restore failed'):
+            self.install(high=True)
 
 
 if __name__ == '__main__':

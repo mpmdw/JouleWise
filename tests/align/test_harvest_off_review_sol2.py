@@ -5,6 +5,7 @@ prevents the shared fixture's optional native decorators from probing an archive
 Run this module alone with a realpath TMPDIR and JW_WP22_FULL=1. Red assertions
 describe the required behavior, not acceptance of the observed defect.
 """
+from tests.align.test_v4_arm_watchdog_check import acceptance as _watchdog_acceptance
 from copy import deepcopy
 import contextlib
 import hashlib
@@ -284,7 +285,7 @@ class EligibilityTests(Scratch):
             try:
                 session._arm_and_install(target, {'v4_series': {'window_id': 'T3'},
                     'source_measurement_root': str(self.root)}, self.root, t2.next_plan, None,
-                    runner=lambda argv: subprocess.CompletedProcess(argv, 0, '', ''), volume_runner=None,
+                    watchdog_check=_watchdog_acceptance, runner=lambda argv: subprocess.CompletedProcess(argv, 0, '', ''), volume_runner=None,
                     now=lambda: records.NOW, w1_disk_config=None, disk_gate=None, battery_log=log,
                     next_arm_triage=packet, obc_off_attested_by='synthetic', meter_probe=lambda _: {'live': True})
             except ValueError:

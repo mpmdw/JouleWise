@@ -1,4 +1,5 @@
 """Synthetic boundary receipts; never discover or read measurement records."""
+from tests.align.test_v4_arm_watchdog_check import acceptance as _watchdog_acceptance
 from contextlib import redirect_stderr, redirect_stdout
 from contextvars import ContextVar
 from copy import deepcopy
@@ -393,7 +394,7 @@ class ProducerTests(unittest.TestCase):
                      patch.object(session.kit, 'arm_powermode_check'), \
                      patch.object(session.pilot, 'install', return_value={'exit_code': 0}):
                     call = lambda: session._arm_and_install(root, {}, root, {}, None,
-                        runner=None, volume_runner=None, now=lambda: 100, w1_disk_config=None, disk_gate=None)
+                        watchdog_check=_watchdog_acceptance, runner=None, volume_runner=None, now=lambda: 100, w1_disk_config=None, disk_gate=None)
                     if refused:
                         with self.assertRaisesRegex(ValueError, 'synthetic disk refusal'):
                             call()
@@ -426,7 +427,7 @@ class ProducerTests(unittest.TestCase):
                     return {'exit_code': 0}
                 @session._install_timing
                 def operation():
-                    return session._arm_and_install(root, {}, root, {}, None, runner=None, volume_runner=None,
+                    return session._arm_and_install(root, {}, root, {}, None, watchdog_check=_watchdog_acceptance, runner=None, volume_runner=None,
                         now=lambda: 100, w1_disk_config=None, disk_gate=None)
                 out, err = io.StringIO(), io.StringIO()
                 with redirect_stdout(out), redirect_stderr(err), \

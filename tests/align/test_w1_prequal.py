@@ -30,6 +30,11 @@ class _Ctx(unittest.TestCase):
     NEXT = 'w1'
 
     def setUp(self):
+        from scripts import align_v4_session
+        from tests.align.test_v4_arm_watchdog_check import acceptance
+        watchdog = mock.patch.object(align_v4_session, 'watchdog_acceptance', side_effect=acceptance)
+        watchdog.start()
+        self.addCleanup(watchdog.stop)
         self.tmp = Path(tempfile.mkdtemp(prefix='w1pq-test-'))
         self.addCleanup(shutil.rmtree, self.tmp, True)
         env = mock.patch.dict(os.environ, {'JOULEWISE_HOST_STATE_DIR': str(self.tmp / 'host-state')})
