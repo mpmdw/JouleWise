@@ -1,13 +1,13 @@
 {
   "armed": null,
-  "next_observable": "commit on main adding docs/process_traces/2026-11-11-bytes-stage1-twinfix-rerun/ (rc, above-bar field names and counts, predictions sha256)",
-  "owner": "magistrate",
+  "next_observable": "research lead ruling on the BYTES stage-1 flags disagreement in audit/2026-11-10-fable RESEARCH-LEAD-DECISIONS.md",
+  "owner": "lead",
   "schema": "joulewise.current_pointer.v1",
-  "source_item": "267",
+  "source_item": "268",
   "source_item_heading_date": "2026-11-11",
   "wait": {
-    "deadline_epoch_s": 1794456000,
-    "observable": "results_branch_exists",
-    "on_early_or_refused": "anything other than rc 0 or rc 7 with only flag fields above the bar: stop, record, mail the lead; never commit predictions"
+    "deadline_epoch_s": 1794513600,
+    "observable": "ruling_recorded",
+    "on_early_or_refused": "if the flags ruling admits the disagreement as disclose-only, the commitment uses the existing run-twinfix predictions (a6cb172c...5f19); if it rules a fix, the fixed side reruns §3.8 into another new --out"
   }
 }
