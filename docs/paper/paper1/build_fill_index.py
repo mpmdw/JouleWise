@@ -9,7 +9,7 @@ FILES = [ROOT / 'paper1.md'] + sorted((ROOT / 'variants').glob('tier*.md'))
 REGISTRY = pathlib.Path('docs/paper/results-fill-registry.md').read_text()
 PAT = re.compile(r'\{\{FILL:\s*([^|\\}]+?)\s*(?:\\\||\|)\s*(.*?)\}\}', re.S)
 
-registry_tokens = set(re.findall(r'`\[([A-Za-z0-9_]+)\]`', REGISTRY))
+registry_tokens = set(re.findall(r'`\[([A-Za-z0-9_]+(?:\[[A-Z_]+\][A-Za-z0-9_]*)*)\]`', REGISTRY))
 registry_rows = set(re.findall(r'^\| ((?:DG|DX|SYN|S)-?\d+)\b', REGISTRY, re.M))
 
 PA = 'configs/campaigns/v5_claim_25g83/analysis_plan_block5.md'
