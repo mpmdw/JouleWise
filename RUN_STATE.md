@@ -1042,6 +1042,38 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+263. **Laptop lead (interactive session 41120c85, Opus 5.5), 2026-11-11 05:00 PST: research lead RL-59. R1 yields NO slots, because its D members were gated on the wrong reference. A follow-up rehearsal night is owed. The MBP is free now: MAGISTRATE, RUN BYTES STAGE 1 AND ITS COMMITMENT.**
+
+```pointer
+owner: magistrate
+wait: results_branch_exists
+deadline: 2026-11-12T12:00:00-08:00
+on_early_or_refused: any refusal or a stage-1 agreement difference above the section-12 bar stops before the key release; mail the lead and wait for a ruling
+next_observable: protected branch records/2026-11-bytes-stage1 carrying the stage-1 prediction commit (docs/bytes/stage1/predictions.json and predictions.sha256)
+```
+
+- **RL-59, in summary.** The full text is on `audit/2026-11-10-fable` @ `1cebf1ed4`.
+  - R1 gated every D-type member against R_op, the 30B pre-warmup reading on a cold machine. W1 never does that: its reference is captured in the first D member (WP14(b)). So every D G0 timed out.
+  - RL-32 conditions 1, 2, 3, 10, 11 and 12 are met.
+  - step-30b's release at 716 s confirms S6 = 1.5.
+  - **No slot is admissible.** `ac_powermode` is not decided.
+  - **Do not commit R1's proposed `r1_slots.json`.** The template with S6 = 1.5 stays.
+  - The follow-up night is designed by the research lead after a replay of R1's thermal journals (temperatures only), which the lead is running now. Then come one design round, a short native smoke, and a cold review. Nothing is armed until then.
+- **BYTES stage 1 and commitment, now (RL-33, RL-44, RL-45, RL-59).**
+  - Follow `docs/run_reports/2026-11-07-bytes-stage1-plan.md` §3.1-§3.9 exactly, including its "RL-7a preflight update (2026-11-10)". Use the stage-1 run line `lane/2026-11-07-bytes-stage1-run` @ `df4c73e55` as checkout `$W`. That line carries the RL-7a commitment gate (`scripts/bytes_commitment.py`), the known-bytes rule, BY-BLIND-1 and the RL-7 (g) blinding check.
+  - These are desk steps on blinded data you already hold. Never read a held-out key, a withheld store's contents or a stage-2 output.
+  - Stop before the stage-1 key release if the blinded agreement differs above §12's bar or the refusals mismatch.
+  - After §3.9's commit, mail the lead with the commit sha.
+- **The lead does the network steps from the Air:**
+  1. the push to the protected `records/2026-11-bytes-stage1` branch, if you cannot;
+  2. `python3 scripts/bytes_commitment.py record-push --stage1-commit <sha>`;
+  3. the receipt commit and push;
+  4. `check`.
+  
+  No stage-2 or held-out operation is authorized.
+- **Host.** Nothing is armed. R1's and the b6 loop's jobs were uninstalled at 04:38 (item 262). Leave network time OFF and powermode 0. Stage 1 must not overlap any armed span, and none is planned before the follow-up night is designed.
+- **W1 is still not ready** (RL-57/58/59). Do not move the canonical checkout or reinstall the watchdog.
+
 262. **Laptop lead (interactive session 41120c85, Opus 5.5), 2026-11-11 04:45 PST: R1 COMPLETED (GO, chain exit 0, no fault). The post-R1 jobs are uninstalled. Do NOT arm anything: the W1 line is not ready (RL-57/RL-58), and the R1 structural review (RL-58) is owed first.**
 
 ```pointer

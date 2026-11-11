@@ -274,7 +274,10 @@ REVIEW_BASE = '9159dbf05'
 
 def apply_print_rulings(rows):
     """Install RL-41(b), as amended by RL-42, preserving historical phase1_match."""
-    for number, row in enumerate(rows, 2):
+    # Later authorities append rows. These rulings and their count expectation
+    # apply only to the original 538 rows; they do not review an extension.
+    original_rows = rows[:538]
+    for number, row in enumerate(original_rows, 2):
         addition = None
         if number in RECORDED_ROWS:
             row.update(match='recorded-judgment', hand_check='recorded judgment; not re-derived')
@@ -326,7 +329,7 @@ def apply_print_rulings(rows):
             row['note'] += '; RL-41/RL-42: ' + addition
         row['paper1'] = ('not-printed' if 388 <= number <= 395 else
                          'print-labelled' if row['match'] in ('recorded-judgment', 'single-source') else 'print')
-    counts = Counter(row['match'] for row in rows)
+    counts = Counter(row['match'] for row in original_rows)
     if counts != EXPECTED_COUNTS:
         raise ValueError(f'STOP: RL-42 counts differ: actual={dict(counts)}, expected={dict(EXPECTED_COUNTS)}')
     return counts
@@ -354,13 +357,21 @@ def repository_tables(write=False):
         round_differences(rows)
     rendered = {name: table_text(rows).encode() for name, rows in tables.items()}
     for name, content in rendered.items():
+        current = (dest / name).read_bytes()
+        extended = name == 'rederivation.tsv' and len(current.splitlines()) > 539
+        if extended:
+            if not current.startswith(content):
+                raise ValueError('original ledger prefix differs; refuse to overwrite an extension')
+            # Check/preserve the reviewed prefix only. RL-52 has its own reader.
+            rendered[name] = content = current
         if write:
             (dest / name).write_bytes(content)
-        elif (dest / name).read_bytes() != content:
+        elif current != content:
             raise ValueError(f'{name}: committed table differs from repository-only output')
     print(json.dumps({'mode': 'repository-only; no custody arithmetic rerun',
                       'counts': dict(counts), 'total': sum(counts.values()),
-                      'tables': list(rendered), 'byte_identical': not write}, indent=2))
+                      'tables': list(rendered), 'byte_identical': not write,
+                      'scope': 'original 538 ledger rows; appended rows are not checked here'}, indent=2))
 
 
 def hand_calculations(d):

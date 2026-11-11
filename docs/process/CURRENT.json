@@ -1,13 +1,13 @@
 {
   "armed": null,
-  "next_observable": "research lead ruling on the R1 structural review (RL-59 or later) in audit/2026-11-10-fable RESEARCH-LEAD-DECISIONS.md",
-  "owner": "lead",
+  "next_observable": "protected branch records/2026-11-bytes-stage1 carrying the stage-1 prediction commit (docs/bytes/stage1/predictions.json and predictions.sha256)",
+  "owner": "magistrate",
   "schema": "joulewise.current_pointer.v1",
-  "source_item": "262",
+  "source_item": "263",
   "source_item_heading_date": "2026-11-11",
   "wait": {
-    "deadline_epoch_s": 1794448800,
-    "observable": "ruling_recorded",
-    "on_early_or_refused": "if the research lead finds an R1 slot condition failed, a gated follow-up night is designed by the research lead before any W1 step"
+    "deadline_epoch_s": 1794513600,
+    "observable": "results_branch_exists",
+    "on_early_or_refused": "any refusal or a stage-1 agreement difference above the section-12 bar stops before the key release; mail the lead and wait for a ruling"
   }
 }
