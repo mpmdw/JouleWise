@@ -1,0 +1,179 @@
+{
+ "_what": "R1 thermal replay manifest (RL-59 item 4 step 1). Journals are custody r1-20261111T043229Z/night/align-r1 on the MBP; copies stay outside the repo. Warmup anchors are the controller's stage_started warmup timestamps, extracted read-only from each member's events.jsonl (no other event read). expected_outcome is the r1_result G0 outcome per the RL-58 structural extract.",
+ "custody": "/Users/edr/night-align/r1-20261111T043229Z/night/align-r1",
+ "build": "da3187e6e84b4dd1449577e144b7f699b8331815",
+ "r_op": {
+  "fast_c": 34.1641960144043,
+  "slow_c": 27.0440616607666,
+  "source": "step_30b/runs/align-v4-r1-step-30b/outputs/align_window_reference.json",
+  "sha256": "7855d406675f4fdd11556fa5a187b30ec65c432a492090faca0cf72b4df96e66"
+ },
+ "policy": {
+  "s_fast": "TV0h",
+  "s_slow": "Tf08",
+  "delta_fast_c": 1.0,
+  "delta_slow_c": 1.5,
+  "g0_cap_s": 1200,
+  "source": "each member config.json workload_profile.prompt_text thermal policy, read-only extract; all ten identical"
+ },
+ "members": [
+  {
+   "label": "step_30b",
+   "role": "control",
+   "journal": "step_30b/runs/align-v4-r1-step-30b/outputs/align_thermal.jsonl",
+   "sha256": "879bb4de8be9a0409cf1b8ead4ff766ff095eecd2ec1195b1a664847263bc810",
+   "warmup_entry_epoch_s": 1794375643.038112,
+   "warmup_anchor_source": {
+    "file": "step_30b/runs/align-v4-r1-step-30b/events.jsonl",
+    "sha256": "460adb91779d50dd188a5b462c51e2dfca0fc39d79a574f07ce9b5eac3153fb6",
+    "event": "stage_started warmup (timestamp_s)"
+   },
+   "expected_outcome": "released"
+  },
+  {
+   "label": "high_power_A1",
+   "role": "gated",
+   "journal": "high_power_A1/runs/align-v4-r1-high-power-aba-a1/outputs/align_thermal.jsonl",
+   "sha256": "4cdf5ac31841530b3bf54e9f9fac305f56bfa507182f9a96e680dad27cad49ce",
+   "warmup_entry_epoch_s": 1794378492.44824,
+   "warmup_anchor_source": {
+    "file": "high_power_A1/runs/align-v4-r1-high-power-aba-a1/events.jsonl",
+    "sha256": "ba2879e140bffd7fa8f3e93ae9a9fd2684b8f121ca8181f2ae46eb8ea5be477c",
+    "event": "stage_started warmup (timestamp_s)"
+   },
+   "expected_outcome": "timeout"
+  },
+  {
+   "label": "high_power_B",
+   "role": "gated",
+   "journal": "high_power_B/runs/align-v4-r1-high-power-aba-b/outputs/align_thermal.jsonl",
+   "sha256": "8e0a223776bff5b73079dfe117c3ee0192e487a689a56595a426d7715474e7d9",
+   "warmup_entry_epoch_s": 1794381004.604121,
+   "warmup_anchor_source": {
+    "file": "high_power_B/runs/align-v4-r1-high-power-aba-b/events.jsonl",
+    "sha256": "3e90f41722bc2d4afb3a55730d869a16c2e64e94c9911f70e627fcc582bafa0f",
+    "event": "stage_started warmup (timestamp_s)"
+   },
+   "expected_outcome": "timeout"
+  },
+  {
+   "label": "high_power_A2",
+   "role": "gated",
+   "journal": "high_power_A2/runs/align-v4-r1-high-power-aba-a2/outputs/align_thermal.jsonl",
+   "sha256": "bd6f0866c759990f853152cde183136e0ad616fabd3669b53277d2830ab9a141",
+   "warmup_entry_epoch_s": 1794383539.672578,
+   "warmup_anchor_source": {
+    "file": "high_power_A2/runs/align-v4-r1-high-power-aba-a2/events.jsonl",
+    "sha256": "044d2d2034f691bee06a3c66c8111940829ad3aa0a88863b77bbd55e0a79249f",
+    "event": "stage_started warmup (timestamp_s)"
+   },
+   "expected_outcome": "timeout"
+  },
+  {
+   "label": "step_D (first try)",
+   "role": "gated",
+   "journal": "step_D_prefill_10k_decode_4096.g0_timeout1/runs/align-v4-r1-step-d/outputs/align_thermal.jsonl",
+   "sha256": "a941ef7ed5c611816a5b2625e11db21c7a87ca17256e6c84f481f61ab340105d",
+   "warmup_entry_epoch_s": 1794385808.8964832,
+   "warmup_anchor_source": {
+    "file": "step_D_prefill_10k_decode_4096.g0_timeout1/runs/align-v4-r1-step-d/events.jsonl",
+    "sha256": "bebe5fe90f0145905bc704494c7a7b0605963342566724e3eee547308f4299ef",
+    "event": "stage_started warmup (timestamp_s)"
+   },
+   "expected_outcome": "timeout"
+  },
+  {
+   "label": "step_D (retry)",
+   "role": "gated",
+   "journal": "step_D_prefill_10k_decode_4096/runs/align-v4-r1-step-d/outputs/align_thermal.jsonl",
+   "sha256": "f163771c6cbe15b8cc92a5d44abb3096d85ba859fecfc1f53e64a985708ca73e",
+   "warmup_entry_epoch_s": 1794388125.639219,
+   "warmup_anchor_source": {
+    "file": "step_D_prefill_10k_decode_4096/runs/align-v4-r1-step-d/events.jsonl",
+    "sha256": "5b7adb3f40a5ae659a0c06dab62a4ae05726581ad35c38f6218a9520275ed3d5",
+    "event": "stage_started warmup (timestamp_s)"
+   },
+   "expected_outcome": "timeout"
+  },
+  {
+   "label": "planning +4C",
+   "role": "planning",
+   "journal": "planning_turn_R_plus_4C/runs/align-v4-r1-d-planning-turn-r-plus-4c/outputs/align_thermal.jsonl",
+   "sha256": "186fcc7f55454f83969ee79c21186b3ce823c0baa2f8e43f820901b09cb4550f",
+   "warmup_entry_epoch_s": 1794390468.7604458,
+   "warmup_anchor_source": {
+    "file": "planning_turn_R_plus_4C/runs/align-v4-r1-d-planning-turn-r-plus-4c/events.jsonl",
+    "sha256": "8c3be9290929eac3e37edf76521d0dc93d6ea3aa6b86700ef658c59c0692c1d7",
+    "event": "stage_started warmup (timestamp_s)"
+   },
+   "expected_outcome": "released",
+   "planning_offset_c": 4.0
+  },
+  {
+   "label": "planning +2C",
+   "role": "planning",
+   "journal": "planning_turn_R_plus_2C/runs/align-v4-r1-d-planning-turn-r-plus-2c/outputs/align_thermal.jsonl",
+   "sha256": "3b3a9c0d68d8ef770f225c3c452d5e1336dea092d6d5b920d338f8581f7e5964",
+   "warmup_entry_epoch_s": 1794393494.706135,
+   "warmup_anchor_source": {
+    "file": "planning_turn_R_plus_2C/runs/align-v4-r1-d-planning-turn-r-plus-2c/events.jsonl",
+    "sha256": "f0c6764f8af9f7c47f58a458b5c1faa8cd79dc58fa9e57c44e702090771d9e46",
+    "event": "stage_started warmup (timestamp_s)"
+   },
+   "expected_outcome": "released",
+   "planning_offset_c": 2.0
+  },
+  {
+   "label": "planning +0C (first try)",
+   "role": "planning",
+   "journal": "planning_turn_R_plus_0C.g0_timeout1/runs/align-v4-r1-d-planning-turn-r-plus-0c/outputs/align_thermal.jsonl",
+   "sha256": "681587ba8f6ca013df5d8e3cd32c0272e7d8c7d2892d2351075da7267cfd5453",
+   "warmup_entry_epoch_s": 1794396529.519635,
+   "warmup_anchor_source": {
+    "file": "planning_turn_R_plus_0C.g0_timeout1/runs/align-v4-r1-d-planning-turn-r-plus-0c/events.jsonl",
+    "sha256": "c9fdd72000902878035db77b040870dca9606857cbc86679d6646fd04bfb7d6a",
+    "event": "stage_started warmup (timestamp_s)"
+   },
+   "expected_outcome": "timeout",
+   "planning_offset_c": 0.0
+  },
+  {
+   "label": "planning +0C (retry)",
+   "role": "planning",
+   "journal": "planning_turn_R_plus_0C/runs/align-v4-r1-d-planning-turn-r-plus-0c/outputs/align_thermal.jsonl",
+   "sha256": "9feb77c3bc91b1237094158bba28605302e10c0a936e93ff09047f582ab7ed3e",
+   "warmup_entry_epoch_s": 1794398908.3990169,
+   "warmup_anchor_source": {
+    "file": "planning_turn_R_plus_0C/runs/align-v4-r1-d-planning-turn-r-plus-0c/events.jsonl",
+    "sha256": "40ac93b8041bc2835f98b29ff8a58d33424848a842bc067ced23769d5b3ddb69",
+    "event": "stage_started warmup (timestamp_s)"
+   },
+   "expected_outcome": "timeout",
+   "planning_offset_c": 0.0
+  },
+  {
+   "label": "release vs soak before A1",
+   "role": "release_check",
+   "journal": "high_power_A1.g0_release0/g0/align_thermal.jsonl",
+   "sha256": "09ab7a0f66fdd5aa4e3d2a36d1c2ee79ede1ab96e4058fc01c2f34a0410673ab",
+   "warmup_entry_epoch_s": null,
+   "expected_outcome": "timeout"
+  },
+  {
+   "label": "release vs soak before B",
+   "role": "release_check",
+   "journal": "high_power_B.g0_release0/g0/align_thermal.jsonl",
+   "sha256": "3ada1485df30eec0e8e9318395ec4121702884dea304b42784bc36e713f7a18d",
+   "warmup_entry_epoch_s": null,
+   "expected_outcome": "released"
+  },
+  {
+   "label": "release vs soak before A2",
+   "role": "release_check",
+   "journal": "high_power_A2.g0_release0/g0/align_thermal.jsonl",
+   "sha256": "8ade03ad8efce7abeb99ca83d1c28e9a097e902e50fde6f829d500d881de45aa",
+   "warmup_entry_epoch_s": null,
+   "expected_outcome": "timeout"
+  }
+ ]
+}
