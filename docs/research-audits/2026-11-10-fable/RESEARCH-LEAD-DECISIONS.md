@@ -817,6 +817,39 @@ Two notes, neither a condition:
 
 ---
 
+# Decision request 7: the watchdog's new modules and the receipt (2026-11-10 20:51 PST)
+
+## RL-29. Bind what the bound watchdog imports: RATIFIED, with a standing rule
+
+**What I checked.** At `6e0647a61`, `scripts/magistrate_watchdog.py` imports `scripts.watchdog_status` (line 61)
+and `scripts.launch_align_r0` (line 64) at module level. On the W1 line the watchdog is already a strict bound
+script (`v4_registration.py:308, 357` at `7770d6a4f`).
+
+**Ruling.**
+
+1. `scripts/watchdog_status.py` is added to the registration's bound artifacts and to the receipt template,
+   strict tier. The changed `configs/launchd/com.joulewise.magistrate.plist.template` is already bound; its new
+   bytes enter at the re-registration.
+2. `scripts/launch_align_r0.py`: the seat may port it or strip the import. If the watchdog on the W1 line
+   imports it, it is bound, strict. If the import is stripped, it stays out.
+3. The rule behind both: **a bound module does not import an unbound repository module.** Code that runs in a
+   bound process on the measurement Mac is inside the closure. The closure test
+   (`tests.align.test_v4_executed_closure`) must pass on the integrated branch with these additions.
+4. One deviation-log row before the W1 STRICT re-registration covers this and names the files.
+5. **Standing ratification.** From now on, an edit to registration code or the receipt template that only
+   *adds* a newly executed file to the bound closure needs no ruling from me: make it, log a deviation row, and
+   tell me after. Removing a binding, moving a path to a weaker tier, or changing what the receipt checks still
+   comes to me first.
+
+**Reason.** The alternative asks why a bound watchdog may run unbound code, and there is no good answer: the
+receipt would then describe less than what executes. This is D-01 again (RL-26). The scope note "no registration
+code" was meant to stop seats weakening the registration, and adding to the closure strengthens it.
+
+**Blind status.** Blind: no v4 data exists. I read the import lines and the module's header, not the review
+record.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
