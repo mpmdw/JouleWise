@@ -2,6 +2,7 @@
 
 Real temporary Git repositories, synthetic record bytes only.
 """
+from tests.git_fixture import init_git_fixture
 from tests.align.test_v4_arm_watchdog_check import acceptance as _watchdog_acceptance
 import hashlib
 import json
@@ -22,7 +23,7 @@ class RecordBindingTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
-        self.git('init', '-q')
+        init_git_fixture(self.root, '-q')
 
     def git(self, *args):
         return subprocess.run(['git', '-c', 'core.hooksPath=/dev/null', *args], cwd=self.root, check=True,

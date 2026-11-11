@@ -53,7 +53,7 @@ REPLACE_CALL_ALLOWLIST = {
      "replace(refusal, detail=refusal.detail + '; ' + json.dumps(dict(samples_total=lines, last_busy_cores=metrics.get('busy_cores'), top_consumers=summary['top_consumers_at_decision'], quiet_samples_sha256=digest, quiet_samples_lines=lines), sort_keys=True))"): REPLACE_REASON,
     ("scripts/run_night.py", "bind_until_quiet",
      "replace(current, schema=night_gate.QUIET_RECEIPT_SCHEMA, admission=summary, verdict='REFUSED' if refusal else 'REHEARSAL_ONLY' if plan.receipt_class == 'REHEARSAL_STUB' else 'GO', refusal=refusal, authored_monotonic_ns=max(0, int(monotonic() * 1000000000.0)))"): REPLACE_REASON,
-    ("scripts/run_night.py", "run_night",
+    ("scripts/run_night.py", "_run_night",
      "replace(probes, run=first_census)"): REPLACE_REASON,
     ("scripts/validate_powermetrics_fiducial.py", "_label_active_capture_detection",
      "replace(detection, anchor_method=method, derivation_role='prospective')"): REPLACE_REASON,
@@ -79,6 +79,12 @@ ALLOWLIST = {
     ("scripts/issue_calibration_acceptance_generation.py", "_battery_verdict"):
         frozenset({"verdict_record"}),
     ("tests/fixtures/epoch_bootstrap/build.py", "write_verdict_record"): frozenset({"verdict_record"}),
+}
+# 19a862dc8 wraps run_night and moves its unchanged Probes replacement to
+# _run_night. ba3a2ea5e (RL-56) adds a watchdog JSON field named "parse";
+# these exact dictionary reads cannot reference a battery verdict primitive.
+NON_PRIMITIVE_STRING_CALLS = {
+    ("scripts/align_v4_session.py", "watchdog_acceptance", "snapshot.get('parse')"),
 }
 # Raw-boundary semantics: these calls replay one authenticated ioreg observation
 # at its recorded wall time. They do not consume or synthesize a window verdict.
@@ -157,6 +163,7 @@ class _Checker(ast.NodeVisitor):
             if isinstance(node, ast.AnnAssign):
                 self.allowed_type_loads.update(id(part) for part in ast.walk(node.annotation))
         self.raw_parse_references: set[int] = set()
+        self.non_primitive_strings: set[int] = set()
         self.functions: list[str] = []
         self.qualname: list[str] = []
         self.replace_sites: list[tuple[str, str, str]] = []
@@ -244,6 +251,8 @@ class _Checker(ast.NodeVisitor):
     def visit_Call(self, node: ast.Call) -> None:
         callee = node.func
         site = (self.relative, ".".join(self.qualname), ast.unparse(node))
+        if site in NON_PRIMITIVE_STRING_CALLS:
+            self.non_primitive_strings.update(id(arg) for arg in node.args if isinstance(arg, ast.Constant))
         if site in RAW_BOUNDARY_PARSE_CALLS:
             self.raw_parse_references.add(id(callee))
         if not self.in_module:
@@ -280,7 +289,8 @@ class _Checker(ast.NodeVisitor):
             self._flag(node, node.id)
 
     def visit_Constant(self, node: ast.Constant) -> None:
-        if self.strings_bind and node.value in GUARDED and id(node) not in self.docstrings:
+        if (self.strings_bind and node.value in GUARDED and id(node) not in self.docstrings
+                and id(node) not in self.non_primitive_strings):
             self._flag(node, node.value)
 
 
@@ -313,6 +323,15 @@ class ConsumerGuardTests(unittest.TestCase):
     def test_no_consumer_references_a_verdict_primitive(self) -> None:
         found = [row for row in tree_violations(ROOT) if _tracked(ROOT, row[0])]
         self.assertEqual(found, [])
+
+    def test_watchdog_parse_field_exception_does_not_allow_a_primitive(self) -> None:
+        source = ("from joulewise import battery_float\n"
+                  "def watchdog_acceptance():\n"
+                  "    return snapshot.get('parse')\n")
+        self.assertEqual(violations("scripts/align_v4_session.py", source), [])
+        changed = source.replace("snapshot.get('parse')", "getattr(battery_float, 'parse')")
+        self.assertTrue(violations("scripts/align_v4_session.py", changed))
+        self.assertTrue(violations("scripts/other.py", source))
 
     def test_the_seam_calls_each_of_its_three_primitives(self) -> None:
         tree = ast.parse((ROOT / "joulewise/battery_float.py").read_text(encoding="utf-8"))

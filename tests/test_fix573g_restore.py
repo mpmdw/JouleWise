@@ -171,6 +171,7 @@ class ColdReviewProbe3Tests(unittest.TestCase):
         def replay(runs):
             fake = SimpleNamespace(archive=self.archive,
                                    inputs=SimpleNamespace(claim_runs_root=runs),
+                                   seams=harvest.Seams(),
                                    emit=mock.Mock(), _record_error=mock.Mock())
             fake.whole_window_member_failures = lambda row: harvest._Harvest.whole_window_member_failures(fake, row)
             harvest._Harvest.step(fake, 'whole_window',

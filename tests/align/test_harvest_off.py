@@ -5,6 +5,7 @@ strict bundles; no real record, night-* or restricted path is read.
 """
 from __future__ import annotations
 
+from tests.git_fixture import init_git_fixture
 import contextlib
 import concurrent.futures
 from copy import deepcopy
@@ -300,7 +301,7 @@ class R17ReviewCustodyTests(unittest.TestCase):
         self.ledger.write_bytes(b'{"row": 1}\n')
         (self.src / 'measurement').symlink_to(self.checkout, target_is_directory=True)
         import subprocess
-        subprocess.run(['git', 'init', '-q', str(self.checkout)], check=True, capture_output=True)   # D3: ignored-content probe
+        init_git_fixture(self.checkout, '-q')   # D3: ignored-content probe
         self.identity = {'head': 'a' * 40, 'tracked_clean': True}
         self.mirror = {'root': str(self.checkout), 'identity': self.identity}
 
@@ -982,7 +983,11 @@ class SyntheticV4SessionE2ETests(unittest.TestCase):
     def runner(self, argv, run=None):
         import io
         from scripts import align_v4_harvest_off as runner
-        with contextlib.redirect_stdout(io.StringIO()) as out, contextlib.redirect_stderr(io.StringIO()) as err:
+        # Auto-sizing is exercised against a fixed synthetic machine. The native
+        # vm_stat parser has a separate injected-runner test below (Linux has no vm_stat).
+        with mock.patch.object(runner, 'free_memory_bytes', return_value=32 << 30), \
+                mock.patch.object(runner, 'free_cores', return_value=2), \
+                contextlib.redirect_stdout(io.StringIO()) as out, contextlib.redirect_stderr(io.StringIO()) as err:
             code = runner.main(argv, **({'run': run} if run else {}))
         self.assertEqual(code, 0, err.getvalue()[-2000:])
         return json.loads(out.getvalue().strip().splitlines()[-1])
