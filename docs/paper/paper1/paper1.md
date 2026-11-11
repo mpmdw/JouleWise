@@ -35,15 +35,19 @@ far timing alone can move one request's assigned energy), the *detection floor* 
 instrument produces when nothing differs), and the *dominance ratio* (how much timing uncertainty enlarges the
 detection floor). We then report a pre-registered, blinded experiment on Qwen3-1.7B and Qwen3-8B (4-bit), with
 a 512-token decode workload and a 2,048-token prefill workload, two primary model contrasts with Holm
-correction, an independent recomputation of every headline number from the raw records, and a replication in
-further sessions on later days. {{FILL: P1-ABS-PART1 | one or two sentences summarising Part 1, assembled from
+correction, and an independent recomputation of the core arithmetic from raw power records with recorded
+collection-time judgments as inputs. A registered replication in further sessions on later days was collected
+and remains blinded. <!-- FACT H01: RL-5; R2P P3; LEAN-COVERAGE-AUDIT.md §§2-4; paper-audit C-11. -->
+{{FILL: P1-ABS-PART1 | one or two sentences summarising Part 1, assembled from
 the issued outcome fields only: the four reported cells' L1 statement with intervals (CP-X05-*), the dominance
 branch (CP-X02-abstract / CP-X03-abstract), the decode and prefill contrast outcome words and, only where the
 claim gate returns L2, the registered direction (CP-X08-*-abstract), and the replication word per contrast
 (P1-B6-REPWORD-decode, P1-B6-REPWORD-prefill)}} In a second part, BYTES, we test whether decode energy per
 token on the same laptop follows the bytes the model reads per token, its resident size in memory, or its
-decode time: three straight lines are fixed on three dense models and committed before ten held-out models,
-including three mixture-of-experts models, are unblinded. {{FILL: P1-ABS-PART2 | one sentence: the H1 verdict
+decode time: the registration requires three straight lines fixed on three dense models to be committed before
+seven held-out models, including three mixture-of-experts models, are unblinded.
+<!-- FACT H02: RL-5 item 5; paper-audit §4.2 (BYTES commitment is a requirement, not a completed step). -->
+{{FILL: P1-ABS-PART2 | one sentence: the H1 verdict
 words for the held-out models at the processor-rail and DC-input boundaries (P1-BY-H1-WORDS-*), the
 active-or-resident answer (P1-BY-AR-*), and the primary energy-per-bandwidth coefficient with its interval
 (P1-BY-H2-*), in the registered wording only}} Every phase energy reported here rests on sampler timing that no
@@ -86,10 +90,12 @@ We treat the instrument's limits as results. Every reported phase energy carries
   enlarges the detection floor. A ratio of at least 2 means that timing attribution, not ordinary repeatability,
   limits the measurement (Section 3.7).
 
-We fixed every rule (which runs count, which are excluded, every estimator and every sentence that may be
-printed under each outcome) in registrations written and sealed before the data existed, kept every energy
-hidden from people and agents until a recorded release, and recomputed the headline numbers with independent
-code before release (Section 4).
+The registrations fixed the counting and exclusion rules, estimators and specified fixed sentences before the
+data they govern. Dated errata, interpretations and analysis-code changes are disclosed in Section 4.5.
+The draft's additional branch prose was written before release, at commit `a1a5029fb`, after primary collection;
+the blind draft is tagged `paper1/blind-draft-2026-10-27`. After the primary release, on 10 November 2026, statements of fact about the method and several branch glosses were corrected by seats that could know the primary block's result. Every such change is listed in `CORRECTIONS-2026-11-10.md`. Energies stayed hidden until a recorded release;
+the independent recomputation uses recorded collection-time judgments as inputs (Section 4).
+<!-- FACT H03: R2P P3/P5/P7; RL-1/RL-5; LEAN-COVERAGE-AUDIT.md §4. -->
 
 ### 1.3 Contributions
 
@@ -98,13 +104,12 @@ code before release (Section 4).
    floor with timing-widened corners, an attribution floor, a dominance ratio, a drift allowance from
    reference requests with a labelled scaled sensitivity line, and a whole-machine cross-check at the laptop's
    power input (Section 3).
-2. **A pre-registered, blinded measurement and its replication**: reported phase energies for two models, two
+2. **A pre-registered, blinded measurement with a collected, blinded replication**: reported phase energies for two models, two
    primary model contrasts under a multiplicity correction and a claims ladder that caps what each result may
-   say, and a replication in further sessions whose agreement word was defined before any data (Sections 4
-   and 5). The outcome is publishable whichever way it falls: a contrast that is not resolvable is a statement
-   about the instrument's resolution, and pre-registration is what makes it one.
-3. **BYTES, a pre-registered test of what drives decode energy per token** on the same laptop, with rival
-   lines committed before held-out models were unblinded and mixture-of-experts models used to separate
+   say, and a replication in further sessions whose agreement word was defined before replication collection (Sections 4
+   and 5). The replication results remain sealed. <!-- FACT H04: paper-audit C-10/C-11; RL-5 item 5. -->
+3. **BYTES, a pre-registered test of what drives decode energy per token** on the same laptop, requiring rival
+   lines to be committed before held-out models are unblinded and using mixture-of-experts models to separate
    bytes read from bytes held (Section 6).
 4. **An account of research run by AI agents** under human direction, with the integrity controls that
    constrained them and the failures those controls did and did not catch (Section 7).
@@ -374,8 +379,16 @@ why each stratum needs five kept units.
 Ten null-quad differences with mean 0.04 J and s = 0.0966 J give a point floor of 0.2692 J; with a shared-edge
 width of 0.30 J on every quad the operative floor is 1.0349 J.
 
-A **model contrast** (Section 3.10) is judged against a **floor gate**: for each side, the worse of that model's
-absolute and comparative operative floors for the phase, and then the larger of the two sides.
+A **model contrast** (Section 3.10) is judged against a **floor gate**. Each form first adds the floor session's
+whole gross drift allowance to its guarded operative floor, giving `drift_widened_guarded_floor_j`.
+For each model and phase, `floor_abs_j` and `floor_cmp_j` are those two drift-widened values, and the cell's
+`floor_gate_j` is their maximum; the contrast uses the larger gate of its two sides. The allowance is added
+after the guard, once per form. It does not enter the point or corner-widened diagnostics, the dominance ratios,
+or the attribution floor. Each floor is disclosed with the guarded operative value, the allowance and its source,
+and the resulting minted floor. The contrast's decision interval separately carries the contrast session's
+allowance (Section 3.8). The blind ruling of 12 October corrected the analysis plan's contrary description
+without changing the code (Section 4.5).
+<!-- FACT H05: RUN_STATE item 33(b); l9-rulings/RULING.md:117-136 (J5); detection_floor.py:1534-1536,1818-1838. -->
 
 ### 3.7 The dominance ratio
 
@@ -401,6 +414,11 @@ independence. **Branch A** holds when every one of the twelve is at least 2, and
 attribution dominates the detection floor and the paper's contingent subtitle. Otherwise **branch B** reports each
 ratio that failed. A zero denominator refuses; no infinity is ever printed. Every ratio is printed with its
 numerator, denominator and n, and labelled "point diagnostic; no interval".
+
+The attribution floor of Section 3.5, the detection-floor class `attribution_limited` under D-078, and the
+dominance branch are separate quantities. A floor-class label alone does not select the dominance branch or
+license the contingent subtitle.
+<!-- FACT H06: paper-audit C-2/F-10; RL-4(viii); D-078 and D-165. -->
 
 ### 3.8 Drift: reference requests, the drift screen and the scaled sensitivity line
 
@@ -548,7 +566,10 @@ one diagnostic reference. Widths are not to scale.*
 The primary block (registered internally as measurement block 5) collected one analysed session of each pack.
 Its registration, analysis plan, flag catalog and an inventory of the SHA-256 digest of every code and
 configuration file a session reads were committed together and sealed by an independent judgment before the
-first session armed. Every session ran from a separate checkout of the repository at the sealed commit.
+first session armed. There were two seals: prospective Erratum 1 required a second seal; Errata 2 and 3 later
+governed only the attempts to which they applied. Every session ran from a separate checkout at its governing
+sealed commit and applicable pins. The seal and erratum history is part of the change disclosure (Section 4.5).
+<!-- FACT H07: SEAL_RECORD.md (docs/process_traces/2026-10-07-block5-seal/), Erratum 1 and Addenda 3-4; RL-5 item 2. -->
 
 **What refuses, and what is only recorded.** A session is *armed*, that is allowed to start, only after direct
 measurements show none of the registered physical hazards: a clock step or drift beyond budget, running on battery
@@ -600,12 +621,16 @@ primary-block number was seen, so that it would be collected whatever the primar
 - **The replication word.** A contrast is **replicated** when every counting replication session gives the same
   outcome word as the primary block's analysed session *and* the same sign of d̄; otherwise it is **not
   replicated**, and each session's word and sign are printed. If the primary contrast is not estimable, the word is
-  not used. This definition was fixed before any data and is a description of agreement, not a new test.
+  not used. This definition was fixed before replication collection and is a description of agreement, not a new test.
 - **The flagged-inclusive line.** Beside every registered result, a labelled line adds back the non-counting
   sessions that ran the registered experiment and can be computed, ignoring session-level exclusions. It never
   replaces the registered value and shows what the session-level rules cost.
 
 Figure 3 shows the order of sessions in the collection period.
+
+Collection closed on 21 October 2026 with three counting sessions per pack, nine in total. These are collection
+facts; the replication's numerical results remain sealed, and Section 5.7 remains an unfilled template.
+<!-- FACT H08: paper-audit §4.2 (replication close), C-11; RL-6(e), DLE-10. -->
 
 ![Figure 3. Order of measurement sessions (schematic ledger).](figures/fig_p1_session_ledger.svg)
 
@@ -616,9 +641,11 @@ cells are the attempts of each pack in the registered rotation, with BYTES sessi
 
 ### 4.5 Pre-registration and changes after registration
 
-Each registration fixes, before its first session, which data count, every estimator, every printed sentence for
-each outcome, and the sizing. The primary block's files were sealed by recording their SHA-256 digests in a seal
-record; a session refuses to start if any file it reads differs from the sealed bytes. The replication block's
+Each registration fixes, before its first session, which data count, the estimators, specified fixed sentences
+for the outcomes, and the sizing. The primary block's files were sealed by recording their SHA-256 digests in a
+seal record. At arm, the identity check refuses an OS-build or machine-model mismatch. An executed-code difference
+is detected at harvest as `code.executed_differs_from_sealed` and excludes the session; changed seal documents
+cause a harvest fault. The replication block's
 registration passed an independent judgment and was committed before its first round began; the BYTES
 registration likewise before its first session.
 
@@ -626,8 +653,28 @@ Errors found after registration were handled in three ways, each recorded with i
 **prospective erratum** changes a rule before any data it governs exist. A **registered deviation** records where
 the executed procedure departed from the text. A **disclosed repair** corrects analysis code found, after release,
 to differ from the registered arithmetic; the repair restores the registered arithmetic and is reported with the
-result. No registered arithmetic was changed after data existed
-({{FILL: P1-DEV-LIST | list of every erratum, deviation and disclosed repair with its date and whether it preceded or followed the data it governs, from the seal record, the replication registration's change log and the BYTES addenda}}).
+result. Keeping the registered estimator definitions did not mean that the analysis program or its reporting
+rules stayed unchanged after collection. The primary block's history includes:
+
+- two seals and three prospective errata, with attempt-specific applicability;
+- the blind L9 rulings J1-J8, their erratum and roster ruling, and the later L9 addendum; in particular J5
+  corrected the plan's statement about the floor session's drift allowance;
+- D-188's result-equivalent analysis engineering, D-189's non-stopping claim-side-bound non-issuance, and
+  D-190's handling of registered nulls in the disclosures;
+- analysis versions r1 through r4 and DLE-0 through DLE-5: replacement of the Results cold gate by recompute
+  agreement (0), verification of the pre-release dry-run outputs at release (1), the later-block production-path
+  change and its coverage conditions (2), r3's disclosure-key correction and blind post-collection D5b
+  reason-mapping correction plus the documented engineering and comparison changes (3), r4's campaign-log
+  member-parse correction in the floor binder (4), and the comparator's floor-leaf coverage correction (5);
+- the later reporting entries DLE-6 through DLE-10: the pre-print reader gate, placement, the phase-attribution
+  limitation, fixed-sentence reporting, and printing the primary block while replication remains sealed.
+
+The D5b correction followed a permitted structural read of floor-resolution status and reason words; it was not
+a prospective change made before collection. These are changes to implementation, interpretation or reporting,
+and cannot be hidden by saying that the estimators were unchanged.
+<!-- FACT H09: R2P P6/P7/P8; RL-5 items 1-2; SEAL_RECORD.md; l9-rulings/RULING.md J5;
+L9-RULING-ADDENDUM.md; decision_log.md D-188-D-190; docs/analysis/b5/DEVIATION-LOG.md DLE-0-DLE-10. -->
+({{FILL: P1-DEV-LIST | dated list of every erratum, deviation, interpretation and disclosed repair with applicability and blind status: primary-block SEAL_RECORD.md (two seals, three prospective errata), L9 rulings and addenda including the 2026-10-12 J5 floor-drift correction, docs/analysis/b5/DEVIATION-LOG.md DLE-0 through DLE-10, docs/decision_log.md D-188 through D-190, replication §17 and BYTES addenda}}).
 
 ### 4.6 Blinding and release
 
@@ -638,28 +685,49 @@ only: verdicts, whether a session counted, flag counts by code, kept-unit counts
 that is not a phase duration. A unit removed by a restricted code was reported only as "removed (restricted
 code)".
 
-Before release, the analysis programs ran end to end over the real archives in a **blind dry run** that wrote out
-only structure (exit codes, schema checks, refusal codes). A **release event** then tied the digests of the sealed
-documents and the final harvest records together; the registered analysis ran after it, and any analysis not
-registered is labelled exploratory. The replication block's numbers were released only after the replication
-block had closed *and* the primary block had been released, because replication values estimate the same
-quantities and reading them first would have unblinded the primary analysis in all but name. BYTES used a
-stronger, two-stage blinding with hidden multiplicative offsets (Section 6.3).
+Before the primary release, GAMMA floor-resolution status and reason words were read under a structural ruling;
+the D5b reason-mapping correction was ruled after that read. This was a disclosed exception to the restriction
+on reading analysis status, not a reading of measured values (Section 4.5).
+<!-- FACT H10: R2P Decision 10(i), P8; DEVIATION-LOG.md:228-236,252-278; paper-audit C-9. -->
+
+Before the primary release, the analysis programs ran end to end over the real archives in a **blind dry run**:
+numerical outputs stayed in custody and only structure (exit codes, schema checks, refusal codes) was exposed.
+A **release event** tied the digests of the sealed documents and final harvest records together. Under DLE-1,
+the primary numbers designated for printing are the dry run's L9 outputs, produced before the event and verified
+byte for byte at release, rather than outputs of a new post-event L9 run. Any unregistered analysis is labelled
+exploratory. The replication remains blinded; its release requires closure and prior primary release, because
+reading replication values first would unblind the same quantities. BYTES has a stronger, two-stage blinding
+with hidden multiplicative offsets (Section 6.3).
+<!-- FACT H11: R2P P2; DEVIATION-LOG.md:71-128 (DLE-1); paper-audit C-5/C-11. -->
 
 {{FILL: P1-RELEASE | dates of the primary-block release event, the replication-block release and the BYTES stage-1 commitment and stage-2 release, with the digests each record ties, from the seal-record "Release event" section and the release records}}
 
 ### 4.7 Independent recomputation
 
-Before a result was printed, the headline numbers were computed a second time from the raw power records by an
-**independent recomputation**: code written to the registered definitions that shares no code with the analysis
-programs. The registered agreement tolerance is that each run's phase energy agrees within 1 mJ and every printed
-quantity, compared unrounded, agrees within half a unit of its last printed digit. The tolerance was set from a
-non-claim rehearsal in which an independent overlap sum reproduced every phase energy far inside it, while the
-defects it must catch are far larger (a 1 ms edge shift at the powers involved is tens of millijoules; a dropped
-record is joules). The observed agreement is printed beside the tolerance and is never used as one. Part 2 uses
-an independent **twin** implementation in the same way (Section 6.3).
+The primary block's **independent recomputation** checks core arithmetic from raw power records using separate
+code written to the registered definitions. Recorded selection, clock-anchor inputs, pulse-calibration fits,
+hazard flags, clean reference membership and the drift-screen decision remain inputs. Reapplying exclusions to
+stored flags is not an independent detection of the hazards that produced those flags.
 
-{{FILL: P1-RECOMPUTE | the comparison table of the independent recomputation against the analysis for every printed Part 1 quantity: tolerance, observed largest difference, and agreement word, per block; checked by one executing reader before printing}}
+Seven disclosure families are not fully recomputed: monitor cost and probe census; arm/host and anchor summaries;
+battery phase/subject summaries and discharged energies; stage battery temperatures; full reference/corpus
+history and the complete drift screen; all-attempt history, yield and G10 derivation; and selection and full
+eligibility adjudication. Other computed items, including the load-correlated sensitivity line, lack a numerical
+comparison. A separate reader check against named sources is required before uncovered quantities can be
+printed; recompute agreement alone does not establish them.
+
+For Block 5 the bars were **fixed blind before release**, by the lead's ruling adopted in DLE-0, and are specified
+per family in `configs/analysis/b5/recompute_bars.json`. Joule, watt and ordinary ratio families use
+max(10⁻⁶ absolute, 10⁻⁶ × |L9 value|); p values and the rail/machine ratio ρ use 10⁻⁶ absolute only; the operative
+timing bound uses 10⁻⁶ relative only. Counts and integer-nanosecond window edges are exact; legacy wall-placed
+meter edges use 10⁻⁶ s absolute. Where a family specifies printed decimals, half a unit of that precision also
+enters the maximum. Block 6's separate S-13 rule is 1 mJ for run phase energies and half a last printed digit
+for printed quantities; it is not Block 5's bar set. The observed differences and comparison coverage must be
+printed beside the applicable bars, never used to choose them. Part 2 uses an independent **twin** (Section 6.3).
+<!-- FACT H12: R2P P1/P3; RUN_STATE item 83 ruling 1; recompute_bars.json; DEVIATION-LOG.md DLE-0/DLE-6;
+LEAN-COVERAGE-AUDIT.md §§2-4. No agreement or completion verdict is asserted here. -->
+
+{{FILL: P1-RECOMPUTE | per block and compared family: applicable bar, number compared, observed largest difference and agreement word; name uncovered quantities and their separate reader checks; Block 5 uses recompute_bars.json fixed blind under DLE-0, Block 6 uses §12.3; checked by one executing reader before printing}}
 
 ## 5. Results, Part 1: phase energy, floors and contrasts
 
@@ -714,8 +782,9 @@ and, as registered, is not reported.*
 
 Each row of Table 2 carries the fixed attribution-floor sentence of Section 3.5 with its own value of X, and the
 interval's three components: h, and the average first-kind timing bound, interpolation bound and drift term that
-make up B ({{FILL: P1-B5-INTERVAL-PARTS | per cell: h, B and its three kind averages, and the run attaining the attribution floor with the smallest first-kind bound over kept runs}}). The share of each interval taken by B rather
+make up B ({{FILL: P1-B5-INTERVAL-PARTS | per cell: h, B and its three kind averages, and the run attaining the attribution floor with the smallest first-kind bound over kept runs}}). As an **exploratory**, unregistered diagnostic, the share of each interval taken by B rather
 than h is {{FILL: P1-B5-B-SHARE | per cell, B ÷ (h + B), derived from the same record}}.
+<!-- FACT H13: R2P P9; RL-5 item 6; analysis_plan_block5.md:771-772. -->
 
 Labelled lines printed beside each cell, none of which replaces it:
 
@@ -733,9 +802,12 @@ Labelled lines printed beside each cell, none of which replaces it:
 | Qwen3-8B | decode | {{FILL: F_8B_decode_abs_J \| absolute}} | {{FILL: F_8B_decode_cmp_J \| comparative}} | {{FILL: F_8B_decode_operative_J \| operative}} | {{FILL: P1-B5-FN-8B-decode \| n}} |
 | Qwen3-8B | prefill (2,048) | {{FILL: F_8B_prefill_p2048_abs_J \| absolute}} | {{FILL: F_8B_prefill_p2048_cmp_J \| comparative}} | {{FILL: F_8B_prefill_p2048_operative_J \| operative}} | {{FILL: P1-B5-FN-8B-prefill \| n}} |
 
-*Table 3. Detection floors, primary block, guarded where n < 10 (Section 3.6). The operative floor is the larger
-component, never their sum. A floor is a property of this machine, stack, boundary and session; it does not rank
+*Table 3. Detection floors, primary block (Section 3.6). Each absolute and comparative value includes its
+small-sample guard where n < 10, followed by the floor session's whole gross drift allowance; the operative
+column is the larger of those drift-widened values. Disclose each guarded value, added allowance and allowance
+source beside the minted value. A floor is a property of this machine, stack, boundary and session; it does not rank
 hardware or validate absolute scale.*
+<!-- FACT H14: RL-5 item 1; l9-rulings/RULING.md J5(b),(e); detection_floor.py:1818-1838. -->
 
 ### 5.4 Is the floor limited by timing attribution?
 
@@ -803,14 +875,29 @@ but {{FILL: P1-B5-CTR-UNRES-REASON | "its metrology interval contains zero" or "
 is not evidence that the two models use equal energy in this phase. **[END BRANCH 5.5.3]**
 
 **[BRANCH 5.5.4 — outcome "not resolvable"]** The instrument cannot resolve this contrast:
-{{FILL: P1-B5-CTR-NR-REASON | "|d̄| = … J does not exceed the floor gate of … J", or "the decision interval contains zero while the metrology interval does not, so the recorded timing and drift bounds obscure the direction", or "no floor could be issued"}}. A contrast that is not resolvable is a statement about the
-measurement's resolution on this boundary, not about the models: the difference, if any, is smaller than what
-these sensors can separate from their own false differences. The registered descriptive estimates below are
+{{FILL: P1-B5-CTR-NR-REASON | registered gloss of each issued not-resolvable reason code; use the code-to-branch distinctions below; floor_artifact_invalid belongs to branch 5.5.5}}. The reason determines whether this is a limit of resolution or of applying the registered floor;
+an unavailable transport does not establish that a difference is small. The registered descriptive estimates below are
 printed for completeness and support no comparison. **[END BRANCH 5.5.4]**
 
 **[BRANCH 5.5.5 — outcome "not estimable"]** The contrast could not be estimated:
 {{FILL: P1-B5-CTR-NE-REASON | registered not-estimable code and its plain-language reason}}. No estimate is printed.
-The Holm family keeps its size of two. **[END BRANCH 5.5.5]**
+The Holm family keeps its size of two. A binding refusal (`floor_artifact_invalid`) is not evidence about the
+instrument's resolution and is not an empirical negative result. It must never select branch 5.5.4.
+**[END BRANCH 5.5.5]**
+<!-- FACT H15: R2P P11; DEVIATION-LOG.md:252-278 (D5b); decision_log.md D-178/D-189;
+analysis_engine/claims.py:333-382. These are code glosses, not selected outcomes. -->
+
+The floor-related reasons must be kept distinct when selecting these branches:
+
+| Issued reason code | Branch | Interpretation |
+|---|---|---|
+| `effect_not_above_floor` | 5.5.4 | The estimate does not exceed the floor gate; this is a resolution limit on this boundary. |
+| `deterministic_bound_obscures_direction` | 5.5.4 | The decision interval contains zero while the metrology interval does not; the recorded bounds obscure direction. |
+| `floor_transport_inapplicable` | 5.5.4 | The registered floor-transport conditions do not apply; this is not evidence that the difference is small. |
+| `floor_artifact_invalid` | 5.5.5 | The floor artifact or its binding is invalid; no empirical negative result follows. |
+
+Other issued codes retain their registered glosses and outcome branches; a generic absence of a floor must not
+be substituted for the actual reason code.
 
 **Leave-one-quad-out.** {{FILL: P1-B5-CTR-LOO | per contrast: "no single quad changes the verdict", or the verdict-influential quad; and, if raised, the fixed sentence "Leaving out quad k moves the estimate by X J, more than a quarter of the floor; the direction, the floor status and the multiplicity decision are unchanged"}}
 
@@ -892,7 +979,7 @@ count, the words would have been {{FILL: P1-B6-FLAGINC-WORDS | flagged-inclusive
 
 ### 5.8 Agreement of the independent recomputation
 
-{{FILL: P1-RECOMPUTE-SUMMARY | one paragraph: for each block, the number of run phase energies compared, the largest absolute difference against the 1 mJ tolerance, the number of printed quantities compared and the largest difference in units of the last printed digit; and any disclosed repair with its date and effect}}
+{{FILL: P1-RECOMPUTE-SUMMARY | one paragraph per block: compared families and counts, largest differences against that block's applicable bars (Block 5 recompute_bars.json fixed blind under DLE-0; Block 6 §12.3), uncovered quantities and separate reader checks; any disclosed repair with its date and effect}}
 
 ## 6. Part 2, BYTES: what drives decode energy per token?
 
@@ -1032,6 +1119,9 @@ measurements):* with fit-set energies of 0.030, 0.045 and 0.066 J per pass, ±0.
 e = 0.016966 + 0.010685·b; a held-out model with b = 1.9378 GB and an invented measured e of 0.038 ± 0.001 J gets
 prediction intervals of [0.036672, 0.038672] J (bytes), [0.181187, 0.197589] J (resident) and
 [0.050714, 0.052714] J (time); only bytes overlaps, so the word is `bytes`.
+This synthetic example uses the registration's four-decimal pilot regressors, rather than the rounded manifest
+entries printed in Table 7; recomputing from that table does not reproduce every printed digit.
+<!-- FACT H32: paper-audit F-22; bytes_pack_v1.md:297 at origin/lane/2026-11-07-bytes-stage1 (912cf8c3a). -->
 
 **H2: power against bandwidth.** Over models, on each boundary and basis, ordinary least-squares fits of
 P̄ = P₀ + ε·BW (simple), and P̄ = P₀ + ε·BW + ρ·(R/τ) (resident-extended, whose ε is primary); "resident adds
@@ -1060,9 +1150,9 @@ boundary; for H2, 9 primary intervals at rails and DC input and 11 at rest. The 
 once, uniform on [0.8, 1.25], and each model configuration's by a secret factor uniform on [0.97, 1.03], following
 the hidden-offset practice of blind analysis [22]. A common factor leaves every H1 word unchanged, but the
 configuration factors hide ratios only to about ±6%, while the MoE hypotheses differ by much larger factors; so,
-in addition, **held-out models' rows were withheld** from every analysis export until stage 1 was committed, and
-rows visible before then carried no clock times, because gaps between reference runs could reveal a withheld
-module's duration. The stages were:
+in addition, the registration requires **held-out models' rows to stay withheld** from analysis exports until
+the stage-1 commitment, and visible rows to carry no clock times, because gaps between reference runs could
+reveal a withheld module's duration. The registered stages are:
 
 1. **Blinded:** rails only, fit set and references, used to check that the analysis and its twin agree.
 2. **Stage 1 (fit):** the fit set's and the references' factors are released; the fit points, the rival lines,
@@ -1075,8 +1165,10 @@ module's duration. The stages were:
 4. **Stage 2 (held-out):** every held-out factor is released, the predictions file's hash is checked, and the H1
    words, the active-or-resident answer and every H2 fit are computed.
 
-The paper says the predictions were committed before the held-out energies were *unblinded*, not before they were
-measured.
+The required ordering is a recorded prediction commitment before held-out energies are *unblinded*, rather than
+before they are measured. The commitment record remains unfilled here; this description of the requirement
+does not assert that it has been satisfied.
+<!-- FACT H30: paper-audit §4.2 (commitment), F-08; RL-7(a); RL-24 seat 3. -->
 
 **Two implementations.** The analysis and an independent twin, written from the registration alone and sharing no
 code with it, compute the same tables. They agree when every word, count, degree of freedom, refusal, label and
@@ -1085,20 +1177,15 @@ h + B; durations within 1 ms).
 
 ### 6.4 Extension models
 
-Two current open-weights models that did not exist when the roster was registered were added on 27 October 2026,
-after the first pass had begun and before any BYTES energy had been seen: Qwen3.8-27B (dense, 8-bit), which fills
-the gap in bytes per token between Qwen3-32B and Llama-70B, and NVIDIA Nemotron 3.5 Super 120B-A12B (a hybrid
-Mamba-Transformer MoE at about 4 bits), added only if a compatible MLX build existed and passed a short
-resolvability check. They are predicted by the *committed* registered lines, unchanged, reported in their own
-labelled section, never mixed into the registered results or the H2 fits, and protected by their own Bonferroni
-family of six checks per boundary (three if Nemotron is dropped). Each has one pass, scheduled after the registered
-pass-1 sub-packs, and was the first to be dropped if time ran short.
-({{FILL: P1-BYX-STATUS | for each extension model: collected, dropped for time, or (Nemotron) dropped for no compatible build or a failed resolvability check; its b and R from the registered manifest script}})
+Both extension models, Qwen3.8-27B (8-bit) and NVIDIA Nemotron 3.5 Super 120B-A12B, were dropped.
+Nemotron had no loadable compatible build; Qwen3.8-27B was dropped under the registered rule that extension
+sessions are dropped first ({{FILL: P1-BYX-STATUS | source identifiers for the two structural drop decisions only; no model quantities or results}}).
+<!-- FACT H16: RL-5 item 5; paper-audit §4.2/F-18; RUN_STATE.md:902 (Qwen drop). -->
 
 ### 6.5 Results
 
-<!-- TEMPLATE. Fill only from the stage-2 records of the registered analysis (and the extension's own
-records) after release. Keep one branch of each group. -->
+<!-- TEMPLATE. Fill only from the stage-2 records of the registered analysis after release.
+Keep one branch of each group. Extension results removed under RL-5 item 5 (H16). -->
 
 **Collection.** {{FILL: P1-BY-SESSIONS | per sub-pack and pass: counting or not with cause; per model: pass status (two passes, one pass, no pass) and kept units per stratum and boundary}}
 
@@ -1184,10 +1271,6 @@ models with two passes as a labelled sensitivity line ({{FILL: P1-BY-H2-TWOPASS 
 
 **Agreement of the two implementations.** {{FILL: P1-BY-TWIN | per stage: counts of printed fields compared and of differences under and above the bar; attribution and ruling of any difference above the bar}}
 
-**Extension models.** {{FILL: P1-BYX-RESULTS | for each extension model and boundary: the word under the committed registered lines, ln(measured/predicted) for each line, with the extension's own Bonferroni family; printed in a separate labelled table and never in the registered family}} These models were added after the roster was
-registered and after pass 1 began, but before any BYTES energy was seen; their results are a separately labelled
-addition to the registered test.
-
 ### 6.6 The known-bytes stream test
 
 Whether the GPU rail includes the energy of the memory controller decides how the rails-versus-rest split of
@@ -1217,17 +1300,23 @@ it merged and kept the project's record. **Worker** sessions, drawn from two mod
 tests and drafted text. An **independent judge** session, one with no prior involvement in the work, checked each
 registration before it bound, and a **refuter** session was asked to show the judge wrong.
 
-The work ran on three kinds of machine (Figure 5). The **measurement laptop** ran only the collection loop: plain
-scheduled programs that ran each session, its pre-session checks and its desk steps, with no agent process alive.
-A second laptop held the restricted data for analysis under an account no agent used. Cloud machines ran all code
-development, reviews, synthetic tests and continuous integration, and never held real or blinded data.
+The work used a measurement laptop, an analysis laptop and cloud machines (Figure 5). On the **measurement
+laptop**, an agent census refuses collection at arm and pauses it while an agent process is alive. Between
+sessions a headless supervisory agent runs on that laptop and arms collection. On the analysis laptop, agents ran blind
+dry runs over real custody under the user account that holds custody; custody was kept by rule, not by an account no agent could
+use. Development and review also ran locally; cloud machines were used for development, review, synthetic tests
+and continuous integration. This is a separation of permitted activities and reading rules, not complete
+separation of agents from data by machine.
+<!-- FACT H17: R2P P4; RL-5 item 3; RUN_STATE item 108, items 71-76 and 181;
+registration_block5.md:4853. -->
 
 ![Figure 5. The research pipeline (schematic).](figures/fig_p1_pipeline.svg)
 
-*Figure 5. Schematic of the pipeline. Agents work only in the cloud zone and on documents; the measurement laptop
-runs scheduled programs only; restricted data move only from the measurement laptop to the analysis host, by
-hash-verified transfer. Arrows show the order from registration through collection, blind processing, release,
-independent recomputation and printing.*
+*Figure 5. Schematic of the permitted activities. Agents develop and review code in cloud and local sessions,
+run on the measurement laptop between sessions, and run blind processing on the analysis laptop under custody
+rules. No agent process may remain alive during collection. Primary-block L9 outputs are produced in the blind
+dry run and verified at release (Section 4.6); printing additionally requires the independent comparison and
+separate checks of uncovered quantities (Section 4.7).*
 
 ### 7.2 Integrity controls
 
@@ -1237,13 +1326,13 @@ these failure modes; each is mechanical, recorded, or both.
 
 1. **Registration before data, by hash.** Every registration, analysis plan and flag catalog was committed, and
    for the primary block every code and configuration file a session reads was listed with its SHA-256 digest in
-   a sealed inventory, before the first session. A session refuses to start, and the harvest faults, if any file it
-   reads differs from the sealed bytes. Changes after registration go only through a dated erratum, a registered
+   a sealed inventory, before the sessions they govern. The arm checks OS build and machine model; harvest
+   excludes a session for an executed-code difference and faults on changed seal documents. Changes after registration go only through a dated erratum, a registered
    deviation or a disclosed repair (Section 4.5).
 2. **Blinding enforced by custody.** Energies and every derived quantity were written to restricted paths listed
    in a custody map; everything released during collection was structure only, and analysis code was written and
    repaired by sessions that had read no restricted value (Section 4.6). BYTES added hidden multiplicative offsets
-   and withheld held-out rows until its predictions were committed (Section 6.3).
+   and requires held-out rows to stay withheld until its predictions are committed (Section 6.3).
 3. **Physics refuses; everything else is recorded.** Only a directly measured physical hazard can stop collection
    or remove data, and the presence of an AI agent process on the measurement laptop is one of those hazards: the
    arm refuses and a running session pauses while one is alive. Every other condition is a flag with one
@@ -1252,14 +1341,16 @@ these failure modes; each is mechanical, recorded, or both.
    reviewed by two sessions from different model families, launched together and instructed to run and mutate the
    code on production-shaped inputs rather than only read it, together with a regression test and a demonstration
    that the test fails without the change.
-5. **Independent recomputation and a twin.** Every headline number is computed a second time by code that shares
-   nothing with the analysis (Sections 4.7, 6.3), against a tolerance fixed in advance.
+5. **Independent recomputation and a twin.** Separate code recomputes the primary block's core arithmetic with
+   recorded collection-time judgments as inputs; uncovered quantities require separate checks (Section 4.7).
+   BYTES requires agreement with its independent twin (Section 6.3), against a tolerance fixed in advance.
 6. **Fail-closed refusals with reasons.** A missing fingerprint, a malformed record or an undefined estimator
    input produces a named refusal, never a default value; a refused cell is printed as unavailable with its reason,
    never as zero.
-7. **Pre-written outcome text.** Every sentence the paper may print under each outcome is fixed in the
-   registrations, and the claims ladder caps the strength of each (Section 3.10). This draft was written with every
-   result as a placeholder before any result was released.
+7. **Pre-written outcome text.** The registrations fix specified sentences, and the claims ladder caps claim
+   strength (Section 3.10). The draft's additional branch prose was written before release, at commit `a1a5029fb`
+   (tag `paper1/blind-draft-2026-10-27`), after primary collection, with results as placeholders. Corrections made after release are stated in Section 1.2.
+<!-- FACT H18: R2P P3/P5/P6; RL-1/RL-5; sources as H03/H09/H12. -->
 
 ### 7.3 Failures and lessons
 
@@ -1270,8 +1361,10 @@ number, with what each taught.
   even when waiting. During collection, agent processes on the measurement laptop (interactive sessions, a
   headless supervisory session, and a daemon left behind by a software update) were caught by the agent census, and
   each catch cost a session or held the loop ({{FILL: P1-AUTO-LOST | estimated quiet-machine hours lost to agent presence during collection, and the sessions affected, from the pipeline audit's outcomes ledger}}). Every catch was a real contaminant; none corrupted a kept number,
-  because the census refused or paused. The remedy was structural: no agent ever runs on the measurement laptop, the
-  agent applications were removed from it, and a shell guard refuses agent commands while a session is active.
+  because the census refused or paused. The rule is temporal: the census refuses and pauses collection while an
+  agent process is alive; the headless supervisory agent runs between sessions and owns arming. The claim that agents never
+  run on this laptop does not describe the study.
+  <!-- FACT H19: RL-5 item 3; RUN_STATE items 71-76 and 181; paper-audit C-7. -->
 - **Reviews that executed code caught the defects that mattered.** Over the study period, the defects that could
   have changed a number were found by reviewers that ran the code on realistic inputs, or by running the pipeline
   itself: a reference run silently dropped when a file failed to read; a reference request's energy integrated over
@@ -1356,37 +1449,40 @@ required.
 discriminate between the hypotheses. The split of memory energy between rails and rest depends on whether the GPU
 rail includes the memory controller (Section 6.6). The meter's label offset was not measured; DC-input and rest
 statements are printed under both the registered and the alternative interval. No drift-transfer test passed, so
-the drift allowance is scaled by a registered rule rather than measured transfer. The extension models were added
-after the first pass had begun. The KV cache size is averaged over the 512 decode passes of one prompt length.
+the drift allowance is scaled by a registered rule rather than measured transfer. Both extension models were
+dropped (Section 6.4). The KV cache size is averaged over the 512 decode passes of one prompt length.
 
 **Automation.** The agents that ran the study also wrote much of this paper. The controls of Section 7.2 constrain
-what an agent could change in the data and the analysis; they do not make the prose neutral, which is why every
-outcome sentence was fixed in the registrations before the data existed.
+what an agent could change in the data and the analysis; they do not make the prose neutral. The registrations'
+specified sentences predate the data they govern; the draft's additional branch prose was written before
+release, at commit `a1a5029fb`, after primary collection. Corrections made after release are stated in Section 1.2.
+<!-- FACT H20: R2P P5; RL-1/RL-5; H16 for extension status. -->
 
 ## 9. Conclusion
 
 A laptop's own power sampler can divide inference energy between prefill and decode, but only within limits that
 the measurement must report: an attribution floor from phase-edge timing, a detection floor from false
-differences between identical runs, and the dominance ratio that says which of the two limits the result. We
+differences between identical runs, and the dominance ratio that compares timing widening with repeatability. We
 measured these quantities for two models on one Apple M3 Max laptop under pre-registration, blinding and
-independent recomputation, and repeated the measurement in further sessions.
+independent recomputation; the registered replication was collected in further sessions and remains blinded.
+<!-- FACT H21: paper-audit C-2/C-11; no replication result is asserted. -->
 
 **[BRANCH 9.D — dominance branch]** {{FILL: CP-X02-conclusion | under branch A: "On this stack, timing attribution, not repeatability, limits phase-energy measurement: allowing each value to move within its registered timing uncertainty at least doubled every detection floor." Under branch B: "Timing attribution at least doubled the detection floor for some components and not others (the failing components named), so neither timing nor repeatability alone limits these measurements."}} **[END BRANCH 9.D]**
 
-**[BRANCH 9.C — contrasts]** {{FILL: CP-X08-decode-a-conclusion | one sentence per contrast in the registered wording for its outcome and claim level (Section 5.5 branch), with the replication word (Section 5.7)}} A contrast that
-is not resolvable is a finding about the resolution of a software power sampler at the phase boundary, and the
-pre-registration is what makes it a finding rather than a failed comparison. **[END BRANCH 9.C]**
+**[BRANCH 9.C — contrasts]** {{FILL: CP-X08-decode-a-conclusion | one sentence per contrast in the registered wording for its outcome and claim level (Section 5.5 branch), with the replication word (Section 5.7)}} **[END BRANCH 9.C]**
+<!-- FACT H22: RL-5 item 5; R2P P11; paper-audit C-10. Unconditional resolution gloss removed. -->
 
 **[BRANCH 9.B — BYTES]** {{FILL: P1-BY-CONCLUSION | one sentence: the H1 words for the MoE models and the active-or-resident answer at rails and DC input, and the primary ε, in the registered wording; with the dense-model sentence}} **[END BRANCH 9.B]**
 
 The methods (timing bounds carried into every phase energy, floors that refuse rather than average away missing
-evidence, and outcome text fixed before data) transfer to any software power counter with interval-average
+evidence, and registered fixed sentences) transfer to any software power counter with interval-average
 records. So does the lesson of the automation: agents could run this study because the rules that protected it
 were mechanical.
 
 ## Evidence and code availability
 
-{{FILL: P1-AVAIL | the public release: repository revision, archive locator and its SHA-256 manifest of registrations, sealed inventories, flag catalogs, analysis and recomputation code, harvest records, released energies and figure sources; and the statement of which raw captures are and are not released}}
+{{FILL: P1-AVAIL | public release: repository revision, archive locator and SHA-256 manifest of registrations, sealed inventories, flag catalogs, analysis and recomputation code, harvest records, released energies and figure sources; primary-block custody locator, dry-run record digest, released bundle SHA256SUMS and release-event binding; which raw captures are and are not released; locators must be supplied by the authorized release record, never inferred}}
+<!-- FACT H31: R2P P12 (synthesis); release locators are required at fill, not populated by this seat. -->
 
 ## References
 
