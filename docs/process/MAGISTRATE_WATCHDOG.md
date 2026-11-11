@@ -37,20 +37,103 @@ hold state, **never** grants permission to launch. A possibly armed plan must
 be repaired/withdrawn by its owner and re-evaluated normally. No unknown key is
 ignored and no admission schema was relaxed.
 
-These are local durable notices through the existing notice/ack path. They do
-not prove mail delivery while launch is held; an external observer must read
-the status/notice queue, or a later permitted magistrate must deliver them.
+The notice/ack path remains local. The R2 status transport below also exports
+holds while launch is prohibited. W-01/W-02 remain **OPEN pending native
+launchd delivery and an installed Air alarm**; synthetic Git delivery does not
+prove either gate.
 
 **W-02 heartbeat:** both an ordinary tick observing an owned live process and
 the resident supervisor read `heartbeat` (maximum 4096 bytes). Its plain line
 is `PID ACTIVATION_ID EPOCH_SECONDS`. The PID and activation must match the
 owned lock, and the timestamp must be finite, no older than this activation,
-and at most five seconds in the future. After 900 seconds without a valid fresh
-stamp (with activation-start grace for a missing stamp), a
+and at most five seconds in the future. The primary progress signal is growth
+of the supervisor-owned `attempts/<activation>/attempt-N.stream.jsonl` for the
+current activation and attempt. Only size growth of the same regular-file
+inode refreshes progress after the first observation; replacement, truncation,
+touching an unchanged file, or another attempt cannot refresh it. On the first
+observation a nonempty file's valid mtime supplies its actual age. The model
+heartbeat is a second input, so a long tool call no longer requires the model
+to rewrite a file every minute. After 900 seconds without either fresh signal
+(with activation-start grace for missing signals), a
 `magistrate_heartbeat_stale` notice is queued once per stale episode. Recovery
 re-arms the notice for another outage. `state.json` records the observation,
 status and age. Heartbeat staleness is reporting only: PID ownership, plan
 fences and the existing stand-down ladder still decide process actions.
+
+### Off-host status and Air polling (R2 / W-A)
+
+`scripts/watchdog_status.py` uses the W1 A-02 courier's transport: a temporary
+bare Git repository, read origin from the code clone, fetch only the status
+ref's parent, create a small snapshot commit, and push it without force. The
+dedicated ref is `refs/heads/watchdog-status/<host>`; `<host>` defaults to the
+hostname, or `MAGISTRATE_WATCHDOG_STATUS_HOST` can pin a stable host name in
+launchd. A per-host ref avoids touching main, mixing hosts, or disclosing
+measurement records. Each commit contains only `status.json` and the pending
+`transitions.jsonl`; its parent retains earlier batches.
+
+Records carry state, named hold category, transition epoch/sequence, dwell,
+heartbeat age/staleness, last activation ID, host and observation epoch. No raw
+reason, custody path, prompt, model output or outcome leaves the machine.
+Every transition enters a durable outbox immediately. A change in heartbeat
+staleness also enters the outbox even when the state word stays `ACTIVE`.
+Successful acknowledged push is the only action that clears those entries.
+
+Pushes share a 25-second deadline, use absolute Git/SSH executables, and
+disable terminal/askpass/SSH authentication prompts. They use origin's normal
+noninteractive credentials, which must be provisioned for the LaunchAgent.
+A separate flock permits one publisher across tick/resident/restart paths.
+Attempts are limited to one per 60 seconds; intermediate transitions remain
+queued. Keepalive becomes due after 3,250 seconds, leaving room for a
+300-second tick and the transport budget before an hour elapses. Host sleep,
+launchd scheduling delays and delivery failure can exceed that target: the
+Air's staleness alarm is the backstop.
+
+The short tick flushes after its safety action. The resident publishes on a
+background thread after its step, so transport never blocks REQUEST/TERM/KILL.
+This reporting traffic also runs while fenced; the separate remote-stop probe
+continues to skip plan spans. There is no code-tree/index mutation. Local
+records and receipts live below watchdog storage as `status.json`,
+`status-outbox/`, `status-attempt.json`, `status-delivery.json` and
+`status-export.lock`. No acknowledged receipt, a failed export, an expired
+worker, or a receipt at least an hour old blocks a new activation under
+`HOLD_STATUS_EXPORT`. A fresh prior receipt permits an in-flight refresh;
+retrying a failed export does not clear that failure until push succeeds.
+Plan and desk fences always retain priority.
+
+On the Air, schedule this command every five minutes with the MBP's configured
+host name and the Air clone's own origin. It prints JSON and exits 3 for an
+alarm, 0 for healthy status:
+
+```sh
+python3.13 -B scripts/watchdog_status.py poll \
+  --repository "$AIR_CODE_CLONE" --host "$MBP_STATUS_HOST" \
+  --cursor-file "$AIR_STATUS_CURSOR"
+```
+
+The cursor is Air-owned, outside measurement custody. Polling fetches only the
+status ref, follows commits since that cursor, and retains alarm transitions
+until `--ack` is supplied **after the Air notifier has delivered them**. Thus a
+hold and recovery between polls, or in one rate-limited batch, still alarms.
+The latest status alarms for any `HOLD_*`, `STRANDED`, uncertain clock/network,
+stale magistrate progress, missing/invalid status or 75 minutes without a new
+watchdog observation. Fetch/authentication errors and an invalid cursor also
+exit 3. Cursor advance alone cannot acknowledge an alarm. Wire exit 3 to the
+Air's notifier and prove delivery before closing W-01/W-02; this branch does
+not install or send an Air notification.
+
+### Model startup rejection (R2 / W-D)
+
+The ruled flag remains `--model claude-fable-5-2`. The supervisor checks actual
+CLI error diagnostics, including a child that exits before its PID is first
+observed. An anchored stderr model-rejection diagnostic or a structured CLI
+error result queues a notice, prints the failure, and latches
+`HOLD_MODEL_REJECTED` (`STRANDED` retains that named category after the normal
+dwell limit). Normal assistant text and successful results cannot trigger it.
+There is no extra unsupervised model probe and no automatic model fallback or
+retry loop. Other failures retain existing backoff behavior. After verifying
+the native CLI/model, the lead must stop the watchdog and clear only
+`model_startup_hold` in its state before restarting. Native acceptance and
+actual installed-CLI rejection wording remain installation checks.
 
 **Updated 2026-09-15 — INSTALL-WINDOWS-MULTI-01, D-180 clause 1 / D-181
 clause 1 adopted design:** plan spans replace the fixed-clock relaunch fences;
@@ -259,7 +342,7 @@ No status branch, checkout, plan, night result, `courier.sent`, or repository fi
 
 Installation is authorized only after the built-artifact gauntlet and cold gate pass. The acting magistrate emails Ed the install notice, quotes the D-171 authorization and the stop instructions above, then follows this checklist without waiting for a reply. Do not arm any plan during this handoff.
 
-0. Land the watchdog branch on `main` through the normal gate ledger: replay the integration on `int/2026-09-04-watchdog`, open the PR, require CI and the merge gate, and merge only under the lead's authority. Then update the canonical checkout with `git -C /Users/edr/code/JouleWise pull --ff-only`. Before step 1 executes any pinned file, verify SHA-256 byte identity for the eight pinned files against the merge commit on `main` that landed this branch, not against the earlier packet exhibits. Run these exact commands, record both digest/path lines for every file, and stop if any command fails. Do not substitute this development worktree for the canonical checkout.
+0. Land the watchdog branch on `main` through the normal gate ledger: replay the integration on `int/2026-09-04-watchdog`, open the PR, require CI and the merge gate, and merge only under the lead's authority. Then update the canonical checkout with `git -C /Users/edr/code/JouleWise pull --ff-only`. Before step 1 executes any pinned file, verify SHA-256 byte identity for the nine pinned files against the merge commit on `main` that landed this branch, not against the earlier packet exhibits. Run these exact commands, record both digest/path lines for every file, and stop if any command fails. Do not substitute this development worktree for the canonical checkout.
 
    ```zsh
    cd /Users/edr/code/JouleWise
@@ -269,6 +352,7 @@ Installation is authorized only after the built-artifact gauntlet and cold gate 
    test "$(/usr/bin/git show -s --format=%P "$merge_sha" | /usr/bin/awk '{print NF}')" -eq 2 || { echo "STEP0_FAIL HEAD is not a merge commit" >&2; exit 3; }
    pinned_files=(
      scripts/magistrate_watchdog.py
+     scripts/watchdog_status.py
      scripts/install_magistrate_watchdog.sh
      scripts/launch_align_r0.py
      scripts/run_align_r0_launchagent.sh

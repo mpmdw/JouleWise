@@ -2695,7 +2695,7 @@ class ContractTests(WatchdogTestCase):
         ordered = (
             "normal gate ledger",
             "pull --ff-only",
-            "eight pinned files",
+            "nine pinned files",
             "stop every background task",
             "magistrate_watchdog.py handoff-daemons",
             "claude daemon stop --any",
@@ -2710,6 +2710,7 @@ class ContractTests(WatchdogTestCase):
         self.assertEqual(positions, sorted(positions))
         for pinned in (
             "scripts/magistrate_watchdog.py",
+            "scripts/watchdog_status.py",
             "scripts/install_magistrate_watchdog.sh",
             "scripts/launch_align_r0.py",
             "scripts/run_align_r0_launchagent.sh",
@@ -2729,7 +2730,7 @@ class ContractTests(WatchdogTestCase):
         self.assertIn("FROM", handback)
         self.assertIn("plan's `measurement_root`", handback)
 
-    def test_documented_merge_commit_digest_gate_compares_all_eight_files(self) -> None:
+    def test_documented_merge_commit_digest_gate_compares_all_nine_files(self) -> None:
         repo = Path(__file__).resolve().parents[1]
         watchdog = (repo / "docs" / "process" / "MAGISTRATE_WATCHDOG.md").read_text(
             encoding="utf-8"
@@ -2768,6 +2769,7 @@ class ContractTests(WatchdogTestCase):
         init_git_fixture(checkout, "-b", "main")
         pinned = (
             "scripts/magistrate_watchdog.py",
+            "scripts/watchdog_status.py",
             "scripts/install_magistrate_watchdog.sh",
             "scripts/launch_align_r0.py",
             "scripts/run_align_r0_launchagent.sh",
