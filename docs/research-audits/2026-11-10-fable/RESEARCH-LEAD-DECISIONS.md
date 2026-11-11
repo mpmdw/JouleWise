@@ -2093,6 +2093,87 @@ Block 6, BYTES and v4.
 
 ---
 
+# Decision request 20: seat 7's cold review, finding F1 (§17-R12 timing) (2026-11-11 00:58 PST)
+
+**Read.** On `analysis/2026-11-11-b6-path` @ `da0a03145`: the Opus cold review in full and the seat report's
+limitations. On `main`: §17-R12 and the agreement-gate clause of §17-DLE2 in the entries draft. I ran nothing;
+this is a ruling on order, and round 2 of the seat is still changing the code. No Block 6 value is in any of it.
+
+## RL-48. R12 runs before S-14 is cut. A handmade fixture with 16 records a member is not "full-size"
+
+### F1: option (a). The real-chain fixtures come before the pin
+
+§17-R12 says what it means in its title: "Fixtures before S-14 is cut". The seat's report moves the real-chain
+replay to the release. That is not accepted, and I do not log it as a deviation.
+
+- R12's list is not arbitrary. Mixed campaign-log rows are what broke Block 5's floor binder (DLE-4), found
+  only on the real dry run, after the pin, and repaired as a disclosed post-collection change. Compressed logs,
+  waited runs and skips are the shapes Block 6 added to the chain. The entry exists so that Block 6 meets them
+  before its analysis commit is fixed.
+- After the pin, every repair is a dated deviation made after Block 5's result is public. Before it, a repair is
+  only a fix. This seat has already found one mapping bug on a handmade fixture.
+- The entry was written before the unseal and admitted yesterday. Setting it aside on the first day it costs
+  something would say the entries are optional.
+
+**The R12 seat.** A separate Sol seat, Block-5-naive under RL-43's path list, on the Air, synthetic only.
+
+1. The sessions are **written by the chain's own code at `f31aca19f`**: its driver, harvest, desk compression
+   and loop records. Only the instrument sources are simulated, at the lowest seam the chain offers. Nothing is
+   assembled by hand. The report names the seam.
+2. They cover R12's six shapes: waited runs with attempt-N telemetry; wait-cap and budget skips;
+   `anchor_not_bounded` members; campaign logs that mix executed-member rows with the trailing whole-window row;
+   compressed campaign logs and plists; one cross-session GAMMA unit. Further shapes may be added and are
+   listed.
+3. For each shape, a named fixture and a test: the option (c) path either exits 0 with the comparator agreeing,
+   or gives the registered refusal or flag for that shape, stated in advance in the test.
+4. Defects it finds are fixed before the pin. That is the purpose.
+5. No real session is read: not Block 6 custody, not the machine-test or smoke archives, not Block 5's. A
+   rehearsal archive holds real energies of the same workloads.
+6. If the chain can generate only in real time, or cannot be driven off the measurement Mac, the seat stops and
+   says so, and the question comes to me. It does not fall back to a handmade tree.
+7. An Opus cold review follows, also Block-5-naive. Then the S-14 pin comes to me with the F2 witness, the R12
+   report and the numbers in the next section.
+
+It runs beside the seat's round 2. The 21 November date for the code stands.
+
+### "Full-size synthetic"
+
+Sixteen raw records a member gives the full member topology and not the volume. It meets the criterion for
+counting and pairing. It does not meet it for run time and memory, which is the other thing "full-size" was
+for: Block 5's analysis once took 27 hours, and the largest meter and plist files have not been through the
+`.zst` reader at their real size (F9).
+
+The criterion is met when, among the R12 fixtures, at least one session per pack has the registered member
+counts and instrument streams at the registered cadence over production durations, and the dry run over a
+nine-session set records its wall time and peak memory on the Air. The other sessions of the set may carry
+reduced volume. The seat states which are which.
+
+### F10, noted for when the agreement is cited
+
+Under option (c) the second side covers counting, calibration, run phase energies, harvest bounds, NEG-8, the
+GAMMA engine, pairing and §10-§11. The cell and floor estimators for ALPHA and BETA are the Block 5
+recomputation's functions, byte-pinned, with no second producer inside Block 6. Two things stand behind them:
+those same functions agreed with the registered analysis on Block 5 in every compared family, and §17-DLE2's
+agreement gate requires the same agreement again on the first counting Block 6 session.
+
+So the paper's sentence about Block 6's agreement says what was compared in Block 6, and says that the floor
+and cell estimators were shown to agree on Block 5 and on one Block 6 session. If that audit run on the first
+counting session is not completed, the ALPHA and BETA floors are `single-source` in RL-41's sense and print
+with that label. The pin request tells me which.
+
+### The other findings
+
+F2 to F5 before the pin, as the review says; F6 to F8 in the same commit. They are the lead's and the
+reviewer's to close. For 7b, the review's condition is mine too: it is shown when the strengthened witness of
+F2 passes, with decode and prefill given different synthetic values.
+
+**Reason.** The one lesson Block 5's analysis taught four times is that the first contact with real archives
+finds defects. R12 moves that contact, in synthetic form, to the side of the pin where a defect costs nothing.
+
+**Blind status.** Blind to Block 6. Block-5-aware, which is why I cite DLE-4 and the seat's workers may not.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
