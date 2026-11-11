@@ -42,3 +42,28 @@ Reviewer: Fable 5.2, state-machine lane lead, 2026-11-11 03:50 PST. Reviewed hea
    the record and that `pmset -g custom` and network time read as before the arm.
 2. With a night lock held by a second process: confirm `deferred`, exit nonzero, and a successful retry after
    the lock is released.
+
+## Round 2 delta review (2026-11-11 04:13 PST)
+
+Reviewed `556ce3e5e` (Sol's round 2, pushed as the side branch `ops/2026-11-11-w1-unstrand-r2` and merged here
+into `ops/2026-11-11-w1-unstrand`).
+
+**Verdict: ADMIT.**
+
+| Finding | Disposition |
+|---|---|
+| U-1 | Fixed. One write-once record per attempt, `night/unstrand.restore.<n>.json`, n from 1 to 20. A new attempt is refused only when an earlier record has `ok: true`; an unreadable earlier record is warned about and does not count as success. Each record carries `attempt` and the earlier attempts' action words. |
+| U-2 | Fixed. A second `--go --restore-host` with the jobs already absent reaches the restore; tested end to end with the fakes. |
+| U-3 | Fixed. `ok` accepts `verified is True` as the driver's terminal restore does (`scripts/run_night.py:4593-4594`). |
+| U-4 | Fixed. `not_owner` is recorded as `refused: other_session_owns_host_state` with its own message, and network time is not touched in that case. |
+
+Checks on the merged head:
+
+- `tests.test_post_window_unstrand`: 57 tests; the same four host-process failures as on the base, and no other.
+- Eight mutants of the new path, each killed (five or more failures against the baseline four): an earlier
+  successful restore no longer refuses; any verdict accepted; `courier.sent` not required; unproven delivery
+  accepted; the host lock not honoured; `chain.started` without `chain.exited` routed to the new path; another
+  plan's result accepted; a non-null chain exit code accepted.
+- Only `scripts/post_window_unstrand.sh` and its test module differ from the W1 line, plus reports.
+
+The two native checks listed above remain owed after install, both remote.
