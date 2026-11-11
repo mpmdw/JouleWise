@@ -4137,6 +4137,60 @@ waiting time.
 
 ---
 
+# Decision request 46: the five deviation rows on the W1 pre-signing branch (2026-11-11 06:15 PST)
+
+**Read.** The five rows added to `docs/align/v4/DEVIATIONS.md` on `ops/2026-11-11-w1-presign` @ `82c14c9ea`, word
+for word. I checked four of their facts: the estimator file is byte-identical to `main` (`70f47086…`); the
+phase-table module has no import and no wait; both new bindings are in the receipt template; the bound catalog
+hashes to `01767fe4…`. I did not review the code of the integration commits; an Opus pass is doing that.
+
+## RL-77. The rows are accepted with four edits
+
+The rows say what was ruled, and three of them need a sentence changed so that they stay true at signing
+whatever happens to the rest of the batch.
+
+**1. R1-PHASE-TABLE.** Condition 13 has six files since RL-72, not five. Add
+`joulewise/align/apple/workload.py` to the list, cite RL-72, and end the row: "The slots file names that commit,
+and a registration test compares the files."
+
+**2. IDENTITY-FLAGS.** The last sentence says model identity rests on "the weight-digest check at prepare".
+That check is not on this branch, and under RL-62 and RL-73 it may be made by hand if the code misses the
+cut-off. The row must be true either way. The last sentence becomes:
+
+> "For v4, code and pack identity rest on the kit-regeneration check and the STRICT receipt, checked at arm;
+> model identity rests on the registered inventory, on the comparison of the weight digests and of the
+> installed runtime stack with the registration before every arm (RL-62, RL-73; by the prepare code, or
+> recorded in the arm notice), and on the runtime's tokenizer and template refusals."
+
+Add also, after "None of the three reaches a member's exclusion": "In the catalog the v4 desk applies
+(B6-CATALOG-BIND) all three are disclosure-only."
+
+**3. DRIVER-P9-W1.** The row names W1's driver by the commit `b4a6c217f`. If any commit before signing touches
+that file, the row is wrong. Add: "The measurement-core test pins this file at the signing head; a further
+commit to it before signing is added to this row under the same two headings."
+
+**4. EST-RESTORE.** Add what shows the results are unchanged: "The memo is opened only by the off-MBP harvest,
+and the tests that it returns what the unmemoised parse returns are retained."
+
+**B6-CATALOG-BIND** stands as written. It may give the catalog's digest in the row; the receipt holds it in any
+case.
+
+**What is still owed in this file before signing**, with the batch or without it: the row for the held
+windows as RL-71 restated it (conditions and their v4 signals, the five codes that cannot be raised, the nine
+inert codes, and the statement that v4 reads neither the calibration bracket nor the reference screen); the
+row for the bound edits of RL-53 and for the `workload.py` callback of RL-72; and, if the sensor round changes
+which key gates or how it is chosen, that row against WP14(a).
+
+With the four edits the rows need no further reading from me. The code review of the two integration commits
+is the Opus pass's.
+
+**Reason.** A deviation row is signed with the registration. It has to be true on the day of signing, not on
+the day it was drafted.
+
+**Blind status.** Blind: no v4 outcome exists.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
