@@ -18,6 +18,7 @@ from tests.align.v4_option_b import OPTION_B_MANIFEST_SHA256
 
 ROOT = Path(__file__).resolve().parents[2]
 CHECKER = ROOT / 'docs/align/v4/seedcheck-claim-b-opus/derive_and_check.py'
+SOL_CHECKER = ROOT / 'docs/align/v4/seedcheck-claim-b-sol/derive_and_check.py'
 
 
 def _checker():
@@ -68,6 +69,33 @@ class SeedCheckTests(unittest.TestCase):
         self.assertEqual((receipt['verdict'], receipt['manifest_sha256'], receipt['differences']),
                          ('MATCH', OPTION_B_MANIFEST_SHA256, []))
         self.assertEqual(receipt['members'], 436)
+
+    def test_item_3_sol_check_and_receipt_match_and_detect_synthetic_changes(self):
+        spec = importlib.util.spec_from_file_location('seedcheck_claim_b_sol', SOL_CHECKER)
+        sol = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(sol)
+        result = sol.check(self.manifest)
+        self.assertEqual((result['verdict'], result['members'], result['placement_windows']), ('MATCH', 436, 19))
+        self.assertTrue(result['pairwise_disjoint'])
+        receipt = json.loads((SOL_CHECKER.parent / 'comparison.json').read_bytes())
+        self.assertEqual(receipt['manifest_sha256'], OPTION_B_MANIFEST_SHA256)
+        self.assertEqual(receipt['checker_sha256'], hashlib.sha256(SOL_CHECKER.read_bytes()).hexdigest())
+        for key in result:
+            self.assertEqual(receipt[key], result[key], key)
+        for field in ('seed_index', 'episode_seed', 'turn_seed_0', 'ordinal', 'condition', 'pool'):
+            value = deepcopy(self.manifest)
+            m = value['windows'][1]['members'][6]
+            m[field] = m[field] + 1 if isinstance(m[field], int) else 'changed'
+            self.assertEqual(sol.check(value)['verdict'], 'MISMATCH', field)
+        for name in ('placement', 'overlap', 'missing'):
+            value = deepcopy(self.manifest)
+            if name == 'placement':
+                value['windows'][-1]['sabotage_ordinals'][series.PAIRS[0]] += 2
+            elif name == 'overlap':
+                value['windows'][-1]['members'][5]['seed_index'] = 2
+            else:
+                value['windows'].pop()
+            self.assertEqual(sol.check(value)['verdict'], 'MISMATCH', name)
 
     def test_two_implementations_of_the_placement_law_agree(self):
         for window in self.manifest['windows'][1:]:
