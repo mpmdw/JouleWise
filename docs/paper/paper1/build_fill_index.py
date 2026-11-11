@@ -45,7 +45,7 @@ def source(fid):
     if fid.startswith(('DG-', 'DX-')):
         return 'existing results-fill-registry row (historical diagnostic, already issued)'
     if fid == 'P1-B5-B-SHARE':
-        return 'EXPLORATORY, unregistered: DERIVE B / (h + B) from the same reported-cell record; no registered verdict uses it (RL-5 item 6; analysis plan §10)'
+        return 'EXPLORATORY, unregistered: DERIVE B / (h + B) from the same reported-cell record; no registered verdict uses it (RL-5 item 6; analysis plan §12 (lines 771-772))'
     if fid.startswith('P1-B5-'):
         return f'primary-block analysis outputs and disclosure producer ({PA} §4-§8; registration §1)'
     if fid.startswith('P1-B6-'):

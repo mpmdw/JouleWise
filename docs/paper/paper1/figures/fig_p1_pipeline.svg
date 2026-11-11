@@ -28,7 +28,7 @@ text{font-family:Helvetica,Arial,sans-serif;fill:#1a1a1a}
 <rect x="330" y="50" width="260" height="300" class="orange" rx="6"/>
 <text x="340" y="70" class="s" text-anchor="start">MEASUREMENT LAPTOP</text>
 <rect x="345" y="84" width="230" height="38" class="box" rx="4"/>
-<text x="355" y="107" class="xs" text-anchor="start">headless lead between sessions</text>
+<text x="355" y="107" class="xs" text-anchor="start">headless supervisory agent between sessions</text>
 <rect x="345" y="134" width="230" height="38" class="box" rx="4"/>
 <text x="355" y="157" class="xs" text-anchor="start">agent census + hazard arm</text>
 <rect x="345" y="184" width="230" height="38" class="box" rx="4"/>

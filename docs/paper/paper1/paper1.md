@@ -93,7 +93,7 @@ We treat the instrument's limits as results. Every reported phase energy carries
 The registrations fixed the counting and exclusion rules, estimators and specified fixed sentences before the
 data they govern. Dated errata, interpretations and analysis-code changes are disclosed in Section 4.5.
 The draft's additional branch prose was written before release, at commit `a1a5029fb`, after primary collection;
-the blind draft is tagged `paper1/blind-draft-2026-10-27`. Energies stayed hidden until a recorded release;
+the blind draft is tagged `paper1/blind-draft-2026-10-27`. Factual corrections to non-selected branch glosses were made after release on 10 November 2026 and are listed in `CORRECTIONS-2026-11-10.md`. Energies stayed hidden until a recorded release;
 the independent recomputation uses recorded collection-time judgments as inputs (Section 4).
 <!-- FACT H03: R2P P3/P5/P7; RL-1/RL-5; LEAN-COVERAGE-AUDIT.md §4. -->
 
@@ -889,7 +889,7 @@ analysis_engine/claims.py:333-382. These are code glosses, not selected outcomes
 
 The floor-related reasons must be kept distinct when selecting these branches:
 
-| Issued reason code | Branch | Fixed interpretation |
+| Issued reason code | Branch | Interpretation |
 |---|---|---|
 | `effect_not_above_floor` | 5.5.4 | The estimate does not exceed the floor gate; this is a resolution limit on this boundary. |
 | `deterministic_bound_obscures_direction` | 5.5.4 | The decision interval contains zero while the metrology interval does not; the recorded bounds obscure direction. |
@@ -1302,8 +1302,8 @@ registration before it bound, and a **refuter** session was asked to show the ju
 
 The work used a measurement laptop, an analysis laptop and cloud machines (Figure 5). On the **measurement
 laptop**, an agent census refuses collection at arm and pauses it while an agent process is alive. Between
-sessions a headless lead agent runs on that laptop and arms collection. On the analysis laptop, agents ran blind
-dry runs over real custody under the same account; custody was kept by rule, not by an account no agent could
+sessions a headless supervisory agent runs on that laptop and arms collection. On the analysis laptop, agents ran blind
+dry runs over real custody under the user account that holds custody; custody was kept by rule, not by an account no agent could
 use. Development and review also ran locally; cloud machines were used for development, review, synthetic tests
 and continuous integration. This is a separation of permitted activities and reading rules, not complete
 separation of agents from data by machine.
@@ -1349,7 +1349,7 @@ these failure modes; each is mechanical, recorded, or both.
    never as zero.
 7. **Pre-written outcome text.** The registrations fix specified sentences, and the claims ladder caps claim
    strength (Section 3.10). The draft's additional branch prose was written before release, at commit `a1a5029fb`
-   (tag `paper1/blind-draft-2026-10-27`), after primary collection, with results as placeholders.
+   (tag `paper1/blind-draft-2026-10-27`), after primary collection, with results as placeholders; factual corrections to non-selected branch glosses were made after release on 10 November 2026 and are listed in `CORRECTIONS-2026-11-10.md` (Section 1.2).
 <!-- FACT H18: R2P P3/P5/P6; RL-1/RL-5; sources as H03/H09/H12. -->
 
 ### 7.3 Failures and lessons
@@ -1362,7 +1362,7 @@ number, with what each taught.
   headless supervisory session, and a daemon left behind by a software update) were caught by the agent census, and
   each catch cost a session or held the loop ({{FILL: P1-AUTO-LOST | estimated quiet-machine hours lost to agent presence during collection, and the sessions affected, from the pipeline audit's outcomes ledger}}). Every catch was a real contaminant; none corrupted a kept number,
   because the census refused or paused. The rule is temporal: the census refuses and pauses collection while an
-  agent process is alive; the headless lead runs between sessions and owns arming. The claim that agents never
+  agent process is alive; the headless supervisory agent runs between sessions and owns arming. The claim that agents never
   run on this laptop does not describe the study.
   <!-- FACT H19: RL-5 item 3; RUN_STATE items 71-76 and 181; paper-audit C-7. -->
 - **Reviews that executed code caught the defects that mattered.** Over the study period, the defects that could
@@ -1455,7 +1455,7 @@ dropped (Section 6.4). The KV cache size is averaged over the 512 decode passes 
 **Automation.** The agents that ran the study also wrote much of this paper. The controls of Section 7.2 constrain
 what an agent could change in the data and the analysis; they do not make the prose neutral. The registrations'
 specified sentences predate the data they govern; the draft's additional branch prose was written before
-release, at commit `a1a5029fb`, after primary collection.
+release, at commit `a1a5029fb`, after primary collection; factual corrections to non-selected branch glosses were made after release on 10 November 2026 and are listed in `CORRECTIONS-2026-11-10.md` (Section 1.2).
 <!-- FACT H20: R2P P5; RL-1/RL-5; H16 for extension status. -->
 
 ## 9. Conclusion
@@ -1475,7 +1475,7 @@ independent recomputation; the registered replication was collected in further s
 **[BRANCH 9.B — BYTES]** {{FILL: P1-BY-CONCLUSION | one sentence: the H1 words for the MoE models and the active-or-resident answer at rails and DC input, and the primary ε, in the registered wording; with the dense-model sentence}} **[END BRANCH 9.B]**
 
 The methods (timing bounds carried into every phase energy, floors that refuse rather than average away missing
-evidence, and registered fixed sentences supplemented by branch prose written before release) transfer to any software power counter with interval-average
+evidence, and registered fixed sentences supplemented by branch prose written before release, with factual corrections to non-selected branch glosses made after release on 10 November 2026 and listed in `CORRECTIONS-2026-11-10.md` (Section 1.2)) transfer to any software power counter with interval-average
 records. So does the lesson of the automation: agents could run this study because the rules that protected it
 were mechanical.
 
