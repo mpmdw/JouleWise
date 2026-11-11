@@ -3306,6 +3306,161 @@ stage 1's desk work, which is analysis and not measurement. It does not run insi
 
 ---
 
+# Decision request 35: the R1 thermal replay (2026-11-11 05:14 PST)
+
+**Read.** The lead's summary of `docs/run_reports/2026-11-11-r1-thermal-replay.md` on
+`analysis/2026-11-11-r1-thermal-replay` @ `78e6b19ce`, and the report's own lines on band margins, slope and the
+planning rows. Temperatures, slopes and times of a rehearsal only. I did not run the script.
+
+## RL-64. The replay is the good case. The design round goes ahead, with this brief
+
+### What the replay settles
+
+- The script reproduces all 13 recorded gate outcomes against the references actually used, and recovers R_op
+  exactly. Its counterfactual can be trusted for the members with no heater: the three legs and both step-D
+  runs.
+- **A D member's own idle sits 1.2 to 1.55 °C above the cold 30B reference on the slow sensor.** That is the
+  band's own width. It answers the question left open in RL-23 and RL-32, and it is the whole cause of the
+  night's timeouts.
+- **Against its own reference every D member releases, between 728 and 889 s**, inside the 1,200 s cap, and at
+  release it sits 0.88 to 1.45 °C inside the band. The slope bar decides the release, not the band.
+
+RL-59's condition for going to the design round is met.
+
+### The consume case need not be computed first
+
+It follows from the margins. The D members' own references differ from one another by at most about 0.4 °C,
+and every member is at least 0.88 °C inside its own band at release. Gated against another D member's reference
+instead of its own, each is still inside the band, and the slope bar still decides. The round computes it
+anyway, as its first item, since the script exists. What the journals cannot show is a D member that follows a
+full D episode; that is what the gated block measures.
+
+### Brief for the round
+
+One round, an Opus seat and a Sol seat, on the follow-up night under RL-59's rules. W1's protocol is not open.
+The seats read R1's thermal journals through the replay script, temperatures only. They return one plan and a
+list of what they disagree on. It must settle:
+
+1. **From the journals, before anything else:** the consume case (every D member against step-D's captured
+   reference), and the same releases at δ_slow = 1.0 °C. See the note on S6 below.
+2. **The order and the capture member.** step-D follows a 30B run with W1's inter-member idle and captures the
+   window reference. Which 30B run, and the exact sequence from the soak to the gated block.
+3. **The A-B-A legs:** each gates against its own capture. How the three start states are shown to be
+   comparable, and whether the legs stay ahead of step-D.
+4. **The planning turns** at R + 0, + 2 and + 4 above the D-captured reference: whether the preheat reaches
+   each state inside its cap.
+5. **A timeout runs flagged.** The exact semantics, and for each slot the flag that makes it inadmissible
+   without my ruling.
+6. **Every slot, the segment that feeds it, and what the night must contain for it.** Anything the slots do
+   not need may be proposed as a cut.
+7. **The thermometry classifier's null pick** on the 30B record: its cause, and what the night needs to give a
+   thermometry verdict.
+8. **The night's length**, its deadline arithmetic and the OS batch window.
+9. **The smoke:** what a thirty-minute native run must show before the long block is armed.
+10. **Condition 13:** the night runs W1's own thermal-gate module, byte for byte. Anything R1 needs beyond it
+    goes through a hook, not a fork.
+
+### A note on S6, for the round and for me
+
+S6 was moved from 1.0 to 1.5 °C because a gate could not release. Both failures behind that move were gates
+against a reference the member could not reach: the soak on the first night, R_op for the D members on the
+second. With the right reference the D members release on the slope bar with room to spare, and by the
+replay's margins they would also have released at 1.0 °C. A tighter band is a better-controlled start state.
+
+S6 stays at 1.5 °C for arming the follow-up night; RL-32 holds until I change it. The night's desk prints, for
+every release, how far inside the band the member was. I then set S6 by the registered rule, the smallest
+step that works, from that record.
+
+### The disclosed slip
+
+An unfiltered listing printed about forty decode-token timestamps of the 30B control. No energy, power or count.
+It is a rehearsal's control run and it changes nothing. Recorded.
+
+**Reason.** The cheap evidence came back clean and specific: it names the cause to within the width of the
+band. The round's job is to turn that into a night that cannot empty itself on one timeout.
+
+**Blind status.** Blind: no v4 outcome exists. Rehearsal temperatures only.
+
+---
+
+# Decision request 36: the flag catalog's excluding codes, read against the protocol (2026-11-11 05:15 PST)
+
+**Read.** The lane lead's extract of `configs/b6/flag_catalog_b6.json` (SHA-256 `01767fe4…dd0c`): 269 codes, 41
+that exclude a member, 19 that exclude a window. In the protocol on the W1 line: the X1 to X8 list (lines
+491-499), exclusion B (646-652), R22-1 on contention (1039-1045) and the strata rule that cites the exclusion
+union (1180). The text of interpretation ruling A9 on its branch, and `v4_contention.split_codes`. I did not
+read the catalog file itself or the harvest code.
+
+## RL-65. Protocol first, then the catalog. One real gap, at the window level
+
+### The weights
+
+All three model roots match the registered inventory, hashed on the measurement Mac on 2026-11-11 at 05:12
+PST by the registration's own identity function. Noted. The whole hash took twenty seconds, so doing it at
+every prepare costs nothing.
+
+### Which governs: the protocol, where it speaks
+
+A v4 member's exclusions are the union ruling A9 defines: the classes the analysis re-derives (X1 to X8, F1, B
+and the named others) together with the exclusions the desk recorded. The recorded ones come from this
+catalog. So the catalog is part of what decides eligibility, which is why RL-62 bound it. The order of
+authority, to go in the catalog's deviation row:
+
+1. **Where the protocol states a rule for a code, the protocol governs.** R22-1 is the one case today: no
+   `contention.*` code excludes a member in v4, whatever the catalog says. Every v4 reader of an exclusion list
+   strips them: the desk, the committed-record reader, and at the analysis seal the engine and the recompute.
+2. **Everywhere else the catalog's member effect applies**, by A9's union. That includes the `agent.*` codes.
+   The protocol is silent on them, and a member measured while an agent process was alive should not count.
+3. Where the catalog's code and a re-derived class describe the same hazard on different spans, as with the
+   OS thermal level and X1, the union applies and the mismatch is printed. That is A9 as ruled.
+
+### `model.identity_underivable`
+
+This is the one code I want shown by execution before signing, not by reading. The arm collector could not
+find a model source for a v4 pack at all (RL-63). If the harvest likewise cannot derive a v4 member's model
+identity, the code excludes **every** member of every window, and the series produces nothing. The lane lead
+runs the harvest on the synthetic W1 session now and reports the excluded-member list. The native smoke then
+shows the same on real records: **for a clean smoke, `members_excluded` is empty, and any code in it is
+explained.** That joins the smoke's four observations.
+
+### The window-level codes: this is a gap, for some of them
+
+In v4 a window-level effect sets a field nobody reads. Whether that matters depends on the code.
+
+- **It matters** where the condition means the window's numbers are not what the registration says they are:
+  the model files or the runtime stack differ from the registered ones; number-bearing code is unreviewed; a
+  source changed during harvest; the structure codes that say the harvest's own view of the window is
+  incomplete (chain crashed, stage bundles missing, no capture records, no roster). A window like that must
+  not count without anyone having decided so.
+- **It does not matter** where the code guards an estimand v4 does not compute: a reported cell below its
+  minimum, the pre-check's certain exclusion, and, if v4 consumes neither, the reference-request drift screen
+  and the calibration bracket's bound.
+
+The lane lead sorts the nineteen into those two lists, by what v4's analysis reads, and I confirm the sorting
+before signing. For the calibration and reference-screen codes the question to answer is simply whether any
+v4 number depends on that bracket or that screen.
+
+**The rule, for the first list:** a v4 window whose final harvest carries one of those reasons is **held**. It
+is not counted, and the next window is not armed on it, until I rule. Three places carry the rule:
+
+1. **Now, in `DEVIATIONS.md`:** one row with the rule and the list.
+2. **At the arm:** the helper refuses when the previous window's final harvest carries a listed reason and no
+   signed ruling answers it. That is a refuse-only bound edit and goes under RL-53's terms and cut-off. If it
+   misses, the magistrate reads the window reasons before every arm, records them in the arm notice, and does
+   not arm on a listed one.
+3. **At the analysis seal, before C1:** the engine and the recompute read the window reasons, and a held
+   window's members do not enter. This joins RL-21's list. W1 is selection data, so the seal is where this
+   rule starts to protect a claim.
+
+**Reason.** The catalog was written for a block where a bad window excluded itself. v4 reuses the harvest and
+dropped that reader without deciding to. For most of the nineteen that is harmless; for the ones that say
+"this is not the registered model, code or record", it is the difference between a held window and a silent
+one.
+
+**Blind status.** Blind: no v4 outcome exists.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
