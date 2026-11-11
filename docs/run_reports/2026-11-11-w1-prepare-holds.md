@@ -621,3 +621,174 @@ runs remote synthetic native qualification, PREQUAL and smoke on the final
 registered bytes. Any measured smoke requires agents to stand down and a
 clean lead-controlled quiet session. No research ruling question remains;
 RL-79 supersedes the round-1 identity-hold question.
+
+## Round 3 — PH-1: W1 final harvests participate in holds
+
+Base: arm-check `bb64d1e70` (rounds 1 and 2 merged). Local branch:
+`ops/2026-11-11-w1-prepare-holds-r3`. Read RL-53 W-0 through W-3,
+RL-35 item 4, RL-37, RL-65, RL-71 and RL-79 at the requested audit ref,
+the requested state-machine audit sections, M0 and repository conventions.
+The explicit seat brief selects this work and prohibits coordination-state
+writes and a full suite; no kernel task was registered. No agent was delegated.
+
+The only bound edit is in `scripts/align_v4_session.py`: replace the
+R1/W1/development skip with `window.window == 'R1'` and correct its comment.
+W1 and other development records now use the existing finality, no-capture
+and authenticated-final-exclusions branches. R1 remains skipped. The packet's
+calibration-count omission does not exempt W1 from RL-65/RL-71/RL-79 holds.
+No measured byte, flag, verdict, window-record content or receipt check changes.
+
+No new refusal code is introduced. The existing
+`held_window: W1: roster.no_science_bundles: no signed ruling` now refuses
+the arm of C1 when W1's final harvest carries that reason. Its evidence is
+recorded in the arm's `held_window_check.windows` (and latest-window summary),
+and the refusal is copied to the arm's `reasons`, persisted by the existing
+`staging/v4-arm-NNN.json` writer before quiet dwell. The hold check itself
+finishes before the meter probe. The existing unreadable
+refusal and committed, authenticated ruling requirements are unchanged.
+
+### Round 3 failing-first evidence
+
+Test-only commit `01cf4094e` precedes the production edit. Six selected
+arm-module tests ran against unchanged production code: **6 tests, 5 failures**,
+63.310 s unittest / 70.376 s process wall. Red output excerpts:
+
+```text
+FAIL: test_w1_not_final_defers_without_refusing
+AssertionError: Lists differ: [] != ['W1']
+FAIL: test_w1_final_without_capture_needs_no_harvest
+AssertionError: 'skipped' != 'no final harvest: no capture'
+FAIL: test_other_development_record_checks_final_exclusions
+AssertionError: True is not false
+FAIL: test_r1_is_skipped_and_each_chain_digest_is_verified
+AssertionError: Lists differ: ['skipped', 'skipped'] != ['skipped', 'no held reasons']
+```
+
+That first run's new C1-arm fixture also exposed my stale synthetic battery
+timestamp: its only arm refusal was `battery top-up incomplete/unobserved`,
+so its failed reason assertion was not used as the decisive PH-1 arm witness.
+I corrected the fixture to timestamp its fake battery and quiet records at
+the current test time, then reran only the W1/C1 test against the same unchanged
+production code: **1 test, 1 failure**, 10.250 s unittest / 17.459 s process wall:
+
+```text
+FAIL: test_w1_final_hold_refuses_c1_arm_until_committed_ruling
+    self.assertFalse(row['admitted'], row)
+AssertionError: True is not false
+```
+
+The captured arm had `admitted: True`, no refusal reasons and W1 status
+`skipped`, despite the authenticated final `roster.no_science_bundles` reason.
+The first six-test run also passed the unchanged round-2 test
+`test_k_final_with_held_reason_and_k_plus_1_not_final_refuses_the_arm_of_k_plus_2`.
+The first full post-fix run completed **80 tests, 1 failure**, 338.717 s
+unittest / 345.564 s process wall. The new release fixture reused a packet
+after changing its series commit to commit the ruling; the production arm
+correctly refused that stale packet with:
+
+```text
+next_arm_triage: packet does not match its committed sources (the supplied packet differs from the arm's own build)
+```
+
+Its held check was already successful and carried W1's release ID. I corrected
+the fixture to rebuild the packet at the new commit. Static review also
+corrected its not-yet-reached release assertion: release IDs live in
+`windows[].released_by`, while the existing latest-window summary is not
+refreshed for that field. No production change was made for either test
+mistake; completed verification is recorded below.
+
+### Round 3 fixture and native handoff
+
+The shared synthetic `Scenario` already writes W1's final `pilot`, `desk`
+and readable `exclusions` sources. PREQUAL's held-window case uses that same
+fixture. No missing-W1-exclusions fixture repair or PREQUAL harness change
+was needed; the check was not weakened. Fixture corrections were limited to
+the new arm test's synthetic timestamps, packet rebuild after the ruling
+commit, and per-window release assertion described above.
+
+After integration and registration, the lead must remotely exercise the
+installed arm on a disposable synthetic W1 record whose authenticated final
+exclusions carry `roster.no_science_bundles`: C1 refuses without its ruling,
+then admits that hold with a valid committed W1 ruling. Inspect the staged
+arm's W1 finality, reason, release ID and carried ruling, and confirm no
+earlier record changes and completion before meter/dwell. Also exercise W1
+provisional/deferred, W1 final zero-capture without harvest, R1 skipped, and
+the final-k/provisional-k+1/arm-k+2 history case. All host commands in these
+tests use existing fakes; no live host or measurement validation is claimed.
+No MLX code changed and no Metal execution was attempted. Quiet measurements,
+PREQUAL/smoke on registered bytes, deviation row, trace/STRICT receipt
+regeneration and admission remain lead-owned gates.
+
+### Round 3 final diff and verification
+
+Against `bb64d1e70`:
+
+| Path | Added / removed | Change |
+|---|---:|---|
+| `scripts/align_v4_session.py` (only bound file) | 2 / 3 | R1-only skip and corrected comment |
+| `tests/align/test_v4_arm_watchdog_check.py` | 56 / 3 | Four new regression tests; update the combined R1/W1 expectation |
+| This report | append only | Round 3 evidence and handoff |
+
+No new test module was added, so `scripts/test_timings.json` is unchanged.
+The round-2 k/k+1/k+2 method's source was also compared with the base in
+memory and is unchanged. Both changed Python files compile in memory.
+
+Final verification uses `python3.13 -B -m unittest` with the exact arguments
+below. The separate corrected W1-arm test passed first: **1 test**, 25.268 s
+unittest / 32.895 s process wall. The final complete arm module then passed:
+**80 tests**, 373.715 s unittest / 383.389 s process wall.
+
+```text
+tests.align.test_v4_arm_watchdog_check
+```
+
+PREQUAL's held-window/runtime-stack case and production arm CLI control/fault
+cases passed: **2 tests**, 231.835 s unittest / 233.143 s process wall.
+The held-window case's clean W1 final exclusions remained readable; no new
+`held_window: unreadable` refusal was observed.
+
+```text
+tests.align.test_w1_prequal.ArmCliTests.test_named_runtime_stack_and_held_window_cases
+tests.align.test_w1_prequal.ArmCliTests.test_production_cli_admits_the_control_and_refuses_every_fault_before_the_installer
+```
+
+Importer discovery used `rg -l align_v4_session tests scripts` (excluding
+real restricted directories). Per this round's explicit narrower test
+instruction, no other importer modules were invoked independently. Every
+test invocation was serial, with private synthetic HOME/host-state/temp
+paths, system/global Git config disabled, hooks/templates disabled, lazy
+fetch disabled and offline model settings. Test opt-ins were cleared.
+Diagnostic logs and the process-wall ledger are in
+`/private/tmp/w1-prepare-holds-r3-checks/`; they contain synthetic fixtures.
+
+The required canonical group passed: **36 tests**, 335.703 s unittest /
+343.225 s process wall, with these exact arguments:
+
+```text
+tests.align.test_v4_executed_closure tests.align.test_v4_dynamic_closure tests.align.test_v4_registration
+```
+
+No stale trace/receipt digest failure was emitted, so there is no EXPECTED
+failure message to quote. Final requested checks: **118 tests passed**,
+plus the separate passing corrected W1-arm test.
+
+Total serial test process wall, including both red runs and the superseded
+full-module fixture failure: **1426.051 s (23.768 min)**. This exceeded the
+approximately 20-minute target by 3.768 min. The extra full-module run after
+my new-fixture mistakes caused the overrun; no additional test process was
+started after the canonical group. No full suite, pytest, network operation,
+model download, real measurement-data access, real custody access or live
+host command was performed.
+
+Final diff/whitespace review passes and confirms only the three paths above
+changed. Coordination state, protocol, deviations, trace, registration and
+receipt, packet builder, watchdog, night driver and B5 driver are unchanged.
+Local test-only commit: `01cf4094e`; the implementation/test-correction/report
+commit is returned in the handoff. Nothing was pushed.
+
+No open contract question remains. The test subset is green; it does not
+claim a complete importer regression or native qualification. Next exact
+step: the lead cold-reviews the round-3 commits, integrates the narrow fix,
+adds its deviation row and regenerates the trace/STRICT receipt, then runs
+the remote installed synthetic native checks above and PREQUAL/smoke on the
+registered bytes. Any measurement requires agents to stand down first.

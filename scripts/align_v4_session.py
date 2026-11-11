@@ -1274,9 +1274,8 @@ def held_window_check(measurement_root, packet, *, ruling_path=None):
             row = {'window': window.window, 'final': final_error is None, 'held_reasons': [],
                    'released_by': None}
             record['windows'].append(row)
-            # R1/W1 are omitted from series history by build_packet at :1010-1012;
-            # development contributes no calibration at :956-959 either.
-            if window.window in ('R1', 'W1') or window.record['role'] == 'development':
+            # Only R1 is a rehearsal without a v4 desk harvest.
+            if window.window == 'R1':
                 row['status'] = 'skipped'
             elif final_error is not None:
                 row.update(status='deferred', finality_reason=final_error)

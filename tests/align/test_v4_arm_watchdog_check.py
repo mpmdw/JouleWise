@@ -474,9 +474,10 @@ class HeldWindowTests(unittest.TestCase):
         self.assertEqual(row['reasons'], ['held_window: W1: roster.no_science_bundles: no signed ruling'])
         self.assertEqual(row['held_window_check']['status'], 'held')
         path, _, ruling = self.ruling('W1')
-        row = arm(self.commit_rulings(packet), path)
+        packet = self.scenario.build(now=now, series_commit=self.scenario.commit())
+        row = arm(packet, path)
         self.assertTrue(row['admitted'], row)
-        self.assertEqual(row['held_window_check']['released_by'], ruling['ruling_id'])
+        self.assertEqual(row['held_window_check']['windows'][0]['released_by'], ruling['ruling_id'])
 
     def test_w1_not_final_defers_without_refusing(self):
         from tests.align.test_v4_next_arm_packet import Scenario
