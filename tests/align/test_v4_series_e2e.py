@@ -110,6 +110,8 @@ class SeriesCadenceEndToEnd(unittest.TestCase):
                                         return_value={'ok': True, 'synthetic': True}))
         stack.enter_context(patch.object(kit, 'generate', side_effect=lambda root, **kw: self.w1_checks.append(root)))
         stack.enter_context(patch.object(pilot.h, 'prepare', side_effect=self.shared_prepare))
+        stack.enter_context(patch.object(session, 'weight_digest_preflight',
+                                        return_value={'ok': True, 'synthetic': True}))
         self.installed = []
         stack.enter_context(patch.object(pilot, 'install', side_effect=self.shared_install))
         self.manifest = s.load(self.measurement)

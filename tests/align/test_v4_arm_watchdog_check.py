@@ -27,6 +27,188 @@ def acceptance(*, phase, **_):
             'elapsed_s': 0.0, 'plan_read_proven': False}
 
 
+class WeightDigestTests(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+        self.weights = self.root / 'tiny-weights'
+        self.weights.mkdir()
+        (self.weights / 'model.safetensors').write_bytes(b'fixture')
+        self.members = [{'model_id': 'tiny', 'run_id': 'one'}, {'model_id': 'tiny', 'run_id': 'two'}]
+        self.observed = {'status': 'ok', 'kind': 'file_set', 'folded_sha256': 'a' * 64,
+                         'files': {'model.safetensors': 'b' * 64},
+                         'inventory': [{'path': 'model.safetensors', 'size_bytes': 7}]}
+        self.inventory = {'artifacts': {session.pilot.h.align_unit_id(m['model_id'], m['run_id']):
+            dict(self.observed, root=str(self.weights)) for m in self.members}}
+        self.state = {'measurement_root': str(self.root), 'source_measurement_root': str(self.root),
+                      'registration_dir': str(self.root / session.kit.KIT / 'registration'),
+                      'preparation_status': 'STAGED'}
+        self.write_inputs()
+
+    def write_inputs(self):
+        directory = Path(self.state['registration_dir'])
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / 'model_artifact_inventory.json').write_text(json.dumps(self.inventory))
+        (directory.parent / 'collection_plan.json').write_text(json.dumps({'members': self.members}))
+
+    def preflight(self, observed=None):
+        self.identity = Mock(return_value=self.observed if observed is None else observed)
+        return session.weight_digest_preflight(self.state, identity_fn=self.identity)
+
+    def test_shared_root_hashed_once_and_unplanned_inventory_ignored(self):
+        self.inventory['artifacts']['unplanned'] = {'root': '/synthetic/never-read'}
+        self.write_inputs()
+        row = self.preflight()
+        self.assertTrue(row['ok'], row)
+        self.identity.assert_called_once_with(str(self.weights))
+        root = row['roots'][str(self.weights)]
+        self.assertEqual(root['registered_folded_sha256'], 'a' * 64)
+        self.assertEqual(root['observed_folded_sha256'], 'a' * 64)
+        self.assertEqual((root['file_count'], root['total_bytes']), (1, 7))
+        self.assertTrue(root['ok'])
+        self.assertGreaterEqual(root['elapsed_s'], 0)
+        self.assertIsInstance(row['prepared_at_epoch_s'], (float, int))
+
+    def test_every_shared_unit_digest_is_compared(self):
+        self.inventory['artifacts']['tiny-two']['folded_sha256'] = 'c' * 64
+        self.write_inputs()
+        row = self.preflight()
+        self.assertFalse(row['ok'])
+        self.assertIn('weight_digest_preflight: digest_mismatch: tiny-two tiny-weights', row['reasons'])
+        self.identity.assert_called_once()
+
+    def test_missing_inventory_row_refuses(self):
+        del self.inventory['artifacts']['tiny-two']
+        self.write_inputs()
+        row = self.preflight()
+        self.assertFalse(row['ok'])
+        self.assertIn('weight_digest_preflight: no_inventory_row: tiny-two', row['reasons'])
+
+    def test_changed_digest_refuses(self):
+        row = self.preflight(dict(self.observed, folded_sha256='c' * 64))
+        self.assertIn('weight_digest_preflight: digest_mismatch: tiny-one tiny-weights', row['reasons'])
+        self.assertFalse(row['roots'][str(self.weights)]['ok'])
+
+    def test_each_file_map_change_refuses_even_with_matching_fold(self):
+        for files, added, missing, changed in (
+                ({'model.safetensors': 'b' * 64, 'extra.bin': 'c' * 64}, ['extra.bin'], [], []),
+                ({}, [], ['model.safetensors'], []),
+                ({'renamed.safetensors': 'b' * 64}, ['renamed.safetensors'], ['model.safetensors'], []),
+                ({'model.safetensors': 'c' * 64}, [], [], ['model.safetensors'])):
+            with self.subTest(files=files):
+                row = self.preflight(dict(self.observed, files=files))
+                self.assertIn('weight_digest_preflight: file_set_differs: tiny-weights', row['reasons'])
+                self.assertEqual(row['roots'][str(self.weights)]['file_set_diff'],
+                                 {'added': added, 'missing': missing, 'changed': changed})
+                self.assertFalse(row['ok'])
+
+    def test_every_shared_unit_file_map_is_compared(self):
+        self.inventory['artifacts']['tiny-two'] = dict(self.inventory['artifacts']['tiny-two'], files={})
+        self.write_inputs()
+        self.assertFalse(self.preflight()['ok'])
+
+    def test_unavailable_reasons_and_wrong_kind_refuse(self):
+        for reason in ('model weight file is unreadable', 'model inventory changed during read',
+                       'cannot enumerate model directory'):
+            with self.subTest(reason=reason):
+                row = self.preflight({'status': 'unavailable', 'reason': reason})
+                self.assertEqual(row['reasons'], [f'weight_digest_preflight: unavailable: tiny-weights: {reason}'])
+        row = self.preflight(dict(self.observed, kind='single_file'))
+        self.assertFalse(row['ok'])
+        self.assertIn('weight_digest_preflight: unavailable: tiny-weights:', row['reasons'][0])
+
+    def test_identity_exception_is_a_recorded_unavailable(self):
+        with patch('joulewise.provenance.model_artifact_identity', side_effect=OSError('synthetic read failure')):
+            row = session.weight_digest_preflight(self.state)
+        self.assertIn('weight_digest_preflight: unavailable: tiny-weights: OSError: synthetic read failure',
+                      row['reasons'])
+
+    def test_member_and_inventory_order_independent(self):
+        other = self.root / 'other-tiny-weights'
+        other.mkdir()
+        (other / 'model.safetensors').write_bytes(b'fixture')
+        self.inventory['artifacts']['tiny-two'] = dict(self.inventory['artifacts']['tiny-two'], root=str(other))
+        self.write_inputs()
+        with patch.object(session.time, 'time', return_value=10), \
+                patch.object(session.time, 'monotonic', return_value=20):
+            first = self.preflight()
+            self.members.reverse()
+            self.inventory['artifacts'] = dict(reversed(list(self.inventory['artifacts'].items())))
+            self.write_inputs()
+            self.assertEqual(first, self.preflight())
+            self.assertEqual(self.identity.call_count, 2)
+
+    def test_real_identity_on_tiny_tree_and_extra_shard(self):
+        from joulewise.provenance import model_artifact_identity
+        (self.weights / 'model.safetensors').write_bytes(b'tiny synthetic weights')
+        real = model_artifact_identity(str(self.weights))
+        self.inventory['artifacts'] = {unit: real for unit in self.inventory['artifacts']}
+        self.write_inputs()
+        self.assertTrue(session.weight_digest_preflight(self.state)['ok'])
+        (self.weights / 'extra.bin').write_bytes(b'extra synthetic shard')
+        row = session.weight_digest_preflight(self.state)
+        self.assertFalse(row['ok'])
+        self.assertEqual(row['roots'][str(self.weights)]['file_set_diff']['added'], ['extra.bin'])
+
+    def test_prepare_persists_refusal_and_never_enters_arm_dwell(self):
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(powermode, 'host_lock_preflight', return_value={'ok': True}))
+            stack.enter_context(patch.object(session, 'session_start_restore', return_value={'action': 'none'}))
+            stack.enter_context(patch.object(session.kit, 'generate'))
+            stack.enter_context(patch.object(session, 'series_ac_powermode', return_value=0))
+            stack.enter_context(patch.object(session.pilot, 'prepare', return_value=self.state))
+            arm = stack.enter_context(patch.object(session, 'arm_checks', side_effect=AssertionError('arm in prepare')))
+            for mismatch in (True, False):
+                identity = Mock(return_value=dict(self.observed, folded_sha256=('c' if mismatch else 'a') * 64))
+                if mismatch:
+                    with self.assertRaisesRegex(ValueError, 'weight_digest_preflight: digest_mismatch:'):
+                        session.prepare(self.root, self.root / 'session', weight_identity_fn=identity,
+                                        frequency_preflight=lambda *a, **k: {'ok': True})
+                else:
+                    session.prepare(self.root, self.root / 'session', weight_identity_fn=identity,
+                                    frequency_preflight=lambda *a, **k: {'ok': True})
+                stored = session.pilot.h.read(self.root / 'session/session.json')['weight_digest_preflight']
+                self.assertEqual(stored['ok'], not mismatch)
+                identity.assert_called_once()
+            arm.assert_not_called()
+
+    def test_early_model_presence_or_row_refusal_also_records_weight_evidence(self):
+        for fault in ('missing_shard', 'renamed_shard', 'unreadable_shard', 'missing_row'):
+            with self.subTest(fault=fault), ExitStack() as stack:
+                self.write_inputs()
+                observed = dict(self.observed, files={} if fault == 'missing_shard' else
+                                {'renamed.safetensors': 'b' * 64})
+                if fault == 'unreadable_shard':
+                    observed = {'status': 'unavailable', 'reason': 'synthetic unreadable shard'}
+                if fault == 'missing_row':
+                    del self.inventory['artifacts']['tiny-two']
+                    self.write_inputs()
+                target = self.root / fault
+                stack.enter_context(patch.object(powermode, 'host_lock_preflight', return_value={'ok': True}))
+                stack.enter_context(patch.object(session, 'session_start_restore', return_value={'action': 'none'}))
+                stack.enter_context(patch.object(session.kit, 'generate'))
+                stack.enter_context(patch.object(session, 'series_ac_powermode', return_value=0))
+                error = (KeyError('tiny-two') if fault == 'missing_row' else PermissionError('synthetic unreadable shard')
+                         if fault == 'unreadable_shard' else session.pilot.h.PhysicalHazard('models missing: synthetic'))
+                stack.enter_context(patch.object(session.pilot, 'prepare', side_effect=error))
+                code = ('no_inventory_row' if fault == 'missing_row' else 'unavailable'
+                        if fault == 'unreadable_shard' else 'file_set_differs')
+                with self.assertRaisesRegex(ValueError, 'weight_digest_preflight: ' + code):
+                    session.prepare(self.root, target, weight_identity_fn=lambda _: observed)
+                stored = session.pilot.h.read(target / 'session.json')['weight_digest_preflight']
+                self.assertFalse(stored['ok'])
+                if fault in ('missing_shard', 'renamed_shard'):
+                    self.assertIn('model.safetensors', stored['roots'][str(self.weights)]['file_set_diff']['missing'])
+                preserved = target / 'preserved.txt'
+                preserved.write_text('keep')
+                before = (target / 'session.json').read_bytes()
+                with self.assertRaises(type(error)):
+                    session.prepare(self.root, target, weight_identity_fn=lambda _: observed)
+                self.assertEqual(preserved.read_text(), 'keep')
+                self.assertEqual((target / 'session.json').read_bytes(), before)
+
+
 class WatchdogTests(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
@@ -604,6 +786,7 @@ class PrivilegeTests(unittest.TestCase):
 
     def test_prepare_admits_readable_on_and_retains_the_frequency_gate(self):
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            stack.enter_context(patch.object(session, 'weight_digest_preflight', return_value={'ok': True, 'synthetic': True}))
             stack.enter_context(patch.object(powermode, 'host_state_override', return_value=None))
             stack.enter_context(patch.object(powermode, 'HostLock'))
             stack.enter_context(patch.object(powermode, 'host_lock_preflight', return_value={'acquired': True}))
@@ -703,7 +886,7 @@ class ArmIntegrationTests(unittest.TestCase):
         record['quiet_dwell'] = {'start_ns': session.time.monotonic_ns()}
         return record
 
-    def install(self, *, high=False, now=None):
+    def install(self, *, high=False, now=None, **kwargs):
         if high:
             self.plan['runtime_requirements']['ac_powermode'] = 2
         path = self.root / session.kit.KIT / 'collection_plan.json'
@@ -711,7 +894,92 @@ class ArmIntegrationTests(unittest.TestCase):
         path.write_text(json.dumps(self.plan))
         return session.install(self.session, runner=self.run, watchdog_check=self.check, now=now,
             frequency_preflight=lambda *a, **k: {'ok': True},
-            frequency_pre_t0=lambda *a, **k: {'ok': True})
+            frequency_pre_t0=lambda *a, **k: {'ok': True}, **kwargs)
+
+    def test_weight_digests_from_prepare_are_carried_verbatim_without_hashing(self):
+        block = {'source': 'prepare', 'prepared_at_epoch_s': 1234, 'ok': True,
+                 'roots': {'/synthetic/model': {'registered_folded_sha256': 'a' * 64,
+                     'observed_folded_sha256': 'a' * 64, 'ok': True}}}
+        self.state['weight_digest_preflight'] = block
+        session.pilot.h.write(self.session / 'session.json', self.state)
+        with patch('joulewise.provenance.model_artifact_identity', side_effect=AssertionError('arm rehashed')) as identity:
+            self.install()
+        identity.assert_not_called()
+        arm = session.pilot.h.read(self.session / 'staging/v4-arm-001.json')
+        self.assertEqual(arm['weight_digests'], block)
+
+    def test_legacy_prepare_records_not_recorded_without_refusal_or_hashing(self):
+        with patch('joulewise.provenance.model_artifact_identity', side_effect=AssertionError('arm rehashed')):
+            self.install()
+        arm = session.pilot.h.read(self.session / 'staging/v4-arm-001.json')
+        self.assertTrue(arm['admitted'])
+        self.assertEqual(arm['weight_digests'], {'source': 'not_recorded_by_prepare'})
+
+    def attestation(self, **changes):
+        root = str(self.root / 'tiny-weights')
+        self.plan['members'] = [{'model_id': 'tiny', 'run_id': 'one'}, {'model_id': 'tiny', 'run_id': 'two'}]
+        directory = self.root / session.kit.KIT / 'registration'
+        directory.mkdir(parents=True, exist_ok=True)
+        session.pilot.h.write(directory / 'model_artifact_inventory.json', {'artifacts': {
+            'tiny-one': {'root': root, 'folded_sha256': 'a' * 64},
+            'tiny-two': {'root': root, 'folded_sha256': 'a' * 64}}})
+        doc = {'attested_by': 'Synthetic operator', 'attested_at_epoch_s': 1234,
+               'roots': {root: {'registered_folded_sha256': 'a' * 64, 'observed_folded_sha256': 'a' * 64}}}
+        doc.update(changes)
+        path = self.root / 'attestation.json'
+        session.pilot.h.write(path, doc)
+        return path
+
+    def test_attested_weight_digests_are_validated_and_carried_without_hashing(self):
+        path = self.attestation()
+        with patch('joulewise.provenance.model_artifact_identity', side_effect=AssertionError('arm rehashed')):
+            self.install(weight_digests_attested=path)
+        arm = session.pilot.h.read(self.session / 'staging/v4-arm-001.json')
+        self.assertEqual(arm['weight_digests']['source'], 'attested')
+        self.assertEqual(arm['weight_digests']['attested_by'], 'Synthetic operator')
+        self.assertEqual(arm['weight_digests']['attested_at_epoch_s'], 1234)
+        self.assertEqual(arm['weight_digests']['roots'], session.pilot.h.read(path)['roots'])
+
+    def test_bad_weight_attestations_refuse_in_persisted_arm_before_install(self):
+        for fault in ('observed', 'registered', 'missing_root', 'blank_name', 'missing_unit', 'other_unit'):
+            with self.subTest(fault=fault):
+                path = self.attestation()
+                doc = session.pilot.h.read(path)
+                root = next(iter(doc['roots']))
+                if fault in ('observed', 'registered'):
+                    doc['roots'][root][fault + '_folded_sha256'] = 'c' * 64
+                elif fault == 'missing_root':
+                    doc['roots'] = {}
+                elif fault == 'blank_name':
+                    doc['attested_by'] = ' '
+                else:
+                    inventory_path = self.root / session.kit.KIT / 'registration/model_artifact_inventory.json'
+                    inventory = session.pilot.h.read(inventory_path)
+                    if fault == 'missing_unit':
+                        del inventory['artifacts']['tiny-two']
+                    else:
+                        inventory['artifacts']['tiny-two']['folded_sha256'] = 'd' * 64
+                    session.pilot.h.write(inventory_path, inventory)
+                session.pilot.h.write(path, doc)
+                self.installer.reset_mock()
+                with patch('joulewise.provenance.model_artifact_identity', side_effect=AssertionError('arm rehashed')):
+                    with self.assertRaisesRegex(ValueError, 'weight_digest_preflight:'):
+                        self.install(weight_digests_attested=path)
+                self.installer.assert_not_called()
+                records = sorted((self.session / 'staging').glob('v4-arm-[0-9][0-9][0-9].json'))
+                arm = session.pilot.h.read(records[-1])
+                self.assertFalse(arm['admitted'])
+                self.assertEqual(arm['weight_digests']['source'], 'attested')
+                self.assertTrue(any(r.startswith('weight_digest_preflight:') for r in arm['reasons']))
+
+    def test_weight_attestation_cli_option_is_forwarded(self):
+        path = self.attestation()
+        with patch.object(session, 'install') as install:
+            rc = session.main(['install', '--session-root', str(self.session), '--w1-disk-config', 'synthetic',
+                '--obc-off-attested-by', 'synthetic', '--battery-log', 'synthetic',
+                '--next-arm-triage', 'synthetic', '--weight-digests-attested', str(path)])
+        self.assertEqual(rc, 0)
+        self.assertEqual(install.call_args.kwargs['weight_digests_attested'], path)
 
     def dwell(self):
         return json.loads((self.session / 'staging/v4-arm-001.dwell.json').read_bytes())['quiet_dwell']
