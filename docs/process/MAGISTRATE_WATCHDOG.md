@@ -41,6 +41,17 @@ These are local durable notices through the existing notice/ack path. They do
 not prove mail delivery while launch is held; an external observer must read
 the status/notice queue, or a later permitted magistrate must deliver them.
 
+**W-02 heartbeat:** both an ordinary tick observing an owned live process and
+the resident supervisor read `heartbeat` (maximum 4096 bytes). Its plain line
+is `PID ACTIVATION_ID EPOCH_SECONDS`. The PID and activation must match the
+owned lock, and the timestamp must be finite, no older than this activation,
+and at most five seconds in the future. After 900 seconds without a valid fresh
+stamp (with activation-start grace for a missing stamp), a
+`magistrate_heartbeat_stale` notice is queued once per stale episode. Recovery
+re-arms the notice for another outage. `state.json` records the observation,
+status and age. Heartbeat staleness is reporting only: PID ownership, plan
+fences and the existing stand-down ladder still decide process actions.
+
 **Updated 2026-09-15 — INSTALL-WINDOWS-MULTI-01, D-180 clause 1 / D-181
 clause 1 adopted design:** plan spans replace the fixed-clock relaunch fences;
 the night driver's timing functions own their derived boundaries.

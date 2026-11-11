@@ -92,3 +92,88 @@ class UnsafeHoldTests(fixtures.WatchdogTestCase):
                 self.assertEqual(expected, decision.state)
                 self.assertFalse(decision.launch)
                 self.assertEqual(1, len(state['notice_pending']))
+
+
+class HeartbeatTests(fixtures.WatchdogTestCase):
+    def setUp(self):
+        super().setUp()
+        self.lock = self.write_live_lock()
+        self.harness.processes.rows = [wd.ProcessInfo(100, 99, 'token-a', 'session')]
+
+    def advance(self, seconds):
+        self.harness.clock.wall += dt.timedelta(seconds=seconds)
+        self.harness.clock.mono += seconds
+
+    def heartbeat(self, text=None):
+        path = self.harness.storage.root / 'heartbeat'
+        path.write_text(text if text is not None else
+                        f"100 activation-a {self.harness.clock.wall.timestamp()}\n")
+
+    def test_tick_reads_heartbeat_and_notices_stale_live_pid_once(self):
+        self.heartbeat()
+        first = wd.tick(self.harness.storage, self.harness.deps, dry_run=True)
+        self.assertEqual('ACTIVE', first.state)
+        self.assertFalse(wd.load_state(self.harness.storage)['magistrate_heartbeat']['stale'])
+        self.advance(wd.HEARTBEAT_STALE_S)
+        decision = wd.tick(self.harness.storage, self.harness.deps, dry_run=True)
+        self.assertEqual('ACTIVE', decision.state)
+        state = wd.load_state(self.harness.storage)
+        self.assertTrue(state['magistrate_heartbeat']['stale'])
+        self.assertEqual(['magistrate_heartbeat_stale'], [n['kind'] for n in state['notice_pending']])
+        state['notice_pending'] = []  # acknowledge the already surfaced episode
+        self.harness.storage.atomic_json(self.harness.storage.root / 'state.json', state)
+        wd.tick(self.harness.storage, self.harness.deps, dry_run=True)
+        self.assertEqual([], wd.load_state(self.harness.storage)['notice_pending'])
+        self.assertEqual([], self.harness.processes.signals)
+        self.assertEqual([], self.harness.spawn_calls)
+
+    def test_missing_identity_mismatch_malformed_and_future_stamps_cannot_keep_session_live(self):
+        self.advance(wd.HEARTBEAT_STALE_S + 1)
+        epoch = self.harness.clock.wall.timestamp()
+        cases = (None, 'garbage', f'200 activation-a {epoch}', f'100 old-activation {epoch}',
+                 '100 activation-a nan', f'100 activation-a {epoch + 60}',
+                 f'100 activation-a {self.base.timestamp() - 1}', 'x' * 4097)
+        for text in cases:
+            with self.subTest(text=text):
+                (self.harness.storage.root / 'heartbeat').unlink(missing_ok=True)
+                if text is not None:
+                    self.heartbeat(text)
+                state = wd.initial_state()
+                decision = wd.decide(self.harness.storage, self.harness.deps, state)
+                self.assertEqual('ACTIVE', decision.state)
+                self.assertTrue(state['magistrate_heartbeat']['stale'])
+                self.assertEqual('magistrate_heartbeat_stale', state['notice_pending'][0]['kind'])
+
+    def test_start_grace_recovery_and_second_outage(self):
+        state = wd.initial_state()
+        wd.decide(self.harness.storage, self.harness.deps, state)
+        self.assertEqual([], state['notice_pending'])
+        self.advance(wd.HEARTBEAT_STALE_S)
+        wd.decide(self.harness.storage, self.harness.deps, state)
+        self.assertEqual(1, len(state['notice_pending']))
+        self.heartbeat()
+        wd.decide(self.harness.storage, self.harness.deps, state)
+        self.assertFalse(state['magistrate_heartbeat']['stale'])
+        self.advance(wd.HEARTBEAT_STALE_S)
+        wd.decide(self.harness.storage, self.harness.deps, state)
+        self.assertEqual(2, len(state['notice_pending']))
+        self.assertEqual(2, len({n['id'] for n in state['notice_pending']}))
+
+    def test_unreadable_heartbeat_is_a_notice_rather_than_an_exception(self):
+        self.advance(wd.HEARTBEAT_STALE_S)
+        state = wd.initial_state()
+        with mock.patch.object(self.harness.storage, 'read_bytes_bounded', side_effect=PermissionError()):
+            wd._observe_magistrate_heartbeat(self.harness.storage, state, self.harness.clock.wall, self.lock)
+        self.assertEqual('unreadable', state['magistrate_heartbeat']['status'])
+        self.assertEqual('magistrate_heartbeat_stale', state['notice_pending'][0]['kind'])
+
+    def test_resident_supervisor_also_reads_heartbeat_without_changing_standdown(self):
+        plan = self.make_plan()
+        supervisor = self.supervisor(plan)
+        supervisor._cached_remote_stop = lambda _mono: self.harness.stop
+        self.advance(wd.HEARTBEAT_STALE_S + 1)
+        self.assertTrue(supervisor.step())
+        self.assertTrue(supervisor.state['magistrate_heartbeat']['stale'])
+        self.assertEqual('magistrate_heartbeat_stale', supervisor.state['notice_pending'][0]['kind'])
+        self.assertEqual('ACTIVE', supervisor.state['state'])
+        self.assertEqual([], self.harness.processes.signals)

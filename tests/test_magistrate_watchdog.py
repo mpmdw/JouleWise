@@ -1629,7 +1629,8 @@ class SupervisorTests(WatchdogTestCase):
         self.assertIn((100, signal.SIGKILL), self.harness.processes.signals)
         self.assertEqual(self.harness.census_calls, 1, "KILL must be followed by production census")
         self.assertEqual(supervisor.state["state"], "FENCED")
-        self.assertEqual([item["kind"] for item in supervisor.state["notice_pending"]], ["forced_standdown"])
+        self.assertEqual([item["kind"] for item in supervisor.state["notice_pending"]],
+                         ["magistrate_heartbeat_stale", "forced_standdown"])
 
     def test_forced_hold_polls_child_to_reap_defunct_owner(self) -> None:
         plan = self.make_plan()

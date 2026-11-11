@@ -130,6 +130,7 @@ USAGE_BACKOFF_S = (900, 1800, 3600, 7200, 7200)
 # W-01 (measurement-system audit 2026-11-10): operational escalation,
 # never permission to launch over an unreadable/possibly armed plan.
 UNSAFE_HOLD_DWELL_S = 15 * 60
+HEARTBEAT_STALE_S = 15 * 60
 UNSAFE_STATES = frozenset({"HOLD_UNSAFE", "HOLD_PLAN_UNREADABLE", "HOLD_PLAN_MALFORMED",
                           "HOLD_PLIST_UNREADABLE", "HOLD_CONFLICT", "HOLD_LOCK",
                           "HOLD_PROCESS_TABLE", "HOLD_DESK_FENCE", "STRANDED"})
@@ -2236,6 +2237,7 @@ def _decide(
     if stop.state not in {"CLEAR", "NOT_PROBED"}:
         return Decision("NETWORK_UNCERTAIN", stop.detail, adopt=owner is not None)
     if owner is not None:
+        _observe_magistrate_heartbeat(storage, state, wall, lock)
         return Decision("ACTIVE", f"owned pid {owner.pid} is live", adopt=True)
     if wall.timestamp() < float(state.get("next_eligible_epoch_s", 0.0)):
         waiting_state = (
@@ -2282,6 +2284,56 @@ def _queue_safety_notice(storage, state, now, *, notice_id, kind, reason):
         "schema": EVENT_SCHEMA, "kind": "safety_notice", "notice_id": notice_id,
         "notice_kind": kind, "reason": reason, "epoch_s": now.timestamp(),
     })
+
+
+def _observe_magistrate_heartbeat(storage, state, now, lock):
+    """W-02: a live PID alone is not session progress. Notice only; no kills.
+
+    Wire: PID ACTIVATION_ID EPOCH_SECONDS, as the magistrate prompt requests.
+    Old activations, unreadable/malformed/future stamps cannot prove liveness.
+    """
+    activation, pid = str(lock.get("activation_id")), lock.get("pid")
+    watch = state.get("heartbeat_watch")
+    if not isinstance(watch, dict) or (watch.get("activation_id"), watch.get("pid")) != (activation, pid):
+        watch = {"activation_id": activation, "pid": pid, "first_observed_epoch_s": now.timestamp(),
+                 "episode": 0, "notified": False}
+        state["heartbeat_watch"] = watch
+    launched = lock.get("activation_spawn_epoch_s", lock.get("launch_epoch_s"))
+    if isinstance(launched, bool) or not isinstance(launched, (int, float)) or not math.isfinite(launched):
+        launched = watch["first_observed_epoch_s"]
+    status, epoch = "missing", None
+    try:
+        raw = storage.read_bytes_bounded(storage.root / "heartbeat", 4096)
+        if len(raw) > 4096:
+            raise ValueError("heartbeat oversized")
+        fields = raw.decode("utf-8").split()
+        if len(fields) != 3:
+            raise ValueError("heartbeat shape")
+        if fields[0] != str(pid) or fields[1] != activation:
+            status = "identity_mismatch"
+        else:
+            candidate = float(fields[2])
+            if not math.isfinite(candidate) or candidate < launched or candidate > now.timestamp() + 5:
+                raise ValueError("heartbeat epoch")
+            epoch, status = candidate, "observed"
+    except FileNotFoundError:
+        pass
+    except (OSError, ValueError, UnicodeError):
+        status = "unreadable"
+    age = max(0.0, now.timestamp() - (epoch if epoch is not None else launched))
+    stale = age >= HEARTBEAT_STALE_S
+    state["magistrate_heartbeat"] = {"activation_id": activation, "pid": pid, "status": status,
+                                     "epoch_s": epoch, "age_s": age, "stale": stale,
+                                     "observed_epoch_s": now.timestamp()}
+    if stale and not watch["notified"]:
+        watch["episode"] += 1
+        _queue_safety_notice(storage, state, now,
+                             notice_id=f"heartbeat-{activation}-{pid}-{watch['episode']}",
+                             kind="magistrate_heartbeat_stale",
+                             reason=f"activation {activation} pid {pid}: heartbeat {status}, age {age:.0f}s")
+        watch["notified"] = True
+    elif not stale:
+        watch["notified"] = False
 
 
 def _surface_unsafe_decision(storage, deps, state, decision, now):
@@ -2763,6 +2815,7 @@ class ResidentSupervisor:
         exit_code = self.child.poll()
         if exit_code is not None:
             return self._finish_child(exit_code, now)
+        _observe_magistrate_heartbeat(self.storage, self.state, now, self.lock_record)
 
         uncertain = clock_uncertain(self.state, now, monotonic)
         if uncertain:
