@@ -64,9 +64,9 @@ def source(fid):
     if fid == 'P1-AUTO-CATCHES':
         return 'docs/process_traces/2026-10-27-pipeline-audit/segments.json and SYNTHESIS.md (through 2026-10-27, historical evidence only); docs/process/gate_policy.md rule 9 pruning tallies in session records after 2026-10-27 (RUN_STATE magistrate RECORD.md files and docs/run_reports/)'
     if fid == 'P1-AUTO-REPLAY':
-        return f'replay derivations of the drift bar and the outside-processor exclusion in {B6} (S-8 derivation; RUN_STATE item 42) and the primary-block rehearsal replays they cite'
+        return f'replay counts, structure only, from {B6}: the drift bar in §9.5 item 7 (lines 1046-1054) and the outside-processor exclusion, S-8 (lines 765-774; RUN_STATE item 42); both on the 77 rehearsal runs named in the revision of 2026-10-15 (lines 32-43)'
     if fid == 'P1-AUTO-BLINDCHECK':
-        return 'the structure-only check of RL-7 (g), made by RL-24 seat 11 and recorded before the BYTES stage-1 commitment, at origin/audit/2026-11-10-fable RESEARCH-LEAD-DECISIONS.md; printed whichever way it falls'
+        return 'REQUIRED, not yet made: the structure-only check of RL-7 (g), to be made by RL-24 seat 11 and recorded before the BYTES stage-1 commitment (origin/audit/2026-11-10-fable RESEARCH-LEAD-DECISIONS.md); printed whichever way it falls'
     if fid.startswith('P1-AUTO-'):
         return 'process evidence through November: docs/process/gate_policy.md; docs/process_traces/2026-10-27-pipeline-audit/ (historical evidence only); RUN_STATE items 108 and 181; docs/analysis/b5/DEVIATION-LOG.md; RL-5 items 3-4 and RL-24 seat 9 at origin/audit/2026-11-10-fable (full rewrite and evidence adjudication pending; BLINDCHECK requires its own recorded check)'
     if fid.startswith('P1-ID-') or fid == 'CP-X01-identity':

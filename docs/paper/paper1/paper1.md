@@ -1188,8 +1188,10 @@ models with two passes as a labelled sensitivity line ({{FILL: P1-BY-H2-TWOPASS 
 This study was designed, implemented, collected, reviewed and written by AI agents working under one human
 researcher. The researcher set the research direction, the methodological requirements (raw evidence kept for
 every run, gross energy as the headline basis, a named measurement boundary on every number, no claim that cannot
-be audited) and the process policy, and decided every question that changed what was measured or claimed.
-Coordination was a **lead** role held by interactive agent sessions, one after another and for a time two at
+be audited) and the process policy. The researcher was the escalation point for changes to what is measured or
+claimed (registered constants, the deciding contrast, the model, the exclusion rules, results the design does
+not cover and science-design forks), and from 10 November 2026 delegated research-design and paper-bound rulings
+to a research-lead session (below). Coordination was a **lead** role held by interactive agent sessions, one after another and for a time two at
 once (a project lead and a primary-block lead). The lead decomposed the work, assigned it,
 adjudicated design questions, chose the review gate each change passed before merge and kept the project's
 record. **Worker** sessions, drawn from two model families from different vendors ({{FILL: P1-AUTO-MODELS | the model families and versions used for the lead, research-lead, supervisory, implementation, review and judgment roles over the study period}}), implemented code against written specifications, reviewed each other's work, wrote
@@ -1199,7 +1201,8 @@ ruled before it bound. From 10 November 2026 a single **research-lead** session'
 binding record for research-design and paper-bound rulings. A ruling by any other session is a proposal until
 that log enters it. This section was written by a seat that log assigned.
 <!-- FACT H17: R2P P4. Roles and gates: docs/process/gate_policy.md:3-6 (Ed's policy, 2026-10-27), :37-39
-(one executing refuter; a judge only where a registration requires one), :49-60 (amendment: the lead picks the
+(one executing refuter; a judge only where a registration requires one, or where the refuter's executed result
+contradicts the lead on a counting or exclusion rule), :49-60 (amendment: the lead picks the
 gate for each change; a refuter only when the text changes what is computed, excluded or counted). Two leads at once: RUN_STATE item 102 (Ed to "the second laptop session joulewise-28"),
 item 108 ("joulewise-28, as block-5 lead"), item 165 ("block-5 lead, M4 Air analysis box"). Cold judges: item 42
 (replication registration, "cold gate by two blind judges"), item 69 (BYTES pass 1, "registration cold gate ...
@@ -1207,22 +1210,29 @@ blind, executing"), item 85 (BYTES pass 2, registration section 21). Research le
 PST: the research lead's decision log is "the single binding record for research-design and paper-bound
 rulings"; any other ruling "is a proposal until the research lead enters it in that log"), item 252 (Ed,
 2026-11-10: "def fable 5.2 should be the final say for anything paper bound"), item 256b (Ed approved E1-E6 as
-the research lead recommended); RL-24 seat 9 assigns this section. -->
+the research lead recommended); RL-24 seat 9 assigns this section. Escalation list: gate_policy.md:54-57
+(science-design forks; changes to what a registration computes, excludes or counts) and RUN_STATE item 181
+("Escalate to Ed ... only for": registered constants, the deciding contrast, the model, the exclusion rules; a
+result the design does not cover); delegation: item 257 ("have fable lead all research design work"), item
+256b ("If Fable recommends them, go ahead"). -->
 
 On the **measurement laptop**, a **headless supervisory agent** did the desk work between sessions. A launchd
-watchdog evaluates a short tick every 300 s and, when a launch is safe, starts a fresh headless session. Each such
-activation reads the project's state file, takes the next permitted step, writes a record and exits. An agent
+watchdog evaluates a short tick every 300 s and, when a launch is safe, starts a fresh headless session. A working
+activation reads the project's state file, takes the next permitted step, writes a record and exits; a short
+launch that finds nothing to do can exit without a record. An agent
 census on that laptop refuses an arm while any agent process is alive. What it does to a session already running
 differed between collections. In the primary block an agent sighting during the chain stopped it. In the
-replication and BYTES the chain paused, resumed after 600 s with no agent, and stopped once 7,200 s had been spent
-paused. Interactive agent sessions also ran on the measurement laptop at times, and the census caught them
+replication and BYTES the chain paused, resumed after 600 s with no agent, and stopped once 7,200 s in total had
+been spent paused. Interactive agent sessions also ran on the measurement laptop at times, and the census caught them
 (Section 8.3). On the analysis laptop, agents ran blind dry runs over real custody under the user account that
 holds custody, so custody was kept by rule rather than by the file system. Development and review also ran
 locally; cloud machines were used for development, review, synthetic tests and continuous integration. This is a
 separation of permitted activities and reading rules, not complete separation of agents from data by machine.
 <!-- FACT S9-01: docs/process/MAGISTRATE_WATCHDOG.md:3 (`com.joulewise.magistrate`, "a short Python tick at load
-and every 300 seconds"; "A safe tick forks a new session"). Activation pattern: RUN_STATE items 41-76 (each
-"Magistrate activation <id> (Opus 5.5, headless, ...)" with its own RECORD.md). Census stops the chain in the
+and every 300 seconds"; "A safe tick forks a new session"). Activation pattern: RUN_STATE items 41-76 (working
+activations "Magistrate activation <id> (Opus 5.5, headless, ...)" with a RECORD.md); docs/orchestration.md:141-142
+("A headless relaunch that finds nothing to do writes no record"); items 51, 52 and 59 ("No record file (short
+launch)"). The pause limit is cumulative: agent_pause.py:55-88. Census stops the chain in the
 primary block: joulewise/b5/driver.py:1272-1276 at the primary claim head c27485347 ("POSITIVE ... the chain
 stops"); no pause class at that commit. Pause in the replication and BYTES: joulewise/b6/agent_pause.py:12-13
 (`PAUSE_RESUME_S = 600`, `PAUSE_LIMIT_S = 7200`; "ten clean minutes to resume, two paused hours total") and
@@ -1246,7 +1256,7 @@ standing authority over when to collect.
 | Collection | Sessions armed by | Agent's part |
 |---|---|---|
 | Primary block, 8 to 12 October 2026 | An agent. Each of the 11 recorded arms was performed by a headless supervisory agent activation. | Under the block's written brief, the activation ran the pre-arm checks, sent the arm notice and installed two launchd jobs: a night job that started the session program at a calendar t0, and a dead-man job. It armed only packs that a program-read release line, set by recorded gates, released. |
-| Replication, 17 to 21 October 2026 | The scheduled loop program. | An activation loaded the loop on 17 October and reloaded it after a fix the same evening. The loop then pre-checked each session, sent the arm notice, waited 1,800 s for the researcher's veto, checked again and started the session, until its terminal state, reached once nine sessions counted. |
+| Replication, 17 to 21 October 2026 | The scheduled loop program. | An activation loaded the loop on 17 October and reloaded it after a fix the same evening. The loop then pre-checked each session, sent the arm notice, waited at least 1,800 s for the researcher's veto, checked again and started the session, until its terminal state, reached once nine sessions counted. |
 | BYTES, 25 to 30 October 2026 | The scheduled loop program, under its BYTES configuration. | An activation loaded the loop for pass 1 on 25 October; another resumed it for pass 2 on 28 October. The loop armed the BYTES sessions as above until all 12 sub-packs counted. |
 
 The loop runs every 300 s under launchd. It could also start a headless agent session at fixed desk points, and
@@ -1292,10 +1302,14 @@ these failure modes; each is mechanical, recorded, or both.
    in a custody map; everything released during collection was structure only, and analysis code was written and
    repaired by sessions that had read no restricted value (Section 5.6). BYTES added hidden multiplicative offsets
    and requires held-out rows to stay withheld until its predictions are committed (Section 7.3).
-3. **Physics refuses; everything else is recorded.** Only a directly measured physical hazard can stop collection
-   or remove data, and the presence of an AI agent process on the measurement laptop is one of those hazards: the
-   arm refuses while one is alive, and a running session stops (primary block) or pauses (replication and BYTES),
-   as Section 8.1 describes. Every other condition is a flag with one registered effect. This removes the
+3. **Physics refuses; a short registered list of other grounds excludes; everything else is recorded.** Only a
+   directly measured physical hazard stops collection, and the presence of an AI agent process on the measurement
+   laptop is one of those hazards: the arm refuses while one is alive, and a running session stops (primary block)
+   or pauses (replication and BYTES), as Section 8.1 describes. Data are removed only on a physical hazard or on
+   the registered grounds beside it: in the primary block, that a number would be wrong or could not be attributed
+   to what it claims to measure; in the replication, that the number is undefined, that the data are not of the
+   registered model, runtime or code, the registered drift screen, or structural failure of the collection code.
+   Every other condition is a flag with one registered effect. This constrains, rather than removes, the
    discretion through which an agent could select data.
 4. **Executing review of number-bearing code.** From 27 October 2026, code that can compute, select or exclude a
    published number is reviewed by two sessions from different model families, launched together and instructed
@@ -1304,13 +1318,17 @@ these failure modes; each is mechanical, recorded, or both.
 5. **Independent recomputation and a twin.** Separate code recomputes the primary block's core arithmetic with
    recorded collection-time judgments as inputs; uncovered quantities require separate checks (Section 5.7).
    BYTES requires agreement with its independent twin (Section 7.3), against a tolerance fixed in advance.
-6. **Fail-closed refusals with reasons.** A missing fingerprint, a malformed record or an undefined estimator
-   input produces a named refusal, never a default value; a refused cell is printed as unavailable with its reason,
-   never as zero.
+6. **Fail-closed refusals with reasons.** In the primary block's registered analysis, a refusal at any step stops
+   the steps after it. A tooling refusal is repaired blind and the step re-runs on identical bytes; a refusal that
+   is a registered scientific outcome is the result and is printed as such.
 7. **Pre-written outcome text.** The registrations fix specified sentences, and the claims ladder caps claim
    strength (Section 4.8). The draft's additional branch prose was written before release, at commit `a1a5029fb`
    (tag `paper1/blind-draft-2026-10-27`), after primary collection, with results as placeholders. Corrections made after release are stated in Section 1.2.
-<!-- FACT H18: R2P P3/P5/P6; RL-1/RL-5; sources as H03/H09/H12. Item 3: as FACT S9-01. Item 4:
+<!-- FACT H18: R2P P3/P5/P6; RL-1/RL-5; sources as H03/H09/H12. Item 3: as FACT S9-01 for the census;
+exclusion grounds registration_block5.md:4469-4473 (PHYSICS and NUMBER_INTEGRITY) and
+docs/registrations/block6_replication_DRAFT.md:551-559 (§8.1: P plus N, W, D, S). Item 6:
+configs/campaigns/v5_claim_25g83/analysis_plan_block5.md:174-178 ("Refusals"), softened from the blind draft's
+universal no-default/no-zero wording, which seat 9 could not source. Item 4:
 docs/process/gate_policy.md:1 (binding 2026-10-27) and :28-34 (rule 3: "Two executing reviews from different model
 families, launched together, each told to probe and mutate"; regression test and counterfactual). -->
 
@@ -1328,41 +1346,61 @@ number, with what each taught. The record runs to 10 November 2026.
   captured. The headless supervisory
   agent's own sessions were bound by the same rule: while the loop was pre-checking, arming or collecting, an
   activation had to exit at once.
-  <!-- FACT H19: RL-5 item 3; paper-audit C-7; RL-40 (the "shell guard" clause stays out: seat 9 found no source).
+  <!-- FACT H19: RL-5 item 3; paper-audit C-7; RL-40 (the "shell guard" clause stays out: RUN_STATE item 80
+  (1) says Ed installs a `~/.zshrc` guard keyed to `collection.active`, snippet in issue #589, and pipeline-audit
+  CRITIQUE.md:27-35 describes its condition, but no record shows it installed or refusing anything, and seat 9
+  did not inspect the home directory; the blind draft's "none corrupted a kept number" also stays out: SYNTHESIS.md:15
+  calls each census hit to 27 October "a real contaminant" in an unadopted proposal and does not address kept
+  numbers).
   RUN_STATE item 16 (BETA attempt 2: "A `claude` session opened at the keyboard at 13:28 PDT stopped the chain
   2 h 32 min after t0"; not claim-usable); item 78 (r1-bytes-s6-p1: `codex update` left an app-server daemon;
   "the fence paused 2 h, then ended the session"; "not counting"); items 67 and 158 (arms refused at t0 by the
   census, zero runs / "nothing captured"); item 78's next-activation pointer (RUN_STATE "(1) BYTES ...: if the loop
   is in PRECHECK, ARM_WAIT, SMOKE_* or SESSION_RUN, exit at once, quietly (a live agent on the Mac pauses the
   pre-check ...)"). -->
-- **Reviews that executed code caught the defects that mattered.** Over the study period, the defects that could
-  have changed a number were found by reviewers that ran the code on realistic inputs, or by running the pipeline
-  itself: a reference run silently dropped when a file failed to read; a reference request's energy integrated over
-  the wrong span; the twin implementation diverging from the analysis on compressed input. Reviews of documents and
-  bookkeeping, serial re-reviews and multi-model councils on process questions added days and caught little
-  ({{FILL: P1-AUTO-CATCHES | counts of review catches by review type (executing, reading-only, council) and by severity, from the pipeline audit's segments (through 27 October 2026) and the gate-policy pruning tallies in session records after it}}). Reading reviews could also repeat an error: for a later study on the same laptop,
+- **Reviews that executed code caught the defects that mattered.** The 27 October review of the October record
+  found that the defects able to change a number had been found by reviewers that ran the code on realistic
+  inputs, or by running the pipeline itself. Its examples: a reference run silently dropped when a file failed to read; a reference request's energy integrated over
+  the wrong span; the twin implementation diverging from the analysis on compressed input. By the same review, reviews
+  of documents and bookkeeping, serial re-reviews and multi-model councils on process questions added time and
+  little protection ({{FILL: P1-AUTO-CATCHES | counts of review catches by review type (executing, reading-only, council) and by severity, from the pipeline audit's segments (through 27 October 2026) and the gate-policy pruning tallies in session records after it}}). Reading reviews could also repeat an error: for a later study on the same laptop,
   several model documents and cross-reviews stated that the external meter was outside the power path, and the
   researcher corrected them. Late review rounds mostly found defects in the previous round's fixes, but some were
   real, so a hard cap on rounds would have been unsafe. The project therefore kept two parallel executing reviews
-  from different model families for number-bearing code and reduced everything else to continuous integration and
-  the change's own tests.
+  from different model families for number-bearing code, and reduced reviews of documents, records and code that
+  cannot change a number to continuous integration and, for code, the change's own regression test.
   <!-- FACT S9-03: docs/process/gate_policy.md:13-21 ("What the October record showed": the #416 NEG-8
   reference-span blocker, RUN_STATE item 69; a reference silently dropped on a read failure; the twin diverging on
   compressed input, #573; late rounds; councils) and :25-34 (rules 1-3). Meter path: RUN_STATE item 210 of
   2026-11-07 (Ed, verbatim: "the usb c power meter is between the magsafe cord and the wallbrick, so it does catch
   all power"); docs/capstone/TALK-OUTLINE-v2.md H12. -->
-- **Rules must be replayed on real non-claim data before they bind.** Several registered lines, written from first
-  principles, proved wrong when replayed on rehearsal sessions: a drift bar that every session failed by
-  construction, because its widened difference is always at least the mean width of its two ranges; and an
-  exclusion for outside processor work that would have removed a large fraction of quiet rehearsal runs
-  ({{FILL: P1-AUTO-REPLAY | the replay counts for these two rules, from the replication registration's derivations}}). Both were changed, before any claim data existed, to disclosures with the registered
-  rule's result printed beside the registered value.
+- **Rules must be replayed on real non-claim data before they bind.** Two registered lines, written from first
+  principles, proved wrong when replayed on rehearsal sessions: the primary block's drift bar, which every session
+  fails by construction, because its widened difference is always at least the mean width of its two ranges; and the
+  replication's exclusion for outside processor work, which would have removed a large fraction of quiet rehearsal runs
+  ({{FILL: P1-AUTO-REPLAY | the replay counts for these two rules, from the replication registration's derivations}}). Both were changed in the
+  replication registration's revision of 15 October 2026, after primary collection had closed and before
+  replication collection began, and only for the replication and later packs. The primary block's drift bar became
+  a disclosure there, and the replication decides drift by its own registered drift screen; the policy file keeps
+  the bar's bytes, so the primary block's plan digests stay identical. The outside-processor exclusion became a
+  flag for the replication's first round, with the registered rule's result printed as a labelled alternative.
+  <!-- FACT S9-13: docs/registrations/block6_replication_DRAFT.md:32-43 (revision of 2026-10-15; "the NEG-8
+  bracket decision is disclosure only (§9.5 item 7)"; the outside-processor line, S-8), :765-774 (replay of the
+  registered outside-processor rule; "flag only (governs for round 1)"), :1046-1054 (§9.5 item 7: "that widened
+  difference is at least the mean width of the two ranges, so the bar fails every session by construction"; "the
+  policy file keeps the bar's bytes so that block 5's plan digests stay identical, packs registered after these
+  three drop the bar, and drift is decided by the D1 screen's own bound"); RUN_STATE item 31 (primary collection
+  closed 2026-10-12) and item 45 (replication round 1 armed 2026-10-17); item 42 (the outside-processor rule printed
+  "as a labelled alternative"). Replay values are not reproduced. -->
 - **An instrument assumption can be silently false.** An early clock mapping assumed that the wall clock and the
-  monotonic clock advance at the same rate; that assumption could move every fitted edge in the same direction. It
-  was replaced by the rate-aware mapping of Section 4.2, and the energies of captures reduced under the old mapping
-  were voided for claim use.
-  <!-- FACT S9-04: carried unchanged from a1a5029fb; seat 9 did not re-derive this bullet (no number in it). The
-  rate-aware anchor is queued in docs/decision_log.md D-099. -->
+  monotonic clock advance at the same rate; that assumption could move every fitted edge in the same direction. A
+  consult in August 2026 found the rate difference larger than the anchor margins and queued a rate-aware design;
+  the analysis uses the rate-aware fit of Section 4.2.
+  <!-- FACT S9-04: docs/decision_log.md:6222-6230 (D-099 item 2: consult of 2026-08-01; "the unmodeled controller
+  wall/monotonic rate ... exceeds every margin"; "Rate-aware anchor design is a queued desk/paper item");
+  paper1.md §4.2 ("A rate-aware fit retains every straight-line mapping between the clocks"). The blind draft's
+  "replaced" and "voided for claim use" clauses are removed: seat 9 found no record of either event (the Sol
+  review of seat 9, fix 3). -->
 - **A leaked test process changes the machine.** An orphaned monitoring process that a test had left running was
   found on the quiet machine before the replication's first round, and the replication's background-load constant
   was measured only after it was gone. The supervisory watchdog now counts orphaned test processes.
@@ -1378,16 +1416,19 @@ number, with what each taught. The record runs to 10 November 2026.
   <!-- FACT S9-06: RUN_STATE item 249 (activation 30693ba4, 2026-11-10: "R1 ... NEVER MEASURED"; `status: refused`,
   `host_lock_unavailable`; "`night/result.json` still says `verdict: GO` ... and the courier sent normally, so
   nothing flagged the loss"; "Why it sat 2.5 days: the watchdog held in HOLD_UNSAFE ... because it could not
-  parse the installed plists' `ac_powermode` key"); items 250-251 (the next arm's refusal and its corrected
-  diagnosis). No measured value of that study is used. -->
+  parse the installed plists' `ac_powermode` key"); items 250-251 concern a distinct later refusal and are not part of
+  this cause. No measured value of that study is used. -->
 - **Analysis runtime is a defect.** One run of the primary block's blind analysis died after 18.5 h when parallel
   agent test runs filled the disk with about 110 GB of fixtures. Another took 27.1 h. A rewrite ran in 1 h 46 min
-  and was shown equivalent to the 27.1 h run under a fixed comparator. Agents sharing a machine share its
-  disk, and a slow analysis is a process failure to be profiled, not waited out.
+  and was shown equivalent to the 27.1 h run under a fixed comparator. The two runs were on differently
+  loaded machines and the faster was niced, so the gain is not attributed to the rewrite alone, and the comparison
+  of the last steps was still pending at that record. Agents sharing a machine share its disk, and a slow analysis is a process failure to be profiled, not waited out.
   <!-- FACT S9-07: RUN_STATE item 165 ("Attempt D (r1, item 160) died at step 9 on ENOSPC after 18.5 h. Parallel
   agent test runs had filled the disk with about 110 GB of fixtures"; "Candidate 1 ran in 1 h 46 min (attempt E
   took 27.1 h) and is EQUIVALENT to attempt E under the fixed comparator"); D-188;
-  docs/process_traces/2026-11-04-d188-retrospective/RETROSPECTIVE.md. -->
+  docs/process_traces/2026-11-04-d188-retrospective/RETROSPECTIVE.md:9-15 ("Not all of that speedup is the
+  rewrite. E ran on a more loaded machine than candidate 1, and candidate 1 was niced 5"; "The final comparison,
+  which also covers steps 9b, 10 and 11, waits"). -->
 - **A release hold can be traced blind.** A release check of the primary block held on 1,001 failing comparator
   rows in 11 families. A trace that read only leaf identifiers, verdicts, reasons and coarse difference classes
   attributed every row to one of six defects from structure alone; the last remaining defect was fixed in a later
@@ -1409,19 +1450,23 @@ number, with what each taught. The record runs to 10 November 2026.
   <!-- FACT S9-10: RUN_STATE item 181 ("Item 176 (2)'s and item 178 (1)'s 'the laptop lead decides' re-run holds
   were the lead over-reaching. They are withdrawn"); item 257 ("`docs/process_traces/2026-11-10-r1-g0/10-fable52-
   ruling.md` is therefore a proposal"; "Magistrates ... do not convene their own deciding seat"). -->
-- **Process overhead was the critical path.** Collection rarely limited progress; serial review and gating did.
-  The project's gate policy was rewritten during the study, before any primary, replication or BYTES result was
-  seen, to fit the depth of review to whether a change can alter a number (Section 8.2, item 4).
+- **Review overhead held work back.** The 27 October review of the October record found that serial review rounds
+  and gating had added time with little protection. The project's gate policy was rewritten then, before any primary,
+  replication or BYTES result was seen, to fit the depth of review to whether a change can alter a number
+  (Section 8.2, item 4). Analysis runtime was a second bottleneck (above).
   <!-- FACT S9-11: docs/process/gate_policy.md:8 ("This policy was made before any block-5, block-6 or BYTES result
-  was seen"); docs/process_traces/2026-10-27-pipeline-audit/SYNTHESIS.md. -->
+  was seen") and :20-21 ("Councils on process questions, reviews of docs and bookkeeping, and serial re-reviews added
+  time and little protection"); docs/process_traces/2026-10-27-pipeline-audit/SYNTHESIS.md (proposals, not adopted;
+  corrected by CRITIQUE.md). -->
 
 {{FILL: P1-AUTO-BLINDCHECK | result of the check whether any held-out BYTES model's per-request duration or other timing was read before the stage-1 commitment (a process audit ran harvest readers on a held-out model's session); either "no held-out duration was read" with its evidence, or a disclosure of what was read, when, and that it could not change the committed lines}}
 
-The lesson we draw is that agents can run a measurement study with the rigour such a study needs only if the
-rigour is mechanical. Digests, custody maps, physical refusals and independent recomputation of the core
-arithmetic held whatever an individual agent believed; reviews and judgments helped most when they ran the code.
-Where a mechanical check was missing, as with a verdict carried from an earlier stage, the failure stayed unseen
-until someone read the record.
+The lesson we draw, an inference from this record rather than a demonstrated guarantee, is that agents can run a
+measurement study with the rigour such a study needs only if the rigour is mechanical. Digests, custody maps,
+physical refusals and independent recomputation of the core arithmetic are designed not to depend on what an
+individual agent believes; in the record above, reviews and judgments helped most when they ran the code. Where a
+mechanical check was missing, as with a verdict carried from an earlier stage, the failure stayed unseen until
+someone read the record.
 
 ## 9. Limitations
 
