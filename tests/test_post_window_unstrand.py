@@ -13,6 +13,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest import mock
 
 
 REPO = Path(__file__).resolve().parents[1]
@@ -244,15 +245,29 @@ sys.exit(int(os.environ.get("TEST_PS_RC", "0")))
         self.assertIn("DRY RUN", result.stdout)
         self.assert_blinded(result)
 
-    @unittest.skipUnless(sys.platform == "darwin" and Path("/usr/bin/caffeinate").exists(),
-                         "requires macOS caffeinate")
     def test_native_ps_clean_completed_window_under_caffeinate(self):
-        self.require_native_ps()
-        self.env.pop("UNSTRAND_PS")
-        result = subprocess.run(
-            ["/usr/bin/caffeinate", "-i", "/bin/bash", str(SCRIPT),
-             "--events", str(self.events), "--wait-seconds", "0", str(self.custody)],
-            cwd=REPO, env=self.env, capture_output=True, text=True, timeout=15)
+        # Retain this witness's name, but never acquire a real host assertion.
+        # The fake wrapper supplies caffeinate's childless-helper census while
+        # the real unstrand script runs against the existing synthetic ps seam.
+        self.env["TEST_PS_EXTRA_ROWS"] = (
+            f"4242 {{script}} /usr/bin/caffeinate -i {SCRIPT} {self.custody}\n")
+        real_run = subprocess.run
+        wrapper_calls = []
+
+        def fake_caffeinate(argv, **kwargs):
+            if argv[0] == "/usr/bin/caffeinate":
+                self.assertEqual(argv[1:3], ["-i", "/bin/bash"])
+                self.assertEqual(kwargs["env"], self.env)
+                wrapper_calls.append(argv)
+                return self.run_script()
+            return real_run(argv, **kwargs)
+
+        with mock.patch.object(subprocess, "run", side_effect=fake_caffeinate):
+            result = subprocess.run(
+                ["/usr/bin/caffeinate", "-i", "/bin/bash", str(SCRIPT),
+                 "--events", str(self.events), "--wait-seconds", "0", str(self.custody)],
+                cwd=REPO, env=self.env, capture_output=True, text=True, timeout=15)
+        self.assertEqual(len(wrapper_calls), 1)
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertIn("DRY RUN", result.stdout)
         self.assertFalse(self.log.exists())

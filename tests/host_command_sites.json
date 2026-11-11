@@ -1,0 +1,2210 @@
+[
+  {
+    "file": "joulewise/adapters/powermetrics.py",
+    "locator": "PowermetricsTelemetryAdapter.__init__:004ec7e0892e7838",
+    "command": "sudo",
+    "seam": "privilege_prefix/executable parameters; patch module subprocess.Popen for capture"
+  },
+  {
+    "file": "joulewise/adapters/powermetrics.py",
+    "locator": "PowermetricsTelemetryAdapter.__init__:24e5e1c2bbef5653",
+    "command": "sudo",
+    "seam": "privilege_prefix/executable parameters; patch module subprocess.Popen for capture"
+  },
+  {
+    "file": "joulewise/align/analysis/budget_pilot.py",
+    "locator": "frontier_lines:127a51b03ee80741",
+    "command": "kill",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/align/apple/external_volume.py",
+    "locator": "prepare_plan:136f44584c694de1",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/align/apple/external_volume.py",
+    "locator": "prepare_plan:2b868a2f3773f0e8",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/align/apple/external_volume.py",
+    "locator": "prepare_plan:48660b4c3d1c871c",
+    "command": "pmset",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/align/apple/external_volume.py",
+    "locator": "prepare_plan:4c8df13ddef8c85a",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/align/apple/external_volume.py",
+    "locator": "prepare_plan:5d4a9c4047529e4e",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/align/apple/external_volume.py",
+    "locator": "prepare_plan:9e95f2f544d41af9",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/align/apple/external_volume.py",
+    "locator": "prepare_plan:a50dbe7d9b4ffa57",
+    "command": "defaults",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/align/apple/external_volume.py",
+    "locator": "prepare_plan:a50dbe7d9b4ffa57",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/align/apple/external_volume.py",
+    "locator": "prepare_plan:eee93aa4b0c6fd45",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/align/apple/powermode.py",
+    "locator": "<module>:09c1cd748df121a6",
+    "command": "pmset",
+    "seam": "runner parameter on observe/read/admit/enter/restore; module constants consumed through runner"
+  },
+  {
+    "file": "joulewise/align/apple/powermode.py",
+    "locator": "<module>:24e5e1c2bbef5653",
+    "command": "sudo",
+    "seam": "runner parameter on observe/read/admit/enter/restore; module constants consumed through runner"
+  },
+  {
+    "file": "joulewise/align/apple/powermode.py",
+    "locator": "<module>:37c967b5b585729f",
+    "command": "pmset",
+    "seam": "runner parameter on observe/read/admit/enter/restore; module constants consumed through runner"
+  },
+  {
+    "file": "joulewise/align/apple/powermode.py",
+    "locator": "<module>:3a778b0d07e1da60",
+    "command": "pmset",
+    "seam": "runner parameter on observe/read/admit/enter/restore; module constants consumed through runner"
+  },
+  {
+    "file": "joulewise/align/apple/powermode.py",
+    "locator": "<module>:3a778b0d07e1da60",
+    "command": "sudo",
+    "seam": "runner parameter on observe/read/admit/enter/restore; module constants consumed through runner"
+  },
+  {
+    "file": "joulewise/align/apple/powermode.py",
+    "locator": "<module>:541443a289d468bd",
+    "command": "pmset",
+    "seam": "runner parameter on observe/read/admit/enter/restore; module constants consumed through runner"
+  },
+  {
+    "file": "joulewise/align/apple/powermode.py",
+    "locator": "<module>:559db711a9b0c2ad",
+    "command": "pmset",
+    "seam": "runner parameter on observe/read/admit/enter/restore; module constants consumed through runner"
+  },
+  {
+    "file": "joulewise/align/apple/powermode.py",
+    "locator": "<module>:559db711a9b0c2ad",
+    "command": "sudo",
+    "seam": "runner parameter on observe/read/admit/enter/restore; module constants consumed through runner"
+  },
+  {
+    "file": "joulewise/align/apple/powermode.py",
+    "locator": "<module>:c463823381952a7c",
+    "command": "pmset",
+    "seam": "runner parameter on observe/read/admit/enter/restore; module constants consumed through runner"
+  },
+  {
+    "file": "joulewise/align/apple/powermode.py",
+    "locator": "admit_ac_powermode:b427feea4ddc1e26",
+    "command": "sudo",
+    "seam": "runner parameter on observe/read/admit/enter/restore; module constants consumed through runner"
+  },
+  {
+    "file": "joulewise/align/apple/powermode.py",
+    "locator": "enter_high_power:6f605eba9a4a7f11",
+    "command": "sudo",
+    "seam": "runner parameter on observe/read/admit/enter/restore; module constants consumed through runner"
+  },
+  {
+    "file": "joulewise/align/apple/powermode.py",
+    "locator": "observe_ac_powermode:070cb353a4abe854",
+    "command": "pmset",
+    "seam": "runner parameter on observe/read/admit/enter/restore; module constants consumed through runner"
+  },
+  {
+    "file": "joulewise/align/apple/powermode.py",
+    "locator": "observe_ac_powermode:533ead8587438c3e",
+    "command": "pmset",
+    "seam": "runner parameter on observe/read/admit/enter/restore; module constants consumed through runner"
+  },
+  {
+    "file": "joulewise/align/apple/powermode.py",
+    "locator": "read_ac_powermode:18bbd6f159d1ed22",
+    "command": "pmset",
+    "seam": "runner parameter on observe/read/admit/enter/restore; module constants consumed through runner"
+  },
+  {
+    "file": "joulewise/align/apple/powermode.py",
+    "locator": "restore_automatic:b802952a6d324fff",
+    "command": "sudo",
+    "seam": "runner parameter on observe/read/admit/enter/restore; module constants consumed through runner"
+  },
+  {
+    "file": "joulewise/align/apple/r1_runtime.py",
+    "locator": "<module>:541443a289d468bd",
+    "command": "pmset",
+    "seam": "BatteryJournal.runner / backend.run_cmd; parse_pmset_batt and battery_summary are text-only"
+  },
+  {
+    "file": "joulewise/align/apple/r1_runtime.py",
+    "locator": "<module>:76a35a4bd9cb5cbb",
+    "command": "pmset",
+    "seam": "BatteryJournal.runner / backend.run_cmd; parse_pmset_batt and battery_summary are text-only"
+  },
+  {
+    "file": "joulewise/align/apple/r1_runtime.py",
+    "locator": "BatteryJournal.sample:5fbe5d7bb62fa7b9",
+    "command": "pmset",
+    "seam": "BatteryJournal.runner / backend.run_cmd; parse_pmset_batt and battery_summary are text-only"
+  },
+  {
+    "file": "joulewise/align/apple/r1_runtime.py",
+    "locator": "battery_summary:caee7cd655748718",
+    "command": "pmset",
+    "seam": "BatteryJournal.runner / backend.run_cmd; parse_pmset_batt and battery_summary are text-only"
+  },
+  {
+    "file": "joulewise/align/apple/r1_runtime.py",
+    "locator": "parse_pmset_batt:869203f84a1a96ba",
+    "command": "pmset",
+    "seam": "BatteryJournal.runner / backend.run_cmd; parse_pmset_batt and battery_summary are text-only"
+  },
+  {
+    "file": "joulewise/align/frontier.py",
+    "locator": "frontier_agreement:ffdffa26f6f4606f",
+    "command": "kill",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/align/power/nvml.py",
+    "locator": "NvmlSampler.start:6bb832aaca53e200",
+    "command": "shutdown",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/align/prequal.py",
+    "locator": "<module>:d5173d5d0ce3e0aa",
+    "command": "pmset",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/align/prequal.py",
+    "locator": "check_launcher.fake_run:1b8938f8083e84a0",
+    "command": "launchctl",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/align/prequal.py",
+    "locator": "check_launcher:1b8938f8083e84a0",
+    "command": "launchctl",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/align/prequal.py",
+    "locator": "check_launcher:2d02131c2f35f25d",
+    "command": "launchctl",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/align/prequal.py",
+    "locator": "check_launcher:87e4c8ab536742ec",
+    "command": "python-isolated",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/align/prequal.py",
+    "locator": "check_launcher:ae17b9a737bf75ad",
+    "command": "launchctl",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/align/r0.py",
+    "locator": "markdown:4d5ec70908dde187",
+    "command": "pmset",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/align/r0_host.py",
+    "locator": "QuietGuard.check:502ee0a584ce0b0b",
+    "command": "launchctl",
+    "seam": "host_snapshot(run=...) / display_census(run=...)"
+  },
+  {
+    "file": "joulewise/align/r0_host.py",
+    "locator": "QuietGuard.check:ae17b9a737bf75ad",
+    "command": "launchctl",
+    "seam": "host_snapshot(run=...) / display_census(run=...)"
+  },
+  {
+    "file": "joulewise/align/r0_host.py",
+    "locator": "display_census:541443a289d468bd",
+    "command": "pmset",
+    "seam": "host_snapshot(run=...) / display_census(run=...)"
+  },
+  {
+    "file": "joulewise/align/r0_host.py",
+    "locator": "display_census:acb647b6f1798283",
+    "command": "pmset",
+    "seam": "host_snapshot(run=...) / display_census(run=...)"
+  },
+  {
+    "file": "joulewise/align/r0_host.py",
+    "locator": "display_census:bf6b444741079b85",
+    "command": "pmset",
+    "seam": "host_snapshot(run=...) / display_census(run=...)"
+  },
+  {
+    "file": "joulewise/align/r0_host.py",
+    "locator": "display_census:f64f8fd00a0648e1",
+    "command": "pmset",
+    "seam": "host_snapshot(run=...) / display_census(run=...)"
+  },
+  {
+    "file": "joulewise/align/r0_host.py",
+    "locator": "host_snapshot:0d98ba3c3a592d02",
+    "command": "pmset",
+    "seam": "host_snapshot(run=...) / display_census(run=...)"
+  },
+  {
+    "file": "joulewise/align/r0_host.py",
+    "locator": "host_snapshot:541443a289d468bd",
+    "command": "pmset",
+    "seam": "host_snapshot(run=...) / display_census(run=...)"
+  },
+  {
+    "file": "joulewise/align/r0_host.py",
+    "locator": "host_snapshot:76a35a4bd9cb5cbb",
+    "command": "pmset",
+    "seam": "host_snapshot(run=...) / display_census(run=...)"
+  },
+  {
+    "file": "joulewise/align/r0_host.py",
+    "locator": "host_snapshot:c463823381952a7c",
+    "command": "pmset",
+    "seam": "host_snapshot(run=...) / display_census(run=...)"
+  },
+  {
+    "file": "joulewise/align/w1_prequal.py",
+    "locator": "FakeHost.__call__:24e5e1c2bbef5653",
+    "command": "sudo",
+    "seam": "FakeHost.__call__ is itself the synthetic runner"
+  },
+  {
+    "file": "joulewise/align/w1_prequal.py",
+    "locator": "FakeHost.__call__:4227d8920c3e4625",
+    "command": "pmset",
+    "seam": "FakeHost.__call__ is itself the synthetic runner"
+  },
+  {
+    "file": "joulewise/align/w1_prequal.py",
+    "locator": "FakeHost.__call__:45a7953197b8ae95",
+    "command": "pmset",
+    "seam": "FakeHost.__call__ is itself the synthetic runner"
+  },
+  {
+    "file": "joulewise/align/w1_prequal.py",
+    "locator": "FakeHost.__call__:45a7953197b8ae95",
+    "command": "sudo",
+    "seam": "FakeHost.__call__ is itself the synthetic runner"
+  },
+  {
+    "file": "joulewise/align/w1_prequal.py",
+    "locator": "FakeHost.__call__:541443a289d468bd",
+    "command": "pmset",
+    "seam": "FakeHost.__call__ is itself the synthetic runner"
+  },
+  {
+    "file": "joulewise/align/w1_prequal.py",
+    "locator": "FakeHost.__call__:9d2be7ac15275504",
+    "command": "pmset",
+    "seam": "FakeHost.__call__ is itself the synthetic runner"
+  },
+  {
+    "file": "joulewise/align/w1_prequal.py",
+    "locator": "FakeHost.__call__:ae17b9a737bf75ad",
+    "command": "launchctl",
+    "seam": "FakeHost.__call__ is itself the synthetic runner"
+  },
+  {
+    "file": "joulewise/align/w1_prequal.py",
+    "locator": "FakeHost.__call__:c463823381952a7c",
+    "command": "pmset",
+    "seam": "FakeHost.__call__ is itself the synthetic runner"
+  },
+  {
+    "file": "joulewise/align/w1_prequal.py",
+    "locator": "FakeHost:2da4190ae6dec0fc",
+    "command": "launchctl",
+    "seam": "FakeHost.__call__ is itself the synthetic runner"
+  },
+  {
+    "file": "joulewise/align/w1_smoke.py",
+    "locator": "SmokeRunner.guards:ae17b9a737bf75ad",
+    "command": "launchctl",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/align/w1_smoke.py",
+    "locator": "SmokeRunner.in_window_faults:0ad70fd971de1688",
+    "command": "kill",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/align/w1_smoke.py",
+    "locator": "SmokeRunner.in_window_faults:0bfce5de2f178ed2",
+    "command": "kill",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/align/w1_smoke.py",
+    "locator": "SmokeRunner.in_window_faults:2744b757296dd99b",
+    "command": "kill",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/align/w1_smoke.py",
+    "locator": "SmokeRunner.in_window_faults:462bfeb0798f3074",
+    "command": "kill",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/align/w1_smoke.py",
+    "locator": "SmokeRunner.teardown_owned:86741a50f2495421",
+    "command": "launchctl",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/align/w1_smoke.py",
+    "locator": "SmokeRunner.teardown_owned:ae17b9a737bf75ad",
+    "command": "launchctl",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/align/w1_smoke.py",
+    "locator": "SmokeRunner.terminal:ae17b9a737bf75ad",
+    "command": "launchctl",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/arm_readiness.py",
+    "locator": "_histsem_rederive_pack_authentication:e1fd7f56a393b489",
+    "command": "python-isolated",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/arm_readiness.py",
+    "locator": "_launch_argv_matches:0672075787e402de",
+    "command": "caffeinate",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/arm_readiness_evidence.py",
+    "locator": "<module>:1100034de2cbaf6c",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/arm_readiness_evidence.py",
+    "locator": "<module>:1100034de2cbaf6c",
+    "command": "systemsetup",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/arm_readiness_evidence.py",
+    "locator": "<module>:2b7822c8043c760a",
+    "command": "systemsetup",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/arm_readiness_evidence.py",
+    "locator": "<module>:3ba6f6bbbadb0e3d",
+    "command": "systemsetup",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/arm_readiness_evidence.py",
+    "locator": "<module>:648ae5c0a3a3cb5e",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/arm_readiness_evidence.py",
+    "locator": "<module>:648ae5c0a3a3cb5e",
+    "command": "systemsetup",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/arm_readiness_evidence.py",
+    "locator": "_derive_doctrine_pin:1100034de2cbaf6c",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/arm_readiness_evidence.py",
+    "locator": "_derive_doctrine_pin:1100034de2cbaf6c",
+    "command": "systemsetup",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/arm_readiness_evidence.py",
+    "locator": "_execute_unittest_suite_subprocess:f2f4093de685bcef",
+    "command": "python-isolated",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/arm_readiness_evidence.py",
+    "locator": "_generator_command:cfa8b5d171c09408",
+    "command": "python-isolated",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/arm_readiness_evidence_t0.py",
+    "locator": "_derive_power:541443a289d468bd",
+    "command": "pmset",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/arm_readiness_evidence_t0.py",
+    "locator": "_derive_power:76a35a4bd9cb5cbb",
+    "command": "pmset",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/arm_readiness_evidence_t0.py",
+    "locator": "_derive_power:c463823381952a7c",
+    "command": "pmset",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/arm_readiness_evidence_t0.py",
+    "locator": "_derive_powermetrics:650aa89ad0060b30",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/arm_readiness_evidence_t0.py",
+    "locator": "_derive_powermetrics:868508abc39f6298",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/arm_readiness_evidence_t0.py",
+    "locator": "_derive_powermetrics:c6b4f9d80631983e",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/arm_readiness_evidence_t0.py",
+    "locator": "_derive_process_census:0672075787e402de",
+    "command": "caffeinate",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/arm_readiness_evidence_t0.py",
+    "locator": "_derive_process_census:fae9dc7232841220",
+    "command": "caffeinate",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/arm_readiness_evidence_t0.py",
+    "locator": "_launch_manifest:0672075787e402de",
+    "command": "caffeinate",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/arm_readiness_evidence_t0.py",
+    "locator": "_systemsetup_argv:24e5e1c2bbef5653",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/arm_readiness_evidence_t0.py",
+    "locator": "_systemsetup_argv:e4cd6a3107d1f763",
+    "command": "systemsetup",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/arm_readiness_evidence_t0.py",
+    "locator": "_thermal_probe:0d98ba3c3a592d02",
+    "command": "pmset",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/arm_readiness_evidence_t0.py",
+    "locator": "_thermal_probe:541443a289d468bd",
+    "command": "pmset",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/b5/driver.py",
+    "locator": "<module>:07935a92b5068149",
+    "command": "sudo",
+    "seam": "make_probes / probes.run; popen parameter for child launch"
+  },
+  {
+    "file": "joulewise/b5/driver.py",
+    "locator": "<module>:07935a92b5068149",
+    "command": "systemsetup",
+    "seam": "make_probes / probes.run; popen parameter for child launch"
+  },
+  {
+    "file": "joulewise/b5/driver.py",
+    "locator": "<module>:650aa89ad0060b30",
+    "command": "sudo",
+    "seam": "make_probes / probes.run; popen parameter for child launch"
+  },
+  {
+    "file": "joulewise/b5/driver.py",
+    "locator": "<module>:668741c8bca9cef3",
+    "command": "systemsetup",
+    "seam": "make_probes / probes.run; popen parameter for child launch"
+  },
+  {
+    "file": "joulewise/b5/driver.py",
+    "locator": "run_bounded:7b1e179a988e46dd",
+    "command": "kill",
+    "seam": "make_probes / probes.run; popen parameter for child launch"
+  },
+  {
+    "file": "joulewise/b5/driver.py",
+    "locator": "run_hazard_night:01a7335a61eea244",
+    "command": "caffeinate",
+    "seam": "make_probes / probes.run; popen parameter for child launch"
+  },
+  {
+    "file": "joulewise/b6/driver_lane.py",
+    "locator": "DriverLane.__init__:ae17b9a737bf75ad",
+    "command": "launchctl",
+    "seam": "DriverLane(run=..., launchctl_bin=...)"
+  },
+  {
+    "file": "joulewise/b6/lanes.py",
+    "locator": "Waker._bootstrap:1a4944e7aa45453d",
+    "command": "launchctl",
+    "seam": "Waker(run=...)"
+  },
+  {
+    "file": "joulewise/b6/lanes.py",
+    "locator": "Waker._bootstrap:ae17b9a737bf75ad",
+    "command": "launchctl",
+    "seam": "Waker(run=...)"
+  },
+  {
+    "file": "joulewise/b6/precheck.py",
+    "locator": "<module>:076e6298365618d7",
+    "command": "pmset",
+    "seam": "ctx.run parameter"
+  },
+  {
+    "file": "joulewise/b6/precheck.py",
+    "locator": "<module>:541443a289d468bd",
+    "command": "pmset",
+    "seam": "ctx.run parameter"
+  },
+  {
+    "file": "joulewise/b6/precheck.py",
+    "locator": "<module>:c463823381952a7c",
+    "command": "pmset",
+    "seam": "ctx.run parameter"
+  },
+  {
+    "file": "joulewise/b6/precheck.py",
+    "locator": "runtime_versions:c88bfb56c2beadd9",
+    "command": "python-isolated",
+    "seam": "ctx.run parameter"
+  },
+  {
+    "file": "joulewise/b6/sleep_guard.py",
+    "locator": "KeepAwake.start:175a05d35d6cb7d5",
+    "command": "caffeinate",
+    "seam": "KeepAwake(popen=..., run_command=...)"
+  },
+  {
+    "file": "joulewise/b6/sleep_guard.py",
+    "locator": "KeepAwake.start:eeab3b621b55ec4d",
+    "command": "caffeinate",
+    "seam": "KeepAwake(popen=..., run_command=...)"
+  },
+  {
+    "file": "joulewise/b6/sleep_guard.py",
+    "locator": "KeepAwake.verify:076e6298365618d7",
+    "command": "pmset",
+    "seam": "KeepAwake(popen=..., run_command=...)"
+  },
+  {
+    "file": "joulewise/b6/sleep_guard.py",
+    "locator": "KeepAwake.verify:541443a289d468bd",
+    "command": "pmset",
+    "seam": "KeepAwake(popen=..., run_command=...)"
+  },
+  {
+    "file": "joulewise/calibration_ledger.py",
+    "locator": "_stop_custody_worker:80730f9e4c2a3989",
+    "command": "kill",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/doctor.py",
+    "locator": "<module>:338f62ea33752c78",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/doctor.py",
+    "locator": "_sudo_policy_probe:24e5e1c2bbef5653",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/doctor.py",
+    "locator": "_sudo_policy_probe:e2b36c759375a153",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/doctor.py",
+    "locator": "_sudo_policy_probe:e37a46ed15c951f9",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/doctor.py",
+    "locator": "build_doctor_report:1566abee6c2dc3c5",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/doctor.py",
+    "locator": "build_doctor_report:53c563fcbf7a0322",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/environment.py",
+    "locator": "collect_environment_guard_observation:6a35f73108e8f2f8",
+    "command": "pmset",
+    "seam": "patch module _run (environment probes)"
+  },
+  {
+    "file": "joulewise/environment.py",
+    "locator": "collect_environment_guard_observation:9d2be7ac15275504",
+    "command": "pmset",
+    "seam": "patch module _run (environment probes)"
+  },
+  {
+    "file": "joulewise/environment.py",
+    "locator": "collect_environment_snapshot:4227d8920c3e4625",
+    "command": "pmset",
+    "seam": "patch module _run (environment probes)"
+  },
+  {
+    "file": "joulewise/environment.py",
+    "locator": "collect_environment_snapshot:6a35f73108e8f2f8",
+    "command": "pmset",
+    "seam": "patch module _run (environment probes)"
+  },
+  {
+    "file": "joulewise/environment.py",
+    "locator": "collect_environment_snapshot:7ca0ad135e4bb0bf",
+    "command": "pmset",
+    "seam": "patch module _run (environment probes)"
+  },
+  {
+    "file": "joulewise/environment.py",
+    "locator": "collect_environment_snapshot:9d2be7ac15275504",
+    "command": "pmset",
+    "seam": "patch module _run (environment probes)"
+  },
+  {
+    "file": "joulewise/environment.py",
+    "locator": "collect_environment_snapshot:c628e4f96dc8497b",
+    "command": "pmset",
+    "seam": "patch module _run (environment probes)"
+  },
+  {
+    "file": "joulewise/environment.py",
+    "locator": "probe_thermal_pressure:58f160265b9b3d7f",
+    "command": "pmset",
+    "seam": "patch module _run (environment probes)"
+  },
+  {
+    "file": "joulewise/environment.py",
+    "locator": "probe_thermal_pressure:7434db5ce2082f6a",
+    "command": "pmset",
+    "seam": "patch module _run (environment probes)"
+  },
+  {
+    "file": "joulewise/environment.py",
+    "locator": "probe_thermal_pressure:9d2be7ac15275504",
+    "command": "pmset",
+    "seam": "patch module _run (environment probes)"
+  },
+  {
+    "file": "joulewise/evidence_night.py",
+    "locator": "check:ae17b9a737bf75ad",
+    "command": "launchctl",
+    "seam": "corecaptured_arm_check(actuator).run"
+  },
+  {
+    "file": "joulewise/evidence_night.py",
+    "locator": "corecaptured_arm_check:0b353f6058d419c4",
+    "command": "sudo",
+    "seam": "corecaptured_arm_check(actuator).run"
+  },
+  {
+    "file": "joulewise/evidence_night.py",
+    "locator": "corecaptured_arm_check:650aa89ad0060b30",
+    "command": "sudo",
+    "seam": "corecaptured_arm_check(actuator).run"
+  },
+  {
+    "file": "joulewise/evidence_night.py",
+    "locator": "corecaptured_arm_check:6a40bdeaa7672f3f",
+    "command": "networksetup",
+    "seam": "corecaptured_arm_check(actuator).run"
+  },
+  {
+    "file": "joulewise/evidence_night.py",
+    "locator": "corecaptured_arm_check:9b0ec7d53519e0db",
+    "command": "networksetup",
+    "seam": "corecaptured_arm_check(actuator).run"
+  },
+  {
+    "file": "joulewise/evidence_night.py",
+    "locator": "installer_call:ae17b9a737bf75ad",
+    "command": "launchctl",
+    "seam": "corecaptured_arm_check(actuator).run"
+  },
+  {
+    "file": "joulewise/evidence_night.py",
+    "locator": "main:ae17b9a737bf75ad",
+    "command": "launchctl",
+    "seam": "corecaptured_arm_check(actuator).run"
+  },
+  {
+    "file": "joulewise/evidence_night.py",
+    "locator": "notice:ae17b9a737bf75ad",
+    "command": "launchctl",
+    "seam": "corecaptured_arm_check(actuator).run"
+  },
+  {
+    "file": "joulewise/evidence_night.py",
+    "locator": "publish_install:ae17b9a737bf75ad",
+    "command": "launchctl",
+    "seam": "corecaptured_arm_check(actuator).run"
+  },
+  {
+    "file": "joulewise/evidence_night.py",
+    "locator": "rehearsal_launchctl:04af9f72779a9753",
+    "command": "launchctl",
+    "seam": "corecaptured_arm_check(actuator).run"
+  },
+  {
+    "file": "joulewise/evidence_night.py",
+    "locator": "rehearsal_launchctl:6ae7c5fef7ada64e",
+    "command": "launchctl",
+    "seam": "corecaptured_arm_check(actuator).run"
+  },
+  {
+    "file": "joulewise/evidence_night.py",
+    "locator": "rehearsal_launchctl:ae17b9a737bf75ad",
+    "command": "launchctl",
+    "seam": "corecaptured_arm_check(actuator).run"
+  },
+  {
+    "file": "joulewise/evidence_night.py",
+    "locator": "require_fresh_check:0f26b5944deb4e40",
+    "command": "launchctl",
+    "seam": "corecaptured_arm_check(actuator).run"
+  },
+  {
+    "file": "joulewise/evidence_night.py",
+    "locator": "uninstall:ae17b9a737bf75ad",
+    "command": "launchctl",
+    "seam": "corecaptured_arm_check(actuator).run"
+  },
+  {
+    "file": "joulewise/evidence_night.py",
+    "locator": "verify:ae17b9a737bf75ad",
+    "command": "launchctl",
+    "seam": "corecaptured_arm_check(actuator).run"
+  },
+  {
+    "file": "joulewise/evidence_night.py",
+    "locator": "verify_state:ae17b9a737bf75ad",
+    "command": "launchctl",
+    "seam": "corecaptured_arm_check(actuator).run"
+  },
+  {
+    "file": "joulewise/hazards/arm.py",
+    "locator": "<module>:07935a92b5068149",
+    "command": "sudo",
+    "seam": "Context.run for command constants"
+  },
+  {
+    "file": "joulewise/hazards/arm.py",
+    "locator": "<module>:07935a92b5068149",
+    "command": "systemsetup",
+    "seam": "Context.run for command constants"
+  },
+  {
+    "file": "joulewise/hazards/arm.py",
+    "locator": "<module>:541443a289d468bd",
+    "command": "pmset",
+    "seam": "Context.run for command constants"
+  },
+  {
+    "file": "joulewise/hazards/arm.py",
+    "locator": "<module>:650aa89ad0060b30",
+    "command": "sudo",
+    "seam": "Context.run for command constants"
+  },
+  {
+    "file": "joulewise/hazards/arm.py",
+    "locator": "<module>:668741c8bca9cef3",
+    "command": "systemsetup",
+    "seam": "Context.run for command constants"
+  },
+  {
+    "file": "joulewise/hazards/arm.py",
+    "locator": "<module>:a172ec82be243314",
+    "command": "pmset",
+    "seam": "Context.run for command constants"
+  },
+  {
+    "file": "joulewise/hazards/arm.py",
+    "locator": "<module>:a172ec82be243314",
+    "command": "sudo",
+    "seam": "Context.run for command constants"
+  },
+  {
+    "file": "joulewise/hazards/arm.py",
+    "locator": "<module>:a172ec82be243314",
+    "command": "systemsetup",
+    "seam": "Context.run for command constants"
+  },
+  {
+    "file": "joulewise/hazards/arm.py",
+    "locator": "<module>:c463823381952a7c",
+    "command": "pmset",
+    "seam": "Context.run for command constants"
+  },
+  {
+    "file": "joulewise/hazards/clock.py",
+    "locator": "<module>:ed3e0a5a940d4adc",
+    "command": "sudo",
+    "seam": "Context.run for command constants"
+  },
+  {
+    "file": "joulewise/hazards/contention.py",
+    "locator": "<module>:b35b76aef998821c",
+    "command": "sudo",
+    "seam": "Context.run for command constants"
+  },
+  {
+    "file": "joulewise/hazards/instrument.py",
+    "locator": "<module>:004ec7e0892e7838",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/hazards/instrument.py",
+    "locator": "<module>:0269bfef383ba4f7",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/hazards/instrument.py",
+    "locator": "<module>:24e5e1c2bbef5653",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/hazards/instrument.py",
+    "locator": "_term_then_kill:0dcca0300f4405bc",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/hazards/thermal.py",
+    "locator": "<module>:0d98ba3c3a592d02",
+    "command": "pmset",
+    "seam": "Context.run"
+  },
+  {
+    "file": "joulewise/hazards/thermal.py",
+    "locator": "<module>:541443a289d468bd",
+    "command": "pmset",
+    "seam": "Context.run"
+  },
+  {
+    "file": "joulewise/hazards/thermal.py",
+    "locator": "<module>:8455f1787c1f0194",
+    "command": "pmset",
+    "seam": "Context.run"
+  },
+  {
+    "file": "joulewise/hazards/thermal.py",
+    "locator": "measure:c9c52123a1c26863",
+    "command": "pmset",
+    "seam": "Context.run"
+  },
+  {
+    "file": "joulewise/network_time_off.py",
+    "locator": "<module>:07935a92b5068149",
+    "command": "sudo",
+    "seam": "runner parameter on set_network_time_off / boot_id"
+  },
+  {
+    "file": "joulewise/network_time_off.py",
+    "locator": "<module>:07935a92b5068149",
+    "command": "systemsetup",
+    "seam": "runner parameter on set_network_time_off / boot_id"
+  },
+  {
+    "file": "joulewise/network_time_off.py",
+    "locator": "<module>:650aa89ad0060b30",
+    "command": "sudo",
+    "seam": "runner parameter on set_network_time_off / boot_id"
+  },
+  {
+    "file": "joulewise/network_time_off.py",
+    "locator": "<module>:668741c8bca9cef3",
+    "command": "systemsetup",
+    "seam": "runner parameter on set_network_time_off / boot_id"
+  },
+  {
+    "file": "joulewise/night_agent_install.py",
+    "locator": "LaunchctlAdapter.__init__:ae17b9a737bf75ad",
+    "command": "launchctl",
+    "seam": "LaunchctlAdapter(executable=...) / --launchctl-bin fake executable"
+  },
+  {
+    "file": "joulewise/night_agent_install.py",
+    "locator": "NullAdapter._invoke:12de3a843d945986",
+    "command": "launchctl",
+    "seam": "LaunchctlAdapter(executable=...) / --launchctl-bin fake executable"
+  },
+  {
+    "file": "joulewise/night_agent_install.py",
+    "locator": "NullAdapter.bootout:12de3a843d945986",
+    "command": "launchctl",
+    "seam": "LaunchctlAdapter(executable=...) / --launchctl-bin fake executable"
+  },
+  {
+    "file": "joulewise/night_agent_install.py",
+    "locator": "NullAdapter.bootstrap:12de3a843d945986",
+    "command": "launchctl",
+    "seam": "LaunchctlAdapter(executable=...) / --launchctl-bin fake executable"
+  },
+  {
+    "file": "joulewise/night_agent_install.py",
+    "locator": "NullAdapter.print:12de3a843d945986",
+    "command": "launchctl",
+    "seam": "LaunchctlAdapter(executable=...) / --launchctl-bin fake executable"
+  },
+  {
+    "file": "joulewise/night_agent_install.py",
+    "locator": "main:ae17b9a737bf75ad",
+    "command": "launchctl",
+    "seam": "LaunchctlAdapter(executable=...) / --launchctl-bin fake executable"
+  },
+  {
+    "file": "joulewise/night_agent_install.py",
+    "locator": "main:edd58f101e7d0175",
+    "command": "launchctl",
+    "seam": "LaunchctlAdapter(executable=...) / --launchctl-bin fake executable"
+  },
+  {
+    "file": "joulewise/night_gate.py",
+    "locator": "<module>:0d98ba3c3a592d02",
+    "command": "pmset",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/night_gate.py",
+    "locator": "<module>:541443a289d468bd",
+    "command": "pmset",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/night_gate.py",
+    "locator": "<module>:76a35a4bd9cb5cbb",
+    "command": "pmset",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/night_gate.py",
+    "locator": "<module>:bf6b444741079b85",
+    "command": "pmset",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/prewindow.py",
+    "locator": "t0_check:4227d8920c3e4625",
+    "command": "pmset",
+    "seam": "patch module subprocess.run (local probe)"
+  },
+  {
+    "file": "joulewise/prewindow.py",
+    "locator": "t0_check:9d2be7ac15275504",
+    "command": "pmset",
+    "seam": "patch module subprocess.run (local probe)"
+  },
+  {
+    "file": "joulewise/quiet_guard.py",
+    "locator": "<module>:650aa89ad0060b30",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/quiet_guard.py",
+    "locator": "<module>:f64ab60939bdc413",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/quiet_predicate_campaign.py",
+    "locator": "record_covariates:e046fa1b80ba1888",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/sampler_teardown.py",
+    "locator": "SamplerTeardown._sampler_command:24e5e1c2bbef5653",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/sampler_teardown.py",
+    "locator": "SamplerTeardown._sampler_command:8dd135ef35539688",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/t0_rehearsal.py",
+    "locator": "<module>:0672075787e402de",
+    "command": "caffeinate",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/t0_rehearsal.py",
+    "locator": "<module>:0d98ba3c3a592d02",
+    "command": "pmset",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/t0_rehearsal.py",
+    "locator": "<module>:0fa61c8bae4e7dcf",
+    "command": "caffeinate",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/t0_rehearsal.py",
+    "locator": "<module>:175a05d35d6cb7d5",
+    "command": "caffeinate",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/t0_rehearsal.py",
+    "locator": "<module>:24e5e1c2bbef5653",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/t0_rehearsal.py",
+    "locator": "<module>:541443a289d468bd",
+    "command": "pmset",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/t0_rehearsal.py",
+    "locator": "<module>:648ae5c0a3a3cb5e",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/t0_rehearsal.py",
+    "locator": "<module>:648ae5c0a3a3cb5e",
+    "command": "systemsetup",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/t0_rehearsal.py",
+    "locator": "<module>:650aa89ad0060b30",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/t0_rehearsal.py",
+    "locator": "<module>:668741c8bca9cef3",
+    "command": "systemsetup",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/t0_rehearsal.py",
+    "locator": "<module>:742b3a650c01233f",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/t0_rehearsal.py",
+    "locator": "<module>:76a35a4bd9cb5cbb",
+    "command": "pmset",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/t0_rehearsal.py",
+    "locator": "<module>:bf6b444741079b85",
+    "command": "pmset",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/t0_rehearsal.py",
+    "locator": "<module>:c463823381952a7c",
+    "command": "pmset",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/t0_rehearsal.py",
+    "locator": "<module>:c6b4f9d80631983e",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/t0_rehearsal.py",
+    "locator": "<module>:fae9dc7232841220",
+    "command": "caffeinate",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/t0_rehearsal.py",
+    "locator": "_run_real_author_boundary:07935a92b5068149",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/t0_rehearsal.py",
+    "locator": "_run_real_author_boundary:07935a92b5068149",
+    "command": "systemsetup",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/t0_rehearsal.py",
+    "locator": "_run_real_author_boundary:650aa89ad0060b30",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "joulewise/t0_rehearsal.py",
+    "locator": "_run_real_author_boundary:668741c8bca9cef3",
+    "command": "systemsetup",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/align_r1_rehearsal.py",
+    "locator": "PowerModeGuard.__enter__:a58036966e11acd8",
+    "command": "pmset",
+    "seam": "PowerModeGuard(runner=...); patch module subprocess.run for _terminate"
+  },
+  {
+    "file": "scripts/align_r1_rehearsal.py",
+    "locator": "PowerModeGuard.__enter__:a85fa83ad08d332a",
+    "command": "pmset",
+    "seam": "PowerModeGuard(runner=...); patch module subprocess.run for _terminate"
+  },
+  {
+    "file": "scripts/align_r1_rehearsal.py",
+    "locator": "PowerModeGuard:24e5e1c2bbef5653",
+    "command": "sudo",
+    "seam": "PowerModeGuard(runner=...); patch module subprocess.run for _terminate"
+  },
+  {
+    "file": "scripts/align_r1_rehearsal.py",
+    "locator": "PowerModeGuard:31e7061a20797f91",
+    "command": "sudo",
+    "seam": "PowerModeGuard(runner=...); patch module subprocess.run for _terminate"
+  },
+  {
+    "file": "scripts/align_r1_rehearsal.py",
+    "locator": "PowerModeGuard:3a778b0d07e1da60",
+    "command": "pmset",
+    "seam": "PowerModeGuard(runner=...); patch module subprocess.run for _terminate"
+  },
+  {
+    "file": "scripts/align_r1_rehearsal.py",
+    "locator": "PowerModeGuard:3a778b0d07e1da60",
+    "command": "sudo",
+    "seam": "PowerModeGuard(runner=...); patch module subprocess.run for _terminate"
+  },
+  {
+    "file": "scripts/align_r1_rehearsal.py",
+    "locator": "PowerModeGuard:541443a289d468bd",
+    "command": "pmset",
+    "seam": "PowerModeGuard(runner=...); patch module subprocess.run for _terminate"
+  },
+  {
+    "file": "scripts/align_r1_rehearsal.py",
+    "locator": "PowerModeGuard:559db711a9b0c2ad",
+    "command": "pmset",
+    "seam": "PowerModeGuard(runner=...); patch module subprocess.run for _terminate"
+  },
+  {
+    "file": "scripts/align_r1_rehearsal.py",
+    "locator": "PowerModeGuard:559db711a9b0c2ad",
+    "command": "sudo",
+    "seam": "PowerModeGuard(runner=...); patch module subprocess.run for _terminate"
+  },
+  {
+    "file": "scripts/align_r1_rehearsal.py",
+    "locator": "PowerModeGuard:c463823381952a7c",
+    "command": "pmset",
+    "seam": "PowerModeGuard(runner=...); patch module subprocess.run for _terminate"
+  },
+  {
+    "file": "scripts/align_r1_rehearsal.py",
+    "locator": "_terminate:24f91a0623bfec28",
+    "command": "sudo",
+    "seam": "PowerModeGuard(runner=...); patch module subprocess.run for _terminate"
+  },
+  {
+    "file": "scripts/align_smc_enumerate.py",
+    "locator": "host_metadata:541443a289d468bd",
+    "command": "pmset",
+    "seam": "host_metadata(probe=...)"
+  },
+  {
+    "file": "scripts/align_smc_enumerate.py",
+    "locator": "host_metadata:dd0f85d71c2feccb",
+    "command": "pmset",
+    "seam": "host_metadata(probe=...)"
+  },
+  {
+    "file": "scripts/align_ssd_qualification.py",
+    "locator": "<module>:53b2328211651674",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/align_v4_harvest_off.py",
+    "locator": "checkout_identity:180159af2e908e9f",
+    "command": "python-isolated",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/align_v4_session.py",
+    "locator": "<module>:650aa89ad0060b30",
+    "command": "sudo",
+    "seam": "runner / frequency_runner / power_runner parameters"
+  },
+  {
+    "file": "scripts/align_v4_session.py",
+    "locator": "<module>:84889aa65679fcd6",
+    "command": "sudo",
+    "seam": "runner / frequency_runner / power_runner parameters"
+  },
+  {
+    "file": "scripts/align_v4_session.py",
+    "locator": "<module>:8e861c7ef3f8548b",
+    "command": "sudo",
+    "seam": "runner / frequency_runner / power_runner parameters"
+  },
+  {
+    "file": "scripts/align_v4_session.py",
+    "locator": "_require_night_job_absent:ae17b9a737bf75ad",
+    "command": "launchctl",
+    "seam": "runner / frequency_runner / power_runner parameters"
+  },
+  {
+    "file": "scripts/align_v4_session.py",
+    "locator": "arm_checks:4227d8920c3e4625",
+    "command": "pmset",
+    "seam": "runner / frequency_runner / power_runner parameters"
+  },
+  {
+    "file": "scripts/align_v4_session.py",
+    "locator": "arm_checks:9c4fb7a0a89ab999",
+    "command": "pmset",
+    "seam": "runner / frequency_runner / power_runner parameters"
+  },
+  {
+    "file": "scripts/align_v4_session.py",
+    "locator": "arm_checks:9c4fb7a0a89ab999",
+    "command": "sudo",
+    "seam": "runner / frequency_runner / power_runner parameters"
+  },
+  {
+    "file": "scripts/align_v4_session.py",
+    "locator": "arm_checks:9d2be7ac15275504",
+    "command": "pmset",
+    "seam": "runner / frequency_runner / power_runner parameters"
+  },
+  {
+    "file": "scripts/align_v4_session.py",
+    "locator": "frequency_word_preflight:4287a0a1dec84e90",
+    "command": "sudo",
+    "seam": "runner / frequency_runner / power_runner parameters"
+  },
+  {
+    "file": "scripts/align_v4_session.py",
+    "locator": "frequency_word_preflight:650aa89ad0060b30",
+    "command": "sudo",
+    "seam": "runner / frequency_runner / power_runner parameters"
+  },
+  {
+    "file": "scripts/align_v4_session.py",
+    "locator": "frequency_word_preflight:668741c8bca9cef3",
+    "command": "systemsetup",
+    "seam": "runner / frequency_runner / power_runner parameters"
+  },
+  {
+    "file": "scripts/align_v4_session.py",
+    "locator": "frequency_word_preflight:fe117ae638014da5",
+    "command": "sudo",
+    "seam": "runner / frequency_runner / power_runner parameters"
+  },
+  {
+    "file": "scripts/align_v4_session.py",
+    "locator": "frequency_word_preflight:fe117ae638014da5",
+    "command": "systemsetup",
+    "seam": "runner / frequency_runner / power_runner parameters"
+  },
+  {
+    "file": "scripts/align_v4_session.py",
+    "locator": "observe_ac_powermode:a6b5199d60bf1cf8",
+    "command": "pmset",
+    "seam": "runner / frequency_runner / power_runner parameters"
+  },
+  {
+    "file": "scripts/b6_machine_test.py",
+    "locator": "prepare:9ac638f4c9410874",
+    "command": "launchctl",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/b6_machine_test.py",
+    "locator": "report:502ee0a584ce0b0b",
+    "command": "launchctl",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/b6_machine_test.py",
+    "locator": "report:6843143b16fdf87d",
+    "command": "launchctl",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/bench_replay_start_drift.py",
+    "locator": "<module>:6bba141443c9a807",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/bench_replay_start_drift.py",
+    "locator": "markdown:c43da4cc83d0cdc0",
+    "command": "systemsetup",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/bench_replay_start_drift.py",
+    "locator": "require_no_night_agent:502ee0a584ce0b0b",
+    "command": "launchctl",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/bench_replay_systemsetup_stub.py",
+    "locator": "<module>:51a964bd9a3a3c26",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/bench_replay_systemsetup_stub.py",
+    "locator": "<module>:51a964bd9a3a3c26",
+    "command": "systemsetup",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/bytes_h_session.py",
+    "locator": "install:72001dc32b322e33",
+    "command": "launchctl",
+    "seam": "run parameter / installer --launchctl-bin argument"
+  },
+  {
+    "file": "scripts/bytes_h_session.py",
+    "locator": "install:ae17b9a737bf75ad",
+    "command": "launchctl",
+    "seam": "run parameter / installer --launchctl-bin argument"
+  },
+  {
+    "file": "scripts/capture_t0_step.py",
+    "locator": "_command_for_step:07935a92b5068149",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/capture_t0_step.py",
+    "locator": "_command_for_step:07935a92b5068149",
+    "command": "systemsetup",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/capture_t0_step.py",
+    "locator": "_command_for_step:650aa89ad0060b30",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/capture_t0_step.py",
+    "locator": "_command_for_step:668741c8bca9cef3",
+    "command": "systemsetup",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/capture_t0_step.py",
+    "locator": "_execute:e4cd6a3107d1f763",
+    "command": "systemsetup",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/capture_t0_step.py",
+    "locator": "_load_context:175a05d35d6cb7d5",
+    "command": "caffeinate",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/capture_t0_step.py",
+    "locator": "_load_context:ee36f55774cf4291",
+    "command": "caffeinate",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/check-codex-mcp.mjs",
+    "locator": "shell:7174718a91937e4f",
+    "command": "kill",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/check-codex-mcp.mjs",
+    "locator": "shell:a952b82807973049",
+    "command": "kill",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/codex-bridge",
+    "locator": "shell:06604ea50ba927a5",
+    "command": "kill",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/codex-bridge",
+    "locator": "shell:2f3b659ffdee32a7",
+    "command": "kill",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/codex-bridge",
+    "locator": "shell:593bdd5e38e3a866",
+    "command": "kill",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/codex-bridge",
+    "locator": "shell:975414789dc5b379",
+    "command": "kill",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/codex-bridge",
+    "locator": "shell:9e130bc6b449ee75",
+    "command": "kill",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/codex-mcp-server.mjs",
+    "locator": "shell:3f025979692217c4",
+    "command": "shutdown",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/codex-mcp-server.mjs",
+    "locator": "shell:80f4b71b035a93c5",
+    "command": "shutdown",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/codex-mcp-server.mjs",
+    "locator": "shell:994f113f3e2adbbd",
+    "command": "shutdown",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/codex-mcp-server.mjs",
+    "locator": "shell:ba7fc59769a7fa87",
+    "command": "shutdown",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/codex-mcp-server.mjs",
+    "locator": "shell:cd0929e228528e7e",
+    "command": "shutdown",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/codex-mcp-server.mjs",
+    "locator": "shell:ea08afaad32cee03",
+    "command": "shutdown",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/codex-run",
+    "locator": "shell:53561df0afc5244b",
+    "command": "kill",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/codex-run",
+    "locator": "shell:7bd77555fa6d5dc8",
+    "command": "kill",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/codex-run",
+    "locator": "shell:7d72caea8cb16a6a",
+    "command": "kill",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/codex-run",
+    "locator": "shell:cfcc9cd178c4742a",
+    "command": "kill",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/codex-run",
+    "locator": "shell:d4e1bb811a028457",
+    "command": "kill",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/ed_session/rail-probe.sh",
+    "locator": "shell:52ec67b85270b9a4",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/ed_session/rail-probe.sh",
+    "locator": "shell:de942b5b57d7afcb",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/ed_session/rail-probe.sh",
+    "locator": "shell:f51fe12c0e234e10",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/ed_session/sampler-checklist.sh",
+    "locator": "shell:de942b5b57d7afcb",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/ed_session/sampler-checklist.sh",
+    "locator": "shell:f51fe12c0e234e10",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/floor_reconciliation_receipt.py",
+    "locator": "build_receipt:685741836c33233b",
+    "command": "shutdown",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/g10_clock_step_control.py",
+    "locator": "<module>:1c72b153e0c2b8c5",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/g10_clock_step_control.py",
+    "locator": "<module>:1c72b153e0c2b8c5",
+    "command": "systemsetup",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/g10_clock_step_control.py",
+    "locator": "<module>:650aa89ad0060b30",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/g10_clock_step_control.py",
+    "locator": "<module>:668741c8bca9cef3",
+    "command": "systemsetup",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/g10_clock_step_control.py",
+    "locator": "real_run:3cfd8a14456eaf86",
+    "command": "kill",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/gen_derivation_night.py",
+    "locator": "render_quiet_runsheet:6270da078abfee31",
+    "command": "shutdown",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/gen_derivation_night.py",
+    "locator": "render_region:4eb4fa4d76520b72",
+    "command": "kill",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/joulewise-network-time.sudoers",
+    "locator": "shell:3ba6f6bbbadb0e3d",
+    "command": "systemsetup",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/launch_align_r0.py",
+    "locator": "main:0ad70fd971de1688",
+    "command": "kill",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/launch_align_r0.py",
+    "locator": "main:502ee0a584ce0b0b",
+    "command": "launchctl",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/launch_align_r0.py",
+    "locator": "main:541443a289d468bd",
+    "command": "pmset",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/launch_align_r0.py",
+    "locator": "preflight:1ce72457247d2496",
+    "command": "pmset",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/launch_align_r0.py",
+    "locator": "sleep_display:4d225195f0918490",
+    "command": "pmset",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/launch_align_r0.py",
+    "locator": "sleep_display:4d225195f0918490",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/magistrate_watchdog.py",
+    "locator": "reap_handoff:2bda9b4dfbabfdb1",
+    "command": "kill",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/magistrate_watchdog.py",
+    "locator": "reap_handoff:34cf09955fae122f",
+    "command": "kill",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/night_chains/align_r1_rehearsal.zsh",
+    "locator": "shell:559db711a9b0c2ad",
+    "command": "pmset",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/night_chains/align_r1_rehearsal.zsh",
+    "locator": "shell:559db711a9b0c2ad",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/offload_setup_air.sh",
+    "locator": "shell:1f64604ba090b8c5",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/offload_setup_air.sh",
+    "locator": "shell:2a7be42bc6f63863",
+    "command": "launchctl",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/offload_setup_air.sh",
+    "locator": "shell:49e71a468b3ef83a",
+    "command": "pmset",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/offload_setup_air.sh",
+    "locator": "shell:e4abe0777b8523db",
+    "command": "launchctl",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/offload_window.py",
+    "locator": "init_store:c812e50b854ee2fa",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/offload_window.py",
+    "locator": "run_process_group:837c24cde7987e2e",
+    "command": "kill",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/prewindow_check.sh",
+    "locator": "shell:319adc4f9aae57fc",
+    "command": "pmset",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/quiet_guard.py",
+    "locator": "privileged_command:650aa89ad0060b30",
+    "command": "sudo",
+    "seam": "privileged_command renders argv; injected privileged runner at caller"
+  },
+  {
+    "file": "scripts/quiet_guard.py",
+    "locator": "privileged_command:93c9782f8f95b439",
+    "command": "sudo",
+    "seam": "privileged_command renders argv; injected privileged runner at caller"
+  },
+  {
+    "file": "scripts/quiet_guard_privileged.py",
+    "locator": "<module>:49a7fac5d28f70b9",
+    "command": "python-isolated",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/quiet_mac_prep.sh",
+    "locator": "shell:2c084710e3f07ede",
+    "command": "pmset",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/quiet_mac_prep.sh",
+    "locator": "shell:2f724750112f5cca",
+    "command": "pmset",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/quiet_mac_prep.sh",
+    "locator": "shell:be6240fd1089daca",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/quiet_mac_prep.sh",
+    "locator": "shell:d2f3f88bbe41d978",
+    "command": "pmset",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/quiet_mac_prep.sh",
+    "locator": "shell:dffbcfb056ceb5b2",
+    "command": "pmset",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/quiet_window_clock.sh",
+    "locator": "shell:0c5d9b68fa63b3c5",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/quiet_window_clock.sh",
+    "locator": "shell:0c5d9b68fa63b3c5",
+    "command": "systemsetup",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/quiet_window_clock.sh",
+    "locator": "shell:415302ef4b6ed3e7",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/quiet_window_clock.sh",
+    "locator": "shell:415302ef4b6ed3e7",
+    "command": "systemsetup",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/rehearse_b5_real.py",
+    "locator": "<module>:0110c2c503cb7ee3",
+    "command": "pmset",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/rehearse_b5_real.py",
+    "locator": "<module>:290cdce8fc49b1ce",
+    "command": "pmset",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/rehearse_b5_real.py",
+    "locator": "<module>:290cdce8fc49b1ce",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/rehearse_b5_real.py",
+    "locator": "<module>:290cdce8fc49b1ce",
+    "command": "systemsetup",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/rehearse_b5_real.py",
+    "locator": "<module>:90623fec8b16d827",
+    "command": "systemsetup",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/rehearse_b5_real.py",
+    "locator": "<module>:a4e73e824dacbb98",
+    "command": "pmset",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/rehearse_b5_real.py",
+    "locator": "write_shims:9d2be7ac15275504",
+    "command": "pmset",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/replay_powermetrics_frames.py",
+    "locator": "<module>:e49f8318abcc4dc7",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/run_campaign.py",
+    "locator": "_HazardMemberWatch:90245e2d68a9c652",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/run_campaign.py",
+    "locator": "_hazard_is_sampler_wrapper:24e5e1c2bbef5653",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/run_campaign.py",
+    "locator": "_hazard_is_sampler_wrapper:e5bb6ad9693e5414",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/run_campaign.py",
+    "locator": "campaign_environment_preflight:817dc28f0bb99139",
+    "command": "pmset",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/run_campaign.py",
+    "locator": "campaign_environment_preflight:9d2be7ac15275504",
+    "command": "pmset",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/run_campaign.py",
+    "locator": "parse_args:c9736f69220860b6",
+    "command": "pmset",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/run_night.py",
+    "locator": "<module>:541443a289d468bd",
+    "command": "pmset",
+    "seam": "make_probes / probes.run (including network time) and popen seam"
+  },
+  {
+    "file": "scripts/run_night.py",
+    "locator": "<module>:648ae5c0a3a3cb5e",
+    "command": "sudo",
+    "seam": "make_probes / probes.run (including network time) and popen seam"
+  },
+  {
+    "file": "scripts/run_night.py",
+    "locator": "<module>:648ae5c0a3a3cb5e",
+    "command": "systemsetup",
+    "seam": "make_probes / probes.run (including network time) and popen seam"
+  },
+  {
+    "file": "scripts/run_night.py",
+    "locator": "<module>:650aa89ad0060b30",
+    "command": "sudo",
+    "seam": "make_probes / probes.run (including network time) and popen seam"
+  },
+  {
+    "file": "scripts/run_night.py",
+    "locator": "<module>:668741c8bca9cef3",
+    "command": "systemsetup",
+    "seam": "make_probes / probes.run (including network time) and popen seam"
+  },
+  {
+    "file": "scripts/run_night.py",
+    "locator": "<module>:c463823381952a7c",
+    "command": "pmset",
+    "seam": "make_probes / probes.run (including network time) and popen seam"
+  },
+  {
+    "file": "scripts/run_night.py",
+    "locator": "<module>:fe117ae638014da5",
+    "command": "sudo",
+    "seam": "make_probes / probes.run (including network time) and popen seam"
+  },
+  {
+    "file": "scripts/run_night.py",
+    "locator": "<module>:fe117ae638014da5",
+    "command": "systemsetup",
+    "seam": "make_probes / probes.run (including network time) and popen seam"
+  },
+  {
+    "file": "scripts/run_night.py",
+    "locator": "_WindowDeadline:fab86912f6312edb",
+    "command": "shutdown",
+    "seam": "make_probes / probes.run (including network time) and popen seam"
+  },
+  {
+    "file": "scripts/run_night.py",
+    "locator": "_admit_ac_powermode:36f16ce92cd3af62",
+    "command": "sudo",
+    "seam": "make_probes / probes.run (including network time) and popen seam"
+  },
+  {
+    "file": "scripts/run_night.py",
+    "locator": "_dead_man:ae17b9a737bf75ad",
+    "command": "launchctl",
+    "seam": "make_probes / probes.run (including network time) and popen seam"
+  },
+  {
+    "file": "scripts/run_night.py",
+    "locator": "_probe_cadence:004ec7e0892e7838",
+    "command": "sudo",
+    "seam": "make_probes / probes.run (including network time) and popen seam"
+  },
+  {
+    "file": "scripts/run_night.py",
+    "locator": "_probe_cadence:24e5e1c2bbef5653",
+    "command": "sudo",
+    "seam": "make_probes / probes.run (including network time) and popen seam"
+  },
+  {
+    "file": "scripts/run_night.py",
+    "locator": "_restore_network_time:0dd9dd846a9bc471",
+    "command": "systemsetup",
+    "seam": "make_probes / probes.run (including network time) and popen seam"
+  },
+  {
+    "file": "scripts/run_night.py",
+    "locator": "_term_then_kill_probe_group:71f017ae0f13611f",
+    "command": "sudo",
+    "seam": "make_probes / probes.run (including network time) and popen seam"
+  },
+  {
+    "file": "scripts/sample_quiet_predicate_evidence.py",
+    "locator": "PowerRecorder.finish:2bda9b4dfbabfdb1",
+    "command": "kill",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/sample_quiet_predicate_evidence.py",
+    "locator": "ReplayRecorder:d00411e5078c765a",
+    "command": "kill",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/sample_quiet_predicate_evidence.py",
+    "locator": "collect:2bda9b4dfbabfdb1",
+    "command": "kill",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/sample_quiet_predicate_evidence.py",
+    "locator": "power_argv:004ec7e0892e7838",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/sample_quiet_predicate_evidence.py",
+    "locator": "power_argv:24e5e1c2bbef5653",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/setup_quiet_guard.sh",
+    "locator": "shell:04589b88af92eafd",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/setup_quiet_guard.sh",
+    "locator": "shell:093e123630c3d0e6",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/setup_quiet_guard.sh",
+    "locator": "shell:09abadbb544acfc7",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/setup_quiet_guard.sh",
+    "locator": "shell:280550155add0c09",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/setup_quiet_guard.sh",
+    "locator": "shell:2f30cd0eb198bf11",
+    "command": "python-isolated",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/setup_quiet_guard.sh",
+    "locator": "shell:2f30cd0eb198bf11",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/setup_quiet_guard.sh",
+    "locator": "shell:3d7d782275918d1d",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/setup_quiet_guard.sh",
+    "locator": "shell:46e257a7ce5ff0de",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/setup_quiet_guard.sh",
+    "locator": "shell:7a34ce389c3cce69",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/setup_quiet_guard.sh",
+    "locator": "shell:8048f46057ac3668",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/setup_quiet_guard.sh",
+    "locator": "shell:873ca084e5fab8de",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/setup_quiet_guard.sh",
+    "locator": "shell:8ccfab54ad230f77",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/setup_quiet_guard.sh",
+    "locator": "shell:b560cfee718c9a9a",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/setup_quiet_guard.sh",
+    "locator": "shell:c7155b1c1a0004e7",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/setup_quiet_guard.sh",
+    "locator": "shell:ca1dc62ccac4efb6",
+    "command": "python-isolated",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/setup_quiet_guard.sh",
+    "locator": "shell:ca1dc62ccac4efb6",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/size_b5_window.py",
+    "locator": "<module>:6dcc33183e199cf3",
+    "command": "shutdown",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/size_b5_window.py",
+    "locator": "derive_document:04de202a40a1e992",
+    "command": "shutdown",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/validate_powermetrics_fiducial.py",
+    "locator": "main:004ec7e0892e7838",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/validate_powermetrics_fiducial.py",
+    "locator": "main:24e5e1c2bbef5653",
+    "command": "sudo",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/validate_powermetrics_fiducial.py",
+    "locator": "main:541443a289d468bd",
+    "command": "pmset",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/validate_powermetrics_fiducial.py",
+    "locator": "main:922c47fe7171913e",
+    "command": "pmset",
+    "seam": "none"
+  },
+  {
+    "file": "scripts/validate_powermetrics_fiducial.py",
+    "locator": "main:99396a2a5503574e",
+    "command": "pmset",
+    "seam": "none"
+  }
+]
