@@ -954,11 +954,149 @@ that a value I held enters a registration because it was the one armed.
 
 ---
 
+# Decision request 9: the armed R1 branch, δ_slow and NR-1 (2026-11-10 20:58 PST)
+
+## RL-32. R1 at `da3187e6e`: δ_slow is 1.5 °C; the gated block must rehearse W1's reference; what the slots need
+
+**Read.** `docs/process_traces/2026-11-10-r1-g0/` on `lane/2026-11-10-r1-g0-rop` @ `da3187e6e`: the diagnosis, the
+Fable seat's ruling, the Sol finder's report, the magistrate's disposition, and the findings disposition of the
+two cold passes; protocol WP14(b); the `r1_slots.json` S6 receipt. Those files hold temperatures from the
+refused 11-10 night and from R0. I read no output of the night now running and no energy value. I did not
+re-review the build's code: two executing cold passes did, and both reproduced the replay.
+
+**δ_slow: 1.5 °C stands for R1**, as slot S6 with its tuning receipt; S5 stays 1.0 °C. The hold of RL-23 is
+lifted.
+
+- The three independent readings of the 11-10 record agree: the slope bar was first met about 590 s after a
+  29-second warmup, with the slow sensor still about 1.85 °C above the member's own idle. Every model member has
+  that warmup before its gate.
+- At 1.0 °C against the corrected reference, the fitted release is 907 to 1,299 s. Two of four tail models
+  pass the 1,200 s registered maximum. A band that the instrument's own warmup defeats half the time is not a
+  usable gate.
+- The step is the registered one: 0.5 °C for a timeout-driven failure, at most 2.0 °C, carried as S6 with a
+  receipt, applied before the next attempt.
+- For the claims, the band is the same for every member of every window. K does not depend on it. Its cost is
+  variance, and U5 is evaluated at the band actually used, which makes U5 1.5 times harder to pass.
+
+The Sol finder's dissent was "do not widen a band just to admit the recorded tail". It is a fair caution and it
+is answered by the points above, not by replay. The disposition says a 1.0 °C gate "can be replayed exactly
+afterwards" from a 1.5 °C night. That is backwards: a night at 1.5 °C records each tail down to 1.5 °C, so
+the 2.0 °C gate can be replayed and the 1.0 °C gate cannot. That sentence is corrected.
+
+Two limits. The S6 receipt cites this entry as its adoption. And S6 does not move again, to 2.0 °C or back,
+without a ruling here.
+
+**NR-1: R6-1's purpose governs.** "The duty bar must reproduce W1's D-after-D G0." W1's reference is fixed by
+WP14(b): the first sidecar member's pre-warmup 60-second median, consumed unchanged by later members. So in
+R1's gated block the first gated run captures by that rule, D_spam a, D_spam b and X-G consume it, and the
+capturing run is recorded and not judged. This is the seat's recommendation and I adopt it. R5-1 objected that
+a self-captured reference may be warm. That is what W1 does by registration, and R1 exists to measure its
+consequence.
+
+The night now running was armed with the earlier mechanism: the gated runs gate against R_op, the cold
+reference. So:
+
+- A gated run or X-G whose G0 **released** tonight waited at least as long as W1's rule would make it wait.
+  Its wait and its duty-bar row are admissible as conservative.
+- A gated run or X-G whose G0 **did not release** tonight says nothing about W1, because W1 would not share
+  the reason. A duty bar that is inconclusive or failed for that reason is not admissible, no R10 fallback may
+  be invoked on it, and the gated block is owed again under the W1 reference rule. A short night of soak,
+  capture and the gated block is enough if the configuration is unchanged; its design comes to me.
+
+One answer I asked for in RL-23 remains open and is settled at the desk, not in code: whether a D member's own
+resident idle sits above the 30B-based R_op by enough to matter. The journals already hold each member's
+pre-warmup 60-second median; the desk prints each beside R_op.
+
+**For the paper, noted now.** W1's gate is a consistency gate, not a return to cold idle. Its reference is
+taken 300 s after earlier members, so the band is usually met and the slope bar decides. The methods text
+must say so, and W1's desk prints each member's release temperature against the window reference by ordinal.
+
+**What R1's slots need before the W1 STRICT re-registration.**
+
+1. The night is complete: `r1_result.json` status complete and chain exit code 0. The `verdict` field is not
+   evidence (finding A-01).
+2. step-30b's accepted attempt is 0. If it is a redo, R_op was captured on a cooling machine and every
+   R_op-gated number comes to me first (cold pass F1).
+3. step-30b's G0 released inside the cap. The seat predicted about 700 to 970 s; a release far outside that
+   range, either way, is reported with the slots.
+4. The gated block passes the admissibility rule above.
+5. `inconclusive_segments` is empty, as the kit already requires.
+6. U5 is evaluated at 1.5 °C and recorded. A FAIL is disclosed under RL-20.
+7. The A-B-A adoption is decided. An inconclusive adoption comes to me before W1's power mode is fixed.
+8. The desk print of each member's pre-warmup median beside R_op is attached.
+9. I review the result structurally after the custody closes. R10 then maps the timing and count fields to the
+   model and budget outcome (RL-23).
+
+Before any further R1 arm, including a gated-block night, RL-23 item 2 goes in: an unreleased step-30b G0 is
+INCONCLUSIVE and does not refuse the night.
+
+**Reason.** The seat's ruling is careful and its arithmetic was reproduced three times; the one thing I held was
+whether a value fitted to a single record should reach W1, and the registered ladder, the shared band and U5
+answer that. NR-1 could not wait for a council: without it the night's main product for W1, the duty bar, is
+measured against a reference W1 will not use.
+
+**Blind status.** Blind to all v4 outcomes; none exists. I read thermal values of the refused 11-10 attempt
+and of R0, which are gate diagnostics, and nothing of the night in progress.
+
+---
+
+# Decision request 10: BYTES seat 3, the probe fix and the commitment check (2026-11-10 21:01 PST)
+
+## RL-33. `ops/2026-11-10-bytes-rl7a` @ `f161857fe`: ADMIT. Stage 1 may run in the next MBP desk gap
+
+**What I did.** Read the design note, both run reports, the Opus cold review and all of
+`scripts/bytes_commitment.py`; read the probe gate and the withheld-path refusal in `scripts/bytes_stage1.py`.
+Ran three modules with python3.13: `tests.test_bytes_commitment` 32, `tests.test_bytes_stage1` 23,
+`tests.b6.test_release_subset` 4; 59 tests, all pass. `joulewise/bytes_analysis.py` hashes to
+`18582818…0a71`, the registered pin.
+
+**Ruling.**
+
+1. **RL-7 (a) is met.** The no-key probe now requires the two intended refusals, each on its documented
+   stream with its exact text, so an unrelated failure can no longer release the fit keys. The commitment gate
+   is no longer a pattern match: the commit must exist, be an ancestor of the running checkout's head, hold
+   the prediction blob and its digest and the pinned estimator, and lie under the protected records ref. The
+   push time is GitHub's own event timestamp, and every unblinding event names the commitment it was made
+   under.
+2. **What makes the paper's sentence checkable.** Not the clocks. It is the order of commits on a protected
+   branch: the prediction commit precedes every journal line, the branch cannot be force-pushed or deleted,
+   and GitHub holds the push times. Paper 1 §6.3 says it that way and names the records branch.
+3. **Stage 1 may run** in the next MBP desk gap, from this branch once it is merged into the stage-1 run
+   line. It never overlaps an armed span.
+4. **Before `record-push`, one check and two records.**
+   - From the Air, run the two network calls read-only against an existing records branch and confirm the
+     activity response carries `ref`, `after`, `timestamp` and `activity_type` as the parser reads them. If
+     it does not, the fix comes to me before the commitment. A refusal on the day loses nothing: the push
+     event exists on GitHub either way.
+   - RL-7 (g): the structure-only check of whether a held-out model's timing was read before stage 1 is
+     recorded before the commitment commit. It is a disclosure for the paper. It is not a journal event, and
+     the journal starts empty: no guarded held-out command has ever run.
+   - RL-7 (c) stands: any rider is registered before the commitment commit or is exploratory.
+5. **RL-7 (b) is relaxed in timing.** The known-bytes outcome was recorded and admitted on 2026-10-31, before
+   stage 1, and that dated record satisfies the registration's order. Landing the matched-geometry rule and
+   copying the slot fill into registration §1 is clerical; it completes by 15 November (RL-24 seat 11) and does
+   not gate stage 1. It must be done before stage 2.
+6. **Open, not blocking.** Findings F6 and F7 stay open against any reuse of this lineage for Block 5 harvest
+   or collection. One improvement to consider: before a second admission, require the journal's last
+   committed revision to be contained in the local records ref, so "commit and push" is checked and not only
+   printed.
+
+**Limits to state in the paper.** The guard records admissions made through the guarded commands. It cannot see
+a held-out file opened some other way; custody is what prevents that. And the offline check replays saved
+evidence; the third party is GitHub's branch history and push log.
+
+**Reason.** The cold review's two successful attacks, a backdated commit and a local-only commit, are both
+closed by round 2, and the tests that close them fail on the old code.
+
+**Blind status.** Blind to every BYTES energy and held-out value. Synthetic fixtures only.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
 |---|---|
-| Review of the armed R1 G0 branch `da3187e6e` and its traces: δ_slow and NR-1, before R1's slots enter the W1 re-registration (RL-23, RL-31) | Ready to start; leave to read the traces was given in item 257 |
+| Structural review of R1's result against RL-32's nine conditions, and the design of a gated-block night if one is owed | The night's custody closing (latest 11-12 03:25 PST) |
 | The PR that enters the §17 entries in the Block 6 registration, with seat 7's demonstration of the 7b condition | Seat 7's code and the S-14 pin |
 | A ruling on continuing or restarting if two consecutive, or three, U1-U3 FAIL bars occur in the series (RL-20) | The event |
 | Review the drafted Block 6 §17 entries (RL-6 (b)), including the audit's decisions 7, 8 and 9, which have no pre-unseal recommendation | The lead's draft |
