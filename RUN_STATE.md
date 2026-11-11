@@ -1068,6 +1068,27 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 (3) After `chain.exited`: runbook §4 on `20e9edbc4` with `S=/Users/edr/night-align/r1-20261111T014106Z`. Read `r1_result.json` status first. Then network time ON, the Automatic restore, KM003C, stray monitors, uninstall, record, mail Ed. **Before the NEXT arm after that, zero the frequency word again** (network time OFF, then the zero script, then measure the rate).
 (4) The watchdog-v5 fix (PR #707) is still open; install it only after the chain exits.
 
+257. **Laptop lead (interactive session 41120c85, Opus 5.5), 2026-11-10 20:10 PST: ONE research-design authority, and the R1 G0 ruling that binds (research lead RL-23). This amends item 255's (magistrate) "Next action".**
+- **Authority (lead process ruling, under Ed's 11-10 instruction "have fable lead all research design work"):**
+  - The Fable 5.2 **research lead's decision log** (`audit/2026-11-10-fable:docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md`) is the single binding record for research-design and paper-bound rulings.
+  - A ruling by any other Fable seat, including one convened by a magistrate, is a **proposal** until the research lead enters it in that log.
+  - `docs/process_traces/2026-11-10-r1-g0/10-fable52-ruling.md` is therefore a proposal. The research lead disposed of it in **RL-23**.
+  - Magistrates route design questions to the research lead through the laptop lead: a RUN_STATE item addressed to the lead, or mail to Ed. They do not convene their own deciding seat.
+- **RL-23, binding for R1** (the decision log has the full text and exact code changes):
+  - **(a) Adopted from the proposal:** a 1,200 s G0 cap for every model member (step-30b by extending R7-2's scope on R7-2's own reason, plus the A-B-A legs and d-4bit); the deadman after G0 for the A-B-A legs and d-4bit; recomputed bounds.
+  - **(b) Adopted in principle:** R_op = the step-30b pre-warmup 60 s median (WP14(b) already defines W1's reference this way). It is captured once from step-30b and never re-captured. R1 prints each later member's own pre-warmup median beside it.
+  - **(c) NEW, not in the proposal:** a step-30b whose ONLY incompleteness is an unreleased G0 is **INCONCLUSIVE, exit 0, and the night continues.** It is recorded outside `inconclusive_segments` (`align_v4_kit.py:194` refuses W1 on any entry there). Any other incompleteness still refuses. Code: `r1_runtime.py:81` adds "step-30b" to `G0_TIMEOUT_KINDS`; `k_step_30b` passes `g0_inconclusive=True` and on inconclusive calls `stop_inventory()` and returns; the contract allows an INCONCLUSIVE step-30b outside `G0_INCONCLUSIVE_KINDS`; `align_r1_rehearsal.py:153` bounds it by `g0_timeout_s`; line 1793's `30B_record_only` becomes `{"status":"inconclusive",...}`; `record_only_inconclusive` is added to the registration. The W1 kit on the v4 line must accept the new key and status; if it does not, stop and return to the research lead.
+  - **(d) HELD:** δ_slow 1.0 → 1.5 °C. It stays a slot (S6) so either value can be armed. The research lead decides it when reviewing the built branch, with the r1-g0 traces (read access granted by the lead).
+  - **(e) NR-1 must be answered before the re-arm, not deferred:** what stops step-d failing the same way if the D model's resident idle sits above the 30B-based R_op + δ?
+  - **Window:** the step-30b bound adds 600 s, so the retry floor goes from 96,427 to 97,027 s and the one-crossing `window_max_s` from 105,427 to 106,027 s, before the legs and d-4bit deltas. Derive `R1_RETRY_FLOOR_S` from `night_worst_case_s` and assert it in a test.
+  - **Route:** a cited rebind on the one reviewed fix line from `20e9edbc4` (`lane/2026-11-10-r1-g0-rop` serves). It replaces R13's "arm exactly 20e9edbc4". Bundle nothing else.
+- **Next action for the magistrate (replaces item 255's (1)-(3)):**
+  (1) Fold RL-23 (c) and the window derivation into the `lane/2026-11-10-r1-g0-rop` build. Keep δ_slow as a slot.
+  (2) Failing-first tests, then an executing review by the other model family.
+  (3) **Then the research lead's review.** It rules δ_slow and checks the NR-1 answer. This is the final gate before re-pinning `$M` and re-arming.
+  (4) Item 251's frequency-word zeroing before the arm. Arm notice to Ed.
+- **Model size and turn budget (Ed's question):** decided after R1 by ruling R10 (item 203). A different smaller model would be a model change for Ed. K, the confirmatory claim, does not depend on model size.
+
 255. **Magistrate activation 5515349e (Opus 5.5, headless), 2026-11-10 19:55 PST: items 253 and 254 are answered. The cause of the 19:05 refusal is structural. The Fable 5.2 research lead has ruled, and the R1 fix is building. Ed was mailed (Gmail `1a1c89b64f3e3348`).**
 - **Structural answer (item 254):** yes, the load comes before G0. Order inside `step-30b` (`$R/events.jsonl`): prepare (model load) 18:46:54, then idle_baseline 18:47-18:53, then warmup 18:53:40-18:54:08 (one 5 s run), then G0 18:54:10. The warmup heated Tf08 to 58 C, and G0 timed out at its 600 s cap.
 - **Two causes, measured** (`docs/process_traces/2026-11-10-r1-g0/00-diagnosis.md` and the ruling's section 2):
@@ -1089,7 +1110,7 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 (2) Then re-pin `$M` at the new head, with a fresh custody root. Before arming: network time OFF and the zero script (item 251). Then write the plan, send the arm notice and install.
 (3) The laptop lead does not need to route item 254's question again. The ruling exists.
 
-255. **Ed's decisions on Paper 1 (interactive session 41120c85, 2026-11-10 ~19:55 PST): E1-E6 all approved as the Fable 5.2 research lead recommended.** Source: `audit/2026-11-10-fable:docs/research-audits/2026-11-10-fable/paper-audit.md` and RL-1 to RL-11. **Ed, verbatim:** "yes to all E1 on E6 ... If Fable recommends them, go ahead".
+256. **Ed's decisions on Paper 1 (interactive session 41120c85, 2026-11-10, committed 19:42 PST; renumbered from a colliding 255): E1-E6 all approved as the Fable 5.2 research lead recommended.** Source: `audit/2026-11-10-fable:docs/research-audits/2026-11-10-fable/paper-audit.md` and RL-1 to RL-11. **Ed, verbatim:** "yes to all E1 on E6 ... If Fable recommends them, go ahead".
 - **E1:** **Paper 1 is the mid-December capstone submission,** with a one-page agent-auditing outlook. The tripwire paper is not the December deliverable. This supersedes item 232's attachment of Block 5/BYTES as the tripwire paper's validation section.
 - **E2:** capstone length now (about 17,600 words). Cut for a venue once the replication and BYTES are released.
 - **E3:** the AI-use statement names the model families. **Ed writes the introduction and conclusion.**
