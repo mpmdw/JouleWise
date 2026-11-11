@@ -56,6 +56,17 @@ def source(fid):
         return f'BYTES harvest structure and stage records ({BY} §5, §11, §15)'
     if fid.startswith('P1-BY-'):
         return f'BYTES stage-2 records of `scripts/bytes_analyze.py` and the twin comparer ({BY} §7-§15)'
+    # FACT S9-12 (RL-24 seat 9): per-id sources for the Section 7 automation fills, through 10 November 2026.
+    if fid == 'P1-AUTO-MODELS':
+        return 'session headers in RUN_STATE.md (each item names its session, model and role: lead, magistrate activation, loop wake); docs/process/gate_policy.md rule 3 (review seats); docs/process/model_allocation_ledger.md; RUN_STATE items 252 and 257 (research lead from 2026-11-10); E3 of item 256b (the AI-use statement names the families)'
+    if fid == 'P1-AUTO-LOST':
+        return 'census refusal, stop and pause records outside custody, structure only: primary-block arm and window records (docs/process_traces/2026-10-block5/), RUN_STATE items 16 and 31 (primary), 44-59 (replication), 70-78, 85 and 151 (BYTES), harvest verdict codes `night_refused_agent_present` / `night_aborted_agent_present`; no custody path is opened'
+    if fid == 'P1-AUTO-CATCHES':
+        return 'docs/process_traces/2026-10-27-pipeline-audit/segments.json and SYNTHESIS.md (through 2026-10-27, historical evidence only); docs/process/gate_policy.md rule 9 pruning tallies in session records after 2026-10-27 (RUN_STATE magistrate RECORD.md files and docs/run_reports/)'
+    if fid == 'P1-AUTO-REPLAY':
+        return f'replay derivations of the drift bar and the outside-processor exclusion in {B6} (S-8 derivation; RUN_STATE item 42) and the primary-block rehearsal replays they cite'
+    if fid == 'P1-AUTO-BLINDCHECK':
+        return 'the structure-only check of RL-7 (g), made by RL-24 seat 11 and recorded before the BYTES stage-1 commitment, at origin/audit/2026-11-10-fable RESEARCH-LEAD-DECISIONS.md; printed whichever way it falls'
     if fid.startswith('P1-AUTO-'):
         return 'process evidence through November: docs/process/gate_policy.md; docs/process_traces/2026-10-27-pipeline-audit/ (historical evidence only); RUN_STATE items 108 and 181; docs/analysis/b5/DEVIATION-LOG.md; RL-5 items 3-4 and RL-24 seat 9 at origin/audit/2026-11-10-fable (full rewrite and evidence adjudication pending; BLINDCHECK requires its own recorded check)'
     if fid.startswith('P1-ID-') or fid == 'CP-X01-identity':
