@@ -1,5 +1,12 @@
 # Block 5 independent reader: RL-41/RL-42 print authority
 
+**2026-11-11 RL-52 partial extension:** 263 rows have been appended after the
+original 538 rows, which remain byte-identical to print authority `0b8763f0a`.
+The extension is **not a completed RL-52 gate**: access authority for the pinned
+`dry-m/dry-run/restricted/` descendants needs a ruling, and an Opus cold review
+is still owed. See [Rows not printed by RESULTS.md (RL-52)](#rows-not-printed-by-resultsmd-rl-52)
+and the [extension report](../../run_reports/2026-11-11-p1-b5-ledger-ext.md).
+
 ## Errata to RESULTS.md
 
 2026-11-10, research lead RL-39. [RESULTS.md](RESULTS.md) remains byte-identical.
@@ -34,7 +41,7 @@ by RL-42**, subject to the row and composition rules below. The ledger commit
 recorded in the [seat-p3 report](../../run_reports/2026-11-10-p1-seat4-p3.md)
 is the print authority; this report does not supply a new custody check.
 
-The [538-row ledger](rederivation.tsv) has **261 exact, 256 within-rounding
+The original 538 rows of the [ledger](rederivation.tsv) have **261 exact, 256 within-rounding
 (517 together), 6 recorded-judgment, 14 single-source, and 1 MISMATCH**.
 Physical TSV row numbers include the header and remain stable.
 
@@ -608,3 +615,76 @@ for ds, mu, se, bound, tokens in cases:
     print("p", student_two_sided(mu/se,n-1))
     print("per token", mu/tokens, "LOO", min(loo), max(loo))
 ```
+
+## Rows not printed by RESULTS.md (RL-52)
+
+2026-11-11, Sol seat `p1-b5-ledger-ext`, branch
+`analysis/2026-11-11-b5-ledger-ext`. This is a **partial extension**, with
+263 new rows at physical TSV lines **540–802**. The new table commit is
+recorded in the [run report](../../run_reports/2026-11-11-p1-b5-ledger-ext.md).
+The original header and all 538 original rows remain byte-identical to
+`0b8763f0a8291bfa5d47fdc18aa64ef3aa33ec1b`; their row numbers do not move.
+`RESULTS.md` remains byte-identical, SHA-256
+`fb5f81e8741532d79b059b2ca7c44b1c479f0f983c28527ab6e2511d7dfb6f55`.
+
+The source for every new row is **RC**, the already pinned
+`release-check-final-20261108T0942Z/recompute.json`, SHA-256
+`c06ee7c8cbf85a68dcebc24a73e0372fd6f8d825fc3acf30ec352304dd93cacc`.
+Every open authenticated the file before JSON parsing and re-hashed it in a
+`finally` block. The script follows no path inside it. No file under
+`dry-m/dry-run/restricted/` was opened, listed or statted by this seat.
+
+| New rows | Coverage |
+|---|---|
+| 540–606 | Eight independent R, their 16 terms, eight n and pass words; four comparative floors; four R_cm with numerator, denominator, n and pass; branch and failure counts |
+| 607–712 (interleaved by cell) | Three kind averages of B, attribution-floor attaining run and minimum, ALPHA/BETA removed-unit codes and counts, per-cell battery/load numeric lines and counts, four cross-session deltas, half-widths and agree booleans |
+| 713–721 | Nine removed contrast quads, each with its codes as a row value, checked by unioning the member codes |
+| 722–784 | All three packs' model-specific request-level ρ medians, ranges, quartiles, within-model spreads, consistency words, member counts and hard-band failure counts |
+| 785–802 | ALPHA/BETA gross-family NEG-8 corpus/reference counts, both bound terms, bound, spread and allowance |
+
+[hand_check_rl52.py](hand_check_rl52.py) uses independent stdlib arithmetic,
+with the earlier reader's stdlib numerical/access helpers. It imports no
+repository analysis or recompute code. Each TSV row carries its key path,
+source hash, formula, value at ledger precision and residual to two significant
+figures. No member energy, current, temperature or timing series is serialized.
+Shared trace-sweep widths remain pinned member/quad inputs, as in the earlier
+hand checks; scalar member energies do not reconstruct the raw trace sweep.
+
+The dominance point bound is the registered maximum of the envelope and
+Student prediction term. Independent-sign corner enumeration supplies the
+numerator; the denominator is the unguarded point bound. Comparative floors
+apply the small-n guard and gross NEG-8 allowance. R_cm uses one shared sign
+with independent local signs. **All eight R pass; three R_cm fail; branch B
+is reproduced; no nonpositive denominator is encountered.**
+
+Reported-cell calculations retain fixed weights 0.2 and 0.8. B's three
+averages are the clock bound, zero interval-support interpolation bound, and
+half the gross allowance. The attaining run is the argmax of the first-kind
+bound over kept members; the other two kinds do not have unique attaining
+runs. Load restoration requires that a dropped unit's complete nonempty code
+set be load-only; a mixed-code unit stays removed. The eight battery-assist
+counts are copied recorded inputs, labelled `recorded-judgment`; the numeric
+without-assist lines are independently calculated conditional on those inputs.
+
+For cross-session agreement, the rule is
+`abs(G-F) <= hypot(h_G,h_F)`. G and h_G use GAMMA **quad-arm means**, while F
+and h_F use the registered stratified floor-session estimator. The four deltas
+also agree at the precision of original rows **169–172**. These new booleans
+are derived words, not recorded judgments. A direct check against DISC's
+`cross_window` rows is still blocked by the access question.
+
+New-row words: **118 exact, 137 within-rounding, 8 recorded-judgment**;
+zero new MISMATCH and zero source-outside-unseal rows. Whole-table words:
+**379 exact, 393 within-rounding, 14 recorded-judgment, 14 single-source,
+1 MISMATCH** (the unchanged RL-39 row 249), **801 total**.
+
+The unsourced remainder is the attempt-disclosure causes/counts, arm hazards
+and stage temperatures/physics counts, monitor costs, floor-limit class
+leaves, full two-family NEG-8 verdict/loss/cap/spare disclosures, and direct
+DISC/projection checks for the rows above (including the agree/differ words).
+Their files are **inside** the two named roots but under the separately
+forbidden real `restricted/` directory. They are authority-blocked, not
+factual mismatches or sources known to be outside the unseal; no fabricated
+ledger status is assigned. The run report records the question and next step.
+The new `paper1` placements describe row-level eligibility only: **the extension
+still needs its own Opus cold review and lead adjudication before a second fill.**

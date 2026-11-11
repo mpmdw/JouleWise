@@ -354,6 +354,10 @@ def repository_check():
         before = list(csv.DictReader(io.StringIO(original), delimiter='\t'))
         with (dest / name).open(newline='') as stream:
             current = list(csv.DictReader(stream, delimiter='\t'))
+        if name == 'rederivation.tsv' and len(current) >= len(before):
+            # This historical cold review covers the original ledger only.
+            # Appended RL-52 rows need their own independent cold review.
+            current = current[:len(before)]
         if len(before) != len(current):
             raise ValueError(f'{name}: changed row count')
         for number, (old, row) in enumerate(zip(before, current), 2):
@@ -397,7 +401,8 @@ def repository_check():
     print(json.dumps({'mode': 'repository-only; no custody arithmetic rerun', 'counts': dict(counts),
                       'total': len(rows), 'hand_rows': len(tables['hand_checks_phase2.tsv']),
                       'rounded_hand_table_byte_identical': True,
-                      'ledger_residuals_match_review_record': True}, indent=2))
+                      'ledger_residuals_match_review_record': True,
+                      'scope': 'original 538 rows only; no review of appended rows'}, indent=2))
 
 
 def main():

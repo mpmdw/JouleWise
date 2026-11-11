@@ -16,6 +16,9 @@ SCRIPT = Path(__file__).absolute().parents[2] / 'docs/analysis/b5/hand_check_pha
 spec = importlib.util.spec_from_file_location('phase2_reader', SCRIPT)
 reader_module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(reader_module)
+ext_spec = importlib.util.spec_from_file_location('rl52_reader', SCRIPT.with_name('hand_check_rl52.py'))
+extension = importlib.util.module_from_spec(ext_spec)
+ext_spec.loader.exec_module(extension)
 
 
 class AccessBoundaryTests(unittest.TestCase):
@@ -169,6 +172,105 @@ class PrintAuthorityTests(unittest.TestCase):
         rows[0]['match'] = 'MISMATCH'
         with self.assertRaisesRegex(ValueError, 'STOP: RL-42 counts differ'):
             reader_module.apply_print_rulings(rows)
+
+
+class LedgerExtensionTests(unittest.TestCase):
+    def test_partial_reader_refuses_dry_m_before_filesystem_access(self):
+        with patch.object(Path, 'lstat', side_effect=AssertionError('filesystem touched')):
+            for alias in ('DISC', 'FILL', 'PROJ-A', 'REC', 'VER'):
+                with self.subTest(alias=alias), self.assertRaisesRegex(ValueError, 'only RC'):
+                    extension.ReleasedReader().read(alias)
+            for root, rel in ((extension.h.ROOT_A, 'file.json'),
+                              (extension.h.ROOT_B, 'restricted/file.json'),
+                              (extension.h.ROOT_B, '../recompute.json')):
+                with self.subTest(relative=rel), self.assertRaisesRegex(ValueError, 'only RC'):
+                    extension.ReleasedReader.checked_path(root, rel)
+
+    def test_original_ledger_prefix_is_immutable(self):
+        self.assertTrue(SCRIPT.with_name('rederivation.tsv').read_bytes().startswith(extension.base_bytes()))
+        original = list(csv.DictReader(io.StringIO(extension.base_bytes().decode()), delimiter='\t'))
+        self.assertEqual(len(original), 538)
+
+    def test_recompute_pin_cannot_silently_drift(self):
+        source = {'RC':(extension.h.ROOT_B,'recompute.json','0'*64)}
+        with patch.object(extension.h,'SOURCES',source):
+            with patch.object(Path,'lstat',side_effect=AssertionError('filesystem touched')):
+                with self.assertRaisesRegex(ValueError,'pin configuration changed'):
+                    extension.ReleasedReader().read('RC')
+
+    def test_extension_serializes_only_printed_precision_and_rounded_residual(self):
+        fields = next(csv.reader(io.StringIO(extension.base_bytes().decode()), delimiter='\t'))
+        ledger = extension.Ledger(fields)
+        ledger.add('synthetic.aggregate', 1.234567891, 1.234567892, 'synthetic arithmetic')
+        row = ledger.rows[0]
+        self.assertEqual(row['printed_value'], '1.23457')
+        self.assertEqual(row['rederived_value'], '1.23457')
+        self.assertEqual(row['source_value'], '1.23457')
+        self.assertEqual(row['difference'], '-0.0000021')
+        self.assertEqual(row['match'], 'within-rounding')
+        self.assertNotIn('1.23456789', reader_module.table_text(ledger.rows))
+        ledger.add('synthetic.mismatch', 1.0, 2.0, 'bad stored leaf', kind='recorded-judgment')
+        self.assertEqual(ledger.rows[-1]['match'], 'MISMATCH')
+
+    def test_mixed_load_and_nonload_codes_are_never_restored(self):
+        units = [{'unit_id': 'load', 'codes': ['contention.request_overlap']},
+                 {'unit_id': 'mixed', 'codes': ['contention.request_overlap', 'member.failed']},
+                 {'unit_id': 'empty', 'codes': []}]
+        self.assertEqual([x['unit_id'] for x in extension.restored_load_units(units)], ['load'])
+
+    @staticmethod
+    def synthetic_cell():
+        members = {}
+        def put(key, energy, bound):
+            members[key] = {'E_j': {'decode':energy}, 'a_bop_j':{'decode':bound}}
+        put('repeat1',0,1)
+        put('repeat2',2,3)
+        for i, energy in enumerate((3,5),1):
+            for position in ('a1','b1','b2','a2'):
+                put(f'floor-decode-b{i:02}-{position}',energy,5)
+        cell = {'model':'Qwen3-1.7B-4bit', 'phase':'decode',
+                'kept_units':{'repeat':['repeat1','repeat2'], 'quad':['floor-b01','floor-b02']}}
+        rc = {'members':{'ALPHA':members}, 'windows':{'ALPHA':{'neg8':{'allowance_j':2}}}}
+        return rc, cell
+
+    def test_kind_averages_are_stratified_and_attribution_uses_kept_members(self):
+        rc, cell = self.synthetic_cell()
+        rc['members']['ALPHA']['removed'] = {'E_j':{'decode':100},'a_bop_j':{'decode':99}}
+        value = extension.cell_arithmetic(rc,cell)
+        self.assertAlmostEqual(value['mean'],3.4)
+        self.assertEqual(value['kind_averages_j'],[4.4,0,1])
+        self.assertAlmostEqual(value['B_j'],5.4)
+        self.assertNotEqual(value['attained_by'],'removed')
+        self.assertEqual(value['minimum_j'],1)
+
+    def test_cross_session_uses_quad_arm_means_for_scatter(self):
+        rc, cell = self.synthetic_cell()
+        gamma = {}
+        for i, mean in enumerate((3,5,7),1):
+            for position, energy in [('a1',mean-1),('a2',mean+1),('b1',1000),('b2',1000)]:
+                gamma[f'gamma-decode-b{i:02}-{position}'] = {'E_j':{'decode':energy}}
+        rc['members']['GAMMA'] = gamma
+        rc['contrasts'] = {'contrast-decode-primary':{'kept_quads':['gamma-b01','gamma-b02','gamma-b03']}}
+        value = extension.cross_arithmetic(rc,cell)
+        self.assertAlmostEqual(value['delta_j'],1.6)
+        self.assertAlmostEqual(value['h_G_j'],4.302652729749464*2/math.sqrt(3))
+        self.assertTrue(value['agree'])
+        for key, member in gamma.items():
+            if key.endswith(('a1','a2')):
+                member['E_j']['decode'] += 100
+        self.assertFalse(extension.cross_arithmetic(rc,cell)['agree'])
+
+    def test_quad_identity_ambiguity_refuses(self):
+        rc, _ = self.synthetic_cell()
+        members = rc['members']['ALPHA']
+        members['duplicate-decode-b01-a1'] = members['floor-decode-b01-a1']
+        with self.assertRaisesRegex(ValueError,'ambiguous'):
+            extension.quad_ids(members,'decode','floor-b01')
+
+    def test_quantiles_interpolate_and_keep_endpoints(self):
+        self.assertEqual(extension.percentile([1,5,9,13],.25),4)
+        self.assertEqual(extension.percentile([1,5,9,13],.75),10)
+        self.assertEqual(extension.percentile([7],.75),7)
 
 
 if __name__ == '__main__':
