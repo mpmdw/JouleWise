@@ -37,9 +37,16 @@ class _Ctx(unittest.TestCase):
                                      side_effect=AssertionError('PREQUAL omitted synthetic watchdog'))
         watchdog.start()
         self.addCleanup(watchdog.stop)
-        for name in ('frequency_word_preflight', 'frequency_word_pre_t0'):
-            frequency = mock.patch.object(align_v4_session, name,
-                side_effect=AssertionError('PREQUAL omitted synthetic frequency'))
+        preflight = align_v4_session.frequency_word_preflight
+
+        def synthetic_preflight(*args, **kwargs):
+            if kwargs.get('reader') is None:
+                raise AssertionError('PREQUAL omitted synthetic frequency reader')
+            return preflight(*args, **kwargs)
+
+        for name, seam in (('frequency_word_preflight', synthetic_preflight),
+                           ('frequency_word_pre_t0', AssertionError('PREQUAL omitted synthetic frequency'))):
+            frequency = mock.patch.object(align_v4_session, name, side_effect=seam)
             frequency.start()
             self.addCleanup(frequency.stop)
         self.tmp = Path(tempfile.mkdtemp(prefix='w1pq-test-'))
@@ -58,6 +65,42 @@ class _Ctx(unittest.TestCase):
 
 
 class ArmCliTests(_Ctx):
+    def test_synthetic_plan_carries_production_clock_budget(self):
+        import time
+        from joulewise.b6 import plan_inputs
+        from scripts import align_v4_kit as kit, bytes_h_session as h
+        now = time.time()
+        _, session, _ = wp.arm_fixture(self.ctx, 'clock-plan', now=now)
+        state = h.read(session / 'session.json')
+        plan = h.read(state['plan_path'])
+        w1, _, _ = wp.synthetic_w1_plan(self.ctx)
+        stream_max = max(member['member_s'] for member in w1['align_v4']['members'])
+        clock = plan_inputs.thresholds(ROOT, ROOT / kit.KIT / 'registration')['clock']
+        clock['t_stream_max_s'] = stream_max
+        self.assertEqual(plan['hazard_window']['thresholds']['clock'], clock)
+        self.assertEqual(plan['hazard_window']['T_stream_max_s'], stream_max)
+
+    def test_missing_hazard_window_is_refused_before_installer(self):
+        import time
+        from scripts import bytes_h_session as h
+        now = time.time()
+        base, session, disk = wp.arm_fixture(self.ctx, 'missing-clock-plan', now=now)
+        state = h.read(session / 'session.json')
+        plan = h.read(state['plan_path'])
+        packet = wp.valid_packet(self.ctx, base, now)
+        plan.pop('hazard_window', None)
+        h.write(state['plan_path'], plan)
+        state['plan_sha256'] = h.locator(state['plan_path'])['sha256']
+        h.write(session / 'session.json', state)
+        host = wp.FakeHost(now=now)
+        out = wp.run_install(self.ctx, session, disk, packet, host=host, now=now,
+                             frequency_preflight=host.frequency_plan_check)
+        self.assertNotEqual(out['rc'], 0)
+        self.assertFalse(out['arm']['admitted'])
+        self.assertEqual(out['installer_calls'], [])
+        self.assertEqual(out['arm']['reasons'], [
+            "clock.frequency_plan_invalid: ValueError: plan clock budget unavailable: 'hazard_window'"])
+
     def test_named_weight_digest_check_passes_matching_and_trips_mismatch(self):
         self.assertIn('weight-digest-preflight', wp.CHECKS)
         row = self.probe('weight-digest-preflight')
@@ -136,6 +179,8 @@ class ArmCliTests(_Ctx):
         self.assertEqual(row['status'], wp.PASS, row['detail'])
         cases = {c['case']: c for c in row['evidence']['cases']}
         self.assertTrue(cases['control']['admitted'] and cases['control']['installer_called'])
+        self.assertEqual(cases['plan-hazard-window-missing']['reasons'], [
+            "clock.frequency_plan_invalid: ValueError: plan clock budget unavailable: 'hazard_window'"])
         for name, case in cases.items():
             if name != 'control':
                 self.assertFalse(case['installer_called'], name)
