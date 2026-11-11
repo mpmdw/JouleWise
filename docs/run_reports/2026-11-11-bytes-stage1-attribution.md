@@ -242,3 +242,30 @@ $PY -I $S1/attribution-probe.py --repo $W --run-root $S1/run --export $S1/export
 
 Under RL-80, the seat that builds any fix sees only what this report states, plus the yes/no and count lines the
 lead relays.
+
+## Addendum, 2026-11-11 07:51 PST: `W_follows_B` = no in 6 of 9 is a probe defect, not a second difference
+
+**What was read.** The probe's output on main, `docs/process_traces/2026-11-11-bytes-stage1-attribution-probe/probe.txt`
+@ `6d46bf699`, which holds typed tokens only. The code of both implementations and of the probe, at `53207bad3`.
+
+**The defect is in the probe.** It compares quantities in different units.
+- **The probe** compares Δw with the mean over passes of the gross cell's ΔB, at w's bar
+  (`scripts/bytes_stage1_attribution_probe.py:398-407`).
+- **The comparer's `w`** is `(p["upper"] - p["lower"]) / 2` of the fit point (`tests/test_bytes_agreement.py:1070`).
+- **The estimator's fit point** has `lower = (mean − h − B) / DECODE_STEPS` and
+  `upper = (mean + h + B) / DECODE_STEPS`, with h and B each the mean over passes (`joulewise/bytes_analysis.py:1432-1446`;
+  `DECODE_STEPS = 512`, `:27`). So `w` is the half-width per decode forward pass, mean over passes of (h + B) / 512, as
+  §7's derived quantities register (`bytes_pack_v1.md`, e and its interval).
+- **The twin's w** is `e_half_width_j_per_step = (hi − lo) / 2 / DECODE_STEPS` (`scripts/bytes_twin.py:1662, 2191`).
+
+Both sides therefore compute the same thing: the mean over passes, the same passes, divided by 512. The probe compares
+Δw with the mean of ΔB without dividing by 512, so its test reads "no" wherever ΔB is non-zero:
+- rails and rest, 6 of 6 above bar: `no`;
+- DC input, where ΔB is within bar: `yes`, 3 of 3.
+
+**The tokens agree with that reading.** A multiple of a bar does not depend on units. The w multiples (41, 13, 35, 12,
+27, 11) equal the mean of the two passes' gross `B_j` multiples (42/40, 14/13, 36/34, 13/11, 27/26, 11/12) to two
+significant figures, for every model and boundary. `W_with_B` is yes in 9 of 9.
+
+**Item 3 stands.** `w` follows from item 1 alone. No RL-80 branch beyond item 1's applies, and nothing needs to be
+re-run for the attribution. If the probe is ever reused, its `W_follows_B` test should divide the mean ΔB by 512.
