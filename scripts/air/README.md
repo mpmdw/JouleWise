@@ -2,12 +2,14 @@
 
 Run this on the lead's Air. It never opens SSH. The Git origin must use HTTPS
 or a local file path. Authentication must already work without a prompt.
+An unsupported origin protocol exits 2 with `ORIGIN_PROTOCOL_NOT_ALLOWED` before the first poll.
 It fetches Git objects without checking out branches. Only projected structural
 records enter temporary files. Slots and existence markers are never read.
 No measurement files or free-form record text are printed or materialised.
 
 ```sh
 python3.13 scripts/air/night_results_watch.py --once
+python3.13 scripts/air/night_results_watch.py --once --include-plan finished-rehearsal
 python3.13 scripts/air/night_results_watch.py --loop --interval 120 --hours 26 \
   --plan-id example-plan --t0 1794400000 --latest-end 1794440000 \
   --min-expected-s 3600 --grace 300
@@ -27,10 +29,10 @@ event is suppressed across restarts. A moved ref is classified again. Failed
 reads are retried, including after restart. A crash during delivery can repeat
 a line; state is saved after output/notification to avoid losing the alarm.
 
-On the first run, existing refs are baseline. `--since-epoch E` includes existing
-refs whose structural `result.ended_epoch_s >= E`. Missing or unreadable end
-times are included conservatively. New/moved refs after initialization are
-always included. An incomplete results branch alarms as UNKNOWN and is inspected
+On the first run, existing refs are baseline and remain unread. Repeat
+`--include-plan <plan_id>` to select existing branches explicitly. The armed plan
+from CURRENT or `--plan-id` is always included. New/moved refs after initialization
+are always included. An incomplete results branch alarms as UNKNOWN and is inspected
 again on each poll. A single failed remote listing is logged as INFO;
 `SILENCE` alarms after `--failure-limit 3` consecutive failures or
 `--silence-minutes 10` without a successful listing, whichever comes first.
@@ -52,10 +54,21 @@ CURRENT armed block. The minimum expected duration defaults to 0 (supply
 `result_json_exists` and `results_branch_exists`, with `wait.plan_id` defaulting
 to the armed plan. An observable object with `kind` and `plan_id` also works.
 Unknown observables alarm as `DEADLINE_PASSED_UNCHECKED:<observable>`.
-Baseline branches can satisfy waits without reading blobs. Plist facts remain
+An unnamed baseline can satisfy `results_branch_exists` from the ref listing.
+For `result_json_exists`, name the plan with `--include-plan` or arm it;
+the watcher never fetches an unnamed baseline just to satisfy a wait. Plist facts remain
 unknown, so the watcher cannot establish local uninstall or retained labels.
 
-Plans may declare `exit_contract: {"0": "complete", "3": "refused"}`. The adapter
+The published layout is `docs/process_traces/night-results/<plan_id>/`, followed
+by the legacy `<plan_id>/`, `night/` and root layouts. One directory supplies
+all records. Both writer generations publish `chain.started`; neither publishes
+`night_plan.json` or R1 payload/slots files. The published allowlist excludes
+these absent files. Published-branch timing comes only from CURRENT or CLI.
+W1 also publishes `courier.delivery.json` and `courier.filed` when present.
+Its Git delivery receipt is written after the push and can be absent from the
+first snapshot; the watcher does not invent delivery evidence.
+
+Legacy layouts may carry a plan with `exit_contract: {"0": "complete", "3": "refused"}`. The adapter
 passes integer keys and plan words to `window_outcome`, using the optional
 `joulewise.exit_contract.PLAN_WORDS` vocabulary when installed and the shadow
 reader's plan vocabulary otherwise. Invalid declarations alarm and are retried.
@@ -74,6 +87,9 @@ The event line is appended as the final argument. Notifications have a 10 s
 timeout; a failure exits 2 without acknowledging that poll's events. Git
 operations each have a `--git-timeout` (default 25 s), disabled prompts and
 disabled automatic maintenance. `REF_READ_FAILED` alarms on fetch/read failures.
+After `--failure-limit` consecutive failures for the same ref and commit,
+`REF_READ_FAILING` alarms once more with the count. Counters survive restart and
+reset on success, a changed commit or ref deletion.
 
 For launchd, adapt this example to absolute Air paths and save it yourself.
 This example is text only; nothing is installed by this tool. `SuccessfulExit`

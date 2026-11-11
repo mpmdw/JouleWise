@@ -1,6 +1,7 @@
 """Synthetic records only. The transport integration uses a local bare repo."""
 from __future__ import annotations
 
+import ast
 import contextlib
 import io
 import json
@@ -25,6 +26,32 @@ def encoded(doc):
     return json.dumps(doc).encode()
 
 
+def writer_prefix(plan):
+    """Read HEAD's destination expression as data, never import the writer."""
+    source = subprocess.run(["git", "-C", str(w.ROOT), "show", "HEAD:scripts/run_night.py"],
+                            check=True, capture_output=True, text=True).stdout
+    tree = ast.parse(source)
+    writer = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "_durable_record")
+    expressions = [n.value for n in ast.walk(writer) if isinstance(n, ast.Assign)
+                   and any(isinstance(t, ast.Name) and t.id == "destination" for t in n.targets)]
+    if len(expressions) != 1:
+        raise AssertionError("writer destination expression changed; review the watcher layout")
+
+    def read(node):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return node.value
+        if isinstance(node, ast.Name) and node.id == "clone":
+            return Path()
+        if (isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name)
+                and node.value.id == "plan" and node.attr == "plan_id"):
+            return plan
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
+            return Path(read(node.left)) / read(node.right)
+        raise AssertionError("unrecognised writer destination expression")
+
+    return read(expressions[0]).as_posix() + "/"
+
+
 def records(*, verdict="GO", rc=0, fault=False, reasons=None, prefix="night/", started=True):
     doc = {"verdict": verdict, "chain_exit_code": rc, "fault": fault,
            "fault_reasons": reasons or [], "ended_epoch_s": 1000}
@@ -40,25 +67,41 @@ class FakeGit:
         self.refs = {REF: A}
         self.files = files if files is not None else records()
         self.shown, self.fetched = [], []
-        self.fail_ls = self.fail_fetch = False
+        self.calls = []
+        self.files_by_sha = {}
+        self.fail_ls = self.fail_fetch = self.fail_tree = self.fail_show = False
+        self.origin_error = False
+
+    def check_origin(self):
+        self.calls.append(("check_origin",))
+        if self.origin_error:
+            raise w.WatchError("ORIGIN_PROTOCOL_NOT_ALLOWED")
 
     def ls_remote(self, pattern):
+        self.calls.append(("ls_remote", pattern))
         assert pattern == w.PREFIX + "*"
         if self.fail_ls:
             raise w.WatchError("secret transport detail")
         return dict(self.refs)
 
     def fetch(self, ref):
+        self.calls.append(("fetch", ref))
         self.fetched.append(ref)
         if self.fail_fetch:
             raise w.WatchError("secret fetch detail")
 
     def list_tree(self, ref):
-        return set(self.files)
+        self.calls.append(("list_tree", ref))
+        if self.fail_tree:
+            raise w.WatchError("secret tree detail")
+        return set(self.files_by_sha.get(ref, self.files))
 
     def show(self, ref, path):
+        self.calls.append(("show", ref, path))
         self.shown.append(path)
-        return self.files[path]
+        if self.fail_show:
+            raise w.WatchError("secret show detail")
+        return self.files_by_sha.get(ref, self.files)[path]
 
 
 def running(git=None, **kwargs):
@@ -129,6 +172,76 @@ class ResultsTests(unittest.TestCase):
         files = records(prefix="synthetic/", started=False) | records()
         self.assertEqual(w.inspect_ref(FakeGit(files), REF, A, 1001).outcome, "UNKNOWN")
 
+    def test_published_layout_follows_head_writer_and_wins_over_fallbacks(self):
+        prefix = writer_prefix("synthetic")
+        # Only the writer expression supplies the published destination.
+        for kwargs, expected in (({}, "MEASURED_OK"), ({"rc": 3}, "CHAIN_FAILED"),
+                                 ({"started": False}, "UNKNOWN")):
+            for fallback in ({}, records()):
+                with self.subTest(kwargs=kwargs, fallback=bool(fallback)):
+                    files = records(prefix=prefix, **kwargs) | fallback
+                    summary = w.inspect_ref(FakeGit(files), REF, A, 1001)
+                    self.assertEqual(summary.outcome, expected)
+        files = {prefix + "chain.started": b"{}"}
+        self.assertEqual(w.layout(set(files), "synthetic"), prefix)
+        self.assertEqual(w.inspect_ref(FakeGit(files), REF, A, 1001).outcome, "UNKNOWN")
+        # An incomplete published snapshot must not borrow a fallback result.
+        self.assertEqual(w.inspect_ref(FakeGit(files | records()), REF, A, 1001).outcome, "UNKNOWN")
+
+    def test_published_allowlist_and_both_writer_generations(self):
+        prefix = writer_prefix("synthetic")
+        for delivery in ({"courier.json": {"sent": True, "message_id": "PRIVATE"}},
+                         {"courier.delivery.json": {"transport": "git-push", "commit": A,
+                                                    "result_sha256": "b" * 64, "ref": REF}}):
+            files = records(prefix=prefix) | {prefix + "courier.sent": b"PRIVATE"}
+            files.update({prefix + name: encoded(doc) for name, doc in delivery.items()})
+            # Neither generation publishes plans or payload/slots records.
+            for name in ("night_plan.json", "r1_result.json", "align-r1/r1_result.json",
+                         "outcomes.json", "launch_abandoned.json", "courier.lock"):
+                files[prefix + name] = b"PRIVATE"
+            files["night_plan.json"] = b"PRIVATE"
+            git = FakeGit(files)
+            summary = w.inspect_ref(git, REF, A, 1001)
+            self.assertEqual(summary.outcome, "MEASURED_OK")
+            self.assertEqual(summary.state, "Delivered")
+            self.assertEqual(set(git.shown), {prefix + name for name in
+                             ("result.json", "chain.started", "chain.exited", *delivery)})
+            self.assertNotIn("PRIVATE", summary.fields())
+
+    def test_published_projection_at_temp_and_cli_boundaries(self):
+        prefix = writer_prefix("synthetic")
+        files = records(prefix=prefix) | {
+            prefix + "result.json": encoded({"verdict": "GO", "chain_exit_code": 0,
+                                              "fault": True, "fault_reasons": ["PRIVATE"], "outcome": "PRIVATE"}),
+            prefix + "courier.delivery.json": encoded({"transport": "git-push", "commit": A,
+                                                       "result_sha256": "b" * 64, "ref": REF, "outcome": "PRIVATE"}),
+            prefix + "courier.sent": b"PRIVATE",
+            prefix + "receipt.json": b"PRIVATE",
+            prefix + "outcomes.json": b"PRIVATE",
+            prefix + "night_plan.json": b"PRIVATE",
+        }
+        observe = w.ws.observe_night_dir
+        checked = []
+
+        def inspect_temp(path, **kwargs):
+            for p in Path(path).rglob("*"):
+                if p.is_file():
+                    self.assertNotIn(b"PRIVATE", p.read_bytes())
+            checked.append(True)
+            return observe(path, **kwargs)
+
+        with tempfile.TemporaryDirectory() as d, \
+             mock.patch.object(w, "Git", return_value=FakeGit(files)), \
+             mock.patch.object(w, "optional_exit_module", return_value=None), \
+             mock.patch.object(w.ws, "observe_night_dir", side_effect=inspect_temp), \
+             contextlib.redirect_stdout(io.StringIO()) as stdout:
+            rc = w.main(["--once", "--include-plan", "synthetic", "--state", str(Path(d) / "state"),
+                         "--current", str(Path(d) / "absent")])
+        self.assertTrue(checked)
+        self.assertEqual(rc, 10)
+        self.assertIn("outcome=MEASURED_WITH_FLAGS", stdout.getvalue())
+        self.assertNotIn("PRIVATE", stdout.getvalue())
+
     def test_both_payload_locations_and_courier_generations(self):
         for payload in w.PAYLOADS:
             files = records() | {"night/" + payload: b'{"status":"complete"}',
@@ -189,7 +302,7 @@ class ResultsTests(unittest.TestCase):
              mock.patch.object(w, "Git", return_value=git), \
              mock.patch.object(w, "optional_exit_module", return_value=None), \
              contextlib.redirect_stdout(io.StringIO()) as stdout:
-            rc = w.main(["--once", "--since-epoch", "0", "--state", str(Path(d) / "state"),
+            rc = w.main(["--once", "--include-plan", "synthetic", "--state", str(Path(d) / "state"),
                          "--current", str(Path(d) / "absent")])
         # The deliberately orphaned second slots record is incomplete evidence.
         self.assertEqual(rc, 20)
@@ -314,16 +427,44 @@ class TimingTests(unittest.TestCase):
 
 
 class PollStateTests(unittest.TestCase):
-    def test_first_baseline_quiet_and_since_filter(self):
+    def test_first_baseline_is_unread(self):
         git = FakeGit()
         watcher = w.Watcher(git, w.empty_state())
         self.assertEqual(watcher.poll(1001), [])
-        self.assertEqual(git.shown, [])
-        for since, expected in ((999, True), (1000, True), (1001, False)):
-            watcher = w.Watcher(git, w.empty_state(), since=since)
-            self.assertEqual(bool(watcher.poll(1002)), expected)
-        watcher = w.Watcher(FakeGit({}), w.empty_state(), since=1001)
-        self.assertIn("RESULT_NOT_MEASURED", codes(watcher.poll(1002)))
+        self.assertEqual(git.calls, [("ls_remote", w.PREFIX + "*")])
+        self.assertEqual(watcher.state["refs"], {REF: A})
+
+    def test_first_run_touches_exactly_named_and_armed_refs(self):
+        git = FakeGit()
+        named, armed, other = (w.PREFIX + p for p in ("named", "armed", "other"))
+        git.refs.update({named: B, armed: C, other: "d" * 40})
+        watcher = w.Watcher(git, w.empty_state(), include_plans=["named", "named"])
+        events = watcher.poll(1001, {"armed": {"plan_id": "armed"}})
+        self.assertEqual({e.subject for e in events}, {named, armed})
+        expected = [("ls_remote", w.PREFIX + "*")]
+        for ref, sha in ((armed, C), (named, B)):
+            expected += [("fetch", ref), ("list_tree", sha)]
+            expected += [("show", sha, "night/" + name) for name in
+                         ("result.json", "chain.started", "chain.exited")]
+        self.assertEqual(git.calls, expected)
+        # An unnamed baseline stays unread on later polls, too.
+        git.calls.clear()
+        watcher.poll(1002)
+        self.assertEqual({c[1] for c in git.calls if c[0] == "fetch"}, {named, armed})
+        self.assertEqual({c[1] for c in git.calls if c[0] in {"list_tree", "show"}}, {B, C})
+
+    def test_new_armed_pointer_includes_unchanged_baseline(self):
+        git = FakeGit()
+        watcher = w.Watcher(git, w.empty_state())
+        watcher.poll(1001)
+        self.assertEqual(codes(watcher.poll(1002, {"armed": {"plan_id": "synthetic"}})), {"RESULT"})
+        self.assertEqual(git.fetched, [REF])
+
+    def test_include_plan_validated_before_any_git_access(self):
+        git = FakeGit()
+        with self.assertRaises(ValueError):
+            w.Watcher(git, w.empty_state(), include_plans=["../secret"])
+        self.assertEqual(git.calls, [])
 
     def test_new_moved_twice_and_restart_deduplication(self):
         watcher, git = running(FakeGit(records(rc=3)))
@@ -367,6 +508,52 @@ class PollStateTests(unittest.TestCase):
         restarted = w.Watcher(git, json.loads(json.dumps(watcher.state)))
         self.assertIn("RESULT", codes(restarted.poll(1002)))
 
+    def test_ref_read_failure_limit_and_restart_at_each_git_boundary(self):
+        for boundary in ("fail_fetch", "fail_tree", "fail_show"):
+            for limit in (2, 4):
+                with self.subTest(boundary=boundary, limit=limit), tempfile.TemporaryDirectory() as d:
+                    watcher, git = running(failure_limit=limit)
+                    setattr(git, boundary, True)
+                    path = Path(d) / "state"
+                    for count in range(1, limit + 2):
+                        events = watcher.poll(1000 + count)
+                        self.assertEqual("REF_READ_FAILED" in codes(events), count == 1)
+                        self.assertEqual("REF_READ_FAILING" in codes(events), count == limit)
+                        if count == limit:
+                            event = next(e for e in events if e.code == "REF_READ_FAILING")
+                            self.assertEqual((event.subject, event.fields, event.identity), (REF, f"count={limit}", B))
+                            self.assertNotIn("secret", event.line(1000 + count))
+                        w.save_state(path, watcher.state)
+                        watcher = w.Watcher(git, w.load_state(path), failure_limit=limit)
+
+    def test_ref_failure_count_resets_for_new_sha_success_and_deletion(self):
+        watcher, git = running(failure_limit=2)
+        git.fail_fetch = True
+        watcher.poll(1001)
+        git.refs[REF] = C
+        self.assertNotIn("REF_READ_FAILING", codes(watcher.poll(1002)))
+        self.assertIn("REF_READ_FAILING", codes(watcher.poll(1003)))
+        git.fail_fetch = False
+        watcher.poll(1004)
+        self.assertEqual(watcher.state["read_failures"], {})
+        git.fail_fetch = True
+        self.assertNotIn("REF_READ_FAILING", codes(watcher.poll(1005)))
+        self.assertEqual(watcher.state["read_failures"][REF]["count"], 1)
+        git.refs = {}
+        watcher.poll(1006)
+        self.assertEqual(watcher.state["read_failures"], {})
+
+    def test_ref_failure_counts_are_independent(self):
+        watcher, git = running(failure_limit=3)
+        git.fail_fetch = True
+        watcher.poll(1001)
+        other = w.PREFIX + "other"
+        git.refs[other] = C
+        watcher.poll(1002)
+        events = watcher.poll(1003)
+        self.assertEqual({e.subject for e in events if e.code == "REF_READ_FAILING"}, {REF})
+        self.assertEqual({e.subject for e in watcher.poll(1004) if e.code == "REF_READ_FAILING"}, {other})
+
     def test_ls_failure_count_time_silence_and_recovery(self):
         watcher, git = running(silence_s=100, failure_limit=3)
         git.fail_ls = True
@@ -390,15 +577,23 @@ class PollStateTests(unittest.TestCase):
         self.assertEqual(codes(watcher.poll(1010, current)), {"LS_REMOTE_FAILED", "SILENCE"})
         self.assertFalse(watcher.state["initialized"])
 
-    def test_baseline_can_satisfy_result_deadline_without_reading_blobs(self):
+    def test_armed_baseline_is_classified_and_satisfies_result_deadline(self):
         git = FakeGit()
         current = {"armed": {"plan_id": "synthetic"},
                    "wait": {"observable": "result_json_exists", "deadline_epoch_s": 1000}}
         watcher = w.Watcher(git, w.empty_state())
-        self.assertEqual(watcher.poll(1001, current), [])
-        self.assertEqual(git.shown, [])
+        self.assertEqual(codes(watcher.poll(1001, current)), {"RESULT"})
+        self.assertEqual(set(git.shown), set(records()))
         git.files = {}
         self.assertIn("DEADLINE_PASSED", codes(watcher.poll(1002, current)))
+
+    def test_wait_alone_does_not_read_an_unnamed_baseline(self):
+        for observable in ("results_branch_exists", "result_json_exists"):
+            git = FakeGit()
+            current = {"wait": {"observable": observable, "plan_id": "synthetic", "deadline_epoch_s": 1000}}
+            events = w.Watcher(git, w.empty_state()).poll(1001, current)
+            self.assertEqual(git.calls, [("ls_remote", w.PREFIX + "*")])
+            self.assertEqual("DEADLINE_PASSED" in codes(events), observable == "result_json_exists")
 
     def test_state_atomic_round_trip_and_invalid_state(self):
         with tempfile.TemporaryDirectory() as d:
@@ -407,6 +602,11 @@ class PollStateTests(unittest.TestCase):
             state = w.empty_state()
             w.save_state(path, state)
             self.assertEqual(w.load_state(path), state)
+            legacy = dict(state)
+            legacy.pop("read_failures")
+            path.write_bytes(encoded(legacy))
+            self.assertEqual(w.load_state(path), state)
+            w.save_state(path, state)
             with mock.patch.object(w.os, "replace", side_effect=OSError):
                 with self.assertRaises(OSError):
                     w.save_state(path, dict(state, initialized=True))
@@ -414,13 +614,35 @@ class PollStateTests(unittest.TestCase):
             self.assertEqual(list(path.parent.iterdir()), [path])
             for bad in ({}, dict(state, version=2), dict(state, refs={REF: "bad"}),
                         dict(state, failures=-1), dict(state, active=["bad"]),
-                        dict(state, raised=[{}]), dict(state, last_success="bad")):
+                        dict(state, raised=[{}]), dict(state, last_success="bad"),
+                        dict(state, read_failures=[]), dict(state, read_failures={"bad": {"sha": A, "count": 1}}),
+                        *(dict(state, read_failures={REF: value}) for value in
+                          ({}, [], {"sha": "bad", "count": 1}, {"sha": A, "count": 0},
+                           {"sha": A, "count": True}, {"sha": A, "count": "bad"}))):
                 path.write_bytes(encoded(bad))
                 with self.subTest(bad=bad), self.assertRaises(w.WatchError):
                     w.load_state(path)
 
 
 class EdgesTests(unittest.TestCase):
+    def test_origin_protocol_checked_without_a_poll_or_url_disclosure(self):
+        git = w.Git("/synthetic")
+        for url in ("https://example.invalid/repo.git", "file:///synthetic/repo.git",
+                    "/synthetic/repo.git", "./synthetic/repo.git", "../synthetic/repo.git"):
+            with self.subTest(url=url), mock.patch.object(git, "_run", return_value=url.encode()) as run:
+                git.check_origin()
+                run.assert_called_once_with("remote", "get-url", "origin")
+        for url in ("ssh://user@example.invalid/repo.git", "user@example.invalid:repo.git",
+                    "git://example.invalid/repo.git", "http://example.invalid/repo.git",
+                    "ext::private-command", "https::private-command", "https://", "file:private",
+                    "https://[", "", "PRIVATE\nURL"):
+            with self.subTest(url=url), mock.patch.object(git, "_run", return_value=url.encode()), \
+                 self.assertRaisesRegex(w.WatchError, "^ORIGIN_PROTOCOL_NOT_ALLOWED$"):
+                git.check_origin()
+        with mock.patch.object(git, "_run", return_value=b"\xff"), \
+             self.assertRaisesRegex(w.WatchError, "^ORIGIN_PROTOCOL_NOT_ALLOWED$"):
+            git.check_origin()
+
     def test_invalid_json_duplicate_nonfinite_oversize_not_object(self):
         for raw in (b"{", b"[]", b'{"x":1,"x":2}', b'{"x":NaN}', b"\xff", b" " * (w.MAX_RECORD + 1)):
             with self.subTest(raw=raw[:30]), self.assertRaises(w.WatchError):
@@ -512,8 +734,9 @@ class EdgesTests(unittest.TestCase):
             git(source, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-m", "synthetic")
             git(source, "push", "origin", "HEAD:" + REF)
             transport = w.Git(air)
+            transport.check_origin()
             self.assertEqual(set(transport.ls_remote(w.PREFIX + "*")), {REF})
-            watcher = w.Watcher(transport, w.empty_state(), since=0)
+            watcher = w.Watcher(transport, w.empty_state(), include_plans=["synthetic"])
             events = watcher.poll(1001)
             self.assertIn("RESULT_NOT_MEASURED", codes(events))
             self.assertFalse((air / "night").exists())
@@ -535,8 +758,8 @@ class CliTests(unittest.TestCase):
 
     def test_once_quiet_notice_alarm_usage_internal(self):
         self.assertEqual(self.invoke()[0], 0)
-        self.assertEqual(self.invoke(["--once", "--since-epoch", "0"], FakeGit(records(fault=True)))[0], 10)
-        self.assertEqual(self.invoke(["--once", "--since-epoch", "0"], FakeGit(records(rc=3)))[0], 20)
+        self.assertEqual(self.invoke(["--once", "--include-plan", "synthetic"], FakeGit(records(fault=True)))[0], 10)
+        self.assertEqual(self.invoke(["--once", "--include-plan", "synthetic"], FakeGit(records(rc=3)))[0], 20)
         for extra in ([], ["--once", "--loop"], ["--once", "--interval", "0"],
                       ["--once", "--hours", "nan"], ["--once", "--t0", "1"],
                       ["--once", "--failure-limit", "1"], ["--once", "--notify-cmd"]):
@@ -560,24 +783,49 @@ class CliTests(unittest.TestCase):
         self.assertEqual(rc, 20)
         self.assertIn("RESULT_EARLY synthetic", output)
 
+    def test_origin_rejected_before_first_poll_and_state_write(self):
+        git = FakeGit()
+        git.origin_error = True
+        with mock.patch.object(w, "save_state") as save:
+            rc, output = self.invoke(["--once"], git)
+        self.assertEqual(rc, 2)
+        self.assertIn("ORIGIN_PROTOCOL_NOT_ALLOWED", output)
+        self.assertNotIn("SILENCE", output)
+        self.assertEqual(git.calls, [("check_origin",)])
+        save.assert_not_called()
+
+    def test_include_plan_repeatable_and_validated(self):
+        git = FakeGit()
+        named = w.PREFIX + "named"
+        git.refs[named] = B
+        rc, output = self.invoke(["--once", "--include-plan", "synthetic", "--include-plan", "named"], git)
+        self.assertEqual(rc, 0)
+        self.assertEqual(set(git.fetched), {REF, named})
+        self.assertIn("RESULT", output)
+        self.assertEqual(git.calls[0], ("check_origin",))
+        for value in ("../secret", "a.lock", "a..b", "bad\nline"):
+            git = FakeGit()
+            self.assertEqual(self.invoke(["--once", "--include-plan", value], git)[0], 2)
+            self.assertEqual(git.calls, [])
+
     def test_loop_alarm_stops_and_keep_going_expires(self):
         with mock.patch.object(w.time, "sleep") as sleep:
-            self.assertEqual(self.invoke(["--loop", "--since-epoch", "0"], FakeGit(records(rc=3)))[0], 20)
+            self.assertEqual(self.invoke(["--loop", "--include-plan", "synthetic"], FakeGit(records(rc=3)))[0], 20)
             sleep.assert_not_called()
         for git, expected in ((FakeGit(records(rc=3)), 20), (FakeGit(records(fault=True)), 10), (FakeGit(), 0)):
             with mock.patch.object(w.time, "monotonic", side_effect=[0, 0, 3601]), mock.patch.object(w.time, "sleep") as sleep:
-                rc, _ = self.invoke(["--loop", "--hours", "1", "--keep-going", "--since-epoch", "0"], git)
+                rc, _ = self.invoke(["--loop", "--hours", "1", "--keep-going", "--include-plan", "synthetic"], git)
             self.assertEqual(rc, expected)
             sleep.assert_called_once_with(120)
 
     def test_notify_argv_no_shell_and_failure_not_persisted(self):
         with mock.patch.object(w.subprocess, "run", return_value=mock.Mock(returncode=0)) as run:
-            rc, output = self.invoke(["--once", "--since-epoch", "0", "--notify-cmd", "/synthetic/notifier", "fixed argument"])
+            rc, output = self.invoke(["--once", "--include-plan", "synthetic", "--notify-cmd", "/synthetic/notifier", "fixed argument"])
         self.assertEqual(rc, 0)
         self.assertEqual(run.call_args.args[0], ["/synthetic/notifier", "fixed argument", output.strip()])
         self.assertNotIn("shell", run.call_args.kwargs)
         with mock.patch.object(w.subprocess, "run", side_effect=subprocess.TimeoutExpired("notify", 10)):
-            self.assertEqual(self.invoke(["--once", "--since-epoch", "0", "--notify-cmd", "/synthetic"])[0], 2)
+            self.assertEqual(self.invoke(["--once", "--include-plan", "synthetic", "--notify-cmd", "/synthetic"])[0], 2)
 
 
 if __name__ == "__main__":

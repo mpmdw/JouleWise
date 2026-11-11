@@ -20,6 +20,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from urllib.parse import urlsplit
 
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -30,6 +31,15 @@ PREFIX = "refs/heads/night-results/"
 ROOT = Path(__file__).resolve().parents[2]
 PAYLOADS = ("r1_result.json", "align-r1/r1_result.json")
 SLOTS = ("r1_slots.json", "align-r1/r1_slots.json")
+# _artifact_list/_durable_record on main and _publish_terminal_result on W1.
+# Neither writer publishes night_plan.json or the R1 payload/slots files.
+PUBLISHED_PREFIX = "docs/process_traces/night-results/"
+PUBLISHED_JSON = ("result.json", "refusal.json", "chain.started", "chain.exited",
+                  "chain.unkilled", "hazard_result.json", "courier.json", "courier.delivery.json")
+PUBLISHED_EXISTENCE = ("censuses.jsonl", "receipt.json", "clean_dwell.output.txt", "clean_dwell.json",
+                       "start_conditions.json", "go_receipt.json", "go-census.json", "arm_decision.json",
+                       "launch.pending", "launch.resolved", "network_time_off.json", "courier.sent",
+                       "courier.filed", "courier.heartbeat")
 MAX_RECORD = 4 * 1024 * 1024
 
 
@@ -103,6 +113,20 @@ class Git:
         except (ValueError, UnicodeError):
             raise WatchError("GIT_INVALID_REFS") from None
         return rows
+
+    def check_origin(self):
+        """Fail before polling, without exposing the URL or invoking transport."""
+        raw = self._run("remote", "get-url", "origin")
+        try:
+            url = raw.decode("utf-8").strip()
+            parsed = urlsplit(url)
+            allowed = ((parsed.scheme == "https" and url.startswith("https://") and bool(parsed.netloc))
+                       or (parsed.scheme == "file" and url.startswith("file://"))
+                       or (not parsed.scheme and not re.match(r"[^/]*:", url)))
+            if not url or any(ord(c) < 32 for c in url) or not allowed:
+                raise ValueError()
+        except (UnicodeError, ValueError):
+            raise WatchError("ORIGIN_PROTOCOL_NOT_ALLOWED") from None
 
     def fetch(self, ref):
         if not valid_ref(ref):
@@ -227,6 +251,9 @@ def project(doc):
 
 def layout(paths, plan):
     """Use a single coherent layout; never mix two directories' records."""
+    published = PUBLISHED_PREFIX + plan + "/"
+    if any(published + name in paths for name in (*PUBLISHED_JSON, *PUBLISHED_EXISTENCE)):
+        return published
     prefixes = (plan + "/", "night/", "")
     for prefix in prefixes:
         if prefix + "result.json" in paths:
@@ -247,7 +274,6 @@ class Summary:
     fault: bool | None = None
     fault_reason_count: int = 0
     result_exists: bool = False
-    ended: float | None = None
 
     def fields(self):
         return (f"outcome={self.outcome} state={self.state} "
@@ -261,25 +287,29 @@ def inspect_ref(git, ref, sha, now, exit_module=None):
     paths = git.list_tree(sha)
     plan = plan_id(ref[len(PREFIX):])
     prefix = layout(paths, plan)
+    published = prefix == PUBLISHED_PREFIX + plan + "/"
+    json_names = PUBLISHED_JSON if published else (*ws.JSON_MARKERS, *PAYLOADS)
+    existence_names = PUBLISHED_EXISTENCE if published else (*ws.EXISTENCE_MARKERS, *SLOTS)
     raw_plan = {}
     # Plans can carry outcome-bearing extra fields too; never write them raw.
-    plan_path = next((p for p in (plan + "/night_plan.json", "night_plan.json") if p in paths), None)
+    # A published branch never gets a plan from another directory in its tree.
+    plan_path = None if published else next(
+        (p for p in (plan + "/night_plan.json", "night_plan.json") if p in paths), None)
     if plan_path:
         raw_plan = parse_object(git.show(sha, plan_path))
     contract = declared_contract(raw_plan, exit_module)
-    ended = None
     with tempfile.TemporaryDirectory(prefix="jw-air-watch-") as directory:
         root = Path(directory)
         night = root / "night"
         night.mkdir()
         if plan_path:
             (root / "night_plan.json").write_text(json.dumps(project(raw_plan)), encoding="utf-8")
-        for name in (*ws.JSON_MARKERS, *ws.EXISTENCE_MARKERS, *PAYLOADS, *SLOTS):
+        for name in (*json_names, *existence_names):
             if prefix + name not in paths:
                 continue
             destination = night / name
             destination.parent.mkdir(parents=True, exist_ok=True)
-            if name in ws.EXISTENCE_MARKERS or name in SLOTS:
+            if name in existence_names:
                 destination.touch()
             else:
                 # A malformed record is still present; let the owning reader
@@ -292,8 +322,6 @@ def inspect_ref(git, ref, sha, now, exit_module=None):
                     destination.write_text("null", encoding="utf-8")
                 else:
                     destination.write_text(json.dumps(doc), encoding="utf-8")
-                    if name == "result.json" and number(doc.get("ended_epoch_s")):
-                        ended = doc["ended_epoch_s"]
         observation = ws.observe_night_dir(root)  # plist facts intentionally unknown
         state = ws.derive_window_state(observation, now)
         outcome = ws.window_outcome(night, exit_contract=contract)
@@ -307,7 +335,7 @@ def inspect_ref(git, ref, sha, now, exit_module=None):
             invariants.add(mismatch)
         return Summary(word.value, state.state.value, tuple(sorted(invariants)),
                        observation.verdict, observation.chain_exit_code, observation.fault,
-                       len(observation.fault_reasons), "result.json" in observation.markers, ended)
+                       len(observation.fault_reasons), "result.json" in observation.markers)
 
 
 @dataclass(frozen=True)
@@ -375,13 +403,15 @@ def context_events(refs, results, current, now, min_expected_s, grace):
 
 def empty_state():
     return {"version": 1, "initialized": False, "refs": {}, "active": [], "raised": [],
-            "last_success": None, "started": None, "failures": 0}
+            "last_success": None, "started": None, "failures": 0, "read_failures": {}}
 
 
 def load_state(path):
     if not path.exists():
         return empty_state()
     state = parse_object(path.read_bytes())
+    # Round-1 state has no per-ref counter. Its baselines remain intact.
+    state.setdefault("read_failures", {})
     try:
         if (state["version"] != 1 or type(state["initialized"]) is not bool
                 or not isinstance(state["refs"], dict)
@@ -391,6 +421,10 @@ def load_state(path):
                 or not isinstance(state["raised"], list)
                 or not all(isinstance(s, str) for s in state["raised"])
                 or type(state["failures"]) is not int or state["failures"] < 0
+                or not isinstance(state["read_failures"], dict)
+                or not all(valid_ref(r) and isinstance(v, dict) and oid(v.get("sha"))
+                           and type(v.get("count")) is int and v["count"] > 0
+                           for r, v in state["read_failures"].items())
                 or any(state[k] is not None and not number(state[k]) for k in ("last_success", "started"))):
             raise ValueError()
     except (KeyError, TypeError, ValueError):
@@ -415,10 +449,11 @@ def save_state(path, state):
 
 
 class Watcher:
-    def __init__(self, git, state, *, since=None, silence_s=600, failure_limit=3,
+    def __init__(self, git, state, *, include_plans=(), silence_s=600, failure_limit=3,
                  min_expected_s=0, grace=300, exit_module=None):
         self.git, self.state = git, state
-        self.since, self.silence_s, self.failure_limit = since, silence_s, failure_limit
+        self.included = {PREFIX + plan_id(p) for p in include_plans}
+        self.silence_s, self.failure_limit = silence_s, failure_limit
         self.min_expected_s, self.grace, self.exit_module = min_expected_s, grace, exit_module
 
     def poll(self, now, current=None):
@@ -444,35 +479,27 @@ class Watcher:
         active = set(state["active"])
         armed = (current or {}).get("armed") or {}
         target = armed.get("plan_id")
-        wait = (current or {}).get("wait") or {}
-        wait_target = wait.get("plan_id", target)
-        if isinstance(wait.get("observable"), dict):
-            wait_target = wait["observable"].get("plan_id", wait_target)
+        included = self.included | ({PREFIX + plan_id(target)} if target is not None else set())
         for ref, sha in sorted(refs.items()):
             changed = state["refs"].get(ref) != sha
-            eligible = ref in active or changed and (not first or self.since is not None)
-            # Baseline refs are not announced, but their result existence can
-            # still satisfy a wait. No blob content needed for this check.
+            eligible = ref in active or ref in included or changed and not first
+            # A first snapshot establishes an unread baseline for unnamed refs.
             if not eligible:
-                if ref[len(PREFIX):] in (target, wait_target):
-                    try:
-                        self.git.fetch(ref)
-                        paths = self.git.list_tree(sha)
-                        results[ref] = layout(paths, ref[len(PREFIX):]) + "result.json" in paths
-                    except WatchError:
-                        events.append(Event("ALARM", "REF_READ_FAILED", ref, identity=sha))
                 state["refs"][ref] = sha
                 continue
             try:
                 summary = inspect_ref(self.git, ref, sha, now, self.exit_module)
             except WatchError:
+                previous = state["read_failures"].get(ref, {})
+                count = previous.get("count", 0) + 1 if previous.get("sha") == sha else 1
+                state["read_failures"][ref] = {"sha": sha, "count": count}
                 events.append(Event("ALARM", "REF_READ_FAILED", ref, identity=sha))
+                if count >= self.failure_limit:
+                    events.append(Event("ALARM", "REF_READ_FAILING", ref, f"count={count}", sha))
                 # Retain the old SHA: retries, including after restart, are mandatory.
                 continue
+            state["read_failures"].pop(ref, None)
             results[ref] = summary.result_exists
-            if first and self.since is not None and summary.ended is not None and summary.ended < self.since:
-                state["refs"][ref] = sha
-                continue
             active.add(ref)
             events.extend(result_events(ref, sha, summary))
             state["refs"][ref] = sha
@@ -480,6 +507,7 @@ class Watcher:
         state["active"] = sorted(active & refs.keys())
         # Drop deleted refs so their later reappearance is observable.
         state["refs"] = {r: s for r, s in state["refs"].items() if r in refs}
+        state["read_failures"] = {r: v for r, v in state["read_failures"].items() if r in refs}
         events.extend(context_events(refs, results, current or {}, now, self.min_expected_s, self.grace))
         return self._new(events)
 
@@ -525,7 +553,8 @@ def main(argv=None):
     parser.add_argument("--state", type=Path, default=Path.home() / "Library/Application Support/JouleWise/air-watch/state.json")
     parser.add_argument("--current", type=Path, default=ROOT / "docs/process/CURRENT.json")
     parser.add_argument("--plan-id", type=plan_id)
-    for name, default in (("t0", None), ("latest-end", None), ("since-epoch", None),
+    parser.add_argument("--include-plan", type=plan_id, action="append", default=[])
+    for name, default in (("t0", None), ("latest-end", None),
                           ("min-expected-s", 0), ("grace", 300), ("silence-minutes", 10),
                           ("interval", 120), ("hours", 26), ("git-timeout", 25)):
         parser.add_argument("--" + name, type=float, default=default)
@@ -535,7 +564,7 @@ def main(argv=None):
     try:
         args = parser.parse_args(argv)
         if (any(v is not None and (not number(v) or v < 0) for v in
-                (args.t0, args.latest_end, args.since_epoch, args.min_expected_s, args.grace))
+                (args.t0, args.latest_end, args.min_expected_s, args.grace))
                 or any(not number(v) or v <= 0 for v in
                        (args.silence_minutes, args.interval, args.hours, args.git_timeout))
                 or args.failure_limit < 2
@@ -543,7 +572,9 @@ def main(argv=None):
                 or args.notify_cmd == []):
             parser.error("invalid timing, failure limit, plan or notification arguments")
         state = load_state(args.state)
-        watcher = Watcher(Git(args.repo, args.git_timeout), state, since=args.since_epoch,
+        git = Git(args.repo, args.git_timeout)
+        git.check_origin()
+        watcher = Watcher(git, state, include_plans=args.include_plan,
                           silence_s=args.silence_minutes * 60, failure_limit=args.failure_limit,
                           min_expected_s=args.min_expected_s, grace=args.grace,
                           exit_module=optional_exit_module())
@@ -575,7 +606,11 @@ def main(argv=None):
             time.sleep(min(args.interval, remaining))
     except SystemExit as error:
         return int(error.code)
-    except (OSError, ValueError, TypeError, AttributeError, WatchError, subprocess.SubprocessError):
+    except WatchError as error:
+        code = "ORIGIN_PROTOCOL_NOT_ALLOWED" if str(error) == "ORIGIN_PROTOCOL_NOT_ALLOWED" else "WATCH_ERROR"
+        print(Event("INFO", code, "-").line(time.time()), flush=True)
+        return EXIT_CODES["error"]
+    except (OSError, ValueError, TypeError, AttributeError, subprocess.SubprocessError):
         print(Event("INFO", "WATCH_ERROR", "-").line(time.time()), flush=True)
         return EXIT_CODES["error"]
 
