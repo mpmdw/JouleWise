@@ -38,7 +38,7 @@ LEDGER = ROOT / 'docs/analysis/b5/rederivation.tsv'
 PLAN = ROOT / 'configs/campaigns/v5_claim_25g83/analysis_plan_block5.md'
 ORIGINAL_AUTHORITY_COMMIT = '0b8763f0a8291bfa5d47fdc18aa64ef3aa33ec1b'
 ORIGINAL_AUTHORITY_SHA256 = '0462f8144388e758ec1461452828309c4968ac39d2f986ef4a15175d07b84343'
-AUTHORITY_SHA256 = '2f15d0810ae6123c42871e7101e880440e4c46ad350f707058d3fd5e7a988469'
+AUTHORITY_SHA256 = '41b7e577a7be494245ed42ba38190da9de860430a75f5dc6d0987a15de79060f'
 PASSING = {'exact', 'within-rounding', 'recorded-judgment', 'single-source'}
 PRINTABLE = {'print', 'print-labelled'}
 

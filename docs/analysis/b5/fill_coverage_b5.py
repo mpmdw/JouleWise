@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""RL-55 pending Block 5 fill inventory, pinned to local origin/main's snapshot.
+"""RL-55 pending Block 5 fill inventory, checked against the merged paper.
 
 No custody or network access. Build an element/row map, or check its exact TSV
 serialization. Row numbers are physical TSV lines including the header.
@@ -18,10 +18,11 @@ import subprocess
 
 HERE = Path(__file__).absolute().parent
 REPO = HERE.parents[2]
-PAPER_COMMIT = '84ad2c5beea5f823723e6f6f83ccf8caabf9e476'
+PAPER_COMMIT = '9fb42569069b4b7f47b020ec794864101410e8c8'
 PAPER_PATH = 'docs/paper/paper1/paper1.md'
 FIELDS = ['paper_commit','paper_line','placeholder','description','element','ledger_rows','reason','committed_file','instruction']
-REASONS = {'not a leaf of a registered output','needs Block 6','a name from a committed file'}
+REASONS = {'not a leaf of a registered output','needs Block 6','a name from a committed file',
+           'outside Block 5 (BYTES; sealed)'}
 IDENTITY = 'configs/campaigns/v5_claim_25g83/identity_pins.json'
 PIN = 'configs/campaigns/d117_floor_qwen3-1p7b_v5/prefill_pin/'
 INDEX = 'configs/analysis/b5/analysed_windows.json'
@@ -29,7 +30,11 @@ PLAN = 'configs/campaigns/v5_claim_25g83/analysis_plan_block5.md'
 
 
 def paper_text():
-    return subprocess.run(['git','show',PAPER_COMMIT+':'+PAPER_PATH],cwd=REPO,check=True,capture_output=True,text=True).stdout
+    frozen = subprocess.run(['git','show',PAPER_COMMIT+':'+PAPER_PATH],cwd=REPO,check=True,capture_output=True,text=True).stdout
+    current = (REPO/PAPER_PATH).read_text()
+    if current != frozen:
+        raise ValueError('working-tree paper differs from merged paper snapshot')
+    return current
 
 
 def build(paper, ledger):
@@ -83,6 +88,9 @@ def build(paper, ledger):
 
     def nonleaf(fid, element, file='', note=''):
         add(fid,element,reason='not a leaf of a registered output',file=file,note=note)
+
+    def sealed_bytes(fid, element, note):
+        add(fid,element,reason='outside Block 5 (BYTES; sealed)',note=note)
 
     # Explicit element enumeration of each composite description.
     use('P1-B5-METER', range(722,785), 'per pack/model median, range, IQR, spread, hard-band count and consistency',
@@ -154,7 +162,8 @@ def build(paper, ledger):
     use('P1-B5-DOM-FAILED',range(803,865),'all eight R, four R_cm, operands, n and status; branch',
         'Only failed R_cm components print as failures; take the higher precision extension. R_cm 1.7B prefill prints 1.99975 (RL-55).')
     use('P1-B5-DOM-FAILED',range(540,607),'fullest-precision RC dominance/floor operands',
-        'RL-55: row 570 supplies 1.7B prefill R_cm at five decimals, 1.99975; rows 277/848 are coarser copies.')
+        'RL-55: row 1846 supplies 1.7B prefill R_cm at five decimals, 1.99975; rows 277/502/570/848 are coarser copies.')
+    use('P1-B5-DOM-FAILED',[1846],'fullest-precision 1.7B prefill R_cm (RL-55)')
     use('P1-B5-DOM-REFUSED',range(803,863),'component status',
         'All twelve statuses complete and positive denominators: branch 5.4.R is not selected; no refusal code is owed.')
     nonleaf('P1-B5-DOM-REFUSED','refusal component/code in unselected branch 5.4.R',
@@ -196,7 +205,7 @@ def build(paper, ledger):
     use('CP-X02-conclusion',[863,864],'branch-B registered sentence')
     use('CP-X02-conclusion',list(range(843,863)),'failing components with names/ratios/operands/n',
         'Name R_cm 1.7B decode, 1.7B prefill and 8B decode; 8B prefill passes. Do not assert general dominance.')
-    use('CP-X02-conclusion',[570],'fullest-precision 1.7B prefill R_cm (RL-55)')
+    use('CP-X02-conclusion',[1846],'fullest-precision 1.7B prefill R_cm (RL-55)')
     for element,file in [('model names/revisions',IDENTITY),('runtime/library version names',IDENTITY),
                          ('1.7B tokenizer identity/digest',PIN+'prefill_prompt_pin.json'),
                          ('8B tokenizer identity/digest','configs/campaigns/d117_floor_qwen3-8b_v5/prefill_pin/prefill_prompt_pin.json'),
@@ -214,23 +223,23 @@ def build(paper, ledger):
             file='configs/campaigns/v5_claim_25g83/registration_block5.md',note='Instrument-description input, not a released Block 5 analysis output leaf; outside the RL-52 fill.')
     name('P1-M-ACCEPT','primary pre-capture/bracket/drift constant identities','configs/campaigns/v5_claim_25g83/registration_block5.md')
     later('P1-M-ACCEPT','replication acceptance constants')
-    nonleaf('P1-M-ACCEPT','BYTES acceptance constants',note='Sealed and outside this Block 5 output ledger; no BYTES source read.')
+    sealed_bytes('P1-M-ACCEPT','BYTES acceptance constants',note='Sealed and outside this Block 5 output ledger; no BYTES source read.')
     use('P1-LEDGER',list(range(885,950))+list(range(1643,1651)),'primary attempts/counts/verdicts/causes')
     later('P1-LEDGER','replication attempts/counting/cause families')
-    nonleaf('P1-LEDGER','BYTES attempts/counting/cause families',note='Sealed and outside this Block 5 output ledger.')
+    sealed_bytes('P1-LEDGER','BYTES attempts/counting/cause families',note='Sealed and outside this Block 5 output ledger.')
     name('P1-DEV-LIST','primary errata/deviations/interpretations/repairs, dates, applicability and blind status','docs/analysis/b5/DEVIATION-LOG.md',
          'Also primary SEAL_RECORD.md and decision_log.md D-188 through D-190; disclosure text, not outcome numbers.')
     later('P1-DEV-LIST','replication section 17 disclosures')
-    nonleaf('P1-DEV-LIST','BYTES addenda',note='Sealed and outside this Block 5 output ledger.')
+    sealed_bytes('P1-DEV-LIST','BYTES addenda',note='Sealed and outside this Block 5 output ledger.')
     name('P1-RELEASE','primary release event date and bound record digests','docs/process_traces/2026-10-07-block5-seal/SEAL_RECORD.md')
     later('P1-RELEASE','replication release date/digests')
-    nonleaf('P1-RELEASE','BYTES commitment/release dates/digests',note='Outside the Block 5 output ledger; do not infer from operational text.')
+    sealed_bytes('P1-RELEASE','BYTES commitment/release dates/digests',note='Outside the Block 5 output ledger; do not infer from operational text.')
     recompute('P1-RECOMPUTE')
     name('P1-AVAIL','primary registrations/code/seal identities and release binding','docs/process_traces/2026-10-07-block5-seal/SEAL_RECORD.md')
     nonleaf('P1-AVAIL','authorized public archive locators, released manifest and raw-capture publication scope',
             note='Publication/release decision, not a registered analysis output; never infer a locator or publish custody.')
     later('P1-AVAIL','replication availability/released evidence')
-    nonleaf('P1-AVAIL','BYTES availability/released evidence',note='Sealed and outside this Block 5 output ledger.')
+    sealed_bytes('P1-AVAIL','BYTES availability/released evidence',note='Sealed and outside this Block 5 output ledger.')
     if {r['placeholder'] for r in out} != pending|mixed:
         raise ValueError('coverage placeholder set differs')
     pairs = [(r['placeholder'],r['element']) for r in out]

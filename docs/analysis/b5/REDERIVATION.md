@@ -1,6 +1,15 @@
 # Block 5 independent reader: RL-41/RL-42 print authority
 
-**2026-11-11 RL-55 round 4:** 425 append-only rows complete the session
+**2026-11-11 RL-55 round 5:** D1–D3 are addressed: physical row **1846**
+prints the independently replayed 1.7B prefill R_cm at **1.99975**;
+the five BYTES coverage reasons name their sealed, outside-Block-5 scope;
+and `origin/main` is merged. Both fill checkers pass on the working-tree
+paper. The 1,844 earlier rows and RESULTS remain byte-identical. See the
+[round-5 report](../../run_reports/2026-11-11-p1-b5-ledger-ext.md#round-5--opus-delta-fixes-d1d3).
+The new print-authority commit is recorded there after the implementation commit.
+Lead acceptance/event-log audit remain owed.
+
+**2026-11-11 RL-55 round 4 (historical):** 425 append-only rows complete the session
 disclosures and required coverage map; see the round-4 section below. The
 original 1,419 rows and RESULTS are unchanged. Opus review/lead acceptance
 remain owed.
@@ -45,7 +54,8 @@ no deviation-log note is added. Paper 1 prints no count; any future count must
 carry its unit.
 
 **Clarification, RL-55 (not an erratum):** 1.7B prefill R_cm appears at
-`1.9997` in RESULTS (row 277) and `1.99975` in the fuller extension (row 570).
+`1.9997` in RESULTS (row 277) and `1.99975` in the round-5 extension (row 1846).
+Rows 502, 570 and 848 also retain their original four-decimal `1.9997`.
 The second fill takes the row with more digits and prints this one at five
 decimals, **1.99975**; it is below 2 either way. Other R/R_cm keep four decimals.
 This is a last-place precision difference, not a new mismatch.
@@ -899,17 +909,20 @@ The full ledger SHA-256 is
 ### Required coverage table (RL-55)
 
 [fill_coverage.tsv](fill_coverage.tsv) is the complete **element-by-element**
-map: **1,581 elements**, **65 placeholders**, comprising all **57** still-pending
+map, updated in round 5: **1,582 elements**, **65 placeholders**, comprising all **57** still-pending
 Block 5 ids plus the primary-block parts of **8** mixed placeholders. It
-pins the exact `origin/main` paper snapshot
-`84ad2c5beea5f823723e6f6f83ccf8caabf9e476`, including each FILL's full description
-and source line. No Block 6, BYTES or v4 output was read. Mixed placeholders
+pins the merged paper snapshot
+`9fb42569069b4b7f47b020ec794864101410e8c8` and verifies that the working-tree
+paper equals it, including each FILL's full description and source line.
+No Block 6, BYTES or v4 output was read. Mixed placeholders
 are inventoried for completeness; this does not authorize their second fill.
 
 Every mapped leaf has a physical ledger row. Every other element has one
-of RL-55's three allowed reasons, with its committed file where applicable:
-**1,539** element/row entries, **22** names from committed files, **11** needing
-Block 6, **9** not leaves of the registered Block 5 outputs. The last group
+of RL-55's three reasons or D2's explicit sealed-BYTES scope label,
+with its committed file where applicable:
+**1,540** element/row entries, **22** names from committed files, **11** needing
+Block 6, **5** outside Block 5 (BYTES; sealed), **4** not leaves of the registered
+Block 5 outputs. The last group
 contains the unissued refusal of an unselected branch, the explicitly
 dropped B-share and cross-block/publication/probe
 items outside this ledger, not a missing registered Block 5 result. There is
@@ -932,12 +945,12 @@ spare, unread-hazard or below-minimum sentence is invented when its count is zer
 | `P1-ID-OS` | operating-system build(s) of the primary-block sessions and of each replication session, from the identity pins and per-session records | a name from a committed file; needs Block 6 |
 | `P1-M-RECORD-WIDTH` | median record width and its range in the pre-collection probe sessions, from the registration's instrument description | not a leaf of a registered output |
 | `P1-B5-METER` | per pack and model: median, range and interquartile range of the rails' share ρ; member windows outside the hard plausibility band, each listed with its meter flags; within-model spread; the central band from the first clean session and the count of later member windows inside it; or "no clean session, no central band" | 528, 722–784 |
-| `P1-M-ACCEPT` | the registered acceptance constants for each block: pre-capture screen, bracket screen and drift limit, from the acceptance files named in the registrations | a name from a committed file; needs Block 6; not a leaf of a registered output |
+| `P1-M-ACCEPT` | the registered acceptance constants for each block: pre-capture screen, bracket screen and drift limit, from the acceptance files named in the registrations | a name from a committed file; needs Block 6; outside Block 5 (BYTES; sealed) |
 | `CP-X01-identity` | model identities and revisions, runtime and library versions, tokenizer and chat-template digests, from the identity pins and prompt pin | a name from a committed file |
 | `CP-X01-length` | the selection record that fixed the 2,048-token length, with its digest | a name from a committed file |
-| `P1-LEDGER` | per-attempt verdicts (counting or not, with cause family) for every primary, replication and BYTES attempt, from the harvest verdicts and attempt histories | 885–949, 1643–1650; needs Block 6; not a leaf of a registered output |
-| `P1-DEV-LIST` | dated list of every erratum, deviation, interpretation and disclosed repair with applicability and blind status: primary-block SEAL_RECORD.md (two seals, three prospective errata), L9 rulings and addenda including the 2026-10-12 J5 floor-drift correction, docs/analysis/b5/DEVIATION-LOG.md DLE-0 through DLE-10, docs/decision_log.md D-188 through D-190, replication §17 and BYTES addenda | a name from a committed file; needs Block 6; not a leaf of a registered output |
-| `P1-RELEASE` | dates of the primary-block release event, the replication-block release and the BYTES stage-1 commitment and stage-2 release, with the digests each record ties, from the seal-record "Release event" section and the release records | a name from a committed file; needs Block 6; not a leaf of a registered output |
+| `P1-LEDGER` | per-attempt verdicts (counting or not, with cause family) for every primary, replication and BYTES attempt, from the harvest verdicts and attempt histories | 885–949, 1643–1650; needs Block 6; outside Block 5 (BYTES; sealed) |
+| `P1-DEV-LIST` | dated list of every erratum, deviation, interpretation and disclosed repair with applicability and blind status: primary-block SEAL_RECORD.md (two seals, three prospective errata), L9 rulings and addenda including the 2026-10-12 J5 floor-drift correction, docs/analysis/b5/DEVIATION-LOG.md DLE-0 through DLE-10, docs/decision_log.md D-188 through D-190, replication §17 and BYTES addenda | a name from a committed file; needs Block 6; outside Block 5 (BYTES; sealed) |
+| `P1-RELEASE` | dates of the primary-block release event, the replication-block release and the BYTES stage-1 commitment and stage-2 release, with the digests each record ties, from the seal-record "Release event" section and the release records | a name from a committed file; needs Block 6; outside Block 5 (BYTES; sealed) |
 | `P1-RECOMPUTE` | per block and compared family: applicable bar, number compared, observed largest difference and agreement word; name uncovered quantities and their separate reader checks; Block 5 uses recompute_bars.json fixed blind under DLE-0, Block 6 uses §12.3; checked by one executing reader before printing | 523, 1651–1793; a name from a committed file; needs Block 6 |
 | `P1-B5-ATTEMPTS` | attempt history of each primary-block pack: number of attempts, each with its verdict and cause family, and "collected X of Y planned runs"; the three superseded first-seal attempts listed separately as inputs to no number; from the harvest records and analysis-plan disclosure producer | 885–949, 1643–1650; a name from a committed file |
 | `P1-B5-ANALYSED` | identifiers and dates of the analysed attempt of each pack | a name from a committed file |
@@ -984,15 +997,15 @@ spare, unread-hazard or below-minimum sentence is invented when its count is zer
 | `TERM_A_8B_prefill_p2048_cmp_J` | point | 595 |
 | `TERM_B_8B_prefill_p2048_abs_J` | corner | 589 |
 | `TERM_B_8B_prefill_p2048_cmp_J` | corner | 594 |
-| `P1-B5-DOM-FAILED` | list of each ratio below 2, with model, phase, form, value, numerator and denominator | 540–606, 803–864 |
+| `P1-B5-DOM-FAILED` | list of each ratio below 2, with model, phase, form, value, numerator and denominator | 540–606, 803–864, 1846 |
 | `P1-B5-DOM-REFUSED` | component and refusal code | 803–862; not a leaf of a registered output |
 | `P1-B5-XWIN` | per model and phase: "agree within their within-session intervals (difference Δ J)" or "differ by Δ J, more than their within-session intervals cover; the reported intervals understate between-session variation, which includes different interleaving and thermal history" | 974–978, 1006–1010, 1054–1058, 1096–1100 |
 | `P1-B5-NEG8` | per session: drift-screen verdict on both energy families, the corpus size the deciding bound rested on and the corpus runs left out by reason, realised reference counts against the planned (3, 1, 3), each lost reference, each spare used, any lost midpoint with its fixed sentence, and the allowance; the bound's two terms printed with the other energies | 1255–1287, 1383–1420, 1428–1429, 1532–1535, 1606–1642 |
 | `P1-B5-MONITOR` | per session: monitor and meter-reader CPU time, and the number of monitor probes that fell inside target phases | 348–350, 1160–1162, 1288–1290 |
 | `P1-RECOMPUTE-SUMMARY` | one paragraph per block: compared families and counts, largest differences against that block's applicable bars (Block 5 recompute_bars.json fixed blind under DLE-0; Block 6 §12.3), uncovered quantities and separate reader checks; any disclosed repair with its date and effect | 523, 1651–1793; a name from a committed file; needs Block 6 |
-| `CP-X02-conclusion` | under branch A: "On this stack, timing attribution, not repeatability, limits phase-energy measurement: allowing each value to move within its registered timing uncertainty at least doubled every detection floor." Under branch B: "Timing attribution at least doubled the detection floor for some components and not others (the failing components named), so neither timing nor repeatability alone limits these measurements." | 570, 843–864 |
+| `CP-X02-conclusion` | under branch A: "On this stack, timing attribution, not repeatability, limits phase-energy measurement: allowing each value to move within its registered timing uncertainty at least doubled every detection floor." Under branch B: "Timing attribution at least doubled the detection floor for some components and not others (the failing components named), so neither timing nor repeatability alone limits these measurements." | 843–864, 1846 |
 | `CP-X08-decode-a-conclusion` | one sentence per contrast in the registered wording for its outcome and claim level (Section 6.5 branch), with the replication word (Section 6.8) | 530–535; needs Block 6 |
-| `P1-AVAIL` | public release: repository revision, archive locator and SHA-256 manifest of registrations, sealed inventories, flag catalogs, analysis and recomputation code, harvest records, released energies and figure sources; primary-block custody locator, dry-run record digest, released bundle SHA256SUMS and release-event binding; which raw captures are and are not released; locators must be supplied by the authorized release record, never inferred | a name from a committed file; needs Block 6; not a leaf of a registered output |
+| `P1-AVAIL` | public release: repository revision, archive locator and SHA-256 manifest of registrations, sealed inventories, flag catalogs, analysis and recomputation code, harvest records, released energies and figure sources; primary-block custody locator, dry-run record digest, released bundle SHA256SUMS and release-event binding; which raw captures are and are not released; locators must be supplied by the authorized release record, never inferred | a name from a committed file; needs Block 6; not a leaf of a registered output; outside Block 5 (BYTES; sealed) |
 
 The [coverage checker](fill_coverage_b5.py) reproduces the explicit element map
 from repository files, rejects missing/new Block 5 placeholders and
@@ -1002,8 +1015,32 @@ later appends do not invalidate their replay. This preserves what each older
 review checked; it does not confer that review on the new rows.
 
 `fill_check_b5.py` pins the final full ledger hash and independently preserves
-the header plus original 538 rows from `0b8763f0a`. `--paper-ref` explicitly
-checks the admitted first fill in a local Git snapshot on this pre-first-fill
-branch. `--repo-only` checks the ledger/branch arithmetic without checking a
-paper. The default still validates the working-tree paper strictly; it is
-not presented as passing before that paper is filled.
+the header plus original 538 rows from `0b8763f0a`. `--paper-ref` can explicitly
+check a local Git snapshot. `--repo-only` checks the ledger/branch arithmetic
+without checking a paper. Both fill checkers now pass in their default modes
+against the merged working-tree paper.
+
+## Round 5 — five-decimal R_cm and delta fixes
+
+[hand_check_rl55_round5.py](hand_check_rl55_round5.py) opens only the pinned
+RC file. Its independent stdlib arithmetic reconstructs eight kept prefill
+quad differences and local widths from ALPHA member leaves, takes the pinned
+shared widths as inputs, and enumerates all 512 shared/local sign corners.
+The point floor uses the registered df=7 Student multiplier 2.365. The replayed
+numerator, denominator and ratio agree with RC's full-precision terms and
+`R_cm` leaf; a separate Decimal division checks those terms too. No raw
+trace or embedded source path is followed. Only aggregate values at ledger
+precision are serialized.
+
+The sole append is physical row **1846**:
+`RC.dominance.common_mode[Qwen3-1.7B-4bit/prefill].R_cm`, printed and
+re-derived **1.99975**, `within-rounding`, residual **-1.7e-06** (two
+significant figures, RL-42). Prior rows are immutable. CP-X02-conclusion and
+P1-B5-DOM-FAILED cite this row for the fuller precision. The ratio remains
+below 2 and branch B is unchanged.
+
+Current ledger: **1,845 rows** = **1,101 exact**, **581 within-rounding**,
+**128 recorded-judgment**, **34 single-source**, **1 MISMATCH**. The sole
+MISMATCH remains physical row 249, the ruled RL-39 wording erratum.
+No new MISMATCH or `source-outside-unseal` row arose. The full ledger SHA-256
+is `41b7e577a7be494245ed42ba38190da9de860430a75f5dc6d0987a15de79060f`.

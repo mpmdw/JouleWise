@@ -1,13 +1,13 @@
-# Paper 1 Block 5 ledger extension — rounds 1 through 4
+# Paper 1 Block 5 ledger extension — rounds 1 through 5
 
 2026-11-11 · Sol seat `p1-b5-ledger-ext` · no network or delegation.
 
-**Current handoff:** [Round 4](#round-4--rl-55-required-disclosures-and-coverage)
-adds 425 rows (1,844 total), supplies the required coverage map, preserves every
-existing row and RESULTS byte, and passes the documented replay/check commands.
-The NEW PRINT AUTHORITY SHA is recorded below after the implementation commit.
-Opus cold review and lead acceptance/event-log audit remain owed. Earlier rounds
-and their holds are historical.
+**Current handoff:** [Round 5](#round-5--opus-delta-fixes-d1d3) addresses all three
+delta findings. Row 1846 prints 1.99975; the five BYTES reason labels are corrected;
+main's first fill is merged and both default fill checks pass. All earlier ledger
+rows and RESULTS remain byte-identical. The NEW PRINT AUTHORITY SHA is recorded
+in round 5 after the implementation commit. Lead acceptance/event-log audit remain
+owed. Earlier rounds and their holds are historical.
 
 ## Round 1 — historical partial pass
 
@@ -706,3 +706,132 @@ the 425-row append and final checker pin. This documentation-only follow-up
 records that immutable commit in this report and REDERIVATION; it changes no
 ledger, source manifest, script or test byte. All three final custody re-hashes
 were equal to the pins. Nothing was pushed.
+
+## Round 5 — Opus delta fixes D1–D3
+
+2026-11-11 · Sol seat `p1-b5-ledger-ext` · starting HEAD `88239349d` on
+`analysis/2026-11-11-b5-ledger-ext`, clean. No network or delegation.
+The delta section of the Opus cold review was read first. RL-3, RL-38,
+RL-39, RL-41, RL-42, RL-52 and RL-55 were read verbatim from the local audit
+ref; seat 12's report and pending list supplied the paper context. Mission M0
+found no active stop card. This bounded [AGENT] fix follows the user's brief;
+coordination-state selection/registration and writes were expressly excluded.
+
+### Findings addressed and commits
+
+- **D1:** appended exactly one row, physical TSV line **1846**, for
+  `RC.dominance.common_mode[Qwen3-1.7B-4bit/prefill].R_cm`.
+  Printed/re-derived/source values at ledger precision: **1.99975**.
+  Word: **within-rounding**. Difference (own full value minus print), rounded
+  to two significant figures under RL-42: **-1.7e-06**. Rows 277, 502, 570
+  and 848 retain their four-decimal 1.9997, byte for byte. The CP-X02 coverage
+  element now cites row 1846; P1-B5-DOM-FAILED also explicitly maps it.
+  REDERIVATION's false row-570 statement is corrected.
+- **D2:** the five BYTES elements for P1-M-ACCEPT, P1-LEDGER, P1-DEV-LIST,
+  P1-RELEASE and P1-AVAIL now carry **outside Block 5 (BYTES; sealed)**.
+  No BYTES source was opened. The Markdown coverage index was regenerated
+  from the updated TSV.
+- **D3:** `git merge --no-edit origin/main` brought in `6a7493f40` and the
+  first paper fill. The only conflict was an add/add of `fill_check_b5.py`:
+  comparison showed main held the original seat-12 checker, while this branch
+  held its extended-ledger/prefix checks. Preserved the extended checker;
+  merge commit **`9fb42569069b4b7f47b020ec794864101410e8c8`**. The coverage
+  generator now verifies the working-tree paper against that merged snapshot,
+  and both fill checkers pass without `--paper-ref`. The coverage TSV was
+  regenerated, so every entry's paper-commit column changes to this snapshot.
+
+**NEW PRINT AUTHORITY SHA:** recorded after the final fixes/table commit in
+the authority-recording note below. As in rounds 3 and 4, a documentation-only
+follow-up records that immutable SHA without changing the ledger or checker.
+
+The full ledger SHA-256 is
+`41b7e577a7be494245ed42ba38190da9de860430a75f5dc6d0987a15de79060f`.
+The full header and 1,844 preceding rows equal round-4 authority `ffe8137be`
+and starting HEAD. Full counts: **1,101 exact**, **581 within-rounding**,
+**128 recorded-judgment**, **34 single-source**, **1 MISMATCH**, total **1,845**.
+The only MISMATCH remains row 249's ruled RL-39 wording erratum.
+No new MISMATCH, `source-outside-unseal` or missing registered Block 5 element.
+
+### Every custody file opened and its hash
+
+Only this exact file was opened. No directory was listed, no path inside it
+was followed, and custody was never written. The pin is RESULTS.md §0's RC pin.
+Hashing preceded loading; the loaded bytes were rechecked before JSON parsing;
+the same path was rehashed in `finally` and again at the end of the run.
+
+| Alias | Exact read-only path | SHA-256 before = loaded bytes = after = final |
+|---|---|---|
+| RC | `/Users/edr/jw-b5-custody/release-check-final-20261108T0942Z/recompute.json` | `c06ee7c8cbf85a68dcebc24a73e0372fd6f8d825fc3acf30ec352304dd93cacc` |
+
+New script `hand_check_rl55_round5.py` uses its own stdlib arithmetic and
+imports no analysis, recompute or other hand-check implementation. It forms
+the eight kept quad differences from `RC.members.ALPHA[*].E_j.prefill`, local
+widths from half the sum of their four `r_j.prefill` values, and takes
+`RC.floors[Qwen3-1.7B-4bit/prefill/comparative].shared_j` as pinned input.
+With the registered df=7 t multiplier 2.365, point =
+max(max |d|, |mean(d)| + t × sampleSD(d) × sqrt(1+1/n)). It enumerates 512
+shared/local sign corners and divides the largest point floor by the
+unshifted point floor. Own numerator, denominator, ratio and n agree with
+the stored common-mode terms; a Decimal division independently checks the
+stored terms. Only ledger-precision aggregates and a two-significant-figure
+residual are committed. No member-level value or reading array is committed.
+
+### Verification
+
+All tests and checkers ran sequentially. The one unittest module took
+**19.825 s**, well under the ~20-minute budget. No new test module was added;
+there is no seat-authored change to `scripts/test_timings.json`.
+
+| Command/check | Result |
+|---|---|
+| `python3.13 -B -m unittest tests.b5_analysis.test_hand_check_phase2` | **66 passed**, 19.825 s. Eight new regressions cover synthetic common-sign arithmetic and bad terms, pre-load/pre-parse authentication, precision-row/BYTES coverage, merged-paper drift/default fill, round-4 suffix preservation/write refusal and custody-free round-5 mode. |
+| `python3.13 -I -B docs/analysis/b5/hand_check_rl55_round5.py --write` | Exit 0; one append; RC before/after hashes equal pin. |
+| `python3.13 -I -B docs/analysis/b5/hand_check_rl55_round5.py` | Exit 0; native one-file replay, byte-identical row and prefix; RC before/after hashes equal pin. |
+| `python3.13 -I -B docs/analysis/b5/hand_check_phase2.py --repo-only` | Exit 0; original 538 rows and phase-2 table unchanged. |
+| `python3.13 -I -B docs/analysis/b5/hand_check_rl52.py --repo-only` | Exit 0; frozen original/round-1 prefix. |
+| `python3.13 -I -B docs/analysis/b5/hand_check_rl52_round2.py --repo-only` | Exit 0; physical rows 1–1420 unchanged. |
+| `python3.13 -I -B docs/analysis/b5/opus_coldreview_check.py --repo-only` | Exit 0; original reviewed prefix and residuals unchanged. |
+| `python3.13 -I -B docs/analysis/b5/opus_coldreview_rl52_check.py --repo-only` | Exit 0; historical reviewed prefix unchanged; no new Opus review implied. |
+| `python3.13 -I -B docs/analysis/b5/hand_check_rl55_round4.py --repo-only` | Exit 0; source-pin manifest, RESULTS, prefix and final full digest pass. Native round-4 suffix compatibility/write refusal is tested with mocked custody, avoiding extra file reads. |
+| `python3.13 -I -B docs/analysis/b5/hand_check_rl55_round5.py --repo-only` | Exit 0; row 1846, frozen 1,844-row prefix, full counts and RESULTS pass. |
+| `python3.13 -I -B docs/analysis/b5/fill_coverage_b5.py --write` then the same command without `--write` | Both exit 0; **1,582 elements**, **65 placeholders**: 1,540 row entries, 22 committed names, 11 needing Block 6, 4 nonleaves and 5 sealed-BYTES elements. No `--paper-ref`. |
+| `python3.13 -I -B docs/paper/paper1/fill_check_b5.py` | **PASS**; merged working-tree paper, 28 sites, 69 filled ids, 111 cited rows; full digest, original prefix and both branch derivations pass. No `--paper-ref`. |
+| In-memory `compile()` of the five changed/new Python files | Passed; no bytecode generated. |
+| Repository integrity audit | All earlier ledger rows, RESULTS and four prohibited coordination files unchanged; paper and timings equal merged main. Row 1846 is the sole append, with two-significant-figure residual. |
+| `git diff --check` | Passed. |
+
+The round-4 native replay is now scoped to its own physical rows, so the new
+append does not recreate F3's stale-replay problem. Its `--write` refuses a
+later suffix rather than truncating it. Historical repo-only checks authenticate
+their stated frozen prefixes; they do not re-run old custody arithmetic or
+confer an old review on this row. The two default fill checks now establish
+the integration result that the earlier pre-first-fill branch could not.
+
+### Files, boundaries, uncertainty and next exact step
+
+Seat-authored files: `docs/analysis/b5/REDERIVATION.md`, `rederivation.tsv`,
+`fill_coverage.tsv`, `fill_coverage_b5.py`, `hand_check_rl55_round4.py`, new
+`hand_check_rl55_round5.py`; `docs/paper/paper1/fill_check_b5.py`;
+`tests/b5_analysis/test_hand_check_phase2.py`; and this report. Other changes
+in merge `9fb425690` came directly from main, including its paper fill and
+timing entries; the seat did not re-author them.
+
+`RESULTS.md` retains SHA-256
+`fb5f81e8741532d79b059b2ca7c44b1c479f0f983c28527ab6e2511d7dfb6f55`.
+No edits to RUN_STATE.md, TASK_QUEUE.md, docs/process/state_kernel.json or
+tests/test_gen_state.py. No kernel task registered. No full suite, pytest,
+network, analysis pipeline, model weights, live/MLX action, process census or
+control. The running blinded job was not inspected or touched. No Block 6,
+BYTES, ALIGN v4, night/archive path or other custody was opened. No native
+MLX check is required for this stdlib-only change. Nothing pushed.
+
+No new ruling question arose. The shared trace-sweep widths remain pinned
+inputs; this replay does not reintegrate raw traces or revalidate hardware.
+The existing accepted limits on recorded judgments/single-source rows stay
+as described in rounds 2–4. A passing fill checker authenticates the first
+fill; it does not perform the second fill or the later ten-constraint
+sentence review. The site-build hold remains.
+
+**Next exact step:** lead reviews D1–D3 and the new print-authority commit,
+audits this seat's event log and records acceptance. Then the second fill
+uses row 1846 and the updated coverage map under RL-52/RL-55.

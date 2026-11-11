@@ -253,14 +253,19 @@ def main():
     finally:
         opened = reader.finish()
         print(json.dumps({'opened_custody':opened}, sort_keys=True))
-    result = serialize(current, prefix, rows, fields)
+    # Replay only round 4's physical rows; a later append is immutable too.
+    # --write may finish round 4, but must never truncate a later extension.
+    scope = b''.join(current.splitlines(keepends=True)[:len(prefix.splitlines())+len(rows)])
+    result = serialize(scope, prefix, rows, fields)
     if args.write:
+        if current != scope:
+            raise ValueError('later append exists; refuse overwrite')
         target.write_bytes(result)
         with (HERE/'round4_sources.tsv').open('w', newline='') as stream:
             writer = csv.DictWriter(stream, ['alias','path','sha256_before','sha256_after'], delimiter='\t', lineterminator='\n')
             writer.writeheader()
             writer.writerows(dict(alias=a, **{k:v for k,v in opened[a].items() if k!='expected_sha256'}) for a in sorted(opened))
-    elif current != result:
+    elif scope != result:
         raise ValueError('new rows absent; use --write')
     print(json.dumps({'round4_rows':len(rows), 'round4_counts':dict(Counter(r['match'] for r in rows)),
                       'full_counts':dict(Counter(r['match'] for r in csv.DictReader(io.StringIO(result.decode()),delimiter='\t'))),

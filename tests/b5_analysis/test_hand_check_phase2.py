@@ -253,7 +253,7 @@ class Round3RepositoryGateTests(unittest.TestCase):
     def test_fill_gate_checks_full_ledger_and_original_prefix(self):
         fill = self.load_script('fill_check_b5.py')
         rows = fill.load_ledger()
-        self.assertEqual(len(rows), 1844)
+        self.assertEqual(len(rows), 1845)
         self.assertEqual(fill.FAILURES, [])
         raw = fill.LEDGER.read_bytes()
         original = extension.base_bytes()
@@ -614,6 +614,105 @@ class Round4CoverageAndReplayTests(unittest.TestCase):
             paper.read_text.side_effect=AssertionError('paper read in repo-only mode')
             self.assertEqual(fill.main(['--repo-only']),0)
         self.assertIn('paper not checked',output.getvalue())
+
+
+class Round5DeltaTests(unittest.TestCase):
+    module = staticmethod(Round3RepositoryGateTests.load_script)
+
+    def test_independent_replay_matches_uniform_shared_shift_and_refuses_bad_terms(self):
+        r5 = self.module('hand_check_rl55_round5.py')
+        members = {}
+        units = [f'synthetic-b{i:02}' for i in range(8)]
+        for i, unit in enumerate(units, 1):
+            for position in ('a1', 'b1', 'b2', 'a2'):
+                members[f'synthetic-prefill-{unit[-3:]}-{position}'] = {
+                    'E_j': {'prefill': 2.0*i if position == 'b1' else 0.0},
+                    'r_j': {'prefill': 0.0}}
+        # A uniform shift preserves sample SD, so the comparative prediction
+        # increases by exactly the shared width. No repository helper used.
+        denominator = 4.5 + 2.365*math.sqrt(6)*math.sqrt(9/8)
+        numerator = denominator + 0.25
+        rc = {'members': {'ALPHA': members},
+              'floors': {r5.CELL+'/comparative': {
+                  'kept_units': units, 'local_j': [0.0]*8, 'shared_j': [0.25]*8}},
+              'dominance': {'common_mode': {r5.CELL: {
+                  'n': 8, 'numerator_j': numerator, 'denominator_j': denominator,
+                  'R_cm': numerator/denominator}}}}
+        self.assertAlmostEqual(r5.rederive(rc)[0], numerator/denominator)
+        rc['dominance']['common_mode'][r5.CELL]['numerator_j'] += 0.01
+        with self.assertRaisesRegex(ValueError, 'real mismatch'):
+            r5.rederive(rc)
+
+    def test_round5_refuses_bad_hash_before_loading(self):
+        r5 = self.module('hand_check_rl55_round5.py')
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp)/'synthetic.json'
+            path.write_bytes(b'{}')
+            with patch.object(r5, 'SOURCE', path), patch.object(r5, 'PIN', '0'*64):
+                with patch.object(Path, 'read_bytes', side_effect=AssertionError('loaded before hash matched')):
+                    with self.assertRaisesRegex(ValueError, 'hash mismatch before loading'):
+                        r5.read_source({})
+
+    def test_round5_authenticates_loaded_bytes_before_parsing(self):
+        r5 = self.module('hand_check_rl55_round5.py')
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp)/'synthetic.json'
+            path.write_bytes(b'{}')
+            with patch.object(r5, 'SOURCE', path), patch.object(r5, 'PIN', hashlib.sha256(b'{}').hexdigest()):
+                with patch.object(Path, 'read_bytes', return_value=b'changed'):
+                    with patch.object(r5.json, 'loads', side_effect=AssertionError('parsed unauthenticated bytes')):
+                        with self.assertRaisesRegex(ValueError, 'loaded bytes differ'):
+                            r5.read_source({})
+
+    def test_coverage_uses_five_decimal_row_and_names_sealed_bytes(self):
+        coverage = self.module('fill_coverage_b5.py')
+        fill = self.module('fill_check_b5.py')
+        ledger = fill.load_ledger()
+        rows = coverage.build(coverage.paper_text(), ledger)
+        for fid in ('CP-X02-conclusion', 'P1-B5-DOM-FAILED'):
+            precision = [r for r in rows if r['placeholder'] == fid and
+                         r['element'].startswith('fullest-precision 1.7B prefill R_cm')]
+            self.assertEqual(len(precision), 1)
+            self.assertEqual(precision[0]['ledger_rows'], '1846')
+            self.assertEqual(ledger[1846]['printed_value'], '1.99975')
+        sealed = [r for r in rows if r['reason'] == 'outside Block 5 (BYTES; sealed)']
+        self.assertEqual({r['placeholder'] for r in sealed},
+                         {'P1-M-ACCEPT', 'P1-LEDGER', 'P1-DEV-LIST', 'P1-RELEASE', 'P1-AVAIL'})
+        self.assertFalse(any(r['element'].startswith('BYTES') and
+                             r['reason'] != 'outside Block 5 (BYTES; sealed)' for r in rows))
+
+    def test_coverage_rejects_working_paper_drift_from_merged_snapshot(self):
+        coverage = self.module('fill_coverage_b5.py')
+        with patch.object(Path, 'read_text', return_value='# changed paper'):
+            with self.assertRaisesRegex(ValueError, 'working-tree paper differs'):
+                coverage.paper_text()
+
+    def test_default_fill_checks_merged_working_paper(self):
+        fill = self.module('fill_check_b5.py')
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(fill.main(), 0)
+
+    def test_round4_native_replay_preserves_later_append_and_write_refuses(self):
+        r4 = self.module('hand_check_rl55_round4.py')
+        frozen = subprocess.run(['git', 'show',
+                                 'ffe8137be:docs/analysis/b5/rederivation.tsv'],
+                                cwd=SCRIPT.parents[3], check=True, capture_output=True).stdout
+        rows = list(csv.DictReader(io.StringIO(frozen.decode()), delimiter='\t'))[1419:]
+        with patch.object(r4, 'ReleasedReader') as reader:
+            reader.return_value.read.return_value = {}
+            reader.return_value.finish.return_value = {}
+            with patch.object(r4, 'append_rows', return_value=rows), redirect_stdout(io.StringIO()):
+                with patch('sys.argv', [str(r4.__file__)]):
+                    r4.main()
+                with patch('sys.argv', [str(r4.__file__), '--write']):
+                    with self.assertRaisesRegex(ValueError, 'later append exists'):
+                        r4.main()
+
+    def test_round5_repository_mode_never_opens_custody(self):
+        r5 = self.module('hand_check_rl55_round5.py')
+        with patch.object(r5, 'read_source', side_effect=AssertionError('custody opened')):
+            with patch('sys.argv', [str(r5.__file__), '--repo-only']), redirect_stdout(io.StringIO()):
+                r5.main()
 
 
 if __name__ == '__main__':
