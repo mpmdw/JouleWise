@@ -58,6 +58,14 @@ class _Ctx(unittest.TestCase):
 
 
 class ArmCliTests(_Ctx):
+    def test_named_weight_digest_check_passes_matching_and_trips_mismatch(self):
+        self.assertIn('weight-digest-preflight', wp.CHECKS)
+        row = self.probe('weight-digest-preflight')
+        self.assertEqual(row['status'], wp.PASS, row)
+        self.assertTrue(row['evidence']['matching_prepare_and_arm'])
+        self.assertTrue(row['evidence']['mismatch_refused'])
+        self.assertIn('weight_digest_preflight: digest_mismatch:', row['evidence']['refusal'])
+
     def test_synthetic_watchdog_models_nested_session_plan_outside_scan(self):
         import time
         from scripts import bytes_h_session as h
