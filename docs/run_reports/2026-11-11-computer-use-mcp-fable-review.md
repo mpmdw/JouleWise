@@ -201,3 +201,29 @@ F10 no inter-chunk delay in `type_text`. Finder stays on the allowlist and
 can launch anything, and system shortcuts beyond the blocked set (Mission
 Control keys, `ctrl+F3` Dock focus) are still accepted. The README now says
 the allowlist is not a sandbox.
+
+## Delta review 2 — `d6f8e2e85` (round 3 `f999d99f3`)
+
+### Verdict: ADMIT, no remaining findings
+
+| Check | Result |
+| --- | --- |
+| Tests: functional + mutation modules | PASS, 70 tests |
+| D1 drag hit-test | CLOSED. Both endpoints are checked in Python and twice in Swift before mouse-down. A drag under 3 points is rewritten to `click` before the first log record (confirmed in dry run: 2-point drag logged as `click`, 3-point drag as `drag`) |
+| D2 parser | CLOSED. Real `gui/501` (411 rows) and `system` (408 rows) still parse as one section each and come out unarmed |
+| D3 MBP note | CLOSED. README says `respect_remote_armed` must stay `true` on the MBP |
+
+Re-probe of the three previously open rows, injected into real `gui/501`
+output: the quoted label now refuses as a malformed row; the upper-case and
+mixed-case labels come out ARMED; a stray `}` at any other indentation
+refuses. A duplicated services block still refuses.
+
+Accepted residual: a `}` line at exactly the services block's own
+indentation ends the section, so rows placed after it are not read. That is
+indistinguishable from the genuine close and is not output launchctl
+produces; it would need a forged `launchctl`. `xcom.joulewise.night` is
+correctly not a prefix match.
+
+Unchanged residuals: F5 check-to-post race, F8 `swiftc` from `PATH`, F10
+`type_text` pacing, and move/scroll without ownership hit-testing (documented).
+Native screenshot and input are still unverified; the Air's marker is armed.
