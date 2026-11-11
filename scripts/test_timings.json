@@ -609,7 +609,7 @@
     "tests.test_mint_floor_artifact_generalized_d165": 2.896,
     "tests.test_mint_floor_v2_config_set": 11.655,
     "tests.test_mint_policy_resolver_guard": 0.026,
-    "tests.test_mlx_runtime": 0.038,
+    "tests.test_mlx_runtime": 0.219,
     "tests.test_mlx_runtime_detokenizer": 0.019,
     "tests.test_mock_adapters": 0.125,
     "tests.test_model_panel": 0.006,

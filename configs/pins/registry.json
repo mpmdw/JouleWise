@@ -34242,8 +34242,8 @@
       ["#L7057", "historical_pin", null]
     ]},
     {"path": "tests/test_mlx_runtime.py", "rows": [
-      ["#L829", "synthetic_literal", null],
-      ["#L835", "synthetic_literal", null]
+      ["#L799", "synthetic_literal", null],
+      ["#L805", "synthetic_literal", null]
     ]},
     {"path": "tests/test_model_panel.py", "rows": [
       ["#L71", "synthetic_literal", null]

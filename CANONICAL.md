@@ -11,7 +11,7 @@ because nobody could see which tool was current. The 2026-11-06 prune
 ([run report](docs/run_reports/2026-11-06-repo-prune.md)) removed about 8,100 stale files so
 that cannot happen again.
 
-Last updated: 2026-11-08 (v4 line section added; the rest as of 2026-11-06, lane/2026-11-06-repo-prune, merged with `main` at `a07134b8`; entries checked against the triage of `sol/burn-canon`).
+Last updated: 2026-11-10 (file-prune stack; CA-42 retirement held at the live ALIGN registration gate). The v4 line section remains as recorded on 2026-11-08; current lane state is in `RUN_STATE.md`.
 
 ## Project state
 
@@ -89,6 +89,13 @@ Held, not canonical yet: the condition-waits lane (`align/2026-11-08-condition-w
 | Pins | `python3 scripts/repin.py --check` (all families); `--write registry` after deleting or adding pinned files | Hand repins |
 | State kernel | `python3 scripts/gen_state.py --check` | — |
 
+## Suite manifest producers
+
+| Job | Canonical | Disposition |
+|---|---|---|
+| Mixed and sentinel suite manifests | `scripts/gen_jw_mixed.py` over `joulewise/gensuite.py` | KEEP: current producer; tokenizer-manifest helpers have live test consumers |
+| Authenticated scored-v6 import | `scripts/gen_gsm8k_scored.py` over `joulewise/benchmark_import.py` | KEEP: canonical producer; scored-lane retirement is deferred |
+
 ## Repository operations
 
 | Job | Canonical | Replaced / retaining ref |
@@ -105,6 +112,15 @@ Held, not canonical yet: the condition-waits lane (`align/2026-11-08-condition-w
 |---|---|---|
 | Superseded profiling logs, synthetic E2E reports and legacy portfolio synthesis listed in `docs/ops/FILE-PRUNE-G1.tsv` | Current tools above; reader and authority records remain in the checkout | `archive/process-traces-before-release-prune-2026-11-08:<path>` |
 | Historical P2-015 generated campaign, generator/spec/backup and six generator-only assertions | Current v5 packs; calibration plan, its digest sidecar and the live NEG8 test config remain. Historical manifest assertions use archived blobs | `archive/process-traces-before-release-prune-2026-11-08:configs/campaigns/p2_015_floors/` |
+| `scripts/axi_sb_static_batch_spike.py` | Already retired: isolated AXI experiment, no current entry point (#654) | `archive/pre-prune-2026-11-06:scripts/axi_sb_static_batch_spike.py` |
+| `scripts/axi_sc_spec_decode_spike.py` | Already retired: isolated AXI experiment, no current entry point (#654) | `archive/pre-prune-2026-11-06:scripts/axi_sc_spec_decode_spike.py` |
+| `scripts/codex_usage_probe.py` | Already retired: one-shot diagnostic (#654) | `archive/pre-prune-2026-11-06:scripts/codex_usage_probe.py` |
+| `scripts/measure_claude_cold_start.sh` | Already retired: one-shot timing diagnostic (#654) | `archive/pre-prune-2026-11-06:scripts/measure_claude_cold_start.sh` |
+| `scripts/gen_affine_smoke.py` | Already retired: one-shot fixture generator (#654) | `archive/pre-prune-2026-11-06:scripts/gen_affine_smoke.py` |
+| `scripts/spike_mlx_prompt_cache.py` | Retired: recorded Stage 3.0.1 verdict `replay_supported`; current size prediction is `python -m joulewise kv-size`. Historical evidence stays in `docs/phase_3/kv_feasibility.md`; no new native validation claimed | `archive/process-traces-before-release-prune-2026-11-08:scripts/spike_mlx_prompt_cache.py` |
+
+The two retained G4 generator candidates are listed under suite manifest
+producers above. All eight verdicts are recorded in `docs/ops/FILE-PRUNE-G4.tsv`.
 
 ## Paper
 

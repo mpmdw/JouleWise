@@ -47,7 +47,6 @@ from joulewise.suite import (
     SuiteManifest,
     suite_manifest_sha256,
 )
-from scripts import spike_mlx_prompt_cache
 
 
 def make_config(
@@ -640,35 +639,6 @@ class MlxRuntimeTests(unittest.TestCase):
                     list(range(len(pieces))),
                 )
 
-    def test_spike_report_rejects_equal_truncated_decodes(self) -> None:
-        for tokens in ([1, 2], []):
-            with self.subTest(tokens=tokens), tempfile.TemporaryDirectory() as tmp:
-                workdir = Path(tmp)
-                for name, payload in (
-                    ("mono_tokens.json", {"tokens": tokens}),
-                    ("resume_tokens.json", {"tokens": tokens}),
-                    ("mono_meta.json", {"mlx_lm_version": "test", "mlx_version": "test"}),
-                    ("prefill_meta.json", {"cache_bytes": 100, "offset": 4}),
-                    ("decode_meta.json", {"pre_trim_offset": 4, "post_trim_offset": 3}),
-                ):
-                    (workdir / name).write_text(json.dumps(payload))
-                with patch.object(
-                    spike_mlx_prompt_cache, "predict_cache_bytes", return_value=100
-                ):
-                    report = spike_mlx_prompt_cache.assemble_report(
-                        workdir,
-                        Path("/model"),
-                        prompt_len=4,
-                        decode_tokens_count=3,
-                        subprocess_timings={},
-                    )
-
-            self.assertEqual(report["monolithic_emitted_tokens"], len(tokens))
-            self.assertEqual(report["resumed_emitted_tokens"], len(tokens))
-            self.assertTrue(report["tokens_identical"])
-            self.assertTrue(
-                report["verdict"].startswith("replay_unsupported(decode_count_")
-            )
 
     def test_run_workload_event_stream_is_byte_identical_after_generate_refactor(self) -> None:
         adapter, _ = self.prepared_adapter(["A", "B", "C"])
