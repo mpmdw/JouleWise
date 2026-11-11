@@ -37,6 +37,11 @@ class _Ctx(unittest.TestCase):
                                      side_effect=AssertionError('PREQUAL omitted synthetic watchdog'))
         watchdog.start()
         self.addCleanup(watchdog.stop)
+        for name in ('frequency_word_preflight', 'frequency_word_pre_t0'):
+            frequency = mock.patch.object(align_v4_session, name,
+                side_effect=AssertionError('PREQUAL omitted synthetic frequency'))
+            frequency.start()
+            self.addCleanup(frequency.stop)
         self.tmp = Path(tempfile.mkdtemp(prefix='w1pq-test-'))
         self.addCleanup(shutil.rmtree, self.tmp, True)
         env = mock.patch.dict(os.environ, {'JOULEWISE_HOST_STATE_DIR': str(self.tmp / 'host-state')})
@@ -58,6 +63,10 @@ class ArmCliTests(_Ctx):
         now = time.time()
         base, session, disk = wp.arm_fixture(self.ctx, 'watchdog-hold', now=now)
         packet = wp.valid_packet(self.ctx, base, now)
+        control = wp.run_install(self.ctx, session, disk, packet, host=wp.FakeHost(now=now), now=now)
+        self.assertEqual(control['rc'], 0, control['stderr'])
+        self.assertTrue(control['arm']['admitted'])
+        self.assertEqual(len(control['installer_calls']), 1)
         host = wp.FakeHost(now=now, watchdog_state='HOLD_PLAN_MALFORMED')
         row = wp.run_install(self.ctx, session, disk, packet, host=host, now=now)
         self.assertNotEqual(row['rc'], 0)

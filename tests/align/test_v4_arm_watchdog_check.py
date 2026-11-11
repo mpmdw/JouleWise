@@ -189,10 +189,11 @@ class RemoteProbeTests(watchdog_fixtures.WatchdogTestCase):
             # The installed plists alone supply the plan (no custody glob).
             stack.enter_context(patch.object(wd.Storage, 'glob_plans', return_value=[]))
             stack.enter_context(patch.object(wd, 'real_dependencies', return_value=self.harness.deps))
-            stack.enter_context(patch.object(wd, 'StatusExporter', return_value=None))
             stack.enter_context(patch.object(wd, 'current_boot_id', return_value='synthetic-boot'))
             network = stack.enter_context(patch.object(wd.subprocess, 'run',
                 return_value=subprocess.CompletedProcess([], 0, 'synthetic stop', '')))
+            transport = stack.enter_context(patch.object(wd.subprocess, 'Popen',
+                side_effect=AssertionError('status transport forbidden')))
             fork = stack.enter_context(patch.object(wd.os, 'fork', side_effect=AssertionError('fork forbidden')))
             for offset in (-wd.PLAN_LEAD_S, -1, 0, 1):
                 with self.subTest(offset=offset):
@@ -206,6 +207,7 @@ class RemoteProbeTests(watchdog_fixtures.WatchdogTestCase):
                     self.assertTrue(record['ok'], record)
                     self.assertEqual(record['state'], 'FENCED')
                     network.assert_not_called()
+                    transport.assert_not_called()
                     fork.assert_not_called()
             # The same installed plan before t0-180 DOES permit remote Git.
             self.harness.clock.wall = dt.datetime.fromtimestamp(plan.t0_epoch_s - wd.PLAN_LEAD_S - 1,
@@ -217,6 +219,7 @@ class RemoteProbeTests(watchdog_fixtures.WatchdogTestCase):
             self.assertEqual(network.call_count, 2)
             self.assertTrue(all('ls-remote' in call.args[0] for call in network.call_args_list))
             fork.assert_not_called()
+            transport.assert_not_called()
         self.assertFalse((self.harness.storage.root / 'state.json').exists())
 
 

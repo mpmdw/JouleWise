@@ -145,6 +145,10 @@ class FakeHost:
                 'argv': ['synthetic-watchdog', '--dry-run'], 'plan_read_proven': False,
                 'elapsed_s': 0.0, 'stopped': self.watchdog_state == 'STOPPED'}
 
+    def frequency_check(self, *_, **__):
+        """The minimal fake night plan has no native clock budget or reader."""
+        return {'ok': True, 'synthetic': True, 'reason': 'PREQUAL synthetic frequency'}
+
     def __call__(self, argv, *args, **kwargs):
         import plistlib
         argv = tuple(str(a) for a in argv)
@@ -331,7 +335,8 @@ def run_install(ctx, session, disk, packet, *, host, args_override=None, drop=()
     from unittest import mock
     with mock.patch.object(session_mod, 'install', functools.partial(
             real_install, runner=host, volume_runner=host, disk_gate=gate, now=lambda: now,
-            meter_probe=meter_probe or LIVE_METER, watchdog_check=host.watchdog_check)), \
+            meter_probe=meter_probe or LIVE_METER, watchdog_check=host.watchdog_check,
+            frequency_preflight=host.frequency_check, frequency_pre_t0=host.frequency_check)), \
             mock.patch.object(h, 'install', functools.partial(real_h_install, run=host, now=lambda: now)), \
             mock.patch.object(kit, 'generate', lambda *a, **k: None), \
             contextlib.redirect_stderr(stderr), contextlib.redirect_stdout(io.StringIO()):
