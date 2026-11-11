@@ -281,35 +281,73 @@ class Round3RepositoryGateTests(unittest.TestCase):
 
     @staticmethod
     def first_fill_text():
-        # The task base predates the first fill. Read its admitted, immutable
-        # Git text as a fixture; never replace the working-tree paper.
+        # The admitted first fill, as immutable Git text; never replace the working-tree paper.
         return subprocess.run(['git', 'show',
                                'e5fd296715f21c7c3792e4f9743b7494b07813ec:docs/paper/paper1/paper1.md'],
                               cwd=SCRIPT.parents[3], check=True, capture_output=True, text=True).stdout
 
-    def test_fill_gate_passes_existing_first_fill_with_extended_ledger(self):
+    def test_fill_gate_refuses_first_fill_ledger_precision_under_rl52(self):
+        # The first fill printed ledger precision; RL-52's print-precision rule now refuses that text.
         fill = self.load_script('fill_check_b5.py')
         with patch.object(fill, 'PAPER') as paper, redirect_stdout(io.StringIO()) as output:
             paper.read_text.return_value = self.first_fill_text()
-            self.assertEqual(fill.main(), 0)
-        self.assertIn('PASS: every filled Block 5 value', output.getvalue())
+            self.assertEqual(fill.main(), 1)
+        self.assertIn('ledger-rendered text', output.getvalue())
 
     def test_fill_gate_rejects_each_cited_paper_value_perturbation(self):
         fill = self.load_script('fill_check_b5.py')
         fill.L = fill.load_ledger()
-        paper = fill.norm(self.first_fill_text())
+        paper = fill.norm(fill.PAPER.read_text())
         cited = {int(m.group(1)) for _, _, template, _, _ in fill.SITES for m in fill.PH.finditer(template)}
         for number in sorted(cited):
             template = next(t for _, _, t, _, _ in fill.SITES
                             if any(int(m.group(1)) == number for m in fill.PH.finditer(t)))
-            rendered = fill.PH.sub(lambda m: fill.render_value(int(m.group(1)), m.group(2)), template)
-            changed = fill.PH.sub(lambda m: fill.render_value(int(m.group(1)), m.group(2)) +
-                                 ('X' if int(m.group(1)) == number else ''), template)
+            rendered = fill.rendered(template)
+            changed = fill.rendered(fill.PH.sub(lambda m: m.group(0) + ('X' if int(m.group(1)) == number else ''),
+                                                template))
             self.assertIn(fill.norm(rendered), paper)
             fill.FAILURES.clear()
             fill.check_sites(paper.replace(fill.norm(rendered), fill.norm(changed), 1))
             with self.subTest(physical_row=number):
                 self.assertTrue(any('ledger-rendered text' in f for f in fill.FAILURES))
+
+    def test_fill_gate_rejects_a_value_rounded_against_the_rule(self):
+        # 146.63 J is row 15 rounded to nearest; one unit in the last place is refused.
+        fill = self.load_script('fill_check_b5.py')
+        fill.L = fill.load_ledger()
+        paper = fill.PAPER.read_text()
+        self.assertIn('by 146.63 J', paper)
+        fill.FAILURES.clear()
+        fill.check_sites(paper.replace('by 146.63 J', 'by 146.64 J', 1))
+        self.assertTrue(any('ledger-rendered text' in f for f in fill.FAILURES))
+
+    def test_fill_gate_rejects_a_format_outside_the_row_class(self):
+        fill = self.load_script('fill_check_b5.py')
+        fill.L = fill.load_ledger()
+        site = next(i for i, s in enumerate(fill.SITES) if s[0] == 'Table 2, 1.7B decode')
+        name, ids, template, count, labels = fill.SITES[site]
+        with patch.object(fill, 'SITES', list(fill.SITES)) as sites:
+            sites[site] = (name, ids, template.replace('{r133:e}', '{r133:mr}'), count, labels)
+            fill.FAILURES.clear()
+            fill.check_formats()
+        self.assertTrue(any("is class 'J' but printed with format 'mr'" in f for f in fill.FAILURES))
+
+    def test_fill_gate_rejects_a_rounding_that_flips_a_stated_comparison(self):
+        # Synthetic: move d-bar to just above the decode gate; on the ledger it exceeds the gate, but rounded to
+        # nearest beside a gate rounded up it does not. The check must refuse the rounding.
+        fill = self.load_script('fill_check_b5.py')
+        fill.L = fill.load_ledger()
+        rows = {n: dict(r) for n, r in fill.L.items()}
+        rows[15]['printed_value'] = '10.17900'
+        for n in (48, 36, 63, 64):
+            rows[n]['printed_value'] = '10.17850'
+        rows[37]['printed_value'] = rows[49]['printed_value'] = '10.17950'
+        with patch.object(fill, 'L', rows):
+            fill.FAILURES.clear()
+            fill.check_comparisons()
+        self.assertTrue(any('flips on the printed (rounded) values' in f and 'decode: d̄ exceeds the floor gate' in f
+                            for f in fill.FAILURES))
+        self.assertFalse(any('false on the ledger values: decode: d̄ exceeds' in f for f in fill.FAILURES))
 
 
 class LedgerExtensionTests(unittest.TestCase):
@@ -570,7 +608,7 @@ class Round4CoverageAndReplayTests(unittest.TestCase):
         coverage = self.module('fill_coverage_b5.py')
         fill = self.module('fill_check_b5.py')
         rows = coverage.build(coverage.paper_text(), fill.load_ledger())
-        self.assertTrue(set(fill.PENDING) <= {r['placeholder'] for r in rows})
+        self.assertTrue(set(fill.PENDING) - coverage.NEW_AFTER_SNAPSHOT <= {r['placeholder'] for r in rows})
         self.assertEqual(len({r['placeholder'] for r in rows}),65)
         # Compare digests so a failure cannot dump the study's coverage table.
         self.assertEqual(hashlib.sha256(coverage.encoded(rows)).digest(),
@@ -602,10 +640,11 @@ class Round4CoverageAndReplayTests(unittest.TestCase):
                              r['key/leaf'].endswith('.rise_k') for r in ledger.values()),10)
 
     def test_fill_paper_ref_is_explicit_and_uses_local_git_only(self):
+        # The first-fill commit prints ledger precision, which the RL-52 rule refuses.
         fill = self.module('fill_check_b5.py')
         with patch.object(fill, 'PAPER') as paper, redirect_stdout(io.StringIO()) as output:
             paper.read_text.side_effect=AssertionError('working-tree paper read with explicit ref')
-            self.assertEqual(fill.main(['--paper-ref','e5fd296715f21c7c3792e4f9743b7494b07813ec']),0)
+            self.assertEqual(fill.main(['--paper-ref','e5fd296715f21c7c3792e4f9743b7494b07813ec']),1)
         self.assertIn('Paper input: local Git commit',output.getvalue())
 
     def test_fill_repo_only_never_reads_paper(self):
@@ -681,11 +720,22 @@ class Round5DeltaTests(unittest.TestCase):
         self.assertFalse(any(r['element'].startswith('BYTES') and
                              r['reason'] != 'outside Block 5 (BYTES; sealed)' for r in rows))
 
-    def test_coverage_rejects_working_paper_drift_from_merged_snapshot(self):
+    def test_coverage_map_reads_the_pinned_snapshot_not_the_working_paper(self):
         coverage = self.module('fill_coverage_b5.py')
-        with patch.object(Path, 'read_text', return_value='# changed paper'):
-            with self.assertRaisesRegex(ValueError, 'working-tree paper differs'):
-                coverage.paper_text()
+        with patch.object(Path, 'read_text', side_effect=AssertionError('working-tree paper read')):
+            self.assertIn('{{FILL: P1-B5-METER', coverage.paper_text())
+
+    def test_coverage_checks_the_filled_working_paper_against_the_map(self):
+        coverage = self.module('fill_coverage_b5.py')
+        fill = self.module('fill_check_b5.py')
+        rows = coverage.build(coverage.paper_text(), fill.load_ledger())
+        current = (SCRIPT.parents[3]/'docs/paper/paper1/paper1.md').read_text()
+        self.assertEqual(coverage.check_working_paper(current, rows, fill), (53, 12))
+        with self.assertRaisesRegex(ValueError, 'unaccounted Block 5 placeholder'):
+            coverage.check_working_paper(current + '\n{{FILL: P1-B5-NEW-GAP | x}}', rows, fill)
+        with patch.object(fill, 'FILLED', [f for f in fill.FILLED if f != 'P1-B5-XWIN']):
+            with self.assertRaisesRegex(ValueError, 'gone without a fill'):
+                coverage.check_working_paper(current, rows, fill)
 
     def test_default_fill_checks_merged_working_paper(self):
         fill = self.module('fill_check_b5.py')

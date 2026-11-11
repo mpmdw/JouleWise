@@ -4,6 +4,12 @@
 No custody or network access. Build an element/row map, or check its exact TSV
 serialization. Row numbers are physical TSV lines including the header.
 Reasons apply only to the named element, never to an entire composite fill.
+
+The map is of the paper snapshot PAPER_COMMIT, taken before the second fill, and
+stays byte-identical. After the second fill the working-tree paper is checked
+against it separately (check_working_paper): every mapped id is either filled,
+deleted with its branch or dropped, as fill_check_b5.py records, or still pending
+there; no Block 5 placeholder outside the map appears.
 """
 from __future__ import annotations
 
@@ -29,12 +35,51 @@ INDEX = 'configs/analysis/b5/analysed_windows.json'
 PLAN = 'configs/campaigns/v5_claim_25g83/analysis_plan_block5.md'
 
 
+# The 57 Block 5 ids pending at PAPER_COMMIT (fill_check_b5.PENDING before the second fill).
+PENDING_AT_SNAPSHOT = [
+    'P1-B5-METER', 'P1-B5-ATTEMPTS', 'P1-B5-ANALYSED', 'P1-B5-HAZARDS', 'P1-B5-INTERVAL-PARTS', 'P1-B5-B-SHARE',
+    'P1-B5-BATT-LINE', 'P1-B5-LOAD-LINE', 'P1-B5-DOM-FAILED', 'P1-B5-DOM-REFUSED', 'P1-B5-XWIN', 'P1-B5-NEG8',
+    'P1-B5-MONITOR', 'P1-B5-RM-ctr-decode', 'P1-B5-RM-ctr-prefill', 'P1-RECOMPUTE-SUMMARY', 'P1-ABS-PART1',
+    'CP-X01-identity', 'CP-X01-length', 'CP-X02-conclusion', 'CP-X08-decode-a-conclusion']
+PENDING_AT_SNAPSHOT += [f'P1-B5-{k}-{c}' for k in ('RM', 'FN') for c in ('1p7B-decode', '1p7B-prefill', '8B-decode', '8B-prefill')]
+PENDING_AT_SNAPSHOT += [f'F_{c}_cmp_J' for c in ('1p7B_decode', '1p7B_prefill_p2048', '8B_decode', '8B_prefill_p2048')]
+PENDING_AT_SNAPSHOT += [f'{p}{c}_{f}{s}' for c in ('1p7B_decode', '1p7B_prefill_p2048', '8B_decode', '8B_prefill_p2048')
+                        for f in ('abs', 'cmp') for p, s in (('R_', ''), ('TERM_A_', '_J'), ('TERM_B_', '_J'))]
+MIXED = {'P1-ID-OS','P1-M-RECORD-WIDTH','P1-M-ACCEPT','P1-LEDGER','P1-DEV-LIST','P1-RELEASE','P1-RECOMPUTE','P1-AVAIL'}
+# Placeholders the second fill created (RL-52 (4): the Block 6 half of P1-RECOMPUTE-SUMMARY).
+NEW_AFTER_SNAPSHOT = {'P1-RECOMPUTE-SUMMARY-B6'}
+FILL_ID = re.compile(r'\{\{FILL:\s*([^|]+?)\s*\|')
+
+
 def paper_text():
-    frozen = subprocess.run(['git','show',PAPER_COMMIT+':'+PAPER_PATH],cwd=REPO,check=True,capture_output=True,text=True).stdout
-    current = (REPO/PAPER_PATH).read_text()
-    if current != frozen:
-        raise ValueError('working-tree paper differs from merged paper snapshot')
-    return current
+    """The paper the coverage map was built from: the pinned pre-second-fill snapshot (local Git only)."""
+    return subprocess.run(['git','show',PAPER_COMMIT+':'+PAPER_PATH],cwd=REPO,check=True,capture_output=True,text=True).stdout
+
+
+def fill_module():
+    s = importlib.util.spec_from_file_location('coverage_fill_metadata',REPO/'docs/paper/paper1/fill_check_b5.py')
+    fill = importlib.util.module_from_spec(s); s.loader.exec_module(fill)
+    return fill
+
+
+def check_working_paper(current, rows, fill=None):
+    """Every mapped id is filled, deleted, dropped or still pending in the working paper; nothing unmapped appears."""
+    fill = fill or fill_module()
+    mapped = {r['placeholder'] for r in rows}
+    present = {m[1].rstrip(' \\') for m in FILL_ID.finditer(current)}
+    done = set(fill.FILLED) | set(fill.DELETED_WITH_BRANCH) | set(fill.DROPPED)
+    for fid in mapped:
+        if fid in present:
+            if fid not in set(fill.PENDING) | MIXED:
+                raise ValueError('working paper: mapped id still a placeholder but not listed pending: '+fid)
+        elif fid not in done:
+            raise ValueError('working paper: mapped id gone without a fill, branch or drop record: '+fid)
+    for fid in present:
+        if (fid.startswith('P1-B5-') or fid in set(fill.PENDING)) and fid not in mapped | NEW_AFTER_SNAPSHOT:
+            raise ValueError('working paper: unaccounted Block 5 placeholder: '+fid)
+    if not set(fill.PENDING) <= mapped | NEW_AFTER_SNAPSHOT:
+        raise ValueError('fill_check_b5.PENDING names an id outside the coverage map')
+    return len(mapped - present), len(mapped & present)
 
 
 def build(paper, ledger):
@@ -42,12 +87,11 @@ def build(paper, ledger):
     for m in re.finditer(r'\{\{FILL:\s*([^|]+?)\s*\|\s*(.*?)\}\}',paper,re.S):
         fid = m[1].rstrip(' \\')
         placeholders[fid] = (paper.count('\n',0,m.start())+1, ' '.join(m[2].split()))
-    s = importlib.util.spec_from_file_location('coverage_fill_metadata',REPO/'docs/paper/paper1/fill_check_b5.py')
-    fill = importlib.util.module_from_spec(s); s.loader.exec_module(fill)
-    pending = set(fill.PENDING)
+    fill = fill_module()
+    pending = set(PENDING_AT_SNAPSHOT)
     # Mixed placeholders remain outside the second fill, but their Block 5
     # elements are also inventoried so none is silently treated as complete.
-    mixed = {'P1-ID-OS','P1-M-RECORD-WIDTH','P1-M-ACCEPT','P1-LEDGER','P1-DEV-LIST','P1-RELEASE','P1-RECOMPUTE','P1-AVAIL'}
+    mixed = MIXED
     if not pending <= placeholders.keys():
         raise ValueError('pinned main is missing pending ids')
     if {k for k in placeholders if k.startswith('P1-B5-')} - pending:
@@ -269,8 +313,10 @@ def main():
     raw=encoded(rows);target=HERE/'fill_coverage.tsv'
     if args.write:target.write_bytes(raw)
     elif target.read_bytes()!=raw:raise ValueError('coverage table differs from explicit element/row map')
+    gone, left = check_working_paper((REPO/PAPER_PATH).read_text(), rows)
     print('PASS: coverage',len(rows),'elements;',len({r['placeholder'] for r in rows}),'placeholders;',
           dict(Counter(r['reason'] or 'ledger row' for r in rows)))
+    print('PASS: working paper:',gone,'mapped placeholders filled, deleted or dropped;',left,'still pending')
 
 
 if __name__=='__main__':

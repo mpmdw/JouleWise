@@ -60,6 +60,19 @@ The second fill takes the row with more digits and prints this one at five
 decimals, **1.99975**; it is below 2 either way. Other R/R_cm keep four decimals.
 This is a last-place precision difference, not a new mismatch.
 
+**Clarification, second fill (RL-52, RL-55; not an erratum):** the second fill
+looked for every other quantity that the ledger holds twice among the rows it
+prints (the cross-session deltas 169–172 and 974/1006/1054/1096, the contention
+totals 242–244 and 1181/1309/1530, the GAMMA ρ rows 351–357 and 767–781, h and
+B 136–164 and the DISC battery-line rows, the 8B allowance 289 and 1388). Each
+pair has the same digits, so 1.99975 is the only longer-row difference from
+`RESULTS.md`. Separately, Paper 1 now rounds each value once from its row by
+RL-52's print-precision rule, so its printed figures differ from `RESULTS.md`'s
+in the last printed place by design; floors round up (for example the prefill
+floor gate 8.83026 prints as 8.84). The paper's fill check asserts each rounding
+and every stated comparison on the rounded values
+(`docs/paper/paper1/fill_check_b5.py`).
+
 ## Current ledger disposition and printing rule
 
 Sol seat `p1-seat4-p3` applies research-lead **RL-41(b), as amended by RL-42**,
