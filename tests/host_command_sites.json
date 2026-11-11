@@ -21,55 +21,55 @@
     "file": "joulewise/align/apple/external_volume.py",
     "locator": "prepare_plan:136f44584c694de1",
     "command": "sudo",
-    "seam": "none: prepare_plan renders operator command text only"
+    "seam": "none"
   },
   {
     "file": "joulewise/align/apple/external_volume.py",
     "locator": "prepare_plan:2b868a2f3773f0e8",
     "command": "sudo",
-    "seam": "none: prepare_plan renders operator command text only"
+    "seam": "none"
   },
   {
     "file": "joulewise/align/apple/external_volume.py",
     "locator": "prepare_plan:48660b4c3d1c871c",
     "command": "pmset",
-    "seam": "none: prepare_plan renders operator command text only"
+    "seam": "none"
   },
   {
     "file": "joulewise/align/apple/external_volume.py",
     "locator": "prepare_plan:4c8df13ddef8c85a",
     "command": "sudo",
-    "seam": "none: prepare_plan renders operator command text only"
+    "seam": "none"
   },
   {
     "file": "joulewise/align/apple/external_volume.py",
     "locator": "prepare_plan:5d4a9c4047529e4e",
     "command": "sudo",
-    "seam": "none: prepare_plan renders operator command text only"
+    "seam": "none"
   },
   {
     "file": "joulewise/align/apple/external_volume.py",
     "locator": "prepare_plan:9e95f2f544d41af9",
     "command": "sudo",
-    "seam": "none: prepare_plan renders operator command text only"
+    "seam": "none"
   },
   {
     "file": "joulewise/align/apple/external_volume.py",
     "locator": "prepare_plan:a50dbe7d9b4ffa57",
     "command": "defaults",
-    "seam": "none: prepare_plan renders operator command text only"
+    "seam": "none"
   },
   {
     "file": "joulewise/align/apple/external_volume.py",
     "locator": "prepare_plan:a50dbe7d9b4ffa57",
     "command": "sudo",
-    "seam": "none: prepare_plan renders operator command text only"
+    "seam": "none"
   },
   {
     "file": "joulewise/align/apple/external_volume.py",
     "locator": "prepare_plan:eee93aa4b0c6fd45",
     "command": "sudo",
-    "seam": "none: prepare_plan renders operator command text only"
+    "seam": "none"
   },
   {
     "file": "joulewise/align/apple/powermode.py",
@@ -1743,13 +1743,13 @@
     "file": "scripts/night_chains/align_r1_rehearsal.zsh",
     "locator": "shell:559db711a9b0c2ad",
     "command": "pmset",
-    "seam": "none: shell script; no Python tripwire inside shell, requires explicit PATH command shims"
+    "seam": "none"
   },
   {
     "file": "scripts/night_chains/align_r1_rehearsal.zsh",
     "locator": "shell:559db711a9b0c2ad",
     "command": "sudo",
-    "seam": "none: shell script; no Python tripwire inside shell, requires explicit PATH command shims"
+    "seam": "none"
   },
   {
     "file": "scripts/offload_setup_air.sh",

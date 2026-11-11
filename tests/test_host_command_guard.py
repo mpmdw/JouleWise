@@ -111,6 +111,9 @@ class HostCommandGuardTests(unittest.TestCase):
         exec("def misuse():\n    with guard.expect_refusals(): pass", namespace)
         with self.assertRaisesRegex(RuntimeError, "reserved"):
             namespace["misuse"]()
+        exec("def disable():\n    guard.uninstall()", namespace)
+        with self.assertRaisesRegex(RuntimeError, "reserved"):
+            namespace["disable"]()
 
     def test_expect_refusals_returns_records_without_failure(self):
         with guard.expect_refusals() as records, patch("subprocess._fork_exec") as fork:

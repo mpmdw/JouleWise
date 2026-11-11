@@ -246,6 +246,11 @@ def install():
 
 def uninstall():
     """For guard unit tests only; ordinary tests must never disable the tripwire."""
+    caller = inspect.currentframe().f_back
+    if caller.f_globals.get("__name__") not in {
+        "tests.test_host_command_guard", "test_host_command_guard",
+    } or Path(caller.f_code.co_filename).resolve() != Path(__file__).with_name("test_host_command_guard.py").resolve():
+        raise RuntimeError("uninstall is reserved for tests.test_host_command_guard")
     while _originals:
         owner, name, original = _originals.pop()
         setattr(owner, name, original)
