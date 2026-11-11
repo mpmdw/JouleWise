@@ -1089,6 +1089,35 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
   (4) Item 251's frequency-word zeroing before the arm. Arm notice to Ed.
 - **Model size and turn budget (Ed's question):** decided after R1 by ruling R10 (item 203). A different smaller model would be a model change for Ed. K, the confirmatory claim, does not depend on model size.
 
+256. **Magistrate activation 5515349e (Opus 5.5, headless), 2026-11-10 20:35 PST: the R1 G0 fix is built and admitted. R1 RE-ARMED: t0 20:53 PST 11-10, `window_max_s` 109,627 s, latest end Thu 11-12 03:25 PST (including the 300 s grace).**
+- **Build:** `lane/2026-11-10-r1-g0-rop` @ `da3187e6e`, from `20e9edbc4`, draft PR #711. Built by Sol 6.1 xhigh from item 255's ruling, with two lead changes:
+  - `ad9c0667f`: G1/H keep the episode (G0-release) reference. Only G0 moves to R_op. The brief's "G0, G1, H" was the lead's wording error.
+  - `da3187e6e`: the cold-pass text fixes, plus runbook §4 rules.
+  - Records: `docs/process_traces/2026-11-10-r1-g0/` on that branch: 31 build report, 40/41 cold passes, 42 findings disposition.
+- **Review:** blind executing cold passes. Fable returned ADMIT_WITH_FIXES; F1-F3 are dispositioned (F1 became a runbook flag rule, F2/F3 were text). Opus returned ADMIT. Both reproduced:
+  - the 600 s timeout, and R_op Tf08 26.571250 C;
+  - tail models A-D releasing at 706-940 s, all within 1,200 s;
+  - the R0 0550Z hot start refused across the full 1,200 s;
+  - bounds of 5,763.9952 s, 5,528.9952 s and 109,627 s.
+  The R1 suite passed locally (296 tests, OK, 1 skipped).
+- **CI on #711:** `quick` fails on `test_s0_blocked_enumeration` and `hazards.test_physics_coverage`, and both fail identically at base `20e9edbc4` (lead re-ran them). The 12 test shards were still queued at arm time. The lead armed without waiting: R1 is a non-claim rehearsal run from the lane, the R1 modules are green, and the cold passes executed the real code. Read the shard results after R1.
+- **Arm:**
+  - `$M` was re-pinned (fetch + switch --detach) from `20e9edbc4` to `da3187e6e`, with the pinned packages unchanged.
+  - Custody `S=/Users/edr/night-align/r1-20261111T043229Z`, plan sha256 `dc29aa59...31c4`.
+  - Host: AC, 100 %, not charging, 0 mA; no external volume; 113 GB free.
+  - Network time OFF; the frequency word reads 0; rate +0.011 ppm over 120 s.
+  - Arm notice to Ed before install: Gmail `1a1c8e171e7a6607`. Install rc 0, and both agents are loaded. Deadman calendar: 04:26.
+
+**Next activation (replaces item 255's pointer):**
+(1) While armed (until `chain.exited`, latest Thu 11-12 03:25 PST): do not move `$M` or the canonical root, run no git in `$M`, and keep no agent alive on the MBP.
+(2) After `chain.exited`, read first `$S/night/align-r1/r1_result.json` `status`/`error` and `chain.exit-census.json` `exit_code`. Do not rely on `result.json` `verdict`: it reads GO for a refused chain (A-01).
+  - If `step_30b`'s accepted attempt is above 0, send R_op-gated numbers to the ruling seat first (runbook §4, cold pass F1).
+  - Read the step-30b G0 release time; about 707-966 s is expected. Also read the three A-B-A leg releases (cold pass observation 1).
+  - Then follow runbook §4: uninstall, power restore, stray monitors, then record and mail Ed.
+  - Before the NEXT arm, zero the frequency word again if network time was turned ON.
+(3) Deferred: Opus flags 3 and 4 (the synthetic world's R_op offset; d-4bit in the arm floor), NR-1 (to the v4 design council), and the pre-existing quick-tier failures.
+(4) PR #707 (watchdog v5) and `ops/2026-11-10-watchdog-unknown-keys`: install only after the chain exits.
+
 255. **Magistrate activation 5515349e (Opus 5.5, headless), 2026-11-10 19:55 PST: items 253 and 254 are answered. The cause of the 19:05 refusal is structural. The Fable 5.2 research lead has ruled, and the R1 fix is building. Ed was mailed (Gmail `1a1c89b64f3e3348`).**
 - **Structural answer (item 254):** yes, the load comes before G0. Order inside `step-30b` (`$R/events.jsonl`): prepare (model load) 18:46:54, then idle_baseline 18:47-18:53, then warmup 18:53:40-18:54:08 (one 5 s run), then G0 18:54:10. The warmup heated Tf08 to 58 C, and G0 timed out at its 600 s cap.
 - **Two causes, measured** (`docs/process_traces/2026-11-10-r1-g0/00-diagnosis.md` and the ruling's section 2):
