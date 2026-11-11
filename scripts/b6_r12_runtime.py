@@ -34,6 +34,7 @@ REAL_MONOTONIC = time.monotonic
 REAL_POPEN = subprocess.Popen
 REAL_RUN = subprocess.run
 REAL_EXECUTE = subprocess.Popen._execute_child
+REAL_KILL = os.kill
 WALL_NS = 1_800_000_000_000_000_000
 MONO_NS = 1_000_000_000_000
 
@@ -113,7 +114,9 @@ class SharedClock:
         self.stop_delivered = False
 
     def frontier(self):
-        if not self.stop_delivered and (self.path.parent / "source-stop.json").exists():
+        stop_input = self.path.parent / "source-stop.json"
+        own_signal = self.path.parent / "signal-inputs" / f"{os.getpid()}-{os.environ.get('R12_PROCESS_TOKEN', 'top')}.json"
+        if not self.stop_delivered and (stop_input.exists() or own_signal.exists()):
             self.stop_delivered = True
             self.stopping = True
             for callback in tuple(self.stop_callbacks):
@@ -325,6 +328,8 @@ def audit_guard(root, pin):
         elif event in {"socket.connect", "socket.bind", "socket.sendto", "socket.getaddrinfo", "socket.gethostbyname",
                        "socket.gethostbyaddr", "socket.getnameinfo", "os.system", "os.posix_spawn", "os.exec", "os.fork", "os.link"}:
             raise PermissionError("R12 native action denied: " + event)
+        elif event == "os.killpg" or (event == "os.kill" and args[1] != 0):
+            raise PermissionError("R12 native signal denied")
         elif event == "subprocess.Popen":
             executable, argv, cwd, env = args
             exe = str(executable)
@@ -776,6 +781,35 @@ def install_sources(root, clock):
 
     sources = ChainSources()
     clock.processes = sources.processes
+    def signal_result(pid, number, *, group=False):
+        import signal
+        if number == 0 and not group:
+            return REAL_KILL(pid, 0)  # read-only existence check of a fixture marker's PID
+        argv = ("os.killpg" if group else "os.kill", str(pid), str(number))
+        process = sources.processes.get(pid)
+        if process is None or number != signal.SIGTERM:
+            sources.completed(argv, (126, b"", b"RL-49 undeclared signal denied"), "declared_action_denied")
+            raise PermissionError("undeclared fixture signal")
+        if process.poll() is not None:
+            sources.completed(argv, (3, b"", b"fixture child already gone"), "declared_child_absent")
+            raise ProcessLookupError(pid)
+        # The return value of the host action is synthetic. Incoming signal
+        # delivery is an external OS input to the pinned handler. Its actual
+        # meter/monitor writer, not this caller, writes the shutdown records.
+        directory = root / "signal-inputs"
+        directory.mkdir(exist_ok=True)
+        (directory / f"{pid}-{process._r12_signal_token}.json").write_text(json.dumps({"signum": int(number),
+            "declared_result": 0, "executed": False}) + "\n")
+        sources.completed(argv, (0, b"", b""), "declared_action_success")
+    os.kill = lambda pid, number: signal_result(pid, number)
+    os.killpg = lambda pid, number: signal_result(pid, number, group=True)
+    # A dataclass may already have captured the OS default during imports.
+    from joulewise.b5 import harvest
+    parameters = list(inspect.signature(harvest.Seams).parameters)
+    defaults = list(harvest.Seams.__init__.__defaults__)
+    names = parameters[-len(defaults):]
+    defaults[names.index("killpg")] = os.killpg
+    harvest.Seams.__init__.__defaults__ = tuple(defaults)
     install_usb_source(root, clock)
     word = kernel_clock.Timex()
     frequency = {"schema_version": kernel_clock.PROBE_SCHEMA, "modes": 0, "raw_word": 0,
@@ -844,7 +878,11 @@ def install_sources(root, clock):
             rewrite = [sys.executable, "-B", str(root / "bootstrap.py"), "--root", str(root), "returned", payload]
         bound.arguments["args"] = rewrite
         bound.arguments["executable"] = rewrite[0]
+        import secrets
+        token = secrets.token_hex(12)
+        bound.arguments["env"] = {**(bound.arguments.get("env") or os.environ), "R12_PROCESS_TOKEN": token}
         result = REAL_EXECUTE(*bound.args, **bound.kwargs)
+        process._r12_signal_token = token
         sources.processes[process.pid] = process
         background = any(Path(value).name in {"hazard_monitor.py", "km003c_monitor.py"} for value in argv)
         sampler = "sampler" in rewrite[5:7]

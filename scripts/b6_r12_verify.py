@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -160,6 +161,10 @@ def session_facts(root, session_id):
     """Read actual archived writer outputs, never construct an expected result."""
     from joulewise.b6_analysis_inputs import AuthenticatedInputs
     metadata = json.loads((root / "sessions" / session_id / "session.json").read_bytes())
+    actual_attempts = [row for row in rows((root / "loop/attempts.jsonl").read_bytes())
+                       if row["session_id"] == session_id]
+    if len(actual_attempts) != 1:
+        raise ValueError("one original loop attempt required")
     archive = child(root, metadata["paths"]["archive"])
     pin = archive_pin(root, archive, metadata)
     reader = AuthenticatedInputs(archive, pin)
@@ -203,7 +208,56 @@ def session_facts(root, session_id):
             "campaign_row_kinds": sorted(kinds), "campaign_rows": len(campaign),
             "compressed_campaign_logs": sum(row["path"].endswith("campaign_log.jsonl") for row in compressed),
             "compressed_plists": sum(row["path"].endswith(".plist") for row in compressed),
-            "off_actions": off_actions, "real_loop_attempt": True}
+            "off_actions": off_actions, "real_loop_attempt": bool(actual_attempts)}
+
+
+def meter_facts(data):
+    """Bounded-memory wire census; original protocol decoder supplies sample layout."""
+    from joulewise.external.km003c_parse import SAMPLE, STEP_MS, WRAP
+    header = None
+    polls = total = kept = duplicates = dropped = irregular = 0
+    previous_seq = previous_rx = running_max = None
+    current = first = last = 0
+    for line in io.BytesIO(data):
+        row = json.loads(line)
+        if row.get("k") == "h":
+            header = row
+        if row.get("k") != "b":
+            continue
+        polls += 1
+        for index, sample in enumerate(SAMPLE.iter_unpack(bytes.fromhex(row.get("p") or ""))):
+            seq = sample[0]
+            total += 1
+            if previous_seq is None:
+                current = 0
+            else:
+                delta = ((seq - previous_seq + WRAP // 2) % WRAP) - WRAP // 2
+                if index == 0 and previous_rx is not None:
+                    host_ms = (row["rx"] - previous_rx) / 1e6
+                    if host_ms > WRAP // 2:
+                        delta += round((host_ms - delta) / WRAP) * WRAP
+                current += delta
+            previous_seq = seq
+            if running_max is not None and current <= running_max:
+                duplicates += 1
+                continue
+            if kept:
+                gap = current - last
+                step = STEP_MS[header["rate_idx"]]
+                dropped += max(0, gap // step - 1)
+                irregular += bool(gap % step)
+            else:
+                first = current
+            kept += 1
+            last = running_max = current
+        previous_rx = row["rx"]
+    if header is None:
+        raise ValueError("original meter header missing")
+    return {"sps": header["sps"], "poll_s": header["poll_s"], "polls": polls,
+            "wire_samples": total, "samples": kept, "duplicates": duplicates,
+            "step_ms": STEP_MS[header["rate_idx"]], "span_s": (last - first) / 1000,
+            "drops": {"kept": kept, "dropped": dropped, "irregular_gaps": irregular,
+                      "drop_fraction": dropped / (kept + dropped) if kept + dropped else None}}
 
 
 def volume_facts(root, session_id):
@@ -213,7 +267,6 @@ def volume_facts(root, session_id):
     independent of the source-policy duration declaration. No bundle is edited.
     """
     from joulewise.b6_analysis_inputs import AuthenticatedInputs
-    from joulewise.external.km003c_parse import samples, drops
     metadata = json.loads((root / "sessions" / session_id / "session.json").read_bytes())
     archive = child(root, metadata["paths"]["archive"])
     reader = AuthenticatedInputs(archive, archive_pin(root, archive, metadata))
@@ -232,19 +285,20 @@ def volume_facts(root, session_id):
     meter = []
     for name in reader.expected:
         if name.startswith("sources/night-custody/hazards/meter/stream-") and name.endswith(".jsonl"):
-            data = rows(reader.read(archive / name))
-            header = next(row for row in data if row.get("k") == "h")
-            batch = [row for row in data if row.get("k") == "b"]
-            parsed = samples(header, batch)
-            meter.append({"path": name, "sps": header["sps"], "poll_s": header["poll_s"],
-                          "polls": len(batch), "samples": len(parsed.dev_ms), "step_ms": parsed.step_ms,
-                          "span_s": (parsed.dev_ms[-1] - parsed.dev_ms[0]) / 1000 if parsed.dev_ms else 0,
-                          "drops": drops(parsed)})
+            meter.append({"path": name, **meter_facts(reader.read(archive / name))})
     monitor = {}
     for name in reader.expected:
         if name.startswith("sources/night-custody/hazards/monitor/") and name.endswith(".jsonl"):
             data = rows(reader.read(archive / name))
-            monitor[name] = {"rows": len(data)}
+            by_kind = {}
+            for row in data:
+                stamp = row.get("started", {}).get("monotonic_ns")
+                if isinstance(stamp, int):
+                    by_kind.setdefault(row.get("kind", "unknown"), []).append(stamp)
+            monitor[name] = {"rows": len(data), "kinds": {kind: {
+                "rows": len(times), "span_s": (times[-1] - times[0]) / 1e9,
+                "cadence_ns": sorted({b - a for a, b in zip(times, times[1:])})}
+                for kind, times in by_kind.items()}}
     return {"session_id": session_id, "primary_plists": plist, "meter": meter, "monitor": monitor,
             "archive_pin_sha256": hashlib.sha256(json.dumps(reader.record, sort_keys=True).encode()).hexdigest()}
 

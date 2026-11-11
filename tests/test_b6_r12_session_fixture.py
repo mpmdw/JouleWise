@@ -201,6 +201,13 @@ print(count)
         self.assertEqual(len(polls), 11)
         self.assertEqual(sum(row["n"] for row in polls), 110)
         self.assertTrue(all(len(bytes.fromhex(row["p"])) == 200 for row in polls))
+        from b6_r12_verify import meter_facts
+        facts = meter_facts((self.root / "source-only-meter.jsonl").read_bytes())
+        self.assertEqual(facts["samples"], 110)
+        self.assertEqual(facts["step_ms"], 20)
+        self.assertEqual(facts["span_s"], 2.18)
+        self.assertEqual(facts["drops"]["dropped"], 0)
+        self.assertEqual(facts["duplicates"], 0)
 
     def test_pinned_j1_schema_mismatch_is_reported_without_patch(self):
         """Predict: f31's real producer/reader disagree on J1 schema; reader returns verdict_schema_mismatch."""
@@ -214,6 +221,34 @@ print(count)
         record = json.loads(result.stdout)
         self.assertNotEqual(record["producer"], record["consumer"])
         self.assertEqual(record["miss"], {"reason": "verdict_schema_mismatch"})
+
+    def test_declared_signal_reaches_original_meter_shutdown_handler(self):
+        """Predict: declared owned-child TERM executes no native signal; the real meter writes its signal trailer and exits 0."""
+        export_chain_inputs(self.root)
+        (self.root / "source-policy.json").write_text('{"volume":"reduced"}\n')
+        code = '''import json,os,signal,subprocess,sys,time
+from pathlib import Path
+root=Path(sys.argv[1])
+p=subprocess.Popen([sys.executable,'-B',str(root/'pin/scripts/km003c_monitor.py'),
+                    '--out',str(root/'meter-signal.jsonl')])
+time.sleep(2)
+os.killpg(p.pid,signal.SIGTERM)
+assert p.wait(timeout=3) == 0
+rows=[json.loads(line) for line in (root/'meter-signal.jsonl').read_text().splitlines()]
+assert rows[-1]['k'] == 't'
+print(json.dumps(rows[-1]))
+'''
+        result = subprocess.run(command(self.root, "code", code, self.root), capture_output=True,
+                                text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        trailer = json.loads(result.stdout)
+        self.assertIn("signal", str(trailer["stop_reason"]).lower())
+        calls = [json.loads(line) for path in self.root.glob("source-calls-*.jsonl")
+                 for line in path.read_text().splitlines()]
+        actions = [row for row in calls if row["argv"][0] == "os.killpg"]
+        self.assertEqual(len(actions), 1)
+        self.assertFalse(actions[0]["executed"])
+        self.assertEqual(actions[0]["returncode"], 0)
 
     @unittest.skipUnless(Path("/bin/zsh").is_file(), "rendered chain requires zsh")
     def test_shell_and_python_use_same_clock(self):
@@ -351,6 +386,26 @@ class DeclaredShapeTests(unittest.TestCase):
         self.assertIn("network_time.off_output", value["flags"])
         self.assertEqual(value["off_action_returncode"], 126)
         self.assertTrue(value["real_loop_attempt"])
+
+    def test_full_volume_member_and_instrument_census(self):
+        """Predict full ALPHA/BETA/GAMMA: 125/125/107 members, >=334 s per primary at 10 Hz with 16 CPUs; continuous 50 Hz meter with no drops (RL-48 item 5)."""
+        root = Path(os.environ["R12_REAL_CHAIN_SET"])
+        values = json.loads((root / "full-volume-observations.json").read_bytes())
+        for sid, expected in (("r3-alpha", 125), ("r1-beta", 125), ("r1-gamma", 107)):
+            value = values[sid]
+            self.assertEqual(len(value["primary_plists"]), expected, sid)
+            for item in value["primary_plists"]:
+                self.assertEqual(item["frames"], item["elapsed_fields"], item["path"])
+                self.assertGreaterEqual(item["duration_s"], 334, item["path"])
+                self.assertEqual(item["cadence_ns"], [100_000_000], item["path"])
+                self.assertEqual(item["cpu_fields"], 16 * item["frames"], item["path"])
+            self.assertTrue(value["meter"], sid)
+            for meter in value["meter"]:
+                self.assertEqual(meter["sps"], 50)
+                self.assertEqual(meter["step_ms"], 20)
+                self.assertEqual(meter["drops"]["dropped"], 0)
+                self.assertEqual(meter["drops"]["irregular_gaps"], 0)
+                self.assertEqual(meter["duplicates"], 0)
 
 
 if __name__ == "__main__":
