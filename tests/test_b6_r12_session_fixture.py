@@ -497,6 +497,18 @@ class DeskInputBoundaryTests(unittest.TestCase):
                 reader.verify_census()
 
 
+class VerifierInventoryTests(unittest.TestCase):
+    def test_actual_smoke_inventory_excludes_attached_calibrations(self):
+        """Predict: captured f31 smoke inventory yields four executed primaries; its four calibration copies and validation captures never inflate volume."""
+        from b6_r12_verify import primary_plist_names
+        value = json.loads((REPO / "tests/fixtures/b6_r12_smoke_primary_inventory.json").read_text())
+        expected = ["sources/claim-runs/" + bundle + "/raw/powermetrics.plist" for bundle in (
+            "d117fq31p7-df-ph-decode-abs-r01", "d117fq31p7-df-ph-prefill-p2048-abs-r01",
+            "neg8-window-end-r1", "neg8-window-start-r1")]
+        self.assertEqual(primary_plist_names(value["paths"]), expected)
+        self.assertEqual(value["pin"], PIN)
+
+
 @unittest.skipUnless(os.environ.get("R12_REAL_CHAIN_SET"), "explicit generated R12 set required")
 class DeclaredShapeTests(unittest.TestCase):
     """Integration expectations declared before any official named shape run.

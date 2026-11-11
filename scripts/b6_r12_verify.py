@@ -24,6 +24,8 @@ os.environ["XDG_CONFIG_HOME"] = str(Path(tempfile.gettempdir()).resolve() / "r12
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
+LOADED_VERIFIER_SHA256 = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+PROGRAM_ARGV_SCHEMA = "r12.program_argv.v1"
 
 
 def sha(path):
@@ -262,6 +264,12 @@ def meter_facts(data):
                       "drop_fraction": dropped / (kept + dropped) if kept + dropped else None}}
 
 
+def primary_plist_names(names):
+    """Primary capture layout, excluding calibration copies and validation runs."""
+    return sorted(name for name in names if re.fullmatch(
+        r"sources/(?:claim|bound)-runs/[^/]+/raw/powermetrics\.plist", name))
+
+
 def volume_facts(root, session_id):
     """Count native frames/cadence and actual meter rows without refitting decisions.
 
@@ -273,11 +281,7 @@ def volume_facts(root, session_id):
     archive = child(root, metadata["paths"]["archive"])
     reader = AuthenticatedInputs(archive, archive_pin(root, archive, metadata))
     plist = []
-    for name in sorted(reader.expected):
-        # Each bundle also carries instrument_calibration/raw/powermetrics.plist.
-        # That is a copied calibration input, not a primary member capture.
-        if not re.fullmatch(r"sources/(?:claim|bound)-runs/[^/]+/raw/powermetrics\.plist", name):
-            continue
+    for name in primary_plist_names(reader.expected):
         data = reader.read(archive / name)
         elapsed = [int(value) for value in re.findall(rb"<key>elapsed_ns</key>\s*<integer>(\d+)</integer>", data)]
         frames = data.count(b"</plist>")
@@ -315,6 +319,8 @@ def volume_facts(root, session_id):
 
 def run_option_c(root, workers=1, *, stem="option-c", session_id=None):
     verifier_sha256 = sha(Path(__file__))
+    if verifier_sha256 != LOADED_VERIFIER_SHA256:
+        raise RuntimeError("verifier changed after import; reload before producing evidence")
     verifier_commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO, text=True).strip()
     # The serial/pool byte comparison must use the exact same input-document
     # path as well as the same bytes. Output destinations may differ.
@@ -329,7 +335,8 @@ def run_option_c(root, workers=1, *, stem="option-c", session_id=None):
             "--inputs", str(document), "--inputs-sha256", sha(document), "--workers", str(workers),
             "--restricted-out", str(numbers), "--public-out", str(public)]
     program_argv = root / (stem + "-program-argv.json")
-    program_argv.write_text(json.dumps(argv, indent=2) + "\n")
+    program_argv.write_text(json.dumps({"schema": PROGRAM_ARGV_SCHEMA,
+        "verifier_sha256": LOADED_VERIFIER_SHA256, "argv": argv}, indent=2) + "\n")
     timed = ["/usr/bin/time", "-l", sys.executable, "-B", str(Path(__file__).resolve()),
              "--root", str(root), "--exec-argv", str(program_argv), "--stem", stem]
     (root / (stem + "-argv.json")).write_text(json.dumps(timed, indent=2) + "\n")
@@ -355,7 +362,18 @@ def execute_argv(root, argv_file, stem):
     """Retain the program exit even if macOS time -l's sysctl is denied."""
     import resource
     import time
-    argv = json.loads(child(root, argv_file).read_text())
+    document = json.loads(child(root, argv_file).read_text())
+    if (not isinstance(document, dict) or document.get("schema") != PROGRAM_ARGV_SCHEMA
+            or document.get("verifier_sha256") != LOADED_VERIFIER_SHA256):
+        # An auxiliary watcher may outlive an implementation increment. It
+        # must stop before scientific work, rather than attribute old loaded
+        # functions to the new file hash. This is a harness cancellation,
+        # never a production recomputation result.
+        receipt = {"exit_code": 98, "harness_cancelled": True,
+                   "reason": "stale or unversioned verifier invocation; reload required"}
+        (root / (stem + "-process.json")).write_text(json.dumps(receipt, indent=2) + "\n")
+        return 98
+    argv = document["argv"]
     if not (len(argv) > 2 and argv[:2] == [sys.executable, "-B"]
             and Path(argv[2]) == REPO / "scripts/independent_recompute_b6.py"):
         raise ValueError("only the declared local B6 program may be measured")

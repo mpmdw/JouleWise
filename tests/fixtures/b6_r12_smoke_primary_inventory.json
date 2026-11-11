@@ -1,0 +1,19 @@
+{
+  "synthetic_only": true,
+  "kind": "observed path inventory, not a session fixture",
+  "pin": "f31aca19f90473231c41cb31643afb0d6c85d355",
+  "generator_commit": "27cd3788775b35244010f1357badba7fa059fd9c",
+  "harvest_sha256": "a0581fa52b742336da371fc24b57bf56f94353708c156dde37ec0398d252c97b",
+  "paths": [
+    "sources/claim-runs/d117fq31p7-df-ph-decode-abs-r01/instrument_calibration/raw/powermetrics.plist",
+    "sources/claim-runs/d117fq31p7-df-ph-decode-abs-r01/raw/powermetrics.plist",
+    "sources/claim-runs/d117fq31p7-df-ph-prefill-p2048-abs-r01/instrument_calibration/raw/powermetrics.plist",
+    "sources/claim-runs/d117fq31p7-df-ph-prefill-p2048-abs-r01/raw/powermetrics.plist",
+    "sources/claim-runs/instrument_validation/SMOKE-d117_floor_qwen3-1p7b_v5-20270115T1005Z-post/raw/powermetrics.plist",
+    "sources/claim-runs/instrument_validation/SMOKE-d117_floor_qwen3-1p7b_v5-20270115T1005Z-pre/raw/powermetrics.plist",
+    "sources/claim-runs/neg8-window-end-r1/instrument_calibration/raw/powermetrics.plist",
+    "sources/claim-runs/neg8-window-end-r1/raw/powermetrics.plist",
+    "sources/claim-runs/neg8-window-start-r1/instrument_calibration/raw/powermetrics.plist",
+    "sources/claim-runs/neg8-window-start-r1/raw/powermetrics.plist"
+  ]
+}

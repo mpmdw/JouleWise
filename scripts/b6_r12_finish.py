@@ -14,6 +14,7 @@ import subprocess
 import sys
 
 from b6_r12_verify import REPO, finalize_manifest, rows, run_option_c, safe_root, sha, write_observations
+LOADED_FINISHER_SHA256 = sha(Path(__file__))
 
 
 def agree(root, stem):
@@ -24,6 +25,8 @@ def agree(root, stem):
 
 
 def finish(root, denied):
+    if sha(Path(__file__)) != LOADED_FINISHER_SHA256:
+        raise RuntimeError("finisher changed after import; reload before producing evidence")
     state = json.loads((root / "loop/state.json").read_bytes())
     if state["state"] != "DONE":
         raise RuntimeError("the original loop has not closed: " + state["state"])
@@ -64,7 +67,7 @@ def finish(root, denied):
         "tests.test_b6_r12_session_fixture.DeclaredShapeTests"], cwd=REPO,
         env={**os.environ, "R12_REAL_CHAIN_SET": str(root)}, check=False)
     receipt = {"synthetic_only": True, "integration_test_exit": result.returncode,
-        "finisher_sha256": sha(Path(__file__)),
+        "finisher_sha256": LOADED_FINISHER_SHA256,
         "serial_pool_byte_proof": proofs, "serial_receipt_sha256": sha(root / "option-c-receipt.json"),
         "pool_receipt_sha256": sha(root / "option-c-pool-receipt.json"),
         "denied_receipt_sha256": sha(denied / "option-c-denied-receipt.json"),
