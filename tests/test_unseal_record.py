@@ -15,6 +15,7 @@ import tempfile
 import unittest
 from unittest import mock
 
+from tests.git_fixture import init_git_fixture
 from joulewise import unseal_record as unseal
 from scripts import show_outcomes_guard as guard
 
@@ -158,7 +159,7 @@ class CommittedTests(unittest.TestCase):
         self.records.mkdir(parents=True)
         self.env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
         self.env.update(GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull)
-        self.git("init", "--quiet")
+        init_git_fixture(self.root, "--quiet")
         for key, value in (("user.name", "Synthetic test"), ("user.email", "test@example.invalid"),
                            ("commit.gpgsign", "false"), ("core.hooksPath", os.devnull)):
             self.git("config", key, value)
