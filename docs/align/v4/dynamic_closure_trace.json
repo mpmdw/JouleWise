@@ -1020,11 +1020,7 @@
   "scripts/align_w1_budget_procedure.py",
   "scripts/generate_matrix.py",
   "scripts/km003c_monitor.py",
-  "scripts/launch_align_r0.py",
-  "scripts/post_window_unstrand.sh",
-  "scripts/run_align_r0_launchagent.sh",
-  "scripts/run_night.py",
-  "scripts/watchdog_status.py"
+  "scripts/run_night.py"
  ],
  "executed": [
   "joulewise/__init__.py",
@@ -1210,20 +1206,11 @@
   "scripts/fixture_orphan_census.py",
   "scripts/generate_matrix.py",
   "scripts/km003c_monitor.py",
-  "scripts/launch_align_r0.py",
   "scripts/night_chains/align_r1_rehearsal.zsh",
-  "scripts/post_window_unstrand.sh",
-  "scripts/run_align_r0_launchagent.sh",
   "scripts/run_night.py",
-  "scripts/validate_align_v4_w1_plan.py",
-  "scripts/watchdog_status.py"
+  "scripts/validate_align_v4_w1_plan.py"
  ],
- "not_bound": [
-  "scripts/launch_align_r0.py",
-  "scripts/post_window_unstrand.sh",
-  "scripts/run_align_r0_launchagent.sh",
-  "scripts/watchdog_status.py"
- ],
+ "not_bound": [],
  "not_strict": [],
  "scenarios": {
   "arm_install_session": {

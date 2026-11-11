@@ -318,7 +318,11 @@
     "scripts/verify_family_marker.py": null,
     "scripts/write_derivation_night_inputs.py": null,
     "scripts/write_v5_qualification_plan.py": null,
-    "scripts/zero_ntp_frequency.c": null
+    "scripts/zero_ntp_frequency.c": null,
+    "scripts/watchdog_status.py": null,
+    "scripts/launch_align_r0.py": null,
+    "scripts/run_align_r0_launchagent.sh": null,
+    "scripts/post_window_unstrand.sh": null
   },
   "commit": null,
   "gates": {

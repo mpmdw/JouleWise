@@ -22,6 +22,8 @@ _NAMED_ARTIFACTS = (
     'joulewise/align/energy_residual.py',
     'scripts/align_v4_kit.py', 'scripts/align_v4_session.py',
     'scripts/zero_ntp_frequency.c',
+    'scripts/watchdog_status.py', 'scripts/launch_align_r0.py',
+    'scripts/run_align_r0_launchagent.sh', 'scripts/post_window_unstrand.sh',
     'scripts/align_v4_thermal_desk.py', 'scripts/align_pilot_session.py',
     'scripts/align_v4_u3_bar.py', 'scripts/align_v4_u3_export.py', 'scripts/align_v4_wp19.py', 'scripts/align_v4_offloads.py',
     'joulewise/align/apple/v4_u3.py', 'joulewise/align/apple/v4_battery.py',
