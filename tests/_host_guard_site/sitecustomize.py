@@ -1,11 +1,11 @@
 """Carry the test tripwire into ordinary child Python interpreters."""
 import importlib.machinery
 import importlib.util
-from pathlib import Path
+import os
 import sys
 
-_site_dir = Path(__file__).resolve().parent
-_root = str(_site_dir.parent.parent)
+_site_dir = os.path.dirname(os.path.realpath(__file__))
+_root = os.path.dirname(os.path.dirname(_site_dir))
 _added = _root not in sys.path
 if _added:
     sys.path.insert(0, _root)
@@ -17,7 +17,7 @@ finally:
         sys.path.remove(_root)
 
 # Preserve an unrelated environment's sitecustomize, including its normal name.
-_paths = [p for p in sys.path if Path(p or '.').resolve() != _site_dir]
+_paths = [p for p in sys.path if os.path.realpath(p or '.') != _site_dir]
 _spec = importlib.machinery.PathFinder.find_spec('sitecustomize', _paths)
 if _spec is not None and _spec.loader is not None:
     _module = importlib.util.module_from_spec(_spec)

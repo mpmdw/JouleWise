@@ -1,19 +1,12 @@
 """Test-only tripwire for accidental host commands (not a security sandbox)."""
 
+# Child interpreters load this module through sitecustomize at startup, so only what every child needs is
+# imported here; the rest is imported where it is used (startup cost; tests.test_b5_driver_p3's meter race).
 from contextlib import contextmanager
-import atexit
 import functools
-import inspect
-import json
 import os
-from pathlib import Path
-import re
-import shlex
-import shutil
 import subprocess
-import tempfile
-import unittest
-import uuid
+import sys
 
 
 class HostCommandRefused(RuntimeError):
@@ -36,10 +29,11 @@ _report = None
 _environment = {}
 
 
-_REFUSED_ABSOLUTE = re.compile(r"/(?:[\w.+-]+/)*(?:sudo|systemsetup|pmset|caffeinate|shutdown|nvram|launchctl|networksetup|scutil)\b")
+_REFUSED_ABSOLUTE = r"/(?:[\w.+-]+/)*(?:sudo|systemsetup|pmset|caffeinate|shutdown|nvram|launchctl|networksetup|scutil)\b"
 
 
 def _temp_roots():
+    import tempfile
     roots = {tempfile.gettempdir(), "/tmp", "/private/tmp", "/var/folders", "/private/var/folders",
              os.environ.get("TMPDIR") or ""}
     return {os.path.realpath(r) for r in roots if r}
@@ -52,6 +46,7 @@ def _is_temp_fake(value, path=None):
     temp root, so a symlink from a temp dir to /usr/bin/sudo is still refused.
     """
     value = os.fsdecode(value)
+    import shutil
     found = value if os.sep in value else shutil.which(value, path=path if path is not None else os.environ.get("PATH"))
     if not found or not os.path.isfile(found):
         return False
@@ -65,7 +60,8 @@ def _is_temp_fake(value, path=None):
             text = stream.read(1 << 20).decode("latin-1")
     except OSError:
         return False
-    return _REFUSED_ABSOLUTE.search(text) is None
+    import re
+    return re.search(_REFUSED_ABSOLUTE, text) is None
 
 
 def _names(value):
@@ -79,6 +75,7 @@ def simple_commands(command):
     command = os.fsdecode(command)
     for opener in _SHELL_OPENERS:
         command = command.replace(opener, " ; ")
+    import shlex
     lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|\n")
     lexer.whitespace = " \t\r"
     lexer.whitespace_split = True
@@ -162,7 +159,7 @@ def _check(command, **kwargs):
     found = classify(command, **kwargs)
     if not found:
         return
-    frame = inspect.currentframe().f_back
+    frame = sys._getframe(1)
     while frame and frame.f_code.co_filename == __file__:
         frame = frame.f_back
     caller = None if frame is None else {
@@ -171,7 +168,8 @@ def _check(command, **kwargs):
     }
     argv = [os.fsdecode(command)] if isinstance(command, (str, bytes)) else [os.fsdecode(a) for a in command]
     for name, _simple_argv in found:
-        record = {"id": uuid.uuid4().hex, "pid": os.getpid(), "command": name,
+        import json
+        record = {"id": os.urandom(16).hex(), "pid": os.getpid(), "command": name,
                   "argv": argv[:6], "test_id": _active_test, "caller": caller}
         REFUSALS.append(record)
         # One append/write per record also works for concurrent child interpreters.
@@ -193,6 +191,7 @@ def _since(snapshot):
     with open(_report, encoding="utf-8") as stream:
         stream.seek(offset)
         for line in stream:
+            import json
             record = json.loads(line)
             records[record["id"]] = record
     return [r for r in records.values() if r["id"] not in _expected]
@@ -201,7 +200,8 @@ def _since(snapshot):
 @contextmanager
 def expect_refusals():
     """Only the guard's own witnesses may acknowledge deliberate refusals."""
-    module = inspect.currentframe().f_back
+    from pathlib import Path
+    module = sys._getframe(1)
     # contextlib enters generator contexts on behalf of the actual caller.
     while module and module.f_globals.get("__name__") in (__name__, "contextlib"):
         module = module.f_back
@@ -232,17 +232,20 @@ def _invoke(original, *args, **kwargs):
 def install():
     global _report
     if _originals:
+        _install_unittest_hook()
         return
     for key in ("PYTHONPATH", "JW_TEST_HOST_GUARD_REPORT"):
         _environment[key] = os.environ.get(key)
     _report = os.environ.get("JW_TEST_HOST_GUARD_REPORT")
     if not _report:
+        import atexit
+        import tempfile
         fd, _report = tempfile.mkstemp(prefix="jw-test-host-guard-", suffix=".jsonl")
         os.close(fd)
         owned = _report
         atexit.register(lambda: os.path.exists(owned) and os.unlink(owned))
     os.environ["JW_TEST_HOST_GUARD_REPORT"] = _report
-    site = str(Path(__file__).with_name("_host_guard_site"))
+    site = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_host_guard_site")
     paths = os.environ.get("PYTHONPATH", "").split(os.pathsep)
     os.environ["PYTHONPATH"] = os.pathsep.join([site] + [p for p in paths if p and p != site])
 
@@ -250,11 +253,12 @@ def install():
 
     @functools.wraps(original_init)
     def popen_init(self, args, *positional, **kwargs):
-        # Bind positionals too: executable and shell need not be keyword arguments.
-        bound = inspect.signature(original_init).bind(self, args, *positional, **kwargs)
-        env = bound.arguments.get("env")
-        _check(args, shell=bound.arguments.get("shell", False),
-               executable=bound.arguments.get("executable"),
+        # Positionals too: Popen(args, bufsize, executable, stdin, stdout, stderr, preexec_fn, close_fds,
+        # shell, cwd, env, ...); executable, shell and env need not be keyword arguments.
+        def given(name, index, default=None):
+            return kwargs[name] if name in kwargs else (positional[index] if len(positional) > index else default)
+        env = given("env", 9)
+        _check(args, shell=given("shell", 7, False), executable=given("executable", 1),
                path=None if env is None else env.get("PATH", env.get(b"PATH")))
         original_init(self, args, *positional, **kwargs)
 
@@ -280,6 +284,14 @@ def install():
 
         _replace(os, name, make_wrapper(name, original))
 
+    _install_unittest_hook()
+
+
+def _install_unittest_hook():
+    """Per-test failure. Installed once unittest is loaded (a startup child gets it when it imports tests)."""
+    if "unittest" not in sys.modules or any(name == "run" for _owner, name, _o in _originals):
+        return
+    import unittest
     original_run = unittest.TestCase.run
 
     @functools.wraps(original_run)
@@ -304,7 +316,8 @@ def install():
 
 def uninstall():
     """For guard unit tests only; ordinary tests must never disable the tripwire."""
-    caller = inspect.currentframe().f_back
+    from pathlib import Path
+    caller = sys._getframe(1)
     if caller.f_globals.get("__name__") not in {
         "tests.test_host_command_guard", "test_host_command_guard",
     } or Path(caller.f_code.co_filename).resolve() != Path(__file__).with_name("test_host_command_guard.py").resolve():
