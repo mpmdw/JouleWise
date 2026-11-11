@@ -113,14 +113,17 @@ class Delta5Witnesses(unittest.TestCase):
         # R22-2 changed the manifest bytes by design (reserve windows appended at seeds 100-131): every R15
         # seed-checked window (W1, C1-C8, T1-T3) must be preserved exactly; the paired seed check of the new
         # bytes follows. The committed file is still exactly the generator's output.
+        # RUN_STATE 251 option B (adapted by name): the seeded sabotage placement moves which fresh ordinal of
+        # each pair is sabotage-instructed, so the checked windows keep every seed field, not every byte.
+        from tests.align.v4_option_b import assert_seed_preserved
         result = subprocess.run(['git', 'show', '79777d261:' + series.MANIFEST.as_posix()],
                                 cwd=ROOT, capture_output=True, check=True)
         checked = json.loads(result.stdout)
         current = json.loads((ROOT / series.MANIFEST).read_bytes())
         self.assertEqual((ROOT / series.MANIFEST).read_bytes(), series.raw_json(self.manifest))
         by_id = {w['id']: w for w in current['windows']}
-        for window in checked['windows']:                  # W1, C1-C8 AND T1-T3: all exactly as seed-checked (R15)
-            self.assertEqual(by_id[window['id']], window, window['id'])
+        for window in checked['windows']:                  # W1, C1-C8 AND T1-T3: every seed as seed-checked (R15)
+            assert_seed_preserved(self, window, by_id[window['id']])
         trace = json.loads((ROOT / 'docs/align/v4/dynamic_closure_trace.json').read_bytes())
         # the committed trace grows with each merged module (timing_receipts joined at integration item 6)
         self.assertGreaterEqual(len(trace['executed']), 180)

@@ -118,7 +118,8 @@ class ManifestTests(unittest.TestCase):
         cls.manifest = series.candidate()
 
     def test_order_and_the_pre_declared_replacement_windows(self):
-        self.assertEqual(self.manifest['order'], ['W1', *[f'C{i}' for i in range(1, 15)], 'T1', 'T2', 'T3'])
+        self.assertEqual(self.manifest['order'], ['W1', *[f'C{i}' for i in range(1, 15)],
+                                                  'T1', 'T2', 'T3', 'T4', 'T5'])      # option B: test reserves T4-T5
         by_id = {w['id']: w for w in self.manifest['windows']}
         for name in (f'C{i}' for i in range(9, 15)):          # R24: all six reserve windows are armable
             self.assertIs(by_id[name]['replacement'], True)
@@ -152,15 +153,18 @@ class ManifestTests(unittest.TestCase):
         self.assertFalse(set(every) & series.RESERVED_INDICES)                    # 91-99 are reserved development indices
         self.assertEqual(self.manifest['seed_allocation']['reserve_pool']['start'], 100)
         per_pair = {pair: [] for pair in series.PAIRS}
-        for name in [*(f'C{i}' for i in range(1, 9)), 'T1', 'T2', 'T3', *(f'C{i}' for i in range(9, 15))]:
+        # option B (claim contract B6): the test reserves take the next contiguous pool, 148-163
+        self.assertEqual((fresh('T4')[0], fresh('T4')[-1], fresh('T5')[0], fresh('T5')[-1]), (148, 155, 156, 163))
+        self.assertEqual(self.manifest['seed_allocation']['test_reserve_pool']['start'], 148)
+        for name in [*(f'C{i}' for i in range(1, 9)), 'T1', 'T2', 'T3', *(f'C{i}' for i in range(9, 15)), 'T4', 'T5']:
             for r in by_id[name]['members']:
                 if r['ordinal'] in range(6, 22):
                     per_pair[r['pair']].append(r['seed_index'])
         for pair, seeds in per_pair.items():
             self.assertEqual(seeds, sorted(seeds))                                # kit order
-            self.assertEqual(len(seeds), len(set(seeds)))                         # distinct across all 17 windows
+            self.assertEqual(len(seeds), len(set(seeds)))                         # distinct across all 19 windows
             self.assertFalse(set(seeds) & series.RESERVED_INDICES)
-            self.assertEqual((seeds[0], seeds[-1], len(seeds)), (2, 147, 136))
+            self.assertEqual((seeds[0], seeds[-1], len(seeds)), (2, 163, 152))
 
     def test_every_replacement_window_materializes_and_there_is_no_window_beyond_c14(self):
         root = __import__('pathlib').Path(__file__).resolve().parents[2]
@@ -246,11 +250,36 @@ class SeriesLedgerTests(unittest.TestCase):
                                         after_window='C7#2', lead_signature='lead: synthetic 2026-11-08')}
         self.assertIsNone(series.calibration_rows(self.manifest, [*zeros(7), release])[1])   # a release cannot repair 8 windows
 
-    def test_only_a_calibration_window_can_be_barred(self):
-        history = self.history(*[f'C{i}' for i in range(1, 9)])
-        history.append(self.entry('T1', captured=22, spam=0, bank=0, barred='u1_u3_fail'))
+    def test_a_barred_test_window_owes_a_test_reserve_never_more_than_three_admitted(self):
+        # RUN_STATE 251 option B (adapted by name from test_only_a_calibration_window_can_be_barred): a
+        # structurally barred T window is not admitted and owes T4, then T5; T4/T5 are never armed otherwise.
+        cal = self.history(*[f'C{i}' for i in range(1, 9)])
+        t = lambda name, **kw: self.entry(name, captured=kw.pop('captured', 22), spam=0, bank=0, **kw)
+        plain = [*cal, t('T1'), t('T2')]
+        self.assertEqual(series.calibration_rows(self.manifest, plain)[1], 'T3')
+        self.assertIsNone(series.calibration_rows(self.manifest, [*plain, t('T3')])[1])   # 3 admitted: no reserve
+        with self.assertRaisesRegex(ValueError, 'skips/reorders'):
+            series.calibration_rows(self.manifest, [*plain, t('T3'), t('T4')])
+        barred = [*cal, t('T1', barred='u1_u3_fail'), t('T2'), t('T3')]
+        self.assertEqual(series.calibration_rows(self.manifest, barred)[1], 'T4')
+        self.assertIsNone(series.calibration_rows(self.manifest, [*barred, t('T4')])[1])
+        two = [*cal, t('T1', barred='u1_u3_fail'), t('T2', barred='whole_window_capture_failure'), t('T3')]
+        self.assertEqual(series.calibration_rows(self.manifest, [*two, t('T4')])[1], 'T5')
+        three = [*two, t('T4', barred='u1_u3_fail'), t('T5')]
+        self.assertIsNone(series.calibration_rows(self.manifest, three)[1])         # reserves used: the cohort is short
+        # a T zero-capture retry that is zero again is a bar (no longer an escalation) while a reserve is left
+        zero = [*cal, t('T1', captured=0), self.entry('T1', 'T1#2', captured=0, spam=0, bank=0), t('T2'), t('T3')]
+        self.assertEqual(series.calibration_rows(self.manifest, zero)[1], 'T4')
+        # a T window cannot carry calibration counts, barred or not
         with self.assertRaises(ValueError):
-            series.calibration_rows(self.manifest, history)
+            series.calibration_rows(self.manifest, [*cal, self.entry('T1', barred='u1_u3_fail', spam=7, bank=7)
+                                                    | {'eligible_benign': dict(spam=7, bank=7)}])
+        # a zero-capture bar beyond both test reserves escalates
+        zeros = [*cal]
+        for name in ('T1', 'T2', 'T3'):
+            zeros += [t(name, captured=0), self.entry(name, name + '#2', captured=0, spam=0, bank=0)]
+        with self.assertRaisesRegex(ValueError, 'escalate_to_lead'):
+            series.calibration_rows(self.manifest, zeros)
 
     def test_desk_row_marks_a_u1_u3_fail_as_barred_and_replaced(self):
         manifest = series.load(__import__('pathlib').Path(__file__).resolve().parents[2])
@@ -258,6 +287,12 @@ class SeriesLedgerTests(unittest.TestCase):
         members = [{'run_id': f'{pack}-e{o:02}', 'captured': True, 'excluded': False} for o in range(5, 23)]
         row_ = series.desk_row(manifest, 'C3', members, False)
         self.assertEqual(row_['barred'], 'u1_u3_fail')
+        # option B (claim contract B6): a U1-U3-failed T window is barred too (replaced by T4/T5), with no counts
+        pack = series.pack_id('T2')
+        members = [{'run_id': f'{pack}-e{o:02}', 'captured': True, 'excluded': False} for o in range(5, 23)]
+        row_ = series.desk_row(manifest, 'T2', members, False)
+        self.assertEqual((row_['barred'], row_['desk_eligible_benign']), ('u1_u3_fail', {'spam': 0, 'bank': 0}))
+        self.assertNotIn('barred', series.desk_row(manifest, 'T2', members, True))
         self.assertEqual(sum(row_['desk_eligible_benign'].values()), 0)
         self.assertIn('u1_u3_failed:window_barred_and_replaced', row_['flags'])
         self.assertNotIn('barred', series.desk_row(manifest, 'C3', members, True))

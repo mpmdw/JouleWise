@@ -967,6 +967,12 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
             else:
                 counts = {'captured_members': record.counted_captures(), 'status': 'final',
                           'eligible_benign': dict.fromkeys(cadence.CAL_PAIRS, 0)}
+                if record.record.get('role') == 'test':
+                    # RUN_STATE 251 option B (claim contract B6): a structurally barred T window is not
+                    # admitted to the test cohort and owes a test reserve (T4, then T5); same R22-2 predicate.
+                    bar = record.structural_bar(counts['captured_members'])
+                    if bar:
+                        counts['barred'] = bar
             history.append({'window_id': record.window.split('#')[0], 'attempt_id': record.window, **counts})
             for ruling in packet['lead_rulings']:
                 if ruling['after_window'] == record.window:

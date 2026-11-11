@@ -225,14 +225,17 @@ class FrozenSeriesTests(unittest.TestCase):
     def test_seed_checked_manifest_bytes_still_match(self):
         # The R15 bytes were paired-seed checked (sha eba6fb07...). R22-2 appends the reserve windows C9-C12 (seeds
         # 100-131) and leaves every checked window untouched; the new bytes need a new paired check.
+        # RUN_STATE 251 option B (adapted by name): the seeded sabotage placement keeps every checked seed and
+        # moves only which fresh ordinal of each pair is sabotage-instructed.
+        from tests.align.v4_option_b import assert_seed_preserved
         checked_raw = subprocess.run(['git', 'show',
             '79777d261:docs/align/v4/seed-check/series_manifest.json'],
             cwd=ROOT, check=True, capture_output=True).stdout
         self.assertEqual(series.sha(checked_raw), 'eba6fb0732ec26996a0c63bb679a899b71dc2009474502e59048dd67d764f0c7')
         checked, current = json.loads(checked_raw), json.loads((ROOT / series.MANIFEST).read_bytes())
         by_id = {w['id']: w for w in current['windows']}
-        for window in checked['windows']:                  # W1, C1-C8 AND T1-T3: all exactly as seed-checked (R15)
-            self.assertEqual(by_id[window['id']], window, window['id'])
+        for window in checked['windows']:                  # W1, C1-C8 AND T1-T3: every seed as seed-checked (R15)
+            assert_seed_preserved(self, window, by_id[window['id']])
         self.assertNotEqual(series.sha((ROOT / series.MANIFEST).read_bytes()), series.sha(checked_raw))
 
     def test_series_binding_refuses_a_23rd_counted_member(self):

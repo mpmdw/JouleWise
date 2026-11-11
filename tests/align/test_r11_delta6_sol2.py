@@ -23,7 +23,8 @@ from tests.align.test_v4_next_arm_packet import Scenario
 from tests.align.v4_registration_fixtures import signed_bar
 
 ROOT = Path(__file__).resolve().parents[2]
-MANIFEST_SHA256 = '21313cc2791865e01f322c24606db62ba2ac6a65adda6d737e5b7432bef2ad5c'
+# RUN_STATE 251 option B regenerated the R24 bytes (21313cc2...): seeded sabotage ordinals, test reserves T4-T5.
+from tests.align.v4_option_b import OPTION_B_MANIFEST_SHA256 as MANIFEST_SHA256, assert_seed_preserved
 
 
 def setUpModule():
@@ -190,7 +191,7 @@ class FrozenAllocationAndStopTests(unittest.TestCase):
         import json
         current = {w['id']: w for w in manifest['windows']}
         for window in json.loads(old)['windows']:
-            self.assertEqual(current[window['id']], window, window['id'])
+            assert_seed_preserved(self, window, current[window['id']])      # option B: seeds kept, placement moved
         for n in range(9, 15):
             low = 100 + 8 * (n - 9)
             for pair in series.PAIRS:

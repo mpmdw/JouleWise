@@ -19,7 +19,8 @@ from tests.align.test_thermal_desk import member
 from tests.align.test_v4_next_arm_packet import Scenario
 
 ROOT = Path(__file__).resolve().parents[2]
-MANIFEST_SHA = '21313cc2791865e01f322c24606db62ba2ac6a65adda6d737e5b7432bef2ad5c'
+# RUN_STATE 251 option B regenerated the R24 bytes (21313cc2...): seeded sabotage ordinals, test reserves T4-T5.
+from tests.align.v4_option_b import OPTION_B_MANIFEST_SHA256 as MANIFEST_SHA, assert_seed_preserved
 
 
 def ledger_row(n, *, bar=None, eligible=7):
@@ -107,7 +108,7 @@ class Delta6Witnesses(unittest.TestCase):
             ['git', 'show', '356c41c82:' + series.MANIFEST.as_posix()], cwd=ROOT))
         current = {w['id']: w for w in series.load(ROOT)['windows']}
         for window in old['windows']:
-            self.assertEqual(current[window['id']], window)
+            assert_seed_preserved(self, window, current[window['id']])      # option B: seeds kept, placement moved
         for pair in series.PAIRS:
             seeds = [r['seed_index'] for n in range(9, 15)
                      for r in current[f'C{n}']['members'][5:21] if r['pair'] == pair]
