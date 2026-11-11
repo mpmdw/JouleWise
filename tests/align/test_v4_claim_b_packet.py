@@ -2,6 +2,7 @@
 from copy import deepcopy
 import unittest
 
+from scripts import align_v4_series as series
 from tests.align.test_v4_next_arm_packet import Base, Scenario, evaluate
 
 RESET = 'u1_u3_fail_escalation'
@@ -69,6 +70,7 @@ class ClaimBPacketTests(Base):
         packet = self.assert_thermal(s, 'pass')
         self.assertEqual(packet['checks']['cohort_pool_rules']['status'], 'pass')
         self.assertNotIn('barred', packet['series_history'][-1])
+        self.assertIsNone(series.calibration_rows(series.candidate(), packet['series_history'])[1])
 
     def test_item20_c_fail_accepts_unchanged_plan_and_records_bar(self):
         s = self.chain([('C1', 'fail')], next_window='C2')
@@ -133,6 +135,15 @@ class ClaimBPacketTests(Base):
             s = self.chain([('C1', 'fail'), ('C2', 'fail')], next_window='C3')
             self.rule(s, **changes)
             self.assertFalse(s.build()['packet_preflight']['ready'])
+
+    def test_item21_third_nonconsecutive_bar_in_test_reserve_requires_ruling(self):
+        prefix = [(f'C{i}', 'fail' if i == 1 else 'pass') for i in range(1, 10)]
+        prefix += [('T1', 'fail'), ('T2', 'pass'), ('T3', 'pass'), ('T4', 'fail')]
+        s = self.chain(prefix, next_window='T5')
+        self.assert_thermal(s, 'fail', RESET)
+        self.rule(s)
+        packet = self.assert_thermal(s, 'pass')
+        self.assertTrue(packet['packet_preflight']['ready'], packet['packet_preflight'])
 
     def test_item21_a_later_pass_does_not_erase_an_unruled_hold(self):
         s = self.chain([('C1', 'fail'), ('C2', 'fail'), ('C3', 'pass')], next_window='C4')

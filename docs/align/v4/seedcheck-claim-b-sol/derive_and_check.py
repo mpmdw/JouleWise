@@ -41,11 +41,6 @@ def derive():
     rows = {'W1': [member(o, 'selection', p, c, i,
                           'qwen3.8-27b' if o in d_ordinals else 'qwen3-30b-a3b')
                    for o, (p, c, i) in enumerate(w1, 1)]}
-    for row in rows['W1']:
-        o = row['ordinal']
-        row['role'] = ('anchor' if o <= 4 else 'D' if o in d_ordinals else
-                       'X-G' if o in (6, 16) else 'X-S' if o in (9, 13) else
-                       'Y-G' if o in (10, 12) else 'Y-S')
     placements = {}
     for window in WINDOWS[1:]:
         number = int(window[1:])
@@ -82,7 +77,8 @@ def check(manifest):
     actual = {w.get('id'): w for w in windows}
     for name, members in expected.items():
         window = actual.get(name, {})
-        if window.get('members') != members:
+        projected = [{k: m.get(k) for k in FIELDS} for m in window.get('members', [])]
+        if projected != members:
             differences.append(f'{name}: member identities, conditions, pools or seeds differ')
         if name != 'W1' and window.get('sabotage_ordinals') != placements[name]:
             differences.append(f'{name}: placement differs')

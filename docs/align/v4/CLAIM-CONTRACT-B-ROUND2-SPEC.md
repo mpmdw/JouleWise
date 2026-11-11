@@ -155,7 +155,7 @@ Authority: [protocol B0-B9](../pilot_protocol_v4.md#claim-contract-option-b-run_
 
 26. New families and bars: `k_rule` (exact: X, n, c*, rational p), `k_fpr_bound` (log10-rel 1e-6), `s_strata`
     (exact member sets and U_k), `s_scores` (abs 1e-6), `s_statistic` (θ̂ exact rational; p exact rational;
-    SE/t/interval abs 1e-9), `s_conditional` (as `s_statistic`), `task_outcomes` (exact), `placement` (exact),
+    SE/t/interval abs 1e-9), `s_conditional` (θ̂ and both intervals as above; no outcome word), `task_outcomes` (exact), `placement` (exact),
     `s_eligibility` (exact status/reason and eligible/assigned sets), `secondary_*` for all eight prints
     (scores abs 1e-6, correlations rel 1e-9, bootstrap exact; DC numeric rel 1e-3). Remove
     `claim_contract_open` from the "no ruling yet" list. Sealed C-sabotage DC rows stay `dc_sealed` (presence).
