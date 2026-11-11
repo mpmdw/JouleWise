@@ -122,6 +122,13 @@ class HostCommandGuardTests(unittest.TestCase):
             self.assertTrue(guard.classify(["sudo", "-n", "x"], path=str(link)))
             result = subprocess.run(["sudo", "-n", "x"], env={"PATH": tmp}, capture_output=True)
             self.assertEqual(result.returncode, 0)
+            # A temp fake that forwards to a refused command by absolute path is not a fake.
+            for body in ('exec /usr/bin/sudo "$@"', "/usr/bin/pmset -g", "/bin/launchctl bootout gui/501/x"):
+                forwarder = Path(tmp) / "fwd" / "sudo"
+                forwarder.parent.mkdir(exist_ok=True)
+                forwarder.write_text("#!/bin/sh\n" + body + "\n")
+                forwarder.chmod(0o755)
+                self.assertTrue(guard.classify(["sudo", "-n", "x"], path=str(forwarder.parent)), body)
 
     def test_child_interpreter_reports_even_swallowed_refusal(self):
         class Leaky(unittest.TestCase):

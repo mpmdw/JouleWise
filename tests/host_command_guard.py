@@ -7,6 +7,7 @@ import inspect
 import json
 import os
 from pathlib import Path
+import re
 import shlex
 import shutil
 import subprocess
@@ -35,6 +36,9 @@ _report = None
 _environment = {}
 
 
+_REFUSED_ABSOLUTE = re.compile(r"/(?:[\w.+-]+/)*(?:sudo|systemsetup|pmset|caffeinate|shutdown|nvram|launchctl|networksetup|scutil)\b")
+
+
 def _temp_roots():
     roots = {tempfile.gettempdir(), "/tmp", "/private/tmp", "/var/folders", "/private/var/folders",
              os.environ.get("TMPDIR") or ""}
@@ -52,7 +56,16 @@ def _is_temp_fake(value, path=None):
     if not found or not os.path.isfile(found):
         return False
     real = os.path.realpath(found)
-    return any(real.startswith(root.rstrip(os.sep) + os.sep) for root in _temp_roots())
+    if not any(real.startswith(root.rstrip(os.sep) + os.sep) for root in _temp_roots()):
+        return False
+    # A fake that itself names a refused command by absolute path (e.g. `exec /usr/bin/sudo "$@"`)
+    # would reach the host through a shell the guard cannot see: it is not treated as a fake.
+    try:
+        with open(real, "rb") as stream:
+            text = stream.read(1 << 20).decode("latin-1")
+    except OSError:
+        return False
+    return _REFUSED_ABSOLUTE.search(text) is None
 
 
 def _names(value):
