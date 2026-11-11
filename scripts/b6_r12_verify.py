@@ -148,6 +148,8 @@ def finalize_manifest(root):
 
 
 def run_option_c(root, workers=1, *, stem="option-c"):
+    verifier_sha256 = sha(Path(__file__))
+    verifier_commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO, text=True).strip()
     archives, attempts, document = prepare_run_inputs(root)
     numbers, public = root / (stem + "-numbers.json"), root / (stem + "-public.json")
     argv = [sys.executable, "-B", str(REPO / "scripts/independent_recompute_b6.py"), "block",
@@ -165,6 +167,7 @@ def run_option_c(root, workers=1, *, stem="option-c"):
                                 env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "PYTHONNOUSERSITE": "1"})
     child_receipt = json.loads((root / (stem + "-process.json")).read_text())
     receipt = {"exit_code": child_receipt["exit_code"], "time_wrapper_exit": result.returncode,
+               "verifier_sha256": verifier_sha256, "verifier_commit": verifier_commit,
                "process_measurement": child_receipt, "sessions": len(archives), "workers": workers,
                "program_sha256": sha(REPO / "scripts/independent_recompute_b6.py"),
                "inputs_sha256": sha(document)}
@@ -185,7 +188,9 @@ def execute_argv(root, argv_file, stem):
             and Path(argv[2]) == REPO / "scripts/independent_recompute_b6.py"):
         raise ValueError("only the declared local B6 program may be measured")
     started = time.monotonic()
-    result = subprocess.run(argv, cwd=REPO, check=False)
+    temporary = root / "analysis-tmp"
+    temporary.mkdir(exist_ok=True)
+    result = subprocess.run(argv, cwd=REPO, check=False, env={**os.environ, "TMPDIR": str(temporary)})
     usage = resource.getrusage(resource.RUSAGE_CHILDREN)
     receipt = {"exit_code": result.returncode, "wall_s": time.monotonic() - started,
                "peak_rss": usage.ru_maxrss, "peak_rss_units": "bytes" if sys.platform == "darwin" else "KiB",

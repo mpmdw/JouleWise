@@ -3,6 +3,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import plistlib
 import shutil
 import struct
 from pathlib import Path
@@ -15,6 +16,7 @@ import unittest
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "scripts"))
 from b6_r12_session_fixture import command, prepare, export_chain_inputs, prepare_interpreters
+from b6_r12_runtime import SharedClock
 from b6_r12_chain_fixture import PIN
 
 
@@ -141,6 +143,33 @@ print(count)
             plists.append((root / "source.plist").read_bytes())
         self.assertEqual(payloads[0], payloads[1])
         self.assertEqual(plists[0], plists[1])
+
+    def test_public_model_input_drives_declared_science_sensor_script(self):
+        """Predict: declared science input emits busy GPU/6 W; reference input emits clean GPU/0 W, using only raw source inputs."""
+        (self.root / "source-policy.json").write_text('{"volume":"reduced","gpu_busy_science":true}\n')
+        for name, idle, power in (("Qwen3-1.7B-4bit", 0., 6000.), ("Qwen2.5-1.5B-Instruct-4bit", .999, 0.)):
+            (self.root / "source-stop.json").unlink(missing_ok=True)
+            (self.root / f"model-source-{os.getpid()}.json").write_text(json.dumps({"source": str(self.root / name)}))
+            output = self.root / (name + ".plist")
+            process = subprocess.Popen(command(self.root, "sampler", "/usr/bin/powermetrics", "-i", "100", "-o", output),
+                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            deadline = time.monotonic() + 10
+            ready = self.root / f"sampler-ready-{process.pid}"
+            while not ready.exists() and process.poll() is None and time.monotonic() < deadline:
+                time.sleep(.005)
+            self.assertTrue(ready.exists())
+            clock = SharedClock(self.root / "clock.bin")
+            try:
+                clock.sleep(1)
+            finally:
+                clock.close()
+            (self.root / "source-stop.json").write_text("{}\n")
+            out, error = process.communicate(timeout=10)
+            self.assertEqual(process.returncode, 0, error.decode())
+            records = [plistlib.loads(raw) for raw in output.read_bytes().split(b'\0') if raw]
+            self.assertGreaterEqual(len(records), 10)
+            self.assertTrue(all(row['gpu']['idle_ratio'] == idle for row in records))
+            self.assertTrue(all(row['processor']['gpu_power'] == power for row in records))
 
     @unittest.skipUnless(sys.platform == "darwin", "pinned USB protocol uses CommonCrypto")
     def test_real_meter_writer_uses_synthetic_libusb_object(self):
@@ -303,6 +332,13 @@ class DeclaredShapeTests(unittest.TestCase):
     def test_cross_session_gamma(self):
         """Predict r12-gamma-cross: nine-session option (c) exits 0/agrees and records a GAMMA unit paired across sessions (§17-R12:673)."""
         self.assertTrue(self.evidence("r12-gamma-cross")["cross_session_gamma"])
+
+    def test_denied_action_ordinary_session(self):
+        """Predict r12-denied-action: single-session option (c) exits 0/agrees; normal session retains network_time.off_output and arm action rc 126 (RL-49 rule 2)."""
+        value = self.evidence("r12-denied-action")
+        self.assertIn("network_time.off_output", value["flags"])
+        self.assertEqual(value["off_action_returncode"], 126)
+        self.assertTrue(value["real_loop_attempt"])
 
 
 if __name__ == "__main__":

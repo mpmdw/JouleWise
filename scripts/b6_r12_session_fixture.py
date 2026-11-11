@@ -261,9 +261,12 @@ def main(argv=None):
     parser.add_argument("--synthetic-models", action="store_true")
     parser.add_argument("--volume", choices=("prerequisite", "reduced", "full"), default="prerequisite")
     parser.add_argument("--denied-off", action="store_true")
+    parser.add_argument("--deny-normal-session", action="store_true",
+                        help="deny OFF only in the ordinary session; keep prerequisite/smoke actions normal")
     args = parser.parse_args(argv)
     root = prepare(args.out)
-    (root / "source-policy.json").write_text(json.dumps({"volume": args.volume, "denied_off": args.denied_off,
+    (root / "source-policy.json").write_text(json.dumps({"volume": args.volume, "denied_off": args.denied_off or args.deny_normal_session,
+        "denied_normal": args.deny_normal_session,
         "primary_stream_duration_s": 335 if args.volume == "full" else 65,
         "token_first_s": .5 if args.volume == "reduced" else 1.0,
         "token_next_s": .001 if args.volume == "reduced" else .05}, indent=2) + "\n")

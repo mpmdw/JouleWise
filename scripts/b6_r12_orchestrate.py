@@ -133,7 +133,8 @@ def loop_fixture(root, clock, pack="alpha", limit="1"):
         print("loop", tick, state["state"], flush=True)
         if state["state"] in {"HOLD_LOOP", "DONE"}:
             return 0 if state["state"] == "DONE" else 2
-        if base_policy.get("denied_off") and state["state"] == "ARM_WAIT" and (state.get("session") or {}).get("smoke_done"):
+        if (base_policy.get("denied_off") and not base_policy.get("denied_normal")
+                and state["state"] == "ARM_WAIT" and (state.get("session") or {}).get("smoke_done")):
             (root / "denied-fixture-receipt.json").write_text(json.dumps({
                 "kind": "denied-action non-claim smoke session", "state": state["state"],
                 "session": state["session"], "loop_wrote_attempt": False,
@@ -151,7 +152,8 @@ def loop_fixture(root, clock, pack="alpha", limit="1"):
             scheduled.add(str(plan_path))
             policy = dict(base_policy)
             if prefix:
-                policy.update(scenario="smoke-" + session["id"], denied_off=bool(base_policy.get("denied_off")),
+                policy.update(scenario="smoke-" + session["id"],
+                              denied_off=bool(base_policy.get("denied_off")) and not base_policy.get("denied_normal"),
                               primary_stream_duration_s=65, volume="reduced")
             else:
                 policy = session_policy(session["packs"][0], session["round"], base_policy) if pack == "all" else policy
