@@ -38,6 +38,7 @@ class AuthenticatedInputs:
             if cursor.is_symlink():
                 raise InputRefusal("input_symlink")
         self.expected, self.compressed = {}, {}
+        self.external_expected = {}
         self.zstd = None
         # These three digests must come from a verified custody handoff, not
         # from a sidecar generated from the copy about to be analysed.
@@ -59,9 +60,22 @@ class AuthenticatedInputs:
         self.record = {k: pin[k] for k in ("harvest_sha256", "acceptance_sha256", "sha256sums_sha256")}
         if pin.get("compression"):
             item = pin["compression"]
-            name = relative(item["path"])
-            self.add(name, item["sha256"])
-            rows = self.read(self.archive / name).decode().splitlines()
+            if ("path" in item) == ("external_path" in item):
+                raise InputRefusal("compression_input_path_invalid")
+            if "external_path" in item:
+                path = Path(item["external_path"])
+                if not path.is_absolute():
+                    raise InputRefusal("compression_input_path_invalid")
+                # This path is supplied by the caller's separately hashed
+                # input document, never discovered in an archive locator.
+                # The production desk writes archive.desk/compression.jsonl;
+                # accepting its explicit pin avoids altering the archive.
+                self.external_expected[str(path)] = self.checked_digest(item["sha256"])
+                rows = self.read_external(path).decode().splitlines()
+            else:
+                name = relative(item["path"])
+                self.add(name, item["sha256"])
+                rows = self.read(self.archive / name).decode().splitlines()
             latest = {}
             for line in rows:
                 row = json.loads(line)
@@ -85,13 +99,33 @@ class AuthenticatedInputs:
                     self.compressed[name] = row["sha256"]
             self.record["compression_sha256"] = item["sha256"]
 
-    def add(self, name, sha):
-        name = relative(name)
+    @staticmethod
+    def checked_digest(sha):
         if not isinstance(sha, str) or len(sha) != 64 or any(c not in "0123456789abcdef" for c in sha):
             raise InputRefusal("input_digest_invalid")
+        return sha
+
+    def add(self, name, sha):
+        name = relative(name)
+        self.checked_digest(sha)
         if name in self.expected and self.expected[name] != sha:
             raise InputRefusal("input_digest_conflict")
         self.expected[name] = sha
+
+    def read_external(self, path):
+        path = Path(path)
+        expected = self.external_expected.get(str(path))
+        if expected is None:
+            raise InputRefusal("input_digest_missing")
+        cursor = Path(path.anchor)
+        for part in path.parts[1:]:
+            cursor /= part
+            if cursor.is_symlink():
+                raise InputRefusal("input_symlink")
+        data = path.read_bytes()
+        if digest(data) != expected:
+            raise InputRefusal("input_digest_mismatch")
+        return data
 
     def local(self, path):
         try:
@@ -147,4 +181,6 @@ class AuthenticatedInputs:
         """Release re-verification: no stored decisions or hash cache."""
         for name in sorted(self.expected):
             self.read(self.archive / name)
-        return {"files_verified": len(self.expected), **self.record, "zstd": self.zstd}
+        for name in sorted(self.external_expected):
+            self.read_external(name)
+        return {"files_verified": len(self.expected) + len(self.external_expected), **self.record, "zstd": self.zstd}

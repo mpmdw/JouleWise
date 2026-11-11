@@ -3,6 +3,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import shutil
 from pathlib import Path
 import subprocess
 import sys
@@ -89,6 +90,47 @@ class BootstrapTests(unittest.TestCase):
         child = subprocess.run(command(self.root, "probe", 0), capture_output=True, text=True, timeout=20)
         self.assertEqual(child.returncode, 0, child.stderr)
         self.assertEqual(json.loads(child.stdout)["before"]["epoch_s"], last)
+
+
+class DeskInputBoundaryTests(unittest.TestCase):
+    @unittest.skipUnless(shutil.which("zstd"), "real desk compression requires zstd")
+    def test_real_desk_log_can_be_pinned_without_editing_archive(self):
+        """Predict: the B6 reader authenticates the real desk's adjacent log without copying it into the immutable archive."""
+        from joulewise import desk_compress
+        from joulewise.b6_analysis_inputs import AuthenticatedInputs, InputRefusal
+        with tempfile.TemporaryDirectory(prefix="r12-desk-boundary-") as directory:
+            root = Path(directory).resolve()
+            archive, custody = root / "archive", root / "custody"
+            (archive / "derived").mkdir(parents=True)
+            (archive / "sources").mkdir()
+            (custody / "night").mkdir(parents=True)
+            (custody / "night/chain.exited").write_text("{}")
+            payload = archive / "sources/payload.jsonl"
+            raw = b'{"synthetic_unit_test":true}\n' * 100
+            payload.write_bytes(raw)
+            sums = archive / "sources/SHA256SUMS"
+            sums.write_text(hashlib.sha256(raw).hexdigest() + "  payload.jsonl\n")
+            (archive / "harvest.json").write_text('{"verdict":"COLLECTED","outputs":{}}\n')
+            (archive / "derived/b6-acceptance.json").write_text("{}\n")
+            code, result = desk_compress.compress(archive=archive, custody=custody, min_bytes=100)
+            self.assertEqual(code, 0, result)
+            self.assertEqual(result["files"], 1)
+            log = root / "archive.desk/compression.jsonl"
+            sha = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
+            pin = {"harvest_sha256": sha(archive / "harvest.json"),
+                   "acceptance_sha256": sha(archive / "derived/b6-acceptance.json"),
+                   "sha256sums_sha256": sha(sums),
+                   "compression": {"external_path": str(log), "sha256": sha(log),
+                                   "relocations": {str(archive): "."}}}
+            reader = AuthenticatedInputs(archive, pin)
+            self.assertEqual(reader.read(payload), raw)
+            self.assertFalse((archive / "compression.jsonl").exists())
+            reader.verify_census()
+            # Re-verification must reread the external log, not cache it.
+            with log.open("ab") as stream:
+                stream.write(b"\n")
+            with self.assertRaisesRegex(InputRefusal, "input_digest_mismatch"):
+                reader.verify_census()
 
 
 @unittest.skipUnless(os.environ.get("R12_REAL_CHAIN_SET"), "explicit generated R12 set required")
