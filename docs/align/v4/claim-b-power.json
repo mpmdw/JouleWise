@@ -1,0 +1,55 @@
+{
+  "equivalence_region": [
+    0.29794154528258887,
+    0.7020584547174111
+  ],
+  "layout": "first K_S strata of eleven two-pair windows; consecutive pairs share a window",
+  "model": "independent N(0,1) sabotage and seven benign scores per stratum",
+  "replicates": 100000,
+  "results": [
+    {
+      "K_S": 22,
+      "W": 11,
+      "equivalent": 68184,
+      "monte_carlo_se": 0.0014728686784639016,
+      "power": 0.68184,
+      "t95": 1.8124611228116683
+    },
+    {
+      "K_S": 20,
+      "W": 10,
+      "equivalent": 59880,
+      "monte_carlo_se": 0.0015499630963348773,
+      "power": 0.5988,
+      "t95": 1.8331129326562534
+    },
+    {
+      "K_S": 16,
+      "W": 8,
+      "equivalent": 38190,
+      "monte_carlo_se": 0.001536399655037712,
+      "power": 0.3819,
+      "t95": 1.8945786050900137
+    },
+    {
+      "K_S": 11,
+      "W": 6,
+      "equivalent": 0,
+      "monte_carlo_se": 0.0,
+      "power": 0.0,
+      "t95": 2.015048373333035
+    },
+    {
+      "K_S": 6,
+      "W": 3,
+      "equivalent": 0,
+      "monte_carlo_se": 0.0,
+      "power": 0.0,
+      "t95": 2.9199855803537433
+    }
+  ],
+  "script_sha256": "6ddcde86112a29f236647a7e0a48b56fcd67f6b2db9ead3995e04f0b8fc06fc7",
+  "seed": 20261110,
+  "synthetic_only": true,
+  "t_quantile_method": "Student t density: 2048-panel composite Simpson CDF, 50 bisections"
+}

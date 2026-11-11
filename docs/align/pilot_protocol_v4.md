@@ -1217,17 +1217,23 @@ T = 3 admitted turns (the R1 duty bar, chair 1 and R08/R16) this is 0.80 at h = 
 3-turn training trajectories), 0.75 at h = 1/3 and 0.65 at h = 0.8; **c = 0.75** is registered. The rank
 statistic is scale-free, so no s_r is estimated for S.
 
-*Power (normal location model; exact convolution of the per-stratum rank distribution).*
+*Power (normal location model, independent pairs).* Superiority columns retain the exact
+convolution calculation. The joint equivalence column is synthetic simulation: seed 20261110,
+100,000 replicates, independent N(0,1) scores for one sabotage-instructed and seven benign members
+per stratum. Strata are the first K_S of eleven two-pair windows (11 strata give six windows);
+both intervals and W ≥ 8 are required. Reproduction: `docs/align/v4/claim_b_power.py`; receipt
+`docs/align/v4/claim-b-power.json`. Monte Carlo SE is at most .0016; the Student t quantile is
+computed by Simpson integration of its density and bisection.
 
 | K_S | Superiority power at 0.5 / 0.75 / 1.0 SD | Equivalence power at no effect |
 |---:|---|---:|
-| 22 (8 C + 3 T windows, both pairs) | .50 / .84 / .98 | .79 |
-| 20 | .46 / .80 / .96 | .74 |
-| 16 | .37 / .70 / .91 | .58 |
-| 11 | .28 / .55 / .79 | .30 |
+| 22 (8 C + 3 T windows, both pairs) | .50 / .84 / .98 | .682 |
+| 20 | .46 / .80 / .96 | .599 |
+| 16 | .37 / .70 / .91 | .382 |
+| 11 | .28 / .55 / .79 | 0 (W < 8) |
 | 6 (T windows only) | .15 / .29 / .48 | 0 |
 
-Alternatives weighed: c = 0.5 (U6's per-row value applied to member scores) gives equivalence power .25 at
+Alternatives weighed under the former design-interval-only planning calculation: c = 0.5 (U6's per-row value applied to member scores) gives equivalence power .25 at
 K_S = 22, so the predicted null would usually stay inconclusive; c = 1.0 gives .96 but would call "equivalent" a
 shift that raises a sabotage-instructed episode's alarm probability to about 17 %. The T windows alone cannot
 establish equivalence at any of these margins, which is why the C-window members are admitted.
