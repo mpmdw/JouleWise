@@ -20,6 +20,7 @@ from unittest.mock import patch
 from joulewise.align.apple import powermode
 from scripts import align_pilot_session as pilot, align_r1_rehearsal as r1, align_v4_kit as kit
 from scripts import align_v4_session as session
+from tests.align.v4_registration_fixtures import held_window_acceptance, session_plan
 from tests.align import test_r1_rehearsal as rehearsal_tests
 from tests.align.test_v4_kit import FakeArmHost, W1DiskGateTests
 
@@ -120,15 +121,15 @@ class V4SessionHighPowerTests(HostStateCase):
         root = self.tmp / 's'
         (root / 'staging').mkdir(parents=True, exist_ok=True)
         self.custody = self.tmp / 's/custody'
-        (root / 'session.json').write_text(json.dumps(
+        (root / 'session.json').write_text(json.dumps(session_plan(root,
             {'measurement_root': str(measurement), 'inputs': {'custody_root': str(self.custody)},
-             'plan_path': str(self.custody / 'night_plan.json')}))
+             'plan_path': str(self.custody / 'night_plan.json')})))
         return measurement, root
 
     def install(self, root, host, *, installed=None):
         from tests.align.test_v4_kit import topup
         with patch.object(kit, 'require_w1_ready'), patch.object(kit, 'generate'), \
-                patch.object(session, 'held_window_check', return_value={'ok': True, 'reasons': [], 'synthetic': True}), \
+                patch.object(session, 'held_window_check', side_effect=held_window_acceptance), \
                 patch.object(pilot, 'install', return_value={'exit_code': 0} if installed is None else installed) \
                 as install:
             try:
@@ -203,7 +204,7 @@ class V4SessionHighPowerTests(HostStateCase):
         host = FakeArmHost(mode=0, marker=self.marker)
         from tests.align.test_v4_kit import topup
         with patch.object(kit, 'require_w1_ready'), patch.object(kit, 'generate'), \
-                patch.object(session, 'held_window_check', return_value={'ok': True, 'reasons': [], 'synthetic': True}), \
+                patch.object(session, 'held_window_check', side_effect=held_window_acceptance), \
                 patch.object(pilot, 'install', side_effect=installer):
             session.install(root, runner=host, volume_runner=host, obc_off_attested_by='synthetic', **topup(),
                             w1_disk_config=W1DiskGateTests.config(self, self.tmp),

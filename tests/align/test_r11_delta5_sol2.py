@@ -4,6 +4,7 @@ The contract assertions documenting findings are intentionally red on 03253edca.
 No real measurements, native probes, weights, network or external user paths.
 """
 from tests.align.test_v4_arm_watchdog_check import acceptance as _watchdog_acceptance
+from tests.align.v4_registration_fixtures import session_plan
 from copy import deepcopy
 import json
 import os
@@ -57,7 +58,8 @@ class CommittedSeriesTests(unittest.TestCase):
         good = dict(passed=True, probe_error=False, external_connected=True, is_charging=False,
                     current_capacity_pct=100, instant_amperage_ma=0, update_age_s=1)
         log = write_battery_log(self.scratch / 'battery.jsonl', fixtures.NOW)
-        state = {'v4_series': {'window_id': window}, 'source_measurement_root': str(self.repo)}
+        state = session_plan(target, {'v4_series': {'window_id': window},
+                                     'source_measurement_root': str(self.repo)}, now=fixtures.NOW)
         with patch('joulewise.align.apple.powermode.admit_ac_powermode',
                    return_value={'admitted': True, 'observed': 0}), \
              patch('joulewise.align.apple.external_volume.census', return_value={}), \
