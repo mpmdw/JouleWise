@@ -30,6 +30,10 @@ class ToolError(Exception):
     """An expected tool failure, returned as MCP content with isError=true."""
 
 
+class ArmedError(ToolError):
+    """A positively observed armed state, distinct from an unreadable guard."""
+
+
 def schema(properties=None, required=()):
     return {"type": "object", "properties": properties or {},
             "required": list(required), "additionalProperties": False}
@@ -52,9 +56,9 @@ TOOL_SCHEMAS = {
                        "dy": {"type": "integer", "minimum": -5000, "maximum": 5000}}, ("dy",))),
     "type_text": ("Type Unicode text into the focused control (does not use the clipboard).",
                   schema({"text": {"type": "string", "maxLength": 10000}}, ("text",))),
-    "key": ("Press a key combo, e.g. cmd+space, ctrl+alt+delete, shift+tab, cmd+a.",
+    "key": ("Press a key combo, e.g. shift+tab or cmd+a; app/launcher shortcuts are blocked.",
             schema({"combo": {"type": "string", "minLength": 1, "maxLength": 100}}, ("combo",))),
-    "open_app": ("Open an allowlisted app by exact configured name; current app must also be allowed.",
+    "open_app": ("Open an allowlisted bundle id (name argument), including to recover focus.",
                  schema({"name": {"type": "string", "minLength": 1, "maxLength": 200}}, ("name",))),
     "frontmost_app": ("Report the frontmost app (subject to armed-night and app gates).", schema()),
     "wait": ("Wait up to ten seconds (subject to armed-night and app gates).",
@@ -97,6 +101,19 @@ def validate(name, arguments):
                 raise ToolError(f"Invalid Unicode for {key}")
         if "enum" in rule and value not in rule["enum"]:
             raise ToolError(f"Invalid choice for {key}")
+    if name == "key":
+        parts = [part.strip().lower() for part in arguments["combo"].split("+")]
+        aliases = {"cmd": "cmd", "command": "cmd", "ctrl": "ctrl", "control": "ctrl",
+                   "alt": "opt", "option": "opt", "opt": "opt", "shift": "shift", "fn": "fn"}
+        try:
+            modifiers = {aliases[part] for part in parts[:-1]}
+        except KeyError as exc:
+            raise ToolError("Unsupported key modifier") from exc
+        key = parts[-1]
+        if (("cmd" in modifiers and key in ("tab", "space")) or
+                ("ctrl" in modifiers and key in ("up", "down")) or
+                ({"cmd", "opt"} <= modifiers and key in ("esc", "escape"))):
+            raise ToolError("App-switching and launcher key combos are blocked")
 
 
 def text_result(value, *, error=False):
@@ -163,7 +180,8 @@ class MacBackend:
 
     def frontmost(self):
         value = self.helper("frontmost_app")
-        if not isinstance(value.get("name"), str) or not value["name"]:
+        if (not isinstance(value.get("bundle_id"), str) or not value["bundle_id"] or
+                type(value.get("pid")) is not int or value["pid"] <= 0):
             raise ToolError("Cannot determine frontmost app")
         return value
 
@@ -249,42 +267,86 @@ class ComputerUse:
             os.close(fd)
 
     def check_armed(self):
-        output = self.backend.executor.run(["/bin/launchctl", "list"])
-        lines = output.splitlines()
-        if not lines or lines[0].split() != ["PID", "Status", "Label"]:
-            raise ToolError("Cannot verify armed-night state: malformed launchctl list")
-        for line in lines[1:]:
-            fields = line.split()
-            if (len(fields) != 3 or (fields[0] != "-" and not fields[0].isdigit()) or
-                    not re.fullmatch(r"-?\d+", fields[1])):
-                raise ToolError("Cannot verify armed-night state: malformed launchctl row")
-            if fields[2].startswith("com.joulewise.night"):
-                raise ToolError(f"Armed-night refusal: loaded launchd label {fields[2]}")
-        marker = self.home / "Library/Logs/jw-hostlink/armed_until"
-        try:
-            raw = marker.read_text(encoding="utf-8").strip()
-        except FileNotFoundError:
+        # Never use the caller-relative `list`: SSH/Background can see a different
+        # domain from the user's night LaunchAgents. Check system jobs as well.
+        for domain in (f"gui/{os.getuid()}", "system"):
+            try:
+                output = self.backend.executor.run(["/bin/launchctl", "print", domain])
+            except Exception as exc:
+                raise ToolError(f"Cannot verify armed-night state: unreadable launchctl domain {domain}") from exc
+            if (not re.match(r"\s*" + re.escape(domain) + r"\s*=\s*\{\s*\n", output) or
+                    not re.search(r"^\}[^\S\n]*$", output.rstrip(), re.M)):
+                raise ToolError(f"Cannot verify armed-night state: malformed launchctl domain {domain}")
+            sections = re.findall(r"^\s*services = \{[^\S\n]*\n(.*?)^\s*\}", output, re.M | re.S)
+            if len(sections) != 1:
+                raise ToolError(f"Cannot verify armed-night state: malformed launchctl services in {domain}")
+            for line in sections[0].splitlines():
+                fields = line.split()
+                if (len(fields) != 3 or (fields[0] != "-" and not fields[0].isdigit()) or
+                        (fields[1] != "-" and not re.fullmatch(r"-?\d+", fields[1]))):
+                    raise ToolError(f"Cannot verify armed-night state: malformed launchctl row in {domain}")
+                if fields[2].startswith("com.joulewise.night"):
+                    raise ArmedError(f"Armed-night refusal: loaded launchd label {fields[2]} in {domain}")
+        config = self.config()
+        if not config.get("respect_remote_armed", True):
             return
-        except (OSError, UnicodeError) as exc:
-            raise ToolError("Cannot verify armed-night state: unreadable armed_until") from exc
-        try:
-            epoch = float(raw)
-            if not math.isfinite(epoch):
-                raise ValueError
-        except ValueError as exc:
-            raise ToolError("Cannot verify armed-night state: invalid armed_until epoch") from exc
-        if epoch > self.clock():
-            raise ToolError(f"Armed-night refusal: armed_until epoch {epoch} is in the future")
+        for configured in config.get("armed_marker_paths", ["~/Library/Logs/jw-hostlink/armed_until"]):
+            marker = self.home / configured[2:] if configured.startswith("~/") else Path(configured)
+            try:
+                raw = marker.read_text(encoding="utf-8").strip()
+            except FileNotFoundError:
+                continue
+            except (OSError, UnicodeError) as exc:
+                raise ToolError("Cannot verify armed-night state: unreadable armed_until marker") from exc
+            try:
+                epoch = float(raw)
+                if not math.isfinite(epoch):
+                    raise ValueError
+            except ValueError as exc:
+                raise ToolError("Cannot verify armed-night state: invalid armed_until epoch") from exc
+            if epoch > self.clock():
+                raise ArmedError(f"Armed-night refusal: armed_until epoch {epoch} is in the future")
 
-    def allowed_apps(self):
+    def config(self):
         try:
             config = json.loads(self.allowlist_path.read_text(encoding="utf-8"))
             apps = config["apps"]
-            if not isinstance(apps, list) or not apps or any(not isinstance(a, str) or not a for a in apps):
+            if (not isinstance(apps, list) or not apps or
+                    any(not isinstance(a, str) or not re.fullmatch(r"[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+", a)
+                        for a in apps)):
                 raise ValueError
-            return apps
+            if type(config.get("respect_remote_armed", True)) is not bool:
+                raise ValueError
+            paths = config.get("armed_marker_paths", ["~/Library/Logs/jw-hostlink/armed_until"])
+            if (not isinstance(paths, list) or not paths or
+                    any(not isinstance(p, str) or "\0" in p or
+                        not (p.startswith("~/") or Path(p).is_absolute()) for p in paths)):
+                raise ValueError
+            return config
         except (OSError, ValueError, KeyError, TypeError) as exc:
             raise ToolError("Cannot read valid app allowlist") from exc
+
+    def allowed_apps(self):
+        return self.config()["apps"]
+
+    def check_app(self, name, arguments):
+        apps = self.allowed_apps()
+        if name == "open_app":
+            if arguments["name"] not in apps:
+                raise ToolError("App refusal: requested app is not allowlisted")
+            return None
+        frontmost = self.backend.frontmost()
+        if frontmost["bundle_id"] not in apps:
+            raise ToolError(f"App refusal: frontmost app {frontmost['bundle_id']!r} is not allowlisted")
+        return frontmost
+
+    def check_click_target(self, arguments, frontmost):
+        target = self.backend.helper("window_at_point", {k: arguments[k] for k in ("x", "y")})
+        if (target.get("bundle_id") != frontmost["bundle_id"] or
+                type(target.get("pid")) is not int or target["pid"] != frontmost["pid"] or
+                type(target.get("layer")) is not int or target["layer"] != 0 or
+                target["bundle_id"] == "com.apple.dock"):
+            raise ToolError("Click refusal: target must be a normal window of the allowed frontmost app; Dock/status items refused")
 
     def rate_limit(self):
         now = self.monotonic()
@@ -296,17 +358,18 @@ class ComputerUse:
 
     def call(self, name, arguments):
         call_id, frontmost = uuid.uuid4().hex, None
-        input_reserved = False
+        input_reserved, before_logged = False, False
         try:
             # Even refusals and invalid requests get a durable intent before any probes.
-            self.log(call_id, "before", name, arguments, frontmost, "pending")
-        except (OSError, ValueError, RecursionError) as exc:
-            return text_result({"error": f"Action log unavailable; nothing executed ({type(exc).__name__})"}, error=True)
-        try:
+            try:
+                self.log(call_id, "before", name, arguments, frontmost, "pending")
+                before_logged = True
+            except Exception as exc:
+                raise ToolError(f"Action log unavailable; nothing executed ({type(exc).__name__})") from exc
             if name not in TOOL_SCHEMAS:
                 raise ToolError("Unknown tool")
             validate(name, arguments)
-            if self.env.get("JW_CU_DRY_RUN") == "1":
+            if self.env.get("JW_CU_DRY_RUN") not in (None, "", "0"):
                 result = text_result({"dry_run": True, "executed": False,
                                       "note": "No probes or actions ran; safety/permissions were not evaluated"})
             else:
@@ -320,41 +383,34 @@ class ComputerUse:
                             # A screenshot can diagnose a missing foreground app.
                             frontmost = None
                     else:
-                        frontmost = self.backend.frontmost()
-                    if name != "screenshot":
-                        apps = self.allowed_apps()
-                        if frontmost["name"] not in apps:
-                            raise ToolError(f"App refusal: frontmost app {frontmost['name']!r} is not allowlisted")
-                        if name == "open_app" and arguments["name"] not in apps:
-                            raise ToolError("App refusal: requested app is not allowlisted")
+                        frontmost = self.check_app(name, arguments)
                 if name in INPUT_TOOLS:
                     # Probes/first compilation can take time. Recheck immediately before input.
                     self.check_armed()
-                    current = self.backend.frontmost()
-                    frontmost = current
-                    apps = self.allowed_apps()
-                    if current["name"] not in apps:
-                        raise ToolError(f"App refusal: frontmost app {current['name']!r} is not allowlisted")
-                    if name == "open_app" and arguments["name"] not in apps:
-                        raise ToolError("App refusal: requested app is not allowlisted")
+                    frontmost = self.check_app(name, arguments)
                     self.rate_limit()
                     input_reserved = True
                 # Record the resolved foreground immediately before the actual operation.
                 self.log(call_id, "execute", name, arguments, frontmost, "pending")
-                result = self.execute(name, arguments, frontmost)
-        except (ToolError, OSError, ValueError) as exc:
-            result = text_result({"error": str(exc)}, error=True)
-        finally:
-            if input_reserved:
-                # Serialized calls retain their reservation through completion.
-                # A slow helper/log must not let this action expire before it posts.
-                self.input_times[-1] = self.monotonic()
-        # Never put screenshot base64 or typed text into the audit result.
-        summary = {"isError": result.get("isError", False),
-                   "content": [item for item in result["content"] if item["type"] == "text"]}
+                try:
+                    result = self.execute(name, arguments, frontmost)
+                finally:
+                    if input_reserved:
+                        # Keep the slot charged through completion, including errors.
+                        self.input_times[-1] = self.monotonic()
+            # Serialization/shape errors must be caught before the stdio writer.
+            json.dumps(result, ensure_ascii=True, allow_nan=False)
+            # Never log image bytes.
+            summary = {"isError": result.get("isError", False),
+                       "content": [item for item in result["content"] if item["type"] == "text"]}
+        except Exception as exc:
+            result = text_result({"error": f"{type(exc).__name__}: {exc}"}, error=True)
+            summary = {"isError": True, "content": result["content"]}
         try:
             self.log(call_id, "after", name, arguments, frontmost, summary)
-        except (OSError, ValueError):
+        except Exception:
+            if not before_logged:
+                return result  # Logging is unavailable; no probes/actions ran.
             # Execution may already have happened: the caller must not silently retry.
             return text_result({"error": "Result log failed; operation may have executed. Inspect state before retrying."}, error=True)
         return result
@@ -363,7 +419,13 @@ class ComputerUse:
         if name == "screenshot":
             return self.backend.screenshot(before_capture=self.check_armed)
         if name == "permissions_status":
-            return text_result(self.backend.helper("permissions_status"))
+            try:
+                self.check_armed()
+            except ArmedError as exc:
+                return text_result({"armed": True, "reason": str(exc),
+                                    "screen_recording": "unknown (armed; not compiled)",
+                                    "accessibility": "unknown (armed; not compiled)"})
+            return text_result({**self.backend.helper("permissions_status"), "armed": False})
         if name == "frontmost_app":
             return text_result(frontmost)
         if name == "wait":
@@ -372,9 +434,17 @@ class ComputerUse:
         permissions = self.backend.helper("permissions_status")
         if permissions.get("accessibility") is not True:
             raise ToolError("Accessibility permission is missing; grant it in System Settings")
+        # open_app can be the first helper use; preflight may have compiled it.
+        self.check_armed()
         if name == "open_app":
-            self.backend.executor.run(["/usr/bin/open", "-a", arguments["name"]])
+            self.check_app(name, arguments)
+            self.backend.executor.run(["/usr/bin/open", "-b", arguments["name"]])
             return text_result({"opened": arguments["name"]})
+        if name == "click":
+            self.check_click_target(arguments, frontmost)
+            self.check_armed()
+            arguments = {**arguments, "expected_pid": frontmost["pid"],
+                         "expected_bundle_id": frontmost["bundle_id"]}
         return text_result(self.backend.helper(name, arguments))
 
 

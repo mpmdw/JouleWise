@@ -777,6 +777,7 @@
     "tests.test_write_derivation_night_inputs": 0.898,
     "tests.test_zero_capture_facts": 0.008,
     "tests.tools.test_computer_use_mcp": 0.121,
+    "tests.tools.test_computer_use_mcp_mutations": 11.308,
     "tests.twins.test_engine_twin": 0.159,
     "tests.twins.test_engine_twin_comparison": 0.658,
     "tests.twins.test_harvest_twin": 0.004,

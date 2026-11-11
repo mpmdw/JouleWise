@@ -46,6 +46,44 @@ func mouse(_ type: CGEventType, _ point: CGPoint, _ button: CGMouseButton,
     event.post(tap: .cghidEventTap)
 }
 
+// CGWindowList is ordered front to back in Quartz screen-point coordinates.
+// Keep system windows in the list: excluding them would click through the Dock
+// or a status item into an otherwise allowed app window underneath.
+func windowAtPoint(_ p: CGPoint) throws -> [String: Any] {
+    guard let windows = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID)
+            as? [[String: Any]] else { try fail("Cannot inspect window ownership") }
+    for window in windows {
+        guard let rawBounds = window[kCGWindowBounds as String] as? [String: Any],
+              let bounds = CGRect(dictionaryRepresentation: rawBounds as CFDictionary),
+              let alpha = window[kCGWindowAlpha as String] as? NSNumber else {
+            try fail("Cannot inspect window bounds/visibility")
+        }
+        if alpha.doubleValue <= 0 || !bounds.contains(p) { continue }
+        guard let pid = window[kCGWindowOwnerPID as String] as? NSNumber,
+              let layer = window[kCGWindowLayer as String] as? NSNumber,
+              let app = NSRunningApplication(processIdentifier: pid.int32Value),
+              let bundle = app.bundleIdentifier else { try fail("Cannot inspect window owner") }
+        return ["pid": pid.int32Value, "bundle_id": bundle, "layer": layer.intValue]
+    }
+    try fail("Click refusal: no owning window at target point")
+}
+
+func checkClickTarget(_ args: [String: Any], _ p: CGPoint) throws {
+    guard let expectedPID = args["expected_pid"] as? NSNumber,
+          let expectedBundle = args["expected_bundle_id"] as? String,
+          let frontmost = NSWorkspace.shared.frontmostApplication,
+          frontmost.processIdentifier == expectedPID.int32Value,
+          frontmost.bundleIdentifier == expectedBundle else {
+        try fail("Click refusal: frontmost app changed")
+    }
+    let target = try windowAtPoint(p)
+    guard target["pid"] as? Int32 == expectedPID.int32Value,
+          target["bundle_id"] as? String == expectedBundle,
+          target["layer"] as? Int == 0, expectedBundle != "com.apple.dock" else {
+        try fail("Click refusal: target is outside the allowed app window (Dock/status items refused)")
+    }
+}
+
 // ANSI virtual keys. Named navigation/function keys are layout independent;
 // character shortcuts use their physical ANSI positions. Unicode text uses UTF-16.
 let keyCodes: [String: CGKeyCode] = [
@@ -81,6 +119,12 @@ func pressKey(_ combo: String) throws {
         case "fn": flags.insert(.maskSecondaryFn)
         default: try fail("Unsupported key modifier")
         }
+    }
+    // Repeat the Python guard at the posting boundary, including modifier aliases.
+    if (flags.contains(.maskCommand) && ["tab", "space"].contains(last)) ||
+       (flags.contains(.maskControl) && ["up", "down"].contains(last)) ||
+       (flags.contains(.maskCommand) && flags.contains(.maskAlternate) && ["esc", "escape"].contains(last)) {
+        try fail("App-switching and launcher key combos are blocked")
     }
     guard let down = CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: true),
           let up = CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: false) else {
@@ -130,7 +174,10 @@ func run() throws {
         guard let app = NSWorkspace.shared.frontmostApplication, let name = app.localizedName else {
             try fail("Cannot determine frontmost app")
         }
-        try emit(["name": name, "bundle_id": app.bundleIdentifier ?? ""])
+        try emit(["name": name, "bundle_id": app.bundleIdentifier ?? "", "pid": app.processIdentifier])
+        return
+    case "window_at_point":
+        try emit(windowAtPoint(point(args, "x", "y")))
         return
     case "display_info":
         let display = CGMainDisplayID()
@@ -153,8 +200,10 @@ func run() throws {
         guard count == 1 || count == 2 else { try fail("Click count must be 1 or 2") }
         let right = name == "right"
         let button: CGMouseButton = right ? .right : .left
+        try checkClickTarget(args, p)
         try mouse(.mouseMoved, p, button)
         for i in 1...Int(count) {
+            try checkClickTarget(args, p)
             try mouse(right ? .rightMouseDown : .leftMouseDown, p, button, clickState: Int64(i))
             try mouse(right ? .rightMouseUp : .leftMouseUp, p, button, clickState: Int64(i))
             if i < Int(count) { Thread.sleep(forTimeInterval: 0.08) }

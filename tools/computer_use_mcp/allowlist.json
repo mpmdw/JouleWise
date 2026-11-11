@@ -1,3 +1,10 @@
 {
-  "apps": ["System Settings", "Finder", "Terminal"]
+  "apps": ["com.apple.systempreferences", "com.apple.Settings", "com.apple.finder"],
+  "_comments": {
+    "com.apple.systempreferences": "System Settings (System Preferences on older macOS)",
+    "com.apple.Settings": "System Settings alternative bundle id",
+    "com.apple.finder": "Finder"
+  },
+  "armed_marker_paths": ["~/Library/Logs/jw-hostlink/armed_until"],
+  "respect_remote_armed": true
 }
