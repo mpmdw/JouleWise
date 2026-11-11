@@ -4522,6 +4522,309 @@ periodic read during members is such a difference even when it is small.
 
 ---
 
+# Decision request 51: the BYTES attribution result, and the flags (2026-11-11 12:52 PST)
+
+**Read.** On `analysis/2026-11-11-bytes-stage1-attribution` @ `205734f27`, the attribution report's header and
+its flags section. On `fix/2026-11-11-bytes-twin-anchor` @ `a0d5b19c4`: the estimator's flag code
+(`joulewise/bytes_analysis.py:919-953, 1128-1140`, digest equal to the pin), the twin's import list, the
+fixture change, and the fix seat's recorded read-scope exception. The registration's §6, §11, §13, §15 and
+§22. RUN_STATE items 266 and 268 on main. From the probe's output on main I read the flag lines only: code
+names, counts and yes-or-no answers. I opened no export, predictions file, archive or stage-1 output.
+
+## RL-82. The twin fix is confirmed. A cell's flags are the codes on its runs and on its session: the twin changes, the analysis does not
+
+### Items 1 and 3: confirmed
+
+The attribution was made from the text before any value was compared, and the probe then bore it out: the
+twin's anchor term equals the export column in 12 of 12 cells and the analysis's in none. The fixed twin's
+rerun leaves no timing-bound or `w` field above the bar, and the predictions file is byte-identical to the
+first run's. That is RL-80's first branch, completed. The twin still imports nothing from `joulewise`. The
+six "no" answers on `W_follows_B` were the probe dividing by the wrong unit, as the report's addendum says;
+the rerun settles it, since no `w` row remains.
+
+The fix seat's check compared three coordination files byte for byte without displaying them, outside its
+read list. I accept the lead's handling: the exception is recorded, the seat is not described as strictly
+within its read list, and a clean seat reviewed the fix. A comparison that prints only "equal" passes no
+content to the seat.
+
+### Item 2, the flags: reading A
+
+**Ruling.** A cell's flags are the codes recorded on its kept runs and the codes recorded on its session. The
+twin is changed to list them. The analysis and its digest do not move.
+
+Three grounds, in the order I weigh them.
+
+1. **§6 defines a flag as "a recorded code on a run or session", and §15 prints each cell's "flags" without
+   narrowing that.** §15 lists nothing else in which a session's codes appear. A disclose-only code has one
+   effect, which is to be printed. Under the other reading a code recorded on a session would be printed
+   nowhere the registration names.
+2. **Where the prose is silent, the bound program is the registration.** §13 binds the analysis by digest.
+   Its behaviour stands unless it contradicts the text, and here it does not.
+3. **Nothing rides on it.** Every code concerned is disclose-only. No number, exclusion, family or word
+   changes under either reading. So the choice carries no outcome, and I can make it from the text.
+
+I formed grounds 1 and 2 from the registration and the code. I then read the probe's flag lines to check that
+the ruling covers everything that differs. It does: 23 codes, every one on the analysis side only, every one
+disclose-only, none a meter flag, none an exclusion code, none on any run's own list, each present in every
+fit cell of its session. All 23 are session codes. No second kind of difference is hiding among them.
+
+**Scope.**
+
+- A session code is a code recorded with no run attached, in the session's flags file or in the acceptance
+  record's emitted flags. That is the analysis's rule and I adopt it as stated.
+- The twin reads those two sources itself. It takes nothing from the analysis's output and still imports
+  nothing from `joulewise`.
+- It applies at every stage that reads the session's archive: fit now, and held-out and all later.
+- **The blinded stage is unchanged on both sides.** It reads only the export, and the export carries run codes
+  only. Its lists therefore hold run codes only. That is a stated limit of that stage, and the row below says
+  so. The export is not changed.
+- An exclusion code of a restored run in a flagged-inclusive cell did not arise. If it does at stage 2, the
+  same reading answers it: it is a code recorded on a kept run of that cell, and it is listed.
+
+**Conditions on the change.**
+
+1. Built by a seat that has this ruling and the attribution report and nothing else from the run. Cold review.
+2. Failing first: the synthetic fixture today holds run codes only. A session code is added to it, the
+   unchanged twin is shown to disagree, and the changed twin to agree.
+3. All nineteen synthetic campaigns: zero fields above the bar.
+4. The rerun on the fit set: return code 0, zero fields above the bar at both stages, and a predictions file
+   byte-identical to `a6cb172c…5f19`. The rerun's file is the one committed.
+5. If any flag row is still above the bar, stop. Do not widen the change. It is attributed as RL-80 says.
+6. The RL-44 census is re-run before the commitment, as already ruled.
+
+**Before the held-out agreement, not before the commitment.** The nineteen campaigns missed both differences
+for the same reason: the fixture did not carry the feature. The anchor fix added an optional anchor profile.
+Before stage 2, at least one of the nineteen runs with a nonzero anchor profile and a session code, so the
+registered agreement exercises what the real data exercises.
+
+### The deviation row
+
+One row in `docs/registrations/bytes_deviation_log.md`, entered before the commitment and after condition 4
+is met. If condition 4 is not met as written, the last sentence is not entered and it comes back to me.
+
+> "BY-AGREE-1 (entered 2026-11-11, before the stage-1 commitment; blind to every BYTES energy). The first
+> stage-1 run on real data stopped at §12's bar: 390 of 59,068 fields differed between the analysis and its
+> twin, in every fit cell. No central estimate differed. The difference was attributed from this
+> registration's text and the two programs before any value was compared (research lead rulings RL-80 and
+> RL-82). (1) Timing bound. The twin took the rails anchor-shift term from an export column, which holds the
+> whole sampling window's envelope under the member's own calibration bound. §7 item 4 requires the
+> decode-phase term re-derived under the session's operative timing bound, which is what the analysis
+> computes. The twin was corrected. The synthetic campaigns had not shown the difference because their
+> fixture set every anchor term to zero. (2) Flags. At the stages that read a session's archive, the analysis
+> lists in each cell the codes recorded on the session as well as those recorded on the cell's runs; the twin
+> listed the runs' codes only. §6 defines a flag as a code on a run or session, and §15 prints each cell's
+> flags without saying which. Ruled: a cell's flags are the codes on its kept runs and on its session. The
+> twin was changed to match. The 23 codes concerned are all disclose-only, so no number, exclusion or word
+> depends on the ruling. The blinded stage reads only the export, which carries run codes, so its lists hold
+> run codes only. The analysis was not changed in either case and its digest is the registered one. After
+> both changes the two implementations agree at §12's bar on the fit set and on all nineteen synthetic
+> campaigns, and the committed predictions are byte-identical to the file the first run wrote."
+
+### For the paper
+
+Where the BYTES tables print flags, the note says they are the codes recorded on a cell's kept runs or on its
+session. The account of the stage-1 stop that RL-80 put on the Part 2 list now has its content: this row.
+
+**Reason.** The registration defines a flag to include session codes and binds a program that prints them.
+The check was narrower than the thing it checks. The stop, the attribution and the two repairs all happened
+with the predictions uncommitted and no value compared.
+
+**Blind status.** Blind to every BYTES energy, power and duration, fit set and held-out. I now know the names
+of 23 disclose-only session codes recorded in the BYTES sessions, from a probe output that passed a blinding
+review. They are not outcomes, and I read them after fixing the grounds above.
+
+---
+
+# Decision request 52: three items parked by the interim lane lead (2026-11-11 12:52 PST)
+
+**Read.** On `ops/2026-11-11-w1-presign` @ `5df1afbf8`: where each window-level code is raised
+(`joulewise/b6/acceptance.py`, `code_check.py`, `model_files.py`, `precheck_lane.py`, `joulewise/b5/harvest.py`),
+`scripts/harvest_b6_session.py`, `joulewise/b6/session.py` (`accept_archive`), the contents of
+`configs/campaigns/align_v4/registration/`, the prepare checks in `scripts/align_v4_session.py`, the
+HELD-WINDOWS row, `joulewise/battery_float.py`, `scripts/align_v4_battery_log.py` and the note in
+`tests/test_battery_float_sweep.py`.
+
+## RL-83. Seven codes are acceptance-only, not five, and an eighth cannot fire either; the battery registry is left alone
+
+### (a) The list, by reading the code
+
+RL-71 said five and said the harvest raises `precheck.certain_exclusion`. I took both from the lane's trace.
+Both were wrong.
+
+**Why the acceptance codes cannot fire in v4.** The desk harvest script does call the acceptance step. The v4
+kit's registration directory holds no acceptance registration, so the step returns
+`precheck.acceptance_unavailable`, which is disclose-only, before it evaluates anything. The pilots' kits did
+carry one. "v4 does not run acceptance" is the wrong description; "in v4 the acceptance step has nothing to
+evaluate against" is the right one, and it holds only while that directory holds no acceptance file.
+
+**Raised only inside that step (7):**
+
+| Code | Condition | v4's signal |
+|---|---|---|
+| `code.number_bearing_unreviewed` | Number-bearing code is not the registered code | STRICT receipt check at arm |
+| `model.files_differ_from_registered` | Model files are not the registered ones | Weight-digest check at prepare (RL-62) |
+| `model.stack_differs_from_registered` | The runtime stack is not the registered one | Runtime-stack check at prepare (RL-73) |
+| `structure.chain_crashed`, `structure.missing_stage_bundles`, `structure.no_capture_records`, `structure.no_roster` | The harvest's view of the window is incomplete | The desk fault and the members' own classes |
+
+Both prepare checks are present on the pre-signing branch and each sets the previous-window hold on a
+mismatch. So the two model codes are covered.
+
+**Raised only by the Block 6 loop's pre-check, which v4 does not run (1):** `precheck.certain_exclusion`. It
+stays in the held set, where it is harmless. v4's own prepare refuses on the conditions that pre-check looked
+for.
+
+**Raised by the harvest itself (2):** `records.source_changed_during_harvest` and
+`roster.no_science_bundles`. These are the only held reasons that can occur in v4.
+
+**Two edits to the HELD-WINDOWS row.**
+
+1. For "`records.source_changed_during_harvest`, `roster.no_science_bundles` and
+   `precheck.certain_exclusion`, which the harvest itself raises, are the **held reasons**" put:
+   "`records.source_changed_during_harvest` and `roster.no_science_bundles`, which the harvest itself raises,
+   and `precheck.certain_exclusion` are the **held reasons**".
+2. For the passage from "**Cannot be raised in v4:**" to "at prepare." put:
+
+> "**Cannot be raised in v4:** seven window-level codes of the catalog are raised only inside the Block 6
+> acceptance step. The v4 kit carries no acceptance registration, so in v4 that step returns
+> `precheck.acceptance_unavailable` (disclose-only) and evaluates nothing. Each condition is covered by the
+> signal named above: `code.number_bearing_unreviewed` (the STRICT receipt check at arm);
+> `model.files_differ_from_registered` (the weight-digest check at prepare);
+> `model.stack_differs_from_registered` (the runtime-stack check at prepare); `structure.chain_crashed`,
+> `structure.missing_stage_bundles`, `structure.no_capture_records` and `structure.no_roster` (the desk fault
+> and the members' own classes). An eighth, `precheck.certain_exclusion`, is raised only by the Block 6
+> loop's pre-check, which v4 does not run; it stays among the held reasons and cannot occur."
+
+One thing follows for the series. An acceptance file added to that directory later would switch the step on
+and change what a v4 window's record carries. No file is added to the v4 registration directory after
+signing without coming to me. I do not ask for a mechanical check of that under the cut-off.
+
+### (b) `topup_log` stays out of `battery_float.PHASES`
+
+No edit. `joulewise/battery_float.py` is in the Block 5 registration, the v5 sealed inventory and the pin
+registry. A change to its bytes moves digests that closed blocks pin, which is the trouble RL-57 and RL-58
+dealt with, and here it would buy nothing: no production code reads `PHASES`, `observe` does not check a
+phase against it, and no gate admits the phase. The label is bound where it is used, in
+`scripts/align_v4_battery_log.py`. The test that asserts a top-up record can enter no gate is the right
+guard, and the lead's test-side registration stands. No deviation row: nothing registered says the tuple is
+exhaustive.
+
+### (c) The `workload.py` row
+
+Noted as pending. I read it when the kit change lands on the pre-signing branch.
+
+**Reason.** A row that says why a code cannot fire has to give the real reason, because the real reason has a
+condition attached. And a registry nobody reads is not worth moving a closed block's digest for.
+
+**Blind status.** Blind: no v4 outcome exists. Code and registration text only.
+
+---
+
+# Decision request 53: five items parked by the follow-up kit's cold review (2026-11-11 12:52 PST)
+
+**Read.** The cold review on `ops/2026-11-11-r1-followup-kit` (`docs/run_reports/2026-11-11-r1-followup-kit-coldreview.md`):
+findings F-4 and F-8 to F-10 and the five parked items. In the kit at `f0c825779`: the predecessor member
+(`r1_runtime.py:1937-1954`), the condition-13 list (`v4_registration.py:482-487`), the contract module and
+the launcher, and the registered classifier's rule and its coverage handling
+(`smc_enumeration.py:25-37, 503-604`). No measurement.
+
+## RL-84. The predecessor runs as W1 runs it; Tf08 is recorded wherever the sidecar runs, in W1 too; the bar is per key, as registered
+
+### P-1: RL-72 D1 governs the predecessor
+
+The 30B predecessor is there so that step-D starts from the state a W1 member starts from. W1's ungated 30B
+members run no sidecar. So the rehearsal's predecessor runs none: the line that adds the sensors policy to it
+is removed, and the existing refusal ("must be the ordinary unmodified 30B template") stays.
+
+Removing the `launch_lineage_required` tag is permitted, since no R1 member runs under a launch lineage. It is
+the only derivation, and the member's record says so beside the template's digest.
+
+RL-78's "every member" was loose. It meant every member that runs the thermal sidecar: a member without one
+has no journal for the key to go in, and adding a sidecar to an ungated member would change a measured member
+of W1 for a disclosure that does not need it. Step-D records Tf08 from its own pre-warmup, which is the
+reading the comparison uses.
+
+**One edit to the WP14(a)-R1-SLOW row.** For "The heatsink key Tf08 is journalled, record-only, in every
+member (`record_keys` in the sidecar policy; the gate module is unchanged)." put:
+
+> "The heatsink key Tf08 is journalled, record-only, in every member that runs the thermal sidecar
+> (`record_keys` in the sidecar policy; the gate module is unchanged). Members that run no sidecar, the
+> ungated 30B members, are unchanged."
+
+### P-2: yes, on the W1 side too
+
+That was the point of RL-78: without it the gate's blind spot is unrecorded in every window of the series.
+Before signing, the W1 kit's thermal policy carries `record_keys` holding R0's heatsink pick for every member
+that runs the sidecar, and the kit's check fails without it. The key is a registered constant, not an R1
+result. It is a W1 configuration change and RL-78 ordered it; it is not under RL-53's cut-off. W1's ungated
+30B members get no sidecar.
+
+### P-3: per key, which is what the registered classifier already does
+
+The registered rule's coverage sentence is applied key by key: a key that fails it is rejected with its
+reason and classification goes on. The kit's bar is stricter than the registration and is brought back to it.
+
+- **The sampler's bar fails the smoke.** In every phase the sampling process takes at least 99% of its
+  one-second sweeps and never misses two in a row. That is the stall RL-74 found, and it is a property of the
+  process.
+- **A key's bar rejects the key.** A key under 99% of cells, at 1% read errors or more, or with two
+  consecutive empty cells in any phase is not a candidate for either role or for the fallback. The table lists
+  it with its R0 class, the phase and the reason.
+- **Tf08 failing its own bar fails the smoke**, because the disclosure depends on it. The two picked keys pass
+  by construction.
+
+I see the rejected keys in the table before the arm, as RL-78 already requires.
+
+### P-4: yes, and the classifier with them
+
+Condition 13 lists the code that rehearsed. The contract module declares which kinds exist and which fields a
+slot must carry, and the launcher is the entry point; both ran. The classifier
+(`joulewise/align/apple/smc_enumeration.py`) turns the record into the pick, which is a slot. All three join.
+The list is ten paths:
+
+`scripts/align_r1_rehearsal.py`, `scripts/align_r1_runtime.py`, `joulewise/align/apple/r1_runtime.py`,
+`joulewise/align/apple/r1_runtime_contract.py`, `joulewise/align/apple/smc_enumeration.py`,
+`joulewise/align/apple/thermal_gates.py`, `configs/align/v4/r1_runtime.json`,
+`joulewise/align/apple/r1_phase_table.py`, `joulewise/align/apple/workload.py`,
+`joulewise/align/apple/thermal.py`.
+
+The test pins that literal set (the review's F-5). The R1-PHASE-TABLE row's condition-13 sentence names all
+ten (its F-8): "at signing the R1 driver, the R1 runtime with its launcher and contract module, the sensor
+classifier, the thermal-gate module, the R1 runtime configuration, this module,
+`joulewise/align/apple/workload.py` and `joulewise/align/apple/thermal.py` are byte-identical to the files at
+the commit that ran the slot-producing night", citing RL-61, RL-72, RL-78 and RL-84.
+
+The night must therefore run the final bytes of all ten. The kit's round 3 is editing the contract now, which
+is fine before the smoke and not after the night.
+
+### P-5: twenty minutes was an estimate
+
+So was RL-78's "fifty-minute test". The ruled 1,200 s is the G0 cap and nothing else. F-4 is an engineering
+fix as the reviewer proposes: Part B is bounded by the member's own bounds, which is still finite. It changes
+executed bytes, so it gets its delta review before the smoke.
+
+**Reason.** The rehearsal earns its slots by running what W1 runs. Each of these five is that principle
+applied: the same predecessor, the same sidecar policy, the registered coverage rule, the same files.
+
+**Blind status.** Blind: no v4 outcome exists. Code and review text only.
+
+---
+
+# Process calls reported by the lead (2026-11-11 12:52 PST)
+
+## RL-85. No objection to either; one is mine to confirm
+
+- **The test-only host-command guard allows bare `pmset -g` getters** and refuses `sudo`, setters and anything
+  else after `-g`. This is engineering and the lead's call. No objection.
+- **The twin-fix seat's read-scope exception.** This one bears on RL-80, so I confirm it in RL-82 above:
+  accepted as recorded, with the clean-seat cold review.
+- **The combined W1 pre-signing PR (#734)** waits for my final read after its CI comparison. I read it when
+  the lead says it is ready, with RL-83's two row edits, RL-84's two row edits and the `workload.py` row in
+  it.
+
+**Blind status.** Blind to v4 and to every BYTES value.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
