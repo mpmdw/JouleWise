@@ -1,37 +1,50 @@
 #!/bin/bash
-# Blinded, no-sudo recovery. Default: inspect and print the uninstall command.
-# Usage: scripts/post_window_unstrand.sh [--go] [--events PATH]
+# Blinded recovery. Default: inspect and print; host restore is opt-in.
+# Usage: scripts/post_window_unstrand.sh [--go] [--restore-host] [--events PATH]
 #        [--wait-seconds N] PLAN_CUSTODY_DIR
 # Uninstall authority: docs/phase_2/derivation_night_runbook.md §1.4.
 # R1's arm helper delegates to the same install_night_agent.sh --uninstall.
 set -euo pipefail
 
 usage() {
-  echo "usage: $0 [--go] [--events PATH] [--wait-seconds N] PLAN_CUSTODY_DIR" >&2
-  echo "Completed windows only: a window refused before its chain started is not covered." >&2
+  echo "usage: $0 [--go] [--restore-host] [--events PATH] [--wait-seconds N] PLAN_CUSTODY_DIR" >&2
+  echo "Completed windows, or a delivered REFUSED result for this plan with no chain markers or live night process." >&2
+  echo "--restore-host requires --go; restores owed host state after verified uninstall." >&2
   exit 2
 }
 go=0
+restore_host=0
 events="${MAGISTRATE_WATCHDOG_CUSTODY_ROOT:-$HOME/night-custody/magistrate}/events.jsonl"
 wait_seconds=330
 custody=""
 while (( $# )); do
   case "$1" in
     --go) go=1; shift ;;
+    --restore-host) restore_host=1; shift ;;
     --events) [[ $# -ge 2 && -n "$2" ]] || usage; events="$2"; shift 2 ;;
     --wait-seconds) [[ $# -ge 2 && "$2" =~ ^[0-9]+$ ]] || usage; wait_seconds="$2"; shift 2 ;;
     --*) usage ;;
     *) [[ -z "$custody" ]] || usage; custody="$1"; shift ;;
   esac
 done
+if (( restore_host && ! go )); then
+  echo 'Refused: --restore-host requires --go.' >&2; exit 2
+fi
 [[ -n "$custody" && -d "$custody" ]] || usage
 logical_custody="$(CDPATH= cd -L -- "$custody" >/dev/null && pwd -L)"
 custody="$(CDPATH= cd -- "$custody" >/dev/null && pwd -P)"
 script_dir="$(CDPATH= cd -- "$(dirname "${BASH_SOURCE[0]}")" >/dev/null && pwd -P)"
 plan="$custody/night_plan.json"
 [[ -f "$plan" ]] || { echo 'Refused: night_plan.json is missing.' >&2; exit 1; }
-for marker in chain.exited result.json courier.sent; do
-  # Existence only. Never open, parse, cat or print these blinded records.
+unstrand_path=completed
+markers=(chain.exited result.json courier.sent)
+if [[ ! -e "$custody/night/chain.started" && ! -e "$custody/night/chain.exited" ]]; then
+  unstrand_path=pre_chain_refusal
+  markers=(result.json)
+fi
+for marker in "${markers[@]}"; do
+  # Completed-window records remain existence-only. The new refusal path
+  # reads only the structural result/delivery fields below, never payloads.
   [[ -e "$custody/night/$marker" ]] || {
     echo "Refused: required night/$marker is missing." >&2; exit 1;
   }
@@ -39,7 +52,8 @@ done
 
 # A process-table failure is a hold. Print neither argv nor custody payloads.
 # Also refuse to remove jobs belonging to a different (possibly future) plan.
-python3 -B - "$custody" "$$" "$logical_custody" <<'PY'
+python3 -B - "$custody" "$$" "$logical_custody" "$unstrand_path" <<'PY'
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -55,6 +69,43 @@ def refuse(message):
 root = Path(sys.argv[1])
 try:
     metadata = json.loads((root / "night_plan.json").read_bytes())
+    if sys.argv[4] == "pre_chain_refusal":
+        night = root / "night"
+        try:
+            result_bytes = (night / "result.json").read_bytes()
+            result = json.loads(result_bytes)
+        except (OSError, ValueError):
+            refuse("pre-chain result is unreadable or invalid JSON.")
+        if not isinstance(result, dict):
+            refuse("pre-chain result is not a JSON object.")
+        plan_id = metadata.get("plan_id")
+        if not isinstance(plan_id, str) or not plan_id or result.get("plan_id") != plan_id:
+            refuse("pre-chain result belongs to a different plan.")
+        verdict = result.get("verdict")
+        if verdict != "REFUSED":
+            if verdict in ("GO", "ABORTED"):
+                refuse("pre-chain result verdict is " + verdict + ", not REFUSED.")
+            refuse("pre-chain result verdict is not REFUSED.")
+        if result.get("chain_exit_code") is not None:
+            refuse("pre-chain result has a chain exit code.")
+        if not (night / "courier.sent").exists():
+            refuse("pre-chain courier.sent is missing.")
+        # Same transport evidence as align_v4_next_arm_packet.py's
+        # terminal_release_check, without reading outcome/receipt payloads.
+        def structural_record(name):
+            try:
+                value = json.loads((night / name).read_bytes())
+                return value if isinstance(value, dict) else {}
+            except (OSError, ValueError):
+                return {}
+        if structural_record("courier.json").get("sent") is not True:
+            receipt = structural_record("courier.delivery.json")
+            commit = receipt.get("commit")
+            if not (receipt.get("transport") == "git-push" and receipt.get("plan_id") == plan_id
+                    and receipt.get("ref") == "refs/heads/night-results/" + plan_id
+                    and receipt.get("result_sha256") == hashlib.sha256(result_bytes).hexdigest()
+                    and isinstance(commit, str) and re.fullmatch(r"[0-9a-f]{40,64}", commit)):
+                refuse("pre-chain result delivery is unproven.")
     custody_names = {str(root), sys.argv[3]}
     declared = metadata.get("custody_root")
     if declared is not None:
@@ -117,7 +168,9 @@ try:
             refuse("an installed job belongs to a different plan.")
 except Exception:  # malformed plist dates/nesting and unknown probe faults also hold
     refuse("process absence or installed plan identity is unproven.")
-print("Completion markers exist; no chain, driver or window process observed.")
+print("Completion markers exist; no chain, driver or window process observed."
+      if sys.argv[4] == "completed" else
+      "Delivered pre-chain refusal verified; no chain, driver or window process observed.")
 PY
 
 if (( go )); then
@@ -134,6 +187,136 @@ else
   printf '%q ' "$script_dir/install_night_agent.sh" --plan "$plan" --uninstall
   printf '\nUse --go to uninstall.\n'
   wait_seconds=0
+fi
+
+if (( restore_host )); then
+  python3 -B - "$script_dir/.." "$custody" "$unstrand_path" <<'PY'
+import json
+import os
+from pathlib import Path
+import re
+import sys
+import time
+from types import SimpleNamespace
+
+sys.path.insert(0, sys.argv[1])
+from joulewise.align.apple import powermode
+from scripts import run_night
+
+# No production behaviour override: synthetic tests patch the interpreter's
+# existing runner/default-path seams, never this entry-point guard.
+powermode.mark_production_entry("post_window_unstrand")
+root = Path(sys.argv[2])
+try:
+    with (root / "night_plan.json").open() as handle:
+        metadata = json.load(handle)
+    plan = SimpleNamespace(plan_id=metadata["plan_id"], custody_root=str(root),
+                           measurement_root=metadata["measurement_root"])
+    if not isinstance(plan.measurement_root, str) or not Path(plan.measurement_root).is_absolute():
+        raise ValueError("measurement root is unproven")
+    earlier_outcomes = []
+    for attempt in range(1, 21):
+        path = root / ("night/unstrand.restore." + str(attempt) + ".json")
+        try:
+            stream = path.open("x", encoding="utf-8")
+            break
+        except FileExistsError:
+            try:
+                previous = json.loads(path.read_bytes())
+                if not isinstance(previous, dict):
+                    raise ValueError("not an object")
+            except (OSError, ValueError):
+                print("Warning: host restore attempt " + str(attempt) + " record is unreadable; "
+                      "not counted as successful.", file=sys.stderr)
+                earlier_outcomes.append({"powermode": "unreadable", "network_time": "unreadable"})
+                continue
+            if previous.get("ok") is True:
+                print("Refused: host restore already succeeded in attempt " + str(attempt)
+                      + "; no host restore attempted.", file=sys.stderr)
+                raise SystemExit(1)
+            # History carries action words only, never prior probe output/errors.
+            actions = previous.get("actions")
+            outcome = {}
+            for name in ("powermode", "network_time"):
+                action = actions.get(name) if isinstance(actions, dict) else None
+                word = action.get("action") if isinstance(action, dict) else None
+                outcome[name] = (word if isinstance(word, str)
+                                 and re.fullmatch(r"[a-z][a-z0-9_]{0,63}", word) else "unknown")
+            earlier_outcomes.append(outcome)
+    else:
+        print("Refused: host restore attempt limit (20) reached; no host restore attempted.", file=sys.stderr)
+        raise SystemExit(1)
+except Exception as error:
+    print("Refused: host restore setup failed (" + type(error).__name__ + ").", file=sys.stderr)
+    raise SystemExit(1)
+
+record = {"schema": "joulewise.unstrand_restore.v1", "plan_id": plan.plan_id,
+          "attempt": attempt, "earlier_attempt_outcomes": earlier_outcomes,
+          "epoch_s": time.time(), "path": sys.argv[3], "found": {}, "actions": {},
+          "deferred_to_measuring_night": False, "ok": False}
+lock = None
+try:
+    markers = run_night._power_markers(plan)
+    owed = run_night._night_turned_network_time_off(plan)
+    record["found"] = {"power_markers": {m: os.path.lexists(m) for m in markers},
+                       "network_time_restore_owed": owed}
+    lock = powermode.HostLock(role="post-window-unstrand:" + plan.plan_id)
+    # Cover network time too, even when restore_owed finds no power marker.
+    if not lock.acquire():
+        record["deferred_to_measuring_night"] = True
+        record["actions"] = {"powermode": {"action": "deferred_measuring_night"},
+                             "network_time": {"action": "deferred"}}
+    else:
+        record["found"]["power_markers"] = {m: os.path.lexists(m) for m in markers}
+        owner = {"custody_root": str(root), "plan_path": root / "night_plan.json"}
+        w1 = [m for m in markers if os.path.lexists(m) and powermode.w1_marker(m)]
+        # A different armed session's W1 obligation is never ours to clear.
+        if any(not powermode.owned_by(m, **owner) for m in w1):
+            record["actions"]["powermode"] = {"action": "not_owner"}
+            record["refused"] = "other_session_owns_host_state"
+        else:
+            probes = run_night.make_probes()
+            record["found"]["ac_powermode"] = powermode.read_ac_powermode(
+                runner=lambda argv: probes.run(tuple(argv)))
+            record["found"]["network_time"] = run_night._leave_network_time(probes, skipped=False)
+            power = powermode.restore_owed(markers, runner=lambda argv: probes.run(tuple(argv)),
+                lock=lock, owner=owner if w1 else None, reason="post_window_unstrand")
+            record["actions"]["powermode"] = power
+            if power.get("action") == "not_owner":
+                record["refused"] = "other_session_owns_host_state"
+            else:
+                network = (run_night._restore_network_time(probes) if owed else {"action": "not_owed"})
+                record["actions"]["network_time"] = network
+                # Match the terminal restore in scripts/run_night.py:4593-4594.
+                record["ok"] = (power.get("action") in ("none", "restored")
+                                and (not owed or network.get("ok") is True
+                                     or network.get("verified") is True))
+except Exception as error:
+    record["error"] = type(error).__name__
+finally:
+    try:
+        if lock is not None:
+            lock.release()
+    finally:
+        with stream:
+            json.dump(record, stream, sort_keys=True, indent=2)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+if record["deferred_to_measuring_night"]:
+    print("Refused: host restore deferred to a measuring night; recorded deferred.", file=sys.stderr)
+elif record.get("refused") == "other_session_owns_host_state":
+    print("Refused: another armed session owns the host state; nothing was changed.", file=sys.stderr)
+elif not record["ok"]:
+    print("Refused: host restore failed (" + record.get("error", "see restore record") + ").", file=sys.stderr)
+else:
+    print("Owed host state restored; write-once host restore record saved.")
+raise SystemExit(0 if record["ok"] else 1)
+PY
+else
+  printf 'Host restore command: '
+  printf '%q ' "$script_dir/post_window_unstrand.sh" --go --restore-host --events "$events" --wait-seconds 0 "$custody"
+  printf '\n'
 fi
 
 # Recent transition state words only; never emit reasons, alerts or payloads.
