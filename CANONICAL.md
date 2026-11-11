@@ -38,11 +38,8 @@ The magistrate on the MacBook Pro owns running, re-running and arming windows
 | v4 kit and sessions | `scripts/align_v4_kit.py`, `scripts/align_v4_session.py` on the R1 integration line (`lane/2026-11-06-v4-r1-integrated`); the WP17 versions are also on the measurement lane. Not on `main` | — |
 | Window records | Record branches `records/<date>-align-*` and `docs/align/r0/<date>/` (cited from `RUN_STATE.md`) | — |
 | Window state and outcome (read-only shadow) | `joulewise/window_state.py`; `python3 -m joulewise.window_state <custody_root> [--json]` reads structural markers only; synthetic coverage in `tests/test_window_state.py` | — |
-<<<<<<< HEAD
 | Owed host side effects (read-only shadow) | `joulewise/host_effects.py`; `python3 -m joulewise.host_effects --state-dir D [--json]` combines fixed-name records with caller-supplied live facts; synthetic coverage in `tests/test_host_effects.py` | — |
-=======
 | Air results watcher (structure only) | `scripts/air/night_results_watch.py`; `--once` or `--loop` polls results refs without checkout or SSH; usage and launchd text in `scripts/air/README.md`; synthetic coverage in `tests/test_night_results_watch.py` | Lead's scratch zsh watcher, only after the current chain exits |
->>>>>>> origin/main
 | Block-5 window harvest (collection finished) | `scripts/harvest_b5_window.py` + `joulewise/b5/**` | `scripts/harvest_g2a_window.py` (kept because `joulewise/v5_qualification.py` imports it); CA-42 arm/T-0 retirement (#668) is held by the live ALIGN v4 artifact/registration inventory; see `docs/run_reports/2026-11-10-file-prune-g3.md` |
 | Exit-code vocabularies and classification (shadow only) | `joulewise/exit_contract.py`: immutable tables, fail-closed classifier and future plan-contract parser; no existing tool adopts it | — |
 
