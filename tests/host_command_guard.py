@@ -21,6 +21,12 @@ class HostCommandRefused(RuntimeError):
 REFUSALS = []
 _DENIED = {"sudo", "systemsetup", "pmset", "caffeinate", "shutdown", "nvram"}
 _LAUNCH_WRITES = {"bootstrap", "bootout", "load", "unload", "kickstart", "enable", "disable", "remove"}
+# Transparent wrappers run their trailing argument vector as a command (cold review F-3).
+_WRAPPERS = {"nohup", "nice", "timeout", "gtimeout", "time", "command", "exec", "builtin", "xargs",
+             "stdbuf", "arch", "sandbox-exec", "chroot", "doas", "su", "watch"}
+_LAUNCH_EXEC = {"asuser", "bsexec"}
+# Shell grouping and substitution open a new simple command (cold review F-3).
+_SHELL_OPENERS = ("$(", "`", "(", ")", "{", "}")
 _originals = []
 _expected = set()
 _active_test = None
@@ -36,7 +42,10 @@ def _names(value):
 
 def simple_commands(command):
     """Tokenize shell command lists without executing or expanding anything."""
-    lexer = shlex.shlex(os.fsdecode(command), posix=True, punctuation_chars=";&|\n")
+    command = os.fsdecode(command)
+    for opener in _SHELL_OPENERS:
+        command = command.replace(opener, " ; ")
+    lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|\n")
     lexer.whitespace = " \t\r"
     lexer.whitespace_split = True
     lexer.commenters = "#"
@@ -87,11 +96,21 @@ def classify(command, *, shell=False, executable=None):
                     break
             found.extend(classify(rest))
             continue
+        if names & _WRAPPERS:
+            # Classify every trailing suffix: wrapper options are skipped without parsing them.
+            for index in range(1, len(argv)):
+                inner = classify(argv[index:])
+                if inner:
+                    found.extend(inner)
+                    break
+            continue
         denied = sorted(names & _DENIED)
         if denied:
             found.append((denied[0], raw))
         elif "launchctl" in names and len(argv) > 1 and argv[1] in _LAUNCH_WRITES:
             found.append(("launchctl", raw))
+        elif "launchctl" in names and len(argv) > 3 and argv[1] in _LAUNCH_EXEC:
+            found.extend(classify(argv[3:]))
         elif names & {"networksetup", "scutil"} and any(a.startswith(("-set", "--set")) for a in argv[1:]):
             found.append((sorted(names & {"networksetup", "scutil"})[0], raw))
         elif names & {"sh", "zsh", "bash", "dash", "ksh"}:

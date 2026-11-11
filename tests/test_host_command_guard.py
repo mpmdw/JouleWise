@@ -78,6 +78,32 @@ class HostCommandGuardTests(unittest.TestCase):
             self.assertEqual(records[0]["command"], "sudo")
         self.assertEqual(subprocess.run(["git", "--version"], capture_output=True).returncode, 0)
 
+    def test_launchctl_verbs_wrappers_and_shell_groups(self):
+        # Cold review F-1/F-3: literal lists, so emptying the guard's own sets cannot pass vacuously.
+        for sub in ("bootstrap", "bootout", "load", "unload", "kickstart", "enable", "disable", "remove"):
+            self.assertEqual(guard.classify(["/bin/launchctl", sub, "gui/501/fake"])[0][0], "launchctl", sub)
+        refused = [
+            (["nohup", "sudo", "true"], {}), (["timeout", "-s", "KILL", "5", "pmset", "-g"], {}),
+            (["nice", "-n", "10", "caffeinate", "-i", "true"], {}), (["xargs", "-n", "1", "sudo"], {}),
+            (["/usr/bin/time", "systemsetup", "-getusingnetworktime"], {}),
+            (["launchctl", "asuser", "501", "launchctl", "bootstrap", "gui/501", "x"], {}),
+            ("command sudo true", {"shell": True}), ("exec pmset -g", {"shell": True}),
+            ("(sudo true)", {"shell": True}), ("echo $(pmset -g)", {"shell": True}),
+            ("echo `nvram -p`", {"shell": True}), ("{ shutdown -h now; }", {"shell": True}),
+        ]
+        for command, kwargs in refused:
+            self.assertTrue(guard.classify(command, **kwargs), command)
+        allowed = [(["nohup", "python3", "x.py"], {}), (["timeout", "5", "git", "status"], {}),
+                   (["launchctl", "asuser", "501", "git", "status"], {}),
+                   ('git commit -m "note (pmset) text"', {"shell": True})]
+        for command, kwargs in allowed:
+            self.assertEqual(guard.classify(command, **kwargs), [], command)
+        with guard.expect_refusals() as records, patch("subprocess._fork_exec") as fork:
+            with self.assertRaises(guard.HostCommandRefused):
+                subprocess.run(["nohup", "sudo", "-n", "true"])
+            fork.assert_not_called()
+        self.assertEqual([r["command"] for r in records], ["sudo"])
+
     def test_child_interpreter_reports_even_swallowed_refusal(self):
         class Leaky(unittest.TestCase):
             def runTest(self):
