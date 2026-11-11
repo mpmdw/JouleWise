@@ -44,7 +44,8 @@ def series_ac_powermode(measurement_root, kit_path=kit.KIT):
 
 
 def prepare(measurement_root, session_root, *, power_runner=None, window_id=None, extra_sentinels=0,
-            frequency_reader=None, frequency_runner=None, frequency_preflight=None, weight_identity_fn=None, **kwargs):
+            frequency_reader=None, frequency_runner=None, frequency_preflight=None, weight_identity_fn=None,
+            runtime_runner=None, runtime_reader=None, **kwargs):
     from joulewise.align.apple import powermode
     preflight = powermode.host_lock_preflight(role='v4-prepare-preflight')
     # Lead ruling R6-7: at every session start a host-level High Power marker
@@ -87,12 +88,13 @@ def prepare(measurement_root, session_root, *, power_runner=None, window_id=None
         state = {'measurement_root': str(measurement_root), 'preparation_status': 'INPUTS_ONLY',
                  'registration_dir': str(Path(measurement_root) / kwargs['kit'] / 'registration'),
                  'host_state_preflight': preflight}
-        weights = weight_digest_preflight(state, identity_fn=weight_identity_fn)
+        weights = _prepare_weight_digests(state, identity_fn=weight_identity_fn)
         if weights['ok']:
             raise
         state['weight_digest_preflight'] = weights
+        _prepare_mismatch_hold(state, weights['reasons'])
         pilot.h.write(session / 'session.json', state)
-        raise ValueError('; '.join(weights['reasons'])) from exc
+        raise ValueError(_prepare_refusal_text(state, weights['reasons'])) from exc
     state['host_state_preflight'] = preflight
     privileges = (host_privilege_preflight(runner=power_runner) if powermode.host_state_override() is None
                   else {'ok': True, 'skipped': 'host-state test override', 'reasons': []})
@@ -104,12 +106,17 @@ def prepare(measurement_root, session_root, *, power_runner=None, window_id=None
     # The prepared plan supplies the actual stream span and registered budget.
     # A second, fresh check at install owns any intervening network-time ON.
     frequency = None
-    weights = None
+    weights = runtime = None
     if privileges['ok'] and state.get('preparation_status') == 'STAGED':
         # RL-62: prepare stages the plan; it never calls arm_checks or its
         # pre_dwell/stamp. Hashing ends here, long before that install path.
-        weights = state['weight_digest_preflight'] = weight_digest_preflight(state, identity_fn=weight_identity_fn)
-    if privileges['ok'] and (weights is None or weights['ok']) and state.get('preparation_status') == 'STAGED':
+        weights = state['weight_digest_preflight'] = _prepare_weight_digests(state, identity_fn=weight_identity_fn)
+        runtime = state['runtime_stack_preflight'] = runtime_stack_preflight(
+            str(Path(state['measurement_root']) / '.venv/bin/python'), _registration_dir(state) / 'identity_pins.json',
+            runner=runtime_runner, reader=runtime_reader)
+        _prepare_mismatch_hold(state, weights.get('reasons', []) + runtime['reasons'])
+    if (privileges['ok'] and (weights is None or weights['ok']) and (runtime is None or runtime['ok'])
+            and state.get('preparation_status') == 'STAGED'):
         lock = powermode.HostLock(role='v4-prepare-frequency')
         try:
             if not lock.acquire():
@@ -122,8 +129,10 @@ def prepare(measurement_root, session_root, *, power_runner=None, window_id=None
     pilot.h.write(Path(session_root) / 'session.json', state)
     if not privileges['ok']:
         raise ValueError('; '.join(privileges['reasons']))
-    if weights is not None and not weights['ok']:
-        raise ValueError('; '.join(weights['reasons']))
+    failures = [reason for block in (weights, runtime) if block is not None and not block['ok']
+                for reason in block['reasons']]
+    if failures:
+        raise ValueError(_prepare_refusal_text(state, failures))
     if frequency is not None and not frequency['ok']:
         raise ValueError(f"{frequency['cause']}: {frequency['reason']}")
     if series_state is not None:
@@ -137,15 +146,106 @@ def prepare(measurement_root, session_root, *, power_runner=None, window_id=None
     return state
 
 
-def _registered_weight_roots(state, *, members=None):
+def _registration_dir(state):
+    return Path(state.get('registration_dir', Path(state['measurement_root']) / kit.KIT / 'registration'))
+
+
+def _prepare_mismatch_hold(state, reasons):
+    """RL-62/71/73: a statement in THIS prepare only; never mutate history."""
+    if not any(r.startswith(('weight_digest_preflight: digest_mismatch:',
+                             'weight_digest_preflight: file_set_differs:',
+                             'runtime_stack_preflight: differs:')) for r in reasons):
+        return
+    from scripts import align_v4_next_arm_packet as builder
+    previous = None
+    try:
+        evidence = builder.GitEvidence(state.get('source_measurement_root') or state['measurement_root'])
+        head = evidence.git('rev-parse', '--verify', 'HEAD^{commit}').decode().strip()
+        ledger = builder.decode(evidence.read(evidence.commit(head), builder.SERIES_PATH))
+        link = ledger['previous_record']
+        record = builder.WindowRecord(evidence, link['commit'], link['path'])
+        builder.require(record.sha256 == link['sha256'], 'previous record digest mismatch')
+        previous = record.window
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        pass                         # no authenticated prior id available; record null
+    state['holds_previous_window'] = previous
+
+
+def _prepare_refusal_text(state, reasons):
+    text = '; '.join(reasons)
+    if 'holds_previous_window' in state:
+        text += (f"; holds_previous_window: {state['holds_previous_window'] or 'null'}; "
+                 'held until it is shown when the files/stack changed')
+    return text
+
+
+def _runtime_stack_reasons(registered, observed):
+    for label, value in (('registered', registered), ('installed', observed)):
+        if (not isinstance(value, dict) or not isinstance(value.get('packages'), dict)
+                or not all(isinstance(k, str) and k for k in value['packages'])):
+            raise ValueError(f'{label} runtime_versions must contain a packages map')
+    if not (registered['packages'] or observed['packages']):
+        raise ValueError('no registered or installed package versions')
+    reasons = []
+    pairs = [('python', registered.get('python', '<missing>'), observed.get('python', '<missing>'))]
+    pairs += [(name, registered['packages'].get(name, '<missing>'), observed['packages'].get(name, '<missing>'))
+              for name in sorted(registered['packages'].keys() | observed['packages'].keys())]
+    for name, expected, found in pairs:
+        if expected != found:
+            reasons.append(f'runtime_stack_preflight: differs: {name}: registered {expected} installed {found}')
+        if (any(not isinstance(v, str) or not v.strip() for v in (expected, found))
+                or expected == found == '<missing>'):
+            reasons.append(f'runtime_stack_preflight: unreadable: {name}: registered {expected} installed {found}')
+    return reasons
+
+
+def runtime_stack_preflight(python, identity_pins, *, runner=None, reader=None):
+    """RL-73, reusable by any kit: metadata from its measurement interpreter.
+
+    runner has collect.runtime_versions(python)'s interface; reader returns the
+    decoded pins document. Neither this function nor the weight function uses
+    v4 session state. No runtime library or model is imported by the probe.
+    """
+    from joulewise.flags.collect import runtime_versions
+    started = time.monotonic()
+    record = {'source': 'prepare', 'registered': None, 'observed': None, 'ok': False, 'reasons': []}
+    try:
+        read = reader or (lambda path: json.loads(Path(path).read_bytes()))
+        record['registered'] = read(identity_pins)['runtime_versions']
+        record['observed'] = (runner or runtime_versions)(python)
+        record['reasons'] = _runtime_stack_reasons(record['registered'], record['observed'])
+    except (OSError, ValueError, RuntimeError, KeyError, TypeError, AttributeError) as exc:
+        record['reasons'].append(f'runtime_stack_preflight: unreadable: {type(exc).__name__}: {exc}')
+    record.update(ok=not record['reasons'], elapsed_s=time.monotonic() - started)
+    return record
+
+
+def _attested_runtime_stack(state, path):
+    record = {'source': 'attested', 'registered': None, 'observed': None, 'ok': False, 'reasons': []}
+    try:
+        document = pilot.h.read(path)
+        record.update(attested_by=document.get('attested_by'),
+                      attested_at_epoch_s=document.get('attested_at_epoch_s'), observed=document.get('observed'))
+        if not isinstance(record['attested_by'], str) or not record['attested_by'].strip():
+            raise ValueError('attested_by must name the operator')
+        record['registered'] = pilot.h.read(_registration_dir(state) / 'identity_pins.json')['runtime_versions']
+        if document.get('registered') != record['registered']:
+            raise ValueError('attested registered stack must equal the registered identity pins')
+        record['reasons'] = _runtime_stack_reasons(record['registered'], record['observed'])
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+        record['reasons'].append(f'runtime_stack_preflight: unreadable: attestation: {type(exc).__name__}: {exc}')
+    record['ok'] = not record['reasons']
+    return record
+
+
+def _registered_weight_roots(registration_dir, members, *, reader=None):
     """Use the kit's existing unit IDs; never resolve or inspect model paths."""
     # Same selected registration as _member_rows and bytes_h_session.prepare:
     # W1 uses align_v4/registration; series kits project the registered units
     # with _identities for their own member run IDs (align_v4_series:418-429).
-    directory = Path(state.get('registration_dir', Path(state['measurement_root']) / kit.KIT / 'registration'))
-    inventory = pilot.h.read(directory / 'model_artifact_inventory.json')['artifacts']
-    rows = pilot._member_rows(state, kit=kit.KIT) if members is None else members
-    units = sorted({pilot.h.align_unit_id(row['model_id'], row['run_id']) for row in rows})
+    read = reader or (lambda path: json.loads(Path(path).read_bytes()))
+    inventory = read(Path(registration_dir) / 'model_artifact_inventory.json')['artifacts']
+    units = sorted({pilot.h.align_unit_id(row['model_id'], row['run_id']) for row in members})
     groups, reasons = {}, []
     for unit in units:
         row = inventory.get(unit)
@@ -156,12 +256,22 @@ def _registered_weight_roots(state, *, members=None):
     return dict(sorted(groups.items())), reasons
 
 
-def weight_digest_preflight(state, *, identity_fn=None):
+def _prepare_weight_digests(state, *, identity_fn=None):
+    try:
+        members = pilot._member_rows(state, kit=kit.KIT)
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        return {'source': 'prepare', 'prepared_at_epoch_s': time.time(), 'roots': {}, 'ok': False,
+                'reasons': [f'weight_digest_preflight: unavailable: model_artifact_inventory.json: '
+                            f'{type(exc).__name__}: {exc}']}
+    return weight_digest_preflight(_registration_dir(state), members, identity_fn=identity_fn)
+
+
+def weight_digest_preflight(registration_dir, members, *, identity_fn=None, reader=None):
     """RL-62: the R0 identity function, once per planned root, at prepare only."""
     from joulewise.provenance import model_artifact_identity
     record = {'source': 'prepare', 'prepared_at_epoch_s': time.time(), 'roots': {}, 'ok': False, 'reasons': []}
     try:
-        groups, record['reasons'] = _registered_weight_roots(state)
+        groups, record['reasons'] = _registered_weight_roots(registration_dir, members, reader=reader)
     except (OSError, ValueError, KeyError, TypeError) as exc:
         record['reasons'].append(f'weight_digest_preflight: unavailable: model_artifact_inventory.json: '
                                  f'{type(exc).__name__}: {exc}')
@@ -217,7 +327,7 @@ def _attested_weight_digests(state, members, path):
             raise ValueError('attested_by must name the operator')
         if not isinstance(record['roots'], dict):
             raise ValueError('roots must map each planned root to its registered and observed folded_sha256')
-        groups, record['reasons'] = _registered_weight_roots(state, members=members)
+        groups, record['reasons'] = _registered_weight_roots(_registration_dir(state), members)
         if set(record['roots']) != set(groups):
             raise ValueError('attested roots must equal the planned registered roots')
         for root, units in groups.items():
@@ -1110,12 +1220,93 @@ def _record_bound(root, packet):
             and packet.get('series_sha256') == _sha256(ledger.stdout))
 
 
+# RL-65 item 2, narrowed to harvest-produced signals by RL-71.
+# RL-73's member runtime mismatch remains a lead follow-up: the committed
+# exclusions code alone cannot distinguish it from the arm identity mismatch.
+HELD_WINDOW_REASONS = frozenset({'records.source_changed_during_harvest',
+                                'roster.no_science_bundles', 'precheck.certain_exclusion'})
+
+
+def held_window_check(measurement_root, packet, *, ruling_path=None):
+    """Read only the rebuilt packet's authenticated previous final sources.
+
+    The packet currently rejects held_window_release ledger rows. The CLI
+    fallback uses the identical row shape/signature; its text source is a
+    committed blob at the rebuilt packet's series_commit, never a custody path.
+    """
+    from scripts import align_v4_next_arm_packet as builder
+    record = {'ok': False, 'window': None, 'held_reasons': [], 'reasons': [], 'ruling': None}
+    try:
+        evidence = builder.GitEvidence(measurement_root)
+        previous = builder.WindowRecord(evidence, packet['record_commit'], packet['record_path'])
+        builder.require(previous.sha256 == packet['record_sha256'], 'previous record digest mismatch')
+        builder.require(previous.window == packet['previous_window'], 'previous window mismatch')
+        record['window'] = previous.window
+        if not previous.has_final_sources():
+            # Same late-final source binding as the packet's last_desk_state:
+            # the authenticated ledger can name a successor carrying previous_final.
+            ledger = builder.decode(evidence.read(packet['series_commit'], builder.SERIES_PATH,
+                                                  packet['series_sha256']))
+            last = ledger.get('last_passed_record') or {}
+            if all(last.get(k) == packet['record_' + k] for k in ('commit', 'path', 'sha256')):
+                final_ref = last.get('final_record')
+                if final_ref is not None:
+                    builder.require(isinstance(final_ref, dict) and set(final_ref) == {'commit', 'path', 'sha256'},
+                                    'last desk-passed final_record malformed')
+                    successor = builder.WindowRecord(evidence, final_ref['commit'], final_ref['path'])
+                    builder.require(successor.sha256 == final_ref['sha256'], 'final record digest mismatch')
+                    previous.bind_final(successor)
+                    builder.require(previous.final_from is not None, 'final record carries no previous_final')
+        final_error = previous.final_evidence()
+        record['final'] = final_error is None
+        if final_error is not None:
+            record.update(ok=True, status='previous window not final: hold check deferred to its finality',
+                          finality_reason=final_error)
+            return record
+        if not previous.has_final_sources():
+            # A zero-capture record can be final without a harvest (R17).
+            record.update(ok=True, status='no final harvest: no capture')
+            return record
+        exclusions = previous.source('exclusions')
+        reasons = exclusions['reasons']
+        builder.require(isinstance(reasons, list) and all(isinstance(r, str) for r in reasons),
+                        'final exclusions reasons malformed')
+        record.update(claim_usable=exclusions['claim_usable'], final_reasons=reasons,
+                      held_reasons=sorted(HELD_WINDOW_REASONS.intersection(reasons)))
+        if not record['held_reasons']:
+            record.update(ok=True, status='no held reasons')
+            return record
+        if ruling_path is not None:
+            ruling = pilot.h.read(ruling_path)
+            fields = {'ruling_id', 'after_window', 'text', 'lead_signature', 'resets'}
+            builder.require(isinstance(ruling, dict) and set(ruling) == fields, 'held ruling row malformed')
+            builder.require(ruling['resets'] == 'held_window_release'
+                            and ruling['after_window'] == previous.window
+                            and isinstance(ruling['ruling_id'], str) and ruling['ruling_id'].strip()
+                            and kit.valid_lead_signature(ruling['lead_signature']),
+                            'held ruling identity/signature/window invalid')
+            text = evidence.source(packet['series_commit'], ruling['text'], json_value=False)
+            builder.require(bool(text.strip()), 'held ruling text empty')
+            record.update(ok=True, status='held reasons answered by signed ruling',
+                          ruling={**ruling, 'source': 'arm_cli', 'text_sha256': builder.digest(text)})
+        else:
+            record['reasons'].append(f"held_window: {previous.window}: "
+                                     + ', '.join(record['held_reasons']) + ': no signed ruling')
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+        if record['held_reasons']:
+            record['reasons'].append(f"held_window: {record['window']}: "
+                                     + ', '.join(record['held_reasons']) + ': no signed ruling')
+        record['reasons'].append(f'held_window: unreadable: {type(exc).__name__}: {exc}')
+    return record
+
+
 @timing_receipts.timed("arm", "v4_arm_checks")
 def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=None, owner=None,
                obc_off_attested_by=None, battery_runner=None, battery_log=None, window_battery_journal=None,
                now=None, next_arm_triage=None, commit_check=None, record_check=None,
                packet_builder=None, meter_probe=None, dwell_start=None, series_bind=None, pre_dwell=None,
-               watchdog_plist=None, watchdog_check=None, watchdog_plan=None, watchdog_plan_path=None):
+               watchdog_plist=None, watchdog_check=None, watchdog_plan=None, watchdog_plan_path=None,
+               held_window_ruling=None):
     """W1/D arm evidence: ruling 7 AC powermode and ruling 20 volumes.
 
     R17 review F7: every Git check (record commit, record binding) and the frozen-series binding
@@ -1211,6 +1402,8 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
                         'record_commit_exists': (commit_check or _commit_exists)(measurement_root, commit),
                         'record_bound': bool((record_check or _record_bound)(measurement_root, built))}
         series_binding = list(series_bind(built)) if series_bind is not None else None
+    held = held_window_check(measurement_root, built, ruling_path=held_window_ruling)
+    reasons += held['reasons']
     watchdog = (watchdog_check or watchdog_acceptance)(phase='pre_install', runner=runner,
         plist_path=watchdog_plist, plan=watchdog_plan, plan_path=watchdog_plan_path, now=now)
     if not watchdog['ok']:
@@ -1250,6 +1443,7 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
     reasons += ([] if internal['meter_reader_live'] else
                 ['next_arm_triage: triage meter_reader_live failed'])
     record = {'schema': ARM_RECORD_SCHEMA, 'admitted': not reasons, 'reasons': reasons,
+            'held_window_check': held,
             'watchdog_acceptance': watchdog,
             'next_arm_triage': triage,
             'ac_powermode': power, 'external_volumes': volumes, 'battery': battery,
@@ -1624,7 +1818,7 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
                      packet_builder=None, meter_probe=None, dwell_start=None,
                      frequency_preflight_record=None, frequency_pre_t0_check=None,
                      watchdog_plist=None, watchdog_check=None, watchdog_undo_closing=None,
-                     weight_digests_attested=None, **kwargs):
+                     weight_digests_attested=None, runtime_stack_attested=None, held_window_ruling=None, **kwargs):
     # RUN_STATE 226 R15: every arm, W1 included, binds the frozen series. W1 binds an empty history after
     # R1; a C/T window the next frozen window. The packet bound is the arm's OWN rebuild (a supplied
     # packet is only a pointer), whose history is derived from the hash-chained, authenticated records.
@@ -1663,6 +1857,13 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
         record['weight_digests'] = weights
         if weights.get('ok') is False:
             for reason in weights['reasons']:
+                refuse(record, reason)
+        runtime = (_attested_runtime_stack(state, runtime_stack_attested)
+                   if runtime_stack_attested is not None else
+                   state.get('runtime_stack_preflight', {'source': 'not_recorded_by_prepare'}))
+        record['runtime_stack'] = runtime
+        if runtime.get('ok') is False:
+            for reason in runtime['reasons']:
                 refuse(record, reason)
         built = (record.get('next_arm_triage') or {}).get('rebuilt_packet')
         binding = record.pop('series_binding', None)
@@ -1723,6 +1924,7 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
                         record_check=record_check, packet_builder=packet_builder, meter_probe=meter_probe,
                         dwell_start=dwell_start, series_bind=series_bind, pre_dwell=pre_dwell,
                         watchdog_plist=watchdog_plist, watchdog_check=watchdog_check,
+                        held_window_ruling=held_window_ruling,
                         watchdog_plan=pilot.h.read(state['plan_path']), watchdog_plan_path=state['plan_path'])
     # After the stamp: the single in-memory dwell value, written once, then the handoff (or refusal).
     dwell = {'schema': ARM_DWELL_SCHEMA, 'arm_record': str(path), 'admitted': record['admitted'],
@@ -1777,6 +1979,12 @@ def main(argv=None):
                                        ('--weight-digests-attested', dict(type=Path,
                           help='RL-62 JSON: attested_by, optional attested_at_epoch_s, roots mapping to '
                                'registered_folded_sha256 and observed_folded_sha256 pairs')),
+                                       ('--runtime-stack-attested', dict(type=Path,
+                          help='RL-73 JSON: attested_by, optional attested_at_epoch_s, registered and observed '
+                               'runtime_versions (python and packages)')),
+                                       ('--held-window-ruling', dict(type=Path,
+                          help='signed held_window_release row; text is a {path, sha256} source at the '
+                               'rebuilt packet series_commit')),
                                        ('--next-arm-triage', dict(type=Path, required=True,
                           help='R12 B2 next-arm triage packet (JSON) built off the MBP from the committed record'))))
 

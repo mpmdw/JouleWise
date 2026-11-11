@@ -1848,7 +1848,8 @@ class W1DiskGateTests(unittest.TestCase):
         self.assertEqual(seen, {'session_root': Path('s'), 'w1_disk_config': Path('/c.json'),
                                 'obc_off_attested_by': 'synthetic', 'battery_log': [Path('/b.jsonl'), Path('/c.jsonl')],
                                 'window_battery_journal': [Path('/w.jsonl')],
-                            'next_arm_triage': Path('/t.json'), 'weight_digests_attested': None})
+                            'next_arm_triage': Path('/t.json'), 'weight_digests_attested': None,
+                            'runtime_stack_attested': None, 'held_window_ruling': None})
 
 
 if __name__ == '__main__':

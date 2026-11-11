@@ -50,11 +50,13 @@ class WeightDigestTests(unittest.TestCase):
         directory = Path(self.state['registration_dir'])
         directory.mkdir(parents=True, exist_ok=True)
         (directory / 'model_artifact_inventory.json').write_text(json.dumps(self.inventory))
+        (directory / 'identity_pins.json').write_text(json.dumps({'runtime_versions':
+            {'python': 'synthetic', 'packages': {'mlx': 'synthetic'}}}))
         (directory.parent / 'collection_plan.json').write_text(json.dumps({'members': self.members}))
 
     def preflight(self, observed=None):
         self.identity = Mock(return_value=self.observed if observed is None else observed)
-        return session.weight_digest_preflight(self.state, identity_fn=self.identity)
+        return session.weight_digest_preflight(self.state['registration_dir'], self.members, identity_fn=self.identity)
 
     def test_shared_root_hashed_once_and_unplanned_inventory_ignored(self):
         self.inventory['artifacts']['unplanned'] = {'root': '/synthetic/never-read'}
@@ -120,7 +122,7 @@ class WeightDigestTests(unittest.TestCase):
 
     def test_identity_exception_is_a_recorded_unavailable(self):
         with patch('joulewise.provenance.model_artifact_identity', side_effect=OSError('synthetic read failure')):
-            row = session.weight_digest_preflight(self.state)
+            row = session.weight_digest_preflight(self.state['registration_dir'], self.members)
         self.assertIn('weight_digest_preflight: unavailable: tiny-weights: OSError: synthetic read failure',
                       row['reasons'])
 
@@ -145,9 +147,9 @@ class WeightDigestTests(unittest.TestCase):
         real = model_artifact_identity(str(self.weights))
         self.inventory['artifacts'] = {unit: real for unit in self.inventory['artifacts']}
         self.write_inputs()
-        self.assertTrue(session.weight_digest_preflight(self.state)['ok'])
+        self.assertTrue(session.weight_digest_preflight(self.state['registration_dir'], self.members)['ok'])
         (self.weights / 'extra.bin').write_bytes(b'extra synthetic shard')
-        row = session.weight_digest_preflight(self.state)
+        row = session.weight_digest_preflight(self.state['registration_dir'], self.members)
         self.assertFalse(row['ok'])
         self.assertEqual(row['roots'][str(self.weights)]['file_set_diff']['added'], ['extra.bin'])
 
@@ -164,9 +166,11 @@ class WeightDigestTests(unittest.TestCase):
                 if mismatch:
                     with self.assertRaisesRegex(ValueError, 'weight_digest_preflight: digest_mismatch:'):
                         session.prepare(self.root, self.root / 'session', weight_identity_fn=identity,
+                        runtime_runner=lambda python: {'python': 'synthetic', 'packages': {'mlx': 'synthetic'}},
                                         frequency_preflight=lambda *a, **k: {'ok': True})
                 else:
                     session.prepare(self.root, self.root / 'session', weight_identity_fn=identity,
+                        runtime_runner=lambda python: {'python': 'synthetic', 'packages': {'mlx': 'synthetic'}},
                                     frequency_preflight=lambda *a, **k: {'ok': True})
                 stored = session.pilot.h.read(self.root / 'session/session.json')['weight_digest_preflight']
                 self.assertEqual(stored['ok'], not mismatch)
@@ -256,29 +260,44 @@ class RuntimeStackTests(unittest.TestCase):
             self.assertFalse(row['ok'])
             self.assertIn('runtime_stack_preflight: unreadable:', row['reasons'][0])
 
+    def test_empty_installed_packages_names_every_missing_package(self):
+        row = self.check({'python': '3.13.1', 'packages': {}})
+        self.assertCountEqual(row['reasons'], [
+            'runtime_stack_preflight: differs: mlx: registered 0.31.2 installed <missing>',
+            'runtime_stack_preflight: differs: numpy: registered 2.5.1 installed <missing>'])
+
+    def test_python_absent_on_both_sides_is_unreadable(self):
+        versions = {'packages': {'mlx': 'same'}}
+        row = self.check(versions, reader=lambda path: {'runtime_versions': versions})
+        self.assertFalse(row['ok'], row)
+        self.assertTrue(any(': unreadable: python:' in r for r in row['reasons']), row)
+
     def test_prepare_persists_stack_and_mismatch_hold_before_frequency_or_arm(self):
         from scripts import align_v4_next_arm_packet as builder
         from tests.align.test_v4_next_arm_packet import Scenario
         (self.root / 'ledger').mkdir()
         scenario = Scenario(self.root / 'ledger', 'R1')
         scenario.finish()
-        state = {'measurement_root': str(self.root / 'ledger'), 'preparation_status': 'STAGED',
+        state = {'measurement_root': str(self.root / 'view'), 'source_measurement_root': str(self.root / 'ledger'),
+                 'preparation_status': 'STAGED',
                  'registration_dir': str(self.pins.parent)}
         frequency = Mock(return_value={'ok': True})
+        runner = Mock(return_value=dict(self.versions, python='changed'))
         with ExitStack() as stack:
             stack.enter_context(patch.object(powermode, 'host_lock_preflight', return_value={'ok': True}))
             stack.enter_context(patch.object(session, 'session_start_restore', return_value={'action': 'none'}))
             stack.enter_context(patch.object(session.kit, 'generate'))
             stack.enter_context(patch.object(session, 'series_ac_powermode', return_value=0))
             stack.enter_context(patch.object(session.pilot, 'prepare', return_value=state))
-            stack.enter_context(patch.object(session, 'weight_digest_preflight', return_value={'ok': True}))
+            stack.enter_context(patch.object(session, '_prepare_weight_digests', return_value={'ok': True}))
             stack.enter_context(patch.object(session, 'arm_checks', side_effect=AssertionError('arm in prepare')))
             with self.assertRaisesRegex(ValueError, 'runtime_stack_preflight: differs:.*holds_previous_window: R1'):
                 session.prepare(self.root / 'ledger', self.root / 'session', frequency_preflight=frequency,
-                    runtime_runner=lambda python: dict(self.versions, python='changed'))
+                    runtime_runner=runner)
         stored = session.pilot.h.read(self.root / 'session/session.json')
         self.assertEqual(stored['holds_previous_window'], 'R1')
         self.assertFalse(stored['runtime_stack_preflight']['ok'])
+        runner.assert_called_once_with(str(self.root / 'view/.venv/bin/python'))
         frequency.assert_not_called()
 
     def test_weight_function_accepts_explicit_inputs_without_session_state(self):
@@ -343,6 +362,22 @@ class HeldWindowTests(unittest.TestCase):
         row = session.held_window_check(self.scenario.root, self.packet())
         self.assertTrue(row['ok'], row)
         self.assertEqual(row['status'], 'previous window not final: hold check deferred to its finality')
+
+    def test_previous_final_sources_can_ride_in_authenticated_successor(self):
+        from tests.align.test_v4_next_arm_packet import Scenario
+        prior = Scenario(self.scenario.root, 'R1').finish()
+        previous = Scenario(self.scenario.root, 'W1', previous=prior, provisional=True).finish()
+        previous.final_sources['exclusions'].update(reasons=['precheck.certain_exclusion'], claim_usable=False)
+        successor = Scenario(self.scenario.root, 'C1', previous=previous, previous_final=True).finish()
+        ledger = dict(successor.series, previous_record=previous.link,
+                      last_passed_record={**previous.link, 'final_record': successor.link})
+        successor.write(self.builder.SERIES_PATH, ledger)
+        commit = successor.commit()
+        packet = previous.build(series_commit=commit)
+        row = session.held_window_check(self.scenario.root, packet)
+        self.assertFalse(row['ok'], row)
+        self.assertTrue(row['final'])
+        self.assertEqual(row['held_reasons'], ['precheck.certain_exclusion'])
 
     def test_changed_exclusions_blob_refuses_authentication(self):
         packet = self.packet()
@@ -590,8 +625,9 @@ from types import SimpleNamespace
 PLAN_LEAD_S = 180
 class PlanError(ValueError): pass
 class Storage:
-    def __init__(self, root, dry_run): pass
+    def __init__(self, root, dry_run): self.dry_run, self.would_write = dry_run, []
     def read_text(self, path): return path.read_text()
+    def glob_plans(self): return []
 def is_retired_v1_plan(raw): return False
 class NightPlan:
     @staticmethod
@@ -940,7 +976,7 @@ class PrivilegeTests(unittest.TestCase):
             stack.enter_context(patch.object(session, 'session_start_restore', return_value={'action': 'none'}))
             stack.enter_context(patch.object(session.kit, 'generate'))
             stack.enter_context(patch.object(session, 'series_ac_powermode', return_value=0))
-            stack.enter_context(patch.object(session.pilot, 'prepare', return_value={'preparation_status': 'STAGED'}))
+            stack.enter_context(patch.object(session.pilot, 'prepare', return_value={'preparation_status': 'STAGED', 'measurement_root': tmp}))
             frequency = Mock(return_value={'ok': True})
             run = lambda argv: subprocess.CompletedProcess(argv, 1, '', '')
             with self.assertRaisesRegex(ValueError, 'host_privilege_preflight: sudo_rule_missing'):
@@ -955,14 +991,15 @@ class PrivilegeTests(unittest.TestCase):
 
     def test_prepare_admits_readable_on_and_retains_the_frequency_gate(self):
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
-            stack.enter_context(patch.object(session, 'weight_digest_preflight', return_value={'ok': True, 'synthetic': True}))
+            stack.enter_context(patch.object(session, '_prepare_weight_digests', return_value={'ok': True, 'synthetic': True}))
+            stack.enter_context(patch.object(session, 'runtime_stack_preflight', return_value={'ok': True, 'reasons': []}))
             stack.enter_context(patch.object(powermode, 'host_state_override', return_value=None))
             stack.enter_context(patch.object(powermode, 'HostLock'))
             stack.enter_context(patch.object(powermode, 'host_lock_preflight', return_value={'acquired': True}))
             stack.enter_context(patch.object(session, 'session_start_restore', return_value={'action': 'none'}))
             stack.enter_context(patch.object(session.kit, 'generate'))
             stack.enter_context(patch.object(session, 'series_ac_powermode', return_value=0))
-            stack.enter_context(patch.object(session.pilot, 'prepare', return_value={'preparation_status': 'STAGED'}))
+            stack.enter_context(patch.object(session.pilot, 'prepare', return_value={'preparation_status': 'STAGED', 'measurement_root': tmp}))
             frequency = Mock(return_value={'ok': True})
             run = lambda argv: subprocess.CompletedProcess(argv, 0, 'Network Time: On\n', '')
             state = session.prepare(tmp, tmp, power_runner=run, frequency_preflight=frequency)

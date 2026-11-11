@@ -54,6 +54,7 @@ GAP_REFS = {
 }
 
 CHECKS = {}
+SYNTHETIC_RUNTIME_STACK = {'python': 'synthetic', 'packages': {'mlx': 'synthetic'}}
 
 
 def check(name, covers, gates='w1'):
@@ -295,6 +296,8 @@ def arm_fixture(ctx, name, *, now, t0_offset_s=3600, ac_powermode=0):
         (weights / 'model.safetensors').write_bytes(b'fixture')
         inventory[h.align_unit_id(member['model_id'], member['run_id'])] = FakeHost.weight_identity(weights)
     h.write(measurement / kit.KIT / 'registration/model_artifact_inventory.json', {'artifacts': inventory})
+    h.write(measurement / kit.KIT / 'registration/identity_pins.json',
+            {'runtime_versions': SYNTHETIC_RUNTIME_STACK})
     (measurement / kit.R1_SLOTS).write_text(json.dumps({'ac_powermode': ac_powermode}))
     series = ctx.repo / kit.KIT / 'series'
     if series.is_dir():                 # RUN_STATE 226 R15: every arm binds the frozen series
@@ -309,7 +312,8 @@ def arm_fixture(ctx, name, *, now, t0_offset_s=3600, ac_powermode=0):
         'preparation_status': 'STAGED',
         'plan_sha256': h.locator(night_plan)['sha256'], 'inputs': {'custody_root': str(custody)}}
     from scripts import align_v4_session as session_mod
-    state['weight_digest_preflight'] = session_mod.weight_digest_preflight(state, identity_fn=FakeHost.weight_identity)
+    state['weight_digest_preflight'] = session_mod.weight_digest_preflight(
+        measurement / kit.KIT / 'registration', plan['members'], identity_fn=FakeHost.weight_identity)
     h.write(session / 'session.json', state)
     config = json.loads((ctx.repo / 'configs/align/v4/r0_desk.json').read_bytes())
     if not config.get('offloads'):
@@ -407,6 +411,7 @@ def check_weight_digest_preflight(ctx):
             mock.patch.object(session_mod, 'session_start_restore', return_value={'action': 'none'}), \
             contextlib.redirect_stdout(io.StringIO()):
         session_mod.prepare(base / 'measurement', session, weight_identity_fn=host.weight_identity,
+                            runtime_runner=lambda python: SYNTHETIC_RUNTIME_STACK,
                             frequency_preflight=host.frequency_check)
         control = run_install(ctx, session, disk, packet, host=host, now=now)
         matching = (control['rc'] == 0 and bool(host.installer_calls) and
@@ -414,6 +419,7 @@ def check_weight_digest_preflight(ctx):
         refusal = ''
         try:
             session_mod.prepare(base / 'measurement', session,
+                runtime_runner=lambda python: SYNTHETIC_RUNTIME_STACK,
                 weight_identity_fn=lambda root: dict(host.weight_identity(root), folded_sha256='c' * 64),
                 frequency_preflight=host.frequency_check)
         except ValueError as exc:
@@ -425,6 +431,57 @@ def check_weight_digest_preflight(ctx):
                 refused_arm['rc'] != 0 and not fresh_host.installer_calls)
     return result(PASS if matching and mismatch else FAIL, 'matching prepare/arm and changed-weight refusal',
                   matching_prepare_and_arm=matching, mismatch_refused=mismatch, refusal=refusal)
+
+
+@check('runtime-stack-preflight', 'RL-73: matching synthetic installed stack passes prepare and arm; '
+       'a changed Python version refuses and is carried to the arm')
+def check_runtime_stack_preflight(ctx):
+    from unittest import mock
+    from scripts import align_v4_session as session_mod, bytes_h_session as h
+    now = time.time()
+    base, session, disk = arm_fixture(ctx, 'runtime-stack', now=now)
+    packet = valid_packet(ctx, base, now)
+    host = FakeHost(now=now)
+    state = h.read(session / 'session.json')
+    with mock.patch.object(session_mod.pilot, 'prepare', return_value=state), \
+            mock.patch.object(session_mod.kit, 'generate'), \
+            mock.patch.object(session_mod, 'session_start_restore', return_value={'action': 'none'}):
+        session_mod.prepare(base / 'measurement', session, weight_identity_fn=host.weight_identity,
+            runtime_runner=lambda python: SYNTHETIC_RUNTIME_STACK, frequency_preflight=host.frequency_check)
+        control = run_install(ctx, session, disk, packet, host=host, now=now)
+        matching = (control['rc'] == 0 and bool(host.installer_calls) and
+                    control['arm']['runtime_stack'] == state['runtime_stack_preflight'])
+        refusal = ''
+        try:
+            session_mod.prepare(base / 'measurement', session, weight_identity_fn=host.weight_identity,
+                runtime_runner=lambda python: dict(SYNTHETIC_RUNTIME_STACK, python='changed'),
+                frequency_preflight=host.frequency_check)
+        except ValueError as exc:
+            refusal = str(exc)
+        fresh_host = FakeHost(now=now)
+        arm = run_install(ctx, session, disk, packet, host=fresh_host, now=now)
+    refused = ('runtime_stack_preflight: differs: python:' in refusal and arm['rc'] != 0
+               and not fresh_host.installer_calls and not arm['arm']['runtime_stack']['ok'])
+    return result(PASS if matching and refused else FAIL, 'matching stack and changed-stack refusal',
+                  matching=matching, refused=refused, refusal=refusal)
+
+
+@check('held-window', 'RL-65/RL-71: authenticated previous final harvest hold refuses at the arm')
+def check_held_window(ctx):
+    from scripts import align_v4_session as session_mod
+    root = ctx.work / 'held-window-records'
+    root.mkdir()
+    now = time.time()
+    scenario = _fresh(_scenario_class()(root, 'W1'), now).finish()
+    control = _arm_on_records(ctx, root, scenario.build(now=now), now=now)
+    scenario.sources['exclusions'].update(reasons=['precheck.certain_exclusion'], claim_usable=False)
+    scenario.finish()
+    arm = _arm_on_records(ctx, root, scenario.build(now=now), now=now)
+    matching = control['admitted'] and control['held_window_check']['ok']
+    refused = (not arm['admitted'] and
+               'held_window: W1: precheck.certain_exclusion: no signed ruling' in arm['reasons'])
+    return result(PASS if matching and refused else FAIL, 'clean final harvest and held final harvest',
+                  matching=matching, refused=refused, reasons=arm['reasons'])
 
 
 @check('watchdog-hold-rollback', 'RL-56: pre-install hold refuses before install; post-install hold '
