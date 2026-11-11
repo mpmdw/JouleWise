@@ -100,6 +100,11 @@ def executed_closure(entries=ENTRY_POINTS):
 
 
 class ExecutedClosureBindingTests(unittest.TestCase):
+    def test_r1_phase_table_is_named_and_strict(self):
+        path = 'joulewise/align/apple/r1_phase_table.py'
+        self.assertIn(path, registration._NAMED_ARTIFACTS)
+        self.assertTrue(registration.is_strict(path))
+
     def test_every_executed_module_and_script_is_in_the_receipt_artifact_set(self):
         closure = executed_closure()
         for required in ('joulewise/align/apple/prompt_cache.py', 'joulewise/align/apple/sampler.py',

@@ -2254,7 +2254,7 @@ _CHAIN_REFUSAL_CODES = frozenset({
 
 def _r1_refusal_summary(raw):
     """D-05: publish vocabulary only, never error text, paths or numeric values."""
-    from scripts.align_r1_rehearsal import phase_plan
+    from joulewise.align.apple.r1_phase_table import phase_plan
     phases = phase_plan(include_4bit=True)
     names = {name for name, *_ in phases}
     error = raw.get("error") if isinstance(raw.get("error"), str) else ""

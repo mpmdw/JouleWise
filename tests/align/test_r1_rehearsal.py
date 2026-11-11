@@ -237,6 +237,14 @@ NOON_SAFE = r1.datetime(2026, 11, 7, 2, 0, tzinfo=PACIFIC)
 
 
 class PhaseTableIdentityTests(unittest.TestCase):
+    def test_driver_reexports_phase_table(self):
+        from joulewise.align.apple import r1_phase_table as table
+        self.assertIs(r1.phase_plan, table.phase_plan)
+        for name in ('COOLDOWN_AFTER_D_MAX_S', 'GATED_D_RUNS', 'HIGH_POWER_LEGS',
+                     'PLANNING_RUN_ORDER_C', 'PRECOOL_SUFFIX', 'STEP_D_NAME'):
+            with self.subTest(name=name):
+                self.assertIs(getattr(r1, name), getattr(table, name))
+
     def test_phase_tables_match_pre_move_literals(self):
         # RL-61: freeze the full plan before moving its definition; no measured data.
         expected = {
