@@ -3084,6 +3084,71 @@ temperatures.
 
 ---
 
+# Decision request 32: the second Block 5 fill, five questions (2026-11-11 05:03 PST)
+
+**What I did.** On `docs/2026-11-11-paper1-b5-fill2` @ `d2c0dc72d`: ran `fill_check_b5.py` (PASS: 49 sites,
+120 filled ids, 1,072 ledger rows cited, 158 stated comparisons on both ledger and printed values), the
+fill-index generator (`100 79 88 77`) and `tests.test_paper_build` (pass). I counted the extended ledger at
+`766f8d4bb`: 1,845 rows; 1,101 `exact`, 581 `within-rounding`, 128 `recorded-judgment`, 34 `single-source`, 1
+`MISMATCH` (row 249, the ruled erratum); `paper1` column 1,678 `print`, 159 `print-labelled`, 8 `not-printed`.
+I read Tables 3 and 4 as filled and the ledger rows the questions name. I have not yet read the new prose and
+the eight disclosure tables; that is my review when the fill comes back with the sentence check.
+
+## RL-60. The print-precision rule, completed
+
+The extended ledger is accepted as the print authority at `766f8d4bb`.
+
+**1. Direction of rounding: confirmed, with one case added.**
+
+- A quantity that states an uncertainty or a limit rounds **up**: bounds, half-widths, allowances, floors,
+  attribution floors.
+- Interval and range ends round **outward**.
+- Estimates round to **nearest**.
+- **An operand of a ratio, sum or difference printed beside it rounds to nearest**, whatever kind of quantity it
+  is. The reader will do that arithmetic, and it should come as close as the digits allow.
+
+**2. Table 4's terms print to three significant figures.** 4.80 ÷ 0.60 beside 8.1073 invites a reader to
+divide and get 8.00. The general rule, replacing "two decimals" in RL-52's table: a quantity in joules prints
+with two decimals or three significant figures, whichever shows more digits. The table's note says the ratios
+are computed from the unrounded terms.
+
+**3. The three ties go away, because the rule that made them was wrong.** Rows 722, 754 and 781 are values
+of the rail share ρ or of its spread, issued at four decimals. That is the registered printed precision of ρ,
+and RL-52's "three decimals in tables" coarsened it for no reason. **The share ρ and quantities stated on its
+scale print at four decimals in tables, as issued, and at two in running text.** For any
+tie that remains anywhere: where the ledger's value is an exact tie at the rounding digit, print the ledger's
+digits and do not round. The ledger's value is itself rounded, and rounding it again at a tie can go either
+way.
+
+**4. Table 3's caption: fill it.** The instruction is not stale. It is ruling J5 (e): each floor is disclosed
+with its guarded value, the allowance added and the allowance's source. No further custody round is needed:
+
+- Table 3 gains one column, the drift allowance included in each row's floors: the 1.7B floor session's
+  allowance for its two rows (ledger row 793) and the 8B floor session's for its two (row 802).
+- The caption says where the allowance comes from, each floor session's own drift allowance from its reference
+  requests, and that the guarded value of each form is the tabulated value less that allowance.
+- The check script asserts that identity on the two cells where the ledger also holds the guarded value
+  (rows 288 and 291 against rows 54 and 57).
+- The sentence that began "Disclose each guarded value" is removed from the caption.
+
+The guarded values so obtained are differences of two checked rows, shown with their operands, so they need no
+rows of their own.
+
+**5. `CP-X01-identity` and `CP-X01-length`: yes, in part.** An element that is a name, a revision, a digest or
+a registered constant in a committed file prints from that file, and the check asserts the match, as for the
+attempt identifiers. An element that is a realised value, such as an observed token count or the outcome of
+the selection, needs a ledger row. The seat sorts the elements and says which is which.
+
+**The sentence check may run on this head.** Its findings and these five rulings are applied together, and
+then the fill comes to me.
+
+**Reason.** A rounding rule is finished when a reader's own arithmetic on the printed digits never contradicts
+the printed result. Three of these five questions were that test failing on the rule I wrote in RL-52.
+
+**Blind status.** Not blind to Block 5. Blind to Block 6, BYTES and v4.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
