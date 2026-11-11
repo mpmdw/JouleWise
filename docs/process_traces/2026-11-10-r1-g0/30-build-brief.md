@@ -20,14 +20,14 @@ Seat: Sol 6.1 xhigh, build. Branch `lane/2026-11-10-r1-g0-rop` from `20e9edbc4`
    capture leaves current behaviour: the member is incomplete. Record
    `reference_source` honestly (`r1_soak_reference` or the step-30b capture), and
    print R_op minus the soak mean per key, with no gate on it.
-   `step-30b` itself gates against the soak reference with the S6 band; nothing
-   else exists before it.
-   NOTE: by the ruling's numbers, step-30b's own G0 against the soak mean at 1.5 C
-   is predicted to release at 1,328 s (model B) or never (model A). READ the
-   ruling's section 1 row 1 and section 4.1 carefully. If the ruling means
-   step-30b's own G0 uses its own just-captured pre-warmup median (R_op), build
-   that. If the text leaves step-30b's own G0 reference undetermined, stop and
-   report NEEDS_RULING on exactly that point, quoting the lines. Do not guess.
+   **step-30b's own G0 also uses R_op**: its own pre-warmup capture, taken
+   just before its warmup. Lead decision, from ruling section 4.1. The adopted
+   row "R_op, 1.5, 1,200" is evaluated on step-30b's record, and the
+   section 1 check says that "step-30b G0 released between about 700 and
+   910 s; Tf08 at release about 1.5 C above the member's own idle". The
+   phrase "after the first model member" in section 1 row 1 means the
+   reference is *taken* at the first model member. Consumption starts with
+   that member's own G0.
 2. **δ_slow = 1.5 C as slot S6** in `configs/campaigns/align_v4/registration/r1_slots.json`,
    with a tuning receipt citing the ruling (path and commit `cc709ace2` on branch
    `ops/2026-11-10-r1-g0-diagnosis`). S5's formula and value stay; the fast band
