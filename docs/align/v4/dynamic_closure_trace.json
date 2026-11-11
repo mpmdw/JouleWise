@@ -1186,6 +1186,12 @@
   "scripts/validate_align_v4_w1_plan.py",
   "scripts/watchdog_status.py"
  ],
+ "final_admission_witness": {
+  "prior_trace_sha256": "343bd3fb7bd33e3914b80eff23ce98aa44309d54cef46a779d4b7a425ed387f3",
+  "reason": "both fixed keys use nightly admissibility rather than nightly class-edge/ranking changes",
+  "source": "scripts/align_v4_kit.py",
+  "source_sha256": "7a7244d213648a204a01bb4937f1ddafe1a01e4fd1c6f21960ad1cf4cd75f65c"
+ },
  "not_bound": [],
  "not_strict": [],
  "profile": "bounded_representative",
@@ -1518,6 +1524,11 @@
    "new_paths": 1,
    "ok": true,
    "tests_run": 2
+  },
+  "r1_fixed_pair_admission": {
+   "new_paths": 136,
+   "ok": true,
+   "tests_run": 1
   },
   "r1_synthetic_arm": {
    "new_paths": 8,

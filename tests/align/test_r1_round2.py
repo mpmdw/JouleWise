@@ -201,9 +201,10 @@ class DeskTests(unittest.TestCase):
         d["heatsink_candidates"] = []
         with self.assertRaisesRegex(ValueError, "heatsink"): v4kit.require_ready(inputs, slots)
         d["night_confirmation"] = {"ok": True, "authority": "RL-78", "s_fast": d["s_fast"], "s_slow": d["s_slow"]}
+        d["die_candidates"] = []  # class-edge/rank changes do not re-select the fixed fast key either
         v4kit.require_ready(inputs, slots)
         d["night_confirmation"]["ok"] = False
-        with self.assertRaisesRegex(ValueError, "heatsink"): v4kit.require_ready(inputs, slots)
+        with self.assertRaisesRegex(ValueError, "die|heatsink"): v4kit.require_ready(inputs, slots)
 
 
 class PrepareChecksTests(unittest.TestCase):

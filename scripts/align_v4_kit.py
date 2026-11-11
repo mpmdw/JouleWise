@@ -255,11 +255,12 @@ def check_r1_evidence(inputs, r1_slots, *, synthetic=False, receipt=None):
         if fast == slow or any(fast in group and slow in group for group in aliases):
             raise ValueError('R1.thermal_policy s_fast/s_slow: aliased keys are one thermometer '
                              '(LEAD-RULINGS-2 R7-13)')
-        if sensors.get('s_fast') not in (classified.get('die_candidates') or ()):
-            raise ValueError(f'R1.thermal_policy s_fast {sensors.get("s_fast")!r} is not in the R1 die list')
         confirmation = classified.get('night_confirmation') or {}
         fixed_pair = (confirmation.get('ok') is True and confirmation.get('authority') == 'RL-78'
                       and all(confirmation.get(r) == sensors.get(r) for r in ('s_fast', 's_slow')))
+        if sensors.get('s_fast') not in (classified.get('die_candidates') or ()) and not fixed_pair:
+            raise ValueError(f'R1.thermal_policy s_fast {sensors.get("s_fast")!r} is not in the R1 die list '
+                             'or an admissible RL-78 fixed pair')
         if sensors.get('s_slow') not in (classified.get('heatsink_candidates') or ()) and not fixed_pair:
             raise ValueError(f'R1.thermal_policy s_slow {sensors.get("s_slow")!r} is not in the R1 heatsink list '
                              'or an admissible RL-78 fixed smoke pair')

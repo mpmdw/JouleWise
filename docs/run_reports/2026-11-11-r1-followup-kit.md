@@ -169,9 +169,9 @@ none executes sudo, systemsetup, pmset, launchctl lifecycle commands or
 caffeinate for real. No native MLX/Metal result is claimed.
 
 The first broader rehearsal run exposed two stale fixtures: a soak-redo
-assertion needed `unsettled_soak_once=True`, and the synthetic hardware-label
-record-shape fixture needed a mocked source-identity check while sources are
-edited. Production source validation remains intact and has separate mutation
+assertion expected an obsolete retry (the follow-up refuses an unsettled soak),
+and the synthetic hardware-label record-shape fixture needed a mocked
+source-identity check while sources are edited. Production source validation remains intact and has separate mutation
 tests. That initial 76-test run failed (1 failure, 1 error; 19.674 s); it is not
 a pass.
 
@@ -252,8 +252,7 @@ with one failure in `ArmOrderWitness`: the armcheck merge now requires
 its synthetic plan and supplies that path; watchdog, host commands and installer
 remain fake. Only that failed scenario was repeated under the same tracer,
 passing in **24.342 s**. Production/source/config bytes were held unchanged;
-the retry records their SHA-256s and the original failed trace digest. The final
-artifact is the union of these actual traces, explicitly
+the retry records their SHA-256s and the original failed trace digest. The artifact after that retry was the union of these actual traces, explicitly
 `profile: bounded_representative`, **45 successful tests in seven scenarios**,
 181 executed paths, zero unbound and zero non-strict. Its arm scenario preserves
 `previous_attempt_ok: false` and the retry marker. No failed test was relabelled
@@ -299,3 +298,104 @@ Other files: `docs/align/r1_runtime_contract.md`, this report,
 arm-order fixture in `test_v4_next_arm_packet.py`. The armcheck merge's broader
 file inventory is visible in merge commit `71e970c13` and its own reports.
 Coordination-state files remain untouched.
+
+
+### Final checks, commits and exact remaining work
+
+- Local commits: `71e970c13` imports the specified armcheck revision;
+  `b1faa9376` implements RL-78 and records the initial trace disposition;
+  `b40911215` merges the specified `1bca029f7` presign revision. That merge
+  conflicted only in DEVIATIONS: all four incoming RL-77 rows were preserved
+  byte-for-byte and the R1 rows retained. The final commit containing this
+  section carries the last admission witness and fixture correction. Nothing
+  was pushed.
+- `python3.13 -B -m unittest tests.align.test_v4_executed_closure`: **6 tests,
+  OK, 60.718 s**. The presign merge changes documentation only; production
+  sources are identical across that merge.
+- `python3.13 -B -m unittest tests.align.test_v4_dynamic_closure`: **10 tests,
+  OK, 219.862 s**. The canonical representative trace covers the fresh minimal
+  child, strict bindings and allowlist/spine checks. This does not turn the
+  failed/incomplete full profile into a pass.
+- Final review caught the kit still requiring the fixed fast key to be in the
+  night's fast-class list even after its admissibility confirmation. Both
+  fixed keys now use that confirmation; the legacy checks remain when it is
+  absent. The targeted admission regression was re-executed under tracing:
+  **1 test, OK, 4.854 s**, added as `r1_fixed_pair_admission`. It checks both
+  class lists changing without re-selection and refusal without confirmation.
+  AST import/launch edges are unchanged. The full closure modules above were
+  not repeated after this predicate-only correction; the final trace's
+  scenario/binding invariants were checked directly. The trace now records
+  **46 passing tests in eight scenarios**, 181 executed paths, zero unbound
+  and non-strict paths, SHA-256
+  `ab79f1d2fd1d7f4d774fe494bfc4cea2075fc439338baea023b824c1fa083fe5`.
+  The extra witness was again written exclusively to scratch and moved with
+  digest equality checked; its source digest is recorded separately from the
+  earlier fixture-retry snapshot.
+- The two repaired rehearsal cases were re-run together: the evidence-binding
+  case passed, but my initial attempt to fix the stale soak assertion by
+  supplying an unsettled soak correctly refused (1 failure / 2 tests,
+  4.773 s). The final test preserves the settled input and asserts no obsolete
+  soak retry. Its separate command
+  `python3.13 -B -m unittest tests.align.test_r1_rehearsal.R1Tests.test_quiet_segment_redone_on_sustained_cpu_load`
+  passed **1 test in 1.897 s**. The earlier native-label evidence-binding
+  success remains synthetic command-boundary evidence, not hardware evidence.
+- `python3.13 -B -m unittest tests.align.test_v4_registration.R1ExecutedSourceTests`:
+  **1 test, OK, 2.323 s**, including thermal.py mutation via the complete
+  condition-13 list.
+- `python3.13 -B -m compileall -q joulewise tests`: exit 0. The kit CLI help,
+  final diff whitespace check, all four presign-row equalities, gate-module
+  equality to `82c14c9ea`, insertion-only timing-manifest diff and untouched
+  coordination-state checks passed. No real forbidden host command was added.
+
+The targeted execution total was approximately **27 minutes**, exceeding the
+requested approximate 20-minute budget. The full-profile attempt and the much
+slower representative trace dominate it. No further broad run was started.
+This remains a process/verification limitation and is not presented as a
+completed final-head broad test run.
+
+**Next exact step on the Air:** run the first full-profile group as individual
+modules, capturing failure details: `tests.align.test_v4_series`,
+`tests.align.test_v4_series_e2e`, `tests.align.test_v4_series_r20`, and
+`tests.align.test_v4_replacement_windows`. Attribute/fix those failures, then run
+`python3.13 -B scripts/align_v4_dynamic_trace.py --out <new-scratch>/trace.json`
+without `--bounded`, inspect every scenario, move the successful trace into
+place, and repeat both closure modules. Do not overwrite a trace with the
+generator. Native smoke/selection/ruling/cold review are still required before
+arming, as listed above.
+
+The broader final-head modules were not run in full (some classes/cases were
+run as documented). In addition to the changed test modules listed below, the
+R1/runtime/thermal/replay follow-through owed is:
+`tests.align.test_r1_runtime`, `tests.align.test_r1_runtime_contract`,
+`tests.align.test_r1_runtime_e2e`, `tests.align.test_thermal_sidecar`,
+`tests.align.test_thermal_gate`, `tests.align.test_thermal_coverage`,
+`tests.align.test_thermal_legacy`, `tests.align.test_thermal_desk`, and
+`tests.test_align_r1_thermal_replay`. Native `test_thermal_mlx` remains opt-in
+on Metal only. The imported armcheck tests need their own final-head module
+passes; importing their fixes is not evidence that every module passed here.
+
+Changed test modules needing a complete final-head pass:
+- `tests.align.test_harvest_off_review_sol2`
+- `tests.align.test_r0_host`
+- `tests.align.test_r11_delta4_sol1`
+- `tests.align.test_r11_delta4_sol2`
+- `tests.align.test_r11_delta5_sol1`
+- `tests.align.test_r11_delta5_sol2`
+- `tests.align.test_r11_delta_sol1`
+- `tests.align.test_r1_followup`
+- `tests.align.test_r1_rehearsal`
+- `tests.align.test_r1_round2`
+- `tests.align.test_r1_round6_power`
+- `tests.align.test_timing_receipts`
+- `tests.align.test_v4_arm_watchdog_check`
+- `tests.align.test_v4_cadence`
+- `tests.align.test_v4_kit`
+- `tests.align.test_v4_next_arm_packet`
+- `tests.align.test_v4_record_binding`
+- `tests.align.test_v4_registration`
+- `tests.align.test_v4_series`
+- `tests.align.test_v4_series_e2e`
+- `tests.align.test_w1_prequal`
+- `tests.test_w1_reliability_r2`
+- `tests.test_w1_reliability_r3`
+- `tests.test_w1_reliability_r7`

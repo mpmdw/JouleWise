@@ -507,7 +507,7 @@ class R1Tests(unittest.TestCase):
 
     def test_quiet_segment_redone_on_sustained_cpu_load(self):
         with tempfile.TemporaryDirectory() as td:
-            world = FakeWorld(busy_once={"step-d"}, unsettled_soak_once=True)
+            world = FakeWorld(busy_once={"step-d"})
             with patch.object(r1, "_run", world):
                 self.assertEqual(r1.run(self.args(td)), 0)
             result = json.loads((Path(td) / "run/r1_result.json").read_text())
@@ -516,7 +516,9 @@ class R1Tests(unittest.TestCase):
             self.assertEqual(step[0]["attempt"], 1)
             self.assertIn("step_D_prefill_10k_decode_4096:cpu_load", step[0]["superseded_attempts"][0]["redo_reason"])
             soak = [p for p in result["phases"] if p["name"] == "idle_soak"][0]
-            self.assertEqual(soak["superseded_attempts"][0]["redo_reason"], "soak_slope")
+            # RL-72's bound allows load redos; an unsettled soak refuses.
+            # This settled soak therefore has no rejected attempt.
+            self.assertEqual(soak["superseded_attempts"], [])
             self.assertTrue(soak["soak_detrended"]["s_slow"]["settled"])
             self.assertAlmostEqual(soak["soak_detrended"]["s_slow"]["detrended_sd_c"], 0.05, places=3)
 
