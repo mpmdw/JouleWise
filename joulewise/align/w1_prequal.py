@@ -139,13 +139,21 @@ class FakeHost:
         self.watchdog_post_state = watchdog_post_state
         self.installed_labels = set()
 
-    def watchdog_check(self, *, phase, **_):
-        """Explicit W-1 stand-in through the production arm's injected seam."""
+    def watchdog_check(self, *, phase, plan=None, **_):
+        """Synthetic nested session/custody plan: only installed jobs expose it to discovery."""
+        from joulewise.night_agent_install import LABELS
         from scripts import align_v4_session as session_mod
         state = self.watchdog_post_state if phase == 'post_install' and self.watchdog_post_state else self.watchdog_state
-        return {'ok': state in session_mod.WATCHDOG_ADMITTED,
-                'state': state, 'reason': 'PREQUAL synthetic watchdog',
-                'argv': ['synthetic-watchdog', '--dry-run'], 'plan_read_proven': False,
+        found = phase == 'pre_install' or set(LABELS) <= self.installed_labels
+        span = (plan or {}).get('t0_epoch_s', (self.now or time.time()) + 3600) - session_mod.WATCHDOG_PLAN_LEAD_S
+        identity = {'source': 'installed_parser_on_plan_file' if phase == 'pre_install' else 'installed_load_plans',
+                    'found': found, 'span_start_epoch_s': span if found else None, 'expected': span, 'ok': found}
+        if phase == 'pre_install':
+            identity['discovered_by_scan'] = False
+        return {'ok': found and state in session_mod.WATCHDOG_ADMITTED,
+                'state': state, 'reason': 'PREQUAL synthetic watchdog' if found else 'plan_identity: arm plan missing',
+                'plan_identity': identity,
+                'argv': ['synthetic-watchdog', '--dry-run'], 'plan_read_proven': found,
                 'elapsed_s': 0.0, 'stopped': state == 'STOPPED'}
 
     def frequency_check(self, *_, **__):
@@ -262,7 +270,8 @@ def arm_fixture(ctx, name, *, now, t0_offset_s=3600, ac_powermode=0):
     """A session the production install CLI accepts: an R1 -> W1 record series, plan, R0 disk config."""
     from scripts import align_v4_kit as kit, bytes_h_session as h
     base = ctx.work / name
-    measurement, session, custody = base / 'measurement', base / 'session', base / 'custody'
+    measurement, session = base / 'measurement', base / 'night-align/session'
+    custody = session / 'custody'
     measurement.mkdir(parents=True)
     scenario = _scenario_class()(measurement, 'R1')
     scenario.next_plan.update(window='W1', role='development')

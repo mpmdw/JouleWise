@@ -142,6 +142,16 @@ def host_privilege_rules():
     return unique
 
 
+def _stored_streams(result):
+    """Bound staging evidence to 8 KiB per UTF-8 stream; parse the full output."""
+    evidence = {}
+    for name in ('stdout', 'stderr'):
+        raw = (getattr(result, name) or '').encode('utf-8')
+        evidence[name] = raw[:8192].decode('utf-8', errors='ignore')
+        evidence[name + '_truncated'] = len(raw) > 8192
+    return evidence
+
+
 def host_privilege_preflight(*, runner=None):
     """W-2: LIST permissions, then reuse the night's read-only network-time reader."""
     from types import SimpleNamespace
@@ -157,7 +167,7 @@ def host_privilege_preflight(*, runner=None):
         evidence = record['rules'][name] = {'argv': list(argv), 'allowed': False}
         try:
             result = run(argv)
-            evidence.update(exit_code=result.returncode, stdout=result.stdout, stderr=result.stderr,
+            evidence.update(exit_code=result.returncode, **_stored_streams(result),
                             allowed=result.returncode == 0)
         except (OSError, subprocess.SubprocessError) as exc:
             evidence['error'] = f'{type(exc).__name__}: {exc}'
@@ -213,10 +223,52 @@ print(json.dumps({"plans": [{"plan_id": p.plan_id, "t0_epoch_s": p.t0_epoch_s,
 '''
 
 
-def watchdog_acceptance(*, phase, runner=None, plist_path=None, plan=None, now=None, deadline_ns=None):
+# Mirror ONLY load_plans' scanned-plan steps (magistrate_watchdog.py:765-805):
+# read/JSON -> retired-v1 -> installed NightPlan -> authored time -> deadman.
+# No main()/tick(), writes or host probes. The scan is informational here.
+WATCHDOG_PLAN_FILE_PROGRAM = '''import importlib.util, json, sys
+from pathlib import Path
+spec = importlib.util.spec_from_file_location("_arm_watchdog_discovery", sys.argv[1])
+watchdog = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = watchdog
+spec.loader.exec_module(watchdog)
+storage = watchdog.Storage(Path(sys.argv[2]), dry_run=True)
+path = Path(sys.argv[3])
+now = watchdog.time.time()
+def parse():
+    try:
+        text = storage.read_text(path)
+    except OSError as exc:
+        return {"parse": "unreadable", "exception": type(exc).__name__}
+    try:
+        raw = watchdog.json.loads(text)
+    except Exception as exc:
+        return {"parse": "unreadable", "exception": type(exc).__name__}
+    if watchdog.is_retired_v1_plan(raw):
+        return {"parse": "retired_v1"}
+    try:
+        plan = watchdog.NightPlan.from_mapping(raw)
+        if plan.authored_epoch_s > now:
+            raise watchdog.PlanError("night_plan_malformed", "plan authored_epoch_s is in the future")
+        watchdog.deadman_epoch(plan)
+    except (watchdog.PlanError, OverflowError, ValueError) as exc:
+        return {"parse": "malformed", "exception": type(exc).__name__}
+    return {"parse": "ok", "plan_id": plan.plan_id, "t0_epoch_s": plan.t0_epoch_s,
+            "span_start_epoch_s": plan.t0_epoch_s - watchdog.PLAN_LEAD_S}
+result = parse()
+snapshot = watchdog.load_plans(storage, now_epoch_s=now)
+result["discovered_by_scan"] = (result["parse"] == "ok"
+    and path.resolve(strict=False) in [p.resolve(strict=False) for p in storage.glob_plans()]
+    and any(p.plan_id == result["plan_id"] and p.t0_epoch_s == result["t0_epoch_s"] for p in snapshot.plans))
+assert storage.dry_run and not storage.would_write, "plan identification attempted a write"
+print(json.dumps(result))
+'''
+
+
+def watchdog_acceptance(*, phase, runner=None, plist_path=None, plan=None, plan_path=None, now=None, deadline_ns=None):
     """W-1: run only the installed watchdog's read-only command, fail closed.
 
-    RL-56: discover this plan with the installed module after the dry run.
+    Parse this plan directly before install; discover it after install (RL-56).
     Before its span, ordinary idle/launch/backoff states admit too; at/after
     its span boundary only FENCED/STANDDOWN admit. Both runs share one deadline.
     """
@@ -262,25 +314,33 @@ def watchdog_acceptance(*, phase, runner=None, plist_path=None, plan=None, now=N
             raise TimeoutError('watchdog acceptance timeout')
         result = (runner or subprocess.run)(argv, cwd=cwd, env=environment,
             check=False, capture_output=True, text=True, timeout=remaining)
-        record.update(exit_code=result.returncode, stdout=result.stdout or '', stderr=result.stderr or '')
+        record.update(exit_code=result.returncode, **_stored_streams(result))
         if result.returncode != 0:
             raise ValueError(f'installed watchdog exited {result.returncode}')
-        lines = [line for line in record['stdout'].splitlines() if line.lstrip().startswith('decision=')]
+        lines = [line for line in (result.stdout or '').splitlines() if line.lstrip().startswith('decision=')]
         match = re.fullmatch(r'decision=([A-Z][A-Z0-9_]*) reason=(\S[^\r\n]*)', lines[0]) if len(lines) == 1 else None
         if match is None:
             raise ValueError('expected one well-formed decision= line')
         record.update(state=match[1], reason=match[2], stopped=match[1] == 'STOPPED')
         record['ok'] = (record['state'] in WATCHDOG_ADMITTED and not any(text in record['reason'] for text in
             ('night_plan_unreadable', 'night_plan_malformed', 'installed_agent_fence')))
-        if not record['ok']:
+        decision_ok = record['ok']
+        if not decision_ok and phase != 'pre_install':
             return record
-        identity = record['plan_identity'] = {'found': False, 'span_start_epoch_s': None, 'expected': None, 'ok': False}
+        identity = record['plan_identity'] = {'source': ('installed_parser_on_plan_file' if phase == 'pre_install'
+            else 'installed_load_plans'), 'found': False, 'span_start_epoch_s': None, 'expected': None, 'ok': False}
         record['ok'] = False
         try:
             if (not isinstance(plan, dict) or not isinstance(plan.get('plan_id'), str) or not plan['plan_id']
                     or not pilot.h.finite(plan.get('t0_epoch_s'))):
                 raise ValueError('arm plan identity unavailable')
             identity['expected'] = plan['t0_epoch_s'] - WATCHDOG_PLAN_LEAD_S
+            if phase == 'pre_install':
+                identity['discovered_by_scan'] = False
+                if plan_path is None or not Path(plan_path).is_absolute():
+                    raise ValueError('arm plan path must be absolute')
+                discovery_argv = argv[:script] + ['-c', WATCHDOG_PLAN_FILE_PROGRAM,
+                    argv[script], custody, str(plan_path)]
             remaining = (deadline_ns - time.monotonic_ns()) / 1e9
             if remaining <= 0:
                 raise TimeoutError('watchdog acceptance timeout before discovery')
@@ -294,6 +354,18 @@ def watchdog_acceptance(*, phase, runner=None, plist_path=None, plan=None, now=N
                 raise TimeoutError('watchdog acceptance timeout after discovery')
             lines = (found.stdout or '').splitlines()
             snapshot = json.loads(lines[0]) if len(lines) == 1 else None
+            if phase == 'pre_install':
+                if (not isinstance(snapshot, dict) or snapshot.get('parse') not in
+                        ('ok', 'retired_v1', 'unreadable', 'malformed')
+                        or type(snapshot.get('discovered_by_scan')) is not bool):
+                    raise ValueError('malformed parser snapshot')
+                identity['discovered_by_scan'] = snapshot['discovered_by_scan']
+                if snapshot['parse'] != 'ok':
+                    record['reason'] = 'plan_identity: ' + snapshot['parse']
+                    return record
+                snapshot = {'plans': [{k: snapshot.get(k) for k in
+                    ('plan_id', 't0_epoch_s', 'span_start_epoch_s')}],
+                    'errors_count': 0, 'installed_source': 'not_distinguishable'}
             if (not isinstance(snapshot, dict) or not isinstance(snapshot.get('plans'), list)
                     or type(snapshot.get('errors_count')) is not int or snapshot['errors_count'] < 0
                     or snapshot.get('installed_source') not in ('installed', 'scanned', 'not_distinguishable')):
@@ -317,7 +389,7 @@ def watchdog_acceptance(*, phase, runner=None, plist_path=None, plan=None, now=N
             if phase == 'post_install' and snapshot['installed_source'] == 'scanned':
                 raise ValueError('arm plan not discovered through installed plist')
             identity['ok'] = record['plan_read_proven'] = True
-            record['ok'] = True
+            record['ok'] = decision_ok
         except Exception as exc:
             record['reason'] = f'plan_identity: {type(exc).__name__}: {exc}'
         if record['ok'] and (now or time.time)() >= identity['expected']:
@@ -920,7 +992,7 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
                obc_off_attested_by=None, battery_runner=None, battery_log=None, window_battery_journal=None,
                now=None, next_arm_triage=None, commit_check=None, record_check=None,
                packet_builder=None, meter_probe=None, dwell_start=None, series_bind=None, pre_dwell=None,
-               watchdog_plist=None, watchdog_check=None, watchdog_plan=None):
+               watchdog_plist=None, watchdog_check=None, watchdog_plan=None, watchdog_plan_path=None):
     """W1/D arm evidence: ruling 7 AC powermode and ruling 20 volumes.
 
     R17 review F7: every Git check (record commit, record binding) and the frozen-series binding
@@ -1017,7 +1089,7 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
                         'record_bound': bool((record_check or _record_bound)(measurement_root, built))}
         series_binding = list(series_bind(built)) if series_bind is not None else None
     watchdog = (watchdog_check or watchdog_acceptance)(phase='pre_install', runner=runner,
-                                                       plist_path=watchdog_plist, plan=watchdog_plan, now=now)
+        plist_path=watchdog_plist, plan=watchdog_plan, plan_path=watchdog_plan_path, now=now)
     if not watchdog['ok']:
         reasons.append(_watchdog_refusal('pre_install', watchdog))
     # The 3 s monitor launch is USB and process activity: it runs BEFORE the quiet/display dwell
@@ -1519,7 +1591,7 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
                         record_check=record_check, packet_builder=packet_builder, meter_probe=meter_probe,
                         dwell_start=dwell_start, series_bind=series_bind, pre_dwell=pre_dwell,
                         watchdog_plist=watchdog_plist, watchdog_check=watchdog_check,
-                        watchdog_plan=pilot.h.read(state['plan_path']))
+                        watchdog_plan=pilot.h.read(state['plan_path']), watchdog_plan_path=state['plan_path'])
     # After the stamp: the single in-memory dwell value, written once, then the handoff (or refusal).
     dwell = {'schema': ARM_DWELL_SCHEMA, 'arm_record': str(path), 'admitted': record['admitted'],
              'quiet_dwell': record['quiet_dwell'], 'timing_receipts': _take_receipts()}
