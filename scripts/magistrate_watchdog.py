@@ -146,7 +146,7 @@ SESSION_ARGV_AFTER_PROMPT = (
     "--permission-prompts",
     "none",
     "--model",
-    "opus",
+    "claude-fable-5-2",
     "--effort",
     "high",
     "--allowedTools",
