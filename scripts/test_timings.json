@@ -576,6 +576,7 @@
     "tests.test_harvest_window": 4.791,
     "tests.test_hazard_neg8_mint_verdicts": 3.305,
     "tests.test_hazard_whole_window_verdict": 23.667,
+    "tests.test_host_effects": 0.694,
     "tests.test_identity_pins": 1.903,
     "tests.test_idle_admission": 4.252,
     "tests.test_idle_dependence": 0.049,
