@@ -215,6 +215,98 @@ class Fixture(unittest.TestCase):
             self.assertTrue((self.record / rel).exists(), rel)
 
 
+class DeletionDecisionCharacterization(unittest.TestCase):
+    # Written and committed against b4a6c217f before the Q10 fixes. These are
+    # release() decisions for fixed custody states, not retry-stage decisions.
+    CASES = (
+        ("air_missing", False, "no_air_receipt"),
+        ("air_only", False, "second_copy_not_confirmed"),
+        ("local_second_only", False, "second_copy_not_confirmed"),
+        ("both_verified", True, None),
+        ("air_seal_changed", False, "receipt_hash_mismatch"),
+        ("second_seal_changed", False, "receipt_hash_mismatch"),
+        ("second_wrong_manifest", False, "second_copy_receipt_does_not_match"),
+        ("fresh_missing", False, "no_fresh_receipt"),
+        ("fresh_replayed", False, "fresh_receipt_does_not_match"),
+        ("air_part_changed", False, "air_part_decayed"),
+        ("local_part_changed", False, "local_pack_changed"),
+        ("local_raw_changed", False, "content_differs_from_bound_digest"),
+        ("armed", False, "window_armed"),
+        ("deleting_without_air", False, "no_air_receipt"),
+        ("deleting_without_second", False, "second_copy_not_confirmed"),
+        ("deleting_with_both", True, None),
+        ("released_latch", False, None),
+    )
+
+    def test_base_deletion_decisions(self):
+        for state, may_delete, reason in self.CASES:
+            with self.subTest(state=state):
+                f = Fixture()
+                f.setUp()
+                try:
+                    self._check_state(f, state, may_delete, reason)
+                finally:
+                    f.doCleanups()
+
+    def _check_state(self, f, state, may_delete, reason):
+        self.assertEqual(f.run_offload(codec="gzip"), 0)
+        off = f.offload()
+        manifest = ow.read_json(off.dir / ow.MANIFEST_NAME)
+        no_second = {"air_missing", "air_only", "deleting_without_air", "deleting_without_second"}
+        if state not in no_second:
+            f.confirm_second_copy()
+        air_path = f.store / "windows/w1-test" / ow.AIR_RECEIPT
+        second_path = f.store / "second/w1-test" / ow.SECOND_RECEIPT
+        if state in {"air_missing", "deleting_without_air"}:
+            air_path.unlink()  # the stale MBP receipt remains
+        elif state == "local_second_only":
+            shutil.copyfile(second_path, off.dir / "receipt-second.json")
+            second_path.unlink()
+        elif state in {"air_seal_changed", "second_seal_changed", "second_wrong_manifest"}:
+            path = air_path if state == "air_seal_changed" else second_path
+            receipt = ow.read_json(path)
+            receipt["offload_manifest_sha256"] = "0" * 64
+            if state == "second_wrong_manifest":
+                receipt = ow.sealed(ow.check_sealed(ow.read_json(path)) | {"offload_manifest_sha256": "0" * 64})
+            path.write_bytes(ow.canonical(receipt))
+        elif state in {"fresh_missing", "fresh_replayed"}:
+            def replace(command, raw):
+                if not command.startswith("receipts "):
+                    return raw
+                reply = json.loads(raw)
+                reply["fresh"] = (None if state == "fresh_missing" else
+                                  ow.sealed(ow.check_sealed(reply["fresh"]) | {"nonce": "0" * 32}))
+                return ow.canonical(reply)
+            f.transport.replace_reply = replace
+        elif state in {"air_part_changed", "local_part_changed", "local_raw_changed"}:
+            path = (f.store / "inbox/w1-test" / manifest["parts"][0]["name"] if state == "air_part_changed" else
+                    off.parts_dir / manifest["parts"][0]["name"] if state == "local_part_changed" else
+                    f.record / "members/m01/raw/powermetrics.plist")
+            info = path.stat()
+            raw = path.read_bytes()
+            path.write_bytes(bytes([raw[0] ^ 1]) + raw[1:])
+            os.utime(path, ns=(info.st_atime_ns, info.st_mtime_ns))
+        elif state == "armed":
+            f.probe_state["armed"] = ["synthetic-night.plist"]
+        if state.startswith("deleting_"):
+            rows, skipped = off._inventory(manifest)
+            (off.dir / "deleting.json").write_bytes(ow.canonical({
+                "schema": ow.SCHEMA_DELETING, "window_id": "w1-test", "state": "deleting",
+                "record_manifest_sha256": manifest["record_manifest_sha256"],
+                "rule": "two_verified_copies", "inventory": rows, "skipped": skipped,
+            }))
+        if state == "released_latch":
+            (off.dir / "released.json").write_bytes(ow.canonical({"already": "released"}))
+        if reason is not None:
+            with self.assertRaisesRegex(ow.Refusal, reason):
+                off.release()
+        else:
+            off.release()
+        self.assertEqual(not (f.record / "empty.txt").exists(), may_delete)
+        if not may_delete:
+            f.assert_nothing_deleted()
+
+
 class HappyPath(Fixture):
     def test_round_trip_verify_second_copy_release(self):
         self.assertEqual(self.run_offload(), 0)
