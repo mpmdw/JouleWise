@@ -1042,6 +1042,23 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+270. **Laptop lead (interactive session 41120c85, Opus 5.5), 2026-11-11 15:18 PST: the R1 follow-up kit is ADMITTED-WITH-FIXES for native smoke (Fable 5.2 delta review, round 5, `6a9805190`). MAGISTRATE: run native smoke Part A, then Part B, at `ops/2026-11-11-r1-followup-kit` @ `6a9805190`, then stop. Do NOT prepare and do NOT arm: the arm waits for the research lead's sensor ruling on the Part B table and for D-7/D-8 (item 271 or later).**
+
+```pointer
+owner: magistrate
+wait: result_json_exists
+deadline: 2026-11-11T19:30:00-08:00
+on_early_or_refused: a partial smoke is not a pass and is never extended; on any refusal, timeout, orphan resource or missing feed, stop, restore the host, record the refusal text and mail the lead
+next_observable: commit on main adding docs/process_traces/2026-11-11-r1-followup-smoke/ (Part A receipt summary, Part B smoke_part_b.json sha256 and the table file itself)
+```
+
+- **Procedure:** follow `docs/run_reports/2026-11-11-r1-followup-kit.md` on the kit branch, "next steps" items 2–3. Use the ordinary R1 night host and DC-in custody: KM003C capture, AC/battery, agent and volume feeds, Automatic readback and restore. No other agent or job may run during either capture; the magistrate itself makes no tool calls while a part is capturing.
+  - Part A: `python3.13 -B scripts/align_r1_followup_kit.py smoke --part A --output <new-A-dir> --soak-reference <R1's accepted soak reference>`. Take the soak reference from the R1 night root harvested in item 262 (`r1_soak_reference.json`), not a substitute. Check that it passes: native 60 s capture before warmup, W1 verifier accepted, G0 released ≤1,200 s, no timeout-run, re-arm evidence present, meter and host feeds complete, and no orphan SMC/heater/restore resource.
+  - Part B: a NEW output directory, `--part B`. The table is `smoke_part_b.json`. Record whole-inventory coverage per phase (pre-warmup idle, quiet, load, recovery), the classifier record, and the **D-turn (load phase) length in seconds**. The research lead needs that length for D-4: the coverage bars are fragile below 150 s.
+- **Read-only beforehand:** confirm the condition-13 sources at `6a9805190` match the kit (the smoke refuses drift itself), and that nothing is armed and no `joulewise.night*` label is loaded.
+- **After:** commit the record, then mail the lead with Part A's result, Part B's table sha256 and the D-turn length.
+- **Queue after this:** the BYTES §3.8 rerun waits for the twin session-codes cold review (item 269). It will come as its own item, after this smoke, never during a capture.
+
 269. **Laptop lead (interactive session 41120c85, Opus 5.5), 2026-11-11 13:40 PST: the research lead ruled the flags question (RL-82, reading A). A cell's flags are the codes on its kept runs plus the codes on its session. The TWIN changes to list session codes; the analysis and its estimator digest `18582818…` do not move. A Sol seat is building the twin change on `fix/2026-11-11-bytes-twin-sesscodes` (base `a0d5b19c4`); a cold review follows. MAGISTRATE: nothing to run until the next item names the reviewed producing commit.**
 
 ```pointer

@@ -1,13 +1,13 @@
 {
   "armed": null,
-  "next_observable": "cold-review verdict ADMIT committed on fix/2026-11-11-bytes-twin-sesscodes, then a RUN_STATE item telling the magistrate to re-run stage-1 §3.8 into a new --out",
-  "owner": "lead",
+  "next_observable": "commit on main adding docs/process_traces/2026-11-11-r1-followup-smoke/ (Part A receipt summary, Part B smoke_part_b.json sha256 and the table file itself)",
+  "owner": "magistrate",
   "schema": "joulewise.current_pointer.v1",
-  "source_item": "269",
+  "source_item": "270",
   "source_item_heading_date": "2026-11-11",
   "wait": {
-    "deadline_epoch_s": 1794502800,
-    "observable": "ruling_recorded",
-    "on_early_or_refused": "if the cold review refuses the twin change, the seat gets a fix round and this deadline moves by one item; nothing is committed and no prediction file is re-made"
+    "deadline_epoch_s": 1794454200,
+    "observable": "result_json_exists",
+    "on_early_or_refused": "a partial smoke is not a pass and is never extended; on any refusal, timeout, orphan resource or missing feed, stop, restore the host, record the refusal text and mail the lead"
   }
 }
