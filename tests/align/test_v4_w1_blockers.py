@@ -78,7 +78,7 @@ class U3Tests(unittest.TestCase):
         bar = signed_bar()
         self.assertIs(reg.validate_u3(bar), bar)
         p = bar['prediction']
-        self.assertEqual((p['n'], p['df'], p['series_comparisons']), (7, 7, 22))   # ruling 2 / R15: N = 16; R25: N = 22 with the six reserve windows
+        self.assertEqual((p['n'], p['df'], p['series_comparisons']), (7, 7, 24))   # ruling 2 / R15: N = 16; R25: N = 22 with the six reserve windows
         rel = [r for r, pair in zip([(e[1]-e[0])/((e[0]+e[1])/2) for e in (x['energies_j'] for x in bar['pairs'])],
                                      bar['pairs']) if pair['phase'] == 'pilot']
         s0 = math.sqrt(sum(r*r for r in rel)/len(rel))
@@ -143,7 +143,7 @@ class U3Tests(unittest.TestCase):
                          'series_false_fail', 'relative_bar_30B', 'relative_bar_D'}
             self.assertEqual({k: v for k, v in before.items() if k not in dependent},
                              {k: v for k, v in after.items() if k not in dependent})
-            self.assertEqual((before['series_comparisons'], after['series_comparisons']), (16, 22))
+            self.assertEqual((before['series_comparisons'], after['series_comparisons']), (16, 24))
             self.assertEqual(after['heavy_tail_rule_applied'], heavy)
             self.assertEqual(after['series_beta'], .025 if heavy else .05)
             self.assertGreater(after['series_quantile_q'], before['series_quantile_q'])
@@ -202,10 +202,10 @@ class ExportTests(unittest.TestCase):
     def test_policy_template_is_the_ruled_roster_and_assemble_refuses_placeholders(self):
         from scripts import align_v4_u3_export as export_cli
         policy = export_cli.policy_template()
-        self.assertEqual(sum(sum(w.values()) for w in policy['checks_by_window'].values()), 22)   # R15: N = 16; R25: + C9-C14 reserves
+        self.assertEqual(sum(sum(w.values()) for w in policy['checks_by_window'].values()), 24)   # R15: N = 16; R25: + C9-C14 reserves
         self.assertEqual((policy['series_alpha'], policy['d_transfer_factor']), (.05, 1.5))     # rulings 1, 6
         self.assertEqual(sorted(policy['checks_by_window']), sorted(['W1', *[f'C{i}' for i in range(1, 15)],
-                                                                     *[f'T{i}' for i in range(1, 4)]]))
+                                                                     *[f'T{i}' for i in range(1, 6)]]))
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
             (tmp/'policy.json').write_text(json.dumps(policy))

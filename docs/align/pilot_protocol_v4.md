@@ -450,7 +450,7 @@ counts W1 when later sentinel windows make it evaluable. `F:364–409; A:94–99
 |---|---|
 | U1 | Included turns: OS level 0 / Nominal PM; ≤1 X1–X4 member per model-window; ≥99% sidecar coverage through episodes/gates, no gap >2 s; PM gaps ≤max(1 s, 5 periods); G1/H timeouts ≤2% of admissions, G0 ≤1/model-window |
 | U2 | G0 slow-temperature range ≤3 °C; every G1/H release verified within δ of its own episode's E |
-| U3 | **Derived bar, R11/R03** (ruling 5 below): \|ΔE\| ≤ q·s₀·Ē (30B) or 1.5·q·s₀·Ē (D, only if R1's screen does not refute), s₀ the zero-centred RMS of one prespecified 30B pilot pair per session, q the exact series quantile at β=.05, N=16. No k=3, 2.576 or fixed floor. Exact-token and active-clock ≤0.5% checks remain; an unsigned or missing bar is INCONCLUSIVE, never a v3 fallback |
+| U3 | **Derived bar, R11/R03** (ruling 5 below): \|ΔE\| ≤ q·s₀·Ē (30B) or 1.5·q·s₀·Ē (D, only if R1's screen does not refute), s₀ the zero-centred RMS of one prespecified 30B pilot pair per session, q the exact series quantile at β=.05, N = 24 (RL-16: W1 30B 4 + D 1, C1-C14 and T1-T5 D 1 each). No k=3, 2.576 or fixed floor. Exact-token and active-clock ≤0.5% checks remain; an unsigned or missing bar is INCONCLUSIVE, never a v3 fallback |
 | U4 | Sentinel window-mean relative shift ≤0.25% in magnitude and its 90% t interval within ±0.5%, df W−1; count W1 (W=4 at D3). E_ref = mean of R1 replay pair and W1 ordinals 5 and 17. Four-anchor 30B σ_w is print-only |
 | U5 | R1 three designed start states estimate D β_T; \|β_T\|₉₀·δ_slow ≤c·σ_pair, c=1.0; σ_pair=max(R1 replay-pair SD, 2.97 J). Point inside/upper bound outside means INCONCLUSIVE. Consequence amendment remains PENDING LEAD RULING below |
 | U6 | Early/late margins ±0.5·s_r with trajectory-clustered SEs; imprecise intervals say “calibration unresolved: imprecise”. D prints per-turn-position means, judging a position only if ≥6 trajectories reach it; no turn-index slope gate |
@@ -661,7 +661,11 @@ R1's adjacent D_spam a/b pair as a transfer screen (`scripts/align_v4_u3_export.
 s₀ is the RMS of the relative differences about zero (df = n); q solves the series
 false-fail E_U[1−(1−P(|Z|>qU))^N] = β, integrating the shared scale uncertainty once,
 with β = .05 (halved if any pilot difference exceeds 3× the leave-one-out RMS) and
-N = 22 (**R25**, RUN_STATE 239, a pre-signature design change: W1 30B:4 + D:1, C1-C14 D:1 each, T1-T3 D:1 each; it was 16 = 5 + 8 + 3 under RUN_STATE 226 R15 before the six R24 reserve windows C9-C14 existed). The U3 bar is not signed yet, so the roster expands prospectively to every window that can be run, and the familywise false-fail budget stays β over every possible comparison. `docs/align/v4/U3-transfer.md` restates the inputs at N = 22 (n = 7, β = .05: q 4.0898 to 4.2793, D bar multiplier 6.1347 to 6.4190) with regenerated OC evidence (`docs/align/v4/U3-scope-n22.json`). A pair fails if
+N = 24 (**RL-16**, pre-signature and blind): W1 30B:4 + D:1, C1-C14 D:1 each, T1-T5 D:1 each.
+R25's roster rule covers every window that can be run, including both test reserves. At n = 7 and β = .05,
+q = 4.3305 and the D multiplier is 6.4958 (formerly 4.2793 and 6.4190 at N = 22).
+`docs/align/v4/U3-transfer.md` restates these inputs and the regenerated synthetic evidence is
+`docs/align/v4/U3-scope-n24.json`. A pair fails if
 |ΔE| > q·s₀·Ē for 30B and f·q·s₀·Ē for D, f = 1.5 with a digest-bound written
 justification. A refuted or missing R1 screen leaves D U3 inconclusive. There is
 no multiplier outside this recomputed derivation: no k=3, 2.576 or floor. `validate_u3`
@@ -1353,8 +1357,8 @@ P(three admitted test windows) is .67 / .92 / .98 with 0 / 1 / 2 reserves at bar
 at R24's stress rate 1/4; a reserve costs a window of MBP time only when it is used. *U3 consequence:* R25's
 rule (the roster covers every window that can be run) makes the U3 roster N = 24 (T4 and T5, D 1 each); at
 n = 7 and β = .05 that moves q from 4.2793 to 4.3305 and the D multiplier from 6.4190 to 6.4958
-(`v4_u3.series_quantile`). This contract does NOT change the U3 constants or the export roster; the lead rules
-before the U3 bar is signed. A T reserve armed after a thermal bar inherits the lead's ruling on V4-04 (the
+(`v4_u3.series_quantile`). RL-16 installs N = 24 in the export roster and U3 inputs before the bar is
+signed; β = .05, transfer factor 1.5 and every other U constant stay unchanged. A T reserve armed after a thermal bar inherits the lead's ruling on V4-04 (the
 escalation ladder).
 
 **B7. Print-only secondaries.** None gates, selects or changes K, S or any eligibility; each is computed in the
