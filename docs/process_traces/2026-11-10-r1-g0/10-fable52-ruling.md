@@ -25,10 +25,29 @@ Terms used below, each fixed here:
   its model loaded and power capture running.
 - **Excess**: Tf08 minus that member's own idle.
 
+R1 names used below, as the runtime contract defines them:
+
+- **step-30b, step-d**: one long turn each on the 30B model and on model D, used
+  to read how the sensors respond to a load.
+- **A-B-A legs**: three such turns in Automatic, High Power, Automatic power
+  mode, to decide whether High Power is adopted.
+- **Designed start states**: three D turns started on purpose at R, R + 2 and
+  R + 4 °C, to measure how energy depends on start temperature (β_T).
+- **Gated D runs and X-G**: four members run back to back as W1 will run them.
+  The **duty bar** checks that their gate waits take at most 40 % of the
+  member's time limit.
+- **Precool** (`idle-until-soak`) and **`g0-release-soak`**: sensors-only waits
+  for Tf08 to come within the band of R before a segment.
+- **Slots S5 and S6**: the slow band from the registered formula, and the slow
+  band the gates actually use. They differ only by a recorded tuning step.
+
 ## 1. Ruling
 
-Adopt three changes together. Each is needed; the replay in section 4 shows
-that any one or two of them still times out on the 11-10 record.
+Adopt three changes together. Each is needed. On the 11-10 record every
+combination of one or two of them is still unreleased at 600 s. The
+combinations that keep the 600 s cap therefore time out on the record itself.
+Those that take the 1,200 s cap fail to release within it in at least two of
+the four tail models of section 3 (section 4.1).
 
 | # | Change | Value | Now |
 |---|---|---|---|
@@ -122,7 +141,9 @@ operating point.
 **3.2 δ_slow = 1.5 °C (change 2).** The registered text already names the
 remedy for a timeout-driven failure: loosen δ_slow in 0.5 °C steps, never above
 2.0 °C (protocol v4, chair ruling 14 and ruling 1(e); slot S6 with a tuning
-receipt). The choice is which step. Rule used: *the smallest step for which
+receipt). That text was written for the D-series windows; it is applied here to
+the R1 re-run, before the next attempt and not in place. The choice is which
+step. Rule used: *the smallest step for which
 1.25 × the predicted release time is within 1,200 s under every tail model that
 fits the record.* The 1.25 factor and the 1,200 s are the registered headroom
 and maximum (LEAD-RULINGS-2 R7-2: cap = 1.25 × longest wait, at most 1,200 s).
@@ -151,7 +172,8 @@ after warmup end, against R_op:
 
 1.5 °C is the smallest step that passes. It is preferred over 2.0 °C for two
 further reasons. At 2.0 °C the band stops doing anything on a warmup-only tail:
-the slope bar binds first (observed release 592 s at +1.89 °C). And a night run
+the band is met at 576 s and the slope bar is the last condition to be met
+(observed release 592 s at +1.89 °C). And a night run
 at 1.5 °C records each tail down to 1.5 °C, from which the 2.0 °C gate can be
 replayed exactly; the reverse is not possible.
 
@@ -199,7 +221,7 @@ end 600 s into the gate.
 | Soak mean, 1.0, 600 (as run) | timeout | none | +1.86 at 600 s |
 | Soak mean, 1.0, 1,200 (longer cap only) | not released | never in models A–C (limit is below own idle); D 1,131 s | |
 | Soak mean, 1.5, 1,200 | not released | A never; B 1,328; C 2,046; D 959 s | |
-| Soak mean, 2.0, 1,200 (ladder maximum) | not released | A 1,886; B 949; C 1,321; D 911 s | +0.6 to +0.9 |
+| Soak mean, 2.0, 1,200 (registered maximum band) | not released | A 1,886; B 949; C 1,321; D 911 s | +0.6 to +0.9 |
 | Soak mean, 3.0, 600 | timeout | none | +1.86 at 600 s |
 | R_op, 1.0, 600 (reference only) | timeout | none | +1.86 at 600 s |
 | R_op, 1.0, 1,200 | not released | predicted 907–1,299 s | +1.0 |
@@ -276,7 +298,7 @@ energy per °C, or about 1–14 J per °C for each kJ a member uses.
 - **Longer cap alone (soak reference, 1.0 °C, 1,200 s).** The limit, 26.489 °C,
   is below the member's own settled idle, 26.549 °C. Waiting longer cannot
   release.
-- **Wider band on the soak reference.** At the ladder maximum of 2.0 °C the
+- **Wider band on the soak reference.** At the registered maximum of 2.0 °C the
   limit is own idle + 0.94 °C and the predicted release is 911–1,886 s. Going
   wider would exceed the registered 2.0 °C maximum and would hide a 1.06 °C
   operating-point error inside a tolerance, where it would silently change if
