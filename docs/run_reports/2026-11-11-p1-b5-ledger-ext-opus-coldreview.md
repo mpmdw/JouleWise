@@ -286,3 +286,25 @@ counted in each. The "All 425" row is exact.
 | D1 | **Medium** (paper-bound) | **No ledger row prints 1.99975.** RL-55 assumed the ledger held R_cm for 1.7B prefill twice, "1.9997 from RESULTS.md and 1.99975 from the extension". In fact rows 570 and 848, and rows 277 and 502, all print **1.9997**, each with residual 0.000048. `REDERIVATION.md` line 48 says row 570 holds 1.99975, which is false. The coverage element "fullest-precision 1.7B prefill R_cm (RL-55)" under CP-X02-conclusion cites row 570 (1.9997). Under RL-52 every printed value is a row, so the second fill cannot print 1.99975 as things stand. The value itself is right: my own R_cm is 1.9997482608, which rounds to 1.99975. | Append one row: printed `1.99975`, key `RC.dominance.common_mode[Qwen3-1.7B-4bit/prefill].R_cm`, `within-rounding`, residual `-1.7e-6`. Re-point the coverage element to it and correct line 48. No existing row changes. |
 | D2 | Low | Five BYTES elements carry the reason "not a leaf of a registered output": P1-M-ACCEPT, P1-LEDGER, P1-DEV-LIST, P1-RELEASE and P1-AVAIL. That reason is inaccurate, because they are BYTES registered outputs; their own instructions say "sealed and outside this Block 5 output ledger". None of RL-55's three reasons fits. | Relabel them "outside Block 5 (BYTES; sealed)", or have the lead accept the label as a stand-in. This changes no row. |
 | D3 | Info | The coverage table pins `paper1.md` at `84ad2c5be`. Main is now `6a7493f40`, with `paper1.md` unchanged. | After main is merged into the branch, re-run `fill_coverage_b5.py` against the merged paper. |
+
+---
+
+## Delta review: round 5 (D1-D3)
+
+2026-11-11 04:26 PST · same reviewer · target `analysis/2026-11-11-b5-ledger-ext` @ `84d1bd5a9ee0a311719847df81ecb78443f17e5d`.
+The print authority is `766f8d4bb`; its ledger and coverage table equal HEAD's. The ledger has 1,845 rows and
+SHA-256 `41b7e577…060f`. **I opened no custody file in this pass.** The comparison uses my own R_cm from the
+round-1/2 run, 1.9997482608.
+
+**Verdict: ADMIT.**
+
+| Check | Result |
+|---|---|
+| Rows 1-1845 vs `8dc82e24e` | byte-identical. `RESULTS.md` is unchanged. |
+| Row 1846 | Prints `1.99975` with key `RC.dominance.common_mode[Qwen3-1.7B-4bit/prefill].R_cm`, `within-rounding`, residual `-1.7e-06`. Mine is 1.9997482608 − 1.99975 = −1.74e-6, so it agrees. |
+| D1 | **Closed.** The CP-X02 "fullest-precision" element and the P1-B5-DOM-FAILED element cite row 1846. The `REDERIVATION.md` clarification (lines 57-60) now names row 1846. |
+| D2 | **Closed.** All five BYTES elements read "outside Block 5 (BYTES; sealed)". |
+| D3 | **Closed.** `origin/main` is merged, and `paper1.md` is identical to main. `fill_coverage_b5.py` is now pinned to `9fb425690`. |
+| `fill_check_b5.py` (no `--paper-ref`) | PASS, exit 0 |
+| `fill_coverage_b5.py` | PASS, exit 0. 1,582 elements over 65 placeholders: 1,540 cite a ledger row and 42 carry a reason. |
+| `python3.13 -B -m unittest tests.b5_analysis.test_hand_check_phase2` | 66 tests OK |
