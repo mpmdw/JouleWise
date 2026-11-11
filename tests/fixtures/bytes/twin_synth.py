@@ -229,7 +229,14 @@ class Session:
         bundle = {"events": events, "metadata": {
             "run_id": run_id, "status": {"state": status}, "schema": "joulewise.metadata.synthetic.v1",
             "synthetic_idle_dc_w": idle_dc_w,
-            "uncertainty_evidence": {"clock_anchor": {"method": "synthetic", "clock_stamps": {
+            # §7: re-reduce the decode-phase envelope under the session's
+            # operative bound. This toy world has explicit interval supports.
+            "device": {"rail_manifest": ["synthetic"]},
+            "instrument_calibration": {"b_fiducial_s": EDGE_BOUND_S},
+            "uncertainty_evidence": {"clock_anchor": {"method": "synthetic", "status": "bounded",
+                "first_sample_end_point_epoch_s": epoch_start + .1,
+                "effective_clock_anchor_bound_s": .001, "wall_minus_monotonic_span_s": 0.0,
+                "clock_stamps": {
                 "sampling_started": {"epoch_s": sampling_started[0], "monotonic_before_s": sampling_started[1],
                                      "monotonic_after_s": sampling_started[1] + 1e-6}}}}},
             "config": {"run_id": run_id, "model": {"name": model_name, "family": "synthetic"},
@@ -237,7 +244,9 @@ class Session:
                        "run_metadata": {"tags": ["df-condition=" + config_key] + (
                            ["calibration-abba-block-id=" + abba[0], "calibration-abba-label=" + abba[1][0],
                             "calibration-abba-sequence-index=" + str(abba[2])] if abba else [])}},
-            "summary": summary}
+            "summary": summary,
+            "anchor_trace": [(epoch_start, epoch_start + .1, rails["decode"]),
+                             (epoch_start + .1, self.epoch + 1, rails["decode"])]}
         self.bundles[run_id] = bundle
         self.spans[run_id] = {"monotonic_ns": [int(idle_start * 1e9), int(request_end * 1e9)],
                               "request_monotonic_ns": [int(request_start * 1e9), int(request_end * 1e9)]}
@@ -385,6 +394,10 @@ class Session:
             write_json(base / "metadata.json", bundle["metadata"])
             write_json(base / "config.json", bundle["config"])
             write_json(base / "status.json", {"status": {"state": bundle["metadata"]["status"]["state"]}})
+            with (base / "power_trace.csv").open("w", newline="") as output:
+                writer = csv.writer(output)
+                writer.writerow(["timestamp_s", "power_w", "source", "rail", "interval_start_s", "interval_end_s"])
+                writer.writerows((z, p, "synthetic", "synthetic", a, z) for a, z, p in bundle["anchor_trace"])
             write_json(archive / "withheld/reductions" / (run_id + ".summary_metrics.rereduced.json"), bundle["summary"])
         self.write_stream(archive / "sources/night-custody/hazards/meter/stream-001.jsonl")
 

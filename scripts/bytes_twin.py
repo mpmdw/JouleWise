@@ -3,7 +3,7 @@
 
 Inputs are the block-6 per-run records as the harvest and ``joulewise/b6/export_runs.py``
 write them (``<session>.runs.csv`` plus ``<session>.session.json``), optionally each
-session's harvest archive (for the DC-input meter join), and the frozen bytes manifest
+session's harvest archive (for operative rails bounds and the DC-input meter join), and the frozen bytes manifest
 (``configs/bytes/bytes_manifest.json``, ruling R4).  Everything is recomputed from the
 raw per-run phase records by the text of the ruling (``docs/design/bytes_pack_design.md``)
 and of block 5's analysis plan (``analysis_plan_block5.md`` section 4).  Standard library
@@ -1054,8 +1054,121 @@ def load_archive(root):
             stream = {"aligned": False, "poll_ns": [], "raw_offset_ns": None, "reason": str(exc)}
         stream["name"] = path.name
         streams.append(stream)
+    # §16: "reads the harvest's operative timing bound ... and never recomputes
+    # a calibration bracket". Keep the archive's already evaluated record.
     return {"root": root, "session_id": record.get("session_id"), "pack_id": record.get("pack_id"),
-            "streams": streams}
+            "streams": streams, "calibration": record.get("calibration") or {}}
+
+
+def anchor_envelope(intervals, window, common_s, edge_s):
+    """Independent interval-overlap envelope, block-5 plan §4 step 4.
+
+    "The result is the field max_abs_delta_j ... for the phase." Nonnegative
+    powers put independent-edge extrema at the corners. For each corner,
+    moving both edges past every support endpoint enumerates every kink of
+    the piecewise-linear energy, including extrema inside the common shift.
+    """
+    if (not intervals or any(not is_number(v) or v < 0 for v in (common_s, edge_s))
+            or window[1] <= window[0]):
+        raise ValueError("decode anchor inputs unavailable")
+    origin = intervals[0][1]
+    trace = [(a - origin, z - origin, p) for a, z, p in intervals]
+    start, end = (t - origin for t in window)
+    if any(not all(is_number(v) for v in row) or row[0] >= row[1] or row[2] < 0 for row in trace):
+        raise ValueError("invalid interval-support power trace")
+    if (start - edge_s - common_s < min(a for a, z, p in trace)
+            or end + edge_s + common_s > max(z for a, z, p in trace)
+            or end - start < 2 * edge_s):
+        raise ValueError("trace does not cover operative decode shifts")
+
+    def energy(a, z):
+        return math.fsum(p * max(0.0, min(z, right) - max(a, left)) for left, right, p in trace)
+
+    point = energy(start, end)
+    values = [point]
+    for on in (-edge_s, edge_s):
+        for off in (-edge_s, edge_s):
+            a, z = start + on, end + off
+            shifts = {-common_s, 0.0, common_s}
+            for left, right, p in trace:
+                for boundary in (left, right):
+                    for edge in (a, z):
+                        shift = boundary - edge
+                        if -common_s <= shift <= common_s:
+                            shifts.add(shift)
+            values.extend(energy(a + d, z + d) for d in sorted(shifts))
+    return max(abs(value - point) for value in values)
+
+
+def decode_anchor_bound(archive, run_id):
+    """§7: rails bound "re-derived under the session's operative timing bound".
+
+    §16: read calibration.operative_bound_s, "never recomputes a calibration
+    bracket". Consume the archive's bounded clock placement and interval
+    trace; re-integrate the decode envelope independently, without the export's
+    whole-window bound, any estimator imports, or a persisted re-reduction.
+    """
+    value = archive.get("calibration", {}).get("operative_bound_s")
+    if isinstance(value, bool) or value is None:
+        raise ValueError("session operative timing bound missing")
+    operative = float(value)
+    if not is_number(operative) or operative < 0:
+        raise ValueError("invalid session operative timing bound")
+    bundle = _bundle(archive["root"], run_id)
+    if bundle is None:
+        raise ValueError("anchor bundle missing")
+    with _readable_bundle(bundle, Path(str(archive["root"]) + ".desk") / "compression.jsonl") as plain:
+        metadata = read_json(plain / "metadata.json", {})
+        clock = (metadata.get("uncertainty_evidence") or {}).get("clock_anchor") or {}
+        if clock.get("status") != "bounded":
+            # Existing mock campaigns have no native timing evidence. Match
+            # their explicitly labelled oracle only; this is not a live join.
+            config = read_json(plain / "config.json", {})
+            stored = read_json(archive["root"] / "withheld/reductions" /
+                               (run_id + ".summary_metrics.rereduced.json"), {})
+            if (config.get("hardware_target", {}).get("telemetry_backend") == "mock"
+                    and stored.get("bytes_synthetic_timing_fixture") is True):
+                result = stored["energy_anchor_shift_envelopes"]["/phase_energy_j/decode"]["max_abs_delta_j"]
+                if is_number(result) and result >= 0:
+                    return result
+            raise ValueError("bounded member clock anchor missing")
+        common = clock.get("effective_clock_anchor_bound_s")
+        span = clock.get("wall_minus_monotonic_span_s")
+        mint = (metadata.get("instrument_calibration") or {}).get("b_fiducial_s")
+        point = clock.get("first_sample_end_point_epoch_s")
+        if any(not is_number(v) or v < 0 for v in (common, span, mint)) or not is_number(point):
+            raise ValueError("member anchor evidence incomplete")
+        if operative + 1e-12 < mint:
+            raise ValueError("operative bound narrows member calibration")
+        events = [json.loads(line) for line in _read_text(plain / "events.jsonl").splitlines() if line.strip()]
+        starts = [e["timestamp_s"] for e in events if e.get("phase") == "decode" and e.get("event_type") == "phase_start"]
+        ends = [e["timestamp_s"] for e in events if e.get("phase") == "decode" and e.get("event_type") == "phase_end"]
+        if len(starts) != 1 or len(ends) != 1:
+            raise ValueError("one decode phase required")
+        rails = (metadata.get("device") or {}).get("rail_manifest")
+        if not isinstance(rails, list) or not rails:
+            raise ValueError("anchor rail manifest missing")
+        grouped = {}
+        for row in csv.DictReader(_read_text(plain / "power_trace.csv").splitlines()):
+            if row["rail"] not in rails:
+                continue
+            stamp = float(row["timestamp_s"])
+            a, z, p = (float(row[k]) for k in ("interval_start_s", "interval_end_s", "power_w"))
+            group = grouped.setdefault(stamp, {})
+            if row["rail"] in group:
+                raise ValueError("duplicate anchor rail")
+            group[row["rail"]] = (a, z, p)
+        intervals = []
+        # Current native traces persist the record-0 endpoint placement. Shift
+        # older stored placements onto the bounded archive anchor before overlap.
+        first = min(grouped)
+        shift = point - first
+        for stamp, group in sorted(grouped.items()):
+            if set(group) != set(rails) or len({(a, z) for a, z, p in group.values()}) != 1:
+                raise ValueError("misaligned anchor rails")
+            a, z, _ = next(iter(group.values()))
+            intervals.append((a + shift, z + shift, math.fsum(v[2] for v in group.values())))
+        return anchor_envelope(intervals, (starts[0], ends[0]), common, operative + span)
 
 
 @contextmanager
@@ -1321,7 +1434,9 @@ def _member(row, boundary, dc, allowance_j):
     e_rails = row.get("phase_decode_j")
     if not is_number(t) or t <= 0:
         return None
-    anchor = row.get("bound_E_clock_anchor_shift_bound_j")
+    # §7: "re-derived under the session's operative timing bound" at fit and
+    # heldout; §11's blinded-stage export-column rule stays unchanged.
+    anchor = row.get("_operative_anchor_j", row.get("bound_E_clock_anchor_shift_bound_j"))
     if boundary == "rails":
         if not is_number(e_rails):
             return None
@@ -2094,6 +2209,7 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
             unblinded = all(r["_unblinded"] for r in srows)
             archive = archive_by_session.get(session_id)
             dc_by_run = {}
+            anchor_status = {}
             if archive is not None and unblinded:
                 for r in srows:
                     dc_by_run[r["run_id"]] = dc_join(archive, r["run_id"])
@@ -2106,6 +2222,16 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
                         f"decode marker not evaluated: archive unavailable (run {r['run_id']})"))
                 valid = r["status"] == "succeeded" and not (
                     set((r.get("exclusion_codes") or "").split(";")) & VALIDITY_CODES)
+                if stage in ("1", "2"):
+                    # §7's operative decode-phase bound supplies every rails
+                    # and rest variant and their attribution floors via _member.
+                    r["_operative_anchor_j"] = None
+                    if valid and unblinded and archive is not None:
+                        try:
+                            r["_operative_anchor_j"] = decode_anchor_bound(archive, r["run_id"])
+                            anchor_status[r["run_id"]] = "ok"
+                        except (OSError, ValueError, KeyError, TypeError) as exc:
+                            anchor_status[r["run_id"]] = str(exc)
                 r["_meter_flags"] = (["bytes.decode_battery_assist"] if r["_decode_assisted"] else [])
                 if valid and unblinded and dc_by_run.get(r["run_id"], {}).get("status") != "ok":
                     r["_meter_flags"].append("bytes.meter_gap" if
@@ -2120,6 +2246,7 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
                 per_boundary[boundary] = cell
             cells.setdefault(model, {})[f"pass{pass_index}"] = {
                 "session_id": session_id, "unblinded": unblinded, "boundaries": per_boundary,
+                "anchor_join_status": anchor_status,
                 "dc_join_status": {run: (v or {}).get("status") for run, v in dc_by_run.items()}}
     # pass keys: every pass, plus the mean of passes where two or more exist
     pass_keys = sorted({k for m in cells.values() for k in m})

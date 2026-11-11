@@ -82,6 +82,102 @@ def run_twin(world: Path, stage: str, *, archives=True, key_dir=True, extra=()) 
     return json.loads(out.read_text())
 
 
+class AnchorEnvelopeTests(QuantityTestCase):
+    """§7's operative decode envelope; §12's actual cell energy bar."""
+
+    def test_stage1_uses_operative_decode_envelope(self):
+        result = run_twin(WORLD["one"], "1")
+        name = "qwen3-1.7b-4bit"
+        cell = result["cells"][name]["pass1"]["boundaries"]["rails"]["gross"]
+        # Toy trace has constant power, so independent edges add 2*b*P;
+        # a common shift adds nothing. The mint/export uses another bound.
+        expected = .092 * cell["mean_j"] / cell["duration_s"]
+        actual = cell["kind_averages_j"]["E_clock_anchor_shift_bound_j"]
+        self.assertAlmostEqual(actual, expected, delta=.01 * (cell["h_j"] + cell["B_j"]))
+
+    def test_registered_worked_example(self):
+        # Block-5 §4.4: g=46 ms, m=2 ms, 40 W at start, 10 W at end.
+        self.assertQuantityEqual(bt.anchor_envelope([(-1, 1.5, 40), (1.5, 4, 10)],
+                                                   (1, 2), .002, .046), 2.36)
+
+    def test_breakpoints_include_interior_common_shift_extremum(self):
+        from joulewise.bundle_read import TracePoint, Window
+        from joulewise.reduce import _corner_composed_anchor_shift_envelope
+        specs = [(-2, 0, 0), (0, 1, 10), (1, 2, 0), (2, 3, 30), (3, 5, 0)]
+        curve = [TracePoint(t=z, power_w=p, support_start_s=a, support_end_s=z) for a, z, p in specs]
+        for common, edge in ((.8, .03), (.2, .25), (0, .1), (.1, 0)):
+            with self.subTest(common=common, edge=edge):
+                expected = _corner_composed_anchor_shift_envelope(
+                    [(curve, [Window(start_s=.5, end_s=2.5)])], common, edge, 0)
+                self.assertQuantityEqual(bt.anchor_envelope(specs, (.5, 2.5), common, edge),
+                                         expected["max_abs_delta_j"])
+
+    def test_interval_bundle_matches_operative_estimator_without_writes(self):
+        import hashlib
+        from dataclasses import replace
+        from joulewise import bytes_analysis as ba
+        from joulewise import reduce as reducer
+        from joulewise.bundle_read import TracePoint
+        from joulewise.clock import FakeClock
+        from joulewise.interfaces import PowerSample
+        from joulewise.schemas import TelemetryBackend
+        from tests.test_reduce import BundleBuilder, load_config
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = load_config(run_id="anchor")
+            config = replace(config, hardware_target=replace(config.hardware_target,
+                             telemetry_backend=TelemetryBackend.POWERMETRICS))
+            builder = BundleBuilder(root, config, FakeClock(start=1000))
+            builder.measured_window(1, 4)
+            builder.add_phase("prefill", 1, 2)
+            builder.add_phase("decode", 2, 3)
+            specs = [(-1, 1.5, 40), (1.5, 2.5, 30), (2.5, 4.5, 10), (4.5, 6, 2)]
+            builder.write_trace([PowerSample(timestamp_s=z, power_w=p, source="mock", rail="mock",
+                interval_start_s=a, interval_end_s=z) for a, z, p in specs])
+            bundle = builder.write_metadata(rail_manifest=["mock"])
+            metadata = json.loads((bundle / "metadata.json").read_text())
+            metadata.update(instrument_calibration={"b_fiducial_s": .01}, uncertainty_evidence={"clock_anchor": {
+                "status": "bounded", "first_sample_end_point_epoch_s": 1.5,
+                "effective_clock_anchor_bound_s": .002, "wall_minus_monotonic_span_s": .0004}})
+            (bundle / "metadata.json").write_text(json.dumps(metadata))
+            before = {p.relative_to(bundle): hashlib.sha256(p.read_bytes()).hexdigest()
+                      for p in bundle.rglob("*") if p.is_file()}
+            acceptance = {"calibration": {"operative_bound_s": ".092"}}
+            # Clock/calibration authentication is outside this fix. Stub that
+            # context only; run the unchanged estimator's real output-free
+            # reducer seam and operative phase-envelope arithmetic in full.
+            def context(*args, authenticated_fiducial_bound_override_s=None, **kwargs):
+                bound = authenticated_fiducial_bound_override_s
+                self.assertEqual(bound, .092)
+                return reducer._AnchorContext(True, False, .002 + bound + .0004,
+                    [TracePoint(t=z, power_w=p, support_start_s=a, support_end_s=z) for a, z, p in specs],
+                    1.5, .002, bound, None, .0004)
+            with patch.object(reducer, "_derive_anchor_context", side_effect=context):
+                summary, provenance = ba.operative_summary(bundle, acceptance)
+            self.assertEqual(provenance["status"], "rereduced")
+            with patch.object(bt, "_bundle", return_value=bundle):
+                actual = bt.decode_anchor_bound({"root": root, **acceptance}, bundle.name)
+                for bad in (None, True, "nan", "-1", "0"):
+                    with self.subTest(bound=bad), self.assertRaises(ValueError):
+                        bt.decode_anchor_bound({"root": root, "calibration": {"operative_bound_s": bad}}, bundle.name)
+            self.assertQuantityEqual(actual, summary["energy_anchor_shift_envelopes"][
+                "/phase_energy_j/decode"]["max_abs_delta_j"])
+            self.assertEqual(before, {p.relative_to(bundle): hashlib.sha256(p.read_bytes()).hexdigest()
+                                     for p in bundle.rglob("*") if p.is_file()})
+
+    def test_missing_evidence_and_short_coverage_refuse(self):
+        for intervals, window, common, edge in (([], (0, 1), 0, 0),
+                ([(0, 2, 1)], (0, 1), .1, .1), ([(0, 2, -1)], (.5, 1.5), 0, 0)):
+            with self.subTest(intervals=intervals), self.assertRaises(ValueError):
+                bt.anchor_envelope(intervals, window, common, edge)
+
+    def test_blinded_stage_keeps_export_columns(self):
+        # §11: "from the blinded export's columns (no archive, key or meter reads)".
+        with patch.object(bt, "decode_anchor_bound", side_effect=AssertionError("blinded anchor read")):
+            result = run_twin(WORLD["one"], "blinded")
+        self.assertTrue(result["cells"])
+
+
 class ConstantsTests(QuantityTestCase):
     def test_addendum5_512_decode_passes(self):
         self.assertEqual(bt.DECODE_STEPS, 512)

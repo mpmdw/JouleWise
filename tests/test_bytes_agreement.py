@@ -141,6 +141,12 @@ CAMPAIGNS = {
                                   "battery_publication": "delayed", "battery_reference_assist": True,
                                   "marker_stream_mode": "first_batch_tail_replayed"}, ()),
     "compressed": ("bytes", 1100, [], NR1_KNOBS, ()),
+    # §7's decode envelope under the operative bound, distinct from the
+    # exported whole-window envelope under the member's mint bound (§12).
+    # R6's twelve sub-pack sessions retain all ten 50-run modules in both
+    # passes and also exercise §11's post-commit blinded-store path.
+    "anchor_narrow": ("bytes", 1100, [], {**NR1_KNOBS, "subpack_sessions": True, "anchor_profile": "narrow"}, ()),
+    "anchor_wide": ("resident", 3100, [], {**NR1_KNOBS, "subpack_sessions": True, "anchor_profile": "wide"}, ()),
 }
 BMAP = {"rails": "rails", "DC input": "dc_input", "rest": "rest"}
 VMAP = {("gross primary", "primary"): "gross", ("idle-subtracted secondary", "primary"): "idle_subtracted",
@@ -1692,6 +1698,51 @@ class CompressedRefusalTests(unittest.TestCase):
 
 class AgreementTests(unittest.TestCase):
     """Every campaign, every stage: zero differences above the bar; the under-bar count is printed."""
+
+    def test_nonzero_decode_anchor_campaigns(self):
+        # Registration §12: energy differences must be within 1% of (h+B).
+        # This fails on the original twin's exported whole-window term.
+        for name in ("anchor_narrow", "anchor_wide"):
+            with self.subTest(campaign=name):
+                self.check(name, 63, {"h2/rails/passes_mean": (9, 9),
+                    "h2/dc_input/passes_mean": (9, 9), "h2/rest/passes_mean": (11, 11)})
+                root = WORK["root"] / name
+                manifest = load(root / "manifest.json")
+                session = manifest["sessions"][0]
+                archive = Path(session["archive"])
+                rid = _run_ids(archive, manifest["models"], "Qwen3-1.7B-4bit")[0]
+                stored = load(archive / "withheld/reductions" / (rid + ".summary_metrics.rereduced.json"))
+                envelope = stored["energy_anchor_shift_envelopes"]
+                self.assertGreater(envelope["/phase_energy_j/decode"]["max_abs_delta_j"], 0)
+                self.assertNotEqual(envelope["/phase_energy_j/decode"]["max_abs_delta_j"],
+                                    envelope["/gross_energy_j"]["max_abs_delta_j"])
+                metadata = load(archive / "sources/claim-runs" / rid / "metadata.json")
+                self.assertNotEqual(metadata["instrument_calibration"]["b_fiducial_s"],
+                                    float(load(archive / "derived/b6-acceptance.json")["calibration"]["operative_bound_s"]))
+                # Keep the exact pre-fix _member source selection as a mutation:
+                # original twin used the export column at fit. It must fail the
+                # real comparer against the unchanged estimator, above §12's bar.
+                member = bt._member
+                def legacy_member(row, *args):
+                    row = dict(row)
+                    row.pop("_operative_anchor_j", None)
+                    return member(row, *args)
+                output = root / "legacy-anchor.json"
+                argv = ["--export-dir", str(root / "export"), "--manifest", str(root / "manifest.json"),
+                        "--stage", "1", "--key-dir", str(root / "released-keys/bytes/blinding"), "--out", str(output)]
+                for item in manifest["sessions"]:
+                    argv += ["--archive", item["archive"]]
+                import contextlib
+                import io
+                with mock.patch.object(bt, "_member", side_effect=legacy_member), contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(bt.main(argv), 0)
+                legacy = Recorder()
+                compare_cells(legacy, "fit", load(root / "out/a-fit/fit_pass_estimates.json"), load(output))
+                hits = [r for r in legacy.above() if r["key"] == "B_kind:anchor"]
+                self.assertTrue(hits, "old export-column anchor must disagree with the estimator above §12's bar")
+                self.assertFalse([r for r in legacy.above() if r["key"] in ("mean_j", "h_j", "duration_s")])
+                print(f"\nlegacy anchor {name}: {len(hits)} anchor fields above bar; "
+                      f"smallest multiple {min(r['abs'] / r['bar'] for r in hits):.3f}")
 
     def check(self, name, expected_words, expected_h2):
         R = campaign(name)

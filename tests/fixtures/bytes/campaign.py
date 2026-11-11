@@ -44,10 +44,10 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
                      edge_phase=True, min_receive_latency_ms=10.0,
                      subpack_sessions=False, uncollected_sessions=(), drop_8b_8bit=False,
                      battery_assist=False, battery_publication="instant", battery_reference_assist=False,
-                     late_start_stream=False, marker_stream_mode=None):
+                     late_start_stream=False, marker_stream_mode=None, anchor_profile=None):
     """1000 on-disk runs: real mock trace reducer -> harvest layout -> B6 export.
 
-    No calibration hardware is claimed: the zero phase envelope is explicitly
+    No calibration hardware is claimed: the stored phase envelope is explicitly
     synthetic, with missing operative evidence disclosed. Each energy passes
     through reduce_bundle and the full CLI, not a summary oracle.
     subpack_sessions uses the R6 six sub-packs in both registered pass orders;
@@ -92,6 +92,8 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
     from tests.test_reduce import BundleBuilder, load_config, DEFAULT_IDLE
     from joulewise.interfaces import PowerSample
     design = ba.read_json(FIXTURES / "campaign_design.json")
+    if anchor_profile not in (None, "narrow", "wide"):
+        raise ValueError("unknown synthetic anchor profile")
     if drop_8b_8bit:
         # Removed before registration: no run, reference identity or key uses this model.
         design["models"] = [m for m in design["models"] if m["model"] != "Qwen3-8B-8bit"]
@@ -128,6 +130,9 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
         if session_id in uncollected_sessions:
             continue
         archive = root / session_id
+        timing = calibration.evaluate(calibration.Capture(Decimal(".060" if anchor_profile == "wide" else ".040"), "valid"),
+            calibration.Capture(Decimal(".050" if anchor_profile == "wide" else ".030"), "valid"),
+            document(), [], [session_id], False)
         bundles = archive / "sources/claim-runs"
         roster, evidence_members, meter_samples, battery_episodes = [], [], [], []
         # Native 50 SPS meter, with optional unequal passes and signed clock-fit excess latency.
@@ -241,6 +246,38 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
                 metadata["uncertainty_evidence"] = {"clock_anchor": {"clock_stamps": {
                     "sampling_started": {"epoch_s": start, "monotonic_before_s": start}}}}
                 _write_json(bundle / "metadata.json", metadata)
+                if anchor_profile:
+                    # Registration §7: "re-derived under the session's operative
+                    # timing bound"; block-5 §4.4: envelope "for the phase".
+                    # Decode stays constant-power, but +/-g crosses neighbours
+                    # at 20 ms. Whole-window edges have different powers again.
+                    import csv
+                    from joulewise.bundle_read import TracePoint, Window
+                    from joulewise.reduce import _corner_composed_anchor_shift_envelope
+                    specs = [(start + .5, decode_start - .02, 3 * power),
+                             (decode_start - .02, end + .02, power),
+                             (end + .02, end + 7.5, .2 * power)]
+                    with (bundle / "power_trace.csv").open("w", newline="") as output:
+                        writer = csv.writer(output)
+                        writer.writerow(["timestamp_s", "power_w", "source", "rail", "interval_start_s", "interval_end_s"])
+                        writer.writerows((z, p, "mock", "mock", a, z) for a, z, p in specs)
+                    curve = [TracePoint(t=z, power_w=p, support_start_s=a, support_end_s=z) for a, z, p in specs]
+                    member_bound, common, span = .01, .002, .0004
+                    def envelope(a, z, bound):
+                        return _corner_composed_anchor_shift_envelope(
+                            [(curve, [Window(start_s=a, end_s=z)])], common, bound, span)
+                    summary["energy_anchor_shift_envelopes"] = {
+                        "/phase_energy_j/decode": envelope(decode_start, end, float(timing["operative_bound_s"])),
+                        "/gross_energy_j": envelope(start + 1, end + 7, member_bound)}
+                    summary["energy_bound_terms_j"]["E_clock_anchor_shift_bound_j"] = summary[
+                        "energy_anchor_shift_envelopes"]["/gross_energy_j"]["max_abs_delta_j"]
+                    _write_json(archive / "withheld/reductions" / (run_id + ".summary_metrics.rereduced.json"), summary)
+                    metadata["uncertainty_evidence"]["clock_anchor"].update(
+                        status="bounded", method="synthetic_interval_anchor",
+                        first_sample_end_point_epoch_s=specs[0][1],
+                        effective_clock_anchor_bound_s=common, wall_minus_monotonic_span_s=span)
+                    metadata["instrument_calibration"] = {"b_fiducial_s": member_bound}
+                    _write_json(bundle / "metadata.json", metadata)
                 unit = {"cell_id": model["cell_ids"][0], "stratum": "repeat" if ordinal < 10 else "quad",
                         "unit_id": str(ordinal if ordinal < 10 else (ordinal - 10) // 4)}
                 roster.append({"run_id": run_id, "stage_id": ref["role"] + "_reference" if ref else "decode",
@@ -312,8 +349,7 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
                          for e in battery_episodes if e.get("current_ma", design["battery_assist"]["current_ma"]) < 0]
         acceptance = {"pack_id": pack_id, "session_id": session_id, "verdict": "PASS", "counting": True,
                       "excluding": [], "flag_counts": {}, "emitted_flags": harvest_assist,
-                      "calibration": calibration.evaluate(calibration.Capture(Decimal(".040"), "valid"),
-                          calibration.Capture(Decimal(".030"), "valid"), document(), [], [session_id], False)}
+                      "calibration": timing}
         _write_json(archive / "derived/b6-acceptance.json", acceptance)
         (archive / "derived/flags.jsonl").write_text("".join(json.dumps(f) + "\n" for f in harvest_assist))
         evidence = SimpleNamespace(stages=[SimpleNamespace(members=evidence_members)], runtime={}, session_id=session_id)
