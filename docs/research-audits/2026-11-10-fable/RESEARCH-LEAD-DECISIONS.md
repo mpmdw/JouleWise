@@ -3461,6 +3461,106 @@ one.
 
 ---
 
+# Decision request 37: the licence-constraint sentence check on the second fill (2026-11-11 05:19 PST)
+
+**Read.** The head of `docs/run_reports/2026-11-11-p1-b5-licence-read.md` on
+`docs/2026-11-11-paper1-b5-licence-read`: the ten constraints as quoted, findings F01 to F07, the
+fixed-sentence comparison, J01 to J03 and the list of what passes. In the manuscript at `d2c0dc72d`: the
+passages the three questions name, §6.5's paragraphs, Appendix C's opening, and the list of table captions. In
+the registration: analysis plan §6 and §7.3 and the fixed-sentence constants in
+`joulewise/b5_analysis/disclosures.py`. I did not go through the 854-row inventory.
+
+## RL-66. Seven defects and three questions, each disposed
+
+The reader did what RL-3 asked for, and its findings stand. What passes is the substance: both contrasts,
+their numbers, the branch, and no dominance claim. What fails is how the registered words are carried.
+
+### The three questions
+
+**J01: narrower wording, in all three places.** The registered meaning of R ≥ 2 is that timing movement at
+least doubles that floor (analysis plan §6). "Limits the measurement" is the dominance sentence, licensed only
+on branch A, and branch B is to report "each failed component with null framing". The sentence now at 9.D
+comes from the blind draft's placeholder, not from the registration, and its second half is a conclusion the
+registration does not license.
+
+- §1.2: "A ratio of at least 2 means that timing movement at least doubles that floor. The statement that
+  timing attribution dominates the detection floor is licensed only when every registered ratio is at least 2
+  (Section 4.6)."
+- §4.6: "R ≥ 2 (equality passes) means that letting each value move within its timing box at least doubles
+  the floor." The clause that follows the colon is cut; the sentence about the threshold stays.
+- §11, branch 9.D: "Allowing each value to move within its registered timing uncertainty at least doubled the
+  detection floor in all eight independent-corner ratios, and did not in three of the four shared-sign
+  replays (1.7B decode, 1.7B prefill, 8B decode). The registered condition for stating that timing attribution
+  dominates the detection floor is therefore not met, and we make no statement about which source limits these
+  measurements."
+
+**J02: one verbatim print, and a pointer.** The attribution-floor sentence is printed once, verbatim, in
+Appendix C under its label. Table 2's caption says that the attribution-floor column is the X of that sentence
+and that the sentence applies to each row. Four copies are not needed. §4.4 quotes the sentence in the
+registered words, "kept members … as part of B", with a bracketed gloss for "members" if the paper's word is
+"runs".
+
+**J03: prospective.** "These methods need only interval-average power records, so they can be applied to
+other software power counters; we have applied them to one."
+
+### The seven defects
+
+**F01, the boundary label and the counts.** The registered label `M3 Max / MLX / powermetrics SoC rails` is
+defined once in §3.1 and printed, exactly, in the caption of every table that reports a rail energy and in
+the two result sentences of §6.5 in place of "this stack and boundary". Table 5 prints kept over planned
+quads, not n alone. Table 2's caption points to Table 1 for kept units and says "one session per model".
+
+**F02.** Table 4 prints numerator, denominator and n for every ratio, the four R_cm included. The rows exist.
+
+**F03, Appendix C is rebuilt from the registered constants.**
+
+- Every fixed sentence, verbatim, each under a short label, generated from the same literals the disclosure
+  producer uses, so that "verbatim" is checked and not typed.
+- Internal labels stay in the sentence and get a bracketed gloss after them: NEG-8, GAMMA, D-179, p42.
+  "Window" stays as registered, with one note that the body says "session".
+- Sentences whose trigger did not fire in the primary block are included and marked "not triggered".
+- The sentence calling the wording "an open question for the author" is removed. RL-4 (xi) settled it.
+
+**F04, verbatim or labelled.** Where the body uses a registered sentence in its registered words, it needs no
+label. Where it paraphrases, it cites the label, once per paragraph or caption. The abstract cannot carry
+labels, so its sentence on phase attribution becomes the registered one, verbatim.
+
+**F05, RL-4 (x) is made precise.** I wrote "every table caption". The registration says every phase-energy
+sentence. The rule is: **the limitation goes in the caption of every table that prints a phase energy or a
+quantity computed from one**: reported cells, interval components, floors, dominance ratios and their terms,
+contrasts, and per-cell or per-contrast sensitivity lines. It does not go on tables of counts, flags, attempts,
+hazard readings, request-level energies and shares, reference-request screens, or comparator differences. The
+repair seat lists every Block 5 table with yes or no and the reason. By that rule Tables 3 and 4 gain it, and
+Tables 1, S1 to S4, S6 and S7 do not; the seat decides S8 by what it prints. For paragraphs the rule stays
+literal: the two §6.5 paragraphs gain the sentence. The lead adds one dated line to the reporting
+interpretation in the deviation log (DLE-8) with this wording.
+
+**F06.** The registered descriptive ratios carry, beside them, the statement analysis plan §7.3 requires:
+recorded timing bounds are not propagated into the ratio's interval.
+
+**F07.** The floor class is defined once, in §4.5: a detection floor is *attribution-limited* when its
+published value is set by the clock-anchor timing bound. Section 6.3 then says which of the four published
+floors are in that class, with the repeatability-only floor beside each, as RL-4 (viii) allows.
+
+### One cut allowed with the repair
+
+The reason-code table after the contrast results, with its lead-in sentence. It glosses outcomes that did not
+occur and branches that are deleted. The outcome words stay defined in §4.8.
+
+### Next
+
+The fill seat repairs under RL-60 and this entry, both checkers are re-run, the licence checker joins the
+repository with the repair, and then it comes to me. I will read the Block 5 text whole at that point. RL-27's
+hold stays.
+
+**Reason.** A registered sentence is either the registered words or a labelled paraphrase of them; anything in
+between is the paper speaking where the registration was supposed to. And a null branch has to read as a null:
+the conclusion may say what was not shown, and no more.
+
+**Blind status.** Not blind to Block 5. Blind to Block 6, BYTES and v4.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
