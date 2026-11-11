@@ -75,7 +75,7 @@ class ArithmeticWitnesses(unittest.TestCase):
         result = predicted([.002]*5)
         self.assertAlmostEqual(result['rms_rel'], .002, places=12)
         self.assertEqual(result['s_rel_sample'], 0)
-        self.assertEqual((result['df'], result['series_comparisons']), (5, 22))      # R25: N = 22
+        self.assertEqual((result['df'], result['series_comparisons']), (5, 24))      # RL-16: N = 24
         self.assertGreater(result['relative_bar_30B'], 0)
         self.assertAlmostEqual(result['relative_bar_D'], 1.5*result['relative_bar_30B'])
 

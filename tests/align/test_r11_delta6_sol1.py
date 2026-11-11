@@ -19,7 +19,7 @@ from tests.align.test_thermal_desk import member
 from tests.align.test_v4_next_arm_packet import Scenario
 
 ROOT = Path(__file__).resolve().parents[2]
-# RUN_STATE 251 option B regenerated the R24 bytes (21313cc2...): seeded sabotage ordinals, test reserves T4-T5.
+# RUN_STATE 252 option B regenerated the R24 bytes (21313cc2...): seeded sabotage ordinals, test reserves T4-T5.
 from tests.align.v4_option_b import OPTION_B_MANIFEST_SHA256 as MANIFEST_SHA, assert_seed_preserved
 
 

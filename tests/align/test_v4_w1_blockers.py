@@ -78,7 +78,7 @@ class U3Tests(unittest.TestCase):
         bar = signed_bar()
         self.assertIs(reg.validate_u3(bar), bar)
         p = bar['prediction']
-        self.assertEqual((p['n'], p['df'], p['series_comparisons']), (7, 7, 22))   # ruling 2 / R15: N = 16; R25: N = 22 with the six reserve windows
+        self.assertEqual((p['n'], p['df'], p['series_comparisons']), (7, 7, 24))   # RL-16: all C/T reserves, N = 24
         rel = [r for r, pair in zip([(e[1]-e[0])/((e[0]+e[1])/2) for e in (x['energies_j'] for x in bar['pairs'])],
                                      bar['pairs']) if pair['phase'] == 'pilot']
         s0 = math.sqrt(sum(r*r for r in rel)/len(rel))
@@ -124,31 +124,21 @@ class U3Tests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, '>=5'):
             reg.derive_u3(few['pairs'], {'x': 'a'*64, 'transfer.md': 'f'*64}, policy=few['policy'])
 
-    def test_r25_changes_only_roster_dependent_prediction(self):
+    def test_rl16_expands_scope_without_changing_scale_or_beta(self):
         from joulewise.align.apple import v4_u3
-        from scripts.align_v4_u3_export import ROSTER
         for heavy in (False, True):
             data = export()
-            # The shared fixture now carries the R25 roster (N = 22); the comparison needs the historical N = 16.
-            data['policy']['checks_by_window'] = {'W1': {'30B': 4, 'D': 1},
-                                                  **{f'C{i}': {'30B': 0, 'D': 1} for i in range(1, 9)},
-                                                  **{f'T{i}': {'30B': 0, 'D': 1} for i in range(1, 4)}}
             if heavy:
                 data['pairs'][6]['energies_j'] = [990., 1010.]
-            before = v4_u3.prediction(data['pairs'], data['policy'])
-            expanded = deepcopy(data['policy'])
-            expanded['checks_by_window'] = deepcopy(ROSTER)
-            after = v4_u3.prediction(data['pairs'], expanded)
-            dependent = {'series_comparisons', 'series_quantile_q', 'pair_false_fail',
-                         'series_false_fail', 'relative_bar_30B', 'relative_bar_D'}
-            self.assertEqual({k: v for k, v in before.items() if k not in dependent},
-                             {k: v for k, v in after.items() if k not in dependent})
-            self.assertEqual((before['series_comparisons'], after['series_comparisons']), (16, 22))
+            after = v4_u3.prediction(data['pairs'], data['policy'])
+            beta = .025 if heavy else .05
+            historical_q = v4_u3.series_quantile(7, 22, beta)
+            self.assertEqual(after['series_comparisons'], 24)
             self.assertEqual(after['heavy_tail_rule_applied'], heavy)
-            self.assertEqual(after['series_beta'], .025 if heavy else .05)
-            self.assertGreater(after['series_quantile_q'], before['series_quantile_q'])
-            self.assertLess(after['pair_false_fail'], before['pair_false_fail'])
-            self.assertAlmostEqual(after['series_false_fail'], after['series_beta'], places=9)
+            self.assertEqual(after['series_beta'], beta)
+            self.assertGreater(after['series_quantile_q'], historical_q)
+            self.assertAlmostEqual(after['relative_bar_D'], 1.5*after['series_quantile_q']*after['rms_rel'])
+            self.assertAlmostEqual(after['series_false_fail'], beta, places=9)
 
     def test_d_replay_checks_target_identity_battery_and_frozen_window_scope(self):
         from tests.align.test_thermal_desk import member
@@ -187,12 +177,17 @@ class U3Tests(unittest.TestCase):
             with self.subTest(energy=energy), self.assertRaises(ValueError):
                 reg.u3_margin(energy, bar)
 
-    def test_small_sample_and_larger_series_widen_prediction(self):
+    def test_smaller_sample_widens_prediction_and_unregistered_roster_refuses(self):
         data = export()
         base = reg.derive_u3(data['pairs'], {'x': 'a'*64, 'transfer.md': 'f'*64}, policy=data['policy'])
-        data['policy']['checks_by_window']['T4'] = {'30B': 0, 'D': 10}
-        wider = reg.derive_u3(data['pairs'], {'x': 'a'*64, 'transfer.md': 'f'*64}, policy=data['policy'])
-        self.assertGreater(wider['prediction']['relative_bar_30B'], base['prediction']['relative_bar_30B'])
+        small = deepcopy(data)
+        del small['pairs'][3]
+        wider = reg.derive_u3(small['pairs'], {'x': 'a'*64, 'transfer.md': 'f'*64}, policy=small['policy'])
+        self.assertGreater(wider['prediction']['series_quantile_q'], base['prediction']['series_quantile_q'])
+        wrong = deepcopy(data)
+        wrong['policy']['checks_by_window']['T4'] = {'30B': 0, 'D': 10}
+        with self.assertRaisesRegex(ValueError, 'registered roster'):
+            reg.derive_u3(wrong['pairs'], {'x': 'a'*64, 'transfer.md': 'f'*64}, policy=wrong['policy'])
         data['pairs'][-1]['energies_j'] = [100, 200]
         bad = reg.derive_u3(data['pairs'], {'x': 'a'*64, 'transfer.md': 'f'*64}, policy=data['policy'])
         self.assertEqual(bad['prediction']['d_screen'], 'refuted')
@@ -202,10 +197,10 @@ class ExportTests(unittest.TestCase):
     def test_policy_template_is_the_ruled_roster_and_assemble_refuses_placeholders(self):
         from scripts import align_v4_u3_export as export_cli
         policy = export_cli.policy_template()
-        self.assertEqual(sum(sum(w.values()) for w in policy['checks_by_window'].values()), 22)   # R15: N = 16; R25: + C9-C14 reserves
+        self.assertEqual(sum(sum(w.values()) for w in policy['checks_by_window'].values()), 24)   # RL-16: N = 24
         self.assertEqual((policy['series_alpha'], policy['d_transfer_factor']), (.05, 1.5))     # rulings 1, 6
         self.assertEqual(sorted(policy['checks_by_window']), sorted(['W1', *[f'C{i}' for i in range(1, 15)],
-                                                                     *[f'T{i}' for i in range(1, 4)]]))
+                                                                     *[f'T{i}' for i in range(1, 6)]]))
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
             (tmp/'policy.json').write_text(json.dumps(policy))

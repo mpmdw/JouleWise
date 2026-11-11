@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Synthetic R14/R25 N=16 versus N=22 sensitivity; never reads measurements.
+"""Synthetic RL-16 N=24 sensitivity; never reads measurements.
 
 Reproduce U3-transfer.md using the unchanged v4_u3 arithmetic and OC procedure.
-Only the six reserve roster entries differ between policies. Digest fields are
+The roster includes all C and T reserves. Digest fields are
 synthetic stand-ins, never evidence or a candidate signed bar. No input files,
 model libraries, bundle readers or hardware interfaces are used.
 """
@@ -44,11 +44,8 @@ def comparison():
     for key in ('d_configuration_sha256', 'r1_configuration_sha256',
                 'transfer_justification_sha256'):
         current[key] = '0'*64
-    previous = deepcopy(current)
-    for i in range(9, 15):
-        del previous['checks_by_window'][f'C{i}']
     cases = []
-    for policy in (previous, current):
+    for policy in (current,):
         counts = v4_u3.policy_checks(policy)
         tests = sum(counts.values())
         for n, beta in ((7, .05), (7, .025), (5, .05), (6, .05)):
@@ -67,8 +64,8 @@ def comparison():
                 'oc': v4_u3.operating_characteristics(policy, {'n': n, 'series_quantile_q': q}),
             })
     return {'label': 'SYNTHETIC DESIGN ONLY; no measurements, adoption or hardware validation',
-            'roster_source': 'origin/align/2026-11-08-v4-r11 @ 33932b391:scripts/align_v4_u3_export.py',
-            'policies': {'16': previous, '22': current}, 'cases': cases,
+            'roster_source': 'RL-16; scripts/align_v4_u3_export.py; manifest order W1, C1-C14, T1-T5',
+            'policies': {'24': current}, 'cases': cases,
             'limitation': 'Fixed-beta sensitivity; the OC does not reapply the leave-one-out '
                           'trigger in each replicate. Probabilities integrate calibration scale; '
                           'they are not guarantees conditional on a realized scale or trigger.'}

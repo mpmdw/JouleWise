@@ -1,4 +1,4 @@
-"""Option-B seed check (RUN_STATE 251; claim contract B5/B6): the committed manifest against the text.
+"""Option-B seed check (RUN_STATE 252; claim contract B5/B6): the committed manifest against the text.
 
 The checker (docs/align/v4/seedcheck-claim-b-opus/derive_and_check.py) imports nothing from JouleWise or
 scripts; it re-derives all 436 members from the registered text. These tests run it on the committed bytes,
@@ -10,6 +10,7 @@ import hashlib
 import importlib.util
 import json
 from pathlib import Path
+import subprocess
 import unittest
 
 from scripts import align_v4_series as series
@@ -17,6 +18,7 @@ from tests.align.v4_option_b import OPTION_B_MANIFEST_SHA256
 
 ROOT = Path(__file__).resolve().parents[2]
 CHECKER = ROOT / 'docs/align/v4/seedcheck-claim-b-opus/derive_and_check.py'
+SOL_CHECKER = ROOT / 'docs/align/v4/seedcheck-claim-b-sol/derive_and_check.py'
 
 
 def _checker():
@@ -32,6 +34,24 @@ class SeedCheckTests(unittest.TestCase):
         cls.check = _checker()
         cls.raw = (ROOT / series.MANIFEST).read_bytes()
         cls.manifest = json.loads(cls.raw)
+
+    def test_item_1_only_the_three_authority_citations_changed(self):
+        old_raw = subprocess.check_output(
+            ['git', 'show', 'cf501f75f:configs/campaigns/align_v4/series/series_manifest.json'], cwd=ROOT)
+        self.assertEqual(hashlib.sha256(old_raw).hexdigest(),
+                         'b5fedb49ee04e0b5388ea43a76b6fbf07cb94b896145476386271e702fb41c64')
+        old = json.loads(old_raw)
+        self.assertEqual(len(old['windows']), len(self.manifest['windows']))
+        for before, after in zip(old['windows'], self.manifest['windows'], strict=True):
+            self.assertEqual(before['members'], after['members'], before['id'])
+            self.assertEqual(before.get('sabotage_ordinals'), after.get('sabotage_ordinals'), before['id'])
+        expected = deepcopy(old)
+        expected['status'] = old['status'].replace('RUN_STATE_251', 'RUN_STATE_252')
+        expected['authority'] = old['authority'].replace('RUN_STATE 251', 'RUN_STATE 252')
+        expected['test']['reserve_rule'] = old['test']['reserve_rule'].replace('RUN_STATE 251', 'RUN_STATE 252')
+        self.assertEqual(self.manifest, expected)
+        self.assertEqual(self.raw, old_raw.replace(b'RUN_STATE 251', b'RUN_STATE 252')
+                         .replace(b'RUN_STATE_251', b'RUN_STATE_252'))
 
     def test_committed_manifest_matches_the_text_for_every_member(self):
         self.assertEqual(hashlib.sha256(self.raw).hexdigest(), OPTION_B_MANIFEST_SHA256)
@@ -49,6 +69,33 @@ class SeedCheckTests(unittest.TestCase):
         self.assertEqual((receipt['verdict'], receipt['manifest_sha256'], receipt['differences']),
                          ('MATCH', OPTION_B_MANIFEST_SHA256, []))
         self.assertEqual(receipt['members'], 436)
+
+    def test_item_3_sol_check_and_receipt_match_and_detect_synthetic_changes(self):
+        spec = importlib.util.spec_from_file_location('seedcheck_claim_b_sol', SOL_CHECKER)
+        sol = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(sol)
+        result = sol.check(self.manifest)
+        self.assertEqual((result['verdict'], result['members'], result['placement_windows']), ('MATCH', 436, 19))
+        self.assertTrue(result['pairwise_disjoint'])
+        receipt = json.loads((SOL_CHECKER.parent / 'comparison.json').read_bytes())
+        self.assertEqual(receipt['manifest_sha256'], OPTION_B_MANIFEST_SHA256)
+        self.assertEqual(receipt['checker_sha256'], hashlib.sha256(SOL_CHECKER.read_bytes()).hexdigest())
+        for key in result:
+            self.assertEqual(receipt[key], result[key], key)
+        for field in ('seed_index', 'episode_seed', 'turn_seed_0', 'ordinal', 'condition', 'pool'):
+            value = deepcopy(self.manifest)
+            m = value['windows'][1]['members'][6]
+            m[field] = m[field] + 1 if isinstance(m[field], int) else 'changed'
+            self.assertEqual(sol.check(value)['verdict'], 'MISMATCH', field)
+        for name in ('placement', 'overlap', 'missing'):
+            value = deepcopy(self.manifest)
+            if name == 'placement':
+                value['windows'][-1]['sabotage_ordinals'][series.PAIRS[0]] += 2
+            elif name == 'overlap':
+                value['windows'][-1]['members'][5]['seed_index'] = 2
+            else:
+                value['windows'].pop()
+            self.assertEqual(sol.check(value)['verdict'], 'MISMATCH', name)
 
     def test_two_implementations_of_the_placement_law_agree(self):
         for window in self.manifest['windows'][1:]:

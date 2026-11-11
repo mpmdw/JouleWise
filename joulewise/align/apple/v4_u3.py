@@ -1,4 +1,4 @@
-"""Prospective R03 procedure; no installed alpha, transfer factor or energy floor.
+"""R03 procedure with RL-16 registered beta .05, transfer factor 1.5 and N = 24; no energy floor.
 
 Merged build (docs/align/v4/W1-BLOCKERS-AGREEMENT.md, lead rulings 1-11):
 Sol's inputs, custody and scope (one prespecified 30B pilot pair per session,
@@ -20,6 +20,7 @@ that policy remains PENDING.
 """
 import json
 import math
+from pathlib import Path
 import random
 import statistics
 
@@ -69,6 +70,11 @@ def series_quantile(n, tests, beta):
 
 def policy_checks(policy):
     from joulewise.align.apple.v4_registration import is_digest
+    # RL-16 / agreement item 17: these are installed policy, not free knobs.
+    if (not isinstance(policy, dict)
+            or type(policy.get('series_alpha')) not in (int, float) or policy['series_alpha'] != .05
+            or type(policy.get('d_transfer_factor')) not in (int, float) or policy['d_transfer_factor'] != 1.5):
+        raise ValueError('U3 requires registered beta .05 and transfer factor 1.5')
     if (not isinstance(policy, dict) or policy.get('method') != METHOD
             or policy.get('selection') != 'one_prespecified_pair_per_session'
             or type(policy.get('series_alpha')) not in (int, float)
@@ -94,6 +100,11 @@ def policy_checks(policy):
     counts = {model: sum(w[model] for w in windows.values()) for model in ('30B', 'D')}
     if not all(counts.values()) or sum(counts.values()) > 10000:
         raise ValueError('U3 requires both populations and bounded comparison count')
+    manifest_path = Path(__file__).resolve().parents[3] / 'configs/campaigns/align_v4/series/series_manifest.json'
+    manifest = json.loads(manifest_path.read_bytes())
+    expected = {name: {'30B': 4 if name == 'W1' else 0, 'D': 1} for name in manifest['order']}
+    if windows != expected:
+        raise ValueError('U3 registered roster must equal manifest window order and comparison counts')
     return counts
 
 

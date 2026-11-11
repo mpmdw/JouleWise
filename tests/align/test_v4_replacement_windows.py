@@ -251,7 +251,7 @@ class SeriesLedgerTests(unittest.TestCase):
         self.assertIsNone(series.calibration_rows(self.manifest, [*zeros(7), release])[1])   # a release cannot repair 8 windows
 
     def test_a_barred_test_window_owes_a_test_reserve_never_more_than_three_admitted(self):
-        # RUN_STATE 251 option B (adapted by name from test_only_a_calibration_window_can_be_barred): a
+        # RUN_STATE 252 option B (adapted by name from test_only_a_calibration_window_can_be_barred): a
         # structurally barred T window is not admitted and owes T4, then T5; T4/T5 are never armed otherwise.
         cal = self.history(*[f'C{i}' for i in range(1, 9)])
         t = lambda name, **kw: self.entry(name, captured=kw.pop('captured', 22), spam=0, bank=0, **kw)

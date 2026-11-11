@@ -39,6 +39,7 @@ IDENTITY_FIELDS = ('record_commit', 'record_path', 'series_commit', 'series_path
 # The series ledger is ONE canonical append-only file, rewritten by each window's commit. Its latest
 # committed version names the latest window record (delta3 G1), so an older packet cannot stay current.
 SERIES_PATH = 'series/state.json'
+THERMAL_FAIL_RESET = 'u1_u3_fail_escalation'  # RL-20, distinct from zero-capture escalation
 # The frozen series names its two task pairs in full; the count-only predicate keys them spam/bank.
 PAIR_NAMES = {'spam': cadence.CAL_PAIRS[0], 'bank': cadence.CAL_PAIRS[1],
               'spam_filter_update': cadence.CAL_PAIRS[0], 'bank_transfer_2': cadence.CAL_PAIRS[1]}
@@ -766,14 +767,44 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
             return False
         return last_digest == current_artifact_set_sha256
 
+    thermal_rulings = []
+
     def thermal():
         reports = previous.thermal()['model_windows']
-        failed = [model for model, r in reports.items() if any(r[f'U{k}']['status'] != 'pass' for k in (1, 2, 3))]
-        if not failed:
-            return {'basis': 'U1-U3 pass; no escalation required'}
+        failed = [model for model, r in reports.items() if any(r[f'U{k}']['status'] == 'fail' for k in (1, 2, 3))]
         plan = next_plan()
         prior = previous.source('collection_plan')['thermal_policy']
         after = plan['thermal_policy']
+        if previous.record.get('role') in ('calibration', 'test'):
+            require(after == prior, 'series_thermal_policy_changed: RL-20 freezes thermal policy from C1')
+            require(history_error is None, 'thermal history unavailable: ' + str(history_error))
+            rulings = {r['after_window']: r for r in thermal_rulings}
+            require(len(rulings) == len(thermal_rulings), 'duplicate thermal fail ruling')
+            total = consecutive = 0
+            bars, applied = [], []
+            for record in chain:
+                if record.record.get('role') not in ('calibration', 'test'):
+                    continue
+                barred = record.structural_bar(record.counted_captures()) == 'u1_u3_fail'
+                if barred:
+                    bars.append(record.window)
+                    total += 1
+                    consecutive += 1
+                else:
+                    consecutive = 0
+                held = consecutive >= 2 or total >= 3
+                ruling = rulings.get(record.window)
+                if ruling:
+                    require(held, THERMAL_FAIL_RESET + ': ruling must name the window triggering the hold')
+                    applied.append(ruling)
+                    total = consecutive = 0
+                else:
+                    require(not held, THERMAL_FAIL_RESET + ': signed ruling required after ' + record.window)
+            return {'basis': 'RL-20 frozen thermal policy; structural FAIL bars counted over C and T attempts',
+                    'failed': failed, 'u1_u3_fail_bars': bars, 'bars_since_ruling': total,
+                    'consecutive_fail_bars': consecutive, 'rulings': applied}
+        if not failed:
+            return {'basis': 'U1-U3 has no FAIL; no escalation required'}
         steps = series.get('escalations', [])
         require(any(r.get('window') == previous.window and r.get('next_plan_sha256') == series['next_plan']['sha256']
                     and isinstance(r.get('ruling_id'), str) and r['ruling_id'].strip() for r in steps),
@@ -804,7 +835,7 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
         require(isinstance(pool, list) and len(pool) == len(set(pool)), 'pool roster missing or duplicated')
         ids = {m['id'] for m in members}
         require(set(pool) <= ids, 'pool members outside previous D roster')
-        if any(r[f'U{k}']['status'] != 'pass' for r in table['model_windows'].values() for k in (1, 2, 3)):
+        if any(r[f'U{k}']['status'] == 'fail' for r in table['model_windows'].values() for k in (1, 2, 3)):
             require(not pool, 'U1-U3 failure bars pool entry')
         eligible = previous.eligibility(allow_provisional=provisional_allowed())
         # One shared structural-bar predicate for history, pool admission and calibration (R22-2): a barred
@@ -865,7 +896,7 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
                          ('quiet_start_state', quiet), ('meter_coverage', meter_coverage),
                          ('capture_faults', faults)):
         check(name, action)
-    for name, action in (('thermal_escalation', thermal), ('cohort_pool_rules', cohort),
+    for name, action in (('cohort_pool_rules', cohort),
                          ('sentinel_roster', sentinels), ('member_eligibility', eligibility)):
         if previous.window == 'R1':
             packet['checks'][name] = {'status': 'not_applicable', 'basis': 'previous window is R1'}
@@ -934,13 +965,26 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
             require(chain[-1].commit == previous.commit and chain[-1].path == previous.path,
                     'previous calibration record missing from history tail')
         for row in series.get('lead_rulings', []):
-            require(isinstance(row, dict) and set(row) == {'ruling_id', 'after_window', 'text', 'lead_signature'},
+            from scripts.align_v4_kit import valid_lead_signature
+            fields = {'ruling_id', 'after_window', 'text', 'lead_signature'}
+            require(isinstance(row, dict) and set(row) in (fields, fields | {'resets'}),
                     'lead ruling row malformed')
+            reset = row.get('resets', 'zero_capture_escalation')
+            require(reset in ('zero_capture_escalation', THERMAL_FAIL_RESET), 'unknown lead ruling reset')
+            require(isinstance(row['ruling_id'], str) and row['ruling_id'].strip()
+                    and valid_lead_signature(row['lead_signature'])
+                    and row['after_window'] in {r.window for r in chain}, 'lead ruling identity/signature/window invalid')
             text = evidence.source(series_commit, row['text'], json_value=False)
             require(bool(text.strip()), 'lead ruling text empty')
-            packet['lead_rulings'].append({'ruling_id': row['ruling_id'], 'text_sha256': digest(text),
-                'resets': 'zero_capture_escalation', 'after_window': row['after_window'],
-                'lead_signature': row['lead_signature']})
+            ruling = {'ruling_id': row['ruling_id'], 'text_sha256': digest(text),
+                      'resets': reset, 'after_window': row['after_window'], 'lead_signature': row['lead_signature']}
+            if reset == THERMAL_FAIL_RESET:
+                require(any(r.window == row['after_window'] and r.record.get('role') in ('calibration', 'test')
+                            for r in chain), 'thermal fail ruling must name a C or T attempt')
+                # Retained in the authenticated thermal check, not applied as a zero-capture reset.
+                thermal_rulings.append(ruling)
+            else:
+                packet['lead_rulings'].append(ruling)
         packet['calibration_decision'] = cadence.calibration_stop(packet['calibration_windows'], packet['lead_rulings'])
         # The frozen series binding (R15) needs the window id the arm will run and the chronological history,
         # DERIVED here from the authenticated hash chain (the arm binds its own rebuild, never a supplied one).
@@ -968,7 +1012,7 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
                 counts = {'captured_members': record.counted_captures(), 'status': 'final',
                           'eligible_benign': dict.fromkeys(cadence.CAL_PAIRS, 0)}
                 if record.record.get('role') == 'test':
-                    # RUN_STATE 251 option B (claim contract B6): a structurally barred T window is not
+                    # RUN_STATE 252 option B (claim contract B6): a structurally barred T window is not
                     # admitted to the test cohort and owes a test reserve (T4, then T5); same R22-2 predicate.
                     bar = record.structural_bar(counts['captured_members'])
                     if bar:
@@ -1017,6 +1061,10 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
             streak += 1
         return {'status': 'fail', 'consecutive_non_pass': max(streak, 1),
                 'basis': f'previous window B bar did not pass ({max(streak, 1)} consecutive non-passing)'}
+    if previous.window == 'R1':
+        packet['checks']['thermal_escalation'] = {'status': 'not_applicable', 'basis': 'previous window is R1'}
+    else:
+        check('thermal_escalation', thermal)
     if previous.window == 'R1':
         packet['checks']['battery_window'] = {'status': 'not_applicable', 'basis': 'previous window is R1'}
     else:

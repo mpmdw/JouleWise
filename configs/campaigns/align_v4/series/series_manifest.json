@@ -1,5 +1,5 @@
 {
-  "authority": "RUN_STATE 226 R15; R22-2 / R24; RUN_STATE 251 option B",
+  "authority": "RUN_STATE 226 R15; R22-2 / R24; RUN_STATE 252 option B",
   "calibration": {
     "benign_per_pair_per_window": 7,
     "counted_windows": 8,
@@ -105,11 +105,11 @@
     "late_replay_of": 5,
     "source": "W1:5"
   },
-  "status": "FROZEN_PER_RUN_STATE_251_OPTION_B_PENDING_PAIRED_SEED_CHECK",
+  "status": "FROZEN_PER_RUN_STATE_252_OPTION_B_PENDING_PAIRED_SEED_CHECK",
   "test": {
     "admitted_windows": 3,
     "reserve_cap": 2,
-    "reserve_rule": "RUN_STATE 251 option B (claim contract B6): each armed, in order, ONLY to replace a STRUCTURAL bar of a T window (U1-U3 fail, whole-window capture failure, zero-capture refusal beyond the retry); never on scores, alarms, counts or to repair low n; at most 3 admitted test windows",
+    "reserve_rule": "RUN_STATE 252 option B (claim contract B6): each armed, in order, ONLY to replace a STRUCTURAL bar of a T window (U1-U3 fail, whole-window capture failure, zero-capture refusal beyond the retry); never on scores, alarms, counts or to repair low n; at most 3 admitted test windows",
     "reserve_windows": [
       "T4",
       "T5"
