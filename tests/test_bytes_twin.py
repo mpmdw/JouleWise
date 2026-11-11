@@ -82,6 +82,28 @@ def run_twin(world: Path, stage: str, *, archives=True, key_dir=True, extra=()) 
     return json.loads(out.read_text())
 
 
+class SessionFlagTests(unittest.TestCase):
+    def test_both_archive_sources_only_contribute_codes_without_a_run(self):
+        with tempfile.TemporaryDirectory(prefix="bytes-session-flags-") as directory:
+            root = Path(directory)
+            derived = root / "derived"
+            derived.mkdir()
+            shared = {"code": "power.pstar_unsized", "scope": {}}
+            file_flags = [shared, {"code": "registration.default_used", "scope": None},
+                          {"code": "run.file_only", "scope": {"run_id": "other-run"}}]
+            emitted = [shared, {"code": "catalog.digest_mismatch"},
+                       {"code": "run.acceptance_only", "scope": {"run_id": "other-run"}}]
+            (derived / "flags.jsonl").write_text("\n" + "".join(json.dumps(f) + "\n" for f in file_flags))
+            (derived / "b6-acceptance.json").write_text(json.dumps({"emitted_flags": emitted}))
+            self.assertEqual(bt.load_archive(root)["session_flags"],
+                             ["catalog.digest_mismatch", "power.pstar_unsized", "registration.default_used"])
+
+    def test_blinded_stage_never_loads_archive_session_flags(self):
+        with patch.object(bt, "load_archive", side_effect=AssertionError("blinded archive read")):
+            result = run_twin(WORLD["one"], "blinded")
+        self.assertTrue(result["cells"])
+
+
 class AnchorEnvelopeTests(QuantityTestCase):
     """§7's operative decode envelope; §12's actual cell energy bar."""
 

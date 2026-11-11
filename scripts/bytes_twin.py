@@ -1044,6 +1044,14 @@ def member_spans(bundle):
 def load_archive(root):
     root = Path(root)
     record = read_json(root / "derived/b6-acceptance.json", {}) or {}
+    try:
+        flag_rows = [json.loads(raw) for raw in _read_text(root / "derived/flags.jsonl").splitlines() if raw.strip()]
+    except FileNotFoundError:
+        flag_rows = []
+    # §6 / §15, RL-82 reading A: session codes have no run attached in
+    # either source. Read them independently of the analysis and export.
+    session_flags = sorted({flag["code"] for flag in flag_rows + record.get("emitted_flags", [])
+                            if not (flag.get("scope") or {}).get("run_id")})
     streams = []
     base = root / "sources/night-custody/hazards/meter"
     for path in sorted(base.glob("stream-*.jsonl")):
@@ -1057,7 +1065,7 @@ def load_archive(root):
     # §16: "reads the harvest's operative timing bound ... and never recomputes
     # a calibration bracket". Keep the archive's already evaluated record.
     return {"root": root, "session_id": record.get("session_id"), "pack_id": record.get("pack_id"),
-            "streams": streams, "calibration": record.get("calibration") or {}}
+            "streams": streams, "calibration": record.get("calibration") or {}, "session_flags": session_flags}
 
 
 def anchor_envelope(intervals, window, common_s, edge_s):
@@ -1585,7 +1593,8 @@ def compute_cell(rows, boundary, dc_by_run, allowances, alpha, *, diagnostic=Fal
         kept_rows = [r for r in rows if r["run_id"] in kept_ids]
         flag_rows = kept_rows if est["status"] == "ok" else rows
         est["flags"] = sorted({f for r in flag_rows for f in (r.get("flag_codes") or "").split(";") if f} |
-                              {f for r in flag_rows for f in r.get("_meter_flags", [])})
+                              {f for r in flag_rows for f in r.get("_meter_flags", [])} |
+                              {f for r in flag_rows for f in r.get("_session_flags", [])})
         est["harvest_assisted_member_counts"] = {s: sum(_units_of(r)[0] == s and
             "battery.assist" in (r.get("flag_codes") or "").split(";") for r in kept_rows) for s in ("repeat", "quad")}
         evaluated = all(r.get("_decode_assisted") is not None for r in kept_rows)
@@ -2216,6 +2225,7 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
             elif archive is not None:
                 notes.append(f"{model} {session_id}: DC-input skipped, rows still blinded (raw meter cannot be blinded)")
             for r in srows:
+                r["_session_flags"] = archive.get("session_flags", []) if archive is not None and stage in ("1", "2") else []
                 r["_decode_assisted"] = dc_by_run.get(r["run_id"], {}).get("decode_assisted")
                 r["_decode_assist_reason"] = ("not evaluated at the blinded stage" if not unblinded else
                     dc_by_run.get(r["run_id"], {}).get("decode_assist_evaluated_reason",

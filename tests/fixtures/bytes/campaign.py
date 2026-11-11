@@ -347,11 +347,17 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
         _write_json(archive / "derived/roster.json", {"pack_id": pack_id, "attempt": 1, "members": roster})
         harvest_assist = [{"code": "battery.assist", "effect": "DISCLOSE", "scope": {"run_id": e["run_id"]}}
                          for e in battery_episodes if e.get("current_ma", design["battery_assist"]["current_ma"]) < 0]
+        # §6 / RL-82: session codes have no run attached. Keep a shared code
+        # and a code unique to each source so agreement exercises both readers.
+        session_flags = [{"code": code, "effect": "DISCLOSE", "scope": {}}
+                         for code in ("power.pstar_unsized", "registration.default_used")]
+        session_emitted = [{"code": code, "effect": "DISCLOSE", "scope": {}}
+                           for code in ("power.pstar_unsized", "catalog.digest_mismatch")]
         acceptance = {"pack_id": pack_id, "session_id": session_id, "verdict": "PASS", "counting": True,
-                      "excluding": [], "flag_counts": {}, "emitted_flags": harvest_assist,
+                      "excluding": [], "flag_counts": {}, "emitted_flags": harvest_assist + session_emitted,
                       "calibration": timing}
         _write_json(archive / "derived/b6-acceptance.json", acceptance)
-        (archive / "derived/flags.jsonl").write_text("".join(json.dumps(f) + "\n" for f in harvest_assist))
+        (archive / "derived/flags.jsonl").write_text("".join(json.dumps(f) + "\n" for f in harvest_assist + session_flags))
         evidence = SimpleNamespace(stages=[SimpleNamespace(members=evidence_members)], runtime={}, session_id=session_id)
         _seal_archive_inputs(archive)
         export_runs.export(archive, {}, root / "registration", root / "private-keys", root / "export", non_claim=non_claim,

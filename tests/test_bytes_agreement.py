@@ -1699,6 +1699,45 @@ class CompressedRefusalTests(unittest.TestCase):
 class AgreementTests(unittest.TestCase):
     """Every campaign, every stage: zero differences above the bar; the under-bar count is printed."""
 
+    def test_session_codes_at_archive_stages(self):
+        # §6, §15 and RL-82 reading A. This campaign also has a nonzero
+        # operative anchor profile, as required before held-out agreement.
+        name = "anchor_narrow"
+        recorder = campaign(name)
+        above = recorder.above()
+        self.assertEqual(above, [], f"{name}: {len(above)} above the bar:\n" +
+                         "\n".join(describe(row) for row in above[:12]))
+        codes = {"power.pstar_unsized", "registration.default_used", "catalog.digest_mismatch"}
+        for stage in ("fit", "heldout", "blinded", "blinded-post"):
+            flags = [row for row in recorder.rows if row["stage"] == stage and row["key"] == "flags"]
+            self.assertTrue(flags, stage)
+            for row in flags:
+                for side in ("a", "t"):
+                    self.assertEqual(codes & set(row[side]), codes if stage in ("fit", "heldout") else set())
+
+        # Retain the old twin's run-only rule as a mutation. Only flags may
+        # disagree; the actual registered comparer must reject them exactly.
+        root = WORK["root"] / name
+        manifest = load(root / "manifest.json")
+        output = root / "legacy-session-flags.json"
+        argv = ["--export-dir", str(root / "export"), "--manifest", str(root / "manifest.json"),
+                "--stage", "1", "--key-dir", str(root / "released-keys/bytes/blinding"), "--out", str(output)]
+        for session in manifest["sessions"]:
+            argv += ["--archive", session["archive"]]
+        original = bt.load_archive
+        def run_only(archive):
+            return {**original(archive), "session_flags": []}
+        import contextlib
+        import io
+        with mock.patch.object(bt, "load_archive", side_effect=run_only), contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(bt.main(argv), 0)
+        legacy = Recorder()
+        compare_cells(legacy, "fit", load(root / "out/a-fit/fit_pass_estimates.json"), load(output))
+        self.assertTrue(legacy.above(), "old run-only flags must fail the exact agreement bar")
+        self.assertEqual({row["key"] for row in legacy.above()}, {"flags"})
+        print(f"\nlegacy session flags {name}: {len(legacy.above())} flags above the exact bar; "
+              "fixed campaign: 0 fields above bar")
+
     def test_nonzero_decode_anchor_campaigns(self):
         # Registration §12: energy differences must be within 1% of (h+B).
         # This fails on the original twin's exported whole-window term.
