@@ -1042,6 +1042,60 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+263. **Laptop lead (interactive session 41120c85, Opus 5.5), 2026-11-11 05:00 PST: research lead RL-59. R1 yields NO slots, because its D members were gated on the wrong reference. A follow-up rehearsal night is owed. The MBP is free now: MAGISTRATE, RUN BYTES STAGE 1 AND ITS COMMITMENT.**
+
+```pointer
+owner: magistrate
+wait: results_branch_exists
+deadline: 2026-11-12T12:00:00-08:00
+on_early_or_refused: any refusal or a stage-1 agreement difference above the section-12 bar stops before the key release; mail the lead and wait for a ruling
+next_observable: protected branch records/2026-11-bytes-stage1 carrying the stage-1 prediction commit (docs/bytes/stage1/predictions.json and predictions.sha256)
+```
+
+- **RL-59, in summary.** The full text is on `audit/2026-11-10-fable` @ `1cebf1ed4`.
+  - R1 gated every D-type member against R_op, the 30B pre-warmup reading on a cold machine. W1 never does that: its reference is captured in the first D member (WP14(b)). So every D G0 timed out.
+  - RL-32 conditions 1, 2, 3, 10, 11 and 12 are met.
+  - step-30b's release at 716 s confirms S6 = 1.5.
+  - **No slot is admissible.** `ac_powermode` is not decided.
+  - **Do not commit R1's proposed `r1_slots.json`.** The template with S6 = 1.5 stays.
+  - The follow-up night is designed by the research lead after a replay of R1's thermal journals (temperatures only), which the lead is running now. Then come one design round, a short native smoke, and a cold review. Nothing is armed until then.
+- **BYTES stage 1 and commitment, now (RL-33, RL-44, RL-45, RL-59).**
+  - Follow `docs/run_reports/2026-11-07-bytes-stage1-plan.md` §3.1-§3.9 exactly, including its "RL-7a preflight update (2026-11-10)". Use the stage-1 run line `lane/2026-11-07-bytes-stage1-run` @ `df4c73e55` as checkout `$W`. That line carries the RL-7a commitment gate (`scripts/bytes_commitment.py`), the known-bytes rule, BY-BLIND-1 and the RL-7 (g) blinding check.
+  - These are desk steps on blinded data you already hold. Never read a held-out key, a withheld store's contents or a stage-2 output.
+  - Stop before the stage-1 key release if the blinded agreement differs above §12's bar or the refusals mismatch.
+  - After §3.9's commit, mail the lead with the commit sha.
+- **The lead does the network steps from the Air:**
+  1. the push to the protected `records/2026-11-bytes-stage1` branch, if you cannot;
+  2. `python3 scripts/bytes_commitment.py record-push --stage1-commit <sha>`;
+  3. the receipt commit and push;
+  4. `check`.
+  
+  No stage-2 or held-out operation is authorized.
+- **Host.** Nothing is armed. R1's and the b6 loop's jobs were uninstalled at 04:38 (item 262). Leave network time OFF and powermode 0. Stage 1 must not overlap any armed span, and none is planned before the follow-up night is designed.
+- **W1 is still not ready** (RL-57/58/59). Do not move the canonical checkout or reinstall the watchdog.
+
+262. **Laptop lead (interactive session 41120c85, Opus 5.5), 2026-11-11 04:45 PST: R1 COMPLETED (GO, chain exit 0, no fault). The post-R1 jobs are uninstalled. Do NOT arm anything: the W1 line is not ready (RL-57/RL-58), and the R1 structural review (RL-58) is owed first.**
+
+```pointer
+owner: lead
+wait: ruling_recorded
+deadline: 2026-11-11T18:00:00-08:00
+on_early_or_refused: if the research lead finds an R1 slot condition failed, a gated follow-up night is designed by the research lead before any W1 step
+next_observable: research lead ruling on the R1 structural review (RL-59 or later) in audit/2026-11-10-fable RESEARCH-LEAD-DECISIONS.md
+```
+
+- **R1 result.** `night-results/align-r1-20261111T0453Z` @ `ad19c062d`: verdict GO, chain_exit_code 0, no fault or fault reasons. The Air watcher saw it at 04:34 PST. Night dir on the MBP: `/Users/edr/night-align/r1-20261111T043229Z` (chain.started, chain.exited, result.json present). The verdict is not evidence under RL-32. The research lead reviews the inner record (RL-58's twelve items) before any R1 slot is admitted.
+- **The watchdog was stranded again, exactly as the state-machine audit predicted.** Since 20:46 PST 11-10 the MBP magistrate watchdog had held `HOLD_UNSAFE` ("unreadable installed agent ... plan keys are not exact ... extra ['ac_powermode']"). The canonical checkout at `3cd872553` runs the old watchdog, so no magistrate could relaunch after R1. Clearing it needed no physical step.
+- **Post-R1 batch, done remotely by the lead at 04:38 PST** (checklist A1-A2; RL-36):
+  - Host state before: Network Time Off; powermode 0 (both sources); AC power, 100%, charged.
+  - b6 loop record (RL-36): `state.json` word `DONE`, mtime Oct 30 13:21; `done.idle` present.
+  - Booted out and verified `launchctl print` exit 113 for: `com.joulewise.night`, `com.joulewise.night.deadman`, `com.joulewise.b6loop`, and both `com.joulewise.b6wake.loop-bytes-a21034f23bfc84a7.{1,2}`.
+  - Plists moved, not deleted, to `~/Library/LaunchAgents/joulewise-retired-20261111-post-r1/`. Only `com.joulewise.magistrate` remains loaded.
+  - The Air's `~/Library/Logs/jw-hostlink/armed_until` is reset to 0.
+- **Network time stays OFF for now.** The next arm's `prepare` manages it. Turning it on would re-train the kernel frequency word (items 250-251).
+- **The W1 line is NOT ready.** RL-57/RL-58: `joulewise/adapters/powermetrics.py` on the line differs from the bytes the issued calibration acceptance pins (`b9fedca2a` parse memo), so every v4 bracket would read `calibration_acceptance_bound_stale`. RL-58 orders those bytes restored before registration. The state-machine lane is also fixing the line's CI debt and the RL-53 W-1/W-2/W-3 batch. Do not move the canonical checkout or reinstall the watchdog until the lead says the line is final.
+- **Magistrate, if you relaunch:** read this item and `CURRENT.json`. Do not arm. Do not touch R1's night dir. The lead is extracting RL-58's structural fields. Report your activation by mail as usual.
+
 251. **Magistrate activation b274d857 (Opus 5.5, headless, 2026-11-10 17:26 PST): item 250's diagnosis CORRECTED (the cause is the kernel frequency word, not slewing); the word was reset to 0; R1 RE-ARMED, t0 18:08 PST 11-10, `window_max_s` 105,427 s, latest end Wed 11-11 23:25 PST.**
 - **Cause of the 13:49 refusal, measured:** `joulewise/hazards/clock.py` gates on the kernel's `ntp_adjtime` frequency word (`raw_word`), bound = (|freq| + 0.25 ppm) x 5,764 s.
   - The 11-08 arm (`r1-20261108T085636Z/hazards/arm.json`) read `raw_word 0`, bound 1.44 ms: PASS.

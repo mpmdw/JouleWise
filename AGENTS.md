@@ -39,11 +39,11 @@ expectations below continue to apply.
 
 For any substantial task:
 
-1. Read the targeted sections of `RUN_STATE.md`: `ACTIVE_STOP_CARD`, Current
-   Project Status, Known Workspace State, and What Is Next. An active stop card
-   overrides every other restart or queue pointer.
-2. Read the Current Queue and Do-Not-Do-Yet sections of `TASK_QUEUE.md`. Triage
-   a new user request there before treating it as ordinary next work.
+1. Read `CANONICAL.md`, then `RUN_STATE.md`'s top numbered item (the highest
+   number) and `docs/process/CURRENT.json`. An active stop card overrides
+   every other restart or queue pointer.
+2. Follow `docs/process/POINTER_RULE.md` for the current observable, deadline,
+   and refusal branch. Treat the state kernel and generated queue as backlog.
 3. Run Mission M0 in `docs/agent_playbook.md`. For delegation, review, or
    multi-stream work, also read `docs/orchestration.md` before landing changes.
 4. Consult the owning plan, contract, exit checklist, and targeted decision-log

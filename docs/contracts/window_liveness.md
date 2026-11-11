@@ -672,6 +672,10 @@ returns rc `1` if the helper fails. `courier.sent`, the file recording delivery
 of the night's handback message, is not inspected and cannot clear either
 chain or campaign contributions. [T6]
 
+The publisher and `WINDOW_STATUS.md` are retained; the file can be recreated
+by the documented status-update procedure. Current head-pointer intake uses
+[`CURRENT.json`](../process/CURRENT.json) and [the pointer rule](../process/POINTER_RULE.md).
+
 A **commit-freeze sentinel** is a file whose presence suppresses Git work;
 `JOULEWISE_COMMIT_FREEZE_SENTINEL` selects it, default
 `/Users/edr/JouleWise-window-custody/COMMIT_FREEZE_OPEN`. **Staging** means adding
