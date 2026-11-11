@@ -4,6 +4,7 @@ The five Witness tests intentionally fail on 353446ad6. Product repairs and
 scientific rulings belong to the lead. Controls characterize the working
 paths and the receipt's conservative B6 coupling.
 """
+from tests.git_fixture import init_git_fixture
 from copy import deepcopy
 import hashlib
 import json
@@ -32,7 +33,7 @@ class TemporaryCandidate:
         self.gates = {s: f'docs/align/v4/delta-witness-{s}.md' for s in ('A', 'B')}
         for relative in self.gates.values():
             self.write(relative, 'synthetic admitted gate\n')
-        self.git('init', '-q')
+        init_git_fixture(self.root, '-q')
         reviewed = self.commit('Synthetic reviewed candidate')
         self.receipt = {
             'schema': registration.RECEIPT_SCHEMA, 'status': 'registered',

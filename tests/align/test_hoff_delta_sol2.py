@@ -3,6 +3,7 @@
 Assertions describe the required behavior; unresolved findings stay red.
 No B5 fixture, model, native measurement, or external custody is imported.
 """
+from tests.git_fixture import init_git_fixture
 from copy import deepcopy
 import json
 import os
@@ -40,7 +41,8 @@ class Scratch(unittest.TestCase):
         (checkout / 'b.json').write_text('{"input":2}')
         (checkout / '.venv/bin').mkdir(parents=True)
         (checkout / '.venv/bin/python').write_text('synthetic interpreter seam; never executed')
-        for args in (('init', '-q'), ('add', '.'), ('commit', '-qm', 'synthetic checkout')):
+        init_git_fixture(checkout, '-q')
+        for args in (('add', '.'), ('commit', '-qm', 'synthetic checkout')):
             subprocess.run(['git', '-c', 'user.name=Synthetic', '-c',
                             'user.email=synthetic@example.invalid', '-C', str(checkout), *args],
                            check=True, capture_output=True)

@@ -1,4 +1,5 @@
 """Registration blockers: synthetic records only; no native probes or weights."""
+from tests.git_fixture import init_git_fixture
 from tests.align.test_v4_arm_watchdog_check import acceptance as _watchdog_acceptance
 from copy import deepcopy
 import hashlib
@@ -46,7 +47,7 @@ class RegistrationTests(unittest.TestCase):
                 p.write_text('synthetic gate\n')
             def git(*args):
                 return subprocess.run(['git', *args], cwd=root, check=True, capture_output=True).stdout.decode().strip()
-            git('init', '-q')
+            init_git_fixture(root, '-q')
             git('add', '.')
             git('-c', 'user.name=Synthetic', '-c', 'user.email=synthetic@example.invalid',
                 'commit', '-qm', 'Synthetic registration fixture')

@@ -4,6 +4,7 @@ Negative witnesses intentionally fail at 9891d679b. They exercise receipt
 classification, ordinary stale-packet reuse, and a stray meter file; no live
 runner, hardware probe, model, measurement data, or network is invoked.
 """
+from tests.git_fixture import init_git_fixture
 import contextlib
 import hashlib
 import io
@@ -127,7 +128,7 @@ class RecordFreshnessWitnesses(unittest.TestCase):
                     'commit', '-qm', 'Synthetic series ledger')
                 return hashlib.sha256(ledger.read_bytes()).hexdigest()
 
-            git('init', '-q')
+            init_git_fixture(root, '-q')
             path = 'staging/window-C2-record.json'
             commit, digest = commit_record(path, {'window': 'C2', 'status': 'final'})
             series_sha = commit_ledger(commit, path, digest)

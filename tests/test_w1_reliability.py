@@ -106,7 +106,8 @@ class TerminalDeliveryTests(unittest.TestCase):
         self.repo, self.remote = self.root / 'source', self.root / 'remote.git'
         self.repo.mkdir()
         init_git_fixture(self.repo, '-q')
-        self.git('init', '--bare', '-q', str(self.remote))
+        self.remote.mkdir()
+        init_git_fixture(self.remote, '--bare', '-q')
         self.git('-C', str(self.repo), 'remote', 'add', 'origin', str(self.remote))
         self.custody = self.root / 'custody'
         self.night = self.custody / 'night'

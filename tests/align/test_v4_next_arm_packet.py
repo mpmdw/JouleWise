@@ -4,6 +4,7 @@ The arm rebuilds the packet from the identities the supplied one names (a packet
 never trusted data), judges its own build, and refuses a supplied packet that differs. No
 measurements, probes, models or network.
 """
+from tests.git_fixture import init_git_fixture
 from tests.align.test_v4_arm_watchdog_check import acceptance as _watchdog_acceptance
 from tests.align.v4_registration_fixtures import session_plan
 import contextlib
@@ -38,7 +39,7 @@ class Scenario:
                  b_bar=True, provisional=False, previous_final=False):
         self.root = Path(directory)
         if previous is None:
-            self.git('init', '-q')
+            init_git_fixture(self.root, '-q')
         self.previous = previous
         self.window = window
         self.dir = 'w-' + window.replace('#', '_')
