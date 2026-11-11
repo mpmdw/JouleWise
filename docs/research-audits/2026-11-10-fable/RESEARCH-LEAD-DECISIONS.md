@@ -2495,6 +2495,123 @@ placeholders.
 
 ---
 
+# Decision request 25: the state-machine lane's questions for the W1 line (2026-11-11 03:26 PST)
+
+**Read.** The lane's plan, `docs/research-audits/2026-11-11-state-machine-lane/PLAN.md` @ `985d8740a`, sections 1
+to 5; the finality and unseal passages of `implicit-state-machines.md` on the audit branch. On the W1 line at
+`b4a6c217f` I checked that `scripts/offload_window.py` and the harvest-off runbook are not named in the
+registration's bound artifacts or the receipt. No code has been written for any of these items yet, so this
+rules designs, not diffs.
+
+## RL-53. W-0 to W-8
+
+### W-0: yes, one batch, three edits, with a cut-off
+
+The registration is not signed, and a bound-file edit is cheapest now (RL-35). W-1, W-2 and W-3 close the paths
+that stranded the measurement Mac twice. They may land on the W1 line in one batch before the STRICT
+re-registration, on these terms:
+
+1. **None of them changes a measured byte**, a flag, a verdict, a window record's content, or what the receipt
+   checks.
+2. **The batch lands before PREQUAL and the W1 smoke**, which run on the registered bytes. The native checks
+   that exercise these files run after it.
+3. **The cut-off.** If the batch is not admitted when the lead is ready to start PREQUAL after R1, it is left
+   out, W1 goes without it, and the procedures of RL-35 cover the gap as they do now. The lane does not hold
+   the measurement Mac.
+4. Each edit has failing-first tests and a cold review. The trace is regenerated and both closure modules
+   pass. One row in `DEVIATIONS.md` covers the batch and names the three files; the protocol text is not
+   edited. The new arm refusal is described there as an added check, as METER-T0-PROBE was.
+
+### W-1 (the watchdog dry run at the arm): admitted
+
+- Run it twice, as RL-35 item 4 does by hand: before the install against the rendered plan (expect no
+  `HOLD_PLAN_*`), and after the install (expect the fence for this plan).
+- **A refusal after the install undoes the install.** The helper removes the jobs it loaded and leaves the host
+  as it found it. An installed night job under a holding watchdog is the state this check exists to prevent.
+- It runs before the quiet and display dwell starts, never during it, as the meter probe does.
+- It runs the installed watchdog read-only: no write, no fork.
+
+### W-2 (the sudo and network-time preflight): admitted
+
+The probes read and do not set. Whether a rule exists is asked of `sudo` by listing, not by running the
+command; the network-time state is queried, not changed.
+
+### W-3 (unstrand after a refusal before the chain): admitted
+
+This one is not refuse-only: it permits an unstrand that was refused before, and that is the repair.
+
+- The new path needs positive evidence, all of it: a result for this plan with verdict REFUSED, delivered; no
+  `chain.started`; no night process alive. The existing refusal against a live chain stays.
+- The host restore is a separate flag, off by default. It goes through `powermode.restore_owed`, so it takes
+  the host lock and defers to a measuring night. No bare `pmset` in the shell. It records what it found and
+  what it restored.
+
+### W-4 (bound writers adopt the shadow modules): not during the v4 series
+
+A new custody file and changed fault reasons alter what a window record carries. The series is frozen in that
+respect (V4-04). Build and prove it in shadow on `main`. Adoption waits for the registration that follows the
+series. If a defect forces part of it earlier, that comes to me as a defect.
+
+### W-5 (offload fixes): plain engineering, by my reading
+
+`scripts/offload_window.py` is not in the bound artifacts or the receipt at `b4a6c217f`; only
+`scripts/align_v4_offloads.py` is. The lane lead confirms. If confirmed, this is the orchestrator's, with one
+condition that is mine because the copies are the data: the change may retry, re-queue and report, and may not
+alter when or whether a source is removed. Verification before removal stays exactly as it is.
+
+### W-6 (the watchdog's transition table, more dwell limits, a tolerant fence reader)
+
+- **Transition table and dwell limits for the other states:** not for W1. They are bound-file changes that do
+  not justify a re-registration of their own. They ride with the next re-registration that happens for another
+  reason, or wait for the end of the series.
+- **The tolerant fence reader: approved in design, not built now.** With W-1 in, a plan the watchdog cannot
+  parse can no longer be armed, which is the case the tolerant reader was for. If it is built later: it is used
+  for fence arithmetic only; it reads only the fence fields, each validated strictly; it fences and also raises
+  a notice that it fenced on a plan with unknown keys; admission of a plan stays strict.
+
+### W-7 (finality in one field, and a release for the k+2 deadlock): no release is built
+
+The rule that window k+2 does not arm until window k is final bounds how much is collected while exclusions are
+unknown. A release would let the series run on with the pool counts, the U bars and the holds of RL-20 undecided
+for a window. I do not want that available as a routine act.
+
+A failed desk is one of two things. If it is a tooling defect, the repair touches bound desk code and needs a
+re-registration anyway, and once the desk re-runs the deadlock is gone. If it is the data, the series should
+stop until it is understood. Either way it comes to me when it happens, blind, and is logged.
+
+The single finality field with one writer is a record change and goes with W-4.
+
+Two things from the same audit section are wanted before the registration is signed, because they sit in the
+claim contract's code and text:
+
+1. **The runbook disagrees with the code** about which later record may carry `previous_final`. The code accepts
+   only the immediate successor. The runbook is corrected to say so now. It is not a bound file.
+2. **The late-exclusion path.** The audit derived, and did not verify, that if a final desk excludes a member
+   already counted in the series pool, the arm of k+2 refuses with no repair. The protocol says a desk-only
+   finding "costs at most that window". The lane lead reads the code on the W1 line and reports to me whether
+   production replay recovers by rebuilding the history from the records or deadlocks. No build. If it
+   deadlocks, the fix is a claim-contract change and is cheapest before signing.
+
+### W-8 (`unseal.json`): the record yes, the refusal optional
+
+Block 5's unseal was a sentence in RUN_STATE, and I have since had to rule twice on what its scope meant
+(RL-38, RL-41). So:
+
+- **Every unseal from now on is a committed record**: who gave it, when, in what words; the block; the digest of
+  the verdict it follows; the exact paths it opens; what stays sealed; and which seats may read. Block 6 and
+  each v4 release use it. BYTES keeps its commitment journal, which already does this job.
+- Making display tools refuse without the record is the orchestrator's choice. It lives in the release tools
+  and touches no bound W1 file. It is a guard against accident, not a barrier: custody is by rule, under one
+  user.
+
+**Reason.** Before a registration is signed, a guard that only refuses is nearly free and each of these three
+would have saved days. Everything that changes what a record says, or lets the series continue where it now
+stops, is a different kind of change and waits.
+
+**Blind status.** Blind: no v4 outcome exists.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
