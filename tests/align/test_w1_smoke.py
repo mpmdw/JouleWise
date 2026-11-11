@@ -211,6 +211,31 @@ class RunnerTests(unittest.TestCase):
     def parse(self):
         return smoke.parse(self.tmp / 'smoke', member_reader=member_reader)
 
+    def test_production_guard_exercises_missing_lock_file_and_releases_it(self):
+        from joulewise.align.apple import powermode
+        production = self.tmp / 'production-host-state'
+        with mock.patch.object(powermode, 'HOST_STATE_DEFAULT', str(production)), \
+                mock.patch.object(powermode, '_PRODUCTION_ENTRY', 'w1-smoke-synthetic'), \
+                mock.patch.dict(os.environ, {powermode.HOST_STATE_ENV: ''}):
+            self.assertEqual(self.runner(FakeMBP(self, self.clock)).run(), 0)
+            self.assertTrue((production / 'night.lock').is_file())
+            lock = powermode.HostLock()
+            self.assertTrue(lock.acquire())
+            lock.release()
+        guards = next(json.loads(l) for l in (self.tmp / 'smoke' / smoke.LOG).read_text().splitlines()
+                      if json.loads(l)['step'] == 'guards')
+        self.assertTrue(guards['host_state_preflight']['released'])
+
+    def test_production_host_directory_error_aborts_before_prepare_or_install(self):
+        from joulewise.align.apple import powermode
+        mbp = FakeMBP(self, self.clock)
+        with mock.patch.object(powermode.HostLock, 'acquire', side_effect=PermissionError('root-owned')):
+            self.assertEqual(self.runner(mbp).run(), 2)
+        self.assertFalse(any('align_v4_session.py' in ' '.join(c) for c in mbp.calls))
+        guards = next(json.loads(l) for l in (self.tmp / 'smoke' / smoke.LOG).read_text().splitlines()
+                      if json.loads(l)['step'] == 'guards')
+        self.assertIn('root-owned', guards['host_state_preflight']['error'])
+
     def test_a_clean_smoke_passes_every_row(self):
         mbp = FakeMBP(self, self.clock)
         self.assertEqual(self.runner(mbp).run(), 0)

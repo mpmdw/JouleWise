@@ -121,4 +121,6 @@ def prepare_child(args):
 
 
 if __name__ == '__main__':
+    from joulewise.align.apple import powermode
+    powermode.mark_production_entry('align_v4_w1_smoke')
     raise SystemExit(main())

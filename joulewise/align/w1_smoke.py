@@ -961,13 +961,12 @@ class SmokeRunner:
         published = [str(agents / f'{name}.plist') for name in (NIGHT_LABEL, NIGHT_LABEL + '.deadman')
                      if (agents / f'{name}.plist').exists()]
         from joulewise.align.apple import powermode
-        lock = Path(powermode.night_lock_path())
-        lock_free = True
-        if lock.exists():
-            held = powermode.HostLock(role='w1-smoke-probe')
-            lock_free = bool(held.acquire())
-            if lock_free:
-                held.release()
+        try:
+            preflight = powermode.host_lock_preflight(role='w1-smoke-preflight')
+            lock_free = True
+        except (OSError, ValueError) as exc:
+            preflight = {'acquired': False, 'error': f'{type(exc).__name__}: {exc}'}
+            lock_free = False
         head = self.cmd(['git', '-C', str(self.m), 'rev-parse', 'HEAD'], timeout=30)[1].strip()
         dirty = self.cmd(['git', '-C', str(self.m), 'status', '--porcelain'], timeout=60)[1].strip()
         try:
@@ -979,6 +978,7 @@ class SmokeRunner:
         ok = job_absent and rc_p == 1 and not published and lock_free and not dirty and prequal_ok
         self.log('guards', 'pass' if ok else 'abort', night_job_absent=job_absent,
                  run_night_processes=out_p.split(), published_night_plists=published, night_lock_free=lock_free,
+                 host_state_preflight=preflight,
                  head=head, dirty=bool(dirty),
                  prequal={k: report.get(k) for k in ('status', 'commit', 'next', 'checkout_dirty')})
         return ok, head

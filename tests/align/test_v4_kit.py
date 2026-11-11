@@ -1757,7 +1757,7 @@ class W1HighPowerTests(unittest.TestCase):
             seed_series(measurement)
             (measurement / kit.KIT / 'collection_plan.json').write_text(json.dumps(
                 {'runtime_requirements': {'ac_powermode': 2}}))
-            with patch.object(kit, 'generate'), patch.object(pilot.h, 'prepare', return_value='ok') as prepare:
+            with patch.object(kit, 'generate'), patch.object(pilot.h, 'prepare', return_value={}) as prepare:
                 session.prepare(measurement, Path(tmp) / 'session')
             self.assertEqual(prepare.call_args.kwargs['ac_powermode'], 2)
 

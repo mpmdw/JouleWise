@@ -42,6 +42,8 @@ def series_ac_powermode(measurement_root, kit_path=kit.KIT):
 
 
 def prepare(measurement_root, session_root, *, power_runner=None, window_id=None, extra_sentinels=0, **kwargs):
+    from joulewise.align.apple import powermode
+    preflight = powermode.host_lock_preflight(role='v4-prepare-preflight')
     # Lead ruling R6-7: at every session start a host-level High Power marker
     # means an Automatic restore is owed. Restore it first (never under a
     # measuring night, which holds the host night lock and restores at its own
@@ -69,6 +71,8 @@ def prepare(measurement_root, session_root, *, power_runner=None, window_id=None
     kwargs.setdefault('pack_id', kit.PACK_ID)
     kwargs.setdefault('session_prefix', 'align-v4-')
     state = pilot.prepare(measurement_root, session_root, **kwargs)
+    state['host_state_preflight'] = preflight
+    pilot.h.write(Path(session_root) / 'session.json', state)
     if series_state is not None:
         if state.get('preparation_status') != 'STAGED':
             raise ValueError('series prepare produced no armable plan; inspect session flags')

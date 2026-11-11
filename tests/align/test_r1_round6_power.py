@@ -218,7 +218,7 @@ class V4SessionHighPowerTests(HostStateCase):
         order = []
         with patch.object(kit, 'generate', side_effect=lambda *a, **k: order.append(('generate', host.mode))), \
                 patch.object(session, 'series_ac_powermode', return_value=0), \
-                patch.object(pilot, 'prepare', side_effect=lambda *a, **k: order.append(('prepare', host.mode))):
+                patch.object(pilot, 'prepare', side_effect=lambda *a, **k: order.append(('prepare', host.mode)) or {}):
             session.prepare(measurement, self.tmp / 'new-session', power_runner=host)
         self.assertEqual(order, [('generate', 0), ('prepare', 0)])
         self.assertFalse(self.marker.exists())

@@ -26,6 +26,7 @@ class OutcomeTests(unittest.TestCase):
             (night / 'chain.exited').write_text(json.dumps({'exit_code': code}))
             return code, None, 0, [], True
         h.driver._run_chain_once = exited
+        h.driver._group_census = lambda *a, **k: (True, [])
 
     def test_nonzero_chain_exit_faults_result_hazard_and_courier_without_changing_go(self):
         h = Harness(self, g10=False)

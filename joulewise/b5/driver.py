@@ -135,8 +135,8 @@ MONITOR_JOURNAL_DIR = ("hazards", "monitor")
 # the end of the post capture (the battery join needs a read at most
 # battery.SMC_MAX_GAP_S = 5 s after the span it judges).
 MONITOR_POST_CHAIN_HOLD_S = 5.0
-# The KM003C wall meter (scripts/km003c_monitor.py; WIRING.md): a disclosed
-# diagnostic supervised like the monitor. It never refuses or stops a window.
+# DC-in is mandatory (lead ruling 2026-11-10, I-01). Use the existing
+# instrument-liveness bound/cadence, including for USB errors and empty polls.
 METER_NAME = "meter"
 METER_STREAM_DIR = ("hazards", "meter")
 # PLAN2 row 9 (interim): one publication retry, then both locators re-read.
@@ -536,9 +536,10 @@ class Seams:
     emit_flag: Callable[[Path, Mapping[str, Any]], None] = _emit_flag_production
     boot_session_uuid: Callable[[], str | None] = _boot_session_uuid
     verify_lineage: Callable[[LineageRequest], Mapping[str, Any]] = _production_lineage_check
-    # The KM003C wall meter's command line; None runs the window without it.
+    # None is an unavailable reader and refuses before the chain.
     meter_argv: Callable[[MonitorRequest], Sequence[str]] | None = None
     keep_awake: Callable[[int], sleep_guard.KeepAwake] | None = None
+    meter_probe: Callable[[Path], Mapping[str, Any]] | None = None
 
 
 _STATUS_ORDER = {PASS: 0, "NOT_EVALUATED": 1, UNMEASURED: 2, REFUSE: 3}
@@ -1268,6 +1269,80 @@ class MonitorLiveness:
             if (isinstance(line, dict) and isinstance(line.get("kind"), str) and line["kind"] in kinds
                     and line.get("error") is None):
                 self.last_good[name] = now
+
+
+class MeterLiveness(MonitorLiveness):
+    """DC-in sample liveness using the monitor's 600 s bound and 10 s cadence.
+
+    Incrementally read every create-once stream, including restarts. Only a
+    nonempty, correctly sized sample batch under a streaming header counts;
+    USB errors, empty polls, partial/malformed lines and unreadable streams
+    never refresh liveness. Header RAW/monotonic anchors date the batch, so
+    reading a backlog cannot turn old samples into current evidence.
+    """
+
+    def __init__(self, directory: Path, *, clock: Callable[[], float] = time.monotonic) -> None:
+        super().__init__(directory, clock=clock)
+        self.offsets, self.partial, self.anchors = {}, {}, {}
+        self.last_good = {"meter": clock()}
+        self.outage: dict[str, Any] | None = None
+
+    def check(self) -> dict[str, Any] | None:
+        now = self.clock()
+        if now < self.next_check:
+            return None
+        self.next_check = now + MONITOR_LIVENESS_CHECK_S
+        try:
+            for path in sorted(self.directory.glob("stream-*.jsonl")):
+                try:
+                    self._read_stream(path, now)
+                except Exception as error:  # noqa: BLE001 - unreadable is not sampling
+                    if len(self.errors) < 20:
+                        self.errors.append(f"{path.name}: {_error_text(error)}")
+        except Exception as error:  # noqa: BLE001 - directory loss also counts as silence
+            if len(self.errors) < 20:
+                self.errors.append(_error_text(error))
+        self.outage = self.outage or self.silent(now)
+        return self.outage
+
+    def _read_stream(self, path: Path, now: float) -> None:
+        name, size = path.name, path.stat().st_size
+        offset = self.offsets.get(name, 0)
+        if size < offset:
+            offset = 0
+            self.partial.pop(name, None)
+            self.anchors.pop(name, None)
+        if size == offset:
+            return
+        with path.open("rb") as handle:
+            handle.seek(offset)
+            data = handle.read(size - offset)
+        self.offsets[name] = offset + len(data)
+        lines = (self.partial.get(name, b"") + data).split(b"\n")
+        self.partial[name] = lines.pop()
+        for raw in lines:
+            try:
+                row = json.loads(raw)
+                if not isinstance(row, dict):
+                    continue
+                if row.get("k") == "h":
+                    self.anchors.pop(name, None)
+                    if (row.get("status") == "streaming"
+                            and all(type(row.get(k)) is int for k in ("start_raw_ns", "start_mono_ns"))):
+                        self.anchors[name] = row["start_raw_ns"] - row["start_mono_ns"]
+                elif row.get("k") == "b" and name in self.anchors:
+                    n, payload, rx = row.get("n"), row.get("p"), row.get("rx")
+                    if (type(n) is int and n > 0 and isinstance(payload, str) and len(payload) == 40 * n
+                            and len(bytes.fromhex(payload)) == 20 * n and type(rx) is int):
+                        seen = (rx - self.anchors[name]) / 1e9
+                        if self.last_good["meter"] < seen <= now:
+                            gap = seen - self.last_good["meter"]
+                            if gap >= MONITOR_OUTAGE_S and self.outage is None:
+                                self.outage = {"silent_s": {"meter": round(gap, 1)},
+                                               "outage_s": MONITOR_OUTAGE_S, "recovered": True}
+                            self.last_good["meter"] = seen
+            except (ValueError, TypeError):
+                continue
 
 
 # --------------------------------------------------------------------------
@@ -2240,6 +2315,20 @@ def _run_hazard_night_body(rt: Any, plan_path: Path, plan: Any, probes: Any,
                       {"verdicts": decision["verdicts"], "reasons": decision["reasons"],
                        "arm_decision": f"night/{ARM_DECISION}"})
 
+    # I-01: reuse the v4 arm's live probe semantics (aligned samples, RAW
+    # offset and closing line), never an operator-entered availability bit.
+    try:
+        from scripts.align_v4_session import _probe_meter_live
+        meter_probe = dict((seams.meter_probe or _probe_meter_live)(
+            Path(getattr(rt, "REPO_ROOT", plan.measurement_root))))
+    except Exception as error:  # noqa: BLE001 - an unverifiable reader refuses
+        meter_probe = {"live": False, "reason": _error_text(error)}
+    hazard["meter_readiness"] = meter_probe
+    if meter_probe.get("live") is not True or seams.meter_argv is None:
+        return refuse("meter", REFUSED_INSTRUMENT_NOT_SAMPLING,
+                      "KM003C DC-in reader is absent or unreadable; every measurement requires DC-in",
+                      meter_probe, fault_reasons=("meter_not_sampling",))
+
     # Final census immediately before any publication or launch.
     final = window.agent_census()
     hazard["final_census"] = {"clean": final["clean"], "exit_code": final.get("exit_code")}
@@ -2445,10 +2534,10 @@ def _run_hazard_night_body(rt: Any, plan_path: Path, plan: Any, probes: Any,
                       {"attempts": readiness}, fault_reasons=("instrument_not_sampling",))
     liveness = MonitorLiveness(journal_dir)
 
-    # 5b. The KM003C wall meter (WIRING.md), supervised like the monitor but
-    # never awaited and never a refusal: an absent meter exits 0 once and is
-    # not restarted; its supervision failures are DISCLOSE flags.
+    # 5b. The mandatory KM003C DC-in reader. The arm probe above gates
+    # admission; sample liveness below stops a window after the outage bound.
     meter: MonitorSupervisor | None = None
+    meter_liveness = MeterLiveness(custody.joinpath(*METER_STREAM_DIR))
     meter_faults: set[str] = set()
 
     def meter_fault(event: str, observed: Mapping[str, Any]) -> None:
@@ -2458,7 +2547,7 @@ def _run_hazard_night_body(rt: Any, plan_path: Path, plan: Any, probes: Any,
         window.flag("meter.supervision_fault", "DIAGNOSTIC", "PHYSICS", stage="window",
                     observed={"event": event, **observed},
                     detail="the wall-meter process could not be supervised as planned (" + event + "); the "
-                           "meter is a disclosed diagnostic and collection went on")
+                           "sample liveness is checked independently against the instrument outage bound")
 
     if seams.meter_argv is not None:
         meter_argv = seams.meter_argv
@@ -2532,6 +2621,7 @@ def _run_hazard_night_body(rt: Any, plan_path: Path, plan: Any, probes: Any,
     # never ends the chain, it is flagged once per step and the pass goes on.
     supervision_faults: dict[str, int] = {}
     liveness_failing_since: list[float | None] = [None]
+    meter_outage: dict[str, Any] | None = None
 
     def supervision_fault(label: str, error: BaseException) -> None:
         supervision_faults[label] = supervision_faults.get(label, 0) + 1
@@ -2548,6 +2638,7 @@ def _run_hazard_night_body(rt: Any, plan_path: Path, plan: Any, probes: Any,
             return None
 
     def supervise() -> dict[str, Any] | None:
+        nonlocal meter_outage
         if keep is not None:
             restarted = guarded("keep_awake", keep.poll)
             if restarted and getattr(keep, "last_loss", True):
@@ -2558,6 +2649,16 @@ def _run_hazard_night_body(rt: Any, plan_path: Path, plan: Any, probes: Any,
         guarded("monitor", monitor.poll)
         if meter is not None:
             guarded("meter", poll_meter)
+        reading = meter_liveness.check()
+        if reading is not None:
+            meter_outage = reading
+            window.flag("meter.supervision_fault", "DIAGNOSTIC", "PHYSICS", stage="window",
+                        observed={"event": "liveness_outage", **meter_outage},
+                        expected={"outage_s": MONITOR_OUTAGE_S},
+                        detail="no valid DC-in sample batch within the instrument outage bound; chain stopped")
+            return rt._refusal_mapping(STOPPED_MONITOR_OUTAGE,
+                f"KM003C DC-in stream silent for {MONITOR_OUTAGE_S:g} s; the driver stopped the chain",
+                meter_outage)
         reading = guarded("disk", disk.check)
         if reading is not None:
             window.flag("disk.low", "DIAGNOSTIC", "PHYSICS", stage="window",
@@ -2771,6 +2872,8 @@ def _run_hazard_night_body(rt: Any, plan_path: Path, plan: Any, probes: Any,
                            if len(captures) >= 2 else "not_run")
     bound_derivation_failed = _stage_fault(journal, [*derivations, *(item + ".corpus" for item in derivations)])
     fault_reasons = []
+    if meter_outage is not None:
+        fault_reasons.append("meter_liveness_outage")
     if yield_status in {"EMPTY", "LOW"}:
         fault_reasons.append(f"yield_{yield_status.lower()}")
     if verdict == "CHAIN_STOPPED":
