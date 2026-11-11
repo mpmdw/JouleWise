@@ -54,9 +54,9 @@ NEXT_ARM_TRIAGE = (
          text='sidecar/powermetrics coverage, collector faults, OOM/Metal, deadman and '
               'unobserved-state faults (X1-X8) tabulated for the previous window'),
     dict(id='thermal_escalation', source=PACKET, first_window_na=True,
-         text='U1-U3 result: if failed, the registered escalation ladder (idle 300->450 s, '
-              'delta_slow steps <=2.0 C, then one quantization step down) is applied and '
-              'recorded before use, never in place'),
+         text='W1 to C1: recorded ladder on U1-U3 FAIL only. From C1: thermal policy frozen; '
+              'two consecutive C/T U1-U3 FAIL bars or a third bar hold arming for a signed '
+              'u1_u3_fail_escalation ruling naming the triggering attempt (RL-20)'),
     dict(id='cohort_pool_rules', source=PACKET, first_window_na=True,
          text='cohort and pool rules: U1-U3 failure bars pool entry; one frozen four-slot '
               'cohort; no pooling across a changed configuration'),

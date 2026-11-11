@@ -930,7 +930,11 @@ gives that model 0 eligible from that window (R15, RUN_STATE 226). A fill-in
 template: `v4_cadence.triage_template(previous_window)`. A **`lead_ruling` row** (in
 `lead_rulings`: `ruling_id`, `text_sha256`, `resets: zero_capture_escalation`,
 `after_window`, `lead_signature`) resets the zero-capture escalation count after the
-named window row; it is validated, applied by `calibration_stop` and retained. Whether the
+named window row; it is validated, applied by `calibration_stop` and retained. RL-20 adds source rows
+with `resets: u1_u3_fail_escalation` (same committed text and lead signature), naming the C/T attempt
+that triggered the thermal hold. Those rows are validated and retained in the rebuilt
+`checks.thermal_escalation.rulings`, reset only the thermal FAIL-bar counts and leave zero-capture
+escalation unchanged. A ruling cannot authorize a changed in-series thermal policy. Whether the
 triage fits in five minutes, and the 30-45 minute turnaround, are targets, not
 measurements.
 
