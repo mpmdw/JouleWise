@@ -329,6 +329,8 @@ def _ensure_import_paths() -> None:
     tests_path = os.fspath(DEFAULT_TESTS_DIR)
     if tests_path not in sys.path:
         sys.path.insert(0, tests_path)
+    from tests import host_command_guard  # Install the host-command guard before relative test imports.
+    host_command_guard.install()  # also its per-test hook, if a startup child installed it before unittest
 
 
 def _module_test_ids(module: str, imported) -> frozenset[str]:
@@ -652,6 +654,8 @@ def run_shard(modules, shard_count: int, shard_index: int) -> int:
         # directory.  Match that behavior even though this script lives in
         # scripts/ and therefore has a different default sys.path[0].
         sys.path.insert(0, tests_path)
+    from tests import host_command_guard  # This launch path also bypasses tests-qualified module names.
+    host_command_guard.install()
     loader = unittest.TestLoader()
     total_tests = total_failures = total_errors = total_skipped = 0
     successful = bool(modules)
