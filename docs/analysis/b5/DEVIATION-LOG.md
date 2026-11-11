@@ -680,3 +680,230 @@ bound and the refusal precedence are fixed, and the transport-usability witnesse
 
 > The release event has not happened. The lead has seen no Block 5 energy or outcome value. Ed delegated
 > preregistration rulings to the lead.
+
+---
+
+## Signing statement for DLE-6 to DLE-10
+
+These entries were written after the Block 5 release event (Ed's unseal, 2026-11-08, `RUN_STATE.md` item 231). The
+statement the earlier entries carry ("The release event has not happened") cannot be made for them, and they do not
+carry it.
+
+Each records a ruling of the research design lead (Fable 5.2) of 2026-11-10 18:44 PST, in
+`docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md` on `origin/audit/2026-11-10-fable` @ `5de56400f`
+(called **RL** below; `RL:42` is its line 42 at that commit). The lead's authority, RL:3-6:
+
+> **Authority.** Ed, 2026-11-10 about 18:25 PST, recorded in `RUN_STATE.md` item 252: "def fable 5.2 should be the
+> final say for anything paper bound". That covers claim contracts, registrations, designs, analysis rulings, and
+> release and claim text. Opus 5.5 (the lead) orchestrates and has the final say on non-paper engineering.
+> Scope, venue and authorship choices stay with Ed.
+
+Each entry quotes its ruling, reason and blind-status line verbatim, copied from those bytes line for line. The
+rulings are **Block-5-aware**: the research lead read the released Block 5 results before ruling, and each blind-status
+line says so. The recorder (an Opus 5.5 seat, RL-24 seat 8) read the rulings, the registrations, the sources cited and
+`RUN_STATE.md` items 231 and 232, and opened no Block 6, BYTES held-out or restricted path. RL-24 routes these entries
+to the research lead for review before merge.
+
+---
+
+## DLE-6. The gate a Block 5 number passes before it is rendered (RL-3)
+
+- **Status.** ADOPTED, 2026-11-10, by research-lead ruling RL-3 (RL:56-76). It is logged as DLE-6 because RL-3 says
+  "The lead logs it as DLE-6".
+- **Original rule.** The 2026-10-20 renderer obligation, declared deviation Q-RENDERER, appended to the Block 5 seal
+  record (`docs/process_traces/2026-10-07-block5-seal/SEAL_RECORD.md:631-638`;
+  `docs/process_traces/2026-10-20-magistrate-6cff3515/L9-RULING-ADDENDUM.md:92-99`). Its obligation, from the line on which it starts (SEAL_RECORD.md:635-638):
+
+> changes. Obligation fixed now, before release: any block-5 Results renderer written after release prints every row of
+> the validated fill input's contrast census with its issued status (unsupported and refused included), selects none, and
+> its validator checks row-for-row correspondence with the fill input. It passes the Results cold gate before any number
+> it prints is used.
+
+  `RUN_STATE.md` item 232 lists that gate as open: "the Results cold gate required by the 2026-10-20 renderer
+  obligation". DLE-0 replaced PLAN step 12, the results cold gate, by the recompute agreement; the obligation still
+  named it.
+- **Ruling (verbatim, RL:58-71).**
+
+> **Ruling.** No Block 5 number enters Paper 1, a slide, the site or any public page until all three hold:
+>
+> 1. `docs/analysis/b5/RESULTS.md` is on `main`.
+> 2. One fresh executing reader from the other model family than its author (it was written by an Opus seat, so
+>    a Sol seat) re-derives every number to be printed from the frozen custody by the key paths the file gives,
+>    and checks the paper's sentences against the ten licence constraints listed in the release-to-paper audit.
+>    That reader is not a repair seat.
+> 3. Every printed value that comes from one of the seven families the recompute does not cover, from the 403
+>    exempt leaves, or from a recompute-only line (the whole-machine per-phase energies, the load-correlated and
+>    scaled-allowance lines, the durations, the attempt history, the monitor cost) has the item-83 ruling-3 hand
+>    check, with its source named.
+>
+> This is the replacement for the "Results cold gate" that the 2026-10-20 renderer obligation still names and
+> DLE-0 abolished. The lead logs it as DLE-6. Internal documents may quote `RESULTS.md` meanwhile, naming it.
+
+- **Reason (verbatim, RL:73-74).**
+
+> **Reason.** Item 232 lists this gate as open. Without it, every paper number is a hand copy of one seat's
+> reading.
+
+- **Blind status (verbatim, RL:76).**
+
+> **Blind status.** Not blind to Block 5. Procedural.
+
+- **Effect on estimands.** None. No estimand, estimator, decision rule or threshold changes. It governs when a
+  released Block 5 number may be rendered.
+
+---
+
+## DLE-7. Adoption ruling for Block 5 placement, registration §14 Q4 (RL-2)
+
+- **Status.** ADOPTED, 2026-11-10, by research-lead ruling RL-2 (RL:40-54). RL-2 directs that it be recorded here
+  and as a dated addendum at the head of `docs/paper/results-fill-registry.md`; that addendum is entered in the same
+  commit as this entry.
+- **Original rule.**
+  - Block 5 registration §1 (`configs/campaigns/v5_claim_25g83/registration_block5.md:1652-1653`):
+
+> What the paper prints, and from which artifact, is fixed in analysis plan §9; printing anything needs the placement
+> ruling of §14 Q4.
+
+  - Block 5 registration §14 Q4 (`registration_block5.md:5968-5969`):
+
+> - **Q4. Paper placement (cold gate, ideally before seal).** D-174's fallback places no `_v5` result; printing needs an
+>   adoption ruling.
+
+  - The registry's standing disposition, `docs/paper/results-fill-registry.md:5-15` at `60d3225ee`, before the RL-2 addendum was put above it:
+
+> D-174 SELECT FALLBACK selects the single methods/diagnostic draft in
+> `draft-v2-skeleton.md`, under
+> `docs/process_traces/2026-09-05-readiness/02-magistrate-ruling-fallback.md`.
+> `RETIRED_FALLBACK` means no placement in this submission and no rendering
+> permission. Dated retirement entries preserve each former supplier, token,
+> value and status for history; they do not delete rows or authorize a later
+> campaign. This disposition overrides the historical A/B/Refusal instructions,
+> contingent subtitle, floor tables and fill census below. Those describe the
+> frozen draft-v1/template, not active slots in the methods/diagnostic paper.
+> The selector filename is retained as a single-outcome validator/copier accepting
+> only METHODS_DIAGNOSTIC; A, B and REFUSAL selections are rejected.
+
+- **Ruling (verbatim, RL:42-48).**
+
+> **Ruling.** Every row the Block 5 analysis plan §9 registers for print is placed in Paper 1 at the sites
+> `fill_index.md` names for it (§5.1 to §5.6 and §5.8, the abstract and conclusion sentences assembled from
+> them), beside its registered fixed sentence. Both contrasts print with their issued status; nothing is selected
+> or omitted. Dominance prints as branch B, with every ratio, numerator, denominator and n, and no subtitle. This
+> supersedes the 2026-09-05 "D-174 SELECT FALLBACK" disposition for these rows, on Ed's written instruction of
+> 2026-11-08 (item 232), which is one of the two events at which D-174 says it expires. The lead records it as a
+> dated addendum at the head of `docs/paper/results-fill-registry.md` and in the Block 5 deviation log.
+
+- **Reason (verbatim, RL:50-51).**
+
+> **Reason.** Item 232 settles that Block 5 is in the paper. It does not say which rows, where, or what happens to
+> the registry's standing disposition, and the registration requires an adoption ruling before anything prints.
+
+- **Blind status (verbatim, RL:53-54).**
+
+> **Blind status.** Not blind: Block 5 is released and I have read it. The ruling places every registered row and
+> selects none, so knowing the outcomes cannot shape it.
+
+- **Effect on estimands.** None. No estimand, estimator, decision rule or threshold changes. It places registered rows
+  and selects none.
+
+---
+
+## DLE-8. The D-177 limitation on phase-energy sentences (RL-4 (x)): reporting interpretation
+
+- **Kind.** A reporting interpretation, not a change of rule. RL-4 (x): "Logged as a reporting interpretation."
+- **Status.** ADOPTED, 2026-11-10, by research-lead ruling RL-4 (x) (RL:104-106).
+- **Original rule.** Block 5 registration §1 (`configs/campaigns/v5_claim_25g83/registration_block5.md:1641-1642`):
+  "Every phase-energy sentence carries the D-177 limitation (phase attribution was not characterized by a measured
+  instrument check)."
+
+- **Ruling (verbatim, RL:80 and RL:104-106).**
+
+> **Ruling.** These bind every sentence about Block 5 in Paper 1, the capstone manuscript and the talk:
+
+> - (x) Registration §1's "every phase-energy sentence carries the D-177 limitation" is met by stating it in the
+>   abstract, in every table caption and in every paragraph that states a phase energy, and in the limitations.
+>   Logged as a reporting interpretation.
+
+- **Reason (verbatim, RL:111).**
+
+> **Reason.** These are the points at which the released record is narrower than the natural way to write it up.
+
+- **Blind status (verbatim, RL:113).**
+
+> **Blind status.** Not blind to Block 5; the ruling is about wording released results.
+
+- **Effect on estimands.** None. It fixes where a registered limitation sentence is stated.
+
+---
+
+## DLE-9. The registered fixed sentences (RL-4 (xi)): reporting interpretation
+
+- **Kind.** A reporting interpretation, not a change of rule. RL-4 (xi): "Logged as a reporting interpretation."
+- **Status.** ADOPTED, 2026-11-10, by research-lead ruling RL-4 (xi) (RL:107-109).
+- **Original rule.** PLAN's fixed sentences, for example the attribution-floor sentence of §5 (PLAN line 257) and the
+  disclosure sentences of §8.1. They use internal labels, which Paper 1's draft paraphrases (finding F-19 of
+  `docs/research-audits/2026-11-10-fable/paper-audit.md` on `origin/audit/2026-11-10-fable`), and they say "window"
+  (for example PLAN line 506: "These numbers are conditional on a window ...").
+- **Ruling (verbatim, RL:80 and RL:107-109).**
+
+> **Ruling.** These bind every sentence about Block 5 in Paper 1, the capstone manuscript and the talk:
+
+> - (xi) The registered fixed sentences print verbatim in an appendix, with internal labels glossed in brackets.
+>   The body may paraphrase one only where it cites that sentence by label. "Session" may replace "window" with
+>   one note saying so. Logged as a reporting interpretation.
+
+- **Reason (verbatim, RL:111).**
+
+> **Reason.** These are the points at which the released record is narrower than the natural way to write it up.
+
+- **Blind status (verbatim, RL:113).**
+
+> **Blind status.** Not blind to Block 5; the ruling is about wording released results.
+
+- **Effect on estimands.** None. Every fixed sentence prints verbatim; the ruling governs where it prints and how the
+  body may refer to it.
+
+---
+
+## DLE-10. Printing Block 5 without Block 6 beside it (RL-6 (e))
+
+- **Status.** ADOPTED, 2026-11-10, by research-lead ruling RL-6 (e) (RL:159-162). A standing deviation: it covers every
+  draft, talk or Tier C submission that prints Block 5 without Block 6 beside it.
+- **Original rule.**
+  - `RUN_STATE.md` item 37 (line 66), decided blind on 2026-10-14: "Reporting rule fixed now: the paper prints block 5
+    and block 6 side by side, each under the same estimators, and the difference between them per printed quantity;
+    a GAMMA contrast is called replicated only if block 6 gives the same outcome word."
+  - Block 6 registration §11.1 (`docs/registrations/block6_replication_DRAFT.md:1083-1084`): "The paper prints, for
+    every quantity of §9 and each pack, block 5's value and each counting block-6 session's value, under the same
+    estimators, with each session's interval, kept units and flags."
+
+- **Ruling (verbatim, RL:159-162).**
+
+> - (e) Printing Block 5 without Block 6 beside it, in a draft, the talk or a Tier C submission, departs from
+>   item 37's reporting rule. It is logged as a deviation and carries the sentence that a registered replication
+>   is collected and its results are not yet released. I will not sign off a submission of Paper 1 to an
+>   external venue without the replication released.
+
+- **Context in the same ruling (verbatim, RL:145 and RL:156-158).**
+
+> - (a) Block 6 stays in Paper 1's design. It is not ruled out of scope.
+
+> - (d) Paper 1 prints the replication if Block 6 is released under its registration by **5 December 2026**.
+>   Otherwise it prints the Tier C text. The call is recorded in `RUN_STATE.md` by date, before any Block 6
+>   number is read. This replaces the contingency plan's 22 November trigger.
+
+- **Reason (verbatim, RL:164-166).**
+
+> **Reason.** Nine counting sessions are collected and no path can analyse them. The amendments that should have
+> preceded the Block 5 unseal did not. Adopting the pre-unseal text verbatim is the only way left to keep those
+> choices from depending on Block 5's outcome words.
+
+- **Blind status (verbatim, RL:168-169).**
+
+> **Blind status.** Blind to Block 6: nothing of it has been read. **Not blind to Block 5**, whose outcome words
+> the replication word compares against. The date in (d) was chosen from engineering state only.
+
+- **The required sentence.** RL-6 (e) requires the sentence "that a registered replication is collected and its
+  results are not yet released"; it does not fix the wording. The wording, where it prints, is the research lead's.
+- **Effect on estimands.** None. No Block 5 or Block 6 number changes. It changes what a draft, the talk or a Tier C
+  submission prints beside Block 5.
