@@ -60,6 +60,9 @@ RESULT_NAME = "runtime_result.json"
 CUSTODY_NAME = "runtime_custody.json"
 # The accepted step-d attempt always owns this canonical directory (driver).
 STEP_D_SEGMENT = "step_D_prefill_10k_decode_4096"
+STEP_30B_SEGMENT = "step_30b"
+OPERATING_REFERENCE_SOURCE = "r1_step_30b_pre_warmup"
+R1_REGISTRATION = ROOT / "configs/campaigns/align_v4/registration/r1_slots.json"
 NS = 1_000_000_000
 TERM_TEARDOWN_S = 15.0       # forced exit, inside the driver's 20 s TERM grace
 WATCHDOG_HARD_S = 4.0        # the watchdog's own teardown: 15 s + 4 s < the 20 s grace
@@ -72,13 +75,11 @@ STEP_QUIET_S = 300
 RECOVERY_CAP_S = 600
 COOLDOWN_CAP_S = 1500        # ruling 1(c)
 PREHEAT_CAP_S = 900
-# LEAD-RULINGS-2 R7-2: R1's gated D runs, X-G, step-d and the designed start
-# states (the R6-2 precool/retry segments) arm the G0 timeout the runtime
-# config names (``g0_timeout_s``, 1,200 s: after a full load no key reaches
-# G0's slope bar until 840-1,040 s after load end, so the 600 s cap truncated
-# the waits R1 exists to measure). Every other G0 keeps the 600 s default.
+# 2026-11-10 ruling §3.3 extends the existing 1,200 s R7-2 timeout
+# to every model member. Only the sensors-only release keeps 600 s.
 G0_TIMEOUT_CONFIG_KEY = "g0_timeout_s"
-G0_TIMEOUT_KINDS = ("step-d", "x-g", *contract.GATED_D_KINDS, *contract.PLANNING_KINDS)
+G0_TIMEOUT_KINDS = ("step-30b", "step-d", "x-g", "d-4bit", *contract.HIGH_POWER_KINDS,
+                    *contract.GATED_D_KINDS, *contract.PLANNING_KINDS)
 PREHEAT_MARGIN_C = 0.5
 PLANNING_FAST_CEILING_C = 150.0   # designed start states band S_slow only (ruling 6)
 DEADMAN_FACTOR = 1.13544
@@ -400,8 +401,18 @@ def reference_c(soak, sensors):
     return {"fast_c": values["s_fast"], "slow_c": values["s_slow"]}
 
 
-def bands_c(soak, sensors):
-    """FD 2.6 / slot S5: delta_k = max(1.0 C, 3 x the detrended soak SD of key k)."""
+def registered_s6():
+    """The ruled S6 and its receipt; unmeasured slots remain pending."""
+    return json.loads(R1_REGISTRATION.read_text())
+
+
+def bands_c(soak, sensors, *, slow_floor=None):
+    """Fast: max(1 C, 3 SD); slow: max(registered S6, 3 SD).
+
+    Pass slow_floor=1 C to retain the registered S5 formula separately.
+    """
+    if slow_floor is None:
+        slow_floor = registered_s6()["slots"]["S6"]
     out = {}
     for role, name in (("s_fast", "delta_fast_c"), ("s_slow", "delta_slow_c")):
         try:
@@ -410,7 +421,7 @@ def bands_c(soak, sensors):
             raise Refused(f"soak reference lacks the detrended SD of {sensors[role]}") from error
         if not math.isfinite(sd) or sd < 0:
             raise Refused("soak detrended SD must be finite and non-negative")
-        out[name] = max(BAND_FLOOR_C, 3.0 * sd)
+        out[name] = max(slow_floor if role == "s_slow" else BAND_FLOOR_C, 3.0 * sd)
     return out
 
 
@@ -419,10 +430,8 @@ def gate_policy(sensors, bands, *, turn_cap_s, chunk_tokens, heavy, per_turn, g0
     policy = {
         "sensors": sensors, "delta_fast_c": bands["delta_fast_c"], "delta_slow_c": bands["delta_slow_c"],
         "turn_cap_s": turn_cap_s, "chunk_tokens": chunk_tokens, "heavy": heavy, "per_turn": per_turn,
-        # The policy validator needs a role; no R1 model member keeps it. Every
-        # member installs its reference through a session hook before warmup
-        # (the soak R, or a designed start state), so capture_reference never
-        # replaces it with a self-captured warm value (LEAD-RULINGS-2 R5-1).
+        # step-30b captures R_op at warmup entry; later members install that
+        # fixed reference (or its designed offset) before warmup.
         "window_reference": {"role": "capture"}}
     if g0_cap_s is not None:
         policy["g0_cap_s"] = g0_cap_s   # R7-2: the R1 G0 timeout
@@ -765,13 +774,13 @@ def recovery_time(rows, sensors, reference, bands, peak_ns):
 
 
 def derive_step_d_slots(*, ep, turn, wall_s, responses, recovery_s, recovery_censored, bands,
-                        t_decline_s, t_decline_status, d_class):
+                        t_decline_s, t_decline_status, d_class, s5_bands=None):
     """Slot vocabulary S1-S9, B_D, I_D, T_dead, N_chunk, t_decline, class.
 
     S1-S4 are the R0-picked keys' step response (S1 fast delta T, S2 fast t63,
     S3 slow delta T, S4 slow tau); the key names and the class checks are in
-    the detail. S5 = delta_slow from the soak; S6 = the delta_slow R1 gates use
-    (the S6 tuning is the lead's after the gated runs); S7 = G_turn; S8 =
+    the detail. S5 retains max(1 C, 3 soak SD); S6 is the slow band R1 gates use
+    (including the 2026-11-10 tuning); S7 = G_turn; S8 =
     N_chunk; S9 = t_decline. A censored t_decline (no decline in the step)
     is the observed decode length and N_chunk is 2,048 (A1 A3.1).
     """
@@ -800,8 +809,9 @@ def derive_step_d_slots(*, ep, turn, wall_s, responses, recovery_s, recovery_cen
     g_turn = min(300.0, 3.0 * recovery_s)
     planning_turn_s = prefill_s + 4096 / r_decode
     fast, slow = responses["s_fast"], responses["s_slow"]
+    s5_bands = s5_bands or bands
     slots = {"S1": fast["delta_t_c"], "S2": fast["t63_s"], "S3": slow["delta_t_c"], "S4": slow["tau_s"],
-             "S5": bands["delta_slow_c"], "S5_fast": bands["delta_fast_c"], "S6": bands["delta_slow_c"], "S7": g_turn, "S8": float(n_chunk),
+             "S5": s5_bands["delta_slow_c"], "S5_fast": s5_bands["delta_fast_c"], "S6": bands["delta_slow_c"], "S7": g_turn, "S8": float(n_chunk),
              "S9": t_dec, "B_D": b_d, "I_D": i_d, "T_dead": t_dead, "N_chunk": n_chunk,
              "t_decline": t_dec, "class": d_class}
     detail = {
@@ -809,10 +819,12 @@ def derive_step_d_slots(*, ep, turn, wall_s, responses, recovery_s, recovery_cen
         "classification": {"s_fast_t63_le_5s": None if fast["t63_s"] is None else fast["t63_s"] <= 5.0,
                            "s_slow_delta_t_ge_3c": slow["delta_t_c"] >= 3.0,
                            "s_slow_tau_le_300s": slow["tau_s"] <= 300.0},
-        "responses": responses, "bands_c": bands, # LEAD-RULINGS-2 R5-7: S6 = delta_slow until the FD 2.6 tuning.
-        "S6_tuning": {"status": "TODO", "S6_now": "delta_slow (S5)", "rule": "FD 2.6 S6 tuning",
+        "responses": responses, "bands_c": bands,
+        "S6_tuning": {**registered_s6()["s6_tuning"], "status": "adopted", "S6_now": bands["delta_slow_c"],
+                      "from_c": slots["S5"], "to_c": slots["S6"],
+                      "rule": "max(S6, 3 x soak SD); further FD 2.6 tuning after R1",
                       "tied_to": "the median G1 wait of the R1 gated D runs (r1_slots.s6_tuning)",
-                      "authority": "LEAD-RULINGS-2 R5-7"},
+                      },
         "recovery_s": recovery_s, "recovery_censored": recovery_censored,
         "t_decline_status": t_decline_status, "t_decline_censored": censored,
         "r_decode_tok_per_s": r_decode, "r_prefill_tok_per_s": r_prefill,
@@ -1379,11 +1391,23 @@ class Segment:
     def reference(self):
         if self.soak is None:
             raise Refused(f"{self.kind} needs --soak-reference")
-        return reference_c(self.soak, self.sensors)
+        # The driver moves rejected attempts away from this canonical path.
+        # Never read a rejected capture or silently fall back from corrupt custody.
+        path = self.out.parent / STEP_30B_SEGMENT / RESULT_NAME
+        if self.kind != "step-30b" and path.parent.exists():
+            value = self.accepted_result(STEP_30B_SEGMENT, "step-30b")
+            reference = value.get("operating_reference")
+            if (not isinstance(reference, dict)
+                    or reference.get("source_member") != OPERATING_REFERENCE_SOURCE
+                    or not all(_finite(reference.get(k)) for k in ("fast_c", "slow_c"))):
+                raise Refused(f"{path} lacks the captured step-30b operating reference")
+            return dict(reference)
+        return {**reference_c(self.soak, self.sensors),
+                "source_member": "r1_soak_reference", "span_ns": None}
 
     def bands(self):
         if self.soak is None:
-            return {"delta_fast_c": BAND_FLOOR_C, "delta_slow_c": BAND_FLOOR_C}
+            return {"delta_fast_c": BAND_FLOOR_C, "delta_slow_c": registered_s6()["slots"]["S6"]}
         return bands_c(self.soak, self.sensors)
 
     def step_d_result(self):
@@ -1391,16 +1415,23 @@ class Segment:
         (Sol wp15rev F3): its bytes must be the ones the step-d runtime's
         terminal record digested, so a post-close edit of B_D, N_chunk or
         T_dead, or a step-d whose custody did not complete, is refused."""
-        path = self.out.parent / STEP_D_SEGMENT / RESULT_NAME
+        value = self.accepted_result(STEP_D_SEGMENT, "step-d")
+        if not isinstance(value.get("slots"), dict):
+            raise Refused("accepted step-d result lacks slots")
+        return value
+
+    def accepted_result(self, segment, kind):
+        """Read the canonical accepted sibling, bound by complete custody."""
+        path = self.out.parent / segment / RESULT_NAME
         custody_path = path.parent / CUSTODY_NAME
         try:
             raw = path.read_bytes()
             value = json.loads(raw)
             custody = json.loads(custody_path.read_bytes())
         except (OSError, ValueError) as error:
-            raise Refused(f"{self.kind} needs the accepted step-d result and custody {path}") from error
-        if not isinstance(value, dict) or value.get("kind") != "step-d" or not isinstance(value.get("slots"), dict):
-            raise Refused(f"{path} is not an accepted step-d result")
+            raise Refused(f"{self.kind} needs the accepted {kind} result and custody {path}") from error
+        if not isinstance(value, dict) or value.get("kind") != kind:
+            raise Refused(f"{path} is not an accepted {kind} result")
         expected = (custody.get("files") or {}).get(RESULT_NAME) if isinstance(custody, dict) else None
         if (custody.get("schema") != CUSTODY_SCHEMA or custody.get("status") != "complete"
                 or expected != hashlib.sha256(raw).hexdigest()):
@@ -1421,7 +1452,7 @@ class Segment:
                                        f"r1-{self.kind}-{label}", pm_status=pm_status)
         self.open_sessions.append(managed)
         if reference is not None:
-            managed.session.reference = {**reference, "source_member": "r1_soak_reference", "span_ns": None}
+            managed.session.reference = dict(reference)
         return managed
 
     def close_session(self, managed):
@@ -1459,27 +1490,34 @@ class Segment:
                                status=summary.status.value,
                                failure_reason=getattr(summary.failure_reason, "value", None))
 
-    def reference_hook(self, reference, *, quiet_s=0, rearm_s=None):
-        """Gate against the soak R (never a self-captured warm reference).
+    def reference_hook(self, reference, *, quiet_s=0, rearm_s=None, capture=False):
+        """Capture step-30b R_op, or consume the fixed accepted reference.
 
-        With ``rearm_s`` the G0 runs on its own cap (600 s; step-d's is the R7-2
-        timeout) with no deadman, and the member's deadman is re-armed for
+        With ``rearm_s`` the G0 runs on its own 1,200 s cap with no deadman,
+        and the member's deadman is re-armed for
         ``rearm_s`` after it (R5-2); with
         ``quiet_s`` a released G0 is followed by that much idle before the
         prefill, the step's quiet window (protocol v4 :243-251, R5-5)."""
         segment = self
 
         def hook(session):
-            session.reference = {**reference, "source_member": "r1_soak_reference", "span_ns": None}
-            if not quiet_s and rearm_s is None:
-                return
+            if not capture:
+                session.reference = dict(reference)
             original = session.wait
 
             def wait(kind, **kwargs):
                 if kind != "G0":
                     return original(kind, **kwargs)
+                if capture and session.reference is not None:
+                    # capture_reference ran at warmup entry, before this G0.
+                    reference.update(session.reference, source_member=OPERATING_REFERENCE_SOURCE)
+                    session.reference = dict(reference)
                 deadman = kwargs.pop("deadman", None) if rearm_s is not None else kwargs.get("deadman")
                 row = original(kind, **kwargs)
+                if row["outcome"] == "released":
+                    # R1 uses the fixed R_op for G1/H too. W1 retains its
+                    # ordinary episode-reference rule in ThermalSession.
+                    session.episode_reference = dict(reference)
                 if quiet_s and row["outcome"] == "released":
                     start = segment.now_ns()
                     while (segment.now_ns() - start) / NS < quiet_s:
@@ -1545,7 +1583,7 @@ class Segment:
 
     @property
     def g0_cap_s(self):
-        """R7-2: the G0 cap this segment's members arm (None = the 600 s default)."""
+        """All R1 model members use the timeout; release keeps the 600 s default."""
         return g0_timeout_s(self.config) if self.kind in G0_TIMEOUT_KINDS else None
 
     @property
@@ -1560,13 +1598,14 @@ class Segment:
         if source is not None:
             template = deepcopy(template)
             template["model"].update(source)
-        reference = self.reference()
+        reference = {} if self.kind == "step-30b" else self.reference()
         policy = gate_policy(self.sensors, self.bands(), turn_cap_s=300, chunk_tokens=256,
                              heavy=False, per_turn=False, g0_cap_s=self.g0_cap_s)
         step = self.config["step"]
         spec = step_spec(tspec, step, policy, deadman_s=step["deadman_s"])
         config = member_config(template, spec, run_id=f"align-v4-r1-{label}", kind=self.kind)
-        hook = self.reference_hook(reference, quiet_s=quiet_s, rearm_s=step["deadman_s"] if rearm else None)
+        hook = self.reference_hook(reference, quiet_s=quiet_s, rearm_s=step["deadman_s"] if rearm else None,
+                                   capture=self.kind == "step-30b")
         return self.run_member(config, hook), reference
 
     # Kinds -----------------------------------------------------------------
@@ -1632,6 +1671,7 @@ class Segment:
         if not curve:
             raise RuntimeFailure("idle-until-soak observed no valid S_slow sample")
         return {"recovery_curve": curve, "released": released, "reference_c": reference["slow_c"],
+                "reference_source": reference.get("source_member", "r1_soak_reference"),
                 "delta_slow_c": bands["delta_slow_c"], "cap_s": cap}
 
     def k_g0_release_soak(self):
@@ -1642,6 +1682,7 @@ class Segment:
         flags = list(managed.session.flags)
         self.close_session(managed)
         return {"released": row["outcome"] == "released", "g0": row, "reference_c": reference["slow_c"],
+                "reference_source": reference.get("source_member", "r1_soak_reference"),
                 "release_c": row["release"]["slow_c"], "flags": flags,
                 **g0_wait_fields(row, self.armed_g0_cap_s)}
 
@@ -1688,7 +1729,9 @@ class Segment:
             **g0_wait_fields(g0, self.armed_g0_cap_s), "t_decline_status": decline_status,
             "t_decline_s": decline_s, "decode_energy_j": joules, "decode_tokens": tokens,
             "prefill_tokens": turn.prefill_tokens, "energy_flags": flags, "episode_flags": list(ep.flags),
-            "ac_powermode": ep.hardware.get("ac_powermode"), "reference_c": reference["slow_c"]}
+            "ac_powermode": ep.hardware.get("ac_powermode"), "reference_c": reference["slow_c"],
+            "reference_source": reference.get("source_member", "r1_soak_reference"),
+            "operating_reference": reference}
 
     def k_step_30b(self):
         self.start_inventory()
@@ -1698,6 +1741,11 @@ class Segment:
         self.observe_recovery(member)
         # Protocol v4: the 30B step is classified for the record only.
         fields["thermometry"] = self.thermometry(member, label="step-30b", record_only=True)
+        if self.soak is not None:
+            soak = reference_c(self.soak, self.sensors)
+            fields["operating_minus_soak_c"] = {
+                self.sensors[role]: fields["operating_reference"][name] - soak[name]
+                for role, name in (("s_fast", "fast_c"), ("s_slow", "slow_c"))}
         return fields
 
     def observe_recovery(self, member):
@@ -1776,7 +1824,8 @@ class Segment:
         recovery_s, censored = recovery_time(rows, sensors, reference, bands, responses["s_slow"]["peak_ns"])
         slots, detail = derive_step_d_slots(
             ep=member.ep, turn=turn, wall_s=member.wall_s, responses=responses, recovery_s=recovery_s,
-            recovery_censored=censored, bands=bands, t_decline_s=fields["t_decline_s"],
+            recovery_censored=censored, bands=bands,
+            s5_bands=bands_c(self.soak, sensors, slow_floor=BAND_FLOOR_C), t_decline_s=fields["t_decline_s"],
             t_decline_status=fields["t_decline_status"], d_class=self.config.get("d_class", "heavy"))
         detail["quiet_before_prefill_s"] = STEP_QUIET_S
         detail["recovery_observed_s"] = RECOVERY_CAP_S
@@ -1786,7 +1835,7 @@ class Segment:
                 "e_D_j_per_token": fields["decode_energy_j"] / fields["decode_tokens"]}
 
     def k_aba_leg(self):
-        _, fields = self.k_step("d_spam", label=self.kind, leg=True)
+        _, fields = self.k_step("d_spam", label=self.kind, leg=True, rearm=True)
         if fields["g0_released"] and fields["t_decline_status"] == "unobserved":
             raise RuntimeFailure(f"{self.kind}: no powermetrics GPU clock support for t_decline")
         return fields   # t_decline_s: seconds, or None for no decline (infinite) when g0_released
@@ -1795,7 +1844,7 @@ class Segment:
         source = self.config.get("d_4bit_source")
         if _pending(source):
             raise Refused("d-4bit: r1 runtime config d_4bit_source is not set (R0.10 did not trigger)")
-        _, fields = self.k_step("d_spam", label="d-4bit", source=source)
+        _, fields = self.k_step("d_spam", label="d-4bit", source=source, rearm=True)
         return fields
 
     def gated_policy(self, slots, *, heavy, per_turn, chunk_tokens=256):
@@ -1815,8 +1864,8 @@ class Segment:
                                                                 chunk_tokens=int(slots["N_chunk"])),
                     warmup_condition="benign", max_episode_decode_tokens=b_d)
         config = member_config(template, spec, run_id=f"align-v4-r1-{self.kind}", kind=self.kind)
-        # LEAD-RULINGS-2 R5-1: gate against the soak R, as W1 members consume
-        # member 5's R. R6-1: no precool; the run follows a D turn with only
+        # Fixed accepted R_op (2026-11-10 ruling); NR-1 remains deferred.
+        # R6-1: no precool; the run follows a D turn with only
         # W1's inter-member schedule (this member's configured idle).
         reference = self.reference()
         member = self.run_member(config, self.reference_hook(reference))
@@ -1853,7 +1902,7 @@ class Segment:
         intervals = (ep.hardware.get("thermal") or {}).get("intervals", [])
         g0 = next((r for r in intervals if r["kind"] == "G0"), None)
         return {"reference_c": reference["slow_c"], "reference_fast_c": reference["fast_c"],
-                "reference_source": "r1_soak_reference",
+                "reference_source": reference.get("source_member", "r1_soak_reference"),
                 "g0_reference": g0.get("reference") if g0 else None,
                 "g0_outcome": g0["outcome"] if g0 else None, **g0_wait_fields(g0, self.armed_g0_cap_s),
                 "gate_waits_s": {kind: [r["duration_s"] for r in intervals if r["kind"] == kind]
@@ -1910,7 +1959,7 @@ class Segment:
         spec = dict(tspec)
         spec.update(thermal=self.gated_policy(step["slots"], heavy=False, per_turn=True), warmup_condition="benign")
         config = member_config(template, spec, run_id="align-v4-r1-x-g", kind=self.kind)
-        reference = self.reference()   # R5-1: the soak R, never a self-captured one
+        reference = self.reference()   # Fixed accepted R_op; NR-1 remains deferred.
         member = self.run_member(config, self.reference_hook(reference))
         from joulewise.align.apple.thermal_desk import read_bundle_record
         record = read_bundle_record(member.bundle)

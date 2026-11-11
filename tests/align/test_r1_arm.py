@@ -98,11 +98,11 @@ class ArmTests(unittest.TestCase):
 
     def test_sizing_uses_local_calendar_across_dst_and_half_open_end(self):
         self.assertEqual(arm.BATCH_ZONE, ZoneInfo('America/Los_Angeles'))
-        # Fall-back is 2026-11-01, < 30 h after this t0. The next 11:45 is
-        # 29 h 45 min away (one extra elapsed hour), beyond the base window.
+        # Fall-back is 2026-11-01. From 05:00 the next-day 11:45 is
+        # 31 h 45 min away (one extra hour), beyond the 109,627 s base.
         # Spring-forward is 2026-03-08, < 30 h after the second t0. Its next
         # 11:45 is only 28 h 45 min away (one fewer hour), inside the window.
-        for date, hour, crossings in (((2026, 10, 31), 7, 1), ((2026, 3, 7), 6, 2)):
+        for date, hour, crossings in (((2026, 10, 31), 5, 1), ((2026, 3, 7), 6, 2)):
             with self.subTest(date=date):
                 t0 = datetime(*date, hour, tzinfo=arm.BATCH_ZONE).timestamp()
                 sizing = arm.size_window(t0)

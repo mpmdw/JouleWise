@@ -58,7 +58,7 @@ COOLDOWN_AFTER_D_MAX_S = 1500          # ruling 1(c)
 # reproduce W1's D-after-D G0. Every gated D run, and X-G, follows a D turn
 # with exactly W1's inter-member schedule: the member's own configured idle
 # (sampling.idle_seconds of the W1 kit config it runs), and nothing else; no
-# cool-to-band. They still consume the soak R (R5-1). A G0 timeout makes that
+# cool-to-band. They consume accepted R_op (2026-11-10 ruling). A G0 timeout makes that
 # run INCONCLUSIVE (recorded), never a night refusal. They therefore run after
 # the designed start states: the R + 0 C planning turn (a D turn) precedes the
 # first (D_bank, R7-1), and X-G follows D_spam b (W1's D -> X transition).
@@ -107,13 +107,11 @@ QUIET_SEGMENT_BOUND_S = 1800           # planning bound for an unscheduled step 
 STEP_RECOVERY_S = 600
 PLANNING_PREHEAT_CAP_S = 900
 # Round-5 executing review: R5-2 re-arms the deadman after the G0 (its own
-# 600 s cap) and, for the 30B/D steps, after the 300 s quiet as well, so the
+# model G0 cap) and, for the 30B/D steps, after the 300 s quiet as well, so the
 # 1,800 s member bound no longer contains either; both are added here.
-STEP_G0_CAP_S = 600
 STEP_QUIET_S = 300
-# LEAD-RULINGS-2 R7-2: step-d and the designed start states (the R6-2
-# calibration segments), the gated D runs and X-G arm the R1 G0 timeout, the
-# runtime config's g0_timeout_s (1,200 s); step-30b keeps the 600 s G0 cap.
+# 2026-11-10 ruling: every model member arms the existing 1,200 s R1
+# timeout. A-B-A and d-4bit join the re-armed-deadman path.
 # The gated runs and X-G arm their G0 inside the member deadman, so their
 # 1,800 s member bound already contains it.
 G0_TIMEOUT_KEY = "g0_timeout_s"
@@ -147,11 +145,13 @@ def segment_bounds(g0_timeout_s, step_deadman_s):
 
     Round-8 disposition D8-3 (R1 round-8 exec LOW-2): step-30b's deadman is
     re-armed after its G0 and quiet too, so it takes the same construction:
-    the re-armed member plus its pre-deadman phases (the 600 s G0 cap it keeps
-    under R7-2, the 300 s quiet) and the 600 s recovery."""
+    the re-armed member plus its pre-deadman phases (the 1,200 s G0 cap
+    under the 2026-11-10 ruling, the 300 s quiet) and the 600 s recovery.
+    Optional d-4bit adds its G0 outside the re-armed member too."""
     member = rearmed_member_bound_s(step_deadman_s)
-    return {"step-30b": member + STEP_G0_CAP_S + STEP_QUIET_S + STEP_RECOVERY_S,
+    return {"step-30b": member + g0_timeout_s + STEP_QUIET_S + STEP_RECOVERY_S,
             "step-d": member + g0_timeout_s + STEP_QUIET_S + STEP_RECOVERY_S,
+            "d-4bit": member + g0_timeout_s,
             **{f"d-planning-turn-r-plus-{int(o)}c": member + PLANNING_PREHEAT_CAP_S + g0_timeout_s
                for o in PLANNING_START_OFFSETS_C}}
 CPU_BUSY_CORES_LIMIT = 0.5
@@ -808,8 +808,8 @@ def duty_verdict(rows):
 
 
 def gate_wait_medians(gated):
-    """R5-7: S6 stays delta_slow until the FD 2.6 tuning, which the lead ties to
-    the gated runs' median G1 (and hold) wait; recorded here as the TODO input."""
+    """Further FD 2.6 tuning uses the gated runs' median G1 and hold waits;
+    the 2026-11-10 receipt already sets the R1 slow floor to 1.5 C."""
     waits = {"G1": [], "H": []}
     for name, result in gated.items():
         block = result.get("gate_waits_s")
@@ -1018,8 +1018,8 @@ def projected_mde(e_d, gated):
 
 
 def write_soak_reference(output, soak_row):
-    """The accepted soak's detrended last-20-min means: the reference R handed
-    to every later runtime release, cooldown and designed start state."""
+    """The accepted soak's last-20-min means and detrended spread. Its mean
+    is the fallback reference until accepted step-30b captures R_op."""
     path = output / "soak_reference.json"
     detrended = soak_row["soak_detrended"]
     value = {"schema": SOAK_REFERENCE_SCHEMA, "source_segment": soak_row["name"],
@@ -1307,7 +1307,7 @@ def aba_leg_bound_s(runtime_argv):
     only waits longer for the ruling 8 batch window, never less.
     """
     from scripts.align_v4_kit import DEADMAN_FACTOR
-    return (release_segment_bound_s() + ABA_LEG_I_D_BOUND_S
+    return (release_segment_bound_s() + runtime_g0_timeout_s(runtime_argv) + ABA_LEG_I_D_BOUND_S
             + DEADMAN_FACTOR * runtime_step_deadman_s(runtime_argv) + LEG_BOUND_MARGIN_S)
 
 
@@ -1545,19 +1545,20 @@ def _check_member_powermode(name, result, mode):
         raise Refusal(f"{name}: member recorded AC powermode {value!r}, series mode is {mode}")
 
 
-def _check_soak_reference_consumed(name, result, soak_reference):
-    """R5-1: the gated D runs and X-G must gate against the soak R, never a
-    self-captured warm reference."""
-    if result.get("reference_source") != "r1_soak_reference":
-        raise Refusal(f"{name}: gated run did not consume the soak reference R "
+def _check_soak_reference_consumed(name, result, soak_reference, operating_reference=None):
+    """The gated block consumes accepted R_op (soak only before its capture)."""
+    source = operating_reference["source_member"] if operating_reference else "r1_soak_reference"
+    if result.get("reference_source") != source:
+        raise Refusal(f"{name}: gated run did not consume the fixed reference R "
                       f"(reference_source {result.get('reference_source')!r})")
     reference = _finite_number(result.get("reference_c"), f"{name}.reference_c")
     soak = json.loads(Path(soak_reference).read_text())
     slow_key = (soak.get("sensor_roles") or {}).get("s_slow")
-    slow = (soak.get("sensors_c") or {}).get(slow_key)
+    slow = operating_reference["slow_c"] if operating_reference else (soak.get("sensors_c") or {}).get(slow_key)
     if (isinstance(slow, bool) or not isinstance(slow, (int, float)) or not math.isfinite(slow)
-            or not math.isclose(reference, slow, rel_tol=0, abs_tol=1e-9)):
-        raise Refusal(f"{name}: reference_c {reference} is not the soak s_slow reference value")
+            # Build brief numbers rule: agreement bar in degrees C.
+            or not math.isclose(reference, slow, rel_tol=1e-6, abs_tol=1e-6)):
+        raise Refusal(f"{name}: reference_c {reference} is not the fixed s_slow reference value")
 
 
 def _check_recovery_curve(name, curve):
@@ -1702,10 +1703,14 @@ def run(args):
                         contract_key="idle_soak" if name == "idle_soak" else None, extra=extra)
                 if name == "idle_soak":
                     soak_reference = write_soak_reference(output, row)
+                if name == "step_30b":
+                    print("R1 R_op minus soak mean C: " + json.dumps(
+                        results[name]["operating_minus_soak_c"], sort_keys=True), flush=True)
                 if model and series_mode is not None:
                     _check_member_powermode(name, results[name], series_mode)
                 if name in GATED_NAMES or kind == "x-g":
-                    _check_soak_reference_consumed(name, results[name], soak_reference)
+                    _check_soak_reference_consumed(name, results[name], soak_reference,
+                                                   results["step_30b"]["operating_reference"])
                     g0_ok[name] = _check_schedule(name, results[name], schedule,
                                                   "X-G" if kind == "x-g" else "D")
                     follows[name] = last_d_turn
@@ -1755,16 +1760,19 @@ def run(args):
                        for name, result in gated.items()]
             verdict = duty_verdict(deadman)
             duty = {"declared": DUTY_BAR, "pass": verdict == "pass", "verdict": verdict,
-                    "inconclusive_runs": uncooled, "reference": "soak R (LEAD-RULINGS-2 R5-1)",
+                    "inconclusive_runs": uncooled, "reference": "accepted step-30b R_op (2026-11-10 ruling)",
                     "schedule": schedule, "duty_T_dead_s": l1["effective_T_dead_s"],
                     "fallback_order": list(DUTY_FALLBACK_ORDER)}
             mde = projected_mde(results[STEP_D_NAME].get("e_D_j_per_token"), gated)
             u5 = (u5_verdict(temperature_summary, gated, inconclusive_runs=uncooled) if not planning_inconclusive else
                   {"criterion": "U5", "c": U5_C, "authority": "LEAD-RULINGS-1 L2", "verdict": "inconclusive",
                    "reason": "designed start state(s) INCONCLUSIVE (R6-2): " + ", ".join(planning_inconclusive)})
-            s6 = {"status": "TODO", "S6_c": slots["S6"], "rule": "S6 = delta_slow (S5) until the FD 2.6 tuning",
+            from joulewise.align.apple.r1_runtime import registered_s6
+            s6 = {**registered_s6()["s6_tuning"], "status": "adopted", "S6_c": slots["S6"],
+                  "from_c": slots["S5"], "to_c": slots["S6"],
+                  "rule": "R1 max(S6, 3 x soak SD); further FD 2.6 tuning after R1",
                   "tied_to": "the gated D runs' median G1 wait (with the hold median, fallback step 1)",
-                  "authority": "LEAD-RULINGS-2 R5-7", **gate_wait_medians(gated)}
+                  **gate_wait_medians(gated)}
             fit_inputs = budget_fit_inputs(results[STEP_D_NAME], gated, deadman)
             thermometry_d = thermometry_record(STEP_D_NAME, results[STEP_D_NAME])
             x_g = {"status": "inconclusive" if reasons["X_G_contrast"] else "measured",

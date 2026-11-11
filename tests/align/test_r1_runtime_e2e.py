@@ -68,6 +68,24 @@ class DriverRuntimeTests(unittest.TestCase):
             registration = json.loads((root / "r1_slots.json").read_text())
             self.assertEqual(registration["source"], "R1 synthetic rehearsal")
             step = json.loads((root / "align-r1" / rt.STEP_D_SEGMENT / rt.RESULT_NAME).read_text())
+            first = json.loads((root / "align-r1/step_30b" / rt.RESULT_NAME).read_text())
+            op = first["operating_reference"]
+            captured = json.loads((root / "align-r1/step_30b" / first["bundle"]
+                                   / "outputs/align_window_reference.json").read_text())
+            self.assertEqual(captured["status"], "captured")
+            self.assertEqual(first["reference_source"], rt.OPERATING_REFERENCE_SOURCE)
+            # Build-brief agreement bars, in C; source and consumers cross
+            # subprocess/JSON boundaries while retaining the captured precision.
+            for key in ("fast_c", "slow_c"):
+                self.assertAlmostEqual(op[key], captured[key], delta=1e-6)
+            later = json.loads((root / "align-r1/D_bank_benign_s1_gated_held" / rt.RESULT_NAME).read_text())
+            self.assertEqual(later["reference_source"], rt.OPERATING_REFERENCE_SOURCE)
+            self.assertAlmostEqual(later["reference_c"], op["slow_c"], delta=1e-6)
+            episode = json.loads((root / "align-r1/D_bank_benign_s1_gated_held" / later["bundle"]
+                                  / "outputs/align_episode.json").read_text())
+            for gate in episode["hardware"]["thermal"]["intervals"]:
+                for key in ("fast_c", "slow_c"):
+                    self.assertAlmostEqual(gate["reference"][key], op[key], delta=1e-6)
             self.assertEqual(registration["slots"], step["slots"])
             for row in registration["deadman_budget"]:
                 self.assertAlmostEqual(row["T_dead_s"], step["slots"]["T_dead"])

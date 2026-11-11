@@ -46,7 +46,8 @@ class ContractTests(unittest.TestCase):
                          ["deadman.phases_s.tail"])
         self.assertEqual(contract.missing_fields("step-30b", {}, quiet=True),
                          ["cpu_busy_cores", "cpu_busy_t_s", "census", "battery_drain_pct_per_h",
-                          "thermometry.status", "thermometry.classification_sha256", "g0_wait_s", "g0_timeout_s"])
+                          "thermometry.status", "thermometry.classification_sha256",
+                          "operating_reference", "reference_source", "operating_minus_soak_c", "g0_wait_s", "g0_timeout_s"])
         with self.assertRaisesRegex(ValueError, "no kind"):
             contract.required_fields("unknown", quiet=False)
 

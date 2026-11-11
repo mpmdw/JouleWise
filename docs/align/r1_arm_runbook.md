@@ -81,27 +81,29 @@ It is a ceiling, not a reservation:
 
 | Term | Seconds | Source |
 |---|---:|---|
-| R1 with retries and corrected batch encounter | 96,427 | origin/main RUN_STATE items 215–216; replaces the stale runtime display |
+| R1 with retries and corrected batch encounter | 100,627 | prior 96,427 s floor (RUN_STATE items 215–216) + 600 s step-30b + 3 × 1,200 s A-B-A G0, per 2026-11-10 ruling |
 | Hazard admission, inside the t0 deadline | 3,300 | `b5.plan.T0_STAGE_CAP_S` |
 | Two diagnostic bookends | 3,600 | twice `b5.chain.STAGE_WALL_BUDGET_S.pre_calibration_capture` (1,800 each) |
 | Bookend teardown/close allowances | 1,200 | twice the existing 600-second session-status budget; covers the budget helper's 30-second TERM grace and bounded process censuses/reap |
 | Final R1 harvest/result writes | 600 | one existing session-status wall allowance |
 | Display sleep dwell before the pre bookend | 300 | R0-L3 / RUN_STATE items 206, 209: R0 re-run 11 passing dwell |
 
-The old base is 105,127 s; adding the dwell gives 105,427 s. The redo floor
-already includes one 11,164 s batch encounter. Each further local 11:45 in
-`[t0, t0 + window_max_s)` adds 11,164 s (item 216); recalculate the crossings
-until the size stops changing. Calendar crossings use America/Los_Angeles,
-including DST. For 2026-11-08 t0 at 13:30 PT there is one crossing: 105,427 s.
-At 08:00 PT there are two: 116,591 s. The corresponding D2-only numbers before
-the new dwell are 105,127 s and 116,291 s. The existing driver already supervises
-the meter within the arm/close allowances, so no extra 30 s is added. This
-route retains exact seconds; it does not apply the Opus route's minute rounding.
+The base with display dwell is now 109,627 s: the preceding base
+105,427 s plus 600 + 3 × 1,200 = 4,200 s for the changed model G0 bounds.
+The redo floor already includes one 11,164 s batch encounter. Each further
+local 11:45 in `[t0, t0 + window_max_s)` adds 11,164 s (item 216);
+recalculate crossings until the size stops changing. Calendar crossings use
+America/Los_Angeles, including DST. For 2026-11-08 t0 at 13:30 PT there is
+one crossing: 109,627 s. At 08:00 PT there are two: 120,791 s.
+The existing driver supervises the meter within the arm/close allowances,
+so no extra allowance is added. This route retains exact seconds.
 
 Extra sustained-load redos can still reach this ceiling; it is not a promise
 that every possible sequence of two redos per quiet segment will fit. The
-outer driver also has its existing 300-second shutdown grace. Nothing changes
-`night_worst_case_s` or its display test.
+outer driver also has its existing 300-second shutdown grace. The revised `night_worst_case_s` table has 60,406.9616 s without redos,
+29,055.9808 s for R6-2 retries and 5,400 s for one batch wait, totaling
+94,862.9424 s. The arm floor preserves the prior corrected encounter
+allowance: 100,627 s, above that display total.
 
 The two bookends are ordinary diagnostic D-109 fiducial observations. They
 are **not a claim-eligible reserved W1 bracket**: R1 may exceed the existing
@@ -122,8 +124,8 @@ install and t0**, including status/fetch/checkout. The wrapper then calls
 failure is a flag, never a veto. `night/r1_wrapper.jsonl` records the sleep
 outcome and dwell start/end.
 
-The R1 sampler-span allowance is 5,764 seconds, the ceiling of the existing
-`segment_bounds` maximum at the committed G0 timeout and step deadman. Clock
+The R1 sampler-span allowance is 5,764 seconds, the ceiling of the revised
+`segment_bounds` maximum (5,763.9952 s, shared by step-30b, step-d and the designed states) at the committed G0 timeout and step deadman. Clock
 admission uses the **existing ALIGN pilot S-7 hold** from `b6.plan_inputs`:
 5 ms / span minus 0.25 ppm, with placement judged by each run's own fit. Do
 not substitute Block 5's old 3.7 ms placement hold: even zero rate would give

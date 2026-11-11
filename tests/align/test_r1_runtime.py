@@ -47,6 +47,11 @@ class ConformanceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=TMP) as td:
             root = Path(td)
             config = rs.synthetic_config(root / "cfg", decline_after_s=120.0, slow_gain=0.12)
+            config_map = json.loads(config.read_text())
+            # The synthetic backend supplies its own model mirror for this
+            # optional leg too; no real 4-bit model is opened.
+            config_map["d_4bit_source"] = {"source": "synthetic-4bit"}
+            config.write_text(json.dumps(config_map))
             run = root / "r1"
             run.mkdir()
             results, kinds = {}, {}
@@ -109,12 +114,13 @@ class ConformanceTests(unittest.TestCase):
             digest = body.pop("classification_sha256")
             self.assertEqual(digest, thermometry["classification_sha256"])
             self.assertEqual(digest, __import__("hashlib").sha256(rt.canonical(body).encode()).hexdigest())
-            self.assertEqual(detail["S6_tuning"]["status"], "TODO")
+            self.assertEqual(detail["S6_tuning"]["status"], "adopted")
             self.assertEqual(results["step_30b"]["thermometry"]["for_record_only"], True)
             cool = segment("cooldown_after_D", "idle-until-soak", "--duration-s", "1500")
             self.assertTrue(cool["recovery_curve"])
             gated = {}
-            soak_r = json.loads((run / "soak_reference.json").read_text())["sensors_c"][rs.syn.SLOW]
+            op = results["step_30b"]["operating_reference"]
+            soak_r = op["slow_c"]
             for name, kind in r1.GATED_D_RUNS:
                 # R6-1: no precool; the member's own W1 idle is the schedule.
                 gated[name] = segment(name, kind)
@@ -126,16 +132,16 @@ class ConformanceTests(unittest.TestCase):
                                      .read_text())["turns"]))
                 self.assertGreater(gated[name]["decode_tokens"], 0)
                 r1._check_gated_t_dead(name, gated[name], step)
-                r1._check_soak_reference_consumed(name, gated[name], run / "soak_reference.json")
+                r1._check_soak_reference_consumed(name, gated[name], run / "soak_reference.json", op)
                 r1.deadman_summary(name, gated[name])
                 bundle = run / name / gated[name]["bundle"]
                 self.assertFalse((bundle / "outputs/align_window_reference.json").exists())
                 episode = json.loads((bundle / "outputs/align_episode.json").read_text())
                 g0 = [r for r in episode["hardware"]["thermal"]["intervals"] if r["kind"] == "G0"][0]
                 self.assertEqual(g0["reference"]["slow_c"], soak_r)
-                self.assertEqual(g0["reference"]["source_member"], "r1_soak_reference")
+                self.assertEqual(g0["reference"]["source_member"], rt.OPERATING_REFERENCE_SOURCE)
             xg = segment("X_G_contrast", "x-g")
-            self.assertEqual(xg["reference_source"], "r1_soak_reference")
+            self.assertEqual(xg["reference_source"], rt.OPERATING_REFERENCE_SOURCE)
             self.assertEqual((xg["inter_member_idle_s"], xg["g0_outcome"]), (300.0, "released"))
             self.assertEqual(r1.gate_wait_medians(gated)["G1_waits"],
                              sum(len(g["gate_waits_s"]["G1"]) for g in gated.values()))
@@ -150,6 +156,7 @@ class ConformanceTests(unittest.TestCase):
             self.assertTrue(all(leg["g0_released"] is True for leg in legs))
             legs = [leg["t_decline_s"] for leg in legs]
             r1.high_power_adoption(*legs)
+            segment("D_4bit", "d-4bit")
             segment("post_calibration_bracket", "calibration-post", soak=False)
             harvested = segment("harvest", "harvest")
             battery = r1.battery_report(results, harvested)
@@ -169,12 +176,19 @@ class ConformanceTests(unittest.TestCase):
                 armed[kinds[name]] = spec["thermal"].get("g0_cap_s")
                 episode = json.loads((bundle / "outputs/align_episode.json").read_text())
                 g0 = [r for r in episode["hardware"]["thermal"]["intervals"] if r["kind"] == "G0"][0]
+                if kinds[name] in (*contract.HIGH_POWER_KINDS, "d-4bit"):
+                    budget = episode["hardware"]["token_budget"]
+                    self.assertEqual(budget["deadline_origin"], "R1_after_G0_release")
+                    # The 1,580 s configured deadman starts at G0 exit;
+                    # 1e-6 s is the build brief's column agreement bar.
+                    self.assertAlmostEqual((budget["deadline_ns"] - g0["end_ns"]) / NS,
+                                           config_map["step"]["deadman_s"], delta=1e-6)
                 self.assertEqual(result["g0_wait_s"], g0["duration_s"], name)
                 self.assertEqual(result["g0_timeout_s"], 1200 if kinds[name] in rt.G0_TIMEOUT_KINDS else 600, name)
             for kind in ("step-d", "x-g", *contract.GATED_D_KINDS, *contract.PLANNING_KINDS):
                 self.assertEqual(armed[kind], 1200, kind)
             for kind in ("step-30b", *contract.HIGH_POWER_KINDS):
-                self.assertIsNone(armed[kind], kind)
+                self.assertEqual(armed[kind], 1200, kind)
             # R7-13: the D classification records its alias groups (none here).
             self.assertEqual(step["thermometry"]["alias_groups"], [])
             # Every runtime wrote only inside its own segment directory.
@@ -669,7 +683,8 @@ class Round5Tests(unittest.TestCase):
             step_dir.mkdir()
             result = step_dir / rt.RESULT_NAME
             result.write_text(json.dumps({"kind": "step-d", "slots": {"T_dead": 10, "B_D": 1024}}))
-            segment = SimpleNamespace(out=root / "consumer", kind="d-spam-benign-s1-a")
+            segment = object.__new__(rt.Segment)
+            segment.out, segment.kind = root / "consumer", "d-spam-benign-s1-a"
             with self.assertRaisesRegex(rt.Refused, "result and custody"):
                 rt.Segment.step_d_result(segment)
             rt.write_custody(step_dir, {"status": "complete"})

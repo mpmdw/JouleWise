@@ -22,7 +22,10 @@ from joulewise.night_gate import NightPlan
 KIT = Path("configs/campaigns/align_v4")
 # origin/main RUN_STATE items 215-216 supersede the runtime's display-only
 # total: R6-2 retries plus corrected step-D/batch encounter, rounded up.
-R1_RETRY_FLOOR_S = 96_427
+# 2026-11-10 ruling: step-30b +600 s; three A-B-A legs +1,200 s
+# each. The preserved floor includes one R6-2 retry, not load redos.
+R1_G0_BOUND_INCREASE_S = 600 + 3 * 1200
+R1_RETRY_FLOOR_S = 96_427 + R1_G0_BOUND_INCREASE_S
 # Reuse the existing stage wall budgets, rather than timing a happy path.
 BOOKEND_S = chain.STAGE_WALL_BUDGET_S["pre_calibration_capture"]  # 1,800 s each
 CLOSE_S = chain.STAGE_WALL_BUDGET_S["session_status_record"]  # 600 s teardown allowance each

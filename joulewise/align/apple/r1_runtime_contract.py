@@ -25,7 +25,7 @@ PLANNING_KINDS = tuple(f"d-planning-turn-r-plus-{offset}c" for offset in (0, 2, 
 HIGH_POWER_KINDS = ("high-power-aba-a1", "high-power-aba-b", "high-power-aba-a2")
 # LEAD-RULINGS-2 R7-2: every G0 wait is recorded. Every kind that runs a G0
 # reports the wait and the cap it ran under (the R1 timeout, g0_timeout_s, for
-# step-d, the designed states, the gated runs and X-G; 600 s otherwise).
+# every model member; only g0-release-soak keeps 600 s).
 G0_WAIT_FIELDS = ("g0_wait_s", "g0_timeout_s")
 
 # Fields per kind, in addition to QUIET_FIELDS for quiet segments. Dotted names
@@ -42,13 +42,14 @@ KIND_FIELDS = {
     # Protocol v4 :243-251 (LEAD-RULINGS-2 R5-5): the full-inventory R1
     # classification around both planning-turn steps (the 30B for the record).
     "step-30b": ("battery_drain_pct_per_h", "thermometry.status", "thermometry.classification_sha256",
+                 "operating_reference", "reference_source", "operating_minus_soak_c",
                  *G0_WAIT_FIELDS),
     "step-d": ("slots", "e_D_j_per_token", "battery_drain_pct_per_h", "thermometry.status",
                "thermometry.classification_sha256", "thermometry.alias_groups", *G0_WAIT_FIELDS),
     # released: S_slow reached the G0 band of R (<= R + delta_slow) before the cap.
     "idle-until-soak": ("recovery_curve", "released"),
-    # R5-1: X-G and the gated D runs gate against the soak R (reference_source
-    # r1_soak_reference), never a self-captured warm reference. R6-1: each
+    # 2026-11-10: X-G and gated D runs consume accepted step-30b R_op
+    # (reference_source r1_step_30b_pre_warmup), never their own warm capture. R6-1: each
     # follows a D turn with only W1's inter-member schedule (the member's own
     # configured idle, inter_member_idle_s); its G0 outcome decides whether
     # the run is judged or INCONCLUSIVE. R6-3: decode_tokens gives the run's

@@ -229,3 +229,27 @@ Every gate-map policy requires exactly one role form: the first member uses
 capture member exclusively creates `outputs/align_window_reference.json` with
 schema `joulewise.align_window_reference.v1`; consumers bind the source config,
 sensor policy, canonical record digest, and recomputed source-journal samples.
+
+## R1 operating reference (2026-11-10 supersession)
+
+For R1, accepted step-30b supplies R_op: the existing WP14(b) per-key
+60 s pre-warmup median with coverage ≥ 0.9. Its own G0 uses that capture.
+Every later R1 G0, G1, H, precool and sensors-only release uses the fixed
+accepted R_op (designed start states retain their R + offset mechanism).
+A release before acceptance uses the soak mean. The soak still supplies
+settling, spread and the printed per-key R_op minus mean; that difference
+has no acceptance threshold. Missing capture coverage still makes the
+member incomplete. Reference provenance and custody are described in
+[r1_runtime_contract.md](r1_runtime_contract.md).
+
+R1's fast band stays max(1.0 °C, 3 × soak SD); its slow band is
+max(S6 = 1.5 °C, 3 × soak SD), with S5's max(1.0 °C, 3 × soak SD)
+retained separately and an S6 tuning receipt. The 1.5 °C floor is the
+smallest registered 0.5 °C step whose fitted tail release has 1.25 times
+headroom inside the existing 1,200 s maximum (ruling §3.2).
+
+All R1 model-member G0 caps are 1,200 s. The sensors-only release keeps
+600 s. A-B-A and optional d-4bit now rearm the deadman after G0, like the
+steps; gated D runs and X-G retain their deadman at G0 entry and their
+existing mechanism with R_op substituted (NR-1 deferred). W1's episode
+reference and cap derivation are unchanged.

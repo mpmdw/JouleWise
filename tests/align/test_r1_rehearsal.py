@@ -123,7 +123,7 @@ class FakeWorld:
             return completed(argv, code=9, err="synthetic runtime failure")
         slots = {f"S{i}": float(i) for i in range(1, 10)}
         # S5 = S6 = delta_slow and S7 = G_turn, as the runtime derives them.
-        slots.update(S5_fast=8.0, S5=1.0, S6=1.0, S7=120.0, B_D=self.b_d, I_D=101.5, T_dead=1451.018, N_chunk=256,
+        slots.update(S5_fast=8.0, S5=1.0, S6=1.5, S7=120.0, B_D=self.b_d, I_D=101.5, T_dead=1451.018, N_chunk=256,
                      t_decline=23.0, **{"class": "heavy"})
         slots.update(self.slot_changes)
         offset = int(kind.rsplit("-", 1)[-1][:-1]) if kind.startswith("d-planning-turn") else 0
@@ -171,6 +171,12 @@ class FakeWorld:
         if kind == "idle-until-soak":
             payload["recovery_curve"] = [[0, 55.0], [600, 45.0], [900, 41.0]]
             payload["released"] = out.name not in self.precool_timeout
+        if kind == "step-30b":
+            # Synthetic capture at the fixture's 40 C idle; no offset is inferred.
+            payload.update(reference_source="r1_step_30b_pre_warmup",
+                           operating_reference={"source_member": "r1_step_30b_pre_warmup",
+                                                "fast_c": 40.0, "slow_c": 40.0, "span_ns": [0, 60 * 10**9]},
+                           operating_minus_soak_c={"s_slow": 0.0})
         if kind in ("step-30b", "step-d"):
             # Keys as the kit's ready_inputs policy names them (TC0P die, TG0P heatsink).
             payload["thermometry"] = {"status": self.thermometry_status, "s_fast": "TC0P", "s_slow": "TG0P",
@@ -180,7 +186,7 @@ class FakeWorld:
                                       "alias_groups": [["TCMb", "TVD0"]],   # R7-13
                                       "classification_sha256": "c" * 64}
         if kind == "x-g" or kind.startswith(("d-spam", "d-bank")):
-            payload.update(reference_source="r1_soak_reference",
+            payload.update(reference_source="r1_step_30b_pre_warmup",
                            gate_waits_s={"G0": [120.0], "G1": [40.0, 50.0, 60.0], "H": [30.0, 30.0, 30.0]},
                            # R6-1: W1's inter-member schedule (the kit configs' idle).
                            inter_member_idle_s=300.0,
@@ -209,7 +215,7 @@ class FakeWorld:
             # R7-2: every G0 wait is recorded; these kinds keep the 600 s cap.
             payload.update(g0_outcome="released" if kind != "g0-release-soak" or self.released else "timeout",
                            g0_wait_s=30.0 if kind != "g0-release-soak" or self.released else 600.0,
-                           g0_timeout_s=600.0)
+                           g0_timeout_s=600.0 if kind == "g0-release-soak" else 1200.0)
             if kind == "g0-release-soak":
                 payload["g0"] = {"outcome": payload.pop("g0_outcome")}
         if kind in ("step-30b", "step-d", "x-g", "d-4bit") or kind.startswith(("d-", "high-power-aba-")):
@@ -586,7 +592,7 @@ class R1Tests(unittest.TestCase):
                 # committed runtime config's step deadman, 1,580 s), not an
                 # assumed 1,800 + 600 s. R5-5 runs the legs before step-d, so the
                 # member intercept is the runtime's admissible maximum I_D (1,750 s).
-                self.assertAlmostEqual(window[0][1], 65 + 600 + 1750 + 1.13544 * 1580 + 120)
+                self.assertAlmostEqual(window[0][1], 65 + 600 + 1200 + 1750 + 1.13544 * 1580 + 120)
             kinds = [c[c.index("--r1-kind") + 1] for c in world.calls if "--r1-kind" in c]
             self.assertLess(kinds.index("high-power-aba-a2"), kinds.index("step-d"))
             b_calls = [c for c in world.calls if "--r1-kind" in c and "high-power-aba-b" in c]
@@ -1184,12 +1190,12 @@ class Round5RulingTests(unittest.TestCase):
             # quiet outside the deadman, so they join the bound. R7-2: step-d
             # and the designed states arm the 1,200 s R1 G0 timeout.
             # D8-3: 30B step: the re-armed member 3,663.9952 + 600 G0 + 300 quiet + 600 recovery
-            self.assertEqual(sum(1 for b in bounds if abs(b - 5163.9952) < 1e-6), 1)
+            self.assertEqual(sum(1 for b in bounds if abs(b - 5163.9952) < 1e-6), 0)
             # R8-4: the re-armed member 1,750 + 1.13544 x 1,580 + 120, then D
             # step + 1,200 + 300 + 600; states + 900 + 1,200.
-            self.assertEqual(sum(1 for b in bounds if abs(b - 5763.9952) < 1e-6), 1 + 3)
+            self.assertEqual(sum(1 for b in bounds if abs(b - 5763.9952) < 1e-6), 2 + 3)
         table = r1.segment_bounds(r1.runtime_g0_timeout_s(None), r1.runtime_step_deadman_s(None))
-        self.assertAlmostEqual(table["step-30b"], 5163.9952)
+        self.assertAlmostEqual(table["step-30b"], 5763.9952)
         self.assertAlmostEqual(table["step-d"], 5763.9952)
         self.assertAlmostEqual(table["d-planning-turn-r-plus-4c"], 5763.9952)
         # Each bound covers the runtime's own caps around the re-armed deadman.
@@ -1360,7 +1366,7 @@ class Round5RulingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             _, registration = self.run_world(td, FakeWorld())
             s6 = registration["s6_tuning"]
-            self.assertEqual(s6["status"], "TODO")
+            self.assertEqual(s6["status"], "adopted")
             self.assertEqual(s6["S6_c"], registration["slots"]["S6"])
             self.assertEqual(s6["G1_median_s"], 50.0)    # three runs x [40, 50, 60]
             self.assertEqual(s6["H_median_s"], 30.0)
