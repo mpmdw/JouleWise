@@ -1,0 +1,102 @@
+{
+  "authority": "single-builder independent arithmetic; external paired check still required",
+  "index_ranges": {
+    "calibration": [
+      2,
+      65
+    ],
+    "calibration_reserve": [
+      100,
+      147
+    ],
+    "test": [
+      66,
+      89
+    ],
+    "test_reserve": [
+      200,
+      215
+    ]
+  },
+  "manifest_sha256": "0f992cab9b94c6c8ac666b33f99e4c3b7611a16866d693640ef957a980a74215",
+  "members_checked": 436,
+  "placements": {
+    "C1": [
+      9,
+      16
+    ],
+    "C10": [
+      10,
+      15
+    ],
+    "C11": [
+      10,
+      19
+    ],
+    "C12": [
+      9,
+      14
+    ],
+    "C13": [
+      11,
+      20
+    ],
+    "C14": [
+      7,
+      14
+    ],
+    "C2": [
+      9,
+      14
+    ],
+    "C3": [
+      11,
+      20
+    ],
+    "C4": [
+      9,
+      20
+    ],
+    "C5": [
+      8,
+      13
+    ],
+    "C6": [
+      7,
+      20
+    ],
+    "C7": [
+      11,
+      14
+    ],
+    "C8": [
+      10,
+      19
+    ],
+    "C9": [
+      9,
+      20
+    ],
+    "T1": [
+      11,
+      14
+    ],
+    "T2": [
+      11,
+      14
+    ],
+    "T3": [
+      7,
+      18
+    ],
+    "T4": [
+      11,
+      16
+    ],
+    "T5": [
+      10,
+      19
+    ]
+  },
+  "status": "MATCH"
+}

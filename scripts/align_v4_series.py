@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 from copy import deepcopy
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -46,26 +47,56 @@ REPLACEMENT_WINDOWS = cadence.REPLACEMENT_WINDOWS   # R24 cap: C9-C14 are armabl
 RESERVE_WINDOWS = 6                                  # seeds are allocated for C9-C14 (all armable); a window beyond the cap would hold seeds only
 RESERVE_POOL_START = 100                             # contiguous pool after the T range and the reserved 91-99
 TEST_WINDOWS = 3                                     # RUN_STATE 226 R15
-SABOTAGE_ORDINALS = (9, 18)                          # Amendment 1: spread, one per half
+TEST_RESERVE_WINDOWS = 2                             # Option B: structural bars only; round-2 arm support owed
+TEST_RESERVE_POOL_START = 200                         # unused, separate from C 2-65/100-147 and T 66-89
+ORDER_LAW = 'align-v4-sabotage-order-v1'
+ORDER_SEED = 20261110
 D_CEILING_S = 59520                                  # Ed Q4
 ESCALATED_CEILING_S = 62400                          # RUN_STATE 226 R15: +2-sentinel windows only
+
+
+def sabotage_placement(window_id, first):
+    """Uniform seeded draw over constrained (spam ordinal, bank ordinal) pairs.
+
+    One member per task and half, neither fresh-block edge (6/21), and at
+    least two intervening members. SHA-256 rejection sampling avoids modulo
+    bias and is independent of Python's random implementation and episode RNG.
+    """
+    second = PAIRS[1 - PAIRS.index(first)]
+    slots = {pair: [o for o in range(7, 21)
+                    if (first if o % 2 == 0 else second) == pair]
+             for pair in PAIRS}
+    choices = [(a, b) for a in slots[PAIRS[0]] for b in slots[PAIRS[1]]
+               if (a <= 11) != (b <= 11) and abs(a - b) >= 3]
+    counter = 0
+    while True:
+        raw = json.dumps([ORDER_LAW, ORDER_SEED, window_id, counter], separators=(',', ':')).encode('ascii')
+        digest = hashlib.sha256(raw).digest()
+        value = int.from_bytes(digest, 'big')
+        if value < (2**256 // len(choices)) * len(choices):
+            return dict(ordinals=sorted(choices[value % len(choices)]),
+                        draw_sha256=digest.hex(), draw_counter=counter)
+        counter += 1
 
 
 def candidate():
     """The frozen series (RUN_STATE 226 R15): Sol code base, Opus allocation.
 
-    W1, then C1-C8 (D_k is C_k: no separate fit windows), the two pre-declared blind replacement windows
+    W1, then C1-C8 (D_k is C_k: no separate fit windows), the six pre-declared blind replacement windows
     C9-C14 (R22-2 / R24; each armed only to replace a structural bar of a C window), then T1-T3. Every C/T
     window: anchors 1-4 (original bytes), early W1:5 sentinel at 5, sixteen fresh
     held-out D members at 6-21 alternating pair by pair (odd windows spam first,
-    even bank first; first pair on even ordinals) with sabotage at 9 (second
-    pair) and 18 (first pair), late sentinel at 22; midpoint after 11. Held-out
+    even bank first; first pair on even ordinals) with seeded, constrained
+    sabotage placement, late sentinel at 22; midpoint after 11. Held-out
     seed indices are distinct, consumed per pair in kit order (window order,
     then ordinal) from 2, skipping 1 and 91-99: C1-C8 use 2-65 and T1-T3 66-89 (exactly as R15; the paired
     seed check MATCHed them). The reserve pool for C9-C14 is the contiguous range 100-147 (8 per pair per
     window): 91-99 are reserved development indices, so it starts at 100. All six are armable (the R24 cap
     is C14), in order, each only to replace a structural bar. A
-    C-window sabotage member is pool ``known_h`` and counts toward nothing.
+    C-window sabotage member remains pool ``known_h`` (never calibration),
+    but its GPU score enters S under Option B. DC stays sealed. T4/T5 reserve
+    seeds are registered here; materialization/arming awaits round-2 support
+    and the lead's U3 scope ruling. No U-gate constant is changed here.
     """
     selection = []
     for ordinal, (role, pair, condition, index) in enumerate(w1.ROSTER, 1):
@@ -81,24 +112,28 @@ def candidate():
     # pool is one contiguous range). Run order is C1-C8, C9-C14 only as owed, then T1-T3.
     plan = ([('C', 'calibration', n, False) for n in range(1, CALIBRATION_WINDOWS + 1)]
             + [('T', 'test', n, False) for n in range(1, TEST_WINDOWS + 1)]
-            + [('C', 'calibration', CALIBRATION_WINDOWS + n, True) for n in range(1, RESERVE_WINDOWS + 1)])
+            + [('C', 'calibration', CALIBRATION_WINDOWS + n, True) for n in range(1, RESERVE_WINDOWS + 1)]
+            + [('T', 'test_reserve', TEST_WINDOWS + n, True) for n in range(1, TEST_RESERVE_WINDOWS + 1)])
     built = {}
     for prefix, role, number, reserve in plan:
         if reserve and number == CALIBRATION_WINDOWS + 1:
             assert RESERVE_POOL_START > max(next_index.values()) and RESERVE_POOL_START not in RESERVED_INDICES
             next_index = dict.fromkeys(PAIRS, RESERVE_POOL_START)
+        if role == 'test_reserve' and number == TEST_WINDOWS + 1:
+            next_index = dict.fromkeys(PAIRS, TEST_RESERVE_POOL_START)
         first = PAIRS[0] if number % 2 else PAIRS[1]
         second = PAIRS[1] if first == PAIRS[0] else PAIRS[0]
+        placement = sabotage_placement(prefix + str(number), first)
         rows = [dict(pool='anchor', pair=pair, condition=condition, seed_index=1)
                 for pair, condition in zip((PAIRS[0], PAIRS[1], PAIRS[0], PAIRS[1]),
                                            ('benign', 'sabotage', 'sabotage', 'benign'))]
         rows.append(dict(pool='sentinel', pair=PAIRS[0], condition='benign', seed_index=1))
         for ordinal in range(6, 22):
             pair = first if ordinal % 2 == 0 else second
-            sabotage = ordinal in SABOTAGE_ORDINALS
+            sabotage = ordinal in placement['ordinals']
             while next_index[pair] in RESERVED_INDICES:
                 next_index[pair] += 1
-            pool = role if not sabotage or role == 'test' else 'known_h'
+            pool = role if not sabotage or role in ('test', 'test_reserve') else 'known_h'
             rows.append(dict(pool=pool, pair=pair, condition='sabotage' if sabotage else 'benign',
                              seed_index=next_index[pair]))
             next_index[pair] += 1
@@ -112,17 +147,27 @@ def candidate():
             extra['replacement'] = True
             if number > CALIBRATION_WINDOWS + REPLACEMENT_WINDOWS:
                 extra['armable'] = False             # beyond the cap: seeds fixed, the ledger refuses to arm it
+        if role == 'test_reserve':
+            extra.update(armable=False, requires='round-2 test-reserve scheduler and lead U3 scope ruling')
         built[prefix + str(number)] = dict(id=prefix + str(number), role=role,
             aliases=['D' + str(number)] if prefix == 'C' and not reserve else [],
-            midpoint_after_ordinal=11, members=rows, **extra)
+            midpoint_after_ordinal=11, sabotage_placement=placement, members=rows, **extra)
     run_order = ([f'C{n}' for n in range(1, CALIBRATION_WINDOWS + REPLACEMENT_WINDOWS + 1)]
                  + [f'T{n}' for n in range(1, TEST_WINDOWS + 1)])
     windows += [built[name] for name in run_order]
     windows += [built[f'C{n}'] for n in range(CALIBRATION_WINDOWS + REPLACEMENT_WINDOWS + 1,
                                               CALIBRATION_WINDOWS + RESERVE_WINDOWS + 1)]
-    return dict(schema=SCHEMA, status='FROZEN_PER_RUN_STATE_226_R15_R22_PENDING_PAIRED_SEED_CHECK',
+    windows += [built[f'T{n}'] for n in range(TEST_WINDOWS + 1, TEST_WINDOWS + TEST_RESERVE_WINDOWS + 1)]
+    return dict(schema=SCHEMA, status='OPTION_B_CANDIDATE_PENDING_COUNCIL_AND_PAIRED_SEED_CHECK',
                 d_mapping='alias_calibration', test_windows=TEST_WINDOWS, order=['W1', *run_order],
                 windows=windows,
+                sabotage_order=dict(law=ORDER_LAW, master_seed=ORDER_SEED,
+                    draw='SHA-256 JSON [law, master_seed, window_id, counter]; unsigned big-endian rejection sampling',
+                    choices='lexicographic (spam ordinal, bank ordinal); alternating pair roster',
+                    constraints='one per pair and half; ordinals 7-20; separation >=3; W1 unchanged'),
+                test_reserves=dict(windows=['T4', 'T5'], maximum_admitted_test_windows=3,
+                    rule='FIFO replacement of a structurally barred T slot only; never on scores, counts or success',
+                    arm_support='pending round 2 and lead U3 scope ruling; not in executable order yet'),
                 calibration=dict(counted_windows=CALIBRATION_WINDOWS, benign_per_pair_per_window=7,
                                  minimum_eligible_per_pair=39, replacements=0, fence_from='C6',
                                  replacement_windows=[f'C{n}' for n in range(
@@ -138,8 +183,12 @@ def candidate():
     # NOTE (R17, RUN_STATE 228): ``fence_from`` stays in the seed-checked frozen bytes, but the
     # RUN_STATE 216 fence it records is WITHDRAWN; bind_packet enforces R17's k+2 rule instead.
                 seed_allocation=dict(held_out_start=HELD_OUT_START, reserved=sorted(RESERVED_INDICES),
+                                     unused=[90],
                                      order='per pair, kit order: C1-C8, T1-T3 (as R15), then the reserve pool for '
-                                           'C9-C14; distinct indices',
+                                           'C9-C14, then test reserves T4-T5; distinct indices',
+                                     test_reserve_pool=dict(start=TEST_RESERVE_POOL_START,
+                                         end=TEST_RESERVE_POOL_START + 8 * TEST_RESERVE_WINDOWS - 1,
+                                         windows=['T4', 'T5'], per_pair_per_window=8),
                                      reserve_pool=dict(start=RESERVE_POOL_START, per_pair_per_window=8,
                                                        windows=[f'C{n}' for n in range(
                                                            CALIBRATION_WINDOWS + 1, CALIBRATION_WINDOWS + RESERVE_WINDOWS + 1)],
@@ -152,10 +201,10 @@ def candidate():
                               escalated_ceiling_s=ESCALATED_CEILING_S),
                 seed_law='align-p4-v1', turn_seed_law='align-p4-turn-v1',
                 test_shape='v4: 14 benign + 2 sabotage; no v5 attacks or physical controls',
-                authority='RUN_STATE 226 R15',
-                open_rulings=['paired seed check of these manifest bytes before signing',
-                              'Sol simulation of the R22-2 replacement rule (FPR at the fixed-8 level under drift) '
-                              'before registration'])
+                authority='RUN_STATE 251 Option B; R15 seed allocation retained',
+                open_rulings=['independent second-seat seed check and council admission of these bytes before signing',
+                              'lead U3 scope ruling and round-2 test-reserve scheduler before enabling T4/T5',
+                              'round-2 claim engine, independent recompute, evaluator and release seal before live claim use'])
 
 
 def validate(manifest):
@@ -255,8 +304,8 @@ def build_files(root, manifest, name, *, extra_sentinels=0):
     root = Path(root)
     window = selected(manifest, name)
     if window.get('armable') is False:
-        raise ValueError(f'{window["id"]} is a reserve window beyond the reserve-window cap (R24: C14): its seeds are fixed '
-                         'but it can not be materialized or armed without a ruling')
+        raise ValueError(f'{window["id"]} reserve seeds are fixed but it cannot be materialized or armed: '
+                         + window.get('requires', 'reserve-window cap requires a ruling'))
     if extra_sentinels not in (0, 2):
         raise ValueError('a window carries 0 or 2 escalation sentinels')
     if window['id'] == 'W1':

@@ -84,7 +84,7 @@ class ManifestTests(unittest.TestCase):
         cls.files = s.build_files(ROOT, cls.manifest, 'C1')
 
     def test_candidate_is_reproducible_and_roles_seeds_are_disjoint(self):
-        # RUN_STATE 226 R15: D_k = C_k, distinct seeds in kit order, sabotage at 9/18, 3 tests.
+        # R15 seeds/aliases retained; Option B prospectively randomizes sabotage positions.
         self.assertEqual((ROOT / s.MANIFEST).read_bytes(), s.raw_json(s.candidate()))
         m = self.manifest
         self.assertEqual(m['order'], ['W1'] + [f'C{i}' for i in range(1, 15)] + ['T1', 'T2', 'T3'])   # R22-2 / R24: C9-C14
@@ -102,7 +102,12 @@ class ManifestTests(unittest.TestCase):
             first = s.PAIRS[0] if index_in_role % 2 else s.PAIRS[1]
             self.assertEqual([r['pair'] for r in fresh[::2]], [first] * 8)
             self.assertTrue(all(fresh[i]['pair'] != fresh[i + 1]['pair'] for i in range(15)))
-            self.assertEqual([r['ordinal'] for r in fresh if r['condition'] == 'sabotage'], [9, 18])
+            sabotage = [r for r in fresh if r['condition'] == 'sabotage']
+            self.assertEqual({r['pair'] for r in sabotage}, set(s.PAIRS))
+            self.assertEqual([r['ordinal'] for r in sabotage], window['sabotage_placement']['ordinals'])
+            self.assertEqual(sum(r['ordinal'] <= 11 for r in sabotage), 1)
+            self.assertGreaterEqual(sabotage[1]['ordinal'] - sabotage[0]['ordinal'], 3)
+            self.assertTrue(all(7 <= r['ordinal'] <= 20 for r in sabotage))
             sabotage_pool = 'known_h' if window['role'] == 'calibration' else 'test'
             for row in fresh:
                 pool = window['role'] if row['condition'] == 'benign' else sabotage_pool
