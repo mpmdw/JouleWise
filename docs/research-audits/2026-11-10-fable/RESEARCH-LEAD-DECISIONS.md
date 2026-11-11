@@ -2734,6 +2734,74 @@ the one whose disclosures are missing.
 
 ---
 
+# Decision request 28: the finality tests' result, and two decisions on the arm-time watchdog check (2026-11-11 04:16 PST)
+
+**Read.** The lead's summary of PR #724 and of the lane lead's two decisions. On the W1 line I read what the
+watchdog's `--dry-run` prints (`scripts/magistrate_watchdog.py:3690-3704`): a state, a reason and the writes it
+would make. It does not name the plans it parsed. I did not read the test code or the review table.
+
+## RL-56. Finality: accepted, nothing owed before signing. The post-install check: confirmed, with two additions
+
+### W-7
+
+The result I asked for under RL-54 is in, by execution, and it is the good case.
+
+- A late final exclusion does not deadlock: replay recovers and the count drops by that member.
+- Final counts may fall and may not rise.
+- Only record k+1 carries k's final sources.
+- All three orders work. A re-issued tail record is accepted once the series ledger is committed again, and the
+  test asserts the two records differ only in `previous_final`. Holding record k+1 until the desk is final
+  needs nothing earlier.
+
+**No code change is owed before the registration is signed.** The corrected runbook is right to prefer the
+hold. PR #724 may merge on green; none of its files is bound.
+
+Two limits, recorded:
+
+- A re-issue after record k+2 exists was not tested and the runbook does not offer it. If it is ever needed, it
+  comes to me first.
+- The release-tools branch was not searched for readers that take pool membership from a stored list. That
+  check joins RL-21's list for the analysis seal before C1: the engine and the recompute take membership from
+  replay of the records.
+
+### The post-install check: what it can prove
+
+RL-53 said to expect the fence after the install. That was wrong about the watchdog: its span begins 180 s
+before t0, and an arm installs earlier than that, so immediately after the install there is usually no fence.
+The lane lead's reading is right. The rule, restated:
+
+- **Refuse**, and undo the install, on any `HOLD_*`, on `STRANDED`, on an uncertain clock or network, on an
+  installed plist or plan that cannot be read, on a timeout, on any failure.
+- **Admit** otherwise, and record which case applied: a fence, or "parsed, no fence yet" with the seconds
+  remaining until the span.
+
+Two additions.
+
+1. **Inside the span, only a fence is admitted.** If the check runs at or after t0 − 180 s and the state is not
+   a fence state, the arm is refused. Before the span, no fence is expected; inside it, its absence is the
+   failure this check exists for.
+2. **Positive identification, if it can be had without changing the watchdog.** The dry run's output does not
+   say which plans it parsed, so "no hold" shows that nothing it scanned was unreadable, not that it scanned
+   this plan. If the helper can call the watchdog's own plan discovery, read-only, in the same removable
+   function, it records that this plan's id was found and that the span start the watchdog derives equals
+   t0 − 180 s, and refuses on a mismatch. If that cannot be done inside the cut-off without editing the
+   watchdog, the batch goes without it, the record says "plan identity not confirmed by the watchdog", and the
+   identification is added with W-6.
+
+### The PREQUAL harness
+
+A synthetic watchdog in the fake host is accepted; the file is not bound. One condition, from Ed's rule that a
+prequalification trips the flags it can: PREQUAL includes a case in which the synthetic watchdog returns a hold,
+and it expects the refusal with the install undone. The real watchdog is exercised by the native check after
+R1.
+
+**Reason.** A check should be asked only for what it can observe at the moment it runs. Before the span that is
+"parsed and not holding"; inside the span it is "fenced".
+
+**Blind status.** Blind: no v4 outcome exists.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
