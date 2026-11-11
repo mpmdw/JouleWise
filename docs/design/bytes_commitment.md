@@ -17,8 +17,8 @@ independent authorization mechanism.
 ## Evidence read, and what is checked
 
 The analysis checkout defaults to the directory containing the scripts. An
-explicit `--commitment-repo` selects the analysis Git checkout; it must name the
-checkout whose analysis head is being asserted, not an unrelated custody repo.
+explicit `--commitment-repo` must resolve to the same Git toplevel as the running
+script checkout. An unrelated checkout is refused before receipt or data reads.
 `--stage1-receipt` defaults to `docs/bytes/stage1/push-receipt.json` there.
 
 The check reads exactly:
@@ -30,7 +30,15 @@ The check reads exactly:
   Global/system Git configuration and lazy object fetching are disabled.
 - The named push receipt. Required fields are schema
   `joulewise.bytes_push_receipt.v1`, `stage1_commit`, repository-relative
-  `predictions_path`, `origin_ref`, `origin_tip`, and UTC `pushed_utc`.
+  `predictions_path`, `origin_ref`, `origin_tip`, UTC `pushed_utc`,
+  `github_activity_raw` (the exact JSON response) and `force_push: false`.
+  `github_repository` must match the owner/repo in the local GitHub origin URL;
+  the API path is derived from that origin, rather than gh's default repository.
+  The saved activity must name a normal push to
+  `refs/heads/records/2026-11-bytes-stage1`, with `after` equal to `origin_tip`.
+  `pushed_utc` must equal that event's server `timestamp`. A force-push activity
+  or true force flag refuses. GitHub's ordinary `activity_type: push` excludes
+  force pushes even when the response has no separate boolean force flag.
 - The local prediction JSON (`--predictions`, otherwise the receipt locator) and
   adjacent `predictions.sha256`. Their bytes/digest must equal the committed
   regular blobs. The JSON's estimator digest must also equal the registered pin.
@@ -47,19 +55,27 @@ The object must itself be a commit, be an ancestor of the selected analysis
 `HEAD`, and be reachable from the receipt's local origin ref. The receipt tip
 must contain the commitment and remain an ancestor of the current origin tip.
 The commitment must contain both frozen prediction blobs and the registered
-estimator. Its committer timestamp and the attested push timestamp must precede
+estimator. Its committer timestamp and the recorded server push timestamp must precede
 every heldout event/release timestamp; equality with an unblinding timestamp
 refuses. The push timestamp cannot precede the commit or be in the future.
 For every nonempty historical metadata revision, the commitment must also be a
 **strict ancestor of that revision**. Backdating a new prediction commit cannot
 repair an earlier committed unblinding record. Malformed/missing required
-metadata refuses.
+metadata refuses. Every journal event and heldout release must name the same
+`stage1_commit`; an intact journal therefore refuses a replacement prediction
+commit regardless of backdated clocks.
 
 The journal contains one JSON object per line, with `event` (`heldout_rows`,
 `heldout_keys`, or `heldout_analysis`), UTC `unblinded_utc`, and `stage1_commit`.
-A guarded command locks, checks, appends, flushes and fsyncs an admission attempt
+A guarded command locks the journal and requires its bytes to equal the regular
+blob at `HEAD:docs/bytes/stage1/unblinding.jsonl`. It then checks, appends, flushes
+and fsyncs an admission attempt
 **before** opening heldout rows or keys. A later command failure leaves the
-attempt recorded conservatively. Outputs retain the verification receipt,
+attempt recorded conservatively. After each append it prints the instruction to
+commit and push the journal before another heldout command. A second admission
+refuses until the previous line is committed; a truncated committed journal also
+refuses. The twin forwards the external guard's diagnostic so the instruction
+reaches its caller. Outputs retain the verification receipt,
 including the push time, origin snapshots and analysis head.
 
 ## Operator sequence (future lead-controlled use only)
@@ -71,28 +87,44 @@ including the push time, origin snapshots and analysis head.
    `docs/bytes/stage1/unblinding.jsonl` if no heldout attempt has occurred. Copy
    `predictions.json`/`predictions.sha256` into that directory as the existing
    stage-1 plan specifies. Commit them from the registered estimator checkout.
-3. The lead performs the authorized push and refreshes/verifies the local origin
-   ref. Record the actual UTC push time. No push/fetch is performed by the guard.
-4. Run `python3 scripts/bytes_commitment.py record-push --stage1-commit HASH
-   --pushed-utc UTC_TIME --origin-ref refs/remotes/origin/records/2026-11-bytes-stage1`.
-   It checks the evidence before exclusively creating `push-receipt.json`.
-   Preserve that receipt with the commitment records.
+3. The lead performs the authorized push to `records/2026-11-bytes-stage1` and
+   refreshes the local origin ref. The lead reports GitHub ruleset
+   `protect-records-branches` already protects `records/**` against deletion and
+   non-fast-forward pushes. That server configuration was not queried in this
+   offline implementation seat.
+4. On the networked Air, run `python3 scripts/bytes_commitment.py record-push
+   --stage1-commit HASH`. This command alone runs
+   `git ls-remote origin refs/heads/records/2026-11-bytes-stage1` and requires
+   exact equality with the local `origin_tip`. It obtains the push event with
+   `gh api repos/{owner}/{repo}/activity?ref=refs/heads/records/2026-11-bytes-stage1&activity_type=push&per_page=100`.
+   The event must be in that response; absent/ambiguous evidence refuses, so
+   record it promptly after the push. No typed push timestamp is accepted.
+   It exclusively creates and commits `push-receipt.json`, preserving the raw
+   response. Push that receipt commit to the protected records branch before
+   proceeding. The utility does not push or fetch. Its two network calls use an
+   injectable runner; all tests use recorded synthetic responses.
 5. `python3 scripts/bytes_commitment.py check --stage1-commit HASH` is read-only.
    Then use the existing post-commit analysis/twin/release commands, adding the
    real `--stage1-commit HASH` also to heldout analysis and twin stage 2.
    `--predictions` and its SHA sidecar must be supplied to heldout analysis; other
    commands default to the receipt locator. Preserve heldout `release.json` as
-   `docs/bytes/stage1/heldout-release.json` and preserve/commit the journal. Never
+   `docs/bytes/stage1/heldout-release.json`. Commit and push the journal after
+   **each** admission, including attempts whose downstream command failed. Never
    commit factors/keys. No stage-2 operation is authorized by this implementation
    handoff.
 
 ## Limits of this evidence
 
-Git has no authenticated push timestamp. `pushed_utc` is explicitly an operator
-attestation, and local origin refs are an offline snapshot, not a query of the
-server. The lead must verify freshness and the actual push time before study
-use. Commit clocks are also self-reported; the additional graph/history check
-protects against ordinary retrospective mistakes, not a dishonest operator.
+`record-push` obtains a live origin comparison and a GitHub server timestamp.
+`check` and `admit` remain offline: they replay saved JSON and local origin refs,
+without contacting GitHub or authenticating a hand-edited receipt independently.
+The committed receipt, protected remote history, and journal are the durable
+record; this is not a defense against an operator fabricating all local evidence.
+Commit clocks are self-reported; journal commit identity and graph/history checks
+provide the additional clock-independent anchors. Admission requires a local
+journal commit but cannot verify its push offline; the printed push instruction
+remains an operator duty. A fresh clone without an unpushed admission cannot
+recover that line.
 The check covers the named metadata inventory, not events omitted from it or
 Git objects no longer reachable from any ref. It reads no archive, outcome,
 withheld store or blinding factor. A successful fixture check is not evidence

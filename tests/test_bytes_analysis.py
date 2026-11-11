@@ -25,6 +25,7 @@ from joulewise import bytes_analysis as ba
 from joulewise.external import km003c_parse as kp
 from scripts import bytes_analyze
 from tests.git_fixture import init_git_fixture
+from tests.bytes_commitment_support import commitment_command
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests/fixtures/bytes"
@@ -2000,7 +2001,7 @@ class Q1WithheldCensusTests(unittest.TestCase):
 
 class SubsetReleaseChainTests(unittest.TestCase):
     def command(self, *args, expected=0, cwd=ROOT):
-        result = subprocess.run(list(map(str, args)), cwd=cwd, capture_output=True, text=True,
+        result = subprocess.run(commitment_command(args), cwd=cwd, capture_output=True, text=True,
                                 env={**os.environ, "JW_B5_SYNTHETIC_ONLY": "1"}, check=False)
         self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
         return result.stdout
@@ -2148,7 +2149,7 @@ class Q1MissingFilesCLIChainTests(unittest.TestCase):
     target = "Qwen3-30B-A3B-4bit"
 
     def command(self, *args, cwd=ROOT):
-        result = subprocess.run(list(map(str, args)), cwd=cwd, capture_output=True, text=True,
+        result = subprocess.run(commitment_command(args), cwd=cwd, capture_output=True, text=True,
             env={**os.environ, "JW_B5_SYNTHETIC_ONLY": "1"}, check=False)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         return result.stdout
@@ -2357,7 +2358,7 @@ class Q2CommitmentCLIChainTests(unittest.TestCase):
                         if predictions is not None:
                             from tests.bytes_commitment_support import fixture_options
                             command += fixture_options(root, predictions)
-                        result = subprocess.run(list(map(str, command)), cwd=checkout,
+                        result = subprocess.run(commitment_command(command), cwd=checkout,
                             capture_output=True, text=True, check=False,
                             env={**os.environ, "JW_B5_SYNTHETIC_ONLY": "1"})
                         self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
@@ -3057,7 +3058,7 @@ class ReviewInputTests(unittest.TestCase):
                     extra = fixture_options(root, root / 'single/predictions.json')
                     command = [sys.executable, '-B', 'scripts/bytes_analyze.py', '--manifest', str(manifest_path),
                                '--export', *map(str, supplied), '--stage', stage, *extra, '--out', str(out)]
-                    result = subprocess.run(command, cwd=ROOT, text=True, capture_output=True)
+                    result = subprocess.run(commitment_command(command), cwd=ROOT, text=True, capture_output=True)
                     self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                     records = ba.load_records(supplied, manifest, stage=stage,
                                               stage1_commit='a' * 40 if stage == 'blinded' else None)

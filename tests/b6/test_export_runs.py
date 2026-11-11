@@ -1073,9 +1073,9 @@ class ExportTests(unittest.TestCase):
         with precommit.open() as stream:
             self.assertEqual({r["run_id"] for r in csv.DictReader(stream)}, {"ref", "corpus"})
         released = self.root / "released.csv"
-        from tests.bytes_commitment_support import fixture_options
+        from tests.bytes_commitment_support import fixture_options, synthetic_checkout
         args += fixture_options(self.root)
-        with contextlib.redirect_stdout(io.StringIO()):
+        with synthetic_checkout(args), contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(b6_unblind.main(args + ["--out", str(released)]), 0)
         with released.open() as stream:
             rows = list(csv.DictReader(stream))
@@ -1089,7 +1089,7 @@ class ExportTests(unittest.TestCase):
                 self.assertTrue(math.isclose(float(row["phase_decode_j"]), 10, rel_tol=1e-6, abs_tol=1e-6))
         info = json.loads(result.sidecar_path.read_text())["blinding"]["withheld"]
         (result.csv_path.parent / info["path"]).unlink()
-        with contextlib.redirect_stdout(io.StringIO()) as stdout:
+        with synthetic_checkout(args), contextlib.redirect_stdout(io.StringIO()) as stdout:
             self.assertEqual(b6_unblind.main(args + ["--out", str(self.root / "missing.csv")]), 0)
         self.assertEqual(json.loads(stdout.getvalue())["flags"], ["bytes.withheld_missing"])
 

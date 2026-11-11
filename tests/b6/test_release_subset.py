@@ -11,6 +11,7 @@ from unittest.mock import patch
 from joulewise.b6 import blinding
 from scripts import b6_release_subset
 from tests.b6.support import write_json
+from tests.bytes_commitment_support import synthetic_checkout
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -42,7 +43,7 @@ class ReleaseSubsetTests(unittest.TestCase):
                 from tests.bytes_commitment_support import fixture_options
                 args += fixture_options(self.root)
         stdout, stderr = io.StringIO(), io.StringIO()
-        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+        with synthetic_checkout(args), contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
             code = b6_release_subset.main(args)
         return code, stdout.getvalue(), stderr.getvalue()
 
@@ -89,7 +90,8 @@ class ReleaseSubsetTests(unittest.TestCase):
         options = fixture_options(self.root)
         commit = options[-1]
         code, _, error = self.release([key], "heldout", commit=commit)
-        self.assertEqual((code, error), (0, ""))
+        self.assertEqual(code, 0, error)
+        self.assertIn('commit and push', error)
         self.assertEqual({p.name for p in (self.root / "released").iterdir()},
                          {"pack.json", "release.json", blinding._config_filename(key)})
         self.assertEqual(json.loads((self.root / "released/release.json").read_text())["stage1_commit"], commit)

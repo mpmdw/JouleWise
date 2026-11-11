@@ -87,8 +87,25 @@ def _visible(root, pattern):
             yield path
 
 
+def _refuse_withheld_exports(export_dirs):
+    """List names only, before either estimator can recurse through an export root."""
+    def failed(error):
+        raise Stage1Error(f"cannot list export directory: {error}")
+
+    for root in map(Path, export_dirs):
+        if not root.is_dir():
+            raise Stage1Error(f"export directory missing: {root}")
+        if 'withheld' in root.parts:
+            raise Stage1Error(f"withheld path under export root: {root}")
+        for parent, directories, files in os.walk(root, onerror=failed):
+            for name in directories + files:
+                if name == 'withheld' or name.endswith('.withheld.csv'):
+                    raise Stage1Error(f"withheld path under export root: {Path(parent) / name}")
+
+
 def _sessions_in(export_dirs):
     """(session_id, csv path, sidecar path) for every exported session under the given roots."""
+    _refuse_withheld_exports(export_dirs)
     found = {}
     for root in export_dirs:
         root = Path(root)
@@ -281,6 +298,7 @@ def run_stage1(manifest_path, export_dirs, pack_records_root, out_root, *, pytho
     """Pre-commit stage-1 sequence. Returns (exit code, summary).
 
     The summary is written even when a later step raises (verdict ABORTED_ON_ERROR)."""
+    _refuse_withheld_exports(export_dirs)
     from tests.test_bytes_agreement import compare_campaign   # the registered comparer (section 12)
     out_root = Path(out_root)
     if out_root.exists():

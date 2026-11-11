@@ -8,7 +8,8 @@ import unittest
 from unittest import mock
 
 from scripts import bytes_analyze as analysis
-from tests.bytes_commitment_support import commitment_fixture, git
+from scripts import bytes_commitment as bc
+from tests.bytes_commitment_support import commitment_fixture, git, activity_json, ORIGIN_REF, REMOTE_REF
 
 
 class CommitmentGateTests(unittest.TestCase):
@@ -17,6 +18,9 @@ class CommitmentGateTests(unittest.TestCase):
         self.addCleanup(temp.cleanup)
         self.repo, self.predictions, self.receipt, self.commit = commitment_fixture(temp.name)
         self.journal = self.receipt.parent / 'unblinding.jsonl'
+        patcher = mock.patch.object(bc, 'ROOT', self.repo)
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def invoke(self, commit=None, before_reduce=None):
         # ROOT selects the analysis checkout, without adding an option that the old CLI lacks.
@@ -41,9 +45,9 @@ class CommitmentGateTests(unittest.TestCase):
         git(self.repo, 'add', '.')
         git(self.repo, 'commit', '--amend', '--no-edit', '-q')
         self.commit = git(self.repo, 'rev-parse', 'HEAD')
-        git(self.repo, 'update-ref', 'refs/remotes/origin/synthetic', self.commit)
+        git(self.repo, 'update-ref', ORIGIN_REF, self.commit)
         record = json.loads(self.receipt.read_text())
-        record.update(stage1_commit=self.commit, origin_tip=self.commit)
+        record.update(stage1_commit=self.commit, origin_tip=self.commit, github_activity_raw=activity_json(self.commit))
         self.receipt.write_text(json.dumps(record))
 
     def test_nonexistent_hex_commit_refuses_before_input(self):
@@ -58,7 +62,7 @@ class CommitmentGateTests(unittest.TestCase):
         self.assert_refused_before_input(git(self.repo, 'rev-parse', 'refs/tags/synthetic-tag'))
 
     def test_local_only_commit_refuses_before_input(self):
-        git(self.repo, 'update-ref', '-d', 'refs/remotes/origin/synthetic')
+        git(self.repo, 'update-ref', '-d', ORIGIN_REF)
         self.assert_refused_before_input()
 
     def test_nonancestor_commit_refuses_before_input(self):
@@ -129,7 +133,10 @@ class CommitmentGateTests(unittest.TestCase):
         self.assert_refused_before_input()
 
     def test_existing_journal_without_final_newline_remains_valid(self):
-        self.journal.write_text(json.dumps({'event': 'heldout_rows', 'unblinded_utc': '2026-11-02T10:00:00+00:00'}))
+        self.journal.write_text(json.dumps({'event': 'heldout_rows', 'unblinded_utc': '2026-11-02T10:00:00+00:00',
+                                          'stage1_commit': self.commit}))
+        git(self.repo, 'add', 'docs/bytes/stage1/unblinding.jsonl')
+        git(self.repo, 'commit', '-qm', 'Synthetic committed admission', date='2026-11-03T10:00:00+00:00')
         self.assertEqual(self.invoke()[0], 0)
         self.assertEqual(len([json.loads(line) for line in self.journal.read_text().splitlines()]), 2)
 
@@ -164,11 +171,108 @@ class CommitmentGateTests(unittest.TestCase):
     def test_git_commit_timezone_is_normalized(self):
         git(self.repo, 'commit', '--amend', '--no-edit', '-q', date='2026-11-01T02:00:00-08:00')
         self.commit = git(self.repo, 'rev-parse', 'HEAD')
-        git(self.repo, 'update-ref', 'refs/remotes/origin/synthetic', self.commit)
+        git(self.repo, 'update-ref', ORIGIN_REF, self.commit)
         record = json.loads(self.receipt.read_text())
-        record.update(stage1_commit=self.commit, origin_tip=self.commit)
+        record.update(stage1_commit=self.commit, origin_tip=self.commit, github_activity_raw=activity_json(self.commit))
         self.receipt.write_text(json.dumps(record))
         self.assertEqual(self.invoke()[0], 0)
+
+    def test_backdated_prediction_commit_cannot_replace_admitted_commit(self):
+        # P1: C1 admitted at 12:00, journal intact but uncommitted. C2 is made
+        # afterwards, backdated to 10:30, with an attested 10:31 push.
+        self.journal.write_text(json.dumps({'event': 'heldout_rows', 'stage1_commit': self.commit,
+                                          'unblinded_utc': '2026-11-01T12:00:00+00:00'}) + '\n')
+        import hashlib
+        self.predictions.write_text(json.dumps({'bytes_analysis_sha256': bc.ESTIMATORS['joulewise/bytes_analysis.py'],
+                                                'synthetic': 'C2'}))
+        self.predictions.with_suffix('.sha256').write_text(hashlib.sha256(self.predictions.read_bytes()).hexdigest())
+        git(self.repo, 'add', 'docs/bytes/stage1/predictions.json', 'docs/bytes/stage1/predictions.sha256')
+        git(self.repo, 'commit', '-qm', 'Backdated synthetic C2', date='2026-11-01T10:30:00+00:00')
+        replacement = git(self.repo, 'rev-parse', 'HEAD')
+        git(self.repo, 'update-ref', ORIGIN_REF, replacement)
+        record = json.loads(self.receipt.read_text())
+        activity = json.loads(activity_json(replacement))
+        activity[0]['timestamp'] = '2026-11-01T10:31:00+00:00'
+        record.update(stage1_commit=replacement, origin_tip=replacement,
+                      pushed_utc=activity[0]['timestamp'], github_activity_raw=json.dumps(activity))
+        self.receipt.write_text(json.dumps(record))
+        with self.assertRaisesRegex(ValueError, 'another stage1_commit'):
+            bc.verify_commitment(replacement, repo=self.repo)
+
+    def test_every_journal_event_requires_its_stage1_commit(self):
+        for event in ('heldout_rows', 'heldout_keys', 'heldout_analysis'):
+            with self.subTest(event=event):
+                self.journal.write_text(json.dumps({'event': event, 'unblinded_utc': '2026-11-02T12:00:00+00:00'}))
+                with self.assertRaises((KeyError, ValueError)):
+                    bc.verify_commitment(self.commit, repo=self.repo)
+
+    def test_admission_requires_committing_each_previous_journal_line(self):
+        from types import SimpleNamespace
+        args = SimpleNamespace(stage1_commit=self.commit, commitment_repo=self.repo, stage1_receipt=self.receipt)
+        with contextlib.redirect_stderr(io.StringIO()) as error:
+            bc.admit(args, 'heldout_rows')
+        prior = self.journal.read_bytes()
+        with self.assertRaisesRegex(ValueError, 'commit and push'):
+            bc.admit(args, 'heldout_keys')
+        self.assertEqual(self.journal.read_bytes(), prior)
+        git(self.repo, 'add', 'docs/bytes/stage1/unblinding.jsonl')
+        git(self.repo, 'commit', '-qm', 'Synthetic first admission')
+        self.journal.write_bytes(b'')  # P4: truncation of a committed journal must also refuse.
+        with self.assertRaisesRegex(ValueError, 'commit and push'):
+            bc.admit(args, 'heldout_keys')
+        self.journal.write_bytes(prior)
+        with contextlib.redirect_stderr(io.StringIO()):
+            bc.admit(args, 'heldout_keys')
+        self.assertEqual(len(self.journal.read_text().splitlines()), 2)
+        self.assertIn('commit and push', error.getvalue())
+
+    def test_foreign_commitment_checkout_is_refused_even_when_valid(self):
+        other = self.repo.parent / 'other'
+        other.mkdir()
+        repo, predictions, receipt, commit = commitment_fixture(other)
+        with self.assertRaisesRegex(ValueError, 'running checkout'):
+            bc.verify_commitment(commit, predictions, repo=repo, receipt=receipt)
+
+    def test_record_push_rejects_forged_origin_and_invalid_server_events(self):
+        import subprocess
+        self.receipt.unlink()
+        good = json.loads(activity_json(self.commit))[0]
+        cases = [('missing remote', 1, '', good), ('stale remote', 0, 'f' * 40, good),
+                 ('wrong ref', 0, self.commit, {**good, 'ref': 'refs/heads/other'}),
+                 ('wrong after', 0, self.commit, {**good, 'after': 'f' * 40}),
+                 ('force activity', 0, self.commit, {**good, 'activity_type': 'force_push'}),
+                 ('force flag', 0, self.commit, {**good, 'force_push': True}),
+                 ('missing timestamp', 0, self.commit, {k: v for k, v in good.items() if k != 'timestamp'})]
+        for label, rc, remote, event in cases:
+            with self.subTest(case=label):
+                self.receipt.unlink(missing_ok=True)
+                def runner(command, **kwargs):
+                    raw = remote + '\t' + REMOTE_REF + '\n' if command[0] == 'git' else json.dumps([event])
+                    return subprocess.CompletedProcess(command, rc if command[0] == 'git' else 0, raw.encode())
+                with contextlib.redirect_stdout(io.StringIO()) as out:
+                    code = bc.main(['record-push', '--stage1-commit', self.commit], runner=runner)
+                self.assertEqual(code, 1, out.getvalue())
+                self.assertIn('BYTES commitment', out.getvalue())
+                self.assertFalse(self.receipt.exists())
+                self.assertEqual(git(self.repo, 'rev-parse', 'HEAD'), self.commit)
+
+    def test_check_and_admit_do_not_use_network_runner(self):
+        runner = mock.Mock(side_effect=AssertionError('offline gate attempted network'))
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(bc.main(['check', '--stage1-commit', self.commit], runner=runner), 0)
+            self.assertEqual(bc.main(['admit', '--stage1-commit', self.commit, '--event', 'heldout_rows'], runner=runner), 0)
+        runner.assert_not_called()
+
+    def test_record_push_refuses_no_remote_despite_forged_tracking_ref(self):
+        git(self.repo, 'remote', 'remove', 'origin')
+        git(self.repo, 'update-ref', ORIGIN_REF, self.commit)
+        self.receipt.unlink()
+        runner = mock.Mock(side_effect=AssertionError('missing remote must refuse locally'))
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(bc.main(['record-push', '--stage1-commit', self.commit], runner=runner), 1)
+        self.assertIn('BYTES commitment', out.getvalue())
+        runner.assert_not_called()
+        self.assertFalse(self.receipt.exists())
 
 
 class EntrypointGateTests(unittest.TestCase):
@@ -186,10 +290,12 @@ class EntrypointGateTests(unittest.TestCase):
                                          '--stage1-commit', 'f' * 40, '--out', str(root / 'release')]),
             ]
             for main, args in calls:
-                with self.subTest(main=main.__module__), contextlib.redirect_stdout(io.StringIO()), \
-                        contextlib.redirect_stderr(io.StringIO()), \
-                        mock.patch.object(Path, 'open', side_effect=AssertionError('source opened before preflight')):
+                with self.subTest(main=main.__module__), contextlib.redirect_stdout(io.StringIO()) as out, \
+                        contextlib.redirect_stderr(io.StringIO()) as err, \
+                        mock.patch.object(Path, 'open', side_effect=AssertionError('source opened before preflight')) as opened:
                     self.assertEqual(main(args), 1)
+                    self.assertIn('BYTES commitment', out.getvalue() + err.getvalue())
+                    opened.assert_not_called()
             self.assertEqual(list(root.iterdir()), [])
 
     def test_push_receipt_command_records_time_without_unblinding(self):
@@ -197,12 +303,30 @@ class EntrypointGateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='bytes-push-receipt-') as temp:
             repo, predictions, receipt, commit = commitment_fixture(temp)
             receipt.unlink()
-            with contextlib.redirect_stdout(io.StringIO()):
+            # GitHub represents normal pushes via activity_type; force_push is
+            # a separate activity type, rather than a required boolean field.
+            activity = json.loads(activity_json(commit))
+            del activity[0]['force_push']
+            raw = json.dumps(activity, indent=2) + '\n'
+            (repo / 'unrelated.txt').write_text('synthetic staged work\n')
+            git(repo, 'add', 'unrelated.txt')
+            def runner(command, **kwargs):
+                import subprocess
+                if command == ['git', 'ls-remote', 'origin', REMOTE_REF]:
+                    return subprocess.CompletedProcess(command, 0, (commit + '\t' + REMOTE_REF + '\n').encode())
+                self.assertEqual(command, ['gh', 'api', 'repos/synthetic/bytes/activity?ref=' + REMOTE_REF + '&activity_type=push&per_page=100'])
+                return subprocess.CompletedProcess(command, 0, raw.encode())
+            with mock.patch.object(bc, 'ROOT', repo), contextlib.redirect_stdout(io.StringIO()):
                 code = bc.main(['record-push', '--commitment-repo', str(repo), '--stage1-commit', commit,
-                                '--predictions', str(predictions), '--origin-ref', 'refs/remotes/origin/synthetic',
-                                '--pushed-utc', '2026-11-01T10:01:00+00:00'])
+                                '--predictions', str(predictions)], runner=runner)
             self.assertEqual(code, 0)
             self.assertEqual(json.loads(receipt.read_text())['pushed_utc'], '2026-11-01T10:01:00+00:00')
+            self.assertEqual(json.loads(receipt.read_text())['github_activity_raw'], raw)
+            self.assertIs(json.loads(receipt.read_text())['force_push'], False)
+            self.assertEqual(git(repo, 'show', 'HEAD:docs/bytes/stage1/push-receipt.json'), receipt.read_text().strip())
+            self.assertEqual(git(repo, 'diff', '--cached', '--name-only'), 'unrelated.txt')
+            self.assertEqual(git(repo, 'diff-tree', '--no-commit-id', '--name-only', '-r', 'HEAD'),
+                             'docs/bytes/stage1/push-receipt.json')
             self.assertEqual((repo / 'docs/bytes/stage1/unblinding.jsonl').read_text(), '')
 
 

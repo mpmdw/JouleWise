@@ -22,8 +22,9 @@ def compress_member(path, archive):
 
 
 def ample_space_command(command, *, free=1024**4):
-    """Patch only free-space observations in a fixture subprocess, on both sides."""
-    command = list(command)
+    """Supply fixture free space and, when requested, its synthetic commitment checkout."""
+    from tests.bytes_commitment_support import commitment_command
+    command = commitment_command(command)
     if command[1:2] == ["-B"]:
         del command[1]
     return [command[0], '-B', '-c',

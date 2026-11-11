@@ -1,7 +1,7 @@
 Committed locally on `ops/2026-11-10-bytes-rl7a`; tree clean, nothing pushed.
 
 - `276d05201`: fixed probe/completeness gates and added Git commitment, prediction, estimator-digest and chronology checks across six drivers.
-- `de91d9f3d`: [run report with files touched, verification and F1–F7 dispositions](/Volumes/JW-EXT/jw-wt/sol-bytes-rl7a/docs/run_reports/2026-11-10-bytes-rl7a.md).
+- `de91d9f3d`: [run report with files touched, verification and F1–F7 dispositions](../2026-11-10-bytes-rl7a.md).
 
 The estimator digest and prohibited coordination files are unchanged.
 
