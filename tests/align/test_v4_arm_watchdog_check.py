@@ -209,6 +209,151 @@ class WeightDigestTests(unittest.TestCase):
                 self.assertEqual((target / 'session.json').read_bytes(), before)
 
 
+class RuntimeStackTests(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+        self.versions = {'python': '3.13.1', 'packages': {'mlx': '0.31.2', 'numpy': '2.5.1'}}
+        self.pins = self.root / session.kit.KIT / 'registration/identity_pins.json'
+        self.pins.parent.mkdir(parents=True)
+        self.pins.write_text(json.dumps({'runtime_versions': self.versions}))
+        self.python = str(self.root / '.venv/bin/python')
+
+    def check(self, observed=None, **kwargs):
+        self.runner = Mock(return_value=self.versions if observed is None else observed)
+        return session.runtime_stack_preflight(self.python, self.pins, runner=self.runner, **kwargs)
+
+    def test_matching_uses_measurement_interpreter_and_reader(self):
+        reader = Mock(return_value={'runtime_versions': self.versions})
+        row = self.check(reader=reader)
+        self.assertTrue(row['ok'], row)
+        self.runner.assert_called_once_with(self.python)
+        reader.assert_called_once_with(self.pins)
+        self.assertEqual(row['registered'], self.versions)
+        self.assertEqual(row['observed'], self.versions)
+        self.assertGreaterEqual(row['elapsed_s'], 0)
+
+    def test_python_each_package_missing_and_extra_are_compared(self):
+        for observed, expected in (
+                ({'python': '3.13.2', 'packages': {'mlx': 'changed', 'numpy': '2.5.1'}},
+                 ['python: registered 3.13.1 installed 3.13.2', 'mlx: registered 0.31.2 installed changed']),
+                ({'python': '3.13.1', 'packages': {'numpy': '2.5.1', 'extra': '1'}},
+                 ['mlx: registered 0.31.2 installed <missing>', 'extra: registered <missing> installed 1'])):
+            with self.subTest(observed=observed):
+                row = self.check(observed)
+                self.assertFalse(row['ok'])
+                self.assertCountEqual(row['reasons'], ['runtime_stack_preflight: differs: ' + r for r in expected])
+
+    def test_unreadable_versions_and_probe_or_reader_errors_refuse(self):
+        for value in (None, '', 3, {}, []):
+            row = self.check({'python': '3.13.1', 'packages': {'mlx': value, 'numpy': '2.5.1'}})
+            self.assertFalse(row['ok'])
+            self.assertTrue(any(': unreadable:' in r for r in row['reasons']), row)
+        for runner, reader in ((Mock(side_effect=OSError('probe failed')), session.pilot.h.read),
+                               (Mock(), Mock(side_effect=ValueError('pins failed')))):
+            row = session.runtime_stack_preflight(self.python, self.pins, runner=runner, reader=reader)
+            self.assertFalse(row['ok'])
+            self.assertIn('runtime_stack_preflight: unreadable:', row['reasons'][0])
+
+    def test_prepare_persists_stack_and_mismatch_hold_before_frequency_or_arm(self):
+        from scripts import align_v4_next_arm_packet as builder
+        from tests.align.test_v4_next_arm_packet import Scenario
+        (self.root / 'ledger').mkdir()
+        scenario = Scenario(self.root / 'ledger', 'R1')
+        scenario.finish()
+        state = {'measurement_root': str(self.root / 'ledger'), 'preparation_status': 'STAGED',
+                 'registration_dir': str(self.pins.parent)}
+        frequency = Mock(return_value={'ok': True})
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(powermode, 'host_lock_preflight', return_value={'ok': True}))
+            stack.enter_context(patch.object(session, 'session_start_restore', return_value={'action': 'none'}))
+            stack.enter_context(patch.object(session.kit, 'generate'))
+            stack.enter_context(patch.object(session, 'series_ac_powermode', return_value=0))
+            stack.enter_context(patch.object(session.pilot, 'prepare', return_value=state))
+            stack.enter_context(patch.object(session, 'weight_digest_preflight', return_value={'ok': True}))
+            stack.enter_context(patch.object(session, 'arm_checks', side_effect=AssertionError('arm in prepare')))
+            with self.assertRaisesRegex(ValueError, 'runtime_stack_preflight: differs:.*holds_previous_window: R1'):
+                session.prepare(self.root / 'ledger', self.root / 'session', frequency_preflight=frequency,
+                    runtime_runner=lambda python: dict(self.versions, python='changed'))
+        stored = session.pilot.h.read(self.root / 'session/session.json')
+        self.assertEqual(stored['holds_previous_window'], 'R1')
+        self.assertFalse(stored['runtime_stack_preflight']['ok'])
+        frequency.assert_not_called()
+
+    def test_weight_function_accepts_explicit_inputs_without_session_state(self):
+        reader = Mock(return_value={'artifacts': {'tiny-one': {'root': '/synthetic/weights',
+            'folded_sha256': 'a' * 64, 'files': {'shard': 'b' * 64}}}})
+        row = session.weight_digest_preflight(self.pins.parent, [{'model_id': 'tiny', 'run_id': 'one'}],
+            reader=reader, identity_fn=lambda root: {'status': 'ok', 'kind': 'file_set',
+                'folded_sha256': 'a' * 64, 'files': {'shard': 'b' * 64}})
+        self.assertTrue(row['ok'], row)
+
+
+class HeldWindowTests(unittest.TestCase):
+    def setUp(self):
+        from scripts import align_v4_next_arm_packet as builder
+        from tests.align.test_v4_next_arm_packet import Scenario
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+        self.builder = builder
+        (self.root / 'repo').mkdir()
+        self.scenario = Scenario(self.root / 'repo', 'W1')
+
+    def packet(self):
+        self.scenario.finish()
+        return self.builder.build_packet(self.scenario.root, **self.scenario.identities(), now_epoch_s=111,
+                                         current_artifact_set_sha256='a' * 64)
+
+    def test_each_held_reason_refuses_and_nonheld_reason_does_not(self):
+        for reason in ('records.source_changed_during_harvest', 'roster.no_science_bundles',
+                       'precheck.certain_exclusion', 'cell.below_minimum'):
+            with self.subTest(reason=reason):
+                self.scenario.sources['exclusions'].update(reasons=[reason], claim_usable=False)
+                row = session.held_window_check(self.scenario.root, self.packet())
+                self.assertEqual(row['ok'], reason == 'cell.below_minimum', row)
+                if not row['ok']:
+                    self.assertEqual(row['reasons'], [f'held_window: W1: {reason}: no signed ruling'])
+
+    def test_valid_signed_ruling_answers_hold_and_is_recorded_invalid_refuses(self):
+        self.scenario.sources['exclusions'].update(reasons=['precheck.certain_exclusion'], claim_usable=False)
+        text = self.scenario.write('rulings/held.txt', b'RL synthetic release after investigation')
+        packet = self.packet()
+        ruling = {'ruling_id': 'RL-synthetic', 'after_window': 'W1', 'resets': 'held_window_release',
+                  'text': text, 'lead_signature': 'lead: synthetic 2026-11-11'}
+        path = self.root / 'ruling.json'
+        for signature, ok in (('unsigned', False), (ruling['lead_signature'], True)):
+            path.write_text(json.dumps(dict(ruling, lead_signature=signature)))
+            row = session.held_window_check(self.scenario.root, packet, ruling_path=path)
+            self.assertEqual(row['ok'], ok, row)
+            if ok:
+                self.assertEqual(row['ruling']['lead_signature'], signature)
+                self.assertEqual(row['ruling']['text_sha256'], text['sha256'])
+        for mutation in ({'after_window': 'C1'}, {'resets': 'other'},
+                         {'text': {'path': text['path'], 'sha256': 'f' * 64}}):
+            path.write_text(json.dumps(dict(ruling, **mutation)))
+            self.assertFalse(session.held_window_check(self.scenario.root, packet, ruling_path=path)['ok'])
+
+    def test_previous_not_final_defers(self):
+        from tests.align.test_v4_next_arm_packet import Scenario
+        prior = Scenario(self.scenario.root, 'R1').finish()
+        self.scenario = Scenario(self.scenario.root, 'W1', previous=prior)
+        self.scenario.provisional = True
+        row = session.held_window_check(self.scenario.root, self.packet())
+        self.assertTrue(row['ok'], row)
+        self.assertEqual(row['status'], 'previous window not final: hold check deferred to its finality')
+
+    def test_changed_exclusions_blob_refuses_authentication(self):
+        packet = self.packet()
+        descriptor = self.scenario.record['sources']['exclusions']
+        # Working-tree changes cannot replace committed evidence.
+        (self.scenario.root / descriptor['path']).write_text('{"reasons": ["precheck.certain_exclusion"]}')
+        self.assertTrue(session.held_window_check(self.scenario.root, packet)['ok'])
+        packet['record_sha256'] = 'f' * 64
+        self.assertFalse(session.held_window_check(self.scenario.root, packet)['ok'])
+
+
 class WatchdogTests(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
@@ -437,6 +582,30 @@ class WatchdogTests(unittest.TestCase):
 
 
 class RemoteProbeTests(watchdog_fixtures.WatchdogTestCase):
+    def test_direct_parser_rejects_installed_deadman_epoch_error(self):
+        module = self.temp / 'deadman-watchdog.py'
+        module.write_text('''import json, time
+from pathlib import Path
+from types import SimpleNamespace
+PLAN_LEAD_S = 180
+class PlanError(ValueError): pass
+class Storage:
+    def __init__(self, root, dry_run): pass
+    def read_text(self, path): return path.read_text()
+def is_retired_v1_plan(raw): return False
+class NightPlan:
+    @staticmethod
+    def from_mapping(raw): return SimpleNamespace(**raw)
+def deadman_epoch(plan): raise PlanError("synthetic invalid deadman")
+def load_plans(storage, now_epoch_s): return SimpleNamespace(plans=[])
+''')
+        plan = self.temp / 'deadman-plan.json'
+        plan.write_text(json.dumps({'plan_id': 'synthetic', 'authored_epoch_s': 1, 't0_epoch_s': 2}))
+        out = subprocess.run([sys.executable, '-B', '-c', session.WATCHDOG_PLAN_FILE_PROGRAM,
+            str(module), str(self.temp), str(plan)], capture_output=True, text=True, check=True, timeout=30)
+        self.assertEqual(json.loads(out.stdout), {'parse': 'malformed', 'exception': 'PlanError',
+                                                 'discovered_by_scan': False})
+
     def parser_run(self, argv, **kwargs):
         # Only the fixed file-reader program runs for real. Host/remote dry-run
         # probes remain behind the injected runner, as required by RL-53.
@@ -818,6 +987,9 @@ class PreInstallTests(unittest.TestCase):
             stack.enter_context(patch.object(battery_float, 'observe', return_value=({}, b'synthetic')))
             stack.enter_context(patch.object(v4_registration, 'battery_arm', return_value={'admitted': False, 'reasons': []}))
             stack.enter_context(patch.object(v4_registration, 'artifact_set_digest', return_value='a' * 64))
+            held = stack.enter_context(patch.object(session, 'held_window_check', create=True,
+                side_effect=lambda *a, **k: events.append('held') or
+                {'ok': False, 'reasons': ['held_window: W1: precheck.certain_exclusion: no signed ruling']}))
 
             def check(**kwargs):
                 events.append('watchdog')
@@ -827,7 +999,9 @@ class PreInstallTests(unittest.TestCase):
                 watchdog_check=check, meter_probe=lambda root: events.append('meter') or {'live': True},
                 pre_dwell=lambda record: events.append('write'),
                 dwell_start=lambda: events.append('stamp') or session.time.monotonic_ns())
-            self.assertEqual(events, ['watchdog', 'meter', 'write', 'stamp'])
+            self.assertEqual(events, ['held', 'watchdog', 'meter', 'write', 'stamp'])
+            held.assert_called_once()
+            self.assertFalse(record['held_window_check']['ok'])
             self.assertIn('watchdog_acceptance: pre_install: HOLD_PLAN_MALFORMED: synthetic', record['reasons'])
             self.assertIn('ac_powermode: old refusal', record['reasons'])
             self.assertFalse(record['watchdog_acceptance']['ok'])
@@ -907,6 +1081,46 @@ class ArmIntegrationTests(unittest.TestCase):
         identity.assert_not_called()
         arm = session.pilot.h.read(self.session / 'staging/v4-arm-001.json')
         self.assertEqual(arm['weight_digests'], block)
+
+    def test_runtime_stack_prepare_legacy_and_attestation_sources(self):
+        versions = {'python': '3.13.1', 'packages': {'mlx': '0.31.2'}}
+        pins = self.root / session.kit.KIT / 'registration/identity_pins.json'
+        pins.parent.mkdir(parents=True, exist_ok=True)
+        pins.write_text(json.dumps({'runtime_versions': versions}))
+        path = self.root / 'stack.json'
+        for source in ('prepare', 'not_recorded_by_prepare', 'attested'):
+            with self.subTest(source=source):
+                state = session.pilot.h.read(self.session / 'session.json')
+                block = {'source': 'prepare', 'ok': True, 'registered': versions, 'observed': versions,
+                         'elapsed_s': 12.5}
+                state.pop('runtime_stack_preflight', None)
+                if source == 'prepare':
+                    state['runtime_stack_preflight'] = block
+                session.pilot.h.write(self.session / 'session.json', state)
+                path.write_text(json.dumps({'attested_by': 'Synthetic operator', 'registered': versions,
+                                           'observed': versions}))
+                with patch('joulewise.flags.collect.runtime_versions', side_effect=AssertionError('probe at arm')):
+                    self.install(**({'runtime_stack_attested': path} if source == 'attested' else {}))
+                arm = json.loads(sorted((self.session / 'staging').glob('v4-arm-???.json'))[-1].read_text())
+                self.assertEqual(arm['runtime_stack']['source'], source)
+                if source == 'prepare':
+                    self.assertEqual(arm['runtime_stack'], block)
+        path.write_text(json.dumps({'attested_by': 'Synthetic operator', 'registered': versions,
+                                   'observed': dict(versions, python='changed')}))
+        self.installer.reset_mock()
+        with self.assertRaisesRegex(ValueError, 'runtime_stack_preflight: differs:'):
+            self.install(runtime_stack_attested=path)
+        self.installer.assert_not_called()
+        arm = json.loads(sorted((self.session / 'staging').glob('v4-arm-???.json'))[-1].read_text())
+        self.assertFalse(arm['runtime_stack']['ok'])
+
+    def test_runtime_and_held_cli_options_are_forwarded(self):
+        with patch.object(session, 'install', return_value={}) as install:
+            session.main(['install', '--session-root', str(self.session), '--w1-disk-config', 'synthetic',
+                '--obc-off-attested-by', 'synthetic', '--battery-log', 'synthetic', '--next-arm-triage', 'synthetic',
+                '--runtime-stack-attested', 'stack.json', '--held-window-ruling', 'ruling.json'])
+        self.assertEqual(install.call_args.kwargs['runtime_stack_attested'], Path('stack.json'))
+        self.assertEqual(install.call_args.kwargs['held_window_ruling'], Path('ruling.json'))
 
     def test_legacy_prepare_records_not_recorded_without_refusal_or_hashing(self):
         with patch('joulewise.provenance.model_artifact_identity', side_effect=AssertionError('arm rehashed')):
