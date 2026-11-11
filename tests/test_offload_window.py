@@ -423,6 +423,51 @@ class Q10Recovery(Fixture):
         self.assertEqual(receipt_path.read_bytes(), before)
         self.assert_nothing_deleted()
 
+    def test_air_receipt_for_other_manifest_keeps_local_receipt_and_refuses_without_upload(self):
+        self.assertEqual(self.run_offload(codec="gzip"), 0)
+        receipt_path = self.offload().dir / "receipt-air.json"
+        before = receipt_path.read_bytes(), receipt_path.stat().st_mtime_ns
+        air_receipt = self.store / "windows/w1-test" / ow.AIR_RECEIPT
+        other = ow.sealed(ow.check_sealed(ow.read_json(air_receipt))
+                          | {"offload_manifest_sha256": "0" * 64})
+        ow.write_atomic(air_receipt, ow.canonical(other))
+        air_objects = [air_receipt, *sorted((self.store / "inbox/w1-test").iterdir())]
+        air_before = {p: (p.read_bytes(), p.stat().st_mtime_ns) for p in air_objects}
+        sent = self.transport.sent
+        self.transport.calls.clear()
+
+        rc = self.run_offload(codec="gzip")
+
+        self.assertTrue(receipt_path.exists(), "a different Air digest must keep the local receipt")
+        self.assertEqual((receipt_path.read_bytes(), receipt_path.stat().st_mtime_ns), before)
+        self.assertEqual(rc, 3)
+        self.assertEqual(self.span()["outcome"], "Mismatch")
+        self.assertEqual(self.span()["reason"], "air:window_id_conflict_on_air")
+        self.assertIn("stat w1-test", self.transport.calls)
+        self.assertFalse(any(c.startswith(("put ", "commit ")) for c in self.transport.calls))
+        self.assertEqual(self.transport.sent, sent)
+        self.assertEqual({p: (p.read_bytes(), p.stat().st_mtime_ns) for p in air_objects}, air_before)
+        self.assert_nothing_deleted()
+
+    def test_air_unreachable_during_stat_keeps_local_receipt_and_returns_transport_exit(self):
+        self.assertEqual(self.run_offload(codec="gzip"), 0)
+        receipt_path = self.offload().dir / "receipt-air.json"
+        before = receipt_path.read_bytes(), receipt_path.stat().st_mtime_ns
+
+        def unreachable(command):
+            if command == "stat w1-test":
+                raise OSError("synthetic Air unreachable during stat")
+
+        self.transport.before = unreachable
+        self.transport.calls.clear()
+        self.assertEqual(self.run_offload(codec="gzip"), 5)
+        self.assertTrue(receipt_path.exists())
+        self.assertEqual((receipt_path.read_bytes(), receipt_path.stat().st_mtime_ns), before)
+        self.assertEqual(self.span()["outcome"], "TransportError")
+        self.assertIn("synthetic Air unreachable during stat", self.span()["reason"])
+        self.assertEqual(self.transport.calls, ["stat w1-test"])
+        self.assert_nothing_deleted()
+
     def test_unexpected_exception_records_actual_process_rc(self):
         script = '''
 import sys
