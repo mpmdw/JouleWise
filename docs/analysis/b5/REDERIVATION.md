@@ -1,3 +1,132 @@
+# Block 5 independent reader: phase 2
+
+## Errata to RESULTS.md
+
+2026-11-10, research lead RL-39. [RESULTS.md](RESULTS.md) remains byte-identical.
+
+- **§2.2, “four different causes”:** four losses, **three distinct causes
+  (contention twice, an anchor failure, an admission abort)**. The committed
+  attempt index selects the second-seal GAMMA attempt; its authenticated
+  `EXC.cells[*].dropped_units[unit_id ends b01 or b06].codes` supplies the four
+  stage-opening causes, in stage order: contention, anchor failure, admission
+  abort, contention. The index itself contains attempt-level causes, not
+  within-attempt stage causes. This is a wording erratum, not a deviation.
+- **§1 derived margin, prefill “10.9”:** the third significant digit is
+  undetermined at the displayed input precision: `95.807/8.830 = 10.85017`,
+  whereas `95.80749/8.83026 = 10.84991`. Paper 1 prints **“about 11”**.
+  Under RL-39 a derived ratio uses the fullest released precision, rounds once,
+  and prints at most two significant figures. The phase-1 coarse-input check
+  does not license “10.9” for the paper.
+
+## Phase 2 result and limits
+
+Fresh Sol seat `p1-seat4-p2`, branch `p1-seat4-p2`, base
+`35b0e98d12cde94d3522419c45da9b417613e2d4`. Authority: RL-3, RL-38 and RL-39,
+read verbatim from `origin/audit/2026-11-10-fable` at
+`529a6772724faa8e001b0b9e106524e618da1084`. **RL-3 remains open.**
+The required Opus cold review, lead event-log audit, disposition of the new
+count disagreement, and unresolved hand checks are not discharged here.
+
+All **207 phase-1 input stops were sourced** from the named frozen leaves or
+explicit counts over them: 206 agree exactly or at printed precision; one
+aggregate-count claim disagrees under the DLE-5 counting scope below. Of these
+207 rows, 181 now have final `exact`/`within-rounding` status, 25 remain
+`source-outside-unseal` for the required hand check, and one is `MISMATCH`.
+Six additional formerly conditional rows depend on unavailable duration/scaling
+inputs and are now `source-outside-unseal` too.
+
+The [538-row ledger](rederivation.tsv) now has **254 exact, 251 within-rounding,
+2 MISMATCH, 31 source-outside-unseal**. The two mismatches are the known
+four-versus-three wording error and the new 84-versus-118 count below. These
+counts include repeated presentations, definitions and auxiliary checks.
+The 270 rows not revisited from phase 1 retain their narrower phase-1 notes;
+this is not a blanket printing certificate for those rows.
+
+New columns separate `source_value`/`source_match` from the final `match` and
+`hand_check`, preserve `phase1_match`, and record the arithmetic `difference`
+(re-derived minus printed, in the printed unit; percentages use percentage
+points). Source differences are also in each updated note. A copied aggregate
+can agree while its final status remains `source-outside-unseal`.
+`MISMATCH` now means an actual disagreement; no missing source uses that word.
+Physical TSV row numbers include the header and are stable from phase 1.
+
+The [157 hand-check rows](hand_checks_phase2.tsv) give each printed value,
+member/quad input key paths, formula, re-derived value at printed precision and
+residual. All 157 agree at printed precision. The data-free
+[stdlib reader and hand-check script](hand_check_phase2.py) imports no repository
+analysis or recompute code. It reconstructs the primary quad differences,
+means/SD/SE/t tails/Holm, geometric ratios, intervals and per-token quantities;
+the four stratified reported cells and their timing averages; floor box corners
+and common-sign dominance replay; request median rail shares; whole-machine
+phase means, h and median member shares; and the load-correlated sensitivity
+with only the registered load codes ignored. Recorded timing widths, retained
+IDs and allowance summaries are named inputs: this does not independently
+refit clocks or re-detect raw hazards.
+
+Phase-energy arithmetic is internal, within **M3 Max / MLX / powermetrics SoC
+rails**, gross assigned phase energy, one session. Phase attribution is reported
+without a measured instrument phase-accounting check (D-177). The whole-machine
+phase check uses gross meter-only energy and retains its separate DC-input
+boundary; request shares include the battery term. Ratios of cell means are
+never substituted for medians of member ratios or geometric quad ratios.
+
+### New count disagreement requiring the research lead
+
+RESULTS §4.1 says the DLE-5 attribution metadata adds **84 leaves**. Counting
+exactly the groups named in DLE-5 “The gap” in frozen FILL gives **118**:
+
+| Contrast | Floor diagnostics | Resolution diagnostics | Entire claim floor-limit object | Total |
+|---|---:|---:|---:|---:|
+| Decode | 10 | 10 | 24 | 44 |
+| Prefill p2048 | 20 | 20 | 34 | 74 |
+| Both | 30 | 30 | 58 | **118** |
+
+Count every scalar leaf, including strings and booleans, in
+`FILL.gamma.contrasts[*].floor.point_floor_diagnostics`,
+`.floor.resolutions[*].point_floor_diagnostics`, and
+`.claim_evaluation.floor_limit`. Numeric leaves alone total 56. An independent
+cross-check is 96 mapped comparator leaves (54 numeric diagnostic terms,
+36 diagnostic labels/flags, four class/source words, two published floors),
+plus 22 newly named exempt discipline leaves. DLE-5 describes a structural
+count that “can reach 84”; it does not establish 84 as this output's realized
+count. Ledger row 522 is `MISMATCH`, difference **+34 leaves** under that
+explicit scope. The intended scope of the original 84 is uncertain and needs
+adjudication; no analysis/custody/RESULTS repair was made and this is not added
+to the ruled errata above.
+
+### RL-3 item 3 coverage
+
+| Required family / line | Independent check and remaining boundary |
+|---|---|
+| Monitor cost | All three printed aggregates sourced; CPU endpoints and probe/phase overlaps are absent from §0 files. Hand check remains outside the unseal. |
+| Arm and host hazards | Stored member-code recounts reproduce contention totals 4/14/10; this does not re-detect hazards. Arm battery 0 sourced, but independent arm receipt remains outside. |
+| Battery | Zero assist quads sourced. Member activity diagnostics do not replace raw `battery.assist` flags and fallback qualification; hand check remains outside. |
+| Battery temperature | All 30 stage reading arrays checked independently: rise=(last-first)/100, last-three range ≤50 centi-C, rise>3 K without plateau. Zero arithmetic/classification differences. No stage temperature value is printed in RESULTS. |
+| Reference/corpus/NEG-8 history | Retained-ID lists give five deciding references and a clean corpus of 12, with seven references planned. Raw clean-corpus selection and full screen decision are not independently replayed. |
+| Attempt history/G10 | All 11 index entries agree with DISC on attempt and cause key; zero differences. Stage-opening causes come from indexed EXC, not the attempt-level index alone. “Never analysed” and raw G10 execution are not proved by the records' declarations. |
+| Selection/full eligibility | All 44 included GAMMA token-provenance records source the output count. Absence of extra runs/top-ups/replacements and full manifest/transport/current eligibility remain outside. |
+| Printed exempt leaves | Missing required monitor/arm/battery/selection checks retain `source-outside-unseal`; source equality alone never passes them. Raw stored judgments remain distinct from independent arithmetic. |
+| Recompute-only whole-machine phase lines | Means, decode h and all four median member shares independently agree. The two printed edge-shift maxima lack per-member shifted energies/raw meter samples in §0 files and remain outside. |
+| Recompute-only load sensitivity | Independent member-energy arithmetic reproduces 146.800 [146.439,147.161] J and 101.657 [101.224,102.089] J, each n=8, restoring two/three quads. L9 remains not computable; this is an uncompared check. D-177 applies as above. |
+| Recompute-only durations/scaled allowance | All printed leaves sourced. GAMMA member phase durations are absent from the released summaries; scaled D, its intervals and floor gates retain outside status because the factor is not independently established. |
+
+The exhaustive 31-row outside list, all opened custody paths and before/after
+hashes are in the [phase-2 run report](../../run_reports/2026-11-10-p1-seat4-p2.md).
+The [source manifest](phase2_sources.tsv) contains 12 custody files. All full
+§0 pins agree; PROJ-A/B have only truncated pins in §0 and also agree with their
+full content-addressed filenames and the full pins in authenticated REC.
+VER's SHA-256, absent from §0, is recorded. Every opened custody file was
+re-hashed unchanged at the end. Referenced paths stayed inert; no raw archive,
+night custody, Block 6, BYTES or ALIGN v4 source was followed.
+
+The historical repository-only report below is retained as phase-1 evidence.
+Its “no custody” and “blocked/mismatch” descriptions apply to that earlier run
+only; current disposition and vocabulary are above. Its review of RESULTS §6
+remains a historical text review. The filled paper's RL-4 licence review is
+still the later gate specified by RL-38.
+
+---
+
 # Block 5 independent reader: repository-only re-derivation
 
 2026-11-10 · Sol seat `p1-seat4` · reviewer: research lead · **RL-3 gate NOT PASSED**
