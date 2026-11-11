@@ -433,6 +433,7 @@
     "tests.test_b6_mailer": 0.035,
     "tests.test_b6_queue": 0.043,
     "tests.test_b6_r12_chain_fixture": 6.181,
+    "tests.test_b6_r12_session_fixture": 4.705,
     "tests.test_b6_registration": 0.182,
     "tests.test_b6_sleep_guard": 0.004,
     "tests.test_battery_float": 143.248,
