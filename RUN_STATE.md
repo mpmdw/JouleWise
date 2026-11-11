@@ -1068,6 +1068,20 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 (3) After `chain.exited`: runbook §4 on `20e9edbc4` with `S=/Users/edr/night-align/r1-20261111T014106Z`. Read `r1_result.json` status first. Then network time ON, the Automatic restore, KM003C, stray monitors, uninstall, record, mail Ed. **Before the NEXT arm after that, zero the frequency word again** (network time OFF, then the zero script, then measure the rate).
 (4) The watchdog-v5 fix (PR #707) is still open; install it only after the chain exits.
 
+258. **Laptop lead (interactive session 41120c85, Opus 5.5), 2026-11-10 20:58 PST: R1 was re-armed at 20:53 (magistrate item 256) BEFORE the research lead's RL-23 review that item 257 set as the final gate. Research lead ruling RL-31: R1 runs; the hold moves to registration.**
+- **Facts, from RL-31** (the armed build is `da3187e6e`):
+  - The build has the 1,200 s G0 cap, R_op (the pre-warmup median) and δ_slow at 1.5 °C.
+  - It does **not** have RL-23 item 2: `k_step_30b` still refuses the night on a G0 timeout.
+  - NR-1 is recorded as deferred.
+  - The build commit (20:29) and the arm (20:53) both came after item 257 (pushed at about 19:52).
+- **RL-31, binding:**
+  (1) R1 runs to its end. It is a non-claim rehearsal, and its G0 waits are informative at either δ.
+  (2) The hold moves from the arm to the registration. R1's slots (B_D, I_D, T_dead, thermal_policy) do **not** enter W1 STRICT re-registration until the research lead has reviewed the armed branch and the r1-g0 traces and ruled on δ_slow and NR-1. If δ_slow is ruled back to 1.0 °C, R1 is owed again.
+  (3) If this night refuses at step-30b on a G0 timeout, RL-23 item 2 (step-30b non-refusing) goes in before any further arm.
+- **Process gap, and its fix (lead process ruling):** activation 5515349e started at 19:11 and did not re-read main before arming, so item 257 never reached it. From now on, **every magistrate fetches origin/main and re-reads the top of RUN_STATE immediately before any arm, install or re-pin.** If any item newer than the one it is acting on names a gate, it stops and follows that item. The watchdog-v5 branch's off-MBP status export plus the Air poller (W-A) will make a missed gate visible. Until then, the lead's night-results watcher is the backstop.
+- **Numbering:** two items carried 256. The lead's Paper 1 item is now **256b**. Its content and its citation as "item 256 E1" stand.
+- **While R1 is armed:** no SSH to the MBP and no agent on it, per the standing rule. The lead watches `night-results/*` and alarms on any non-GO or nonzero chain exit.
+
 257. **Laptop lead (interactive session 41120c85, Opus 5.5), 2026-11-10 20:10 PST: ONE research-design authority, and the R1 G0 ruling that binds (research lead RL-23). This amends item 255's (magistrate) "Next action".**
 - **Authority (lead process ruling, under Ed's 11-10 instruction "have fable lead all research design work"):**
   - The Fable 5.2 **research lead's decision log** (`audit/2026-11-10-fable:docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md`) is the single binding record for research-design and paper-bound rulings.
@@ -1139,7 +1153,7 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 (2) Then re-pin `$M` at the new head, with a fresh custody root. Before arming: network time OFF and the zero script (item 251). Then write the plan, send the arm notice and install.
 (3) The laptop lead does not need to route item 254's question again. The ruling exists.
 
-256. **Ed's decisions on Paper 1 (interactive session 41120c85, 2026-11-10, committed 19:42 PST; renumbered from a colliding 255): E1-E6 all approved as the Fable 5.2 research lead recommended.** Source: `audit/2026-11-10-fable:docs/research-audits/2026-11-10-fable/paper-audit.md` and RL-1 to RL-11. **Ed, verbatim:** "yes to all E1 on E6 ... If Fable recommends them, go ahead".
+256b. **Ed's decisions on Paper 1 (interactive session 41120c85, 2026-11-10, committed 19:42 PST; renumbered twice because of number collisions with magistrate items 255 and 256; cited as "item 256 E1" elsewhere): E1-E6 all approved as the Fable 5.2 research lead recommended.** Source: `audit/2026-11-10-fable:docs/research-audits/2026-11-10-fable/paper-audit.md` and RL-1 to RL-11. **Ed, verbatim:** "yes to all E1 on E6 ... If Fable recommends them, go ahead".
 - **E1:** **Paper 1 is the mid-December capstone submission,** with a one-page agent-auditing outlook. The tripwire paper is not the December deliverable. This supersedes item 232's attachment of Block 5/BYTES as the tripwire paper's validation section.
 - **E2:** capstone length now (about 17,600 words). Cut for a venue once the replication and BYTES are released.
 - **E3:** the AI-use statement names the model families. **Ed writes the introduction and conclusion.**
