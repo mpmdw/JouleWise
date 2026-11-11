@@ -4315,6 +4315,71 @@ can at least be seen.
 
 ---
 
+# Decision request 48: RL-73's item 4 cannot be built as worded; where a held window's release lives (2026-11-11 06:24 PST)
+
+**Read.** The lead's account of what the arm-check seat found and built on `ops/2026-11-11-w1-armcheck` @
+`bcc051881`. I did not read the code.
+
+## RL-79. Item 4 is withdrawn; the release comes through the arm for now; the hold check looks at every earlier window
+
+### RL-73 item 4: withdrawn, option (a)
+
+I wrote item 4 on the belief that the desk compares each member's recorded runtime versions with v4's pins.
+It does not, in any sense that could trip. The v4 pins carry no per-unit runtime identity, so the harvest's
+comparison is against a missing value and raises `model.identity_mismatch` on every member by construction. A
+hold on that code would hold every window. The seat was right to stop.
+
+What covers the hazard is what RL-73 items 1 to 3 and RL-62 already require: before every window the installed
+stack and the weight digests are compared with the registration, a difference refuses, and it holds the window
+before. Between and within windows the cohort key catches a member whose `mlx`, `mlx-lm` or weights differ.
+The case left open is a change of one of the other packages after prepare and inside a fenced window, which I
+do not think worth a change to a registration input today.
+
+The held reasons are therefore the three harvest codes of RL-71 and nothing more.
+
+**Two consequences.**
+
+- **The IDENTITY-FLAGS row gains a sentence**, because it must be true of what a reader will see in every
+  window: "The desk harvest also raises `model.identity_mismatch` on every v4 member by construction: the v4
+  pins carry no per-unit runtime identity, so its comparison has nothing to compare with. The code is
+  disclosure-only there. What compares the machine with the registration is the check before every arm."
+- **Option (b) is deferred, not rejected.** Recording per-unit runtime identity in the pins would make that
+  comparison real and take a meaningless flag off every member of the claim windows. It rides with the next
+  re-registration that happens for another reason before C1, the analysis seal being the likely one.
+
+### The held-window release: the arm option is enough for W1; the packet is not edited now
+
+W1 has no earlier v4 window, so the refusal cannot trip before C1. I do not want the next-arm packet, which is
+claim-contract code with pinned projections, edited before signing for a row that cannot occur in the window
+being signed. So:
+
+- The release comes through `--held-window-ruling`, with the ledger's row shape and signature check.
+- **The ruling is a committed file**, and the arm record carries its path, its SHA-256 and its text. A release
+  that exists only as an argument on the measurement Mac is not a record.
+- Whether a held window and its release become rows of the series ledger is decided at the analysis seal
+  before C1, together with how the engine and the recompute read a held window (RL-21, RL-65). If a ledger row
+  is wanted, the packet learns it then.
+
+### One correction to what was built
+
+The refusal "reads the previous record's final exclusions, and defers if that record isn't final yet". Under
+harvest-off that leaves a hole. When window k+2 arms, the previous record is k+1, which is often not final, so
+the check defers; window k has become final in the meantime and is never looked at. **The check walks every
+earlier window of the series whose record is final, and refuses on any held reason there that no ruling has
+released.** It defers only for records that are not yet final, and those are caught at the next arm.
+
+The rest, as built, is accepted in design: the stack preflight in the arm record, `holds_previous_window` on a
+weight or stack mismatch with nothing written into the earlier window's record, and plain call signatures the
+R1 kit can use. Its review and mutation pass are the lane's.
+
+**Reason.** A rule I wrote named a comparison that does not exist. The remedy is to say what really compares
+the machine with the registration, and to say in the registration's own text why every member will carry a
+flag that sounds worse than it is.
+
+**Blind status.** Blind: no v4 outcome exists.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
