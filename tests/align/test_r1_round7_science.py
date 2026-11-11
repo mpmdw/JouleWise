@@ -67,11 +67,15 @@ class G0TimeoutTests(_World):
         for bad in (None, 599, 1201, True, float("nan"), "1200"):
             with self.subTest(bad=bad), self.assertRaises(rt.Refused):
                 rt.g0_timeout_s(dict(config, g0_timeout_s=bad))
-        # Only the gated runs, X-G, step-d and the designed start states arm it.
+        # a85ee8ec6, RL-59: "1,200 s stays, for every R1 gate."
         self.assertEqual(set(rt.G0_TIMEOUT_KINDS),
-                         {"step-d", "x-g", *contract.GATED_D_KINDS, *contract.PLANNING_KINDS})
-        for kind in ("step-30b", "d-4bit", "g0-release-soak", *contract.HIGH_POWER_KINDS):
-            self.assertNotIn(kind, rt.G0_TIMEOUT_KINDS)
+                         {"step-30b", "step-d", "x-g", "d-4bit", *contract.HIGH_POWER_KINDS,
+                          *contract.GATED_D_KINDS, *contract.PLANNING_KINDS})
+        self.assertNotIn("g0-release-soak", rt.G0_TIMEOUT_KINDS)
+        # a85ee8ec6, RL-72 E3: "a timeout runs flagged: step kinds only."
+        self.assertEqual(set(rt.TIMEOUT_RUN_KINDS),
+                         {"step-30b", "step-d", *contract.HIGH_POWER_KINDS, *contract.PLANNING_KINDS})
+        self.assertTrue(set(rt.TIMEOUT_RUN_KINDS).isdisjoint((*contract.GATED_D_KINDS, "x-g")))
 
     def test_a_runtime_config_without_the_timeout_refuses_at_t0(self):
         with tempfile.TemporaryDirectory() as td:
@@ -108,9 +112,11 @@ class G0TimeoutTests(_World):
         self.assertNotIn("g0_cap_s", rt.gate_policy(sensors, bands, turn_cap_s=120, chunk_tokens=256,
                                                     heavy=True, per_turn=True))
         config = json.loads(r1.runtime_config_path(None).read_text())
+        # a85ee8ec6, RL-59: "1,200 s stays, for every R1 gate."
         for kind, expected in (("step-d", 1200), ("x-g", 1200), ("d-bank-benign-s1", 1200),
-                               ("d-planning-turn-r-plus-0c", 1200), ("step-30b", None),
-                               ("high-power-aba-b", None), ("d-4bit", None)):
+                               ("d-planning-turn-r-plus-0c", 1200), ("step-30b", 1200),
+                               *((kind, 1200) for kind in contract.HIGH_POWER_KINDS),
+                               ("d-4bit", 1200), ("g0-release-soak", None)):
             segment = rt.Segment.__new__(rt.Segment)
             segment.kind, segment.config = kind, config
             self.assertEqual(segment.g0_cap_s, expected, kind)
@@ -121,34 +127,60 @@ class G0TimeoutTests(_World):
         # 1,750 + 1.13544 x 1,580 + 120 = 3,663.9952 s around the deadman.
         member = 1750 + 1.13544 * 1580 + 120
         table = r1.segment_bounds(1200, 1580)
-        # Round-8 disposition D8-3: step-30b takes the same construction with
-        # the 600 s G0 cap it keeps (R7-2): 3,663.9952 + 600 + 300 + 600.
-        self.assertAlmostEqual(table["step-30b"], member + 600 + 300 + 600)
-        self.assertAlmostEqual(table["step-30b"], 5163.9952)
-        self.assertAlmostEqual(r1.segment_bounds(600, 1580)["step-30b"], table["step-30b"])  # not the R1 timeout
+        # a85ee8ec6, RL-59: "1,200 s stays, for every R1 gate."
+        self.assertAlmostEqual(table["step-30b"], member + 1200 + 300 + 600)
+        self.assertAlmostEqual(table["step-30b"], 5763.9952)
+        self.assertAlmostEqual(r1.segment_bounds(600, 1580)["step-30b"], 5163.9952)
         self.assertAlmostEqual(table["step-d"], member + 1200 + 300 + 600)
         for o in (0, 2, 4):
             self.assertAlmostEqual(table[f"d-planning-turn-r-plus-{o}c"], member + 900 + 1200)
         self.assertAlmostEqual(r1.segment_bounds(600, 1580)["step-d"], member + 600 + 300 + 600)
 
     def test_night_worst_case_with_the_round8_bounds(self):
-        # R7-2: +600 s on step-d and each designed state; R8-4: + (3,663.9952
-        # - 1,800) s more on each of the four (4 x 1,863.9952 = 7,455.98 s);
-        # D8-3: + 1,863.9952 s more on step-30b (5,163.9952 - 3,300).
+        # a85ee8ec6, RL-72 E2: "two load redos for the night, each a whole
+        # admission unit; `window_max_s` 126,480 s."
         value = r1.night_worst_case_s(["fake-runtime"])
-        self.assertEqual(value["g0_timeout_s"], 1200)
-        self.assertEqual(value["redo_release_s"], 665)
-        self.assertAlmostEqual(value["no_redo_s"], 54342.9664 + 1863.9952, places=3)
-        self.assertAlmostEqual(value["no_redo_s"], 56206.96, places=1)
-        # RUN_STATE 215/216: one encounter waits the step-d bound plus the 5,400 s blackout.
-        self.assertAlmostEqual(value["batch_blackout_s"], 5400)
-        self.assertAlmostEqual(value["batch_encounter_max_s"], 5763.9952 + 5400)
-        self.assertAlmostEqual(value["with_one_batch_encounter_s"], 67370.9568, places=3)
-        self.assertEqual(math.ceil(value["with_one_batch_encounter_s"]), 67371)
-        self.assertAlmostEqual(value["r6_2_retry_max_s"], 4 * (1500 + 5763.9952))   # step-30b takes no R6-2 retry
-        self.assertAlmostEqual(value["with_retries_and_one_batch_encounter_s"], 96426.93, places=1)
-        self.assertEqual(math.ceil(value["with_retries_and_one_batch_encounter_s"]), 96427)
-        for stale in ("batch_window_wait_max_s", "with_one_batch_wait_s", "with_retries_and_one_batch_wait_s"):
+        self.assertEqual(r1.runtime_g0_timeout_s(["fake-runtime"]), 1200)
+        expected_units = [
+            (["idle_soak"], 1800),
+            (["step_30b"], 5763.9952),
+            (["high_power_A1"], 4863.9952),
+            (["high_power_B"], 4863.9952),
+            (["high_power_A2"], 4863.9952),
+            (["capture_predecessor_30b", r1.STEP_D_NAME], 1800 + 5763.9952),
+            (["cooldown_after_D", "planning_turn_R_plus_4C"], 1500 + 5763.9952),
+            (["planning_turn_R_plus_2C.precool", "planning_turn_R_plus_2C"], 1500 + 5763.9952),
+            (["planning_turn_R_plus_0C.precool", "planning_turn_R_plus_0C"], 1500 + 5763.9952),
+            ([BANK], 1800), ([SPAM_A], 1800), ([SPAM_B], 1800), ([XG], 1800),
+        ]
+        self.assertEqual([unit["names"] for unit in value["admission_units"]],
+                         [names for names, _ in expected_units])
+        for unit, (_, bound) in zip(value["admission_units"], expected_units):
+            self.assertAlmostEqual(unit["bound_s"], bound)
+        subtotal = math.fsum(bound for _, bound in expected_units)
+        largest = 1800 + 5763.9952
+        encounter = largest + 5400
+        floor = math.ceil(subtotal + 2 * largest + 2 * encounter)
+        self.assertAlmostEqual(value["no_redo_s"], subtotal)
+        self.assertAlmostEqual(value["no_redo_s"], 58711.9616)
+        self.assertAlmostEqual(value["largest_unit_s"], largest)
+        self.assertAlmostEqual(value["largest_unit_s"], 7563.9952)
+        self.assertEqual(value["batch_blackout_s"], 5400)
+        self.assertAlmostEqual(value["batch_encounter_max_s"], encounter)
+        self.assertAlmostEqual(value["batch_encounter_max_s"], 12963.9952)
+        self.assertEqual((value["redo_quota"], value["encounters"]), (2, 2))
+        self.assertEqual(value["floor_s"], floor)
+        self.assertEqual(value["floor_s"], 99768)
+        self.assertEqual(value["overhead_caps_s"],
+                         {"pre_bracket": 1800, "post_bracket": 1800, "close": 900, "harvest": 4500})
+        self.assertEqual(value["overhead_s"], sum(value["overhead_caps_s"].values()))
+        self.assertEqual(value["overhead_s"], 9000)
+        self.assertEqual(value["programmed_span_s"], floor + 9000)
+        self.assertEqual(value["programmed_span_s"], 108768)
+        self.assertEqual(value["window_max_s"], 126480)
+        for stale in ("g0_timeout_s", "redo_release_s", "r6_2_retry_max_s", "with_one_batch_encounter_s",
+                      "with_retries_and_one_batch_encounter_s", "batch_window_wait_max_s",
+                      "with_one_batch_wait_s", "with_retries_and_one_batch_wait_s"):
             self.assertNotIn(stale, value)
 
 
@@ -190,7 +222,7 @@ class G0CapW1Tests(_World):
     def test_registration_records_the_cap_and_every_g0_wait(self):
         with tempfile.TemporaryDirectory() as td:
             world = FakeWorld(g0_waits={BANK: 200.0, SPAM_A: 350.0, SPAM_B: 640.0, XG: 300.0},
-                              calibration_g0_timeouts={"step-d": 1})
+                              calibration_g0_timeouts={"step-d": 1}, busy_once={"step-30b"})
             result, registration = _World.run_world(self, td, world)
             cap = registration["g0_cap_w1"]
             self.assertEqual((cap["value_s"], cap["max_g0_s"], cap["x_g_fallback"]), (800, 640.0, False))
@@ -200,21 +232,33 @@ class G0CapW1Tests(_World):
                              {BANK: "released", SPAM_A: "released", SPAM_B: "released"})
             waits = registration["g0_waits"]
             segments = [row["segment"] for row in waits]
-            # The timed-out first step-d attempt and its accepted retry are both recorded.
-            self.assertEqual(segments.count(r1.STEP_D_NAME), 2)
+            # a85ee8ec6, RL-72 E3: "step-30b, the legs, step-D and the planning
+            # turns dispatch their turn after an observed timeout." No G0-only retry.
+            self.assertEqual(segments.count(r1.STEP_D_NAME), 1)
             first = next(row for row in waits if row["segment"] == r1.STEP_D_NAME)
-            self.assertEqual((first["g0_outcome"], first["g0_wait_s"]), ("timeout", 1200.0))
-            self.assertTrue(first["output_dir"].endswith(r1.STEP_D_NAME + r1.G0_TIMEOUT_SUFFIX))
-            for name in (BANK, SPAM_A, SPAM_B, XG, "planning_turn_R_plus_4C"):
-                self.assertIn(name, segments)
-            # Every G0-bearing segment is recorded, each with the cap it ran under,
-            # and a release precedes the member it released.
-            for name in ("step_30b", "high_power_A1", "high_power_A1.g0_release"):
-                self.assertIn(name, segments)
-            self.assertLess(segments.index("high_power_A1.g0_release"), segments.index("high_power_A1"))
-            caps = {row["segment"]: row["g0_timeout_s"] for row in waits}
-            self.assertEqual(caps["step_30b"], 600.0)
-            self.assertTrue(all(caps[name] == 1200.0 for name in (BANK, SPAM_A, SPAM_B, XG, r1.STEP_D_NAME)))
+            self.assertEqual((first["g0_outcome"], first["g0_wait_s"], first["g0_timeout_s"]),
+                             ("timeout", 1200.0, 1200.0))
+            self.assertEqual(Path(first["output_dir"]).name, r1.STEP_D_NAME)
+            step = next(row for row in result["phases"] if row["name"] == r1.STEP_D_NAME)
+            self.assertIn("r1.g0_timeout_run", step["result"]["episode_flags"])
+            self.assertTrue(step["result"]["candidate_only"])
+            self.assertIn(r1.STEP_D_NAME, registration["inconclusive_segments"])
+            self.assertIn("r1.g0_timeout_run", registration["inadmissible_slots"]["B_D"])
+            # a85ee8ec6, RL-59: "The release against the soak before each leg
+            # is dropped; the leg's own gate is the settled start."
+            self.assertEqual(segments, ["step_30b", "step_30b", "high_power_A1", "high_power_B", "high_power_A2",
+                                        r1.STEP_D_NAME, "planning_turn_R_plus_4C", "planning_turn_R_plus_2C",
+                                        "planning_turn_R_plus_0C", BANK, SPAM_A, SPAM_B, XG])
+            self.assertTrue(all(row["g0_timeout_s"] == 1200.0 for row in waits))
+            invoked_names = [name for _, name, _ in world.invocations]
+            self.assertFalse(any(".g0_timeout1" in name or ".g0_release" in name for name in invoked_names))
+            self.assertNotIn("g0-release-soak", [kind for kind, _, _ in world.invocations])
+            # The CPU-contaminated attempt still precedes its accepted replacement.
+            prior, accepted = [row for row in waits if row["segment"] == "step_30b"]
+            self.assertEqual(Path(prior["output_dir"]).name, "step_30b.rejected1")
+            self.assertEqual(Path(accepted["output_dir"]).name, "step_30b")
+            phase = next(row for row in result["phases"] if row["name"] == "step_30b")
+            self.assertTrue(phase["superseded_attempts"][0]["os_load"]["redo"])
             for kind in ("step-30b", "d-4bit", "g0-release-soak", *contract.HIGH_POWER_KINDS):
                 self.assertIn("g0_wait_s", contract.required_fields(kind, quiet=True), kind)
 

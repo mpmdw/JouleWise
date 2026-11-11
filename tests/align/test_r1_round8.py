@@ -481,16 +481,18 @@ class WatchdogArmTests(unittest.TestCase):
 
 
 class RedoReleaseBoundTests(unittest.TestCase):
-    """R8-4: a heavy redo's release is its 65 s pre-roll plus the 600 s G0 cap."""
+    """RL-72 E2: repeat the whole unit; R8-4 still bounds the standalone helper."""
 
     def test_a_heavy_redo_waits_with_the_release_preroll(self):
         self.assertEqual(r1.release_segment_bound_s(), 65 + 600)
         with tempfile.TemporaryDirectory() as td:
             args = type("Args", (), dict(runtime=["fake-runtime"], volume_watch=None,
                                          segment_bounds={"step-d": 5000.0}))()
-            waits, attempts = [], []
+            waits, attempts, invocations = [], [], []
+            record = {"phases": []}
 
             def invoke(_runtime, kind, target, *a, **k):
+                invocations.append(kind)
                 if kind == "g0-release-soak":
                     return {"released": True}
                 attempts.append(kind)
@@ -501,8 +503,22 @@ class RedoReleaseBoundTests(unittest.TestCase):
                 return {"redo": len(attempts) == 1}
             with mock.patch.object(r1, "wait_outside_os_batch", lambda bound: waits.append(bound) or 0.0), \
                     mock.patch.object(r1, "_invoke", invoke), mock.patch.object(r1, "os_load_verdict", verdict):
-                r1._segment(args, Path(td), "step", "step-d", None, "heavy", {"phases": []}, quiet=True)
-        self.assertEqual(waits, [5000.0, 5000.0 + 665])
+                r1._segment(args, Path(td), "step", "step-d", None, "heavy", record, quiet=True)
+            # a85ee8ec6, RL-72 E2: "two load redos for the night, each a whole admission unit".
+            # Both admissions use the config bound, ignoring the obsolete segment_bounds override.
+            self.assertEqual(waits, [5763.9952, 5763.9952])
+            self.assertEqual(attempts, ["step-d", "step-d"])
+            self.assertNotIn("g0-release-soak", invocations)
+            self.assertEqual(record["load_redos_used"], 1)
+            phase, = record["phases"]
+            prior, = phase["superseded_attempts"]
+            self.assertTrue(prior["os_load"]["redo"])
+            self.assertFalse(phase["os_load"]["redo"])
+            self.assertEqual((prior["attempt"], phase["attempt"]), (0, 1))
+            self.assertEqual(Path(prior["output_dir"]).name, "step.rejected1")
+            self.assertTrue(Path(prior["output_dir"]).is_dir())
+            self.assertEqual(Path(phase["output_dir"]).name, "step")
+            self.assertTrue(Path(phase["output_dir"]).is_dir())
 
 
 class DryArmInterruptTests(rn.NightDriverTests):
