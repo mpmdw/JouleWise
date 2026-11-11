@@ -103,6 +103,7 @@
     "tests.test_admit_model_panel_entry": 0.001,
     "tests.test_agent_census_concurrency": 6.708,
     "tests.test_aggregate": 0.04,
+    "tests.test_align_r1_thermal_replay": 26.335,
     "tests.test_analysis_claims": 0.485,
     "tests.test_analysis_engine": 0.023,
     "tests.test_analysis_engine_evidence_roots": 46.711,
