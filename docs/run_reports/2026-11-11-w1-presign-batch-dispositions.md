@@ -22,3 +22,5 @@ Opus 5.5, interim state-machine lane lead, 2026-11-11. One row per finding from 
 | RL-71 "five acceptance-only codes" | Count needs confirmation | PARKED for the research lead |
 | RL-72 `workload.py` callback row | Change not on this branch | PARKED until the follow-up kit lands |
 | RL-81 F-1 condition-13 registration test | Signing gate | Open; built by the follow-up kit seat |
+| ci-debt-3: watchdog span, s0 enumeration, physics coverage | Pre-existing line CI failures | Stale expectations of admitted commits; fixed in tests/test data (`276d02c02`); Opus ADMIT |
+| `tests.test_battery_float_sweep` `topup_log` phase not in `battery_float.PHASES` | Pre-existing; possibly a registration gap | PARKED for the research lead; by reading no classification changes (review `2026-11-11-w1-ci-debt-3-opus-coldreview.md`) |
