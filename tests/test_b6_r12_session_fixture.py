@@ -653,6 +653,27 @@ class DeskInputBoundaryTests(unittest.TestCase):
 
 
 class VerifierInventoryTests(unittest.TestCase):
+    def test_finisher_refuses_live_generators_before_hashing(self):
+        """Predict: DONE alone cannot authorize receipt hashing while a generator parent is still live. Unit state stubs are not collected loop records or fixture evidence."""
+        from unittest.mock import patch
+        import b6_r12_finish as finisher
+        with tempfile.TemporaryDirectory(prefix="r12-finish-boundary-") as directory:
+            root = Path(directory)
+            denied = root / "denied"
+            (root / "loop").mkdir()
+            (denied / "loop").mkdir(parents=True)
+            (root / "loop/state.json").write_text(json.dumps({"state": "DONE"}))
+            (denied / "loop/attempts.jsonl").write_text(json.dumps({"session_id": "r1-alpha"}) + "\n")
+            for missing in (root, denied):
+                for parent in (root, denied):
+                    (parent / "generator-parent-exit.txt").write_text("0\n")
+                (missing / "generator-parent-exit.txt").unlink()
+                with self.subTest(missing=str(missing)), patch.object(finisher, "finalize_manifest",
+                        side_effect=AssertionError("hashing live writer")) as hashing:
+                    with self.assertRaisesRegex(RuntimeError, "generator parent"):
+                        finisher.finish(root, denied)
+                    hashing.assert_not_called()
+
     def test_empty_gamma_pairing_never_becomes_cross_session_evidence(self):
         """Predict: the observation join rejects empty/self pairings as cross-session evidence; only a nonempty other-session map qualifies. Receipt stubs test the join, not a chain fixture."""
         from unittest.mock import patch

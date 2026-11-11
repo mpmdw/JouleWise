@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import time
 
 from b6_r12_verify import REPO, finalize_manifest, rows, run_option_c, safe_root, sha, write_observations
 LOADED_FINISHER_SHA256 = sha(Path(__file__))
@@ -36,6 +37,10 @@ def finish(root, denied):
     for path in (root, denied):
         if (path / "source-stop.json").exists():
             raise RuntimeError("retired development source is not final R12 evidence")
+        exit_receipt = path / "generator-parent-exit.txt"
+        if not exit_receipt.is_file() or exit_receipt.read_text().strip() != "0":
+            raise RuntimeError("generator parent must have exited successfully before hashing: " + str(path))
+    for path in (root, denied):
         finalize_manifest(path)
 
     run_option_c(root, 1)
@@ -87,7 +92,15 @@ def main():
     parser.add_argument("--root", required=True)
     parser.add_argument("--denied-root", required=True)
     args = parser.parse_args()
-    finish(safe_root(args.root), safe_root(args.denied_root))
+    roots = (safe_root(args.root), safe_root(args.denied_root))
+    # A readiness observer can see original DONE just before the native
+    # generator exits. Do not hash receipts while its cleanup can append.
+    deadline = time.monotonic() + 60
+    while not all((root / "generator-parent-exit.txt").is_file() for root in roots):
+        if time.monotonic() >= deadline:
+            raise RuntimeError("generator parent has not exited; leave writer receipts unpinned")
+        time.sleep(.1)
+    finish(*roots)
 
 
 if __name__ == "__main__":
