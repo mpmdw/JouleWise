@@ -129,11 +129,21 @@ class FakeHost:
     ``night_job_loaded`` makes launchd report a loaded night job.
     """
 
-    def __init__(self, mode=0, *, extra_mount=False, night_job_loaded=False, soc=100, charging=False, now=None):
+    def __init__(self, mode=0, *, extra_mount=False, night_job_loaded=False, soc=100, charging=False, now=None,
+                 watchdog_state='LAUNCHING'):
         self.now = now
         self.mode, self.extra_mount, self.night_job_loaded = mode, extra_mount, night_job_loaded
         self.soc, self.charging = soc, charging
         self.calls, self.installer_calls = [], []
+        self.watchdog_state = watchdog_state
+
+    def watchdog_check(self, *, phase, **_):
+        """Explicit W-1 stand-in through the production arm's injected seam."""
+        from scripts import align_v4_session as session_mod
+        return {'ok': self.watchdog_state in session_mod.WATCHDOG_ADMITTED,
+                'state': self.watchdog_state, 'reason': 'PREQUAL synthetic watchdog',
+                'argv': ['synthetic-watchdog', '--dry-run'], 'plan_read_proven': False,
+                'elapsed_s': 0.0, 'stopped': self.watchdog_state == 'STOPPED'}
 
     def __call__(self, argv, *args, **kwargs):
         import plistlib
@@ -321,7 +331,7 @@ def run_install(ctx, session, disk, packet, *, host, args_override=None, drop=()
     from unittest import mock
     with mock.patch.object(session_mod, 'install', functools.partial(
             real_install, runner=host, volume_runner=host, disk_gate=gate, now=lambda: now,
-            meter_probe=meter_probe or LIVE_METER)), \
+            meter_probe=meter_probe or LIVE_METER, watchdog_check=host.watchdog_check)), \
             mock.patch.object(h, 'install', functools.partial(real_h_install, run=host, now=lambda: now)), \
             mock.patch.object(kit, 'generate', lambda *a, **k: None), \
             contextlib.redirect_stderr(stderr), contextlib.redirect_stdout(io.StringIO()):
@@ -433,7 +443,7 @@ def _arm_on_records(ctx, measurement, packet_or_path, *, now, quiet=True):
         return session_mod.arm_checks(measurement, {'runtime_requirements': {'ac_powermode': 0}}, runner=host,
                                       volume_runner=host, obc_off_attested_by='w1-prequal synthetic',
                                       battery_log=log, now=lambda: now, next_arm_triage=packet_or_path,
-                                      meter_probe=LIVE_METER)
+                                      meter_probe=LIVE_METER, watchdog_check=host.watchdog_check)
 
 
 # --- Packet-as-pointer design (lead ruling, 2026-11-08): the ARM REBUILDS the next-arm packet

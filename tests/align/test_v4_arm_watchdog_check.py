@@ -57,7 +57,9 @@ class WatchdogTests(unittest.TestCase):
         self.assertEqual(options['cwd'], self.document['WorkingDirectory'])
         self.assertEqual(options['env']['PATH'], '/synthetic/bin')
         self.assertGreater(options['timeout'], 0)
-        self.assertLessEqual(options['timeout'], 60)
+        self.assertEqual(options['timeout'], session.WATCHDOG_TIMEOUT_S)
+        self.assertEqual(session.WATCHDOG_TIMEOUT_S, 3 * watchdog_fixtures.wd.SUPERVISOR_POLL_S)
+        self.assertEqual(session.WATCHDOG_PLAN_LEAD_S, watchdog_fixtures.wd.PLAN_LEAD_S)
         self.assertEqual(record['argv'], argv)
         self.assertEqual(record['state'], 'LAUNCHING')
         self.assertGreaterEqual(record['elapsed_s'], 0)
@@ -89,10 +91,12 @@ class WatchdogTests(unittest.TestCase):
             with self.subTest(output=output):
                 self.run.return_value = subprocess.CompletedProcess([], 0, output, '')
                 self.assertFalse(self.check()['ok'])
+                self.assertFalse(self.check('post_install')['ok'])
         self.run.return_value = subprocess.CompletedProcess([], 1, 'decision=ACTIVE reason=ok\n', '')
         self.assertFalse(self.check()['ok'])
         self.run.side_effect = subprocess.TimeoutExpired('synthetic', 30)
         self.assertFalse(self.check()['ok'])
+        self.assertFalse(self.check('post_install')['ok'])
 
     def test_every_declared_state_is_classified_in_both_phases(self):
         wd = watchdog_fixtures.wd
@@ -424,11 +428,34 @@ class ArmIntegrationTests(unittest.TestCase):
         self.assert_stamps()
 
     def test_timeout_is_bounded_refusal_with_undo_and_both_stamps(self):
-        self.check.side_effect = subprocess.TimeoutExpired('synthetic', session.WATCHDOG_TIMEOUT_S)
+        plist = self.root / 'magistrate.plist'
+        plist.write_bytes(plistlib.dumps({'Label': 'com.joulewise.magistrate',
+            'ProgramArguments': ['/synthetic/python3', '/synthetic/magistrate_watchdog.py'],
+            'WorkingDirectory': str(self.root),
+            'EnvironmentVariables': {'MAGISTRATE_WATCHDOG_CUSTODY_ROOT': str(self.root / 'watchdog')}}))
+
+        def check(**kwargs):
+            return session.watchdog_acceptance(**dict(kwargs, plist_path=plist))
+
+        def command(argv, **kwargs):
+            if '--dry-run' in argv:
+                self.assertEqual(kwargs['timeout'], session.WATCHDOG_TIMEOUT_S)
+                raise subprocess.TimeoutExpired(argv, kwargs['timeout'])
+            return self.command(argv, **kwargs)
+
+        self.check.side_effect = check
+        self.run.side_effect = command
         with self.assertRaisesRegex(ValueError, 'TimeoutExpired:.*install undone'):
             self.install(high=True)
         self.assertTrue(any('--uninstall' in event for event in self.events))
         self.restore.assert_called_once()
+        self.assert_stamps()
+
+    def test_post_check_signal_still_records_both_stamps_and_undoes(self):
+        self.check.side_effect = KeyboardInterrupt('synthetic signal')
+        with self.assertRaisesRegex(ValueError, 'KeyboardInterrupt:.*install undone'):
+            self.install()
+        self.assertTrue(any('--uninstall' in event for event in self.events))
         self.assert_stamps()
 
     def test_post_install_refusal_uninstalls_both_labels_and_restores(self):
