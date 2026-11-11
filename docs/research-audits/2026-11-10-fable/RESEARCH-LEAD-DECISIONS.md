@@ -4380,6 +4380,148 @@ flag that sounds worse than it is.
 
 ---
 
+# Decision request 49: BYTES stage 1 stopped on a disagreement between the two implementations (2026-11-11 06:39 PST)
+
+**Read.** The lead's account of the magistrate's record (RUN_STATE 264): counts and field names. In the
+registration on the BYTES lineage: §7 item 4, §11's stage table, §12 and §13. I did not open the magistrate's
+record, the predictions file, or any export. I know no BYTES value.
+
+## RL-80. The stop was right. The registration's text decides which side is wrong, before anyone looks at which way the numbers move
+
+### What happened, in the registration's terms
+
+§12: a difference above the bar "is attributed and ruled before release". Stage 1 compared 59,068 fields and
+390 are above the bar: the timing-bound term and everything built on it (B, the interval ends, the attribution
+floors, the fit weight), and the flags, in every fit cell. No central estimate differs. The agreement on
+blinded rails tables, which both sides take from the export, was clean. Nothing is committed, and no held-out
+key, row or store was opened. The gate did what it is for.
+
+### 1. Who attributes it, and with what access
+
+One Opus attribution seat. Not a repair seat.
+
+- **It reads:** both implementations, the registration (§7, §11 to §13 and the addenda they cite), and the
+  agreement comparer.
+- **It may have run, on the measurement Mac, by the magistrate, a diagnostic it writes** over the stage-1
+  outputs that already exist. The diagnostic prints **field names, counts, each difference as a multiple of its
+  bar, and yes-or-no answers** to stated questions, such as "does the twin's anchor term equal the stratified
+  average of the export column" and "does the estimator's equal its own re-derivation". **It prints no energy,
+  power or duration value**, of the fit set or anything else, and no sign or direction of a difference.
+- **It never touches held-out data**: no held-out key, row, store or archive.
+- It returns: for each of the two items, which source each side used, which registered sentence governs, and
+  whether each side follows it. It does not say which side's bound is larger.
+
+The fit set's keys are released by design at this stage, so its values are no longer blinded in the
+registration's sense. I keep the seat away from them anyway, for the reason in point 2.
+
+### 2. Which side is right
+
+**The text decides, and it is read before the magnitudes are.** The bound B sets the width of every interval,
+and the H1 words for the held-out models are read against intervals the same code will compute. A choice
+between two ways of computing B, made after seeing which gives the wider one, would be a choice made with the
+outcome's shape in view. So the attribution is on sources and sentences only.
+
+On the text as I read it: §7 item 4 says the rails timing term is the run's anchor-shift bound "re-derived
+under the session's operative timing bound from `joulewise/b6/calibration.py`; Addendum 1 item 4". If the
+estimator re-derives it so at the fit stage and the twin takes a column the harvest wrote under some other
+bound, the twin departs from the text. That is the magistrate's hypothesis and it is unverified. The seat
+verifies it, including whether the export's column is or is not that same re-derivation.
+
+- **If the twin departs from the text:** the twin is fixed. The estimator and its digest do not move. The rerun
+  must then produce a predictions file **byte-identical** to the uncommitted one, since the estimator is
+  deterministic and unchanged; that identity is recorded. The rerun's file is what gets committed, not the
+  earlier one.
+- **If the estimator departs from the text:** it is fixed to the text, before the commitment, as §11 already
+  provides for a defect found later: the fix restores the registered arithmetic and does not change it, its
+  diff is limited to the attributed difference, and both implementations agree again at §12's bar on the real
+  fit-set rows and on all the synthetic campaigns. The pinned digest then changes, which is a dated addendum
+  binding the new agreeing digest, as the registration did once before. It comes to me before it is built.
+- **If the text supports both readings:** it comes to me as an interpretation, with the two readings and the
+  sentences, and without magnitudes. I rule it blind and it is logged as a deviation.
+
+In every case the fix is built by a seat that has not seen the diagnostic's output beyond what the attribution
+report states, and it gets a cold review. The uncommitted predictions file is kept, with its digest, and is
+never committed.
+
+### 3. The flags
+
+A separate item, attributed the same way. Flags are words and must match exactly. The seat lists the flag
+names that differ, by boundary and by side, with counts, and says which registered rule each flag comes from
+and which side applies it as written. Then the same three branches.
+
+### Dates
+
+The commitment has to be recorded by 19 November (RL-7). The lead's own checkpoint of 12 November may slip;
+that is acceptable. A commitment made a few days later on agreeing implementations is worth more than one made
+tomorrow over an unexplained difference. Before the commitment the census of RL-44 is re-run as already ruled.
+
+### For the paper
+
+Section 7's account of BYTES says that the first run of stage 1 on real data stopped on a disagreement between
+the analysis and its twin in the timing-bound term and the flags, with no central estimate differing; that it
+was attributed from the registration's text before any value was compared; and what was fixed. It goes on the
+list for the Part 2 fill.
+
+**Reason.** Two implementations disagreeing is the agreement test working. What must not happen next is a
+repair chosen by looking at the result it produces. The registration says what the term is; the only question
+is which program computes that.
+
+**Blind status.** Blind to every BYTES value, fit set and held-out. I read registration text and field names.
+
+---
+
+# Decision request 50: DRIVER-P9-W1 and the meter liveness read (2026-11-11 06:44 PST)
+
+**Read.** On the pre-signing branch at `4d2792f10`: `joulewise/b5/driver.py` (`MeterLiveness`, its call in
+`supervise`, the reader's launch arguments), `scripts/km003c_monitor.py` (default rate and poll), and the
+DRIVER-P9-W1 row of `docs/align/v4/DEVIATIONS.md`. Code and text only.
+
+## RL-81. The row gains the liveness read, with two corrections to the proposed wording and one added sentence
+
+The second reader's F-2 is right: the row says what the six commits change and left out the one thing that
+now happens while a member runs. The proposed parenthesis is accurate against the code except in two places.
+
+1. **"while members run" becomes "while the chain runs".** The check sits in the driver's supervision pass,
+   which runs for the whole chain: in members, between them, and in the waits. It does not start or stop with
+   a member.
+2. **The read is of new bytes only, in the driver's process.** Both are true in the code and both matter to a
+   reader judging the cost, so the row says them.
+
+**The parenthesis, as it goes in:**
+
+> (a liveness check in the driver's supervision process that reads the new bytes of the meter's own stream
+> files, read-only, every 10 s while the chain runs, flags once on a 600 s outage and does not stop the chain;
+> the reader is restarted after a clean exit, where pilot 9 left it stopped)
+
+**One sentence added after "produced as at pilot 9":**
+
+> The liveness read is the one new activity while a member runs: about 20 kB every 10 s at the meter's 50
+> samples per second, on the same schedule in every member of every condition. Its energy cost has not been
+> measured.
+
+Checked: the 10 s cadence and the 600 s bound are the constants `MONITOR_LIVENESS_CHECK_S` and
+`MONITOR_OUTAGE_S`; the flag is raised once (`meter_outage is None`); `_read_stream` opens with `rb`, seeks to
+its last offset and writes nothing; the reader starts with its defaults, 50 samples per second and a 200 ms
+poll.
+
+**The lane's "a few kB every 10 s" is low.** A sample is 40 hexadecimal characters in the stream, so 50 per
+second is 2 kB per second before batch framing: about 20 kB per read. That is still small, and I do not ask
+for it to be measured. It is not a condition of signing.
+
+**Why no measurement.** The read does not depend on the condition a member is in, so it cannot make a
+difference between conditions; it can only add a small common amount. The row has to say that it exists and
+that its cost is unmeasured, and with the sentence above it does.
+
+**F-1** (the condition-13 test that R1-PHASE-TABLE promises does not exist yet) stays a gate on signing, as
+the second reader set it. A row may not promise a test the signed tree does not contain.
+
+**Reason.** A deviation row states every way the instrument differs from the one the pilots ran under. A
+periodic read during members is such a difference even when it is small.
+
+**Blind status.** Blind to v4. Code and registration text only.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
