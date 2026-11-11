@@ -3951,6 +3951,102 @@ only known to be consistent with itself.
 
 ---
 
+# Decision request 45: the thermometry print (2026-11-11 05:57 PST)
+
+**Read.** The head of the print's report (`r1-thermometry-e1.md`, the one file the lead named): the headline,
+the files and commands, the phase bounds, the sampler timing and the classification summary. In the protocol
+on the W1 line: WP14(a), with the classifier's registered rule quoted verbatim (lines 223-255). Temperatures,
+time constants and counts of a rehearsal's 30B control only.
+
+## RL-74. Fix the sampler; choose the slow sensor before the night, not during it
+
+### What the print shows
+
+1. **Both picks were null because the inventory sampler stalled**, not because of any sensor. For about 150 s
+   after the load ended, sweeps took 1.6 to 3.8 s instead of 0.14 s, recovery coverage fell to 0.76, and every
+   key was gated out before the class arithmetic ran. No sensor read failed.
+2. **With the gates set aside, Tf08 does not qualify as the slow key.** Its cooling time constant is about
+   140 s. The registered rule requires a key of either role to return to within 1 °C of baseline in 300 s,
+   that is τ × ln(rise) ≤ 300 s. On a step that raises it by 56 °C that allows τ up to 74.6 s. Tf08 would pass
+   only on a rise below about 8.5 °C, which is how it came to be R0's provisional pick on R0's lighter load.
+3. **The slow class is nearly empty on this step.** A slow key must have 60 < τ ≤ 74.6 s. One candidate sits at
+   60.2 s and falls out of the class when the long-sweep reads are added back; then two others at 66.6 s take
+   its place.
+
+So Tf08, the sensor every gate has been tuned around since RL-23, the 1.5 °C band and the 1,200 s cap
+included, is a sensor the registered classifier will very probably reject on the D step. The registration says
+what happens then: W1 uses R1's picks.
+
+### (a) The sampler fix is in scope, and required
+
+Without it the classifier returns null whatever the machine does. The read-back of the finished bundle moves
+out of the recovery phase, or the ticker moves out of that process; the builder chooses. It is an R1 runtime
+file under condition 13, with cold review. Smoke Part B shows the bar met: each phase at least 99% of
+one-second cells, under 1% read errors, no two consecutive empty cells.
+
+### (b) How the D bar is met
+
+**By the registered classifier, on a D step, with a sampler that works. Nobody substitutes a sensor by hand.**
+That is the rule and I do not change it on a 30B record with gaps in it.
+
+But the plan as it stands would repeat the mistake of the last two nights in a third form. The night gates
+every member on R0's picks, and learns its own D picks at step-D, halfway through. If step-D rejects Tf08, the
+gated block, the G0 cap and the duty bar will all have been measured on a sensor W1 will not use.
+
+**So the D picks are established before the night, by the smoke.** Part B becomes the selection step: step-D
+natively, full inventory, the registered classifier unchanged. Its classification table comes to me, and one
+of three things follows.
+
+1. **The picks are R0's.** The night arms as planned.
+2. **The slow pick differs, is not null, and is the same with and without any borderline reads.** The night's
+   thermal policy names the smoke's D picks. One deviation row says so: R0's slow pick fails the registered
+   rule at R1's step size, and the follow-up night gates on the picks of a native D step taken before it. The
+   night's own step-D classification must reproduce them; if it does not, the registered pick-change rule
+   applies and the result comes to me. For a new slow key the band starts at the registered default,
+   max(1.0 °C, 3 × the soak's idle SD), and S6's tuning receipt, which was earned on Tf08, does not carry over.
+3. **The slow pick is null, or it changes with the borderline reads.** Then the slow class cannot be met
+   stably on this machine at this step size, and that is a question about the rule: whether a return time
+   measured to 1 °C is the right test for a sensor whose gate band is wider than that and whose rise is 56 °C.
+   One design round on that question, with the D table, and I rule before anything arms. A change to the
+   classifier would be a deviation made blind, before any v4 window.
+
+**Two things to do now, which need no measurement:**
+
+- **Replay step-30b's gate on the candidate keys.** The inventory journal starts about 1,150 s before the
+  prefill, so it holds that member's pre-warmup idle and its whole G0. For Tf08 and for each candidate slow key
+  the print names, against the key's own pre-warmup median, at 1.0 and 1.5 °C: the release time and which
+  condition decides. That says how different the gates are under the registered pick, today.
+- **The lane lead reads R0's classification record** and says whether those candidate keys are among the keys
+  R0 classified, in the sense of the sentence "no R1 or W1 thermal policy may name a key R0 did not classify".
+  If they are not, outcome 2 needs that sentence addressed in the same deviation row.
+
+The design round may start on those two results without waiting for the smoke.
+
+### (c) What changes about the night
+
+- **The arm waits for the smoke's D table and my ruling on it.** The build, the synthetic tests and smoke
+  Part A do not wait.
+- The sensors in the night's policy are whatever outcome 1, 2 or 3 gives. Everything else in RL-72 stands.
+- **Whichever slow key is chosen, the other is recorded.** If the member journal can carry a further
+  record-only key by policy data alone, with W1's gate module untouched, it carries Tf08 when a faster key
+  gates, or the classifier's pick when Tf08 gates. Then the start state of the deeper mass is on record for
+  every member, and the later analysis can ask whether it mattered. If that needs a code change in the gate
+  module, it is not done, and the builder says so.
+
+**For Ed, plainly:** "The print found two things. The sensor logger stalled, which is a bug and is being
+fixed. And the slow temperature sensor all the gates have been using cools too slowly to pass our own
+registered selection rule on a heavy workload; it was picked on a light one. A fifty-minute test on the Mac
+will show which sensor the rule selects for the 27B model. The rehearsal night is armed on that answer, so
+that it rehearses the sensor W1 will really use."
+
+**Reason.** Three times now the rehearsal has differed from the window it rehearses: the soak as reference,
+the cold 30B as reference, and now the sensor. Each was found one night late. This one is found before the
+night, and the cheap run that settles it comes first.
+
+**Blind status.** Blind: no v4 outcome exists. Rehearsal temperatures only.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
