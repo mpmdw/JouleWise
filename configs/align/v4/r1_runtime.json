@@ -11,9 +11,13 @@
   "d_pins": "configs/align/v4/qwen38-27b-8bit-hf-pins.json",
   "d_4bit_source": null,
   "d_class": "heavy",
-  "sensors": {"s_fast": "TV0h", "s_slow": "Tf08", "fan_keys": ["F0Ac", "F1Ac"], "r0_sha256": "e6231a8f3e6ab6177bbedbf12b878c958a7b4d4331e36472c74c2a192588769b"},
+  "sensors": {"s_fast": "TV0h", "s_slow": "Tf08", "fan_keys": ["F0Ac", "F1Ac"], "record_keys": ["Tf08"], "r0_sha256": "e6231a8f3e6ab6177bbedbf12b878c958a7b4d4331e36472c74c2a192588769b"},
   "step": {"prefill_chars": 40000, "decode_tokens": 4096, "seed": 1, "deadman_s": 1580},
   "battery_poll_s": 30,
   "calibration_precool_cap_s": 1500,
-  "g0_timeout_s": 1200
+  "g0_timeout_s": 1200,
+  "slow_band_floor_c": 1.0,
+  "r0_classified_keys": ["TV0h", "TV1h", "TV0m", "TV0s", "TV1s", "Tf08"],
+  "r0_classes": {"TV0h": "die", "TV1h": "die", "TV0m": "die", "TV0s": "die", "TV1s": "die", "Tf08": "heatsink"},
+  "r0_classes_authority": "Research-lead audit decision RL-74 follow-up, 2026-11-11 06:00 PST; class labels only"
 }

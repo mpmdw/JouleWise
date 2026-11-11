@@ -14,6 +14,25 @@ Element 0 is a repo-relative Python script; the chain passes `--runtime-entrypoi
 
 The field table lives in `joulewise/align/apple/r1_runtime_contract.py` (`KIND_FIELDS`, `QUIET_FIELDS`, `NEEDS_SOAK_REFERENCE`). The driver checks every result against it at the seam. This document is the prose form of that table, and a test keeps the two in step.
 
+The production driver requires `--prepare-packet FILE` from
+`align_r1_followup_kit.py prepare` (the chain receives `ALIGN_R1_PREPARE_PACKET`).
+Before acquiring the host lock it checks `FOR_LEAD_ARM`, the current
+`executed_commit`, the bound source hashes, and both RL-62/73 checks (`weight_digests`
+and `runtime_stack`, each `ok: true`). Its arm record carries the packet path,
+SHA-256 and both results. A missing, stale or refused packet is a named refusal.
+The synthetic driver remains fixture-only.
+
+`capture-predecessor-30b` is the ordinary 30B capture predecessor introduced by
+`a85ee8ec6` for RL-72's indivisible predecessor/step-D admission unit.
+Its runtime fields remain defined by `KIND_FIELDS`.
+
+Smoke Part B's post-G0 engineering watchdog is the sum of the registered quiet,
+the re-armed turn deadman, recovery, and a 120 s classification/close margin
+(300 + 1,580 + 600 + 120 = 2,600 s with the current config). G0 keeps its
+1,200 s cap. RL-84 P-5 confirms that Part B's twenty minutes is an estimate,
+not a total bound. This executed-byte engineering change requires delta
+review before smoke.
+
 ## Arguments
 
 - `--output DIR` is always the canonical segment directory, `<R1 output>/<segment name>`. When the driver rejects an attempt (ruling 8 load, or soak slope), it renames that directory to `<segment name>.rejectedN` (the next free N from 1) before the next attempt starts. A step-d or designed start state whose G0 timed out is moved to `<segment name>.g0_timeout1` before its one retry (LEAD-RULINGS-2 R6-2). The accepted attempt therefore always ran in, and owns, the canonical directory. The runtime must write only inside `DIR` and use paths relative to it.
@@ -164,3 +183,94 @@ Field derivations and their stated approximations:
 - Designed start states (planning kinds): a proportional MLX heater (`ProcessHeater`, a child process) preheats to R + offset and holds S_slow there during the production G0, whose reference is R + offset on S_slow (S_fast is not banded); it stops before the episode starts. `g0_release_c` is the G0 interval's measured release.
 - `released`: the G0 outcome. `t_decline_s`: the step's t_decline, null when no decline occurred.
 - `calibration-pre`/`-post` record the read-only host snapshot at the brackets; the meter calibration itself belongs to the R1 night plan's scaffold. `harvest` writes `DIR/harvest_manifest.json` (SHA-256 of every file under the R1 output) and aggregates the charge-resume events.
+
+## Follow-up night (RL-59/61/64/72/74/75/76, 2026-11-11)
+
+This section supersedes the R5/R6 soak-reference and G0-retry descriptions above
+for the follow-up kit. The bound 30B template is unchanged. The order is the pure
+phase module's table: soak, cold step-30B (R_op diagnostic), A1/B/A2 (own native
+captures), ordinary 30B predecessor plus step-D (one admission unit), cooldown
+then planning +4/+2/+0 relative to step-D R_D, bank/spam-a/spam-b and X-G. Each
+planning precool belongs to its planning admission unit. Two load redos total
+repeat whole units. No wait can split the capture pair. No G0-only retry occurs.
+The two batch-encounter envelope is enforced; a third encounter refuses.
+
+Only the step kinds dispatch after an observed timeout, retaining W1's timeout
+flag and null episode reference and adding `r1.g0_timeout_run`. Unobserved state,
+deadman and collector/status faults retain their stop semantics. Gated D and
+X-G have the W1 stop, and their successors record whether D work preceded them.
+A captured R_D survives a timeout. An unobserved capture never permits recapture
+by a consumer. Consumers use W1 `load_window_reference`, including its journal,
+policy and config authentication. No changes are made to `thermal_gates.py`.
+
+The night produces candidate slots with an `inadmissible_slots` table. All
+flagged segments enter `inconclusive_segments`; the kit refuses those candidates
+until the lead rules. RL-78 supersedes the inherited S6 receipt: every arm
+uses max(1.0 C, 3 x soak idle SD), cap 1,200 s. Smoke Part B makes the single
+selection using the unchanged classifier. If its slow class is empty, the
+longest registered return time <=300 s supplies the near-die settling check,
+among R0-classified, unclamped keys passing the registered slow noise/rise
+tests, excluding the fast key and its D-record aliases, with no lower tau bound.
+The night confirms those fixed keys' admissibility and never re-ranks. Failure
+holds the desk/slots for the research lead. The full classifier and numeric
+class-edge margins remain disclosures; the sampler bar binds. The arm still
+requires the smoke table and research lead's ruling.
+
+`thermal.py` accepts optional `record_keys`; the absent-field journal is
+byte-identical. RL-84 P-1 records Tf08 in every member that runs the thermal
+sidecar. The ordinary ungated 30B predecessor runs no sidecar, as W1 does. Its
+only derivation is removal of `launch_lineage_required`, recorded beside the
+template digest; its prompt bytes, episode and schedule are unchanged. No gate
+reads record-only keys. The desk prints
+Tf08 at member start minus its last-60-s step-D window reference, and compares
+conditions within this window as a disclosure. Missing observations stay null.
+RL-84 P-3 checks sampler sweeps separately from individual keys in all four
+smoke phases: >=99% sweeps and never two missed in a row. Each key needs >=99%
+cells, <1% read errors and no two consecutive empty cells. A failed key is
+excluded from both picks and the fallback, with its R0 class, phase and reason
+listed. Tf08 failure fails smoke. The full classifier result remains unchanged.
+R0 class labels in the runtime config come from the audit decision
+"Follow-up to RL-74" (2026-11-11 06:00 PST), without reading its source data.
+
+RL-84 P-4 makes condition 13 ten paths: the R1 driver, runtime launcher, runtime,
+runtime contract, sensor classifier, thermal-gate module, runtime configuration,
+phase module, `workload.py` and `thermal.py`. The registration test pins the
+literal set. The final night must run those signing bytes; `thermal_gates.py`
+and the classifier remain unchanged.
+
+Prepare uses the public RL-62/RL-73 functions from `align_v4_session.py` before
+any dwell. R1 member IDs project explicitly to the registered D/30B/NEG-8 roots;
+the registration inventory is unchanged. Both results are recorded as
+`weight_digests` and `runtime_stack`, including refusals with joined reasons.
+
+Universal bars: chain exit 0 and complete custody; accepted attempt; AC present
+and battery not discharging (`r1.battery_feed_invalid`); no agent overlap
+(`r1.agent_feed_overlap`); passing external-volume census; correct mode readback.
+
+| Slot / record | Segment and additional flag/bar |
+|---|---|
+| S1-S4, S7, S8/N_chunk, S9/t_decline, B_D, I_D, T_dead, class, e_D | step-D timeout-run or incomplete turn; tau/recovery censored or t_decline unobserved (bounds remain labelled) |
+| S5, S5_fast | accepted settled soak and coverage |
+| S6 / tuning inputs | gated G0 timeout or hold suppression; missing receipt |
+| ac_powermode | any unreleased/timed-out leg, inconclusive arithmetic, cross-band or B-capture bracket failure |
+| planning_temperature, U5 | planning timeout-run/preheat-cap/two-sided release failure; replay-pair G0 timeout gives no sigma_pair |
+| duty_bar, deadman_budget, l1, max_r1_tail_s, budget_fit_inputs, projected_mde | candidate step-D budgets or gated timeout; lead's fallback order |
+| x_g, g0_cap_w1 | gated or X-G timeout, counted at cap: `r1.g0_cap_saturated` |
+| thermometry.D / bar | step-D timeout-run; classifier reason, null or aliased pick |
+
+The computed phase subtotal is 58,711.9616 s. Largest admission unit is
+7,563.9952 s. Two load redos and two encounters of unit plus 5,400 s blackout,
+rounded up, give 99,768 s; add 9,000 s overhead (brackets 1,800 each, close 900,
+harvest 4,500). The existing plan writer yields `window_max_s=126480` from
+`programmed_span_s=108768`. Runtime subprocess wall caps bound brackets and
+harvest; close is checked and recorded. These are bounds, not a wall prediction.
+
+Native commands are in `scripts/align_r1_followup_kit.py`: smoke A stops after
+capture/G0 within 1,800 s; smoke B continues the D step for at most another
+1,200 s and prints inventory coverage, unchanged classification, and every
+candidate at bands 1.0/1.5 C with deciding condition and reference +/-0.03 C
+sensitivity. Run under the ordinary clean-host/DC-in custody procedure; the
+script is not authority to run while an agent is active. The `desk` subcommand
+prints each member's own pre-warmup median beside R_op and R_D and every release
+margin, using the replay functions. `prepare_checks` is the fail-closed plug-in
+site for the separate RL-62/RL-73 armcheck batch; this lane implements neither.

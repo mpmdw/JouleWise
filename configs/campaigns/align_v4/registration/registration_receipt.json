@@ -242,6 +242,8 @@
     "scripts/align_r0_checks.py": null,
     "scripts/align_r1_rehearsal.py": null,
     "scripts/align_r1_runtime.py": null,
+    "scripts/align_r1_followup_kit.py": null,
+    "scripts/align_r1_thermal_replay.py": null,
     "scripts/align_r1_to_w1_chain.py": null,
     "scripts/align_r1_turn_counts_export.py": null,
     "scripts/align_smc_enumerate.py": null,

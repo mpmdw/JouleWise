@@ -946,14 +946,15 @@ class Round6KitTests(unittest.TestCase):
     def test_an_inconclusive_step_d_is_refused_by_name(self):
         inputs, slots = ready_inputs()
         slots['inconclusive_segments'] = {kit.STEP_D_SEGMENT: 'G0 did not release, twice'}
-        with self.assertRaisesRegex(ValueError, 'step-d was INCONCLUSIVE'):
+        with self.assertRaisesRegex(ValueError, 'INCONCLUSIVE'):
             kit.require_ready(inputs, slots)
 
     def test_an_inconclusive_designed_state_refuses_w1(self):
         # Sol critique of round 6: fail closed at the kit for every R6-2 segment.
         inputs, slots = ready_inputs()
         slots['inconclusive_segments'] = {'planning_turn_R_plus_2C': 'G0 did not release, twice'}
-        with self.assertRaisesRegex(ValueError, r'INCONCLUSIVE \(R6-2\): planning_turn_R_plus_2C'):
+        # a85ee8ec6: RL-72 bars flagged/inconclusive feeding members, including X-G.
+        with self.assertRaisesRegex(ValueError, r'INCONCLUSIVE \(RL-72\): planning_turn_R_plus_2C'):
             kit.require_ready(inputs, slots)
         del slots['inconclusive_segments']
         with self.assertRaisesRegex(ValueError, 'inconclusive_segments'):
@@ -1092,7 +1093,7 @@ class Round7KitTests(unittest.TestCase):
             with self.subTest(segment=segment), self.assertRaises(ValueError) as raised:
                 kit.require_ready(inputs, slots)
             message = str(raised.exception)
-            for text in ('re-run', 'magistrate', 'no per-occurrence lead ruling', 'LEAD-RULINGS-2 R7-3'):
+            for text in ('INCONCLUSIVE', 'candidate slots', 'research lead ruling'):
                 self.assertIn(text, message)
 
     def test_missing_or_malformed_alias_groups_refuse(self):

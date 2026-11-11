@@ -147,7 +147,7 @@ class World:
                 reply = smc.SMCKeyData(key=request.key)
                 reply.keyInfo.dataSize, reply.keyInfo.dataType = 4, smc.fourcc('flt ')
                 if request.data8 == smc.CMD_READ_KEY:
-                    value = {FAST: world.t_fast, SLOW: world.t_slow, FAN: 1200.0}.get(key)
+                    value = {FAST: world.t_fast, SLOW: world.t_slow, "Tf08": world.t_slow, FAN: 1200.0}.get(key)
                     if value is None:
                         reply.result = smc.RESULT_KEY_NOT_FOUND
                     else:

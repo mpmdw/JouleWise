@@ -1169,6 +1169,10 @@ def executed_closure(root):
 
 SERIES_SCHEMA = 'joulewise.align_v4.smoke_series_plan.v1'
 BATCH_ENCOUNTER_S = 11164
+R1_BATCH_ENCOUNTER_S = 12964
+R1_FOLLOWUP_FLOOR_S = 99768
+R1_FOLLOWUP_SPAN_S = 108768
+R1_FOLLOWUP_WINDOW_S = 126480
 
 
 def _number(value, name):
@@ -1247,11 +1251,13 @@ def validate_deadline(plan):
             raise ValueError('batch_encounters must cover every attempt that can meet the blackout')
         retries += attempts - 1
         encounters += possible
-        total += attempts * _number(seg.get('bound_s'), 'segment bound_s') + possible * BATCH_ENCOUNTER_S
+        total += attempts * _number(seg.get('bound_s'), 'segment bound_s') + possible * (R1_BATCH_ENCOUNTER_S if budget['kind'] == 'r1' else BATCH_ENCOUNTER_S)
     overhead = sum(_number(budget.get(k), k) for k in ('bracket_s', 'close_s', 'harvest_s'))
     required = total + overhead
     if budget['kind'] == 'r1':
-        required = max(required, (96427 if retries else 67371) + overhead)
+        required = max(required, R1_FOLLOWUP_WINDOW_S)
+        if overhead < 9000:
+            raise ValueError('R1 follow-up needs its 9000 s overhead allowance')
     if maximum < required:
         raise ValueError(f'window_max_s {maximum} < corrected requirement {required} s')
     return {'required_s': required, 'window_max_s': maximum, 'kind': budget['kind'], 'encounters': encounters,
@@ -1393,8 +1399,9 @@ def check_deadline(ctx):
                       **evidence)
     required = plan_inputs.window_max_s({'programmed_span_s': {'seconds': span}})
     if kind == 'r1':
-        retries = bool(_find_key(hazard, 'retry') or _find_key(hazard, 'redo'))
-        required = max(required, 96427 if retries else 67371)
+        required = max(required, R1_FOLLOWUP_WINDOW_S)
+        if span < R1_FOLLOWUP_SPAN_S:
+            return result(FAIL, 'R1 follow-up span omits required whole-unit redos/encounters/overhead', **evidence)
     evidence.update(kind=kind, programmed_span_s=span, window_max_s=maximum, required_s=required)
     if maximum < required:
         return result(FAIL, f'window_max_s {maximum} < {required} s required by the plan\'s own span', **evidence)
