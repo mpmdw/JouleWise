@@ -127,6 +127,15 @@ def present(path):
     return path.is_file() or Path(str(path) + ".zst").is_file()
 
 
+def session_input_pin(pins, archive):
+    """Explicit relocated archive paths disambiguate production's shared basename."""
+    exact = pins.get(str(Path(archive).absolute()))
+    legacy = pins.get(Path(archive).name)
+    if exact is not None and legacy is not None and exact != legacy:
+        raise InputRefusal("session_input_pin_ambiguous")
+    return exact if exact is not None else legacy
+
+
 class Reader(B5.Reader):
     """The block-5 reader with a session scope and block-6 codes."""
     def __init__(self, pack, session, flags, inputs=None):
@@ -1242,7 +1251,7 @@ def recompute_block(archives, attempts_path, flags, b5_output=None, closed=False
     reharvested = read_reharvested(state_path, flags)
     sessions = {}
     for archive in archives:
-        pin = (input_pins or {}).get(Path(archive).name)
+        pin = session_input_pin(input_pins or {}, archive)
         inputs = AuthenticatedInputs(archive, pin) if pin is not None else None
         s = Session(archive, flags, attempts, reharvested=reharvested, inputs=inputs, pool=pool, input_pin=pin)
         if s.session_id in sessions:
@@ -1653,7 +1662,7 @@ def main(argv=None) -> int:
         archives = args.session if args.command == "block" else [args.session]
         contexts = []
         for archive in archives:
-            pin = pins.get(Path(archive).name)
+            pin = session_input_pin(pins, archive)
             if args.inputs and pin is None:
                 raise InputRefusal("session_input_pin_missing")
             if pin is not None:
@@ -1674,7 +1683,7 @@ def main(argv=None) -> int:
             attempts = read_attempts(args.loop_attempts, flags)
             s = Session(args.session, flags, attempts, reharvested=read_reharvested(args.loop_state, flags),
                         inputs=contexts[0] if contexts else None, pool=pool,
-                        input_pin=pins.get(Path(args.session).name))
+                        input_pin=session_input_pin(pins, args.session))
             r = compute_session(s)
             if r["pack"] == "GAMMA":
                 # Same day as harvest: the paired floors may not exist yet; contrasts carry no floor gate.

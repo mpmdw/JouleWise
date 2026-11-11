@@ -13,7 +13,7 @@ import unittest
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "scripts"))
-from b6_r12_session_fixture import command, prepare
+from b6_r12_session_fixture import command, prepare, export_chain_inputs
 from b6_r12_chain_fixture import PIN
 
 
@@ -44,6 +44,36 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(len(json.loads(result.stdout)), 6)
         self.assertFalse((self.root.parent / "R12-outside-write").exists())
+
+    def test_synthetic_inputs_keep_canonical_suite_bindings(self):
+        """Predict: every synthetic suite config binds the pinned canonicalizer's actual digest, with production 57.6 s idle inputs."""
+        export_chain_inputs(self.root)
+        (self.root / "source-policy.json").write_text('{"volume":"reduced"}\n')
+        made = subprocess.run(command(self.root, "make-inputs"), capture_output=True, text=True, timeout=30)
+        self.assertEqual(made.returncode, 0, made.stderr)
+        code = '''import json
+from pathlib import Path
+from joulewise.suite import canonical_effective_manifest, suite_manifest_sha256
+from runtime import source_root
+root = Path(__import__('sys').argv[1])
+pin = source_root(root)
+count = 0
+for path in (pin / 'configs/campaigns').rglob('*.json'):
+    value = json.loads(path.read_text())
+    if not isinstance(value, dict) or 'hardware_target' not in value:
+        continue
+    assert value['sampling']['idle_seconds'] == 57.6
+    profile = value.get('workload_profile', {})
+    if profile.get('suite_manifest_ref'):
+        data = json.loads((pin / profile['suite_manifest_ref']).read_text())
+        assert profile['suite_manifest_sha256'] == suite_manifest_sha256(canonical_effective_manifest(data)), str(path)
+        count += 1
+print(count)
+'''
+        result = subprocess.run(command(self.root, "code", code, self.root), capture_output=True,
+                                text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertGreater(int(result.stdout.strip()), 50)
 
     @unittest.skipUnless(sys.platform == "darwin", "pinned USB protocol uses CommonCrypto")
     def test_real_meter_writer_uses_synthetic_libusb_object(self):
@@ -93,6 +123,34 @@ class BootstrapTests(unittest.TestCase):
 
 
 class DeskInputBoundaryTests(unittest.TestCase):
+    @unittest.skipUnless(shutil.which("zstd"), "synthetic production input regression requires zstd")
+    def test_production_archives_with_repeated_basename_use_distinct_pins(self):
+        """Predict: option (c) exits 0 for ten toy regression archives named archive, each explicitly pinned by absolute path."""
+        # These older handwritten toy archives exercise input routing only;
+        # they are not generated-chain R12 fixture evidence.
+        from tests.independent_recompute.support_b6_production import production_block, b6
+        with tempfile.TemporaryDirectory(prefix="r12-pin-routing-") as directory:
+            root = Path(directory).resolve()
+            archives, attempts, document = production_block(root / "toy")
+            value = json.loads(document.read_text())
+            pins, relocated = {}, []
+            for archive in archives:
+                target = root / "relocated" / archive.name / "archive"
+                target.parent.mkdir(parents=True)
+                archive.rename(target)
+                pins[str(target)] = value["sessions"][archive.name]
+                relocated.append(target)
+            value["sessions"] = pins
+            document.write_text(json.dumps(value) + "\n")
+            result = b6.main(["block", *[v for path in relocated for v in ("--session", str(path))],
+                "--loop-attempts", str(attempts), "--closed", "--inputs", str(document),
+                "--inputs-sha256", hashlib.sha256(document.read_bytes()).hexdigest(),
+                "--restricted-out", str(root / "numbers.json"), "--public-out", str(root / "public.json")])
+            self.assertEqual(result, 0)
+            output = json.loads((root / "numbers.json").read_bytes())
+            self.assertEqual(len(output["inputs"]["census"]), 10)
+            self.assertTrue(output["block"]["option_c"]["pass"])
+
     @unittest.skipUnless(shutil.which("zstd"), "real desk compression requires zstd")
     def test_real_desk_log_can_be_pinned_without_editing_archive(self):
         """Predict: the B6 reader authenticates the real desk's adjacent log without copying it into the immutable archive."""
