@@ -1042,6 +1042,23 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+250. **Laptop lead (interactive session 41120c85, Opus 5.5), 2026-11-10 17:30 PST: item 249's R1 RE-ARM REFUSED at 13:49:42 PST, before the chain started (zero capture). The MBP has been restored. Re-arm R1 only after the clock-settle precondition below.**
+- **Evidence:** `origin/night-results/align-r1-20261110T2146Z` (pushed 13:50) has `result.json` `verdict: REFUSED`, `refusal.reason: night_refused_hazard`, detail `clock=REFUSE; clock REFUSE: measured rate gate: 58.5029 ms > 5.0 ms` (`joulewise/hazards/clock.py:365` at `20e9edbc4`). There is no `chain.started`. The R1 courier is file-only, so nobody was mailed. A Fable 5.2 state-machine audit found the refusal at about 17:15, by reading the results ref.
+- **Cause (lead inference, not proven):** item 249 turned network time ON at about 13:21, after it had been OFF for 2.5 days. The arm then turned it OFF again before t0 13:46. `timed` was most likely still slewing the accumulated offset during the hazard dwell, so the wall-vs-raw rate fit failed. At 17:22 the offset to time.apple.com, with network time still OFF, was +0.180 s.
+- **Restore done by the lead at 17:24 PST** (SSH from the Air, under item 249's allowance that the lead runs the restore):
+  - `arm_align_r1.py uninstall --custody-root /Users/edr/night-align/r1-20261110T212531Z` returned rc 0 (`$S/uninstall-lead-41120c85.out`). `com.joulewise.night` and `.deadman` are gone.
+  - Network time is ON.
+  - `pmset` powermode is 0 (Automatic).
+  - No stray `km003c_monitor` or `hazard_monitor`.
+  - `/Users/Shared/JouleWise/host-power/` holds only `night.lock`, with no High Power marker.
+  - The custody is kept as is. This is a zero-capture tooling refusal.
+- **Next activation (replaces item 249's pointer; items 225-228 hold):**
+  (1) **Clock settle before arming.** Leave network time ON until `sntp -t 3 time.apple.com` reads |offset| < 2 ms twice, at least 10 minutes apart, and at least 45 minutes after it was turned ON (17:24). Only then arm. The arm turns network time OFF itself.
+  (2) Re-arm R1 as a zero-capture retry under R13 / item 225 (A212), exactly as item 249 did: same `$M` `20e9edbc4`, a fresh custody root, and the arm notice to Ed before install. The hazard thresholds are NOT changed: no design change.
+  (3) After any arm, check `night-results/<plan>` or `$S/night/result.json` within 10 minutes of t0. **Read `verdict` and `refusal` first.** A REFUSED night must be restored and mailed to Ed at once, without waiting for the window ceiling.
+  (4) The watchdog-v5 fix (PR #707) is still OPEN. Do not install it from the branch.
+- **Lead follow-ups (Air side, no MBP change):** a watcher on `night-results/*` refs that alarms on any non-GO result within minutes, and a correction to the `armed_until` gate. Four Fable 5.2 audits are on `audit/2026-11-10-fable` @ `c03a626bd`: measurement system, implicit state machines, next-block designs and structure. Their measurement findings A-01/A-02 (GO masks a refusal; file-only courier) and W-01 (watchdog holds silently on any unknown plan key) are queued as fixes before W1.
+
 249. **Magistrate activation 30693ba4 (Opus 5.5, headless, 2026-11-10 13:21 PST): R1 (item 227) NEVER MEASURED; cause fixed; R1 RE-ARMED, t0 13:46 PST 11-10, `window_max_s` 105,427 s, latest end Wed 11-11 19:03 PST.**
 - **What happened to item 227's R1** (`$S` = `/Users/edr/night-align/r1-20261108T085636Z`):
   - At 01:20 PST 11-08, `night/align-r1/r1_result.json` recorded `status: refused`, `powermode.host_lock_unavailable: [Errno 13] Permission denied: '/Users/Shared/JouleWise/host-power'`, with `phases: []` and `powermode: []`. Nothing was measured and no power-mode change was made.
