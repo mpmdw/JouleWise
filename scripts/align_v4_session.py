@@ -44,7 +44,7 @@ def series_ac_powermode(measurement_root, kit_path=kit.KIT):
 
 
 def prepare(measurement_root, session_root, *, power_runner=None, window_id=None, extra_sentinels=0,
-            frequency_reader=None, frequency_runner=None, frequency_preflight=None, **kwargs):
+            frequency_reader=None, frequency_runner=None, frequency_preflight=None, weight_identity_fn=None, **kwargs):
     from joulewise.align.apple import powermode
     preflight = powermode.host_lock_preflight(role='v4-prepare-preflight')
     # Lead ruling R6-7: at every session start a host-level High Power marker
@@ -85,7 +85,12 @@ def prepare(measurement_root, session_root, *, power_runner=None, window_id=None
     # The prepared plan supplies the actual stream span and registered budget.
     # A second, fresh check at install owns any intervening network-time ON.
     frequency = None
+    weights = None
     if privileges['ok'] and state.get('preparation_status') == 'STAGED':
+        # RL-62: prepare stages the plan; it never calls arm_checks or its
+        # pre_dwell/stamp. Hashing ends here, long before that install path.
+        weights = state['weight_digest_preflight'] = weight_digest_preflight(state, identity_fn=weight_identity_fn)
+    if privileges['ok'] and (weights is None or weights['ok']) and state.get('preparation_status') == 'STAGED':
         lock = powermode.HostLock(role='v4-prepare-frequency')
         try:
             if not lock.acquire():
@@ -98,6 +103,8 @@ def prepare(measurement_root, session_root, *, power_runner=None, window_id=None
     pilot.h.write(Path(session_root) / 'session.json', state)
     if not privileges['ok']:
         raise ValueError('; '.join(privileges['reasons']))
+    if weights is not None and not weights['ok']:
+        raise ValueError('; '.join(weights['reasons']))
     if frequency is not None and not frequency['ok']:
         raise ValueError(f"{frequency['cause']}: {frequency['reason']}")
     if series_state is not None:
@@ -109,6 +116,103 @@ def prepare(measurement_root, session_root, *, power_runner=None, window_id=None
         except Exception:  # noqa: BLE001 - the restore itself is what matters
             pass
     return state
+
+
+def _registered_weight_roots(state, *, members=None):
+    """Use the kit's existing unit IDs; never resolve or inspect model paths."""
+    # Same selected registration as _member_rows and bytes_h_session.prepare:
+    # W1 uses align_v4/registration; series kits project the registered units
+    # with _identities for their own member run IDs (align_v4_series:418-429).
+    directory = Path(state.get('registration_dir', Path(state['measurement_root']) / kit.KIT / 'registration'))
+    inventory = pilot.h.read(directory / 'model_artifact_inventory.json')['artifacts']
+    rows = pilot._member_rows(state, kit=kit.KIT) if members is None else members
+    units = sorted({pilot.h.align_unit_id(row['model_id'], row['run_id']) for row in rows})
+    groups, reasons = {}, []
+    for unit in units:
+        row = inventory.get(unit)
+        if not isinstance(row, dict) or not isinstance(row.get('root'), str) or not row['root']:
+            reasons.append(f'weight_digest_preflight: no_inventory_row: {unit}')
+        else:
+            groups.setdefault(row['root'], {})[unit] = row
+    return dict(sorted(groups.items())), reasons
+
+
+def weight_digest_preflight(state, *, identity_fn=None):
+    """RL-62: the R0 identity function, once per planned root, at prepare only."""
+    from joulewise.provenance import model_artifact_identity
+    record = {'source': 'prepare', 'prepared_at_epoch_s': time.time(), 'roots': {}, 'ok': False, 'reasons': []}
+    try:
+        groups, record['reasons'] = _registered_weight_roots(state)
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        record['reasons'].append(f'weight_digest_preflight: unavailable: model_artifact_inventory.json: '
+                                 f'{type(exc).__name__}: {exc}')
+        return record
+    for root, units in groups.items():
+        basename = Path(root).name
+        started = time.monotonic()
+        try:
+            observed = (identity_fn or model_artifact_identity)(root)
+        except (OSError, ValueError, RuntimeError) as exc:
+            observed = {'status': 'unavailable', 'reason': f'{type(exc).__name__}: {exc}'}
+        entry = record['roots'][root] = {
+            'units': list(units), 'registered_folded_sha256': next(iter(units.values())).get('folded_sha256'),
+            'observed_folded_sha256': observed.get('folded_sha256'),
+            'file_count': len(observed.get('files') or {}),
+            'total_bytes': sum(row['size_bytes'] for row in observed.get('inventory', [])),
+            'elapsed_s': time.monotonic() - started, 'ok': False}
+        reasons = []
+        if observed.get('status') != 'ok' or observed.get('kind') != 'file_set':
+            reason = observed.get('reason') or 'identity must be an ok file_set'
+            reasons.append(f'weight_digest_preflight: unavailable: {basename}: {reason}')
+        else:
+            added, missing, changed = set(), set(), set()
+            for unit, registered in units.items():
+                expected = registered.get('folded_sha256')
+                if not kit.valid_digest(expected) or observed.get('folded_sha256') != expected:
+                    reasons.append(f'weight_digest_preflight: digest_mismatch: {unit} {basename}')
+                expected_files, found_files = registered.get('files'), observed.get('files')
+                if not isinstance(expected_files, dict) or not isinstance(found_files, dict):
+                    reasons.append(f'weight_digest_preflight: unavailable: {basename}: file map unavailable')
+                elif expected_files != found_files:
+                    added.update(found_files.keys() - expected_files.keys())
+                    missing.update(expected_files.keys() - found_files.keys())
+                    changed.update(name for name in expected_files.keys() & found_files.keys()
+                                   if expected_files[name] != found_files[name])
+            if added or missing or changed:
+                entry['file_set_diff'] = dict(added=sorted(added), missing=sorted(missing), changed=sorted(changed))
+                reasons.append(f'weight_digest_preflight: file_set_differs: {basename}')
+        entry['ok'] = not reasons
+        record['reasons'].extend(dict.fromkeys(reasons))
+    record['ok'] = not record['reasons']
+    return record
+
+
+def _attested_weight_digests(state, members, path):
+    """Read a named operator's digest pairs, without touching any model tree."""
+    record = {'source': 'attested', 'roots': {}, 'ok': False, 'reasons': []}
+    try:
+        document = pilot.h.read(path)
+        record.update(attested_by=document.get('attested_by'),
+                      attested_at_epoch_s=document.get('attested_at_epoch_s'), roots=document.get('roots'))
+        if not isinstance(record['attested_by'], str) or not record['attested_by'].strip():
+            raise ValueError('attested_by must name the operator')
+        if not isinstance(record['roots'], dict):
+            raise ValueError('roots must map each planned root to its registered and observed folded_sha256')
+        groups, record['reasons'] = _registered_weight_roots(state, members=members)
+        if set(record['roots']) != set(groups):
+            raise ValueError('attested roots must equal the planned registered roots')
+        for root, units in groups.items():
+            pair = record['roots'][root]
+            for unit, registered in units.items():
+                expected = registered.get('folded_sha256')
+                if (not kit.valid_digest(expected) or not isinstance(pair, dict)
+                        or pair.get('registered_folded_sha256') != expected
+                        or pair.get('observed_folded_sha256') != expected):
+                    record['reasons'].append(f'weight_digest_preflight: digest_mismatch: {unit} {Path(root).name}')
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+        record['reasons'].append(f'weight_digest_preflight: unavailable: attestation: {type(exc).__name__}: {exc}')
+    record['ok'] = not record['reasons']
+    return record
 
 
 # Fixed, root-owned native executable; no Python interpreter or writable repo
@@ -1500,7 +1604,8 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
                      window_battery_journal=None, next_arm_triage=None, commit_check=None, record_check=None,
                      packet_builder=None, meter_probe=None, dwell_start=None,
                      frequency_preflight_record=None, frequency_pre_t0_check=None,
-                     watchdog_plist=None, watchdog_check=None, watchdog_undo_closing=None, **kwargs):
+                     watchdog_plist=None, watchdog_check=None, watchdog_undo_closing=None,
+                     weight_digests_attested=None, **kwargs):
     # RUN_STATE 226 R15: every arm, W1 included, binds the frozen series. W1 binds an empty history after
     # R1; a C/T window the next frozen window. The packet bound is the arm's OWN rebuild (a supplied
     # packet is only a pointer), whose history is derived from the hash-chained, authenticated records.
@@ -1532,6 +1637,14 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
         record['reasons'] = [reason] + record['reasons']
 
     def pre_dwell(record):
+        # No arm-time rehash: carry prepare's time and digest evidence verbatim.
+        weights = (_attested_weight_digests(state, plan['members'], weight_digests_attested)
+                   if weight_digests_attested is not None else
+                   state.get('weight_digest_preflight', {'source': 'not_recorded_by_prepare'}))
+        record['weight_digests'] = weights
+        if weights.get('ok') is False:
+            for reason in weights['reasons']:
+                refuse(record, reason)
         built = (record.get('next_arm_triage') or {}).get('rebuilt_packet')
         binding = record.pop('series_binding', None)
         if binding is None:            # an arm_checks stand-in that did not run the hook
@@ -1642,6 +1755,9 @@ def main(argv=None):
                                        ('--window-battery-journal', dict(type=Path, action='append',
                           help='a window hazard battery journal (the 1 Hz SMC B0AC lines and ioreg lines) merged '
                                'in time order with the between-window log; repeatable')),
+                                       ('--weight-digests-attested', dict(type=Path,
+                          help='RL-62 JSON: attested_by, optional attested_at_epoch_s, roots mapping to '
+                               'registered_folded_sha256 and observed_folded_sha256 pairs')),
                                        ('--next-arm-triage', dict(type=Path, required=True,
                           help='R12 B2 next-arm triage packet (JSON) built off the MBP from the committed record'))))
 

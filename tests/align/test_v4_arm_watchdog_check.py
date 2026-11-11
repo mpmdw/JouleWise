@@ -124,6 +124,10 @@ class WeightDigestTests(unittest.TestCase):
                       row['reasons'])
 
     def test_member_and_inventory_order_independent(self):
+        other = self.root / 'other-tiny-weights'
+        other.mkdir()
+        self.inventory['artifacts']['tiny-two'] = dict(self.inventory['artifacts']['tiny-two'], root=str(other))
+        self.write_inputs()
         with patch.object(session.time, 'time', return_value=10), \
                 patch.object(session.time, 'monotonic', return_value=20):
             first = self.preflight()
@@ -131,6 +135,7 @@ class WeightDigestTests(unittest.TestCase):
             self.inventory['artifacts'] = dict(reversed(list(self.inventory['artifacts'].items())))
             self.write_inputs()
             self.assertEqual(first, self.preflight())
+            self.assertEqual(self.identity.call_count, 2)
 
     def test_real_identity_on_tiny_tree_and_extra_shard(self):
         from joulewise.provenance import model_artifact_identity
@@ -744,6 +749,7 @@ class PrivilegeTests(unittest.TestCase):
 
     def test_prepare_admits_readable_on_and_retains_the_frequency_gate(self):
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            stack.enter_context(patch.object(session, 'weight_digest_preflight', return_value={'ok': True, 'synthetic': True}))
             stack.enter_context(patch.object(powermode, 'host_state_override', return_value=None))
             stack.enter_context(patch.object(powermode, 'HostLock'))
             stack.enter_context(patch.object(powermode, 'host_lock_preflight', return_value={'acquired': True}))

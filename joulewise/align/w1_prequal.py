@@ -160,6 +160,13 @@ class FakeHost:
         """The minimal fake night plan has no native clock budget or reader."""
         return {'ok': True, 'synthetic': True, 'reason': 'PREQUAL synthetic frequency'}
 
+    @staticmethod
+    def weight_identity(root):
+        """Explicit synthetic R0 identity seam; never inspect a real model."""
+        return {'status': 'ok', 'kind': 'file_set', 'root': str(root), 'folded_sha256': 'a' * 64,
+                'files': {'model.safetensors': 'b' * 64},
+                'inventory': [{'path': 'model.safetensors', 'size_bytes': 7}]}
+
     def __call__(self, argv, *args, **kwargs):
         import plistlib
         argv = tuple(str(a) for a in argv)
@@ -281,6 +288,13 @@ def arm_fixture(ctx, name, *, now, t0_offset_s=3600, ac_powermode=0):
     plan = json.loads((ctx.repo / kit.KIT / 'collection_plan.json').read_bytes())
     plan.setdefault('runtime_requirements', {})['ac_powermode'] = ac_powermode
     (measurement / kit.KIT / 'collection_plan.json').write_text(json.dumps(plan))
+    inventory = {}
+    for member in plan['members']:
+        weights = base / 'synthetic-weights' / member['model_id']
+        weights.mkdir(parents=True, exist_ok=True)
+        (weights / 'model.safetensors').write_bytes(b'fixture')
+        inventory[h.align_unit_id(member['model_id'], member['run_id'])] = FakeHost.weight_identity(weights)
+    h.write(measurement / kit.KIT / 'registration/model_artifact_inventory.json', {'artifacts': inventory})
     (measurement / kit.R1_SLOTS).write_text(json.dumps({'ac_powermode': ac_powermode}))
     series = ctx.repo / kit.KIT / 'series'
     if series.is_dir():                 # RUN_STATE 226 R15: every arm binds the frozen series
@@ -290,9 +304,13 @@ def arm_fixture(ctx, name, *, now, t0_offset_s=3600, ac_powermode=0):
     custody.mkdir(parents=True)
     night_plan = custody / 'night_plan.json'
     night_plan.write_text(json.dumps({'t0_epoch_s': now + t0_offset_s, 'plan_id': 'w1-prequal-synthetic'}))
-    h.write(session / 'session.json', {
+    state = {
         'measurement_root': str(measurement), 'plan_path': str(night_plan),
-        'plan_sha256': h.locator(night_plan)['sha256'], 'inputs': {'custody_root': str(custody)}})
+        'preparation_status': 'STAGED',
+        'plan_sha256': h.locator(night_plan)['sha256'], 'inputs': {'custody_root': str(custody)}}
+    from scripts import align_v4_session as session_mod
+    state['weight_digest_preflight'] = session_mod.weight_digest_preflight(state, identity_fn=FakeHost.weight_identity)
+    h.write(session / 'session.json', state)
     config = json.loads((ctx.repo / 'configs/align/v4/r0_desk.json').read_bytes())
     if not config.get('offloads'):
         config['offloads_owed'] = 'none'
@@ -370,6 +388,43 @@ def run_install(ctx, session, disk, packet, *, host, args_override=None, drop=()
 
 # ---------------------------------------------------------------------------
 # Checks
+
+
+@check('weight-digest-preflight', 'RL-62: synthetic prepare and arm carry matching registered digests; '
+       'changed weights refuse before install')
+def check_weight_digest_preflight(ctx):
+    from unittest import mock
+    from scripts import align_v4_session as session_mod, bytes_h_session as h
+    os.environ.setdefault('JOULEWISE_HOST_STATE_DIR', str(ctx.work / 'host-state'))
+    Path(os.environ['JOULEWISE_HOST_STATE_DIR']).mkdir(parents=True, exist_ok=True)
+    now = time.time()
+    base, session, disk = arm_fixture(ctx, 'weight-digest', now=now)
+    packet = valid_packet(ctx, base, now)
+    host = FakeHost(now=now)
+    state = h.read(session / 'session.json')
+    with mock.patch.object(session_mod.pilot, 'prepare', return_value=state), \
+            mock.patch.object(session_mod.kit, 'generate'), \
+            mock.patch.object(session_mod, 'session_start_restore', return_value={'action': 'none'}), \
+            contextlib.redirect_stdout(io.StringIO()):
+        session_mod.prepare(base / 'measurement', session, weight_identity_fn=host.weight_identity,
+                            frequency_preflight=host.frequency_check)
+        control = run_install(ctx, session, disk, packet, host=host, now=now)
+        matching = (control['rc'] == 0 and bool(host.installer_calls) and
+                    control['arm']['weight_digests'] == state['weight_digest_preflight'])
+        refusal = ''
+        try:
+            session_mod.prepare(base / 'measurement', session,
+                weight_identity_fn=lambda root: dict(host.weight_identity(root), folded_sha256='c' * 64),
+                frequency_preflight=host.frequency_check)
+        except ValueError as exc:
+            refusal = str(exc)
+        stored = h.read(session / 'session.json')['weight_digest_preflight']
+        fresh_host = FakeHost(now=now)
+        refused_arm = run_install(ctx, session, disk, packet, host=fresh_host, now=now)
+    mismatch = ('weight_digest_preflight: digest_mismatch:' in refusal and not stored['ok'] and
+                refused_arm['rc'] != 0 and not fresh_host.installer_calls)
+    return result(PASS if matching and mismatch else FAIL, 'matching prepare/arm and changed-weight refusal',
+                  matching_prepare_and_arm=matching, mismatch_refused=mismatch, refusal=refusal)
 
 
 @check('watchdog-hold-rollback', 'RL-56: pre-install hold refuses before install; post-install hold '

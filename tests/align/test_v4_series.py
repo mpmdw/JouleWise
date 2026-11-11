@@ -507,6 +507,8 @@ class FakeWorld:
                     return {'artifacts': {uid: {'inventory': [{'path': 'weight'}]} for uid in pins['units']}}
                 return original_read(path, *args)
             stack.enter_context(patch.object(registration, 'load_identity_pins', side_effect=physical_pins))
+            stack.enter_context(patch.object(session, 'weight_digest_preflight',
+                                            return_value={'ok': True, 'synthetic': True}))
             stack.enter_context(patch.object(h, 'read', side_effect=physical_inventory))
             # The chain replay stages t0 in the past to avoid an eight-minute
             # wait. The pre-arm clock is earlier; the real preflight still reads
