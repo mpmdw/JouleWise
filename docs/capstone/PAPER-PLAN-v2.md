@@ -1,5 +1,13 @@
 # Capstone paper plan v2: a near-complete draft by 30 November
 
+> **Status note, 2026-11-10 (research lead RL-27 (4), amending RL-1 item 3).** Under `RUN_STATE.md` item 256 no
+> tripwire manuscript is in production. This file is superseded as a manuscript plan and is kept as the source
+> register and evidence ledger for Paper 1's outlook and for the talk. Its Block 5 exclusion is historical: neither
+> in force nor reversed. Block 5 numbers are placed in Paper 1 only (RL-2), and on slides under RL-10; a later
+> tripwire or v4 manuscript needs its own placement ruling. Lines are not edited one by one, and the RL-1 note
+> below is amended by this one. Ruling:
+> `docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md`, branch `audit/2026-11-10-fable`.
+
 > **Status note, 2026-11-10 (research lead RL-1; Ed's decision E1, `RUN_STATE.md` item 256).** The mid-December
 > capstone submission is **Paper 1**, `docs/paper/paper1/paper1.md` (see `CANONICAL.md`), with at most a one-page
 > outlook on agent auditing (RL-9). This file remains the plan of the capstone tripwire manuscript and is kept as

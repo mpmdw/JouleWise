@@ -121,19 +121,19 @@
   },
   {
     "path": "docs/paper/results-fill-registry.md",
-    "line": 270,
+    "line": 296,
     "phrase": "common-time",
     "reason": "Registry reproduces the corrected registered absolute rationale: no absolute common-time replay is implemented; not_applicable is comparative-only."
   },
   {
     "path": "docs/paper/results-fill-registry.md",
-    "line": 287,
+    "line": 313,
     "phrase": "common-time",
     "reason": "Registry reproduces the corrected registered absolute rationale: no absolute common-time replay is implemented; not_applicable is comparative-only."
   },
   {
     "path": "docs/paper/results-fill-registry.md",
-    "line": 303,
+    "line": 329,
     "phrase": "common-time",
     "reason": "Registry reproduces the corrected registered absolute rationale: no absolute common-time replay is implemented; not_applicable is comparative-only."
   },
@@ -253,13 +253,13 @@
   },
   {
     "path": "docs/paper/results-fill-registry.md",
-    "line": 279,
+    "line": 305,
     "phrase": "common-time",
     "reason": "Registry reproduces the corrected registered absolute rationale: no absolute common-time replay is implemented; not_applicable is comparative-only."
   },
   {
     "path": "docs/paper/results-fill-registry.md",
-    "line": 295,
+    "line": 321,
     "phrase": "common-time",
     "reason": "Registry reproduces the corrected registered absolute rationale: no absolute common-time replay is implemented; not_applicable is comparative-only."
   },
