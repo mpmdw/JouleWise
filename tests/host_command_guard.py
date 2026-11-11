@@ -14,6 +14,9 @@ class HostCommandRefused(RuntimeError):
 
 
 REFUSALS = []
+# The guard's own test-tree files, which tests/_host_guard_site injects into every child interpreter. A witness
+# that inventories what a production entry point imports in a fresh child excludes exactly these.
+GUARD_FILES = frozenset({"tests/__init__.py", "tests/host_command_guard.py", "tests/_host_guard_site/sitecustomize.py"})
 _DENIED = {"sudo", "systemsetup", "pmset", "caffeinate", "shutdown", "nvram"}
 _LAUNCH_WRITES = {"bootstrap", "bootout", "load", "unload", "kickstart", "enable", "disable", "remove"}
 # Transparent wrappers run their trailing argument vector as a command (cold review F-3).

@@ -5,6 +5,7 @@ import contextlib
 import datetime as dt
 import io
 import json
+import re
 import os
 from pathlib import Path
 import plistlib
@@ -806,6 +807,22 @@ class WatchdogTests(unittest.TestCase):
 
 
 class RemoteProbeTests(watchdog_fixtures.WatchdogTestCase):
+    @property
+    def python(self):
+        """An interpreter path the installed-plist whitelist accepts (basename python3[.x]).
+
+        Hosted CI's sys.executable is named `python`; the whitelist (correctly) refuses it. A symlink named
+        python3.x to the same interpreter keeps these witnesses about the parser, not the CI image.
+        """
+        name = Path(sys.executable).name
+        if re.fullmatch(r'python3(?:\.[0-9]+)?', name):
+            return sys.executable
+        link = self.temp / 'interp-bin' / f'python3.{sys.version_info.minor}'
+        if not link.exists():
+            link.parent.mkdir(parents=True, exist_ok=True)
+            link.symlink_to(os.path.realpath(sys.executable))
+        return str(link)
+
     def test_direct_parser_rejects_installed_deadman_epoch_error(self):
         module = self.temp / 'deadman-watchdog.py'
         module.write_text('''import json, time
@@ -847,7 +864,7 @@ def load_plans(storage, now_epoch_s): return SimpleNamespace(plans=[])
                 'STATUS_HOST': 'synthetic'}.items():
             text = text.replace('@@' + key + '@@', escape(value))
         text = text.replace('    <string>/usr/bin/env</string>\n    <string>python3</string>',
-                            f'    <string>{escape(sys.executable)}</string>')
+                            f'    <string>{escape(self.python)}</string>')
         self.assertNotIn('@@', text)
         path = home / 'Library/LaunchAgents/com.joulewise.magistrate.plist'
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -906,7 +923,7 @@ def load_plans(storage, now_epoch_s): return SimpleNamespace(plans=[])
                     self.assertEqual(dwell['quiet_dwell']['watchdog_post_install']['install_undo']['remaining_labels'], [])
                 # Render the real production night template through its helper;
                 # no installer invocation or launchctl is needed to publish temp plists.
-                prepared = Prepared(plan, plan_path, session.ROOT, sys.executable,
+                prepared = Prepared(plan, plan_path, session.ROOT, self.python,
                     (session.ROOT / 'configs/launchd/com.joulewise.night.plist.template').read_text(),
                     str(self.temp / 'unused-courier'), os.environ['PATH'],
                     {'night_calendar': {'Month': 11, 'Day': 11, 'Hour': 23, 'Minute': 0},
@@ -944,7 +961,7 @@ def load_plans(storage, **kwargs): return SimpleNamespace(plans=(), errors=())
 if __name__ == '__main__': print('decision=LAUNCHING reason=synthetic')
 ''')
         doc = plistlib.loads(plist.read_bytes())
-        doc['ProgramArguments'] = [sys.executable, '-B', str(module)]
+        doc['ProgramArguments'] = [self.python, '-B', str(module)]
         plist.write_bytes(plistlib.dumps(doc))
         custody = self.temp / 'night-align/session/custody'
         custody.mkdir(parents=True)
@@ -971,7 +988,7 @@ if __name__ == '__main__': print('decision=LAUNCHING reason=synthetic')
                 plan_path=Path(plan.custody_root) / 'night_plan.json')
         self.assertTrue(row['ok'], row)
         self.assertEqual(run.call_args_list[0].args[0][:2],
-            [sys.executable, str(session.ROOT / 'scripts/magistrate_watchdog.py')])
+            [self.python, str(session.ROOT / 'scripts/magistrate_watchdog.py')])
         self.assertEqual(run.call_args_list[0].kwargs['env']['MAGISTRATE_SESSION_BIN'],
                          str(self.temp / 'unused-session'))
 

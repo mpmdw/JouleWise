@@ -44,7 +44,8 @@ print(json.dumps(paths))
 '''
         result = subprocess.run([sys.executable, '-B', '-c', code], cwd=ROOT,
                                 capture_output=True, text=True, timeout=60, check=True)
-        cls.imported = set(json.loads(result.stdout))
+        from tests.host_command_guard import GUARD_FILES  # injected into every child by the test-only guard
+        cls.imported = set(json.loads(result.stdout)) - GUARD_FILES
 
     def test_production_entry_imports_are_receipt_bound(self):
         self.assertEqual(sorted(self.imported - set(registration.ARTIFACTS)), [])

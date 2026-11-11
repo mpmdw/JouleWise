@@ -41,7 +41,8 @@ print(json.dumps(sorted(paths)))
 '''
     result = subprocess.run([sys.executable, '-B', '-c', code, target], cwd=ROOT,
                             check=True, capture_output=True, text=True, timeout=30)
-    return set(json.loads(result.stdout))
+    from tests.host_command_guard import GUARD_FILES  # injected into every child by the test-only guard
+    return set(json.loads(result.stdout)) - GUARD_FILES
 
 
 class ExecutedTierWitnesses(unittest.TestCase):
