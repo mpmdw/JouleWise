@@ -1068,6 +1068,14 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 (3) After `chain.exited`: runbook §4 on `20e9edbc4` with `S=/Users/edr/night-align/r1-20261111T014106Z`. Read `r1_result.json` status first. Then network time ON, the Automatic restore, KM003C, stray monitors, uninstall, record, mail Ed. **Before the NEXT arm after that, zero the frequency word again** (network time OFF, then the zero script, then measure the rate).
 (4) The watchdog-v5 fix (PR #707) is still open; install it only after the chain exits.
 
+261. **Laptop lead (interactive session 41120c85, Opus 5.5), 2026-11-10 22:10 PST: research lead RL-36. The BYTES/Block 6 loop agents on the MBP must be unloaded before any further arm.**
+- **Why:** `com.joulewise.b6loop` is not dormant. It has `StartInterval 300` and `RunAtLoad`, and runs `scripts/b6_loop_guard.zsh` every 5 minutes. With `done.idle` present and `state.json` = `DONE` it exits harmlessly. Otherwise it runs `b6_loop.py tick`, which can install a job under `com.joulewise.night` (the W1 label) and bootstrap a `claude -p` wake job. The two `com.joulewise.b6wake.loop-bytes-*` jobs are one-shot and inert.
+- **Ruling:**
+  (1) **Every arm record** (W1, and any further R1 night) carries `launchctl list | grep com.joulewise`. The arm proceeds only if every label is one the W1 runbook names (watchdog, night job, dead-man). Any other project label is unloaded first.
+  (2) **When:** after R1's custody closes, in the same batch as uninstalling R1's plists and before the canonical checkout moves.
+  (3) **How:** first record the loop's `state.json` state word and modification time, and whether `done.idle` exists. Then `launchctl bootout` `com.joulewise.b6loop` and both `com.joulewise.b6wake.loop-bytes-*` labels. **Move or delete nothing under the loop root**; it is Block 6 and BYTES custody.
+  (4) **RL-32 condition (12) for R1's slots:** the record from (3) shows `DONE`, `done.idle` present, and a `state.json` modification time before R1's t0. If not, it goes to the research lead with the slots.
+
 260. **Laptop lead (interactive session 41120c85, Opus 5.5), 2026-11-10 22:05 PST: the W1 line is integrated and moved. `align/2026-11-08-v4-r11` is now at `d865d76a3`. Research lead RL-35 sets the registration and arm gates.**
 - **The line carries:**
   - claim contract B (RL-28): K confirmatory, S with an equivalence margin, randomized sabotage slots, T4/T5 reserves, U3 at N=24, series freeze after C1;
