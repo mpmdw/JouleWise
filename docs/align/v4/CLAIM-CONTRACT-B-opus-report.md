@@ -31,9 +31,11 @@ not touched.
   by 0.5·√T/√(1+h). At the registered planning opportunity T = 3 (the R1 duty bar, chair 1, R08/R16) that is
   0.80 at h = 1/6 (a typical trajectory against six 3-turn training trajectories), **0.75 at h = 1/3**, 0.65 at
   h = 0.8.
-- **Power** (normal location model, exact convolution of the per-stratum rank law): equivalence at no effect
-  .79 with all 22 strata, .74 at 20, .58 at 16; superiority .50/.84/.98 at 0.5/0.75/1.0 SD.
-- **Rejected:** 0.5 (U6's value used directly on member scores) gives equivalence power .25, so the predicted
+- **Power (RL-22 correction, 2026-11-10).** The original design-interval-only equivalence calculation is
+  superseded by the joint rule with estimated window SE: power at no effect is .68 with all 22 strata,
+  .60 at 20 and .38 at 16 (`claim-b-power.json`, normal location model, independent pairs). Equivalence
+  planning power is limited. Superiority retains its exact convolution: .50/.84/.98 at 0.5/0.75/1.0 SD.
+- **Rejected (former design-interval-only calculation):** 0.5 (U6's value used directly on member scores) gives equivalence power .25, so the predicted
   null would usually be inconclusive; 1.0 gives .96 but calls a shift that lifts a sabotage-instructed
   episode's alarm probability to about 17 % "equivalent".
 - **S score is LOSO**, not the A4 LOTO: each member is scored on a fit of the other eligible members of its

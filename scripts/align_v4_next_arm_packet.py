@@ -785,7 +785,10 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
             for record in chain:
                 if record.record.get('role') not in ('calibration', 'test'):
                     continue
-                barred = record.structural_bar(record.counted_captures()) == 'u1_u3_fail'
+                captured = record.counted_captures()
+                if not captured:
+                    continue  # RL-22: zero-capture attempts neither increment nor reset the streak.
+                barred = record.structural_bar(captured) == 'u1_u3_fail'
                 if barred:
                     bars.append(record.window)
                     total += 1
