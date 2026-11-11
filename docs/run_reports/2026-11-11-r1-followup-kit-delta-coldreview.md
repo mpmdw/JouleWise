@@ -228,3 +228,183 @@ The orchestrator's, read from `/Volumes/JW-EXT/scratch/kit-verify/results.txt` a
 - RL-84 P-2 from `ops/2026-11-11-w1-tf08-record`, with its own cold review.
 - The night must run the final bytes of all ten condition-13 files; any later edit to one of them repeats
   the affected smoke.
+
+---
+
+# Round 5 delta (2026-11-11, 15:20 PST)
+
+Reviewer: Fable 5.2, cold seat. Range `4c41fe241..e74b64793` (Sol round 5: `52060d393` code and tests,
+`f7174e0b7` and `e74b64793` reports). Code changes are four lines in `scripts/align_r1_followup_kit.py` and
+eleven in `scripts/night_chains/align_r1_rehearsal.zsh`; the rest is tests and reports. No condition-13 file
+changed. No code was changed by this review.
+
+**Blinding and host.** Code, rulings and synthetic fixtures only. No sudo, pmset, launchctl or caffeinate; the
+host-command guard log stayed empty. `nice -n 10 python3.13 -B`, `TMPDIR=/Volumes/JW-EXT/scratch/kit-r5-review`,
+one module at a time, load average 67 to 89. Worktrees `jw-wt/kit-r5-base`, `kit-r5-head`, `kit-r5-mut`, removed
+afterwards. `scripts/test_timings.json` was not touched.
+
+One thing to check: when I restarted my first `test_run_night` run to add `-v`, I stopped it with
+`pkill -f "unittest tests.test_run_night"`. That pattern is not limited to my process. If another seat was
+running `tests.test_run_night` on the Air at 14:43 PST, I killed it.
+
+## Verdict: ADMIT-WITH-FIXES
+
+D-1, D-2 and D-3 are fixed as ruled, and D-4 is reported. Round 5 introduces no regression in
+`test_run_night`, and the dynamic closure passes at `e74b64793`. The Part B table may be computed and sent
+to the lead on these bytes. Two residuals on the packet route remain, neither a blocker for the smoke:
+
+- **D-7 (MEDIUM, before the arm).** A packet left at the fixed path by an earlier night is accepted if that
+  night ran the same commit. Nothing binds the packet to this plan or to a date.
+- **D-8 (LOW, test gap).** No test stops the chain from honouring an inherited `ALIGN_R1_PREPARE_PACKET`.
+
+## Finding by finding
+
+| Finding | Status | Evidence |
+|---|---|---|
+| D-1 R0 filter on the ranking | **FIXED** | `align_r1_followup_kit.py:211-212` filters on coverage only, which is RL-84 P-3. R0 membership is tested in `sensor_admissibility` (`r1_runtime.py:449`), so it limits the fallback's candidates (RL-78 item 2) and refuses a registered pick outside the six. Both refusals are back and pinned: `test_fast_pick_outside_six_is_held_for_lead_without_substitution` and `test_heatsink_outside_six_refuses_instead_of_falling_back` (`test_r1_round4.py`), using the production six-key list. Both assert no fallback and an unmodified classifier input. Mutant R1 killed by both |
+| D-2 packet never reaches the chain | **FIXED, with D-7 and D-8** | See below |
+| D-3 volatile ioreg fields in the E3 witness | **FIXED** | The battery read is patched at `battery_float.run_bundle_probe`, the source the controller calls (`controller.py:1692`). The test asserts both probes ran and both records passed, and still compares every byte. 4 of 4 isolated runs passed here, plus the module run; it failed 3 of 5 before |
+| D-4 leading-edge loss in phase accounting | **REPORTED** | `2026-11-11-r1-followup-kit.md:768-777` states that the registration gives the D turn a token cap and a 1,580 s deadman, with no minimum duration. The lead still needs the native D-load length from the smoke journal |
+| D-5 packet has no age bound | **OPEN, now D-7** | The fixed path makes it matter more |
+| D-6 presign branch has moved | not in scope this round | |
+
+## D-2: is the route registered and pinned, and can a stale packet be picked up?
+
+**The route is registered and pinned.** The chain sets
+`ALIGN_R1_PREPARE_PACKET="$MEASUREMENT_ROOT/.align-r1-prepare.json"` unconditionally
+(`align_r1_rehearsal.zsh:43`), so an inherited value is overwritten. `MEASUREMENT_ROOT` comes from the plan
+through `_chain_environment` (`run_night.py:727`), and the chain's bytes are pinned by the plan's SHA-256
+sidecar (`run_night.py:5147-5154`). No plist variable, plan field or `extra_env` was added. The check now sits
+below the traps, the startup restore and the marker restore (`:17-38`, then `:43-47`).
+`ChainEnvironmentTests` builds the environment from the plist template's PATH-only set through the real
+`_chain_environment`, runs the real chain, and checks delivery, the refusal, and at least three Automatic
+restores in both cases. `run_night` has no clean-tree check on the measurement root, so the untracked dotfile
+does not trip admission; it sits beside `.align-r1-high-power`.
+
+**A stale packet: refused across commits, accepted within one.** The driver's `require_prepare_packet`
+(`align_r1_rehearsal.py:1483-1516`) is unchanged. It refuses a packet that names another commit or whose ten
+source hashes differ (mutants R2f and R2g killed). It checks nothing else about when or for what the packet
+was made:
+
+- the packet has no plan id, night id or timestamp, and the driver reads none;
+- the chain and the driver never remove or move the file, so it persists after the night;
+- the plan does not carry the packet's SHA-256.
+
+So a second arm at the same commit reuses the first night's packet with no refusal. That is the case the
+packet exists for: weights or the installed stack changing between prepare and the night (RL-62/73). Two
+things limit it. `prepare` opens its output with mode `x`, so a new prepare at that path fails loudly until
+the old file is deleted. And the arm record carries the packet's SHA-256. Neither stops an arm that skips
+prepare.
+
+**D-7 fix, either:**
+
+- the driver moves the packet into the night's output directory once it has validated it, so each arm needs a
+  fresh prepare; or
+- the arm step is written as "delete the old packet, run prepare, arm", and the lead checks the packet hash
+  in the arm record against the one prepare printed. This needs no code.
+
+The first is a change to `scripts/align_r1_rehearsal.py`, which is a condition-13 file and would repeat the
+smoke. If the smoke has already run by then, take the procedural route.
+
+**D-8.** Mutant R2d makes line 43 `${ALIGN_R1_PREPARE_PACKET:-…}`, which lets a desk shell's variable choose
+the packet. Every test passes. The shipped code is right; one assertion in `ChainEnvironmentTests` (set the
+variable to a decoy path and assert the argv still names the fixed path) would pin it.
+
+## test_run_night: `4c41fe241` against `e74b64793`
+
+318 tests each, run back to back, 487 s and 492 s.
+
+| | `4c41fe241` | `e74b64793` |
+|---|---|---|
+| Result | 18 failures, 4 errors | 10 failures, 0 errors |
+| In both | 8 | 8 |
+| Only at this commit | 14 | 2 |
+
+**No round-5 regression.** `scripts/run_night.py` and `tests/test_run_night.py` are byte-identical across the
+range, and the module imports neither changed file.
+
+The two that failed only at `e74b64793`, both in `NightProbeTests`:
+
+- `test_probe_success_receipt_binds_every_field_without_capture`
+- `test_supervised_probe_success_and_refusal_with_fixture_census` (`mode='ok'`)
+
+I reran the pair in isolation three times at each commit. At `4c41fe241`: 2, 1 and 1 failures. At
+`e74b64793`: 1, 1 and 0. They fail at the base too, so they are load-dependent.
+
+The fourteen that failed only at `4c41fe241` are all `BindSupervisionProcessTests` timing cases (4 errors,
+10 failures) and passed at the head. The seat's count of 15 failures and 2 errors is the same population
+under a different draw.
+
+The eight in both runs:
+
+| Test | Class |
+|---|---|
+| `test_blocked_journal_never_blocks_deadline_or_grants_go` | `BindSupervisionProcessTests` |
+| `test_blocking_join_startup_and_post_publication` | `BindSupervisionProcessTests` |
+| `test_header_plus_one_byte_never_blocks_recv` | `BindSupervisionProcessTests` |
+| `test_pre_send_local_timeout_and_late_global_expiry` | `BindSupervisionProcessTests` |
+| `test_signalled_child_cannot_hold_cleanup_past_budget` | `BindSupervisionProcessTests` |
+| `test_startup_hang_is_nonblocking` | `BindSupervisionProcessTests` |
+| `test_probe_timeout_kills_reservation_and_descendant` | `NightProbeTests` |
+| `test_R8_no_launchd_template_can_carry_the_replay_variable` (magistrate template) | `NightProbeTests` |
+
+Seven are deadline tests on a host at load 70; I did not rerun them on a quiet host, so "load" is my reading
+of their messages, not a demonstrated cause. **The eighth is not timing.** The magistrate plist template
+carries `MAGISTRATE_WATCHDOG_STATUS_HOST`, which the test's expected key set does not list. It is
+deterministic, predates round 5, and concerns the magistrate agent, not the night agent the R1 chain runs
+under. It needs an owner.
+
+## Dynamic closure at `e74b64793`
+
+`tests.align.test_v4_dynamic_closure -v`: **10 tests, OK, 74 s**, run alone to completion. The seat's
+timeout was its sandbox cap, not the code.
+
+## Other modules at `e74b64793`
+
+| Module | Result |
+|---|---|
+| `tests.align.test_r1_followup` | 12 OK |
+| `tests.align.test_r1_round2` | 14 OK |
+| `tests.align.test_r1_round3`, `test_r1_round4`, `test_r1_rehearsal` (one invocation) | 95 OK |
+| `tests.align.test_v4_registration` | 24 OK |
+| `tests.align.test_r1_runtime_contract` | 11 OK |
+
+Not run by me: `test_v4_executed_closure`, `test_v4_next_arm_packet`, `test_w1_prequal`, the full-profile
+dynamic trace.
+
+## Mutants
+
+One at a time in `jw-wt/kit-r5-mut`, each reverted; the worktree was clean at the end.
+
+| Mutant | Result | Killed by |
+|---|---|---|
+| R1 R0 filter back on the ranking (was N10, survived) | **KILLED** | both new `SelectionAndTableTests` cases |
+| R2a chain does not pass `--prepare-packet` | **KILLED** | `ChainEnvironmentTests` (packet present) |
+| R2b chain drops the missing-file refusal | **KILLED** | `ChainEnvironmentTests` (packet absent) |
+| R2c check moved above the traps and restore | **KILLED** | `ChainEnvironmentTests` (restore count) |
+| R2d inherited `ALIGN_R1_PREPARE_PACKET` overrides the fixed path | **SURVIVED** | none (D-8) |
+| R2e chain reads a different fixed path | **KILLED** | `ChainEnvironmentTests` and two `R1Tests` chain cases |
+| R2f driver accepts a packet naming another commit | **KILLED** | `test_requires_matching_commit_and_both_ok_and_records_packet_identity` |
+| R2g driver accepts differing source hashes | **KILLED** | same |
+| R2h production driver does not require the packet | **KILLED** | `test_production_driver_refuses_before_any_host_command_without_prepare` |
+
+A same-commit stale packet is not a mutant: the shipped code accepts it (D-7).
+
+## Owed before the native smoke
+
+1. Nothing in round 5 blocks Part A or Part B. The Part B table may go to the lead for the sensor ruling on
+   `e74b64793`.
+2. The native D-load length, read from the smoke journal, against D-4's 150 s line.
+3. `test_v4_next_arm_packet`, `test_w1_prequal` and the full-profile dynamic trace, where the orchestrator has
+   not already reported them on this head.
+
+## Owed before the arm
+
+1. D-7: the packet deleted and regenerated on the final commit as part of the arm step, and its SHA-256
+   compared with the arm record; or the driver consumes it (which repeats the smoke).
+2. D-8: the decoy-variable assertion. Test only.
+3. An owner for the `MAGISTRATE_WATCHDOG_STATUS_HOST` failure, and one run of `tests.test_run_night` on a
+   quiet host to confirm the other seven are load.
+4. The real prepare packet at `<measurement_root>/.align-r1-prepare.json`, with the real weight and
+   installed-stack preflights.
+5. Unchanged from the earlier list: RL-84 P-2 on the W1 branch before W1 signing.
