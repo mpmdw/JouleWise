@@ -37,6 +37,9 @@ DISPLAY_SLEEP_DWELL_S = 300
 # a real run; the record carries both the dwell used and the constant.
 DISPLAY_DWELL_TEST_ENV = "JOULEWISE_R0_TEST_DISPLAY_DWELL_S"
 DISPLAY_PREP_ENV = "JOULEWISE_R0_DISPLAY_PREP"
+# R1 has two separately owned groups (part and meter) and an Automatic
+# restore. Leave the fence up while their ordinary teardown proves absence.
+R1_CLEANUP_GRACE_S = 180
 
 
 def positive_seconds(value: str) -> float:
@@ -185,6 +188,8 @@ def run_until_deadline(args) -> int:
     if remaining <= dwell:
         raise TimeoutError(f"R0 desk deadline leaves no room for the {dwell:g} s display dwell")
     child = None
+    runner = json.loads(args.runner_spec.read_text())
+    r1_smoke = isinstance(runner, dict) and runner.get("kind") == "r1-smoke"
 
     def interrupted(signum, _frame):
         raise SystemExit(128 + signum)
@@ -192,6 +197,12 @@ def run_until_deadline(args) -> int:
     for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
         signal.signal(signum, interrupted)
     try:
+        if r1_smoke:
+            # R1 starts its feeds BEFORE display sleep/dwell. The same absolute
+            # fence deadline is passed through; both layers reserve cleanup.
+            remaining = args.deadline - time.time() - R1_CLEANUP_GRACE_S - 10
+            child = subprocess.Popen(runner["argv"], env=os.environ.copy())
+            return child.wait(timeout=max(0, remaining))
         # RUN_STATE 206: display off, then dwell, before any census-checked
         # segment. The runner records the display state and any wake.
         prep = {"displaysleepnow": sleep_display(args.pmset_bin), "dwell_s": dwell,
@@ -213,13 +224,25 @@ def run_until_deadline(args) -> int:
         if child is not None and child.poll() is None:
             child.terminate()
             try:
-                child.wait(timeout=5)
+                child.wait(timeout=R1_CLEANUP_GRACE_S if r1_smoke else 5)
             except subprocess.TimeoutExpired:
                 child.kill()
                 child.wait()
 
 
+def runner_argv(args) -> list[str]:
+    if getattr(args, "runner_kind", "r0") == "r1-smoke":
+        return [str(args.python_bin), str(args.repo / "scripts/run_align_r1_smoke.py"),
+                "--output", str(args.output), "--soak-reference", str(args.soak_reference),
+                "--deadline", str(args.deadline)]
+    return [str(args.python_bin), str(args.repo / "scripts/align_r0_checks.py"),
+            "--config", str(args.config), "--output", str(args.output),
+            *(["--checks", args.checks] if args.checks is not None else []),
+            *(["--keep-going"] if args.keep_going else [])]
+
+
 def launch(args) -> None:
+    args.runner_kind = getattr(args, "runner_kind", "r0")
     if (args.magistrate_pid <= 1 or not pid_alive(args.magistrate_pid)
             or not math.isfinite(args.deadline) or args.deadline <= time.time()):
         raise ValueError("live magistrate PID and future finite epoch deadline required")
@@ -229,8 +252,11 @@ def launch(args) -> None:
         raise ValueError("R0 output must be a new record directory")
     if args.checks is not None and not CHECKS_PATTERN.fullmatch(args.checks):
         raise ValueError("--checks must be comma-separated runner check names")
-    runner = args.repo / "scripts/align_r0_checks.py"
-    if not runner.is_file() or not args.config.is_file() or not os.access(args.python_bin, os.X_OK):
+    if args.runner_kind == "r1-smoke" and (args.soak_reference is None or not args.soak_reference.is_file()):
+        raise ValueError("r1-smoke requires an existing --soak-reference")
+    runner = Path(runner_argv(args)[1])
+    if (not runner.is_file() or not os.access(args.python_bin, os.X_OK)
+            or (args.runner_kind == "r0" and (args.config is None or not args.config.is_file()))):
         raise ValueError("measurement checkout runner, config and executable interpreter required")
     root = args.custody_root
     root.mkdir(parents=True, exist_ok=True)
@@ -245,10 +271,10 @@ def launch(args) -> None:
     runner_spec = job / "runner.json"
     # R0-L3 item 3: pass a check subset (R0-L1) and --keep-going (the desk
     # default) through; the runner's prerequisite gates still apply.
-    runner_spec.write_text(json.dumps([str(args.python_bin), str(runner),
-                                      "--config", str(args.config), "--output", str(args.output),
-                                      *(["--checks", args.checks] if args.checks is not None else []),
-                                      *(["--keep-going"] if args.keep_going else [])]) + "\n")
+    spec = runner_argv(args)
+    if args.runner_kind == "r1-smoke":
+        spec = {"kind": "r1-smoke", "argv": spec}
+    runner_spec.write_text(json.dumps(spec) + "\n")
     # Keep the measurement entry-point name out of the launcher ancestors'
     # argv: QuietGuard correctly refuses a second align_r0_checks process.
     arguments = ["/bin/bash", str(wrapper), str(Path(__file__).resolve()),
@@ -296,7 +322,9 @@ def main(argv=None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     start = sub.add_parser("launch", help="magistrate: publish fence, bootstrap once, then exit session")
     start.add_argument("--repo", type=Path, required=True)
-    start.add_argument("--config", type=Path, required=True)
+    start.add_argument("--config", type=Path, help="required for the default r0 runner")
+    start.add_argument("--runner-kind", choices=("r0", "r1-smoke"), default="r0")
+    start.add_argument("--soak-reference", type=Path, help="required for r1-smoke")
     start.add_argument("--output", type=Path, required=True)
     start.add_argument("--python-bin", type=Path, required=True)
     start.add_argument("--disk-path", type=Path, required=True)
@@ -330,8 +358,8 @@ def main(argv=None) -> int:
     run.add_argument("--runner-spec", type=Path, required=True)
     run.add_argument("--pmset-bin", default="/usr/bin/pmset")
     args = parser.parse_args(argv)
-    for name in ("repo", "config", "output", "disk_path", "custody_root"):
-        if hasattr(args, name):
+    for name in ("repo", "config", "output", "disk_path", "custody_root", "soak_reference"):
+        if getattr(args, name, None) is not None:
             setattr(args, name, getattr(args, name).expanduser().resolve())
     # Absolute but NOT symlink-resolved: a venv interpreter is a symlink to its
     # base Python, and Python finds the venv (pyvenv.cfg) from the invoked path.

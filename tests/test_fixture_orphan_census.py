@@ -89,6 +89,19 @@ class FixtureOrphanCensusTests(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertEqual(sentinel.census(row(command), self.signatures), [])
 
+    def test_r1_smoke_part_fixture_has_a_unique_temporary_namespace(self) -> None:
+        for root in ("/private/tmp", "/tmp/ci"):
+            command = (f"/usr/bin/python3 -B {root}/jw-r1-smoke-fixture-abcd1234/measurement/"
+                       "scripts/align_r1_followup_kit.py smoke --part A --output /synthetic/new --soak-reference /synthetic/soak")
+            self.assertEqual([x["signature"] for x in sentinel.census(row(command), self.signatures)],
+                             ["r1-smoke-synthetic-part"])
+            self.assertEqual(sentinel.census(row(command, ppid=200), self.signatures), [])
+            for changed in (command.replace("jw-r1-smoke-fixture-abcd1234", "production"),
+                            command.replace("jw-r1-smoke-fixture-abcd1234", "jw-r1-smoke-fixture-production"),
+                            command.replace("/measurement/", "/production/"),
+                            command.replace("align_r1_followup_kit.py", "other.py")):
+                self.assertEqual(sentinel.census(row(changed), self.signatures), [])
+
     def test_age_start_rss_and_json_schema(self) -> None:
         start = time.mktime(time.strptime(START, "%a %b %d %H:%M:%S %Y"))
         matches = sentinel.census(row(VLLM), self.signatures, now=start + 13 * 86400 + 5.5)

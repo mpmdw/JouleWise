@@ -78,6 +78,7 @@
     "tests.align.test_r1_round3": 20.0,
     "tests.align.test_r1_round2": 10.0,
     "tests.align.test_r1_followup": 60.0,
+    "tests.align.test_r1_smoke_launcher": 13.883,
     "tests.test_align_r1_thermal_replay": 2.0,
     "tests.align.test_moe_calibration": 1451.183,
     "tests.b6.test_cold_pass_fixes": 1800.0,
