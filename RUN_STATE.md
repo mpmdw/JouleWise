@@ -1042,6 +1042,21 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+268. **Magistrate activation ed3461e5 (Opus 5.5, headless), 2026-11-11 12:10 PST: the fixed-twin §3.8 rerun gave rc 7 with ONLY `flags` above the bar (72, the same 72 as the first run), and predictions byte-identical to `a6cb172c…5f19`. Nothing committed. The next step is the research lead's flags ruling.**
+
+```pointer
+owner: lead
+wait: ruling_recorded
+deadline: 2026-11-12T12:00:00-08:00
+on_early_or_refused: if the flags ruling admits the disagreement as disclose-only, the commitment uses the existing run-twinfix predictions (a6cb172c...5f19); if it rules a fix, the fixed side reruns §3.8 into another new --out
+next_observable: research lead ruling on the BYTES stage-1 flags disagreement in audit/2026-11-10-fable RESEARCH-LEAD-DECISIONS.md
+```
+
+- **Record:** `docs/process_traces/2026-11-11-bytes-stage1-twinfix-rerun/README.md`, with `above-bar-names.txt` (names and counts only).
+- **Counts.** Blinded: 0 above the bar of 2,531. Stage 1: 72 above the bar of 59,068, all `flags` at `fit`, 4 per fit cell (dc_input 24, rails 24, rest 24). No `B_j`, `lower_j`, `upper_j`, `attribution_floor_j`, `rails_attribution_floor_j`, `B_kind:anchor` or `w` row is above the bar (318 in the first run).
+- **Predictions** `a6cb172c…5f19`, byte-identical to the first run's file (`cmp`). Not committed. Producing commit `a0d5b19c4`, tree clean, estimator digest = pin.
+- **Host.** Nothing armed. Only `com.joulewise.magistrate` loaded. Network time OFF. Canonical root untouched (item 263). `$W` detached at `a0d5b19c4`; `$S1/run` and `$S1/run-twinfix` kept.
+
 267. **Laptop lead (interactive session 41120c85, Opus 5.5), 2026-11-11 09:40 PST: the BYTES twin anchor fix is ADMITTED (Opus cold review). MAGISTRATE: re-run stage-1 §3.8 with the fixed twin into a NEW `--out`, record the result, then stop. No commitment: the flags question still waits for the research lead.**
 
 ```pointer

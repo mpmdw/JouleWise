@@ -1,0 +1,25 @@
+compared 59068 Counter({'equal': 53858, 'under_bar': 5138, 'above_bar': 72})
+above_bar 72 by stage {'fit': 72}
+--- keys [('flags', 72)]
+4 cell/qwen3-1.7b-4bit/pass1/dc_input
+4 cell/qwen3-1.7b-4bit/pass1/rails
+4 cell/qwen3-1.7b-4bit/pass1/rest
+4 cell/qwen3-1.7b-4bit/pass2/dc_input
+4 cell/qwen3-1.7b-4bit/pass2/rails
+4 cell/qwen3-1.7b-4bit/pass2/rest
+4 cell/qwen3-4b-4bit/pass1/dc_input
+4 cell/qwen3-4b-4bit/pass1/rails
+4 cell/qwen3-4b-4bit/pass1/rest
+4 cell/qwen3-4b-4bit/pass2/dc_input
+4 cell/qwen3-4b-4bit/pass2/rails
+4 cell/qwen3-4b-4bit/pass2/rest
+4 cell/qwen3-8b-4bit/pass1/dc_input
+4 cell/qwen3-8b-4bit/pass1/rails
+4 cell/qwen3-8b-4bit/pass1/rest
+4 cell/qwen3-8b-4bit/pass2/dc_input
+4 cell/qwen3-8b-4bit/pass2/rails
+4 cell/qwen3-8b-4bit/pass2/rest
+--- key by kind
+dc_input {'flags': 24}
+rails {'flags': 24}
+rest {'flags': 24}
