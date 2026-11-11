@@ -236,6 +236,105 @@ PACIFIC = r1.ZoneInfo("America/Los_Angeles")
 NOON_SAFE = r1.datetime(2026, 11, 7, 2, 0, tzinfo=PACIFIC)
 
 
+class PhaseTableIdentityTests(unittest.TestCase):
+    def test_phase_tables_match_pre_move_literals(self):
+        # RL-61: freeze the full plan before moving its definition; no measured data.
+        expected = {
+            (False, None): (
+                ('pre_calibration_bracket', 'calibration-pre', None, 'light'),
+                ('idle_soak', 'idle', 1800, 'light'),
+                ('step_30b', 'step-30b', None, 'heavy'),
+                ('high_power_A1', 'high-power-aba-a1', None, 'heavy'),
+                ('high_power_B', 'high-power-aba-b', None, 'heavy'),
+                ('high_power_A2', 'high-power-aba-a2', None, 'heavy'),
+                ('step_D_prefill_10k_decode_4096.precool', 'idle-until-soak', 1500, 'light'),
+                ('step_D_prefill_10k_decode_4096', 'step-d', None, 'heavy'),
+                ('cooldown_after_D', 'idle-until-soak', 1500, 'light'),
+                ('planning_turn_R_plus_4C', 'd-planning-turn-r-plus-4c', None, 'heavy'),
+                ('planning_turn_R_plus_2C.precool', 'idle-until-soak', 1500, 'light'),
+                ('planning_turn_R_plus_2C', 'd-planning-turn-r-plus-2c', None, 'heavy'),
+                ('planning_turn_R_plus_0C.precool', 'idle-until-soak', 1500, 'light'),
+                ('planning_turn_R_plus_0C', 'd-planning-turn-r-plus-0c', None, 'heavy'),
+                ('D_bank_benign_s1_gated_held', 'd-bank-benign-s1', None, 'heavy'),
+                ('D_spam_benign_s1_gated_held_a', 'd-spam-benign-s1-a', None, 'heavy'),
+                ('D_spam_benign_s1_gated_held_b', 'd-spam-benign-s1-b', None, 'heavy'),
+                ('X_G_contrast', 'x-g', None, 'heavy'),
+                ('post_calibration_bracket', 'calibration-post', None, 'light'),
+            ),
+            (False, 777.0): (
+                ('pre_calibration_bracket', 'calibration-pre', None, 'light'),
+                ('idle_soak', 'idle', 1800, 'light'),
+                ('step_30b', 'step-30b', None, 'heavy'),
+                ('high_power_A1', 'high-power-aba-a1', None, 'heavy'),
+                ('high_power_B', 'high-power-aba-b', None, 'heavy'),
+                ('high_power_A2', 'high-power-aba-a2', None, 'heavy'),
+                ('step_D_prefill_10k_decode_4096.precool', 'idle-until-soak', 777.0, 'light'),
+                ('step_D_prefill_10k_decode_4096', 'step-d', None, 'heavy'),
+                ('cooldown_after_D', 'idle-until-soak', 1500, 'light'),
+                ('planning_turn_R_plus_4C', 'd-planning-turn-r-plus-4c', None, 'heavy'),
+                ('planning_turn_R_plus_2C.precool', 'idle-until-soak', 777.0, 'light'),
+                ('planning_turn_R_plus_2C', 'd-planning-turn-r-plus-2c', None, 'heavy'),
+                ('planning_turn_R_plus_0C.precool', 'idle-until-soak', 777.0, 'light'),
+                ('planning_turn_R_plus_0C', 'd-planning-turn-r-plus-0c', None, 'heavy'),
+                ('D_bank_benign_s1_gated_held', 'd-bank-benign-s1', None, 'heavy'),
+                ('D_spam_benign_s1_gated_held_a', 'd-spam-benign-s1-a', None, 'heavy'),
+                ('D_spam_benign_s1_gated_held_b', 'd-spam-benign-s1-b', None, 'heavy'),
+                ('X_G_contrast', 'x-g', None, 'heavy'),
+                ('post_calibration_bracket', 'calibration-post', None, 'light'),
+            ),
+            (True, None): (
+                ('pre_calibration_bracket', 'calibration-pre', None, 'light'),
+                ('idle_soak', 'idle', 1800, 'light'),
+                ('step_30b', 'step-30b', None, 'heavy'),
+                ('high_power_A1', 'high-power-aba-a1', None, 'heavy'),
+                ('high_power_B', 'high-power-aba-b', None, 'heavy'),
+                ('high_power_A2', 'high-power-aba-a2', None, 'heavy'),
+                ('step_D_prefill_10k_decode_4096.precool', 'idle-until-soak', 1500, 'light'),
+                ('step_D_prefill_10k_decode_4096', 'step-d', None, 'heavy'),
+                ('cooldown_after_D', 'idle-until-soak', 1500, 'light'),
+                ('planning_turn_R_plus_4C', 'd-planning-turn-r-plus-4c', None, 'heavy'),
+                ('planning_turn_R_plus_2C.precool', 'idle-until-soak', 1500, 'light'),
+                ('planning_turn_R_plus_2C', 'd-planning-turn-r-plus-2c', None, 'heavy'),
+                ('planning_turn_R_plus_0C.precool', 'idle-until-soak', 1500, 'light'),
+                ('planning_turn_R_plus_0C', 'd-planning-turn-r-plus-0c', None, 'heavy'),
+                ('D_bank_benign_s1_gated_held', 'd-bank-benign-s1', None, 'heavy'),
+                ('D_spam_benign_s1_gated_held_a', 'd-spam-benign-s1-a', None, 'heavy'),
+                ('D_spam_benign_s1_gated_held_b', 'd-spam-benign-s1-b', None, 'heavy'),
+                ('X_G_contrast', 'x-g', None, 'heavy'),
+                ('D_4bit_optional', 'd-4bit', None, 'heavy'),
+                ('post_calibration_bracket', 'calibration-post', None, 'light'),
+            ),
+            (True, 777.0): (
+                ('pre_calibration_bracket', 'calibration-pre', None, 'light'),
+                ('idle_soak', 'idle', 1800, 'light'),
+                ('step_30b', 'step-30b', None, 'heavy'),
+                ('high_power_A1', 'high-power-aba-a1', None, 'heavy'),
+                ('high_power_B', 'high-power-aba-b', None, 'heavy'),
+                ('high_power_A2', 'high-power-aba-a2', None, 'heavy'),
+                ('step_D_prefill_10k_decode_4096.precool', 'idle-until-soak', 777.0, 'light'),
+                ('step_D_prefill_10k_decode_4096', 'step-d', None, 'heavy'),
+                ('cooldown_after_D', 'idle-until-soak', 1500, 'light'),
+                ('planning_turn_R_plus_4C', 'd-planning-turn-r-plus-4c', None, 'heavy'),
+                ('planning_turn_R_plus_2C.precool', 'idle-until-soak', 777.0, 'light'),
+                ('planning_turn_R_plus_2C', 'd-planning-turn-r-plus-2c', None, 'heavy'),
+                ('planning_turn_R_plus_0C.precool', 'idle-until-soak', 777.0, 'light'),
+                ('planning_turn_R_plus_0C', 'd-planning-turn-r-plus-0c', None, 'heavy'),
+                ('D_bank_benign_s1_gated_held', 'd-bank-benign-s1', None, 'heavy'),
+                ('D_spam_benign_s1_gated_held_a', 'd-spam-benign-s1-a', None, 'heavy'),
+                ('D_spam_benign_s1_gated_held_b', 'd-spam-benign-s1-b', None, 'heavy'),
+                ('X_G_contrast', 'x-g', None, 'heavy'),
+                ('D_4bit_optional', 'd-4bit', None, 'heavy'),
+                ('post_calibration_bracket', 'calibration-post', None, 'light'),
+            ),
+        }
+        self.maxDiff = None
+        for (include_4bit, cap), phases in expected.items():
+            with self.subTest(include_4bit=include_4bit, precool_cap_s=cap):
+                actual = (r1.phase_plan(include_4bit) if cap is None else
+                          r1.phase_plan(include_4bit, precool_cap_s=cap))
+                self.assertEqual(tuple(actual), phases)
+
+
 class R1Tests(unittest.TestCase):
     def setUp(self):
         clock = patch.object(r1, "_now_local", lambda: NOON_SAFE)
