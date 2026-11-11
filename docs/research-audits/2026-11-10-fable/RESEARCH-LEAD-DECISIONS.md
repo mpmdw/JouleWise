@@ -4825,6 +4825,232 @@ applied: the same predecessor, the same sidecar policy, the registered coverage 
 
 ---
 
+# Decision request 54: the refusal registry's 18 group-C items, the v5 qualification registry, and the kit's D-1 (2026-11-11 15:08 PST)
+
+**Read.** On `ops/2026-11-11-w1-presign` at `535bf9cee`: the seat's report
+(`docs/run_reports/2026-11-11-w1-p2-refusals.md`) and the Opus cold review; `configs/gates/hazard_refusals.json`;
+`tests/hazards/refusal_census.py`; every cited site in `joulewise/b5/driver.py`, `scripts/run_night.py`,
+`scripts/magistrate_watchdog.py`, `joulewise/b5/harvest.py`, `joulewise/timing_receipts.py`,
+`scripts/launch_align_r0.py` and `scripts/align_v4_session.py`; `joulewise/t0_rehearsal.py:347-377, 656-766`;
+`tests/test_v5_block4_x12b.py`; Block 5's sealed inventory. On the kit at `e74b64793`: the delta cold review,
+`smoke_selection`, `select_smoke_sensors` and `sensor_admissibility`.
+
+**Run.** The census itself (`python3 -B -m tests.hazards.refusal_census`, which parses source and executes
+nothing), the same functions on the six proposed modules and on the align workload's closure, and a check in
+memory that the registry as ruled below leaves no count, guard or scope difference. No test suite, no host
+command, no measurement.
+
+## RL-86. Seventeen of the eighteen are accepted, three with changes; the v4 session program is not scanned; and the registry says something about W1 that is no longer true
+
+My census on `535bf9cee` gives exactly the report's frontier: 3 unlisted keys, 2 counts, 2 guards, 11 scope
+edges. Every count and digest in the proposed diff matches what I computed, including the two guards that the
+count failures hide (C04 `5f7ff180602a7c30`, C05 `da64569332d2625b`).
+
+### C01: accepted as INTERNAL, with the protection text changed
+
+The doctrine's "never stops collection" is about who decides. A site is a refusal when the software decides
+to stop. Here the stop was decided by whoever sent the signal, and it has already happened: `_run_chain_once`
+stops the chain's process group and attaches the outcome to the interrupt before the driver's handler sees it
+(`run_night.py:1033-1040`). The handler at `driver.py:2783-2787` records an unproven termination when
+`chain.started` exists and the outcome is not proven, and re-raises. It tests no data and excludes nothing.
+
+The registry already reads it this way. `_run_chain_once / <reraise>` has the same guard digest
+(`9ae08a15d5e9862c`) and is INTERNAL under R8-1 with the words "never stops a chain that the interrupt did
+not already end"; `_run_night / <reraise>` is INTERNAL under D8-2. C01 is the third link of the same path.
+
+The proposed row is accepted with this `protects`:
+
+> "A KeyboardInterrupt (INT, or TERM/HUP through the R7-4 handler) raised out of rt._run_chain_once propagates
+> unchanged to run_night's close. _run_chain_once has by then stopped the chain's process group and attached
+> the outcome (R8-1); this handler only records an unproven termination when chain.started exists and the
+> outcome is not proven. It decides no stop, never stops a chain the interrupt did not already end, and
+> excludes no member or window. RL-86."
+
+### C02 to C05 and C07: accepted as proposed
+
+All five are `Decision(...)` results of the magistrate watchdog. A watchdog decision controls whether the
+magistrate agent is launched, adopted or held. The watchdog's only signals go to the magistrate's own process
+tree (`signal_owned_tree`, `reap_handoff`); none of these sites reaches a chain.
+
+- **C02** `_decide / FENCED`, count 2: lines 2389 (plan span, census empty) and 2391 (desk fence).
+- **C03** `_decide / HOLD_UNSAFE`, count 9: plan snapshot errors, the desk-fence read error, malformed plan
+  times (twice), plan conflict, process table unreadable, corrupt lock, dead lock with a resumed twin, and a
+  lock that could not be cleared. The proposed text names those four kinds of state and is accurate.
+- **C04** `_launch_fence / FENCED`, count 2 with the new guard: desk fence and plan span at the launch
+  boundary.
+- **C05** `decide / HOLD_UNSAFE`, count 1 with the new guard: the wrapper's latched model-startup hold. The
+  other eight moved to `_decide` and are C03.
+- **C07** `_launch_fence / HOLD_UNSAFE`, BASELINE to INTERNAL: `RuntimeError` joins the caught tuple, so an
+  unreadable process table during the desk-fence check becomes a launch hold. A wider catcher is exactly what
+  the guard digest exists to show, and what it shows here is an agent hold.
+
+### C06: accepted as proposed
+
+`archive_sources` now calls `tree_inventory` through a timing wrapper that returns the function's result
+(`harvest.py:1659-1668`). The comparison is the same comparison. NUMBER_INTEGRITY is right and has precedent:
+the two other archive faults in `_harvest` are NUMBER_INTEGRITY under FIX-573f. It is a desk fault after
+collection.
+
+C06 and C07 leave BASELINE. The frozen file is not edited; removing a BASELINE entry needs no other change.
+
+### C08 to C18: five modules are scanned, one is not
+
+| Module | Items | Ruling |
+|---|---|---|
+| `joulewise/timing_receipts.py` | C08, C11, C12, C14, C18 | Scanned. Its one key is listed now, below |
+| `joulewise/harvest_profile.py` | C10, C13 | Scanned. No site, no new dependency |
+| `joulewise/align/apple/r1_phase_table.py` | C17 | Scanned. No site, no new dependency |
+| `scripts/watchdog_status.py` | C16 | Scanned. 17 keys to list |
+| `scripts/launch_align_r0.py` | C15 | Scanned. 24 keys to list. `scripts/align_r0_checks.py` goes in `not_scanned` as `desk` |
+| `scripts/align_v4_session.py` | C09 | **Refused.** Not scanned, under a new reason and a pin test |
+
+**The `timing_receipts.py` key.** `span / raise / <reraise>`, count 1, guard `420f332386437c13`, INTERNAL:
+
+> "The span context manager re-raises its caller's own exception unchanged after noting the span's end status.
+> It raises nothing of its own; a failed receipt write is caught in Writer.emit and reported on stderr. It
+> adds no refusal. RL-86."
+
+**The watchdog exporter and the R0 launcher** are scanned because the watchdog runs their code during a
+window: the exporter's transport, and the launcher's `read_fence`, whose three errors are what `_decide`
+turns into `desk_fence:` holds. Their 41 keys are a mechanical listing of the group-A kind, with an Opus cold
+review as group A had. I expect INTERNAL throughout. A key the seat or the reviewer cannot honestly call
+INTERNAL comes to me. `align_r0_checks.py` is a five-line entry point the launcher starts under a desk fence.
+
+**C09 is refused.** `align_v4_session.py` is v4's desk program: prepare, arm checks, install, desk. It runs
+before the night job starts and after the harvest. The driver takes one function from it,
+`_probe_meter_live` (`driver.py:2371`), which has no census site: it returns `live: False` with a reason, and
+the driver's own `refuse|meter`, already listed as PHYSICS, is where a refusal is decided. Scanning the file
+would bring 83 keys and 18 more modules into a registry of in-window refusals, for sites that hold a window
+before it exists and are governed by v4's own registered hold rule (RL-71, RL-83).
+
+Instead:
+
+- a new reason in `not_scanned_reasons`: `"v4_desk": "the v4 session desk program (prepare, arm checks,
+  install, desk); it runs before the night job starts and after the harvest, and its holds are the v4
+  registration's own. The hazard driver takes only _probe_meter_live from it, which has no census site; the
+  refusal is the driver's listed refuse|meter (RL-86)"`;
+- `scripts/align_v4_session.py` listed under it;
+- one test in `tests/hazards/test_refusal_allowlist.py`: the only name any scanned module imports from
+  `scripts.align_v4_session` is `_probe_meter_live`, and `scan_source` on that function's body returns no
+  site. A second borrowed name, or a `raise` added inside the probe, fails it.
+
+The difference from the launcher is the borrowed code. The launcher's borrowed function carries refusal sites
+that the watchdog reaches; the session program's carries none.
+
+**After these edits** the census shows 41 unlisted keys, all in the two newly scanned files, and nothing
+else: no stale entry, no count, no guard, no scope gap. I checked that in memory against `535bf9cee`.
+
+### One thing the 18 items did not include, and it is the larger one
+
+`joulewise/align/apple/workload.py` is in `not_scanned` under `alignment_workload`: "prospective
+align_episode branch only; absent from currently registered HAZARD packs; census required before D1
+registration". That stopped being true with W1. The v4 kit writes members with `workload='align_episode'`
+(`scripts/align_v4_kit.py:1487`) and they run on the HAZARD_PACK driver. `joulewise/adapters/__init__.py`, a
+scanned module, imports `workload.py`. The scope test passes only because of that listing.
+
+The code behind it, at `535bf9cee`: 19 modules and 155 census keys, none in the registry. It includes
+`thermal_gates.py` (32 keys), `thermal.py` (10), `workload.py` itself (29) and the episode runner. This is
+the code that runs inside a measured v4 member.
+
+- **Before signing, the text is made true.** The reason reads: "the align_episode workload and its imports:
+  runs inside v4 members from W1 on; not yet censused (19 modules, 155 keys at 535bf9cee); census owed,
+  RL-86". `registry_select.py` keeps the same reason. This is a text edit to a file that is not a v4 artifact.
+- **The census is owed and does not gate W1's signing or any arm.** No registered sentence of v4 promises it.
+  The stops that matter inside a v4 member, the gates, their caps, the deadman and the holds, are registered
+  protocol and were read from the code for RL-71 and RL-83. The rehearsal night and the smoke run this code
+  natively. And 155 keys classified in the last day before signing would be classified badly.
+- **It is still owed**, because the doctrine is about every collection and a non-physics raise inside a
+  member loses the member. It is Air work: a seat lists and classifies, a cold review checks, in the interval
+  between W1 and W2. A key that can stop or exclude a member and is not PHYSICS or NUMBER_INTEGRITY comes to
+  me, since changing it would change executed v4 code.
+- **For the paper:** the methods do not say the refusal census covers v4 members until it does.
+
+### Noted
+
+The 42 listings and 15 removals landed without me, correctly: they were mechanical and cold-reviewed. Thirteen
+renamed sites moved from BASELINE to INTERNAL because the baseline digest includes the function name. Their
+protection texts are those sites' first individual review. I did not re-review the thirteen. I did read the
+eight other `_decide` rows of that batch against the function while checking C02 and C03, and they are
+accurate.
+
+**Reason.** The registry is worth keeping only if each line in it is true. Seventeen items make it true about
+code that changed. The eighteenth would have made it larger without making it truer, and one line nobody
+submitted was false.
+
+**Blind status.** Blind: source code, a JSON registry and review text only. No Block 6, BYTES held-out or v4
+outcome was opened.
+
+## RL-87. No v5 qualification night runs on this line. The sealed registry is not edited
+
+**The answer is no.** v5 qualification is the retired ARM/T0 path. Block 5 was collected on the HAZARD path
+and is released. No registered design calls for another qualification night, and I do not intend one. If one
+is ever proposed it is a new registration, and its driver's governed calls are registered then.
+
+**So `joulewise/t0_rehearsal.py` stays at the sealed bytes** (`833b19ad…1ef1`; I hashed it on `535bf9cee`
+and it matches Block 5's inventory). Three registrations there would move a closed block's digest, a pins
+entry and a v4 artifact for a table no future night reads. RL-83 (b) is the precedent.
+
+What makes this safe, checked in the code:
+
+- **The registry is never consulted on a W1 night.** Outside a qualification journal `observed_run` is
+  `subprocess.run` (`t0_rehearsal.py:349-350`). The table only judges journals written in qualification mode.
+- **The seal already names the qualification driver.** Block 5's inventory pins `scripts/run_night.py` at
+  `d2a2c335…06ef`, the bytes at `c27485347`, and those bytes contain none of the three calls. The driver on
+  this line differs from them. The path from `write_v5_qualification_plan.py:705` to `_leave_network_time`
+  exists only in a driver that is, by its bytes, not the qualification driver.
+
+**The test, in the test tree only** (`tests/test_v5_block4_x12b.py`; no production file changes):
+
+1. It asserts that `joulewise/t0_rehearsal.py` hashes to its entry in
+   `configs/campaigns/v5_claim_25g83/sealed_inventory.json`.
+2. It asserts that the governed calls on this line with no registration are exactly a literal list of three,
+   each with its commit: the `-getusingnetworktime` getter (`19a862dc8`), `git init --bare` (`c80d4d638`),
+   and the courier's git prefix (`c80d4d638`), the last marked as a partial vector that is data and not a
+   command. A fourth unregistered call fails the test and is added to the list with its commit.
+3. It asserts that the sealed inventory's digest for `scripts/run_night.py` is not the working tree's, which
+   is the condition under which the list is allowed. On a tree where the driver is the sealed driver the list
+   must be empty.
+4. `tests/fixtures/v5_qualification/process_argv_inventory.json` is refreshed to the current call sites, as
+   `826f90e04` already did once. It is a fixture and is not sealed.
+
+The list is the bill for reviving the path: whoever proposes a qualification night registers what is on it,
+and the courier's remaining git operations with their consumer-derived outcomes, as the P3 note describes.
+
+If anything in `RegisteredRosterTests` is still red after that and is not explained by these three calls, it
+comes back to me.
+
+**Reason.** A registry is edited for the nights that will read it. None will.
+
+**Blind status.** Blind: code, a sealed inventory's digests and test text only. No Block 6, BYTES held-out or
+v4 outcome was opened.
+
+## RL-88. D-1: the lead's reading is confirmed
+
+The revert is right, and round 5 at `e74b64793` is what RL-78 and RL-84 say.
+
+- **RL-84 P-3 orders one filter: coverage.** A key that fails its bar "is not a candidate for either role or
+  for the fallback". `smoke_selection` now drops those keys and nothing else before it re-runs the registered
+  `select_keys` (`align_r1_followup_kit.py:212-216`).
+- **RL-78 puts "R0-classified" on the fallback's candidates only.** E1 says the pair is "the registered
+  classifier's picks on the D step, unchanged". Narrowing the ranking to the six R0 keys before selecting was
+  a selection rule nobody ruled, and in the second case it fired the fallback while the registered slow class
+  was not empty, against the condition written in the WP14(a)-R1-SLOW row.
+- **The two refusals are the intended behaviour.** `sensor_admissibility` checks R0 membership after
+  selection, so a fast pick outside the six, or a heatsink-class key outside the six, gives a selection that
+  is not `ok` and comes to me. That is a hold and not a substitution. It is also needed: the row says "The
+  slow pick is a key R0 classed fast", and a pick R0 never classified would make that sentence false before
+  anyone had looked at the key.
+
+Round 5 adds a test for each case, which closes the surviving mutant the review reported. Its delta review is
+running and I do not pre-empt it. It comes back to me only if it disagrees with this.
+
+**Reason.** The registered classifier picks; the fallback is the only rule added to it, and it has one
+condition.
+
+**Blind status.** Blind: no v4 outcome exists. Code, rulings and synthetic fixtures only.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
@@ -4835,3 +5061,5 @@ applied: the same predecessor, the same sidecar policy, the registered coverage 
 | Review the drafted Block 6 §17 entries (RL-6 (b)), including the audit's decisions 7, 8 and 9, which have no pre-unseal recommendation | The lead's draft |
 | Any custody change that moves BYTES keys to the Air | A proposal from the lead, if Ed wants Paper 1 off the MBP entirely |
 | The capstone manuscript and talk, as a whole | Ed's decision E1 in `paper-audit.md` §9 |
+| Any key in the align_episode census that can stop or exclude a member and is not PHYSICS or NUMBER_INTEGRITY (RL-86) | The census, between W1 and W2 |
+| A listed key in `watchdog_status.py` or `launch_align_r0.py` that is not INTERNAL (RL-86) | The 41-key listing and its cold review |
