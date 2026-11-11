@@ -8,7 +8,7 @@ not execution of a prune or a release.
 ## Work and findings
 
 Read repository intake/stop-card, queue, Mission M0, source-of-truth map,
-freeze-by-commit policy, targeted D-188–D-191 authority, existing prune report,
+freeze-by-commit policy, targeted D-188–D-190 authority, existing prune report,
 canonical map and relevant orchestration rules. No stop card was active. The
 direct PI assignment is bounded `[AGENT]` planning work; no queue task was
 registered. User instructions expressly leave coordination state unchanged.

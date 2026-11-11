@@ -1,4 +1,30 @@
-# Archive: files removed from main on 2026-11-06
+# Archive: retrieving retired repository files
+
+## Release-day file prune, 2026-11-10
+
+The second prune retains files at the annotated tag
+`archive/process-traces-before-release-prune-2026-11-08`, commit
+`901d7580def7862127ad2f4acb33011286d7e688`. A citation of the form
+`archive/process-traces-before-release-prune-2026-11-08:<path>` is a Git
+object path. Read it offline with:
+
+```sh
+git show archive/process-traces-before-release-prune-2026-11-08:docs/run_reports/2026-11-06-b5-robust-executing-review.md
+```
+
+Use `git ls-tree -r --name-only <tag> -- <repo-directory>` to find an archived
+file, or `git restore --source=<tag> -- <repo-path>` to restore one when a
+current reader needs it. No fetch is needed when the tag is already local.
+Never use these commands to inspect sealed custody or measurement data.
+
+Per-file KEEP/DELETE decisions are in `docs/ops/FILE-PRUNE-G1.tsv` and the
+subsequent group inventories. Retention is checked against each deleted
+file's exact blob, rather than inferred from a tag name. The earlier ops
+census and rollback tables are immutable historical snapshots: paths in
+them describe their recorded tree, not required files in today's checkout.
+Current readers, authority, seal records, errata and live state pointers stay.
+
+## First prune, 2026-11-06
 
 On 2026-11-06 about 8,100 files were removed from `main` in the hard prune
 ([run report](run_reports/2026-11-06-repo-prune.md); current tools are listed in

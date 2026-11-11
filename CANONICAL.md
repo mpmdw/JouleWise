@@ -89,6 +89,20 @@ Held, not canonical yet: the condition-waits lane (`align/2026-11-08-condition-w
 | Pins | `python3 scripts/repin.py --check` (all families); `--write registry` after deleting or adding pinned files | Hand repins |
 | State kernel | `python3 scripts/gen_state.py --check` | — |
 
+## Repository operations
+
+| Job | Canonical | Replaced / retaining ref |
+|---|---|---|
+| Prune scope and dependency gates | `docs/ops/PRUNE-PLAN.md`; execution receipts and rollback log in `docs/ops/PRUNE-EXECUTION.md` and `docs/ops/PRUNE-ROLLBACK.tsv` | Branch retirement is already recorded; file retirement is a separate operation |
+| Scientific pin inventory and future tag validation | `docs/ops/PIN-INVENTORY.md`, `docs/ops/TAG-PINNING.md` | Frozen B5 source and original digests remain authoritative for their registered checkout |
+| Retrieve retired files | `docs/ARCHIVE.md`; per-file decisions in `docs/ops/FILE-PRUNE-G1.tsv` | `archive/process-traces-before-release-prune-2026-11-08` (`901d7580d`); earlier archive promise remains unchanged |
+
+## Retired
+
+| Retired material | Current replacement / verdict | Retaining ref |
+|---|---|---|
+| Superseded profiling logs, synthetic E2E reports and legacy portfolio synthesis listed in `docs/ops/FILE-PRUNE-G1.tsv` | Current tools above; reader and authority records remain in the checkout | `archive/process-traces-before-release-prune-2026-11-08:<path>` |
+
 ## Paper
 
 | Job | Canonical | Replaced |
