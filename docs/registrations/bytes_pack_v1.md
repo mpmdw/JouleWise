@@ -33,7 +33,16 @@ A language model writes text one **token** at a time (a token is a short piece o
   adapter delivers (§7, "Battery term"). It is never called "wall" or "AC".
 - **rest**: DC input minus rails, which includes memory chips, power conversion losses, the SSD and fans.
 
-The recorded `powermetrics` samples carry no memory (DRAM) key, so the energy of reading memory is split: the chip's share appears in rails, the memory chips' share only in rest (block-6 design §15, "BYTES measures in two boundaries"). Whether the GPU rail includes the memory controller is measured by the known-bytes stream test (R8 item 6): `⟦MAC: known-bytes stream test outcome⟧` — **PENDING**: required quiet-Mac measurement of about one hour, scheduled after pass-1 collection and before stage-1 unblinding from its own non-claim checkout; no live outcome exists in the named evidence (`configs/campaigns/bytes_mac_check/README.md:28–40`; P0 ruling 9). No measurement is authorized in this desk session.
+The recorded `powermetrics` samples carry no memory (DRAM) key, so the energy of reading memory is split: the chip's share appears in rails, the memory chips' share only in rest (block-6 design §15, "BYTES measures in two boundaries"). Whether memory traffic costs energy on the GPU rail, on rails and on rest is measured by the known-bytes stream test (R8 item 6; this wording replaces "whether the GPU rail includes the memory controller" on admission, reading rule §4, and changes no number): `⟦MAC: known-bytes stream test outcome⟧` — **FILLED** (2026-10-31, magistrate activation 5cbfbcfc, after the cold science gate: Fable 5.1 and Opus 5.5, blind and executing, both ADMIT-WITH-CORRECTIONS, no BLOCKER; slot text [`KB-SLOT-FILL.md`](../process_traces/2026-10-31-magistrate-5cbfbcfc/KB-SLOT-FILL.md), reading rule [`bytes_known_bytes_reading_rule.md`](bytes_known_bytes_reading_rule.md), the matched-geometry revision as run at code `53bcceeac`, landed 2026-11-11 with its admission record and the gate's two post-outcome text corrections). Window `attempt-3` on the measurement Mac (23:21 PDT 2026-10-30 to 00:38 PDT 2026-10-31, verdict GO, chain exit 0), 32 MiB matched dispatches (b = 33,554,432 B, the first resolved rung), contrast rotate minus repeat in J per GB of logical bytes:
+
+| boundary | Δ ± δΔ (J/GB) | class |
+|---|---|---|
+| rails | 0.0092 ± 0.0021 | RESOLVED |
+| GPU rail | 0.00879 ± 0.00010 | RESOLVED |
+| DC input | 0.0389 ± 0.0072 | valid (Δ − δΔ = 0.0317 > 0) |
+| rest | 0.0296 ± 0.0084 | RESOLVED |
+
+With every class RESOLVED, **nothing prints beside the rails or rest claim lines**. The test is non-claim and changes no registered number, exclusion or estimator. Sentence printed with it: "The test identifies memory-traffic energy on a boundary, not whether it is the memory controller, the fabric or the GPU waiting on memory; on rest it does not separate the memory chips from power conversion and fans." Description only (no class reads it): rails share f = Δ_rails / Δ_DC = 0.238 ± 0.098; on the GPU rail 85% of the contrast is the GPU staying powered while it waits on memory; the 32 MiB dispatch reads at 106-116 GB/s, latency-bound, so transfer to bandwidth-bound decode traffic is a stated limit of this test. The labelled 100-lag alternative (rails 0.0092 ± 0.0020, rest 0.0296 ± 0.0084, f = 0.238 ± 0.097) changes no class; the gate's corrections, disclosures and digests are in the slot text.
 
 ## 2. The models
 
@@ -439,7 +448,7 @@ Per model and boundary, on both bases and both selections (primary and flagged-i
 | Per-session disk footprint | §5 | **FILLED**; six exact P and P + smoke values, H-DISK no-reserve form (P0 ruling 5) |
 | C5 sizing per sub-pack | §5 | **FILLED**; six pass-1 S/T rows at 82cc9462c, derivation and computing provenance (P0 ruling 6) |
 | Test 7 per long regime | §7 | **FILLED: no pass established; registered scale retained**; TEST7.md/JSON, P0 ruling 3 |
-| `⟦MAC: known-bytes stream test outcome⟧` | §1 | **PENDING quiet-Mac measurement**, about one hour after pass-1 collection and before stage-1 unblinding, in its own non-claim checkout (P0 ruling 9 as amended) |
+| `⟦MAC: known-bytes stream test outcome⟧` | §1 | **FILLED** 2026-10-31: rails, GPU rail and rest RESOLVED, DC input valid; nothing prints beside the claim lines; window `attempt-3`, cold science gate ADMIT-WITH-CORRECTIONS (Fable 5.1, Opus 5.5); [`KB-SLOT-FILL.md`](../process_traces/2026-10-31-magistrate-5cbfbcfc/KB-SLOT-FILL.md) (P0 ruling 9 as amended) |
 | `⟦B2: coverage table (count of 400 and fraction)⟧` | §9 | **FILLED**: §9 has all 18 count/fraction rows at the FIX-416-A agreeing digest; minimum HC3 plain-95% is 379/400 (0.9475); FIX-416-A record and coverage JSON |
 | `⟦B2: SHA-256 of joulewise/bytes_analysis.py at the agreeing pin⟧` | §13; pack estimator versions | **FILLED**: pass-1 estimator versions are bound to `18582818c7e03bad148b54dce8b8d60a62e2ffc5597e701ae3ab0418dffc0a71` in each pass-1 pack registration through the generator; pass-2 versions null; pass-1 packs registered, pass-2 packs draft |
 | B4 catalog SHA-256 | Appendix A | **FILLED**; exact catalog SHA-256 recorded in Appendix A |
