@@ -33,3 +33,22 @@ hand and said so in the commit message.
 - The reader touches only an allowlist of marker and receipt names, refuses symlinks at and below the
   directory, and never runs a host command; live facts are passed in.
 - Both host invariants of audit 8.3 are separate named checks.
+
+## Round 2 delta review (2026-11-11 06:08 PST)
+
+Reviewed `ecdbf2aaf` (Sol's round 2 on the same branch), then merged `main`.
+
+**Verdict: ADMIT.**
+
+- **HE-1, fixed.** A loaded night label is now placed against its own plan's span. I probed seven positions:
+  before the span with no result is `AWAITING_PLAN_SPAN` (explained); inside, and exactly at `start`, is
+  `ACTIVE_PLAN_SPAN`; at `end` and after it with no result is owed, `NIGHT_LABEL_AFTER_SPAN_WITHOUT_RESULT`;
+  after it with a result is owed, `NIGHT_LABEL_TERMINAL_WITHOUT_ACTIVE_SPAN`; a result present before the span
+  is the separate unknown `RESULT_BEFORE_PLAN_SPAN`.
+- **HE-2, fixed.** The mutant "AC power mode set only when it equals 2" is now killed (four failures).
+- **HE-3, done.** The field is `plan_spans`.
+
+`tests.test_host_effects`: 39 tests, OK, with the default temp directory, also after merging `main`.
+
+Nothing reads this module yet. The first reader will be the Air watcher's host section or the unstrand helper,
+after the v4 series (RL-53 W-4).
