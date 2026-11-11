@@ -194,6 +194,7 @@ if (( restore_host )); then
 import json
 import os
 from pathlib import Path
+import re
 import sys
 import time
 from types import SimpleNamespace
@@ -213,15 +214,44 @@ try:
                            measurement_root=metadata["measurement_root"])
     if not isinstance(plan.measurement_root, str) or not Path(plan.measurement_root).is_absolute():
         raise ValueError("measurement root is unproven")
-    stream = (root / "night/unstrand.restore.json").open("x", encoding="utf-8")
-except FileExistsError:
-    print("Refused: host restore record already exists; no host restore attempted.", file=sys.stderr)
-    raise SystemExit(1)
+    earlier_outcomes = []
+    for attempt in range(1, 21):
+        path = root / ("night/unstrand.restore." + str(attempt) + ".json")
+        try:
+            stream = path.open("x", encoding="utf-8")
+            break
+        except FileExistsError:
+            try:
+                previous = json.loads(path.read_bytes())
+                if not isinstance(previous, dict):
+                    raise ValueError("not an object")
+            except (OSError, ValueError):
+                print("Warning: host restore attempt " + str(attempt) + " record is unreadable; "
+                      "not counted as successful.", file=sys.stderr)
+                earlier_outcomes.append({"powermode": "unreadable", "network_time": "unreadable"})
+                continue
+            if previous.get("ok") is True:
+                print("Refused: host restore already succeeded in attempt " + str(attempt)
+                      + "; no host restore attempted.", file=sys.stderr)
+                raise SystemExit(1)
+            # History carries action words only, never prior probe output/errors.
+            actions = previous.get("actions")
+            outcome = {}
+            for name in ("powermode", "network_time"):
+                action = actions.get(name) if isinstance(actions, dict) else None
+                word = action.get("action") if isinstance(action, dict) else None
+                outcome[name] = (word if isinstance(word, str)
+                                 and re.fullmatch(r"[a-z][a-z0-9_]{0,63}", word) else "unknown")
+            earlier_outcomes.append(outcome)
+    else:
+        print("Refused: host restore attempt limit (20) reached; no host restore attempted.", file=sys.stderr)
+        raise SystemExit(1)
 except Exception as error:
     print("Refused: host restore setup failed (" + type(error).__name__ + ").", file=sys.stderr)
     raise SystemExit(1)
 
 record = {"schema": "joulewise.unstrand_restore.v1", "plan_id": plan.plan_id,
+          "attempt": attempt, "earlier_attempt_outcomes": earlier_outcomes,
           "epoch_s": time.time(), "path": sys.argv[3], "found": {}, "actions": {},
           "deferred_to_measuring_night": False, "ok": False}
 lock = None
@@ -243,6 +273,7 @@ try:
         # A different armed session's W1 obligation is never ours to clear.
         if any(not powermode.owned_by(m, **owner) for m in w1):
             record["actions"]["powermode"] = {"action": "not_owner"}
+            record["refused"] = "other_session_owns_host_state"
         else:
             probes = run_night.make_probes()
             record["found"]["ac_powermode"] = powermode.read_ac_powermode(
@@ -251,10 +282,15 @@ try:
             power = powermode.restore_owed(markers, runner=lambda argv: probes.run(tuple(argv)),
                 lock=lock, owner=owner if w1 else None, reason="post_window_unstrand")
             record["actions"]["powermode"] = power
-            network = (run_night._restore_network_time(probes) if owed else {"action": "not_owed"})
-            record["actions"]["network_time"] = network
-            record["ok"] = (power.get("action") in ("none", "restored")
-                            and (not owed or network.get("ok") is True))
+            if power.get("action") == "not_owner":
+                record["refused"] = "other_session_owns_host_state"
+            else:
+                network = (run_night._restore_network_time(probes) if owed else {"action": "not_owed"})
+                record["actions"]["network_time"] = network
+                # Match the terminal restore in scripts/run_night.py:4593-4594.
+                record["ok"] = (power.get("action") in ("none", "restored")
+                                and (not owed or network.get("ok") is True
+                                     or network.get("verified") is True))
 except Exception as error:
     record["error"] = type(error).__name__
 finally:
@@ -269,6 +305,8 @@ finally:
             os.fsync(stream.fileno())
 if record["deferred_to_measuring_night"]:
     print("Refused: host restore deferred to a measuring night; recorded deferred.", file=sys.stderr)
+elif record.get("refused") == "other_session_owns_host_state":
+    print("Refused: another armed session owns the host state; nothing was changed.", file=sys.stderr)
 elif not record["ok"]:
     print("Refused: host restore failed (" + record.get("error", "see restore record") + ").", file=sys.stderr)
 else:

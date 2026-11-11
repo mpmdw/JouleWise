@@ -515,6 +515,8 @@ def restore(*args, **kwargs):
     return original_restore(*args, **kwargs)
 powermode.restore_owed = restore
 run_night.make_probes = lambda: SimpleNamespace(run=runner)
+if "TEST_NETWORK_RESTORE_RESULT" in os.environ:
+    run_night._restore_network_time = lambda probes: json.loads(os.environ["TEST_NETWORK_RESTORE_RESULT"])
 exec(compile(source, "<unstrand-test>", "exec"), {"__name__": "__main__"})
 ''')
         python.chmod(0o755)
@@ -537,16 +539,18 @@ exec(compile(source, "<unstrand-test>", "exec"), {"__name__": "__main__"})
                                   "--wait-seconds", "0", str(self.custody)],
                                  shlex.split(command.removeprefix("Host restore command: ")))
                 self.assertFalse(self.restore_log.exists())
-                self.assertFalse((self.night / "unstrand.restore.json").exists())
+                self.assertEqual([], list(self.night.glob("unstrand.restore*.json")))
                 self.assertTrue(self.host_marker.exists())
 
     def test_host_restore_both_paths_once_under_lock_with_write_once_record(self):
         self.host_fakes()
         result = self.run_script("--go", "--restore-host")
         self.assertEqual(0, result.returncode, result.stderr)
-        path = self.night / "unstrand.restore.json"
+        path = self.night / "unstrand.restore.1.json"
         original = path.read_bytes()
         record = json.loads(original)
+        self.assertEqual(1, record["attempt"])
+        self.assertEqual([], record["earlier_attempt_outcomes"])
         self.assertEqual("completed", record["path"])
         self.assertEqual("synthetic-plan", record["plan_id"])
         self.assertEqual(2, record["found"]["ac_powermode"]["value"])
@@ -563,7 +567,8 @@ exec(compile(source, "<unstrand-test>", "exec"), {"__name__": "__main__"})
         self.assert_blinded(result)
         again = self.run_script("--go", "--restore-host")
         self.assertNotEqual(0, again.returncode)
-        self.assertIn("host restore record already exists", again.stderr)
+        self.assertIn("host restore already succeeded in attempt 1", again.stderr)
+        self.assertFalse((self.night / "unstrand.restore.2.json").exists())
         self.assertEqual(original, path.read_bytes())
         self.assertEqual(calls, [json.loads(line) for line in self.restore_log.read_text().splitlines()])
 
@@ -572,11 +577,136 @@ exec(compile(source, "<unstrand-test>", "exec"), {"__name__": "__main__"})
         self.host_fakes(turned_off=False)
         result = self.run_script("--go", "--restore-host")
         self.assertEqual(0, result.returncode, result.stderr)
-        record = json.loads((self.night / "unstrand.restore.json").read_text())
+        record = json.loads((self.night / "unstrand.restore.1.json").read_text())
         self.assertEqual("pre_chain_refusal", record["path"])
         self.assertFalse(record["found"]["network_time_restore_owed"])
         calls = self.restore_log.read_text()
         self.assertNotIn("-setusingnetworktime", calls)
+
+    def test_host_restore_retries_deferred_attempt_after_jobs_are_absent(self):
+        import fcntl
+        self.pre_chain_refusal()
+        self.host_fakes()
+        with (self.host_state / "night.lock").open("w") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            first = self.run_script("--go", "--restore-host")
+        self.assertNotEqual(0, first.returncode)
+        self.assertIn("deferred to a measuring night", first.stderr)
+        self.assertTrue(all(not self.plist(label).exists() for label in LABELS))
+        path = next(self.night.glob("unstrand.restore*.json"))
+        original = path.read_bytes()
+        self.assertFalse(self.restore_log.exists())
+        again = self.run_script("--go", "--restore-host")
+        self.assertEqual(0, again.returncode, again.stderr)
+        record = json.loads((self.night / "unstrand.restore.2.json").read_text())
+        self.assertEqual(2, record["attempt"])
+        self.assertEqual([{"powermode": "deferred_measuring_night", "network_time": "deferred"}],
+                         record["earlier_attempt_outcomes"])
+        self.assertIs(record["ok"], True)
+        self.assertEqual(original, path.read_bytes())
+        self.assertFalse(self.host_marker.exists())
+        self.assertFalse(self.r1_marker.exists())
+
+    def test_host_restore_retries_failed_attempt_without_overwriting_it(self):
+        self.host_fakes()
+        self.env["TEST_POWER_RESTORE_RC"] = "7"
+        first = self.run_script("--go", "--restore-host")
+        self.assertNotEqual(0, first.returncode)
+        path = next(self.night.glob("unstrand.restore*.json"))
+        original = path.read_bytes()
+        self.assertEqual("restore_failed", json.loads(original)["actions"]["powermode"]["action"])
+        self.env.pop("TEST_POWER_RESTORE_RC")
+        again = self.run_script("--go", "--restore-host")
+        self.assertEqual(0, again.returncode, again.stderr)
+        record = json.loads((self.night / "unstrand.restore.2.json").read_text())
+        self.assertEqual(2, record["attempt"])
+        self.assertEqual([{"powermode": "restore_failed", "network_time": "unknown"}],
+                         record["earlier_attempt_outcomes"])
+        self.assertIs(record["ok"], True)
+        self.assertEqual(original, path.read_bytes())
+
+    def test_host_restore_reports_unreadable_history_and_keeps_only_action_words(self):
+        self.host_fakes()
+        unreadable = self.night / "unstrand.restore.1.json"
+        unreadable.write_text("SECRET_PAYLOAD_INVALID_JSON")
+        earlier = self.night / "unstrand.restore.2.json"
+        earlier.write_text(json.dumps({"ok": 1, "error": "SECRET_PAYLOAD", "actions": {
+            "powermode": {"action": "restore_failed", "stdout": "SECRET_PAYLOAD"},
+            "network_time": {"action": "SECRET_PAYLOAD\ninvalid"}}}))
+        original = {p: p.read_bytes() for p in (unreadable, earlier)}
+        result = self.run_script("--go", "--restore-host")
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("host restore attempt 1 record is unreadable", result.stderr)
+        record = json.loads((self.night / "unstrand.restore.3.json").read_text())
+        self.assertEqual(3, record["attempt"])
+        self.assertEqual([{"powermode": "unreadable", "network_time": "unreadable"},
+                          {"powermode": "restore_failed", "network_time": "unknown"}],
+                         record["earlier_attempt_outcomes"])
+        self.assertNotIn("SECRET", json.dumps(record))
+        self.assertEqual(original, {p: p.read_bytes() for p in original})
+        self.assert_blinded(result)
+
+    def test_host_restore_refuses_after_twenty_attempts_without_host_commands(self):
+        self.host_fakes()
+        for attempt in range(1, 21):
+            (self.night / f"unstrand.restore.{attempt}.json").write_text(json.dumps({
+                "ok": False, "actions": {"powermode": {"action": "restore_failed"}}}))
+        original = {p: p.read_bytes() for p in self.night.glob("unstrand.restore.*.json")}
+        result = self.run_script("--go", "--restore-host")
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("host restore attempt limit (20) reached", result.stderr)
+        self.assertFalse(self.restore_log.exists())
+        self.assertFalse((self.night / "unstrand.restore.21.json").exists())
+        self.assertEqual(original, {p: p.read_bytes() for p in original})
+
+    def test_host_restore_after_go_with_jobs_already_absent(self):
+        for prechain in (False, True):
+            with self.subTest(prechain=prechain):
+                if prechain:
+                    self.pre_chain_refusal()
+                result = self.run_script("--go")
+                self.assertEqual(0, result.returncode, result.stderr)
+                self.assertTrue(all(not self.plist(label).exists() for label in LABELS))
+                if not prechain:
+                    self.host_fakes()
+                again = self.run_script("--go", "--restore-host")
+                self.assertEqual(0, again.returncode, again.stderr)
+                path = next(self.night.glob("unstrand.restore*.json"))
+                self.assertIs(json.loads(path.read_text())["ok"], True)
+                path.unlink()  # Separate synthetic completed/pre-chain scenarios.
+
+    def test_host_restore_retry_keeps_other_plan_live_process_and_ps_failure_refusals(self):
+        self.host_fakes()
+        self.assertEqual(0, self.run_script("--go").returncode)
+        for gate in ("other_plan", "live_process", "ps_failure"):
+            with self.subTest(gate=gate):
+                if gate == "other_plan":
+                    self.plist(LABELS[0]).write_bytes(plistlib.dumps({"ProgramArguments": [
+                        "driver", "--plan", str(self.root / "another-plan.json")]}))
+                    message = "an installed job belongs to a different plan"
+                elif gate == "live_process":
+                    self.env["TEST_PS_EXTRA_ROWS"] = "4242 1 python /elsewhere/run_night.py run\n"
+                    message = "process is still present"
+                else:
+                    self.env["TEST_PS_RC"] = "2"
+                    message = "process absence is unproven"
+                result = self.run_script("--go", "--restore-host")
+                self.assertNotEqual(0, result.returncode)
+                self.assertIn(message, result.stderr)
+                self.assertFalse(self.restore_log.exists())
+                self.assertEqual([], list(self.night.glob("unstrand.restore*.json")))
+                self.plist(LABELS[0]).unlink(missing_ok=True)
+                self.env.pop("TEST_PS_EXTRA_ROWS", None)
+                self.env.pop("TEST_PS_RC", None)
+
+    def test_host_restore_accepts_verified_network_time_like_driver(self):
+        self.host_fakes()
+        self.env["TEST_NETWORK_RESTORE_RESULT"] = json.dumps({"ok": False, "verified": True})
+        result = self.run_script("--go", "--restore-host")
+        self.assertEqual(0, result.returncode, result.stderr)
+        record = json.loads((self.night / "unstrand.restore.1.json").read_text())
+        self.assertIs(record["ok"], True)
+        self.assertEqual({"ok": False, "verified": True}, record["actions"]["network_time"])
 
     def test_host_restore_defers_to_measuring_lock_even_without_power_markers(self):
         import fcntl
@@ -588,7 +718,7 @@ exec(compile(source, "<unstrand-test>", "exec"), {"__name__": "__main__"})
             result = self.run_script("--go", "--restore-host")
         self.assertNotEqual(0, result.returncode)
         self.assertIn("host restore deferred to a measuring night", result.stderr)
-        record = json.loads((self.night / "unstrand.restore.json").read_text())
+        record = json.loads((self.night / "unstrand.restore.1.json").read_text())
         self.assertTrue(record["deferred_to_measuring_night"])
         self.assertFalse(self.restore_log.exists())
 
@@ -614,8 +744,12 @@ exec(compile(source, "<unstrand-test>", "exec"), {"__name__": "__main__"})
                                     json.dumps({"custody_root": str(self.root / "other-plan")}) + "\n")
         result = self.run_script("--go", "--restore-host")
         self.assertNotEqual(0, result.returncode)
-        record = json.loads((self.night / "unstrand.restore.json").read_text())
+        self.assertIn("another armed session owns the host state; nothing was changed", result.stderr)
+        self.assertNotIn("host restore failed", result.stderr)
+        record = json.loads((self.night / "unstrand.restore.1.json").read_text())
         self.assertEqual("not_owner", record["actions"]["powermode"]["action"])
+        self.assertIs(record["ok"], False)
+        self.assertEqual("other_session_owns_host_state", record["refused"])
         self.assertTrue(self.host_marker.exists())
         self.assertTrue(self.r1_marker.exists())
         self.assertFalse(self.restore_log.exists())
@@ -625,7 +759,7 @@ exec(compile(source, "<unstrand-test>", "exec"), {"__name__": "__main__"})
         self.env["TEST_POWER_RESTORE_RC"] = "7"
         result = self.run_script("--go", "--restore-host")
         self.assertNotEqual(0, result.returncode)
-        record = json.loads((self.night / "unstrand.restore.json").read_text())
+        record = json.loads((self.night / "unstrand.restore.1.json").read_text())
         self.assertEqual("restore_failed", record["actions"]["powermode"]["action"])
         self.assertEqual(7, record["actions"]["powermode"]["restore"]["exit_code"])
         self.assertTrue(record["actions"]["network_time"]["ok"])
@@ -643,7 +777,7 @@ exec(compile(source, "<unstrand-test>", "exec"), {"__name__": "__main__"})
             "epoch_s": 1.0, "monotonic_s": 1.0}))
         result = self.run_script("--go", "--restore-host")
         self.assertEqual(0, result.returncode, result.stderr)
-        record = json.loads((self.night / "unstrand.restore.json").read_text())
+        record = json.loads((self.night / "unstrand.restore.1.json").read_text())
         self.assertTrue(record["found"]["network_time_restore_owed"])
         self.assertTrue(record["actions"]["network_time"]["ok"])
 
@@ -654,7 +788,7 @@ exec(compile(source, "<unstrand-test>", "exec"), {"__name__": "__main__"})
         action.write_text(json.dumps({**value, "stdout": "Network Time: Off\n"}))
         result = self.run_script("--go", "--restore-host")
         self.assertEqual(0, result.returncode, result.stderr)
-        record = json.loads((self.night / "unstrand.restore.json").read_text())
+        record = json.loads((self.night / "unstrand.restore.1.json").read_text())
         self.assertFalse(record["found"]["network_time_restore_owed"])
         self.assertNotIn("-setusingnetworktime", self.restore_log.read_text())
 
@@ -664,7 +798,7 @@ exec(compile(source, "<unstrand-test>", "exec"), {"__name__": "__main__"})
         result = self.run_script("--go", "--restore-host")
         self.assertNotEqual(0, result.returncode)
         self.assertFalse(self.restore_log.exists())
-        self.assertFalse((self.night / "unstrand.restore.json").exists())
+        self.assertFalse((self.night / "unstrand.restore.1.json").exists())
 
     def test_different_plan_or_unreadable_plist_refuses(self):
         for payload in (plistlib.dumps({"ProgramArguments": [
