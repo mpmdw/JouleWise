@@ -841,8 +841,9 @@ limitation. The paper was not edited.
 Round 4 appends **425 rows**, physical TSV lines **1421–1845**, for **1,844
 rows** in total. The header and all **1,419** existing rows remain byte-identical
 to round-3 authority `60f66800fabe02c574dab41b2a61f38623c47a0c`. RESULTS is
-unchanged. The new print-authority SHA is recorded after the table commit in
-the run report and in this section's authority note. Lead acceptance and the
+unchanged. **NEW PRINT AUTHORITY SHA:** `ffe8137beef723e06c381c91267df099f9665261`
+(`docs: extend Block 5 ledger and fill coverage under RL-55`). A documentation-only
+follow-up records this implementation/table commit; it changes no ledger or code. Lead acceptance and the
 prescribed Opus cold review remain separate gates.
 
 | New physical rows | Content |

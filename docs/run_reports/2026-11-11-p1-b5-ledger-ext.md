@@ -515,7 +515,8 @@ round-1 prefixes also equal their own frozen commits. No existing row changed.
 The final ledger SHA-256 is
 `2f15d0810ae6123c42871e7101e880440e4c46ad350f707058d3fd5e7a988469`.
 
-**NEW PRINT AUTHORITY SHA:** recorded in the post-commit authority note below.
+**NEW PRINT AUTHORITY SHA:** `ffe8137beef723e06c381c91267df099f9665261`
+— `docs: extend Block 5 ledger and fill coverage under RL-55`.
 As in round 3, the implementation/table commit is the authority; a separate
 documentation-only commit records its SHA, since a commit cannot name itself.
 This records this reader's result, not Opus admission or the lead's final gate.
@@ -697,3 +698,11 @@ for a row mismatch, outside source or missing registered Block 5 element.
 coverage table against the pinned manuscript, audits this seat's event log,
 and records acceptance of the new print-authority commit. Then the second fill
 uses the map, RL-55's precision/XWIN instructions and F4's refusal pairing.
+
+### Round-4 authority recorded
+
+The implementation/table authority above contains all eleven changed files,
+the 425-row append and final checker pin. This documentation-only follow-up
+records that immutable commit in this report and REDERIVATION; it changes no
+ledger, source manifest, script or test byte. All three final custody re-hashes
+were equal to the pins. Nothing was pushed.
