@@ -2378,6 +2378,123 @@ bug in place unless the science is harmed, and here nothing is.
 
 ---
 
+# Decision request 24: Paper 1 seat 12, the Block 5 fill (2026-11-11 02:55 PST)
+
+**What I did.** On `docs/2026-11-11-paper1-b5-fill` @ `e5fd29671`: read the seat report and every added and
+removed line of `paper1.md` against `41c7a1444`; ran `fill_check_b5.py` (PASS: 28 sites, 69 ids, 111 ledger
+rows), the fill-index generator (`152 131 140 114`) and `tests.test_paper_build` (5 tests, pass); confirmed the
+ledger in the tree is byte-identical to the print authority at `0b8763f0a`. I checked the added sentences
+against RL-4 (i) to (vi) and (x) and RL-41 (b), and read analysis plan §7.2 for the leave-one-quad-out rule. I
+did not re-derive the 69 values by hand; the check script does that from the ledger and fails on a perturbed
+value.
+
+## RL-52. Seat 12 is admitted as it stands. A ledger extension and a second fill follow
+
+### Verdict: ADMIT
+
+Every printed value is a ledger row, printed as the row has it. The branches are right and each was derived
+twice. The sentences RL-4 assigns to the fill are there and say what the rulings ask: the decision interval
+with its statistical part, one session, kept over planned quads, the loss of 9 of 20 quads and its skew, the
+exposure reading labelled exploratory, the load-correlated line as not computable with the uncompared value
+beside it, the claim level as the gate's recorded output. No p-value is in the prose. Nothing from the
+`not-printed` rows appears. The seat left a composite placeholder whole wherever one element lacked a row,
+which is the right instinct. The lead may open the PR and merge.
+
+What follows is a second round, not a condition of this merge.
+
+### 1 and 2: the missing rows. One ledger extension, under RL-38's conditions
+
+RL-2 requires every row that analysis plan §9 registers for print, and the dominance table "with every ratio,
+numerator, denominator and n". Those rows are missing only because `RESULTS.md` did not print them. So:
+
+- **One extension seat**, in the manner of seat 4 phase 2: a Sol reader, Block-5-aware, on the Air, under
+  RL-38's ten conditions and the same two unsealed paths. Then an Opus cold review of its hand checks.
+- **Scope:** every id seat 12 left pending for want of a row. That is the eight R with their sixteen terms, the
+  four comparative floors and the n of each form; the floor-limit class words; and the ALPHA and BETA
+  disclosures (attempt causes and counts, removed units with their codes, arm hazards, NEG-8, monitor cost, the
+  per-cell battery and load lines, ρ per pack, the three kind averages of B and the attaining run, the
+  cross-session agree-or-differ words, the per-quad removal codes for the contrast).
+- **Words:** as RL-41 and RL-42 define them. A ratio, floor or share that can be recomputed from member values
+  gets a hand check. A count or word derived from stored flags is `exact (over stored flags)`. A leaf that is
+  itself a stored judgment is `recorded-judgment`. A number only one program computed is `single-source`.
+  Residuals to two significant figures.
+- Rows that `RESULTS.md` does not print are sourced directly from the pinned files by key path and listed in
+  their own section of `REDERIVATION.md`. `RESULTS.md` stays byte-identical.
+- The lead records the new print-authority commit. It comes to me if any row is `MISMATCH` or
+  `source-outside-unseal`; otherwise the second fill proceeds.
+
+Since every one of these is a leaf of the registered outputs, each can at least be sourced exactly, so none
+should end up unprintable.
+
+### 3: the three small questions
+
+- **`P1-B5-XWIN`: not without rows.** The agree-or-differ word is computed by the registered analysis from the
+  four deltas; it is not a collection-time judgment. It gets rows in the extension: the word from the
+  disclosure record, and the registered rule applied to hand-checked rows 169-172.
+- **`P1-B5-RM-ctr-*`: no.** A row's note is not a printed value. A removal code prints when it is the value of a
+  row. The extension adds them.
+- **`P1-B5-ANALYSED`: yes.** Attempt identifiers are names in a committed configuration file,
+  `configs/analysis/b5/analysed_windows.json`. They are not Block 5 values. They print from that file, and the
+  fill check asserts the strings match it.
+
+### 4: `P1-RECOMPUTE-SUMMARY` is split now
+
+The Block 5 paragraph is filled in the second fill, under RL-4 (vii): what was recomputed, what was not, and
+that one of the 24 comparator families compared no rows. A separate placeholder is left for Block 6. Block 6
+may not be released by the freeze, and Block 5's paragraph should not wait on it.
+
+### 5: `P1-B5-B-SHARE` is dropped
+
+With its sentence. RL-5 item 6 allowed it, and it is an unregistered derived value with no row.
+
+### Two things I add for the second fill
+
+**The leave-one-quad-out sentence for prefill gains one clause.** It already says that each of the five
+estimates is over 4 quads, one fewer than the minimum of 5. A reader will ask whether the minimum applies
+there. Add: "; the registered check recomputes the contrast on the remaining quads and does not re-apply that
+minimum". The released record supports it (five rows, n = 4 each, each direction supported).
+
+**Print precision.** The fill prints seven or eight significant figures because the ledger does. That was the
+acceptance I set, and it is right for a check and wrong for a paper: 0.0128193 J per token beside an interval
+of ±11% claims a precision nobody has. The registry's own rule for a measured value is "copied or
+conservatively rounded from an issued field". So Paper 1 prints each Block 5 value rounded once from its
+ledger row:
+
+| Quantity | Printed |
+|---|---|
+| Energies, interval ends, floors, bounds and allowances, in joules per request | two decimals |
+| Per-token energies | four significant figures |
+| R and R_cm | four decimals, as issued |
+| Magnitude ratios | three decimals |
+| Shares | three decimals in tables, two in running text |
+| p-values | two significant figures, tables only |
+| Counts | exact |
+
+Estimates round to nearest. Interval ends round outward. Floors round up. **No rounding may change the truth
+of a comparison the paper states or of a registered threshold test.** R_cm for 1.7B prefill is 1.9997 against a
+threshold of 2, which is why those ratios keep four decimals. The fill check asserts every stated comparison on
+the rounded values as well as the ledger's; if one would flip, that value prints at the ledger's precision.
+Derived ratios stay under RL-39.
+
+### The second fill, and what follows it
+
+An Opus seat fills the remaining ids from the extended ledger, applies the precision rule to all Block 5
+values, and makes the changes under 3 to 5 and the clause above. Then RL-3's last step: a fresh Sol reader
+checks every Block 5 sentence of the paper against the ten licence constraints and RL-4. Then it comes to me.
+The site-build hold of RL-27 stays until that check is done.
+
+Two things the seat flagged that I confirm. The reason-code table after the contrast branches now glosses
+deleted branches; it goes on my 22 November list. The `[PREFILL_LENGTH]` defect in the index builder is the
+lead's to fix and changes only a status column.
+
+**Reason.** The fill did exactly what the gate licensed, and the gaps it found are gaps in what the gate was
+pointed at. `RESULTS.md` was written as a summary of the result. The paper owes the full registered table.
+
+**Blind status.** Not blind to Block 5. Blind to Block 6, BYTES and v4; the diff touches none of their
+placeholders.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
