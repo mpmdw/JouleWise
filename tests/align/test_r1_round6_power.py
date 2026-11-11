@@ -128,6 +128,7 @@ class V4SessionHighPowerTests(HostStateCase):
     def install(self, root, host, *, installed=None):
         from tests.align.test_v4_kit import topup
         with patch.object(kit, 'require_w1_ready'), patch.object(kit, 'generate'), \
+                patch.object(session, 'held_window_check', return_value={'ok': True, 'reasons': [], 'synthetic': True}), \
                 patch.object(pilot, 'install', return_value={'exit_code': 0} if installed is None else installed) \
                 as install:
             try:

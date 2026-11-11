@@ -3,6 +3,7 @@
 The contract assertions documenting findings are intentionally red on 03253edca.
 No real measurements, native probes, weights, network or external user paths.
 """
+from tests.align.test_v4_arm_watchdog_check import acceptance as _watchdog_acceptance
 from copy import deepcopy
 import json
 import os
@@ -68,7 +69,7 @@ class CommittedSeriesTests(unittest.TestCase):
              patch.object(session.pilot, 'install', return_value={'synthetic': True}) as install:
             try:
                 session._arm_and_install(target, state, self.repo, scenario.next_plan, None,
-                    runner=lambda argv: subprocess.CompletedProcess(argv, 0, '', ''),
+                    watchdog_check=_watchdog_acceptance, runner=lambda argv: subprocess.CompletedProcess(argv, 0, '', ''),
                     volume_runner=None, now=lambda: fixtures.NOW, w1_disk_config=None, disk_gate=None,
                     battery_log=log, obc_off_attested_by='synthetic', next_arm_triage=packet,
                     meter_probe=lambda root: {'live': True})

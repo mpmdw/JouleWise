@@ -19,6 +19,8 @@ from functools import wraps
 import json
 import os
 from pathlib import Path
+import plistlib
+import re
 import signal
 import subprocess
 import sys
@@ -42,7 +44,8 @@ def series_ac_powermode(measurement_root, kit_path=kit.KIT):
 
 
 def prepare(measurement_root, session_root, *, power_runner=None, window_id=None, extra_sentinels=0,
-            frequency_reader=None, frequency_runner=None, frequency_preflight=None, **kwargs):
+            frequency_reader=None, frequency_runner=None, frequency_preflight=None, weight_identity_fn=None,
+            runtime_runner=None, runtime_reader=None, **kwargs):
     from joulewise.align.apple import powermode
     preflight = powermode.host_lock_preflight(role='v4-prepare-preflight')
     # Lead ruling R6-7: at every session start a host-level High Power marker
@@ -71,8 +74,31 @@ def prepare(measurement_root, session_root, *, power_runner=None, window_id=None
     kwargs.setdefault('kit', kit.KIT)
     kwargs.setdefault('pack_id', kit.PACK_ID)
     kwargs.setdefault('session_prefix', 'align-v4-')
-    state = pilot.prepare(measurement_root, session_root, **kwargs)
+    try:
+        state = pilot.prepare(measurement_root, session_root, **kwargs)
+    except (pilot.h.PhysicalHazard, KeyError, OSError) as exc:
+        # The shared caller's presence check precedes plan staging. A missing
+        # shard/row or unreadable tree must still get RL-62's named refusal.
+        # Never overwrite an existing session or replace another physical gate.
+        if isinstance(exc, pilot.h.PhysicalHazard) and not str(exc).startswith('models missing:'):
+            raise
+        session = Path(session_root)
+        if session.exists() and any(session.iterdir()):
+            raise
+        state = {'measurement_root': str(measurement_root), 'preparation_status': 'INPUTS_ONLY',
+                 'registration_dir': str(Path(measurement_root) / kwargs['kit'] / 'registration'),
+                 'host_state_preflight': preflight}
+        weights = _prepare_weight_digests(state, identity_fn=weight_identity_fn)
+        if weights['ok']:
+            raise
+        state['weight_digest_preflight'] = weights
+        _prepare_mismatch_hold(state, weights['reasons'])
+        pilot.h.write(session / 'session.json', state)
+        raise ValueError(_prepare_refusal_text(state, weights['reasons'])) from exc
     state['host_state_preflight'] = preflight
+    privileges = (host_privilege_preflight(runner=power_runner) if powermode.host_state_override() is None
+                  else {'ok': True, 'skipped': 'host-state test override', 'reasons': []})
+    state['host_privilege_preflight'] = privileges
     if series_state is not None and state.get('preparation_status') == 'STAGED':
         # Preserve the selected window even when the following preflight
         # refuses; a later install must still bind the correct frozen series.
@@ -80,7 +106,17 @@ def prepare(measurement_root, session_root, *, power_runner=None, window_id=None
     # The prepared plan supplies the actual stream span and registered budget.
     # A second, fresh check at install owns any intervening network-time ON.
     frequency = None
-    if state.get('preparation_status') == 'STAGED':
+    weights = runtime = None
+    if privileges['ok'] and state.get('preparation_status') == 'STAGED':
+        # RL-62: prepare stages the plan; it never calls arm_checks or its
+        # pre_dwell/stamp. Hashing ends here, long before that install path.
+        weights = state['weight_digest_preflight'] = _prepare_weight_digests(state, identity_fn=weight_identity_fn)
+        runtime = state['runtime_stack_preflight'] = runtime_stack_preflight(
+            str(Path(state['measurement_root']) / '.venv/bin/python'), _registration_dir(state) / 'identity_pins.json',
+            runner=runtime_runner, reader=runtime_reader)
+        _prepare_mismatch_hold(state, weights.get('reasons', []) + runtime['reasons'])
+    if (privileges['ok'] and (weights is None or weights['ok']) and (runtime is None or runtime['ok'])
+            and state.get('preparation_status') == 'STAGED'):
         lock = powermode.HostLock(role='v4-prepare-frequency')
         try:
             if not lock.acquire():
@@ -91,6 +127,12 @@ def prepare(measurement_root, session_root, *, power_runner=None, window_id=None
             lock.release()
         state['clock_frequency_preflight'] = frequency
     pilot.h.write(Path(session_root) / 'session.json', state)
+    if not privileges['ok']:
+        raise ValueError('; '.join(privileges['reasons']))
+    failures = [reason for block in (weights, runtime) if block is not None and not block['ok']
+                for reason in block['reasons']]
+    if failures:
+        raise ValueError(_prepare_refusal_text(state, failures))
     if frequency is not None and not frequency['ok']:
         raise ValueError(f"{frequency['cause']}: {frequency['reason']}")
     if series_state is not None:
@@ -104,11 +146,500 @@ def prepare(measurement_root, session_root, *, power_runner=None, window_id=None
     return state
 
 
+def _registration_dir(state):
+    return Path(state.get('registration_dir', Path(state['measurement_root']) / kit.KIT / 'registration'))
+
+
+def _prepare_mismatch_hold(state, reasons):
+    """RL-62/71/73: a statement in THIS prepare only; never mutate history."""
+    if not any(r.startswith(('weight_digest_preflight: digest_mismatch:',
+                             'weight_digest_preflight: file_set_differs:',
+                             'runtime_stack_preflight: differs:')) for r in reasons):
+        return
+    from scripts import align_v4_next_arm_packet as builder
+    previous = None
+    try:
+        evidence = builder.GitEvidence(state.get('source_measurement_root') or state['measurement_root'])
+        head = evidence.git('rev-parse', '--verify', 'HEAD^{commit}').decode().strip()
+        ledger = builder.decode(evidence.read(evidence.commit(head), builder.SERIES_PATH))
+        link = ledger['previous_record']
+        record = builder.WindowRecord(evidence, link['commit'], link['path'])
+        builder.require(record.sha256 == link['sha256'], 'previous record digest mismatch')
+        previous = record.window
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        pass                         # no authenticated prior id available; record null
+    state['holds_previous_window'] = previous
+
+
+def _prepare_refusal_text(state, reasons):
+    text = '; '.join(reasons)
+    if 'holds_previous_window' in state:
+        text += (f"; holds_previous_window: {state['holds_previous_window'] or 'null'}; "
+                 'held until it is shown when the files/stack changed')
+    return text
+
+
+def _runtime_stack_reasons(registered, observed):
+    for label, value in (('registered', registered), ('installed', observed)):
+        if (not isinstance(value, dict) or not isinstance(value.get('packages'), dict)
+                or not all(isinstance(k, str) and k for k in value['packages'])):
+            raise ValueError(f'{label} runtime_versions must contain a packages map')
+    if not (registered['packages'] or observed['packages']):
+        raise ValueError('no registered or installed package versions')
+    reasons = []
+    pairs = [('python', registered.get('python', '<missing>'), observed.get('python', '<missing>'))]
+    pairs += [(name, registered['packages'].get(name, '<missing>'), observed['packages'].get(name, '<missing>'))
+              for name in sorted(registered['packages'].keys() | observed['packages'].keys())]
+    for name, expected, found in pairs:
+        if expected != found:
+            reasons.append(f'runtime_stack_preflight: differs: {name}: registered {expected} installed {found}')
+        if (any(not isinstance(v, str) or not v.strip() for v in (expected, found))
+                or expected == found == '<missing>'):
+            reasons.append(f'runtime_stack_preflight: unreadable: {name}: registered {expected} installed {found}')
+    return reasons
+
+
+def runtime_stack_preflight(python, identity_pins, *, runner=None, reader=None):
+    """RL-73, reusable by any kit: metadata from its measurement interpreter.
+
+    runner has collect.runtime_versions(python)'s interface; reader returns the
+    decoded pins document. Neither this function nor the weight function uses
+    v4 session state. No runtime library or model is imported by the probe.
+    """
+    from joulewise.flags.collect import runtime_versions
+    started = time.monotonic()
+    record = {'source': 'prepare', 'registered': None, 'observed': None, 'ok': False, 'reasons': []}
+    try:
+        read = reader or (lambda path: json.loads(Path(path).read_bytes()))
+        record['registered'] = read(identity_pins)['runtime_versions']
+        record['observed'] = (runner or runtime_versions)(python)
+        record['reasons'] = _runtime_stack_reasons(record['registered'], record['observed'])
+    except (OSError, ValueError, RuntimeError, KeyError, TypeError, AttributeError) as exc:
+        record['reasons'].append(f'runtime_stack_preflight: unreadable: {type(exc).__name__}: {exc}')
+    record.update(ok=not record['reasons'], elapsed_s=time.monotonic() - started)
+    return record
+
+
+def _attested_runtime_stack(state, path):
+    record = {'source': 'attested', 'registered': None, 'observed': None, 'ok': False, 'reasons': []}
+    try:
+        document = pilot.h.read(path)
+        record.update(attested_by=document.get('attested_by'),
+                      attested_at_epoch_s=document.get('attested_at_epoch_s'), observed=document.get('observed'))
+        if not isinstance(record['attested_by'], str) or not record['attested_by'].strip():
+            raise ValueError('attested_by must name the operator')
+        record['registered'] = pilot.h.read(_registration_dir(state) / 'identity_pins.json')['runtime_versions']
+        if document.get('registered') != record['registered']:
+            raise ValueError('attested registered stack must equal the registered identity pins')
+        record['reasons'] = _runtime_stack_reasons(record['registered'], record['observed'])
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+        record['reasons'].append(f'runtime_stack_preflight: unreadable: attestation: {type(exc).__name__}: {exc}')
+    record['ok'] = not record['reasons']
+    return record
+
+
+def _registered_weight_roots(registration_dir, members, *, reader=None):
+    """Use the kit's existing unit IDs; never resolve or inspect model paths."""
+    # Same selected registration as _member_rows and bytes_h_session.prepare:
+    # W1 uses align_v4/registration; series kits project the registered units
+    # with _identities for their own member run IDs (align_v4_series:418-429).
+    read = reader or (lambda path: json.loads(Path(path).read_bytes()))
+    inventory = read(Path(registration_dir) / 'model_artifact_inventory.json')['artifacts']
+    units = sorted({pilot.h.align_unit_id(row['model_id'], row['run_id']) for row in members})
+    groups, reasons = {}, []
+    for unit in units:
+        row = inventory.get(unit)
+        if not isinstance(row, dict) or not isinstance(row.get('root'), str) or not row['root']:
+            reasons.append(f'weight_digest_preflight: no_inventory_row: {unit}')
+        else:
+            groups.setdefault(row['root'], {})[unit] = row
+    return dict(sorted(groups.items())), reasons
+
+
+def _prepare_weight_digests(state, *, identity_fn=None):
+    try:
+        members = pilot._member_rows(state, kit=kit.KIT)
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        return {'source': 'prepare', 'prepared_at_epoch_s': time.time(), 'roots': {}, 'ok': False,
+                'reasons': [f'weight_digest_preflight: unavailable: model_artifact_inventory.json: '
+                            f'{type(exc).__name__}: {exc}']}
+    return weight_digest_preflight(_registration_dir(state), members, identity_fn=identity_fn)
+
+
+def weight_digest_preflight(registration_dir, members, *, identity_fn=None, reader=None):
+    """RL-62: the R0 identity function, once per planned root, at prepare only."""
+    from joulewise.provenance import model_artifact_identity
+    record = {'source': 'prepare', 'prepared_at_epoch_s': time.time(), 'roots': {}, 'ok': False, 'reasons': []}
+    try:
+        groups, record['reasons'] = _registered_weight_roots(registration_dir, members, reader=reader)
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        record['reasons'].append(f'weight_digest_preflight: unavailable: model_artifact_inventory.json: '
+                                 f'{type(exc).__name__}: {exc}')
+        return record
+    for root, units in groups.items():
+        basename = Path(root).name
+        started = time.monotonic()
+        try:
+            observed = (identity_fn or model_artifact_identity)(root)
+        except (OSError, ValueError, RuntimeError) as exc:
+            observed = {'status': 'unavailable', 'reason': f'{type(exc).__name__}: {exc}'}
+        entry = record['roots'][root] = {
+            'units': list(units), 'registered_folded_sha256': next(iter(units.values())).get('folded_sha256'),
+            'observed_folded_sha256': observed.get('folded_sha256'),
+            'file_count': len(observed.get('files') or {}),
+            'total_bytes': sum(row['size_bytes'] for row in observed.get('inventory', [])),
+            'elapsed_s': time.monotonic() - started, 'ok': False}
+        reasons = []
+        if observed.get('status') != 'ok' or observed.get('kind') != 'file_set':
+            reason = observed.get('reason') or 'identity must be an ok file_set'
+            reasons.append(f'weight_digest_preflight: unavailable: {basename}: {reason}')
+        else:
+            added, missing, changed = set(), set(), set()
+            for unit, registered in units.items():
+                expected = registered.get('folded_sha256')
+                if not kit.valid_digest(expected) or observed.get('folded_sha256') != expected:
+                    reasons.append(f'weight_digest_preflight: digest_mismatch: {unit} {basename}')
+                expected_files, found_files = registered.get('files'), observed.get('files')
+                if not isinstance(expected_files, dict) or not isinstance(found_files, dict):
+                    reasons.append(f'weight_digest_preflight: unavailable: {basename}: file map unavailable')
+                elif expected_files != found_files:
+                    added.update(found_files.keys() - expected_files.keys())
+                    missing.update(expected_files.keys() - found_files.keys())
+                    changed.update(name for name in expected_files.keys() & found_files.keys()
+                                   if expected_files[name] != found_files[name])
+            if added or missing or changed:
+                entry['file_set_diff'] = dict(added=sorted(added), missing=sorted(missing), changed=sorted(changed))
+                reasons.append(f'weight_digest_preflight: file_set_differs: {basename}')
+        entry['ok'] = not reasons
+        record['reasons'].extend(dict.fromkeys(reasons))
+    record['ok'] = not record['reasons']
+    return record
+
+
+def _attested_weight_digests(state, members, path):
+    """Read a named operator's digest pairs, without touching any model tree."""
+    record = {'source': 'attested', 'roots': {}, 'ok': False, 'reasons': []}
+    try:
+        document = pilot.h.read(path)
+        record.update(attested_by=document.get('attested_by'),
+                      attested_at_epoch_s=document.get('attested_at_epoch_s'), roots=document.get('roots'))
+        if not isinstance(record['attested_by'], str) or not record['attested_by'].strip():
+            raise ValueError('attested_by must name the operator')
+        if not isinstance(record['roots'], dict):
+            raise ValueError('roots must map each planned root to its registered and observed folded_sha256')
+        groups, record['reasons'] = _registered_weight_roots(_registration_dir(state), members)
+        if set(record['roots']) != set(groups):
+            raise ValueError('attested roots must equal the planned registered roots')
+        for root, units in groups.items():
+            pair = record['roots'][root]
+            for unit, registered in units.items():
+                expected = registered.get('folded_sha256')
+                if (not kit.valid_digest(expected) or not isinstance(pair, dict)
+                        or pair.get('registered_folded_sha256') != expected
+                        or pair.get('observed_folded_sha256') != expected):
+                    record['reasons'].append(f'weight_digest_preflight: digest_mismatch: {unit} {Path(root).name}')
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+        record['reasons'].append(f'weight_digest_preflight: unavailable: attestation: {type(exc).__name__}: {exc}')
+    record['ok'] = not record['reasons']
+    return record
+
+
 # Fixed, root-owned native executable; no Python interpreter or writable repo
 # script is ever granted root. Provisioning and the exact sudoers rule are in
 # the round-3 report. This command accepts NO arguments.
 ZERO_FREQUENCY_ARGV = ('/usr/bin/sudo', '-n', '/Library/PrivilegedHelperTools/joulewise-zero-ntp-frequency')
 FREQUENCY_CAUSE = 'clock.frequency_word_nonzero'
+
+
+def host_privilege_rules():
+    """The night's fixed sudo rules, from their owning constants, never setters here."""
+    from joulewise import network_time_off
+    from joulewise.align.apple import powermode
+    from joulewise.b5 import driver
+    from scripts import run_night
+    # driver.NETWORK_TIME_OFF_ARGV and network_time_off.OFF_ARGV are the same
+    # rule; retain both sources without issuing duplicate listings.
+    rules = [('network_time_off', driver.NETWORK_TIME_OFF_ARGV),
+             ('network_time_off_receipt', network_time_off.OFF_ARGV),
+             ('network_time_on', run_night.NETWORK_TIME_ON_ARGV),
+             ('network_time_query', run_night.NETWORK_TIME_QUERY_ARGV),
+             ('powermode_automatic', powermode.RESTORE_AUTOMATIC),
+             ('powermode_high', powermode.SET_HIGH_POWER),
+             ('zero_ntp_frequency', ZERO_FREQUENCY_ARGV)]
+    seen, unique = set(), []
+    for name, argv in rules:
+        command = tuple(argv[2:])
+        if command not in seen:
+            seen.add(command)
+            unique.append((name, argv))
+    return unique
+
+
+def _stored_streams(result):
+    """Bound staging evidence to 8 KiB per UTF-8 stream; parse the full output."""
+    evidence = {}
+    for name in ('stdout', 'stderr'):
+        raw = (getattr(result, name) or '').encode('utf-8')
+        evidence[name] = raw[:8192].decode('utf-8', errors='ignore')
+        evidence[name + '_truncated'] = len(raw) > 8192
+    return evidence
+
+
+def host_privilege_preflight(*, runner=None):
+    """W-2: LIST permissions, then reuse the night's read-only network-time reader."""
+    from types import SimpleNamespace
+    from scripts import run_night
+    record = {'ok': False, 'rules': {}, 'network_time': None, 'reasons': []}
+
+    def run(argv):
+        return (runner(argv) if runner is not None else subprocess.run(
+            argv, check=False, capture_output=True, text=True, timeout=10))
+
+    for name, command in host_privilege_rules():
+        argv = ('/usr/bin/sudo', '-n', '-l', *command[2:])
+        evidence = record['rules'][name] = {'argv': list(argv), 'allowed': False}
+        try:
+            result = run(argv)
+            evidence.update(exit_code=result.returncode, **_stored_streams(result),
+                            allowed=result.returncode == 0)
+        except (OSError, subprocess.SubprocessError) as exc:
+            evidence['error'] = f'{type(exc).__name__}: {exc}'
+        if not evidence['allowed']:
+            record['reasons'].append(f'host_privilege_preflight: sudo_rule_missing: {name}')
+
+    def query(argv):
+        result = run(argv)
+        return SimpleNamespace(exit_code=result.returncode, stdout=result.stdout, stderr=result.stderr)
+
+    # Do not execute even the query unless its sudo rule was admitted above.
+    if record['rules']['network_time_query']['allowed']:
+        record['network_time'] = run_night._leave_network_time(SimpleNamespace(run=query), skipped=False)
+    if not (record['network_time'] or {}).get('verified'):
+        record['reasons'].append('host_privilege_preflight: network_time_unreadable')
+    record['ok'] = not record['reasons']
+    return record
+
+
+# Three supervisor polls, equal to the shortest standdown phase gap (30 s).
+# magistrate_watchdog.py:99-104, 128, 440, 504: the process/remote probes
+# each allow 10 s; 30 s allows both remote transports plus one local probe.
+WATCHDOG_TIMEOUT_S = 30
+WATCHDOG_PLAN_LEAD_S = 180  # magistrate_watchdog.py:104, plan_span_active:1328
+# Closed output vocabulary: Decision constructors (_decide:2197-2408,
+# _surface_unsafe_decision:2563), _unsafe_state:2411-2434, computed
+# STANDDOWN phases:1444-1451/BACKOFF:2400-2405, supervisor IDLE:2887.
+WATCHDOG_STATES = frozenset({
+    'ACTIVE', 'FENCED', 'LAUNCHING', 'IDLE', 'BACKOFF', 'BACKOFF_USAGE', 'STOPPED',
+    'STANDDOWN_REQUEST', 'STANDDOWN_TERM', 'STANDDOWN_KILL',
+    'CLOCK_UNCERTAIN', 'NETWORK_UNCERTAIN', 'STRANDED', 'HOLD_CENSUS', 'HOLD_UNSAFE',
+    'HOLD_PLAN_UNREADABLE', 'HOLD_PLAN_MALFORMED', 'HOLD_PLIST_UNREADABLE', 'HOLD_CONFLICT',
+    'HOLD_LOCK', 'HOLD_PROCESS_TABLE', 'HOLD_DESK_FENCE', 'HOLD_STATUS_EXPORT',
+    'HOLD_MODEL_CHECK', 'HOLD_MODEL_REJECTED'})
+WATCHDOG_ADMITTED = frozenset({'FENCED', 'ACTIVE', 'LAUNCHING', 'IDLE', 'BACKOFF', 'BACKOFF_USAGE', 'STOPPED',
+                              'STANDDOWN_REQUEST', 'STANDDOWN_TERM', 'STANDDOWN_KILL'})
+# Installed-module API: Storage:311-344, PlanSnapshot:654-657,
+# load_plans:757-818 and _installed_agent_plans:820-873 only read files.
+# plan_span_active:1328 uses t0 - PLAN_LEAD_S (:104); standdown_phase:1444-1451
+# uses REQUEST/TERM/KILL leads, not the span boundary. No main()/tick() here.
+WATCHDOG_DISCOVERY_PROGRAM = '''import importlib.util, json, sys
+from pathlib import Path
+spec = importlib.util.spec_from_file_location("_arm_watchdog_discovery", sys.argv[1])
+watchdog = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = watchdog
+spec.loader.exec_module(watchdog)
+storage = watchdog.Storage(Path(sys.argv[2]), dry_run=True)
+snapshot = watchdog.load_plans(storage)
+assert storage.dry_run and not storage.would_write, "plan discovery attempted a write"
+print(json.dumps({"plans": [{"plan_id": p.plan_id, "t0_epoch_s": p.t0_epoch_s,
+    "span_start_epoch_s": p.t0_epoch_s - watchdog.PLAN_LEAD_S} for p in snapshot.plans],
+    "errors_count": len(snapshot.errors), "installed_source": "not_distinguishable"}))
+'''
+
+
+# Mirror ONLY load_plans' scanned-plan steps (magistrate_watchdog.py:765-805):
+# read/JSON -> retired-v1 -> installed NightPlan -> authored time -> deadman.
+# No main()/tick(), writes or host probes. The scan is informational here.
+WATCHDOG_PLAN_FILE_PROGRAM = '''import importlib.util, json, sys
+from pathlib import Path
+spec = importlib.util.spec_from_file_location("_arm_watchdog_discovery", sys.argv[1])
+watchdog = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = watchdog
+spec.loader.exec_module(watchdog)
+storage = watchdog.Storage(Path(sys.argv[2]), dry_run=True)
+path = Path(sys.argv[3])
+now = watchdog.time.time()
+def parse():
+    try:
+        text = storage.read_text(path)
+    except OSError as exc:
+        return {"parse": "unreadable", "exception": type(exc).__name__}
+    try:
+        raw = watchdog.json.loads(text)
+    except Exception as exc:
+        return {"parse": "unreadable", "exception": type(exc).__name__}
+    if watchdog.is_retired_v1_plan(raw):
+        return {"parse": "retired_v1"}
+    try:
+        plan = watchdog.NightPlan.from_mapping(raw)
+        if plan.authored_epoch_s > now:
+            raise watchdog.PlanError("night_plan_malformed", "plan authored_epoch_s is in the future")
+        watchdog.deadman_epoch(plan)
+    except (watchdog.PlanError, OverflowError, ValueError) as exc:
+        return {"parse": "malformed", "exception": type(exc).__name__}
+    return {"parse": "ok", "plan_id": plan.plan_id, "t0_epoch_s": plan.t0_epoch_s,
+            "span_start_epoch_s": plan.t0_epoch_s - watchdog.PLAN_LEAD_S}
+result = parse()
+snapshot = watchdog.load_plans(storage, now_epoch_s=now)
+result["discovered_by_scan"] = (result["parse"] == "ok"
+    and path.resolve(strict=False) in [p.resolve(strict=False) for p in storage.glob_plans()]
+    and any(p.plan_id == result["plan_id"] and p.t0_epoch_s == result["t0_epoch_s"] for p in snapshot.plans))
+assert storage.dry_run and not storage.would_write, "plan identification attempted a write"
+print(json.dumps(result))
+'''
+
+
+def watchdog_acceptance(*, phase, runner=None, plist_path=None, plan=None, plan_path=None, now=None, deadline_ns=None):
+    """W-1: run only the installed watchdog's read-only command, fail closed.
+
+    Parse this plan directly before install; discover it after install (RL-56).
+    Before its span, ordinary idle/launch/backoff states admit too; at/after
+    its span boundary only FENCED/STANDDOWN admit. Both runs share one deadline.
+    """
+    started = time.monotonic_ns()
+    deadline_ns = started + WATCHDOG_TIMEOUT_S * 1_000_000_000 if deadline_ns is None else deadline_ns
+    record = {'ok': False, 'argv': None, 'state': 'UNAVAILABLE', 'reason': None,
+              'plan_read_proven': False, 'stopped': False}
+    try:
+        path = Path(plist_path) if plist_path is not None else Path.home() / 'Library/LaunchAgents/com.joulewise.magistrate.plist'
+        document = plistlib.loads(path.read_bytes())
+        argv = document['ProgramArguments']
+        cwd = document['WorkingDirectory']
+        environment = document['EnvironmentVariables']
+        if (document.get('Label') != 'com.joulewise.magistrate' or not isinstance(argv, list)
+                or not all(isinstance(arg, str) and arg for arg in argv)
+                or not argv or document.get('Program', argv[0]) != argv[0]
+                or not isinstance(cwd, str) or not Path(cwd).is_absolute()
+                or not isinstance(environment, dict)
+                or not all(isinstance(k, str) and isinstance(v, str) for k, v in environment.items())):
+            raise ValueError('invalid installed magistrate job')
+        # Whitelist the production Python launch forms; never forward an
+        # installed command/subcommand that might write or spawn a session.
+        script = next(i for i, arg in enumerate(argv) if Path(arg).name == 'magistrate_watchdog.py')
+        prefix = argv[:script]
+        interpreter = prefix[1:] if prefix[:1] == ['/usr/bin/env'] else prefix
+        if (not interpreter or not re.fullmatch(r'python3(?:\.[0-9]+)?', Path(interpreter[0]).name)
+                or any(arg not in ('-B', '-u', '-s', '-S') for arg in interpreter[1:])
+                or not Path(argv[script]).is_absolute()):
+            raise ValueError('unsupported installed watchdog interpreter/script')
+        tail = argv[script + 1:]
+        if tail and (len(tail) != 2 or tail[0] != '--custody-root'):
+            raise ValueError('unsupported installed watchdog arguments')
+        custody = tail[1] if tail else environment.get('MAGISTRATE_WATCHDOG_CUSTODY_ROOT')
+        if not isinstance(custody, str) or not Path(custody).is_absolute():
+            raise ValueError('installed watchdog custody root unavailable')
+        discovery_argv = argv[:script] + ['-c', WATCHDOG_DISCOVERY_PROGRAM, argv[script], custody]
+        argv = argv[:script + 1] + ['--dry-run', '--custody-root', custody]
+        record.update(argv=argv, cwd=cwd, custody_root=custody)
+        environment = dict(os.environ, **environment)
+        environment['PYTHONDONTWRITEBYTECODE'] = '1'  # module import is read-only too
+        remaining = (deadline_ns - time.monotonic_ns()) / 1e9
+        if remaining <= 0:
+            raise TimeoutError('watchdog acceptance timeout')
+        result = (runner or subprocess.run)(argv, cwd=cwd, env=environment,
+            check=False, capture_output=True, text=True, timeout=remaining)
+        record.update(exit_code=result.returncode, **_stored_streams(result))
+        if result.returncode != 0:
+            raise ValueError(f'installed watchdog exited {result.returncode}')
+        lines = [line for line in (result.stdout or '').splitlines() if line.lstrip().startswith('decision=')]
+        match = re.fullmatch(r'decision=([A-Z][A-Z0-9_]*) reason=(\S[^\r\n]*)', lines[0]) if len(lines) == 1 else None
+        if match is None:
+            raise ValueError('expected one well-formed decision= line')
+        record.update(state=match[1], reason=match[2], stopped=match[1] == 'STOPPED')
+        record['ok'] = (record['state'] in WATCHDOG_ADMITTED and not any(text in record['reason'] for text in
+            ('night_plan_unreadable', 'night_plan_malformed', 'installed_agent_fence')))
+        decision_ok = record['ok']
+        if not decision_ok and phase != 'pre_install':
+            return record
+        identity = record['plan_identity'] = {'source': ('installed_parser_on_plan_file' if phase == 'pre_install'
+            else 'installed_load_plans'), 'found': False, 'span_start_epoch_s': None, 'expected': None, 'ok': False}
+        record['ok'] = False
+        try:
+            if (not isinstance(plan, dict) or not isinstance(plan.get('plan_id'), str) or not plan['plan_id']
+                    or not pilot.h.finite(plan.get('t0_epoch_s'))):
+                raise ValueError('arm plan identity unavailable')
+            identity['expected'] = plan['t0_epoch_s'] - WATCHDOG_PLAN_LEAD_S
+            if phase == 'pre_install':
+                identity['discovered_by_scan'] = False
+                if plan_path is None or not Path(plan_path).is_absolute():
+                    raise ValueError('arm plan path must be absolute')
+                discovery_argv = argv[:script] + ['-c', WATCHDOG_PLAN_FILE_PROGRAM,
+                    argv[script], custody, str(plan_path)]
+            remaining = (deadline_ns - time.monotonic_ns()) / 1e9
+            if remaining <= 0:
+                raise TimeoutError('watchdog acceptance timeout before discovery')
+            discovery = record['discovery'] = {'argv': discovery_argv}
+            found = (runner or subprocess.run)(discovery_argv, cwd=cwd, env=environment,
+                check=False, capture_output=True, text=True, timeout=remaining)
+            discovery['exit_code'] = found.returncode
+            if found.returncode != 0:
+                raise ValueError(f'installed discovery exited {found.returncode}')
+            if time.monotonic_ns() > deadline_ns:
+                raise TimeoutError('watchdog acceptance timeout after discovery')
+            lines = (found.stdout or '').splitlines()
+            snapshot = json.loads(lines[0]) if len(lines) == 1 else None
+            if phase == 'pre_install':
+                if (not isinstance(snapshot, dict) or snapshot.get('parse') not in
+                        ('ok', 'retired_v1', 'unreadable', 'malformed')
+                        or type(snapshot.get('discovered_by_scan')) is not bool):
+                    raise ValueError('malformed parser snapshot')
+                identity['discovered_by_scan'] = snapshot['discovered_by_scan']
+                if snapshot['parse'] != 'ok':
+                    record['reason'] = 'plan_identity: ' + snapshot['parse']
+                    return record
+                snapshot = {'plans': [{k: snapshot.get(k) for k in
+                    ('plan_id', 't0_epoch_s', 'span_start_epoch_s')}],
+                    'errors_count': 0, 'installed_source': 'not_distinguishable'}
+            if (not isinstance(snapshot, dict) or not isinstance(snapshot.get('plans'), list)
+                    or type(snapshot.get('errors_count')) is not int or snapshot['errors_count'] < 0
+                    or snapshot.get('installed_source') not in ('installed', 'scanned', 'not_distinguishable')):
+                raise ValueError('malformed discovery snapshot')
+            discovery.update(errors_count=snapshot['errors_count'])
+            record['installed_source'] = snapshot['installed_source']
+            if snapshot['errors_count']:
+                raise ValueError('discovery reported plan errors')
+            for item in snapshot['plans']:
+                if (not isinstance(item, dict) or set(item) != {'plan_id', 't0_epoch_s', 'span_start_epoch_s'}
+                        or not isinstance(item['plan_id'], str) or not item['plan_id']
+                        or not all(pilot.h.finite(item[k]) for k in ('t0_epoch_s', 'span_start_epoch_s'))):
+                    raise ValueError('malformed discovered plan')
+            matches = [item for item in snapshot['plans'] if item['plan_id'] == plan['plan_id']]
+            identity['found'] = bool(matches)
+            if len(matches) != 1:
+                raise ValueError('arm plan missing or ambiguous')
+            identity['span_start_epoch_s'] = matches[0]['span_start_epoch_s']
+            if matches[0]['span_start_epoch_s'] != identity['expected'] or matches[0]['t0_epoch_s'] != plan['t0_epoch_s']:
+                raise ValueError('arm plan span start mismatch')
+            if phase == 'post_install' and snapshot['installed_source'] == 'scanned':
+                raise ValueError('arm plan not discovered through installed plist')
+            identity['ok'] = record['plan_read_proven'] = True
+            record['ok'] = decision_ok
+        except Exception as exc:
+            record['reason'] = f'plan_identity: {type(exc).__name__}: {exc}'
+        if record['ok'] and (now or time.time)() >= identity['expected']:
+            if record['state'] != 'FENCED' and not record['state'].startswith('STANDDOWN_'):
+                record.update(ok=False, reason='inside plan span without a fence')
+    except Exception as exc:  # malformed plist/encoding or any failed read/run is a refusal
+        record['ok'] = False
+        record['reason'] = f'{type(exc).__name__}: {exc}'
+    finally:
+        record['elapsed_s'] = (time.monotonic_ns() - started) / 1e9
+    return record
+
+
+def _watchdog_refusal(phase, record):
+    if record['reason'].startswith('plan_identity:'):
+        return f"watchdog_acceptance: {phase}: {record['reason']}"
+    return f"watchdog_acceptance: {phase}: {record['state']}: {record['reason']}"
 
 
 def frequency_word_preflight(state, *, reader=None, runner=None):
@@ -689,11 +1220,93 @@ def _record_bound(root, packet):
             and packet.get('series_sha256') == _sha256(ledger.stdout))
 
 
+# RL-65 item 2, narrowed to harvest-produced signals by RL-71.
+# RL-73's member runtime mismatch remains a lead follow-up: the committed
+# exclusions code alone cannot distinguish it from the arm identity mismatch.
+HELD_WINDOW_REASONS = frozenset({'records.source_changed_during_harvest',
+                                'roster.no_science_bundles', 'precheck.certain_exclusion'})
+
+
+def held_window_check(measurement_root, packet, *, ruling_path=None):
+    """Read only the rebuilt packet's authenticated previous final sources.
+
+    The packet currently rejects held_window_release ledger rows. The CLI
+    fallback uses the identical row shape/signature; its text source is a
+    committed blob at the rebuilt packet's series_commit, never a custody path.
+    """
+    from scripts import align_v4_next_arm_packet as builder
+    record = {'ok': False, 'window': None, 'held_reasons': [], 'reasons': [], 'ruling': None}
+    try:
+        evidence = builder.GitEvidence(measurement_root)
+        previous = builder.WindowRecord(evidence, packet['record_commit'], packet['record_path'])
+        builder.require(previous.sha256 == packet['record_sha256'], 'previous record digest mismatch')
+        builder.require(previous.window == packet['previous_window'], 'previous window mismatch')
+        record['window'] = previous.window
+        if not previous.has_final_sources():
+            # Same late-final source binding as the packet's last_desk_state:
+            # the authenticated ledger can name a successor carrying previous_final.
+            ledger = builder.decode(evidence.read(packet['series_commit'], builder.SERIES_PATH,
+                                                  packet['series_sha256']))
+            last = ledger.get('last_passed_record') or {}
+            if all(last.get(k) == packet['record_' + k] for k in ('commit', 'path', 'sha256')):
+                final_ref = last.get('final_record')
+                if final_ref is not None:
+                    builder.require(isinstance(final_ref, dict) and set(final_ref) == {'commit', 'path', 'sha256'},
+                                    'last desk-passed final_record malformed')
+                    successor = builder.WindowRecord(evidence, final_ref['commit'], final_ref['path'])
+                    builder.require(successor.sha256 == final_ref['sha256'], 'final record digest mismatch')
+                    previous.bind_final(successor)
+                    builder.require(previous.final_from is not None, 'final record carries no previous_final')
+        final_error = previous.final_evidence()
+        record['final'] = final_error is None
+        if final_error is not None:
+            record.update(ok=True, status='previous window not final: hold check deferred to its finality',
+                          finality_reason=final_error)
+            return record
+        if not previous.has_final_sources():
+            # A zero-capture record can be final without a harvest (R17).
+            record.update(ok=True, status='no final harvest: no capture')
+            return record
+        exclusions = previous.source('exclusions')
+        reasons = exclusions['reasons']
+        builder.require(isinstance(reasons, list) and all(isinstance(r, str) for r in reasons),
+                        'final exclusions reasons malformed')
+        record.update(claim_usable=exclusions['claim_usable'], final_reasons=reasons,
+                      held_reasons=sorted(HELD_WINDOW_REASONS.intersection(reasons)))
+        if not record['held_reasons']:
+            record.update(ok=True, status='no held reasons')
+            return record
+        if ruling_path is not None:
+            ruling = pilot.h.read(ruling_path)
+            fields = {'ruling_id', 'after_window', 'text', 'lead_signature', 'resets'}
+            builder.require(isinstance(ruling, dict) and set(ruling) == fields, 'held ruling row malformed')
+            builder.require(ruling['resets'] == 'held_window_release'
+                            and ruling['after_window'] == previous.window
+                            and isinstance(ruling['ruling_id'], str) and ruling['ruling_id'].strip()
+                            and kit.valid_lead_signature(ruling['lead_signature']),
+                            'held ruling identity/signature/window invalid')
+            text = evidence.source(packet['series_commit'], ruling['text'], json_value=False)
+            builder.require(bool(text.strip()), 'held ruling text empty')
+            record.update(ok=True, status='held reasons answered by signed ruling',
+                          ruling={**ruling, 'source': 'arm_cli', 'text_sha256': builder.digest(text)})
+        else:
+            record['reasons'].append(f"held_window: {previous.window}: "
+                                     + ', '.join(record['held_reasons']) + ': no signed ruling')
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+        if record['held_reasons']:
+            record['reasons'].append(f"held_window: {record['window']}: "
+                                     + ', '.join(record['held_reasons']) + ': no signed ruling')
+        record['reasons'].append(f'held_window: unreadable: {type(exc).__name__}: {exc}')
+    return record
+
+
 @timing_receipts.timed("arm", "v4_arm_checks")
 def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=None, owner=None,
                obc_off_attested_by=None, battery_runner=None, battery_log=None, window_battery_journal=None,
                now=None, next_arm_triage=None, commit_check=None, record_check=None,
-               packet_builder=None, meter_probe=None, dwell_start=None, series_bind=None, pre_dwell=None):
+               packet_builder=None, meter_probe=None, dwell_start=None, series_bind=None, pre_dwell=None,
+               watchdog_plist=None, watchdog_check=None, watchdog_plan=None, watchdog_plan_path=None,
+               held_window_ruling=None):
     """W1/D arm evidence: ruling 7 AC powermode and ruling 20 volumes.
 
     R17 review F7: every Git check (record commit, record binding) and the frozen-series binding
@@ -789,6 +1402,12 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
                         'record_commit_exists': (commit_check or _commit_exists)(measurement_root, commit),
                         'record_bound': bool((record_check or _record_bound)(measurement_root, built))}
         series_binding = list(series_bind(built)) if series_bind is not None else None
+    held = held_window_check(measurement_root, built, ruling_path=held_window_ruling)
+    reasons += held['reasons']
+    watchdog = (watchdog_check or watchdog_acceptance)(phase='pre_install', runner=runner,
+        plist_path=watchdog_plist, plan=watchdog_plan, plan_path=watchdog_plan_path, now=now)
+    if not watchdog['ok']:
+        reasons.append(_watchdog_refusal('pre_install', watchdog))
     # The 3 s monitor launch is USB and process activity: it runs BEFORE the quiet/display dwell
     # starts, never during it (lead ruling 2026-11-08). The arm stamps the probe's end and the dwell
     # start on one monotonic clock and refuses unless the probe ended strictly earlier.
@@ -824,6 +1443,8 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
     reasons += ([] if internal['meter_reader_live'] else
                 ['next_arm_triage: triage meter_reader_live failed'])
     record = {'schema': ARM_RECORD_SCHEMA, 'admitted': not reasons, 'reasons': reasons,
+            'held_window_check': held,
+            'watchdog_acceptance': watchdog,
             'next_arm_triage': triage,
             'ac_powermode': power, 'external_volumes': volumes, 'battery': battery,
             # Lead ruling R7-10: the host state directory this arm used.
@@ -936,12 +1557,11 @@ def w1_disk_check(config_path, *, gate=None, now=None):
     return receipt
 
 
-def _require_night_job_absent(runner=None):
+def _require_night_job_absent(runner=None, *, label='com.joulewise.night'):
     """Lead ruling R7-6 (round-6 exec MEDIUM-4): the shared installer's launchd
     census (``bytes_h_session.install``: same argv, 10 s budget, only exit
     113 with the exact absent-service line admits), run before any power
     mode change. ``runner`` is the install's command boundary (the test seam)."""
-    label = 'com.joulewise.night'
     argv = ['launchctl', 'print', f'gui/{os.getuid()}/{label}']
     try:
         job = (runner(argv) if runner is not None else
@@ -949,10 +1569,10 @@ def _require_night_job_absent(runner=None):
     except (OSError, subprocess.SubprocessError) as exc:
         raise ValueError(f'v4 install refused: launchd job state unavailable: {exc}') from exc
     if job.returncode == 0:
-        raise ValueError('v4 install refused: launchd already holds the night job')
+        raise ValueError(f'v4 install refused: launchd already holds the night job ({label})')
     absent = f'Could not find service "{label}" in domain for user gui: {os.getuid()}'
     if job.returncode != 113 or absent not in (job.stderr or '').splitlines():
-        raise ValueError('v4 install refused: launchd job state unavailable')
+        raise ValueError(f'v4 install refused: launchd job state unavailable ({label})')
 
 
 class _InstallReceipts:
@@ -1071,6 +1691,7 @@ def install(session_root, *, runner=None, volume_runner=None, now=None, w1_disk_
                                       volume_runner=volume_runner, now=now, w1_disk_config=w1_disk_config,
                                       disk_gate=disk_gate, lock=lock,
                                       owner=owner if any(owner.values()) else None,
+                                      watchdog_undo_closing=closing,
                                       frequency_preflight_record=frequency,
                                       frequency_pre_t0_check=lambda: (frequency_pre_t0 or frequency_word_pre_t0)(
                                           state, reader=frequency_reader), **kwargs)
@@ -1082,7 +1703,7 @@ def install(session_root, *, runner=None, volume_runner=None, now=None, w1_disk_
                 raise ValueError('v4 install did not install the night job (installer not called); '
                                  'Automatic restored')
             return result
-        except BaseException:
+        except BaseException as exc:
             closing()
             if entering:
                 # The arm did not hand off: leave the host Automatic (R5-6), on
@@ -1092,6 +1713,9 @@ def install(session_root, *, runner=None, volume_runner=None, now=None, w1_disk_
                     pilot.h.write(session / f'staging/v4-arm-restore-{time.time_ns()}.json', restore)
                 except Exception:  # noqa: BLE001 - the restore itself is what matters
                     pass
+                if (isinstance(exc, ValueError) and str(exc).startswith('watchdog_acceptance: post_install:')
+                        and not restore.get('ok')):
+                    raise ValueError(f'{exc}; install_undo_failed: host Automatic restore failed: {restore}') from exc
             raise
     finally:
         closing()
@@ -1127,12 +1751,74 @@ def _termination_handlers():
     return closing, restore
 
 
+def _watchdog_post_install(state, dwell, *, runner=None, plist_path=None, check=None, closing=None, now=None):
+    """Isolated W-1 post-install step (one call site); refusal removes this arm's jobs.
+
+    The enclosing install's existing exception path restores any High Power
+    it entered, under its still-held host lock and termination shield.
+    """
+    from joulewise.night_agent_install import LABELS
+    quiet = dwell['quiet_dwell']
+    quiet['watchdog_post_install_start_ns'] = time.monotonic_ns()
+    result = {'ok': False, 'state': 'UNAVAILABLE', 'reason': None, 'plan_read_proven': False}
+    try:
+        plan = pilot.h.read(state['plan_path'])
+        deadline = quiet['watchdog_post_install_start_ns'] + WATCHDOG_TIMEOUT_S * 1_000_000_000
+        result = (check or watchdog_acceptance)(phase='post_install', runner=runner, plist_path=plist_path,
+                                               plan=plan, now=now, deadline_ns=deadline)
+        result['stopped'] = result['state'] == 'STOPPED'
+        if result['ok']:
+            if time.monotonic_ns() > deadline:
+                raise TimeoutError('watchdog acceptance timeout')
+            t0 = plan.get('t0_epoch_s')
+            if not pilot.h.finite(t0):
+                raise ValueError('installed plan t0_epoch_s unavailable')
+            remaining = t0 - WATCHDOG_PLAN_LEAD_S - (now or time.time)()
+            if result['state'] == 'FENCED' or result['state'].startswith('STANDDOWN_'):
+                result['evidence_class'] = 'fence_observed'
+            elif remaining <= 0:
+                result.update(ok=False, reason='inside plan span without a fence')
+            else:
+                result.update(evidence_class='installed_plan_parsed_no_fence_yet',
+                              seconds_until_span_begins=remaining)
+    except BaseException as exc:  # a signal after install must undo the jobs too
+        result.update(ok=False, state='UNAVAILABLE', reason=f'{type(exc).__name__}: {exc}')
+    finally:
+        quiet['watchdog_post_install_end_ns'] = time.monotonic_ns()
+        quiet['watchdog_post_install'] = result
+    if result['ok']:
+        return
+    if closing is not None:
+        closing()  # existing termination shield protects uninstall and the enclosing host restore
+    undo = result['install_undo'] = {'errors': [], 'remaining_labels': []}
+    argv = [str(Path(state['measurement_root']) / 'scripts/install_night_agent.sh'),
+            '--plan', state['plan_path'], '--uninstall']
+    undo['argv'] = argv
+    try:
+        done = (runner or subprocess.run)(argv, check=False, capture_output=True, text=True, timeout=180)
+        undo.update(exit_code=done.returncode, stdout=done.stdout, stderr=done.stderr)
+        if done.returncode != 0:
+            undo['errors'].append(f'uninstaller exited {done.returncode}; plists may remain for {", ".join(LABELS)}')
+    except (OSError, subprocess.SubprocessError) as exc:
+        undo['errors'].append(f'uninstaller: {type(exc).__name__}: {exc}')
+    for label in LABELS:
+        try:
+            _require_night_job_absent(runner, label=label)
+        except ValueError as exc:
+            undo['remaining_labels'].append(label)
+            undo['errors'].append(f'{label}: {exc}')
+    detail = ('install_undo_failed: ' + '; '.join(undo['errors']) if undo['errors'] else 'install undone')
+    raise ValueError(_watchdog_refusal('post_install', result) + '; ' + detail)
+
+
 def _arm_and_install(session, state, measurement_root, plan, high, *, runner, volume_runner, now,
                      w1_disk_config, disk_gate, lock=None, owner=None,
                      obc_off_attested_by=None, battery_runner=None, battery_log=None,
                      window_battery_journal=None, next_arm_triage=None, commit_check=None, record_check=None,
                      packet_builder=None, meter_probe=None, dwell_start=None,
-                     frequency_preflight_record=None, frequency_pre_t0_check=None, **kwargs):
+                     frequency_preflight_record=None, frequency_pre_t0_check=None,
+                     watchdog_plist=None, watchdog_check=None, watchdog_undo_closing=None,
+                     weight_digests_attested=None, runtime_stack_attested=None, held_window_ruling=None, **kwargs):
     # RUN_STATE 226 R15: every arm, W1 included, binds the frozen series. W1 binds an empty history after
     # R1; a C/T window the next frozen window. The packet bound is the arm's OWN rebuild (a supplied
     # packet is only a pointer), whose history is derived from the hash-chained, authenticated records.
@@ -1164,6 +1850,21 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
         record['reasons'] = [reason] + record['reasons']
 
     def pre_dwell(record):
+        # No arm-time rehash: carry prepare's time and digest evidence verbatim.
+        weights = (_attested_weight_digests(state, plan['members'], weight_digests_attested)
+                   if weight_digests_attested is not None else
+                   state.get('weight_digest_preflight', {'source': 'not_recorded_by_prepare'}))
+        record['weight_digests'] = weights
+        if weights.get('ok') is False:
+            for reason in weights['reasons']:
+                refuse(record, reason)
+        runtime = (_attested_runtime_stack(state, runtime_stack_attested)
+                   if runtime_stack_attested is not None else
+                   state.get('runtime_stack_preflight', {'source': 'not_recorded_by_prepare'}))
+        record['runtime_stack'] = runtime
+        if runtime.get('ok') is False:
+            for reason in runtime['reasons']:
+                refuse(record, reason)
         built = (record.get('next_arm_triage') or {}).get('rebuilt_packet')
         binding = record.pop('series_binding', None)
         if binding is None:            # an arm_checks stand-in that did not run the hook
@@ -1221,7 +1922,10 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
                         battery_log=battery_log, window_battery_journal=window_battery_journal, now=now,
                         next_arm_triage=next_arm_triage, commit_check=commit_check,
                         record_check=record_check, packet_builder=packet_builder, meter_probe=meter_probe,
-                        dwell_start=dwell_start, series_bind=series_bind, pre_dwell=pre_dwell)
+                        dwell_start=dwell_start, series_bind=series_bind, pre_dwell=pre_dwell,
+                        watchdog_plist=watchdog_plist, watchdog_check=watchdog_check,
+                        held_window_ruling=held_window_ruling,
+                        watchdog_plan=pilot.h.read(state['plan_path']), watchdog_plan_path=state['plan_path'])
     # After the stamp: the single in-memory dwell value, written once, then the handoff (or refusal).
     dwell = {'schema': ARM_DWELL_SCHEMA, 'arm_record': str(path), 'admitted': record['admitted'],
              'quiet_dwell': record['quiet_dwell'], 'timing_receipts': _take_receipts()}
@@ -1237,10 +1941,14 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
         with timing_receipts.span("arm", "v4_installer_handoff"):
             installed = pilot.install(session, now=now or time.time, **kwargs)
         outcome = 'returned'
+        dwell['quiet_dwell']['installer_end_ns'] = time.monotonic_ns()
+        if isinstance(installed, dict) and installed.get('exit_code') == 0:
+            _watchdog_post_install(state, dwell, runner=runner, plist_path=watchdog_plist, check=watchdog_check,
+                                   closing=watchdog_undo_closing, now=now)
         return installed
     finally:
-        dwell['quiet_dwell'] = {**dwell['quiet_dwell'], 'installer_end_ns': time.monotonic_ns(),
-                                'installer_outcome': outcome}
+        dwell['quiet_dwell'].setdefault('installer_end_ns', time.monotonic_ns())
+        dwell['quiet_dwell']['installer_outcome'] = outcome
         dwell['timing_receipts'] = dwell['timing_receipts'] + _take_receipts()   # the installer-handoff markers
         temporary = dwell_path.with_name(dwell_path.name + '.tmp')
         with temporary.open('x') as handle:
@@ -1268,6 +1976,15 @@ def main(argv=None):
                                        ('--window-battery-journal', dict(type=Path, action='append',
                           help='a window hazard battery journal (the 1 Hz SMC B0AC lines and ioreg lines) merged '
                                'in time order with the between-window log; repeatable')),
+                                       ('--weight-digests-attested', dict(type=Path,
+                          help='RL-62 JSON: attested_by, optional attested_at_epoch_s, roots mapping to '
+                               'registered_folded_sha256 and observed_folded_sha256 pairs')),
+                                       ('--runtime-stack-attested', dict(type=Path,
+                          help='RL-73 JSON: attested_by, optional attested_at_epoch_s, registered and observed '
+                               'runtime_versions (python and packages)')),
+                                       ('--held-window-ruling', dict(type=Path,
+                          help='signed held_window_release row; text is a {path, sha256} source at the '
+                               'rebuilt packet series_commit')),
                                        ('--next-arm-triage', dict(type=Path, required=True,
                           help='R12 B2 next-arm triage packet (JSON) built off the MBP from the committed record'))))
 
