@@ -149,16 +149,10 @@ class CensusTests(unittest.TestCase):
         store.parent.mkdir(parents=True)
         shutil.copyfile(table, store)
         table.unlink()
-        opened = []
-        real_open = pathlib.Path.open
-
-        def spy(self, *args, **kwargs):
-            opened.append(str(self))
-            return real_open(self, *args, **kwargs)
-        with mock.patch.object(pathlib.Path, "open", spy):
-            _record, reasons = s1.census([export])
-        self.assertEqual([p for p in opened if "/withheld/" in p], [])
-        self.assertTrue(any("bytes-s1-p1" in r and "needs both" in r for r in reasons), reasons)
+        with mock.patch.object(pathlib.Path, "open", side_effect=AssertionError("opened before layout gate")) as opened:
+            with self.assertRaisesRegex(s1.Stage1Error, "withheld path"):
+                s1.census([export])
+        opened.assert_not_called()
 
     def test_any_clock_like_column_refuses_and_durations_do_not(self):
         # Review of #701, F3: registration section 11 item 2, "run_start_utc or any other clock".
@@ -171,6 +165,37 @@ class CensusTests(unittest.TestCase):
                 self.assertTrue(any("clock column" in r and name in r for r in reasons), reasons)
         self.assertEqual(s1.clock_columns(["dur_decode_s", "ttft_s", "idle_baseline_s",
                                            "bound_E_clock_anchor_shift_bound_j", "abba_label"]), [])
+
+
+class WithheldLayoutTests(unittest.TestCase):
+    def test_driver_refuses_all_withheld_names_before_any_file_open_or_child(self):
+        for name in ('withheld', 'nested/withheld', 'nested/synthetic.withheld.csv'):
+            with self.subTest(name=name), tempfile.TemporaryDirectory(prefix='bytes-layout-') as temp:
+                root = Path(temp)
+                export = root / 'export'
+                path = export / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                if name.endswith('.csv'):
+                    path.write_text('synthetic,never opened\n')
+                else:
+                    path.mkdir()  # Even an empty withheld directory must refuse.
+                for command in ('census', 'run'):
+                    args = [command, '--export', str(export), '--out', str(root / 'out')]
+                    if command == 'run':
+                        args += ['--manifest', 'NEVER_OPEN', '--pack-records-root', 'NEVER_OPEN']
+                    with mock.patch.object(Path, 'open', side_effect=AssertionError('file opened')) as opened, \
+                            mock.patch.object(s1.subprocess, 'run') as child, \
+                            contextlib.redirect_stderr(io.StringIO()) as err:
+                        self.assertEqual(s1.main(args), 1)
+                    self.assertIn('withheld path', err.getvalue())
+                    opened.assert_not_called()
+                    child.assert_not_called()
+                    self.assertFalse((root / 'out').exists())
+                # The callable run path must also guard the single-export case.
+                with mock.patch.object(Path, 'open', side_effect=AssertionError('file opened')) as opened:
+                    with self.assertRaisesRegex(s1.Stage1Error, 'withheld path'):
+                        s1.run_stage1('NEVER_OPEN', [export], 'NEVER_OPEN', root / 'out')
+                opened.assert_not_called()
 
 
 class ManifestTests(unittest.TestCase):
@@ -339,6 +364,7 @@ class ReleaseGateTests(unittest.TestCase):
         temp = tempfile.TemporaryDirectory(prefix="bytes-release-gate-")
         self.addCleanup(temp.cleanup)
         root = Path(temp.name)
+        (root / 'export').mkdir()
         manifest = json.loads((ROOT / "configs/bytes/bytes_manifest.json").read_text())
         manifest["sessions"] = [{"session_id": p, "pack_id": p, "pass_id": int(p[-1]),
                                  "archive": str(root / p)} for p in s1.PACKS]

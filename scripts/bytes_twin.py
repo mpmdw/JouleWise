@@ -2315,6 +2315,8 @@ def main(argv=None):
             checked = subprocess.run(guard, capture_output=True, text=True, check=False)
             if checked.returncode:
                 raise ValueError("BYTES commitment guard refused: " + checked.stdout.strip())
+            if checked.stderr:
+                print(checked.stderr, end="", file=sys.stderr)
             verification = json.loads(checked.stdout)
 
         manifest = read_manifest(args.manifest)

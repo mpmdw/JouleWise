@@ -17,6 +17,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from scripts import bytes_twin as bt
+from tests.bytes_commitment_support import synthetic_checkout
 
 ROOT = Path(__file__).resolve().parents[1]
 _synth_spec = importlib.util.spec_from_file_location("twin_synth", ROOT / "tests/fixtures/bytes/twin_synth.py")
@@ -73,8 +74,11 @@ def run_twin(world: Path, stage: str, *, archives=True, key_dir=True, extra=()) 
         argv += ["--key-dir", str(world / "keys")]
     import contextlib
     import io
-    with contextlib.redirect_stdout(io.StringIO()):
-        assert bt.main(argv) == 0
+    with synthetic_checkout(argv), contextlib.redirect_stdout(io.StringIO()) as output, \
+            contextlib.redirect_stderr(io.StringIO()) as error:
+        assert bt.main(argv) == 0, output.getvalue() + error.getvalue()
+    if stage == "2" or "--stage1-commit" in argv:
+        assert 'commit and push' in error.getvalue(), error.getvalue()
     return json.loads(out.read_text())
 
 
@@ -1697,7 +1701,7 @@ class WithheldStoreTests(QuantityTestCase):
         argv += fixture_options(world)
         import contextlib
         import io
-        with contextlib.redirect_stdout(io.StringIO()):
+        with synthetic_checkout(argv), contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(bt.main(argv), 0)
             self.assertEqual(bt.main(argv[:-3] + ["not-a-hash", "--out", str(out)]), 1)   # refused: not a commit hash
         post = json.loads(out.read_text())

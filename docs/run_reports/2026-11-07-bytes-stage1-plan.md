@@ -260,8 +260,10 @@ git rev-parse HEAD     # THE STAGE-1 COMMIT (40 hex)
 ### RL-7a preflight update (2026-11-10)
 
 Before the original commitment, initialize and track the canonical unblinding
-journal. After the lead's authorized push, record the push-time attestation with
-`scripts/bytes_commitment.py record-push`, then run its read-only `check` command.
+journal. After the lead's authorized push, capture the live origin comparison and
+GitHub push event with `scripts/bytes_commitment.py record-push`. It commits the
+raw receipt; push that receipt commit, then run its offline `check` command.
+Commit and push the admission journal after each heldout command before the next.
 [Exact inputs, limitations and commands](../design/bytes_commitment.md) govern this
 preflight. The stage-2 analysis and twin commands below additionally require the
 real `--stage1-commit HASH`; all four heldout entry points now check the same Git
