@@ -373,6 +373,7 @@
     "tests.test_agent_identity": 0.06,
     "tests.test_aggregate": 0.04,
     "tests.test_align_pilot_session": 122.321,
+    "tests.test_align_r1_thermal_replay": 5.114,
     "tests.test_analysis_claims": 0.485,
     "tests.test_analysis_engine": 0.023,
     "tests.test_analysis_engine_evidence_roots": 46.711,
