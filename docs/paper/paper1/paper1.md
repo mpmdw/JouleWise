@@ -91,7 +91,7 @@ We treat the instrument's limits as results. Every reported phase energy carries
 The registrations fixed the counting and exclusion rules, estimators and specified fixed sentences before the
 data they govern. Dated errata, interpretations and analysis-code changes are disclosed in Section 5.5.
 The draft's additional branch prose was written before release, at commit `a1a5029fb`, after primary collection;
-the blind draft is tagged `paper1/blind-draft-2026-10-27`. After the primary release, on 10 November 2026, statements of fact about the method and several branch glosses were corrected by seats that could know the primary block's result. Every such change is listed in `CORRECTIONS-2026-11-10.md`. Energies stayed hidden until a recorded release;
+the blind draft is tagged `paper1/blind-draft-2026-10-27`. Everything changed after the primary release was changed by seats that could know the primary block's result. On 10 and 11 November 2026, statements of fact about the method and several branch glosses were corrected (`CORRECTIONS-2026-11-10.md`). On 11 November 2026, the sections were reordered with their text unchanged and the contingent subtitle was removed (`OUTLINE-MAP-2026-11-11.md`), and Section 8 was rewritten from the project record. Energies stayed hidden until a recorded release;
 the independent recomputation uses recorded collection-time judgments as inputs (Section 5).
 <!-- FACT H03: R2P P3/P5/P7; RL-1/RL-5; LEAN-COVERAGE-AUDIT.md §4. -->
 
@@ -176,10 +176,10 @@ evaluation [20]; Mytkowicz et al. show that harmless-looking experimental choice
 [21]. Paired minimum-detectable-effect methods let observed variability raise, but not lower, a threshold fixed
 before results are seen [16]; we borrow that prospective discipline but treat timing movement over the
 registered edge domain as a deterministic allocation sensitivity, never combined with random noise as if
-independent. Pre-registration, the public fixing of hypotheses and analyses before data, separates confirmatory
+independent. Pre-registration, the public fixing of hypotheses and analyses before outcomes are observed, separates confirmatory
 from exploratory results [25]. Blind analysis, in which the analysts cannot see the quantity of interest until
-the analysis is fixed, protects against tuning toward an expected answer [22]; Part 2 uses hidden multiplicative
-offsets in the manner of that literature, and both parts withhold energies until a recorded release.
+the analysis is fixed, protects against tuning toward an expected answer [22]; Part 2 hides energies behind secret multiplicative factors,
+adapting that literature's hidden-offset method, and both parts withhold energies until a recorded release.
 
 ### 2.5 Split inference
 
@@ -243,7 +243,7 @@ and rest is reported as not measured, and every rails and rest statement carries
 
 ### 3.4 Whole-machine cross-check
 
-**Whole-machine cross-check.** {{FILL: P1-B5-METER | per pack and model: median, range and interquartile range of the rails' share ρ; member windows outside the hard plausibility band, each listed with its meter flags; within-model spread; the central band from the first clean session and the count of later member windows inside it; or "no clean session, no central band"}} The boundary of this
+{{FILL: P1-B5-METER | per pack and model: median, range and interquartile range of the rails' share ρ; member windows outside the hard plausibility band, each listed with its meter flags; within-model spread; the central band from the first clean session and the count of later member windows inside it; or "no clean session, no central band"}} The boundary of this
 cross-check is the DC input at the laptop's USB-C port plus the battery term; the adapter's AC-to-DC loss is not
 included. It is never a claim number and removed nothing.
 
@@ -324,7 +324,7 @@ The pulse calibration measures how the sampler places the edges of long, square 
 different sequence of work at the prefill-to-decode transition. Applying the pulse-derived bound to inference
 edges is an assumption that this study did not test (Section 9).
 
-### 4.3 Reported phase energy and its interval (derivation in Appendix D.3)
+### 4.3 Reported phase energy and its interval (example in Appendix D.3)
 
 A **reported cell** is one energy per model and phase, from that model's runs of one workload in one session:
 10 **absolute repeats** (single runs) and 10 **null quads**. A **quad** is four consecutive runs in the order A,
@@ -332,6 +332,20 @@ B, B, A; in a null quad A and B are the same model and workload, so any differen
 from the instrument and the machine. A **unit** is what the statistics treat as one independent draw: one repeat
 or one whole quad. The repeats and the quads are the two **strata**. Removing any run of a quad removes the whole
 quad, so its drift cancellation is never broken. A cell needs at least five kept units in each stratum.
+
+For a cell with n_r kept repeats (energies r) and n_b kept quads (quad means q):
+
+1. **Mean.** m = 0.2 × mean(r) + 0.8 × mean(q). The weights are fixed by design, because 10 of the 50 runs are
+   repeats and 40 are quad members; with all units kept this equals the plain mean of the 50 runs.
+2. **Variance.** V = 0.04 × s_r² / n_r + 0.64 × s_q² / n_b, with sample standard deviations (divisor n − 1).
+3. **Half-width.** h = t(0.975, min(n_r, n_b) − 1) × √V, using the smaller stratum's degrees of freedom.
+4. **Recorded bounds.** B is the sum of three stratified averages (0.2 × repeat mean + 0.8 × quad-member mean) of
+   per-run bounds: the first-kind timing bound (Section 4.2); an interpolation bound, which is identically zero
+   for these interval-support records; and half the session's drift allowance (Section 4.7).
+5. **Interval.** [m − h − B, m + h + B], not clamped at zero.
+6. **Per-token value.** For decode, m divided by the 512 runtime-observed output tokens ("decode-phase energy per
+   output token; 512 output tokens, 511 of them generated in the decode phase"); for prefill, m divided by the
+   2,048 prompt tokens.
 
 The interval covers run-to-run and quad-to-quad variation inside one session over the kept units, plus the
 recorded bounds. It does not cover variation between sessions or days, nor any bias from which units were
@@ -349,10 +363,32 @@ over the kept runs is already inside the interval; X itself is not added. The bo
 energy moves when power is taken as constant within each sampler record; it is not a bound on the physical
 energy of the phase."*
 
-### 4.5 The detection floor (derivation in Appendix D.4)
+### 4.5 The detection floor (example in Appendix D.4)
 
 The **detection floor** of a model and phase is the largest difference the registered estimator allows between
 runs that do the same thing; hence the smallest real difference the instrument can resolve. It has two forms.
+
+- **Absolute form**, from the kept repeats v₁ … v_n: deviations are vᵢ − mean(v); the prediction term is
+  t × s × √(1 + 1/n), with s the sample standard deviation of the deviations and t the two-sided 95% Student-t
+  value at n − 1 degrees of freedom.
+- **Comparative form**, from the kept null-quad differences d = (B₁ + B₂ − A₁ − A₂)/2: deviations are the d
+  themselves, not re-centred; the prediction term is |mean(d)| + t × s × √(1 + 1/n).
+
+In both, the **point floor** is max(largest |deviation|, prediction): the first term keeps the largest
+displacement already observed, the second is, under an independent-normal model, a two-sided 95% prediction
+amount for one further value. It is not a deterministic bound on future errors.
+
+**Corner widening.** Each value may lie anywhere within ± its timing half-width wᵢ. For the absolute form, wᵢ is
+the largest distance of the run's phase energy from its unshifted value over the timing movements of Section
+4.2. For the comparative form, each phase edge is treated as shared by the quad's four runs and moved by one
+common amount within ±b, and each run's remaining local clock uncertainty is added. The **corner-widened floor**
+is the largest point floor over every corner of the box of values (2ⁿ corners, enumerated exactly; the program
+refuses above 16 units rather than approximate). The point floor is a convex function of the values, so its
+maximum over the box lies at a corner. The **operative floor** is max(point floor, corner-widened floor).
+
+**Small-sample guard.** For fewer than ten kept units the operative floor is multiplied by
+g(n) = √(9/(n − 1)) (for example 1.0607 at n = 9 and 1.5 at n = 5); the factor is undefined below five, which is
+why each stratum needs five kept units.
 
 A **model contrast** (Section 4.8) is judged against a **floor gate**. Each form first adds the floor session's
 whole gross drift allowance to its guarded operative floor, giving `drift_widened_guarded_floor_j`.
@@ -365,7 +401,7 @@ allowance (Section 4.7). The blind ruling of 12 October corrected the analysis p
 without changing the code (Section 5.5).
 <!-- FACT H05: RUN_STATE item 33(b); l9-rulings/RULING.md:117-136 (J5); detection_floor.py:1534-1536,1818-1838. -->
 
-### 4.6 The dominance ratio (replay and branch rules in Appendix D.5)
+### 4.6 The dominance ratio (example in Appendix D.5)
 
 For each model, phase and floor form we print
 
@@ -374,6 +410,19 @@ For each model, phase and floor form we print
 R ≥ 2 (equality passes) means that letting each value move within its timing box at least doubles the floor:
 timing attribution, not run-to-run repeatability, is what limits the measurement. A threshold merely above 1
 would let any positive timing width decide the answer, so the registered threshold is a doubling.
+
+For the comparative form we also print R_cm, a sensitivity replay in which a block-level energy allowance
+derived from shared edge movements is applied with *one* sign across all quads, and each quad's own local
+uncertainty with its own sign, over every sign combination. R_cm retains one shared sign for scalar energy
+allowances; it does not replay one physical time shift in every quad, and passing it licenses no claim of
+robustness to a common physical timing error.
+
+Two models, two phases and two forms give eight R values and four R_cm values. They share runs and are
+correlated; "independent" in the registered name of R refers to the independent-corner box, not to statistical
+independence. **Branch A** holds when every one of the twelve is at least 2, and licenses the sentence that timing
+attribution dominates the detection floor. Otherwise **branch B** reports each
+ratio that failed. A zero denominator refuses; no infinity is ever printed. Every ratio is printed with its
+numerator, denominator and n, and labelled "point diagnostic; no interval".
 
 The attribution floor of Section 4.4, the detection-floor class `attribution_limited` under D-078, and the
 dominance branch are separate quantities. A floor-class label alone does not select the dominance branch.
@@ -395,7 +444,7 @@ mean, the midpoint energy and the end mean. Each run carries ½A into its cell's
 two sides, carries it once. A lost midpoint reference leaves the allowance on the start and end references only,
 which cannot see an excursion that reverted before the end; this is disclosed with a fixed sentence.
 
-### 4.8 Model contrasts, outcome words and the claims ladder (descriptive checks in Appendix D.7)
+### 4.8 Model contrasts, outcome words and the claims ladder (descriptive estimates in Appendix D.7)
 
 A **contrast** compares two models on the same workload in **contrast quads** ordered 1.7B, 8B, 8B, 1.7B. Each
 kept quad k gives d_k = (B₁ + B₂)/2 − (A₁ + A₂)/2, with B the 8B side. Over n kept quads (at least five of ten):
@@ -411,6 +460,10 @@ kept quad k gives d_k = (B₁ + B₂)/2 − (A₁ + A₂)/2, with B the 8B side.
 4. **Test**: t = d̄ / se, two-sided. The two primary contrasts (decode and prefill) form one family corrected by
    Holm's method at α = 0.05 [26]; a contrast that cannot be estimated keeps the family size at two.
 5. **Floor gate** (Section 4.5).
+
+A **leave-one-quad-out** check recomputes the contrast without each kept quad in turn. If dropping some quad
+changes the sign, the floor status, the Holm decision or the outcome, the contrast is *verdict-influential*. If it
+moves d̄ by more than a quarter of the floor gate, that is reported.
 
 The outcome is one of four registered words, decided in this order of precedence:
 
@@ -1040,7 +1093,9 @@ other model (Llama-70B, Next-80B, Qwen3.5-122B, 8B-8-bit) is printed as a signed
 an interval that combines the fit's uncertainty and the model's own. On the rest boundary a fit adds P̄_rails as a
 regressor; its variance inflation factor is printed, and no conclusion is drawn from its intercept or from λ,
 which are not identified. Because errors in P̄ scale with P̄, primary intervals use HC3 heteroscedasticity-robust
-standard errors [27] with Student t at n − p degrees of freedom; the ordinary errors are printed beside them. A
+standard errors, in the form that divides each squared residual by (1 − leverage)², a simplification of the
+jackknife estimator of MacKinnon and White [27], with Student t at n − p degrees of freedom; the ordinary errors
+are printed beside them. A
 fit with fewer than two residual degrees of freedom is refused. In synthetic campaigns of 400 draws per simulated
 world, the HC3 intervals' plain 95% coverage was at least 0.9475 in every world and fit, above a pre-set floor of
 0.93.
@@ -1057,8 +1112,8 @@ familywise at 0.05 by Bonferroni within the pack: for H1, 7 held-out models × 3
 boundary; for H2, 9 primary intervals at rails and DC input and 11 at rest. The systematic term B is never widened.
 
 **Blinding in two stages.** At harvest every science energy and power was multiplied by a secret pack factor drawn
-once, uniform on [0.8, 1.25], and each model configuration's by a secret factor uniform on [0.97, 1.03], following
-the hidden-offset practice of blind analysis [22]. A common factor leaves every H1 word unchanged, but the
+once, uniform on [0.8, 1.25], and each model configuration's by a secret factor uniform on [0.97, 1.03], adapting
+the hidden-offset method of blind analysis [22] to multiplicative factors. A common factor leaves every H1 word unchanged, but the
 configuration factors hide ratios only to about ±6%, while the MoE hypotheses differ by much larger factors; so,
 in addition, the registration requires **held-out models' rows to stay withheld** from analysis exports until
 the stage-1 commitment, and visible rows to carry no clock times, because gaps between reference runs could
@@ -1181,37 +1236,111 @@ models with two passes as a labelled sensitivity line ({{FILL: P1-BY-H2-TWOPASS 
 
 **Agreement of the two implementations.** {{FILL: P1-BY-TWIN | per stage: counts of printed fields compared and of differences under and above the bar; attribution and ruling of any difference above the bar}}
 
-## 8. Research automation: an agent-driven pipeline and its controls
+## 8. Research automation: controls, and where they failed
 
 ### 8.1 How the work was done
 
-This study was designed, implemented, collected, reviewed and written by AI agents working under one human
+This study was designed, implemented, collected, reviewed and drafted by AI agents working under one human
 researcher. The researcher set the research direction, the methodological requirements (raw evidence kept for
 every run, gross energy as the headline basis, a named measurement boundary on every number, no claim that cannot
-be audited) and the process policy, and decided every question that changed what was measured or claimed. One
-**lead** agent session decomposed the work, assigned it, adjudicated design questions, checked every change before
-it merged and kept the project's record. **Worker** sessions, drawn from two model families from different vendors
-({{FILL: P1-AUTO-MODELS | the model families and versions used for lead, implementation, review and judgment roles over the study period}}), implemented code against written specifications, reviewed each other's work, wrote
-tests and drafted text. An **independent judge** session, one with no prior involvement in the work, checked each
-registration before it bound, and a **refuter** session was asked to show the judge wrong.
+be audited) and the process policy. The researcher was the escalation point for changes to what is measured or
+claimed (registered constants, the deciding contrast, the model, the exclusion rules, results the design does
+not cover and science-design forks), and from 10 November 2026 delegated research-design and paper-bound rulings
+to a research-lead session (below). Coordination was a **lead** role held by interactive agent sessions, one after another and for a time two at
+once (a project lead and a primary-block lead). The lead decomposed the work, assigned it,
+adjudicated design questions, chose the review gate each change passed before merge and kept the project's
+record. **Worker** sessions, drawn from two model families from different vendors ({{FILL: P1-AUTO-MODELS | the model families and versions used for the lead, research-lead, supervisory, implementation, review and judgment roles over the study period}}), implemented code against written specifications, reviewed each other's work, wrote
+tests and drafted text. Under the gate policy of 27 October 2026, registration text that changes what is
+computed, excluded or counted is checked by one executing refuter session; where a registration required a judge, cold judge sessions with no part in the work
+ruled before it bound. From 10 November 2026 a single **research-lead** session's decision log has been the one
+binding record for research-design and paper-bound rulings. A ruling by any other session is a proposal until
+that log enters it. This section was written by a seat that log assigned.
+<!-- FACT H17: R2P P4. Roles and gates: docs/process/gate_policy.md:3-6 (Ed's policy, 2026-10-27), :37-39
+(one executing refuter; a judge only where a registration requires one, or where the refuter's executed result
+contradicts the lead on a counting or exclusion rule), :49-60 (amendment: the lead picks the
+gate for each change; a refuter only when the text changes what is computed, excluded or counted). Two leads at once: RUN_STATE item 102 (Ed to "the second laptop session joulewise-28"),
+item 108 ("joulewise-28, as block-5 lead"), item 165 ("block-5 lead, M4 Air analysis box"). Cold judges: item 42
+(replication registration, "cold gate by two blind judges"), item 69 (BYTES pass 1, "registration cold gate ...
+blind, executing"), item 85 (BYTES pass 2, registration section 21). Research lead: item 257 (2026-11-10 20:10
+PST: the research lead's decision log is "the single binding record for research-design and paper-bound
+rulings"; any other ruling "is a proposal until the research lead enters it in that log"), item 252 (Ed,
+2026-11-10: "def fable 5.2 should be the final say for anything paper bound"), item 256b (Ed approved E1-E6 as
+the research lead recommended); RL-24 seat 9 assigns this section. Escalation list: gate_policy.md:54-57
+(science-design forks; changes to what a registration computes, excludes or counts) and RUN_STATE item 181
+("Escalate to Ed ... only for": registered constants, the deciding contrast, the model, the exclusion rules; a
+result the design does not cover); delegation: item 257 ("have fable lead all research design work"), item
+256b ("If Fable recommends them, go ahead"). -->
 
-The work used a measurement laptop, an analysis laptop and cloud machines (Figure 5). On the **measurement
-laptop**, an agent census refuses collection at arm and pauses it while an agent process is alive. Between
-sessions a headless supervisory agent runs on that laptop and arms collection. On the analysis laptop, agents ran blind
-dry runs over real custody under the user account that holds custody; custody was kept by rule, not by an account no agent could
-use. Development and review also ran locally; cloud machines were used for development, review, synthetic tests
-and continuous integration. This is a separation of permitted activities and reading rules, not complete
-separation of agents from data by machine.
-<!-- FACT H17: R2P P4; RL-5 item 3; RUN_STATE item 108, items 71-76 and 181;
-registration_block5.md:4853. -->
+On the **measurement laptop**, a **headless supervisory agent** did the desk work between sessions. A launchd
+watchdog evaluates a short tick every 300 s and, when a launch is safe, starts a fresh headless session. A working
+activation reads the project's state file, takes the next permitted step, writes a record and exits; a short
+launch that finds nothing to do can exit without a record. An agent
+census on that laptop refuses an arm while any agent process is alive. What it does to a session already running
+differed between collections. In the primary block an agent sighting during the chain stopped it. In the
+replication and BYTES the chain paused, resumed after 600 s with no agent, and stopped once 7,200 s in total had
+been spent paused. Interactive agent sessions also ran on the measurement laptop at times, and the census caught them
+(Section 8.3). On the analysis laptop, agents ran blind dry runs over real custody under the user account that
+holds custody, so custody was kept by rule rather than by the file system. Development and review also ran
+locally; cloud machines were used for development, review, synthetic tests and continuous integration. This is a
+separation of permitted activities and reading rules, not complete separation of agents from data by machine.
+<!-- FACT S9-01: docs/process/MAGISTRATE_WATCHDOG.md:3 (`com.joulewise.magistrate`, "a short Python tick at load
+and every 300 seconds"; "A safe tick forks a new session"). Activation pattern: RUN_STATE items 41-76 (working
+activations "Magistrate activation <id> (Opus 5.5, headless, ...)" with a RECORD.md); docs/orchestration.md:141-142
+("A headless relaunch that finds nothing to do writes no record"); items 51, 52 and 59 ("No record file (short
+launch)"). The pause limit is cumulative: agent_pause.py:55-88. Census stops the chain in the
+primary block: joulewise/b5/driver.py:1272-1276 at the primary claim head c27485347 ("POSITIVE ... the chain
+stops"); no pause class at that commit. Pause in the replication and BYTES: joulewise/b6/agent_pause.py:12-13
+(`PAUSE_RESUME_S = 600`, `PAUSE_LIMIT_S = 7200`; "ten clean minutes to resume, two paused hours total") and
+joulewise/b5/driver.py:2599 (`PausingCensus`) at BYTES pass-2 code 2649fad54; agent_pause.py is identical in
+length and constants at the replication pin f31aca19f and BYTES pass-1 pin 6731d5249; introduced at 495569dfc
+(2026-10-14, "Block 6 driver: pause on agent sighting"). Arm census: driver.py:2194 at 2649fad54 ("Agent census:
+the driver's first probe"). Analysis laptop: RUN_STATE item 108; registration_block5.md:4853 ("kept by rule, not
+by the file system"); RL-5 item 3. -->
 
 ![Figure 5. The research pipeline (schematic).](figures/fig_p1_pipeline.svg)
 
 *Figure 5. Schematic of the permitted activities. Agents develop and review code in cloud and local sessions,
 run on the measurement laptop between sessions, and run blind processing on the analysis laptop under custody
 rules. No agent process may remain alive during collection. Primary-block L9 outputs are produced in the blind
-dry run and verified at release (Section 4.6); printing additionally requires the independent comparison and
-separate checks of uncovered quantities (Section 4.7).*
+dry run and verified at release (Section 5.6); printing additionally requires the independent comparison and
+separate checks of uncovered quantities (Section 5.7).*
+
+**What armed each collection.** The record separates two questions: what performed each arm, and who held
+standing authority over when to collect.
+
+| Collection | Sessions armed by | Agent's part |
+|---|---|---|
+| Primary block, 8 to 12 October 2026 | An agent. Each of the 11 recorded arms was performed by a headless supervisory agent activation. | Under the block's written brief, the activation ran the pre-arm checks, sent the arm notice and installed two launchd jobs: a night job that started the session program at a calendar t0, and a dead-man job. It armed only packs that a program-read release line, set by recorded gates, released. |
+| Replication, 17 to 21 October 2026 | The scheduled loop program. | An activation loaded the loop on 17 October and reloaded it after a fix the same evening. The loop then pre-checked each session, sent the arm notice, waited at least 1,800 s for the researcher's veto, checked again and started the session, until its terminal state, reached once nine sessions counted. |
+| BYTES, 25 to 30 October 2026 | The scheduled loop program, under its BYTES configuration. | An activation loaded the loop for pass 1 on 25 October; another resumed it for pass 2 on 28 October. The loop armed the BYTES sessions as above until all 12 sub-packs counted. |
+
+The loop runs every 300 s under launchd. It could also start a headless agent session at fixed desk points, and
+supervisory activations held or resumed packs through the loop's own commands. Standing authority over when and
+whether to run, re-run, schedule and arm measurement windows passed to the headless supervisory agent on
+6 November 2026, after all three collections had closed. It covers a later study's windows on the same laptop, not
+these collections.
+<!-- FACT S9-02 (R-5; RL-40). Primary block: 11 arm records, docs/process_traces/2026-10-block5/{alpha-a1,alpha-a2,
+alpha-a3}-arm.md and seal2-{alpha-a1,beta-a1..a6,gamma-a1}-arm.md, each headed "Magistrate activation <id> (Opus
+5.5, headless)"; first alpha-a1-arm.md:3 (2026-10-08); procedure "sections 3 and 5 of
+docs/process_traces/2026-10-07-block5-seal/40-magistrate-brief.md" (alpha-a1-arm.md:4); jobs
+seal2-alpha-a1-arm.md:64-68 (labels `com.joulewise.night`, `com.joulewise.night.deadman`; the night job runs
+`scripts/run_night.py run --plan <the plan>` on a calendar; dead-man calendar); release line `B5-ARM-RELEASED`
+"read by a program" (RUN_STATE.md head block) and seal2-gamma-a1-arm.md ("Why it is armed"); collection closed
+2026-10-12, RUN_STATE item 31. Replication: item 44 (first `launchctl bootstrap` refused by the agent's permission
+classifier; Ed emailed the command), item 45 (activation 88c501e5, "Block-6 round 1 ARMED 18:05 PDT: the
+`launchctl bootstrap` of `com.joulewise.b6loop` succeeded ... The loop sends the arm notice"), item 47
+(re-bootstrapped 19:22 PDT), item 59 ("9 of 9 finished sessions counting. The loop moved to DONE at 02:54 PDT"
+2026-10-21). Loop arming code at the replication pin f31aca19f: joulewise/b6/loop.py:285-310 (`_precheck`;
+`arm_notice` with `t0_not_before = clock + 1800`) and :510 (transition to SESSION_RUN after the NO check).
+BYTES: item 70 and its pointer (RUN_STATE "THE BYTES PASS-1 LOOP IS ARMED", written 2026-10-25 by activation
+f18a96e1; configs/b6/loop_bytes.json at 6731d5249); item 85 (activation
+39206674, 2026-10-28: "The loop was resumed 06:21"); item 151 (2026-10-30: "All 12 sub-packs count, and the loop is
+DONE"); loop.py:301-326 and :526 at 6731d5249 and at 2649fad54. Loop interval:
+configs/launchd/com.joulewise.b6loop.plist.template:7 at f31aca19f (`StartInterval 300`). Wake sessions: RUN_STATE
+items 52 and 59 ("Loop wake ... headless"), item 261 (`b6_loop.py tick` "can ... bootstrap a `claude -p` wake
+job"). Hold and resume: item 52 ("judged wrong and resumed"). Authority: RUN_STATE item 181 (2026-11-06 about
+09:10 PST: "The magistrate decides when and whether to run, re-run, schedule and arm R0, R1, W1 and the calibration
+windows"); paper-audit C-7 dates the agent's ownership of arming from item 181. -->
 
 ### 8.2 Integrity controls
 
@@ -1223,73 +1352,178 @@ these failure modes; each is mechanical, recorded, or both.
    for the primary block every code and configuration file a session reads was listed with its SHA-256 digest in
    a sealed inventory, before the sessions they govern. The arm checks OS build and machine model; harvest
    excludes a session for an executed-code difference and faults on changed seal documents. Changes after registration go only through a dated erratum, a registered
-   deviation or a disclosed repair (Section 4.5).
+   deviation or a disclosed repair (Section 5.5).
 2. **Blinding enforced by custody.** Energies and every derived quantity were written to restricted paths listed
    in a custody map; everything released during collection was structure only, and analysis code was written and
-   repaired by sessions that had read no restricted value (Section 4.6). BYTES added hidden multiplicative offsets
-   and requires held-out rows to stay withheld until its predictions are committed (Section 6.3).
-3. **Physics refuses; everything else is recorded.** Only a directly measured physical hazard can stop collection
-   or remove data, and the presence of an AI agent process on the measurement laptop is one of those hazards: the
-   arm refuses and a running session pauses while one is alive. Every other condition is a flag with one
-   registered effect. This removes the discretion through which an agent could select data.
-4. **Executing review of number-bearing code.** Code that can compute, select or exclude a published number is
-   reviewed by two sessions from different model families, launched together and instructed to run and mutate the
-   code on production-shaped inputs rather than only read it, together with a regression test and a demonstration
+   repaired by sessions that had read no restricted value (Section 5.6). BYTES added hidden multiplicative offsets
+   and requires held-out rows to stay withheld until its predictions are committed (Section 7.3). Two departures
+   are disclosed: status and reason words were read before the primary release under a structural ruling
+   (Section 5.6), and one held-out BYTES model's timing was read before the stage-1 commitment (Section 8.3).
+3. **Physics refuses; a short registered list of other grounds excludes; everything else is recorded.** Only a
+   directly measured physical hazard stops collection, and the presence of an AI agent process on the measurement
+   laptop is one of those hazards: the arm refuses while one is alive, and a running session stops (primary block)
+   or pauses (replication and BYTES), as Section 8.1 describes. Data are removed only on a physical hazard or on
+   the registered grounds beside it: in the primary block, that a number would be wrong or could not be attributed
+   to what it claims to measure; in the replication, that the number is undefined, that the data are not of the
+   registered model, runtime or code, the registered drift screen, or structural failure of the collection code.
+   Every other condition is a flag with one registered effect. This constrains, rather than removes, the
+   discretion through which an agent could select data.
+4. **Executing review of number-bearing code.** From 27 October 2026, code that can compute, select or exclude a
+   published number is reviewed by two sessions from different model families, launched together and instructed
+   to probe and mutate the code rather than only read it, together with a regression test and a demonstration
    that the test fails without the change.
 5. **Independent recomputation and a twin.** Separate code recomputes the primary block's core arithmetic with
-   recorded collection-time judgments as inputs; uncovered quantities require separate checks (Section 4.7).
-   BYTES requires agreement with its independent twin (Section 6.3), against a tolerance fixed in advance.
-6. **Fail-closed refusals with reasons.** A missing fingerprint, a malformed record or an undefined estimator
-   input produces a named refusal, never a default value; a refused cell is printed as unavailable with its reason,
-   never as zero.
+   recorded collection-time judgments as inputs; uncovered quantities require separate checks (Section 5.7).
+   BYTES requires agreement with its independent twin (Section 7.3), against a tolerance fixed in advance.
+6. **Fail-closed refusals with reasons.** In the primary block's registered analysis, a refusal at any step stops
+   the steps after it. A tooling refusal is repaired blind and the step re-runs on identical bytes; a refusal that
+   is a registered scientific outcome is the result and is printed as such.
 7. **Pre-written outcome text.** The registrations fix specified sentences, and the claims ladder caps claim
-   strength (Section 3.10). The draft's additional branch prose was written before release, at commit `a1a5029fb`
+   strength (Section 4.8). The draft's additional branch prose was written before release, at commit `a1a5029fb`
    (tag `paper1/blind-draft-2026-10-27`), after primary collection, with results as placeholders. Corrections made after release are stated in Section 1.2.
-<!-- FACT H18: R2P P3/P5/P6; RL-1/RL-5; sources as H03/H09/H12. -->
+<!-- FACT H18: R2P P3/P5/P6; RL-1/RL-5; sources as H03/H09/H12. Item 3: as FACT S9-01 for the census;
+exclusion grounds registration_block5.md:4469-4473 (PHYSICS and NUMBER_INTEGRITY) and
+docs/registrations/block6_replication_DRAFT.md:551-559 (§8.1: P plus N, W, D, S). Item 6:
+configs/campaigns/v5_claim_25g83/analysis_plan_block5.md:174-178 ("Refusals"), softened from the blind draft's
+universal no-default/no-zero wording, which seat 9 could not source. Item 4:
+docs/process/gate_policy.md:1 (binding 2026-10-27) and :28-34 (rule 3: "Two executing reviews from different model
+families, launched together, each told to probe and mutate"; regression test and counterfactual). -->
 
 ### 8.3 Failures and lessons
 
 The controls did not prevent every failure. We report those that cost data or time, or could have affected a
-number, with what each taught.
+number, with what each taught. The record runs to 10 November 2026.
 
-- **Agents perturbed the instrument they were studying.** An AI agent process is not idle: it draws several watts
-  even when waiting. During collection, agent processes on the measurement laptop (interactive sessions, a
-  headless supervisory session, and a daemon left behind by a software update) were caught by the agent census, and
-  each catch cost a session or held the loop ({{FILL: P1-AUTO-LOST | estimated quiet-machine hours lost to agent presence during collection, and the sessions affected, from the pipeline audit's outcomes ledger}}). Every catch was a real contaminant; none corrupted a kept number,
-  because the census refused or paused. The rule is temporal: the census refuses and pauses collection while an
-  agent process is alive; the headless supervisory agent runs between sessions and owns arming. The claim that agents never
-  run on this laptop does not describe the study.
-  <!-- FACT H19: RL-5 item 3; RUN_STATE items 71-76 and 181; paper-audit C-7. -->
-- **Reviews that executed code caught the defects that mattered.** Over the study period, the defects that could
-  have changed a number were found by reviewers that ran the code on realistic inputs, or by running the pipeline
-  itself: a reference run silently dropped when a file failed to read; a reference request's energy integrated over
-  the wrong span; the twin implementation diverging from the analysis on compressed input. Reviews of documents and
-  bookkeeping, serial re-reviews and multi-model councils on process questions added days and caught little
-  ({{FILL: P1-AUTO-CATCHES | counts of review catches by review type (executing, reading-only, council) and by severity, from the gate-policy evidence and the outcomes ledger}}). Late review rounds mostly found defects in the previous round's fixes, but some
-  were real, so a hard cap on rounds would have been unsafe. The project therefore kept two parallel executing
-  reviews from different model families for number-bearing code and reduced everything else to continuous
-  integration and the change's own tests.
-- **Rules must be replayed on real non-claim data before they bind.** Several registered lines, written from first
-  principles, proved wrong when replayed on rehearsal sessions: a drift bar that every session failed by
-  construction, because its widened difference is always at least the mean width of its two ranges; and an
-  exclusion for outside processor work that would have removed a large fraction of quiet rehearsal runs
-  ({{FILL: P1-AUTO-REPLAY | the replay counts for these two rules, from the replication registration's derivations}}). Both were changed, before any claim data existed, to disclosures with the registered
-  rule's result printed beside the registered value.
+- **Agents perturbed the instrument they were studying.** An AI agent process is not idle: it draws power even
+  when waiting. The census caught agent processes on the measurement laptop several times, and each catch cost a
+  session or held the loop ({{FILL: P1-AUTO-LOST | estimated quiet-machine hours lost to agent presence during the three collections, and the sessions affected, counted from the census refusal, stop and pause records outside custody (arm records, RUN_STATE items, harvest verdict codes); structure only}}). In the primary block, an interactive agent
+  session opened at the keyboard stopped a chain 2 h 32 min after its t0, and that attempt did not count. In BYTES,
+  a software update left an agent's background daemon running; the session paused for two hours, then ended, and
+  did not count. In other windows on the same laptop, agent sessions alive at t0 caused refused arms with nothing
+  captured. The headless supervisory
+  agent's own sessions were bound by the same rule: while the loop was pre-checking, arming or collecting, an
+  activation had to exit at once.
+  <!-- FACT H19: RL-5 item 3; paper-audit C-7; RL-40 (the "shell guard" clause stays out: RUN_STATE item 80
+  (1) says Ed installs a `~/.zshrc` guard keyed to `collection.active`, snippet in issue #589, and pipeline-audit
+  CRITIQUE.md:27-35 describes its condition, but no record shows it installed or refusing anything, and seat 9
+  did not inspect the home directory; the blind draft's "none corrupted a kept number" also stays out: SYNTHESIS.md:15
+  calls each census hit to 27 October "a real contaminant" in an unadopted proposal and does not address kept
+  numbers).
+  RUN_STATE item 16 (BETA attempt 2: "A `claude` session opened at the keyboard at 13:28 PDT stopped the chain
+  2 h 32 min after t0"; not claim-usable); item 78 (r1-bytes-s6-p1: `codex update` left an app-server daemon;
+  "the fence paused 2 h, then ended the session"; "not counting"); items 67 and 158 (arms refused at t0 by the
+  census, zero runs / "nothing captured"); item 78's next-activation pointer (RUN_STATE "(1) BYTES ...: if the loop
+  is in PRECHECK, ARM_WAIT, SMOKE_* or SESSION_RUN, exit at once, quietly (a live agent on the Mac pauses the
+  pre-check ...)"). -->
+- **Reviews that executed code caught the defects that mattered.** The 27 October review of the October record
+  found that the defects able to change a number had been found by reviewers that ran the code on realistic
+  inputs, or by running the pipeline itself. Its examples: a reference run silently dropped when a file failed to read; a reference request's energy integrated over
+  the wrong span; the twin implementation diverging from the analysis on compressed input. By the same review, reviews
+  of documents and bookkeeping, serial re-reviews and multi-model councils on process questions added time and
+  little protection ({{FILL: P1-AUTO-CATCHES | counts of review catches by review type (executing, reading-only, council) and by severity, from the pipeline audit's segments (through 27 October 2026) and the gate-policy pruning tallies in session records after it}}). Reading reviews could also repeat an error: for a later study on the same laptop,
+  several model documents and cross-reviews stated that the external meter was outside the power path, and the
+  researcher corrected them. Late review rounds mostly found defects in the previous round's fixes, but some were
+  real, so a hard cap on rounds would have been unsafe. The project therefore kept two parallel executing reviews
+  from different model families for number-bearing code, and reduced reviews of documents, records and code that
+  cannot change a number to continuous integration and, for code, the change's own regression test.
+  <!-- FACT S9-03: docs/process/gate_policy.md:13-21 ("What the October record showed": the #416 NEG-8
+  reference-span blocker, RUN_STATE item 69; a reference silently dropped on a read failure; the twin diverging on
+  compressed input, #573; late rounds; councils) and :25-34 (rules 1-3). Meter path: RUN_STATE item 210 of
+  2026-11-07 (Ed, verbatim: "the usb c power meter is between the magsafe cord and the wallbrick, so it does catch
+  all power"); docs/capstone/TALK-OUTLINE-v2.md H12. -->
+- **Rules must be replayed on real non-claim data before they bind.** Two registered lines, written from first
+  principles, proved wrong when replayed on rehearsal sessions: the primary block's drift bar, which every session
+  fails by construction, because its widened difference is always at least the mean width of its two ranges; and the
+  replication's exclusion for outside processor work, which would have removed a large fraction of quiet rehearsal runs
+  ({{FILL: P1-AUTO-REPLAY | the replay counts for these two rules, from the replication registration's derivations}}). Both were changed in the
+  replication registration's revision of 15 October 2026, after primary collection had closed and before
+  replication collection began, and only for the replication and later packs. The primary block's drift bar became
+  a disclosure there, and the replication decides drift by its own registered drift screen; the policy file keeps
+  the bar's bytes, so the primary block's plan digests stay identical. The outside-processor exclusion became a
+  flag for the replication's first round, with the registered rule's result printed as a labelled alternative.
+  <!-- FACT S9-13: docs/registrations/block6_replication_DRAFT.md:32-43 (revision of 2026-10-15; "the NEG-8
+  bracket decision is disclosure only (§9.5 item 7)"; the outside-processor line, S-8), :765-774 (replay of the
+  registered outside-processor rule; "flag only (governs for round 1)"), :1046-1054 (§9.5 item 7: "that widened
+  difference is at least the mean width of the two ranges, so the bar fails every session by construction"; "the
+  policy file keeps the bar's bytes so that block 5's plan digests stay identical, packs registered after these
+  three drop the bar, and drift is decided by the D1 screen's own bound"); RUN_STATE item 31 (primary collection
+  closed 2026-10-12) and item 45 (replication round 1 armed 2026-10-17); item 42 (the outside-processor rule printed
+  "as a labelled alternative"). Replay values are not reproduced. -->
 - **An instrument assumption can be silently false.** An early clock mapping assumed that the wall clock and the
-  monotonic clock advance at the same rate; that assumption could move every fitted edge in the same direction. It
-  was replaced by the rate-aware mapping of Section 3.3, and the energies of captures reduced under the old mapping
-  were voided for claim use.
-- **A leaked test process changes the machine.** An orphaned monitoring process left running by a test raised the
-  quiet machine's measured background processor load. Each session now ends with a census of orphaned processes.
-- **Process overhead was the critical path.** Collection rarely limited progress; serial review and gating did.
-  The project's gate policy was rewritten during the study, before any result was seen, to fit the depth of review
-  to whether a change can alter a number (Section 7.2, item 4).
+  monotonic clock advance at the same rate; that assumption could move every fitted edge in the same direction. A
+  consult in August 2026 found the rate difference larger than the anchor margins and queued a rate-aware design;
+  the analysis uses the rate-aware fit of Section 4.2.
+  <!-- FACT S9-04: docs/decision_log.md:6222-6230 (D-099 item 2: consult of 2026-08-01; "the unmodeled controller
+  wall/monotonic rate ... exceeds every margin"; "Rate-aware anchor design is a queued desk/paper item");
+  paper1.md §4.2 ("A rate-aware fit retains every straight-line mapping between the clocks"). The blind draft's
+  "replaced" and "voided for claim use" clauses are removed: seat 9 found no record of either event (the Sol
+  review of seat 9, fix 3). -->
+- **A leaked test process changes the machine.** An orphaned monitoring process that a test had left running was
+  found on the quiet machine before the replication's first round, and the replication's background-load constant
+  was measured only after it was gone. The supervisory watchdog now counts orphaned test processes.
+  <!-- FACT S9-05: RUN_STATE item 42 (pid 43816, "an orphaned `scripts/hazard_monitor.py` that a test in the s3-cold
+  lane leaked on 10-15"; the constant "measured without Spotify and an orphaned process"); item 198 ("The
+  watchdog's fixture-orphan census had counted them"). The constant's value is not printed here. -->
+- **A record can say GO when nothing was measured.** On a later study's night on the same laptop, the session
+  program refused before measuring, because a directory it needed had been created with the wrong owner. The
+  night's top-level result still read GO and its courier sent normally, so nothing flagged the loss, and the
+  supervisory watchdog was itself holding on an unparsable key. The loss sat for 2.5 days until an activation read
+  the program's own result. A verdict has to be computed from what was captured, not carried from an earlier
+  stage.
+  <!-- FACT S9-06: RUN_STATE item 249 (activation 30693ba4, 2026-11-10: "R1 ... NEVER MEASURED"; `status: refused`,
+  `host_lock_unavailable`; "`night/result.json` still says `verdict: GO` ... and the courier sent normally, so
+  nothing flagged the loss"; "Why it sat 2.5 days: the watchdog held in HOLD_UNSAFE ... because it could not
+  parse the installed plists' `ac_powermode` key"); items 250-251 concern a distinct later refusal and are not part of
+  this cause. No measured value of that study is used. -->
+- **Analysis runtime is a defect.** One run of the primary block's blind analysis died after 18.5 h when parallel
+  agent test runs filled the disk with about 110 GB of fixtures. Another took 27.1 h. A rewrite ran in 1 h 46 min
+  and was shown equivalent to the 27.1 h run under a fixed comparator. The two runs were on differently
+  loaded machines and the faster was niced, so the gain is not attributed to the rewrite alone, and the comparison
+  of the last steps was still pending at that record. Agents sharing a machine share its disk, and a slow analysis is a process failure to be profiled, not waited out.
+  <!-- FACT S9-07: RUN_STATE item 165 ("Attempt D (r1, item 160) died at step 9 on ENOSPC after 18.5 h. Parallel
+  agent test runs had filled the disk with about 110 GB of fixtures"; "Candidate 1 ran in 1 h 46 min (attempt E
+  took 27.1 h) and is EQUIVALENT to attempt E under the fixed comparator"); D-188;
+  docs/process_traces/2026-11-04-d188-retrospective/RETROSPECTIVE.md:9-15 ("Not all of that speedup is the
+  rewrite. E ran on a more loaded machine than candidate 1, and candidate 1 was niced 5"; "The final comparison,
+  which also covers steps 9b, 10 and 11, waits"). -->
+- **A release hold can be traced blind.** A release check of the primary block held on 1,001 failing comparator
+  rows in 11 families. A trace that read only leaf identifiers, verdicts, reasons and coarse difference classes
+  attributed every row to one of six defects from structure alone; the last remaining defect was fixed in a later
+  analysis version.
+  <!-- FACT S9-08: docs/run_reports/2026-11-07-b5-release-hold-trace.md:3-8 (inputs read: identifiers, verdicts,
+  reasons, types and a coarse relative-difference class only; "This report holds no value"), :14 ("1,001 failing
+  rows in 11 families"), :159 ("Every failing row maps to one of six defects. No row is left unattributed");
+  docs/analysis/b5/DEVIATION-LOG.md DLE-0, DLE-1, DLE-3; TALK-OUTLINE-v2.md H7 (D5 fixed in r4, PR #697). -->
+- **The agents' own safety checks stopped measurement steps.** The permission check of an agent session refused
+  to load the replication's loop and refused to stop a stray process; the researcher was sent the command each
+  time. A check that cannot tell a measurement step from a risky one costs a human round trip, and the record has
+  to show who ran the step.
+  <!-- FACT S9-09: RUN_STATE item 44 ("the auto-mode classifier refused `launchctl bootstrap` of the loop ... Ed
+  was emailed the one command"); item 42 (pid 43816: "The auto-mode classifier refused the ... `kill`. Ed was emailed"). -->
+- **Authority has to be written in one place.** Twice the record had two sources of ruling on one question. On
+  6 November, on the researcher's instruction, the lead's holds on re-running measurements were withdrawn and
+  scheduling passed to the headless supervisory agent; on 10 November a design ruling convened by a supervisory activation was reclassified
+  as a proposal, and the research-lead log became the single binding record.
+  <!-- FACT S9-10: RUN_STATE item 181 ("Item 176 (2)'s and item 178 (1)'s 'the laptop lead decides' re-run holds
+  were the lead over-reaching. They are withdrawn"); item 257 ("`docs/process_traces/2026-11-10-r1-g0/10-fable52-
+  ruling.md` is therefore a proposal"; "Magistrates ... do not convene their own deciding seat"). -->
+- **Review overhead held work back.** The 27 October review of the October record found that serial review rounds
+  and gating had added time with little protection. The project's gate policy was rewritten then, before any primary,
+  replication or BYTES result was seen, to fit the depth of review to whether a change can alter a number
+  (Section 8.2, item 4). Analysis runtime was a second bottleneck (above).
+  <!-- FACT S9-11: docs/process/gate_policy.md:8 ("This policy was made before any block-5, block-6 or BYTES result
+  was seen") and :20-21 ("Councils on process questions, reviews of docs and bookkeeping, and serial re-reviews added
+  time and little protection"); docs/process_traces/2026-10-27-pipeline-audit/SYNTHESIS.md (proposals, not adopted;
+  corrected by CRITIQUE.md). -->
 
-{{FILL: P1-AUTO-BLINDCHECK | result of the check whether any held-out BYTES model's per-request duration or other timing was read before the stage-1 commitment (a process audit ran harvest readers on a held-out model's session); either "no held-out duration was read" with its evidence, or a disclosure of what was read, when, and that it could not change the committed lines}}
+{{FILL: P1-AUTO-BLINDCHECK | disclosure from the recorded check and deviation BY-BLIND-1: per-request timing of one held-out model was read and published before the stage-1 commitment; per-stage timestamps of every session were in the public operational record; each model's approximate decode time was registered from the pilot; why the committed lines cannot depend on any of it; and what the check could not establish}}
 
-The lesson we draw is that agents can run a measurement study with the rigour such a study needs only if the
-rigour is mechanical. Digests, custody maps, physical refusals and independent recomputation held whatever an
-individual agent believed; reviews and judgments helped most when they ran the code.
+The lesson we draw, an inference from this record rather than a demonstrated guarantee, is that agents can run a
+measurement study with the rigour such a study needs only if the rigour is mechanical. Digests, custody maps,
+physical refusals and independent recomputation of the core arithmetic are designed not to depend on what an
+individual agent believes; in the record above, reviews and judgments helped most when they ran the code. Where a
+mechanical check was missing, as with a verdict carried from an earlier stage, the failure stayed unseen until
+someone read the record.
 
 ## 9. Limitations
 
@@ -1404,12 +1638,12 @@ were mechanical.
 19. M. Hähnel, B. Döbel, M. Völp, and H. Härtig. "Measuring energy consumption for short code paths using RAPL." *ACM SIGMETRICS Performance Evaluation Review* 40(3), 2012, pp. 13–17. DOI:10.1145/2425248.2425252.
 20. A. Georges, D. Buytaert, and L. Eeckhout. "Statistically Rigorous Java Performance Evaluation." *OOPSLA '07*, 2007, pp. 57–76. DOI:10.1145/1297027.1297033.
 21. T. Mytkowicz, A. Diwan, M. Hauswirth, and P. F. Sweeney. "Producing Wrong Data Without Doing Anything Obviously Wrong!" *ASPLOS XIV*, 2009, pp. 265–276. DOI:10.1145/1508244.1508275.
-22. J. R. Klein and A. Roodman. "Blind Analysis in Nuclear and Particle Physics." *Annual Review of Nuclear and Particle Science* 55, 2005, pp. 141–163. <!-- ADDED IN THIS DRAFT: cited by the BYTES registration; full locator to be verified in the bibliography audit. -->
-23. S. Williams, A. Waterman, and D. Patterson. "Roofline: An Insightful Visual Performance Model for Multicore Architectures." *Communications of the ACM* 52(4), 2009, pp. 65–76. <!-- ADDED IN THIS DRAFT; verify. -->
-24. R. Pope et al. "Efficiently Scaling Transformer Inference." *Proceedings of Machine Learning and Systems (MLSys)*, 2023. <!-- ADDED IN THIS DRAFT; verify. -->
-25. B. A. Nosek, C. R. Ebersole, A. C. DeHaven, and D. T. Mellor. "The Preregistration Revolution." *PNAS* 115(11), 2018, pp. 2600–2606. <!-- ADDED IN THIS DRAFT; verify. -->
-26. S. Holm. "A Simple Sequentially Rejective Multiple Test Procedure." *Scandinavian Journal of Statistics* 6(2), 1979, pp. 65–70. <!-- ADDED IN THIS DRAFT; verify. -->
-27. J. G. MacKinnon and H. White. "Some Heteroskedasticity-Consistent Covariance Matrix Estimators with Improved Finite Sample Properties." *Journal of Econometrics* 29(3), 1985, pp. 305–325. <!-- ADDED IN THIS DRAFT; verify. -->
+22. J. R. Klein and A. Roodman. "Blind Analysis in Nuclear and Particle Physics." *Annual Review of Nuclear and Particle Science* 55, 2005, pp. 141–163. DOI:10.1146/annurev.nucl.55.090704.151521.
+23. S. Williams, A. Waterman, and D. Patterson. "Roofline: An Insightful Visual Performance Model for Multicore Architectures." *Communications of the ACM* 52(4), 2009, pp. 65–76. DOI:10.1145/1498765.1498785.
+24. R. Pope et al. "Efficiently Scaling Transformer Inference." *Proceedings of Machine Learning and Systems (MLSys)* 5, 2023, pp. 606–624. arXiv:2211.05102.
+25. B. A. Nosek, C. R. Ebersole, A. C. DeHaven, and D. T. Mellor. "The Preregistration Revolution." *PNAS* 115(11), 2018, pp. 2600–2606. DOI:10.1073/pnas.1708274114.
+26. S. Holm. "A Simple Sequentially Rejective Multiple Test Procedure." *Scandinavian Journal of Statistics* 6(2), 1979, pp. 65–70. https://www.jstor.org/stable/4615733.
+27. J. G. MacKinnon and H. White. "Some Heteroskedasticity-Consistent Covariance Matrix Estimators with Improved Finite Sample Properties." *Journal of Econometrics* 29(3), 1985, pp. 305–325. DOI:10.1016/0304-4076(85)90158-7.
 
 ## Appendix A. Terms
 
@@ -1534,73 +1768,24 @@ and an end-edge record averaging 10 W, moving the start 46 ms early and the end 
 2.36 J. When a displaced edge crosses into a neighbouring record this closed form is only an approximation; the
 registered quantity is the exact maximum.
 
-### D.3 Reported-cell estimator and interval example
-
-For a cell with n_r kept repeats (energies r) and n_b kept quads (quad means q):
-
-1. **Mean.** m = 0.2 × mean(r) + 0.8 × mean(q). The weights are fixed by design, because 10 of the 50 runs are
-   repeats and 40 are quad members; with all units kept this equals the plain mean of the 50 runs.
-2. **Variance.** V = 0.04 × s_r² / n_r + 0.64 × s_q² / n_b, with sample standard deviations (divisor n − 1).
-3. **Half-width.** h = t(0.975, min(n_r, n_b) − 1) × √V, using the smaller stratum's degrees of freedom.
-4. **Recorded bounds.** B is the sum of three stratified averages (0.2 × repeat mean + 0.8 × quad-member mean) of
-   per-run bounds: the first-kind timing bound (Section 4.2); an interpolation bound, which is identically zero
-   for these interval-support records; and half the session's drift allowance (Section 4.7).
-5. **Interval.** [m − h − B, m + h + B], not clamped at zero.
-6. **Per-token value.** For decode, m divided by the 512 runtime-observed output tokens ("decode-phase energy per
-   output token; 512 output tokens, 511 of them generated in the decode phase"); for prefill, m divided by the
-   2,048 prompt tokens.
+### D.3 Reported-cell interval example
 
 *Synthetic example (all units kept):* repeats with mean 10.0 J and s_r = 0.2 J, quad means with mean 10.2 J and
 s_q = 0.18257 J give m = 10.16 J, √V = 0.047889 J, h = 2.262157 × 0.047889 = 0.10833 J; with B = 0.060 J the
 interval is [9.9917, 10.3283] J.
 
-### D.4 Detection-floor estimator, corner widening and small-sample guard
-
-- **Absolute form**, from the kept repeats v₁ … v_n: deviations are vᵢ − mean(v); the prediction term is
-  t × s × √(1 + 1/n), with s the sample standard deviation of the deviations and t the two-sided 95% Student-t
-  value at n − 1 degrees of freedom.
-- **Comparative form**, from the kept null-quad differences d = (B₁ + B₂ − A₁ − A₂)/2: deviations are the d
-  themselves, not re-centred; the prediction term is |mean(d)| + t × s × √(1 + 1/n).
-
-In both, the **point floor** is max(largest |deviation|, prediction): the first term keeps the largest
-displacement already observed, the second is, under an independent-normal model, a two-sided 95% prediction
-amount for one further value. It is not a deterministic bound on future errors.
-
-**Corner widening.** Each value may lie anywhere within ± its timing half-width wᵢ. For the absolute form, wᵢ is
-the largest distance of the run's phase energy from its unshifted value over the timing movements of Section
-4.2. For the comparative form, each phase edge is treated as shared by the quad's four runs and moved by one
-common amount within ±b, and each run's remaining local clock uncertainty is added. The **corner-widened floor**
-is the largest point floor over every corner of the box of values (2ⁿ corners, enumerated exactly; the program
-refuses above 16 units rather than approximate). The point floor is a convex function of the values, so its
-maximum over the box lies at a corner. The **operative floor** is max(point floor, corner-widened floor).
-
-**Small-sample guard.** For fewer than ten kept units the operative floor is multiplied by
-g(n) = √(9/(n − 1)) (for example 1.0607 at n = 9 and 1.5 at n = 5); the factor is undefined below five, which is
-why each stratum needs five kept units.
+### D.4 Detection-floor example
 
 *Synthetic example:* ten repeats with s = 0.2 J and largest deviation 0.4 J give a prediction of
 2.262 × 0.2 × √1.1 = 0.4745 J, the point floor; with wᵢ = 0.05 J on every run the operative floor is 0.5730 J.
 Ten null-quad differences with mean 0.04 J and s = 0.0966 J give a point floor of 0.2692 J; with a shared-edge
 width of 0.30 J on every quad the operative floor is 1.0349 J.
 
-### D.5 Dominance example, shared-sign replay and branch rules
+### D.5 Dominance example
 
 In the
 synthetic examples above, the absolute R is 0.5730 / 0.4745 = 1.21 (fails) and the comparative R is
 1.0349 / 0.2692 = 3.84 (passes).
-
-For the comparative form we also print R_cm, a sensitivity replay in which a block-level energy allowance
-derived from shared edge movements is applied with *one* sign across all quads, and each quad's own local
-uncertainty with its own sign, over every sign combination. R_cm retains one shared sign for scalar energy
-allowances; it does not replay one physical time shift in every quad, and passing it licenses no claim of
-robustness to a common physical timing error.
-
-Two models, two phases and two forms give eight R values and four R_cm values. They share runs and are
-correlated; "independent" in the registered name of R refers to the independent-corner box, not to statistical
-independence. **Branch A** holds when every one of the twelve is at least 2, and licenses the sentence that timing
-attribution dominates the detection floor. Otherwise **branch B** reports each
-ratio that failed. A zero denominator refuses; no infinity is ever printed. Every ratio is printed with its
-numerator, denominator and n, and labelled "point diagnostic; no interval".
 
 ### D.6 Drift bound and scaled sensitivity line
 
@@ -1623,11 +1808,7 @@ give a factor of max(1, 8.108, 2.25) = 8.108 and a scaled term of 3.97 J. The li
 In Part 2 the same scale is part of the registered estimator (Section 7.3), because no drift-transfer test passed
 before BYTES collection.
 
-### D.7 Contrast descriptive checks
-
-A **leave-one-quad-out** check recomputes the contrast without each kept quad in turn. If dropping some quad
-changes the sign, the floor status, the Holm decision or the outcome, the contrast is *verdict-influential*. If it
-moves d̄ by more than a quarter of the floor gate, that is reported.
+### D.7 Contrast descriptive estimates
 
 Beside each contrast two **registered descriptive estimates** are printed and decide nothing: the 8B-to-1.7B
 ratio of phase energies, exp(mean of ln(B-side mean / A-side mean)) with its t interval and without the recorded
