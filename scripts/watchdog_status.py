@@ -27,6 +27,11 @@ KEEPALIVE_DUE_S = KEEPALIVE_S - 300 - 2 * 25
 MIN_PUSH_INTERVAL_S = 60
 TRANSPORT_BUDGET_S = 25
 AIR_STALE_S = KEEPALIVE_S + 15 * 60
+STATUS_TICK_S = 5 * 60
+STALE_STATUS_TEXT = (
+    "Watchdog status is stale. This can mean an unreadable armed plan: "
+    "its named hold cannot be exported while the plan span is unknown."
+)
 GIT = "/usr/bin/git"
 
 
@@ -149,7 +154,7 @@ class StatusExporter:
         self.thread = None
         self.thread_lock = threading.Lock()
         self.probe_allowed = lambda: True
-        self.span_end = lambda: None
+        self.span_bounds = lambda: (None, None)
 
     def _read(self, name, default=None):
         try:
@@ -160,7 +165,8 @@ class StatusExporter:
 
     def record(self, state):
         now = self.wall()
-        span_end = self.span_end()
+        span_end, fence_end = self.span_bounds()
+        span_margin = STATUS_TICK_S if span_end is not None else 0
         heartbeat = state.get("magistrate_heartbeat") or {}
         heartbeat_age = heartbeat.get("age_s")
         if heartbeat_age is not None:
@@ -173,7 +179,11 @@ class StatusExporter:
                 "transition_epoch_s": state.get("transition_epoch_s", now),
                 "recorded_epoch_s": now,
                 "span_end_epoch_s": span_end,
-                "next_status_expected_epoch_s": max(now, span_end or now) + AIR_STALE_S,
+                "span_fence_end_epoch_s": fence_end,
+                "span_end_margin_s": span_margin,
+                "desk_fence_end_announced": False,
+                "next_status_expected_epoch_s": max(max(now, span_end or now) + AIR_STALE_S,
+                                                     fence_end or 0) + span_margin,
                 "dwell_s": max(0, now - hold.get("since_epoch_s", state.get("transition_epoch_s", now))),
                 "last_heartbeat_age_s": heartbeat_age,
                 "heartbeat_stale": bool(heartbeat.get("stale", False)),
@@ -186,13 +196,19 @@ class StatusExporter:
         previous = self._read("status.json", {})
         self.storage.atomic_json(self.storage.root / "status.json", record)
         if (transition or previous.get("heartbeat_stale") != record["heartbeat_stale"]
-                or previous.get("span_end_epoch_s") != record["span_end_epoch_s"]):
+                or any(previous.get(key) != record[key] for key in
+                       ("span_end_epoch_s", "span_fence_end_epoch_s", "span_end_margin_s"))):
             # Durable outbox preserves every transition across offline periods,
             # rate limiting, crashes, restarts and supervisor replacement.
             name = f"{time.time_ns()}-{uuid.uuid4().hex}.json"
             self.storage.atomic_json(self.storage.root / "status-outbox" / name, record)
 
     def launch_hold(self):
+        # No delivery has failed before the first permitted attempt. Malformed
+        # existing files still take the diagnostic path below.
+        if not any(self.storage.exists(self.storage.root / name)
+                   for name in ("status-delivery.json", "status-attempt.json")):
+            return None
         receipt = self._read("status-delivery.json", {})
         attempt = self._read("status-attempt.json", {})
         if attempt.get("error"):
@@ -205,7 +221,13 @@ class StatusExporter:
         delivered = receipt.get("delivered_epoch_s")
         if (receipt.get("ref") != self.ref or not isinstance(delivered, (int, float))
                 or isinstance(delivered, bool) or not math.isfinite(delivered)
-                or not 0 <= self.wall() - delivered < KEEPALIVE_S):
+                or self.wall() < delivered):
+            return "status_export: acknowledged status absent or stale"
+        # Persist the delivered record's own deadline: a newer local checkpoint
+        # cannot extend it. Older receipts retain their original one-hour bound.
+        expected = receipt.get("next_status_expected_epoch_s", delivered + KEEPALIVE_S)
+        if (isinstance(expected, bool) or not isinstance(expected, (int, float))
+                or not math.isfinite(expected) or expected < delivered or self.wall() >= expected):
             return "status_export: acknowledged status absent or stale"
         return None
 
@@ -248,7 +270,8 @@ class StatusExporter:
                     return
                 commit = transport.publish(root, self.ref, latest, rows)
                 self.storage.atomic_json(root / "status-delivery.json", {
-                    "ref": self.ref, "commit": commit, "delivered_epoch_s": self.wall()})
+                    "ref": self.ref, "commit": commit, "delivered_epoch_s": self.wall(),
+                    "next_status_expected_epoch_s": latest["next_status_expected_epoch_s"]})
                 for path in paths:
                     self.storage.unlink(path)
                 self.storage.atomic_json(root / "status-attempt.json", {"attempt_epoch_s": now, "error": None})
@@ -288,11 +311,19 @@ def alarm_reasons(record, host, now):
             raise ValueError("heartbeat status")
         reasons = [word] if word.startswith("HOLD_") or word in {"STRANDED", "CLOCK_UNCERTAIN", "NETWORK_UNCERTAIN"} else []
         span_end = record.get("span_end_epoch_s")
+        fence_end = record.get("span_fence_end_epoch_s")
+        margin = record.get("span_end_margin_s", 0)  # accept pre-round-6 records
         expected = record.get("next_status_expected_epoch_s", record["recorded_epoch_s"] + AIR_STALE_S)
         if (isinstance(expected, bool) or not isinstance(expected, (int, float)) or not math.isfinite(expected)
+                or isinstance(margin, bool) or margin not in (0, STATUS_TICK_S)
+                or (span_end is None and margin != 0)
+                or (fence_end is not None and (isinstance(fence_end, bool)
+                    or not isinstance(fence_end, (int, float)) or not math.isfinite(fence_end)
+                    or span_end is None or fence_end < span_end))
                 or (span_end is not None and (isinstance(span_end, bool)
                     or not isinstance(span_end, (int, float)) or not math.isfinite(span_end)))
-                or expected != max(record["recorded_epoch_s"], span_end or record["recorded_epoch_s"]) + AIR_STALE_S):
+                or expected != max(max(record["recorded_epoch_s"], span_end or record["recorded_epoch_s"])
+                                   + AIR_STALE_S, fence_end or 0) + margin):
             raise ValueError("next status expectation")
         if now >= expected:
             reasons.append("watchdog_status_stale")
@@ -348,7 +379,8 @@ def main(argv=None):
         reasons = sorted(set(reasons + pending))
     except Exception as exc:
         record, reasons = None, ["watchdog_status_unavailable:" + type(exc).__name__]
-    print(json.dumps({"alarm": bool(reasons), "reasons": reasons, "status": record}, sort_keys=True))
+    print(json.dumps({"alarm": bool(reasons), "reasons": reasons, "status": record,
+                      "notifier_text": STALE_STATUS_TEXT if "watchdog_status_stale" in reasons else None}, sort_keys=True))
     return 3 if reasons else 0
 
 

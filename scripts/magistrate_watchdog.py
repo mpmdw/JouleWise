@@ -2043,7 +2043,7 @@ def _configure_status_export(storage, deps, state):
         except Exception:
             return False  # an unknown span never licenses network Git
 
-    def span_end():
+    def span_bounds():
         now = deps.wall_now().timestamp()
         snapshot = load_plans(storage, now_epoch_s=now)
         # Announce at the final pre-span tick, rather than suppressing Air
@@ -2051,15 +2051,21 @@ def _configure_status_export(storage, deps, state):
         current = load_state(storage)
         plans = [p for p in snapshot.plans if plan_is_armed(p, now, storage, current)
                  and p.t0_epoch_s - PLAN_LEAD_S <= now + STATUS_ANNOUNCE_LEAD_S]
-        return max((plan_completion_epoch(p) for p in plans), default=None)
+        return (max((plan_completion_epoch(p) for p in plans), default=None),
+                max((deadman_epoch(p) + COURIER_LOCK_FRESH_S for p in plans), default=None))
 
     exporter.probe_allowed = allowed
-    exporter.span_end = span_end
+    exporter.span_bounds = span_bounds
 
 
 def _status_export_notice(storage, deps, state):
     """W-H: delivery failure uses the magistrate channel without gating launch."""
     try:
+        if storage.status_exporter is not None:
+            # Try the current checkpoint before classifying the delivery. The
+            # exporter's fresh plan/desk gate still forbids in-span transport.
+            storage.status_exporter.checkpoint(state)
+            storage.status_exporter.flush()
         reason = (storage.status_exporter.launch_hold() if storage.status_exporter is not None
                   else getattr(storage, "status_export_error", None))
     except Exception as exc:

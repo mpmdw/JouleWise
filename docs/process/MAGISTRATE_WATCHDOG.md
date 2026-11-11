@@ -76,7 +76,10 @@ measurement records. Each commit contains only `status.json` and the pending
 `transitions.jsonl`; its parent retains earlier batches.
 
 Records carry state, named hold category, transition epoch/sequence, dwell,
-heartbeat age/staleness, last activation ID, host and observation epoch. No raw
+heartbeat age/staleness, last activation ID, host and observation epoch. They
+also carry the announced plan completion, computed fence end and Air deadline.
+`desk_fence_end_announced: false` explicitly means there is no announced desk
+fence end; a desk deadline does not extend the Air expectation. No raw
 reason, custody path, prompt, model output or outcome leaves the machine.
 Every transition enters a durable outbox immediately. A change in heartbeat
 staleness also enters the outbox even when the state word stays `ACTIVE`.
@@ -92,24 +95,32 @@ queued. Keepalive becomes due after 3,250 seconds, leaving room for a
 launchd scheduling delays and delivery failure can exceed that target: the
 Air's staleness alarm is the backstop.
 
-The short tick flushes after its safety action. The resident publishes on a
+The launch path checkpoints and flushes once before judging export freshness,
+and the short tick also flushes after its safety action. The resident publishes on a
 background thread after its step, so transport never blocks REQUEST/TERM/KILL.
 All flush routes use `_remote_probe_allowed`; every Git subprocess rechecks
 that gate. No export runs during a plan span or desk fence, and a 50-second
 guard leaves room for the transport to finish before a known upcoming span.
 At the final pre-span tick (within 410 seconds of the span's start), a changed
-`span_end_epoch_s` queues one status push. Its
-`next_status_expected_epoch_s` is that end plus 75 minutes. The Air uses this
+`span_end_epoch_s` queues one status push. `span_fence_end_epoch_s` records the
+rounded dead-man epoch plus the courier-lock tail. The
+`next_status_expected_epoch_s` is the later of completion plus 75 minutes and
+that fence end, plus one 300-second tick (`span_end_margin_s`). Outside an
+announced span, the expectation remains observation plus 75 minutes. The Air uses this
 explicit expectation for staleness; named holds and stale magistrate progress
 still alarm immediately. An unexpectedly open chain beyond that allowance
 therefore still alarms. No successful pre-span push means no alarm deferral.
 There is no code-tree/index mutation. Local
 records and receipts live below watchdog storage as `status.json`,
 `status-outbox/`, `status-attempt.json`, `status-delivery.json` and
-`status-export.lock`. An absent acknowledged receipt, a failed export, an
-expired worker, or a receipt at least an hour old queues `status_export_failed` in the
+`status-export.lock`. The delivery receipt persists the acknowledged record's
+own `next_status_expected_epoch_s`; a newer unsent checkpoint cannot extend it.
+A failed export, an expired worker, an attempted delivery without an
+acknowledged receipt, or a missed delivered deadline queues `status_export_failed` in the
 next magistrate prompt. These conditions never block activation. The launch
 path checks again after binary/version work before rendering that prompt.
+Nothing attempted yet is not a delivery failure. Legacy receipts without an
+explicit deadline retain the previous one-hour freshness bound.
 Missing/invalid runtime host configuration disables export and uses the same
 notice channel. Retrying a failed export does not clear its delivery error
 until push succeeds. Plan and desk fences always retain priority.
@@ -131,10 +142,15 @@ hold and recovery between polls, or in one rate-limited batch, still alarms.
 The latest status alarms for any `HOLD_*`, `STRANDED`, uncertain clock/network,
 stale magistrate progress, missing/invalid status, or a missed next-status
 expectation (normally 75 minutes after the latest observation, extended across
-an announced span). Fetch/authentication errors and an invalid cursor also
+an announced span). If an armed plan is unparseable, its span is unknown and
+export is deferred. The Air therefore receives `watchdog_status_stale` at the
+last delivered deadline, rather than the plan's named hold. Poll output's
+`notifier_text` explains that stale status can mean an unreadable armed plan;
+the Air notifier should include that text. Fetch/authentication errors and an invalid cursor also
 exit 3. Cursor advance alone cannot acknowledge an alarm. Wire exit 3 to the
 Air's notifier and prove delivery before closing W-01/W-02; this branch does
-not install or send an Air notification.
+not install or send an Air notification. Update the Air poller before the MBP
+exporter: it accepts older records as well as the new fence and margin fields.
 
 ### Model startup rejection (R2 / W-D)
 

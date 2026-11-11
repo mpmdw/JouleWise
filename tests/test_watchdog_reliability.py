@@ -1,5 +1,6 @@
 """W-01/W-02 witnesses: synthetic installed plans, clocks and process tables."""
 import datetime as dt
+import io
 import json
 import os
 import subprocess
@@ -333,6 +334,75 @@ class ModelStartupTests(fixtures.WatchdogTestCase):
 
 
 class StatusExportTests(fixtures.WatchdogTestCase):
+    def test_delivered_expectation_survives_long_window_and_new_local_checkpoint(self):
+        plan = self.make_plan(t0=self.base.timestamp() + 550, window_max_s=3 * 3600)
+        state = wd.initial_state()
+        wd._configure_status_export(self.harness.storage, self.harness.deps, state)
+        self.checkpoint('IDLE', state)
+        self.exporter.flush()
+        delivered = self.snapshot()
+        receipt = self.exporter._read('status-delivery.json')
+        self.assertEqual(receipt['next_status_expected_epoch_s'], delivered['next_status_expected_epoch_s'])
+        self.advance(wd.plan_completion_epoch(plan) - self.base.timestamp() + 1)
+        self.checkpoint('IDLE', state)  # unsent checkpoint must not replace the delivered deadline
+        self.assertIsNone(self.exporter.launch_hold())
+        self.advance(delivered['next_status_expected_epoch_s'] - self.harness.clock.wall.timestamp())
+        self.assertIsNotNone(self.exporter.launch_hold())
+
+    def test_first_tick_flushes_before_judging_export_and_does_not_queue_false_notice(self):
+        with mock.patch.object(wd.os, 'fork', return_value=999):
+            self.assertTrue(wd.tick(self.harness.storage, self.harness.deps).launch)
+        state = wd.load_state(self.harness.storage)
+        self.assertNotIn('status_export_failed', [n['kind'] for n in state['notice_pending']])
+        self.assertIsNotNone(self.exporter._read('status-delivery.json'))
+
+    def test_nothing_attempted_while_transport_deferred_is_not_a_failure(self):
+        self.assertIsNone(self.exporter.launch_hold())
+        self.exporter.probe_allowed = lambda: False
+        state = wd.initial_state()
+        wd._status_export_notice(self.harness.storage, self.harness.deps, state)
+        self.assertEqual([], state['notice_pending'])
+        self.assertFalse((self.harness.storage.root / 'status-attempt.json').exists())
+
+    def test_air_expectation_has_one_tick_margin_after_unreleased_fence(self):
+        plan = self.make_plan(t0=self.base.timestamp() + 550, window_max_s=3 * 3600)
+        wd._configure_status_export(self.harness.storage, self.harness.deps, wd.initial_state())
+        self.checkpoint('IDLE')
+        self.exporter.flush()
+        record = self.snapshot()
+        fence_end = wd.deadman_epoch(plan) + wd.COURIER_LOCK_FRESH_S
+        self.assertEqual(record['next_status_expected_epoch_s'], fence_end + 300)
+        self.assertNotIn('watchdog_status_stale', status.alarm_reasons(record, self.exporter.host, fence_end + 1))
+        self.assertIn('watchdog_status_stale', status.alarm_reasons(record, self.exporter.host, fence_end + 300))
+
+    def test_desk_fence_explicitly_has_no_announced_end_and_still_defers(self):
+        with mock.patch.object(wd, 'desk_fence_active', return_value={'deadline': self.base.timestamp() + 600}):
+            wd._configure_status_export(self.harness.storage, self.harness.deps, wd.initial_state())
+            self.checkpoint('FENCED')
+            self.assertFalse(self.exporter._read('status.json')['desk_fence_end_announced'])
+            with mock.patch.object(status.GitTransport, 'publish') as publish:
+                self.exporter.flush()
+                publish.assert_not_called()
+
+    def test_unparseable_plan_reaches_air_as_stale_with_notifier_explanation(self):
+        self.checkpoint('IDLE')
+        self.exporter.flush()
+        plan = self.make_plan(t0=self.base.timestamp() + 550)
+        (Path(plan.custody_root) / 'night_plan.json').write_text('{unparseable')
+        wd._configure_status_export(self.harness.storage, self.harness.deps, wd.initial_state())
+        with mock.patch.object(status.GitTransport, 'publish') as publish:
+            self.assertEqual('HOLD_PLAN_UNREADABLE', wd.tick(self.harness.storage, self.harness.deps).state)
+            publish.assert_not_called()
+        self.advance(status.AIR_STALE_S)
+        output = io.StringIO()
+        with mock.patch.object(status.time, 'time', return_value=self.harness.clock.wall.timestamp()), \
+                mock.patch('sys.stdout', output):
+            self.assertEqual(3, status.main(['poll', '--repository', str(self.clone), '--host', self.exporter.host,
+                                            '--cursor-file', str(self.temp / 'air-stale.json')]))
+        alarm = json.loads(output.getvalue())
+        self.assertEqual(['watchdog_status_stale'], alarm['reasons'])
+        self.assertIn('unreadable armed plan', alarm['notifier_text'])
+
     def test_pre_span_push_announces_end_then_25_armed_ticks_do_no_transport(self):
         plan = self.make_plan(t0=self.base.timestamp() + 550, window_max_s=3 * 3600)
         state = wd.initial_state()
@@ -342,9 +412,10 @@ class StatusExportTests(fixtures.WatchdogTestCase):
         record = self.snapshot()
         end = wd.plan_completion_epoch(plan)
         self.assertEqual(end, record['span_end_epoch_s'])
-        self.assertEqual(end + status.AIR_STALE_S, record['next_status_expected_epoch_s'])
+        expected = wd.deadman_epoch(plan) + wd.COURIER_LOCK_FRESH_S + status.STATUS_TICK_S
+        self.assertEqual(expected, record['next_status_expected_epoch_s'])
         self.assertNotIn('watchdog_status_stale', status.alarm_reasons(record, self.exporter.host, end + 1))
-        self.assertIn('watchdog_status_stale', status.alarm_reasons(record, self.exporter.host, end + status.AIR_STALE_S))
+        self.assertIn('watchdog_status_stale', status.alarm_reasons(record, self.exporter.host, expected))
         self.advance(371)  # inside the span's 180-second lead
         night = Path(plan.custody_root) / 'night'
         night.mkdir(exist_ok=True)
@@ -361,7 +432,10 @@ class StatusExportTests(fixtures.WatchdogTestCase):
         (night / 'chain.exited').write_text('{}')
         (night / 'courier.sent').write_text('sent')
         self.advance(end - self.harness.clock.wall.timestamp() + 1)
-        self.exporter.flush()
+        with mock.patch.object(wd.os, 'fork', return_value=999):
+            self.assertTrue(wd.tick(self.harness.storage, self.harness.deps).launch)
+        state = wd.load_state(self.harness.storage)
+        self.assertNotIn('status_export_failed', [n['kind'] for n in state['notice_pending']])
         self.assertNotEqual(first, self.git('--git-dir=' + str(self.origin), 'rev-parse', self.exporter.ref))
 
     def test_imminent_span_and_unknown_span_defer_transport(self):
@@ -400,7 +474,8 @@ class StatusExportTests(fixtures.WatchdogTestCase):
                     self.harness.storage.status_export_error = 'status_export: host missing'
                 self.harness.processes.rows = [wd.ProcessInfo(100, 99, 'token-a', 'session')]
                 state = wd.initial_state()
-                supervisor = wd.start_session_guarded(self.harness.storage, self.harness.deps, state, binary_path=binary)
+                with mock.patch.object(status.GitTransport, 'publish', side_effect=OSError('synthetic unavailable')):
+                    supervisor = wd.start_session_guarded(self.harness.storage, self.harness.deps, state, binary_path=binary)
                 self.assertIsNotNone(supervisor)
                 prompt = self.harness.spawn_calls[-1][2].parent / 'prompt.md'
                 self.assertIn('status_export_failed', prompt.read_text())
