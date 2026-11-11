@@ -173,7 +173,7 @@ This table also records findings whose remedy is explicitly outside seat 6.
 | Audit statement(s) | Hunk or no-change disposition |
 |---|---|
 | `PAPER-PLAN-v2.md` Block-5 exclusion/sealed gate row; “no Block-5 result”; acceptance checklist | No change needed here: RL-1/seat 1 owns supersession in that other manuscript's plan. This seat imports no results. |
-| Same plan: v4 variant A timing; old §10 content; old Fable role | No change needed here: outside Paper 1 factual corrections and subject to sealed v4 work/lead planning. No v4 source was opened for this correction. |
+| Same plan: v4 variant A timing; old §10 content; old Fable role | No change needed here: outside Paper 1 factual corrections and subject to sealed v4 work/lead planning. No v4 data was opened for this correction. |
 | `TALK-OUTLINE-v2.md` sealed-results rule | No change needed here: seat 1/lead talk ownership. |
 | `research-strategy.md` framing; `AGENDA.md` checkpoint provenance and old fixed-window count | No change needed here: strategy/schedule sources, not manuscript facts being corrected. Lead responsibility; no state edit or task registration. |
 | CANONICAL Paper rows | No change needed: seat 1's landing is already the base prerequisite; this seat does not retag or push. |
