@@ -65,9 +65,13 @@ fences and the existing stand-down ladder still decide process actions.
 `scripts/watchdog_status.py` uses the W1 A-02 courier's transport: a temporary
 bare Git repository, read origin from the code clone, fetch only the status
 ref's parent, create a small snapshot commit, and push it without force. The
-dedicated ref is `refs/heads/watchdog-status/<host>`; `<host>` defaults to the
-hostname, or `MAGISTRATE_WATCHDOG_STATUS_HOST` can pin a stable host name in
-launchd. A per-host ref avoids touching main, mixing hosts, or disclosing
+dedicated ref is `refs/heads/watchdog-status/<host>`. Set the stable name
+explicitly with `MAGISTRATE_WATCHDOG_STATUS_HOST` before install or render;
+the installer refuses a missing/invalid value and embeds it in the plist's
+`EnvironmentVariables` under that same key. For example, set
+`MAGISTRATE_WATCHDOG_STATUS_HOST=joulewise-mbp` for the install command and use
+`--host joulewise-mbp` on the Air. There is no dynamic hostname fallback.
+A per-host ref avoids touching main, mixing hosts, or disclosing
 measurement records. Each commit contains only `status.json` and the pending
 `transitions.jsonl`; its parent retains earlier batches.
 
@@ -90,15 +94,25 @@ Air's staleness alarm is the backstop.
 
 The short tick flushes after its safety action. The resident publishes on a
 background thread after its step, so transport never blocks REQUEST/TERM/KILL.
-This reporting traffic also runs while fenced; the separate remote-stop probe
-continues to skip plan spans. There is no code-tree/index mutation. Local
+All flush routes use `_remote_probe_allowed`; every Git subprocess rechecks
+that gate. No export runs during a plan span or desk fence, and a 50-second
+guard leaves room for the transport to finish before a known upcoming span.
+At the final pre-span tick (within 410 seconds of the span's start), a changed
+`span_end_epoch_s` queues one status push. Its
+`next_status_expected_epoch_s` is that end plus 75 minutes. The Air uses this
+explicit expectation for staleness; named holds and stale magistrate progress
+still alarm immediately. An unexpectedly open chain beyond that allowance
+therefore still alarms. No successful pre-span push means no alarm deferral.
+There is no code-tree/index mutation. Local
 records and receipts live below watchdog storage as `status.json`,
 `status-outbox/`, `status-attempt.json`, `status-delivery.json` and
-`status-export.lock`. No acknowledged receipt, a failed export, an expired
-worker, or a receipt at least an hour old blocks a new activation under
-`HOLD_STATUS_EXPORT`. A fresh prior receipt permits an in-flight refresh;
-retrying a failed export does not clear that failure until push succeeds.
-Plan and desk fences always retain priority.
+`status-export.lock`. An absent acknowledged receipt, a failed export, an
+expired worker, or a receipt at least an hour old queues `status_export_failed` in the
+next magistrate prompt. These conditions never block activation. The launch
+path checks again after binary/version work before rendering that prompt.
+Missing/invalid runtime host configuration disables export and uses the same
+notice channel. Retrying a failed export does not clear its delivery error
+until push succeeds. Plan and desk fences always retain priority.
 
 On the Air, schedule this command every five minutes with the MBP's configured
 host name and the Air clone's own origin. It prints JSON and exits 3 for an
@@ -115,8 +129,9 @@ status ref, follows commits since that cursor, and retains alarm transitions
 until `--ack` is supplied **after the Air notifier has delivered them**. Thus a
 hold and recovery between polls, or in one rate-limited batch, still alarms.
 The latest status alarms for any `HOLD_*`, `STRANDED`, uncertain clock/network,
-stale magistrate progress, missing/invalid status or 75 minutes without a new
-watchdog observation. Fetch/authentication errors and an invalid cursor also
+stale magistrate progress, missing/invalid status, or a missed next-status
+expectation (normally 75 minutes after the latest observation, extended across
+an announced span). Fetch/authentication errors and an invalid cursor also
 exit 3. Cursor advance alone cannot acknowledge an alarm. Wire exit 3 to the
 Air's notifier and prove delivery before closing W-01/W-02; this branch does
 not install or send an Air notification.
@@ -125,7 +140,10 @@ not install or send an Air notification.
 
 The ruled flag remains `--model claude-fable-5-2`. The supervisor checks actual
 CLI error diagnostics, including a child that exits before its PID is first
-observed. An anchored stderr model-rejection diagnostic or a structured CLI
+observed. Latching requires exit within the 60-second startup window and no
+assistant output anywhere in that activation's stream. A later capacity error,
+or an error after assistant output, follows the existing backoff policy.
+An anchored stderr model-rejection diagnostic or a structured CLI
 error result queues a notice, prints the failure, and latches
 `HOLD_MODEL_REJECTED` (`STRANDED` retains that named category after the normal
 dwell limit). Normal assistant text and successful results cannot trigger it.
@@ -412,7 +430,7 @@ Installation is authorized only after the built-artifact gauntlet and cold gate 
 4. Install from that same magistrate session and canonical checkout. The installer refuses any other resolved script repository or Git top level, renders the literal canonical checkout into both plist paths, and pins the installing `python3` process's absolute `sys.executable`. It seeds `magistrate.lock` with the interactive twin's PID and start token so the first resident observes it instead of launching a second session:
 
    ```zsh
-   scripts/install_magistrate_watchdog.sh --install
+   MAGISTRATE_WATCHDOG_STATUS_HOST=joulewise-mbp scripts/install_magistrate_watchdog.sh --install
    python3 -m json.tool "$HOME/night-custody/magistrate/magistrate.lock"
    ```
 
@@ -572,7 +590,7 @@ Run the focused checks and create a fake `REHEARSAL_STUB` plan at `t0 = now + 8 
 ```sh
 tmp_root="$(mktemp -d "${TMPDIR:-/tmp}/magistrate-watchdog.XXXXXX")"
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_magistrate_watchdog -v
-scripts/install_magistrate_watchdog.sh --render-only "$tmp_root/render"
+MAGISTRATE_WATCHDOG_STATUS_HOST=synthetic-mbp scripts/install_magistrate_watchdog.sh --render-only "$tmp_root/render"
 /usr/bin/plutil -lint "$tmp_root/render/com.joulewise.magistrate.plist"
 BENCH_CUSTODY="$tmp_root/custody" python3 - <<'PY'
 import os
@@ -656,7 +674,7 @@ PY
 Expected before: `empty=False`, with the Terminal-hosted interactive root visible and the daemon/hosts/spares absent. From that interactive magistrate session—not from the observer—run the authorized installation, then inspect the exclusive adoption record from the observer:
 
 ```sh
-scripts/install_magistrate_watchdog.sh --install
+MAGISTRATE_WATCHDOG_STATUS_HOST=joulewise-mbp scripts/install_magistrate_watchdog.sh --install
 python3 -m json.tool "$HOME/night-custody/magistrate/magistrate.lock"
 ```
 

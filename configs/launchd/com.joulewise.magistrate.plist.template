@@ -20,6 +20,8 @@
     <string>@@SESSION_BIN@@</string>
     <key>MAGISTRATE_WATCHDOG_CUSTODY_ROOT</key>
     <string>@@CUSTODY_ROOT@@</string>
+    <key>MAGISTRATE_WATCHDOG_STATUS_HOST</key>
+    <string>@@STATUS_HOST@@</string>
   </dict>
   <key>StartInterval</key>
   <integer>300</integer>

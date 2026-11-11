@@ -242,6 +242,26 @@ class HeartbeatTests(fixtures.WatchdogTestCase):
 
 
 class ModelStartupTests(fixtures.WatchdogTestCase):
+    def test_late_model_capacity_error_uses_backoff_without_latching(self):
+        supervisor = self.supervisor(self.make_plan())
+        self.harness.clock.wall += dt.timedelta(seconds=wd.MODEL_STARTUP_WINDOW_S + 1)
+        self.harness.clock.mono += wd.MODEL_STARTUP_WINDOW_S + 1
+        supervisor.stderr_path.write_text('API Error: model not available')
+        self.harness.child.exit_code = 1
+        self.assertFalse(supervisor.step())
+        self.assertEqual('BACKOFF', supervisor.state['state'])
+        self.assertFalse(supervisor.state.get('model_startup_hold'))
+
+    def test_early_error_after_assistant_output_beyond_tail_uses_backoff(self):
+        supervisor = self.supervisor(self.make_plan())
+        supervisor.stdout_path.write_text(json.dumps({'type': 'assistant', 'message': 'working'})
+            + '\n' + (json.dumps({'type': 'tool', 'message': 'x' * 1000}) + '\n') * 10)
+        supervisor.stderr_path.write_text('Error: model not available')
+        self.harness.child.exit_code = 1
+        self.assertFalse(supervisor.step())
+        self.assertEqual('BACKOFF', supervisor.state['state'])
+        self.assertFalse(supervisor.state.get('model_startup_hold'))
+
     def binary(self):
         target = self.temp / 'cli'
         target.write_text('#!/bin/sh\nexit 0\n')
@@ -313,6 +333,96 @@ class ModelStartupTests(fixtures.WatchdogTestCase):
 
 
 class StatusExportTests(fixtures.WatchdogTestCase):
+    def test_pre_span_push_announces_end_then_25_armed_ticks_do_no_transport(self):
+        plan = self.make_plan(t0=self.base.timestamp() + 550, window_max_s=3 * 3600)
+        state = wd.initial_state()
+        wd._configure_status_export(self.harness.storage, self.harness.deps, state)
+        self.checkpoint('IDLE', state)
+        self.exporter.flush()
+        record = self.snapshot()
+        end = wd.plan_completion_epoch(plan)
+        self.assertEqual(end, record['span_end_epoch_s'])
+        self.assertEqual(end + status.AIR_STALE_S, record['next_status_expected_epoch_s'])
+        self.assertNotIn('watchdog_status_stale', status.alarm_reasons(record, self.exporter.host, end + 1))
+        self.assertIn('watchdog_status_stale', status.alarm_reasons(record, self.exporter.host, end + status.AIR_STALE_S))
+        self.advance(371)  # inside the span's 180-second lead
+        night = Path(plan.custody_root) / 'night'
+        night.mkdir(exist_ok=True)
+        (night / 'chain.started').write_text('{"pgid":123}')
+        first = self.git('--git-dir=' + str(self.origin), 'rev-parse', self.exporter.ref)
+        with mock.patch.object(status.GitTransport, 'publish') as publish:
+            for _ in range(25):
+                self.assertEqual('FENCED', wd.tick(self.harness.storage, self.harness.deps).state)
+                self.advance(300)
+            self.exporter.flush_background()
+            self.exporter.finish()
+            publish.assert_not_called()
+        self.assertEqual(first, self.git('--git-dir=' + str(self.origin), 'rev-parse', self.exporter.ref))
+        (night / 'chain.exited').write_text('{}')
+        (night / 'courier.sent').write_text('sent')
+        self.advance(end - self.harness.clock.wall.timestamp() + 1)
+        self.exporter.flush()
+        self.assertNotEqual(first, self.git('--git-dir=' + str(self.origin), 'rev-parse', self.exporter.ref))
+
+    def test_imminent_span_and_unknown_span_defer_transport(self):
+        self.checkpoint()
+        self.make_plan(t0=self.base.timestamp() + wd.PLAN_LEAD_S + 10)
+        wd._configure_status_export(self.harness.storage, self.harness.deps, wd.initial_state())
+        with mock.patch.object(status.GitTransport, 'publish') as publish:
+            self.exporter.flush()
+            publish.assert_not_called()
+        with mock.patch.object(wd, '_remote_probe_allowed', side_effect=ValueError('unknown span')):
+            self.assertFalse(self.exporter.probe_allowed())
+
+    def test_each_git_operation_rechecks_span_gate_before_starting_process(self):
+        transport = status.GitTransport(self.clone)
+        transport.probe_allowed = lambda: False
+        with mock.patch.object(status.subprocess, 'Popen') as popen, self.assertRaisesRegex(RuntimeError, 'deferred'):
+            transport.run(['version'])
+        popen.assert_not_called()
+
+    def test_missing_failed_old_exports_all_allow_real_spawn_with_prompt_notice(self):
+        binary = ModelStartupTests.binary(self)
+        self.harness.storage.mkdir(self.harness.storage.root)
+        for kind in ('missing', 'failed', 'old', 'unconfigured'):
+            with self.subTest(kind=kind):
+                self.harness.storage.status_exporter = self.exporter
+                self.harness.storage.unlink(self.harness.storage.root / 'magistrate.lock')
+                self.harness.storage.unlink(self.harness.storage.root / 'status-attempt.json')
+                self.harness.storage.unlink(self.harness.storage.root / 'status-delivery.json')
+                if kind == 'failed':
+                    self.harness.storage.atomic_json(self.harness.storage.root / 'status-attempt.json', {'error': 'failed'})
+                if kind == 'old':
+                    self.harness.storage.atomic_json(self.harness.storage.root / 'status-delivery.json', {
+                        'ref': self.exporter.ref, 'delivered_epoch_s': self.base.timestamp() - status.KEEPALIVE_S})
+                if kind == 'unconfigured':
+                    self.harness.storage.status_exporter = None
+                    self.harness.storage.status_export_error = 'status_export: host missing'
+                self.harness.processes.rows = [wd.ProcessInfo(100, 99, 'token-a', 'session')]
+                state = wd.initial_state()
+                supervisor = wd.start_session_guarded(self.harness.storage, self.harness.deps, state, binary_path=binary)
+                self.assertIsNotNone(supervisor)
+                prompt = self.harness.spawn_calls[-1][2].parent / 'prompt.md'
+                self.assertIn('status_export_failed', prompt.read_text())
+        self.assertEqual(len(self.harness.spawn_calls), 4)
+
+    def test_configured_host_is_stable_and_missing_host_never_falls_back_to_hostname(self):
+        with mock.patch.dict(os.environ, {'MAGISTRATE_WATCHDOG_STATUS_HOST': 'fixed-mbp'}):
+            self.assertEqual('refs/heads/watchdog-status/fixed-mbp',
+                             status.StatusExporter(self.harness.storage, self.clone).ref)
+        with mock.patch.dict(os.environ, {}, clear=True), self.assertRaises(ValueError):
+            status.StatusExporter(self.harness.storage, self.clone)
+
+    def test_air_rejects_inconsistent_expectation_and_preserves_hold_alarm_in_span(self):
+        self.checkpoint('HOLD_LOCK')
+        self.exporter.flush()
+        record = self.snapshot()
+        now = self.base.timestamp()
+        record.update(span_end_epoch_s=now + 10000, next_status_expected_epoch_s=now + 10000 + status.AIR_STALE_S)
+        self.assertEqual(['HOLD_LOCK'], status.alarm_reasons(record, self.exporter.host, now + status.AIR_STALE_S))
+        record['next_status_expected_epoch_s'] += 1
+        self.assertEqual(['watchdog_status_invalid'], status.alarm_reasons(record, self.exporter.host, now))
+
     def setUp(self):
         super().setUp()
         self.origin = self.temp / 'origin.git'
@@ -387,7 +497,7 @@ class StatusExportTests(fixtures.WatchdogTestCase):
         self.exporter.flush()
         self.assertNotEqual(second, self.git('--git-dir=' + str(self.origin), 'rev-parse', self.exporter.ref))
 
-    def test_failed_push_never_acknowledges_retains_outbox_and_blocks_launch_until_recovery(self):
+    def test_failed_push_retains_outbox_and_notices_without_blocking_launch(self):
         self.checkpoint()
         hook = self.origin / 'hooks/pre-receive'
         hook.write_text('#!/bin/sh\nexit 1\n')
@@ -396,9 +506,10 @@ class StatusExportTests(fixtures.WatchdogTestCase):
         self.assertIsNotNone(self.exporter.launch_hold())
         self.assertFalse((self.harness.storage.root / 'status-delivery.json').exists())
         self.assertTrue(list((self.harness.storage.root / 'status-outbox').glob('*.json')))
-        decision = wd.decide(self.harness.storage, self.harness.deps, wd.initial_state())
-        self.assertEqual('HOLD_STATUS_EXPORT', decision.state)
-        self.assertFalse(decision.launch)
+        state = wd.initial_state()
+        decision = wd.decide(self.harness.storage, self.harness.deps, state)
+        self.assertTrue(decision.launch)
+        self.assertIn('status_export_failed', [n['kind'] for n in state['notice_pending']])
         hook.unlink()
         self.advance(status.MIN_PUSH_INTERVAL_S)
         # Reconstructing the exporter simulates launchd restarting it.
@@ -408,7 +519,7 @@ class StatusExportTests(fixtures.WatchdogTestCase):
         self.assertIsNone(self.exporter.launch_hold())
         self.assertEqual([], list((self.harness.storage.root / 'status-outbox').glob('*.json')))
 
-    def test_missing_stale_or_corrupt_receipt_holds_without_weakening_plan_fence(self):
+    def test_missing_stale_or_corrupt_receipt_notices_without_weakening_plan_fence(self):
         self.checkpoint()
         for raw in ('[]', '{broken', '{"ref":"other","delivered_epoch_s":1}'):
             (self.harness.storage.root / 'status-delivery.json').write_text(raw)
@@ -540,7 +651,7 @@ class StatusExportTests(fixtures.WatchdogTestCase):
         # refusal precedes every host command, binary lookup and fork.
         installed.InstalledV5Tests.write_plan(self, unknown_future_key=1)
         source = Path(wd.__file__).read_text()
-        line = '    storage.status_exporter = StatusExporter(storage, REPO_ROOT)\n'
+        line = '        storage.status_exporter = StatusExporter(storage, REPO_ROOT)\n'
         self.assertEqual(1, source.count(line))
         runner = self.temp / 'entry.py'
         runner.write_text('''import json, os, sys
@@ -549,10 +660,13 @@ sys.path.insert(0, sys.argv[1])
 from scripts import magistrate_watchdog as wd
 from scripts import watchdog_status as status
 if sys.argv[5] == "mutant":
-    source = Path(wd.__file__).read_text().replace("    storage.status_exporter = StatusExporter(storage, REPO_ROOT)\\n", "")
+    source = Path(wd.__file__).read_text().replace("        storage.status_exporter = StatusExporter(storage, REPO_ROOT)\\n", "        pass\\n")
     exec(compile(source, wd.__file__, "exec"), wd.__dict__)
 wd.RealProcessTable.snapshot = lambda self: []
 status.GitTransport.origin = lambda self: sys.argv[3]
+# This entry-point wiring witness isolates the transport gate; the R3 span
+# witnesses exercise the real gate against installed plans separately.
+wd._configure_status_export = lambda storage, deps, state: None
 code = wd.main(["--custody-root", sys.argv[2]])
 root = Path(sys.argv[2])
 assert code == 0

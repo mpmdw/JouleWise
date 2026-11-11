@@ -12,7 +12,6 @@ import math
 import os
 import re
 import signal
-import socket
 import subprocess
 import tempfile
 import threading
@@ -45,6 +44,7 @@ class GitTransport:
     def __init__(self, repository):
         self.repository = Path(repository)
         self.deadline = time.monotonic() + TRANSPORT_BUDGET_S
+        self.probe_allowed = lambda: True
         self.env = dict(os.environ, GIT_TERMINAL_PROMPT="0", GCM_INTERACTIVE="Never",
                         GIT_ASKPASS="/usr/bin/false", SSH_ASKPASS="/usr/bin/false",
                         GIT_SSH_COMMAND="/usr/bin/ssh -oBatchMode=yes -oConnectTimeout=5")
@@ -54,6 +54,8 @@ class GitTransport:
             self.env.pop(name, None)
 
     def run(self, args, *, input=None, allowed=(0,)):
+        if not self.probe_allowed():
+            raise RuntimeError("status transport deferred by plan/desk fence")
         remaining = self.deadline - time.monotonic()
         if remaining <= 0:
             raise TimeoutError("status transport deadline")
@@ -140,12 +142,14 @@ class StatusExporter:
     def __init__(self, storage, repository, *, host=None, wall=time.time, transport=GitTransport):
         self.storage = storage
         self.repository = repository
-        self.host = host or os.environ.get("MAGISTRATE_WATCHDOG_STATUS_HOST") or socket.gethostname()
+        self.host = host if host is not None else os.environ.get("MAGISTRATE_WATCHDOG_STATUS_HOST")
         self.ref = status_ref(self.host)
         self.wall = wall
         self.transport = transport
         self.thread = None
         self.thread_lock = threading.Lock()
+        self.probe_allowed = lambda: True
+        self.span_end = lambda: None
 
     def _read(self, name, default=None):
         try:
@@ -156,6 +160,7 @@ class StatusExporter:
 
     def record(self, state):
         now = self.wall()
+        span_end = self.span_end()
         heartbeat = state.get("magistrate_heartbeat") or {}
         heartbeat_age = heartbeat.get("age_s")
         if heartbeat_age is not None:
@@ -167,6 +172,8 @@ class StatusExporter:
                 "transition_seq": state.get("transition_seq", 0),
                 "transition_epoch_s": state.get("transition_epoch_s", now),
                 "recorded_epoch_s": now,
+                "span_end_epoch_s": span_end,
+                "next_status_expected_epoch_s": max(now, span_end or now) + AIR_STALE_S,
                 "dwell_s": max(0, now - hold.get("since_epoch_s", state.get("transition_epoch_s", now))),
                 "last_heartbeat_age_s": heartbeat_age,
                 "heartbeat_stale": bool(heartbeat.get("stale", False)),
@@ -178,7 +185,8 @@ class StatusExporter:
         record = self.record(state)
         previous = self._read("status.json", {})
         self.storage.atomic_json(self.storage.root / "status.json", record)
-        if transition or previous.get("heartbeat_stale") != record["heartbeat_stale"]:
+        if (transition or previous.get("heartbeat_stale") != record["heartbeat_stale"]
+                or previous.get("span_end_epoch_s") != record["span_end_epoch_s"]):
             # Durable outbox preserves every transition across offline periods,
             # rate limiting, crashes, restarts and supervisor replacement.
             name = f"{time.time_ns()}-{uuid.uuid4().hex}.json"
@@ -202,7 +210,7 @@ class StatusExporter:
         return None
 
     def flush(self):
-        if self.storage.dry_run:
+        if self.storage.dry_run or not self.probe_allowed():
             return
         root = self.storage.root
         self.storage.mkdir(root)
@@ -234,7 +242,11 @@ class StatusExporter:
                 if latest is None:
                     raise ValueError("no local status checkpoint")
                 rows = [json.loads(self.storage.read_text(path)) for path in paths]
-                commit = self.transport(self.repository).publish(root, self.ref, latest, rows)
+                transport = self.transport(self.repository)
+                transport.probe_allowed = self.probe_allowed
+                if not self.probe_allowed():
+                    return
+                commit = transport.publish(root, self.ref, latest, rows)
                 self.storage.atomic_json(root / "status-delivery.json", {
                     "ref": self.ref, "commit": commit, "delivered_epoch_s": self.wall()})
                 for path in paths:
@@ -275,7 +287,14 @@ def alarm_reasons(record, host, now):
         if not isinstance(record["heartbeat_stale"], bool):
             raise ValueError("heartbeat status")
         reasons = [word] if word.startswith("HOLD_") or word in {"STRANDED", "CLOCK_UNCERTAIN", "NETWORK_UNCERTAIN"} else []
-        if age >= AIR_STALE_S:
+        span_end = record.get("span_end_epoch_s")
+        expected = record.get("next_status_expected_epoch_s", record["recorded_epoch_s"] + AIR_STALE_S)
+        if (isinstance(expected, bool) or not isinstance(expected, (int, float)) or not math.isfinite(expected)
+                or (span_end is not None and (isinstance(span_end, bool)
+                    or not isinstance(span_end, (int, float)) or not math.isfinite(span_end)))
+                or expected != max(record["recorded_epoch_s"], span_end or record["recorded_epoch_s"]) + AIR_STALE_S):
+            raise ValueError("next status expectation")
+        if now >= expected:
             reasons.append("watchdog_status_stale")
         if record["heartbeat_stale"]:
             reasons.append("magistrate_heartbeat_stale")

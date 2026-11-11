@@ -58,7 +58,9 @@ from scripts.run_night import (  # noqa: E402
     make_probes,
 )
 from scripts.fixture_orphan_census import launch_observation  # noqa: E402
-from scripts.watchdog_status import StatusExporter  # noqa: E402
+from scripts.watchdog_status import (  # noqa: E402
+    StatusExporter, TRANSPORT_BUDGET_S, MIN_PUSH_INTERVAL_S,
+)
 from scripts.launch_align_r0 import (  # noqa: E402
     FENCE_NAME as DESK_FENCE_NAME,
     fence_lock as desk_fence_lock,
@@ -132,6 +134,8 @@ USAGE_BACKOFF_S = (900, 1800, 3600, 7200, 7200)
 # never permission to launch over an unreadable/possibly armed plan.
 UNSAFE_HOLD_DWELL_S = 15 * 60
 HEARTBEAT_STALE_S = 15 * 60
+STATUS_TRANSPORT_GUARD_S = 2 * TRANSPORT_BUDGET_S
+STATUS_ANNOUNCE_LEAD_S = 300 + STATUS_TRANSPORT_GUARD_S + MIN_PUSH_INTERVAL_S
 UNSAFE_STATES = frozenset({"HOLD_UNSAFE", "HOLD_PLAN_UNREADABLE", "HOLD_PLAN_MALFORMED",
                           "HOLD_PLIST_UNREADABLE", "HOLD_CONFLICT", "HOLD_LOCK",
                           "HOLD_PROCESS_TABLE", "HOLD_DESK_FENCE", "HOLD_STATUS_EXPORT",
@@ -2020,6 +2024,55 @@ def _remote_probe_allowed(storage: Storage, deps: Dependencies, state: Mapping[s
     )
 
 
+def _configure_status_export(storage, deps, state):
+    exporter = storage.status_exporter
+    if exporter is None:
+        return
+
+    def allowed():
+        try:
+            current = load_state(storage)
+            if not _remote_probe_allowed(storage, deps, current):
+                return False
+            # Leave enough time for the entire bounded transport before a span.
+            now = deps.wall_now().timestamp()
+            snapshot = load_plans(storage, now_epoch_s=now)
+            return not snapshot.errors and not any(
+                now < p.t0_epoch_s - PLAN_LEAD_S <= now + STATUS_TRANSPORT_GUARD_S
+                for p in snapshot.plans if plan_is_armed(p, now, storage, current))
+        except Exception:
+            return False  # an unknown span never licenses network Git
+
+    def span_end():
+        now = deps.wall_now().timestamp()
+        snapshot = load_plans(storage, now_epoch_s=now)
+        # Announce at the final pre-span tick, rather than suppressing Air
+        # alarms days early for a far-future authored plan.
+        current = load_state(storage)
+        plans = [p for p in snapshot.plans if plan_is_armed(p, now, storage, current)
+                 and p.t0_epoch_s - PLAN_LEAD_S <= now + STATUS_ANNOUNCE_LEAD_S]
+        return max((plan_completion_epoch(p) for p in plans), default=None)
+
+    exporter.probe_allowed = allowed
+    exporter.span_end = span_end
+
+
+def _status_export_notice(storage, deps, state):
+    """W-H: delivery failure uses the magistrate channel without gating launch."""
+    try:
+        reason = (storage.status_exporter.launch_hold() if storage.status_exporter is not None
+                  else getattr(storage, "status_export_error", None))
+    except Exception as exc:
+        reason = f"status_export: {type(exc).__name__}"
+    if reason:
+        if any(isinstance(n, dict) and n.get("kind") == "status_export_failed"
+               for n in state.get("notice_pending", [])):
+            return
+        _queue_safety_notice(storage, state, deps.wall_now().astimezone(),
+            notice_id=f"status-export-failed-{state.get('activation_id') or 'pre-activation'}",
+            kind="status_export_failed", reason=str(reason))
+
+
 def _probe_remote_stop(storage: Storage, deps: Dependencies, state: Mapping[str, Any]) -> StopObservation:
     if deps.git_probe is remote_stop_probe:
         return remote_stop_probe(probe_allowed=lambda: _remote_probe_allowed(storage, deps, state))
@@ -2419,8 +2472,7 @@ def decide(storage, deps, state, *, plan_snapshot=None):
     decision = _decide(storage, deps, state, plan_snapshot=plan_snapshot)
     if decision.launch:
         reason = state.get("model_startup_hold")
-        if not reason and storage.status_exporter is not None:
-            reason = storage.status_exporter.launch_hold()
+        _status_export_notice(storage, deps, state)
         if reason:
             decision = Decision("HOLD_UNSAFE", str(reason))
     return _surface_unsafe_decision(storage, deps, state, decision, deps.wall_now().astimezone())
@@ -2430,12 +2482,17 @@ class ModelStartupError(RuntimeError):
     pass
 
 
-def model_startup_check(stdout: str, stderr: str) -> None:
+MODEL_STARTUP_WINDOW_S = 60
+
+
+def model_startup_check(stdout: str, stderr: str, *, elapsed_s=0, assistant_output=False) -> None:
     """Check the supervised CLI's startup diagnostics; never spawn a probe.
 
     A rejection latches until an operator verifies the CLI and clears the hold.
     The real activation already has PID ownership and the stand-down ladder.
     """
+    if assistant_output or not 0 <= elapsed_s <= MODEL_STARTUP_WINDOW_S:
+        return
     model = SESSION_ARGV_AFTER_PROMPT[SESSION_ARGV_AFTER_PROMPT.index("--model") + 1]
     diagnostics = []
     for line in stderr.splitlines():
@@ -2450,6 +2507,8 @@ def model_startup_check(stdout: str, stderr: str) -> None:
                 or value.get("type") == "result" and value.get("is_error") is True
                 or value.get("type") == "system" and value.get("subtype") == "error"):
             diagnostics.append(json.dumps({key: value[key] for key in ("error", "errors", "result", "message") if key in value}))
+        if isinstance(value, dict) and value.get("type") == "assistant":
+            return
     rejection = r"(?:invalid|unknown|unsupported|unrecognized|not[ _-](?:found|available|supported|exist)|does not exist|not have access)"
     for diagnostic in diagnostics:
         if re.search(r"\bmodel\b|model_", diagnostic, re.I) and re.search(rejection, diagnostic, re.I):
@@ -2467,6 +2526,25 @@ def session_output_tails(stdout_path: Path, stderr_path: Path) -> tuple[str, str
         except OSError:
             pieces.append("")
     return pieces[0], pieces[1]
+
+
+def session_has_assistant_output(path: Path) -> bool:
+    # Inspect the whole startup stream: an earlier assistant line may have
+    # scrolled beyond the diagnostic tail by the time the child exits.
+    try:
+        with path.open(encoding="utf-8", errors="replace") as source:
+            for line in source:
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(row, dict) and row.get("type") == "assistant":
+                    return True
+    except FileNotFoundError:
+        pass
+    except OSError:
+        return True  # unknown output cannot prove an unused startup
+    return False
 
 
 def resolve_session_binary(path: Path) -> Path:
@@ -2585,6 +2663,8 @@ class ResidentSupervisor:
         self.lock_record = lock_record
         self.stdout_path = stdout_path
         self.stderr_path = stderr_path
+        self.started_monotonic = deps.monotonic()
+        _configure_status_export(storage, deps, state)
         cached_stop = state.get("remote_stop")
         if isinstance(cached_stop, Mapping):
             cached_state = str(cached_stop.get("state", "NETWORK_UNCERTAIN"))
@@ -2671,7 +2751,11 @@ class ResidentSupervisor:
         # do useful work. Explicit rejection is terminal, even if CLI returns 0
         # or a stand-down request arrived at the same time: no retry loop.
         try:
-            model_startup_check(*session_output_tails(self.stdout_path, self.stderr_path))
+            launched = self.lock_record.get("activation_spawn_epoch_s", self.lock_record.get("launch_epoch_s", 0))
+            elapsed = max(now.timestamp() - launched, self.deps.monotonic() - self.started_monotonic)
+            model_startup_check(*session_output_tails(self.stdout_path, self.stderr_path),
+                                elapsed_s=elapsed, assistant_output=(elapsed <= MODEL_STARTUP_WINDOW_S
+                                    and session_has_assistant_output(self.stdout_path)))
         except ModelStartupError as exc:
             self.state["model_startup_hold"] = str(exc)
             if requested:
@@ -3068,6 +3152,7 @@ def start_session(
     binary_version = deps.version_probe(binary)
     if state.get("model_startup_hold"):
         raise ModelStartupError(str(state["model_startup_hold"]))
+    _status_export_notice(storage, deps, state)
     prompt = render_prompt(storage, state, now)
     attempt_dir = storage.root / "attempts" / activation_id
     storage.mkdir(attempt_dir)
@@ -3094,10 +3179,6 @@ def start_session(
     # Re-read every plan/desk source immediately before spawn; never rely on
     # the tick's pre-fork observation after binary/version/prompt work.
     fence = _launch_fence(storage, deps, state)
-    if fence is None and storage.status_exporter is not None:
-        reason = storage.status_exporter.launch_hold()
-        if reason:
-            fence = Decision("HOLD_UNSAFE", reason)
     if fence is not None:
         fence = _surface_unsafe_decision(storage, deps, state, fence, deps.wall_now().astimezone())
         transition(storage, state, fence.state, fence.reason, deps.wall_now().astimezone())
@@ -3118,7 +3199,9 @@ def start_session(
         exit_code = child.poll()
         if exit_code is not None:
             storage.unlink(storage.root / "magistrate.lock")
-            model_startup_check(*session_output_tails(stdout_path, stderr_path))
+            model_startup_check(*session_output_tails(stdout_path, stderr_path),
+                elapsed_s=deps.wall_now().timestamp() - activation_spawn_epoch_s,
+                assistant_output=session_has_assistant_output(stdout_path))
             raise RuntimeError(f"session exited during startup exit={exit_code}")
         deps.sleep(0.1)
     if process is None:
@@ -3333,6 +3416,7 @@ def service_lock(storage: Storage) -> Iterable[int | None]:
 
 
 def tick(storage: Storage, deps: Dependencies, *, dry_run: bool = False) -> Decision:
+    _configure_status_export(storage, deps, load_state(storage))
     try:
         return _tick(storage, deps, dry_run=dry_run)
     finally:
@@ -3501,7 +3585,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 3
     storage = Storage(args.custody_root, dry_run=args.dry_run)
     deps = real_dependencies()
-    storage.status_exporter = StatusExporter(storage, REPO_ROOT)
+    try:
+        storage.status_exporter = StatusExporter(storage, REPO_ROOT)
+    except ValueError:
+        # A broken export configuration cannot remove the magistrate channel.
+        storage.status_export_error = "status_export: MAGISTRATE_WATCHDOG_STATUS_HOST missing or invalid"
     if args.dry_run:
         storage.mkdir(storage.root)
         storage.would_write.append(f"open_and_flock {storage.root / 'watchdog.lock'}")
