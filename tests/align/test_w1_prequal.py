@@ -31,10 +31,17 @@ class _Ctx(unittest.TestCase):
 
     def setUp(self):
         from scripts import align_v4_session
-        from tests.align.test_v4_arm_watchdog_check import acceptance
-        watchdog = mock.patch.object(align_v4_session, 'watchdog_acceptance', side_effect=acceptance)
+        # Harness probes must supply their own explicit synthetic seam. Fail
+        # before any real LaunchAgents read if that adapter is missing.
+        watchdog = mock.patch.object(align_v4_session, 'watchdog_acceptance',
+                                     side_effect=AssertionError('PREQUAL omitted synthetic watchdog'))
         watchdog.start()
         self.addCleanup(watchdog.stop)
+        for name in ('frequency_word_preflight', 'frequency_word_pre_t0'):
+            frequency = mock.patch.object(align_v4_session, name,
+                side_effect=AssertionError('PREQUAL omitted synthetic frequency'))
+            frequency.start()
+            self.addCleanup(frequency.stop)
         self.tmp = Path(tempfile.mkdtemp(prefix='w1pq-test-'))
         self.addCleanup(shutil.rmtree, self.tmp, True)
         env = mock.patch.dict(os.environ, {'JOULEWISE_HOST_STATE_DIR': str(self.tmp / 'host-state')})
@@ -51,6 +58,27 @@ class _Ctx(unittest.TestCase):
 
 
 class ArmCliTests(_Ctx):
+    def test_synthetic_watchdog_holding_refuses_with_w1_reason(self):
+        import time
+        now = time.time()
+        base, session, disk = wp.arm_fixture(self.ctx, 'watchdog-hold', now=now)
+        packet = wp.valid_packet(self.ctx, base, now)
+        control = wp.run_install(self.ctx, session, disk, packet, host=wp.FakeHost(now=now), now=now)
+        self.assertEqual(control['rc'], 0, control['stderr'])
+        self.assertTrue(control['arm']['admitted'])
+        self.assertEqual(len(control['installer_calls']), 1)
+        host = wp.FakeHost(now=now, watchdog_state='HOLD_PLAN_MALFORMED')
+        row = wp.run_install(self.ctx, session, disk, packet, host=host, now=now)
+        self.assertNotEqual(row['rc'], 0)
+        self.assertFalse(row['arm']['admitted'])
+        self.assertIn('watchdog_acceptance: pre_install: HOLD_PLAN_MALFORMED:',
+                      '\n'.join(row['arm']['reasons']))
+        self.assertEqual(row['installer_calls'], [])
+        with mock.patch.object(wp, 'FakeHost', return_value=host):
+            arm = wp._arm_on_records(self.ctx, base / 'measurement', packet, now=now)
+        self.assertFalse(arm['admitted'])
+        self.assertIn('watchdog_acceptance: pre_install: HOLD_PLAN_MALFORMED:', '\n'.join(arm['reasons']))
+
     def test_production_cli_admits_the_control_and_refuses_every_fault_before_the_installer(self):
         row = self.probe('arm-cli')
         self.assertEqual(row['status'], wp.PASS, row['detail'])

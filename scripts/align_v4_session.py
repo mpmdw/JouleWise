@@ -177,10 +177,23 @@ def host_privilege_preflight(*, runner=None):
     return record
 
 
+# Three supervisor polls, equal to the shortest standdown phase gap (30 s).
+# magistrate_watchdog.py:99-104, 128, 440, 504: the process/remote probes
+# each allow 10 s; 30 s allows both remote transports plus one local probe.
 WATCHDOG_TIMEOUT_S = 30
-WATCHDOG_ADMITTED = frozenset({'FENCED', 'ACTIVE', 'LAUNCHING', 'BACKOFF', 'BACKOFF_USAGE', 'STOPPED',
+WATCHDOG_PLAN_LEAD_S = 180  # magistrate_watchdog.py:104, plan_span_active:1328
+# Closed output vocabulary: Decision constructors (_decide:2197-2408,
+# _surface_unsafe_decision:2563), _unsafe_state:2411-2434, computed
+# STANDDOWN phases:1444-1451/BACKOFF:2400-2405, supervisor IDLE:2887.
+WATCHDOG_STATES = frozenset({
+    'ACTIVE', 'FENCED', 'LAUNCHING', 'IDLE', 'BACKOFF', 'BACKOFF_USAGE', 'STOPPED',
+    'STANDDOWN_REQUEST', 'STANDDOWN_TERM', 'STANDDOWN_KILL',
+    'CLOCK_UNCERTAIN', 'NETWORK_UNCERTAIN', 'STRANDED', 'HOLD_CENSUS', 'HOLD_UNSAFE',
+    'HOLD_PLAN_UNREADABLE', 'HOLD_PLAN_MALFORMED', 'HOLD_PLIST_UNREADABLE', 'HOLD_CONFLICT',
+    'HOLD_LOCK', 'HOLD_PROCESS_TABLE', 'HOLD_DESK_FENCE', 'HOLD_STATUS_EXPORT',
+    'HOLD_MODEL_CHECK', 'HOLD_MODEL_REJECTED'})
+WATCHDOG_ADMITTED = frozenset({'FENCED', 'ACTIVE', 'LAUNCHING', 'IDLE', 'BACKOFF', 'BACKOFF_USAGE', 'STOPPED',
                               'STANDDOWN_REQUEST', 'STANDDOWN_TERM', 'STANDDOWN_KILL'})
-WATCHDOG_POST_ADMITTED = WATCHDOG_ADMITTED - {'LAUNCHING', 'BACKOFF', 'BACKOFF_USAGE', 'STOPPED'}
 
 
 def watchdog_acceptance(*, phase, runner=None, plist_path=None):
@@ -188,12 +201,13 @@ def watchdog_acceptance(*, phase, runner=None, plist_path=None):
 
     Successful dry-run output names no parsed plan (watchdog main); absence of
     reader/fence errors is the strongest available evidence, not proof of read.
-    ACTIVE is possible before t0-180 even with installed plists: watchdog
-    plan_span_active/decide. Within the span it yields FENCED/STANDDOWN_*.
+    Before t0-180 the installed plan has no fence yet; ordinary idle/launch/
+    backoff states admit too (lane ruling B). STOPPED admits because the stop
+    switch prevents relaunch after the span (_decide:2392-2393); record it.
     """
     started = time.monotonic_ns()
     record = {'ok': False, 'argv': None, 'state': 'UNAVAILABLE', 'reason': None,
-              'plan_read_proven': False}
+              'plan_read_proven': False, 'stopped': False}
     try:
         path = Path(plist_path) if plist_path is not None else Path.home() / 'Library/LaunchAgents/com.joulewise.magistrate.plist'
         document = plistlib.loads(path.read_bytes())
@@ -233,9 +247,8 @@ def watchdog_acceptance(*, phase, runner=None, plist_path=None):
         match = re.fullmatch(r'decision=([A-Z][A-Z0-9_]*) reason=(\S[^\r\n]*)', lines[0]) if len(lines) == 1 else None
         if match is None:
             raise ValueError('expected one well-formed decision= line')
-        record.update(state=match[1], reason=match[2])
-        allowed = WATCHDOG_POST_ADMITTED if phase == 'post_install' else WATCHDOG_ADMITTED
-        record['ok'] = (record['state'] in allowed and not any(text in record['reason'] for text in
+        record.update(state=match[1], reason=match[2], stopped=match[1] == 'STOPPED')
+        record['ok'] = (record['state'] in WATCHDOG_ADMITTED and not any(text in record['reason'] for text in
             ('night_plan_unreadable', 'night_plan_malformed', 'installed_agent_fence')))
     except Exception as exc:  # malformed plist/encoding or any failed read/run is a refusal
         record['reason'] = f'{type(exc).__name__}: {exc}'
@@ -1272,19 +1285,33 @@ def _termination_handlers():
     return closing, restore
 
 
-def _watchdog_post_install(state, dwell, *, runner=None, plist_path=None, check=None, closing=None):
+def _watchdog_post_install(state, dwell, *, runner=None, plist_path=None, check=None, closing=None, now=None):
     """Isolated W-1 post-install step (one call site); refusal removes this arm's jobs.
 
     The enclosing install's existing exception path restores any High Power
     it entered, under its still-held host lock and termination shield.
     """
     from joulewise.night_agent_install import LABELS
+    quiet = dwell['quiet_dwell']
+    quiet['watchdog_post_install_start_ns'] = time.monotonic_ns()
+    result = {'ok': False, 'state': 'UNAVAILABLE', 'reason': None, 'plan_read_proven': False}
     try:
         result = (check or watchdog_acceptance)(phase='post_install', runner=runner, plist_path=plist_path)
+        result['stopped'] = result['state'] == 'STOPPED'
+        if result['ok']:
+            if result['state'] == 'FENCED' or result['state'].startswith('STANDDOWN_'):
+                result['evidence_class'] = 'fence_observed'
+            else:
+                t0 = pilot.h.read(state['plan_path']).get('t0_epoch_s')
+                if not pilot.h.finite(t0):
+                    raise ValueError('installed plan t0_epoch_s unavailable')
+                result.update(evidence_class='installed_plan_parsed_no_fence_yet',
+                              seconds_until_span_begins=max(0.0, t0 - WATCHDOG_PLAN_LEAD_S - (now or time.time)()))
     except BaseException as exc:  # a signal after install must undo the jobs too
-        result = {'ok': False, 'state': 'UNAVAILABLE', 'reason': f'{type(exc).__name__}: {exc}'}
-    dwell['quiet_dwell']['watchdog_post_install_end_ns'] = time.monotonic_ns()
-    dwell['quiet_dwell']['watchdog_post_install'] = result
+        result.update(ok=False, state='UNAVAILABLE', reason=f'{type(exc).__name__}: {exc}')
+    finally:
+        quiet['watchdog_post_install_end_ns'] = time.monotonic_ns()
+        quiet['watchdog_post_install'] = result
     if result['ok']:
         return
     if closing is not None:
@@ -1425,7 +1452,7 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
         dwell['quiet_dwell']['installer_end_ns'] = time.monotonic_ns()
         if isinstance(installed, dict) and installed.get('exit_code') == 0:
             _watchdog_post_install(state, dwell, runner=runner, plist_path=watchdog_plist, check=watchdog_check,
-                                   closing=watchdog_undo_closing)
+                                   closing=watchdog_undo_closing, now=now)
         return installed
     finally:
         dwell['quiet_dwell'].setdefault('installer_end_ns', time.monotonic_ns())

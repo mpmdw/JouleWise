@@ -1,5 +1,9 @@
 """W-1/W-2: synthetic plists and injected commands only; no host probes."""
 from contextlib import ExitStack
+import ast
+import contextlib
+import datetime as dt
+import io
 import json
 import os
 from pathlib import Path
@@ -11,6 +15,7 @@ from unittest.mock import Mock, patch
 
 from joulewise.align.apple import powermode
 from scripts import align_v4_session as session
+from tests import test_magistrate_watchdog as watchdog_fixtures
 
 
 def acceptance(*, phase, **_):
@@ -52,7 +57,9 @@ class WatchdogTests(unittest.TestCase):
         self.assertEqual(options['cwd'], self.document['WorkingDirectory'])
         self.assertEqual(options['env']['PATH'], '/synthetic/bin')
         self.assertGreater(options['timeout'], 0)
-        self.assertLessEqual(options['timeout'], 60)
+        self.assertEqual(options['timeout'], session.WATCHDOG_TIMEOUT_S)
+        self.assertEqual(session.WATCHDOG_TIMEOUT_S, 3 * watchdog_fixtures.wd.SUPERVISOR_POLL_S)
+        self.assertEqual(session.WATCHDOG_PLAN_LEAD_S, watchdog_fixtures.wd.PLAN_LEAD_S)
         self.assertEqual(record['argv'], argv)
         self.assertEqual(record['state'], 'LAUNCHING')
         self.assertGreaterEqual(record['elapsed_s'], 0)
@@ -84,12 +91,41 @@ class WatchdogTests(unittest.TestCase):
             with self.subTest(output=output):
                 self.run.return_value = subprocess.CompletedProcess([], 0, output, '')
                 self.assertFalse(self.check()['ok'])
+                self.assertFalse(self.check('post_install')['ok'])
         self.run.return_value = subprocess.CompletedProcess([], 1, 'decision=ACTIVE reason=ok\n', '')
         self.assertFalse(self.check()['ok'])
         self.run.side_effect = subprocess.TimeoutExpired('synthetic', 30)
         self.assertFalse(self.check()['ok'])
+        self.assertFalse(self.check('post_install')['ok'])
 
-    def test_state_policy_is_closed_and_post_install_requires_fence_or_owned_active(self):
+    def test_every_declared_state_is_classified_in_both_phases(self):
+        wd = watchdog_fixtures.wd
+        tree = ast.parse(Path(wd.__file__).read_text())
+        # Literal Decision constructors, the reason-to-HOLD mapper, and the
+        # two computed constructors; IDLE is emitted by the supervisor.
+        declared = {node.args[0].value for node in ast.walk(tree)
+                    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                    and node.func.id == 'Decision' and node.args
+                    and isinstance(node.args[0], ast.Constant)}
+        unsafe = next(node for node in tree.body if isinstance(node, ast.FunctionDef)
+                      and node.name == '_unsafe_state')
+        declared |= {node.value for node in ast.walk(unsafe)
+                     if isinstance(node, ast.Constant) and isinstance(node.value, str)
+                     and node.value.startswith('HOLD_')}
+        declared |= {'STANDDOWN_REQUEST', 'STANDDOWN_TERM', 'STANDDOWN_KILL',
+                     'BACKOFF', 'BACKOFF_USAGE', 'IDLE'}
+        self.assertEqual(session.WATCHDOG_STATES, declared)
+        admitted = {'ACTIVE', 'FENCED', 'STANDDOWN_REQUEST', 'STANDDOWN_TERM', 'STANDDOWN_KILL',
+                    'LAUNCHING', 'IDLE', 'BACKOFF', 'BACKOFF_USAGE', 'STOPPED'}
+        for phase in ('pre_install', 'post_install'):
+            for state in sorted(declared):
+                with self.subTest(phase=phase, state=state):
+                    self.run.return_value = subprocess.CompletedProcess([], 0, f'decision={state} reason=x\n', '')
+                    record = self.check(phase)
+                    self.assertEqual(record['ok'], state in admitted)
+                    self.assertEqual(record['stopped'], state == 'STOPPED')
+
+    def test_unknown_words_refuse_and_pre_span_states_admit_after_install(self):
         for state in ('HOLD_PLAN_UNREADABLE', 'HOLD_CENSUS', 'STRANDED', 'CLOCK_UNCERTAIN',
                       'NETWORK_UNCERTAIN', 'HOLD_INVENTED', 'STANDDOWN_INVENTED'):
             with self.subTest(state=state):
@@ -98,10 +134,10 @@ class WatchdogTests(unittest.TestCase):
         for state in ('FENCED', 'STANDDOWN_REQUEST', 'STANDDOWN_TERM', 'STANDDOWN_KILL', 'ACTIVE'):
             self.run.return_value = subprocess.CompletedProcess([], 0, f'decision={state} reason=x\n', '')
             self.assertTrue(self.check('post_install')['ok'], state)
-        for state in ('LAUNCHING', 'BACKOFF', 'BACKOFF_USAGE', 'STOPPED'):
+        for state in ('LAUNCHING', 'IDLE', 'BACKOFF', 'BACKOFF_USAGE', 'STOPPED'):
             self.run.return_value = subprocess.CompletedProcess([], 0, f'decision={state} reason=x\n', '')
             self.assertTrue(self.check()['ok'], state)
-            self.assertFalse(self.check('post_install')['ok'], state)
+            self.assertTrue(self.check('post_install')['ok'], state)
 
     def test_explicit_custody_argument_is_preserved_and_no_mutating_form_is_built(self):
         self.document['ProgramArguments'] += ['--custody-root', str(self.root / 'explicit')]
@@ -122,6 +158,69 @@ class WatchdogTests(unittest.TestCase):
         with patch.object(session.plistlib, 'loads', side_effect=RuntimeError('bad XML date')):
             self.assertFalse(self.check()['ok'])
         self.run.assert_not_called()
+
+
+class RemoteProbeTests(watchdog_fixtures.WatchdogTestCase):
+    def test_helper_argv_and_environment_cannot_enable_in_span_probe(self):
+        wd = watchdog_fixtures.wd
+        plan = self.make_plan()
+        agents = self.temp / 'home/Library/LaunchAgents'
+        agents.mkdir(parents=True)
+        for label in ('com.joulewise.night', 'com.joulewise.night.deadman'):
+            (agents / f'{label}.plist').write_bytes(plistlib.dumps({
+                'ProgramArguments': ['/synthetic/run_night.py', '--plan',
+                                     str(Path(plan.custody_root) / 'night_plan.json')]}))
+        plist = agents / 'com.joulewise.magistrate.plist'
+        environment = {'MAGISTRATE_WATCHDOG_CUSTODY_ROOT': str(self.harness.storage.root),
+                       'MAGISTRATE_WATCHDOG_STATUS_HOST': 'synthetic', 'GIT_TERMINAL_PROMPT': '1'}
+        plist.write_bytes(plistlib.dumps({'Label': 'com.joulewise.magistrate',
+            'ProgramArguments': ['/synthetic/python3', '/synthetic/magistrate_watchdog.py'],
+            'WorkingDirectory': str(self.temp), 'EnvironmentVariables': environment}))
+        self.harness.deps.git_probe = wd.remote_stop_probe
+
+        def runner(argv, **kwargs):
+            self.assertEqual(argv[2:], ['--dry-run', '--custody-root', str(self.harness.storage.root)])
+            out = io.StringIO()
+            with patch.dict(os.environ, kwargs['env'], clear=True), contextlib.redirect_stdout(out):
+                rc = wd.main(argv[2:])
+            return subprocess.CompletedProcess(argv, rc, out.getvalue(), '')
+
+        with ExitStack() as stack:
+            # The installed plists alone supply the plan (no custody glob).
+            stack.enter_context(patch.object(wd.Storage, 'glob_plans', return_value=[]))
+            stack.enter_context(patch.object(wd, 'real_dependencies', return_value=self.harness.deps))
+            stack.enter_context(patch.object(wd, 'current_boot_id', return_value='synthetic-boot'))
+            network = stack.enter_context(patch.object(wd.subprocess, 'run',
+                return_value=subprocess.CompletedProcess([], 0, 'synthetic stop', '')))
+            transport = stack.enter_context(patch.object(wd.subprocess, 'Popen',
+                side_effect=AssertionError('status transport forbidden')))
+            fork = stack.enter_context(patch.object(wd.os, 'fork', side_effect=AssertionError('fork forbidden')))
+            for offset in (-wd.PLAN_LEAD_S, -1, 0, 1):
+                with self.subTest(offset=offset):
+                    self.harness.clock.wall = dt.datetime.fromtimestamp(plan.t0_epoch_s + offset,
+                                                                        tz=self.local_tz)
+                    storage = wd.Storage(self.harness.storage.root, dry_run=True)
+                    state = wd.initial_state()
+                    self.assertFalse(wd._remote_probe_allowed(storage, self.harness.deps, state))
+                    self.assertEqual(wd._probe_remote_stop(storage, self.harness.deps, state).state, 'NOT_PROBED')
+                    record = session.watchdog_acceptance(phase='post_install', runner=runner, plist_path=plist)
+                    self.assertTrue(record['ok'], record)
+                    self.assertEqual(record['state'], 'FENCED')
+                    network.assert_not_called()
+                    transport.assert_not_called()
+                    fork.assert_not_called()
+            # The same installed plan before t0-180 DOES permit remote Git.
+            self.harness.clock.wall = dt.datetime.fromtimestamp(plan.t0_epoch_s - wd.PLAN_LEAD_S - 1,
+                                                                tz=self.local_tz)
+            self.assertTrue(wd._remote_probe_allowed(storage, self.harness.deps, wd.initial_state()))
+            record = session.watchdog_acceptance(phase='post_install', runner=runner, plist_path=plist)
+            self.assertTrue(record['ok'], record)
+            self.assertEqual(record['state'], 'STOPPED')
+            self.assertEqual(network.call_count, 2)
+            self.assertTrue(all('ls-remote' in call.args[0] for call in network.call_args_list))
+            fork.assert_not_called()
+            transport.assert_not_called()
+        self.assertFalse((self.harness.storage.root / 'state.json').exists())
 
 
 class PrivilegeTests(unittest.TestCase):
@@ -250,6 +349,8 @@ class ArmIntegrationTests(unittest.TestCase):
         self.events = []
         self.state = {'measurement_root': str(self.root), 'plan_path': str(self.root / 'night_plan.json'),
                       'inputs': {'custody_root': str(self.root / 'custody')}}
+        self.t0 = session.time.time() + 3600
+        Path(self.state['plan_path']).write_text(json.dumps({'t0_epoch_s': self.t0}))
         self.plan = {'runtime_requirements': {'ac_powermode': 0}}
         session.pilot.h.write(self.session / 'session.json', self.state)
         self.run = Mock(side_effect=self.command)
@@ -304,7 +405,14 @@ class ArmIntegrationTests(unittest.TestCase):
     def dwell(self):
         return json.loads((self.session / 'staging/v4-arm-001.dwell.json').read_bytes())['quiet_dwell']
 
-    def test_post_install_check_has_its_own_monotonic_endpoint(self):
+    def assert_stamps(self):
+        dwell = self.dwell()
+        self.assertLessEqual(dwell['start_ns'], dwell['installer_end_ns'])
+        self.assertLessEqual(dwell['installer_end_ns'], dwell['watchdog_post_install_start_ns'])
+        self.assertLessEqual(dwell['watchdog_post_install_start_ns'], dwell['watchdog_post_install_end_ns'])
+        self.check.assert_called_once()
+
+    def test_post_install_check_has_both_monotonic_stamps(self):
         self.install()
         self.assertIn('post_install', self.events)
         self.assertLess(self.events.index('stamp'), self.events.index('install'))
@@ -312,6 +420,46 @@ class ArmIntegrationTests(unittest.TestCase):
         dwell = self.dwell()
         self.assertLessEqual(dwell['installer_end_ns'], dwell['watchdog_post_install_end_ns'])
         self.assertTrue(dwell['watchdog_post_install']['ok'])
+        self.assert_stamps()
+        self.assertEqual(dwell['watchdog_post_install']['evidence_class'], 'installed_plan_parsed_no_fence_yet')
+        self.assertAlmostEqual(dwell['watchdog_post_install']['seconds_until_span_begins'], 3420, delta=2)
+
+    def test_fence_evidence_is_distinct_from_pre_span_evidence(self):
+        self.check.side_effect = lambda **kw: dict(acceptance(**kw), state='STANDDOWN_REQUEST')
+        self.install()
+        self.assertEqual(self.dwell()['watchdog_post_install']['evidence_class'], 'fence_observed')
+        self.assert_stamps()
+
+    def test_timeout_is_bounded_refusal_with_undo_and_both_stamps(self):
+        plist = self.root / 'magistrate.plist'
+        plist.write_bytes(plistlib.dumps({'Label': 'com.joulewise.magistrate',
+            'ProgramArguments': ['/synthetic/python3', '/synthetic/magistrate_watchdog.py'],
+            'WorkingDirectory': str(self.root),
+            'EnvironmentVariables': {'MAGISTRATE_WATCHDOG_CUSTODY_ROOT': str(self.root / 'watchdog')}}))
+
+        def check(**kwargs):
+            return session.watchdog_acceptance(**dict(kwargs, plist_path=plist))
+
+        def command(argv, **kwargs):
+            if '--dry-run' in argv:
+                self.assertEqual(kwargs['timeout'], session.WATCHDOG_TIMEOUT_S)
+                raise subprocess.TimeoutExpired(argv, kwargs['timeout'])
+            return self.command(argv, **kwargs)
+
+        self.check.side_effect = check
+        self.run.side_effect = command
+        with self.assertRaisesRegex(ValueError, 'TimeoutExpired:.*install undone'):
+            self.install(high=True)
+        self.assertTrue(any('--uninstall' in event for event in self.events))
+        self.restore.assert_called_once()
+        self.assert_stamps()
+
+    def test_post_check_signal_still_records_both_stamps_and_undoes(self):
+        self.check.side_effect = KeyboardInterrupt('synthetic signal')
+        with self.assertRaisesRegex(ValueError, 'KeyboardInterrupt:.*install undone'):
+            self.install()
+        self.assertTrue(any('--uninstall' in event for event in self.events))
+        self.assert_stamps()
 
     def test_post_install_refusal_uninstalls_both_labels_and_restores(self):
         self.check.side_effect = lambda **kw: dict(acceptance(**kw), ok=False,
@@ -324,6 +472,7 @@ class ArmIntegrationTests(unittest.TestCase):
                                 for event in self.events))
         self.restore.assert_called_once()
         self.assertFalse(self.dwell()['watchdog_post_install']['ok'])
+        self.assert_stamps()
 
     def test_failed_undo_names_remaining_job_and_still_restores(self):
         self.check.side_effect = lambda **kw: dict(acceptance(**kw), ok=False,
@@ -339,6 +488,7 @@ class ArmIntegrationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'install_undo_failed.*com.joulewise.night.deadman'):
             self.install(high=True)
         self.restore.assert_called_once()
+        self.assert_stamps()
 
     def test_post_check_exception_still_undoes_the_install(self):
         self.check.side_effect = OSError('synthetic watchdog failed')
@@ -346,6 +496,7 @@ class ArmIntegrationTests(unittest.TestCase):
             self.install()
         self.assertTrue(any('--uninstall' in event for event in self.events))
         self.assertFalse(self.dwell()['watchdog_post_install']['ok'])
+        self.assert_stamps()
 
     def test_uninstaller_failure_is_loud_even_if_labels_are_absent(self):
         self.check.side_effect = lambda **kw: dict(acceptance(**kw), ok=False)
@@ -359,6 +510,7 @@ class ArmIntegrationTests(unittest.TestCase):
         self.run.side_effect = command
         with self.assertRaisesRegex(ValueError, 'install_undo_failed.*com.joulewise.night.deadman'):
             self.install()
+        self.assert_stamps()
 
     def test_failed_host_restore_is_reported_loudly(self):
         self.check.side_effect = lambda **kw: dict(acceptance(**kw), ok=False)
