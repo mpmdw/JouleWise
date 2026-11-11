@@ -91,7 +91,7 @@ We treat the instrument's limits as results. Every reported phase energy carries
 The registrations fixed the counting and exclusion rules, estimators and specified fixed sentences before the
 data they govern. Dated errata, interpretations and analysis-code changes are disclosed in Section 5.5.
 The draft's additional branch prose was written before release, at commit `a1a5029fb`, after primary collection;
-the blind draft is tagged `paper1/blind-draft-2026-10-27`. Everything changed after the primary release was changed by seats that could know the primary block's result. On 10 and 11 November 2026, statements of fact about the method and several branch glosses were corrected (`CORRECTIONS-2026-11-10.md`). On 11 November 2026, the sections were reordered with their text unchanged and the contingent subtitle was removed (`OUTLINE-MAP-2026-11-11.md`), and Section 8 was rewritten from the project record. Energies stayed hidden until a recorded release;
+the blind draft is tagged `paper1/blind-draft-2026-10-27`. Everything changed after the primary release was changed by seats that could know the primary block's result. On 10 and 11 November 2026, statements of fact about the method and several branch glosses were corrected (`CORRECTIONS-2026-11-10.md`). On 11 November 2026, the sections were reordered with their text unchanged and the contingent subtitle was removed (`OUTLINE-MAP-2026-11-11.md`), Section 8 was rewritten from the project record, and the primary-block placeholders that the re-derivation table covers were filled from it, with the result sentences the fill required (`REDERIVATION.md`). Energies stayed hidden until a recorded release;
 the independent recomputation uses recorded collection-time judgments as inputs (Section 5).
 <!-- FACT H03: R2P P3/P5/P7; RL-1/RL-5; LEAN-COVERAGE-AUDIT.md §4. -->
 
@@ -698,8 +698,11 @@ LEAN-COVERAGE-AUDIT.md §§2-4. No agreement or completion verdict is asserted h
 
 ## 6. Results I, instrument validation: phase energy, floors and contrasts
 
-<!-- TEMPLATE. Every value below is a placeholder. Fill only from the issued artifacts named in
-fill_index.md, after the release event of the block concerned. Keep one branch of each group. -->
+<!-- Primary-block values below were filled on 2026-11-11 (RL-24 seat 12) from
+docs/analysis/b5/rederivation.tsv at 0b8763f0a, the RL-43 print authority, where that table has a row;
+docs/paper/paper1/fill_check_b5.py checks each one. Remaining placeholders are pending (see
+docs/run_reports/2026-11-11-p1-seat12.md). Fill only from the issued artifacts named in fill_index.md,
+after the release event of the block concerned. Keep one branch of each group. -->
 
 Every phase energy in this section rests on sampler timing; phase attribution was not checked by an independent
 measuring instrument (Section 9). Every number is conditional on sessions that passed the registered
@@ -716,18 +719,29 @@ that removed them and their positions in the session, so that a reader can see w
 
 | Cell | Kept repeats n_r | Kept quads n_b | Removed units (family, position) |
 |---|---|---|---|
-| 1.7B decode | {{FILL: P1-B5-NR-1p7B-decode \| kept repeats}} | {{FILL: P1-B5-NB-1p7B-decode \| kept null quads}} | {{FILL: P1-B5-RM-1p7B-decode \| removed units}} |
-| 1.7B prefill (2,048) | {{FILL: P1-B5-NR-1p7B-prefill \| kept repeats}} | {{FILL: P1-B5-NB-1p7B-prefill \| kept null quads}} | {{FILL: P1-B5-RM-1p7B-prefill \| removed units}} |
-| 8B decode | {{FILL: P1-B5-NR-8B-decode \| kept repeats}} | {{FILL: P1-B5-NB-8B-decode \| kept null quads}} | {{FILL: P1-B5-RM-8B-decode \| removed units}} |
-| 8B prefill (2,048) | {{FILL: P1-B5-NR-8B-prefill \| kept repeats}} | {{FILL: P1-B5-NB-8B-prefill \| kept null quads}} | {{FILL: P1-B5-RM-8B-prefill \| removed units}} |
-| Contrast, decode | — | {{FILL: P1-B5-NQ-decode \| kept contrast quads}} | {{FILL: P1-B5-RM-ctr-decode \| removed quads}} |
-| Contrast, prefill (2,048) | — | {{FILL: P1-B5-NQ-prefill \| kept contrast quads}} | {{FILL: P1-B5-RM-ctr-prefill \| removed quads}} |
+| 1.7B decode | 10 | 8 | {{FILL: P1-B5-RM-1p7B-decode \| removed units}} |
+| 1.7B prefill (2,048) | 9 | 8 | {{FILL: P1-B5-RM-1p7B-prefill \| removed units}} |
+| 8B decode | 7 | 7 | {{FILL: P1-B5-RM-8B-decode \| removed units}} |
+| 8B prefill (2,048) | 9 | 6 | {{FILL: P1-B5-RM-8B-prefill \| removed units}} |
+| Contrast, decode | — | 6 | {{FILL: P1-B5-RM-ctr-decode \| removed quads}} |
+| Contrast, prefill (2,048) | — | 5 | {{FILL: P1-B5-RM-ctr-prefill \| removed quads}} |
 
 *Table 1. Kept and removed units per target cell in the primary block.*
 
-**[BRANCH 5.1.a — a pack ended without a claim-usable session]** The {{FILL: P1-B5-NOPACK | name of each pack with no claim-usable session}} pack ended with no session that the registered rules allow to be analysed;
-its cells and any contrast that depends on it are printed as unavailable with the reason
-{{FILL: P1-B5-NOPACK-REASON | registered refusal or end-state reason}}. **[END BRANCH 5.1]**
+<!-- B5 FILL (seat 12): RL-4 (v). Ledger rows 11-14, 181-183, 223-231, 236-237, 432-433. -->
+The registered exclusion rules removed 9 of the 20 planned contrast quads, keeping 6 of 10 for decode and 5 of
+10 for 2,048-token prefill; the prefill contrast therefore rests on the registered minimum of 5 quads. A
+removed member removes its whole quad, so every removal takes both models' runs alike, but the members that
+triggered removal were not balanced: 8 of the 11 were on the 8B side and 3 on the 1.7B side, and all 4 decode
+removals were triggered by an 8B member. Contention (an outside process above 0.05 CPU-s/s in a 10 s interval
+overlapping the request) fired on 5 triggering members on the 8B side and 1 on the 1.7B side, an aborted idle
+admission on 2 and 2, and an unbounded clock anchor on 1, on the 8B side. *Exploratory, derived after release:*
+one reading is exposure, since an 8B request runs longer (about 3.3 times as long in decode and 4.3 times in
+prefill, from the independent recomputation only), so a background process at a fixed rate overlaps 8B requests
+more often. This reading is not established.
+
+<!-- BRANCH 5.1.a not selected (seat 12, 2026-11-11): every pack has one analysed, claim-usable attempt
+(ledger rows 509-512, from configs/analysis/b5/analysed_windows.json). The branch is deleted. -->
 
 {{FILL: P1-B5-HAZARDS | per session: hazard measurements at arm (naming any hazard whose probe returned no reading), counts of each physics-in-span code, battery-assist counts, and the battery-temperature rise per stage, from the disclosure producer}}
 
@@ -735,17 +749,18 @@ its cells and any contrast that depends on it are printed as unavailable with th
 
 | Model | Phase | Mean energy (J) | Interval (J) | Per token (J/token) | Attribution floor (J) |
 |---|---|---|---|---|---|
-| Qwen3-1.7B | decode | {{FILL: E_1p7B_decode_J_per_request \| mean}} | [{{FILL: E_1p7B_decode_lower_J \| lower}}, {{FILL: E_1p7B_decode_upper_J \| upper}}] | {{FILL: E_1p7B_decode_J_per_token \| per output token}} | {{FILL: P1-B5-AF-1p7B-decode \| attribution floor}} |
-| Qwen3-1.7B | prefill (2,048) | {{FILL: E_1p7B_prefill_p2048_J_per_request \| mean}} | [{{FILL: E_1p7B_prefill_p2048_lower_J \| lower}}, {{FILL: E_1p7B_prefill_p2048_upper_J \| upper}}] | {{FILL: E_1p7B_prefill_p2048_J_per_token \| per prompt token}} | {{FILL: P1-B5-AF-1p7B-prefill \| attribution floor}} |
-| Qwen3-8B | decode | {{FILL: E_8B_decode_J_per_request \| mean}} | [{{FILL: E_8B_decode_lower_J \| lower}}, {{FILL: E_8B_decode_upper_J \| upper}}] | {{FILL: E_8B_decode_J_per_token \| per output token}} | {{FILL: P1-B5-AF-8B-decode \| attribution floor}} |
-| Qwen3-8B | prefill (2,048) | {{FILL: E_8B_prefill_p2048_J_per_request \| mean}} | [{{FILL: E_8B_prefill_p2048_lower_J \| lower}}, {{FILL: E_8B_prefill_p2048_upper_J \| upper}}] | {{FILL: E_8B_prefill_p2048_J_per_token \| per prompt token}} | {{FILL: P1-B5-AF-8B-prefill \| attribution floor}} |
+| Qwen3-1.7B | decode | 51.20643 | [48.92960, 53.48326] | 0.100013 | 2.12935 |
+| Qwen3-1.7B | prefill (2,048) | 26.25391 | [23.32742, 29.18040] | 0.0128193 | 2.72478 |
+| Qwen3-8B | decode | 198.36172 | [195.23985, 201.48359] | 0.387425 | 2.85109 |
+| Qwen3-8B | prefill (2,048) | 128.28329 | [125.19070, 131.37588] | 0.0626383 | 2.84206 |
 
 *Table 2. Reported gross phase energy per request on the processor-rail boundary (CPU + GPU + ANE as reported by
 `powermetrics`), primary block. Interval = m ± (h + B) (Section 4.3). The attribution floor is printed beside the
 cell and is not added to the interval. Decode per-token values divide by the 512 runtime-observed output tokens,
 511 of them generated in the decode phase. The two models were measured in separate sessions in a fixed order;
 their difference is not a comparison. The 42-token prefill of the decode workload is shorter than one power record
-and, as registered, is not reported.*
+and, as registered, is not reported. Phase attribution is reported without a measured instrument
+phase-accounting check.*
 
 Each row of Table 2 carries the fixed attribution-floor sentence of Section 4.4 with its own value of X, and the
 interval's three components: h, and the average first-kind timing bound, interpolation bound and drift term that
@@ -758,16 +773,17 @@ Labelled lines printed beside each cell, none of which replaces it:
 - *Without battery-assisted units:* {{FILL: P1-B5-BATT-LINE | per cell: mean and interval over units with no assisted run, with n_r, n_b and the count of assisted runs per stratum; "below the registered minimum of 5 units" where applicable}}
 - *Load-correlated exclusions not applied:* {{FILL: P1-B5-LOAD-LINE | per cell where any unit was removed by a thermal-pressure or outside-process code: the same estimator with those units restored, with n_r and n_b; or "no such removal"}}
 
-**[BRANCH 5.2.a — a target cell could not be computed]** The {{FILL: P1-B5-CELL-REFUSED | model and phase of each refused cell}} cell was not computed: {{FILL: P1-B5-CELL-REFUSED-REASON | registered refusal code and its plain-language reason}}. It is printed as unavailable; it is neither zero nor evidence about the phase's energy. **[END BRANCH 5.2]**
+<!-- BRANCH 5.2.a not selected (seat 12, 2026-11-11): all four target cells were computed (ledger rows
+133, 142, 151 and 160). The branch is deleted. -->
 
 ### 6.3 Detection floors
 
 | Model | Phase | Absolute floor (J) | Comparative floor (J) | Operative floor (J) | n (abs / cmp) |
 |---|---|---|---|---|---|
-| Qwen3-1.7B | decode | {{FILL: F_1p7B_decode_abs_J \| absolute operative floor}} | {{FILL: F_1p7B_decode_cmp_J \| comparative operative floor}} | {{FILL: F_1p7B_decode_operative_J \| larger of the two}} | {{FILL: P1-B5-FN-1p7B-decode \| n of each form}} |
-| Qwen3-1.7B | prefill (2,048) | {{FILL: F_1p7B_prefill_p2048_abs_J \| absolute}} | {{FILL: F_1p7B_prefill_p2048_cmp_J \| comparative}} | {{FILL: F_1p7B_prefill_p2048_operative_J \| operative}} | {{FILL: P1-B5-FN-1p7B-prefill \| n}} |
-| Qwen3-8B | decode | {{FILL: F_8B_decode_abs_J \| absolute}} | {{FILL: F_8B_decode_cmp_J \| comparative}} | {{FILL: F_8B_decode_operative_J \| operative}} | {{FILL: P1-B5-FN-8B-decode \| n}} |
-| Qwen3-8B | prefill (2,048) | {{FILL: F_8B_prefill_p2048_abs_J \| absolute}} | {{FILL: F_8B_prefill_p2048_cmp_J \| comparative}} | {{FILL: F_8B_prefill_p2048_operative_J \| operative}} | {{FILL: P1-B5-FN-8B-prefill \| n}} |
+| Qwen3-1.7B | decode | 5.76593 | {{FILL: F_1p7B_decode_cmp_J \| comparative operative floor}} | 5.76593 | {{FILL: P1-B5-FN-1p7B-decode \| n of each form}} |
+| Qwen3-1.7B | prefill (2,048) | 8.21484 | {{FILL: F_1p7B_prefill_p2048_cmp_J \| comparative}} | 8.21484 | {{FILL: P1-B5-FN-1p7B-prefill \| n}} |
+| Qwen3-8B | decode | 10.17807 | {{FILL: F_8B_decode_cmp_J \| comparative}} | 10.17807 | {{FILL: P1-B5-FN-8B-decode \| n}} |
+| Qwen3-8B | prefill (2,048) | 8.83026 | {{FILL: F_8B_prefill_p2048_cmp_J \| comparative}} | 8.83026 | {{FILL: P1-B5-FN-8B-prefill \| n}} |
 
 *Table 3. Detection floors, primary block (Section 4.5). Each absolute and comparative value includes its
 small-sample guard where n < 10, followed by the floor session's whole gross drift allowance; the operative
@@ -780,29 +796,28 @@ hardware or validate absolute scale.*
 
 | Model | Phase | R, absolute (corner ÷ point, J) | R, comparative (corner ÷ point, J) | R_cm, comparative |
 |---|---|---|---|---|
-| Qwen3-1.7B | decode | {{FILL: R_1p7B_decode_abs \| ratio}} ({{FILL: TERM_B_1p7B_decode_abs_J \| corner}} ÷ {{FILL: TERM_A_1p7B_decode_abs_J \| point}}) | {{FILL: R_1p7B_decode_cmp \| ratio}} ({{FILL: TERM_B_1p7B_decode_cmp_J \| corner}} ÷ {{FILL: TERM_A_1p7B_decode_cmp_J \| point}}) | {{FILL: R_cm_1p7B_decode_cmp \| shared-sign ratio}} |
-| Qwen3-1.7B | prefill (2,048) | {{FILL: R_1p7B_prefill_p2048_abs \| ratio}} ({{FILL: TERM_B_1p7B_prefill_p2048_abs_J \| corner}} ÷ {{FILL: TERM_A_1p7B_prefill_p2048_abs_J \| point}}) | {{FILL: R_1p7B_prefill_p2048_cmp \| ratio}} ({{FILL: TERM_B_1p7B_prefill_p2048_cmp_J \| corner}} ÷ {{FILL: TERM_A_1p7B_prefill_p2048_cmp_J \| point}}) | {{FILL: R_cm_1p7B_prefill_p2048_cmp \| shared-sign ratio}} |
-| Qwen3-8B | decode | {{FILL: R_8B_decode_abs \| ratio}} ({{FILL: TERM_B_8B_decode_abs_J \| corner}} ÷ {{FILL: TERM_A_8B_decode_abs_J \| point}}) | {{FILL: R_8B_decode_cmp \| ratio}} ({{FILL: TERM_B_8B_decode_cmp_J \| corner}} ÷ {{FILL: TERM_A_8B_decode_cmp_J \| point}}) | {{FILL: R_cm_8B_decode_cmp \| shared-sign ratio}} |
-| Qwen3-8B | prefill (2,048) | {{FILL: R_8B_prefill_p2048_abs \| ratio}} ({{FILL: TERM_B_8B_prefill_p2048_abs_J \| corner}} ÷ {{FILL: TERM_A_8B_prefill_p2048_abs_J \| point}}) | {{FILL: R_8B_prefill_p2048_cmp \| ratio}} ({{FILL: TERM_B_8B_prefill_p2048_cmp_J \| corner}} ÷ {{FILL: TERM_A_8B_prefill_p2048_cmp_J \| point}}) | {{FILL: R_cm_8B_prefill_p2048_cmp \| shared-sign ratio}} |
+| Qwen3-1.7B | decode | {{FILL: R_1p7B_decode_abs \| ratio}} ({{FILL: TERM_B_1p7B_decode_abs_J \| corner}} ÷ {{FILL: TERM_A_1p7B_decode_abs_J \| point}}) | {{FILL: R_1p7B_decode_cmp \| ratio}} ({{FILL: TERM_B_1p7B_decode_cmp_J \| corner}} ÷ {{FILL: TERM_A_1p7B_decode_cmp_J \| point}}) | 1.7046 |
+| Qwen3-1.7B | prefill (2,048) | {{FILL: R_1p7B_prefill_p2048_abs \| ratio}} ({{FILL: TERM_B_1p7B_prefill_p2048_abs_J \| corner}} ÷ {{FILL: TERM_A_1p7B_prefill_p2048_abs_J \| point}}) | {{FILL: R_1p7B_prefill_p2048_cmp \| ratio}} ({{FILL: TERM_B_1p7B_prefill_p2048_cmp_J \| corner}} ÷ {{FILL: TERM_A_1p7B_prefill_p2048_cmp_J \| point}}) | 1.9997 |
+| Qwen3-8B | decode | {{FILL: R_8B_decode_abs \| ratio}} ({{FILL: TERM_B_8B_decode_abs_J \| corner}} ÷ {{FILL: TERM_A_8B_decode_abs_J \| point}}) | {{FILL: R_8B_decode_cmp \| ratio}} ({{FILL: TERM_B_8B_decode_cmp_J \| corner}} ÷ {{FILL: TERM_A_8B_decode_cmp_J \| point}}) | 1.7616 |
+| Qwen3-8B | prefill (2,048) | {{FILL: R_8B_prefill_p2048_abs \| ratio}} ({{FILL: TERM_B_8B_prefill_p2048_abs_J \| corner}} ÷ {{FILL: TERM_A_8B_prefill_p2048_abs_J \| point}}) | {{FILL: R_8B_prefill_p2048_cmp \| ratio}} ({{FILL: TERM_B_8B_prefill_p2048_cmp_J \| corner}} ÷ {{FILL: TERM_A_8B_prefill_p2048_cmp_J \| point}}) | 2.7704 |
 
 *Table 4. Dominance ratios, primary block, each over the kept units (n as in Table 3). Point diagnostic; no
 interval. "Independent" in the registered name refers to the independent-corner box, not to statistical
 independence; the twelve values share runs and are correlated. An absolute R_cm is not defined by the registered
 replay.*
 
-**[BRANCH 5.4.A — every one of the eight R and four R_cm is at least 2]** On this stack and boundary, allowing
-each value to move within its registered timing uncertainty at least doubles every detection floor, in both forms,
-for both models and both phases, and the shared-sign replay does not withdraw that statement. Timing attribution,
-not run-to-run repeatability, is what limits these phase-energy measurements. This is a statement about the
-registered timing domain under the held-average reconstruction; it does not say that physical phase energy is
-uncertain by that amount, and the shared-sign replay does not establish robustness to one common physical timing
-error. **[END BRANCH 5.4.A]**
+<!-- BRANCH 5.4.B selected (seat 12, 2026-11-11). From the table: comparative R_cm in ledger rows 276-278
+are below the threshold of row 275, so at least one of the twelve ratios is below 2. From the registered
+rule (analysis plan §6): branch A needs every one of the eight R and every required R_cm at least 2; a
+failed required R_cm sends the block to branch B whatever the eight R are. RL-2 and RL-4 (viii) agree.
+Branch 5.4.A is deleted. Branch 5.4.R stays, pending: the eight R are not in the re-derivation table, so a
+refusal among them can be neither shown nor excluded. -->
 
-**[BRANCH 5.4.B — at least one of the twelve ratios is below 2]** Timing attribution did not at least double every
+Timing attribution did not at least double every
 detection floor. The components where it did not are {{FILL: P1-B5-DOM-FAILED | list of each ratio below 2, with model, phase, form, value, numerator and denominator}}. For these, repeatability
 contributes at least as much to the floor as the registered timing movement does; the paper therefore makes no
 claim that the measurement as a whole is attribution-limited, and prints no contingent subtitle. Where a ratio is
-at least 2, it is reported as that component's diagnostic only. **[END BRANCH 5.4.B]**
+at least 2, it is reported as that component's diagnostic only.
 
 **[BRANCH 5.4.R — a ratio refused (zero denominator or missing input)]** The ratio for {{FILL: P1-B5-DOM-REFUSED | component and refusal code}} was refused and is not printed as a number; branch A therefore does not hold. **[END BRANCH 5.4.R]**
 
@@ -810,47 +825,43 @@ at least 2, it is reported as that component's diagnostic only. **[END BRANCH 5.
 
 | Contrast (8B − 1.7B) | n quads | d̄ (J) | Metrology interval (J) | Decision interval (J) | Floor gate (J) | Holm-adjusted p | Outcome | Claim level |
 |---|---|---|---|---|---|---|---|---|
-| decode | {{FILL: P1-B5-NQ-decode \| kept contrast quads}} | {{FILL: E_decode_contrast_signed_J_per_request \| signed estimate}} | {{FILL: P1-B5-CTR-decode-METRO \| metrology interval}} | [{{FILL: E_decode_contrast_lower_J \| lower}}, {{FILL: E_decode_contrast_upper_J \| upper}}] | {{FILL: F_claim_decode_armwise_max_J \| floor gate}} | {{FILL: P1-B5-CTR-decode-PADJ \| adjusted p}} | {{FILL: P1-B5-CTR-decode-OUTCOME \| outcome word}} | {{FILL: P1-B5-CTR-decode-LEVEL \| L1 or L2}} |
-| prefill (2,048) | {{FILL: P1-B5-NQ-prefill \| kept contrast quads}} | {{FILL: E_prefill_p2048_contrast_signed_J_per_request \| signed estimate}} | {{FILL: P1-B5-CTR-prefill-METRO \| metrology interval}} | [{{FILL: E_prefill_p2048_contrast_lower_J \| lower}}, {{FILL: E_prefill_p2048_contrast_upper_J \| upper}}] | {{FILL: F_claim_prefill_p2048_armwise_max_J \| floor gate}} | {{FILL: P1-B5-CTR-prefill-PADJ \| adjusted p}} | {{FILL: P1-B5-CTR-prefill-OUTCOME \| outcome word}} | {{FILL: P1-B5-CTR-prefill-LEVEL \| L1 or L2}} |
+| decode | 6 | 146.62940 | [146.44037, 146.81843] | [141.35628, 151.90252] | 10.17807 | 1.2033 × 10⁻¹⁵ | direction supported | L2 |
+| prefill (2,048) | 5 | 101.80943 | [101.44060, 102.17827] | [95.80749, 107.81138] | 8.83026 | 1.7404 × 10⁻¹¹ | direction supported | L2 |
 
 *Table 5. Primary contrasts, Qwen3-8B minus Qwen3-1.7B gross phase energy per request, processor-rail boundary,
 one Holm family of two at α = 0.05. Quads ran in the fixed, unrandomized order 1.7B, 8B, 8B, 1.7B; the p-values
 assume the quad differences are independent once linear drift has cancelled. The floor gate comes from the
 floor packs' sessions, collected separately; its transfer to the contrast session rests on the registered
 assumption, quoted in Section 9, that the shared-edge treatment calibrated on floor quads applies unchanged at the
-same quad timescale.*
+same quad timescale. Both contrasts reach level L2 under the registered gate; the claim level is the gate's
+recorded output. The gate's eligibility inputs (selection, the absence of top-ups, replacement validity,
+transport and current checks) are collection-time records; we did not re-derive them. Phase attribution is
+reported without a measured instrument phase-accounting check.*
 
-Each contrast is reported in exactly one of the following branches. The decode and prefill contrasts select
-their branches independently; write the paragraph once per contrast, substituting its phase.
+<!-- BRANCH 5.5.1 selected for both contrasts (seat 12, 2026-11-11). From the table: decode rows 530
+(direction_supported), 531 (positive) and 532 (L2); prefill rows 533, 534 and 535. From the registered rule
+(analysis plan §7.2) applied to the numeric rows: see fill_check_b5.py. Branches 5.5.2 to 5.5.5 are deleted.
+The template asked that each contrast select its branch independently and that the paragraph be written once
+per contrast, substituting its phase; that is done below. -->
 
-**[BRANCH 5.5.1 — outcome "direction supported", direction positive (8B uses more), claim gate at L2]** On this
-stack and boundary, the 8B model's {{FILL: P1-B5-CTR-PHASE | "decode" or "2,048-token prefill"}} phase used more
-gross processor-rail energy per request than the 1.7B model's, by {{FILL: P1-B5-CTR-DBAR | d̄ for this contrast}} J
-(decision interval {{FILL: P1-B5-CTR-DI | decision interval for this contrast}} J). The estimate exceeds the floor
-gate of {{FILL: P1-B5-CTR-GATE | floor gate for this contrast}} J, both intervals exclude zero, Holm's correction
-rejects, and leaving out any one quad changes none of these. This is a comparative (L2) result for this one prompt,
-this prompt length and this machine. **[END BRANCH 5.5.1]**
+On this stack and boundary, the 8B model's decode phase used more
+gross processor-rail energy per request than the 1.7B model's, by 146.62940 J
+(decision interval [141.35628, 151.90252] J, whose statistical part is the within-session 95% interval
+[146.44037, 146.81843] J). The estimate exceeds the floor
+gate of 10.17807 J, both intervals exclude zero, Holm's correction
+rejects, and leaving out any one quad changes none of these. This is a comparative (L2) result under the
+registered claim gate, for this one prompt, this prompt length and this machine, from one session in which 6 of
+10 planned quads were kept. Phase attribution is reported without a measured instrument phase-accounting check.
 
-**[BRANCH 5.5.2 — outcome "direction supported", but the claim gate stays at L1]** The contrast's outcome is
-*direction supported* with d̄ = {{FILL: P1-B5-CTR-DBAR | d̄}} J, but the claim gate does not license a comparative
-statement because {{FILL: P1-B5-CTR-L1-REASON | the failing L2 condition: leave-one-quad-out verdict-influential (name the quad), direction opposite to the registered one, or demotion from confirmatory}}. We
-therefore report it at L1: the interval {{FILL: P1-B5-CTR-DI | decision interval}} J was observed on this stack; we
-do not state that one model uses more energy in this phase than the other. **[END BRANCH 5.5.2]**
-
-**[BRANCH 5.5.3 — outcome "unresolved"]** The estimate d̄ = {{FILL: P1-B5-CTR-DBAR | d̄}} J exceeds the floor gate,
-but {{FILL: P1-B5-CTR-UNRES-REASON | "its metrology interval contains zero" or "Holm's correction does not reject (adjusted p = …)"}}. The direction of the difference is not supported at the registered error rate. This
-is not evidence that the two models use equal energy in this phase. **[END BRANCH 5.5.3]**
-
-**[BRANCH 5.5.4 — outcome "not resolvable"]** The instrument cannot resolve this contrast:
-{{FILL: P1-B5-CTR-NR-REASON | registered gloss of each issued not-resolvable reason code; use the code-to-branch distinctions below; floor_artifact_invalid belongs to branch 5.5.5}}. The reason determines whether this is a limit of resolution or of applying the registered floor;
-an unavailable transport does not establish that a difference is small. The registered descriptive estimates below are
-printed for completeness and support no comparison. **[END BRANCH 5.5.4]**
-
-**[BRANCH 5.5.5 — outcome "not estimable"]** The contrast could not be estimated:
-{{FILL: P1-B5-CTR-NE-REASON | registered not-estimable code and its plain-language reason}}. No estimate is printed.
-The Holm family keeps its size of two. A binding refusal (`floor_artifact_invalid`) is not evidence about the
-instrument's resolution and is not an empirical negative result. It must never select branch 5.5.4.
-**[END BRANCH 5.5.5]**
+On this stack and boundary, the 8B model's 2,048-token prefill phase used more
+gross processor-rail energy per request than the 1.7B model's, by 101.80943 J
+(decision interval [95.80749, 107.81138] J, whose statistical part is the within-session 95% interval
+[101.44060, 102.17827] J). The estimate exceeds the floor
+gate of 8.83026 J, both intervals exclude zero, Holm's correction
+rejects, and leaving out any one quad changes none of these. This is a comparative (L2) result under the
+registered claim gate, for this one prompt, this prompt length and this machine, from one session in which 5 of
+10 planned quads were kept, the registered minimum of 5. Phase attribution is reported without a measured
+instrument phase-accounting check.
 <!-- FACT H15: R2P P11; DEVIATION-LOG.md:252-278 (D5b); decision_log.md D-178/D-189;
 analysis_engine/claims.py:333-382. These are code glosses, not selected outcomes. -->
 
@@ -866,18 +877,31 @@ The floor-related reasons must be kept distinct when selecting these branches:
 Other issued codes retain their registered glosses and outcome branches; a generic absence of a floor must not
 be substituted for the actual reason code.
 
-**Leave-one-quad-out.** {{FILL: P1-B5-CTR-LOO | per contrast: "no single quad changes the verdict", or the verdict-influential quad; and, if raised, the fixed sentence "Leaving out quad k moves the estimate by X J, more than a quarter of the floor; the direction, the floor status and the multiplicity decision are unchanged"}}
+**Leave-one-quad-out.** Decode: no single quad changes the verdict; the 6 leave-one-out estimates run from 146.570 to 146.667 J.
+Prefill: no single quad changes the verdict; the 5 leave-one-out estimates, each over 4 quads, one fewer
+than the cell minimum of 5, run from 101.683 to 101.865 J.
 
-**Decision interval against the floor.** {{FILL: P1-B5-CTR-DIFLOOR | per contrast: whether the decision interval's near end lies beyond the floor gate; if not, the fixed sentence "The estimate exceeds the floor, but its decision interval reaches below the floor"}}
+**Decision interval against the floor.** In both contrasts the near end of the decision interval lies beyond the floor gate: 141.35628 J against
+10.17807 J for decode, and 95.80749 J against 8.83026 J for 2,048-token prefill.
 
 **Registered descriptive estimates** (decide nothing). The 8B-to-1.7B ratio of phase energies was
-{{FILL: P1-B5-RATIO-decode | decode energy ratio with its t interval, without recorded bounds}} for decode and
-{{FILL: P1-B5-RATIO-prefill | prefill energy ratio with its t interval}} for 2,048-token prefill. Per token, the
-difference was {{FILL: P1-B5-PERTOK-decode | d̄ ÷ 512 with both intervals ÷ 512}} J per output token and
-{{FILL: P1-B5-PERTOK-prefill | d̄ ÷ 2,048 with both intervals ÷ 2,048}} J per prompt token. Phase energy is gross:
+3.8577 (the geometric mean over kept quads of the per-quad ratio; t interval
+[3.8499, 3.8655]) for decode and
+4.8840 (same quantity; t interval [4.8580, 4.9100]) for 2,048-token prefill. Per token, the
+difference was 0.286386 (metrology interval [0.286016, 0.286755]; decision interval
+[0.276086, 0.296685]) J per output token and
+0.049712 (metrology interval [0.049532, 0.049892]; decision interval
+[0.046781, 0.052642]) J per prompt token. Phase energy is gross:
 it includes the machine's baseline power over the phase, and the 8B phase lasts longer, so part of the difference
 is baseline power times the extra duration. *Without quads holding battery-assisted runs:*
-{{FILL: P1-B5-CTR-BATT | per contrast: d̄ and metrology interval without such quads, with n and the count of such quads}}.
+no quad held a battery-assisted run (0 such quads, from the collection record's battery-assist flags; not
+re-derived), so this line equals the primary estimate: d̄ = 146.62940 J, metrology interval
+[146.44037, 146.81843] J, n = 6 for decode, and d̄ = 101.80943 J, metrology interval [101.44060, 102.17827] J,
+n = 5 for 2,048-token prefill. *Load-correlated exclusions not applied:* the registered pipeline could not
+compute this line; the independent recomputation's value, uncompared, is d̄ = 146.800 J (metrology interval
+[146.439, 147.161] J, n = 8, 2 quads restored) for decode and 101.657 J ([101.224, 102.089] J, n = 8,
+3 restored) for 2,048-token prefill. Phase attribution is reported without a measured instrument
+phase-accounting check.
 
 ### 6.6 Consistency checks beside the claims
 
