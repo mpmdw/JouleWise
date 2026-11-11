@@ -177,6 +177,8 @@ class MemberPool(B5.MemberPool):
 
             def raw(self, path, scope, required=True):
                 self.inputs = next((ctx for ctx in contexts if Path(path).absolute().is_relative_to(ctx.archive)), None)
+                if contexts and self.inputs is None:
+                    raise InputRefusal("input_outside_archive")
                 return super().raw(path, scope, required)
 
         original = B5.Reader

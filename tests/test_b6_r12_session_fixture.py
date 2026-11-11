@@ -536,6 +536,35 @@ raise SystemExit(4)
 
 
 class DeskInputBoundaryTests(unittest.TestCase):
+    def test_pool_reader_refuses_unpinned_sibling_before_read(self):
+        """Predict: a pinned worker refuses an out-of-archive synthetic sibling before reading any of its bytes."""
+        from types import SimpleNamespace
+        from unittest import mock
+        from tests.independent_recompute.support_b6 import b6
+        with tempfile.TemporaryDirectory(prefix="r12-pool-boundary-") as directory:
+            root = Path(directory).resolve()
+            archive = root / "archive"
+            archive.mkdir()
+            outside = root / "synthetic-unpinned.json"
+            outside.write_text('{"synthetic":true}\n')
+            reads = []
+            original_read = Path.read_bytes
+            def observed_read(path):
+                if path == outside:
+                    reads.append(path)
+                return original_read(path)
+            def exercise_reader(_pool):
+                # Replace only worker transport startup. Exercise the real
+                # scoped Reader class installed at the fork boundary.
+                reader = b6.B5.Reader("ALPHA", [])
+                with self.assertRaisesRegex(b6.InputRefusal, "input_outside_archive"):
+                    reader.raw(outside, "synthetic-scope")
+            pool = b6.MemberPool(2, [SimpleNamespace(archive=archive)])
+            with mock.patch.object(b6.B5.MemberPool, "_start", exercise_reader), \
+                    mock.patch.object(Path, "read_bytes", observed_read):
+                pool._start()
+            self.assertEqual(reads, [])
+
     @unittest.skipUnless(shutil.which("zstd"), "synthetic production input regression requires zstd")
     def test_production_archives_with_repeated_basename_use_distinct_pins(self):
         """Predict: option (c) exits 0 for ten toy regression archives named archive, each explicitly pinned by absolute path."""
