@@ -37,6 +37,7 @@ The magistrate on the MacBook Pro owns running, re-running and arming windows
 | v4 kit and sessions | `scripts/align_v4_kit.py`, `scripts/align_v4_session.py` on the R1 integration line (`lane/2026-11-06-v4-r1-integrated`); the WP17 versions are also on the measurement lane. Not on `main` | — |
 | Window records | Record branches `records/<date>-align-*` and `docs/align/r0/<date>/` (cited from `RUN_STATE.md`) | — |
 | Block-5 window harvest (collection finished) | `scripts/harvest_b5_window.py` + `joulewise/b5/**` | `scripts/harvest_g2a_window.py` (kept because `joulewise/v5_qualification.py` imports it); CA-42 arm/T-0 retirement (#668) is held by the live ALIGN v4 artifact/registration inventory; see `docs/run_reports/2026-11-10-file-prune-g3.md` |
+| Exit-code vocabularies and classification (shadow only) | `joulewise/exit_contract.py`: immutable tables, fail-closed classifier and future plan-contract parser; no existing tool adopts it | — |
 
 ## ALIGN v4 window line (W1, C1-C14, T1-T3): agreements and records
 
