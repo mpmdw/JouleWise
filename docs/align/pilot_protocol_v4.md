@@ -452,7 +452,7 @@ counts W1 when later sentinel windows make it evaluable. `F:364–409; A:94–99
 | U2 | G0 slow-temperature range ≤3 °C; every G1/H release verified within δ of its own episode's E |
 | U3 | **Derived bar, R11/R03** (ruling 5 below): \|ΔE\| ≤ q·s₀·Ē (30B) or 1.5·q·s₀·Ē (D, only if R1's screen does not refute), s₀ the zero-centred RMS of one prespecified 30B pilot pair per session, q the exact series quantile at β=.05, N = 24 (RL-16: W1 30B 4 + D 1, C1-C14 and T1-T5 D 1 each). No k=3, 2.576 or fixed floor. Exact-token and active-clock ≤0.5% checks remain; an unsigned or missing bar is INCONCLUSIVE, never a v3 fallback |
 | U4 | Sentinel window-mean relative shift ≤0.25% in magnitude and its 90% t interval within ±0.5%, df W−1; count W1 (W=4 at D3). E_ref = mean of R1 replay pair and W1 ordinals 5 and 17. Four-anchor 30B σ_w is print-only |
-| U5 | R1 three designed start states estimate D β_T; \|β_T\|₉₀·δ_slow ≤c·σ_pair, c=1.0; σ_pair=max(R1 replay-pair SD, 2.97 J). Point inside/upper bound outside means INCONCLUSIVE. Consequence amendment remains PENDING LEAD RULING below |
+| U5 | R1 three designed start states estimate D β_T; \|β_T\|₉₀·δ_slow ≤c·σ_pair, c=1.0; σ_pair=max(R1 replay-pair SD, 2.97 J). Point inside/upper bound outside means INCONCLUSIVE. RL-20: W1 admitted on any R1 U5 verdict; descriptive only; FAIL disclosed as "start-state sensitivity not shown controlled", with no required policy change |
 | U6 | Early/late margins ±0.5·s_r with trajectory-clustered SEs; imprecise intervals say “calibration unresolved: imprecise”. D prints per-turn-position means, judging a position only if ≥6 trajectories reach it; no turn-index slope gate |
 
 Sources: `F:368–398; A:138–146; G:167–180`.
@@ -507,8 +507,8 @@ Two consecutive attempted C/T windows barred by U1-U3 FAIL, or a third such bar 
 arming until a signed research-lead ruling names that attempt (new reset `u1_u3_fail_escalation`).
 An in-series ladder step requires a new cohort: calibration restarts, prior windows stay disclosed and
 are never pooled, and the U3 roster is re-derived. The packet builder refuses any changed thermal policy
-inside the series. INCONCLUSIVE uses its slot, enters the pool and triggers nothing. U4/U5 failure means state not
-controlled; a **U4** inconclusive adds the two R20 escalation sentinels (below), never a
+inside the series. INCONCLUSIVE uses its slot, enters the pool and triggers nothing. U4 failure means state not controlled; U5 is descriptive under RL-20 (FAIL is disclosed as
+"start-state sensitivity not shown controlled" and obliges no policy change); a **U4** inconclusive adds the two R20 escalation sentinels (below), never a
 looser margin. A U5 inconclusive does NOT (A15 / R21: U5, an OLS with intercept on three
 R1 designed states with df 1, is inconclusive by construction, the sentinels cannot resolve
 it and would cost about an hour of MBP per window; U5 is reported descriptively). U6 is reported, never a window-admission gate; imprecision bars
@@ -771,11 +771,10 @@ sabotage capability and guarantees no turns before EOS/context/deadman.
 A rung-changing proxy needs its actual pre-R0-read freeze/access history;
 this late implementation does not claim that an earlier deadline was met.
 
-**PENDING LEAD RULING — U5 admission amendment.** The synthesis proposes
-admitting W1 on any R1 U5 verdict, with FAIL obliging pre-D1 δ_slow tightening
-until the bar holds or disclosure “state not controlled” if the cap makes
-that infeasible. No new waiver or D1 clearance is granted here. The kit
-retains its existing U5 verdict handling pending the lead's ruling.
+**U5 admission closure — RL-20.** W1 is admitted on any R1 U5 verdict, as the kit already does.
+U5 is reported descriptively under R21 A15. A U5 FAIL is disclosed in K's limitations as
+"start-state sensitivity not shown controlled" and obliges no policy change. The lead may tighten
+δ_slow once before C1 under D-17a, recorded before use; the series remains frozen from C1.
 
 **Registration receipt.** `require_w1_ready` requires
 `registration/registration_receipt.json`, schema
@@ -1518,7 +1517,7 @@ in `docs/align/council-2026-11-06-v4-review/OC-TABLE.md` on
 | 3 | v4 | D-series | **Claim contract B1/B6:** numeric test-cohort rule and test reserves T4-T5. Registration grade restates the old 21/3 target: each pair needs ≥39 eligible benign calibration members plus a separate held-out test cohort. Exact fit/calibration/test rosters, every stop condition and the cap need prospective series-plan authority. D7/D8 and ≥6 sabotage are proposals, not installed authority. At cap: insufficient calibration/unresolved; no outcome-driven top-up. The lead must rule the margin before W1 (RUN_STATE 212 R11-2). (Residual analysis; Ed's standing ruling) |
 | 4 | v4 | W1; D-series | **INSTALLED; evidence pending where named.** Battery arm/top-up/OBC attestation and B bar installed in W1 registration installation §4; native top-up/drain/charge-hold evidence PENDING. |
 | 5 | v4 | W1 | **INSTALLED; evidence pending where named.** R11/R03 removes the unruled k=3 bar. U3 derivation/predictive/OC block is PENDING; v4 cannot pass on a historical constant. |
-| 6 | v4 | R1 (U5); W1 | **INSTALLED; evidence pending where named.** U4 counts W1, E_ref 5/17, c=1 U5 and clustered U6 installed in U table and registration installation §6. Updated OC table and D-series wiring PENDING; U5 amendment PENDING LEAD RULING. |
+| 6 | v4 | R1 (U5); W1 | **INSTALLED; evidence pending where named.** U4 counts W1, E_ref 5/17, c=1 U5 and clustered U6 installed in U table and registration installation §6. Updated OC table and D-series wiring PENDING; U5 closure installed by RL-20: W1 admitted on any R1 U5 verdict, descriptive only, FAIL disclosed as "start-state sensitivity not shown controlled" without an obligatory policy change; the lead may tighten δ_slow once before C1 under D-17a. |
 | 7 | | R1; W1 | **Code (round 4):** r1_slots freezes the AC powermode; run_night admission and the v4 arm refuse a mismatch (with the R1 marker restore) and the arm records the value and pmset text; bundles record it; the desk sets `instrument_ok` false. Still lacks: Opus executing review of the WP7 lane; r1_slots freezes the AC powermode; every arm and bundle records it, arm refuses on mismatch, desk sets `instrument_ok` false; POWERMODE-PREFLIGHT-RECORD-01 promoted. (R1; instrument checks) `C:106–116` |
 | 8 | | R1 | **Code (round 4):** all four in the R1 driver, plus journal completeness (≥ 0.9 samples per wall second, no gap > 5 s) and a DST-safe Pacific window. Text: Soak and step tests outside 11:45-13:15 local; per-second CPU load journal; redo a segment above 0.5 core for 60 s; soak SD on the detrended last 20 min after \|slope\| ≤ 0.2 °C/min. (R1; bands) `C:118–125` |
 | 9 | v4 | W1 | **INSTALLED; evidence pending where named.** Delivery, stage indicator (3 df), positive d and scope sentence installed in deciding contrast and registration installation §9. Native WP19 evidence PENDING. |
