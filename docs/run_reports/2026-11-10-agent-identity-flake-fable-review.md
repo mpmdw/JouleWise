@@ -143,3 +143,75 @@ printed pass or fail per cell. It lived in the session scratchpad and is not
 committed. Copies of the test file loaded from outside `tests/` fail the
 ancestor live test for an unrelated reason (it derives `PYTHONPATH` from its
 own location), so that test was excluded from the comparison.
+
+## Delta review, round 2
+
+Reviewer: Claude Fable 5.2, same seat, 2026-11-10 21:07 PST.
+Reviewed head: `0cafbe4bf60c8cdf721c8f08be8e936dbbea8ab7` (test commit
+`6a3899361`). Round-2 report: `docs/run_reports/2026-11-10-agent-identity-flake-r2.md`.
+
+### Final verdict: ADMIT, once the Linux shard is green
+
+F1, F2 and F3 are closed on the evidence I can produce on Darwin. The flake
+was Linux-only and the new waiters have not yet run on Linux: the PR's test
+shards were still pending when I finished. Merge when the shard that runs
+`tests.test_agent_identity` reports 14 tests, 0 failures, and exactly one skip
+(the Darwin-only ancestor test).
+
+### Closure
+
+| Finding | Status | Evidence |
+|---|---|---|
+| F1 dead group leader | Closed | Fixture is `pgid = agent_pid + 1`. The foreign-group mutant now fails the hazard test (my own run, not the seat's). |
+| F2 root cause | Closed | The first-round report drops the 60-second lifetime, cites the CI timings and image, and marks the multicall hypothesis unverified with the runner check. |
+| F3 shared live fixture | Closed on Darwin; Linux pending CI | No `symlink_to("/bin/sleep")` remains. `_live` raises `AssertionError` on early exit, readiness timeout and argv timeout; no `SkipTest` path is left in it. |
+
+`joulewise/` and `scripts/` are still unchanged against `origin/main`.
+Native runs on the Air: 14/14 OK on 16 consecutive runs with
+`-W error::ResourceWarning`, ancestor test active, no leftover children.
+
+### Do the waiters still exercise what the matcher reads?
+
+Yes. The matcher reads the kernel executable path and the kernel argv; it
+never reads `comm`. For a live waiter named `claude` the kernel reported:
+
+- executable: the real Homebrew Python binary (`.../Python.app/Contents/MacOS/Python`)
+- `argv[0]`: the marker path ending in `claude`
+- `identify` on that pair: `agent`; with `argv[0]` swapped for the executable
+  path: `not_agent`
+
+That is the same shape as the old fixture (non-agent executable, agent-named
+`argv[0]`), so the live tests cover the `argv[0]` rule and the non-agent
+executable rule exactly as before. An agent recognised by its executable
+basename is covered only by the table tests, as it was on `main`.
+
+Mutants against the kernel-read layer, whole module, in process:
+
+| Mutant | Live tests that fail |
+|---|---|
+| kernel argv unreadable | listed-window, multiline, own-tree, node, ancestor |
+| kernel `argv[0]` replaced by the executable path | the same five |
+| kernel ppid and pgid lost | own-tree |
+| `identify` ignores the `argv[0]` name | own-tree (plus three table tests) |
+| `identify` always `agent` | listed-window, multiline (plus table tests) |
+
+The round-1 wiring mutants give the same results as before.
+
+### Notes (none blocking)
+
+- D1. Linux exposure of the waiter. It starts the interpreter with a made-up
+  `argv[0]`. I believe CPython on Linux derives its library path from
+  `argv[0]` and falls back to the compiled-in prefix, which works for the
+  hosted runner's Python but may not for a relocatable build such as a
+  uv-managed one. I could not run Linux here. If it bites, the symptom is a
+  hard `child exited without readiness`, not a flake. Adding the child's
+  stderr to that assertion message would make it diagnosable in one read.
+- D2. `AgentIdentityTests.setUp` still skips the whole class when
+  `inspect(os.getpid())` returns None. With the kernel reader forced to None,
+  11 tests skip. This is unchanged from `main` and outside this PR; it is the
+  one remaining way a reader regression hides as skips.
+- D3. `docs/run_reports/interp-energy-desk/flake-r2-sol-report.md` repeats the
+  stale pattern N3 named: "no push performed" and a `/Volumes/JW-EXT/...` link.
+- D4. `gate-ledger` still fails on the PR body (N2).
+- D5. The multicall hypothesis is still unverified. The fix no longer depends
+  on it being true.
