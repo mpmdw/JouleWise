@@ -22,7 +22,7 @@ Verdict: **`replay_supported`**
 - Model: local mirror `~/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit`
   (4-bit weights; KV cache is unquantized bf16/fp16-width — `dtype_bytes=2`
   in the size model)
-- Spike script: `scripts/spike_mlx_prompt_cache.py`
+- Spike script: `archive/process-traces-before-release-prune-2026-11-08:scripts/spike_mlx_prompt_cache.py`
 
 ### What was tested
 
@@ -50,8 +50,8 @@ corrupts the logits. Offsets are asserted at every step.
 ### Commands
 
 ```sh
-# headline (fresh-process, subprocess-orchestrated; prints JSON report)
-.venv/bin/python3 scripts/spike_mlx_prompt_cache.py run --prompt-len 1024 --decode 64
+# retired spike source; its recorded invocation belongs to the archived checkout
+git show archive/process-traces-before-release-prune-2026-11-08:scripts/spike_mlx_prompt_cache.py
 
 # size-model prediction for the same model/length
 .venv/bin/python3 -m joulewise kv-size ~/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit/config.json --prompt-tokens 1024

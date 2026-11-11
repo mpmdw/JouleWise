@@ -1,0 +1,17 @@
+{
+  "commits": 6776,
+  "exclusions": [
+    "night-archive",
+    "night-custody",
+    "restricted",
+    "fixture data payloads (only fixture source/docs are scanned)"
+  ],
+  "main": "d2e7e8a39089be3046de19b7709e81ef6e584e6b",
+  "network_verified": false,
+  "numeric_only_unresolved_omitted": 262,
+  "numeric_policy": "numeric-only candidates require quoting or commit/SHA/head/revision/pin context",
+  "scope_tips": 907,
+  "source_locations": "up to 3 samples per identity; counts are complete",
+  "unique_blobs": 25891,
+  "unresolved": 19176
+}

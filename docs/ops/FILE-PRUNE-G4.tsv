@@ -1,0 +1,9 @@
+path	verdict	reason	retaining_ref
+scripts/axi_sb_static_batch_spike.py	ALREADY_ABSENT	first prune already retired the #654 candidate; do not restore/re-delete	archive/pre-prune-2026-11-06:scripts/axi_sb_static_batch_spike.py
+scripts/axi_sc_spec_decode_spike.py	ALREADY_ABSENT	first prune already retired the #654 candidate; do not restore/re-delete	archive/pre-prune-2026-11-06:scripts/axi_sc_spec_decode_spike.py
+scripts/codex_usage_probe.py	ALREADY_ABSENT	first prune already retired the #654 candidate; do not restore/re-delete	archive/pre-prune-2026-11-06:scripts/codex_usage_probe.py
+scripts/measure_claude_cold_start.sh	ALREADY_ABSENT	first prune already retired the #654 candidate; do not restore/re-delete	archive/pre-prune-2026-11-06:scripts/measure_claude_cold_start.sh
+scripts/gen_affine_smoke.py	ALREADY_ABSENT	first prune already retired the #654 candidate; do not restore/re-delete	archive/pre-prune-2026-11-06:scripts/gen_affine_smoke.py
+scripts/spike_mlx_prompt_cache.py	DELETE	one-shot feasibility spike; recorded replay_supported verdict retained; sole dedicated assertion retired	archive/process-traces-before-release-prune-2026-11-08:scripts/spike_mlx_prompt_cache.py
+scripts/gen_gsm8k_scored.py	KEEP	canonical authenticated scored-v6 producer; live benchmark_import tests; scored lane deferred	current checkout
+scripts/gen_jw_mixed.py	KEEP	current mixed/sentinel producer and TOKENIZER_FILES/tokenizer_manifest live test imports	current checkout

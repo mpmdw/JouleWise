@@ -462,9 +462,9 @@ untracked config files; no existing test references them.
 
 ## 8. Evidence base carried forward from the checkpoint (re-verified)
 
-1. **Structural template:** `configs/campaigns/p2_015_floors/05_phase_decode_abba/`
+1. **Structural template:** `archive/process-traces-before-release-prune-2026-11-08:configs/campaigns/p2_015_floors/05_phase_decode_abba/`
    — 40 members, 10 contiguous A/B/B/A blocks, fixed label order, no RNG; generated
-   by `configs/campaigns/p2_015_floors/generate_configs.py`, which freezes
+   by `archive/process-traces-before-release-prune-2026-11-08:configs/campaigns/p2_015_floors/generate_configs.py`, which freezes
    `calibration_plan.json` + `.sha256` and per-stage `order_manifest.json`
    (`joulewise.order_manifest.v1`) and stamps `calibration-plan-sha256=<hex>` into
    every member's tags. Window C executed exactly this shape and passed — the first

@@ -1068,6 +1068,19 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 (3) After `chain.exited`: runbook §4 on `20e9edbc4` with `S=/Users/edr/night-align/r1-20261111T014106Z`. Read `r1_result.json` status first. Then network time ON, the Automatic restore, KM003C, stray monitors, uninstall, record, mail Ed. **Before the NEXT arm after that, zero the frequency word again** (network time OFF, then the zero script, then measure the rate).
 (4) The watchdog-v5 fix (PR #707) is still open; install it only after the chain exits.
 
+254. **Laptop lead (interactive session 41120c85, Opus 5.5), 2026-11-10 19:42 PST: a code fact for item 253's diagnosis. step_30b's G0 cap may be structurally too short. Do NOT re-arm R1 unchanged until this is settled.**
+- **Source:** the Fable 5.2 delta review of the W1 reliability branches. It covers code structure only and read no thermal or custody data.
+  - `step-30b` keeps a **600 s** G0 cap (`scripts/align_r1_rehearsal.py:112-116` at `20e9edbc4`).
+  - R7-2 raised the cap to 1,200 s for every other kind, because "no key reaches G0's slope bar until 840 to 1,040 s after a full load" (`joulewise/align/apple/r1_runtime.py:75-81`).
+  - `step-30b` is the only G0-gated segment where a timeout refuses the whole night. step-d and the designed start states retry and then record INCONCLUSIVE, and the A-B-A legs record INCONCLUSIVE (`r1_runtime.py:1681`).
+  - Its output is labelled record-only (`align_r1_rehearsal.py:1820`).
+- **Check first (structure only):** does the 30B model load (or prefill) come BEFORE its G0 wait? If it does, 600 s is structurally short, and an unchanged re-arm will very likely refuse the same way. In that case the 19:05 refusal is a code and design defect, not an operational one.
+- **Next activation (amends item 253's pointer):**
+  - Report the structural answer, with file and line, to RUN_STATE and to Ed.
+  - Any change to the step_30b G0 cap or its retry rule, or making it non-refusing like step-d, is a DESIGN change for the Fable 5.2 research lead (item 253 (3)). The lead is routing the question now.
+  - Re-arm only after that ruling, or if the structure shows G0 runs before the load and the timeout was genuinely operational.
+  - R1 still runs on `20e9edbc4`, which masks a refused chain as `verdict: GO` (A-01). The Air watcher keys on `chain_exit_code`.
+
 253. **Laptop lead (interactive session 41120c85, Opus 5.5), 2026-11-10 19:15 PST: item 251's R1 re-arm REFUSED at 19:05 PST at its first model step. This is not a clock failure. The MBP has been restored by the lead. Diagnose the cause before re-arming.**
 - **Evidence:**
   - `night-results/align-r1-20261111T0208Z` (pushed at 19:06) has `chain_exit_code 3` while `result.json` says `verdict: GO`. That is Fable audit finding A-01, the GO mask, and it is why the lead's ref watcher, not a verdict, raised the alarm.
