@@ -33,6 +33,7 @@ class FakeExecutor:
         self.app_name = "Finder"
         self.pid = 42
         self.target = None
+        self.targets = {}
         self.permissions = {"screen_recording": True, "accessibility": True}
         self.launch_error = None
         self.launch_output = None
@@ -75,7 +76,9 @@ class FakeExecutor:
             if operation == "frontmost_app":
                 return json.dumps({"name": self.app_name, "bundle_id": self.app, "pid": self.pid})
             if operation == "window_at_point":
-                return json.dumps(self.target if self.target is not None else
+                args = json.loads(input)
+                target = self.targets.get((args["x"], args["y"]), self.target)
+                return json.dumps(target if target is not None else
                                   {"bundle_id": self.app, "pid": self.pid, "layer": 0})
             if operation == "permissions_status":
                 return json.dumps(self.permissions)
@@ -223,6 +226,42 @@ class ComputerUseTests(unittest.TestCase):
         self.assertNotIn("CGRequestScreenCaptureAccess", source)
         self.assertNotIn("AXIsProcessTrustedWithOptions", source)
 
+    def test_launchctl_quoted_and_non_ascii_label_characters_refuse(self):
+        for label in ('"com.joulewise.night"', "'com.joulewise.night'", '"com.apple.safe"',
+                      "com.apple/slash", "com.apple:colon", "com.apple.é", "com.apple.@",
+                      "com.apple.{brace}", "com.apple.=", "com.apple,comma"):
+            with self.subTest(label=label):
+                self.executor.labels = [label]
+                self.assertError(self.computer.call("wait", SAMPLES["wait"]), "malformed launchctl row")
+        self.assertFalse(self.sleeps)
+        self.assertTrue(all(argv[0] == "/bin/launchctl" for argv, _ in self.executor.calls))
+
+    def test_launchctl_night_prefix_is_case_insensitive_in_both_domains(self):
+        for domain in ("gui", "system"):
+            for label in ("COM.JOULEWISE.NIGHT", "Com.JouleWise.Night.synthetic", "com.joulewise.NIGHT_extra"):
+                with self.subTest(domain=domain, label=label):
+                    self.executor.labels = [label] if domain == "gui" else []
+                    self.executor.system_labels = [label] if domain == "system" else []
+                    self.assertError(self.computer.call("wait", SAMPLES["wait"]), "loaded launchd label " + label)
+        self.assertFalse(self.sleeps)
+
+    def test_launchctl_stray_closing_brace_cannot_hide_following_night_row(self):
+        for indent in ("", "    ", "\t\t", "\t\t\t"):
+            with self.subTest(indent=repr(indent)):
+                self.executor.labels = ["com.apple.before\n" + indent + "}\n\t\t0\t-\tcom.joulewise.night.hidden"]
+                self.assertError(self.computer.call("wait", SAMPLES["wait"]), "malformed launchctl row")
+        self.assertFalse(self.sleeps)
+        self.assertTrue(all(argv[0] == "/bin/launchctl" for argv, _ in self.executor.calls))
+
+    def test_launchctl_valid_label_alphabet_and_space_indentation_still_parse(self):
+        self.executor.labels = ["org.example.Alpha_123-beta.v2"]
+        original = self.executor.run
+        def spaces(argv, **kwargs):
+            output = original(argv, **kwargs)
+            return output.replace("\t", "    ") if argv[0] == "/bin/launchctl" else output
+        with patch.object(self.executor, "run", side_effect=spaces):
+            self.assertFalse(self.computer.call("wait", SAMPLES["wait"])["isError"])
+
     def test_explicit_gui_domain_catches_night_from_ssh_and_background(self):
         for session in ("SSH", "Background"):
             for label in ("com.joulewise.night", "com.joulewise.night.synthetic"):
@@ -361,6 +400,116 @@ class ComputerUseTests(unittest.TestCase):
             self.assertError(self.computer.call("click", SAMPLES["click"]), "no owning window")
         self.assertEqual(self.records()[-1]["phase"], "after")
         self.assertFalse(any(len(argv) > 1 and argv[1] == "click" for argv, _ in self.executor.calls))
+
+    def test_drag_checks_both_endpoints_and_passes_identity_to_native_recheck(self):
+        self.assertFalse(self.computer.call("drag", SAMPLES["drag"])["isError"])
+        points = [json.loads(stdin) for argv, stdin in self.executor.calls if argv[-1] == "window_at_point"]
+        self.assertEqual(points, [{"x": 0, "y": 0}, {"x": 100, "y": 100}])
+        arguments = next(json.loads(stdin) for argv, stdin in self.executor.calls if argv[-1] == "drag")
+        self.assertEqual(arguments, {**SAMPLES["drag"], "expected_pid": 42,
+                                    "expected_bundle_id": "com.apple.finder"})
+        self.assertTrue(all(r["tool"] == "drag" for r in self.records()))
+        source = (cu.HERE / "cu_input.swift").read_text()
+        drag = source.split('    case "drag":', 1)[1].split('    case "scroll":', 1)[0]
+        before_down = drag.split("try mouse(.leftMouseDown", 1)[0]
+        # Native guard is repeated after pointer movement, immediately before down.
+        before_move, after_move = before_down.split("try mouse(.mouseMoved, from, .left)")
+        for part in (before_move, after_move):
+            self.assertIn("try checkClickTarget(args, from)", part)
+            self.assertIn("try checkClickTarget(args, to)", part)
+
+    def test_drag_refuses_unsafe_start_or_end_without_posting(self):
+        for point in ((0, 0), (100, 100)):
+            for target in ({"bundle_id": "org.example.other", "pid": 99, "layer": 0},
+                           {"bundle_id": "com.apple.finder", "pid": 99, "layer": 0},
+                           {"bundle_id": "com.apple.finder", "pid": 42, "layer": 25},
+                           {"bundle_id": "com.apple.dock", "pid": 42, "layer": 0},
+                           {"bundle_id": "com.apple.finder", "pid": 42, "layer": -1}, {},
+                           {"bundle_id": "com.apple.finder", "pid": 42, "layer": False}):
+                with self.subTest(point=point, target=target):
+                    self.tick += 1
+                    self.executor.targets = {point: target}
+                    self.assertError(self.computer.call("drag", SAMPLES["drag"]), "Click refusal")
+                    self.assertTrue(self.records()[-1]["result"]["isError"])
+        self.assertFalse(any(argv[-1] == "drag" for argv, _ in self.executor.calls))
+
+    def test_drag_window_inspection_failure_at_either_endpoint_refuses(self):
+        helper = self.backend.helper
+        for point in ({"x": 0, "y": 0}, {"x": 100, "y": 100}):
+            def fail_window(operation, arguments=None):
+                if operation == "window_at_point" and arguments == point:
+                    raise cu.ToolError("no owning window")
+                return helper(operation, arguments)
+            with self.subTest(point=point), patch.object(self.backend, "helper", side_effect=fail_window):
+                self.assertError(self.computer.call("drag", SAMPLES["drag"]), "no owning window")
+                self.assertEqual(self.records()[-1]["phase"], "after")
+        self.assertFalse(any(argv[-1] == "drag" for argv, _ in self.executor.calls))
+
+    def test_drag_rechecks_armed_after_endpoint_inspection(self):
+        points = []
+        def arm_at_end(argv):
+            if argv[-1] == "window_at_point":
+                points.append(True)
+                if len(points) == 2:
+                    self.executor.labels = ["com.joulewise.night.just-armed"]
+        self.executor.on_call = arm_at_end
+        self.assertError(self.computer.call("drag", SAMPLES["drag"]), "just-armed")
+        self.assertEqual(len(points), 2)
+        self.assertFalse(any(argv[-1] == "drag" for argv, _ in self.executor.calls))
+
+    def test_short_drag_executes_and_logs_as_single_click_at_start(self):
+        for dx, dy in ((0, 0), (2.999, 0), (2, 2), (-2, 2), (0, -2.999)):
+            with self.subTest(dx=dx, dy=dy):
+                self.tick += 1
+                self.executor.calls.clear()
+                arguments = {"x": 10, "y": 20, "to_x": 10 + dx, "to_y": 20 + dy, "duration": 5}
+                self.assertFalse(self.computer.call("drag", arguments)["isError"])
+                self.assertEqual(arguments["duration"], 5)  # Request is not mutated.
+                self.assertEqual([r["phase"] for r in self.records()[-3:]], ["before", "execute", "after"])
+                for record in self.records()[-3:]:
+                    self.assertEqual(record["tool"], "click")
+                    self.assertEqual(record["arguments"], SAMPLES["click"])
+                self.assertFalse(any(argv[-1] == "drag" for argv, _ in self.executor.calls))
+                clicks = [json.loads(stdin) for argv, stdin in self.executor.calls if argv[-1] == "click"]
+                self.assertEqual(clicks, [{**SAMPLES["click"], "expected_pid": 42,
+                                          "expected_bundle_id": "com.apple.finder"}])
+                points = [json.loads(stdin) for argv, stdin in self.executor.calls if argv[-1] == "window_at_point"]
+                self.assertEqual(points, [SAMPLES["click"]])
+
+    def test_short_drag_refuses_unsafe_click_target_and_logs_click(self):
+        self.executor.target = {"bundle_id": "com.apple.dock", "pid": 99, "layer": 20}
+        self.assertError(self.computer.call("drag", {"x": 10, "y": 20, "to_x": 11, "to_y": 21}), "Click refusal")
+        self.assertTrue(all(r["tool"] == "click" for r in self.records()))
+        self.assertFalse(any(argv[-1] in ("click", "drag") for argv, _ in self.executor.calls))
+
+    def test_short_drag_dry_run_logs_click_without_probes_or_input(self):
+        self.env["JW_CU_DRY_RUN"] = "1"
+        result = self.computer.call("drag", {"x": 0, "y": 0, "to_x": 2, "to_y": 0})
+        self.assertFalse(result["isError"])
+        self.assertTrue(json.loads(result["content"][0]["text"])["dry_run"])
+        self.assertEqual([r["phase"] for r in self.records()], ["before", "after"])
+        self.assertTrue(all(r["tool"] == "click" for r in self.records()))
+        self.assertFalse(self.executor.calls)
+        self.assertFalse(self.sleeps)
+
+    def test_drag_at_three_point_threshold_stays_drag(self):
+        for dx, dy in ((3, 0), (0, -3), (3, 3)):
+            with self.subTest(dx=dx, dy=dy):
+                self.executor.calls.clear()
+                self.assertFalse(self.computer.call("drag", {"x": 0, "y": 0, "to_x": dx, "to_y": dy})["isError"])
+                self.assertTrue(any(argv[-1] == "drag" for argv, _ in self.executor.calls))
+                self.assertFalse(any(argv[-1] == "click" for argv, _ in self.executor.calls))
+                self.assertEqual(self.records()[-1]["tool"], "drag")
+
+    def test_invalid_short_drag_is_logged_and_refused_before_normalization(self):
+        for duration in (0, 5.1, "bad"):
+            with self.subTest(duration=duration):
+                arguments = {"x": 0, "y": 0, "to_x": 0, "to_y": 0, "duration": duration}
+                self.assertTrue(self.computer.call("drag", arguments)["isError"])
+                for record in self.records()[-2:]:
+                    self.assertEqual(record["tool"], "drag")
+                    self.assertEqual(record["arguments"], arguments)
+        self.assertFalse(self.executor.calls)
 
     def test_armed_after_window_inspection_refuses_click(self):
         def arm_at_target(argv):

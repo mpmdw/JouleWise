@@ -47,7 +47,7 @@ TOOL_SCHEMAS = {
               schema({**POINT, "button": {"type": "string", "enum": ["left", "right"]},
                       "count": {"type": "integer", "enum": [1, 2]}}, ("x", "y"))),
     "move": ("Move the pointer to absolute screen points.", schema(POINT, ("x", "y"))),
-    "drag": ("Drag the left button between absolute screen points.",
+    "drag": ("Drag between hit-tested screen points; distances under 3 points become a click at the start.",
              schema({**POINT, "to_x": NUMBER, "to_y": NUMBER,
                      "duration": {"type": "number", "minimum": 0.1, "maximum": 5}},
                     ("x", "y", "to_x", "to_y"))),
@@ -277,15 +277,19 @@ class ComputerUse:
             if (not re.match(r"\s*" + re.escape(domain) + r"\s*=\s*\{\s*\n", output) or
                     not re.search(r"^\}[^\S\n]*$", output.rstrip(), re.M)):
                 raise ToolError(f"Cannot verify armed-night state: malformed launchctl domain {domain}")
-            sections = re.findall(r"^\s*services = \{[^\S\n]*\n(.*?)^\s*\}", output, re.M | re.S)
+            # Only a closing line at the block's own indentation ends services.
+            # A stray deeper/unindented brace stays a row and fails validation.
+            sections = re.findall(r"^([ \t]*)services = \{[^\S\n]*\n(.*?)^\1\}[^\S\n]*$",
+                                  output, re.M | re.S)
             if len(sections) != 1:
                 raise ToolError(f"Cannot verify armed-night state: malformed launchctl services in {domain}")
-            for line in sections[0].splitlines():
+            for line in sections[0][1].splitlines():
                 fields = line.split()
                 if (len(fields) != 3 or (fields[0] != "-" and not fields[0].isdigit()) or
-                        (fields[1] != "-" and not re.fullmatch(r"-?\d+|\([a-z]+\)", fields[1]))):
+                        (fields[1] != "-" and not re.fullmatch(r"-?\d+|\([a-z]+\)", fields[1])) or
+                        not re.fullmatch(r"[A-Za-z0-9._-]+", fields[2])):
                     raise ToolError(f"Cannot verify armed-night state: malformed launchctl row in {domain}")
-                if fields[2].startswith("com.joulewise.night"):
+                if fields[2].lower().startswith("com.joulewise.night"):
                     raise ArmedError(f"Armed-night refusal: loaded launchd label {fields[2]} in {domain}")
         config = self.config()
         if not config.get("respect_remote_armed", True):
@@ -360,15 +364,21 @@ class ComputerUse:
         call_id, frontmost = uuid.uuid4().hex, None
         input_reserved, before_logged = False, False
         try:
-            # Even refusals and invalid requests get a durable intent before any probes.
+            # Normalize validated short drags before all log phases and gates.
+            # Validation is pure; even invalid requests get intent before probes.
             try:
-                self.log(call_id, "before", name, arguments, frontmost, "pending")
-                before_logged = True
-            except Exception as exc:
-                raise ToolError(f"Action log unavailable; nothing executed ({type(exc).__name__})") from exc
-            if name not in TOOL_SCHEMAS:
-                raise ToolError("Unknown tool")
-            validate(name, arguments)
+                if name not in TOOL_SCHEMAS:
+                    raise ToolError("Unknown tool")
+                validate(name, arguments)
+                if name == "drag" and math.hypot(arguments["to_x"] - arguments["x"],
+                                                 arguments["to_y"] - arguments["y"]) < 3:
+                    name, arguments = "click", {"x": arguments["x"], "y": arguments["y"]}
+            finally:
+                try:
+                    self.log(call_id, "before", name, arguments, frontmost, "pending")
+                    before_logged = True
+                except Exception as exc:
+                    raise ToolError(f"Action log unavailable; nothing executed ({type(exc).__name__})") from exc
             if self.env.get("JW_CU_DRY_RUN") not in (None, "", "0"):
                 result = text_result({"dry_run": True, "executed": False,
                                       "note": "No probes or actions ran; safety/permissions were not evaluated"})
@@ -440,8 +450,10 @@ class ComputerUse:
             self.check_app(name, arguments)
             self.backend.executor.run(["/usr/bin/open", "-b", arguments["name"]])
             return text_result({"opened": arguments["name"]})
-        if name == "click":
+        if name in ("click", "drag"):
             self.check_click_target(arguments, frontmost)
+            if name == "drag":
+                self.check_click_target({"x": arguments["to_x"], "y": arguments["to_y"]}, frontmost)
             self.check_armed()
             arguments = {**arguments, "expected_pid": frontmost["pid"],
                          "expected_bundle_id": frontmost["bundle_id"]}

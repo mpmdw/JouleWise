@@ -65,9 +65,9 @@ outside measurement windows before relying on it.
 
 - All operational tools, including `screenshot`, `frontmost_app`, and `wait`,
   check `/bin/launchctl print gui/<uid>` explicitly and also `print system`
-  for **any loaded label starting `com.joulewise.night`**, even if it has no
-  running PID. This covers GUI LaunchAgents when the caller is in SSH or a
-  Background session, and system jobs. An unreadable GUI or system domain
+  for **any loaded label starting `com.joulewise.night` (case-insensitive)**,
+  even if it has no running PID. This covers GUI LaunchAgents when the
+  caller is in SSH or a Background session, and system jobs. An unreadable GUI or system domain
   refuses the operation; an empty caller-relative `launchctl list` cannot
   bypass the check. They also refuse if a configured host-link marker
   contains a future epoch. The error names the observed cause.
@@ -105,9 +105,13 @@ outside measurement windows before relying on it.
   the Dock, desktop, menu bar, and status items refuse the click. Swift
   rechecks focus and ownership before each mouse-down, including both
   halves of a double-click. Menus/overlays at other layers are also refused.
+  Drags apply the same check to both endpoints in Python and again in Swift
+  before mouse-down. A drag shorter than 3 screen points (Euclidean distance)
+  becomes one left click at its start, including in every audit-log phase;
+  the click target is hit-tested and no drag events are posted.
 - The allowlist reduces accidents; it is not a sandbox. An allowed app can
   itself launch programs, change settings, or expose other powerful actions.
-  Move, drag, and scroll retain foreground gating without click ownership
+  Move and scroll retain foreground gating without click ownership
   hit-testing. Use them only over the authorized app. The check-to-post race
   remains; neither window ownership nor armed state is an OS transaction.
 - Each tool call appends a durable `before` record to
@@ -162,6 +166,10 @@ default `respect_remote_armed: true` refuses GUI work on the Air too.
 Explicitly setting it to `false` opts out of all configured remote-marker
 checks; it never disables local GUI/system launchd label checks. Omitted
 settings retain the marker path and conservative default shown above.
+**On the MBP, `respect_remote_armed` must stay `true`**, and
+`armed_marker_paths` must include its local armed marker. The same marker
+file represents the MBP's own armed state there; setting this option to
+`false` skips that local marker too, leaving only the launchd label gates.
 
 These gates prevent this tool from acting during an observed armed span.
 They do **not** authorize starting Claude during an armed night: the agent
@@ -177,7 +185,7 @@ pipeline integration.
 | `screenshot` | No arguments; main-display JPEG, long edge ≤1280, plus mapping metadata |
 | `click` | `x`, `y`; optional `button`: `left`/`right`, `count`: 1/2 |
 | `move` | `x`, `y` |
-| `drag` | `x`, `y`, `to_x`, `to_y`; optional `duration`: 0.1–5 seconds (default 0.5) |
+| `drag` | `x`, `y`, `to_x`, `to_y`; optional `duration`: 0.1–5 seconds (default 0.5); under 3 points becomes a click at the start |
 | `scroll` | Integer `dy`, optional integer `dx`, each within ±5000 pixels; positive up/left |
 | `type_text` | `text`: up to 10,000 Unicode characters |
 | `key` | `combo`, e.g. `shift+tab`, `ctrl+alt+delete`, `cmd+a`; launcher/switcher combos refused |

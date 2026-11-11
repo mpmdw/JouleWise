@@ -212,7 +212,13 @@ func run() throws {
         let from = try point(args, "x", "y"), to = try point(args, "to_x", "to_y")
         let duration = try number(args, "duration", default: 0.5)
         guard duration >= 0.1 && duration <= 5 else { try fail("Drag duration outside 0.1...5 seconds") }
+        // Python converts distances under 3 points to the guarded click operation.
+        // Both endpoints must belong to normal windows of the allowed app.
+        try checkClickTarget(args, from)
+        try checkClickTarget(args, to)
         try mouse(.mouseMoved, from, .left)
+        try checkClickTarget(args, from)
+        try checkClickTarget(args, to)
         try mouse(.leftMouseDown, from, .left)
         // Release the button even if creation of an intermediate event fails.
         defer { try? mouse(.leftMouseUp, to, .left) }

@@ -28,9 +28,9 @@ def replace(source, old, new, *, occurrence=None):
 
 # Tuples are (description, old source, replacement, optional 1-based occurrence).
 REVIEW_MUTANTS = [
-    ("night label refusal removed", 'if fields[2].startswith("com.joulewise.night"):', 'if False:'),
-    ("night prefix narrowed to exact", 'fields[2].startswith("com.joulewise.night")',
-     'fields[2] == "com.joulewise.night"'),
+    ("night label refusal removed", 'if fields[2].lower().startswith("com.joulewise.night"):', 'if False:'),
+    ("night prefix narrowed to exact", 'fields[2].lower().startswith("com.joulewise.night")',
+     'fields[2].lower() == "com.joulewise.night"'),
     ("future epoch check removed", 'if epoch > self.clock():', 'if False:'),
     ("invalid marker fails open",
      'raise ToolError("Cannot verify armed-night state: invalid armed_until epoch") from exc', 'continue'),
@@ -78,10 +78,24 @@ ROUND_TWO_MUTANTS = [
 ]
 
 
+ROUND_THREE_MUTANTS = [
+    ("drag hit-tests removed", 'if name in ("click", "drag"):', 'if name == "click":'),
+    ("drag end hit-test removed",
+     'self.check_click_target({"x": arguments["to_x"], "y": arguments["to_y"]}, frontmost)', 'pass'),
+    ("short drag conversion removed", 'if name == "drag" and math.hypot(', 'if False and math.hypot('),
+    ("three-point drag converted to click", 'arguments["to_y"] - arguments["y"]) < 3:',
+     'arguments["to_y"] - arguments["y"]) <= 3:'),
+    ("launchctl label alphabet unchecked", 'not re.fullmatch(r"[A-Za-z0-9._-]+", fields[2])', 'False'),
+    ("night prefix case-sensitive", 'fields[2].lower().startswith("com.joulewise.night")',
+     'fields[2].startswith("com.joulewise.night")'),
+    ("services closing indentation ignored", r'^\1\}[^\S\n]*$', r'^[ \t]*\}[^\S\n]*$'),
+]
+
+
 class SafetyMutationTests(unittest.TestCase):
-    def test_review_and_round_two_mutants_are_caught(self):
+    def test_review_and_all_fix_round_mutants_are_caught(self):
         source = (functional.cu.HERE / "server.py").read_text()
-        for spec in REVIEW_MUTANTS + ROUND_TWO_MUTANTS:
+        for spec in REVIEW_MUTANTS + ROUND_TWO_MUTANTS + ROUND_THREE_MUTANTS:
             name, old, new, *occurrence = spec
             with self.subTest(mutant=name):
                 if name == "post-discovery armed rechecks removed":
