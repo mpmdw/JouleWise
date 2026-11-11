@@ -31,7 +31,9 @@ I read both protocol diffs in full, both reports, both specs, and the Opus code 
   .04802 at m = 39 and .01889 at m = 56; the tail at 3 is .1195 and .0604. Short cohorts: 21 + 14 gives 4 up to
   m = 51, then 3; 14 + 14 gives 4 up to m = 40, then 3; 7 + 7 gives 3 up to m = 42, then 2. All match Opus.
   Sol's .04801583 is the same number.
-- θ_eq = Φ(0.75/√2) = 0.70206, SE₀ = 0.06979 at 22 strata of 7, equivalence power .789 at no effect. Match Opus.
+- θ_eq = Φ(0.75/√2) = 0.70206, SE₀ = 0.06979 at 22 strata of 7. Match Opus. **RL-22 correction:**
+  the original design-interval-only power calculation is superseded; joint-rule equivalence power with
+  estimated window SE is .68 at 22 strata, .60 at 20 and .38 at 16 (receipt `claim-b-power.json`).
 - The U3 series quantile, by a different quadrature: q = 4.0898, 4.2793 and 4.3305 at N = 16, 22 and 24
   (n = 7, β = .05), so the D multiplier is 6.1347, 6.4190 and 6.4958. Match both builds.
 - Clopper-Pearson bounds 6.88% (0 of 42), 13.29% (0 of 21), 63.16% (0 of 3 windows). Match Sol.

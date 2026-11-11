@@ -12,8 +12,9 @@ class ClaimBPacketTests(Base):
     def chain(self, specs, *, next_window=None, change_policy=False, pool=False):
         first = self.scenario().finish()
         previous = first
-        for window, status in specs:
-            s = Scenario(first.root, window, previous=previous)
+        for window, status, *capture in specs:
+            captured = capture[0] if capture else True
+            s = Scenario(first.root, window, previous=previous, captured=captured)
             if window.startswith('T'):
                 s.record['role'] = 'test'
             # Seven eligible benign members per pair make the T-prefix calibration real.
@@ -24,6 +25,10 @@ class ClaimBPacketTests(Base):
                     rid = m['run_id'] + f'-{i}'
                     s.members.append({**m, 'run_id': rid})
                     s.thermal['members'].append({**deepcopy(t), 'id': rid})
+            if not captured:
+                s.absent_captures.update(m['run_id'] for m in s.members)
+                s.sources['exclusions']['members_excluded'] = [
+                    {'run_id': m['run_id'], 'codes': ['member.runtime_failure']} for m in s.members]
             s.thermal['model_windows'][f'tiny/{window}']['U3']['status'] = status
             previous = s
             s.finish()
@@ -104,6 +109,32 @@ class ClaimBPacketTests(Base):
         self.assertEqual(packet['checks']['thermal_escalation']['rulings'][0]['resets'], RESET)
         self.assertTrue(packet['packet_preflight']['ready'], packet['packet_preflight'])
         self.assertTrue(evaluate(s, packet)['admitted'])
+
+    def test_rl22_zero_capture_between_fail_bars_does_not_reset_hold_count(self):
+        for prefix, fail, refused, retry, next_window in (
+                ([], 'C1', 'C2', 'C2#2', 'C3'),
+                ([(f'C{i}', 'pass') for i in range(1, 9)], 'T1', 'T2', 'T2#2', 'T3')):
+            with self.subTest(role=fail[0]):
+                s = self.chain(prefix + [(fail, 'fail'), (refused, 'pass', False), (retry, 'fail')],
+                               next_window=next_window)
+                self.assert_thermal(s, 'fail', RESET)
+                self.rule(s)
+                packet = self.assert_thermal(s, 'pass')
+                check = packet['checks']['thermal_escalation']
+                self.assertEqual(check['u1_u3_fail_bars'], [fail, retry])
+                self.assertEqual(check['rulings'][0]['after_window'], retry)
+                self.assertTrue(packet['packet_preflight']['ready'], packet['packet_preflight'])
+                self.assertTrue(evaluate(s, packet)['admitted'])
+
+    def test_rl22_zero_capture_attempt_neither_increments_nor_resets_fail_count(self):
+        # Even a FAIL report on an uncaptured attempt contributes no thermal bar.
+        for status in ('pass', 'fail'):
+            with self.subTest(zero_capture_report=status):
+                s = self.chain([('C1', 'fail'), ('C2', status, False)], next_window='C2#2')
+                packet = self.assert_thermal(s, 'pass')
+                check = packet['checks']['thermal_escalation']
+                self.assertEqual(check['u1_u3_fail_bars'], ['C1'])
+                self.assertEqual((check['bars_since_ruling'], check['consecutive_fail_bars']), (1, 1))
 
     def test_item21_third_nonconsecutive_c_fail_bar_holds_until_ruling(self):
         s = self.chain([('C1', 'fail'), ('C2', 'pass'), ('C3', 'fail'),

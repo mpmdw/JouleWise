@@ -12,6 +12,7 @@ import json
 from pathlib import Path
 import subprocess
 import unittest
+from unittest.mock import patch
 
 from scripts import align_v4_series as series
 from tests.align.v4_option_b import OPTION_B_MANIFEST_SHA256
@@ -19,6 +20,18 @@ from tests.align.v4_option_b import OPTION_B_MANIFEST_SHA256
 ROOT = Path(__file__).resolve().parents[2]
 CHECKER = ROOT / 'docs/align/v4/seedcheck-claim-b-opus/derive_and_check.py'
 SOL_CHECKER = ROOT / 'docs/align/v4/seedcheck-claim-b-sol/derive_and_check.py'
+# RL-22: computed once from cf501f75fabf99173f278eccf66ac52b8eee1060,
+# configs/campaigns/align_v4/series/series_manifest.json (raw sha256 b5fedb49...1c64).
+# Projection: ordered windows with id, members, sabotage_ordinals (null when absent).
+# Canonical JSON: sort_keys=True, separators=(',', ':'), ensure_ascii=True, UTF-8, no newline.
+OLD_MEMBER_ROWS_SHA256 = '437ef3972387b987ed9f9f52d367344b6b3508da80d5390b3fbd26ed880256e8'
+
+
+def _member_rows_sha256(manifest):
+    projection = [{'id': w['id'], 'members': w['members'], 'sabotage_ordinals': w.get('sabotage_ordinals')}
+                  for w in manifest['windows']]
+    raw = json.dumps(projection, sort_keys=True, separators=(',', ':'), ensure_ascii=True).encode('utf-8')
+    return hashlib.sha256(raw).hexdigest()
 
 
 def _checker():
@@ -36,11 +49,17 @@ class SeedCheckTests(unittest.TestCase):
         cls.manifest = json.loads(cls.raw)
 
     def test_item_1_only_the_three_authority_citations_changed(self):
+        self.assertEqual(_member_rows_sha256(self.manifest), OLD_MEMBER_ROWS_SHA256)
+        # Squash merges, pruned branches and shallow clones may not retain the baseline commit.
+        if subprocess.run(['git', 'cat-file', '-e', 'cf501f75f^{commit}'], cwd=ROOT,
+                          capture_output=True).returncode != 0:
+            return
         old_raw = subprocess.check_output(
             ['git', 'show', 'cf501f75f:configs/campaigns/align_v4/series/series_manifest.json'], cwd=ROOT)
         self.assertEqual(hashlib.sha256(old_raw).hexdigest(),
                          'b5fedb49ee04e0b5388ea43a76b6fbf07cb94b896145476386271e702fb41c64')
         old = json.loads(old_raw)
+        self.assertEqual(_member_rows_sha256(old), OLD_MEMBER_ROWS_SHA256)
         self.assertEqual(len(old['windows']), len(self.manifest['windows']))
         for before, after in zip(old['windows'], self.manifest['windows'], strict=True):
             self.assertEqual(before['members'], after['members'], before['id'])
@@ -52,6 +71,21 @@ class SeedCheckTests(unittest.TestCase):
         self.assertEqual(self.manifest, expected)
         self.assertEqual(self.raw, old_raw.replace(b'RUN_STATE 251', b'RUN_STATE 252')
                          .replace(b'RUN_STATE_251', b'RUN_STATE_252'))
+
+    def test_item_1_digest_check_survives_absent_baseline_commit(self):
+        absent = subprocess.CompletedProcess(args=[], returncode=1)
+        with patch.object(subprocess, 'run', return_value=absent), patch.object(
+                subprocess, 'check_output', side_effect=AssertionError('absent baseline must not be opened')):
+            self.test_item_1_only_the_three_authority_citations_changed()
+            for field in ('members', 'sabotage_ordinals'):
+                changed = deepcopy(self.manifest)
+                if field == 'members':
+                    changed['windows'][1]['members'][6]['episode_seed'] ^= 1
+                else:
+                    changed['windows'][1]['sabotage_ordinals'][series.PAIRS[0]] += 2
+                with self.subTest(field=field), patch.object(self, 'manifest', changed):
+                    with self.assertRaises(AssertionError):
+                        self.test_item_1_only_the_three_authority_citations_changed()
 
     def test_committed_manifest_matches_the_text_for_every_member(self):
         self.assertEqual(hashlib.sha256(self.raw).hexdigest(), OPTION_B_MANIFEST_SHA256)
