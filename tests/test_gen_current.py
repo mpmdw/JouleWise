@@ -454,5 +454,42 @@ class SchemaTests(unittest.TestCase):
         self.invalid(pointer, "deadline >= latest_end")
 
 
+class GenStateHookTests(unittest.TestCase):
+    """scripts/gen_state.py carries CURRENT.json for the live RUN_STATE.md only (lead's hook)."""
+
+    @classmethod
+    def setUpClass(cls):
+        import os
+        import sys
+        scripts = os.path.join(str(gc.ROOT), "scripts")
+        if scripts not in sys.path:
+            sys.path.insert(0, scripts)
+        import gen_current
+        import gen_state
+        cls.gen_state, cls.hooked = gen_state, gen_current
+        cls.live = os.path.join(gen_state.ROOT, "RUN_STATE.md")
+
+    def test_fixture_run_state_leaves_the_pointer_alone(self):
+        with mock.patch.object(self.hooked, "check_default", side_effect=AssertionError), \
+                mock.patch.object(self.hooked, "generate_default", side_effect=AssertionError):
+            self.assertEqual(self.gen_state._current_pointer(True, "/elsewhere/RUN_STATE.md"), 0)
+            self.assertEqual(self.gen_state._current_pointer(False, "/elsewhere/RUN_STATE.md"), 0)
+
+    def test_live_run_state_checks_and_generates(self):
+        with mock.patch.object(self.hooked, "check_default", return_value=1) as check, \
+                mock.patch.object(self.hooked, "generate_default", return_value=0) as generate:
+            self.assertEqual(self.gen_state._current_pointer(True, self.live), 1)
+            self.assertEqual(self.gen_state._current_pointer(False, self.live), 0)
+        check.assert_called_once_with()
+        generate.assert_called_once_with()
+
+    def test_check_exit_carries_pointer_drift_and_invalid(self):
+        for pointer, expected in ((0, 0), (1, 1), (2, 2)):
+            with self.subTest(pointer=pointer), mock.patch.object(
+                    self.hooked, "check_default", return_value=pointer), \
+                    contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(self.gen_state.main(["--check"]), expected)
+
+
 if __name__ == "__main__":
     unittest.main()
