@@ -64,14 +64,18 @@ def classify(command, *, shell=False, executable=None):
         parts = list(simple_commands(command)) if shell else [[os.fsdecode(command)]]
     else:
         parts = [[os.fsdecode(item) for item in command]]
-    found = []
+    found = classify([executable]) if shell and executable is not None else []
     for raw in parts:
         argv = list(raw)
         while argv and "=" in argv[0] and not argv[0].startswith(("/", "-")):
             argv.pop(0)
         if not argv:
-            continue
-        names = _names(executable or argv[0])
+            if executable is None:
+                continue
+            argv = [os.fsdecode(executable)]
+        names = _names(argv[0])
+        if executable is not None and not shell:
+            names |= _names(executable)
         if "env" in names:
             rest = argv[1:]
             while rest:
@@ -109,7 +113,8 @@ def _check(command, **kwargs):
         "file": frame.f_code.co_filename, "function": frame.f_code.co_name,
         "line": frame.f_lineno,
     }
-    for name, argv in found:
+    argv = [os.fsdecode(command)] if isinstance(command, (str, bytes)) else [os.fsdecode(a) for a in command]
+    for name, _simple_argv in found:
         record = {"id": uuid.uuid4().hex, "pid": os.getpid(), "command": name,
                   "argv": argv[:6], "test_id": _active_test, "caller": caller}
         REFUSALS.append(record)
@@ -162,6 +167,10 @@ def _replace(owner, name, replacement):
     setattr(owner, name, replacement)
 
 
+def _invoke(original, *args, **kwargs):
+    return original(*args, **kwargs)
+
+
 def install():
     global _report
     if _originals:
@@ -206,7 +215,7 @@ def install():
                     if name.startswith("execl"):
                         argv = args[1:-1] if name.endswith("e") else args[1:]
                     _check(argv, executable=executable)
-                return original(*args, **kwargs)
+                return _invoke(original, *args, **kwargs)
             return guarded
 
         _replace(os, name, make_wrapper(name, original))

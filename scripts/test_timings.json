@@ -257,6 +257,8 @@
     "tests.test_harvest_v5_g2b_window": 8.207,
     "tests.test_harvest_v5_qualification": 4.602,
     "tests.test_harvest_window": 4.791,
+    "tests.test_host_command_guard": 1.896,
+    "tests.test_host_command_sites": 53.354,
     "tests.test_identity_pins": 1.903,
     "tests.test_idle_admission": 4.252,
     "tests.test_idle_dependence": 0.049,
