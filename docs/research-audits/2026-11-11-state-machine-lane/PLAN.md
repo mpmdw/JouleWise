@@ -277,3 +277,47 @@ repair and not a guess.
   orders (desk before record k+1; re-issue of the tail record; record k+1 held until the desk is final) and the
   analysis-side reader of pool membership. The running seats were briefed before RL-54; each gets a round 2
   for the delta.
+
+## 9. State at 04:50 PST
+
+**Rulings applied since section 8:** RL-56 (W-7 accepted; post-install rule restated, two additions), RL-57
+(repin tooling; withdrawn in part by RL-58), RL-58 (the estimator file goes back to the accepted bytes).
+
+| Item | Branch | Target | State |
+|---|---|---|---|
+| Exit contract (8.2 items 6, 9) | `feat/2026-11-11-sm-exit-contract` | `main` | Merged, PR #722 |
+| `CURRENT.json` from a RUN_STATE pointer block (8.2 item 4, Q7) | `feat/2026-11-11-sm-current-pointer` | `main` | Merged, PR #723 |
+| Window state and outcome (Q2, 8.2 item 1 shadow, 8.3) | `feat/2026-11-11-sm-window-state` | `main` | ADMIT after round 2, PR #726 |
+| Unseal record (8.2 item 7, RL-53 W-8) | `feat/2026-11-11-sm-unseal-record` | `main` | ADMIT, PR #728 |
+| Air results watcher (Q1, Q9) | `feat/2026-11-11-sm-air-watch` | `main` | ADMIT-WITH-FIXES; round 2 queued. Wrong results-branch layout; first run read every branch. |
+| Retire `WINDOW_STATUS.md` and its publisher (Q8) | `docs/2026-11-11-sm-retire-window-status` | `main` | Seat running |
+| Finality tests and runbook (RL-53 W-7, RL-54, RL-56) | `test/2026-11-11-w1-finality-tests` | W1 line | ADMIT, PR #724; waits for the line's CI to be green |
+| W-3 unstrand | `ops/2026-11-11-w1-unstrand` | W1 line, batch | ADMIT after round 2 |
+| W-1 and W-2 arm checks | `ops/2026-11-11-w1-armcheck` | W1 line, batch | Round 3 running (RL-56 additions) |
+| W-5 offload (Q10) | `ops/2026-11-11-w1-offload` | W1 line | ADMIT-WITH-FIXES; one test owed, round 2 queued |
+| W1 line CI debt | `ops/2026-11-11-w1-ci-debt` | W1 line | Orphan-census test, decision log, 440 to 488; in progress |
+| Estimator restore (RL-58) | `ops/2026-11-11-w1-est-restore` | W1 line | Seat running |
+| Repin tooling (RL-57) | none | none | Stopped under RL-58; nothing pushed |
+
+**What the W1 line's CI showed.** PR #724 was the first PR against the W1 line, so it was the first time
+`main`'s gates ran there. Failing before this lane touched anything: the orphan-census test; a decision
+reference to D-188 that the line's decision log lacked; a packet mutation count of 488 against a pinned 440
+(explained by `cc67ac11e`, claim contract B items 19 to 21, inside the head RL-28 admitted); and the estimator
+pins, `g2_phase_d` and `tests.test_calibration_live_three_window`, all from one cause: `b9fedca2a` added a parse
+memo to `joulewise/adapters/powermetrics.py`, one of the four files the issued calibration acceptance pins, so
+bound code on the line reported the acceptance stale. RL-58 restores the file.
+
+**Still open from section 2:** 8.2 item 3 shadow step (`owed_effects`), Q12 analysis-side hygiene, 8.2 item 5
+(with W-4, after the series), 8.2 item 8 (next block's registration).
+
+## 10. MBP install list, post-R1 batch (updated)
+
+All remote. Nothing here is physical.
+
+| What | Arrives with | Native check after install |
+|---|---|---|
+| W-1 watchdog acceptance at the arm, W-2 privilege preflight | The registered W1 line checkout | Pre-install dry run on a rendered plan; a forced post-install hold in an isolated session, both labels absent afterwards |
+| W-3 unstrand for a pre-chain refusal, `--restore-host` | Same | Synthetic refused plan in a scratch custody root; a deferred restore, then a retry |
+| W-5 offload repairs | Same (unbound file) | Remove one Air queue entry by hand, run `verify`, confirm it is recreated |
+| Estimator file restored (RL-58) | Same | `repin.py --check` and the calibration acceptance preflight on the MBP checkout |
+| Air watcher | Air only | One `--once --include-plan` poll on a finished rehearsal, by the orchestrator |
