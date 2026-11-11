@@ -1928,6 +1928,76 @@ verdict rests on what was frozen, and that has not moved.
 
 ---
 
+# Decision request 18: Paper 1 seat 9, the automation section (2026-11-11 00:32 PST)
+
+**Read.** On `docs/2026-11-11-paper1-automation` @ `24a990e1e` (draft PR #715): the seat report with its
+dispositions table, the head of the Sol review, and all of §7 as it now stands. I checked the stop-versus-pause
+claim in code myself: `joulewise/b5/driver.py:1272-1282` at `c27485347`, the absence of any pause class at that
+commit, `joulewise/b6/agent_pause.py:12-13` at `f31aca19f`, and RUN_STATE item 16. The diff touches `paper1.md`
+only inside §7 (three hunks, lines 1293 to 1575). I relied on the Sol review for the other sources.
+
+## RL-46. RL-5 item 3 is amended; seat 9 is ADMIT-WITH-THREE-SMALL-FIXES
+
+### RL-5 item 3, amended
+
+My sentence was wrong for the primary block, and loose about arming. It now reads:
+
+> "3. §7 says what is true of where agents ran. An agent census refuses an arm while any agent process is
+> alive. During a running session, a sighting **stopped** the chain in the primary block and **paused** it in
+> the replication and BYTES (resume after 600 s with no agent; stop once 7,200 s in total has been spent
+> paused). Between sessions a headless agent ran on the measurement Mac. What armed a session differed by
+> collection: agent activations in the primary block, the scheduled loop program in the replication and
+> BYTES; the agent's standing authority over arming dates from 6 November 2026 and covers later windows only.
+> Agents ran the blind dry runs on the analysis laptop under custody kept by rule. The three false claims are
+> removed as before."
+
+The code is plain: at the primary block's claim head a positive census is "the gate's own refusal, so the chain
+stops", and item 16 records a real stop 2 h 32 min into a session. The pause was introduced on 14 October for
+the replication. §7 as written by the seat is right and stays.
+
+### Verdict on seat 9
+
+The section is true to the record as far as I can check it, and the Sol review's findings were all taken. It
+says what armed each collection, dates the agent's authority, and no longer claims a guarantee it cannot source.
+Three small fixes, all inside §7. With them applied in these words it merges after its rebase onto seat 10 and
+does not come back to me.
+
+**F-1. §7.2 item 2 claims more than is now true.** "Everything released during collection was structure only"
+has two known exceptions, and one of them was established after the seat wrote. Add at the end of item 2:
+
+> "Two departures are disclosed: status and reason words were read before the primary release under a
+> structural ruling (Section 4.6), and one held-out BYTES model's timing was read before the stage-1
+> commitment (Section 7.3)."
+
+**F-2. `P1-AUTO-BLINDCHECK` is no longer an open question.** The check was made on 11 November (RL-44, RL-45).
+
+- The FILL description becomes: "disclosure from the recorded check and deviation BY-BLIND-1: per-request
+  timing of one held-out model was read and published before the stage-1 commitment; per-stage timestamps of
+  every session were in the public operational record; each model's approximate decode time was registered
+  from the pilot; why the committed lines cannot depend on any of it; and what the check could not
+  establish".
+- Its source string becomes: "made 2026-11-11: `docs/process_traces/2026-11-11-bytes-blindcheck/BLINDCHECK.md`
+  on the BYTES lineage; research lead RL-44 and RL-45; registration deviation BY-BLIND-1".
+- The fill itself waits for the Part 2 fill seat.
+
+This corrects one line of RL-44: the disclosure goes at this placeholder in §7.3, and §6.3 points to it. I
+wrote "§6.3" there without checking where the placeholder sits.
+
+**F-3. The first sentence of §7.1 says the study was "written by AI agents".** The researcher writes the
+introduction and the conclusion. Change "written" to "drafted" now. The statement of who wrote what is Ed's to
+approve at the final read.
+
+**Not fixes.** The "shell guard" clause stays out, on the narrower ground the seat now records. The section is
+long; its length is seat 10's and the final read's business, not this seat's.
+
+**Reason.** The paper's account of its own automation is read as a claim about integrity. It has to match the
+code that ran, block by block, and RL-5 did not.
+
+**Blind status.** Not blind to Block 5. Blind to Block 6, BYTES and v4; the section carries no value from any
+of them.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
