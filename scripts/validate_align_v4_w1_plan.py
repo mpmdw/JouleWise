@@ -98,6 +98,7 @@ def build_template(collection_plan: dict | None = None) -> dict:
                                "g0_cap_receipt": RECEIPT_ONLY,
                                "g0_cap_s": pending, "heavy": True, "per_turn": True,
                                "sensors": {"fan_keys": pending, "r0_sha256": pending,
+                                           "record_keys": [kit.r0_heatsink_key()],
                                            "s_fast": pending, "s_slow": pending},
                                "turn_cap_s": pending},
             "window": 1,
@@ -150,7 +151,8 @@ def validate(value: dict, inputs: dict | None = None, r1_slots: dict | None = No
     sensor_keys = {"s_fast", "s_slow", "fan_keys", "r0_sha256"}
     if not isinstance(policy, dict) or not isinstance(policy.get("sensors"), dict):
         _fail("thermal_policy and thermal_policy.sensors must be objects")
-    if set(policy["sensors"]) != sensor_keys:
+    if (not sensor_keys <= set(policy["sensors"])
+            or set(policy["sensors"]) - sensor_keys - {"record_keys"}):
         _fail("thermal_policy.sensors must explicitly contain " + ", ".join(sorted(sensor_keys)))
     # The same canonical gate-policy validation the kit applies to D members:
     # the template's own heavy/per_turn keys are validated, never supplied here.
@@ -195,6 +197,7 @@ def validate(value: dict, inputs: dict | None = None, r1_slots: dict | None = No
         _fail("member roles do not match the Amendment-1 window-1 roster")
     registered = (collection_plan if collection_plan is not None
                   else json.loads(COLLECTION_PLAN.read_text()))
+    kit.check_w1_record_keys(registered)
     bindings = MEMBER_BINDINGS
     if [[row.get(key) for key in bindings] for row in members] != [
             [row.get(key) for key in bindings] for row in registered["members"]]:

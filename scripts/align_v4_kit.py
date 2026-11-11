@@ -1272,6 +1272,7 @@ def require_w1_ready(root=ROOT):
         raise ValueError('RUN_STATE 210 / squeeze ruling: W1/D requires a readable collection plan '
                          'that enables KM003C capture') from exc
     km003c.require_enabled(collection_plan)
+    check_w1_record_keys(collection_plan, root)
     inputs = read_inputs(root)
     if not any(p.startswith('WP11.') for p in pending_inputs(inputs)):
         pins_raw = (Path(root) / D_PINS).read_bytes()
@@ -1359,13 +1360,43 @@ def gate_policy_fields(policy, role='D'):
     return fields
 
 
-def thermal_policy(inputs, *, heavy, per_turn, window_reference, role='D'):
+def r0_heatsink_key(root=ROOT):
+    """RL-78/RL-84: the registered R0 pick, independent of R1's gate picks.
+
+    The runtime config retains R0's sensor selection and its record digest;
+    R1's replacement gate pair lives in inputs.R1 and thermometry.D instead.
+    Read only this repository config, never the R0 measurement record.
+    """
+    config = json.loads((Path(root) / 'configs/align/v4/r1_runtime.json').read_bytes())
+    return r1_runtime.sensors_policy(config)['s_slow']
+
+
+def check_w1_record_keys(plan, root=ROOT):
+    """RL-84 P-1/P-2: record the heatsink in every existing sidecar only."""
+    heatsink = r0_heatsink_key(root)
+    for member in plan['members']:
+        thermal = member['spec'].get('thermal')
+        if member['role'] == 'anchor':
+            if thermal is not None:
+                raise ValueError(f'member {member["ordinal"]} is ungated; no thermal sidecar is allowed (RL-84 P-1/P-2)')
+            continue
+        sensors = thermal.get('sensors') if isinstance(thermal, dict) else None
+        recorded = sensors.get('record_keys') if isinstance(sensors, dict) else None
+        if not isinstance(recorded, list) or heatsink not in recorded:
+            raise ValueError(f'member {member["ordinal"]} thermal sidecar record_keys must contain '
+                             f'R0 heatsink key {heatsink} (RL-84 P-2)')
+
+
+def thermal_policy(inputs, *, heavy, per_turn, window_reference, role='D', root=ROOT):
     value = inputs['R1']['thermal_policy']
     if value is None:
-        value = dict(sensors=None, delta_fast_c=None, delta_slow_c=None,
+        value = dict(sensors=dict(s_fast=None, s_slow=None, fan_keys=None, r0_sha256=None),
+                     delta_fast_c=None, delta_slow_c=None,
                      turn_cap_s=None, chunk_tokens=None)
     else:
         value = gate_policy_fields(value, role)
+    # Recording the registered R0 heatsink does not assign it either gate role.
+    value['sensors'] = {**value['sensors'], 'record_keys': [r0_heatsink_key(root)]}
     value.update(heavy=heavy, per_turn=per_turn)
     value['window_reference'] = window_reference
     return value
@@ -1424,14 +1455,14 @@ def build_files(root=ROOT):
                             chat_template_kwargs={'reasoning_effort': inputs['R0']['reasoning_effort']},
                             max_episode_decode_tokens=inputs['R1']['B_D'], deadman_s=inputs['R1']['T_dead'],
                             hybrid_checkpoint_limit=0, thermal=thermal_policy(
-                                inputs, heavy=True, per_turn=True, window_reference=reference))
+                                inputs, heavy=True, per_turn=True, window_reference=reference, root=root))
             else:
                 reference = {'role': 'consume', 'source_run_id': capture_run_id,
                              'source_config_sha256': capture_config_sha256}
                 spec.update(max_turns=inputs['WP18'][name[0]]['max_turns'],
                             deadman_s=CONTRAST_DEADMAN_S,
                             thermal=thermal_policy(inputs, heavy=False, per_turn=name.endswith('G'),
-                                                   window_reference=reference, role='contrast'))
+                                                   window_reference=reference, role='contrast', root=root))
             config['workload_profile']['prompt_text'] = json.dumps(spec, sort_keys=True, separators=(',', ':'), allow_nan=False)
             model_id = D_TAG if name == 'D' else 'qwen3-30b-a3b'
             config['run_metadata']['tags'] = [PACK_ID, 'non-claim', 'launch_lineage_required', 'align', 'align_episode',
@@ -1511,6 +1542,7 @@ def build_files(root=ROOT):
                     w1_launcher='per-member configs via the plan_tree stage commands (the specs carry the roles)',
                     r1_runtime_entrypoint=inputs['WP15']['runtime_entrypoint']))
     check_window_reference_roles(plan)
+    check_w1_record_keys(plan, root)
     files[KIT / 'collection_plan.json'] = raw_json(plan)
     seed_table = {}
     for tag, indices in ((D_TAG, (1, 2, 91, 92, 93)), ('qwen3-30b-a3b', (1, 14, 16))):
