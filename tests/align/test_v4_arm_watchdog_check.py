@@ -40,19 +40,25 @@ class WatchdogTests(unittest.TestCase):
                 'MAGISTRATE_WATCHDOG_CUSTODY_ROOT': str(self.root / 'watchdog'),
                 'MAGISTRATE_WATCHDOG_STATUS_HOST': 'synthetic'}}
         self.write_plist()
-        self.plan = {'plan_id': 'synthetic-arm', 't0_epoch_s': session.time.time() + 3600}
-        self.discovery = {'plans': [dict(self.plan, span_start_epoch_s=self.plan['t0_epoch_s'] - 180)],
+        self.plan = {'plan_id': 'synthetic-arm', 't0_epoch_s': session.time.time() + 3600,
+                     'custody_root': str(self.root / 'custody')}
+        item = {k: self.plan[k] for k in ('plan_id', 't0_epoch_s')}
+        self.parser = dict(item, parse='ok', discovered_by_scan=False,
+                           span_start_epoch_s=self.plan['t0_epoch_s'] - 180)
+        self.discovery = {'plans': [dict(item, span_start_epoch_s=self.plan['t0_epoch_s'] - 180)],
                           'errors_count': 0, 'installed_source': 'not_distinguishable'}
         self.run = Mock(return_value=subprocess.CompletedProcess([], 0,
             'decision=LAUNCHING reason=all launch predicates clear\nWOULD_SPAWN none\n', ''))
         self.run.side_effect = lambda argv, **kw: (subprocess.CompletedProcess(argv, 0,
-            json.dumps(self.discovery) + '\n', '') if '-c' in argv else self.run.return_value)
+            json.dumps(self.parser if session.WATCHDOG_PLAN_FILE_PROGRAM in argv else self.discovery) + '\n', '')
+            if '-c' in argv else self.run.return_value)
 
     def write_plist(self):
         self.plist.write_bytes(plistlib.dumps(self.document))
 
     def check(self, phase='pre_install'):
-        return session.watchdog_acceptance(phase=phase, runner=self.run, plist_path=self.plist, plan=self.plan)
+        return session.watchdog_acceptance(phase=phase, runner=self.run, plist_path=self.plist, plan=self.plan,
+                                          plan_path=self.root / 'custody/night_plan.json')
 
     def test_span_boundary_requires_a_fence_in_both_phases(self):
         fences = {'FENCED', 'STANDDOWN_REQUEST', 'STANDDOWN_TERM', 'STANDDOWN_KILL'}
@@ -62,14 +68,15 @@ class WatchdogTests(unittest.TestCase):
                     with self.subTest(phase=phase, offset=offset, state=state):
                         self.run.return_value = subprocess.CompletedProcess([], 0, f'decision={state} reason=x\n', '')
                         row = session.watchdog_acceptance(phase=phase, runner=self.run, plist_path=self.plist,
-                            plan=self.plan, now=lambda: self.plan['t0_epoch_s'] + offset)
+                            plan=self.plan, plan_path=self.root / 'custody/night_plan.json',
+                            now=lambda: self.plan['t0_epoch_s'] + offset)
                         admitted = session.WATCHDOG_ADMITTED if offset == -181 else fences
                         self.assertEqual(row['ok'], state in admitted)
 
     def test_discovery_uses_installed_interpreter_environment_and_identity(self):
         row = self.check('post_install')
         self.assertTrue(row['ok'], row)
-        self.assertEqual(row['plan_identity'], {'found': True,
+        self.assertEqual(row['plan_identity'], {'source': 'installed_load_plans', 'found': True,
             'span_start_epoch_s': self.plan['t0_epoch_s'] - 180,
             'expected': self.plan['t0_epoch_s'] - 180, 'ok': True})
         first, second = self.run.call_args_list
@@ -81,9 +88,9 @@ class WatchdogTests(unittest.TestCase):
         self.assertLessEqual(second.kwargs['timeout'], first.kwargs['timeout'])
         self.assertEqual(row['installed_source'], 'not_distinguishable')
 
-    def test_discovery_faults_refuse_in_both_phases(self):
+    def test_discovery_faults_refuse_after_install(self):
         valid = json.dumps(self.discovery) + '\n'
-        for phase in ('pre_install', 'post_install'):
+        for phase in ('post_install',):
             for fault in ('missing', 'wrong_span', 'malformed', 'timeout', 'nonzero', 'errors', 'duplicate'):
                 with self.subTest(phase=phase, fault=fault):
                     payload = json.loads(valid)
@@ -268,9 +275,7 @@ class RemoteProbeTests(watchdog_fixtures.WatchdogTestCase):
         self.assertNotIn('@@', text)
         path = home / 'Library/LaunchAgents/com.joulewise.magistrate.plist'
         path.parent.mkdir(parents=True, exist_ok=True)
-        document = plistlib.loads(text.encode())
-        document['EnvironmentVariables']['HOME'] = str(home)
-        path.write_bytes(plistlib.dumps(document))
+        path.write_text(text)
         return path
 
     def test_real_installed_parser_accepts_both_layouts_and_post_install_needs_discovery(self):
@@ -287,8 +292,10 @@ class RemoteProbeTests(watchdog_fixtures.WatchdogTestCase):
                 plan_path = custody / 'night_plan.json'
                 raw = json.loads(plan_path.read_text())
                 plist = self.installed_plist(home, watchdog_root)
-                check = lambda phase: session.watchdog_acceptance(phase=phase, runner=self.parser_run,
-                    plist_path=plist, plan=raw)
+                def check(phase):
+                    with patch.dict(os.environ, HOME=str(home)):
+                        return session.watchdog_acceptance(phase=phase, runner=self.parser_run,
+                            plist_path=plist, plan=raw, plan_path=plan_path)
                 pre = check('pre_install')
                 self.assertTrue(pre['ok'], pre)
                 self.assertEqual(pre['plan_identity'], {'source': 'installed_parser_on_plan_file',
@@ -315,7 +322,8 @@ class RemoteProbeTests(watchdog_fixtures.WatchdogTestCase):
                                 f'Could not find service "{label}" in domain for user gui: {os.getuid()}')
                         return self.parser_run(argv, **kwargs)
                     dwell = {'quiet_dwell': {}}
-                    with self.assertRaisesRegex(ValueError, 'arm plan missing.*install undone'):
+                    with patch.dict(os.environ, HOME=str(home)), self.assertRaisesRegex(
+                            ValueError, 'arm plan missing.*install undone'):
                         session._watchdog_post_install({'plan_path': str(plan_path),
                             'measurement_root': str(session.ROOT)}, dwell, runner=run, plist_path=plist)
                     self.assertTrue(any('--uninstall' in call for call in calls))
@@ -367,12 +375,63 @@ if __name__ == '__main__': print('decision=LAUNCHING reason=synthetic')
         plan = {'plan_id': 'skew-arm', 't0_epoch_s': session.time.time() + 3600,
                 'authored_epoch_s': session.time.time() - 60, 'custody_root': str(custody), 'ac_powermode': 2}
         (custody / 'night_plan.json').write_text(json.dumps(plan))
-        row = session.watchdog_acceptance(phase='pre_install', plist_path=plist, plan=plan)
+        with patch.dict(os.environ, HOME=str(home)):
+            row = session.watchdog_acceptance(phase='pre_install', plist_path=plist, plan=plan,
+                                             plan_path=custody / 'night_plan.json')
         self.assertFalse(row['ok'], row)
         self.assertEqual(session._watchdog_refusal('pre_install', row),
             'watchdog_acceptance: pre_install: plan_identity: malformed')
         self.assertNotIn('SECRET', json.dumps(row))
         self.assertNotIn('ac_powermode', json.dumps(row))
+
+    def test_real_magistrate_template_is_accepted_by_installed_plist_whitelist(self):
+        plan = self.make_plan(t0=session.time.time() + 3600)
+        home = self.temp / 'template-home'
+        plist = self.installed_plist(home, self.harness.storage.root)
+        run = Mock(side_effect=self.parser_run)
+        with patch.dict(os.environ, HOME=str(home)):
+            row = session.watchdog_acceptance(phase='pre_install', runner=run, plist_path=plist,
+                plan=json.loads((Path(plan.custody_root) / 'night_plan.json').read_text()),
+                plan_path=Path(plan.custody_root) / 'night_plan.json')
+        self.assertTrue(row['ok'], row)
+        self.assertEqual(run.call_args_list[0].args[0][:2],
+            [sys.executable, str(session.ROOT / 'scripts/magistrate_watchdog.py')])
+        self.assertEqual(run.call_args_list[0].kwargs['env']['MAGISTRATE_SESSION_BIN'],
+                         str(self.temp / 'unused-session'))
+
+    def test_direct_parser_uses_scanned_plan_rejection_steps_and_emits_no_content(self):
+        plan = self.make_plan(t0=session.time.time() + 3600)
+        path = Path(plan.custody_root) / 'night_plan.json'
+        original = path.read_text()
+        home = self.temp / 'parser-home'
+        home.mkdir()
+        cases = [(None, 'unreadable', 'FileNotFoundError'), ('SECRET not json', 'unreadable', 'JSONDecodeError'),
+                 ((session.ROOT / 'tests/fixtures/night_plan_v1_retired.json').read_text(), 'retired_v1', None)]
+        future = json.loads(original)
+        future['authored_epoch_s'] = future['t0_epoch_s']
+        cases.append((json.dumps(future), 'malformed', 'PlanError'))
+        malformed = json.loads(original)
+        malformed['SECRET_UNKNOWN_KEY'] = 'SECRET content'
+        cases.append((json.dumps(malformed), 'malformed', 'PlanError'))
+        for content, status, exception in cases:
+            with self.subTest(status=status, exception=exception):
+                if content is None:
+                    path.unlink()
+                else:
+                    path.write_text(content)
+                before = sorted(str(p) for p in self.temp.rglob('*'))
+                out = subprocess.run([sys.executable, '-B', '-c', session.WATCHDOG_PLAN_FILE_PROGRAM,
+                    str(Path(watchdog_fixtures.wd.__file__).resolve()), str(self.harness.storage.root), str(path)],
+                    cwd=session.ROOT, env=dict(os.environ, HOME=str(home), PYTHONDONTWRITEBYTECODE='1'),
+                    check=True, capture_output=True, text=True, timeout=30)
+                self.assertEqual(len(out.stdout.splitlines()), 1)
+                expected = {'parse': status, 'discovered_by_scan': False}
+                if exception:
+                    expected['exception'] = exception
+                self.assertEqual(json.loads(out.stdout), expected)
+                self.assertEqual(out.stderr, '')
+                self.assertNotIn('SECRET', out.stdout)
+                self.assertEqual(before, sorted(str(p) for p in self.temp.rglob('*')))
 
     def test_constant_discovery_program_runs_against_real_module_without_host_access(self):
         plan = self.make_plan()
