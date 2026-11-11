@@ -22,6 +22,21 @@ and `runtime_stack`, each `ok: true`). Its arm record carries the packet path,
 SHA-256 and both results. A missing, stale or refused packet is a named refusal.
 The synthetic driver remains fixture-only.
 
+**Arm step for the packet (Fable kit delta review D-7, procedural route; no code change).** The driver
+refuses a packet from another commit or with other source hashes, but accepts any packet left at the fixed
+path by an earlier night of the same commit: the packet carries no plan, night or date. So every arm of an R1
+night does, in this order, on the measurement Mac from the final commit:
+
+1. delete any existing `$MEASUREMENT_ROOT/.align-r1-prepare.json` (`prepare` opens it with mode `x` and
+   refuses an existing file, so this step is what makes the packet fresh);
+2. run `align_r1_followup_kit.py prepare` on the final commit with the real weight-digest and
+   installed-stack preflights, and record the SHA-256 it reports, in the arm notice;
+3. arm; after the arm, compare the arm record's packet SHA-256 with the SHA-256 recorded in step 2. A
+   mismatch is a refused arm: uninstall and repeat from step 1.
+
+The check is procedural because the driver (`scripts/align_r1_rehearsal.py`) is a condition-13 file; moving
+the packet into the night's output directory in code would repeat the smoke.
+
 `capture-predecessor-30b` is the ordinary 30B capture predecessor introduced by
 `a85ee8ec6` for RL-72's indivisible predecessor/step-D admission unit.
 Its runtime fields remain defined by `KIND_FIELDS`.
