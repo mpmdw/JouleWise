@@ -409,6 +409,16 @@ The original prefix remains SHA-256
 The round-1 801-row prefix is also unchanged. The sole historical MISMATCH
 is still row 249 (RL-39); this round introduces none.
 
+### Commits and new print authority
+
+**NEW PRINT AUTHORITY SHA:** `60f66800fabe02c574dab41b2a61f38623c47a0c`
+— `fix: address RL-52 ledger cold-review findings F1-F4`.
+This is the final round-3 fixes/table commit, containing all seven changed
+files. A separate documentation-only commit records its SHA here and in
+`REDERIVATION.md`; a commit cannot contain its own SHA. That follow-up
+changes no ledger, script or test byte. The local branch was already named
+as requested and started exactly at the brief's base. Nothing was pushed.
+
 ### Verification
 
 All commands are sequential and repository-only. No full suite or analysis
@@ -440,11 +450,15 @@ The new ledger pin and prefix checks pass; the first-fill fixture test also
 passes the complete checker. This does not imply the working-tree paper has
 been filled. No paper bytes were changed to make the check pass.
 
-**Pending input:** whether to add a `--paper-ref` option and run against the
-pinned existing first fill (recommended, preserving this paper), or bring
-the existing first fill from cached `origin/main` into this branch. The
-question was sent while independent fixes and tests continued. No network,
-merge or paper edit is authorized by an unanswered question.
+**NEEDS_RULING**
+
+- **Question:** which paper input should the standalone fill-check command validate on this pre-first-fill branch?
+- **Options considered:** add `--paper-ref` and validate the pinned admitted first fill; or bring the existing first fill from cached `origin/main` into this branch.
+- **Recommendation:** `--paper-ref` against `e5fd296715f21c7c3792e4f9743b7494b07813ec`, preserving the explicit no-paper-edit instruction and leaving the default working-tree gate strict.
+- **Blocked work:** selecting/changing the standalone command's paper input and reporting that invocation as passing. The implemented ledger/prefix gates and pinned-fixture checks already pass.
+
+The question was sent while independent fixes and tests continued. No
+network, merge or paper edit is authorized by an unanswered question.
 
 ### Protected boundaries and handoff
 

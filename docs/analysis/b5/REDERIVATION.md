@@ -794,6 +794,12 @@ cold review or the lead's final acceptance/print licence.
 
 ### Round 3 (Opus F1–F4; repo-only)
 
+**NEW PRINT AUTHORITY SHA:** `60f66800fabe02c574dab41b2a61f38623c47a0c`
+(`fix: address RL-52 ledger cold-review findings F1-F4`). This is the final
+round-3 fixes/table commit; a documentation-only follow-up records its SHA.
+The unchanged ledger is the reviewed 1,419-row table, with F4's composition
+rule below. This records no new custody validation or second-fill acceptance.
+
 The XWIN **differ** cell is **8B decode**; round-2 prose above and the run
 report are corrected. Physical rows 647–651 remain immutable and are
 **recompute-only** in the second fill: pair them with refusal rows 1064–1065
