@@ -475,13 +475,18 @@ sys.exit(int(os.environ.get("TEST_PS_RC", "0")))
         python = self.bin / "python3"
         python.unlink()
         python.write_text("#!" + sys.executable + "\n" +
-                          "import sys\nsys.path.insert(0, " + repr(str(REPO)) + ")\n" + '''
+                          "import sys\nsys.dont_write_bytecode = True\nsys.path.insert(0, " + repr(str(REPO)) + ")\n" + '''
+source = sys.stdin.read()
+sys.argv = sys.argv[2:]
+if "powermode.mark_production_entry" not in source:
+    exec(compile(source, "<unstrand-test>", "exec"), {"__name__": "__main__"})
+    raise SystemExit(0)
 import json, os
 from pathlib import Path
 from types import SimpleNamespace
 from joulewise.align.apple import powermode
 from scripts import run_night
-powermode.HOST_STATE_DEFAULT = os.environ["JOULEWISE_HOST_STATE_DIR"]
+powermode.HOST_STATE_DEFAULT = os.environ.get("TEST_HOST_STATE_DEFAULT", os.environ["JOULEWISE_HOST_STATE_DIR"])
 def log(value):
     with open(os.environ["TEST_RESTORE_LOG"], "a") as handle:
         handle.write(json.dumps(value) + "\\n")
@@ -492,8 +497,10 @@ def runner(argv):
     assert not competing.acquire(), "host command ran without the host lock"
     log({"kind": "run", "argv": list(argv)})
     if tuple(argv) == powermode.RESTORE_AUTOMATIC:
-        mode = 0
-        return SimpleNamespace(exit_code=0, stdout="", stderr="")
+        code = int(os.environ.get("TEST_POWER_RESTORE_RC", "0"))
+        if not code:
+            mode = 0
+        return SimpleNamespace(exit_code=code, stdout="", stderr="")
     if tuple(argv) == powermode.QUERY:
         return SimpleNamespace(exit_code=0, stdout=f"AC Power:\\n powermode {mode}\\n", stderr="")
     if tuple(argv) == run_night.NETWORK_TIME_ON_ARGV:
@@ -508,8 +515,7 @@ def restore(*args, **kwargs):
     return original_restore(*args, **kwargs)
 powermode.restore_owed = restore
 run_night.make_probes = lambda: SimpleNamespace(run=runner)
-sys.argv = sys.argv[2:]
-exec(compile(sys.stdin.read(), "<unstrand-test>", "exec"), {"__name__": "__main__"})
+exec(compile(source, "<unstrand-test>", "exec"), {"__name__": "__main__"})
 ''')
         python.chmod(0o755)
 
@@ -546,6 +552,7 @@ exec(compile(sys.stdin.read(), "<unstrand-test>", "exec"), {"__name__": "__main_
         self.assertEqual(2, record["found"]["ac_powermode"]["value"])
         self.assertTrue(record["found"]["network_time_restore_owed"])
         self.assertEqual("restored", record["actions"]["powermode"]["action"])
+        self.assertEqual(0, record["actions"]["powermode"]["restore"]["exit_code"])
         self.assertTrue(record["actions"]["network_time"]["ok"])
         self.assertFalse(record["deferred_to_measuring_night"])
         self.assertFalse(self.host_marker.exists())
@@ -586,11 +593,70 @@ exec(compile(sys.stdin.read(), "<unstrand-test>", "exec"), {"__name__": "__main_
         self.assertFalse(self.restore_log.exists())
 
     def test_production_host_state_override_refuses_without_host_commands(self):
-        self.env["JOULEWISE_HOST_STATE_DIR"] = str(self.root / "forbidden-override")
+        self.host_fakes()
+        self.env["TEST_HOST_STATE_DEFAULT"] = str(self.root / "fixed-production-default")
         result = self.run_script("--go", "--restore-host")
         self.assertNotEqual(0, result.returncode)
         self.assertIn("HostStateOverrideRefused", result.stderr)
-        self.assertFalse((self.root / "forbidden-override").exists())
+        self.assertFalse((self.root / "fixed-production-default").exists())
+        self.assertFalse(self.restore_log.exists())
+
+    def test_host_restore_honours_r1_marker_without_w1_marker(self):
+        self.host_fakes()
+        self.host_marker.unlink()
+        result = self.run_script("--go", "--restore-host")
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertFalse(self.r1_marker.exists())
+
+    def test_host_restore_leaves_another_plans_w1_marker_and_network_alone(self):
+        self.host_fakes()
+        self.host_marker.write_text("ALIGN v4 W1 high-power restoration required\n" +
+                                    json.dumps({"custody_root": str(self.root / "other-plan")}) + "\n")
+        result = self.run_script("--go", "--restore-host")
+        self.assertNotEqual(0, result.returncode)
+        record = json.loads((self.night / "unstrand.restore.json").read_text())
+        self.assertEqual("not_owner", record["actions"]["powermode"]["action"])
+        self.assertTrue(self.host_marker.exists())
+        self.assertTrue(self.r1_marker.exists())
+        self.assertFalse(self.restore_log.exists())
+
+    def test_host_restore_failed_power_restore_keeps_markers_and_records_rc(self):
+        self.host_fakes()
+        self.env["TEST_POWER_RESTORE_RC"] = "7"
+        result = self.run_script("--go", "--restore-host")
+        self.assertNotEqual(0, result.returncode)
+        record = json.loads((self.night / "unstrand.restore.json").read_text())
+        self.assertEqual("restore_failed", record["actions"]["powermode"]["action"])
+        self.assertEqual(7, record["actions"]["powermode"]["restore"]["exit_code"])
+        self.assertTrue(record["actions"]["network_time"]["ok"])
+        self.assertTrue(self.host_marker.exists())
+        self.assertTrue(self.r1_marker.exists())
+
+    def test_network_time_restore_uses_admitted_receipt(self):
+        from scripts import run_night
+        self.host_fakes(turned_off=False)
+        off = run_night.network_time_off
+        (self.night / off.RECEIPT_BASENAME).write_text(json.dumps({
+            "schema": off.SCHEMA, "argv": list(off.OFF_ARGV), "exit_code": 0,
+            "stdout": off.EXPECTED_STDOUT, "stderr": "", "boot_id": "synthetic-boot",
+            "plan_id": "synthetic-plan", "window_id": "synthetic-window",
+            "epoch_s": 1.0, "monotonic_s": 1.0}))
+        result = self.run_script("--go", "--restore-host")
+        self.assertEqual(0, result.returncode, result.stderr)
+        record = json.loads((self.night / "unstrand.restore.json").read_text())
+        self.assertTrue(record["found"]["network_time_restore_owed"])
+        self.assertTrue(record["actions"]["network_time"]["ok"])
+
+    def test_unadmitted_network_time_action_does_not_authorize_setter(self):
+        self.host_fakes()
+        action = self.night / "network_time_off.action.json"
+        value = json.loads(action.read_text())
+        action.write_text(json.dumps({**value, "stdout": "Network Time: Off\n"}))
+        result = self.run_script("--go", "--restore-host")
+        self.assertEqual(0, result.returncode, result.stderr)
+        record = json.loads((self.night / "unstrand.restore.json").read_text())
+        self.assertFalse(record["found"]["network_time_restore_owed"])
+        self.assertNotIn("-setusingnetworktime", self.restore_log.read_text())
 
     def test_failed_uninstall_never_restores_host(self):
         self.host_fakes()
