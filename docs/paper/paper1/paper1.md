@@ -1185,7 +1185,7 @@ models with two passes as a labelled sensitivity line ({{FILL: P1-BY-H2-TWOPASS 
 
 ### 8.1 How the work was done
 
-This study was designed, implemented, collected, reviewed and written by AI agents working under one human
+This study was designed, implemented, collected, reviewed and drafted by AI agents working under one human
 researcher. The researcher set the research direction, the methodological requirements (raw evidence kept for
 every run, gross energy as the headline basis, a named measurement boundary on every number, no claim that cannot
 be audited) and the process policy. The researcher was the escalation point for changes to what is measured or
@@ -1301,7 +1301,9 @@ these failure modes; each is mechanical, recorded, or both.
 2. **Blinding enforced by custody.** Energies and every derived quantity were written to restricted paths listed
    in a custody map; everything released during collection was structure only, and analysis code was written and
    repaired by sessions that had read no restricted value (Section 5.6). BYTES added hidden multiplicative offsets
-   and requires held-out rows to stay withheld until its predictions are committed (Section 7.3).
+   and requires held-out rows to stay withheld until its predictions are committed (Section 7.3). Two departures
+   are disclosed: status and reason words were read before the primary release under a structural ruling
+   (Section 5.6), and one held-out BYTES model's timing was read before the stage-1 commitment (Section 8.3).
 3. **Physics refuses; a short registered list of other grounds excludes; everything else is recorded.** Only a
    directly measured physical hazard stops collection, and the presence of an AI agent process on the measurement
    laptop is one of those hazards: the arm refuses while one is alive, and a running session stops (primary block)
@@ -1459,7 +1461,7 @@ number, with what each taught. The record runs to 10 November 2026.
   time and little protection"); docs/process_traces/2026-10-27-pipeline-audit/SYNTHESIS.md (proposals, not adopted;
   corrected by CRITIQUE.md). -->
 
-{{FILL: P1-AUTO-BLINDCHECK | result of the check whether any held-out BYTES model's per-request duration or other timing was read before the stage-1 commitment (a process audit ran harvest readers on a held-out model's session); either "no held-out duration was read" with its evidence, or a disclosure of what was read, when, and that it could not change the committed lines}}
+{{FILL: P1-AUTO-BLINDCHECK | disclosure from the recorded check and deviation BY-BLIND-1: per-request timing of one held-out model was read and published before the stage-1 commitment; per-stage timestamps of every session were in the public operational record; each model's approximate decode time was registered from the pilot; why the committed lines cannot depend on any of it; and what the check could not establish}}
 
 The lesson we draw, an inference from this record rather than a demonstrated guarantee, is that agents can run a
 measurement study with the rigour such a study needs only if the rigour is mechanical. Digests, custody maps,
