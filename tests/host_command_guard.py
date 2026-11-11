@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import shlex
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -32,6 +33,26 @@ _expected = set()
 _active_test = None
 _report = None
 _environment = {}
+
+
+def _temp_roots():
+    roots = {tempfile.gettempdir(), "/tmp", "/private/tmp", "/var/folders", "/private/var/folders",
+             os.environ.get("TMPDIR") or ""}
+    return {os.path.realpath(r) for r in roots if r}
+
+
+def _is_temp_fake(value, path=None):
+    """A test's own fake (e.g. a fake ``sudo`` placed on PATH) lives in a temp directory.
+
+    Bare names are resolved through the PATH the child will see; the REAL path must be inside a
+    temp root, so a symlink from a temp dir to /usr/bin/sudo is still refused.
+    """
+    value = os.fsdecode(value)
+    found = value if os.sep in value else shutil.which(value, path=path if path is not None else os.environ.get("PATH"))
+    if not found or not os.path.isfile(found):
+        return False
+    real = os.path.realpath(found)
+    return any(real.startswith(root.rstrip(os.sep) + os.sep) for root in _temp_roots())
 
 
 def _names(value):
@@ -67,13 +88,13 @@ def simple_commands(command):
         yield part
 
 
-def classify(command, *, shell=False, executable=None):
+def classify(command, *, shell=False, executable=None, path=None):
     """Return (basename, argv) refusals; pure classification, no subprocesses."""
     if isinstance(command, (str, bytes)):
         parts = list(simple_commands(command)) if shell else [[os.fsdecode(command)]]
     else:
         parts = [[os.fsdecode(item) for item in command]]
-    found = classify([executable]) if shell and executable is not None else []
+    found = classify([executable], path=path) if shell and executable is not None else []
     for raw in parts:
         argv = list(raw)
         while shell and argv and "=" in argv[0] and not argv[0].startswith(("/", "-")):
@@ -94,29 +115,32 @@ def classify(command, *, shell=False, executable=None):
                     rest = rest[1:]
                 else:
                     break
-            found.extend(classify(rest))
+            found.extend(classify(rest, path=path))
             continue
         if names & _WRAPPERS:
             # Classify every trailing suffix: wrapper options are skipped without parsing them.
             for index in range(1, len(argv)):
-                inner = classify(argv[index:])
+                inner = classify(argv[index:], path=path)
                 if inner:
                     found.extend(inner)
                     break
             continue
         denied = sorted(names & _DENIED)
+        if (denied or "launchctl" in names or names & {"networksetup", "scutil"}) and _is_temp_fake(
+                executable if executable is not None and not shell else argv[0], path):
+            continue  # the test's own fake executable, resolved inside a temp directory
         if denied:
             found.append((denied[0], raw))
         elif "launchctl" in names and len(argv) > 1 and argv[1] in _LAUNCH_WRITES:
             found.append(("launchctl", raw))
         elif "launchctl" in names and len(argv) > 3 and argv[1] in _LAUNCH_EXEC:
-            found.extend(classify(argv[3:]))
+            found.extend(classify(argv[3:], path=path))
         elif names & {"networksetup", "scutil"} and any(a.startswith(("-set", "--set")) for a in argv[1:]):
             found.append((sorted(names & {"networksetup", "scutil"})[0], raw))
         elif names & {"sh", "zsh", "bash", "dash", "ksh"}:
             for index, arg in enumerate(argv[1:], 1):
                 if arg.startswith("-") and "c" in arg and index + 1 < len(argv):
-                    found.extend(classify(argv[index + 1], shell=True))
+                    found.extend(classify(argv[index + 1], shell=True, path=path))
                     break
     return found
 
@@ -215,8 +239,10 @@ def install():
     def popen_init(self, args, *positional, **kwargs):
         # Bind positionals too: executable and shell need not be keyword arguments.
         bound = inspect.signature(original_init).bind(self, args, *positional, **kwargs)
+        env = bound.arguments.get("env")
         _check(args, shell=bound.arguments.get("shell", False),
-               executable=bound.arguments.get("executable"))
+               executable=bound.arguments.get("executable"),
+               path=None if env is None else env.get("PATH", env.get(b"PATH")))
         original_init(self, args, *positional, **kwargs)
 
     _replace(subprocess.Popen, "__init__", popen_init)

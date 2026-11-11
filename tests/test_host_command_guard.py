@@ -104,6 +104,25 @@ class HostCommandGuardTests(unittest.TestCase):
             fork.assert_not_called()
         self.assertEqual([r["command"] for r in records], ["sudo"])
 
+    def test_fake_on_path_inside_temp_is_allowed_and_real_is_not(self):
+        # tests.test_run_night puts a fake `sudo` first on PATH; only a fake whose REAL path is in a
+        # temp directory is allowed. The same bare name on the ordinary PATH stays refused.
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = Path(tmp) / "sudo"
+            fake.write_text("#!/bin/sh\nexit 0\n")
+            fake.chmod(0o755)
+            self.assertEqual(guard.classify(["sudo", "-n", "x"], path=tmp), [])
+            self.assertEqual(guard.classify([str(fake), "-n", "x"]), [])
+            self.assertEqual(guard.classify("sudo -n x", shell=True, path=tmp), [])
+            self.assertTrue(guard.classify(["sudo", "-n", "x"], path="/usr/bin:/bin"))
+            self.assertTrue(guard.classify(["sudo", "-n", "x"], path=str(Path(tmp) / "missing")))
+            link = Path(tmp) / "bin"
+            link.mkdir()
+            (link / "sudo").symlink_to("/usr/bin/sudo")
+            self.assertTrue(guard.classify(["sudo", "-n", "x"], path=str(link)))
+            result = subprocess.run(["sudo", "-n", "x"], env={"PATH": tmp}, capture_output=True)
+            self.assertEqual(result.returncode, 0)
+
     def test_child_interpreter_reports_even_swallowed_refusal(self):
         class Leaky(unittest.TestCase):
             def runTest(self):
