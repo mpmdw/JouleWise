@@ -38,6 +38,41 @@ WALL_NS = 1_800_000_000_000_000_000
 MONO_NS = 1_000_000_000_000
 
 
+def source_root(root):
+    active = os.environ.get("R12_ACTIVE_SOURCE_ROOT")
+    if active:
+        path = Path(active)
+        if not path.is_relative_to(root):
+            raise ValueError("active code root escapes fixture")
+        return path
+    pointer = Path(root) / "source-root.json"
+    if not pointer.exists():
+        return Path(root) / "pin"
+    path = Path(json.loads(pointer.read_text())["path"])
+    if not path.is_relative_to(root):
+        raise ValueError("source root escapes fixture")
+    return path
+
+
+def fixture_python_wrapper(root, value):
+    path = Path(value)
+    if not path.is_absolute() or not path.is_relative_to(root) or ".venv" not in path.parts:
+        return False
+    if path.name not in {"python", "python3", "python3.13"}:
+        return False
+    try:
+        return path.read_bytes().startswith(b"#!/bin/sh\n")
+    except FileNotFoundError:
+        return False
+
+
+def fixture_codec(root, argv):
+    if not argv or argv[0] not in {"zstd", "/opt/homebrew/bin/zstd", "/usr/local/bin/zstd", "/usr/bin/zstd"}:
+        return False
+    return all(value in {"--version", "-3", "-q", "-T0", "-o", "-d", "-c"}
+               or (Path(value).is_absolute() and Path(value).is_relative_to(root)) for value in argv[1:])
+
+
 class SharedClock:
     """Integer nanosecond clock; a file lock serializes child advances.
 
@@ -57,8 +92,15 @@ class SharedClock:
         self.local = threading.local()
         self.stopping = False
         self.processes = {}
+        self.stop_callbacks = []
+        self.stop_delivered = False
 
     def frontier(self):
+        if not self.stop_delivered and (self.path.parent / "source-stop.json").exists():
+            self.stop_delivered = True
+            self.stopping = True
+            for callback in tuple(self.stop_callbacks):
+                callback()
         with self.lock():
             return struct.unpack("!Q", self.map[:])[0]
 
@@ -148,7 +190,7 @@ class SharedClock:
         for listener in tuple(self.listeners):
             listener(previous, current)
         self.await_sources(current)
-        REAL_SLEEP(0.002)
+        REAL_SLEEP(0)
 
     def await_sources(self, current):
         """Wait for real background writers to consume the advanced timeline."""
@@ -241,7 +283,13 @@ def audit_guard(root, pin):
         elif event == "os.rename":
             path_check(args[0], True)
             path_check(args[1], True)
-        elif event in {"socket.connect", "socket.bind", "os.system", "os.posix_spawn", "os.exec", "os.fork", "os.link", "os.symlink"}:
+        elif event == "os.symlink":
+            source, destination = map(os.fsdecode, args[:2])
+            path_check(destination, True)
+            allowed = source in {sys.executable, "python", "python3", "python3.13", str(root / "interpreter/python3.13")}
+            if not allowed or ".venv" not in Path(destination).parts:
+                raise PermissionError("R12 symlink is not a fixture interpreter alias")
+        elif event in {"socket.connect", "socket.bind", "os.system", "os.posix_spawn", "os.exec", "os.fork", "os.link"}:
             raise PermissionError("R12 native action denied: " + event)
         elif event == "subprocess.Popen":
             executable, argv, cwd, env = args
@@ -250,8 +298,16 @@ def audit_guard(root, pin):
             python = exe == sys.executable and len(argv) >= 3 and argv[1:3] == ["-B", str(root / "bootstrap.py")]
             zsh = exe == "/bin/zsh" and len(argv) > 2 and str(argv[2]) == str(root / "shell.zsh")
             git_root = str(argv[argv.index("-C") + 1]) if "-C" in argv else str(cwd or os.getcwd())
-            git = exe in ("git", "/usr/bin/git") and Path(git_root).is_relative_to(pin)
-            if not (python or zsh or git):
+            git = exe in ("git", "/usr/bin/git") and Path(git_root).is_relative_to(root)
+            if git and any(value in argv for value in ("push", "fetch", "pull", "ls-remote")):
+                raise PermissionError("R12 network Git command denied")
+            if git and "clone" in argv:
+                from urllib.parse import urlparse, unquote
+                operands = [str(value) for value in argv if str(value).startswith("file://")]
+                if len(operands) != 1 or not Path(unquote(urlparse(operands[0]).path)).is_relative_to(root):
+                    raise PermissionError("R12 clone must use fixture-local source objects")
+            wrapper = fixture_python_wrapper(root, exe)
+            if not (python or zsh or git or wrapper or fixture_codec(root, argv)):
                 raise PermissionError("R12 undeclared native argv: " + repr(argv))
 
     sys.addaudithook(audit)
@@ -260,13 +316,15 @@ def audit_guard(root, pin):
 def bootstrap(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, required=True)
-    parser.add_argument("kind", choices=("clock", "script", "module", "code", "probe", "plan", "returned", "sampler", "dispatch", "make-inputs", "guard-probe", "meter-probe"))
+    parser.add_argument("kind", choices=("clock", "script", "module", "code", "probe", "plan", "loop-probe", "returned", "sampler", "dispatch", "make-inputs", "guard-probe", "meter-probe", "j1-schema-probe"))
     parser.add_argument("rest", nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
     root = args.root
+    if not root.is_absolute() or root.is_relative_to("/Users/edr") or "restricted" in root.parts:
+        raise ValueError("forbidden bootstrap root")
     clock = SharedClock(root / "clock.bin")
     clock.install()
-    pin = root / "pin"
+    pin = source_root(root)
     sys.path.insert(0, str(pin))
     (root / "tmp").mkdir(exist_ok=True)
     tempfile.tempdir = str(root / "tmp")
@@ -293,6 +351,7 @@ def bootstrap(argv=None):
         import signal
         trace = (root / f"debug-stack-{os.getpid()}.txt").open("w")
         faulthandler.register(signal.SIGUSR1, file=trace, all_threads=True)
+        faulthandler.dump_traceback_later(15, repeat=True, file=trace)
     if args.kind == "guard-probe":
         denied = []
         # The wrappers reject these lexical requests before native access.
@@ -330,6 +389,18 @@ def bootstrap(argv=None):
             args.kind = "code" if args.rest.pop(0) == "-c" else "module"
         else:
             args.kind = "script"
+    if args.kind == "script":
+        for argument in args.rest[:2]:
+            candidate = Path(argument)
+            if candidate.is_absolute() and candidate.is_relative_to(root) and candidate.parent.name == "scripts":
+                selected = candidate.parent.parent
+                if (selected / "joulewise").is_dir():
+                    os.environ["R12_ACTIVE_SOURCE_ROOT"] = str(selected)
+                    pin = selected
+                    sys.path.insert(0, str(pin))
+                    break
+    if args.kind == "module" and args.rest[:1] == ["venv"]:
+        sys._base_executable = str(root / "interpreter/python3.13")
     if args.kind == "clock":
         if args.rest[0] == "sleep":
             clock.sleep(float(args.rest[1]))
@@ -349,7 +420,22 @@ def bootstrap(argv=None):
         return 0
     if args.kind == "plan":
         return plan_fixture(root, clock, *args.rest)
+    if args.kind == "loop-probe":
+        from b6_r12_orchestrate import loop_fixture
+        return loop_fixture(root, clock, *args.rest)
     install_sources(root, clock)
+    if args.kind == "j1-schema-probe":
+        from joulewise import controller
+        producer = runpy.run_path(str(pin / "scripts/b5_window_calibration_verdict.py"), run_name="r12_j1_probe")
+        unit = root / "j1-unit"
+        unit.mkdir()
+        capture = unit / "absent-slot"
+        record = producer["build_verdict"](capture)
+        producer["write_create_once"](unit / producer["VERDICT_BASENAME"], record)
+        _, miss = controller._window_calibration_verdict_bound(capture, {}, stored_bound=0.0)
+        print(json.dumps({"producer": producer["SCHEMA"], "consumer": controller.WINDOW_CALIBRATION_VERDICT_SCHEMA,
+                          "miss": miss}))
+        return 0
     if args.kind == "meter-probe":
         import ctypes
         original_cdll = ctypes.CDLL
@@ -371,6 +457,8 @@ def bootstrap(argv=None):
             def received(signum, frame):
                 clock.stopping = True
                 return handler(signum, frame)
+            if number == signal.SIGTERM:
+                clock.stop_callbacks.append(lambda: received(signal.SIGTERM, None))
             return original_signal(number, received)
         signal.signal = register_signal
     sys.argv = args.rest
@@ -388,7 +476,7 @@ def plan_fixture(root, clock, pack="alpha", mode="plan"):
     from joulewise.b5 import plan
     from joulewise.b6 import plan_inputs
     from joulewise.calibration_ledger import GENESIS_DIGEST, LEDGER_SCHEMA
-    pin = root / "pin"
+    pin = source_root(root)
     # These are generator-owned inputs, before the chain writes its tree.
     ledger = pin / plan.DEFAULT_LEDGER_RELATIVE
     ledger.parent.mkdir(parents=True, exist_ok=True)
@@ -481,7 +569,8 @@ def install_sources(root, clock):
 
     class ChainSources(Sources):
         def __init__(self):
-            super().__init__(root, clock)
+            policy = json.loads((root / "source-policy.json").read_text()) if (root / "source-policy.json").exists() else {}
+            super().__init__(root, clock, denied_off=policy.get("denied_off", False))
             self.processes = {}
             self.rules.update({
                 ("/usr/bin/pmset", "-g", "assertions"): (0, b"PreventSystemSleep 1\npid 987654320(caffeinate): [0x1] PreventUserIdleSystemSleep named: 'caffeinate'\n", b""),
@@ -530,6 +619,15 @@ def install_sources(root, clock):
         def run(self, argv, timeout_s):
             argv = tuple(map(str, argv))
             from joulewise.hazards import instrument
+            if argv and argv[0] in ("git", "/usr/bin/git"):
+                result = REAL_RUN(argv, capture_output=True, timeout=timeout_s, check=False)
+                from joulewise.hazards.base import Completed
+                return Completed(argv, result.returncode, result.stdout, result.stderr)
+            if argv and argv[0] == str(source_root(root) / "scripts/install_night_agent.sh"):
+                return self.completed(argv, (0, b"R12 declared installer success; no host action executed\n", b""), "declared_action_success")
+            if len(argv) == 3 and argv[:2] == ("launchctl", "print"):
+                label = argv[-1].rsplit("/", 1)[-1]
+                return self.completed(argv, (113, b"", f'Could not find service "{label}" in domain for user gui: {os.getuid()}\n'.encode()), "declared_job_absent")
             if len(argv) >= 4 and argv[:4] == (sys.executable, "-B", "-c", instrument.CHILD_BOOTSTRAP):
                 return super().run(argv, timeout_s)
             if (len(argv) == 7 and argv[:2] == ("/bin/ps", "-p") and argv[3:] == ("-o", "lstart=", "-o", "stat=")):
@@ -550,7 +648,9 @@ def install_sources(root, clock):
             argv = list(map(str, argv))
             if argv[:2] in (["/usr/bin/taskpolicy", "-b"], ["/usr/sbin/taskpolicy", "-b"]):
                 argv = argv[2:]
-            if argv and (argv[0] == sys.executable or argv[0] == str(root / "pin/.venv/bin/python")):
+            if argv and fixture_python_wrapper(root, argv[0]):
+                return argv
+            if argv and (argv[0] in {sys.executable, "/opt/homebrew/bin/python3.13"} or argv[0] == str(source_root(root) / ".venv/bin/python")):
                 rest = argv[1:]
                 while rest and rest[0] in ("-B", "-u"):
                     rest.pop(0)
@@ -625,6 +725,8 @@ def install_sources(root, clock):
     disk = lambda path: SimpleNamespace(f_bavail=1024 ** 3, f_frsize=4096, f_blocks=2 ** 40)
     stat = lambda path: SimpleNamespace(st_dev=1)
     host = lambda: [[0, 0, clock.ns // 10_000_000, 0]]
+    sources.frequency_reader = lambda: frequency
+    sources.stat, sources.statvfs, sources.host_reader = stat, disk, host
     # Substitute the default object, not the arm or its run/judge/writers.
     arm.run.__defaults__ = (arm.Seams(ctx=ctx, frequency_reader=lambda: frequency,
                                    statvfs=disk, stat=stat, host_cpu=host, smc_read=None),)
@@ -654,6 +756,10 @@ def install_sources(root, clock):
             pass
     from joulewise.hazards import smc
     thermal.NotifyReader, battery.RegistryReader, smc.Reader = ThermalSource, BatterySource, SmcSource
+    from joulewise.adapters.powermetrics import PowermetricsTelemetryAdapter
+    # Existing post-marker clock seam. A declared 200 ms scheduler quantum
+    # lets the real drain judge see a native right edge after the stop marker.
+    PowermetricsTelemetryAdapter.__init__.__kwdefaults__["drain_sleep"] = lambda seconds: clock.sleep(max(seconds, 0.2))
     signature = inspect.signature(REAL_EXECUTE)
     def execute_child(process, *args, **kwargs):
         bound = signature.bind(process, *args, **kwargs)
@@ -665,7 +771,9 @@ def install_sources(root, clock):
             rewrite = list(argv)
         elif argv and argv[0] in ("git", "/usr/bin/git"):
             rewrite = list(argv)
-        elif any(value == "/usr/bin/powermetrics" for value in argv):
+        elif fixture_codec(root, argv):
+            rewrite = list(argv)
+        elif any(value == "/usr/bin/powermetrics" for value in argv) and "-o" in argv:
             rewrite = [sys.executable, "-B", str(root / "bootstrap.py"), "--root", str(root), "sampler", *argv]
         elif rewrite is None:
             result = sources.run(argv, 10)
@@ -677,6 +785,15 @@ def install_sources(root, clock):
         bound.arguments["executable"] = rewrite[0]
         result = REAL_EXECUTE(*bound.args, **bound.kwargs)
         sources.processes[process.pid] = process
+        if any(Path(value).name in {"hazard_monitor.py", "km003c_monitor.py"} for value in argv):
+            # Process transport startup is a source seam. Do not let the
+            # foreground exhaust a logical readiness deadline while a fresh
+            # interpreter has not yet scheduled its first real writer tick.
+            deadline = REAL_MONOTONIC() + 30
+            while not list((root / "passive").glob(f"{process.pid}-*.json")) and process.poll() is None:
+                if REAL_MONOTONIC() >= deadline:
+                    raise TimeoutError("synthetic instrument process did not register its first sleep")
+                REAL_SLEEP(.001)
         if "sampler" in rewrite[5:7]:
             # The process source has an explicit startup barrier. Logical
             # time does not race ahead while its interpreter boots. The
@@ -725,10 +842,16 @@ def make_synthetic_inputs(root):
     replacements["87a2728cb8dc9fe424d624542f6060ec05a1d285ebbec578bb078900e33396b5"] = hashlib.sha256(b"R12 synthetic template").hexdigest()
     originals = {path.relative_to(pin).as_posix(): path.read_bytes() for path in (pin / "configs").rglob("*")
                  if path.is_file() and path.suffix in (".json", ".sha256")}
+    policy = json.loads((root / "source-policy.json").read_text())
 
     def transform(value):
         if isinstance(value, dict):
             result = {replacements.get(key, key): transform(item) for key, item in value.items()}
+            if policy.get("volume") == "reduced" and all(key in result for key in ("model", "sampling", "hardware_target")):
+                result["sampling"]["idle_seconds"] = 3.0
+                result["sampling"]["warmup_seconds"] = 0.0
+            if result.get("schema_version") == "joulewise.b6_pack_registration.v1":
+                result["stopping"]["end_t0_before"] = "2030-01-01T00:00:00+00:00"
             if "tokenizer_identity" in result and isinstance(result["tokenizer_identity"], dict):
                 result["tokenizer_identity"]["class"] = "Tokenizer"
             if "runtime_version" in result and isinstance(result["runtime_version"], dict):
@@ -842,9 +965,17 @@ def install_engine(root, clock):
     Tokenizer.__module__, Tokenizer.__qualname__ = "r12_engine", "Tokenizer"
     lm.load = lambda source, **kwargs: (SimpleNamespace(), Tokenizer(source), {"eos_token_id": 0})
     lm.make_sampler = lambda *args, **kwargs: (lambda x: x)
+    policy_path = root / "source-policy.json"
+    policy = json.loads(policy_path.read_text()) if policy_path.exists() else {}
     def generate(model, tokenizer, prompt, max_tokens, **kwargs):
         for index in range(max_tokens):
-            active(1.0 if index == 0 else 0.05, 10000 if index == 0 else 6000)
+            duration = policy.get("token_first_s", 1.0) if index == 0 else policy.get("token_next_s", .05)
+            primary = root / f"primary-{os.getpid()}.json"
+            if index == max_tokens - 1 and (max_tokens >= 256 or max_tokens == 1) and policy.get("primary_stream_duration_s") and primary.exists():
+                start = json.loads(primary.read_text())["start_ns"]
+                target = start + round((policy["primary_stream_duration_s"] - 1.0) * 1e9)
+                duration = max(duration, (target - clock.ns) / 1e9)
+            active(duration, 10000 if index == 0 else 6000)
             yield SimpleNamespace(token=2, text="x", finish_reason="length" if index == max_tokens - 1 else None)
     lm.stream_generate = generate
     sys.modules["mlx_lm"] = lm
@@ -943,8 +1074,11 @@ def sampler_source(root, clock, argv):
     options = argv[argv.index("/usr/bin/powermetrics") + 1:]
     count = int(options[options.index("-n") + 1]) if "-n" in options else None
     start = clock.monotonic_ns()
+    if count is None:
+        (root / f"primary-{os.getppid()}.json").write_text(json.dumps({"start_ns": start, "output": str(output)}) + "\n")
     import signal
     stopping = [False]
+    clock.stop_callbacks.append(lambda: stopping.__setitem__(0, True))
     signal.signal(signal.SIGTERM, lambda *args: stopping.__setitem__(0, True))
     signal.signal(signal.SIGINT, lambda *args: stopping.__setitem__(0, True))
     signal_path = root / "engine-intervals.jsonl"
@@ -977,6 +1111,13 @@ def sampler_source(root, clock, argv):
                         "clusters": [{"name": "E-Cluster", "idle_ratio": .99, "down_ratio": 0., "online_ratio": 1.,
                                       "cpus": [{"cpu": i, "idle_ratio": .99, "down_ratio": 0., "freq_hz": 1020000000.}
                                                for i in range(16)]}]}, "gpu": {"idle_ratio": .999, "freq_hz": 0.}}
+            if "instrument_validation" in output.parts:
+                # Calibration's requested source contains rails/thermal and
+                # native times; CPU admission is not sampled in that capture.
+                document["processor"].pop("clusters")
+                document.pop("gpu")
+            elif (root / "source-policy.json").exists() and json.loads((root / "source-policy.json").read_text()).get("volume") == "reduced":
+                document["processor"]["clusters"][0]["cpus"] = document["processor"]["clusters"][0]["cpus"][:1]
             if index:
                 out.write(b"\0")
             out.write(plistlib.dumps(document))
