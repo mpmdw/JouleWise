@@ -455,7 +455,9 @@ def write_observations(root, denied_root):
         if label == "r12-gamma-cross":
             gamma = next(r for r in block["sessions"].values() if r["pack"] == "GAMMA" and r["round"] == 1)
             value["pairing"] = gamma["pairing"]
-            value["cross_session_gamma"] = bool(gamma["pairing"]) and all(
+            value["kept_units"] = gamma["kept_units"]
+            has_unit = any(units for strata in gamma["kept_units"].values() for units in strata.values())
+            value["cross_session_gamma"] = has_unit and bool(gamma["pairing"]) and all(
                 p.get("session_id") and p["session_id"] != gamma["session_id"]
                 for p in gamma["pairing"].values())
         observed[label] = value

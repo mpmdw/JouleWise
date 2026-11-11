@@ -699,7 +699,7 @@ class VerifierInventoryTests(unittest.TestCase):
                     hashing.assert_not_called()
 
     def test_empty_gamma_pairing_never_becomes_cross_session_evidence(self):
-        """Predict: the observation join rejects empty/self pairings as cross-session evidence; only a nonempty other-session map qualifies. Receipt stubs test the join, not a chain fixture."""
+        """Predict: empty/self pairings or no kept GAMMA unit never count as cross-session evidence. Receipt stubs test the join, not a chain fixture."""
         from unittest.mock import patch
         import b6_r12_verify as verifier
         with tempfile.TemporaryDirectory(prefix="r12-pairing-guard-") as directory:
@@ -712,10 +712,13 @@ class VerifierInventoryTests(unittest.TestCase):
             for path in (root / "option-c-receipt.json", root / "option-c-skips-receipt.json",
                          denied / "option-c-denied-receipt.json"):
                 path.write_text(json.dumps(receipt))
-            for pairing, expected in (({}, False),
-                    ({"ALPHA": {"session_id": "r1-gamma"}}, False),
-                    ({"ALPHA": {"session_id": "r1-alpha"}}, True)):
-                gamma = {"pack": "GAMMA", "round": 1, "session_id": "r1-gamma", "pairing": pairing}
+            kept = {"decode": {"abba": ["unit-1"]}}
+            for pairing, units, expected in (({}, kept, False),
+                    ({"ALPHA": {"session_id": "r1-gamma"}}, kept, False),
+                    ({"ALPHA": {"session_id": "r1-alpha"}}, kept, True),
+                    ({"ALPHA": {"session_id": "r1-alpha"}}, {}, False)):
+                gamma = {"pack": "GAMMA", "round": 1, "session_id": "r1-gamma",
+                         "pairing": pairing, "kept_units": units}
                 (root / "option-c-numbers.json").write_text(json.dumps({"sessions": {"r1-gamma": gamma}}))
                 with patch.object(verifier, "session_facts", return_value={"archive": archive, "off_actions": []}), \
                      patch.object(verifier, "volume_facts", return_value={}):
@@ -780,6 +783,7 @@ class DeclaredShapeTests(unittest.TestCase):
         value = self.evidence("r12-gamma-cross")
         self.assertTrue(value["cross_session_gamma"])
         self.assertTrue(value["pairing"])
+        self.assertTrue(any(units for strata in value["kept_units"].values() for units in strata.values()))
         for pairing in value["pairing"].values():
             self.assertTrue(pairing.get("session_id"))
             self.assertNotEqual(pairing["session_id"], value["session_id"])
