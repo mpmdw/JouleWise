@@ -308,8 +308,11 @@ def volume_facts(root, session_id):
 def run_option_c(root, workers=1, *, stem="option-c", session_id=None):
     verifier_sha256 = sha(Path(__file__))
     verifier_commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO, text=True).strip()
+    # The serial/pool byte comparison must use the exact same input-document
+    # path as well as the same bytes. Output destinations may differ.
+    input_stem = stem.removesuffix("-pool") if workers > 1 else stem
     archives, attempts, document = prepare_run_inputs(root, counting_only=session_id is None,
-                                                     session_id=session_id, stem=stem)
+                                                     session_id=session_id, stem=input_stem)
     numbers, public = root / (stem + "-numbers.json"), root / (stem + "-public.json")
     argv = [sys.executable, "-B", str(REPO / "scripts/independent_recompute_b6.py"), "block",
             *[value for archive in archives for value in ("--session", str(archive))],
