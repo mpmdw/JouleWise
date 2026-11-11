@@ -200,3 +200,16 @@ sources above, then the research lead reviews.** No independent review is claime
 by this checklist. Seat 9 receives the limited §7 corrections and November source
 pointers; seat 10 receives unchanged section structure and an unresolved title
 handoff. Release readers and fill owners retain every numerical gate.
+
+## 11 November 2026: corrections from the bibliography audit (seat 14, RL-50)
+
+These three method sentences are corrections of fact. §1.2's clause now reads "On 10 and 11 November 2026" (RL-50).
+
+| Id | Section | Was | Now | Source |
+|---|---|---|---|---|
+| C11-1 | §7.3 BYTES analysis, HC3 sentence | "primary intervals use HC3 heteroscedasticity-robust standard errors [27] with Student t at n − p degrees of freedom" | "... HC3 heteroscedasticity-robust standard errors, in the form that divides each squared residual by (1 − leverage)², a simplification of the jackknife estimator of MacKinnon and White [27], with Student t at n − p degrees of freedom" | `joulewise/bytes_analysis.py:183,191`; BYTES registration §9; MacKinnon & White 1985 eq. (12) (RL-50) |
+| C11-2 | §2.4 blinding sentence | "Part 2 uses hidden multiplicative offsets in the manner of that literature" | "Part 2 hides energies behind secret multiplicative factors, adapting that literature's hidden-offset method" | Klein & Roodman 2005 [22], via Roodman arXiv:physics/0312102 (RL-50) |
+| C11-3 | §7.3 "Blinding in two stages" | "following the hidden-offset practice of blind analysis [22]" | "adapting the hidden-offset method of blind analysis [22] to multiplicative factors" | as C11-2 |
+| C11-4 | §2.4 pre-registration sentence | "before data" | "before outcomes are observed" | Nosek et al. 2018 [25] (RL-50) |
+
+Reference metadata (refs 22–27: DOIs, volume 5 and pp. 606–624 plus arXiv:2211.05102 for ref 24, JSTOR stable URL for ref 26) is not a correction of fact and needs no clause (RL-50). The audit could not open three primary texts (Klein & Roodman 2005, Holm 1979, Roofline) because the publishers refused automated access. The wording above does not depend on them, and they are on the research lead's final-read list. The audit report is `docs/run_reports/2026-11-11-p1-seat14.md`.

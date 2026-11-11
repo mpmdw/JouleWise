@@ -91,7 +91,7 @@ We treat the instrument's limits as results. Every reported phase energy carries
 The registrations fixed the counting and exclusion rules, estimators and specified fixed sentences before the
 data they govern. Dated errata, interpretations and analysis-code changes are disclosed in Section 5.5.
 The draft's additional branch prose was written before release, at commit `a1a5029fb`, after primary collection;
-the blind draft is tagged `paper1/blind-draft-2026-10-27`. Everything changed after the primary release was changed by seats that could know the primary block's result. On 10 November 2026, statements of fact about the method and several branch glosses were corrected (`CORRECTIONS-2026-11-10.md`). On 11 November 2026, the sections were reordered with their text unchanged and the contingent subtitle was removed (`OUTLINE-MAP-2026-11-11.md`), and Section 8 was rewritten from the project record. Energies stayed hidden until a recorded release;
+the blind draft is tagged `paper1/blind-draft-2026-10-27`. Everything changed after the primary release was changed by seats that could know the primary block's result. On 10 and 11 November 2026, statements of fact about the method and several branch glosses were corrected (`CORRECTIONS-2026-11-10.md`). On 11 November 2026, the sections were reordered with their text unchanged and the contingent subtitle was removed (`OUTLINE-MAP-2026-11-11.md`), and Section 8 was rewritten from the project record. Energies stayed hidden until a recorded release;
 the independent recomputation uses recorded collection-time judgments as inputs (Section 5).
 <!-- FACT H03: R2P P3/P5/P7; RL-1/RL-5; LEAN-COVERAGE-AUDIT.md §4. -->
 
@@ -176,10 +176,10 @@ evaluation [20]; Mytkowicz et al. show that harmless-looking experimental choice
 [21]. Paired minimum-detectable-effect methods let observed variability raise, but not lower, a threshold fixed
 before results are seen [16]; we borrow that prospective discipline but treat timing movement over the
 registered edge domain as a deterministic allocation sensitivity, never combined with random noise as if
-independent. Pre-registration, the public fixing of hypotheses and analyses before data, separates confirmatory
+independent. Pre-registration, the public fixing of hypotheses and analyses before outcomes are observed, separates confirmatory
 from exploratory results [25]. Blind analysis, in which the analysts cannot see the quantity of interest until
-the analysis is fixed, protects against tuning toward an expected answer [22]; Part 2 uses hidden multiplicative
-offsets in the manner of that literature, and both parts withhold energies until a recorded release.
+the analysis is fixed, protects against tuning toward an expected answer [22]; Part 2 hides energies behind secret multiplicative factors,
+adapting that literature's hidden-offset method, and both parts withhold energies until a recorded release.
 
 ### 2.5 Split inference
 
@@ -1093,7 +1093,9 @@ other model (Llama-70B, Next-80B, Qwen3.5-122B, 8B-8-bit) is printed as a signed
 an interval that combines the fit's uncertainty and the model's own. On the rest boundary a fit adds P̄_rails as a
 regressor; its variance inflation factor is printed, and no conclusion is drawn from its intercept or from λ,
 which are not identified. Because errors in P̄ scale with P̄, primary intervals use HC3 heteroscedasticity-robust
-standard errors [27] with Student t at n − p degrees of freedom; the ordinary errors are printed beside them. A
+standard errors, in the form that divides each squared residual by (1 − leverage)², a simplification of the
+jackknife estimator of MacKinnon and White [27], with Student t at n − p degrees of freedom; the ordinary errors
+are printed beside them. A
 fit with fewer than two residual degrees of freedom is refused. In synthetic campaigns of 400 draws per simulated
 world, the HC3 intervals' plain 95% coverage was at least 0.9475 in every world and fit, above a pre-set floor of
 0.93.
@@ -1110,8 +1112,8 @@ familywise at 0.05 by Bonferroni within the pack: for H1, 7 held-out models × 3
 boundary; for H2, 9 primary intervals at rails and DC input and 11 at rest. The systematic term B is never widened.
 
 **Blinding in two stages.** At harvest every science energy and power was multiplied by a secret pack factor drawn
-once, uniform on [0.8, 1.25], and each model configuration's by a secret factor uniform on [0.97, 1.03], following
-the hidden-offset practice of blind analysis [22]. A common factor leaves every H1 word unchanged, but the
+once, uniform on [0.8, 1.25], and each model configuration's by a secret factor uniform on [0.97, 1.03], adapting
+the hidden-offset method of blind analysis [22] to multiplicative factors. A common factor leaves every H1 word unchanged, but the
 configuration factors hide ratios only to about ±6%, while the MoE hypotheses differ by much larger factors; so,
 in addition, the registration requires **held-out models' rows to stay withheld** from analysis exports until
 the stage-1 commitment, and visible rows to carry no clock times, because gaps between reference runs could
@@ -1636,12 +1638,12 @@ were mechanical.
 19. M. Hähnel, B. Döbel, M. Völp, and H. Härtig. "Measuring energy consumption for short code paths using RAPL." *ACM SIGMETRICS Performance Evaluation Review* 40(3), 2012, pp. 13–17. DOI:10.1145/2425248.2425252.
 20. A. Georges, D. Buytaert, and L. Eeckhout. "Statistically Rigorous Java Performance Evaluation." *OOPSLA '07*, 2007, pp. 57–76. DOI:10.1145/1297027.1297033.
 21. T. Mytkowicz, A. Diwan, M. Hauswirth, and P. F. Sweeney. "Producing Wrong Data Without Doing Anything Obviously Wrong!" *ASPLOS XIV*, 2009, pp. 265–276. DOI:10.1145/1508244.1508275.
-22. J. R. Klein and A. Roodman. "Blind Analysis in Nuclear and Particle Physics." *Annual Review of Nuclear and Particle Science* 55, 2005, pp. 141–163. <!-- ADDED IN THIS DRAFT: cited by the BYTES registration; full locator to be verified in the bibliography audit. -->
-23. S. Williams, A. Waterman, and D. Patterson. "Roofline: An Insightful Visual Performance Model for Multicore Architectures." *Communications of the ACM* 52(4), 2009, pp. 65–76. <!-- ADDED IN THIS DRAFT; verify. -->
-24. R. Pope et al. "Efficiently Scaling Transformer Inference." *Proceedings of Machine Learning and Systems (MLSys)*, 2023. <!-- ADDED IN THIS DRAFT; verify. -->
-25. B. A. Nosek, C. R. Ebersole, A. C. DeHaven, and D. T. Mellor. "The Preregistration Revolution." *PNAS* 115(11), 2018, pp. 2600–2606. <!-- ADDED IN THIS DRAFT; verify. -->
-26. S. Holm. "A Simple Sequentially Rejective Multiple Test Procedure." *Scandinavian Journal of Statistics* 6(2), 1979, pp. 65–70. <!-- ADDED IN THIS DRAFT; verify. -->
-27. J. G. MacKinnon and H. White. "Some Heteroskedasticity-Consistent Covariance Matrix Estimators with Improved Finite Sample Properties." *Journal of Econometrics* 29(3), 1985, pp. 305–325. <!-- ADDED IN THIS DRAFT; verify. -->
+22. J. R. Klein and A. Roodman. "Blind Analysis in Nuclear and Particle Physics." *Annual Review of Nuclear and Particle Science* 55, 2005, pp. 141–163. DOI:10.1146/annurev.nucl.55.090704.151521.
+23. S. Williams, A. Waterman, and D. Patterson. "Roofline: An Insightful Visual Performance Model for Multicore Architectures." *Communications of the ACM* 52(4), 2009, pp. 65–76. DOI:10.1145/1498765.1498785.
+24. R. Pope et al. "Efficiently Scaling Transformer Inference." *Proceedings of Machine Learning and Systems (MLSys)* 5, 2023, pp. 606–624. arXiv:2211.05102.
+25. B. A. Nosek, C. R. Ebersole, A. C. DeHaven, and D. T. Mellor. "The Preregistration Revolution." *PNAS* 115(11), 2018, pp. 2600–2606. DOI:10.1073/pnas.1708274114.
+26. S. Holm. "A Simple Sequentially Rejective Multiple Test Procedure." *Scandinavian Journal of Statistics* 6(2), 1979, pp. 65–70. https://www.jstor.org/stable/4615733.
+27. J. G. MacKinnon and H. White. "Some Heteroskedasticity-Consistent Covariance Matrix Estimators with Improved Finite Sample Properties." *Journal of Econometrics* 29(3), 1985, pp. 305–325. DOI:10.1016/0304-4076(85)90158-7.
 
 ## Appendix A. Terms
 
