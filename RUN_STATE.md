@@ -1089,6 +1089,21 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 (2) Then re-pin `$M` at the new head, with a fresh custody root. Before arming: network time OFF and the zero script (item 251). Then write the plan, send the arm notice and install.
 (3) The laptop lead does not need to route item 254's question again. The ruling exists.
 
+255. **Ed's decisions on Paper 1 (interactive session 41120c85, 2026-11-10 ~19:55 PST): E1-E6 all approved as the Fable 5.2 research lead recommended.** Source: `audit/2026-11-10-fable:docs/research-audits/2026-11-10-fable/paper-audit.md` and RL-1 to RL-11. **Ed, verbatim:** "yes to all E1 on E6 ... If Fable recommends them, go ahead".
+- **E1:** **Paper 1 is the mid-December capstone submission,** with a one-page agent-auditing outlook. The tripwire paper is not the December deliverable. This supersedes item 232's attachment of Block 5/BYTES as the tripwire paper's validation section.
+- **E2:** capstone length now (about 17,600 words). Cut for a venue once the replication and BYTES are released.
+- **E3:** the AI-use statement names the model families. **Ed writes the introduction and conclusion.**
+- **E4:** the working title is approved, subject to RL-8 (the title names only released parts, so "Attribution Limits" is likely revised under RL-2/RL-4). The tripwire phrase appears only as a question.
+- **E5:** the two-half talk on 30 Nov stays. **The capstone due date is still to be stated by Ed.**
+- **E6:** approved: Block 6 and BYTES analysis seats plus 6-12 hours of MBP desk time (BYTES stage 1 first in the R1-to-W1 gap, then the Block 6 custody copy, per RL-11). This costs v4 no window.
+- **Paper 1 work order (research lead RL-1 to RL-8):**
+  1. Land `lane/2026-10-27-paper1-draft` on main and tag the blind draft `a1a5029fb`.
+  2. Fix CANONICAL.md's paper rows.
+  3. Apply the RL-5 corrections of fact before any fill.
+  4. RL-3: get `RESULTS.md` onto main and run a fresh independent re-derivation of every printed number.
+  5. RL-6: enter the Block 6 §17 amendments.
+  6. RL-7: BYTES commitment by 19 Nov.
+
 254. **Laptop lead (interactive session 41120c85, Opus 5.5), 2026-11-10 19:42 PST: a code fact for item 253's diagnosis. step_30b's G0 cap may be structurally too short. Do NOT re-arm R1 unchanged until this is settled.**
 - **Source:** the Fable 5.2 delta review of the W1 reliability branches. It covers code structure only and read no thermal or custody data.
   - `step-30b` keeps a **600 s** G0 cap (`scripts/align_r1_rehearsal.py:112-116` at `20e9edbc4`).
