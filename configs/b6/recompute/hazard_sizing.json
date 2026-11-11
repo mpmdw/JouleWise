@@ -1,0 +1,26 @@
+{
+ "F_min_j": 1.9,
+ "authority": "S17-R10; S-9 and S-11 slot-fill draft; no study data read",
+ "gamma_small_model_phase_s": {
+  "decode": 1.990778,
+  "prefill": 0.622591
+ },
+ "phase_s": {
+  "ALPHA": {
+   "decode": 1.9957762,
+   "prefill": 0.623371
+  },
+  "BETA": {
+   "decode": 6.5719512,
+   "prefill": 2.6810598
+  },
+  "GAMMA": {
+   "decode": 6.569401,
+   "prefill": 2.670075
+  }
+ },
+ "quiet_cpu_s": 0.54,
+ "source_commit": "c37614f71dc65140f432980cec8d9b18e21ae609",
+ "source_ref": "origin/lane/2026-10-22-b6-s9-s11",
+ "w_j_per_cpu_s": 5.432
+}

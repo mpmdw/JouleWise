@@ -8,6 +8,7 @@ import shutil
 import statistics
 import tempfile
 import unittest
+from unittest import mock
 
 from .support_b6 import b6, build_session, nine_sessions, session_id, write_attempts
 
@@ -328,8 +329,9 @@ class Block6Guards(unittest.TestCase):
     def test_synthetic_only_refusal(self):
         archive, _ = build_session(self.tmp, "BETA", 1, 0)
         (archive / b6.SYNTHETIC_MARKER).unlink()
-        rc, _ = run(["single", "--session", archive, "--restricted-out", self.tmp / "r.json",
-                     "--public-out", self.tmp / "p.json"])
+        with mock.patch.dict("os.environ", {"JW_B5_SYNTHETIC_ONLY": "1"}):
+            rc, _ = run(["single", "--session", archive, "--restricted-out", self.tmp / "r.json",
+                         "--public-out", self.tmp / "p.json"])
         self.assertEqual(rc, 4)
         self.assertFalse((self.tmp / "r.json").exists())
 

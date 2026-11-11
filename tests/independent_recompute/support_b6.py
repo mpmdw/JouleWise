@@ -131,6 +131,16 @@ def build_session(parent, pack, round_number, k, *, drift_fail=False, exclude=No
                                            "cells": cells, "members": members})
     flags = [{"code": "battery.assist", "scope": {"run_id": rid}} for rid in assist]
     flags += [{"code": "idle.waited", "scope": {"run_id": rid}} for rid in waited]
+    flags += [{"code": code, "scope": {"run_id": rid}} for rid, codes in exclude.items() for code in codes]
+    if drift_fail:
+        flags.append({"code": "neg8.survivor_screen_failed", "scope": {}})
+    # Real archive flag schema, so C3 executes the sealed exclusion function.
+    for i, flag in enumerate(flags):
+        rid = flag["scope"].get("run_id")
+        flag["flag_id"] = f"synthetic-{i}"
+        flag["scope"] = {"level": "member" if rid else "window", "run_id": rid,
+                         "plan_id": sid, "attempt": round_number, "stage_id": None, "bundle_id": None}
+        flag["interval"] = {"monotonic_ns": None}
     (archive / "derived").mkdir(exist_ok=True)
     (archive / "derived/flags.jsonl").write_text("".join(json.dumps(f) + "\n" for f in flags))
     excluding = [{"code": code, "scope": "member", "run_id": rid, "why": code}

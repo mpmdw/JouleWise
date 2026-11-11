@@ -30,7 +30,6 @@ them. Public outputs carry structure only.
 import argparse
 import fnmatch
 import hashlib
-import importlib.util
 import json
 import math
 import os
@@ -38,12 +37,32 @@ from pathlib import Path
 import re
 import statistics
 import sys
+import tempfile
+import types
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from joulewise.b6_analysis_inputs import AuthenticatedInputs, InputRefusal
+from joulewise.flags.catalog import load_catalog
+from joulewise.flags.exclusions import compute as compute_exclusions
 
 _B5_PATH = Path(__file__).resolve().with_name("independent_recompute_b5.py")
 ROOT_DIR = _B5_PATH.parents[1]
-_spec = importlib.util.spec_from_file_location("independent_recompute_b5_for_b6", _B5_PATH)
-B5 = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(B5)
+B5_SHA256 = "d49103e884ccae47242b8efb91ea1f5764e4505a4ad5e54558cc42a399a2e4e0"
+
+
+def load_pinned_b5(path=_B5_PATH):
+    # Hash and execute the SAME bytes; a second loader read could race an edit.
+    source = Path(path).read_bytes()
+    if hashlib.sha256(source).hexdigest() != B5_SHA256:
+        raise InputRefusal("b5_script_digest_mismatch")
+    module = types.ModuleType("independent_recompute_b5_for_b6")
+    module.__file__ = str(path)
+    exec(compile(source, str(path), "exec"), module.__dict__)
+    module.loaded_sha256 = hashlib.sha256(source).hexdigest()
+    return module
+
+
+B5 = load_pinned_b5()
 get, objects, strings, mapping, finite = B5.get, B5.objects, B5.strings, B5.mapping, B5.finite
 
 SCHEMA = "joulewise.independent_recompute_b6.v1"
@@ -77,7 +96,8 @@ B6_FLAG_CODES = frozenset("""acceptance_record_missing acceptance_schema_unknown
 acceptance_pack_unknown loop_attempt_missing counting_disagrees acceptance_kept_count_mismatch
 neg8_verdict_disagrees neg8_corpus_count_mismatch neg8_midpoint_lost neg8_reference_lost neg8_spare_present
 neg8_idle_family_unavailable excluded_run_not_in_roster kept_unit_not_validated pairing_floor_from_block5
-pairing_floor_unavailable pairing_provisional session_id_duplicate b_op_record_unparsed""".split())
+pairing_floor_unavailable pairing_provisional session_id_duplicate b_op_record_unparsed
+b6_exclusions_disagree b6_exclusions_unclassified option_c_disagrees""".split())
 FLAG_CODES = B5.FLAG_CODES | B6_FLAG_CODES
 # Codes that reveal only structure (counts, presence, identity), never an energy-derived pass/fail.
 PUBLIC_FLAG_CODES = frozenset("""archive_file_missing trace_plist_missing trace_plist_unreadable phase_events_ambiguous
@@ -90,9 +110,11 @@ session_id_duplicate neg8_survivor_count_mismatch kept_member_token_mismatch loo
 # A failure on these leaves the comparison without a defined recompute side.
 STOP_FLAG_CODES = B5.TRACE_STOP_FLAG_CODES | frozenset({
     "acceptance_record_missing", "acceptance_schema_unknown", "acceptance_session_mismatch",
-    "acceptance_pack_unknown", "loop_attempt_missing", "counting_disagrees", "session_id_duplicate"})
-WHOLE_MACHINE_NOT_COMPUTED = {"status": "not_computed", "reason": "S-15 open: the per-phase definition is not "
-                              "committed (registration section 9.5 item 5)"}
+    "acceptance_pack_unknown", "loop_attempt_missing", "counting_disagrees", "session_id_duplicate",
+    "b_op_mismatch", "stored_energy_mismatch", "kept_unit_not_validated", "b6_exclusions_disagree",
+    "b6_exclusions_unclassified", "option_c_disagrees", "acceptance_kept_count_mismatch",
+    "neg8_verdict_disagrees", "neg8_corpus_count_mismatch", "meter_request_mismatch"})
+WHOLE_MACHINE_NOT_COMPUTED = {"status": "not_computed", "reason": "synthetic unit fixture supplied no meter streams"}
 BLOCK5_CODES_NOT_COMPUTED = {"status": "not_computed", "reason": "needs block 5's list of session-removing codes "
                              "beside the block-6 catalog; structure only, outside this script"}
 
@@ -101,17 +123,59 @@ class SyntheticOnlyRefusal(Exception):
     pass
 
 
+def present(path):
+    return path.is_file() or Path(str(path) + ".zst").is_file()
+
+
 class Reader(B5.Reader):
     """The block-5 reader with a session scope and block-6 codes."""
-    def __init__(self, pack, session, flags):
+    def __init__(self, pack, session, flags, inputs=None):
         super().__init__(pack, flags)
         self.session = session
+        self.inputs = inputs
+
+    def raw(self, path, scope, required=True):
+        if self.inputs is None:
+            return super().raw(path, scope, required)
+        try:
+            data = self.inputs.read(path)
+            self.files.add(str(path))
+            return data
+        except FileNotFoundError:
+            if required:
+                self.flag("archive_file_missing", scope, "missing or unreadable")
+            return None
 
     def flag(self, code, scope, detail):
         assert code in FLAG_CODES, code
         row = {"code": code, "pack": self.pack, "session": self.session, "scope": str(scope), "detail": detail}
         if row not in self.flags:
             self.flags.append(row)
+
+
+class MemberPool(B5.MemberPool):
+    """Pinned member builder with an external authenticated I/O seam at fork."""
+    def __init__(self, workers, inputs):
+        super().__init__(workers)
+        self.inputs = inputs
+
+    def _start(self):
+        contexts = self.inputs
+
+        class PoolReader(Reader):
+            def __init__(self, pack, flags):
+                super().__init__(pack, "", flags)
+
+            def raw(self, path, scope, required=True):
+                self.inputs = next((ctx for ctx in contexts if Path(path).absolute().is_relative_to(ctx.archive)), None)
+                return super().raw(path, scope, required)
+
+        original = B5.Reader
+        B5.Reader = PoolReader
+        try:
+            super()._start()
+        finally:
+            B5.Reader = original
 
 
 def pack_of(pack_id):
@@ -146,11 +210,16 @@ class Session:
     """
     diagnostic = False
 
-    def __init__(self, archive, flags, attempts=None, claim_root=None, bound_root=None, reharvested=None):
+    def __init__(self, archive, flags, attempts=None, claim_root=None, bound_root=None, reharvested=None,
+                 inputs=None, pool=None, input_pin=None):
         self.archive = Path(archive)
+        self.pool, self.inputs = pool, inputs
+        self.input_pin = input_pin or {}
         self.reharvested = mapping(reharvested)
         check_synthetic(self.archive)
-        self.reader = r = Reader("", "", flags)
+        if inputs is None and not (self.archive / SYNTHETIC_MARKER).is_file():
+            raise InputRefusal("authenticated_inputs_required")
+        self.reader = r = Reader("", "", flags, inputs)
         self.acceptance = r.json(self.archive / "derived/b6-acceptance.json", "derived/b6-acceptance.json")
         if not self.acceptance:
             r.flag("acceptance_record_missing", "session", "no readable acceptance record")
@@ -197,14 +266,56 @@ class Session:
         self.window_codes = sorted({str(item.get("code")) for item in objects(self.acceptance.get("excluding"))
                                     if item.get("scope") != "member"})
         self.flag_rows = (r.lines(self.archive / "derived/flags.jsonl", "derived/flags.jsonl")
-                          if (self.archive / "derived/flags.jsonl").exists() else [])
-        if (self.archive / "derived/b6-flags.jsonl").exists():
+                          if present(self.archive / "derived/flags.jsonl") else [])
+        if present(self.archive / "derived/b6-flags.jsonl"):
             self.flag_rows += r.lines(self.archive / "derived/b6-flags.jsonl", "derived/b6-flags.jsonl")
+        self.flag_rows += objects(self.acceptance.get("emitted_flags"))
+        self.exclusion_check = self.check_exclusions()
+        self.hazards = None
+        if inputs:
+            from joulewise.b6_analysis_hazards import desk_hazards
+            sizing_bytes = (ROOT_DIR / "configs/b6/recompute/hazard_sizing.json").read_bytes()
+            if hashlib.sha256(sizing_bytes).hexdigest() != "bf399bec4195b9237f53c747c6fc9cd24066610eba933a0fad767534d970d29b":
+                raise InputRefusal("hazard_sizing_digest_mismatch")
+            self.hazards = desk_hazards(self, json.loads(sizing_bytes))
+            for rid in self.hazards["power_removed"]:
+                self.excluded_codes.setdefault(rid, set()).add("registered P* desk exclusion")
+            self.excluded = set(self.excluded_codes)
         self.assist = self.runs_with("battery.assist")
         self.waited = self.runs_with("idle.waited")
-        self.exclusion_cells = self.kept_cells()
+        self.exclusion_cells = self.kept_cells(validate_record=not bool(self.hazards))
         self.b = self.calibration()
+        if self.pool:
+            for row in objects(self.roster.get("members")):
+                rid = row["run_id"]
+                which = "corpus" if B5.role(rid) == "corpus" else ("science" if row.get("kind") == "science" else B5.role(rid))
+                root = self.bound_root if which == "corpus" else self.claim_root
+                self.pool.prefetch(self.pack, root, rid, self.b["b_op_s"], which)
         self.neg8 = self.screen()
+
+    def check_exclusions(self):
+        """C3: sealed compute, B6 catalog, no B5 pack-scoped exceptions."""
+        path = ROOT_DIR / "configs/b6/flag_catalog_b6.json"
+        sha = hashlib.sha256(path.read_bytes()).hexdigest()
+        if sha != "b5bce6c64bbc1d079ecf6fed02bf4c214b76a8f7d279d44eea5984e4a389a42b":
+            raise InputRefusal("b6_catalog_digest_mismatch")
+        spans = self.reader.json(self.archive / "withheld/spans.json", "spans", False)
+        spans = mapping(spans.get("spans", spans))
+        spans = {rid: {"monotonic_ns": row.get("monotonic_ns", row.get("member"))}
+                 for rid, row in spans.items()}
+        derived = compute_exclusions(self.flag_rows, self.roster, spans, load_catalog(path), pack_scoped=False)
+        members = {m["run_id"]: set(m["codes"]) for m in derived["members_excluded"]}
+        reasons = set(derived["reasons"])
+        # Never read derived.claim_usable: B6 counting comes from acceptance and loop.
+        cells = {c["cell_id"]: c["kept_units"] for c in derived["cells"]}
+        same = (members == self.excluded_codes and reasons == set(self.window_codes)
+                and cells == {cid: cell["kept_units"] for cid, cell in self.kept_cells().items()})
+        if not same:
+            self.reader.flag("b6_exclusions_disagree", "session", "catalog re-derivation differs from acceptance")
+        if derived["release_blocked"] or derived["flag_counts"]["unmatched_member"]:
+            self.reader.flag("b6_exclusions_unclassified", "session", "unclassified or unmatched flag")
+        return {"status": "agrees" if same else "disagrees", "catalog_sha256": sha,
+                "members_excluded": derived["members_excluded"], "reasons": derived["reasons"]}
 
     def runs_with(self, code):
         return {get(f, "scope", "run_id") for f in self.flag_rows if f.get("code") == code
@@ -235,7 +346,7 @@ class Session:
             return False, status
         return counting, status
 
-    def kept_cells(self):
+    def kept_cells(self, validate_record=True):
         cells = {}
         for (cid, stratum, uid), ids in sorted(self.units.items()):
             cell = cells.setdefault(cid, {"kept_units": {}, "dropped_units": []})
@@ -245,7 +356,7 @@ class Session:
                 cell["kept_units"].setdefault(stratum, [])
             else:
                 cell["kept_units"].setdefault(stratum, []).append(uid)
-        recorded = mapping(self.acceptance.get("cells"))
+        recorded = mapping(self.acceptance.get("cells")) if validate_record else {}
         for cid, cell in cells.items():
             if cid not in recorded:
                 continue
@@ -264,7 +375,18 @@ class Session:
             self.compared_run_ids.add(run_id)
         if run_id not in self.members:
             root = self.bound_root if member_role == "corpus" else self.claim_root
-            self.members[run_id] = m = B5.Member(root / run_id, run_id, self.reader, self.b["b_op_s"], member_role)
+            built = self.pool.take(self.pack, root, run_id, self.b["b_op_s"], member_role) if self.pool else None
+            if built is None:
+                m = B5.Member(root / run_id, run_id, self.reader, self.b["b_op_s"], member_role)
+            else:
+                state, rows, files = built
+                m = B5.Member.__new__(B5.Member)
+                m.__dict__.update(state)
+                m.reader = self.reader
+                for row in rows:
+                    self.reader.flag(row["code"], row["scope"], row["detail"])
+                self.reader.files.update(files)
+            self.members[run_id] = m
             pre = self.b["b_pre_s"]
             if member_role == "science" and not finite(m.bpre):
                 self.reader.flag("member_pre_bound_missing", run_id, {"session_s": pre, "member_s": m.bpre})
@@ -318,11 +440,15 @@ class Session:
         pre, post = captures.get("pre"), captures.get("post")
         source = "captures"
         if pre is None or post is None:
+            if self.inputs is not None:
+                raise InputRefusal("calibration_capture_missing")
             pre, post = decimal("pre_s"), decimal("post_s")
             source = "acceptance_record"
             r.flag("b_op_from_record", "session", "capture record missing; the acceptance record's captures used")
         bop = drift = None
         if finite(pre) and finite(post):
+            if self.inputs is not None and not finite(recorded):
+                raise InputRefusal("calibration_acceptance_bound_missing")
             drift = abs(post - pre)
             bop = max(pre, post) + max(drift, S_BRACKET_S)
             # Same unrounded relative bar as block 5's b_op check (1e-6 relative).
@@ -388,6 +514,8 @@ class Session:
                 values = [energy(m) for m in corpus] + [energy(m) for k in slots for m in slots[k]]
                 if not all(finite(v) for v in values):
                     r.flag("neg8_idle_family_unavailable", "session", "an idle baseline power is missing")
+                    if self.inputs:
+                        raise InputRefusal("neg8_idle_family_unavailable")
                     result["families"][family] = {"status": "not_computed", "reason": "idle_baseline_unavailable"}
                     continue
                 bound = B5.neg8_bound([energy(m) for m in corpus], counts["start"], counts["end"])
@@ -504,6 +632,13 @@ def labelled_lines(session, cid, selected):
         row = subset_estimate(session, cid, kept, gamma=gamma)
         row["removed_by_stratum"] = {s: len(selected[s]) - len(kept[s]) for s in selected}
         lines[name] = row
+    if session.hazards:
+        removed = set(session.hazards["processor_alternative_removed"])
+        kept = {s: [(u, ms) for u, ms in units if not any(m.run_id in removed for m in ms)] for s, units in selected.items()}
+        row = subset_estimate(session, cid, kept, gamma=gamma)
+        row.update(label=session.hazards["processor_label"],
+                   removed_by_stratum={s: len(selected[s]) - len(kept[s]) for s in selected})
+        lines["outside_processor_alternative"] = row
     return lines
 
 
@@ -558,10 +693,18 @@ def floor_session(session):
         lines["whole_machine"] = WHOLE_MACHINE_NOT_COMPUTED
         out["lines"][cid] = lines
         members = B5.flatten(chosen["repeat"] + chosen["quad"])
-        duration = statistics.fmean(m.edges[phase][1] - m.edges[phase][0] for m in members) if members else None
+        duration = (0.2 * statistics.fmean(ms[0].edges[phase][1] - ms[0].edges[phase][0]
+                                          for _, ms in chosen["repeat"])
+                    + 0.8 * statistics.fmean(statistics.fmean(m.edges[phase][1] - m.edges[phase][0] for m in ms)
+                                              for _, ms in chosen["quad"])) if all(chosen.values()) else None
+        plain_duration = statistics.fmean(m.edges[phase][1] - m.edges[phase][0] for m in members) if members else None
         factor = B5.allowance_factor(reported["mean_j"], duration, basis)
         scaled["reported_cells"][cid] = {**B5.scaled_reported(reported, factor, session.neg8["allowance_j"]),
                                          "E_j": reported["mean_j"], "T_s": duration}
+        if plain_duration != duration:
+            scaled["reported_cells"][cid]["plain_mean_alternative"] = {
+                "label": "plain member mean T alternative (RL-25 8a)", "T_s": plain_duration,
+                "factor": B5.allowance_factor(reported["mean_j"], plain_duration, basis)}
         for form in ("absolute", "comparative"):
             scaled["floors"][prefix + "/" + form] = B5.scaled_floor(out["floors"][prefix + "/" + form], factor)
         a, c = (scaled["floors"][prefix + "/" + f]["drift_widened_guarded_floor_j"] for f in ("absolute", "comparative"))
@@ -644,12 +787,12 @@ def pair(gamma_round, floor_sessions):
     same = [s for r, s in floor_sessions if r == gamma_round]
     if same:
         return {"session_id": same[0], "rule": "1_same_round"}
-    later = sorted((r, s) for r, s in floor_sessions if isinstance(r, int) and r > gamma_round)
+    later = sorted(((r, s) for r, s in floor_sessions if isinstance(r, int) and r > gamma_round), key=lambda x: x[0])
     if later:
         return {"session_id": later[0][1], "rule": "2_next_counting"}
-    earlier = sorted((r, s) for r, s in floor_sessions if isinstance(r, int) and r < gamma_round)
+    earlier = sorted(((r, s) for r, s in floor_sessions if isinstance(r, int) and r < gamma_round), key=lambda x: -x[0])
     if earlier:
-        return {"session_id": earlier[-1][1], "rule": "3_last_earlier_counting"}
+        return {"session_id": earlier[0][1], "rule": "3_last_earlier_counting"}
     return {"session_id": None, "rule": "3_floor_from_block_5"}
 
 
@@ -740,6 +883,8 @@ def session_quantities(result):
         for field in ("G_j", "h_G_j", "F_j", "h_F_j", "delta_j", "agree", "n"):
             q[prefix + "/" + field] = row.get(field)
     for cid, lines in result.get("lines", {}).items():
+        if "p42" in cid:
+            continue  # diagnostic p42 must not overwrite the registered p2048 Q
         label = (tag_of(MODELS[result["pack"]]) + "/" if result["pack"] in FLOOR_PACKS else "") + contrast_key(cid)
         for name, row in lines.items():
             if not isinstance(row, dict) or row.get("status") == "not_computed" and "mean_j" not in row:
@@ -795,7 +940,7 @@ def single_gamma_view(quantities):
 
 SUMMARY_PATTERNS = ("reported/*/mean_j", "reported/*/per_token_j", "reported/*/attribution_floor_j",
                     "floor/*/operative_j", "floor/*/floor_j", "dominance/*/R", "dominance/*/R_cm",
-                    "contrast/*/dbar_j", "contrast/*/energy_ratio")
+                    "contrast/*/dbar_j", "contrast/*/energy_ratio", "lines/whole_machine/*/mean_j")
 
 
 def summarized(key):
@@ -836,6 +981,12 @@ def block5_quantities(b5):
             q["dominance/" + tag_of(parts[0]) + "/" + PHASE_LABEL[parts[1]] + "/comparative/R_cm"] = row.get("R_cm")
     for cid, contrast in fake["contrasts"].items():
         q.update(contrast_keys("contrast/" + contrast_key(cid), contrast, fake["descriptive"].get(cid)))
+    # Consume the released B5 program's output only. Never re-run B5 data.
+    for pack in FLOOR_PACKS:
+        for cid, row in get(b5, "disclosures", "whole_machine", "windows", pack, "cells", default={}).items():
+            if "p42" in cid:
+                continue
+            q["lines/whole_machine/" + tag_of(MODELS[pack]) + "/" + contrast_key(cid) + "/mean_j"] = row.get("mean_j")
     return q
 
 
@@ -848,7 +999,8 @@ def pack_block5_keys(pack, keys):
 
 def block_lines(results, b5_keys):
     """Sections 10, 11.1, 11.2 and 11.4 over the per-session results."""
-    out = {"between_session": {}, "flagged_inclusive": {}, "side_by_side": {}, "replication": {}, "short": {}}
+    out = {"between_session": {}, "flagged_inclusive": {}, "side_by_side": {}, "replication": {}, "short": {},
+           "block6_only": {}}
     for pack in PACKS:
         counting = [r for r in results.values() if r["pack"] == pack and r["counting"]]
         inclusive = counting + [r for r in results.values() if r["pack"] == pack and not r["counting"]
@@ -859,12 +1011,24 @@ def block_lines(results, b5_keys):
         summary, flagged, side = {}, {}, {}
         for key in keys:
             sessions = [r["quantities"].get(key) for r in counting]
-            base = [b5[key]] if key in b5 else []
+            base = [b5[key]] if finite(b5.get(key)) else []
             summary[key] = {**between_session(base + sessions), "block5_included": bool(base)}
+            summary[key]["noncomputable_sessions"] = [r["session_id"] for r in counting
+                                                       if not finite(r["quantities"].get(key))]
+            out["block6_only"].setdefault(pack, {})[key] = between_session(sessions)
+            if key.startswith("floor/") or "attribution_floor" in key:
+                summary[key]["timing_regime_label"] = (
+                    "Block 5's floors were formed under its own calibration acceptance (minimum bracket "
+                    "allowance 14.531 ms) and Block 6's under its own (10.818 ms). The difference, up to 3.713 ms "
+                    "of timing bound and up to 0.175 J of floor by the registration's sizing, comes from the "
+                    "registered rule and not from the machine. The summary over Block 6 sessions alone is "
+                    "printed beside the summary over all sessions.")
+            summary[key]["sd_label"] = "not defined" if summary[key]["n"] == 1 else None
             flagged[key] = {**between_session(base + [r["quantities"].get(key) for r in inclusive]),
                             "block5_included": bool(base)}
             mean6 = between_session(sessions)["mean"]
-            side[key] = {"block5": b5.get(key), "sessions": {r["session_id"]: r["quantities"].get(key) for r in counting},
+            side[key] = {"block5": b5.get(key), "block5_label": None if finite(b5.get(key)) else "block 5: not computed",
+                         "sessions": {r["session_id"]: r["quantities"].get(key) for r in counting},
                          "delta": mean6 - b5[key] if finite(mean6) and finite(b5.get(key)) else None,
                          "session_deltas": {r["session_id"]: r["quantities"][key] - b5[key]
                                             for r in counting if finite(r["quantities"].get(key)) and finite(b5.get(key))}}
@@ -892,6 +1056,8 @@ def block_lines(results, b5_keys):
             row.update(word=None, reason="block5_absent")
         elif base_word == "not_estimable":
             row.update(word=None, reason="block5_not_estimable")
+        elif any(r.get("binding_defect") for r in gammas if r["counting"]):
+            row.update(word=None, reason="binding_defect; tooling refusal, not a replication outcome")
         elif not words:
             row.update(word=None, reason="no_counting_session")
         else:
@@ -919,13 +1085,92 @@ def block_quantities(lines):
 
 # ---------------------------------------------------------------- driver
 
+PHASE_BOUNDARY = "DC input at the USB-C port; the adapter's AC-to-DC loss is not included."
+
+
+def add_session_machine(session, result, selections):
+    """RL-30 7b: ONLY the pinned add_machine executes the arithmetic.
+
+    Its archive I/O is supplied as verified temporary meter/clock files. The
+    actual members and session bounds stay external. No estimator or corner
+    calculation is reproduced here.
+    """
+    pin = session.input_pin
+    paths = pin.get("meter_streams", [])
+    if not paths:
+        if session.inputs is not None:
+            raise InputRefusal("meter_streams_not_supplied")
+        return
+    with tempfile.TemporaryDirectory(prefix="b6-meter-") as directory:
+        root = Path(directory)
+        meter = root / "meter"
+        meter.mkdir()
+        for name in paths:
+            path = session.archive / name
+            data = session.reader.raw(path, "meter_stream")
+            if data is None:
+                raise InputRefusal("meter_stream_missing")
+            (meter / path.name).write_bytes(data)
+        if pin.get("clock_journal"):
+            path = root / "sources/night-custody/hazards/monitor/clock.jsonl"
+            path.parent.mkdir(parents=True)
+            path.write_bytes(session.reader.raw(session.archive / pin["clock_journal"], "clock_journal"))
+        recorded = session.reader.raw(session.archive / "withheld/meter.json", "withheld/meter.json", False)
+        if session.inputs is not None and recorded is None:
+            raise InputRefusal("request_comparison_record_missing")
+        if recorded is not None:
+            (root / "withheld").mkdir()
+            (root / "withheld/meter.json").write_bytes(recorded)
+        proxy = types.SimpleNamespace(**vars(session))
+        proxy.archive = root
+        proxy.harvest = {**session.harvest, "plan_id": session.harvest.get("plan_id", session.archive.name)}
+        proxy.reader = Reader(session.pack, session.session_id, session.reader.flags)
+        proxy.member = session.member
+        output = {"disclosures": {}}
+        B5.add_machine(output, {(session.pack, cid): s for cid, s in selections.items()},
+                       {session.pack: proxy}, meter)
+        machine = output["disclosures"]["whole_machine"]
+        if session.inputs is not None:
+            for member in machine["windows"][session.pack].get("members", {}).values():
+                if "recorded_comparison" not in member["phases"]["request"]:
+                    raise InputRefusal("request_comparison_member_missing")
+        result["whole_machine"] = machine
+        for cid, row in machine["windows"][session.pack].get("cells", {}).items():
+            assisted = sorted({m.run_id for m in B5.flatten(selections[cid]["repeat"] + selections[cid]["quad"])
+                               if m.run_id in session.assist})
+            # Preserve the pinned battery-activity count. The registered flag
+            # is separately sourced from harvest battery.assist, per R8.
+            result["lines"].setdefault(cid, {})["whole_machine"] = {
+                **row, "boundary": PHASE_BOUNDARY,
+                "implementation": "single implementation; not independently recomputed",
+                "request_assisted_members": assisted, "request_assisted_count": len(assisted)}
+        result["request_cross_check"] = machine["request_cross_check"]
+
+
 def compute_session(session):
     result = {"session_id": session.session_id, "pack": session.pack, "round": session.round,
+              "t0": session.attempt.get("t0") if session.attempt else None,
               "counting": session.counting, "loop_status": session.loop_status,
               "acceptance_verdict": session.acceptance.get("verdict"), "window_codes": session.window_codes,
               "calibration": session.b, "neg8": session.neg8,
+              "exclusions_rederivation": session.exclusion_check,
+              "desk_hazards": session.hazards,
               "kept_units": {cid: cell["kept_units"] for cid, cell in session.exclusion_cells.items()},
               "removed_units": {cid: cell["dropped_units"] for cid, cell in session.exclusion_cells.items()}}
+    if session.inputs:
+        families = ("monitor_cost", "arm_host", "battery_phase", "subject_temperature",
+                    "reference_history", "attempt_history", "g10_history", "block5_codes_carried")
+        supplied = session.input_pin.get("copied_records", {})
+        if set(supplied) != set(families):
+            raise InputRefusal("disclosure_coverage_missing")
+        if any(not isinstance(names, list) or not names or any(not isinstance(n, str) for n in names)
+               for names in supplied.values()):
+            raise InputRefusal("disclosure_coverage_invalid")
+        result["copied_disclosures"] = {
+            "label": "copied from the harvest or acceptance record, bound by digest, not recomputed",
+            "families": {family: [{"path": name, "sha256": session.inputs.expected.get(name),
+                                    "record": session.reader.raw(session.archive / name, "disclosure").decode("utf-8")}
+                                   for name in supplied[family]] for family in families}}
     computable = finite(session.b["b_op_s"]) and finite(session.neg8["allowance_j"])
     groups = session.structure_group()
     if session.pack in FLOOR_PACKS:
@@ -938,6 +1183,9 @@ def compute_session(session):
         enough = bool(rows) and all(len(s["quad"]) >= 5 for s in selections.values())
     else:
         enough = False
+    if session.pack in PACKS:
+        add_session_machine(session, result, selections)
+    result["_selections"] = selections if session.pack in PACKS else {}
     result["inclusive"] = {"eligible": not session.counting and not groups and computable and enough,
                            "structure_groups": groups, "computable": computable and enough}
     return result
@@ -948,7 +1196,8 @@ def attach_gamma(result, session, floor_results, b5_view, closed):
     selections, rows, operands = result.pop("_gamma")
     floor_cells, scaled_cells, reported, pairing, ratios = {}, {}, {}, {}, {}
     for pack in FLOOR_PACKS:
-        candidates = [(r["round"], r["session_id"]) for r in floor_results.values()
+        candidates = [(r["round"], r["session_id"]) for r in sorted(floor_results.values(),
+                      key=lambda r: (r["t0"] if finite(r["t0"]) else float("inf"), r["session_id"]))
                       if r["pack"] == pack and r["counting"]]
         p = pair(result["round"], candidates)
         # Before the close a same-round floor session can still be harvested and change rules 2 and 3.
@@ -987,12 +1236,15 @@ def attach_gamma(result, session, floor_results, b5_view, closed):
                                    if len(ratios) == 12 else {"branch": None, "reason": "paired ratios incomplete"})
 
 
-def recompute_block(archives, attempts_path, flags, b5_output=None, closed=False, state_path=None):
+def recompute_block(archives, attempts_path, flags, b5_output=None, closed=False, state_path=None,
+                    input_pins=None, pool=None):
     attempts = read_attempts(attempts_path, flags)
     reharvested = read_reharvested(state_path, flags)
     sessions = {}
     for archive in archives:
-        s = Session(archive, flags, attempts, reharvested=reharvested)
+        pin = (input_pins or {}).get(Path(archive).name)
+        inputs = AuthenticatedInputs(archive, pin) if pin is not None else None
+        s = Session(archive, flags, attempts, reharvested=reharvested, inputs=inputs, pool=pool, input_pin=pin)
         if s.session_id in sessions:
             s.reader.flag("session_id_duplicate", "session", {"archive": str(archive)})
             continue
@@ -1005,7 +1257,32 @@ def recompute_block(archives, attempts_path, flags, b5_output=None, closed=False
             attach_gamma(r, sessions[sid], floor_results, b5_view, closed)
     for sid, r in results.items():
         r["quantities"] = session_quantities(r)
+        r["binding_defect"] = any(f.get("session") == sid and f["code"] in STOP_FLAG_CODES for f in flags)
     lines = block_lines(results, block5_quantities(b5_output))
+    from joulewise.b6_analysis_check import check_block
+    checks = check_block(sessions, results, lines, block5_quantities(b5_output))
+    # Compare only independently produced rows. Never echo unchecked primary
+    # rows into a purported second producer (in particular, R8's phase line).
+    expected = checks.pop("comparison_table")
+    primary = comparison_table(sessions, results, lines)
+    projected = {"schema": TABLE_SCHEMA, "sessions": {}, "block": {"quantities": {}}}
+    for sid, body in expected["sessions"].items():
+        source = primary["sessions"][sid]
+        projected["sessions"][sid] = {
+            "quantities": {k: source["quantities"].get(k) for k in body["quantities"]},
+            "run_phase_energy_j": {rid: {p: source["run_phase_energy_j"].get(rid, {}).get(p) for p in phases}
+                                   for rid, phases in body["run_phase_energy_j"].items()}}
+    projected["block"]["quantities"] = {k: primary["block"]["quantities"].get(k)
+                                        for k in expected["block"]["quantities"]}
+    comparator, public_comparator = compare(projected, expected)
+    checks["comparator"] = public_comparator
+    checks["pass"] = checks["pass"] and comparator["pass"]
+    for s in sessions.values():
+        if not checks["pass"]:
+            s.reader.flag("option_c_disagrees", "block", checks["failures"])
+    lines["option_c"] = checks
+    for r in results.values():
+        r.pop("_selections", None)
     return sessions, results, lines
 
 
@@ -1103,7 +1380,7 @@ def finish_recompute(mode, sessions, results, lines, flags, extra=None):
     stopped = any(f["stops_comparison"] for f in flags)
     table = comparison_table(sessions, results, lines)
     restricted = {"schema": SCHEMA, "mode": mode, "program_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-                  "b5_program_sha256": hashlib.sha256(_B5_PATH.read_bytes()).hexdigest(),
+                  "b5_program_sha256": B5.loaded_sha256,
                   "sessions": results, "block": lines, "comparison_table": table, "flags": flags,
                   "comparison_stopped": stopped, **(extra or {})}
     public = {"schema": PUBLIC_SCHEMA, "mode": mode, "comparison_stopped": stopped, "sessions": {},
@@ -1119,20 +1396,15 @@ def finish_recompute(mode, sessions, results, lines, flags, extra=None):
 
 # ---------------------------------------------------------------- comparator (S-13)
 
-# Comparison precision (decimal places) per key pattern; first match wins. Lead decision 1
-# (2026-10-27, made blind): ratified as the S-13 comparison precision. It is at least as fine
-# as anything the paper prints, so it only makes "half a unit of the last printed digit"
-# stricter; the paper may print fewer digits, which never loosens the comparison. Never set
-# from observed differences. Ed may override before the release.
-RATIFIED_COMPARISON_DECIMALS = (
-    ("calibration/b_op_s", 6),
-    ("*/per_token_j", 6),
-    ("*/R", 2), ("*/R_cm", 2), ("*/factor", 3),
-    ("*/energy_ratio*", 3),
-    ("contrast/*/t", 2), ("contrast/*/p", 4), ("contrast/*/holm_p", 4),
-    ("*_j", 4),
-)
-RATIFIED_SOURCE = "lead decision 1, 2026-10-27 (made blind): ratified comparison precision"
+# S17-R2 supersedes the October precision. One content-pinned table, shared
+# by the option-(c) gate and the external comparison CLI; never fitted to data.
+PRECISION_SHA256 = "e242cab6bb311a9c23d5c6dc06374ed3094a351e36d6954c3589e2b535cc63b0"
+_precision_bytes = (ROOT_DIR / "configs/b6/recompute/precision.json").read_bytes()
+if hashlib.sha256(_precision_bytes).hexdigest() != PRECISION_SHA256:
+    raise InputRefusal("print_precision_digest_mismatch")
+_precision = json.loads(_precision_bytes)
+RATIFIED_COMPARISON_DECIMALS = tuple((p, d) for p, d in _precision["decimals"])
+RATIFIED_SOURCE = _precision["source"]
 RUN_ENERGY_BAR_J = 1e-3  # S-13: each run's phase energy within 1 mJ.
 
 
@@ -1240,7 +1512,8 @@ def compare(recompute_output, driver_table, spec=RATIFIED_COMPARISON_DECIMALS, s
             t["max_observed_difference"] = max(t["max_observed_difference"] or 0.0, row["difference"])
     stopped = bool(recompute_output.get("comparison_stopped"))
     # Lead decision 4: the release comparison is a closed block run; provisional pairings are same-day only.
-    release_inputs = (not release) or (recompute_output.get("mode") == "BLOCK" and recompute_output.get("closed") is True)
+    release_inputs = (not release) or (recompute_output.get("mode") == "BLOCK" and recompute_output.get("closed") is True
+                                      and spec == RATIFIED_COMPARISON_DECIMALS and spec_source == RATIFIED_SOURCE)
     for t in classes.values():
         t["result"] = "pass" if t["failed"] == 0 and t["unmatched"] == 0 and t["compared"] > 0 else "fail"
     passed = bool(classes) and all(t["result"] == "pass" for t in classes.values()) and not stopped and release_inputs
@@ -1262,6 +1535,12 @@ def load_spec(path):
     if path is None:
         return RATIFIED_COMPARISON_DECIMALS, RATIFIED_SOURCE
     data = json.loads(Path(path).read_text(encoding="utf-8"))
+    def placeholder(value):
+        if isinstance(value, dict):
+            return value.get("placeholder") is True or any(placeholder(v) for v in value.values())
+        return isinstance(value, list) and any(placeholder(v) for v in value)
+    if placeholder(data):
+        raise InputRefusal("placeholder_print_precision")
     return tuple((str(p), int(d)) for p, d in data["decimals"]), str(data.get("source", path))
 
 
@@ -1289,6 +1568,18 @@ def key_contract(restricted):
             "model_tags": sorted(MODEL_TAG.values()), "phases": sorted(PHASE_LABEL.values())}
 
 
+def require_production_coverage(results, lines):
+    data = (ROOT_DIR / "configs/b6/recompute/production_comparison_keys.json").read_bytes()
+    if hashlib.sha256(data).hexdigest() != "62dbfaef9ebc5cfbbe5a00734f5eb8ad3d82389f54f28473ed63db6135b9174d":
+        raise InputRefusal("comparison_key_registry_digest_mismatch")
+    expected = json.loads(data)
+    for result in results.values():
+        if set(result["quantities"]) != set(expected["session_quantity_keys"][result["pack"]]):
+            raise InputRefusal("comparison_session_coverage_mismatch")
+    if set(block_quantities(lines)) != set(expected["block_quantity_keys"]):
+        raise InputRefusal("comparison_block_coverage_mismatch")
+
+
 # ---------------------------------------------------------------- command line
 
 def main(argv=None) -> int:
@@ -1306,6 +1597,9 @@ def main(argv=None) -> int:
         p.add_argument("--loop-state", help="the loop's state.json, for its re-harvest corrections")
         p.add_argument("--restricted-out", required=True)
         p.add_argument("--public-out", required=True)
+        p.add_argument("--inputs", help="external custody pins and relocated meter stream names")
+        p.add_argument("--inputs-sha256", help="SHA-256 of the externally supplied run-input document")
+        p.add_argument("--workers", type=B5.worker_count, default=1, help="bounded member pool; default 1")
     cmp = sub.add_parser("compare", help="S-13 comparison against the analysis driver's restricted outputs")
     cmp.add_argument("--recompute", required=True, help="this script's restricted output")
     cmp.add_argument("--driver", required=True, help="the driver's comparison table (restricted)")
@@ -1323,6 +1617,7 @@ def main(argv=None) -> int:
         contract = key_contract(json.loads(Path(args.recompute).read_text(encoding="utf-8")))
         Path(args.out).write_text(json.dumps(contract, indent=1, sort_keys=True) + "\n", encoding="utf-8")
         return 0
+    pool = None
     try:
         if args.command == "compare":
             spec, source = load_spec(args.print_spec)
@@ -1333,15 +1628,53 @@ def main(argv=None) -> int:
             print("compare pass=" + json.dumps(public["pass"]) + " restricted_sha256=" + public["restricted_sha256"])
             return 0 if public["pass"] else 1
         flags = []
+        pins = {}
+        input_record = {"host": "synthetic", "l9_audit": "not_run"}
+        if args.inputs:
+            data = Path(args.inputs).read_bytes()
+            if not args.inputs_sha256 or hashlib.sha256(data).hexdigest() != args.inputs_sha256:
+                raise InputRefusal("run_inputs_digest_mismatch")
+            document = json.loads(data)
+            if document.get("host") != "Air" or document.get("l9_audit") not in ("not_run", "completed"):
+                raise InputRefusal("run_host_or_audit_invalid")
+            pins = document["sessions"]
+            for field in ("loop_attempts", "loop_state", "block5"):
+                path = getattr(args, field, None)
+                if path and hashlib.sha256(Path(path).read_bytes()).hexdigest() != document["external"][field]:
+                    raise InputRefusal("external_input_digest_mismatch")
+            input_record = {"host": "Air", "l9_audit": document["l9_audit"],
+                            "run_inputs_sha256": args.inputs_sha256}
+            for name, sha in {
+                "configs/b6/registration/acceptance.json": "ea130c87ece4e8b557a6357f1f75df045b5a0a738db18fe5ee990a7b539ce2a8",
+                "configs/b6/registration/identity_pins.json": "513d7d4a98f464c7236b34c53f51cd523a9f45b4d9f05f2282a4a22424b4841d",
+            }.items():
+                if hashlib.sha256((ROOT_DIR / name).read_bytes()).hexdigest() != sha:
+                    raise InputRefusal("registration_digest_mismatch")
+        archives = args.session if args.command == "block" else [args.session]
+        contexts = []
+        for archive in archives:
+            pin = pins.get(Path(archive).name)
+            if args.inputs and pin is None:
+                raise InputRefusal("session_input_pin_missing")
+            if pin is not None:
+                context = AuthenticatedInputs(archive, pin)
+                contexts.append(context)
+        if args.workers > 1:
+            pool = MemberPool(args.workers, contexts)
         if args.command == "block":
             b5 = json.loads(Path(args.block5).read_text(encoding="utf-8")) if args.block5 else None
             sessions, results, lines = recompute_block(args.session, args.loop_attempts, flags, b5, args.closed,
-                                                       args.loop_state)
+                                                       args.loop_state, pins, pool)
+            if pins:
+                require_production_coverage(results, lines)
+            input_record["census"] = {sid: s.inputs.verify_census() for sid, s in sessions.items() if s.inputs}
             restricted, public = finish_recompute("BLOCK", sessions, results, lines, flags,
-                                                  {"closed": args.closed, "block5_input": bool(b5)})
+                                                  {"closed": args.closed, "block5_input": bool(b5), "inputs": input_record})
         else:
             attempts = read_attempts(args.loop_attempts, flags)
-            s = Session(args.session, flags, attempts, reharvested=read_reharvested(args.loop_state, flags))
+            s = Session(args.session, flags, attempts, reharvested=read_reharvested(args.loop_state, flags),
+                        inputs=contexts[0] if contexts else None, pool=pool,
+                        input_pin=pins.get(Path(args.session).name))
             r = compute_session(s)
             if r["pack"] == "GAMMA":
                 # Same day as harvest: the paired floors may not exist yet; contrasts carry no floor gate.
@@ -1350,11 +1683,21 @@ def main(argv=None) -> int:
             if r["pack"] == "GAMMA":
                 r["quantities"] = single_gamma_view(r["quantities"])
                 r["deferred_to_block_run"] = list(SINGLE_GAMMA_DEFERRED)
+            r.pop("_selections", None)
+            if s.inputs:
+                input_record["census"] = {s.session_id: s.inputs.verify_census()}
             restricted, public = finish_recompute("SINGLE_SESSION", {s.session_id: s}, {s.session_id: r}, None, flags)
+            restricted["inputs"] = input_record
         public = write_outputs(args.restricted_out, args.public_out, restricted, public)
     except SyntheticOnlyRefusal as exc:
         print("refused: " + str(exc), file=sys.stderr)
         return 4
+    except (InputRefusal, KeyError, ValueError, OSError, TypeError, ArithmeticError) as exc:
+        print("refused: " + (str(exc) if isinstance(exc, InputRefusal) else type(exc).__name__), file=sys.stderr)
+        return 4
+    finally:
+        if pool:
+            pool.close()
     print("recompute sessions=" + str(len(public["sessions"])) + " flags=" + str(public["flag_count"])
           + " comparison_stopped=" + json.dumps(public["comparison_stopped"])
           + " restricted_sha256=" + public["restricted_sha256"])
