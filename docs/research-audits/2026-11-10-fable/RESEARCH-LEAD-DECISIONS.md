@@ -1127,6 +1127,109 @@ checked.
 
 ---
 
+# Decision request 11: the W1 integration head, I-N2, I-N3, and what gates the arm (2026-11-10 21:53 PST)
+
+## RL-35. `align/2026-11-10-w1-integration` @ `433914698` becomes the W1 line; two more bindings; the arm list
+
+**What I checked myself**, at `433914698` (`928976f8c` plus the review commit and the wording fix):
+
+- The claim-contract files are byte-identical to the admitted head `7770d6a4f`: the protocol, the series
+  directory, the seed manifest, `v4_u3.py`, `v4_estimands.py`, `pilot_analysis.py`. The series manifest's
+  SHA-256 is still `70009b6a…c78dd6`.
+- `scripts/align_v4_next_arm_packet.py` differs from `7770d6a4f` only inside `terminal_release_check` (the
+  `courier_delivery` receipt). `build_packet` is untouched.
+- Ten modules, 126 tests, all passing: `test_v4_claim_b_packet` 15, `test_v4_claim_b_u3` 4,
+  `test_v4_seedcheck_claim_b` 9, `test_v4_test_reserves` 2, `test_v4_executed_closure` 4,
+  `test_v4_dynamic_closure` 10, `test_v4_registration` 22, `test_v4_next_arm_packet` 46,
+  `tests.test_w1_integration` 2, `tests.test_install_magistrate_watchdog` 12.
+- I read the registration diff, the trace-generator diff, the two new deviation rows, and every repository path
+  the watchdog and its helpers compute at run time.
+
+I did not repeat the reviewer's blob comparison, three-way merge, static import walk or trace regeneration.
+
+**(a) Yes.** This head becomes `align/2026-11-08-v4-r11`. The bound-file edits below go on it in one commit
+**before** PREQUAL and the W1 smoke, because those must run on the bytes that get registered.
+
+**(b) I-N3: bind two files, leave one unbound.** RL-29's rule covered imports. For files a bound process reads
+or renders, the rule is: **a file is bound if its bytes can change a gate, a fence, the host state or a
+registered quantity. A file that only instructs the agent between windows is not bound, provided custody keeps
+what was used.**
+
+| File | Ruling | Why |
+|---|---|---|
+| `scripts/install_magistrate_watchdog.sh` | Bind, strict | It is the only route from the bound plist template to the installed job. `scripts/install_night_agent.sh` is already bound; this is the same thing. |
+| `tests/fixtures/night_plan_v1_retired.json` | Bind, strict | The review did not list it. The watchdog reads it at import (`magistrate_watchdog.py:81, 180`) and its key set decides which plans count as retired (`:199-207`, used at `:785`). That is a fence decision. The file is a golden fixture and should never change. |
+| `docs/process/MAGISTRATE_RELAUNCH_PROMPT.md` | Not bound | It is the magistrate's instructions. The magistrate is a language model and is not bound; binding its prompt would claim more than is true and would force a re-registration for every process edit. The registration controls the magistrate through the mechanical arm checks. Each activation already stores the rendered prompt in its attempt directory (`:3256-3259`), which is the record. |
+
+Both bindings are additive, so they fall under the standing ratification: make them, add them to the
+`RL29-WATCHDOG-BIND` row or a new row, tell me after. The row also states the rule above and names the prompt
+as deliberately unbound. If a closure test refuses a path under `tests/`, that comes back to me.
+
+**(c) I-N2: leave it.** No watchdog scenario is added to the trace. The watchdog computes no registered
+quantity; its bound bytes are what the receipt needs, and the import walk plus my reading of its run-time paths
+cover the closure. A scenario can be added the next time the generator changes for another reason.
+
+**What gates the W1 STRICT re-registration** (each changes bound bytes or is a registration input):
+
+1. The four inputs: `u3_bar.json`, `w1_plan.json`, `wp19_receipt.json`, `r1_soak_reference.json`. R1's slots
+   enter under RL-32's conditions, with two added below.
+2. The two bindings in (b).
+3. **W-06, a deviation row.** The host-link setup of 2026-11-10 changed the measurement Mac: `tailscaled` as a
+   root service, Screen Sharing and key-only Remote Login on, AC sleep 0, wake-on-network on, and a broad
+   passwordless sudo rule. `DEVIATIONS.md` is bound, so the row goes in now. It lists those facts from the
+   host-link record, says they held for R1 and hold unchanged for the whole v4 series, and says the protocol's
+   "narrow rule" describes the commands the chain uses, not the host's whole sudo state. Any change to them
+   during the series is a deviation row and comes to me.
+
+**What gates the W1 arm** (procedure or native check; no bound bytes):
+
+4. The native checks in the review's sections 7, D6, R6 and S4. The lead owns their order. The ones the paper
+   depends on are the helper digest (RL-26), the meter gates, the restores on every terminal path, the watchdog
+   dry run against the rendered plan, and PREQUAL plus smoke at the registered head.
+5. **W-03.** The Air's link monitor is unloaded, or `armed_until` is written from the arm notice, before every
+   arm. The arm notice records which. In W1 a probe that lands in a window excludes the members it overlaps
+   (`agent.presence_overlap`, `joulewise/flags/catalog.py:363-364`), so this costs data, not validity.
+6. **W-06, the record.** Each arm record carries the `pmset -g custom` text, as now, and one line stating that
+   the host-link services are as in the deviation row.
+7. **I-05.** No code change. The night job has one label, so an R1 night and a W1 night cannot both be
+   scheduled; the remaining route is an orphaned R1 chain shell. The W1 arm records that R1's plists are
+   uninstalled and that no R1 chain process is alive. This matters only if the series mode is High Power.
+8. **F-09.** No bound code is owed: the run path already writes `night/courier.delivery.json` and the release
+   check reads it. What is missing is the step that names it as a `courier_delivery` source in a window record.
+   Add that line to `docs/align/next_arm_packet.md` (not bound) and exercise it in native check 8.
+
+**What can wait past the W1 arm.**
+
+- **A-06, A-08, I-02, I-03, I-04** are findings about the R1 driver. W1 runs a different driver, which excludes
+  members overlapped by an agent, judges battery flow from its own 1 Hz capture (exclusion B), and discloses
+  CPU-journal gaps without refusing. Display state after the dwell is not observed in W1 either; it is noise
+  that falls on both conditions alike, and the methods text says so. Whether A-06 and I-04 are fixed before a
+  further R1 night is the lead's call: they can cost that night, not its validity.
+- **A-07, A-11, W-04** cost time, not data. They wait on one condition: the Air's poller and notifier are
+  proven in the native checks, and the Air alarms on `fault: true` in a delivered result. A-11 is decided as
+  "leave as is": no auto-login, no `autorestart`; the missed-heartbeat alarm covers a reboot.
+
+**Two conditions added to RL-32** for R1's slots, both checked at the desk from records the night already
+writes:
+
+10. The battery journal shows AC present and not discharging through every segment that feeds a slot, the
+    A-B-A legs above all (I-02). A segment that fails is not used.
+11. No agent-presence episode overlaps a segment that feeds a slot (A-08, W-03). An overlapped segment is
+    reported with the slots and comes to me.
+
+**For Paper 1, one check for the lead.** Paper 1's methods describe the host. Confirm from RUN_STATE that the
+last Block 6 and BYTES collection ended before the host-link setup on 2026-11-10. If any session ran after it,
+tell me and the methods text changes.
+
+**Reason.** The integration is faithful and leaves the claim contract's bytes alone, so nothing of mine holds
+it. Everything that would change bound bytes is cheapest now, before the receipt is signed, which is why the
+bindings and the host-state row are placed ahead of registration and the rest is left to procedure. The open
+audit items split cleanly by what they can damage: W1's data, or only W1's schedule. Only the first kind gates.
+
+**Blind status.** Blind: no v4 outcome exists. I read no R1 output from the running night.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
