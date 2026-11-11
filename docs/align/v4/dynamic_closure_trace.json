@@ -32,6 +32,7 @@
    "joulewise/align/apple/pilot.py",
    "joulewise/align/apple/powermode.py",
    "joulewise/align/apple/prompt_cache.py",
+   "joulewise/align/apple/r1_phase_table.py",
    "joulewise/align/apple/r1_runtime.py",
    "joulewise/align/apple/r1_runtime_contract.py",
    "joulewise/align/apple/registry_select.py",
@@ -219,6 +220,7 @@
    "joulewise/align/apple/pilot.py",
    "joulewise/align/apple/powermode.py",
    "joulewise/align/apple/prompt_cache.py",
+   "joulewise/align/apple/r1_phase_table.py",
    "joulewise/align/apple/r1_runtime.py",
    "joulewise/align/apple/r1_runtime_contract.py",
    "joulewise/align/apple/sampler.py",
@@ -414,6 +416,7 @@
    "joulewise/align/apple/pm_reduce.py",
    "joulewise/align/apple/powermode.py",
    "joulewise/align/apple/prompt_cache.py",
+   "joulewise/align/apple/r1_phase_table.py",
    "joulewise/align/apple/r1_runtime.py",
    "joulewise/align/apple/r1_runtime_contract.py",
    "joulewise/align/apple/registry_select.py",
@@ -902,6 +905,7 @@
   "joulewise/align/apple/pilot.py",
   "joulewise/align/apple/powermode.py",
   "joulewise/align/apple/prompt_cache.py",
+  "joulewise/align/apple/r1_phase_table.py",
   "joulewise/align/apple/r1_runtime.py",
   "joulewise/align/apple/r1_runtime_contract.py",
   "joulewise/align/apple/sampler.py",
@@ -1047,6 +1051,7 @@
   "joulewise/align/apple/pilot.py",
   "joulewise/align/apple/powermode.py",
   "joulewise/align/apple/prompt_cache.py",
+  "joulewise/align/apple/r1_phase_table.py",
   "joulewise/align/apple/r1_runtime.py",
   "joulewise/align/apple/r1_runtime_contract.py",
   "joulewise/align/apple/registry_select.py",
@@ -1234,9 +1239,9 @@
    "tests_run": 2
   },
   "r1_synthetic_arm": {
-   "new_paths": 4,
+   "new_paths": 5,
    "ok": true,
-   "tests_run": 76
+   "tests_run": 78
   },
   "r1_to_w1_chain": {
    "new_paths": 2,
