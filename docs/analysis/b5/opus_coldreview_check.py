@@ -8,17 +8,26 @@ registered text (analysis plan 4, 5, 7.1, 7.3, 8.1, 8.2).
 
 Data-free: it reads the two RL-38 custody roots read-only, hashes each file
 before parsing and again at the end, and prints only aggregates at printed
-precision, residual signs, counts and verdicts. It writes nothing anywhere.
+precision, residuals at two significant figures, counts and verdicts. It writes
+nothing anywhere.
 The printed values it checks are read from the seat's hand_checks_phase2.tsv
 (columns key and printed_value only; the seat's re-derived values are ignored).
 
 Usage: python3 -I -B docs/analysis/b5/opus_coldreview_check.py
+Custody mode needs separate access authorization. With --repo-only, independently
+check rounded table serialization and RL-41/RL-42 dispositions using Git and
+repository tables only. This does not repeat the independent custody arithmetic.
 """
+import argparse
+from collections import Counter
 import csv
 import hashlib
+import io
 import itertools
 import json
 import math
+import re
+import subprocess
 import sys
 from decimal import Decimal, getcontext, ROUND_HALF_EVEN
 from pathlib import Path
@@ -327,7 +336,77 @@ def at_printed(printed, value):
     return q == Decimal(s), float(value) - float(s)
 
 
+def residual_text(value):
+    number = Decimal(str(value))
+    if not number.is_finite():
+        raise ValueError('non-finite difference')
+    return '0' if number == 0 else format(number, '.2g')
+
+
+def repository_check():
+    """Check serialization of the published evidence, without re-reading custody."""
+    dest = Path(__file__).absolute().parent
+    repo = dest.parents[2]
+    tables = {}
+    for name in ('rederivation.tsv', 'hand_checks_phase2.tsv'):
+        original = subprocess.run(['git', 'show', f'9159dbf05:docs/analysis/b5/{name}'],
+                                  cwd=repo, check=True, capture_output=True, text=True).stdout
+        before = list(csv.DictReader(io.StringIO(original), delimiter='\t'))
+        with (dest / name).open(newline='') as stream:
+            current = list(csv.DictReader(stream, delimiter='\t'))
+        if len(before) != len(current):
+            raise ValueError(f'{name}: changed row count')
+        for number, (old, row) in enumerate(zip(before, current), 2):
+            raw = '0' if name == 'rederivation.tsv' and number == 522 else old['difference']
+            parts = raw.split(' ', 1)
+            expected = residual_text(parts[0]) if parts[0] else ''
+            if len(parts) == 2:
+                expected += ' ' + parts[1]
+            if row['difference'] != expected:
+                raise ValueError(f'{name} row {number}: residual differs from rounded review record')
+            for value in re.findall(r'source difference=([^;]+)', row.get('note', '')):
+                if value != residual_text(value):
+                    raise ValueError(f'{name} row {number}: unrounded source residual in note')
+            old['difference'] = expected
+        if name == 'hand_checks_phase2.tsv':
+            buffer = io.StringIO(newline='')
+            writer = csv.DictWriter(buffer, list(before[0]), delimiter='\t', lineterminator='\n')
+            writer.writeheader(); writer.writerows(before)
+            if buffer.getvalue().encode() != (dest / name).read_bytes():
+                raise ValueError('hand-check table differs beyond residual rounding')
+        tables[name] = current
+    rows = tables['rederivation.tsv']
+    counts = Counter(row['match'] for row in rows)
+    if counts != Counter({'exact': 261, 'within-rounding': 256, 'recorded-judgment': 6,
+                          'single-source': 14, 'MISMATCH': 1}):
+        raise ValueError(f'STOP: RL-42 counts differ: {dict(counts)}')
+    for number, row in enumerate(rows, 2):
+        recorded = number in {341, 342, 525, 526, 532, 535}
+        single = number in {*range(236, 242), 348, 349, 350, 362, 367, 392, 393, 394}
+        expected = ('not-printed' if 388 <= number <= 395 else
+                    'print-labelled' if recorded or single else 'print')
+        if row['paper1'] != expected or (row['match'] == 'recorded-judgment') != recorded or (row['match'] == 'single-source') != single:
+            raise ValueError(f'row {number}: RL-41/RL-42 disposition differs')
+        if (row['match'] == 'MISMATCH') != (number == 249):
+            raise ValueError(f'row {number}: unexpected mismatch disposition')
+    for check in tables['hand_checks_phase2.tsv']:
+        row = rows[int(check['ledger_row']) - 2]
+        for field in ('printed_value', 'rederived_value', 'difference', 'match'):
+            if check[field] != row[field]:
+                raise ValueError(f'hand-check row {check["ledger_row"]}: {field} differs from ledger')
+    print(json.dumps({'mode': 'repository-only; no custody arithmetic rerun', 'counts': dict(counts),
+                      'total': len(rows), 'hand_rows': len(tables['hand_checks_phase2.tsv']),
+                      'rounded_hand_table_byte_identical': True,
+                      'ledger_residuals_match_review_record': True}, indent=2))
+
+
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--repo-only', action='store_true', help='check committed table serialization; never open custody')
+    args = parser.parse_args()
+    if args.repo_only:
+        repository_check()
+        return
     V, checks, S = compute()
     tsv = Path(__file__).with_name('hand_checks_phase2.tsv')
     rows = list(csv.DictReader(tsv.open(), delimiter='\t'))
@@ -335,6 +414,7 @@ def main():
     for r in rows:
         ok, diff = at_printed(r['printed_value'], V[r['key']])
         agree += ok; refuted += not ok; exact += ok and diff == 0
+        print(f'hand row {r["ledger_row"]}: difference={residual_text(diff)}')
         if not ok:
             print('REFUTED', r['ledger_row'], r['key'], r['printed_value'])
     print(f'hand-check rows: {len(rows)}; confirmed {agree} ({exact} exact, {agree - exact} within-rounding); refuted {refuted}')
@@ -347,14 +427,14 @@ def main():
             394: ('ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b', 'decision_upper', '110.224'),
             395: ('ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b', 'floor_gate', '11.685')}
     for row, (cid, k, printed) in held.items():
-        ok, _ = at_printed(printed, S[cid][k])
+        ok, diff = at_printed(printed, S[cid][k])
         basis = (f'floor factors (window, binding term, E-ratio, T-ratio from meter-side phase durations) = {S[cid]["floor factor basis"]}'
                  if k == 'floor_gate' else f'contrast factor fixed by request-duration bound = {S[cid]["factor fixed by bound"]}')
-        print(f'S row {row}: {k} printed {printed} agree={ok}; {basis}')
+        print(f'S row {row}: {k} printed {printed} difference={residual_text(diff)} agree={ok}; {basis}')
     for cid, s in S.items():
         print(cid, 'E-ratio b %.3f, T-ratio upper bound b %.3f' % (s['E-ratio b'], s['T-ratio upper bound b']))
     for k, v in checks.items():
-        print(k, '=', v)
+        print(k, '=', residual_text(v) if isinstance(v, float) else v)
     for alias, before in SEEN.items():
         after = hashlib.sha256(Path(FILES[alias][0]).read_bytes()).hexdigest()
         print(f'{alias} sha256 before=after: {before == after}')

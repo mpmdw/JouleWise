@@ -1,6 +1,10 @@
 """Synthetic checks for the RL-38 reader; never opens study custody."""
 import hashlib
 import importlib.util
+import csv
+from contextlib import redirect_stdout
+from decimal import localcontext
+import io
 import math
 from pathlib import Path
 import tempfile
@@ -108,6 +112,63 @@ class IndependentArithmeticTests(unittest.TestCase):
         self.assertEqual(reader_module.printed_compare('1.23', 1.236)[2], 'MISMATCH')
         self.assertEqual(reader_module.printed_compare('36%', .3606)[0], '36%')
         self.assertEqual(reader_module.printed_compare('78,389', 78389)[2], 'exact')
+
+
+class PrintAuthorityTests(unittest.TestCase):
+    def test_residual_precision_cannot_recover_full_input(self):
+        cases = {'0.006543219876543': '0.0065', '-0.000076543219876': '-0.000077',
+                 '0.00999': '0.010', '1.99999999999999999e-24': '2.0e-24',
+                 '-0.000000': '0', '-1 distinct cause': '-1 distinct cause', '': ''}
+        for value, expected in cases.items():
+            with self.subTest(value=value):
+                self.assertEqual(reader_module.difference_text(value), expected)
+        self.assertEqual(reader_module.printed_compare('36%', .36064268123456)[1], '0.064')
+        # Classification happens before rounding the difference.
+        self.assertEqual(reader_module.printed_compare('1.23', 1.23501)[2], 'MISMATCH')
+        with self.assertRaisesRegex(ValueError, 'non-finite'):
+            reader_module.difference_text('Infinity')
+
+    def test_source_residual_in_note_is_also_rounded(self):
+        rows = [{'difference': '0.00025888888888888',
+                 'note': 'SOURCED: example; source difference=-0.000987654321; HAND: synthetic'}]
+        reader_module.round_differences(rows)
+        self.assertEqual(rows[0]['difference'], '0.00026')
+        self.assertIn('source difference=-0.00099;', rows[0]['note'])
+
+    def test_normalized_paths_collapse_lists_and_contrasts(self):
+        contrast = {'floor': {'point_floor_diagnostics': {'value': 1, 'valid': True},
+                              'resolutions': [{'point_floor_diagnostics': {'value': 2}}]},
+                    'claim_evaluation': {'floor_limit': {'entries': [{'bound': 2}, {'bound': 3}],
+                                                       'status': 'synthetic'}}}
+        self.assertEqual(reader_module.dle5_leaf_counts([contrast, contrast]), (5, 12))
+
+    def test_repository_mode_never_constructs_custody_reader(self):
+        with patch.object(reader_module.CustodyReader, '__init__', side_effect=AssertionError('custody reader constructed')):
+            with patch('sys.argv', [str(SCRIPT), '--repo-only']), redirect_stdout(io.StringIO()) as output:
+                reader_module.main()
+        self.assertIn('"byte_identical": true', output.getvalue())
+
+    def test_opus_repository_mode_never_computes_from_custody(self):
+        opus_path = SCRIPT.with_name('opus_coldreview_check.py')
+        spec = importlib.util.spec_from_file_location('opus_reader', opus_path)
+        opus = importlib.util.module_from_spec(spec)
+        with localcontext():
+            spec.loader.exec_module(opus)
+            with patch.object(opus, 'compute', side_effect=AssertionError('custody compute called')):
+                with patch.object(opus, 'load', side_effect=AssertionError('custody load called')):
+                    with patch('sys.argv', [str(opus_path), '--repo-only']), redirect_stdout(io.StringIO()) as output:
+                        opus.main()
+        self.assertIn('"rounded_hand_table_byte_identical": true', output.getvalue())
+
+    def test_rulings_are_idempotent_and_count_drift_stops(self):
+        with SCRIPT.with_name('rederivation.tsv').open() as stream:
+            rows = list(csv.DictReader(stream, delimiter='\t'))
+        original = reader_module.table_text(rows)
+        reader_module.apply_print_rulings(rows)
+        self.assertEqual(reader_module.table_text(rows), original)
+        rows[0]['match'] = 'MISMATCH'
+        with self.assertRaisesRegex(ValueError, 'STOP: RL-42 counts differ'):
+            reader_module.apply_print_rulings(rows)
 
 
 if __name__ == '__main__':

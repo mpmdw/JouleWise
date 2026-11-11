@@ -1,4 +1,4 @@
-# Block 5 independent reader: phase 2
+# Block 5 independent reader: RL-41/RL-42 print authority
 
 ## Errata to RESULTS.md
 
@@ -18,35 +18,98 @@
   and prints at most two significant figures. The phase-1 coarse-input check
   does not license “10.9” for the paper.
 
-## Phase 2 result and limits
+**Clarification, RL-42 (not an erratum):** §4.1's count is **84 normalized leaf paths; 118 scalar leaves**.
+List indices collapse to `*` in the comparator's path unit. DLE-5 was right;
+no deviation-log note is added. Paper 1 prints no count; any future count must
+carry its unit.
+
+## Current ledger disposition and printing rule
+
+Sol seat `p1-seat4-p3` applies research-lead **RL-41(b), as amended by RL-42**,
+read verbatim from `origin/audit/2026-11-10-fable` at
+`2eb2df03699e815e4634ce41fd62ac7d77d0d226`, to the phase-2 ledger and
+[Opus cold review](../../run_reports/2026-11-10-p1-seat4-opus-coldreview.md)
+at `9159dbf05`. RL-42 corrects RL-41(a). **RL-3's Block 5 number gate is closed
+by RL-42**, subject to the row and composition rules below. The ledger commit
+recorded in the [seat-p3 report](../../run_reports/2026-11-10-p1-seat4-p3.md)
+is the print authority; this report does not supply a new custody check.
+
+The [538-row ledger](rederivation.tsv) has **261 exact, 256 within-rounding
+(517 together), 6 recorded-judgment, 14 single-source, and 1 MISMATCH**.
+Physical TSV row numbers include the header and remain stable.
+
+| Check word / rows | Paper 1 disposition and obligation |
+|---|---|
+| `exact` / `within-rounding` | `print`, subject to every input row also passing and the exceptions below |
+| `recorded-judgment`: 341, 342, 525, 526, 532, 535 | `print-labelled`: attribute the collection-time judgment to its pinned source in the sentence or table note; not re-derived (§4.7) |
+| `single-source`: 236-241, 362, 367 | `print-labelled`: “from the independent recomputation only”; never in the abstract or conclusion or as support for a claim word. Duration ratios use two significant figures (RL-39); edge-shift values accompany any whole-machine phase energies, labelled. |
+| `single-source`: 348-350 | `print-labelled`: “from the registered disclosure record; not independently recomputed”; same abstract, conclusion and claim-support exclusions |
+| 388-395, including `single-source` 392-394 | All `not-printed`: the scaled-allowance line is not registered; none of it prints in Paper 1 |
+| `MISMATCH`: 249 | Ruled RL-39 wording erratum above; the original “four different causes” cannot print |
+
+`match` records the check; the new `paper1` column records placement. `print`
+alone never clears a mismatch or a failing dependency. A fill must cite its
+ledger row, respect its label, and pass by composition. Recorded judgments
+and single-source leaves are accepted only with the attribution/labels above.
+
+Rows 530, 531, 533 and 534 are `exact`: the Opus arithmetic applies the
+registered outcome rule (estimate exceeds floor gate, both intervals exclude
+zero, Holm rejects, leave-one-out keeps sign and floor); the comparator also
+agrees. The not-estimable prerequisites remain recorded judgments. Rows
+242-244, 490-492 and 528 are arithmetic **over stored flags**, not raw hazard
+re-detection. Row 529 is `exact`: compared by the release comparator (189
+sensitivity rows agree); the acceptance record's alignment bounds are inputs.
+Rows 388-391 and 395 are `within-rounding`, with **“hand check: Opus cold review,
+bound argument”**; the prefill bound does not decide the factor for 392-394.
+
+Every committed `difference`, including `source difference=` in ledger notes,
+is rounded to **two significant figures** (exact zero stays `0`; missing
+differences stay blank). Check words are determined before rounding. The
+[157-row hand-check table](hand_checks_phase2.tsv) keeps its original rows and
+24 exact / 133 within-rounding check words; the five accepted Opus bound checks
+are recorded in the main ledger and review. No history is rewritten.
+
+Both readers have `--repo-only` modes that read the frozen Git tables at
+`9159dbf05` and current repository tables. The seat reader regenerates both
+tables with the rulings and rounded residuals; its default repository mode
+requires byte equality. The Opus reader independently checks residual
+serialization, hand-table byte equality, ledger links, counts and placement.
+These modes **do not rerun custody arithmetic**. The original custody modes
+still require separately authorized access; no custody path was opened for p3.
+
+```sh
+python3.13 -I -B docs/analysis/b5/hand_check_phase2.py --repo-only
+python3.13 -I -B docs/analysis/b5/opus_coldreview_check.py --repo-only
+```
+
+The post-fill sentence check against RL-4's licence constraints remains owed;
+RL-27's site-build hold remains, and slides stay under RL-10. RL-42 asks the
+lead to tell Ed that full-precision residuals already exist in public history;
+this seat records that handoff without sending a message or rewriting history.
+
+## Phase 2 evidence and limits (historical run; dispositions updated above)
 
 Fresh Sol seat `p1-seat4-p2`, branch `p1-seat4-p2`, base
 `35b0e98d12cde94d3522419c45da9b417613e2d4`. Authority: RL-3, RL-38 and RL-39,
 read verbatim from `origin/audit/2026-11-10-fable` at
-`529a6772724faa8e001b0b9e106524e618da1084`. **RL-3 remains open.**
-The required Opus cold review, lead event-log audit, disposition of the new
-count disagreement, and unresolved hand checks are not discharged here.
+`529a6772724faa8e001b0b9e106524e618da1084`. At that run's close RL-3 remained
+open; RL-42 subsequently accepted the Opus review and lead event-log audit
+and closed the number gate under the current rules above.
 
 All **207 phase-1 input stops were sourced** from the named frozen leaves or
-explicit counts over them: 206 agree exactly or at printed precision; one
-aggregate-count claim disagrees under the DLE-5 counting scope below. Of these
-207 rows, 181 now have final `exact`/`within-rounding` status, 25 remain
-`source-outside-unseal` for the required hand check, and one is `MISMATCH`.
-Six additional formerly conditional rows depend on unavailable duration/scaling
-inputs and are now `source-outside-unseal` too.
-
-The [538-row ledger](rederivation.tsv) now has **254 exact, 251 within-rounding,
-2 MISMATCH, 31 source-outside-unseal**. The two mismatches are the known
-four-versus-three wording error and the new 84-versus-118 count below. These
-counts include repeated presentations, definitions and auxiliary checks.
-The 270 rows not revisited from phase 1 retain their narrower phase-1 notes;
-this is not a blanket printing certificate for those rows.
+explicit counts over them. At phase-2 close the ledger had 254 exact,
+251 within-rounding, 2 MISMATCH and 31 source-outside-unseal. RL-42 resolves
+the count's unit, leaving only the known four-versus-three wording mismatch,
+and replaces the outside holds with the current dispositions above. Counts
+include repeated presentations, definitions and auxiliary checks. The 270 rows
+not revisited in phase 2 retain their narrower phase-1 notes and pass only
+by the composition rule, not by a blanket certificate.
 
 New columns separate `source_value`/`source_match` from the final `match` and
 `hand_check`, preserve `phase1_match`, and record the arithmetic `difference`
 (re-derived minus printed, in the printed unit; percentages use percentage
-points). Source differences are also in each updated note. A copied aggregate
-can agree while its final status remains `source-outside-unseal`.
+points). Source differences are also in each updated note, now rounded under
+RL-42. A copied aggregate can agree without being independently re-derived.
 `MISMATCH` now means an actual disagreement; no missing source uses that word.
 Physical TSV row numbers include the header and are stable from phase 1.
 
@@ -70,10 +133,10 @@ phase check uses gross meter-only energy and retains its separate DC-input
 boundary; request shares include the battery term. Ratios of cell means are
 never substituted for medians of member ratios or geometric quad ratios.
 
-### New count disagreement requiring the research lead
+### Row 522: normalized paths and scalar instances (RL-42)
 
-RESULTS §4.1 says the DLE-5 attribution metadata adds **84 leaves**. Counting
-exactly the groups named in DLE-5 “The gap” in frozen FILL gives **118**:
+RESULTS §4.1's **84** counts normalized leaf paths, the comparator's unit.
+Counting scalar instances in the same DLE-5 groups in frozen FILL gives **118**:
 
 | Contrast | Floor diagnostics | Resolution diagnostics | Entire claim floor-limit object | Total |
 |---|---:|---:|---:|---:|
@@ -81,36 +144,36 @@ exactly the groups named in DLE-5 “The gap” in frozen FILL gives **118**:
 | Prefill p2048 | 20 | 20 | 34 | 74 |
 | Both | 30 | 30 | 58 | **118** |
 
-Count every scalar leaf, including strings and booleans, in
+The scalar count includes strings and booleans in
 `FILL.gamma.contrasts[*].floor.point_floor_diagnostics`,
 `.floor.resolutions[*].point_floor_diagnostics`, and
 `.claim_evaluation.floor_limit`. Numeric leaves alone total 56. An independent
 cross-check is 96 mapped comparator leaves (54 numeric diagnostic terms,
 36 diagnostic labels/flags, four class/source words, two published floors),
-plus 22 newly named exempt discipline leaves. DLE-5 describes a structural
-count that “can reach 84”; it does not establish 84 as this output's realized
-count. Ledger row 522 is `MISMATCH`, difference **+34 leaves** under that
-explicit scope. The intended scope of the original 84 is uncertain and needs
-adjudication; no analysis/custody/RESULTS repair was made and this is not added
-to the ruled errata above.
+plus 22 newly named exempt discipline leaves. Collapsing list indices gives
+44 claim floor-limit paths, 30 floor-diagnostic paths and 10
+resolution-diagnostic paths: **84**, also `14 + 10C + 5R` with C=6 and R=2
+over both contrasts. The Opus cold review established this unit; RL-42 adopts
+it and corrects RL-41(a). Row 522 is `exact`, re-derived/source value 84 and
+difference 0. No RESULTS or DLE-5 edit is needed.
 
 ### RL-3 item 3 coverage
 
 | Required family / line | Independent check and remaining boundary |
 |---|---|
-| Monitor cost | All three printed aggregates sourced; CPU endpoints and probe/phase overlaps are absent from §0 files. Hand check remains outside the unseal. |
-| Arm and host hazards | Stored member-code recounts reproduce contention totals 4/14/10; this does not re-detect hazards. Arm battery 0 sourced, but independent arm receipt remains outside. |
-| Battery | Zero assist quads sourced. Member activity diagnostics do not replace raw `battery.assist` flags and fallback qualification; hand check remains outside. |
+| Monitor cost | All three aggregates sourced; `single-source` under RL-41 with the disclosure label, not independently recomputed. CPU endpoints and probe/phase overlaps are absent from §0 files. |
+| Arm and host hazards | Stored member-code recounts reproduce contention totals 4/14/10, over stored flags; this does not re-detect hazards. Arm battery 0 is a `recorded-judgment` attributed to the pinned disclosure. |
+| Battery | Zero assist quads is a `recorded-judgment` attributed to the pinned disclosure. Member activity diagnostics do not replace raw `battery.assist` flags and fallback qualification. |
 | Battery temperature | All 30 stage reading arrays checked independently: rise=(last-first)/100, last-three range ≤50 centi-C, rise>3 K without plateau. Zero arithmetic/classification differences. No stage temperature value is printed in RESULTS. |
 | Reference/corpus/NEG-8 history | Retained-ID lists give five deciding references and a clean corpus of 12, with seven references planned. Raw clean-corpus selection and full screen decision are not independently replayed. |
 | Attempt history/G10 | All 11 index entries agree with DISC on attempt and cause key; zero differences. Stage-opening causes come from indexed EXC, not the attempt-level index alone. “Never analysed” and raw G10 execution are not proved by the records' declarations. |
-| Selection/full eligibility | All 44 included GAMMA token-provenance records source the output count. Absence of extra runs/top-ups/replacements and full manifest/transport/current eligibility remain outside. |
-| Printed exempt leaves | Missing required monitor/arm/battery/selection checks retain `source-outside-unseal`; source equality alone never passes them. Raw stored judgments remain distinct from independent arithmetic. |
-| Recompute-only whole-machine phase lines | Means, decode h and all four median member shares independently agree. The two printed edge-shift maxima lack per-member shifted energies/raw meter samples in §0 files and remain outside. |
+| Selection/full eligibility | All 44 included GAMMA token-provenance records source the output count. Top-up absence, replacements and the L2 ceiling print as attributed `recorded-judgment` inputs, not re-derived eligibility. |
+| Printed exempt leaves | RL-41/RL-42 accept the attributed recorded judgments and labelled single-source values; these remain distinct from independent arithmetic. |
+| Recompute-only whole-machine phase lines | Means, decode h and all four median member shares independently agree. The two edge-shift maxima are `single-source` and print labelled with any whole-machine phase energies. |
 | Recompute-only load sensitivity | Independent member-energy arithmetic reproduces 146.800 [146.439,147.161] J and 101.657 [101.224,102.089] J, each n=8, restoring two/three quads. L9 remains not computable; this is an uncompared check. D-177 applies as above. |
-| Recompute-only durations/scaled allowance | All printed leaves sourced. GAMMA member phase durations are absent from the released summaries; scaled D, its intervals and floor gates retain outside status because the factor is not independently established. |
+| Recompute-only durations/scaled allowance | Durations/ratios are labelled `single-source`. Opus's bound checks pass rows 388-391 and 395; prefill 392-394 remain `single-source`. All scaled-allowance rows 388-395 are `not-printed`. |
 
-The exhaustive 31-row outside list, all opened custody paths and before/after
+The historical 31-row outside list, all phase-2 custody paths and before/after
 hashes are in the [phase-2 run report](../../run_reports/2026-11-10-p1-seat4-p2.md).
 The [source manifest](phase2_sources.tsv) contains 12 custody files. All full
 §0 pins agree; PROJ-A/B have only truncated pins in §0 and also agree with their
