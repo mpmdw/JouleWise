@@ -54,3 +54,31 @@ session layout. Round 4 goes back to Sol.
 
 As listed in Sol's report, plus: a pre-install arm from a session whose custody directory is not under the
 watchdog's scan, which is the case A-1 is about.
+
+## Round 4 delta review (2026-11-11 05:50 PST)
+
+Reviewed `c5b87a582` (Sol's round 4, merged into this branch at `2f223032b`).
+
+**Verdict on round 4: ADMIT-WITH-ONE-TEST-OWED.** The blocking finding A-1 is fixed.
+
+- **A-1, fixed.** Before the install the helper now asks the installed watchdog's own parser about this plan
+  file directly: a second fixed program imports the installed watchdog module and applies the per-plan steps
+  of its `load_plans` (JSON read, retired-v1 test, `NightPlan.from_mapping`, the authored-time check,
+  `deadman_epoch`) to the arm's rendered plan, and reports `parse`, the plan id, t0 and the span start. The
+  scan result is recorded as `discovered_by_scan` and is not required. After the install the `load_plans` rule
+  stands. The orchestrator confirmed from the measurement Mac that v4 session roots live under `~/night-align`,
+  outside the watchdog's scan, so round 3 would have refused every v4 arm.
+- Tests run for real against the watchdog module cover both layouts (a plan the scan sees; a plan under a
+  session's `custody` directory that it does not), a post-install arm without the plists (refused, undone), and
+  a version-skewed installed parser that rejects an unknown key (refused before the install, with no fake
+  runner).
+- **A-2, fixed:** stored streams are capped at 8 KiB with a `truncated` flag.
+- **A-3, fixed:** the repository's real magistrate plist template is rendered and accepted by the whitelist.
+
+On the Air: `tests.align.test_v4_arm_watchdog_check`, 37 tests, OK. Four mutants on the new code: three killed
+(the installed parser's `from_mapping` result ignored for the authored-time check; the retired-v1 test removed;
+the truncation flag forced false). One survived: removing the `deadman_epoch(plan)` call from the parser
+program. A test where that call raises is owed and is in the next round's brief.
+
+Rounds that follow on this branch (each reviewed separately): the weight-digest preflight (RL-62), then the
+runtime-stack preflight and the held-window refusal (RL-73, RL-65, RL-71).
