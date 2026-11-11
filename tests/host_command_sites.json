@@ -360,6 +360,48 @@
     "seam": "FakeHost.__call__ is itself the synthetic runner"
   },
   {
+    "file": "joulewise/align/w1_prequal.py",
+    "locator": "check_watchdog_hold_rollback:24e5e1c2bbef5653",
+    "command": "sudo",
+    "seam": "FakeHost (PREQUAL synthetic host); argv literals are assertions on recorded fake calls"
+  },
+  {
+    "file": "joulewise/align/w1_prequal.py",
+    "locator": "check_watchdog_hold_rollback:3a778b0d07e1da60",
+    "command": "pmset",
+    "seam": "FakeHost (PREQUAL synthetic host); argv literals are assertions on recorded fake calls"
+  },
+  {
+    "file": "joulewise/align/w1_prequal.py",
+    "locator": "check_watchdog_hold_rollback:3a778b0d07e1da60",
+    "command": "sudo",
+    "seam": "FakeHost (PREQUAL synthetic host); argv literals are assertions on recorded fake calls"
+  },
+  {
+    "file": "joulewise/align/w1_prequal.py",
+    "locator": "check_watchdog_hold_rollback:541443a289d468bd",
+    "command": "pmset",
+    "seam": "FakeHost (PREQUAL synthetic host); argv literals are assertions on recorded fake calls"
+  },
+  {
+    "file": "joulewise/align/w1_prequal.py",
+    "locator": "check_watchdog_hold_rollback:559db711a9b0c2ad",
+    "command": "pmset",
+    "seam": "FakeHost (PREQUAL synthetic host); argv literals are assertions on recorded fake calls"
+  },
+  {
+    "file": "joulewise/align/w1_prequal.py",
+    "locator": "check_watchdog_hold_rollback:559db711a9b0c2ad",
+    "command": "sudo",
+    "seam": "FakeHost (PREQUAL synthetic host); argv literals are assertions on recorded fake calls"
+  },
+  {
+    "file": "joulewise/align/w1_prequal.py",
+    "locator": "check_watchdog_hold_rollback:ae17b9a737bf75ad",
+    "command": "launchctl",
+    "seam": "FakeHost (PREQUAL synthetic host); argv literals are assertions on recorded fake calls"
+  },
+  {
     "file": "joulewise/align/w1_smoke.py",
     "locator": "SmokeRunner.guards:ae17b9a737bf75ad",
     "command": "launchctl",
@@ -1390,6 +1432,24 @@
     "locator": "frequency_word_preflight:fe117ae638014da5",
     "command": "systemsetup",
     "seam": "runner / frequency_runner / power_runner parameters"
+  },
+  {
+    "file": "scripts/align_v4_session.py",
+    "locator": "host_privilege_preflight:650aa89ad0060b30",
+    "command": "sudo",
+    "seam": "runner parameter (host_privilege_preflight(runner=...)); sudo -n -l lists, never runs the rule"
+  },
+  {
+    "file": "scripts/align_v4_session.py",
+    "locator": "host_privilege_preflight:65530f85cb5ecb50",
+    "command": "sudo",
+    "seam": "runner parameter (host_privilege_preflight(runner=...)); sudo -n -l lists, never runs the rule"
+  },
+  {
+    "file": "scripts/align_v4_session.py",
+    "locator": "host_privilege_rules:68de0292f11f9b93",
+    "command": "sudo",
+    "seam": "none: data (rule list consumed by host_privilege_preflight through its runner)"
   },
   {
     "file": "scripts/align_v4_session.py",
