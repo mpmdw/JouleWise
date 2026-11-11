@@ -381,3 +381,41 @@ preflight (RL-62, seat running), and the arm refusal on a held previous window (
   seam in the fake host; fixed in the armcheck branch). One is the sizing check that RL-61 answers. Two meter
   cases wait for a quiet machine: four orphaned fake-meter fixture processes from 2026-11-08 are still running
   on the Air, and the orchestrator has asked the owner about them.
+
+## 12. Interim Opus lead (Fable usage limit reached), state at 09:25 PST
+
+Opus 5.5 took over the lane at 07:25. No research ruling could be obtained; items that need one are parked below.
+
+### 12.1 What landed
+
+| Item | Branch / sha | Review |
+|---|---|---|
+| prepare-holds round 3, PH-1 (only R1 is skipped). Found unmerged at intake: the fix sat on `ops/2026-11-11-w1-prepare-holds-r3`, only the Sol report was on the batch branch | merged into `ops/2026-11-11-w1-armcheck` | Opus ADMIT, 4 of 4 mutants killed |
+| W-3 unstrand (not in the batch at intake) | merged into the batch | Fable ADMIT (round 2) |
+| batch-tests, plus lead repairs `510ac023a` (two `plan_path` witnesses) and `82453785b` (series: fence inside the span, e2e plan) | merged | Opus ADMIT |
+| ci-debt-2 | merged | Opus ADMIT, 3 of 3 mutants |
+| Suite-wide host-command guard (approved design), with review fixes F-1, F-3, temp-dir fakes, forwarder content check | `ops/2026-11-11-w1-host-guard`; main mirror PR #735 | Opus cold review, all refused forms mutated |
+| ci-debt-3 (watchdog split holds, two admitted expected failures, renamed run_night site); battery sweep registers `topup_log` test-side (orchestrator process call) | merged into presign | Opus ADMIT |
+| DEVIATIONS rows RL53-BATCH and HELD-WINDOWS; trace regenerated (9 of 9 scenarios ok, not_bound and not_strict empty, 193 executed); closure modules pass | presign | n/a |
+| Combined draft PR #734, presign -> W1 line | head `dd7f3e643` | gate ledger rows 1-5 |
+
+Host-command leak list: `tests.test_post_window_unstrand` (`test_native_ps_clean_completed_window_under_caffeinate`, a real
+`caffeinate`), fixed. `tests.test_run_night`'s four probe tests were a false positive (a fake `sudo` on PATH).
+
+### 12.2 Open pre-signing items, parked for the research lead
+
+1. **RL-71's "five" acceptance-only codes.** The HELD-WINDOWS row lists `code.number_bearing_unreviewed` and the four
+   `structure.*` codes. By reading, `model.stack_differs_from_registered` is also raised only by B6 acceptance, and
+   `model.files_differ_from_registered` by acceptance or the precheck lane; the row covers both by the prepare checks
+   without saying whether they can be raised. Confirm the list.
+2. **RL-72 `workload.py` callback row** (RL-77): owed when the follow-up kit's change lands on the presign branch.
+3. **`topup_log` in `battery_float.PHASES`** (bound): register before signing, or leave the registry as is. No
+   production code reads `PHASES`; the gates that read a recorded phase admit only the phases they name; a test now
+   checks that none admits `topup_log`.
+4. Still a signing gate: RL-81 F-1, the condition-13 registration test (the follow-up kit seat builds it).
+
+### 12.3 Pre-existing failures seen on the Air, identical on the W1 line `b4a6c217f`
+
+`tests.test_post_window_unstrand`: four native/process-table tests under load (other lanes' live chain-like
+processes) and the follower timing test. `tests.align.test_r1_round8_exec_review`: two. `tests.test_run_night`: R8
+template test (one), and `BindSupervisionProcessTests` under load.
