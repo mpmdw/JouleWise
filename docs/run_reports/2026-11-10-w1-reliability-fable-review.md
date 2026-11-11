@@ -364,3 +364,89 @@ STRICT-bound paths added by round 4: `joulewise/align/apple/v4_registration.py`,
 Same as section 9. In addition: the Air poller, the launchd push and the CLI's real rejection text are untested
 natively; I did not re-read the whole watchdog file, only the r2 diff, the new status module and the functions
 they touch.
+
+---
+
+# Round-5 check (Fable 5.2), 2026-11-10 19:58 PST
+
+Scope: the round-5 fixes for the delta findings, under the lead rulings quoted in
+`docs/run_reports/2026-11-10-reliability-r5.md`. Same binding rules. This section is uncommitted.
+
+| Branch | Head | Final verdict |
+|---|---|---|
+| `ops/2026-11-10-w1-reliability` | `fe6912519` (fixes in `c6d25d963`) | **ADMIT-WITH-FIXES: one small fix, R5-1, before STRICT re-registration.** D-02 to D-06 are closed. D-01 still awaits the research lead's ratification. |
+| `ops/2026-11-10-watchdog-unknown-keys` | `5e7c60596` | **ADMIT.** W-F, W-H, W-G and W-I are closed. Safe to install after R1 closes. Three low follow-ups (R5-3 to R5-5). W-01/W-02 stay open until the native launchd push and the Air alarm are proven; W-E (port to the W1 line) is still owed. |
+
+## R1. What I ran
+
+All passing, one module at a time, about 5 minutes.
+
+- Branch 1: `tests.test_w1_reliability` 11, `_r2` 18, `_r3` 14, `_r4` 42, `_r5` 7 (new);
+  `tests.align.test_v4_executed_closure` 4; `tests.align.test_v4_dynamic_closure` 10; `tests.align.test_w1_smoke` 28;
+  `tests.align.test_v4_series.ProductionPathTests` 1; `tests.align.test_v4_next_arm_packet` 46;
+  `tests.align.test_km003c.NightChainTests` 2; `tests.test_b5_driver_p3.MeterWindowTests` 7;
+  `tests.external.test_km003c_monitor` 12 with 1 live-device skip; the nine selected `tests.test_run_night` tests.
+- Branch 2 (temporary worktree, removed): `tests.test_watchdog_reliability` 39, `tests.test_magistrate_watchdog_v5` 4,
+  `tests.test_magistrate_watchdog` 155, `tests.test_install_magistrate_watchdog` 12 (new).
+
+Probes (scratchpad only, synthetic):
+
+1. **D-05 on the item-253 error text.** `_r1_refusal_summary` returns phase `step_30b` and codes
+   `['thermal.start_gate_timeout']`.
+2. **D-05 failure mode.** With the summary helper made to raise, a refused R1 night ends with no `result.json`, no
+   `hazard_result.json` and no courier. This is R5-1.
+3. **W-F across a whole span.** A plan with a 2 h window, ticks every 300 s from 22 minutes before the span to
+   after its end: one push 120 s before the span carrying the span end, **zero pushes inside the span**, and the
+   next push on the first tick after the fence clears.
+4. **W-H after a span.** With the earlier notice acknowledged and a new activation id, the first launch after
+   the span carries a `status_export_failed` notice although no export failed. This is R5-3.
+
+## R2. Branch 1: each item
+
+| ID | Closed? | Note |
+|---|---|---|
+| D-01 | Left as ruled | Registration binding unchanged; ratification is the research lead's. |
+| D-02 | Yes | Early refusals query network time and never set it. A verified OFF records `action: left_off` with `observed`, `verified` and the reason. A failed query leaves the close incomplete and faults. |
+| D-03 | Yes | The dead-man restores power for an abandoned launch through the lock and ownership guards, leaves network time alone, logs to custody only and leaves `night/` byte-identical. A pending launcher or an open chain defers. |
+| D-04 | Yes | Causes `prepare.night_job_loaded` and `prepare.night_job_state_unavailable`, raised before any setter or helper call. The runbook states uninstall-before-prepare. |
+| D-05 | Yes, with R5-1 and R5-2 | `result.json` gains `chain_refused_phase` and `chain_refusal_codes` from a fixed vocabulary. Numbers, paths and prose are dropped. `chain_outcome` stays a string. |
+| D-06 | Yes | An empty final poll no longer displaces the last non-empty batch; that batch's own `rx` dates it. A malformed non-empty final batch still fails closed. |
+
+## R3. Branch 1: left over
+
+| ID | Sev | Path:line | Finding | Fix |
+|---|---|---|---|---|
+| R5-1 | MED | `scripts/run_night.py:2298` (helper at `:2255`) | `_r1_refusal_summary` runs inside a `try` that catches only `FileNotFoundError`, `OSError` and `ValueError`. It imports `scripts.align_r1_rehearsal` and calls `phase_plan`. Any other exception (an import error, a changed signature, an unexpected type) escapes `_chain_outcome`, and the fallback result write calls the same function and fails again. Probe 2: no `result.json`, no hazard result, no courier. The path runs only for a refused or aborted R1, which is exactly when the record matters. Unlikely in practice, but a reporting-only enrichment must not be able to remove the terminal record. | Wrap the call in `except Exception` and fall back to the null summary (optionally with a `chain_refusal_summary_error` class name). Add a test that makes the helper raise and asserts `result.json` is still written. `run_night.py` is STRICT-bound, so do this before re-registration. |
+| R5-2 | LOW | `scripts/run_night.py:2270` | The token pattern allows only letters and underscores, so `episode.g0_unreleased` (in the allow-list) is never extracted from error text. On the item-253 text only `thermal.start_gate_timeout` comes out. The decisive code does surface. | Allow digits inside a token segment (`[a-z_][a-z0-9_]*`). |
+
+Registration note: round 5 touches only paths already bound (`scripts/run_night.py`, `scripts/align_v4_session.py`,
+`joulewise/b5/driver.py`). The runbook is not bound. The dynamic closure trace was not regenerated this round;
+regenerate it at the final head, since the night runner can now import the R1 rehearsal module.
+
+## R4. Branch 2: each item
+
+| ID | Closed? | Note |
+|---|---|---|
+| W-F | Yes | Tick, resident and final flushes all go through `_remote_probe_allowed`, and each git subprocess rechecks it. A 50 s guard keeps a push from running into a span. The last pre-span tick pushes `span_end_epoch_s`, and `next_status_expected_epoch_s` tells the Air when to expect the next status. Probe 3. |
+| W-H | Yes, with R5-3 | A missing, failed or old export no longer blocks a launch; it adds a `status_export_failed` notice. Plan and desk fences keep priority. |
+| W-G | Yes | The rejection latch applies only within 60 s of spawn and only with no assistant output; later errors use the existing backoff. |
+| W-I | Yes | Host name comes only from `MAGISTRATE_WATCHDOG_STATUS_HOST`; the installer refuses without a valid value and writes it into the plist. A missing value at run time disables export and raises the notice. |
+
+## R5. Branch 2: left over
+
+| ID | Sev | Path:line | Finding | Fix |
+|---|---|---|---|---|
+| R5-3 | LOW-MED | `scripts/watchdog_status.py:195-209`; `scripts/magistrate_watchdog.py:2060, 2475` | `launch_hold` still calls a receipt older than 3,600 s stale. After W-F the export is silent for the whole span on purpose, so the first launch after any window longer than an hour gets a false `status_export_failed` notice (probe 4). The same happens on the first tick after install, before any push was tried. The prompt tells the magistrate every notice is something Ed must hear, so this is one false mail per window. | Judge freshness against the last delivered record's own `next_status_expected_epoch_s`, or flush once before deciding when the probe is allowed. Treat "nothing attempted yet" as not a failure. |
+| R5-4 | LOW (by design) | `scripts/magistrate_watchdog.py:2032-2044` | An unparseable plan makes the span unknown, so export is deferred. The W-01 case therefore reaches the Air as `watchdog_status_stale` within 75 minutes, not as a named hold. That is the conservative choice and it does alarm. | Say so in the Air notifier text: "stale" can mean an unreadable armed plan. |
+| R5-5 | LOW | `scripts/magistrate_watchdog.py:2046-2055` | The announced span end is the plan's completion epoch. If a night never releases, the fence runs to the dead-man tail, which is exactly 75 minutes later, so the Air alarm and the fence end coincide and a stale alarm can show for one tick. A desk fence has no announced end at all. Both cases are already abnormal or rare. | Add one tick of margin; announce a desk fence's end if it has one. |
+
+Still open on branch 2, unchanged: W-01/W-02 until the launchd push and the Air poller plus notifier are proven
+natively; W-E. At the port to the W1 line, bind the new `scripts/watchdog_status.py` and note that the bound
+`configs/launchd/com.joulewise.magistrate.plist.template` changed. `scripts/install_magistrate_watchdog.sh` is not
+bound.
+
+## R6. Regressions
+
+None in any module I ran. The native checks in sections 7 and D6 still apply. Two more for this round: confirm
+on the MBP that no status push occurs between the pre-span status and chain exit during a real armed span, and
+that the Air poller stays quiet through the span and alarms if the post-span status does not arrive.

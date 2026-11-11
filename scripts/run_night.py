@@ -2267,7 +2267,7 @@ def _r1_refusal_summary(raw):
         matches = {name for name, kind, *_ in phases if kind in kinds}
         if len(matches) == 1:
             phase = matches.pop()
-    tokens = set(re.findall(r"(?<![\w.])[a-z_]+(?:\.[a-z_]+)+(?![\w.])", error))
+    tokens = set(re.findall(r"(?<![\w.])[a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)+(?![\w.])", error))
     structured = raw.get("refusal_codes")
     if isinstance(structured, list):
         tokens.update(code for code in structured if isinstance(code, str))
@@ -2295,7 +2295,10 @@ def _chain_outcome(plan, night_dir, verdict, chain_exit_code, aborted_reason=Non
             if status not in ("complete", "refused", "aborted", "running"):
                 status = "invalid"
             if status in ("refused", "aborted"):
-                refusal = _r1_refusal_summary(raw)
+                try:
+                    refusal = _r1_refusal_summary(raw)
+                except Exception:  # noqa: BLE001 - enrichment must never prevent a terminal record
+                    pass  # retain the null summary in both primary and fallback result writes
         except FileNotFoundError:
             status = "absent"
         except (OSError, ValueError):
