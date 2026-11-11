@@ -274,8 +274,9 @@ def volume_facts(root, session_id):
     reader = AuthenticatedInputs(archive, archive_pin(root, archive, metadata))
     plist = []
     for name in sorted(reader.expected):
-        if not (name.startswith(("sources/claim-runs/", "sources/bound-runs/"))
-                and name.endswith("/raw/powermetrics.plist") and "instrument_validation/" not in name):
+        # Each bundle also carries instrument_calibration/raw/powermetrics.plist.
+        # That is a copied calibration input, not a primary member capture.
+        if not re.fullmatch(r"sources/(?:claim|bound)-runs/[^/]+/raw/powermetrics\.plist", name):
             continue
         data = reader.read(archive / name)
         elapsed = [int(value) for value in re.findall(rb"<key>elapsed_ns</key>\s*<integer>(\d+)</integer>", data)]

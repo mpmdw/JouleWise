@@ -366,7 +366,7 @@ print('ready')
         self.assertEqual(result.stdout.strip(), "ready")
 
     def test_actual_git_blob_transport_preserves_bytes_and_fresh_refs(self):
-        """Predict: actual Git batch input matches native bytes/errors and the pinned pack digest; a new commit is read fresh and replace refs are denied."""
+        """Predict: native/batch bytes, errors and pinned digest agree; fresh commits are read, replace refs denied, and SystemExit(4) survives transport atexit cleanup."""
         code = '''import hashlib,json,subprocess,sys
 from pathlib import Path
 from runtime import REAL_RUN
@@ -402,10 +402,11 @@ except PermissionError:
 else:
     raise AssertionError('replace refs were not denied')
 print('native_bytes_and_fresh_refs')
+raise SystemExit(4)
 '''
         result = subprocess.run(command(self.root, "code", code, self.root), capture_output=True,
                                 text=True, timeout=60)
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.returncode, 4, result.stderr)
         self.assertEqual(result.stdout.strip(), "native_bytes_and_fresh_refs")
         receipts = [json.loads(line) for path in self.root.glob("git-blob-input-queries-*.jsonl")
                     for line in path.read_text().splitlines()]
