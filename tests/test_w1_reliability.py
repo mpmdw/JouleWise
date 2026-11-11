@@ -1,7 +1,10 @@
 """Synthetic witnesses for the 2026-11-10 measurement-system audit fixes."""
 import json
 import os
+import shlex
+import shutil
 import subprocess
+import sys
 import tempfile
 import time
 import types
@@ -73,6 +76,25 @@ class OutcomeTests(unittest.TestCase):
         self.assertEqual('COMPLETE', h.result()['chain_outcome'])
         self.assertFalse(h.result()['fault'])
         self.assertIsNone(h.result()['measurement_outcome'])
+
+    def test_r1_refused_payload_faults_all_terminal_records_even_at_chain_exit_zero(self):
+        h = Harness(self, g10=False)
+        h.replace_chain("#!/bin/zsh -f\nexit 0\n")
+        self.chain_exit(h, 0)
+        exited = h.driver._run_chain_once
+        def with_payload(*args, **kwargs):
+            result = exited(*args, **kwargs)
+            payload = h.night / 'align-r1/r1_result.json'
+            payload.parent.mkdir()
+            payload.write_text('{"status":"refused"}')
+            return result
+        h.driver._run_chain_once = with_payload
+        self.assertEqual(h.driver.EXIT_GO, h.run())  # registered exit/verdict policy is unchanged
+        for record in (h.result(), h.hazard(), h.driver.run_courier.call_args.kwargs['report']['facts']):
+            self.assertEqual('GO', record['verdict'])
+            self.assertEqual('refused', record['measurement_outcome'])
+            self.assertEqual('CHAIN_FAILED', record['chain_outcome'])
+        self.assertIn('r1_status:refused', h.result()['fault_reasons'])
 
 
 class TerminalDeliveryTests(unittest.TestCase):
@@ -159,6 +181,27 @@ class TerminalDeliveryTests(unittest.TestCase):
             self.assertEqual(1, self.rt._program_courier_delivery(self.custody, self.plan_id))
         publish.assert_called_once()
         self.assertFalse((self.night / 'courier.sent').exists())
+
+    def test_actual_program_courier_parses_prompt_and_pushes_to_local_remote(self):
+        # Copy only repo code into an isolated measurement checkout. The sole
+        # shell substitution is the interpreter path, for Linux/3.11 CI too.
+        scripts = self.repo / 'scripts'
+        scripts.mkdir()
+        (scripts / '__init__.py').touch()
+        source = Path(self.rt.__file__)
+        shutil.copyfile(source, scripts / 'run_night.py')
+        shell = (source.parent / 'b6_courier.sh').read_text()
+        shell = shell.replace('exec /opt/homebrew/bin/python3.13', 'exec ' + shlex.quote(sys.executable))
+        courier = scripts / 'b6_courier.sh'
+        courier.write_text(shell)
+        env = dict(os.environ, PYTHONPATH=str(source.parent.parent))
+        result = subprocess.run(['/bin/sh', str(courier), '-p',
+                                 f'Custody root: {self.custody}; plan: {self.plan_id}.'],
+                                input=b'', cwd=self.repo, env=env, capture_output=True, timeout=20)
+        self.assertEqual(0, result.returncode, result.stderr.decode())
+        self.assertTrue((self.night / 'courier.sent').exists())
+        self.assertEqual(self.ref, json.loads((self.night / 'courier.delivery.json').read_text())['ref'])
+        self.git('--git-dir=' + str(self.remote), 'rev-parse', '--verify', self.ref)
 
 
 if __name__ == '__main__':

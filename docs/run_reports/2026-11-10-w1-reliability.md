@@ -106,20 +106,30 @@ Blocked work and current evidence:
 Commands, one targeted module at a time:
 
 - `python3.13 -B -m unittest tests.test_w1_reliability`: initial four tests
-  passed after isolating the chain process-group boundary; final **9 passed**,
-  7.740 s. Includes a real local bare-Git push, failure/timeout injection,
+  passed after isolating the chain process-group boundary; final **11 passed**,
+  4.529 s. Includes a real local bare-Git push, failure/timeout injection,
   pre-chain refusal, repeated fast-forward, digest binding and byte equality.
+  Final additions exercise a refused R1 payload at exit zero through all
+  terminal records, and the actual shell courier parsing a prompt and pushing
+  to a synthetic local bare remote (only its interpreter path is substituted
+  for portability). No network transport was used.
 - `python3.13 -B -m unittest tests.align.test_v4_executed_closure`: **4 passed**,
   3.851 s. No new unbound executed path introduced.
 - `sh -n scripts/b6_courier.sh`: passed.
+- `python3.13 -B -m compileall -q joulewise tests`: passed on this W1 branch.
 - `git diff --check`: passed before each implementation commit.
 
 Failure/uncertainty: the initial new tests using a real chain process group
 returned courier-failure exit 6 rather than expected 0/5; the existing
 `tests.test_b5_driver.LaunchTests.test_chain_digest_mismatch_is_a_flag_and_the_chain_runs`
 also failed (6 != 0, 12.126 s), with a subprocess ResourceWarning. This was
-not proven to fail at the untouched base, so it is reported as an unresolved
-environment/integration limitation, not dismissed as a known baseline.
+not run at the untouched base. A final synthetic Harness diagnostic reproduced
+the cause: `pgrep` reports `sysmon request failed with error: sysmond service
+not found` / `Cannot get process list`. The runner correctly refuses because
+`chain exited but its process group could not be proven gone`, records
+`night_chain_alive`, leaves monitor cleanup to the dead-man, and suppresses
+the courier. The synthetic fixture's cleanup reaps its own processes. This
+is a concrete sandbox process-census limitation, not a native proof.
 New terminal-reporting witnesses inject a proven chain exit; the arm, monitor,
 result and courier-facts path remain production code. Lead must rerun that
 existing real-process integration test outside the sandbox before arming.
@@ -134,3 +144,46 @@ groups; review these local commits, then complete STRICT re-registration and
 native PREQUAL/smoke at the final integrated W1 head. This branch alone is not
 an assertion that W1 is ready to arm. Watchdog work has its own second branch
 and report.
+
+## Second branch completed in this session
+
+`ops/2026-11-10-watchdog-unknown-keys` at `bb952ed7a`, based on PR #707 head
+`df5311456` fetched from the allowed local Git store. Its own detailed report
+is `docs/run_reports/2026-11-10-watchdog-unknown-keys.md` **on that branch**.
+No cross-branch merge was performed.
+
+- **W-01, `d8660fda5`:** distinct unsafe plan/plist/conflict/lock/process/desk
+  states, immediate existing-path notices, and 900-second continuous-dwell
+  escalation to STRANDED. Changed bad bytes do not restart the dwell. STRANDED
+  still forbids launch; parsing and process stand-down policy remain fail-safe.
+  Files: `scripts/magistrate_watchdog.py`, `tests/test_magistrate_watchdog.py`,
+  `tests/test_magistrate_watchdog_v5.py`, `tests/test_watchdog_reliability.py`,
+  `docs/process/MAGISTRATE_WATCHDOG.md`.
+- **W-02, `21fe4cec7`:** both tick and resident read a bounded, identity-matched
+  heartbeat; 900-second stale/missing progress queues one notice per outage,
+  recovery enables another notice, and state records age/status. This changes
+  reporting, not process actions. Prompt specifies the wire and progress refresh.
+  Files: `scripts/magistrate_watchdog.py`, `tests/test_magistrate_watchdog.py`,
+  `tests/test_watchdog_reliability.py`,
+  `docs/process/MAGISTRATE_RELAUNCH_PROMPT.md`,
+  `docs/process/MAGISTRATE_WATCHDOG.md`.
+- **Tests:** `python3.13 -B -m unittest tests.test_watchdog_reliability`:
+  **9 passed**, 0.038 s; `python3.13 -B -m unittest
+  tests.test_magistrate_watchdog`: **155 passed**, 3.289 s;
+  `python3.13 -B -m unittest tests.test_magistrate_watchdog_v5`: **4 passed**,
+  0.046 s. Compileall and diff check passed. Modules ran separately.
+- **Re-registration:** the watchdog script is a STRICT bound path in the W1
+  artifact set. Integrating it also requires STRICT re-registration. The
+  changed process documents are not in that artifact set; registration code
+  and registration text were not edited.
+- **Residual:** notices are durable in the existing local queue/journal. Mail
+  still requires a permissible magistrate or an external observer reading that
+  queue. These changes do not establish independent off-host notification
+  during a permanent hold, nor detect a watchdog that never runs. Native
+  installed-plan acceptance, heartbeat observation and Air delivery remain
+  lead-owned checks. No live installation was performed.
+
+Local implementation commits on this W1 branch are `5bb152acc` (A-01),
+`c80d4d638` (A-02); `e787f6c24` records the original handoff. The subsequent
+test/report commit adds the final two witnesses above and this completed
+cross-branch handoff. Both work branches remain local and unpushed.
