@@ -3761,6 +3761,162 @@ reader would still stop.
 
 ---
 
+# Decision request 42: the harvest run on a synthetic W1, and the sorting of the nineteen window codes (2026-11-11 05:44 PST)
+
+**Read.** The lead's account of `test/2026-11-11-w1-harvest-exec` @ `081b921be` and of the lane's sorting. In
+the protocol on the W1 line: the cohort and stack lines (502-508, 554, 882). I did not read the test or run it.
+
+## RL-71. The identity derives; the sorting is confirmed; the hold rule is restated in v4's own signals
+
+### `model.identity_underivable`
+
+By execution, all eighteen W1 members' identities derive from their own bundles, and removing one member's
+identity excludes exactly that member. The worst case is ruled out. `members_excluded` was not empty in that
+run for fixture reasons, so RL-65's fifth observation stands as written for the native smoke: on a clean smoke
+it is empty, and any code in it is explained.
+
+### The sorting: confirmed
+
+- **Matters (9):** `code.number_bearing_unreviewed`, `model.files_differ_from_registered`,
+  `model.stack_differs_from_registered`, `records.source_changed_during_harvest`, `roster.no_science_bundles`,
+  and the four `structure.*` codes.
+- **Does not matter in v4 (9):** the five `calibration.*` codes, `cell.below_minimum`,
+  `clock.step_overlap_calibration` and the two `neg8.survivor_screen_*` codes. I accept this on the lane's trace:
+  no v4 estimand, gate or exclusion reads the calibration bracket's bound or acceptance, or the
+  reference-screen result. The same is checked of the engine and the recompute at the analysis seal (RL-21).
+- **`precheck.certain_exclusion`: treated as "matters" until read.** A window that carries it is held, the
+  reason is read, and I rule. That is the lane's proposal with the default made safe.
+
+One consequence to state where the nine inert codes are listed: v4's windows run calibration brackets and
+reference requests, and nothing in v4 reads them. The row says so. The v4 methods text may not then cite them
+as protection. Whether to go on collecting them is a question for after W1, not now.
+
+### The gap: the rule is rewritten by condition and signal
+
+The lead is right. RL-65 named codes, and five of the nine that matter are raised only by an acceptance step
+that v4 does not run. A rule guarding codes that cannot fire guards nothing. What has to be guarded is the
+condition, and each condition needs a signal v4 really produces.
+
+| Condition | v4's signal | Effect |
+|---|---|---|
+| Number-bearing code is not the registered code | The STRICT receipt check at arm | The arm refuses. Already so. |
+| Model files are not the registered ones | The weight-digest check at prepare (RL-62) | Prepare refuses. **A mismatch also holds the previous window**, until it is shown when the files changed. |
+| The runtime stack is not the registered one | **To be established.** | See below. |
+| The harvest's view of the window is incomplete | The desk ends in a fault; members not captured or incomplete carry their own classes (A9) | A desk fault leaves the window non-final, and the window after next cannot arm (RL-53, RL-56). Captured members are judged one by one, as registered. No further hold. |
+| A source changed during harvest; no science bundles; a pre-check exclusion | `records.source_changed_during_harvest`, `roster.no_science_bundles`, `precheck.certain_exclusion`, which the harvest itself raises | **Held**, by RL-65's mechanism: the arm refuses on them without a signed ruling, or the magistrate reads them before every arm if that code misses the cut-off. |
+
+So RL-65's arm-time refusal narrows to the three codes of the last row. The deviation row lists the five
+acceptance-only codes as "cannot be raised in v4", each with the signal that covers its condition.
+
+**The stack is the one condition without an answer.** The protocol says there is no pooling across a stack
+change and that every cohort-identity field is fixed from C1. I have not found what compares a member's
+recorded runtime versions with the registered pins in v4. The lane lead establishes two things, by reading:
+
+1. whether the configuration key that the analysis checks for a changed cohort (A29) includes the runtime
+   stack's digest, so that a member measured on a different stack is excluded at analysis;
+2. whether prepare or arm compares the installed stack with the registered pins.
+
+If neither holds, a library update on the measurement Mac between two windows would pass unnoticed, and the
+series would pool two stacks. Then one check is added at prepare, the installed versions against the pins,
+refuse-only, under RL-53's terms, with the same previous-window hold as the weights. If the first holds, the
+analysis seal carries it and the prepare check is optional. Either way it comes back to me before signing.
+
+**Reason.** A hold rule is only as good as the thing that trips it. The conditions were always the point; the
+codes were Block 6's way of raising them.
+
+**Blind status.** Blind: no v4 outcome exists.
+
+---
+
+# Decision request 43: the design round for the R1 follow-up night is closed (2026-11-11 05:46 PST)
+
+**Read.** `docs/run_reports/2026-11-11-r1-followup-design.md` on `design/2026-11-11-r1-followup` @ `a12fd0e38`,
+in full: the headline, items 1 to 10, the nine disagreements and the seven questions. I did not read the Sol
+seat's separate plan or re-run the replay; the document reports that the two replays agree to 0.01 s.
+
+## RL-72. The plan is adopted with the rulings below. One thing still stands before the arm: thermometry
+
+### A correction to RL-64 first
+
+RL-64 said every D member sat "0.88 to 1.45 °C inside the band at release". Both seats found that I had read
+the at-cap column. At release the legs and step-D are 0.02 to 0.46 °C inside the band at 1.5 °C. At 1.0 °C the
+band decides the release, costs 60 to 300 s a member, brings the worst wait to 1,055 s, and would saturate W1's
+cap formula. My note that the D members "would also have released at 1.0 °C" is true and misleading: they
+would, late and by the band. RL-64's conclusion that the consume case follows from the margins was right by
+luck; the round computed it and it holds, 716 to 889 s at 1.5 °C.
+
+### The plan
+
+Adopted as written in items 2 to 6, 8 and 10: the order, the 30B predecessor and step-D as one admission unit,
+the legs as capture members ahead of step-D, the planning turns relative to R_D, the semantics of a timeout,
+the slot map with its per-slot bars, the cuts, the deadline arithmetic, and the hooks that leave W1's gate
+module untouched.
+
+### The seven questions
+
+**E1, thermometry: the print is ordered now, and I rule when I have it.** The Sol seat is right that no cause
+is established from the gate journal alone (D5). The Opus seat is right that if the slow key's return time
+fails the registered ceiling on a step this hot, no night can pass the D bar, and that is a question about the
+rule. The lead runs, read-only on the measurement Mac, from a checkout at `da3187e6e`:
+
+- the classifier's own record, `step_30b/inventory/r1_classification.json`, printed whole;
+- `classify_step` re-run on the step-30b inventory journal with thresholds unchanged, printing the three phase
+  bounds; each key's unit and quantum; and for each key its class and reason, rise, early rise, time constant,
+  return time, noise, the clamp, alias and heat-order diagnostics, and per phase its coverage, empty cells and
+  read-error fraction.
+
+Temperatures, times and counts only. **The build goes ahead meanwhile. The arm waits for my ruling on what the
+print shows.** If the inventory sampler is the cause of the null fast pick, it is fixed in R1's runtime code
+with a cold review.
+
+**E2, redo allowance: two load redos for the night, each a whole admission unit; `window_max_s` 126,480 s.**
+The construction is the Sol seat's (D6): units, an encounter as unit plus blackout, the 9,000 s overhead
+enforced or verified in the build, the writer's margin. A test asserts the arm's window equals the computed
+worst case. I recommend, and leave to the lead, a wall timeout on each segment so that a hang costs one segment
+and not the window.
+
+**E3, a timeout runs flagged: step kinds only.** step-30b, the legs, step-D and the planning turns dispatch
+their turn after an observed timeout. **The gated D runs and X-G keep W1's behaviour exactly** (D3, the Opus
+position). They exist to rehearse W1's gate after a D turn, and a member W1 would have ended is not made to run
+here. A gated timeout under the right reference is a finding, and the gated waits after it are recorded as not
+following a D turn. The `workload.py` callback (D2, the Sol design) is approved as a bound edit before signing,
+on three terms: its default leaves W1's behaviour unchanged, shown by a test in which a member's bundle is
+byte-identical with and without the edit; a deviation row names it; cold review.
+
+**E4, the A-B-A start-state checks are bars.** Fixed now, before the night: each leg's release sample lies
+inside every other leg's G0 band; and B's own slow capture lies within 0.5 °C of the range spanned by A1 and
+A2. A failure of either makes the adoption inconclusive and brings it to me. In effect that is what the plan
+proposed; calling them bars means nobody decides after the fact whether a failure counts.
+
+**E5, the smoke: Part A and Part B.** Part B is twenty minutes and is the only evidence before the night that
+the inventory journal meets the classifier's sampling bar.
+
+**E6: S6 stays at 1.5 °C for this arm.** I set it after the night from the release times and the headroom to
+the cap, as the seats say.
+
+**E7: yes.** `joulewise/align/apple/workload.py` joins the files of condition 13.
+
+### The remaining disagreements
+
+D1: the already-bound 30B template; no configuration change. D8: each member's own pre-warmup median is
+printed at the desk by the replay script; nothing is added to the runtime for it. D9: the arm uses the bounds;
+the estimate of 9 to 11 hours is for planning only. D2, D3, D4, D5, D6 and D7 are settled by E3, E3, E4, E1, E2
+and E5.
+
+### Order from here
+
+The print for E1, now. The build, from the W1 line after RL-61's move, with the synthetic tests the plan
+lists. My ruling on E1. The smoke, both parts. Cold review of the kit changes; if it changes executed bytes,
+the affected smoke is repeated. Then the arm, with t0 no later than 19:26 PST on its day.
+
+**Reason.** The round did its job twice over: it produced one plan, and it caught my own misreading before the
+night was built on it. What it could not settle is whether the registered sensor rule can be met at all on a
+step this hot, and that has to be known before another night is spent.
+
+**Blind status.** Blind: no v4 outcome exists. Rehearsal temperatures and code only.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
