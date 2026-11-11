@@ -66,6 +66,15 @@ class ArmCliTests(_Ctx):
         self.assertTrue(row['evidence']['mismatch_refused'])
         self.assertIn('weight_digest_preflight: digest_mismatch:', row['evidence']['refusal'])
 
+    def test_named_runtime_stack_and_held_window_cases(self):
+        for name in ('runtime-stack-preflight', 'held-window'):
+            with self.subTest(name=name):
+                self.assertIn(name, wp.CHECKS)
+                row = self.probe(name)
+                self.assertEqual(row['status'], wp.PASS, row)
+                self.assertTrue(row['evidence']['matching'])
+                self.assertTrue(row['evidence']['refused'])
+
     def test_synthetic_watchdog_models_nested_session_plan_outside_scan(self):
         import time
         from scripts import bytes_h_session as h

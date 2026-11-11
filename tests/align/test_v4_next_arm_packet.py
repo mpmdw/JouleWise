@@ -67,7 +67,7 @@ class Scenario:
                 'km003c': {'members': {i: {'status': 'available', 'flags': []} for i in ids}}}},
             'desk': {'plan_id': plan_id, 'pilot_status': 'instrument_ok',
                      'checks': {'synthetic_check': True, 'v4_B_bar': b_bar}, 'harvest_status': 'ok'},
-            'exclusions': {'members_excluded': []}}
+            'exclusions': {'members_excluded': [], 'reasons': [], 'claim_usable': True}}
         if window not in ('W1', 'R1'):
             # The desk's committed provisional counts: a permissive upper bound by default (7 per pair).
             self.sources['pilot']['extra_checks']['series_desk_row'] = {

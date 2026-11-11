@@ -179,7 +179,8 @@ class RegistrationTests(unittest.TestCase):
              patch('joulewise.align.apple.powermode.admit_ac_powermode', return_value={'admitted': True}), \
              patch('joulewise.align.apple.external_volume.census', return_value={}), \
              patch('joulewise.align.apple.external_volume.arm_check', return_value={'verdict': 'PASS', 'reasons': []}), \
-             patch('joulewise.battery_float.observe', return_value=(good, b'synthetic raw')) as observe:
+             patch('joulewise.battery_float.observe', return_value=(good, b'synthetic raw')) as observe, \
+             patch.object(session, 'held_window_check', return_value={'ok': True, 'reasons': [], 'synthetic': True}):
             run = lambda argv: subprocess.CompletedProcess(argv, 0, 'synthetic pmset', '')
             log = write_battery_log(Path(tmp) / 'battery.jsonl', 5000., completion_age=100)        # (a) completed charge
             floated = write_battery_log(Path(tmp) / 'float.jsonl', 5000., completion_age=2400)     # (b) continuous float
@@ -237,7 +238,8 @@ class RegistrationTests(unittest.TestCase):
              patch('joulewise.align.apple.powermode.admit_ac_powermode', return_value={'admitted': True}), \
              patch('joulewise.align.apple.external_volume.census', return_value={}), \
              patch('joulewise.align.apple.external_volume.arm_check', return_value={'verdict': 'PASS', 'reasons': []}), \
-             patch('joulewise.battery_float.observe', return_value=(good, b'raw')):
+             patch('joulewise.battery_float.observe', return_value=(good, b'raw')), \
+             patch.object(session, 'held_window_check', return_value={'ok': True, 'reasons': [], 'synthetic': True}):
             run = lambda argv: subprocess.CompletedProcess(argv, 0, 'pmset', '')
             rows = lambda start, end, charge_until=None: [
                 {'schema': 'joulewise.battery_float.v1', 'probe_error': False, 'wall_time_s': float(t),
