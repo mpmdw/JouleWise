@@ -3,7 +3,7 @@
 > **Status note, 2026-11-10 (research lead RL-1; Ed's decision E1, `RUN_STATE.md` item 256).** The mid-December
 > capstone submission is **Paper 1**, `docs/paper/paper1/paper1.md` (see `CANONICAL.md`), with at most a one-page
 > outlook on agent auditing (RL-9). This file remains the plan of the capstone tripwire manuscript and is kept as
-> history. Its milestones and roles do not govern Paper 1; Paper 1's work plan is RL-24 in
+> history. Its milestones do not govern Paper 1; Paper 1's seats, builders and reviewers are set by RL-24 in
 > `docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md` (branch `audit/2026-11-10-fable`). Lines
 > superseded since this plan was written are marked in place with **[Superseded 2026-11-10: ...]**; the original
 > text is left as it was.
@@ -17,7 +17,7 @@
 - a false-alarm rate;
 - an H50/H90 or a minimum detectable H;
 - that the squeeze holds;
-- any v4, v5, Block-5 or BYTES held-out result. **[Superseded 2026-11-10 for Block 5 only: `RUN_STATE.md` item 232 puts Block 5 in the mid-December paper as the instrument-validation section (RL-1). Released Block 5 numbers print only after RL-3's gate. v4, v5 and BYTES held-out stand.]**
+- any v4, v5, Block-5 or BYTES held-out result. **[Superseded 2026-11-10 for Block 5 only: Block 5 was unsealed 2026-11-08 (item 231) and is reported in Paper 1, the mid-December submission (item 256 E1; RL-1, RL-8), not as a section of this manuscript. Its numbers print only after RL-3's gate. v4, v5 and BYTES held-out stand.]**
 
 The title asks more than the evidence shows. So the abstract's first result sentence must carry the scope: known log omissions, a non-adaptive agent, two trajectories.
 
@@ -73,7 +73,7 @@ Rough length: 9-10 pages plus appendices, a workshop-style length that fits the 
 | v4 results (§6.5, T4) | Registered release passes (recompute agrees) **and** Ed's unseal OK, by about **10 Dec** | Variant B: "v4 outcomes unavailable at this manuscript's evidence cut" | Use readiness numbers, partial windows or synthetic power curves in place of results |
 | v4 gate status in §10 and talk slide B9 | Not sealed: read it from `RUN_STATE.md` at the freeze (22 Nov), and again at the paper cut | Write "pending" | Report any alarm, residual or energy value from R1, W1 or D |
 | v5 design in §10 | The lead's ruling on the design competition (`origin/align/2026-11-08-v5design-*`) | Describe only the R11 choices (D07, D09, D12) and say the design is under competition | Name a roster, sample size or decision rule before the ruling |
-| Block 5 | Excluded from this paper. It is Paper 1 material, and sealed **[Superseded 2026-11-10: Block 5 was unsealed on 2026-11-08 (item 231) and is in the mid-December paper as its instrument-validation section (item 232; RL-1). Its numbers print only after RL-3's gate]** | — | Mention any Block-5 outcome. The **process** facts in App. A (runtimes, defect counts, exit classes) are allowed |
+| Block 5 | Excluded from this paper. It is Paper 1 material, and sealed **[Superseded 2026-11-10: Block 5 was unsealed 2026-11-08 (item 231) and is reported in Paper 1, the mid-December submission (item 256 E1; RL-1, RL-8), not as a section of this manuscript. Its numbers print only after RL-3's gate]** | — | Mention any Block-5 outcome. The **process** facts in App. A (runtimes, defect counts, exit classes) are allowed |
 
 **Not gated (write now):** §§2, 4-9 and App. A-B, plus §3 for KB and E3. These sections make up about 80% of the paper and all of the variant-B result.
 
