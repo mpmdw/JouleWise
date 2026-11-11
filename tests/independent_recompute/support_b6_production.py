@@ -38,7 +38,9 @@ def seal(archive, compress=False):
                 for kind, stamp in (("stage_started", 0.), ("stage_completed", 1.)):
                     out.write(json.dumps({"event_type": kind, "phase": "idle_baseline", "timestamp_s": stamp}) + "\n")
     stream = archive / "sources/night-custody/hazards/meter/stream-synthetic.jsonl"
-    stream_file(stream, lambda t: 10. if t < 1. else 50., count=251)
+    # Distinct phase powers expose a decode/prefill cell swap. Request energy
+    # remains 100 J (40 W for prefill, 60 W for decode), baseline 10 W.
+    stream_file(stream, lambda t: 10. if t < 1. else (40. if t < 2. else 60.), count=251)
     journal = archive / "sources/night-custody/hazards/monitor/contention.jsonl"
     journal.parent.mkdir(parents=True)
     journal.write_text(json.dumps({"schema": "joulewise.hazard_journal.v1", "module": "contention", "kind": "interval",

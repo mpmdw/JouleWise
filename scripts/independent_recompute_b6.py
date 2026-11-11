@@ -168,6 +168,8 @@ class MemberPool(B5.MemberPool):
 
             def raw(self, path, scope, required=True):
                 self.inputs = next((ctx for ctx in contexts if Path(path).absolute().is_relative_to(ctx.archive)), None)
+                if contexts and self.inputs is None:
+                    raise InputRefusal("input_outside_archive")
                 return super().raw(path, scope, required)
 
         original = B5.Reader
@@ -212,7 +214,7 @@ class Session:
 
     def __init__(self, archive, flags, attempts=None, claim_root=None, bound_root=None, reharvested=None,
                  inputs=None, pool=None, input_pin=None):
-        self.archive = Path(archive)
+        self.archive = inputs.archive if inputs is not None else Path(archive)
         self.pool, self.inputs = pool, inputs
         self.input_pin = input_pin or {}
         self.reharvested = mapping(reharvested)
