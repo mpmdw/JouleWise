@@ -58,6 +58,7 @@ from scripts.run_night import (  # noqa: E402
     make_probes,
 )
 from scripts.fixture_orphan_census import launch_observation  # noqa: E402
+from scripts.watchdog_status import StatusExporter  # noqa: E402
 from scripts.launch_align_r0 import (  # noqa: E402
     FENCE_NAME as DESK_FENCE_NAME,
     fence_lock as desk_fence_lock,
@@ -133,7 +134,8 @@ UNSAFE_HOLD_DWELL_S = 15 * 60
 HEARTBEAT_STALE_S = 15 * 60
 UNSAFE_STATES = frozenset({"HOLD_UNSAFE", "HOLD_PLAN_UNREADABLE", "HOLD_PLAN_MALFORMED",
                           "HOLD_PLIST_UNREADABLE", "HOLD_CONFLICT", "HOLD_LOCK",
-                          "HOLD_PROCESS_TABLE", "HOLD_DESK_FENCE", "STRANDED"})
+                          "HOLD_PROCESS_TABLE", "HOLD_DESK_FENCE", "HOLD_STATUS_EXPORT",
+                          "HOLD_MODEL_CHECK", "HOLD_MODEL_REJECTED", "STRANDED"})
 
 # Keep this launch shape in one place.  The magistrate can change one tuple
 # after the owed permission-prompt bench without touching supervisor logic.
@@ -303,6 +305,7 @@ class Storage:
         self.root = root.expanduser().resolve(strict=False)
         self.dry_run = dry_run
         self.would_write: list[str] = []
+        self.status_exporter: StatusExporter | None = None
 
     def _write_path(self, path: Path) -> Path:
         resolved = path.expanduser().resolve(strict=False)
@@ -341,6 +344,8 @@ class Storage:
     def atomic_json(self, path: Path, value: Mapping[str, Any]) -> None:
         data = (json.dumps(value, sort_keys=True, indent=2) + "\n").encode("utf-8")
         self.atomic_bytes(path, data)
+        if path == self.root / "state.json" and self.status_exporter is not None:
+            self.status_exporter.checkpoint(value)
 
     def atomic_bytes(self, path: Path, data: bytes) -> None:
         path = self._write_path(path)
@@ -1799,6 +1804,8 @@ def transition(
         "epoch_s": now.timestamp(),
     }
     storage.append_jsonl(storage.root / "events.jsonl", event)
+    if storage.status_exporter is not None:
+        storage.status_exporter.checkpoint(state, transition=True)
     if notice is not None:
         pending = state.setdefault("notice_pending", [])
         notice_id = f"transition-{sequence}-{notice}"
@@ -2252,22 +2259,28 @@ def _decide(
 
 
 def _unsafe_state(reason):
-    if "night_plan_unreadable" in reason:
+    if reason.startswith("desk_fence:"):
+        return "HOLD_DESK_FENCE"
+    if reason.startswith(("night_plan_unreadable ", "night_plan_unreadable:")):
         return "HOLD_PLAN_UNREADABLE"
-    if "night_plan_malformed" in reason:
+    if reason.startswith(("night_plan_malformed ", "night_plan_malformed:")):
         return "HOLD_PLAN_MALFORMED"
-    if "installed_agent_fence:" in reason:
+    if reason.startswith("installed_agent_fence:"):
         if ": plan_unreadable:" in reason:
             return "HOLD_PLAN_UNREADABLE"
         return "HOLD_PLAN_MALFORMED" if ": plan:" in reason else "HOLD_PLIST_UNREADABLE"
     if reason.startswith("plan_conflict:"):
         return "HOLD_CONFLICT"
-    if "process table unavailable" in reason:
+    if reason.startswith("process table unavailable:"):
         return "HOLD_PROCESS_TABLE"
-    if "lock" in reason or "resumed_twin" in reason:
+    if reason.startswith(("corrupt_lock_", "dead_lock_", "magistrate.lock")):
         return "HOLD_LOCK"
-    if reason.startswith("desk_fence:"):
-        return "HOLD_DESK_FENCE"
+    if reason.startswith("status_export:"):
+        return "HOLD_STATUS_EXPORT"
+    if reason.startswith("model_rejected:"):
+        return "HOLD_MODEL_REJECTED"
+    if reason.startswith("model_check:"):
+        return "HOLD_MODEL_CHECK"
     return "HOLD_UNSAFE"
 
 
@@ -2289,7 +2302,8 @@ def _queue_safety_notice(storage, state, now, *, notice_id, kind, reason):
 def _observe_magistrate_heartbeat(storage, state, now, lock):
     """W-02: a live PID alone is not session progress. Notice only; no kills.
 
-    Wire: PID ACTIVATION_ID EPOCH_SECONDS, as the magistrate prompt requests.
+    Primary signal: growth in this supervisor's attempt-N.stream.jsonl.
+    The model's PID ACTIVATION_ID EPOCH_SECONDS heartbeat is a second input.
     Old activations, unreadable/malformed/future stamps cannot prove liveness.
     """
     activation, pid = str(lock.get("activation_id")), lock.get("pid")
@@ -2320,10 +2334,40 @@ def _observe_magistrate_heartbeat(storage, state, now, lock):
         pass
     except (OSError, ValueError, UnicodeError):
         status = "unreadable"
-    age = max(0.0, now.timestamp() - (epoch if epoch is not None else launched))
+    # Stat only the exact supervisor-owned output, never parse model text.
+    # First observation uses mtime rather than crediting discovery as progress;
+    # later observations credit only growth of the same inode. Replacement or
+    # truncation resets the baseline without manufacturing a fresh heartbeat.
+    stream_status = "missing"
+    stream_epoch = watch.get("stream_epoch_s")
+    attempt = state.get("attempt", 1)
+    if isinstance(attempt, int) and not isinstance(attempt, bool) and attempt > 0 and re.fullmatch(r"[A-Za-z0-9_-]+", activation):
+        path = storage.root / "attempts" / activation / f"attempt-{attempt}.stream.jsonl"
+        try:
+            metadata = path.lstat()
+            if not stat.S_ISREG(metadata.st_mode):
+                raise ValueError("stream not regular")
+            identity = [metadata.st_dev, metadata.st_ino]
+            previous = watch.get("stream_identity")
+            if previous is None and metadata.st_size > 0 and launched <= metadata.st_mtime <= now.timestamp() + 5:
+                stream_epoch = metadata.st_mtime
+            elif previous == identity and metadata.st_size > watch.get("stream_size", 0):
+                stream_epoch = now.timestamp()
+            elif previous != identity or metadata.st_size < watch.get("stream_size", 0):
+                stream_epoch = None
+            watch.update(stream_identity=identity, stream_size=metadata.st_size, stream_epoch_s=stream_epoch)
+            stream_status = "observed" if stream_epoch is not None else "awaiting_growth"
+        except FileNotFoundError:
+            pass
+        except (OSError, ValueError):
+            stream_status = "unreadable"
+    valid_epochs = [stamp for stamp in (epoch, stream_epoch) if stamp is not None]
+    progress_epoch = max(valid_epochs) if valid_epochs else launched
+    age = max(0.0, now.timestamp() - progress_epoch)
     stale = age >= HEARTBEAT_STALE_S
     state["magistrate_heartbeat"] = {"activation_id": activation, "pid": pid, "status": status,
                                      "epoch_s": epoch, "age_s": age, "stale": stale,
+                                     "stream_status": stream_status, "stream_epoch_s": stream_epoch,
                                      "observed_epoch_s": now.timestamp()}
     if stale and not watch["notified"]:
         watch["episode"] += 1
@@ -2373,7 +2417,56 @@ def _surface_unsafe_decision(storage, deps, state, decision, now):
 
 def decide(storage, deps, state, *, plan_snapshot=None):
     decision = _decide(storage, deps, state, plan_snapshot=plan_snapshot)
+    if decision.launch:
+        reason = state.get("model_startup_hold")
+        if not reason and storage.status_exporter is not None:
+            reason = storage.status_exporter.launch_hold()
+        if reason:
+            decision = Decision("HOLD_UNSAFE", str(reason))
     return _surface_unsafe_decision(storage, deps, state, decision, deps.wall_now().astimezone())
+
+
+class ModelStartupError(RuntimeError):
+    pass
+
+
+def model_startup_check(stdout: str, stderr: str) -> None:
+    """Check the supervised CLI's startup diagnostics; never spawn a probe.
+
+    A rejection latches until an operator verifies the CLI and clears the hold.
+    The real activation already has PID ownership and the stand-down ladder.
+    """
+    model = SESSION_ARGV_AFTER_PROMPT[SESSION_ARGV_AFTER_PROMPT.index("--model") + 1]
+    diagnostics = []
+    for line in stderr.splitlines():
+        if re.match(r"^(?:error[: ]|api error[: ]|invalid model|unknown model|unsupported model|unrecognized model|there.s an issue with the selected model)", line.strip(), re.I):
+            diagnostics.append(line)
+    for line in stdout.splitlines():
+        try:
+            value = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(value, dict) and (value.get("type") == "error"
+                or value.get("type") == "result" and value.get("is_error") is True
+                or value.get("type") == "system" and value.get("subtype") == "error"):
+            diagnostics.append(json.dumps({key: value[key] for key in ("error", "errors", "result", "message") if key in value}))
+    rejection = r"(?:invalid|unknown|unsupported|unrecognized|not[ _-](?:found|available|supported|exist)|does not exist|not have access)"
+    for diagnostic in diagnostics:
+        if re.search(r"\bmodel\b|model_", diagnostic, re.I) and re.search(rejection, diagnostic, re.I):
+            raise ModelStartupError(f"model_rejected: CLI rejected {model}; verify CLI/model before clearing hold")
+
+
+def session_output_tails(stdout_path: Path, stderr_path: Path) -> tuple[str, str]:
+    pieces = []
+    for path in (stdout_path, stderr_path):
+        try:
+            with path.open("rb") as handle:
+                handle.seek(0, os.SEEK_END)
+                handle.seek(max(0, handle.tell() - 4096))
+                pieces.append(handle.read(4096).decode("utf-8", errors="replace"))
+        except OSError:
+            pieces.append("")
+    return pieces[0], pieces[1]
 
 
 def resolve_session_binary(path: Path) -> Path:
@@ -2566,13 +2659,7 @@ class ResidentSupervisor:
         return observation
 
     def _output_tail(self) -> str:
-        pieces: list[str] = []
-        for path in (self.stdout_path, self.stderr_path):
-            try:
-                pieces.append(self.storage.read_text(path)[-4096:])
-            except OSError:
-                pass
-        return "\n".join(pieces)
+        return "\n".join(session_output_tails(self.stdout_path, self.stderr_path))
 
     def _finish_child(self, exit_code: int, now: dt.datetime) -> bool:
         requested = self.storage.exists(self.storage.root / "standdown.request")
@@ -2580,6 +2667,22 @@ class ResidentSupervisor:
         self.state["resident_session"] = None
         self.state["clock_drain"] = False
         self.state["resident_hold_drain"] = None
+        # CLI model validation happens in the owned activation, before it can
+        # do useful work. Explicit rejection is terminal, even if CLI returns 0
+        # or a stand-down request arrived at the same time: no retry loop.
+        try:
+            model_startup_check(*session_output_tails(self.stdout_path, self.stderr_path))
+        except ModelStartupError as exc:
+            self.state["model_startup_hold"] = str(exc)
+            if requested:
+                self.storage.unlink(self.storage.root / "standdown.request")
+                self.state["standdown_phase"] = "COMPLETE"
+            decision = _surface_unsafe_decision(self.storage, self.deps, self.state,
+                                               Decision("HOLD_UNSAFE", str(exc)), now)
+            transition(self.storage, self.state, decision.state, decision.reason, now)
+            self.storage.atomic_json(self.storage.root / "state.json", self.state)
+            print(str(exc), file=sys.stderr)
+            return False
         if requested:
             self.storage.unlink(self.storage.root / "standdown.request")
             self.state["standdown_phase"] = "COMPLETE"
@@ -2806,7 +2909,14 @@ class ResidentSupervisor:
         self.storage.atomic_json(self.storage.root / "state.json", self.state)
         return True
 
-    def step(self) -> bool:
+    def step(self, *, publish_background: bool = True) -> bool:
+        try:
+            return self._step()
+        finally:
+            if publish_background and self.storage.status_exporter is not None:
+                self.storage.status_exporter.flush_background()
+
+    def _step(self) -> bool:
         now = self.deps.wall_now().astimezone()
         monotonic = self.deps.monotonic()
         # The email acknowledgement is durable evidence and must win even if
@@ -2921,6 +3031,8 @@ class ResidentSupervisor:
         while True:
             started = self.deps.monotonic()
             if not self.step():
+                if self.storage.status_exporter is not None:
+                    self.storage.status_exporter.finish()
                 return
             elapsed = max(0.0, self.deps.monotonic() - started)
             self.deps.sleep(max(0.0, SUPERVISOR_POLL_S - elapsed))
@@ -2954,6 +3066,8 @@ def start_session(
     )
     binary = resolve_session_binary(requested_binary)
     binary_version = deps.version_probe(binary)
+    if state.get("model_startup_hold"):
+        raise ModelStartupError(str(state["model_startup_hold"]))
     prompt = render_prompt(storage, state, now)
     attempt_dir = storage.root / "attempts" / activation_id
     storage.mkdir(attempt_dir)
@@ -2977,15 +3091,15 @@ def start_session(
         "binary_version": binary_version,
         "status": "STARTING",
     }
-    # Recheck the desk after interpreter/version/prompt work, just before
-    # spawn. With no desk file, the existing plan path does no extra work.
-    try:
-        desk = desk_fence_active(storage, deps, deps.wall_now().timestamp())
-    except (OSError, ValueError, OverflowError, RuntimeError) as exc:
-        fence = Decision("HOLD_UNSAFE", f"desk_fence: {exc}")
-    else:
-        fence = Decision("FENCED", "desk fence active before spawn") if desk else None
+    # Re-read every plan/desk source immediately before spawn; never rely on
+    # the tick's pre-fork observation after binary/version/prompt work.
+    fence = _launch_fence(storage, deps, state)
+    if fence is None and storage.status_exporter is not None:
+        reason = storage.status_exporter.launch_hold()
+        if reason:
+            fence = Decision("HOLD_UNSAFE", reason)
     if fence is not None:
+        fence = _surface_unsafe_decision(storage, deps, state, fence, deps.wall_now().astimezone())
         transition(storage, state, fence.state, fence.reason, deps.wall_now().astimezone())
         storage.atomic_json(storage.root / "state.json", state)
         return None
@@ -3001,6 +3115,11 @@ def start_session(
         process = process_by_pid(deps.processes.snapshot(), child.pid)
         if process is not None:
             break
+        exit_code = child.poll()
+        if exit_code is not None:
+            storage.unlink(storage.root / "magistrate.lock")
+            model_startup_check(*session_output_tails(stdout_path, stderr_path))
+            raise RuntimeError(f"session exited during startup exit={exit_code}")
         deps.sleep(0.1)
     if process is None:
         raise RuntimeError(f"spawned pid {child.pid} absent from process table")
@@ -3042,6 +3161,14 @@ def start_session_guarded(
 ) -> ResidentSupervisor | None:
     try:
         return start_session(storage, deps, state, binary_path=binary_path)
+    except ModelStartupError as exc:
+        now = deps.wall_now().astimezone()
+        state["model_startup_hold"] = str(exc)
+        decision = _surface_unsafe_decision(storage, deps, state, Decision("HOLD_UNSAFE", str(exc)), now)
+        transition(storage, state, decision.state, decision.reason, now)
+        storage.atomic_json(storage.root / "state.json", state)
+        print(str(exc), file=sys.stderr)
+        return None
     except Exception as exc:
         now = deps.wall_now().astimezone()
         apply_backoff(
@@ -3206,6 +3333,14 @@ def service_lock(storage: Storage) -> Iterable[int | None]:
 
 
 def tick(storage: Storage, deps: Dependencies, *, dry_run: bool = False) -> Decision:
+    try:
+        return _tick(storage, deps, dry_run=dry_run)
+    finally:
+        if not dry_run and storage.status_exporter is not None:
+            storage.status_exporter.flush()
+
+
+def _tick(storage: Storage, deps: Dependencies, *, dry_run: bool = False) -> Decision:
     state = load_state(storage)
     observed_wall = deps.wall_now().astimezone()
     snapshot = load_plans(storage, now_epoch_s=observed_wall.timestamp())
@@ -3261,7 +3396,7 @@ def tick(storage: Storage, deps: Dependencies, *, dry_run: bool = False) -> Deci
             notice=notice,
         )
         if supervisor is not None:
-            supervisor.step()
+            supervisor.step(publish_background=False)
         return decision
     if not decision.launch and not decision.adopt:
         return decision
@@ -3366,6 +3501,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 3
     storage = Storage(args.custody_root, dry_run=args.dry_run)
     deps = real_dependencies()
+    storage.status_exporter = StatusExporter(storage, REPO_ROOT)
     if args.dry_run:
         storage.mkdir(storage.root)
         storage.would_write.append(f"open_and_flock {storage.root / 'watchdog.lock'}")
