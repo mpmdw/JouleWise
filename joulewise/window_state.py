@@ -42,7 +42,8 @@ result, and either label loaded/on disk strictly after completion + 3600.
 The audit's loaded-label invariant is reported even if delivery is still owed.
 
 Only observe_night_dir performs filesystem I/O. It opens a fixed allowlist,
-rejects symlinks (including ancestor components), never enumerates a directory,
+resolves ancestors once, refuses a symlink in the supplied root's last component
+and all symlinks below the root, never enumerates a directory,
 and never follows a path embedded in JSON. An explicit payload_path is permitted;
 its sibling r1_slots.json is checked for existence only. Default payload locations
 are night/r1_result.json and night/align-r1/r1_result.json (the W1 writer).
@@ -62,7 +63,12 @@ Audit 8.3 checks outside these facts (host settings/locks, watchdog dry run,
 offload receipts/queue, series finality, harvest journals, analysis admission/
 commit identity, kernel freshness) are deliberately not evaluated. Slots
 equivalence is evaluated only when an R1 payload/slots location is observed.
-exit_contract words are complete, refused, aborted, failed, stopped. Undeclared
+Recorded chain_outcome is compared with the derived outcome when present;
+COMPLETE matches both measured outcomes. Known measurement summary statuses
+invalid, absent and unreadable are not complete. A complete payload with missing
+slots fails. Plan timing also exposes silence strictly after t0 + 900 and an open
+chain strictly after completion, without inventing a terminal state.
+exit_contract words are complete, refused, failed, stopped, usage, hold, aborted. Undeclared
 codes fail; unknown words are UNKNOWN. A nonzero code can never be measured,
 even if a caller declares it complete. Payload completeness is structural only.
 """
@@ -110,7 +116,9 @@ class WindowState(enum.Enum):
 LABELS = ("com.joulewise.night", "com.joulewise.night.deadman")
 VERDICTS = frozenset({"GO", "REFUSED", "ABORTED", "CHAIN_STOPPED", "REHEARSAL_ONLY"})
 PAYLOAD_STATUSES = frozenset({"complete", "refused", "aborted", "running"})
-EXIT_WORDS = frozenset({"complete", "refused", "aborted", "failed", "stopped"})
+MEASUREMENT_OUTCOMES = PAYLOAD_STATUSES | {"invalid", "absent", "unreadable"}
+RECORDED_OUTCOMES = frozenset({"COMPLETE", "CHAIN_FAILED", "REFUSED_PRE_CHAIN", "ABORTED", "UNKNOWN"})
+EXIT_WORDS = frozenset({"complete", "refused", "aborted", "failed", "stopped", "usage", "hold"})
 DRIVER_MARKERS = frozenset({
     "censuses.jsonl", "receipt.json", "clean_dwell.output.txt", "clean_dwell.json",
     "start_conditions.json", "go_receipt.json", "go-census.json", "arm_decision.json",
@@ -142,6 +150,7 @@ class Observation:
     fault: bool | None = None
     fault_reasons: tuple[str, ...] = ()
     payload_status: str | None = None
+    recorded_outcomes: tuple[str, ...] = ()
     slots_present: bool | None = None
     delivery_recorded: bool = False
     delivery_required: bool = True
@@ -156,7 +165,7 @@ class Observation:
 
     def __post_init__(self):
         object.__setattr__(self, "markers", frozenset(self.markers))
-        for name in ("fault_reasons", "plists", "evidence", "errors"):
+        for name in ("fault_reasons", "recorded_outcomes", "plists", "evidence", "errors"):
             object.__setattr__(self, name, tuple(getattr(self, name)))
         if len(self.plists) != 2 or not all(isinstance(p, PlistFacts) for p in self.plists):
             raise TypeError("supply one PlistFacts for each of LABELS")
@@ -201,7 +210,7 @@ def invariant_nonzero_fault(o: Observation) -> str | None:
 
 def invariant_payload_exit(o: Observation) -> str | None:
     """Audit 8.3: 'Payload record `status == complete` if and only if chain exit is 0'."""
-    if o.payload_status in PAYLOAD_STATUSES and (
+    if o.payload_status in MEASUREMENT_OUTCOMES and (
         (o.payload_status == "complete") != (o.chain_exit_code == 0)
     ):
         return "PAYLOAD_EXIT_MISMATCH"
@@ -244,13 +253,48 @@ def invariant_stranded(o: Observation, now_epoch_s: float) -> str | None:
     return None
 
 
-def _invariants(o: Observation, now_epoch_s: float | None = None) -> list[str]:
+def invariant_recorded_outcome(o: Observation, outcome: WindowOutcome) -> str | None:
+    """W1's recorded chain outcome must agree with the shadow classification."""
+    expected = ("COMPLETE" if outcome in {WindowOutcome.MEASURED_OK,
+                                        WindowOutcome.MEASURED_WITH_FLAGS} else outcome.value)
+    if any(word != expected for word in o.recorded_outcomes):
+        return "RECORDED_OUTCOME_DISAGREES"
+    return None
+
+
+def invariant_no_night_record(o: Observation, now_epoch_s: float) -> str | None:
+    """Known plan timing without any launch/terminal evidence has a 900 s dwell."""
+    night_records = DRIVER_MARKERS | {"result.json", "refusal.json", "chain.started",
+                                      "chain.exited", "chain.unkilled", "launch_abandoned.json"}
+    if (o.t0_epoch_s is not None and o.window_max_s is not None
+            and now_epoch_s > o.t0_epoch_s + 900 and not o.markers & night_records):
+        return "NO_NIGHT_RECORD_AFTER_T0"
+    return None
+
+
+def invariant_chain_open(o: Observation, now_epoch_s: float) -> str | None:
+    """An unclosed chain is overdue strictly after the completion epoch."""
+    if ("chain.started" in o.markers and "chain.exited" not in o.markers
+            and o.completion_epoch_s is not None and now_epoch_s > o.completion_epoch_s):
+        return "CHAIN_OPEN_PAST_COMPLETION"
+    return None
+
+
+def _invariants(o: Observation, now_epoch_s: float | None = None,
+                *, outcome: WindowOutcome | None = None) -> list[str]:
     checks = (invariant_go_started, invariant_exit_started, invariant_nonzero_fault,
               invariant_payload_exit, invariant_payload_slots, invariant_courier_delivery,
               invariant_courier_result)
     codes = [code for check in checks if (code := check(o)) is not None]
-    if now_epoch_s is not None and (code := invariant_stranded(o, now_epoch_s)):
-        codes.append(code)
+    if outcome is not None:
+        code = invariant_recorded_outcome(o, outcome)
+        if code:
+            codes.append(code)
+    if now_epoch_s is not None:
+        for check in (invariant_stranded, invariant_no_night_record, invariant_chain_open):
+            code = check(o, now_epoch_s)
+            if code:
+                codes.append(code)
     return codes
 
 
@@ -259,10 +303,8 @@ def _outcome(o: Observation, exit_contract: Mapping[int, str] | None = None) -> 
     evidence.update(markers=sorted(o.markers), verdict=o.verdict,
                     chain_exit_code=o.chain_exit_code, fault=o.fault,
                     fault_reason_count=len(o.fault_reasons), payload_status=o.payload_status)
-    invariants = _invariants(o)
-
     def report(outcome, *reasons):
-        return OutcomeReport(outcome, evidence, list(reasons), invariants)
+        return OutcomeReport(outcome, evidence, list(reasons), _invariants(o, outcome=outcome))
 
     if exit_contract is not None:
         if not isinstance(exit_contract, Mapping) or any(type(k) is not int for k in exit_contract):
@@ -287,6 +329,12 @@ def _outcome(o: Observation, exit_contract: Mapping[int, str] | None = None) -> 
         return report(WindowOutcome.REFUSED_PRE_CHAIN, "ARM_REFUSED_BEFORE_CHAIN")
     if o.verdict == "ABORTED":
         return report(WindowOutcome.ABORTED, "DRIVER_ABORTED")
+    if exit_contract is not None:
+        word = exit_contract.get(o.chain_exit_code)
+        if word == "aborted":
+            return report(WindowOutcome.ABORTED, "DECLARED_ABORT")
+        if word != "complete":
+            return report(WindowOutcome.CHAIN_FAILED, "EXIT_NOT_DECLARED_COMPLETE")
     if o.chain_exit_code is not None and o.chain_exit_code != 0:
         return report(WindowOutcome.CHAIN_FAILED, "NONZERO_CHAIN_EXIT")
     if o.verdict in {"REFUSED", "CHAIN_STOPPED"}:
@@ -295,16 +343,12 @@ def _outcome(o: Observation, exit_contract: Mapping[int, str] | None = None) -> 
         return report(WindowOutcome.UNKNOWN, "REHEARSAL_IS_NOT_MEASUREMENT")
     if o.chain_exit_code is None or "chain.exited" not in o.markers:
         return report(WindowOutcome.UNKNOWN, "CHAIN_EXIT_NOT_PROVEN")
-    if exit_contract is not None:
-        word = exit_contract.get(o.chain_exit_code)
-        if word == "aborted":
-            return report(WindowOutcome.ABORTED, "DECLARED_ABORT")
-        if word != "complete":
-            return report(WindowOutcome.CHAIN_FAILED, "EXIT_NOT_DECLARED_COMPLETE")
-    if o.payload_status is not None and o.payload_status not in PAYLOAD_STATUSES:
+    if o.payload_status is not None and o.payload_status not in MEASUREMENT_OUTCOMES:
         return report(WindowOutcome.UNKNOWN, "UNKNOWN_PAYLOAD_STATUS")
     if o.payload_status is not None and o.payload_status != "complete":
         return report(WindowOutcome.CHAIN_FAILED, "PAYLOAD_NOT_COMPLETE")
+    if o.payload_status == "complete" and o.slots_present is False:
+        return report(WindowOutcome.CHAIN_FAILED, "PAYLOAD_SLOTS_MISSING")
     if o.fault is True or o.fault_reasons or invariant_payload_slots(o):
         return report(WindowOutcome.MEASURED_WITH_FLAGS, "STRUCTURAL_FAULTS_PRESENT")
     return report(WindowOutcome.MEASURED_OK, "CHAIN_COMPLETED")
@@ -315,8 +359,8 @@ def derive_window_state(observation: Observation, now_epoch_s: float) -> StateRe
     o = observation
     if not isinstance(o, Observation) or not _number(now_epoch_s):
         raise TypeError("supply an Observation and a finite numeric epoch")
-    invariants = _invariants(o, now_epoch_s)
     outcome = _outcome(o)
+    invariants = _invariants(o, now_epoch_s, outcome=outcome.outcome)
     outcome.violated_invariants = list(invariants)
     markers = o.markers
     delivered = "courier.sent" in markers or not o.delivery_required
@@ -382,14 +426,20 @@ def observe_night_dir(custody_root, *, plists=None, payload_path=None,
     prefix = "" if _night_only else "night/"
 
     def open_directory(path):
-        # Walk from / with openat: even a swapped directory cannot redirect a
-        # later child open outside the anchored descriptor. Reject all symlinks.
-        fd = os.open(path.anchor, os.O_RDONLY | os.O_DIRECTORY)
+        # macOS /var and /tmp are legitimate symlinked ancestors. Resolve once,
+        # but never accept a symlink naming this root, including a racing swap.
+        before = os.lstat(path)
+        if not stat.S_ISDIR(before.st_mode):
+            raise ValueError("root must be a directory, not a symlink")
+        resolved = os.path.realpath(path)
+        fd = os.open(resolved, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         try:
-            for part in path.parts[1:]:
-                child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
-                os.close(fd)
-                fd = child
+            after = os.fstat(fd)
+            current = os.lstat(path)
+            if (not stat.S_ISDIR(current.st_mode)
+                    or (before.st_dev, before.st_ino) != (after.st_dev, after.st_ino)
+                    or (current.st_dev, current.st_ino) != (after.st_dev, after.st_ino)):
+                raise ValueError("root changed during resolution")
             return fd
         except BaseException:
             os.close(fd)
@@ -502,7 +552,7 @@ def observe_night_dir(custody_root, *, plists=None, payload_path=None,
     finally:
         os.close(root_fd)
 
-    verdicts, exits, faults, statuses = [], [], [], []
+    verdicts, exits, faults, statuses, recorded_outcomes = [], [], [], [], []
     fault_count = 0
     for name in ("result.json", "hazard_result.json"):
         doc = documents.get(name)
@@ -535,11 +585,14 @@ def observe_night_dir(custody_root, *, plists=None, payload_path=None,
             if reasons is not None:
                 fault_count += len(reasons)
         status = field_value(doc, "measurement_outcome", name,
-                             lambda v: v is None or isinstance(v, str) and v in PAYLOAD_STATUSES)
+                             lambda v: v is None or isinstance(v, str) and v in MEASUREMENT_OUTCOMES)
         if status is not None:
             statuses.append(status)
-        field_value(doc, "chain_outcome", name, lambda v: isinstance(v, str) and v in {
-            "COMPLETE", "CHAIN_FAILED", "REFUSED_PRE_CHAIN", "ABORTED", "UNKNOWN"})
+        recorded = field_value(doc, "chain_outcome", name,
+                               lambda v: isinstance(v, str) and v in RECORDED_OUTCOMES)
+        if recorded is not None:
+            recorded_outcomes.append(recorded)
+            evidence[name + ".chain_outcome"] = recorded
     exited = documents.get("chain.exited")
     if exited is not None:
         code = field_value(exited, "exit_code", "chain.exited", lambda v: v is None or type(v) is int, required=True)
@@ -591,6 +644,7 @@ def observe_night_dir(custody_root, *, plists=None, payload_path=None,
         chain_exit_code=exits[0] if exits else None, fault=any(faults) if faults else None,
         fault_reasons=tuple("recorded_fault" for _ in range(fault_count)),
         payload_status=statuses[0] if statuses else None, slots_present=slots_seen,
+        recorded_outcomes=tuple(recorded_outcomes),
         delivery_recorded=recorded, delivery_required=mode != "file-only",
         courier_failed=sent is False, t0_epoch_s=t0, window_max_s=span,
         completion_epoch_s=completion, plists=plist_facts,

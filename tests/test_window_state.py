@@ -265,6 +265,12 @@ class WindowStateTests(unittest.TestCase):
         (self.night / "result.json").unlink()
         self.assert_outcome(ws.WindowOutcome.UNKNOWN)
 
+    def test_hazard_only_cannot_replace_missing_result(self):
+        self.chain()
+        self.write("hazard_result.json", {"verdict": "GO", "chain": {"exit_code": 0}})
+        report = self.assert_outcome(ws.WindowOutcome.UNKNOWN)
+        self.assertEqual(report.reasons, ["MISSING_RESULT"])
+
     def test_noncomplete_payloads_and_slots(self):
         self.measured()
         for status in ("refused", "aborted", "running"):
@@ -273,7 +279,8 @@ class WindowStateTests(unittest.TestCase):
                 report = self.assert_outcome(ws.WindowOutcome.CHAIN_FAILED)
                 self.assertIn("PAYLOAD_EXIT_MISMATCH", report.violated_invariants)
         self.write("r1_result.json", {"status": "complete"})
-        self.assert_outcome(ws.WindowOutcome.MEASURED_WITH_FLAGS)
+        report = self.assert_outcome(ws.WindowOutcome.CHAIN_FAILED)
+        self.assertEqual(report.reasons, ["PAYLOAD_SLOTS_MISSING"])
         self.touch("r1_slots.json")
         self.assert_outcome(ws.WindowOutcome.MEASURED_OK)
         (self.night / "r1_result.json").unlink()
@@ -348,7 +355,7 @@ class WindowStateTests(unittest.TestCase):
             ("hazard_result.json", {"verdict": "GO", "fault": 1}),
             ("hazard_result.json", {"verdict": "GO", "fault_reasons": "bad"}),
             ("hazard_result.json", {"verdict": "GO", "faults": {"reasons": [1]}}),
-            ("hazard_result.json", {"verdict": "GO", "measurement_outcome": "absent"}),
+            ("hazard_result.json", {"verdict": "GO", "measurement_outcome": "future"}),
             ("hazard_result.json", {"verdict": "GO", "chain_outcome": "SUCCESS"}),
             ("chain.exited", {}), ("chain.exited", {"exit_code": 0.0}),
             ("r1_result.json", {}), ("r1_result.json", {"status": "COMPLETE"}),
@@ -515,7 +522,7 @@ class WindowStateTests(unittest.TestCase):
         for name in ("r1_result.json", "align-r1/r1_result.json"):
             self.write(name, {"status": "complete"})
         self.touch("align-r1/r1_slots.json")
-        self.assert_outcome(ws.WindowOutcome.MEASURED_WITH_FLAGS)
+        self.assert_outcome(ws.WindowOutcome.CHAIN_FAILED)
         self.touch("r1_slots.json")
         self.assert_outcome(ws.WindowOutcome.MEASURED_OK)
 
@@ -543,12 +550,230 @@ class WindowStateTests(unittest.TestCase):
         for key, value in (("commit", "x" * 40), ("result_sha256", "a"), ("ref", "main")):
             self.write("courier.delivery.json", dict(receipt, **{key: value}))
             self.assert_outcome(ws.WindowOutcome.UNKNOWN)
+            self.assertFalse(self.observe().delivery_recorded)
+            self.assertIn("COURIER_SENT_WITHOUT_DELIVERY", self.outcome().violated_invariants)
+            missing = dict(receipt)
+            del missing[key]
+            self.write("courier.delivery.json", missing)
+            self.assertFalse(self.observe().delivery_recorded)
+            self.assertIn("COURIER_SENT_WITHOUT_DELIVERY", self.outcome().violated_invariants)
         self.write("courier.delivery.json", {"transport": "git-push"})
         self.assert_outcome(ws.WindowOutcome.UNKNOWN)
         self.write("courier.delivery.json", {"transport": "file"})
         self.assertFalse(self.observe().delivery_recorded)
         self.write("courier.delivery.json", {"transport": "mail", "message_id": "synthetic-id"})
         self.assertTrue(self.observe().delivery_recorded)
+
+    def test_w1_known_bad_measurement_summaries(self):
+        self.chain()
+        for status in ("invalid", "absent", "unreadable"):
+            with self.subTest(status=status):
+                self.result(measurement_outcome=status, chain_outcome="CHAIN_FAILED")
+                observed = self.observe()
+                self.assertEqual(observed.payload_status, status)
+                self.assertEqual(observed.errors, ())
+                report = self.assert_outcome(ws.WindowOutcome.CHAIN_FAILED)
+                self.assertEqual(report.reasons, ["PAYLOAD_NOT_COMPLETE"])
+                self.assertIn("PAYLOAD_EXIT_MISMATCH", report.violated_invariants)
+                self.assertNotIn("RECORDED_OUTCOME_DISAGREES", report.violated_invariants)
+
+    def test_recorded_outcome_every_pairing_and_absence(self):
+        cases = [
+            ("GO", 0, {}, ws.WindowOutcome.MEASURED_OK),
+            ("GO", 0, {"fault": True}, ws.WindowOutcome.MEASURED_WITH_FLAGS),
+            ("GO", 3, {}, ws.WindowOutcome.CHAIN_FAILED),
+            ("REFUSED", None, {}, ws.WindowOutcome.REFUSED_PRE_CHAIN),
+            ("ABORTED", -15, {}, ws.WindowOutcome.ABORTED),
+            ("REHEARSAL_ONLY", 0, {}, ws.WindowOutcome.UNKNOWN),
+        ]
+        for verdict, code, extra, expected in cases:
+            with self.subTest(derived=expected), tempfile.TemporaryDirectory() as directory:
+                night = Path(directory)
+                if code is not None:
+                    (night / "chain.started").write_text("{}")
+                    (night / "chain.exited").write_text(json.dumps({"exit_code": code}))
+                value = dict(verdict=verdict, chain_exit_code=code, **extra)
+                (night / "result.json").write_text(json.dumps(value))
+                absent = ws.window_outcome(night)
+                self.assertIs(absent.outcome, expected)
+                self.assertNotIn("RECORDED_OUTCOME_DISAGREES", absent.violated_invariants)
+                for source in ("result.json", "hazard_result.json"):
+                    for word in sorted(ws.RECORDED_OUTCOMES):
+                        with self.subTest(source=source, recorded=word):
+                            record = value if source == "result.json" else {"verdict": verdict}
+                            (night / source).write_text(json.dumps(dict(record, chain_outcome=word)))
+                            observation = ws.observe_night_dir(night, _night_only=True)
+                            self.assertEqual(observation.recorded_outcomes, (word,))
+                            report = ws.window_outcome(night)
+                            self.assertIs(report.outcome, expected)
+                            matching = "COMPLETE" if expected in {
+                                ws.WindowOutcome.MEASURED_OK, ws.WindowOutcome.MEASURED_WITH_FLAGS
+                            } else expected.value
+                            for invariants in (report.violated_invariants,
+                                               ws.derive_window_state(observation, 0).violated_invariants):
+                                self.assertEqual("RECORDED_OUTCOME_DISAGREES" in invariants, word != matching)
+                    (night / "result.json").write_text(json.dumps(value))
+                    if source == "hazard_result.json":
+                        (night / source).unlink()
+        self.measured()
+        self.result(chain_outcome="COMPLETE")
+        self.write("hazard_result.json", {"verdict": "GO", "chain_outcome": "UNKNOWN"})
+        self.assertIn("RECORDED_OUTCOME_DISAGREES", self.outcome().violated_invariants)
+
+    def test_dwell_invariants_boundaries_and_all_exempting_markers(self):
+        plan = self.root / "night_plan.json"
+        plan.write_text(json.dumps({"t0_epoch_s": 100, "window_max_s": 200}))
+        silent = self.observe()
+        self.assertNotIn("NO_NIGHT_RECORD_AFTER_T0", ws.derive_window_state(silent, 1000).violated_invariants)
+        overdue = ws.derive_window_state(silent, 1001)
+        self.assertIs(overdue.state, ws.WindowState.PREPARED)
+        self.assertIn("NO_NIGHT_RECORD_AFTER_T0", overdue.violated_invariants)
+        for marker in ws.DRIVER_MARKERS | {"result.json", "refusal.json", "chain.started",
+                                          "chain.exited", "chain.unkilled", "launch_abandoned.json"}:
+            with self.subTest(marker=marker):
+                self.assertIsNone(ws.invariant_no_night_record(replace(silent, markers={marker}), 1001))
+        for field in ("t0_epoch_s", "window_max_s"):
+            self.assertIsNone(ws.invariant_no_night_record(replace(silent, **{field: None}), 1001))
+        self.write("chain.started", {})
+        opened = self.observe()
+        self.assertEqual(opened.completion_epoch_s, 600)
+        self.assertNotIn("CHAIN_OPEN_PAST_COMPLETION", ws.derive_window_state(opened, 600).violated_invariants)
+        overdue = ws.derive_window_state(opened, 601)
+        self.assertIs(overdue.state, ws.WindowState.CHAIN_OPEN)
+        self.assertIn("CHAIN_OPEN_PAST_COMPLETION", overdue.violated_invariants)
+        for update in ({"markers": set()}, {"markers": {"chain.started", "chain.exited"}},
+                       {"completion_epoch_s": None}):
+            self.assertIsNone(ws.invariant_chain_open(replace(opened, **update), 601))
+
+    def test_invariant_collection_optional_context_and_no_empty_codes(self):
+        empty = ws.Observation()
+        self.assertEqual(ws._invariants(empty), [])
+        self.assertEqual(ws._invariants(empty, 0), [])
+        self.assertEqual(ws._invariants(empty, outcome=ws.WindowOutcome.UNKNOWN), [])
+        self.assertEqual(ws._invariants(empty, 0, outcome=ws.WindowOutcome.UNKNOWN), [])
+        bad = ws.Observation(markers={"chain.started"}, verdict="GO", t0_epoch_s=0,
+                             window_max_s=1, completion_epoch_s=301, recorded_outcomes=("COMPLETE",))
+        self.assertEqual(ws._invariants(bad, 302), ["CHAIN_OPEN_PAST_COMPLETION"])
+        self.assertEqual(ws._invariants(bad, 302, outcome=ws.WindowOutcome.UNKNOWN),
+                         ["RECORDED_OUTCOME_DISAGREES", "CHAIN_OPEN_PAST_COMPLETION"])
+
+    def test_unkilled_outcome_guard_has_its_own_reason(self):
+        self.write("chain.started", {})
+        self.write("chain.unkilled", {})
+        self.result("ABORTED", -15)
+        report = self.assert_outcome(ws.WindowOutcome.UNKNOWN)
+        self.assertEqual(report.reasons, ["CHAIN_TERMINATION_NOT_PROVEN"])
+        self.write("chain.exited", {"exit_code": -15})
+        self.assert_outcome(ws.WindowOutcome.ABORTED)
+
+    def test_exit_contract_all_words_all_codes(self):
+        for code in (0, 3, -15):
+            self.chain(code)
+            self.result(code=code)
+            for word in ("complete", "refused", "failed", "stopped", "usage", "hold", "aborted"):
+                with self.subTest(code=code, word=word):
+                    expected = (ws.WindowOutcome.ABORTED if word == "aborted" else
+                                ws.WindowOutcome.MEASURED_OK if word == "complete" and code == 0 else
+                                ws.WindowOutcome.CHAIN_FAILED)
+                    self.assert_outcome(expected, exit_contract={code: word})
+
+    def test_symlinked_ancestors_and_tmp_alias_are_accepted(self):
+        self.measured()
+        self.write("r1_result.json", {"status": "complete"})
+        self.touch("r1_slots.json")
+        ancestor = self.root / "ancestor"
+        ancestor.symlink_to(self.root, target_is_directory=True)
+        self.assertIs(ws.window_outcome(ancestor / "night").outcome, ws.WindowOutcome.MEASURED_OK)
+        self.assertEqual(ws.observe_night_dir(ancestor / "night", _night_only=True).errors, ())
+        payload_dir = self.root / "payloads"
+        payload_dir.mkdir()
+        (payload_dir / "r1_result.json").write_text('{"status":"complete"}')
+        (payload_dir / "r1_slots.json").touch()
+        self.assert_outcome(ws.WindowOutcome.MEASURED_OK,
+                            payload_path=ancestor / "payloads" / "r1_result.json")
+        with tempfile.TemporaryDirectory(dir="/tmp") as directory:
+            root = Path(directory)
+            (root / "night").mkdir()
+            (root / "night" / "result.json").write_text('{"verdict":"REFUSED","chain_exit_code":null}')
+            self.assertEqual(ws.observe_night_dir(root).errors, ())
+            self.assertIs(ws.window_outcome(root / "night").outcome, ws.WindowOutcome.REFUSED_PRE_CHAIN)
+            (root / "payload").mkdir()
+            payload = root / "payload" / "r1_result.json"
+            payload.write_text('{"status":"complete"}')
+            (payload.parent / "r1_slots.json").touch()
+            self.assert_outcome(ws.WindowOutcome.MEASURED_OK, payload_path=payload)
+
+    def test_symlinked_root_night_and_marker_never_open_target(self):
+        self.measured()
+        target = self.root / "target"
+        target.mkdir()
+        (target / "result.json").write_text('{"verdict":"REFUSED","chain_exit_code":null}')
+        root_link = self.root / "root-link"
+        root_link.symlink_to(target, target_is_directory=True)
+        with patch.object(ws.os.path, "realpath", side_effect=AssertionError("resolved symlink root")):
+            self.assertEqual(ws.observe_night_dir(root_link).errors, ("DIRECTORY_UNREADABLE_OR_UNSAFE",))
+        with patch.object(ws.os.path, "realpath", wraps=os.path.realpath) as resolve:
+            self.assert_outcome(ws.WindowOutcome.UNKNOWN, payload_path=root_link / "result.json")
+            self.assertEqual(resolve.call_args_list, [unittest.mock.call(self.night.absolute())])
+        real_night = self.root / "real-night"
+        self.night.rename(real_night)
+        self.night.symlink_to(target, target_is_directory=True)
+        original = os.open
+
+        def guard(path, *args, **kwargs):
+            self.assertNotIn(str(target), str(path))
+            self.assertNotEqual(path, "result.json")
+            return original(path, *args, **kwargs)
+
+        with patch.object(ws.os, "open", side_effect=guard):
+            self.assertTrue(self.observe().errors)
+        self.night.unlink()
+        real_night.rename(self.night)
+        (self.night / "result.json").unlink()
+        (self.night / "result.json").symlink_to(target / "result.json")
+        with patch.object(ws.os, "open", side_effect=guard):
+            self.assertIn("result.json:NOT_REGULAR_FILE", self.assert_outcome(ws.WindowOutcome.UNKNOWN).reasons)
+
+    def test_root_symlink_swap_during_resolution_is_refused(self):
+        root = self.root / "racing-root"
+        root.mkdir()
+        moved = self.root / "moved-root"
+        realpath = os.path.realpath
+
+        def swap(path):
+            self.assertEqual(path, root)
+            root.rename(moved)
+            root.symlink_to(moved, target_is_directory=True)
+            return realpath(path)
+
+        with patch.object(ws.os.path, "realpath", side_effect=swap):
+            self.assertEqual(ws.observe_night_dir(root).errors, ("DIRECTORY_UNREADABLE_OR_UNSAFE",))
+
+    def test_module_under_three_tmpdir_settings(self):
+        if os.environ.get("JW_WINDOW_STATE_TMPDIR_CHILD") == "1":
+            return  # The child runs every other test, without recursively spawning itself.
+        var_parent = Path("/var/folders")
+        if sys.platform == "darwin" and var_parent.is_dir():
+            result = subprocess.run(["getconf", "DARWIN_USER_TEMP_DIR"], capture_output=True, text=True, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            candidate = Path(result.stdout.strip())
+            if str(candidate).startswith(("/var/folders/", "/private/var/folders/")):
+                var_parent = candidate
+        settings = [("default", None), ("var-folders", var_parent), ("tmp", Path("/tmp"))]
+        code = ("import tempfile,unittest; print('ACTUAL_TMPDIR=' + tempfile.gettempdir(), flush=True); "
+                "unittest.main(module=None, argv=['unittest', 'tests.test_window_state'])")
+        for label, parent in settings:
+            with self.subTest(setting=label):
+                if parent is not None and not parent.is_dir():
+                    self.skipTest(f"TMPDIR setting does not exist: {parent}")
+                env = dict(os.environ, JW_WINDOW_STATE_TMPDIR_CHILD="1")
+                if parent is not None:
+                    env["TMPDIR"] = str(parent)
+                result = subprocess.run([sys.executable, "-B", "-c", code], env=env,
+                                        capture_output=True, text=True, timeout=120)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                actual = result.stdout.splitlines()[0]
+                print(f"TMPDIR {label}: requested={parent or env.get('TMPDIR', '(unset)')}; {actual}")
 
     def test_bad_arguments(self):
         for value in (None, 42, []):

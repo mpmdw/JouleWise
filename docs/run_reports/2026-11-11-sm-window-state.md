@@ -122,3 +122,114 @@ remains with the lead before any PR. No commit was pushed.
 
 The implementation and this report are committed together with message
 `Add read-only shadow window lifecycle and outcome classifier`.
+
+## Round 2
+
+Applied cold-review findings F-1 through F-7. The review file is unchanged.
+Only `joulewise/window_state.py`, `tests/test_window_state.py` and this report
+change in this round. The existing branch is retained as the round-2 brief
+instructs. Coordination files, tool-map and timing rows are untouched.
+
+- F-1: resolve each root once with `realpath`, after refusing a symlink in
+  its last component. Open the resolved directory with `O_NOFOLLOW`; check
+  its device/inode against the original observation. Child opens remain
+  descriptor-relative and no-follow. The explicit payload parent uses the
+  same rule. Tests accept symlinked ancestors and refuse symlinked roots,
+  `night/`, payload parents and marker files. Marker targets are not opened.
+- F-2: recognize `invalid`, `absent` and `unreadable` in the W1 measurement
+  summary as `CHAIN_FAILED` / `PAYLOAD_NOT_COMPLETE`. Raw payload `status`
+  still uses its original four-word vocabulary.
+- F-3: retain recognized recorded outcomes from both result generations and
+  compare them with the derived outcome. `COMPLETE` matches either measured
+  outcome. Every recorded/derived pairing is tested for both `result.json`
+  and `hazard_result.json`, including absent and contradictory fields.
+- F-4: complete payload plus missing slots is now `CHAIN_FAILED` /
+  `PAYLOAD_SLOTS_MISSING`, superseding round 1's flagged-measurement behavior.
+- F-5: report `NO_NIGHT_RECORD_AFTER_T0` strictly after t0 + 900, and
+  `CHAIN_OPEN_PAST_COMPLETION` strictly after completion. Equality and one
+  second past are tested. Every exempting marker and missing clock is tested.
+  These warnings do not invent terminal states.
+- F-6: an unkilled abort must retain `CHAIN_TERMINATION_NOT_PROVEN` until
+  exit is observed. Missing/invalid git receipt commit, digest and ref each
+  leave `delivery_recorded` false and raise the delivery invariant.
+- F-7: accept all seven exit words without importing `exit_contract`.
+  `aborted` maps to ABORTED, including nonzero codes; only code 0 declared
+  `complete` may measure. The three-code/seven-word table is tested.
+
+The module docstring describes these changes. Re-read audit section 8, the
+lane plan and both refs' driver/watchdog/result vocabulary. No study data,
+sealed refs, network, model weights or hardware measurements were used.
+
+### Round 2 verification and limits
+
+Baseline: `python3.13 -B -m unittest tests.test_window_state`: 32 tests,
+4.448 s, OK. An intermediate 40-test run caught a test mock that rejected
+resolution of the ordinary night root while checking a symlinked payload
+parent. Narrowed the mock and reran successfully.
+
+`python3.13 -B -m unittest tests.test_window_state`: intermediate 40 tests,
+15.465 s, OK, including three whole-module subprocess runs. Every child runs
+the other tests; one environment flag prevents recursive subprocess matrices.
+The matrix reports the actual temp directory. Default used the sandbox's
+`/private/tmp/...`; `/tmp` used `/tmp`; requested `/var/folders` fell back to
+`/tmp`. `getconf DARWIN_USER_TEMP_DIR` also reports the sandbox temp path.
+No setting was skipped. Direct `TemporaryDirectory(dir="/tmp")` root and
+explicit-payload cases passed. This does **not** validate a native writable
+`/var/folders` path: the lead must run the module outside this sandbox with
+the ordinary macOS TMPDIR. On that host the matrix selects the user temp
+directory reported by `getconf` when it is under `/var/folders`.
+
+Final module run: `python3.13 -B -m unittest tests.test_window_state`:
+43 tests, 15.857 s, OK. The subprocess settings had the same actual temp paths
+as above. Added a synthetic root-to-symlink swap during resolution; it is
+refused even when it points back to the original directory inode. The root's
+last component and inode are rechecked after opening the resolved descriptor.
+
+Mutation was local and serial. No source file was overwritten by a mutant.
+The temporary standard-library AST runner compiled each variant into a fresh
+module, substituted that module into the unittest module and restored it
+between cases. Its environment flag disabled only the recursive TMPDIR matrix;
+the ordinary module run above exercised that matrix. All other module tests
+were eligible for each mutant. The final runner stops at the first failure.
+
+The exploratory pass, `python3.13 -B /private/tmp/window_state_mutation_r2.py`,
+covered all 52 `if`/conditional-expression sites in `_outcome`,
+`derive_window_state`, `_invariants` and every named invariant. Each condition
+was negated, replaced by False (disabled) and replaced by True. It killed
+154/156 mutants in 372.309 s. The two survivors were forced comparison without
+an outcome context and a disabled missing-result guard. Added exact collector
+checks and a hazard-only success record without `result.json`. These tests
+cover both gaps.
+
+Final pass: `python3.13 -B /private/tmp/window_state_mutation_final.py`.
+It repeats all sites against the final 43-test module, adds the invariant
+comprehension filter (preserving its assignment), and forces the git-push
+receipt's `recorded` assignment to True. All **160/160 mutants were killed**
+in 71.078 s: 53 conditional sites times three mutations, plus the receipt.
+**Final survivors: none.** No equivalent-mutant exclusions were used.
+The disabled `chain.unkilled` guard and the forced receipt were both killed.
+
+| Other command | Result |
+|---|---|
+| `JW_WINDOW_STATE_TMPDIR_CHILD=1 python3.13 -B -m unittest tests.test_window_state` | Intermediate 40-test run: one test-mock failure, 3.629 s; corrected as described above. |
+| `python3.13 -B -m unittest tests.test_fixture_orphan_census` | 14 tests, 0.246 s, OK; two existing live-`ps` cases skipped by the sandbox. |
+| `python3.13 -B -m unittest tests.test_gen_state` | 44 tests, 7.534 s, OK. No coordination source was edited. |
+| `python3.13 -m compileall -q joulewise tests scripts` | Exit 0, including a repeat after the final code edit. |
+| `ast.parse(..., feature_version=(3, 11))` on both Python files | Python 3.11 grammar accepted. This is not a Python 3.11 runtime test. |
+| `git diff --check` and final diff/scope review | Clean. Only the three allowed files changed. No existing module imports this reader. |
+
+One early intermediate invocation lost its completion output before the same
+command was repeated; overlap of those two short invocations is unverified.
+Subsequent tests and all mutation variants ran serially. Total test runtime
+stayed under ten minutes. No full suite ran. Malformed or conflicting observed
+records still return UNKNOWN; recognized bad summary vocabulary does not
+waive other read errors. No native MLX test is needed for this stdlib module.
+
+No blocking design questions. Remaining validation belongs to the lead:
+run `python3.13 -B -m unittest tests.test_window_state` under the ordinary
+macOS default TMPDIR outside this sandbox, confirm the matrix actually uses
+a writable `/var/folders/...` setting, and run the module under Python 3.11.
+The two existing live census cases also require a host that permits `ps`.
+No real custody or hardware campaign is needed for any new test. Cold delta
+review remains with the lead. The local commit message is
+`Fix shadow window cold-review findings F-1 through F-7`. Nothing was pushed.
