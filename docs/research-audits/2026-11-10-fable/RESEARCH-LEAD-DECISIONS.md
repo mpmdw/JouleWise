@@ -1525,6 +1525,87 @@ and stated once, where a reader will look for it.
 
 ---
 
+# Decision request 15: seat 4 phase 2, the leaf count, the 31 held rows, and closing the gate (2026-11-10 23:35 PST)
+
+**Read.** `analysis/2026-11-10-b5-rederivation` @ `73160e893`: the phase-2 report, the head of `REDERIVATION.md`,
+ledger rows 530-535 and four headline hand-check rows; `RESULTS.md` §4.1 and DLE-5 on `main`; RUN_STATE item 83.
+I opened no custody path and did not re-run the reader's script. The Opus cold review is still running.
+
+## RL-41. Phase 2 dispositions
+
+**Phase 2 met RL-38's conditions** as reported: twelve files, all inside the two paths, hashed before and after;
+member-level values left in custody; the lead's event-log audit found no path outside.
+
+### (a) 84 or 118 leaves
+
+**118 is the count for the released fill. 84 is not reconciled. No count prints in Paper 1.**
+
+- The reader counts 118 scalar leaves under the three groups DLE-5 names, two ways: from the fill (30 floor
+  diagnostics, 30 resolution diagnostics, 58 in the two claim floor-limit objects) and from the comparator's
+  own record (96 mapped plus 22 exempt).
+- DLE-5's own formula agrees with 118. It is 14 + 10C + 5R per contrast. With the reader's counts, decode
+  (C = R = 2) gives 44 and prefill (C = R = 4) gives 74.
+- 84 comes from DLE-5's Source line: the number of unmapped leaves the comparator reported at the 7 November
+  release check. `RESULTS.md` §4.1 repeats it as the number of leaves the analysis printed. That refusal record
+  is outside the unseal, so nobody here can say what it counted. One thing to check if anyone reconciles it:
+  118 − 84 = 34, the size of the prefill claim floor-limit object. That may be coincidence.
+- Nothing depends on the count. No bar, mapping, result or verdict uses it, and the final check shows every one
+  of these leaves mapped or exempt.
+
+Handling, as for the "four causes" sentence: one erratum line in `REDERIVATION.md`'s errata section, saying
+that §4.1's "84 leaves" is DLE-5's reported count of unmapped leaves on 7 November, that the released fill
+holds 118 under DLE-5's three groups, and that the difference is unexplained. One dated note is appended
+under DLE-5 in the deviation log with the same three facts. It is not a new deviation entry. Ledger row 522
+keeps `MISMATCH`. I do not ask for the 7 November record to be opened.
+
+### (b) The 31 held rows: no request to Ed
+
+RL-38 asked for an independent calculation for every uncovered value. That was stricter than item 83 ruling 3,
+which RL-3 cites, and stricter than the paper needs. What the paper needs is that no value is printed as more
+than it is. The 31 rows are four different kinds of thing:
+
+| Kind | Rows | Ruling | Ledger word |
+|---|---|---|---|
+| **Claim outcome and direction**, both contrasts (530, 531, 533, 534) | 4 | They follow from numbers the reader has already checked by hand. They clear when the reader or the Opus reviewer writes down the registered outcome rule applied to those numbers and gets the printed word. No new file is needed. | `exact` once shown |
+| **Recorded judgments**: the L2 ceiling for both contrasts (532, 535), no top-up (525), no replacement (526), bracket sensitivity clean (529), clean central-band windows 0 (528), assist quads 0 (341), arm battery amperage 0 (342) | 8 | Print as what the record says, sourced exactly from the pinned file, with the attribution in the sentence or its table note. Paper 1 already states that collection-time judgments are inputs to the recomputation and are not re-derived (§4.7). | `recorded-judgment` |
+| **Numbers one program computed**: phase durations and their ratios (236-241), monitor cost (348-350), the two edge-shift maxima (362, 367) | 11 | May print only with the label beside them: "from the independent recomputation only" for durations and edge shifts, "from the registered disclosure record; not independently recomputed" for monitor cost. Never in the abstract or conclusion, never as support for a claim word. Duration ratios print to two significant figures (RL-39). If whole-machine phase energies are printed, their edge-shift value is printed with them, labelled. | `single-source` |
+| **Scaled-allowance sensitivity** (388-395) | 8 | Not printed in Paper 1. It is not a registered analysis, and `RESULTS.md` itself calls it not ready for the paper. | `not-printed` |
+
+The methods sentence for the claim level reads, in substance: "Both contrasts reach level L2 under the
+registered gate. The gate's eligibility inputs (selection, the absence of top-ups, replacement validity,
+transport and current checks) are collection-time records; we did not re-derive them." The fill seat writes it
+under RL-4.
+
+Why not widen the unseal. Durations are differences of phase edges that the two programs already agree on
+exactly. Monitor cost is a disclosure. The edge-shift value could only be checked by writing a third
+integration of the raw meter stream, which is not a hand check. Re-deriving eligibility would mean opening the
+raw archives, which sit in directories shared with sealed blocks. None of that buys a claim the paper makes.
+The independent test of the result is Block 6. If Block 6 is not released by 5 December, I look at this again.
+
+### (c) Closing the RL-3 gate
+
+**Yes, on the Opus result.** RL-3 items 2 and 3 are met for a row when all of these hold:
+
+1. its word is `exact` or `within-rounding`, or `recorded-judgment` or `single-source` under the rules above;
+2. every row it is computed from also passes, so phase 1's "conditional" rows pass by composition and not on
+   their own;
+3. the Opus cold review confirms the hand checks and raises nothing that changes a row. If it changes rows,
+   those rows come to me and the rest stand.
+
+Bring me the Opus report; I record the closure then. After that:
+
+- the fill seat (12) may print a Block 5 number only by citing its ledger row;
+- the check of the paper's sentences against the ten licence constraints still follows the fill;
+- the site-build hold of RL-27 stays until that sentence check is done.
+
+**Reason.** A gate is useful when it sorts values by what was done to them. Holding the headline claim word
+behind a check that would need sealed directories opened, while the paper already says those judgments are
+records, would be care in the wrong place.
+
+**Blind status.** Not blind to Block 5. Blind to Block 6 and BYTES. No custody path opened.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
