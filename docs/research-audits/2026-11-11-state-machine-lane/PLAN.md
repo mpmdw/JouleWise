@@ -254,3 +254,26 @@ check refuses a re-issued tail record, a desk that finishes after record k+1 is 
 The tests-only seat `w1-finality-tests` will establish this and the late-exclusion path by execution, on the W1
 line, touching no bound file. The runbook is corrected once that result is in, so that it states the working
 repair and not a guess.
+
+**Anchor members and the pool list (RL-54 reading task). An anchor cannot appear in `pool_members`.**
+
+- The series builder gives anchors `role='anchor'` and every other member `role='D'`
+  (`scripts/align_v4_series.py:366`). The thermal desk copies `role` from the plan item
+  (`scripts/align_v4_thermal_desk.py:123`).
+- The packet's cohort check takes only thermal members with `role == 'D'` and requires
+  `set(pool) <= ids` of those (`scripts/align_v4_next_arm_packet.py:842-847`). An anchor id in the list refuses
+  with `pool members outside previous D roster`.
+- So the fact that anchors keep their kit run id across windows cannot produce a cross-window collision in the
+  pool check.
+- One thing the list check does not do: it does not require `pool_role == 'calibration'`. A sentinel, known-H or
+  test member has `role='D'` and could be listed without a refusal. This changes no count: the packet never
+  counts from `pool_members`; `eligible_benign` counts only planned members with `pool_role == 'calibration'`
+  (`:453-460`). The list is checked, never summed.
+
+- 03:36: `sm-window-state` finished. Cold review ADMIT-WITH-FIXES: its tests fail on the Air's default temp
+  path (F-1, symlinked `/var`); round 2 is briefed. `w1-finality-tests` launched.
+- 03:40: **RL-54 ruled.** The post-install watchdog check stays, inside the dwell, with a hard time limit and
+  start and end stamps on the dwell clock; the deviation row says so. The finality tests must cover three
+  orders (desk before record k+1; re-issue of the tail record; record k+1 held until the desk is final) and the
+  analysis-side reader of pool membership. The running seats were briefed before RL-54; each gets a round 2
+  for the delta.
