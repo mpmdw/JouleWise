@@ -294,6 +294,7 @@ print(count)
         self.assertNotEqual(record["producer"], record["consumer"])
         self.assertEqual(record["miss"], {"reason": "verdict_schema_mismatch"})
 
+    @unittest.skipUnless(sys.platform == "darwin", "pinned USB protocol uses CommonCrypto")
     def test_declared_signal_reaches_original_meter_shutdown_handler(self):
         """Predict: declared owned-child TERM executes no native signal; the real meter writes its signal trailer and exits 0."""
         export_chain_inputs(self.root)
@@ -549,7 +550,7 @@ class DeclaredShapeTests(unittest.TestCase):
         self.assertTrue(value["real_loop_attempt"])
 
     def test_full_volume_member_and_instrument_census(self):
-        """Predict full ALPHA/BETA/GAMMA: 125/125/107 members, >=334 s per primary at 10 Hz with 16 CPUs; continuous 50 Hz meter with no drops (RL-48 item 5)."""
+        """Predict full ALPHA/BETA/GAMMA: 125/125/107 members, >=334 s per primary at 10 Hz with 16 CPUs; continuous 50 Hz meter, registered monitor cadences and no source errors (RL-48 item 5)."""
         root = Path(os.environ["R12_REAL_CHAIN_SET"])
         values = json.loads((root / "full-volume-observations.json").read_bytes())
         for sid, expected in (("r3-alpha", 125), ("r1-beta", 125), ("r1-gamma", 107)):
@@ -567,6 +568,17 @@ class DeclaredShapeTests(unittest.TestCase):
                 self.assertEqual(meter["drops"]["dropped"], 0)
                 self.assertEqual(meter["drops"]["irregular_gaps"], 0)
                 self.assertEqual(meter["duplicates"], 0)
+            self.assertTrue(value["monitor"], sid)
+            for journal in value["monitor"].values():
+                self.assertEqual(journal["errors"], 0, sid)
+            base = "sources/night-custody/hazards/monitor/"
+            for filename, kind, cadence_key in (("clock.jsonl", "reading", "clock_s"),
+                    ("thermal.jsonl", "reading", "thermal_s"),
+                    ("battery.jsonl", "reading:smc", "battery_smc_s")):
+                series = value["monitor"][base + filename]["kinds"][kind]
+                cadence_s = value["registered_monitor_cadence"][cadence_key]
+                self.assertEqual(series["cadence_ns"], [round(cadence_s * 1e9)], sid)
+                self.assertGreaterEqual(series["span_s"], min(m["span_s"] for m in value["meter"]) - cadence_s, sid)
 
 
 if __name__ == "__main__":

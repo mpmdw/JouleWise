@@ -296,12 +296,19 @@ def volume_facts(root, session_id):
             for row in data:
                 stamp = row.get("started", {}).get("monotonic_ns")
                 if isinstance(stamp, int):
-                    by_kind.setdefault(row.get("kind", "unknown"), []).append(stamp)
-            monitor[name] = {"rows": len(data), "kinds": {kind: {
+                    kind = row.get("kind", "unknown")
+                    source = (row.get("values") or {}).get("source")
+                    key = kind + ":" + source if isinstance(source, str) else kind
+                    by_kind.setdefault(key, []).append(stamp)
+            monitor[name] = {"rows": len(data), "errors": sum(bool(row.get("error")) for row in data),
+                            "kinds": {kind: {
                 "rows": len(times), "span_s": (times[-1] - times[0]) / 1e9,
                 "cadence_ns": sorted({b - a for a, b in zip(times, times[1:])})}
                 for kind, times in by_kind.items()}}
+    config_path = archive / "sources/night-custody/hazards/monitor/config.json"
+    config = json.loads(reader.read(config_path))
     return {"session_id": session_id, "primary_plists": plist, "meter": meter, "monitor": monitor,
+            "registered_monitor_cadence": config["cadence"],
             "archive_pin_sha256": hashlib.sha256(json.dumps(reader.record, sort_keys=True).encode()).hexdigest()}
 
 
