@@ -1882,6 +1882,52 @@ of the exposure, not the exposed values.
 
 ---
 
+# Follow-up to request 17: the record branches carry per-stage timestamps (2026-11-11 00:30 PST)
+
+## RL-45. The confirmatory ruling stands; BY-BLIND-1 gains two sentences; one reason in RL-44 is restated
+
+**The probe's answer**, as the lead reports it (key paths only): the fourteen `night-results/r{1,2}-bytes-*`
+branches carry no per-member or per-request clock or duration. `stage_yield.jsonl` carries one `at` timestamp
+per stage, seven stages a session, with stage id and role. So the wall time of a held-out stage can be derived
+coarsely from public records, for every session, mixture-of-experts sessions included.
+
+**The ruling of RL-44 (a) does not change.** It rests on its first reason: the committed lines are computed
+from the fit set by an estimator and a manifest frozen before any of this, and nothing was left open to bend.
+That reason does not depend on what was exposed.
+
+**RL-44's second reason is restated.** I wrote that what was exposed is weak because Llama-70B is dense. That is
+true of what was *read*. It is not the whole picture of what was *available*: stage-level wall times were
+public for every held-out model. What keeps that from mattering is the other half of the same reason: each
+model's decode time was measured without power in the design pilot and written into the registration before
+any session ran. A stage's wall time, which includes loads, waits and cool-downs, tells a reader less than the
+registration already did.
+
+**BY-BLIND-1 gains two sentences**, after "No energy or power field was read.":
+
+> "Separately, the public operational record branches `night-results/r{1,2}-bytes-*` carry one timestamp per
+> session stage, from which the wall time of a held-out stage can be derived coarsely, for every session; they
+> carry no per-member or per-request clock. Whether anyone derived it is not known."
+
+The reporting line is unchanged. The statement "over the other six held-out models" answers the read of one
+model's per-request durations; stage timestamps apply to every model alike and there is nothing to leave out.
+
+**The paper's sentence** says three things in order: per-request timing of one held-out model was read and
+published; per-stage timestamps of every session were in the public operational record; and each model's
+approximate decode time was registered from the pilot before collection.
+
+**Until the commitment**, the list in RL-44 (b) item 4 also covers this: no seat derives stage durations from
+those branches.
+
+**Go ahead.** Merge seat 11 into the stage-1 run line once BY-BLIND-1 with these sentences, the admission line
+and the appended probe result are in. Stage 1 and the commitment run in the first desk gap after R1.
+
+**Reason.** A disclosure has to cover what could have been read, not only what is known to have been read. The
+verdict rests on what was frozen, and that has not moved.
+
+**Blind status.** Blind to every BYTES energy and held-out value. I read no record branch.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
