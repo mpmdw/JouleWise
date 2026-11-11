@@ -773,11 +773,54 @@ should control is what we present as a result.
 
 ---
 
+# Decision request 6: the RL-22 delta check (2026-11-10 20:28 PST)
+
+## RL-28. Claim contract B at `align/2026-11-10-claim-contract-opus` @ `7770d6a4f`: ADMIT
+
+**What I did.** Read the diff from `79e85ccd9` (the four fixes and the power text), and ran the five changed or
+adjacent modules with python3.13: `test_v4_claim_b_packet` 15, `test_v4_next_arm_packet` 45,
+`test_v4_seedcheck_claim_b` 9, `test_v4_claim_b_u3` 4, `test_protocol_v4_doc` 6; 79 tests, all pass. I
+recomputed the pinned projection digest myself from `cf501f75f`'s manifest and from the current one: both give
+`437ef397…56e8`, and the raw digests are `b5fedb49…1c64` and `70009b6a…8dd6` as recorded.
+
+**The four RL-22 fixes.**
+
+1. *Hold count:* closed. A zero-capture attempt is skipped before the bar is evaluated, so it neither
+   increments nor resets. Two new tests cover a refusal between two FAIL bars, on C and on T windows, and a
+   zero-capture attempt that carries a FAIL report. The protocol and the deviation row say "(zero-capture
+   attempts are skipped)".
+2. *Commit-dependent test:* closed. The test pins the projection digest and compares the current manifest
+   against it first; it opens the old commit only when the object exists. A further test proves the digest
+   check survives an absent commit and catches a changed member row or placement.
+3. *B5 text:* closed. "that pair's other seven fresh members are benign (fourteen benign and two
+   sabotage-instructed fresh members per window)".
+4. *DEVIATIONS:* closed. The `R25-U3-N` row is restored with "Superseded by `RL16-U3-N24` below", and
+   `B-ordinals` names both MATCH receipts.
+
+**The power text.** The protocol now states the joint rule's planning power as about .68, .60 and .38 and says
+it is limited by the number of contributing windows. No file calls S well powered.
+
+**Ruling.** Claim contract B is admitted as a whole. The branch may merge onto the W1 integration line, and
+the W1 STRICT re-registration follows. Round 2 and the analysis seal still gate C1 (RL-21).
+
+Two notes, neither a condition:
+
+- The fix also rewrote two records in place: the power lines of the Opus builder's report and one line of my
+  agreement report. Neither file is bound by the registration receipt. A record should keep what was said at
+  the time and add the correction beneath it; restore the two original sentences in a later docs-only change.
+- A thermal-fail ruling that names a zero-capture attempt is now ignored, where before it was refused. It
+  cannot release a hold, so it fails closed.
+
+**Reason.** Every required fix is in and tested, and nothing else in the delta touches the contract.
+
+**Blind status.** Blind: no v4 data exists. Synthetic tests only.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
 |---|---|
-| Delta check of the four RL-22 fixes to the claim-contract branch | The fix commit |
 | Review of the built R1 G0 branch before the re-arm, including the held δ_slow value and the NR-1 question (RL-23) | The branch, and leave to read `docs/process_traces/2026-11-10-r1-g0/` |
 | Second look at the Block 6 §17 draft after the Sol refuter, and at the structural answer to RL-25's 7b condition | The refuter's report, 14 Nov |
 | A ruling on continuing or restarting if two consecutive, or three, U1-U3 FAIL bars occur in the series (RL-20) | The event |
