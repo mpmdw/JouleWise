@@ -428,8 +428,9 @@ def write_observations(root, denied_root):
         if label == "r12-gamma-cross":
             gamma = next(r for r in block["sessions"].values() if r["pack"] == "GAMMA" and r["round"] == 1)
             value["pairing"] = gamma["pairing"]
-            value["cross_session_gamma"] = all(p.get("session_id") and p["session_id"] != gamma["session_id"]
-                                                for p in gamma["pairing"].values())
+            value["cross_session_gamma"] = bool(gamma["pairing"]) and all(
+                p.get("session_id") and p["session_id"] != gamma["session_id"]
+                for p in gamma["pairing"].values())
         observed[label] = value
     value = session_facts(denied_root, "r1-alpha")
     if value["archive"] not in denied_receipt["archives"]:

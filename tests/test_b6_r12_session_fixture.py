@@ -634,6 +634,30 @@ class DeskInputBoundaryTests(unittest.TestCase):
 
 
 class VerifierInventoryTests(unittest.TestCase):
+    def test_empty_gamma_pairing_never_becomes_cross_session_evidence(self):
+        """Predict: the observation join rejects empty/self pairings as cross-session evidence; only a nonempty other-session map qualifies. Receipt stubs test the join, not a chain fixture."""
+        from unittest.mock import patch
+        import b6_r12_verify as verifier
+        with tempfile.TemporaryDirectory(prefix="r12-pairing-guard-") as directory:
+            root = Path(directory)
+            denied = root / "denied"
+            denied.mkdir()
+            archive = str(root / "archive")
+            receipt = {"archives": [archive], "exit_code": 0,
+                       "option_c": {"comparator": {"pass": True}}}
+            for path in (root / "option-c-receipt.json", root / "option-c-skips-receipt.json",
+                         denied / "option-c-denied-receipt.json"):
+                path.write_text(json.dumps(receipt))
+            for pairing, expected in (({}, False),
+                    ({"ALPHA": {"session_id": "r1-gamma"}}, False),
+                    ({"ALPHA": {"session_id": "r1-alpha"}}, True)):
+                gamma = {"pack": "GAMMA", "round": 1, "session_id": "r1-gamma", "pairing": pairing}
+                (root / "option-c-numbers.json").write_text(json.dumps({"sessions": {"r1-gamma": gamma}}))
+                with patch.object(verifier, "session_facts", return_value={"archive": archive, "off_actions": []}), \
+                     patch.object(verifier, "volume_facts", return_value={}):
+                    values = verifier.write_observations(root, denied)
+                self.assertIs(values["r12-gamma-cross"]["cross_session_gamma"], expected, pairing)
+
     def test_actual_smoke_inventory_excludes_attached_calibrations(self):
         """Predict: captured f31 smoke inventory yields four executed primaries; its four calibration copies and validation captures never inflate volume."""
         from b6_r12_verify import primary_plist_names
@@ -689,7 +713,12 @@ class DeclaredShapeTests(unittest.TestCase):
 
     def test_cross_session_gamma(self):
         """Predict r12-gamma-cross: nine-session option (c) exits 0/agrees and records a GAMMA unit paired across sessions (§17-R12:673)."""
-        self.assertTrue(self.evidence("r12-gamma-cross")["cross_session_gamma"])
+        value = self.evidence("r12-gamma-cross")
+        self.assertTrue(value["cross_session_gamma"])
+        self.assertTrue(value["pairing"])
+        for pairing in value["pairing"].values():
+            self.assertTrue(pairing.get("session_id"))
+            self.assertNotEqual(pairing["session_id"], value["session_id"])
 
     def test_denied_action_ordinary_session(self):
         """Predict r12-denied-action: single-session option (c) exits 0/agrees; normal session retains network_time.off_output and arm action rc 126 (RL-49 rule 2)."""
