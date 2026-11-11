@@ -1,0 +1,399 @@
+{
+  "base": "8aac5f25ead796fb267087231946eb2f44c6484c",
+  "compile_check": "compile(path.read_bytes(), str(path), exec) on 25 changed Python sources: PASS",
+  "date": "2026-11-10",
+  "diff_check": "git diff --check 8aac5f25e: PASS",
+  "failing_first": [
+    {
+      "command": "python3.13 -B -m unittest tests.align.test_v4_claim_b_u3",
+      "detail": "Failing subcases: nonregistered beta/factor and missing/extra/renamed/population rosters",
+      "failures": 15,
+      "item": 17,
+      "tests": 4
+    },
+    {
+      "command": "python3.13 -B -m unittest tests.align.test_v4_claim_b_packet",
+      "failures": 11,
+      "items": [
+        19,
+        20,
+        21
+      ],
+      "output": "FFFFFFF.FFFF\n======================================================================\nFAIL: test_item19_c_inconclusive_enters_pool_without_ladder_or_bar_and_counts_slot (tests.align.test_v4_claim_b_packet.ClaimBPacketTests.test_item19_c_inconclusive_enters_pool_without_ladder_or_bar_and_counts_slot)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Volumes/JW-EXT/jw-wt/sol-claim-b-apply/tests/align/test_v4_claim_b_packet.py\", line 59, in test_item19_c_inconclusive_enters_pool_without_ladder_or_bar_and_counts_slot\n    packet = self.assert_thermal(s, 'pass')\n  File \"/Volumes/JW-EXT/jw-wt/sol-claim-b-apply/tests/align/test_v4_claim_b_packet.py\", line 52, in assert_thermal\n    self.assertEqual(check['status'], status, check)\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: 'fail' != 'pass'\n- fail\n+ pass\n : {'status': 'fail', 'basis': 'U1-U3 failure needs prospective recorded escalation', 'sources': ['61f84203f910efeb1f922001f14bf86a2eeae61f:w-C1/captures/bank-w-C1-1.jsonl', '61f84203f910efeb1f922001f14bf86a2eeae61f:w-C1/captures/bank-w-C1-2.jsonl', '61f84203f910efeb1f922001f14bf86a2eeae61f:w-C1/captures/bank-w-C1-3.jsonl', '61f84203f910efeb1f922001f14bf86a2eeae61f:w-C1/captures/bank-w-C1-4.jsonl', '61f84203f910efeb1f922001f14bf86a2eeae61f:w-C1/captures/bank-w-C1-5.jsonl', '61f84203f910efeb1f922001f14bf86a2eeae61f:w-C1/captures/bank-w-C1-6.jsonl', '61f84203f910efeb1f922001f14bf86a2eeae61f:w-C1/captures/bank-w-C1.jsonl', '61f84203f910efeb1f922001f14bf86a2eeae61f:w-C1/captures/spam-w-C1-1.jsonl', '61f84203f910efeb1f922001f14bf86a2eeae61f:w-C1/captures/spam-w-C1-2.jsonl', '61f84203f910efeb1f922001f14bf86a2eeae61f:w-C1/captures/spam-w-C1-3.jsonl', '61f84203f910efeb1f922001f14bf86a2eeae61f:w-C1/captures/spam-w-C1-4.jsonl', '61f84203f910efeb1f922001f14bf86a2eeae61f:w-C1/captures/spam-w-C1-5.jsonl', '61f84203f910efeb1f922001f14bf86a2eeae61f:w-C1/captures/spam-w-C1-6.jsonl', '61f84203f910efeb1f922001f14bf86a2eeae61f:w-C1/captures/spam-w-C1.jsonl', '61f84203f910efeb1f922001f14bf86a2eeae61f:w-C1/evidence/collection_plan.json', '61f84203f910efeb1f922001f14bf86a2eeae61f:w-C1/evidence/desk.json', '61f84203f910efeb1f922001f14bf86a2eeae61f:w-C1/evidence/exclusions.json', '61f84203f910efeb1f922001f14bf86a2eeae61f:w-C1/evidence/pilot.json', '61f84203f910efeb1f922001f14bf86a2eeae61f:w-C1/evidence/plan.json', '9d03e9209ad9b29f4f496009b9abdadb07d0b822:w-C1/series/next_plan.json']}\n\n======================================================================\nFAIL: test_item19_t_and_reserve_inconclusive_use_slots_without_ladder_or_bar (tests.align.test_v4_claim_b_packet.ClaimBPacketTests.test_item19_t_and_reserve_inconclusive_use_slots_without_ladder_or_bar)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Volumes/JW-EXT/jw-wt/sol-claim-b-apply/tests/align/test_v4_claim_b_packet.py\", line 69, in test_item19_t_and_reserve_inconclusive_use_slots_without_ladder_or_bar\n    packet = self.assert_thermal(s, 'pass')\n  File \"/Volumes/JW-EXT/jw-wt/sol-claim-b-apply/tests/align/test_v4_claim_b_packet.py\", line 52, in assert_thermal\n    self.assertEqual(check['status'], status, check)\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: 'fail' != 'pass'\n- fail\n+ pass\n : {'status': 'fail', 'basis': 'U1-U3 failure needs prospective recorded escalation', 'sources': ['019888e8173d5d41e4677b08b0aebad7ef33eb89:w-T4/captures/bank-w-T4-1.jsonl', '019888e8173d5d41e4677b08b0aebad7ef33eb89:w-T4/captures/bank-w-T4-2.jsonl', '019888e8173d5d41e4677b08b0aebad7ef33eb89:w-T4/captures/bank-w-T4-3.jsonl', '019888e8173d5d41e4677b08b0aebad7ef33eb89:w-T4/captures/bank-w-T4-4.jsonl', '019888e8173d5d41e4677b08b0aebad7ef33eb89:w-T4/captures/bank-w-T4-5.jsonl', '019888e8173d5d41e4677b08b0aebad7ef33eb89:w-T4/captures/bank-w-T4-6.jsonl', '019888e8173d5d41e4677b08b0aebad7ef33eb89:w-T4/captures/bank-w-T4.jsonl', '019888e8173d5d41e4677b08b0aebad7ef33eb89:w-T4/captures/spam-w-T4-1.jsonl', '019888e8173d5d41e4677b08b0aebad7ef33eb89:w-T4/captures/spam-w-T4-2.jsonl', '019888e8173d5d41e4677b08b0aebad7ef33eb89:w-T4/captures/spam-w-T4-3.jsonl', '019888e8173d5d41e4677b08b0aebad7ef33eb89:w-T4/captures/spam-w-T4-4.jsonl', '019888e8173d5d41e4677b08b0aebad7ef33eb89:w-T4/captures/spam-w-T4-5.jsonl', '019888e8173d5d41e4677b08b0aebad7ef33eb89:w-T4/captures/spam-w-T4-6.jsonl', '019888e8173d5d41e4677b08b0aebad7ef33eb89:w-T4/captures/spam-w-T4.jsonl', '019888e8173d5d41e4677b08b0aebad7ef33eb89:w-T4/evidence/collection_plan.json', '019888e8173d5d41e4677b08b0aebad7ef33eb89:w-T4/evidence/desk.json', '019888e8173d5d41e4677b08b0aebad7ef33eb89:w-T4/evidence/exclusions.json', '019888e8173d5d41e4677b08b0aebad7ef33eb89:w-T4/evidence/pilot.json', '019888e8173d5d41e4677b08b0aebad7ef33eb89:w-T4/evidence/plan.json', '7f7b90bd47adfa6e37471c448f1008ecb82c2ce5:w-T4/series/next_plan.json']}\n\n======================================================================\nFAIL: test_item20_c_fail_accepts_unchanged_plan_and_records_bar (tests.align.test_v4_claim_b_packet.ClaimBPacketTests.test_item20_c_fail_accepts_unchanged_plan_and_records_bar)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Volumes/JW-EXT/jw-wt/sol-claim-b-apply/tests/align/test_v4_claim_b_packet.py\", line 75, in test_item20_c_fail_accepts_unchanged_plan_and_records_bar\n    packet = self.assert_thermal(s, 'pass')\n  File \"/Volumes/JW-EXT/jw-wt/sol-claim-b-apply/tests/align/test_v4_claim_b_packet.py\", line 52, in assert_thermal\n    self.assertEqual(check['status'], status, check)\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: 'fail' != 'pass'\n- fail\n+ pass\n : {'status': 'fail', 'basis': 'U1-U3 failure needs prospective recorded escalation', 'sources': ['a1bfc764e26caeca51e230b44e8fcc7fb0029f72:w-C1/series/next_plan.json', 'bb8b59bebcef8f07a95e6d6dcfd4a18dc801c722:w-C1/captures/bank-w-C1-1.jsonl', 'bb8b59bebcef8f07a95e6d6dcfd4a18dc801c722:w-C1/captures/bank-w-C1-2.jsonl', 'bb8b59bebcef8f07a95e6d6dcfd4a18dc801c722:w-C1/captures/bank-w-C1-3.jsonl', 'bb8b59bebcef8f07a95e6d6dcfd4a18dc801c722:w-C1/captures/bank-w-C1-4.jsonl', 'bb8b59bebcef8f07a95e6d6dcfd4a18dc801c722:w-C1/captures/bank-w-C1-5.jsonl', 'bb8b59bebcef8f07a95e6d6dcfd4a18dc801c722:w-C1/captures/bank-w-C1-6.jsonl', 'bb8b59bebcef8f07a95e6d6dcfd4a18dc801c722:w-C1/captures/bank-w-C1.jsonl', 'bb8b59bebcef8f07a95e6d6dcfd4a18dc801c722:w-C1/captures/spam-w-C1-1.jsonl', 'bb8b59bebcef8f07a95e6d6dcfd4a18dc801c722:w-C1/captures/spam-w-C1-2.jsonl', 'bb8b59bebcef8f07a95e6d6dcfd4a18dc801c722:w-C1/captures/spam-w-C1-3.jsonl', 'bb8b59bebcef8f07a95e6d6dcfd4a18dc801c722:w-C1/captures/spam-w-C1-4.jsonl', 'bb8b59bebcef8f07a95e6d6dcfd4a18dc801c722:w-C1/captures/spam-w-C1-5.jsonl', 'bb8b59bebcef8f07a95e6d6dcfd4a18dc801c722:w-C1/captures/spam-w-C1-6.jsonl', 'bb8b59bebcef8f07a95e6d6dcfd4a18dc801c722:w-C1/captures/spam-w-C1.jsonl', 'bb8b59bebcef8f07a95e6d6dcfd4a18dc801c722:w-C1/evidence/collection_plan.json', 'bb8b59bebcef8f07a95e6d6dcfd4a18dc801c722:w-C1/evidence/desk.json', 'bb8b59bebcef8f07a95e6d6dcfd4a18dc801c722:w-C1/evidence/exclusions.json', 'bb8b59bebcef8f07a95e6d6dcfd4a18dc801c722:w-C1/evidence/pilot.json', 'bb8b59bebcef8f07a95e6d6dcfd4a18dc801c722:w-C1/evidence/plan.json']}\n\n======================================================================\nFAIL: test_item20_c_fail_refuses_ladder_even_when_escalation_recorded (tests.align.test_v4_claim_b_packet.ClaimBPacketTests.test_item20_c_fail_refuses_ladder_even_when_escalation_recorded)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Volumes/JW-EXT/jw-wt/sol-claim-b-apply/tests/align/test_v4_claim_b_packet.py\", line 81, in test_item20_c_fail_refuses_ladder_even_when_escalation_recorded\n    self.assert_thermal(s, 'fail', 'series_thermal_policy_changed')\n    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Volumes/JW-EXT/jw-wt/sol-claim-b-apply/tests/align/test_v4_claim_b_packet.py\", line 52, in assert_thermal\n    self.assertEqual(check['status'], status, check)\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: 'pass' != 'fail'\n- pass\n+ fail\n : {'status': 'pass', 'basis': 'U1-U3 consequence recorded before next plan; registered ladder applied', 'failed': ['tiny/C1'], 'sources': ['51a77fd8d86c2435bd01a8b2ef22b17bcdbafe28:w-C1/captures/bank-w-C1-1.jsonl', '51a77fd8d86c2435bd01a8b2ef22b17bcdbafe28:w-C1/captures/bank-w-C1-2.jsonl', '51a77fd8d86c2435bd01a8b2ef22b17bcdbafe28:w-C1/captures/bank-w-C1-3.jsonl', '51a77fd8d86c2435bd01a8b2ef22b17bcdbafe28:w-C1/captures/bank-w-C1-4.jsonl', '51a77fd8d86c2435bd01a8b2ef22b17bcdbafe28:w-C1/captures/bank-w-C1-5.jsonl', '51a77fd8d86c2435bd01a8b2ef22b17bcdbafe28:w-C1/captures/bank-w-C1-6.jsonl', '51a77fd8d86c2435bd01a8b2ef22b17bcdbafe28:w-C1/captures/bank-w-C1.jsonl', '51a77fd8d86c2435bd01a8b2ef22b17bcdbafe28:w-C1/captures/spam-w-C1-1.jsonl', '51a77fd8d86c2435bd01a8b2ef22b17bcdbafe28:w-C1/captures/spam-w-C1-2.jsonl', '51a77fd8d86c2435bd01a8b2ef22b17bcdbafe28:w-C1/captures/spam-w-C1-3.jsonl', '51a77fd8d86c2435bd01a8b2ef22b17bcdbafe28:w-C1/captures/spam-w-C1-4.jsonl', '51a77fd8d86c2435bd01a8b2ef22b17bcdbafe28:w-C1/captures/spam-w-C1-5.jsonl', '51a77fd8d86c2435bd01a8b2ef22b17bcdbafe28:w-C1/captures/spam-w-C1-6.jsonl', '51a77fd8d86c2435bd01a8b2ef22b17bcdbafe28:w-C1/captures/spam-w-C1.jsonl', '51a77fd8d86c2435bd01a8b2ef22b17bcdbafe28:w-C1/evidence/collection_plan.json', '51a77fd8d86c2435bd01a8b2ef22b17bcdbafe28:w-C1/evidence/desk.json', '51a77fd8d86c2435bd01a8b2ef22b17bcdbafe28:w-C1/evidence/exclusions.json', '51a77fd8d86c2435bd01a8b2ef22b17bcdbafe28:w-C1/evidence/pilot.json', '51a77fd8d86c2435bd01a8b2ef22b17bcdbafe28:w-C1/evidence/plan.json', 'ec6d62256b0075b83cd13cbd61103dbcf62ceec6:w-C1/series/next_plan.json']}\n\n======================================================================\nFAIL: test_item20_c_pass_and_inconclusive_also_refuse_policy_changes (tests.align.test_v4_claim_b_packet.ClaimBPacketTests.test_item20_c_pass_and_inconclusive_also_refuse_policy_changes)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Volumes/JW-EXT/jw-wt/sol-claim-b-apply/tests/align/test_v4_claim_b_packet.py\", line 86, in test_item20_c_pass_and_inconclusive_also_refuse_policy_changes\n    self.assert_thermal(s, 'fail', 'series_thermal_policy_changed')\n    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Volumes/JW-EXT/jw-wt/sol-claim-b-apply/tests/align/test_v4_claim_b_packet.py\", line 52, in assert_thermal\n    self.assertEqual(check['status'], status, check)\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: 'pass' != 'fail'\n- pass\n+ fail\n : {'status': 'pass', 'basis': 'U1-U3 pass; no escalation required', 'sources': ['6dad394f2b2950a0e2c2b54f9c823da4e6f2e18a:w-C1/captures/bank-w-C1-1.jsonl', '6dad394f2b2950a0e2c2b54f9c823da4e6f2e18a:w-C1/captures/bank-w-C1-2.jsonl', '6dad394f2b2950a0e2c2b54f9c823da4e6f2e18a:w-C1/captures/bank-w-C1-3.jsonl', '6dad394f2b2950a0e2c2b54f9c823da4e6f2e18a:w-C1/captures/bank-w-C1-4.jsonl', '6dad394f2b2950a0e2c2b54f9c823da4e6f2e18a:w-C1/captures/bank-w-C1-5.jsonl', '6dad394f2b2950a0e2c2b54f9c823da4e6f2e18a:w-C1/captures/bank-w-C1-6.jsonl', '6dad394f2b2950a0e2c2b54f9c823da4e6f2e18a:w-C1/captures/bank-w-C1.jsonl', '6dad394f2b2950a0e2c2b54f9c823da4e6f2e18a:w-C1/captures/spam-w-C1-1.jsonl', '6dad394f2b2950a0e2c2b54f9c823da4e6f2e18a:w-C1/captures/spam-w-C1-2.jsonl', '6dad394f2b2950a0e2c2b54f9c823da4e6f2e18a:w-C1/captures/spam-w-C1-3.jsonl', '6dad394f2b2950a0e2c2b54f9c823da4e6f2e18a:w-C1/captures/spam-w-C1-4.jsonl', '6dad394f2b2950a0e2c2b54f9c823da4e6f2e18a:w-C1/captures/spam-w-C1-5.jsonl', '6dad394f2b2950a0e2c2b54f9c823da4e6f2e18a:w-C1/captures/spam-w-C1-6.jsonl', '6dad394f2b2950a0e2c2b54f9c823da4e6f2e18a:w-C1/captures/spam-w-C1.jsonl', '6dad394f2b2950a0e2c2b54f9c823da4e6f2e18a:w-C1/evidence/collection_plan.json', '6dad394f2b2950a0e2c2b54f9c823da4e6f2e18a:w-C1/evidence/desk.json', '6dad394f2b2950a0e2c2b54f9c823da4e6f2e18a:w-C1/evidence/exclusions.json', '6dad394f2b2950a0e2c2b54f9c823da4e6f2e18a:w-C1/evidence/pilot.json', '6dad394f2b2950a0e2c2b54f9c823da4e6f2e18a:w-C1/evidence/plan.json']}\n\n======================================================================\nFAIL: test_item20_t_fail_and_reserve_accept_unchanged_plan_but_refuse_ladder (tests.align.test_v4_claim_b_packet.ClaimBPacketTests.test_item20_t_fail_and_reserve_accept_unchanged_plan_but_refuse_ladder)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Volumes/JW-EXT/jw-wt/sol-claim-b-apply/tests/align/test_v4_claim_b_packet.py\", line 95, in test_item20_t_fail_and_reserve_accept_unchanged_plan_but_refuse_ladder\n    self.assert_thermal(s, 'fail', 'series_thermal_policy_changed')\n    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Volumes/JW-EXT/jw-wt/sol-claim-b-apply/tests/align/test_v4_claim_b_packet.py\", line 52, in assert_thermal\n    self.assertEqual(check['status'], status, check)\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: 'pass' != 'fail'\n- pass\n+ fail\n : {'status': 'pass', 'basis': 'U1-U3 pass; no escalation required', 'sources': ['151bd9a9844b9eb4e15398e9efec80d0b925ce7e:w-T3/captures/bank-w-T3-1.jsonl', '151bd9a9844b9eb4e15398e9efec80d0b925ce7e:w-T3/captures/bank-w-T3-2.jsonl', '151bd9a9844b9eb4e15398e9efec80d0b925ce7e:w-T3/captures/bank-w-T3-3.jsonl', '151bd9a9844b9eb4e15398e9efec80d0b925ce7e:w-T3/captures/bank-w-T3-4.jsonl', '151bd9a9844b9eb4e15398e9efec80d0b925ce7e:w-T3/captures/bank-w-T3-5.jsonl', '151bd9a9844b9eb4e15398e9efec80d0b925ce7e:w-T3/captures/bank-w-T3-6.jsonl', '151bd9a9844b9eb4e15398e9efec80d0b925ce7e:w-T3/captures/bank-w-T3.jsonl', '151bd9a9844b9eb4e15398e9efec80d0b925ce7e:w-T3/captures/spam-w-T3-1.jsonl', '151bd9a9844b9eb4e15398e9efec80d0b925ce7e:w-T3/captures/spam-w-T3-2.jsonl', '151bd9a9844b9eb4e15398e9efec80d0b925ce7e:w-T3/captures/spam-w-T3-3.jsonl', '151bd9a9844b9eb4e15398e9efec80d0b925ce7e:w-T3/captures/spam-w-T3-4.jsonl', '151bd9a9844b9eb4e15398e9efec80d0b925ce7e:w-T3/captures/spam-w-T3-5.jsonl', '151bd9a9844b9eb4e15398e9efec80d0b925ce7e:w-T3/captures/spam-w-T3-6.jsonl', '151bd9a9844b9eb4e15398e9efec80d0b925ce7e:w-T3/captures/spam-w-T3.jsonl', '151bd9a9844b9eb4e15398e9efec80d0b925ce7e:w-T3/evidence/collection_plan.json', '151bd9a9844b9eb4e15398e9efec80d0b925ce7e:w-T3/evidence/desk.json', '151bd9a9844b9eb4e15398e9efec80d0b925ce7e:w-T3/evidence/exclusions.json', '151bd9a9844b9eb4e15398e9efec80d0b925ce7e:w-T3/evidence/pilot.json', '151bd9a9844b9eb4e15398e9efec80d0b925ce7e:w-T3/evidence/plan.json']}\n\n======================================================================\nFAIL: test_item21_a_later_pass_does_not_erase_an_unruled_hold (tests.align.test_v4_claim_b_packet.ClaimBPacketTests.test_item21_a_later_pass_does_not_erase_an_unruled_hold)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Volumes/JW-EXT/jw-wt/sol-claim-b-apply/tests/align/test_v4_claim_b_packet.py\", line 139, in test_item21_a_later_pass_does_not_erase_an_unruled_hold\n    self.assert_thermal(s, 'fail', RESET)\n    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^\n  File \"/Volumes/JW-EXT/jw-wt/sol-claim-b-apply/tests/align/test_v4_claim_b_packet.py\", line 52, in assert_thermal\n    self.assertEqual(check['status'], status, check)\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: 'pass' != 'fail'\n- pass\n+ fail\n : {'status': 'pass', 'basis': 'U1-U3 pass; no escalation required', 'sources': ['5b812cca08c49da4b2d7ae2eebd6d68dd5f02a9d:w-C3/captures/bank-w-C3-1.jsonl', '5b812cca08c49da4b2d7ae2eebd6d68dd5f02a9d:w-C3/captures/bank-w-C3-2.jsonl', '5b812cca08c49da4b2d7ae2eebd6d68dd5f02a9d:w-C3/captures/bank-w-C3-3.jsonl', '5b812cca08c49da4b2d7ae2eebd6d68dd5f02a9d:w-C3/captures/bank-w-C3-4.jsonl', '5b812cca08c49da4b2d7ae2eebd6d68dd5f02a9d:w-C3/captures/bank-w-C3-5.jsonl', '5b812cca08c49da4b2d7ae2eebd6d68dd5f02a9d:w-C3/captures/bank-w-C3-6.jsonl', '5b812cca08c49da4b2d7ae2eebd6d68dd5f02a9d:w-C3/captures/bank-w-C3.jsonl', '5b812cca08c49da4b2d7ae2eebd6d68dd5f02a9d:w-C3/captures/spam-w-C3-1.jsonl', '5b812cca08c49da4b2d7ae2eebd6d68dd5f02a9d:w-C3/captures/spam-w-C3-2.jsonl', '5b812cca08c49da4b2d7ae2eebd6d68dd5f02a9d:w-C3/captures/spam-w-C3-3.jsonl', '5b812cca08c49da4b2d7ae2eebd6d68dd5f02a9d:w-C3/captures/spam-w-C3-4.jsonl', '5b812cca08c49da4b2d7ae2eebd6d68dd5f02a9d:w-C3/captures/spam-w-C3-5.jsonl', '5b812cca08c49da4b2d7ae2eebd6d68dd5f02a9d:w-C3/captures/spam-w-C3-6.jsonl', '5b812cca08c49da4b2d7ae2eebd6d68dd5f02a9d:w-C3/captures/spam-w-C3.jsonl', '5b812cca08c49da4b2d7ae2eebd6d68dd5f02a9d:w-C3/evidence/collection_plan.json', '5b812cca08c49da4b2d7ae2eebd6d68dd5f02a9d:w-C3/evidence/desk.json', '5b812cca08c49da4b2d7ae2eebd6d68dd5f02a9d:w-C3/evidence/exclusions.json', '5b812cca08c49da4b2d7ae2eebd6d68dd5f02a9d:w-C3/evidence/pilot.json', '5b812cca08c49da4b2d7ae2eebd6d68dd5f02a9d:w-C3/evidence/plan.json']}\n\n======================================================================\nFAIL: test_item21_third_nonconsecutive_bar_counts_c_and_t_attempts_together (tests.align.test_v4_claim_b_packet.ClaimBPacketTests.test_item21_third_nonconsecutive_bar_counts_c_and_t_attempts_together)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Volumes/JW-EXT/jw-wt/sol-claim-b-apply/tests/align/test_v4_claim_b_packet.py\", line 127, in test_item21_third_nonconsecutive_bar_counts_c_and_t_attempts_together\n    self.assert_thermal(s, 'fail', RESET)\n    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^\n  File \"/Volumes/JW-EXT/jw-wt/sol-claim-b-apply/tests/align/test_v4_claim_b_packet.py\", line 54, in assert_thermal\n    self.assertIn(reason, check['basis'])\n    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: 'u1_u3_fail_escalation' not found in 'U1-U3 failure needs prospective recorded escalation'\n\n======================================================================\nFAIL: test_item21_third_nonconsecutive_c_fail_bar_holds_until_ruling (tests.align.test_v4_claim_b_packet.ClaimBPacketTests.test_item21_third_nonconsecutive_c_fail_bar_holds_until_ruling)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Volumes/JW-EXT/jw-wt/sol-claim-b-apply/tests/align/test_v4_claim_b_packet.py\", line 109, in test_item21_third_nonconsecutive_c_fail_bar_holds_until_ruling\n    self.assert_thermal(s, 'fail', RESET)\n    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^\n  File \"/Volumes/JW-EXT/jw-wt/sol-claim-b-apply/tests/align/test_v4_claim_b_packet.py\", line 54, in assert_thermal\n    self.assertIn(reason, check['basis'])\n    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: 'u1_u3_fail_escalation' not found in 'U1-U3 failure needs prospective recorded escalation'\n\n======================================================================\nFAIL: test_item21_two_consecutive_c_fail_bars_hold_until_signed_ruling (tests.align.test_v4_claim_b_packet.ClaimBPacketTests.test_item21_two_consecutive_c_fail_bars_hold_until_signed_ruling)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Volumes/JW-EXT/jw-wt/sol-claim-b-apply/tests/align/test_v4_claim_b_packet.py\", line 99, in test_item21_two_consecutive_c_fail_bars_hold_until_signed_ruling\n    self.assert_thermal(s, 'fail', RESET)\n    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^\n  File \"/Volumes/JW-EXT/jw-wt/sol-claim-b-apply/tests/align/test_v4_claim_b_packet.py\", line 54, in assert_thermal\n    self.assertIn(reason, check['basis'])\n    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: 'u1_u3_fail_escalation' not found in 'U1-U3 failure needs prospective recorded escalation'\n\n======================================================================\nFAIL: test_item21_two_consecutive_t_and_reserve_fail_bars_hold_until_ruling (tests.align.test_v4_claim_b_packet.ClaimBPacketTests.test_item21_two_consecutive_t_and_reserve_fail_bars_hold_until_ruling)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Volumes/JW-EXT/jw-wt/sol-claim-b-apply/tests/align/test_v4_claim_b_packet.py\", line 117, in test_item21_two_consecutive_t_and_reserve_fail_bars_hold_until_ruling\n    self.assert_thermal(s, 'fail', RESET)\n    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^\n  File \"/Volumes/JW-EXT/jw-wt/sol-claim-b-apply/tests/align/test_v4_claim_b_packet.py\", line 54, in assert_thermal\n    self.assertIn(reason, check['basis'])\n    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: 'u1_u3_fail_escalation' not found in 'U1-U3 failure needs prospective recorded escalation'\n\n----------------------------------------------------------------------\nRan 12 tests in 69.350s\n\nFAILED (failures=11)\n",
+      "tests": 12
+    },
+    {
+      "baseline": "71c4341e8:scripts/align_v4_next_arm_packet.py",
+      "case": "third nonconsecutive bar at T4",
+      "failures": 1,
+      "item": 21,
+      "method": "isolated in-memory baseline module replaces the fixture builder; no checkout or source mutation",
+      "output": "F\n======================================================================\nFAIL: test_item21_third_nonconsecutive_bar_in_test_reserve_requires_ruling (tests.align.test_v4_claim_b_packet.ClaimBPacketTests.test_item21_third_nonconsecutive_bar_in_test_reserve_requires_ruling)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Volumes/JW-EXT/jw-wt/sol-claim-b-apply/tests/align/test_v4_claim_b_packet.py\", line 143, in test_item21_third_nonconsecutive_bar_in_test_reserve_requires_ruling\n    self.assert_thermal(s, 'fail', RESET)\n    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^\n  File \"/Volumes/JW-EXT/jw-wt/sol-claim-b-apply/tests/align/test_v4_claim_b_packet.py\", line 55, in assert_thermal\n    self.assertIn(reason, check['basis'])\n    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: 'u1_u3_fail_escalation' not found in 'U1-U3 failure needs prospective recorded escalation'\n\n----------------------------------------------------------------------\nRan 1 test in 10.654s\n\nFAILED (failures=1)\n",
+      "tests": 1
+    }
+  ],
+  "final_distinct_modules": 23,
+  "final_distinct_tests": 402,
+  "implementation_commit": "b731cad38f64b76bbedc68b814083c530863a833",
+  "manifest_sha256": "70009b6a594835643ef0bb2ff324ed700447cbe7a6237975ebdb209ec2c78dd6",
+  "passing_runs": [
+    {
+      "command": [
+        "python3.13",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.align.test_v4_next_arm_packet"
+      ],
+      "exit_code": 0,
+      "output_sha256": "ba92504a8069b9257c0d6183e1dba0d79371b7e9cc4e023507f0014b22d3bf26",
+      "seconds": 131.929,
+      "tests": 45
+    },
+    {
+      "command": [
+        "python3.13",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.align.test_v4_claim_b_packet"
+      ],
+      "exit_code": 0,
+      "output_sha256": "0beac95babc56a64e42d10ba47334c5f8e9d7fb995e79e6693da3a3a7298bc78",
+      "seconds": 114.215,
+      "tests": 12
+    },
+    {
+      "command": [
+        "python3.13",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.align.test_v4_cadence"
+      ],
+      "exit_code": 0,
+      "output_sha256": "a4f5e42fbf41e63b589fc685cb0642b4251730cca8e15fb5914c4ed5839d4191",
+      "seconds": 0.367,
+      "tests": 30
+    },
+    {
+      "command": [
+        "python3.13",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.align.test_v4_test_reserves"
+      ],
+      "exit_code": 0,
+      "output_sha256": "553721a74edec8967a7f9d471e556d857b54fe09348d4184d80d793d2d3da1fd",
+      "seconds": 13.373,
+      "tests": 2
+    },
+    {
+      "command": [
+        "python3.13",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.align.test_v4_next_arm_packet_opus_witnesses"
+      ],
+      "exit_code": 0,
+      "output_sha256": "03c8448b908bae0a6f2bfdf8677443efffce81c246d195a8f342e70f3385451c",
+      "seconds": 8.097,
+      "tests": 5
+    },
+    {
+      "command": [
+        "python3.13",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.align.test_v4_series"
+      ],
+      "exit_code": 0,
+      "output_sha256": "63df2d201bb881a46a4caa0eb56b6c6b0451fff62e5c533b912697c0cd6db125",
+      "seconds": 39.325,
+      "tests": 16
+    },
+    {
+      "command": [
+        "python3.13",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.align.test_v4_replacement_windows"
+      ],
+      "exit_code": 0,
+      "output_sha256": "62faba622c7d9921894bef68e752728394cbcbc5fa2a53f283c8aa4cfb10fe60",
+      "seconds": 10.027,
+      "tests": 20
+    },
+    {
+      "command": [
+        "python3.13",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.align.test_v4_series_r20"
+      ],
+      "exit_code": 0,
+      "output_sha256": "074db9efe0c26ea97f8761cc250936d3842d70f2e26c31f7d090c764fac8e54e",
+      "seconds": 1.632,
+      "tests": 10
+    },
+    {
+      "command": [
+        "python3.13",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.align.test_v4_series_delta5"
+      ],
+      "exit_code": 0,
+      "output_sha256": "c9738b12ee3d64b9f345c2ff5300ec3ed3bf0e53098dff6e8e832f5c6b470d57",
+      "seconds": 2.733,
+      "tests": 3
+    },
+    {
+      "command": [
+        "python3.13",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.align.test_r11_delta5_sol1"
+      ],
+      "exit_code": 0,
+      "output_sha256": "4534f07f617e750239df098ed271bc3e87f602986fae0f8d2684bb87d110db0c",
+      "seconds": 18.808,
+      "tests": 8
+    },
+    {
+      "command": [
+        "python3.13",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.align.test_r11_delta5_sol2"
+      ],
+      "exit_code": 0,
+      "output_sha256": "f7778c8f0e8af69b6ebb395e9d5364082cd5e27ef4c98bb91ff474e9756cdcf4",
+      "seconds": 18.446,
+      "tests": 13
+    },
+    {
+      "command": [
+        "python3.13",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.align.test_r11_delta6_sol1"
+      ],
+      "exit_code": 0,
+      "output_sha256": "7a50aad99e209416f5e0380f452ad8a953086d37b315cb8d2b1deacaa3fc697c",
+      "seconds": 9.22,
+      "tests": 11
+    },
+    {
+      "command": [
+        "python3.13",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.align.test_r11_delta6_sol2"
+      ],
+      "exit_code": 0,
+      "output_sha256": "1c0ce3edd9fe9278652bc4b7d2334e430e50fd03570b15d16cca47db19b14058",
+      "seconds": 7.113,
+      "tests": 11
+    },
+    {
+      "command": [
+        "python3.13",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.align.test_w1bm_sol1"
+      ],
+      "exit_code": 0,
+      "output_sha256": "148db7e3d0bf79ad0eb4cac8455972453dbba60c8b30ec9a9e2da0482f45985b",
+      "seconds": 6.836,
+      "tests": 12
+    },
+    {
+      "command": [
+        "python3.13",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.align.test_w1bm_sol2"
+      ],
+      "exit_code": 0,
+      "output_sha256": "38d3f0799b1cd9d906323b6dae8291459424ffd09ebe3113b7aaba7889ed8223",
+      "seconds": 9.263,
+      "tests": 12
+    },
+    {
+      "command": [
+        "python3.13",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.align.test_v4_registration"
+      ],
+      "exit_code": 0,
+      "output_sha256": "5d8764b75d1a6c906777a63489142fc78841164f45f3dea9fffb325d7c617aab",
+      "seconds": 19.001,
+      "tests": 22
+    },
+    {
+      "command": [
+        "python3.13",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.align.test_v4_receipt_tiers"
+      ],
+      "exit_code": 0,
+      "output_sha256": "a1961a0391cc2f79d21194c0845f9c11d78b601e28550a4b24ab76589b3f90d4",
+      "seconds": 4.07,
+      "tests": 8
+    },
+    {
+      "command": [
+        "python3.13",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.align.test_protocol_v4_doc"
+      ],
+      "exit_code": 0,
+      "output_sha256": "280f2a7be691f25873f3336bd49eaac4476d50c4055fb6d843cb3aec0fe4a233",
+      "seconds": 0.333,
+      "tests": 6
+    },
+    {
+      "command": [
+        "python3.13",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.align.test_v4_kit"
+      ],
+      "exit_code": 0,
+      "output_sha256": "be11eb545839eb0f6f70611d63229ef40f21aabe1da033c11c2af672775a38d5",
+      "seconds": 6.734,
+      "tests": 116
+    },
+    {
+      "command": [
+        "python3.13",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.align.test_v4_seedcheck_claim_b"
+      ],
+      "exit_code": 0,
+      "output_sha256": "0b4c34dc53850196635fe43e9fa71939f5ee8ae82de8a2cd19ce57ac339795e5",
+      "seconds": 1.496,
+      "tests": 8
+    },
+    {
+      "command": [
+        "python3.13",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.align.test_v4_claim_b_u3"
+      ],
+      "exit_code": 0,
+      "output_sha256": "56e03afda220e7ba78bbcecf9a2e53a0149cfc3e311fa10bbd01b25e8e5ba671",
+      "seconds": 0.078,
+      "tests": 4
+    },
+    {
+      "command": [
+        "python3.13",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.align.test_v4_w1_blockers"
+      ],
+      "exit_code": 0,
+      "output_sha256": "f79d917171fc78af5ce5e6507101a78c54d3ac6a19964b6ddd2fcf549e2af1fd",
+      "seconds": 13.353,
+      "tests": 17
+    },
+    {
+      "command": [
+        "python3.13",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.align.test_v4_series_e2e"
+      ],
+      "exit_code": 0,
+      "output_sha256": "f7ee323b495001ae8027c00b396e322d1bb75f89ba21f5f9ca16f5cd84a8c113",
+      "seconds": 26.724,
+      "tests": 10
+    },
+    {
+      "command": [
+        "python3.13",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.align.test_v4_claim_b_packet.ClaimBPacketTests.test_item21_third_nonconsecutive_bar_in_test_reserve_requires_ruling"
+      ],
+      "exit_code": 0,
+      "output_sha256": "b1dab1084b8390f286ee8acaf44dae29effe10a9c2f3796395796a8e4a71f66f",
+      "seconds": 18.425,
+      "tests": 1
+    },
+    {
+      "command": [
+        "python3.13",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.align.test_v4_claim_b_packet.ClaimBPacketTests.test_item19_t_and_reserve_inconclusive_use_slots_without_ladder_or_bar"
+      ],
+      "exit_code": 0,
+      "output_sha256": "247f87cd2d56767563fece9a8469ceb887432ee214a7f4d021c342437b2cd257",
+      "seconds": 9.334,
+      "tests": 1
+    },
+    {
+      "command": [
+        "python3.13",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.align.test_v4_seedcheck_claim_b"
+      ],
+      "exit_code": 0,
+      "output_sha256": "a6fb481f1191e768633a3f7cd95d5c50dd5b5505f305691acf72fbf8e5a69f34",
+      "seconds": 1.559,
+      "tests": 8
+    },
+    {
+      "command": [
+        "python3.13",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.align.test_protocol_v4_doc"
+      ],
+      "exit_code": 0,
+      "output_sha256": "8aaf58353c8fb3ec67a0749a4bd9669275f3d227fa98e6dc194a17abee59e703",
+      "seconds": 0.335,
+      "tests": 6
+    }
+  ],
+  "schema": "joulewise.align_v4.claim_b_apply_checks.v1",
+  "verification_notes": [
+    "An initial seed baseline overlapped citation edits; its mixed-version failure was discarded.",
+    "One 0.293-second cadence run briefly overlapped the 45-test packet run; cadence was rerun serially.",
+    "The 21-module run and final selector runs were serial. No full suite, data, network or native MLX run.",
+    "Final Sol checker is byte-identical to the draft authored before opening the Opus checker; later role annotation discarded."
+  ]
+}
