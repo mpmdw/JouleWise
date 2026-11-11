@@ -73,6 +73,22 @@ def fixture_codec(root, argv):
                or (Path(value).is_absolute() and Path(value).is_relative_to(root)) for value in argv[1:])
 
 
+def fixture_filecopy(root, argv):
+    """The chain's own APFS copy writer, limited to non-symlink fixture paths."""
+    if len(argv) != 5 or list(argv[:3]) != ["/bin/cp", "-c", "-pR"]:
+        return False
+    for value in argv[3:]:
+        path = Path(value)
+        if not path.is_absolute() or not path.is_relative_to(root) or ".." in path.parts:
+            return False
+        cursor = root
+        for part in path.relative_to(root).parts:
+            cursor /= part
+            if cursor.is_symlink():
+                return False
+    return True
+
+
 class SharedClock:
     """Integer nanosecond clock; a file lock serializes child advances.
 
@@ -88,6 +104,7 @@ class SharedClock:
         self.listeners = []
         self.passive = False
         self.foreground = None
+        self.foregrounds = {}
         self.replay = False
         self.local = threading.local()
         self.stopping = False
@@ -177,7 +194,8 @@ class SharedClock:
                 marker.unlink(missing_ok=True)
             return
         if self.passive:
-            if self.foreground is not None and self.foreground.poll() is not None:
+            active = any(process.poll() is None for process in self.foregrounds.values())
+            if not active and self.foregrounds:
                 self.passive = False
             else:
             # Supervisor/background waits never move the foreground clock.
@@ -225,6 +243,14 @@ class SharedClock:
         time.monotonic, time.monotonic_ns = self.monotonic, self.monotonic_ns
         time.perf_counter, time.perf_counter_ns = self.monotonic, self.monotonic_ns
         time.clock_gettime_ns, time.sleep = self.clock_gettime_ns, self.sleep
+        # stdlib imported these aliases before the source clock was installed.
+        # Their deadlines must use the same timeline as the pinned Clock.
+        subprocess._time = self.monotonic
+        # Popen's polling sleep is a transport wait, not a producer advancing
+        # the scenario. Keep its clock reads shared, and yield real CPU while
+        # its actual child consumes the current logical frontier.
+        subprocess.time = SimpleNamespace(sleep=lambda seconds: REAL_SLEEP(min(.002, seconds)))
+        threading._time = self.monotonic
         # datetime.now is a separate OS clock entry point, not time.time().
         original = datetime.datetime
         clock = self
@@ -296,7 +322,8 @@ def audit_guard(root, pin):
             allowed = source in {sys.executable, "python", "python3", "python3.13", str(root / "interpreter/python3.13")}
             if not allowed or ".venv" not in Path(destination).parts:
                 raise PermissionError("R12 symlink is not a fixture interpreter alias")
-        elif event in {"socket.connect", "socket.bind", "os.system", "os.posix_spawn", "os.exec", "os.fork", "os.link"}:
+        elif event in {"socket.connect", "socket.bind", "socket.sendto", "socket.getaddrinfo", "socket.gethostbyname",
+                       "socket.gethostbyaddr", "socket.getnameinfo", "os.system", "os.posix_spawn", "os.exec", "os.fork", "os.link"}:
             raise PermissionError("R12 native action denied: " + event)
         elif event == "subprocess.Popen":
             executable, argv, cwd, env = args
@@ -314,7 +341,7 @@ def audit_guard(root, pin):
                 if len(operands) != 1 or not Path(unquote(urlparse(operands[0]).path)).is_relative_to(root):
                     raise PermissionError("R12 clone must use fixture-local source objects")
             wrapper = fixture_python_wrapper(root, exe)
-            if not (python or zsh or git or wrapper or fixture_codec(root, argv)):
+            if not (python or zsh or git or wrapper or fixture_codec(root, argv) or fixture_filecopy(root, argv)):
                 raise PermissionError("R12 undeclared native argv: " + repr(argv))
 
     sys.addaudithook(audit)
@@ -323,7 +350,7 @@ def audit_guard(root, pin):
 def bootstrap(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, required=True)
-    parser.add_argument("kind", choices=("clock", "script", "module", "code", "probe", "plan", "loop-probe", "returned", "sampler", "dispatch", "make-inputs", "guard-probe", "meter-probe", "j1-schema-probe"))
+    parser.add_argument("kind", choices=("clock", "script", "module", "code", "probe", "plan", "loop-probe", "seed-probe", "returned", "sampler", "dispatch", "make-inputs", "guard-probe", "meter-probe", "j1-schema-probe"))
     parser.add_argument("rest", nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
     root = args.root
@@ -338,6 +365,7 @@ def bootstrap(argv=None):
     os.environ["JOULEWISE_CUSTODY_PARENT"] = str(root / "host-state")
     os.environ.pop("JOULEWISE_ADDITIONAL_CUSTODY_PARENTS", None)
     os.environ["PYTHONNOUSERSITE"] = "1"
+    os.environ["PATH"] = "/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
     overlay_path = root / "input-overlays.json"
     if overlay_path.exists():
         overlays = json.loads(overlay_path.read_text())
@@ -430,6 +458,10 @@ def bootstrap(argv=None):
     if args.kind == "loop-probe":
         from b6_r12_orchestrate import loop_fixture
         return loop_fixture(root, clock, *args.rest)
+    if args.kind == "seed-probe":
+        from b6_r12_orchestrate import seed_calibration
+        seed_calibration(root, clock, install_sources(root, clock), source_root(root))
+        return 0
     install_sources(root, clock)
     if args.kind == "script" and args.rest and Path(args.rest[0]).name == "validate_powermetrics_fiducial.py":
         # A declared clock phase at calibration-program entry. Preserve
@@ -636,6 +668,11 @@ def install_sources(root, clock):
         def run(self, argv, timeout_s):
             argv = tuple(map(str, argv))
             from joulewise.hazards import instrument
+            if argv == self.off:
+                policy = json.loads((root / "source-policy.json").read_text())
+                result = (126, b"", b"RL-49 declared denied OFF action") if policy.get("denied_off") else (
+                    0, b"Network Time is already off.\n", b"")
+                return self.completed(argv, result, "declared_action_denied" if result[0] else "declared_action_success")
             if argv and argv[0] in ("git", "/usr/bin/git"):
                 result = REAL_RUN(argv, capture_output=True, timeout=timeout_s, check=False)
                 from joulewise.hazards.base import Completed
@@ -725,6 +762,7 @@ def install_sources(root, clock):
                 if argv[:1] == ("/bin/zsh",):
                     clock.passive = True
                     clock.foreground = value
+                    clock.foregrounds[value.pid] = value
                 return value
             if argv[:4] == ("/usr/bin/caffeinate", "-i", "-s", "-w"):
                 self.completed(argv, (0, b"", b""), "declared_action_success")
@@ -790,6 +828,8 @@ def install_sources(root, clock):
             rewrite = list(argv)
         elif fixture_codec(root, argv):
             rewrite = list(argv)
+        elif fixture_filecopy(root, argv):
+            rewrite = list(argv)
         elif any(value == "/usr/bin/powermetrics" for value in argv) and "-o" in argv:
             rewrite = [sys.executable, "-B", str(root / "bootstrap.py"), "--root", str(root), "sampler", *argv]
         elif rewrite is None:
@@ -802,6 +842,14 @@ def install_sources(root, clock):
         bound.arguments["executable"] = rewrite[0]
         result = REAL_EXECUTE(*bound.args, **bound.kwargs)
         sources.processes[process.pid] = process
+        background = any(Path(value).name in {"hazard_monitor.py", "km003c_monitor.py"} for value in argv)
+        sampler = "sampler" in rewrite[5:7]
+        returned = rewrite[:3] == [sys.executable, "-B", str(root / "bootstrap.py")] and rewrite[5:6] == ["returned"]
+        python_foreground = (rewrite[:3] == [sys.executable, "-B", str(root / "bootstrap.py")]
+                             or fixture_python_wrapper(root, rewrite[0]))
+        if not background and not sampler and not returned and python_foreground:
+            clock.passive, clock.foreground = True, process
+            clock.foregrounds[process.pid] = process
         if any(Path(value).name in {"hazard_monitor.py", "km003c_monitor.py"} for value in argv):
             # Process transport startup is a source seam. Do not let the
             # foreground exhaust a logical readiness deadline while a fresh
@@ -824,6 +872,7 @@ def install_sources(root, clock):
         if argv[:1] == ("/bin/zsh",):
             clock.passive = True
             clock.foreground = process
+            clock.foregrounds[process.pid] = process
         return result
     subprocess.Popen._execute_child = execute_child
     return sources
@@ -868,6 +917,8 @@ def make_synthetic_inputs(root):
                 result["sampling"]["warmup_seconds"] = 0.0
             if result.get("schema_version") == "joulewise.b6_pack_registration.v1":
                 result["stopping"]["end_t0_before"] = "2030-01-01T00:00:00+00:00"
+            if isinstance(result.get("ledger_cutoff"), dict):
+                result["ledger_cutoff"] = {**result["ledger_cutoff"], "sequence": 0, "head_digest": "0" * 64}
             if "tokenizer_identity" in result and isinstance(result["tokenizer_identity"], dict):
                 result["tokenizer_identity"]["class"] = "Tokenizer"
             if "runtime_version" in result and isinstance(result["runtime_version"], dict):
@@ -962,7 +1013,7 @@ def install_engine(root, clock):
         clock.sleep(seconds)
     def evaluate(*values):
         if len(values) == 1:
-            active(0.1, 10000)
+            active(0.1, 50000)
     mx.eval = evaluate
     mx.clear_cache = lambda: None
     mx.metal = SimpleNamespace(get_active_memory=lambda: 0, get_peak_memory=lambda: 0,
@@ -992,7 +1043,13 @@ def install_engine(root, clock):
             clock.sleep(.001)  # external engine's detokenization latency
             return "x " * len(ids)
     Tokenizer.__module__, Tokenizer.__qualname__ = "r12_engine", "Tokenizer"
-    lm.load = lambda source, **kwargs: (SimpleNamespace(), Tokenizer(source), {"eos_token_id": 0})
+    def load(source, **kwargs):
+        # The engine's public input, not any controller decision or context.
+        # The declared sensor script can keep reference-model requests clean
+        # while presenting non-GO idle readings for science-model requests.
+        (root / f"model-source-{os.getpid()}.json").write_text(json.dumps({"source": str(source)}) + "\n")
+        return SimpleNamespace(source=str(source)), Tokenizer(source), {"eos_token_id": 0}
+    lm.load = load
     lm.make_sampler = lambda *args, **kwargs: (lambda x: x)
     policy_path = root / "source-policy.json"
     policy = json.loads(policy_path.read_text()) if policy_path.exists() else {}
@@ -1116,6 +1173,9 @@ def sampler_source(root, clock, argv):
             stream.write(str(ordinal))
     busy = ordinal in policy.get("gpu_busy_primary_ordinals", []) or (
         ordinal > policy.get("gpu_busy_after_primary", float("inf")))
+    model_source = root / f"model-source-{os.getppid()}.json"
+    if ordinal and policy.get("gpu_busy_science") and model_source.exists():
+        busy |= Path(json.loads(model_source.read_text())["source"]).name.startswith("Qwen3-")
     native_offset = policy.get("native_timestamp_offsets_s", {}).get(str(ordinal), 0)
     start = clock.monotonic_ns()
     if count is None:
@@ -1147,6 +1207,8 @@ def sampler_source(root, clock, argv):
                     offset = source.tell()
             gpu_mw = sum(row["power_mw"] * max(0, min(endpoint, row["end_ns"]) - max(endpoint - interval, row["start_ns"]))
                          / interval for row in intervals if row["end_ns"] > endpoint - interval and row["start_ns"] < endpoint)
+            if busy:
+                gpu_mw += 6000.
             intervals = [row for row in intervals if row["end_ns"] > endpoint]
             wall = (WALL_NS + endpoint - MONO_NS) / 1e9 + native_offset
             document = {"timestamp": datetime.datetime.fromtimestamp(wall, datetime.UTC), "is_delta": True,

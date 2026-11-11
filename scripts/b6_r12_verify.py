@@ -15,6 +15,10 @@ import subprocess
 import sys
 import tempfile
 
+os.environ.update(GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_NOSYSTEM="1", GIT_ATTR_NOSYSTEM="1",
+                  PYTHONNOUSERSITE="1", PYTHONDONTWRITEBYTECODE="1",
+                  PATH="/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin")
+
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
@@ -90,11 +94,13 @@ def archive_pin(root, archive, metadata):
     return pin
 
 
-def prepare_run_inputs(root):
+def prepare_run_inputs(root, *, counting_only=True):
     attempts_path = root / "loop/attempts.jsonl"
     attempts = [json.loads(line) for line in attempts_path.read_text().splitlines() if line]
     archives, pins = [], {}
     for attempt in attempts:
+        if counting_only and not any(row.get("status") == "counting" for row in attempt.get("outcomes", {}).values()):
+            continue
         metadata_path = root / "sessions" / attempt["session_id"] / "session.json"
         metadata = json.loads(metadata_path.read_text())
         archive = child(root, metadata["paths"]["archive"])
@@ -149,12 +155,17 @@ def run_option_c(root, workers=1, *, stem="option-c"):
             "--closed", "--loop-attempts", str(attempts), "--loop-state", str(root / "loop/state.json"),
             "--inputs", str(document), "--inputs-sha256", sha(document), "--workers", str(workers),
             "--restricted-out", str(numbers), "--public-out", str(public)]
-    timed = ["/usr/bin/time", "-l", *argv]
+    program_argv = root / (stem + "-program-argv.json")
+    program_argv.write_text(json.dumps(argv, indent=2) + "\n")
+    timed = ["/usr/bin/time", "-l", sys.executable, "-B", str(Path(__file__).resolve()),
+             "--root", str(root), "--exec-argv", str(program_argv), "--stem", stem]
     (root / (stem + "-argv.json")).write_text(json.dumps(timed, indent=2) + "\n")
     with (root / (stem + ".stdout")).open("wb") as out, (root / (stem + ".time")).open("wb") as err:
         result = subprocess.run(timed, cwd=REPO, stdout=out, stderr=err, check=False,
                                 env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "PYTHONNOUSERSITE": "1"})
-    receipt = {"exit_code": result.returncode, "sessions": len(archives), "workers": workers,
+    child_receipt = json.loads((root / (stem + "-process.json")).read_text())
+    receipt = {"exit_code": child_receipt["exit_code"], "time_wrapper_exit": result.returncode,
+               "process_measurement": child_receipt, "sessions": len(archives), "workers": workers,
                "program_sha256": sha(REPO / "scripts/independent_recompute_b6.py"),
                "inputs_sha256": sha(document)}
     if numbers.exists():
@@ -162,6 +173,25 @@ def run_option_c(root, workers=1, *, stem="option-c"):
         receipt["option_c"] = value.get("block", {}).get("option_c")
         receipt["numbers_sha256"] = sha(numbers)
     (root / (stem + "-receipt.json")).write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n")
+    return child_receipt["exit_code"]
+
+
+def execute_argv(root, argv_file, stem):
+    """Retain the program exit even if macOS time -l's sysctl is denied."""
+    import resource
+    import time
+    argv = json.loads(child(root, argv_file).read_text())
+    if not (len(argv) > 2 and argv[:2] == [sys.executable, "-B"]
+            and Path(argv[2]) == REPO / "scripts/independent_recompute_b6.py"):
+        raise ValueError("only the declared local B6 program may be measured")
+    started = time.monotonic()
+    result = subprocess.run(argv, cwd=REPO, check=False)
+    usage = resource.getrusage(resource.RUSAGE_CHILDREN)
+    receipt = {"exit_code": result.returncode, "wall_s": time.monotonic() - started,
+               "peak_rss": usage.ru_maxrss, "peak_rss_units": "bytes" if sys.platform == "darwin" else "KiB",
+               "peak_rss_method": "getrusage(RUSAGE_CHILDREN).ru_maxrss; fallback, not time -l",
+               "user_s": usage.ru_utime, "system_s": usage.ru_stime}
+    (root / (stem + "-process.json")).write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n")
     return result.returncode
 
 
@@ -170,8 +200,12 @@ def main(argv=None):
     parser.add_argument("--root", required=True)
     parser.add_argument("--run-option-c", action="store_true")
     parser.add_argument("--workers", type=int, choices=(1, 2), default=1)
+    parser.add_argument("--exec-argv")
+    parser.add_argument("--stem", default="option-c")
     args = parser.parse_args(argv)
     root = safe_root(args.root)
+    if args.exec_argv:
+        return execute_argv(root, args.exec_argv, args.stem)
     finalize_manifest(root)
     if args.run_option_c:
         return run_option_c(root, args.workers, stem="option-c" if args.workers == 1 else "option-c-pool")

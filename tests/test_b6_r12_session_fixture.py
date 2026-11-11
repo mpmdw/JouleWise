@@ -4,6 +4,7 @@ import importlib.util
 import json
 import os
 import shutil
+import struct
 from pathlib import Path
 import subprocess
 import sys
@@ -13,7 +14,7 @@ import unittest
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "scripts"))
-from b6_r12_session_fixture import command, prepare, export_chain_inputs
+from b6_r12_session_fixture import command, prepare, export_chain_inputs, prepare_interpreters
 from b6_r12_chain_fixture import PIN
 
 
@@ -45,6 +46,39 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(len(json.loads(result.stdout)), 6)
         self.assertFalse((self.root.parent / "R12-outside-write").exists())
 
+    def test_subprocess_deadline_uses_child_logical_clock(self):
+        """Predict: a child that advances 5 logical seconds then waits for stdin exceeds a 1 s parent deadline before 1 wall second."""
+        prepare_interpreters(self.root)
+        code = '''import subprocess, sys, time
+from pathlib import Path
+from runtime import REAL_MONOTONIC
+root = Path(sys.argv[1])
+child = "import sys,time;sys.stdin.buffer.read(1);time.sleep(5);print('ready',flush=True);sys.stdin.buffer.read(1)"
+started = REAL_MONOTONIC()
+process = subprocess.Popen([str(root/'pin/.venv/bin/python'),'-B','-c',child],
+                           stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+probe = subprocess.run(['/usr/sbin/sysctl','-n','hw.model'], capture_output=True, text=True)
+assert probe.stdout.strip() == 'Mac15,9'
+before_probe_wait = time.monotonic()
+time.sleep(17)
+assert time.monotonic() == before_probe_wait
+process.stdin.write(b'a');process.stdin.flush()
+try:
+    process.wait(timeout=1)
+    raise AssertionError('shared logical deadline did not fire')
+except subprocess.TimeoutExpired:
+    assert REAL_MONOTONIC() - started < 1.0
+    assert time.monotonic() == 1005.0
+finally:
+    process.stdin.write(b'x');process.stdin.flush()
+    assert process.wait(timeout=1) == 0
+print('logical_timeout')
+'''
+        result = subprocess.run(command(self.root, "code", code, self.root), capture_output=True,
+                                text=True, timeout=15)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "logical_timeout")
+
     def test_synthetic_inputs_keep_canonical_suite_bindings(self):
         """Predict: every synthetic suite config binds the pinned canonicalizer's actual digest, with production 57.6 s idle inputs."""
         export_chain_inputs(self.root)
@@ -74,6 +108,39 @@ print(count)
                                 text=True, timeout=30)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertGreater(int(result.stdout.strip()), 50)
+
+    @unittest.skipUnless(sys.platform == "darwin", "pinned USB protocol uses CommonCrypto")
+    def test_source_pruning_preserves_raw_instrument_bytes(self):
+        """Predict: pruning expired waveform inputs preserves complete plist bytes and all meter poll bytes against the unpruned source."""
+        reference = prepare(Path(self.temp.name).resolve() / "unpruned-reference")
+        source = (reference / "runtime.py").read_text()
+        source = source.replace('                    self.intervals = [row for row in self.intervals if row["end_ns"] > clock.ns - 180_000_000]\n', '')
+        source = source.replace('            intervals = [row for row in intervals if row["end_ns"] > endpoint]\n', '')
+        (reference / "runtime.py").write_text(source)
+        waves = [dict(start_ns=999_000_000_000, end_ns=999_500_000_000, power_mw=8000),
+                 dict(start_ns=1_000_000_000_000, end_ns=1_000_500_000_000, power_mw=4000),
+                 dict(start_ns=1_001_000_000_000, end_ns=1_001_500_000_000, power_mw=8000)]
+        payloads, plists = [], []
+        relative = "scripts/km003c_monitor.py"
+        meter_source = subprocess.check_output(["git", "show", f"{PIN}:{relative}"], cwd=REPO)
+        for root in (self.root, reference):
+            (root / "source-policy.json").write_text('{"volume":"prerequisite"}\n')
+            (root / "engine-intervals.jsonl").write_text(''.join(json.dumps(row) + '\n' for row in waves))
+            script = root / "pin" / relative
+            script.parent.mkdir(exist_ok=True)
+            script.write_bytes(meter_source)
+            meter = subprocess.run(command(root, "meter-probe"), capture_output=True, text=True, timeout=30)
+            self.assertEqual(meter.returncode, 0, meter.stderr)
+            payloads.append([line for line in (root / "source-only-meter.jsonl").read_bytes().splitlines()
+                             if json.loads(line).get("k") == "b"])
+            # A second independent source timeline, not a generated session.
+            (root / "clock.bin").write_bytes(struct.pack("!Q", 1_000_000_000_000))
+            sampler = subprocess.run(command(root, "sampler", "/usr/bin/powermetrics", "-i", "100", "-n", "20",
+                "-o", root / "source.plist"), capture_output=True, text=True, timeout=30)
+            self.assertEqual(sampler.returncode, 0, sampler.stderr)
+            plists.append((root / "source.plist").read_bytes())
+        self.assertEqual(payloads[0], payloads[1])
+        self.assertEqual(plists[0], plists[1])
 
     @unittest.skipUnless(sys.platform == "darwin", "pinned USB protocol uses CommonCrypto")
     def test_real_meter_writer_uses_synthetic_libusb_object(self):

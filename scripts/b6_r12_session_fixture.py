@@ -11,6 +11,10 @@ import subprocess
 import sys
 import tempfile
 
+os.environ.update(GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_NOSYSTEM="1", GIT_ATTR_NOSYSTEM="1",
+                  PYTHONNOUSERSITE="1", PYTHONDONTWRITEBYTECODE="1",
+                  PATH="/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin")
+
 from b6_r12_chain_fixture import PIN, REPO
 from b6_r12_runtime import SharedClock
 from b6_r12_runtime import source_root
@@ -86,10 +90,13 @@ def prepare(root):
                 "runtime_sha256": hashlib.sha256(runtime.read_bytes()).hexdigest(),
                 "orchestrator_sha256": hashlib.sha256((root / "b6_r12_orchestrate.py").read_bytes()).hexdigest(),
                 "arm_sources_sha256": hashlib.sha256((root / "arm_sources.py").read_bytes()).hexdigest(),
+                "generator_files_sha256": {name: hashlib.sha256(Path(__file__).with_name(name).read_bytes()).hexdigest()
+                    for name in ("b6_r12_session_fixture.py", "b6_r12_runtime.py", "b6_r12_orchestrate.py", "b6_r12_verify.py", "b6_r12_chain_fixture.py")},
                 "clock_mode": "shared integer ns; explicit sleeps advance; no wall-time scale factor",
                 "volume": "bootstrap prerequisite", "seams": {
                     "time.time/time_ns/monotonic/monotonic_ns/clock_gettime_ns/sleep": "SharedClock",
                     "datetime.datetime.now/utcnow": "SharedClock wall time",
+                    "subprocess._time / threading._time": "same shared monotonic clock, including stdlib aliases",
                     "zsh external /bin/date and /bin/sleep inputs": "SharedClock bootstrap CLI"}}
     (root / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
     return root
@@ -109,8 +116,9 @@ def declare_sources(root):
         "joulewise.hazards.smc.Reader": "external SMC reader: declared keys 0; no native SMC call",
         "joulewise.external.km003c_usb.load_libusb": "library object returns protocol bytes; unchanged UsbDevice/Meter/writer; 20 V, 10 W baseline + engine activity, 50 Hz",
         "subprocess.Popen._execute_child": "dispatch unchanged pinned children; sampler raw plists at 10 Hz; first-source-tick startup barrier; undeclared commands return 126 and are logged",
-        "mlx.core / mlx_lm": "tiny engine library source, batch 1; token/model timings in source policy; original runtime, events and reducers run; weights never loaded",
+        "mlx.core / mlx_lm": "tiny engine library source, batch 1; matmul pulse source 50 W; request first/decode 10/6 W; token/model timings in source policy; original runtime, events and reducers run; weights never loaded",
         "Tokenizer.encode/decode": "original input token IDs and 1 ms source latency",
+        "mlx_lm.load source argument / raw sampler script": "model-source-PID.json outside session trees; scripted science-only busy readings keyed by the public engine input, references kept clean; no controller internals inspected",
         "joulewise.adapters.powermetrics.PowermetricsTelemetryAdapter.__init__.__kwdefaults__.drain_sleep": "minimum 200 ms external scheduler quantum; original right-edge drain judgment",
         "calibration CLI clock entry phase": "next whole monotonic second + 132 ns; original pulse protocol/detection/refit",
         "builtins.open/io.open/os.stat/os.lstat on /usr/bin/powermetrics": "declared synthetic executable identity bytes, hashed by original code",
@@ -121,7 +129,8 @@ def declare_sources(root):
         "joulewise.b6.precheck.Seams.orphan_collect": "declared empty external process observation",
         "Loop.clock / DriverLane.clock": "shared injected wall clock; original transitions, status and attempt writers",
         "scheduler": "call actual run_night at plan t0; installer/uninstaller command results 0; no launchd job",
-        "Git and zstd": "actual fixture-scoped code/input Git tools and actual desk codec; no network Git; no simulated compression"})
+        "zsh file utilities": "unchanged rendered program uses cat/mkdir/jq on its fixture-bound paths; date/sleep source functions and bootstrap interpreter isolate time and host commands",
+        "Git, /bin/cp -c -pR and zstd": "actual fixture-scoped code/input Git, non-symlink fixture-only APFS copy writer and desk codec; no network Git; no simulated copying or compression"})
     value["actions"] = {"default": "deny rc 126, stdout empty, stderr RL-49 default deny; execute nothing",
         "network_time_off": "normal success rc 0; extra denied fixture uses 126",
         "display_sleep": "success rc 0, empty stdout/stderr, execute nothing",
@@ -166,6 +175,8 @@ def export_chain_inputs(root):
 def init_source_repo(root):
     """A fresh synthetic code repository; no shared study checkout is opened."""
     pin = source_root(root)
+    if pin == root / "pin":
+        raise ValueError("original pinned export is read-only; materialize synthetic inputs first")
     head = pin / "configs/calibration/calibration_ledger_head.json"
     head.write_text(json.dumps({"sequence": 0, "head_digest": "0" * 64,
                                "ledger_schema": "joulewise.calibration_observation_ledger.v1"}))
@@ -246,6 +257,7 @@ def main(argv=None):
     parser.add_argument("--driver-probe", choices=("alpha", "beta", "gamma"))
     parser.add_argument("--loop-probe", choices=("alpha", "beta", "gamma"))
     parser.add_argument("--nine-session-set", action="store_true")
+    parser.add_argument("--seed-probe", action="store_true")
     parser.add_argument("--synthetic-models", action="store_true")
     parser.add_argument("--volume", choices=("prerequisite", "reduced", "full"), default="prerequisite")
     parser.add_argument("--denied-off", action="store_true")
@@ -257,7 +269,9 @@ def main(argv=None):
         "token_next_s": .001 if args.volume == "reduced" else .05}, indent=2) + "\n")
     if args.bootstrap_probe:
         return subprocess.run(command(root, "probe", 60), cwd=root, check=False).returncode
-    if args.plan_probe or args.driver_probe or args.loop_probe or args.nine_session_set:
+    if args.plan_probe or args.driver_probe or args.loop_probe or args.nine_session_set or args.seed_probe:
+        if not args.synthetic_models:
+            parser.error("chain programs require --synthetic-models and a separate input repository")
         export_chain_inputs(root)
         if args.synthetic_models:
             subprocess.run(command(root, "make-inputs"), cwd=root, check=True)
@@ -265,6 +279,8 @@ def main(argv=None):
             prepare_interpreters(root)
         init_source_repo(root)
         declare_sources(root)
+        if args.seed_probe:
+            return subprocess.run(command(root, "seed-probe"), cwd=root, check=False).returncode
         if args.nine_session_set:
             with (root / "generator.stdout").open("wb") as out, (root / "generator.stderr").open("wb") as err:
                 return subprocess.run(command(root, "loop-probe", "all", "9"), cwd=root,

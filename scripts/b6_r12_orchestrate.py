@@ -50,6 +50,10 @@ def seed_calibration(root, clock, sources, source):
     print("prerequisite_driver", rc, flush=True)
     if rc not in (0, 6):
         raise RuntimeError("prerequisite chain did not finish")
+    captures = [json.loads(path.read_text()) for path in (seed.smoke_dir / "runs-parent").glob(
+        "*/instrument_validation/*/instrument_evidence.json")]
+    if len(captures) != 2 or any(value.get("status") != "valid" for value in captures):
+        raise RuntimeError("the real prerequisite writer did not produce two valid captures")
     plan.advance_ledger_pin(seed.measurement, session_id=seed.bracket_session_id,
         operator_identity="R12 synthetic prerequisite", attestation_reason="real synthetic prerequisite ended")
     # The pinned copier supplies a prior ledger input to the new source
@@ -67,12 +71,12 @@ def session_policy(pack, round_number, base):
     value = dict(base)
     value.update(scenario=f"r{round_number}-{pack}", denied_off=False,
                  gpu_busy_primary_ordinals=[], gpu_busy_after_primary=10**9,
-                 native_timestamp_offsets_s={})
+                 native_timestamp_offsets_s={}, gpu_busy_science=False)
     full = (pack, round_number) in {("alpha", 3), ("beta", 1), ("gamma", 1)}
     value.update(volume="full" if full else "reduced", primary_stream_duration_s=335 if full else 65,
                  token_first_s=1.0 if full else .5, token_next_s=.05 if full else .001)
     if (pack, round_number) == ("alpha", 1):
-        value["gpu_busy_after_primary"] = 18
+        value["gpu_busy_science"] = True
     if (pack, round_number) == ("alpha", 2):
         value["gpu_busy_primary_ordinals"] = [1]
     if (pack, round_number) == ("beta", 2):
@@ -98,7 +102,9 @@ def loop_fixture(root, clock, pack="alpha", limit="1"):
         return sources.subprocess_run(argv, **{"capture_output": True, "text": True, **kwargs})
     base_policy = json.loads((root / "source-policy.json").read_text())
     declarations = [session_policy(p, r, base_policy) for r in (1, 2, 3) for p in ("alpha", "beta", "gamma")]
+    declarations.append(session_policy("alpha", 4, base_policy))
     (root / "fixture-plan.json").write_text(json.dumps(declarations, indent=2) + "\n")
+    (root / "source-policy.json").write_text(json.dumps({**base_policy, "denied_off": False}, indent=2) + "\n")
     seed_calibration(root, clock, sources, source)
     loop_root = root / "loop"
     config = json.loads((source / "configs/b6/loop.json").read_text())
@@ -127,7 +133,13 @@ def loop_fixture(root, clock, pack="alpha", limit="1"):
         print("loop", tick, state["state"], flush=True)
         if state["state"] in {"HOLD_LOOP", "DONE"}:
             return 0 if state["state"] == "DONE" else 2
-        if len(state.get("attempts", [])) >= int(limit):
+        if base_policy.get("denied_off") and state["state"] == "ARM_WAIT" and (state.get("session") or {}).get("smoke_done"):
+            (root / "denied-fixture-receipt.json").write_text(json.dumps({
+                "kind": "denied-action non-claim smoke session", "state": state["state"],
+                "session": state["session"], "loop_wrote_attempt": False,
+                "reason": "the original loop does not count a smoke session"}, indent=2) + "\n")
+            return 0
+        if pack != "all" and len(state.get("attempts", [])) >= int(limit):
             return 0
         session = state.get("session") or {}
         prefix = "smoke_" if state["state"] == "SMOKE_RUN" else ""
@@ -139,7 +151,7 @@ def loop_fixture(root, clock, pack="alpha", limit="1"):
             scheduled.add(str(plan_path))
             policy = dict(base_policy)
             if prefix:
-                policy.update(scenario="smoke-" + session["id"], denied_off=False,
+                policy.update(scenario="smoke-" + session["id"], denied_off=bool(base_policy.get("denied_off")),
                               primary_stream_duration_s=65, volume="reduced")
             else:
                 policy = session_policy(session["packs"][0], session["round"], base_policy) if pack == "all" else policy
