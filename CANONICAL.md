@@ -11,7 +11,7 @@ because nobody could see which tool was current. The 2026-11-06 prune
 ([run report](docs/run_reports/2026-11-06-repo-prune.md)) removed about 8,100 stale files so
 that cannot happen again.
 
-Last updated: 2026-11-08 (v4 line section added; the rest as of 2026-11-06, lane/2026-11-06-repo-prune, merged with `main` at `a07134b8`; entries checked against the triage of `sol/burn-canon`).
+Last updated: 2026-11-10 (file-prune stack; CA-42 retirement held at the live ALIGN registration gate). The v4 line section remains as recorded on 2026-11-08; current lane state is in `RUN_STATE.md`.
 
 ## Project state
 
@@ -36,7 +36,7 @@ The magistrate on the MacBook Pro owns running, re-running and arming windows
 | R1 rehearsal driver | `scripts/align_r1_rehearsal.py` + `joulewise/align/apple/r1_runtime.py` on the R1 integration line `lane/2026-11-06-v4-r1-integrated`. Not on `main`, and not yet on the measurement lane, which has only the earlier WP17 driver without `r1_runtime.py` | The WP17 driver on the measurement lane |
 | v4 kit and sessions | `scripts/align_v4_kit.py`, `scripts/align_v4_session.py` on the R1 integration line (`lane/2026-11-06-v4-r1-integrated`); the WP17 versions are also on the measurement lane. Not on `main` | — |
 | Window records | Record branches `records/<date>-align-*` and `docs/align/r0/<date>/` (cited from `RUN_STATE.md`) | — |
-| Block-5 window harvest (collection finished) | `scripts/harvest_b5_window.py` + `joulewise/b5/**` | `scripts/harvest_g2a_window.py` (kept only because `joulewise/v5_qualification.py` imports it); the CA-42 arm/T-0 route (`scripts/launch_window.py`, `scripts/capture_t0_step.py`, retiring in PR #668) |
+| Block-5 window harvest (collection finished) | `scripts/harvest_b5_window.py` + `joulewise/b5/**` | `scripts/harvest_g2a_window.py` (kept because `joulewise/v5_qualification.py` imports it); CA-42 arm/T-0 retirement (#668) is held by the live ALIGN v4 artifact/registration inventory; see `docs/run_reports/2026-11-10-file-prune-g3.md` |
 
 ## ALIGN v4 window line (W1, C1-C14, T1-T3): agreements and records
 
@@ -88,6 +88,39 @@ Held, not canonical yet: the condition-waits lane (`align/2026-11-08-condition-w
 | CI workflows | Three: `.github/workflows/ci.yml` (quick tier, fences, twelve ordinary `shard_tests.py` shards plus the two exclusive calibration jobs; docs-only ranges report success without running tests); `.github/workflows/gate-ledger.yml` + `scripts/check_gate_ledger.py` (**required** on `main`; validates the PR body's gate ledger); `.github/workflows/d117-production-proof.yml` (**dispatch-only**, `workflow_dispatch`, never runs on a PR) | — |
 | Pins | `python3 scripts/repin.py --check` (all families); `--write registry` after deleting or adding pinned files | Hand repins |
 | State kernel | `python3 scripts/gen_state.py --check` | — |
+
+## Suite manifest producers
+
+| Job | Canonical | Disposition |
+|---|---|---|
+| Mixed and sentinel suite manifests | `scripts/gen_jw_mixed.py` over `joulewise/gensuite/` | KEEP: current producer; tokenizer-manifest helpers have live test consumers |
+| Authenticated scored-v6 import | `scripts/gen_gsm8k_scored.py` over `joulewise/benchmark_import.py` | KEEP: canonical producer; scored-lane retirement is deferred |
+
+## Repository operations
+
+| Job | Canonical | Replaced / retaining ref |
+|---|---|---|
+| Prune scope and dependency gates | `docs/ops/PRUNE-PLAN.md`; execution receipts and rollback log in `docs/ops/PRUNE-EXECUTION.md` and `docs/ops/PRUNE-ROLLBACK.tsv` | Branch retirement is already recorded; file retirement is a separate operation |
+| Scientific pin inventory and future tag validation | `docs/ops/PIN-INVENTORY.md`, `docs/ops/TAG-PINNING.md` | Frozen B5 source and original digests remain authoritative for their registered checkout |
+| Retrieve retired files | `docs/ARCHIVE.md`; per-file decisions in `docs/ops/FILE-PRUNE-G1.tsv` | `archive/process-traces-before-release-prune-2026-11-08` (`901d7580d`); earlier archive promise remains unchanged |
+| Historical campaign retirement | `docs/ops/FILE-PRUNE-G2.tsv`; `configs/campaigns/p2_015_floors/README.md` explains retained live inputs | All nine D117 Qwen2.5 generations stay for the historical receipt/predecessor reader chain and registrations |
+| CA-42 retirement gate | `docs/run_reports/2026-11-10-file-prune-g3.md`; all KEEP decisions in `docs/ops/FILE-PRUNE-G3.tsv` | The ALIGN owner must migrate the registered executed closure before the coupled #668 retirement; old-name shims alone do not satisfy it |
+
+## Retired
+
+| Retired material | Current replacement / verdict | Retaining ref |
+|---|---|---|
+| Superseded profiling logs and synthetic E2E reports listed as DELETE in `docs/ops/FILE-PRUNE-G1.tsv` | Current tools above; reader and authority records remain in the checkout | `archive/process-traces-before-release-prune-2026-11-08:<path>` |
+| Historical P2-015 generated campaign, generator/spec/backup and six generator-only assertions | Current v5 packs; calibration plan, its digest sidecar and the live NEG8 test config remain. Historical manifest assertions use archived blobs | `archive/process-traces-before-release-prune-2026-11-08:configs/campaigns/p2_015_floors/` |
+| `scripts/axi_sb_static_batch_spike.py` | Already retired: isolated AXI experiment, no current entry point (#654) | `archive/pre-prune-2026-11-06:scripts/axi_sb_static_batch_spike.py` |
+| `scripts/axi_sc_spec_decode_spike.py` | Already retired: isolated AXI experiment, no current entry point (#654) | `archive/pre-prune-2026-11-06:scripts/axi_sc_spec_decode_spike.py` |
+| `scripts/codex_usage_probe.py` | Already retired: one-shot diagnostic (#654) | `archive/pre-prune-2026-11-06:scripts/codex_usage_probe.py` |
+| `scripts/measure_claude_cold_start.sh` | Already retired: one-shot timing diagnostic (#654) | `archive/pre-prune-2026-11-06:scripts/measure_claude_cold_start.sh` |
+| `scripts/gen_affine_smoke.py` | Already retired: one-shot fixture generator (#654) | `archive/pre-prune-2026-11-06:scripts/gen_affine_smoke.py` |
+| `scripts/spike_mlx_prompt_cache.py` | Retired: recorded Stage 3.0.1 verdict `replay_supported`; current size prediction is `python -m joulewise kv-size`. Historical evidence stays in `docs/phase_3/kv_feasibility.md`; no new native validation claimed | `archive/process-traces-before-release-prune-2026-11-08:scripts/spike_mlx_prompt_cache.py` |
+
+The two retained G4 generator candidates are listed under suite manifest
+producers above. All eight verdicts are recorded in `docs/ops/FILE-PRUNE-G4.tsv`.
 
 ## Paper
 

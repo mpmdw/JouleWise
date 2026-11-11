@@ -21,6 +21,7 @@ from joulewise.identity_pins import (
 from typing import Any, Iterable
 from unittest import mock
 from tests.test_campaign_generator_core import generation_repository
+from tests.archived_campaign import order_manifest as archived_order_manifest
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -1529,11 +1530,13 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
     def test_ids_are_fresh_and_arm_pins_are_projection_owned(self) -> None:
         run_ids = {row["run_id"] for row in self.root_manifest["executed_order"]}
         historical_ids: set[str] = set()
-        for path in (
-            ROOT / "configs/campaigns/p2_015_floors/order_manifest.json",
-            ROOT / "configs/campaigns/qwen25_7b_decode_floor_v1/order_manifest.json",
-        ):
-            historical_ids.update(row["run_id"] for row in load_json(path)["executed_order"])
+        historical_ids.update(
+            row["run_id"] for row in archived_order_manifest(
+                "archive/process-traces-before-release-prune-2026-11-08:configs/campaigns/p2_015_floors/order_manifest.json"
+            )["executed_order"]
+        )
+        path = ROOT / "configs/campaigns/qwen25_7b_decode_floor_v1/order_manifest.json"
+        historical_ids.update(row["run_id"] for row in load_json(path)["executed_order"])
         self.assertTrue(run_ids.isdisjoint(historical_ids))
         self.assertEqual(self.plan["plan_id"], PLAN_ID)
         self.assertEqual(self.tree["window_identity"]["window_id"], PLAN_ID)

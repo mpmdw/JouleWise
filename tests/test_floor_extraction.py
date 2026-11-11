@@ -27,6 +27,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+from tests.archived_campaign import order_manifest as archived_order_manifest
+
 import joulewise.arm_readiness as arm_readiness
 from joulewise.authentication_io import (
     V2_AUTHENTICATION_INPUT_CHANGED,
@@ -5098,17 +5100,11 @@ class FloorMintSpecValidationTests(unittest.TestCase):
     ) -> None:
         a10_spec = self._load("a10_extraction_spec.json")
         window_c_spec = self._load("window_c_extraction_spec.json")
-        a10_order = json.loads(
-            Path(
-                "configs/campaigns/p2_015_floors/"
-                "02_phase_absolute/order_manifest.json"
-            ).read_text(encoding="utf-8")
+        a10_order = archived_order_manifest(
+            "archive/process-traces-before-release-prune-2026-11-08:configs/campaigns/p2_015_floors/02_phase_absolute/order_manifest.json"
         )
-        window_c_order = json.loads(
-            Path(
-                "configs/campaigns/p2_015_floors/"
-                "05_phase_decode_abba/order_manifest.json"
-            ).read_text(encoding="utf-8")
+        window_c_order = archived_order_manifest(
+            "archive/process-traces-before-release-prune-2026-11-08:configs/campaigns/p2_015_floors/05_phase_decode_abba/order_manifest.json"
         )
         self.assertEqual(
             a10_order["manifest_id"],

@@ -1,0 +1,23 @@
+{
+  "name": "protect-scientific-anchor-tags",
+  "target": "tag",
+  "enforcement": "active",
+  "bypass_actors": [],
+  "conditions": {
+    "ref_name": {
+      "include": [
+        "refs/tags/b5/**",
+        "refs/tags/b6/**",
+        "refs/tags/bytes/**",
+        "refs/tags/pin/**",
+        "refs/tags/archive/**"
+      ],
+      "exclude": []
+    }
+  },
+  "rules": [
+    { "type": "deletion" },
+    { "type": "update" },
+    { "type": "non_fast_forward" }
+  ]
+}
