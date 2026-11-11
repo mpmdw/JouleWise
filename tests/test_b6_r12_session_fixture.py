@@ -555,6 +555,34 @@ raise SystemExit(4)
 
 
 class DeskInputBoundaryTests(unittest.TestCase):
+    def test_open_block_prints_noncomputable_registered_summaries(self):
+        """Predict: with no eligible sessions, every registered block summary prints n=0 and null mean/sd; coverage still rejects a missing required session key. No session or counting judgment is simulated here."""
+        from tests.independent_recompute.support_b6 import b6
+        lines = b6.block_lines({}, {})
+        b6.require_production_coverage({}, lines)
+        for pack in b6.PACKS:
+            values = lines["between_session"][pack]["values"]
+            self.assertTrue(values)
+            self.assertTrue(all(row["n"] == 0 and row["mean"] is None and row["sd"] is None
+                                for row in values.values()))
+            self.assertEqual(lines["short"][pack]["counting"], 0)
+        with self.assertRaisesRegex(b6.InputRefusal, "comparison_session_coverage_mismatch"):
+            b6.require_production_coverage({"missing": {"pack": "ALPHA", "quantities": {}}}, lines)
+
+    def test_noncomputable_single_step_keeps_registered_projection(self):
+        """Predict: insufficient-unit diagnostic rows retain their null result without adding unregistered comparison interval keys. This is a projection regression, not a generated session."""
+        from tests.independent_recompute.support_b6 import b6
+        result = {"pack": "ALPHA", "lines": {"df-ph-decode-qwen3-1p7b": {
+            "single_step_reconstruction": {"status": "below_registered_minimum",
+                "mean_j": None, "h_j": None, "n_r": 0, "n_b": 0,
+                "lower_j": None, "upper_j": None}}}}
+        quantities = b6.session_quantities(result)
+        prefix = "lines/single_step_reconstruction/qwen3-1p7b/decode/"
+        self.assertEqual({key.removeprefix(prefix): value for key, value in quantities.items()
+                          if key.startswith(prefix)},
+                         {"mean_j": None, "h_j": None, "n_r": 0, "n_b": 0})
+        self.assertIn("lower_j", result["lines"]["df-ph-decode-qwen3-1p7b"]["single_step_reconstruction"])
+
     def test_pool_reader_refuses_unpinned_sibling_before_read(self):
         """Predict: a pinned worker refuses an out-of-archive synthetic sibling before reading any of its bytes."""
         from types import SimpleNamespace

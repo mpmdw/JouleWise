@@ -901,6 +901,8 @@ def session_quantities(result):
             if not isinstance(row, dict) or row.get("status") == "not_computed" and "mean_j" not in row:
                 continue
             for field in ("mean_j", "dbar_j", "lower_j", "upper_j", "h_j", "n_r", "n_b", "n"):
+                if name == "single_step_reconstruction" and field in ("lower_j", "upper_j"):
+                    continue  # Absent from the pinned comparison contract, including null diagnostic intervals.
                 if field in row:
                     q["lines/" + name + "/" + label + "/" + field] = row[field]
     scaled = result.get("scaled_allowance") or {}
@@ -1010,6 +1012,7 @@ def pack_block5_keys(pack, keys):
 
 def block_lines(results, b5_keys):
     """Sections 10, 11.1, 11.2 and 11.4 over the per-session results."""
+    registered = production_comparison_keys()["session_quantity_keys"]
     out = {"between_session": {}, "flagged_inclusive": {}, "side_by_side": {}, "replication": {}, "short": {},
            "block6_only": {}}
     for pack in PACKS:
@@ -1018,7 +1021,11 @@ def block_lines(results, b5_keys):
                                 and r["inclusive"]["eligible"]]
         counting.sort(key=lambda r: (r["round"] if isinstance(r["round"], int) else 10 ** 6, r["session_id"]))
         b5 = pack_block5_keys(pack, b5_keys)
-        keys = sorted({k for r in inclusive for k in r["quantities"] if summarized(k)} | {k for k in b5 if summarized(k)})
+        # Quantity names are fixed by the contract even when no session can
+        # contribute a Q. The empty arithmetic still prints n=0, mean/sd=null.
+        keys = sorted({k for k in registered[pack] if summarized(k)} |
+                      {k for r in inclusive for k in r["quantities"] if summarized(k)} |
+                      {k for k in b5 if summarized(k)})
         summary, flagged, side = {}, {}, {}
         for key in keys:
             sessions = [r["quantities"].get(key) for r in counting]
@@ -1579,11 +1586,15 @@ def key_contract(restricted):
             "model_tags": sorted(MODEL_TAG.values()), "phases": sorted(PHASE_LABEL.values())}
 
 
-def require_production_coverage(results, lines):
+def production_comparison_keys():
     data = (ROOT_DIR / "configs/b6/recompute/production_comparison_keys.json").read_bytes()
     if hashlib.sha256(data).hexdigest() != "62dbfaef9ebc5cfbbe5a00734f5eb8ad3d82389f54f28473ed63db6135b9174d":
         raise InputRefusal("comparison_key_registry_digest_mismatch")
-    expected = json.loads(data)
+    return json.loads(data)
+
+
+def require_production_coverage(results, lines):
+    expected = production_comparison_keys()
     for result in results.values():
         if set(result["quantities"]) != set(expected["session_quantity_keys"][result["pack"]]):
             raise InputRefusal("comparison_session_coverage_mismatch")
