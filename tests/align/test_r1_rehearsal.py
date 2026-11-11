@@ -76,6 +76,18 @@ class ChainEnvironmentTests(unittest.TestCase):
                         self.assertFalse(argv_path.exists())
                     self.assertGreaterEqual(calls.read_text().splitlines().count(
                         '-n /usr/bin/pmset -c powermode 0'), 3)
+            # D-8 (Fable kit delta review): an inherited ALIGN_R1_PREPARE_PACKET (a decoy left in a desk shell)
+            # must not choose the packet; the chain always passes its fixed $MEASUREMENT_ROOT path.
+            packet.write_text('{"synthetic": true}\n')
+            decoy = root / 'decoy-prepare.json'
+            decoy.write_text('{"decoy": true}\n')
+            argv_path.unlink(missing_ok=True)
+            proc = subprocess.run(['/bin/zsh', plan.chain_path], env={**env, 'ALIGN_R1_PREPARE_PACKET': str(decoy)},
+                                  capture_output=True, text=True, timeout=15)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            argv = argv_path.read_text().splitlines()
+            self.assertEqual(argv[argv.index('--prepare-packet') + 1], str(packet))
+            self.assertNotIn(str(decoy), argv)
 
 
 def completed(argv, code=0, out="", err=""):
