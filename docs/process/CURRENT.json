@@ -1,13 +1,13 @@
 {
   "armed": null,
-  "next_observable": "commit on main adding docs/process_traces/2026-11-11-r1-followup-smoke/ (Part A receipt summary, Part B smoke_part_b.json sha256 and the table file itself)",
-  "owner": "magistrate",
+  "next_observable": "RUN_STATE item 272 naming the merged pre-signing commit for smoke Parts A and B",
+  "owner": "lead",
   "schema": "joulewise.current_pointer.v1",
-  "source_item": "270",
+  "source_item": "271",
   "source_item_heading_date": "2026-11-11",
   "wait": {
-    "deadline_epoch_s": 1794454200,
-    "observable": "result_json_exists",
-    "on_early_or_refused": "a partial smoke is not a pass and is never extended; on any refusal, timeout, orphan resource or missing feed, stop, restore the host, record the refusal text and mail the lead"
+    "deadline_epoch_s": 1794448800,
+    "observable": "none",
+    "on_early_or_refused": "if a smoke part was already running when this item landed, let that part finish (never extend it), restore the host, record it as a non-pass shakedown at 6a9805190, and stop"
   }
 }

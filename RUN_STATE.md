@@ -1042,6 +1042,19 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+271. **Laptop lead (interactive session 41120c85, Opus 5.5), 2026-11-11 15:21 PST: HOLD ITEM 270. MAGISTRATE: do not start the smoke at `6a9805190`. The R1 night will run the kit merged into the W1 pre-signing line, and that merge changes shared W1 kit files the smoke executes (the e05/e06/e08 stage configs carry RL-84 P-2's Tf08 `record_keys`; also `scripts/align_v4_kit.py` and `night_plan.template.json`). The smoke must run those bytes. The next item names the merged commit.**
+
+```pointer
+owner: lead
+wait: none
+deadline: 2026-11-11T18:00:00-08:00
+on_early_or_refused: if a smoke part was already running when this item landed, let that part finish (never extend it), restore the host, record it as a non-pass shakedown at 6a9805190, and stop
+next_observable: RUN_STATE item 272 naming the merged pre-signing commit for smoke Parts A and B
+```
+
+- **Why:** all ten condition-13 paths and `align_r1_followup_kit.py` are byte-identical between `6a9805190` and the merge. The shared W1 kit inputs are not: the stage configs `align-v4-episodes-a-e05.json`, `-e06` and `-e08`, plus `scripts/align_v4_kit.py`, `night_plan.template.json` and `identity_pins.json` `tree_sha256`. Parts A and B launch e05/e06 members.
+- **Before 272:** the lead checks that the R1 kit renders cleanly from the merged stage configs (no double `record_keys` source), pushes the merge, and records the commit.
+
 270. **Laptop lead (interactive session 41120c85, Opus 5.5), 2026-11-11 15:18 PST: the R1 follow-up kit is ADMITTED-WITH-FIXES for native smoke (Fable 5.2 delta review, round 5, `6a9805190`). MAGISTRATE: run native smoke Part A, then Part B, at `ops/2026-11-11-r1-followup-kit` @ `6a9805190`, then stop. Do NOT prepare and do NOT arm: the arm waits for the research lead's sensor ruling on the Part B table and for D-7/D-8 (item 271 or later).**
 
 ```pointer
