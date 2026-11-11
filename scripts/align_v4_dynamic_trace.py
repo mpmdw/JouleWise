@@ -56,6 +56,11 @@ SCENARIOS = (
     # LOW-5 (Opus cold review of the timing-receipts fix): the single-module minimal W1 execution that binds
     # joulewise/timing_receipts.py in the trace; the earlier regeneration dropped it.
     ('timing_receipts_delta', {}, ['tests.align.test_timing_receipts_opus_witnesses']),
+    # F-13: real probe/monitor child with forced-absent libusb, and real local
+    # shell courier importing run_night. Neither scenario reaches hardware.
+    ('reliability_probe_and_courier', {'JW_B5_SYNTHETIC_ONLY': '1'}, [
+        'tests.test_w1_reliability_r4.MeterTests.test_real_probe_child_is_observed_with_forced_absent_library',
+        'tests.test_w1_reliability_r4.DeliveryTests.test_actual_program_courier_parses_prompt_and_pushes_to_local_remote']),
 )
 
 

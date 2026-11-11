@@ -169,7 +169,14 @@ def terminal_release_check(record, plan, now_epoch_s):
     started, exited = names.get('chain_started') is not None, names.get('chain_exited') is not None
     courier = record.source('courier')
     record.source('courier_sent', json_value=False)  # native courier creates an empty marker with touch
-    require(courier.get('sent') is True, 'courier delivery missing')
+    if courier.get('sent') is not True:
+        receipt = record.source('courier_delivery')
+        require(receipt.get('transport') == 'git-push' and receipt.get('plan_id') == plan['plan_id']
+                and receipt.get('ref') == 'refs/heads/night-results/' + plan['plan_id']
+                and receipt.get('result_sha256') == digest(record.source('result', json_value=False))
+                and isinstance(receipt.get('commit'), str)
+                and re.fullmatch(r'[0-9a-f]{40,64}', receipt['commit']) is not None,
+                'courier delivery missing or for another result')
     decision = terminal_window_release(result, plan_id=plan['plan_id'], receipt_class=plan['receipt_class'],
                 now_epoch_s=now_epoch_s, chain_started=started, chain_exited=exited, courier_sent=True)
     require(decision.allowed, decision.reason)

@@ -1480,6 +1480,7 @@ def _artifact_list(custody_root: Path, night_dir: Path) -> list[dict[str, Any]]:
         # result.json's refusal_documents or the courier's refusal discovery.
         *sorted(night_dir.glob("rerun.refusal*.json")),
         night_dir / "result.json",
+        *sorted(night_dir.glob("deadman_host_restoration-*.json")),
         night_dir / "launch.pending",
         night_dir / "launch.resolved",
         night_dir / "chain.started",
@@ -1637,6 +1638,7 @@ def _publish_terminal_result(custody_root, night_dir, plan_id):
         return "results delivery failed: invalid plan id"
     deadline = time.monotonic() + 50.0
     branch = "refs/heads/night-results/" + plan_id
+    omitted = []
 
     def run(args, **kwargs):
         remaining = deadline - time.monotonic()
@@ -1661,7 +1663,8 @@ def _publish_terminal_result(custody_root, night_dir, plan_id):
                 parent = run([*git, "rev-parse", "FETCH_HEAD"], check=True).stdout.strip()
                 parents = ["-p", parent]
             elif remote.returncode != 2:
-                raise RuntimeError("results ref lookup failed")
+                raise subprocess.CalledProcessError(remote.returncode, remote.args if hasattr(remote, "args") else git,
+                                                    stderr=remote.stderr)
             prefix = "docs/process_traces/night-results/" + plan_id + "/"
             # The default bare index starts empty: each commit is an exact
             # snapshot, while its parent retains previous delivery evidence.
@@ -1670,25 +1673,51 @@ def _publish_terminal_result(custody_root, night_dir, plan_id):
                 if relative.name in {"chain.stdout.log", "chain.stderr.log"}:
                     continue
                 if "error" in artifact:
-                    raise OSError("unreadable reporting artifact: " + str(relative))
+                    if relative == Path("night/result.json"):
+                        raise OSError("unreadable terminal result: " + str(relative))
+                    omitted.append({"path": str(relative), "error": artifact["error"]})
+                    continue
                 source = custody_root / relative
                 name = (source.relative_to(night_dir).as_posix()
                         if source.is_relative_to(night_dir / "evidence") else source.name)
-                blob = run([*git, "hash-object", "-w", str(source)], check=True).stdout.strip()
+                try:
+                    blob = run([*git, "hash-object", "-w", str(source)], check=True).stdout.strip()
+                except (OSError, subprocess.SubprocessError) as error:
+                    if source == result_path:
+                        raise
+                    omitted.append({"path": str(relative), "error": _delivery_error(error)})
+                    continue
                 run([*git, "update-index", "--add", "--cacheinfo", "100644", blob, prefix + name], check=True)
+            if omitted:
+                blob = run([*git, "hash-object", "-w", "--stdin"],
+                           input=json.dumps({"omitted_unreadable_artifacts": omitted}, sort_keys=True) + "\n",
+                           check=True).stdout.strip()
+                run([*git, "update-index", "--add", "--cacheinfo", "100644", blob,
+                     prefix + "delivery_omissions.json"], check=True)
             tree = run([*git, "write-tree"], check=True).stdout.strip()
             commit = run([*git, "commit-tree", tree, *parents],
                          input="record terminal night " + plan_id + "\n", check=True).stdout.strip()
             run([*git, "push", origin, commit + ":" + branch], check=True)
         receipt = {"transport": "git-push", "plan_id": plan_id, "ref": branch,
                    "commit": commit, "result_sha256": result_digest, "delivered_epoch_s": time.time()}
+        if omitted:
+            receipt["omitted_unreadable_artifacts"] = omitted
         pending = night_dir / (".courier-delivery-" + uuid.uuid4().hex)
         pending.write_bytes(_json_bytes(receipt))
         os.replace(pending, night_dir / "courier.delivery.json")
         _append_log(custody_root, "terminal results delivered ref=" + branch + " commit=" + commit)
+        if omitted:
+            _append_log(custody_root, "terminal results omitted unreadable artifacts: " + json.dumps(omitted))
         return None
     except Exception as error:
-        return "results delivery failed: " + type(error).__name__
+        return "results delivery failed: " + _delivery_error(error)
+
+
+def _delivery_error(error):
+    tail = getattr(error, "stderr", "") or ""
+    if isinstance(tail, bytes):
+        tail = tail.decode("utf-8", "replace")
+    return (type(error).__name__ + ": " + str(error))[-1024:] + ("; stderr: " + tail[-2048:] if tail else "")
 
 
 def _program_courier_delivery(custody_root, plan_id):
@@ -1711,6 +1740,7 @@ def _program_courier_delivery(custody_root, plan_id):
             (night / "courier.filed").write_text(error + "\n")
             return 1
     (night / "courier.sent").touch()
+    (night / "courier.filed").unlink(missing_ok=True)
     return 0
 
 
@@ -1828,6 +1858,7 @@ def _wait_for_courier(
     *,
     stop_epoch_s: float | None = None,
     report: dict[str, Any] | None = None,
+    process: Any = None,
 ) -> tuple[bool, bool]:
     if report is None:
         report = {"diagnostics": []}
@@ -1847,6 +1878,8 @@ def _wait_for_courier(
         if sent.is_file():
             optional("sent marker persistence", lambda: _fsync_path(sent))
             return heartbeat_seen, True
+        if process is not None and process.poll() not in (None, 0):
+            return heartbeat_seen, False
         deadline_remaining = deadline - time.monotonic()
         stop_remaining = (
             float("inf")
@@ -2127,6 +2160,7 @@ def run_courier(
                     sent,
                     stop_epoch_s=deadman_epoch_s,
                     report=report,
+                    process=process,
                 )
                 heartbeat_seen = heartbeat_seen or saw_heartbeat
                 if was_sent:
@@ -2268,8 +2302,9 @@ def _write_result(
     census_count: int,
     census_hits: list[dict[str, Any]] | None = None,
     calibration_refusal: dict[str, Any] | None = None,
+    *, host_restoration: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    restoration = _HOST_STATE_CLOSE() if _HOST_STATE_CLOSE is not None else None
+    restoration = (_HOST_STATE_CLOSE() if _HOST_STATE_CLOSE is not None else host_restoration)
     document = {
         "schema": RESULT_SCHEMA,
         "plan_id": plan.plan_id,
@@ -2308,6 +2343,7 @@ def _write_result(
         document["fault_reasons"] = list(dict.fromkeys([*document["fault_reasons"], "host_restoration_incomplete"]))
         document["fault"] = True
     _write_json(night_dir / "result.json", document)
+    _resume_terminal_signals(_SIGNAL_CLOSING)
     return document
 
 
@@ -2522,6 +2558,9 @@ def _finish_reporting(
     courier_bin_substitution: Mapping[str, str] | None = None,
     report: dict[str, Any] | None = None,
 ) -> int:
+    # The host close and create-once result are complete (or a minimal
+    # persistence attempt has failed); the bounded courier is interruptible.
+    _resume_terminal_signals(_SIGNAL_CLOSING)
     if report is None:
         report = {"facts": {"plan_id": plan.plan_id}, "diagnostics": [],
                   "result_unavailable": False, "base_exit_code": base_exit_code,
@@ -4427,9 +4466,27 @@ def _restore_network_time(probes: Probes) -> dict[str, Any]:
     return record
 
 
+def _night_turned_network_time_off(plan: NightPlan) -> bool:
+    night = Path(plan.custody_root) / "night"
+    try:
+        action = json.loads((night / "network_time_off.action.json").read_bytes())
+        if (action.get("argv") == list(network_time_off.OFF_ARGV)
+                and action.get("returncode") == 0 and not action.get("error")
+                and not action.get("timed_out")
+                and network_time_off.off_stdout_admitted(action.get("stdout"))):
+            return True
+    except (OSError, ValueError, TypeError, AttributeError):
+        pass
+    try:
+        network_time_off.read_receipt(night / network_time_off.RECEIPT_BASENAME, plan_id=plan.plan_id)
+        return True
+    except (OSError, ValueError, TypeError):
+        return False
+
+
 def _close_ac_powermode(plan: NightPlan, probes: Probes, admission: Mapping[str, Any],
                         lock: Any = None) -> dict[str, Any]:
-    """Restore Automatic and network time ON together, under the host lock.
+    """Restore Automatic and any network-time obligation under the host lock.
 
     All plans close here, including mode-0 R1 chains that entered High Power
     internally. Never restore while chain termination is unproven, a child
@@ -4472,7 +4529,10 @@ def _close_ac_powermode(plan: NightPlan, probes: Probes, admission: Mapping[str,
             record["action"] = "restored" if restored.get("ok") else "restore_failed"
         except Exception as error:  # noqa: BLE001 - network time still gets its restore
             record.update(ok=False, error=f"{type(error).__name__}: {error}")
-        record["network_time"] = _restore_network_time(probes)
+        record["network_time"] = (_restore_network_time(probes)
+            if (not admission.get("skip_network_time_restore")
+                and (_night_turned_network_time_off(plan) or admission.get("deadman_no_night_installed")))
+            else {"ok": True, "action": "not_owed"})
         record["powermode_ok"] = record["ok"]
         record["ok"] = record["powermode_ok"] and record["network_time"]["ok"]
     except BaseException as error:  # noqa: BLE001 - never mask the night's outcome
@@ -4488,7 +4548,9 @@ def _close_ac_powermode(plan: NightPlan, probes: Probes, admission: Mapping[str,
             if record.get("action") == "not_owner":
                 label += ": marker belongs to another session"
             elif record.get("action") in ("restored", "restore_failed"):
-                label += ": restore Automatic and network time ON"
+                label += ": restore Automatic"
+                label += ("; network time not owed" if record["network_time"].get("action") == "not_owed"
+                          else " and network time ON")
             _append_log(Path(plan.custody_root), label + ": " + json.dumps(record, sort_keys=True))
         except Exception:  # noqa: BLE001
             pass
@@ -4508,7 +4570,9 @@ def _close_night_host(stage: dict[str, Any], plan_path: Path) -> dict[str, Any]:
     plan = stage.get("plan") or _fallback_plan(plan_path)
     try:
         record = _close_ac_powermode(plan, stage.get("probes") or make_probes(),
-                                     {"plan_path": plan_path}, stage.get("lock"))
+                                     {"plan_path": plan_path,
+                                      "skip_network_time_restore": stage.get("skip_network_time_restore", False)},
+                                     stage.get("lock"))
     except BaseException as error:  # noqa: BLE001 - record a broken probe boundary too
         record = {"ok": False, "error": f"{type(error).__name__}: {error}"}
     stage["host_restoration"] = record
@@ -4578,6 +4642,17 @@ _CHAIN_TERMINATION_UNPROVEN: dict[str, Any] | None = None
 _HOST_STATE_CLOSE: Callable[[], dict[str, Any]] | None = None
 
 
+def _set_chain_termination_unproven(record: Mapping[str, Any]) -> None:
+    global _CHAIN_TERMINATION_UNPROVEN
+    _CHAIN_TERMINATION_UNPROVEN = dict(record, proven=False)
+
+
+def _resume_terminal_signals(closing) -> None:
+    resume = getattr(closing, "resume", None)
+    if resume is not None:
+        resume()
+
+
 def _install_termination_handlers() -> tuple[Callable[[], None], Callable[[], None]]:
     """Lead ruling R7-4: SIGTERM and SIGHUP unwind run_night like SIGINT (a
     KeyboardInterrupt), so its normal close runs, High Power restore included.
@@ -4587,7 +4662,8 @@ def _install_termination_handlers() -> tuple[Callable[[], None], Callable[[], No
     ``closing`` before it raises, so no later one can cut short the chain
     termination or the close. Python-level handlers reset to the
     default on exec, so children keep default dispositions. Main thread only.
-    Returns ``(closing, restore)``."""
+    The host close resumes interruption before the courier phase using
+    ``closing.resume``. Returns ``(closing, restore)``."""
     if threading.current_thread() is not threading.main_thread():
         return (lambda: None), (lambda: None)
     state = {"closing": False, "received": []}
@@ -4610,6 +4686,8 @@ def _install_termination_handlers() -> tuple[Callable[[], None], Callable[[], No
 
     def closing() -> None:
         state["closing"] = True
+
+    closing.resume = lambda: state.update(closing=False)
 
     def restore() -> None:
         for sig, old in previous.items():
@@ -4678,6 +4756,7 @@ def run_night(
                     _write_result(Path(plan.custody_root), night, plan,
                                   "ABORTED" if (night / "chain.started").exists() else "REFUSED",
                                   None, "exception_before_result", time.time(), time.monotonic_ns(), None, 0)
+                    _durable_record(Path(plan.custody_root), night, plan)
             except BaseException:  # noqa: BLE001 - a failure cannot mask the original exception
                 pass
         for close in closers:
@@ -4739,6 +4818,7 @@ def _run_night(
     night_dir.mkdir(parents=True, exist_ok=True)
     existing = _existing_record(night_dir, plan)
     if existing is not None:
+        stage["skip_network_time_restore"] = True
         if existing.name == LAUNCH_ABANDONED_MARKER:
             # J4: the watchdog released this launch. Write nothing under night/
             # (any driver record there would re-fence the released span); the
@@ -5316,9 +5396,24 @@ def _deadman_host_restore(stage: dict[str, Any], plan_path: Path) -> dict[str, A
     if stage.get("closing") is not None:
         stage["closing"]()
     plan = stage.get("plan") or _fallback_plan(plan_path)
+    night = Path(plan.custody_root) / "night"
+    if stage.get("stand_down") or (night / LAUNCH_ABANDONED_MARKER).exists():
+        record = {"ok": False, "deferred": stage.get("deferred", "launch abandoned")}
+        stage["restoration"] = record
+        return record
+    try:
+        result = json.loads((night / "result.json").read_bytes())
+        restored = (result.get("host_restoration") or {}).get("ok") is True
+        if restored and not any(os.path.lexists(m) for m in _power_markers(plan)):
+            stage["restoration"] = result["host_restoration"]
+            _resume_terminal_signals(stage.get("closing"))
+            return stage["restoration"]
+    except (OSError, ValueError, TypeError, AttributeError):
+        pass
     if stage.get("safe_to_restore"):
         try:
-            record = _close_ac_powermode(plan, make_probes(), {"plan_path": plan_path})
+            record = _close_ac_powermode(plan, make_probes(), {
+                "plan_path": plan_path, "deadman_no_night_installed": stage.get("no_night_installed", False)})
         except BaseException as error:  # noqa: BLE001 - preserve the dead-man's terminal outcome
             record = {"ok": False, "error": f"{type(error).__name__}: {error}",
                       "network_time": {"ok": False, "action": "not_attempted"}}
@@ -5326,7 +5421,6 @@ def _deadman_host_restore(stage: dict[str, Any], plan_path: Path) -> dict[str, A
         record = {"ok": False, "deferred": stage.get("deferred", "chain termination not established"),
                   "network_time": {"ok": False, "action": "not_attempted"}}
     stage["restoration"] = record
-    night = Path(plan.custody_root) / "night"
     try:
         night.mkdir(parents=True, exist_ok=True)
         _write_json(night / f"deadman_host_restoration-{time.time_ns()}.json", record)
@@ -5336,21 +5430,14 @@ def _deadman_host_restore(stage: dict[str, Any], plan_path: Path) -> dict[str, A
             return record
         if not (night / "result.json").exists():
             _write_result(Path(plan.custody_root), night, plan, "REFUSED", None,
-                          "dead_man_recovery", time.time(), time.monotonic_ns(), None, 0)
-        result = json.loads((night / "result.json").read_bytes())
-        result["dead_man_host_restoration"] = record
-        if not record.get("ok"):
-            result["fault"] = True
-            result["fault_reasons"] = list(dict.fromkeys(
-                [*result.get("fault_reasons", []), "host_restoration_incomplete"]))
-        _atomic_probe_json(night / "result.json", result)
-        # A delivered digest cannot acknowledge the updated recovery result.
-        (night / "courier.sent").unlink(missing_ok=True)
+                          "dead_man_recovery", time.time(), time.monotonic_ns(), None, 0,
+                          host_restoration=record)
     except Exception as error:  # noqa: BLE001 - the separate record/log still carries the attempt
         try:
             _append_log(Path(plan.custody_root), f"dead-man restore result recording failed: {error}")
         except Exception:  # noqa: BLE001 - never mask the terminal outcome
             pass
+    _resume_terminal_signals(stage.get("closing"))
     return record
 
 
@@ -5383,8 +5470,13 @@ def _dead_man(plan_path: Path, *, courier_bin: Path | None, stage: dict[str, Any
     stage["plan"] = plan
     night_dir = custody_root / "night"
     night_dir.mkdir(parents=True, exist_ok=True)
+    if (night_dir / LAUNCH_ABANDONED_MARKER).exists():
+        stage["stand_down"] = True
+        _append_log(custody_root, "dead-man launch abandoned; standing down")
+        return EXIT_GO
     completion_epoch_s = _completion_epoch_s(plan)
     if time.time() < completion_epoch_s:
+        stage["stand_down"] = True
         stage["deferred"] = "dead-man fired before the night's completion epoch"
         _append_log(
             custody_root,
@@ -5392,6 +5484,17 @@ def _dead_man(plan_path: Path, *, courier_bin: Path | None, stage: dict[str, Any
             f"{int(completion_epoch_s)}; standing down",
         )
         return EXIT_GO
+
+    # A delivered, restored terminal night is immutable under daily fires.
+    try:
+        result = json.loads((night_dir / "result.json").read_bytes())
+        if ((result.get("host_restoration") or {}).get("ok") is True
+                and not any(os.path.lexists(m) for m in _power_markers(plan))
+                and (night_dir / "courier.sent").is_file()):
+            stage["restoration"] = result["host_restoration"]
+            return EXIT_GO
+    except (OSError, ValueError, TypeError, AttributeError):
+        pass
 
     resolved_courier, courier_error, courier_substitution = _resolve_courier_bin(
         courier_bin, plan=plan
@@ -5486,6 +5589,12 @@ def _dead_man(plan_path: Path, *, courier_bin: Path | None, stage: dict[str, Any
     # marker another session owns is left alone, and nothing is restored
     # while a measuring night holds the host night lock. Never raises.
     stage["safe_to_restore"] = True
+    try:
+        census = probes.run(("launchctl", "print", f"gui/{os.getuid()}/com.joulewise.night"))
+        absent = f'Could not find service "com.joulewise.night" in domain for user gui: {os.getuid()}'
+        stage["no_night_installed"] = (census.exit_code == 113 and absent in census.stderr.splitlines())
+    except Exception:  # noqa: BLE001 - absence is unproven
+        stage["no_night_installed"] = False
     _deadman_host_restore(stage, plan_path)
     probe, census_refusal = agent_census(probes)
     _append_census(night_dir / "censuses.jsonl", probe, census_refusal)

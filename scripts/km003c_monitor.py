@@ -41,7 +41,8 @@ appears.  Initialisation is retried with a USB reset between attempts.  A
 meter that is absent (no libusb, no device, every init attempt failed) gives
 a header with status "absent", a trailer and exit 0: an absent meter is a
 recorded fact, not a failure.  Exit 2 only for usage errors or an unwritable
-``--out``.
+``--out``. Five consecutive USB errors exit 1 after cleanup so the supervisor
+can open a new handle and a new stream after USB re-enumeration.
 """
 
 from __future__ import annotations
@@ -63,6 +64,7 @@ from joulewise.external import km003c_usb as usb  # noqa: E402
 from joulewise.hazards import smc  # noqa: E402
 
 SCHEMA = "joulewise.km003c_stream.v1"
+USB_ERROR_LIMIT = 5
 RAW = time.CLOCK_MONOTONIC_RAW
 
 
@@ -155,6 +157,8 @@ def main(argv: list[str] | None = None) -> int:
               "smc_keys": list(smc.KEYS), "smc_units": dict(smc.UNITS)}
     meter = None
     counts = {"polls": 0, "empties": 0, "bad": 0, "usb_errors": 0}
+    consecutive_usb_errors = 0
+    exit_code = 0
     t_start = raw_ns()
     # Everything after the output is open sits inside the cleanup boundary: a
     # failed write (a full disk) still stops the graph and releases the meter.
@@ -183,10 +187,15 @@ def main(argv: list[str] | None = None) -> int:
                     rx = raw_ns()
                     rt = time.time_ns()
                     payload, n, ok = usb.parse_put_data(reply)
+                    consecutive_usb_errors = 0
                 except usb.UsbError as exc:
                     rx, rt, payload, n, ok, reply = raw_ns(), time.time_ns(), b"", 0, False, None
                     counts["usb_errors"] += 1
+                    consecutive_usb_errors += 1
                     out.write(json.dumps({"k": "e", "rx": rx, "usb_error": str(exc)}) + "\n")
+                    if consecutive_usb_errors >= USB_ERROR_LIMIT:
+                        stop["reason"] = "consecutive USB errors"
+                        exit_code = 1
                 counts["polls"] += 1
                 read = reader.read(keys)
                 values = read["values"]
@@ -224,8 +233,12 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         if meter is not None:
             try:
-                meter.stop_graph()
-                meter.disconnect()
+                for operation in (meter.stop_graph, meter.disconnect):
+                    try:
+                        operation()
+                    except usb.UsbError as exc:
+                        out.write(json.dumps({"k": "e", "rx": raw_ns(),
+                                              "usb_error": "cleanup: " + str(exc)}) + "\n")
             finally:
                 meter.usb.close()
         reader.close()
@@ -239,7 +252,7 @@ def main(argv: list[str] | None = None) -> int:
             os.fsync(out.fileno())
         finally:
             out.close()
-    return 0
+    return exit_code
 
 
 if __name__ == "__main__":

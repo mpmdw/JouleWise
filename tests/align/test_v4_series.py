@@ -18,6 +18,7 @@ import time
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
+from tests.test_kernel_clock import frequency_probe
 
 from scripts import align_v4_kit as w1, align_v4_series as s, align_v4_session as session
 from scripts import bytes_h_session as h
@@ -483,12 +484,17 @@ class FakeWorld:
                 return original_read(path, *args)
             stack.enter_context(patch.object(registration, 'load_identity_pins', side_effect=physical_pins))
             stack.enter_context(patch.object(h, 'read', side_effect=physical_inventory))
-            stack.enter_context(patch.object(session, 'frequency_word_preflight',
-                                            return_value={'ok': True, 'synthetic': True}))
+            # The chain replay stages t0 in the past to avoid an eight-minute
+            # wait. The pre-arm clock is earlier; the real preflight still reads
+            # and verifies the actual writer's plan and budget.
+            stack.enter_context(patch.object(session, 'time', SimpleNamespace(**(vars(time) | {'time': lambda: time.time() - 600}))))
             state = session.prepare(m, self.session, window_id=self.name, run=self.run_process,
                 now=lambda: time.time() - 480, statvfs=lambda _: SimpleNamespace(f_bavail=10**12, f_frsize=1),
-                capacity=lambda _: None)
+                capacity=lambda _: None, frequency_reader=lambda: frequency_probe(0),
+                frequency_runner=FakeArmHost(0))
             test.assertEqual(state['preparation_status'], 'STAGED')
+            test.assertTrue(state['clock_frequency_preflight']['ok'])
+            test.assertEqual(state['clock_frequency_preflight']['network_time']['observed'], 'off')
             tree = h.read(Path(state['inputs']['pack_root']) / 'plan_tree.json')
             units = tree['arm_attachments']['identity_pin_projection']['identity_units']
             if self.name != 'W1':
@@ -501,6 +507,7 @@ class FakeWorld:
             installed = session.install(self.session, run=self.run_process, runner=host, volume_runner=host,
                 now=lambda: state['t0_epoch_s'] - 1, next_arm_triage=packet,
                 obc_off_attested_by='SYNTHETIC operator', battery_log=self.battery_log(state),
+                frequency_reader=lambda: frequency_probe(0),
                 **arm_seams())
             test.assertEqual(installed['exit_code'], 0)
             test.assertEqual(len(self.installer_calls), 1)

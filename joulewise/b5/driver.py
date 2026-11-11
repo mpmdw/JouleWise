@@ -22,8 +22,9 @@ Inside the launchd job, after t0, this branch runs:
 5. the hazard monitor (``scripts/hazard_monitor.py``) in its own process group
    under ``taskpolicy -b``; a one-second supervision pass restarts it if it dies.
    Then the KM003C wall meter (``scripts/km003c_monitor.py``, plain QoS), a
-   disclosed diagnostic supervised the same way except that its exit 0 (meter
-   absent) is final; it never refuses or stops the window;
+   disclosed diagnostic supervised the same way, including retrying an absent
+   reader while USB re-enumerates. A first valid DC-in batch gates the chain; a sustained
+   sample outage stops it under the instrument outage bound;
 6. the chain, launched once through the driver's no-pack path
    (``_claim_chain_start`` / ``_run_chain_once`` / ``_WindowDeadline`` /
    ``_terminate_process_group``), with the in-chain agent census kept as an
@@ -1277,14 +1278,18 @@ class MeterLiveness(MonitorLiveness):
     Incrementally read every create-once stream, including restarts. Only a
     nonempty, correctly sized sample batch under a streaming header counts;
     USB errors, empty polls, partial/malformed lines and unreadable streams
-    never refresh liveness. Header RAW/monotonic anchors date the batch, so
-    reading a backlog cannot turn old samples into current evidence.
+    never refresh liveness. A streaming header is required; fresh paired
+    RAW/monotonic clocks date the last complete batch, including after sleep,
+    so reading a backlog cannot turn old samples into current evidence.
     """
 
-    def __init__(self, directory: Path, *, clock: Callable[[], float] = time.monotonic) -> None:
+    def __init__(self, directory: Path, *, clock: Callable[[], float] = time.monotonic,
+                 raw_clock: Callable[[], int] | None = None) -> None:
         super().__init__(directory, clock=clock)
+        self.raw_clock = raw_clock or (lambda: time.clock_gettime_ns(time.CLOCK_MONOTONIC_RAW))
         self.offsets, self.partial, self.anchors = {}, {}, {}
         self.last_good = {"meter": clock()}
+        self.last_sample = None
         self.outage: dict[str, Any] | None = None
 
     def check(self) -> dict[str, Any] | None:
@@ -1320,21 +1325,45 @@ class MeterLiveness(MonitorLiveness):
         self.offsets[name] = offset + len(data)
         lines = (self.partial.get(name, b"") + data).split(b"\n")
         self.partial[name] = lines.pop()
+        # Locate headers and the final complete batch without decoding every
+        # sample payload in the polling backlog. An invalid last batch is not
+        # replaced by an earlier (potentially stale) one.
+        last_batch = None
         for raw in lines:
+            kind = re.search(rb'"k"\s*:\s*"([hbet])"', raw)
+            if kind is None:
+                continue
+            if kind[1] == b'b':
+                last_batch = raw
+                continue
+            if kind[1] != b'h':
+                continue
             try:
                 row = json.loads(raw)
                 if not isinstance(row, dict):
                     continue
                 if row.get("k") == "h":
+                    last_batch = None
                     self.anchors.pop(name, None)
                     if (row.get("status") == "streaming"
                             and all(type(row.get(k)) is int for k in ("start_raw_ns", "start_mono_ns"))):
                         self.anchors[name] = row["start_raw_ns"] - row["start_mono_ns"]
-                elif row.get("k") == "b" and name in self.anchors:
+            except (ValueError, TypeError):
+                continue
+        if last_batch is not None and name in self.anchors:
+            try:
+                row = json.loads(last_batch)
+                if row.get("k") == "b":
                     n, payload, rx = row.get("n"), row.get("p"), row.get("rx")
                     if (type(n) is int and n > 0 and isinstance(payload, str) and len(payload) == 40 * n
                             and len(bytes.fromhex(payload)) == 20 * n and type(rx) is int):
-                        seen = (rx - self.anchors[name]) / 1e9
+                        # RAW advances through sleep on macOS; monotonic may
+                        # pause. Re-project using the current paired clocks.
+                        raw_now = self.raw_clock()
+                        if rx > raw_now:
+                            return
+                        seen = now - (raw_now - rx) / 1e9
+                        self.last_sample = max(seen, self.last_sample if self.last_sample is not None else seen)
                         if self.last_good["meter"] < seen <= now:
                             gap = seen - self.last_good["meter"]
                             if gap >= MONITOR_OUTAGE_S and self.outage is None:
@@ -1342,7 +1371,23 @@ class MeterLiveness(MonitorLiveness):
                                                "outage_s": MONITOR_OUTAGE_S, "recovered": True}
                             self.last_good["meter"] = seen
             except (ValueError, TypeError):
-                continue
+                pass
+
+
+def await_meter_ready(meter: "MonitorSupervisor", liveness: MeterLiveness) -> dict[str, Any]:
+    """Require an actual fresh batch within the existing readiness timeout."""
+    deadline = time.monotonic() + MONITOR_READY_TIMEOUT_S
+    while True:
+        meter.poll()
+        liveness.next_check = 0
+        liveness.check()
+        now = time.monotonic()
+        if (liveness.last_sample is not None and now - liveness.last_sample < MONITOR_READY_TIMEOUT_S
+                and meter.process is not None and meter.process.poll() is None):
+            return {"ready": True, "last_sample_monotonic_s": liveness.last_sample}
+        if now >= deadline:
+            return {"ready": False, "errors": liveness.errors}
+        time.sleep(MONITOR_READY_POLL_S)
 
 
 # --------------------------------------------------------------------------
@@ -2554,7 +2599,7 @@ def _run_hazard_night_body(rt: Any, plan_path: Path, plan: Any, probes: Any,
         meter = MonitorSupervisor(
             lambda: meter_argv(monitor_request), night_dir=night, popen=seams.popen,
             group_census=getattr(rt, "_group_census", None), identity=getattr(rt, "observe_identity", None),
-            name=METER_NAME, restart_on_clean_exit=False)
+            name=METER_NAME, restart_on_clean_exit=True)
         meter.on_crash_loop = lambda details: meter_fault("crash_loop", details)
         meter.start()
 
@@ -2595,6 +2640,15 @@ def _run_hazard_night_body(rt: Any, plan_path: Path, plan: Any, probes: Any,
             meter_fault("not_proven_stopped", {"returncode": stop_record.get("returncode"),
                                                "group_absent": stop_record.get("group_absent")})
         return {**summary, "streams": meter_streams(custody, digests=True)}
+
+    readiness = await_meter_ready(meter, meter_liveness)
+    hazard["meter_stream_readiness"] = readiness
+    if not readiness["ready"]:
+        hazard["monitor"] = monitor.stop()
+        hazard["meter"] = stop_meter()
+        return refuse("meter", REFUSED_INSTRUMENT_NOT_SAMPLING,
+                      "KM003C reader produced no first valid batch within the monitor readiness budget",
+                      readiness, fault_reasons=("meter_not_sampling",))
 
     thresholds = plan.hazard_window["thresholds"].get("disk", {})
     low = thresholds.get("low_bytes", DISK_LOW_BYTES_DEFAULT) if isinstance(thresholds, Mapping) else DISK_LOW_BYTES_DEFAULT
@@ -2723,11 +2777,19 @@ def _run_hazard_night_body(rt: Any, plan_path: Path, plan: Any, probes: Any,
             chain_path, plan, probes, night, claim, command=["/bin/zsh", "-f", str(chain_path)],
             abort_on_census=True, supervise=supervise, census_group_on_exit=True,
             census=hazard_census, append_census=hazard_census.append)
+    except KeyboardInterrupt as interrupt:
+        termination = getattr(interrupt, "chain_termination", None)
+        if (night / "chain.started").exists() and not (termination or {}).get("proven"):
+            rt._set_chain_termination_unproven({"path": "interrupt", "outcome": termination})
+        raise
     except Exception as error:  # noqa: BLE001 - recorded; the terminal record must still be written
         window.note(f"chain supervision raised {_error_text(error)}")
         abort = rt._refusal_mapping(rt._CODES["chain_alive"],
                                     f"the driver's chain supervision raised {_error_text(error)}", None)
         proven = False
+    if (night / "chain.started").exists() and not proven:
+        rt._set_chain_termination_unproven({"path": "hazard", "chain_exit_code": exit_code,
+                                           "abort": abort})
     # The chain exited no later than this instant (R3-5: the monitor stop is held from here).
     chain_returned = stamp()
     sleep_end = sleep_guard.safe_sleep_reading()
