@@ -53,10 +53,39 @@ only as a question or hypothesis.
 | Appendix A | Appendix A | First-use section pointers updated |
 | Appendices B–C | Appendices B–C | Unchanged |
 
-Headings and explicit paper section references change only to support these moves. Appendix pointers are
+Headings and explicit paper section references change only to support these moves, except the §8 body
+references handed to seat 9 below under RL-43. Appendix pointers are
 in subsection headings. Original branch identifiers (including `5.4.B`, `5.5.1`, `6.6.*` and `9.*`) stay
 stable as template locators even when their containing section moves. FACT comments remain byte-identical;
 their historical source locators are not renumbered.
+
+## Review fixes F-1–F-3 (seat 10 round 2)
+
+**F-1 / RL-43:** §8's title wording and body are restored byte-identical to `origin/main`'s §7;
+only the four heading numbers change from 7.x to 8.x. The following 11 body references are
+**handed to seat 9** for its rebase and renumbering pass. Ten need renumbering; the §1.2 pointer
+already has its final number and stays unchanged. FACT source locators stay unchanged.
+
+| Reference in restored §8 | Old number → new number | Disposition |
+|---|---|---|
+| Figure 5 caption: release verification | 4.6 → 5.6 | handed to seat 9 |
+| Figure 5 caption: uncovered-quantity checks | 4.7 → 5.7 | handed to seat 9 |
+| §8.2 item 1: change disclosure | 4.5 → 5.5 | handed to seat 9 |
+| §8.2 item 2: primary-block blinding | 4.6 → 5.6 | handed to seat 9 |
+| §8.2 item 2: BYTES commitment | 6.3 → 7.3 | handed to seat 9 |
+| §8.2 item 5: uncovered-quantity checks | 4.7 → 5.7 | handed to seat 9 |
+| §8.2 item 5: BYTES twin | 6.3 → 7.3 | handed to seat 9 |
+| §8.2 item 7: claims ladder | 3.10 → 4.8 | handed to seat 9 |
+| §8.2 item 7: correction provenance | 1.2 → 1.2 (unchanged) | handed to seat 9 |
+| §8.3 clock-mapping bullet | 3.3 → 4.2 | handed to seat 9 |
+| §8.3 process-overhead bullet | 7.2 → 8.2 | handed to seat 9 |
+
+**F-2:** Move only “Over n kept quads (at least five of ten):” from P088 in §4.8 to
+D.7 as the numbered list's lead-in. P089 stays in D.7. P088's two contiguous character spans
+are recorded below; the move cuts no text and leaves no dangling colon in §4.8.
+
+**F-3:** Tier E's keep list now includes §3.1–§3.2 and its replace list includes §3.4,
+the moved `P1-B5-METER` paragraph. The variants README row matches both lists.
 
 ## Cuts
 
@@ -74,7 +103,7 @@ provenance, FACT locators and prior deletions remain intact. All result alternat
 
 Counting whitespace-separated words after removing HTML comments and FILL placeholders: old §3 = **4,142**;
 old phase-method material after taking out boundary §§3.1 and 3.9 = **3,699**;
-new §4 = **1,974**, **53.4%** of that phase-method material. Appendix D retains the displaced text.
+new §4 = **1,965**, **53.1%** of that phase-method material. Appendix D retains the displaced text.
 
 `python3.13 -B docs/paper/paper1/build_fill_index.py` changes the count tuple
 from **235 / 214 / 218 / 173** to **234 / 213 / 217 / 173**
@@ -179,12 +208,12 @@ line breaks; every character span has one destination. Only separating whitespac
 | P085, L460–465 | `An inline USB-C power meter (POWER-Z KM003C) sits in the cable bet` | 3.2, L214–219 |
 | P086, L467–473 | `In Part 1 the meter is a **descriptive cross-check** that never en` | 3.2, L221–227 |
 | P087, L475–475 | `### 3.10 Model contrasts, outcome words and the claims ladder` | 4.8, L398–398 |
-| P088, L477–478 | `A **contrast** compares two models on the same workload in **contr` | 4.8, L400–401 |
-| P089, L480–490 | `1. d̄ = mean(d_k); se = s_d / √n. 2. **Metrology interval**: d̄ ± ` | D.7, L1616–1626 |
+| P088, L477–478 | `A **contrast** compares two models on the same workload in **contr` | `[0:182]` 4.8, L400–401; `[182:223]` D.7, L1616–1616 |
+| P089, L480–490 | `1. d̄ = mean(d_k); se = s_d / √n. 2. **Metrology interval**: d̄ ± ` | D.7, L1618–1628 |
 | P090, L492–492 | `The outcome is one of four registered words, decided in this order` | 4.8, L403–403 |
 | P091, L494–498 | `- **not estimable**: a required input is missing or invalid; - **n` | 4.8, L405–409 |
-| P092, L500–502 | `A **leave-one-quad-out** check recomputes the contrast without eac` | D.7, L1628–1630 |
-| P093, L504–507 | `Beside each contrast two **registered descriptive estimates** are ` | D.7, L1632–1635 |
+| P092, L500–502 | `A **leave-one-quad-out** check recomputes the contrast without eac` | D.7, L1630–1632 |
+| P093, L504–507 | `Beside each contrast two **registered descriptive estimates** are ` | D.7, L1634–1637 |
 | P094, L509–517 | `**The claims ladder** caps how strong a sentence may be. **L1** (i` | 4.8, L411–419 |
 | P095, L519–519 | `## 4. Experimental design` | 5., L421–421 |
 | P096, L521–521 | `### 4.1 Models, workloads and stack` | 5.1, L423–423 |
