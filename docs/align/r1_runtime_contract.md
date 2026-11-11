@@ -33,10 +33,12 @@ The field table lives in `joulewise/align/apple/r1_runtime_contract.py` (`KIND_F
   than falling back. Before acceptance, a redo's `g0-release-soak` uses the
   soak mean.
 
-  Every later R1 G0, G1, H, precool and `g0-release-soak` uses that fixed
-  R_op; designed states retain their existing R + offset mechanism. R1's
-  session hook sets the released episode's G1/H reference to R_op. W1's
-  ordinary G1/H reference rule is unchanged. `reference_source` is
+  Every later R1 G0, precool and `g0-release-soak` uses that fixed R_op;
+  designed states retain their existing R + offset mechanism. G1/H keep
+  `ThermalSession`'s episode reference (the G0 release temperatures), as
+  before and as in W1: the ruling moves only the G0 reference (lead fix
+  2026-11-10; a fixed R_op under G1/H's 300 s turn cap would demand a
+  cold restart between turns). `reference_source` is
   `r1_step_30b_pre_warmup` for the accepted capture or
   `r1_soak_reference` for the fallback. The driver prints
   `operating_minus_soak_c` per key without a gate on the difference.

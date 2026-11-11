@@ -1514,10 +1514,10 @@ class Segment:
                     session.reference = dict(reference)
                 deadman = kwargs.pop("deadman", None) if rearm_s is not None else kwargs.get("deadman")
                 row = original(kind, **kwargs)
-                if row["outcome"] == "released":
-                    # R1 uses the fixed R_op for G1/H too. W1 retains its
-                    # ordinary episode-reference rule in ThermalSession.
-                    session.episode_reference = dict(reference)
+                # G1/H keep ThermalSession's episode reference (the G0 release
+                # temperatures). The ruling moves only the G0 reference to R_op;
+                # a fixed R_op under G1/H's 300 s turn cap would demand a cold
+                # restart between turns (lead fix, 2026-11-10).
                 if quiet_s and row["outcome"] == "released":
                     start = segment.now_ns()
                     while (segment.now_ns() - start) / NS < quiet_s:

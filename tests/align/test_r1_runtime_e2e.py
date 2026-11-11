@@ -83,9 +83,17 @@ class DriverRuntimeTests(unittest.TestCase):
             self.assertAlmostEqual(later["reference_c"], op["slow_c"], delta=1e-6)
             episode = json.loads((root / "align-r1/D_bank_benign_s1_gated_held" / later["bundle"]
                                   / "outputs/align_episode.json").read_text())
-            for gate in episode["hardware"]["thermal"]["intervals"]:
-                for key in ("fast_c", "slow_c"):
-                    self.assertAlmostEqual(gate["reference"][key], op[key], delta=1e-6)
+            # G0 consumes R_op; G1/H keep the episode reference (the G0 release
+            # temperatures), as ThermalSession sets it (ruling moves G0 only).
+            intervals = episode["hardware"]["thermal"]["intervals"]
+            g0 = [g for g in intervals if g["kind"] == "G0"]
+            self.assertEqual(len(g0), 1)
+            for key in ("fast_c", "slow_c"):
+                self.assertAlmostEqual(g0[0]["reference"][key], op[key], delta=1e-6)
+            for gate in intervals:
+                if gate["kind"] != "G0" and g0[0]["outcome"] == "released":
+                    for key in ("fast_c", "slow_c"):
+                        self.assertAlmostEqual(gate["reference"][key], g0[0]["release"][key], delta=1e-6)
             self.assertEqual(registration["slots"], step["slots"])
             for row in registration["deadman_budget"]:
                 self.assertAlmostEqual(row["T_dead_s"], step["slots"]["T_dead"])

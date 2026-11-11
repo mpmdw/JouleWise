@@ -251,3 +251,18 @@ Only the requested R1/touched modules were run; the whole repository suite is le
 
 The next exact step is for the lead to stage the report's 19 pathspec entries and run `git -C /Users/edr/code/jw-wt/r1-g0-build commit -m "fix(align): adopt R1 operating reference and 1200s G0 caps"` with ordinary Git metadata access. Acceptance also remains pending the eight process-enumeration checks on a capable lead/CI executor, followed by the lead's executing review, cold passes and pin/re-arm process. Model-B continuation is synthetic evidence, not new live hardware validation. NR-1 remains deferred; no new measurement was started, custody was not modified, and no network operation or push was performed.
 
+
+
+## Lead amendment (magistrate 5515349e, 2026-11-10)
+
+Decision 3 is reverted. G1/H keep `ThermalSession`'s episode reference, which
+is the temperature at G0 release. Two reasons:
+- The ruling moves only the G0 reference. The "G0, G1, H" in the brief was
+  the lead's own wording error.
+- With a fixed R_op, G1/H would have to cool back to R_op + 1.5 C inside
+  their 300 s turn cap after every decode turn. On the 11-10 tails that takes
+  about 10 minutes.
+
+The hook's override was removed, and the e2e test now checks that G0 uses
+R_op and that G1/H use the G0 release values. The R1 suite passes: 296 tests,
+OK, 1 skipped, run outside the sandbox with working process enumeration.
