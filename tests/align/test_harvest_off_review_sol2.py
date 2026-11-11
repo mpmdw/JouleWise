@@ -187,7 +187,7 @@ class ArchiveEqualityTests(Scratch):
                 now=lambda: 1786300000.0, monotonic_ns=lambda: 123, boot_session_uuid=lambda: 'SYNTHETIC',
                 workers=workers, io_workers=io_workers, harvest_checkout=lambda **_: checkout)
 
-        with mock.patch.object(pm, 'document_memo', contextlib.nullcontext):
+        with mock.patch.object(harvest, 'document_memo', contextlib.nullcontext):
             reference = harvest.harvest(harvest.resolve_inputs(w.plan_path), w.archive,
                                         seams=seams(1, 1), prepare_desk=True)
         expected = {p.relative_to(w.archive).as_posix(): p.read_bytes()
@@ -298,39 +298,39 @@ class MemoTests(unittest.TestCase):
         return plistlib.dumps({'value': value, 'nested': {'items': [1, 2]}})
 
     def test_changed_bytes_are_a_miss_and_callers_are_isolated(self):
-        with mock.patch.object(pm, '_parse_powermetrics_documents', wraps=pm._parse_powermetrics_documents) as parse:
-            with pm.document_memo():
+        with mock.patch.object(pm, '_powermetrics_documents', wraps=pm._powermetrics_documents) as parse:
+            with harvest.document_memo():
                 first = pm._powermetrics_documents(self.data(1))
                 first[0][0]['nested']['items'].append(3)
                 self.assertEqual(pm._powermetrics_documents(self.data(1))[0][0]['nested']['items'], [1, 2])
                 self.assertEqual(pm._powermetrics_documents(self.data(2))[0][0]['value'], 2)
-            with pm.document_memo():
+            with harvest.document_memo():
                 pm._powermetrics_documents(self.data(1))
         self.assertEqual(parse.call_count, 3)
-        self.assertIsNone(pm._DOCUMENT_MEMO.get())
+        self.assertIsNone(harvest._DOCUMENT_MEMO.get())
 
     def test_failed_parse_is_retried_and_exception_drops_member_scope(self):
-        with mock.patch.object(pm, '_parse_powermetrics_documents', wraps=pm._parse_powermetrics_documents) as parse:
+        with mock.patch.object(pm, '_powermetrics_documents', wraps=pm._powermetrics_documents) as parse:
             with self.assertRaises(RuntimeError):
-                with pm.document_memo():
+                with harvest.document_memo():
                     for _ in range(2):
                         with self.assertRaises(ValueError):
                             pm._powermetrics_documents(b'not a plist')
-                    self.assertEqual(pm._DOCUMENT_MEMO.get(), {})
+                    self.assertEqual(harvest._DOCUMENT_MEMO.get(), {})
                     raise RuntimeError('synthetic worker fault')
         self.assertEqual(parse.call_count, 2)
-        self.assertIsNone(pm._DOCUMENT_MEMO.get())
+        self.assertIsNone(harvest._DOCUMENT_MEMO.get())
 
     def test_each_assessed_member_gets_a_fresh_memo(self):
         with tempfile.TemporaryDirectory(dir=REAL_TMP) as d:
             def assess(task, readable):
-                self.assertEqual(pm._DOCUMENT_MEMO.get(), {})
+                self.assertEqual(harvest._DOCUMENT_MEMO.get(), {})
                 pm._powermetrics_documents(self.data(1))
                 return {'run_id': task['run_id']}
             with mock.patch.object(harvest, '_assess_plain_member', side_effect=assess):
                 for rid in ('first', 'second'):
                     harvest.assess_member({'bundle_path': d, 'run_id': rid})
-                    self.assertIsNone(pm._DOCUMENT_MEMO.get())
+                    self.assertIsNone(harvest._DOCUMENT_MEMO.get())
 
 
 class SizingTests(unittest.TestCase):

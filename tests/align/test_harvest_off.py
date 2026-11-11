@@ -6,6 +6,7 @@ strict bundles; no real record, night-* or restricted path is read.
 from __future__ import annotations
 
 import contextlib
+import concurrent.futures
 from copy import deepcopy
 import hashlib
 import json
@@ -49,8 +50,8 @@ def inventory(root: Path) -> dict[str, str]:
 
 class DocumentMemoTests(unittest.TestCase):
     def setUp(self):
-        raw = SEED_PLIST.read_bytes()
-        self.data = b'\0'.join([raw.rstrip(b'\0')] * 2)
+        raw = plistlib.dumps({'nested': {'items': [1, 2]}, 'payload': b'x' * 1024})
+        self.data = b'\0'.join([raw] * 3)
         self.loads = mock.patch.object(pm.plistlib, 'loads', wraps=plistlib.loads)
         self.counter = self.loads.start()
         self.addCleanup(self.loads.stop)
@@ -59,7 +60,7 @@ class DocumentMemoTests(unittest.TestCase):
         documents, _ = pm._powermetrics_documents(self.data)
         per_parse = self.counter.call_count
         self.counter.reset_mock()
-        with pm.document_memo():
+        with h.document_memo():
             first, diag1 = pm._powermetrics_documents(self.data)
             first[0]['__mutated_by_first_caller__'] = True
             second, diag2 = pm._powermetrics_documents(self.data)
@@ -67,7 +68,7 @@ class DocumentMemoTests(unittest.TestCase):
         self.assertNotIn('__mutated_by_first_caller__', second[0])  # callers never share objects
         self.assertEqual(second, documents)
         self.assertEqual((diag1, diag2), (None, None))
-        self.assertIsNone(pm._DOCUMENT_MEMO.get())                  # the scope ends
+        self.assertIsNone(h._DOCUMENT_MEMO.get())                  # the scope ends
 
     def test_memo_is_off_by_default(self):
         pm._powermetrics_documents(self.data)
@@ -78,22 +79,73 @@ class DocumentMemoTests(unittest.TestCase):
     def test_memo_never_keeps_a_refusal(self):
         parts = self.data.split(b'\0')
         broken = b'\0'.join([parts[0], parts[1][:len(parts[1]) // 2], *parts[2:]])
-        with pm.document_memo():
+        with h.document_memo():
             messages = []
             for _ in range(2):
                 with self.assertRaises(ValueError) as caught:
                     pm._powermetrics_documents(broken)
                 messages.append(str(caught.exception))
-            self.assertEqual(pm._DOCUMENT_MEMO.get(), {})
+            self.assertEqual(h._DOCUMENT_MEMO.get(), {})
         self.assertEqual(messages[0], messages[1])
 
     def test_dropped_final_frame_diagnostic_is_reproduced_exactly(self):
         truncated = self.data[:-500]
         plain = pm._powermetrics_documents(truncated)
         self.assertIsNotNone(plain[1])
-        with pm.document_memo():
+        with h.document_memo():
             pm._powermetrics_documents(truncated)
             self.assertEqual(pm._powermetrics_documents(truncated), plain)
+
+    def assert_estimator_unchanged(self, before):
+        self.assertEqual(set(vars(pm)), set(before))
+        for name, value in before.items():
+            self.assertIs(vars(pm)[name], value, name)
+
+    def test_scope_restores_every_estimator_attribute_on_success_and_error(self):
+        before = dict(vars(pm))
+        with h.document_memo():
+            pm._powermetrics_documents(self.data)
+        self.assert_estimator_unchanged(before)
+        with self.assertRaisesRegex(RuntimeError, 'synthetic assessment fault'):
+            with mock.patch.object(h, '_assess_plain_member', side_effect=RuntimeError('synthetic assessment fault')):
+                h.assess_member({'bundle_path': str(SEED_PLIST.parent.parent)})
+        self.assert_estimator_unchanged(before)
+        self.assertIsNone(h._DOCUMENT_MEMO.get())
+
+    def test_memo_keys_cover_exact_bytes(self):
+        other = self.data + b'\n'
+        with h.document_memo():
+            self.assertEqual(pm._powermetrics_documents(self.data), pm._powermetrics_documents(other))
+            self.assertEqual(set(h._DOCUMENT_MEMO.get()),
+                             {hashlib.sha256(raw).hexdigest() for raw in (self.data, other)})
+
+    def test_failed_parse_can_succeed_on_retry(self):
+        plain = pm._powermetrics_documents(self.data)
+        with mock.patch.object(pm, '_powermetrics_documents', side_effect=[ValueError('first parse'), plain]) as parse:
+            with h.document_memo():
+                with self.assertRaisesRegex(ValueError, 'first parse'):
+                    pm._powermetrics_documents(self.data)
+                self.assertEqual(h._DOCUMENT_MEMO.get(), {})
+                self.assertEqual(pm._powermetrics_documents(self.data), plain)
+                self.assertEqual(pm._powermetrics_documents(self.data), plain)
+            self.assertEqual(parse.call_count, 2)
+
+    def test_unrelated_thread_bypasses_the_member_memo(self):
+        before = dict(vars(pm))
+        with h.document_memo():
+            pm._powermetrics_documents(self.data)
+            once = self.counter.call_count
+
+            def unrelated():
+                self.assertIsNone(h._DOCUMENT_MEMO.get())
+                pm._powermetrics_documents(self.data)
+                pm._powermetrics_documents(self.data)
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                pool.submit(unrelated).result(timeout=10)
+            pm._powermetrics_documents(self.data)
+            self.assertEqual(self.counter.call_count, 3 * once)
+        self.assert_estimator_unchanged(before)
 
 
 class MemberDedupeEqualityTests(unittest.TestCase):
@@ -102,7 +154,7 @@ class MemberDedupeEqualityTests(unittest.TestCase):
     def assess(self, bundle, memo):
         withheld = Path(tempfile.mkdtemp(dir=REAL_TMP))
         self.addCleanup(shutil.rmtree, withheld, True)
-        patch = contextlib.nullcontext() if memo else mock.patch.object(pm, 'document_memo', contextlib.nullcontext)
+        patch = contextlib.nullcontext() if memo else mock.patch.object(h, 'document_memo', contextlib.nullcontext)
         with patch:
             result = h.assess_member({'run_id': w.MEMBERS[0][0], 'bundle_path': str(bundle),
                                       'withheld_dir': str(withheld)})
@@ -425,7 +477,7 @@ class SamePathHarvestEqualityTests(unittest.TestCase):
 
     def mbp_then_air(self, *, pinned, boots):
         # MBP: today's path (one worker, no parse dedupe) on the live record.
-        with mock.patch.object(pm, 'document_memo', contextlib.nullcontext):
+        with mock.patch.object(h, 'document_memo', contextlib.nullcontext):
             mbp = h.harvest(h.resolve_inputs(self.window.plan_path), self.window.archive,
                             seams=self.seams(1, boots[0], pinned), prepare_desk=True)
         os.rename(self.tmp / 'w', self.tmp / 'w.mbp')
