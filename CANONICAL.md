@@ -76,6 +76,7 @@ Held, not canonical yet: the condition-waits lane (`align/2026-11-08-condition-w
 | Comparator (recompute against the heavy pipeline) | `scripts/compare_b5_recompute.py` (bars in `configs/analysis/b5/recompute_bars.json`) | `tools/normalized_compare.py` and its R1 original under `docs/process_traces/2026-11-01-l9-speedup-r1/` (deleted in the prune) |
 | D-188 equivalence gate (accepting a restructured heavy pipeline) | `tools/b5_equivalence/compare_b5_results.py` (result-equivalence comparator, `--mode blinded` by default). A different job from the comparator above | Byte-for-byte replays of the old pipeline |
 | Seal and digest pins | `scripts/digest_pin_census.py` (censuses every SHA-256 literal in `tests/` and `configs/`, writes `configs/pins/registry.json`); checked in CI by `python3 scripts/repin.py --check` | One-off seal verification scripts in process traces; hand repins |
+| Analysis commit identity and release checkout provenance | `tests/b5_analysis/test_analysis_commit_agreement.py`: frozen anchor/r4 ancestry and cited rebinds, record/runbook identity, remote-branch fence, and advisory `release_b5.py` checkout fields | — |
 
 ## Flash-Next (qwen4_exp) MLX port
 

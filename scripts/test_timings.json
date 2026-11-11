@@ -202,6 +202,7 @@
     "tests.align.twins.test_nvml_twin_selfcheck": 0.008,
     "tests.align.twins.test_residual_twin_selfcheck": 6.93,
     "tests.b5_analysis.test_analysed_windows_index": 9.807,
+    "tests.b5_analysis.test_analysis_commit_agreement": 8.689,
     "tests.b5_analysis.test_analysis_work_counts": 44.739,
     "tests.b5_analysis.test_archive": 1.529,
     "tests.b5_analysis.test_attempt_record": 3.392,
