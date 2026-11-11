@@ -34,19 +34,22 @@ that any one or two of them still times out on the 11-10 record.
 |---|---|---|---|
 | 1 | Reference for every R1 gate after the first model member | **R_op**: the median of each gate key over the 60 s before warmup entry of the accepted `step-30b` member (the protocol's existing WP14(b) capture rule, `capture_reference`, coverage ≥ 0.9). On the 11-10 record: Tf08 26.571 °C, TV0h 34.106 °C | Mean of the last 1,200 s of the sensors-only soak: 25.489 / 34.011 °C |
 | 2 | Slow band used by R1's gates | **δ_slow = max(1.5 °C, 3 × soak SD)** = 1.5 °C. Recorded as slot S6 = 1.5 with a tuning receipt from S5 = 1.0. S5's formula and the fast band (1.0 °C) do not change | max(1.0 °C, 3 × soak SD) = 1.0 °C |
-| 3 | G0 cap for R1 model members | **1,200 s for every model member** (`g0_timeout_s`, the existing constant), which adds `step-30b`, the three A-B-A legs and `d-4bit` | 600 s for those five; 1,200 s already for step-d, X-G, the gated D runs and the designed start states |
+| 3 | G0 cap for R1 model members | **1,200 s for every model member** (`g0_timeout_s`, the existing constant), which adds `step-30b`, the three A-B-A legs and `d-4bit`. For the legs and `d-4bit` the member deadman (the wall-time limit on the member, 1,580 s) is armed **after** the G0, as `step-30b` and step-d already do | 600 s for those five; 1,200 s already for step-d, X-G, the gated D runs and the designed start states. The legs and `d-4bit` arm their deadman at G0 entry |
 
 Unchanged: the sensor keys, the slope bar, the ten-sample rule, the OS and
 powermetrics status conditions, the warmup, the 300 s quiet after release, the
-600 s cap of the sensors-only `g0-release-soak`, the 1,500 s precool caps, and
-every W1 rule. The soak stays: it still supplies the settling check
-(|slope| ≤ 0.2 °C/min), the SD for the bands, and the "R minus soak" print.
+600 s cap of the sensors-only `g0-release-soak`, the 1,500 s precool caps, the
+gated D runs' and X-G's deadman at G0 entry (that share is what the duty bar
+measures), and every W1 rule. The soak stays: it still supplies the settling
+check (|slope| ≤ 0.2 °C/min), the SD for the bands, and the "R minus soak"
+print.
 
 What the next R1 record should show if this ruling is right (a check, not a gate):
 R_op − soak mean on Tf08 near +1.06 °C; `step-30b` G0 released between about
-700 and 910 s; Tf08 at release about 1.5 °C above the member's own idle. A
-release before about 590 s or none by 1,200 s means the tail model in section 3
-is wrong and the record should come back to this seat.
+700 and 910 s; Tf08 at release about 1.5 °C above the member's own idle. No
+release by 1,200 s means the tail model in section 3 is wrong and the record
+should come back to this seat. A much earlier release is harmless and should
+simply be noted.
 
 ## 2. What the 11-10 record shows
 
@@ -164,6 +167,18 @@ before any band is considered. The need under 1.5 °C is 1.25 × 911 = 1,139 s;
 (`G0_CAP_MAX_S`). `g0-release-soak` keeps 600 s: no warmup precedes it, and the
 one sensors-only cooling record on disk (the head of the soak, starting at
 28.4 °C) releases by replay at 151 s.
+
+The A-B-A legs need the cap for the same reason. At 600 s each leg's own G0
+would time out, the adoption decision would be inconclusive by construction,
+and Ed's ruling that R1 includes the A-B-A would measure nothing. The legs'
+deadman must move with the cap. Today it is armed at G0 entry (1,580 s), so a
+G0 of 708–911 s would leave the turn only 669–872 s, and a deadman that fires
+mid-decode is an incomplete member, which refuses the whole night
+(`k_step`: an incomplete leg is inconclusive only when its G0 did not release).
+Arming the deadman after the G0 uses the existing `rearm` path and keeps a long
+wait from turning a clean inconclusive into a refusal. I did not read how long
+the turn takes (a workload result), so I do not claim the turn would not have
+fitted; the change removes the dependence.
 
 ## 4. Replay
 
@@ -322,10 +337,14 @@ energy per °C, or about 1–14 J per °C for each kJ a member uses.
 9. This is a code change in the R1 runtime, driver, contract and kit text, so
    the frozen root `M` at `20e9edbc4` cannot be re-armed as is. The re-arm goes
    through the ordinary build, review and pin path, not the zero-capture retry.
-   Every bound that contains a model-member G0 cap is recomputed with 1,200 s
-   (`step-30b` takes step-d's bound, 5,763.9952 s; each A-B-A leg and `d-4bit`
-   gains 600 s), and the plan's `window_max_s` follows from the recomputed
-   night table.
+   Every bound that contains a model-member G0 cap is recomputed. `step-30b`
+   takes step-d's bound: 3,663.9952 + 1,200 + 300 + 600 = 5,763.9952 s. Each
+   A-B-A leg's G0 now sits outside its deadman, so its bound gains the 1,200 s
+   cap: 4,328.9952 → 5,528.9952 s, to be confirmed by the builders against
+   `segment_bounds` and `aba_leg_bound_s`. The plan's `window_max_s` follows
+   from the recomputed night table.
+10. The A-B-A legs and `d-4bit` arm their deadman after the G0 (section 3.3).
+    A leg whose G0 still does not release stays inconclusive under R5-3, as now.
 
 ## 8. NEEDS_RULING
 

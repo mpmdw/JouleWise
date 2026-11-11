@@ -3,7 +3,7 @@
 Inputs: `10-fable52-ruling.md` (Fable 5.2, ruler), `11-sol-findings.md` (Sol 6.1
 xhigh, finder), blind to each other.
 
-**Adopted: Fable 5.2 ruling sections 1, 3 and 7, as written.** Under Ed's 11-10
+**Adopted: Fable 5.2 ruling sections 1, 3 and 7 as written, including its late revision (A-B-A legs and d-4bit arm their deadman after G0).** Under Ed's 11-10
 rule, Fable 5.2 has the final say on paper-bound work.
 1. R_op: the WP14(b) pre-warmup 60 s median of the accepted step-30b member
    becomes the reference for every later R1 gate.
