@@ -234,8 +234,10 @@ sensor policy, canonical record digest, and recomputed source-journal samples.
 
 For R1, accepted step-30b supplies R_op: the existing WP14(b) per-key
 60 s pre-warmup median with coverage ≥ 0.9. Its own G0 uses that capture.
-Every later R1 G0, G1, H, precool and sensors-only release uses the fixed
+Every later R1 G0, precool and sensors-only release uses the fixed
 accepted R_op (designed start states retain their R + offset mechanism).
+G1 and H keep the episode reference, the temperatures at that member's G0
+release, as in W1.
 A release before acceptance uses the soak mean. The soak still supplies
 settling, spread and the printed per-key R_op minus mean; that difference
 has no acceptance threshold. Missing capture coverage still makes the

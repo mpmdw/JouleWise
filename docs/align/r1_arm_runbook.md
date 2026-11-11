@@ -178,7 +178,23 @@ which starts no agent and sends no email.
 
 ## 4. On return, preserve the result and uninstall
 
-At the next activation after R1, restore network time; the night leaves it OFF.
+At the next activation after R1, read `$S/night/align-r1/r1_result.json` and
+the chain's exit code first. Do not rely on `result.json`'s `verdict`: it can
+read GO for a refused chain (audit A-01).
+
+Network time: restoring it ON re-creates the kernel frequency-word hazard for
+the next arm (RUN_STATE item 251). Before the next arm, set network time OFF
+and run the zero step.
+
+**R_op after a redo (cold pass F1, 2026-11-10).** If the accepted `step_30b`
+attempt index is above 0, R_op was captured after a full 30B turn rather than
+after the soak. It may then be high by an unmeasured amount. Read
+`operating_minus_soak_c` (about +1.06 C on 11-10). Send such a night to the
+ruling seat before any R_op-gated number is used. This rule is a flag. The
+night is not refused.
+
+Also read first the G0 outcomes of the three sensors-only releases between
+the A-B-A legs (cold pass observation 1). They keep a 600 s cap.
 
 ```zsh
 sudo -n systemsetup -setusingnetworktime on
