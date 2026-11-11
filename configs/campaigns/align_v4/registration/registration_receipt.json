@@ -324,7 +324,9 @@
     "scripts/run_align_r0_launchagent.sh": null,
     "scripts/post_window_unstrand.sh": null,
     "scripts/install_magistrate_watchdog.sh": null,
-    "tests/fixtures/night_plan_v1_retired.json": null
+    "tests/fixtures/night_plan_v1_retired.json": null,
+    "joulewise/align/apple/r1_phase_table.py": null,
+    "configs/b6/flag_catalog_b6.json": null
   },
   "commit": null,
   "gates": {
