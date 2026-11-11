@@ -1042,6 +1042,45 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+265. **Laptop lead (interactive session 41120c85, Opus 5.5), 2026-11-11 08:05 PST: research lead RL-80 (BYTES stage-1 rc 7). The attribution is done from code and text. MAGISTRATE: RUN THE ATTRIBUTION PROBE NOW, then stop. No fix, no rerun, no commitment yet.**
+
+```pointer
+owner: magistrate
+wait: results_branch_exists
+deadline: 2026-11-11T20:00:00-08:00
+on_early_or_refused: if the probe exits nonzero or prints anything but its typed tokens, stop and mail the lead; do not retry with changes
+next_observable: commit on main adding docs/process_traces/2026-11-11-bytes-stage1-attribution-probe/probe.txt (the probe's stdout, verbatim)
+```
+
+- **RL-80, in summary.** Full text: `audit/2026-11-10-fable` @ `53daee6d1`.
+  - The rc-7 stop was correct.
+  - Never commit the rc-7 predictions (`a6cb172c…5f19`). Keep them, with their digest, as a record.
+  - Which side is right is decided by the registration TEXT before any magnitude is compared.
+  - A fix is built only after the research lead rules on the probe result.
+- **Attribution, read from code only.** Branch `analysis/2026-11-11-bytes-stage1-attribution` @ `53207bad3`, report `docs/run_reports/2026-11-11-bytes-stage1-attribution.md`.
+  - **B_j and related fields:** the TWIN departs from §7. It reads an export column with the wrong bound and the whole window. The estimator follows the text.
+  - **Flags:** the text supports both readings; that goes to the research lead.
+  - **`w`:** follows from the B_j item.
+- **The probe.**
+  - It prints typed tokens only: field names, counts, multiples of the bar (only where the bar is relative), and yes/no answers.
+  - It never prints an energy, power or duration value, or the direction of a difference.
+  - It refuses held-out, withheld, key, custody and stage-2 paths.
+  - It passed an Opus blinding review (SAFE-AFTER-FIXES, 13 tests, 40-seed sentinel fuzz).
+- **Run it on the MBP exactly as follows** (`$W=/Users/edr/code/jw-wt/bytes-stage1`, `$S1=/Users/edr/night-archive/bytes-stage1-20261111`, `$PY` = the venv interpreter you used for §3.8). Do not move `$W`:
+  ```zsh
+  git -C $W fetch -q origin analysis/2026-11-11-bytes-stage1-attribution
+  git -C $W show 53207bad3:scripts/bytes_stage1_attribution_probe.py > $S1/attribution-probe.py
+  $PY -I $S1/attribution-probe.py --repo $W --run-root $S1/run --export $S1/export > $S1/attribution-probe.txt; echo rc=$?
+  ```
+- **Then:**
+  - commit `attribution-probe.txt` verbatim, with its rc and sha256, under `docs/process_traces/2026-11-11-bytes-stage1-attribution-probe/` on main;
+  - mail the lead;
+  - stop.
+
+  Do NOT build a twin fix, rerun §3.8, or commit any prediction. Those wait for the research lead's ruling on the probe (RL-82).
+- **Test safety.** Some test modules on the W1 line can issue a real `sudo /usr/sbin/systemsetup -getusingnetworktime` query, and their close path could, in principle, set network time. A suite-wide guard is being built. Until it lands, do not run W1-line test modules on the MBP except those a RUN_STATE item names.
+- **Host.** Nothing is armed. Network time stays OFF. Do not move the canonical checkout (item 263).
+
 264. **Magistrate activation 9a785629 (Opus 5.5, headless), 2026-11-11 06:35 PST: BYTES stage 1 ran and STOPPED at rc 7 (`PREDICTIONS_WRITTEN_STAGE1_DISAGREEMENT`). Nothing is committed. The lead must attribute 390 above-bar stage-1 fields before any commitment.**
 
 ```pointer

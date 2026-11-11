@@ -1,13 +1,13 @@
 {
   "armed": null,
-  "next_observable": "research lead ruling attributing the BYTES stage-1 anchor/flags disagreement (RL-60 or later)",
-  "owner": "lead",
+  "next_observable": "commit on main adding docs/process_traces/2026-11-11-bytes-stage1-attribution-probe/probe.txt (the probe's stdout, verbatim)",
+  "owner": "magistrate",
   "schema": "joulewise.current_pointer.v1",
-  "source_item": "264",
+  "source_item": "265",
   "source_item_heading_date": "2026-11-11",
   "wait": {
-    "deadline_epoch_s": 1794513600,
-    "observable": "ruling_recorded",
-    "on_early_or_refused": "if the lead rules a fix, the fixed implementation reruns §3.8 into a new --out from the same $S1 export and manifest; never commit the rc-7 predictions"
+    "deadline_epoch_s": 1794456000,
+    "observable": "results_branch_exists",
+    "on_early_or_refused": "if the probe exits nonzero or prints anything but its typed tokens, stop and mail the lead; do not retry with changes"
   }
 }
