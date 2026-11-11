@@ -3202,6 +3202,74 @@ making its claim true. And a receipt that lists the rehearsal's code should list
 
 ---
 
+# Decision request 34: the three arm identity flags, traced; model weights; and the flag catalog (2026-11-11 05:09 PST)
+
+**Read.** The lane's trace as the lead relayed it. On the W1 line at `b4a6c217f` I read
+`configs/campaigns/align_v4/registration/local_file_verification.json`, the catalog selection in
+`scripts/harvest_b6_session.py:44-55`, the default in `joulewise/b6/registration.py:30-31`, and searched the v4
+receipt and `v4_registration.py` for any file under `configs/b6`. Nothing here has been run.
+
+## RL-62. The flags are inert by reading; weights are checked at prepare; the catalog that decides exclusions is bound
+
+### The trace: acknowledged
+
+By reading, all three codes are inert in v4: the collector records and exits 0, the driver does not treat them
+as faults, the desk's catalog marks them DISCLOSE, and nothing downstream reads `claim_usable` or a window
+reason. One row in `DEVIATIONS.md` says they are expected and what stands in their place. The W1 smoke confirms
+it by execution, with the four observations the lane listed. `model.identity_mismatch` on R1: someone reads
+which sub-check fired, from the flag's `observed.check` word. If it is not the unpinned case, tell me.
+
+### The gap the lane found: model weights
+
+**Yes: W1 gains a weight-digest check at prepare.** The registration's own record says the D weights were
+hashed once, by the R0 re-run on 6 November; the 30B's digest is inherited from the earlier pilot. Nothing has
+compared the files on disk with the inventory since, and the series runs for weeks. The tokenizer and template
+refusal would not notice a changed shard. If the weights are not the registered ones, every window measured
+the wrong model and nothing in the record would show it.
+
+- At prepare, for each model the plan uses, the folded SHA-256 of its weight shards is computed and compared
+  with the registered inventory. A mismatch or an unreadable shard refuses. It runs before the quiet dwell.
+- It reuses the R0 check's identity function; no new arithmetic.
+- **The check is required for every window. Only its mechanisation is under RL-53's terms and cut-off.** If the
+  code misses the batch, the magistrate runs the digests by hand before each arm and puts both values in the
+  arm notice; a mismatch means no arm.
+- **Now, while the measurement Mac is free:** hash both models' shards once and record the result against the
+  inventory. The follow-up R1 night uses the same weights.
+
+The arm record carries the digests either way. The paper can then say the weights were verified before every
+window, which it cannot say today.
+
+### A second gap, found while reading the trace: the flag catalog is not bound
+
+The trace says the v4 desk takes Block 6's flag catalog. It gets it by fall-through: the harvest tries to
+load a registration from the v4 directory, fails, and uses the default path
+`configs/b6/flag_catalog_b6.json`. That catalog decides which codes exclude a member, and
+`members_excluded` is the one thing every v4 reader downstream consumes. **No file under `configs/b6` is in
+the v4 receipt.** So the file that decides which runs count in the series is unbound and chosen by an
+exception path.
+
+Under RL-35's rule for data files this is not a close call. Before signing, and not under the cut-off:
+
+1. `configs/b6/flag_catalog_b6.json` is bound, strict, in the v4 receipt. Additive; RL-29's standing
+   ratification covers it.
+2. One row in `DEVIATIONS.md` states the fact: member exclusions in a v4 window are decided by that catalog at
+   its bound digest, together with the protocol's own rules (contention is disclosure-only, the battery
+   exclusion B, the capture faults), and how the harvest comes to select it.
+3. A test asserts that the harvest, given the v4 registration directory, resolves to that path, and that the
+   file's digest equals the bound one. The selection by fall-through is left as it is for this series; making
+   it explicit in the harvest is a bound-code change for the next registration.
+4. At the W1 smoke, the desk's recorded catalog digest is compared with the bound digest.
+5. The lane lead lists the catalog's codes whose effect is to exclude a member or a window, and I read that
+   list against the protocol before signing. If the catalog excludes on a code the protocol says only
+   discloses, or the reverse, that is a conflict in the claim contract and comes to me.
+
+**Reason.** Which model was measured and which runs count are the two facts a reader takes on trust from a
+registration. Both should be things the receipt can show.
+
+**Blind status.** Blind: no v4 outcome exists.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
