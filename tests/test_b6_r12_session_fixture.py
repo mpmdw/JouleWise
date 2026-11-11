@@ -653,6 +653,30 @@ class DeskInputBoundaryTests(unittest.TestCase):
 
 
 class VerifierInventoryTests(unittest.TestCase):
+    def test_prediction_sources_use_bound_git_blobs(self):
+        """Predict: later working-file edits cannot change the manifest's original committed prediction/doc hashes. The temporary Git repo is a provenance unit, not a chain fixture."""
+        from b6_r12_verify import prediction_sources
+        with tempfile.TemporaryDirectory(prefix="r12-prediction-source-") as directory:
+            repo = Path(directory)
+            paths = {"tests/test_b6_r12_session_fixture.py":
+                b'class DeclaredShapeTests:\n    def test_shape(self):\n        """Predict before collection: exit 0."""\n',
+                "docs/run_reports/2026-11-11-p1-b6-r12-r3.md": b"Original pre-run prediction.\n"}
+            for name, data in paths.items():
+                path = repo / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(data)
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+            subprocess.run(["git", "-C", str(repo), "-c", "user.name=R12 unit",
+                "-c", "user.email=r12-unit@example.invalid", "-c", "commit.gpgsign=false",
+                "commit", "-qm", "Declare unit prediction"], check=True)
+            commit = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+            for name in paths:
+                (repo / name).write_text("Later working-file content must not be used.\n")
+            value = prediction_sources(commit, repo)
+            self.assertEqual(value["test_docstrings"], {"test_shape": "Predict before collection: exit 0."})
+            self.assertEqual(value["source_sha256"], {name: hashlib.sha256(data).hexdigest() for name, data in paths.items()})
+
     def test_finisher_refuses_live_generators_before_hashing(self):
         """Predict: DONE alone cannot authorize receipt hashing while a generator parent is still live. Unit state stubs are not collected loop records or fixture evidence."""
         from unittest.mock import patch

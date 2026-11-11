@@ -7,6 +7,7 @@ document and observation receipts are generator-owned files beside the trees.
 from __future__ import annotations
 
 import argparse
+import ast
 import hashlib
 import io
 import json
@@ -124,6 +125,31 @@ def prepare_run_inputs(root, *, counting_only=True, session_id=None, stem="run")
     return archives, attempts_path, document
 
 
+def prediction_sources(commit, repo=REPO):
+    """Recover declarations from the immutable commit bound before generation.
+
+    Never use later working files to turn an observation into a prediction.
+    The generated manifest already carries this commit; these explicit blob
+    hashes and original docstrings make that binding directly auditable.
+    """
+    if len(commit) != 40 or any(char not in "0123456789abcdef" for char in commit):
+        raise ValueError("invalid generator commit")
+    sources = {}
+    declarations = {}
+    for name in ("tests/test_b6_r12_session_fixture.py", "docs/run_reports/2026-11-11-p1-b6-r12-r3.md"):
+        data = subprocess.check_output(["git", "show", commit + ":" + name], cwd=repo)
+        sources[name] = hashlib.sha256(data).hexdigest()
+        if name.endswith(".py"):
+            for node in ast.parse(data).body:
+                if isinstance(node, ast.ClassDef) and node.name == "DeclaredShapeTests":
+                    declarations = {method.name: ast.get_docstring(method) for method in node.body
+                                    if isinstance(method, ast.FunctionDef) and method.name.startswith("test_")}
+    if not declarations or not all(declarations.values()):
+        raise ValueError("bound generator commit lacks pre-run shape declarations")
+    return {"schema": "r12.pre_run_predictions.v1", "generator_commit": commit,
+            "source_sha256": sources, "test_docstrings": declarations}
+
+
 def finalize_manifest(root):
     manifest_path = root / "manifest.json"
     manifest = json.loads(manifest_path.read_text())
@@ -154,6 +180,7 @@ def finalize_manifest(root):
     manifest["source_call_receipts"] = {path.name: sha(path) for path in sorted(root.glob("source-calls-*.jsonl"))}
     manifest["git_blob_input_receipts"] = {path.name: sha(path) for path in sorted(root.glob("git-blob-input-queries-*.jsonl"))}
     manifest["volume"] = "mixed; see predeclared per-session source policies"
+    manifest["pre_run_prediction_sources"] = prediction_sources(manifest["generator_commit"])
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
 
 
