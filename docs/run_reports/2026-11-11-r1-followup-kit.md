@@ -1,6 +1,6 @@
 # R1 follow-up rehearsal kit — 2026-11-11
 
-Status (round 3): **code fixes and focused synthetic verification complete; PREQUAL completion, next-arm completion and a fresh full-profile trace remain owed under the test budget. Native smoke and delta review remain required.** Round-1/2 details below are historical; the round-3 section supersedes them. No night was armed. Branch `ops/2026-11-11-r1-followup-kit`; local commits are listed in the round-3 handoff.
+Status (round 5): **D-1/D-2/D-3 fixed; R1 regressions, static closure and kit reproduction pass; equality passes 5/5 isolated runs. Full night-driver module is red and dynamic closure timed out at the bounded test cap.** Native gates and delta review remain owed. Earlier rounds below are historical; the round-5 section owns this run's results and limitations. No night was armed. Branch `ops/2026-11-11-r1-followup-kit`; local commits are recorded in the round-5 handoff.
 
 ## Authority and boundaries
 
@@ -711,3 +711,187 @@ config, docs and tests). This section and final verification handoff are in the
 subsequent report commit. Nothing was pushed. The four forbidden coordination
 paths, `thermal.py`, classifier and thermal-gate module have no diff against
 the required baselines.
+
+## Round 5 — Fable delta-review D-1 through D-4 (2026-11-11)
+
+The delta cold review was read in full before other intake. Continued the
+brief's existing branch `ops/2026-11-11-r1-followup-kit` from exact base
+`4c41fe241787e2e7e1015a4096fba311715f77e2`; the starting tree was clean.
+Mission M0 found no active stop card or global selection gate. This explicit
+desk brief selects the work; no coordination task was registered. The owning
+runtime contract, protocol WP14(a), RL-78 E1/E2 and RL-84 P-3 were consulted.
+Repository code, ruling text and synthetic fixtures only; no study-custody
+or sealed outcome path was opened.
+
+**Condition 13: no file changed.** All ten paths in `R1_EXECUTED_SOURCES`
+were compared byte for byte with `4c41fe241`. In particular,
+`thermal_gates.py`, the entire classifier file and `thermal.py` are unchanged.
+`RUN_STATE.md`, `TASK_QUEUE.md`, `docs/process/state_kernel.json` and
+`tests/test_gen_state.py` remain untouched, as the brief requires.
+
+### Findings and implementation
+
+- **D-1:** `smoke_selection` filters the full classifier ranking solely by
+  each key's coverage across all smoke phases. Existing diagnostics still list
+  every coverage rejection with R0 class, phase and reason. The registered
+  chooser runs over those survivors; R0 membership remains a subsequent
+  admissibility refusal and restricts RL-78's fallback candidates. A selected
+  fast key outside the six is held for the lead. A heatsink-class key outside
+  the six keeps the slow class nonempty and refuses, without invoking the
+  fallback. Two synthetic classifier-result witnesses reproduce the review's
+  cases using the production six-key list. Both failed on the unchanged base
+  (silent substitution; improper fallback respectively), then passed with the
+  one-line filter correction. They also assert the input classifier is intact.
+- **D-2:** the chain derives `ALIGN_R1_PREPARE_PACKET` as
+  `$MEASUREMENT_ROOT/.align-r1-prepare.json`. The existing arm pins both
+  `MEASUREMENT_ROOT` and the chain bytes, and `_chain_environment` already
+  supplies that root. This is the narrowest route: no new plan schema, plist
+  variable, inherited-shell dependency or generic `extra_env` authority.
+  Generate the real packet at that exact path on the final commit. Its file
+  check now follows the traps, startup Automatic restore and persistent-marker
+  restore. Missing packets refuse before runtime work; the driver's existing
+  schema, commit, both-OK and ten-hash checks remain unchanged.
+  `ChainEnvironmentTests` parses the production plist template, starts with
+  its PATH-only environment, passes through the real `_chain_environment`,
+  then runs the actual chain with fixture-owned sudo/interpreter executables.
+  It verifies packet delivery and the missing-packet refusal after all restores.
+  On the base, both subcases failed; after the fix they pass. Two older chain
+  fixtures now create the packet at the registered fixed location.
+- **D-3:** the equality witness supplies deterministic synthetic battery probe
+  bytes at `battery_float.run_bundle_probe`, just as RSS is stabilized at its
+  source. Fake-clock `UpdateTime` and fixed `Voltage` flow through the real
+  parser, raw files, metadata property lines and digests. Each adapter must
+  actually execute both battery probes and produce passing battery records.
+  Every bundle byte is still compared, including the timeout-without-callback
+  case and the one-byte mutation of every emitted file. No production battery
+  output or comparison exclusion changed. Five fresh-process runs passed 5/5.
+- **D-4:** WP14(a) (`pilot_protocol_v4.md:243`) and the runtime contract
+  (`r1_runtime_contract.md:110,167`) define load as prefill dispatch through
+  last decode of the native 10k-prefill / 4,096-token-capped D turn; the runtime
+  config supplies a 1,580 s deadman, not a fixed duration or minimum, so safety
+  at >=150 s is supported by the reviewer's simulation but is not guaranteed
+  by registration (a 100 s load retains the reported 3–41% Tf08 failure risk).
+
+The native D duration is therefore an explicit uncertainty for the lead to
+check on the smoke journal; no measurement data was read to estimate it. No
+coverage threshold or phase accounting was changed for this disclosure.
+
+### Round-5 verification
+
+Targeted modules were invoked serially with Python 3.13 and `-B -m unittest
+<target>`, `TMPDIR=/private/tmp`, `JW_B5_SYNTHETIC_ONLY=1`,
+`JOULEWISE_BACKUP_ROOTS=''`, `GIT_CONFIG_GLOBAL=/dev/null` and
+`GIT_CONFIG_NOSYSTEM=1`. The main runner had a 1,000 s aggregate wall cap;
+equality repeats, red/green probes and the standalone reproduction kept total
+test execution below the brief's approximately 20-minute limit. No full suite,
+network, model download, real measurement,
+host-setting command or LaunchAgent change was performed. All
+chain host commands in the new witness reach local fixture executables.
+The attempted `nice -n 10` on the first failing-first D-1 invocation reported
+`setpriority: Operation not permitted`; the tests still ran, and subsequent
+commands used ordinary priority without changing any existing process.
+The first D-2 witness attempt additionally hit a fixture cleanup
+`FileNotFoundError` after the expected base refusal; cleanup was corrected
+before the definitive failing-first run, which showed both intended failures.
+
+| Target after `python3.13 -B -m unittest` | Result | unittest elapsed |
+|---|---|---|
+| `tests.align.test_r1_followup` | 12 OK | 44.542 s |
+| `tests.align.test_r1_round2` | 14 OK | 6.072 s |
+| `tests.align.test_r1_round3` | 8 OK | 34.999 s |
+| `tests.align.test_r1_round4` | 10 OK | 14.567 s |
+| `tests.align.test_v4_registration` | 24 OK | 97.586 s |
+| `tests.align.test_r1_runtime_contract` | 11 OK | 0.003 s |
+| `tests.align.test_r1_rehearsal` | 77 OK, including the real `_chain_environment` witness | 21.352 s |
+| `tests.test_run_night` | 318 run; 15 failures, 2 errors, 9 skips | 635.156 s |
+| `tests.align.test_v4_executed_closure` | 6 OK | 43.784 s |
+| `tests.align.test_v4_dynamic_closure` | **INCOMPLETE**: parent terminated at the runner's remaining 70.683 s; no final unittest result | 70.683 s wall cap |
+| `tests.align.test_v4_kit.KitTests.test_committed_bytes_reproduce_without_reading_models` | 1 OK, separate invocation after the cap | 3.113 s |
+
+The equality command was
+`TMPDIR=/private/tmp python3.13 -B -m unittest -v tests.align.test_r1_followup.DefaultBundleTests`.
+Five fresh processes passed in 13.386, 12.081, 11.257, 13.441 and 13.669 s
+of unittest time, respectively; the later full follow-up module also passed
+that witness. No generator input changed; the reproduce test compared every
+generated byte successfully, so `plan_tree.json` needed no regeneration.
+`scripts/test_timings.json` was not edited. Four changed Python files passed
+`ast.parse`; `/bin/zsh -n scripts/night_chains/align_r1_rehearsal.zsh` and
+`git diff --check` passed. The canonical full suite was expressly prohibited.
+
+The full night-driver failure is **not** a green gate. The 17 diagnostic
+events comprise:
+
+- `BindSupervisionProcessTests`: nine failure events and one error (8 s
+  external-watchdog timeouts, missing fault acknowledgements/observations,
+  journal saturation versus acknowledgement deadline, and empty samples).
+- `HazardPackPrimitiveTests`: two failures proving process-group cleanup
+  and one error waiting ten seconds for a synthetic monitor to terminate.
+- `NightProbeTests`: two supervised-probe subcase failures (`ok` refused,
+  `refused` timed out) and the plist expectation failure below.
+- `QuietDriverIntegrationTests`: one cancellation/reaping failure; its
+  fixture compared `None` with a float for expiry-to-receipt time.
+
+The plist failure is confirmed pre-existing at `4c41fe241`: the test's literal
+expected environment omits `MAGISTRATE_WATCHDOG_STATUS_HOST`, which the base's
+magistrate template already contains. Both files are unchanged in this round;
+the comparison was repeated on their exact Git-object bytes. The timing and
+cleanup failures involve unchanged driver/gate/fixture paths. They are
+consistent with host load or sandbox process-observation limits, but **were
+not reproduced on the base**, so their causes remain unverified. They were
+not repaired by expanding this bounded R1 fix into unrelated night machinery.
+
+The end-of-session command
+`TMPDIR=/private/tmp python3.13 -B scripts/fixture_orphan_census.py --fail-on-orphans`
+exited **2**, returning
+`{"error": "PermissionError: [Errno 1] Operation not permitted: 'ps'"}`.
+A direct scoped process-observation attempt was also denied. This is an
+unavailable census, not a clean census; fixture descendants after the dynamic
+trace timeout cannot be certified absent. No existing host job was signalled
+or reprioritized. The lead must observe the fixture census with working
+process permissions before relying on cleanup or starting a quiet window.
+
+Raw targeted results are in `/private/tmp/r1-round5-checks/results.json`;
+the full night-driver diagnostics are in
+`/private/tmp/r1-round5-checks/tests.test_run_night.log`. Equality repeats 2–5
+are in `/private/tmp/r1-round5-equality-{2,3,4,5}.log`; the first run and the
+dynamic runner timeout are recorded in this session's tool output. These
+scratch logs were not promoted into immutable study evidence.
+Their SHA-256 values are `df1a1d59dd0fe30c102eeaf4a21afd96138fc65d323b86683c97840bdba0425c`
+(`results.json`) and `be8633edfb3e7be1fd0d785b664ea3fd91e15d27ce7f7f038612a6227e3fbc35`
+(`tests.test_run_night.log`).
+
+Changed implementation/test paths: `scripts/align_r1_followup_kit.py`,
+`scripts/night_chains/align_r1_rehearsal.zsh`,
+`tests/align/test_r1_followup.py`, `tests/align/test_r1_round4.py`,
+`tests/align/test_r1_rehearsal.py`. This report is the sixth changed path.
+
+No delegation or external consult was used. The gates that directly caught
+the reviewed admission defects were the two D-1 failing-first witnesses and
+the D-2 plist-to-chain witness. The D-3 full-byte comparison now removes the
+known host-battery source of nondeterminism without discarding output bytes.
+
+### Lead handoff after round 5
+
+Local implementation commit: `52060d393` (D-1/D-2/D-3 and witnesses). This
+round-5 report lands in the subsequent documentation commit. **LOCAL_ONLY**:
+no push, merge, CI result, arm, signature or native validation is claimed.
+
+1. Obtain the short executing delta review of these D-1/D-2 changes before
+   using Part B's table or arming. No condition-13 change here calls for a smoke
+   repeat; an existing native Part B segment can have its table recomputed.
+   With working process observation and an appropriate test window, triage
+   the full night-driver failures and rerun
+   `python3.13 -B -m unittest tests.align.test_v4_dynamic_closure`; this round
+   does not establish a green dynamic-closure or full night-driver gate.
+2. In the clean, agent-free native lane, perform any still-owed A/B smoke and
+   research-lead sensor ruling. Check the actual D load duration against D-4.
+   Native MLX remains outside this sandbox:
+   `JW_ALIGN_MLX_NATIVE_TESTS=1 python3.13 -B -m unittest tests.align.test_thermal_mlx`.
+3. On the final commit and real measurement interpreter, run the weight and
+   installed-stack preflights and generate the `FOR_LEAD_ARM` prepare packet
+   at `<measurement_root>/.align-r1-prepare.json`, then use the updated pinned
+   chain. No real weights or installed-stack qualification was attempted here.
+4. This round does not discharge the inherited full-profile trace, PREQUAL,
+   next-arm or separate W1 RL-84 P-2 work. The closure-module tests consume the
+   committed trace plus their own fresh-process synthetic witness; they do not
+   establish a fresh full-profile trace. Nothing was armed, signed or pushed.
