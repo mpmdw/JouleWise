@@ -4191,6 +4191,130 @@ the day it was drafted.
 
 ---
 
+# Decision request 47: the slow-sensor round is closed (2026-11-11 06:21 PST)
+
+**Read.** `docs/run_reports/2026-11-11-slow-sensor-rule-design.md` on `design/2026-11-11-slow-sensor-rule` @
+`f4ece6492`, in full, and `joulewise/align/apple/thermal.py`'s policy validation on the pre-signing branch. I
+did not read the Sol seat's separate plan; the document reports its positions and where the two agree.
+Rehearsal temperatures, times and counts only.
+
+## RL-78. Option 3a. The registered pair gates and is named for what it controls; Tf08 is recorded in every member
+
+### What the round established
+
+No key on this machine does all three things: follow the slow mass, give a stable release, and fit the duty
+bar. The two findings that decide it:
+
+- **A gate on Tf08 cannot run the windows.** Its G0 after a D warmup takes 728 to 878 s at 1.5 °C. The duty
+  bar allows the three gates together 0.40 of the member's deadman, under 617 s. And a per-turn gate on Tf08
+  cannot release inside its 300 s cap after a heavy turn, which ends the episode after one turn. Every gate
+  since RL-23 was tuned around a sensor that would have failed the duty bar the first night it was measured.
+- **The registered return-time test is an extrapolation that the data contradict.** It assumes one exponential.
+  The cooldowns have two time scales, and the last degree of every key follows the slow one. The test admits
+  keys as "back within 1 °C in 300 s" that are 1.5 to 2.2 °C up after 600 s.
+
+### E1: option 3a
+
+- **The gate pair is the registered classifier's picks on the D step**, unchanged. Nobody chooses a key by
+  hand.
+- **The second key is called what it is.** In the protocol's deviation row and in the methods it is a
+  *near-die settling check*: with the fast pick it holds the fast-responding masses at G0, G1 and H. It does
+  not hold the heatsink.
+- **Tf08 is recorded for every member**, and its excess at the member's start over the window's reference is
+  printed and compared between conditions within each window, as a disclosure fixed now.
+
+Not option 2. The Sol seat prefers it on principle and says itself that it probably cannot run. It also lands
+on a key nobody has replayed as a gate. Control of the slow mass that removes every heavy cell from the series
+is not control worth having. The slow mass is observed instead, which lets the analysis ask whether it mattered.
+
+### How the pick is made, so that a night cannot be lost to it again
+
+1. **The pick is made once, at smoke Part B**, by the registered classifier on a native D step with the
+   sampler's bar met in every phase.
+2. **If the registered slow class is empty there, a rule fixed now fills it** (E2): the key with the longest
+   registered return time not above 300 s, among R0-classified, unclamped keys that pass the registered noise
+   and rise tests and are not the fast pick or its aliases, whichever side of 60 s its time constant falls.
+   That is the registered slow rule without its lower bound on τ. It is a rule, so it is not a manual
+   substitution, and it replaces the IOHID/X4 ruling for this case.
+3. **The night confirms; it does not re-rank.** The night's own step-D classification is recorded. The pick
+   stands if the picked key is still admissible there: its rise, noise and return-time tests pass and it is not
+   an alias of the fast pick. A different key ranking higher on the night does not change the pick. If the
+   picked key is not admissible on the night, that comes to me.
+4. The smoke's table comes to me before the arm, as RL-75 says. With the rule fixed, that is a check, and it
+   is where I look at the release times and sensitivities the round asked for.
+
+### E3: the record-only key goes through `thermal.py`
+
+An optional `record_keys` list in the sidecar's policy: temperature keys that are journalled and that no gate
+reads. Not a separate collector, which would put another process inside a measured member. Terms:
+
+- with the field absent the sidecar's journal is byte-identical to today's, shown by a test;
+- a test shows no gate reads a recorded key;
+- `thermal_gates.py` is untouched;
+- `joulewise/align/apple/thermal.py` joins the files of condition 13, so the rehearsal runs the sidecar W1
+  runs;
+- cold review, and it lands before signing. It is not under RL-53's cut-off: the row below promises it.
+
+This is a change to what runs inside a measured member, one more sensor read a second. I accept that for what
+it buys: without it the gate's known blind spot would be unrecorded in every window of the series.
+
+### E4: the numeric margins do not bind
+
+With the pick made once and confirmed by admissibility, a margin to a class edge decides nothing. The table
+prints them. What binds is the sampler's bar: if it is met there is one treatment of the reads and one pick.
+
+### E5: arm at the registered default band
+
+max(1.0 °C, 3 × the soak's idle SD), as RL-74 said. A night at the tighter band shows the looser band's G0
+waits by replay; the reverse is not true. If the duty bar fails at the default on G0 alone, I decide from that
+night's record whether 1.5 °C is admitted on the replayed G0 with the measured per-turn waits, or whether a
+short gated-block night is owed. I do not decide it now.
+
+### E6: no breach
+
+The Sol seat printed this decision log, with Block 5 material in it. Block 5 is released, the seat had no
+Block-5-naive requirement, and the log holds no Block 6, BYTES held-out or v4 value. Its work is accepted. That
+seat is now Block-5-aware and is not used later as a naive seat for Block 6.
+
+### The remaining points
+
+D2: noted; option 2 is not taken, so its winner needs no replay. D6: the D record's alias groups decide which
+keys are one thermometer.
+
+### The deviation row, against WP14(a), before signing
+
+> "WP14(a)-R1-SLOW. On Mac15,9 at the registered R1 step, R0's slow pick Tf08 fails the registered return-time
+> rule (τ about 140 s; τ·ln(rise/1 °C) about 565 s against 300 s), and a gate on it cannot meet the duty bar
+> or release a per-turn gate inside its cap. R1's selection is the registered classifier's, unchanged, made
+> once on the D step of the native smoke that precedes the rehearsal night; where the registered slow class is
+> empty, the slow pick is the key with the longest registered return time not above 300 s among the admissible
+> keys that are not the fast pick or its aliases, without the lower bound on τ. The rehearsal night confirms
+> that the picked keys are still admissible on its own D step and does not re-rank them. The slow pick is a
+> key R0 classed fast. It is entered as the second gate key under the name near-die settling check: with the
+> fast pick it controls the fast-responding masses at G0, G1 and H, and it does not control the heatsink mass.
+> The heatsink key Tf08 is journalled, record-only, in every member (`record_keys` in the sidecar policy; the
+> gate module is unchanged). Its excess at each member's start over the window reference is printed and
+> compared between conditions within each window, as a disclosure. No key is substituted by hand, and aliases
+> do not fill both roles. Decided before any v4 window, blind to all v4 data (RL-75, RL-78)."
+
+**Consequences already ruled, restated.** S6's 1.5 °C receipt was earned on Tf08 and does not carry to the new
+key (RL-74). R1's gates keep the registered 1,200 s cap. The registered fallback order still answers a failed
+duty bar.
+
+**For Ed, plainly:** "The round found that the slow sensor we had been gating on could never have worked: its
+waits alone break our own time budget, and it would end each agent episode after one turn. We keep the
+registered selection rule, which picks a faster second sensor, and we say plainly that the gate settles the
+chip and not the heatsink. The heatsink sensor is recorded for every run, so the analysis can check whether its
+state differed between conditions. A fifty-minute test picks the sensor; then the rehearsal night."
+
+**Reason.** A control that cannot run controls nothing. Of the three properties, feasibility is the one the
+series cannot do without, stability is bought by fixing the pick once, and the slow mass, which cannot be held,
+can at least be seen.
+
+**Blind status.** Blind: no v4 outcome exists. Rehearsal temperatures only.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
