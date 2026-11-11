@@ -23,6 +23,24 @@ process.
 
 ## Safety model and state machine
 
+**2026-11-10 measurement-system audit W-01:** unsafe decisions now report
+`HOLD_PLAN_UNREADABLE`, `HOLD_PLAN_MALFORMED`, `HOLD_PLIST_UNREADABLE`,
+`HOLD_CONFLICT`, `HOLD_LOCK`, `HOLD_PROCESS_TABLE`, or `HOLD_DESK_FENCE`;
+`HOLD_UNSAFE` remains the conservative fallback for an unclassified cause.
+Each new reason immediately enters the existing `notice_pending` queue and
+the event journal, even when the state word did not change. Identical notices
+do not flood subsequent ticks or reappear just because they were acknowledged.
+After 900 seconds of continuous unsafe hold the state is `STRANDED`, with an
+additional escalation notice. Changing bad plan bytes does not restart this
+allowance. The watchdog still holds and drains: this limit caps the ordinary
+hold state, **never** grants permission to launch. A possibly armed plan must
+be repaired/withdrawn by its owner and re-evaluated normally. No unknown key is
+ignored and no admission schema was relaxed.
+
+These are local durable notices through the existing notice/ack path. They do
+not prove mail delivery while launch is held; an external observer must read
+the status/notice queue, or a later permitted magistrate must deliver them.
+
 **Updated 2026-09-15 — INSTALL-WINDOWS-MULTI-01, D-180 clause 1 / D-181
 clause 1 adopted design:** plan spans replace the fixed-clock relaunch fences;
 the night driver's timing functions own their derived boundaries.
@@ -47,7 +65,7 @@ The durable states are:
 Every state transition appends exactly one transition event. Re-evaluating the same state does not append another transition. Census, signal, drain-start, and plan diagnostics are separate typed events. Plan events use `plan_dir` (never the plan-declared `custody_root`) and are de-duplicated only for an identical activation-id/spawn-epoch/plan-directory/kind/detail-digest key.
 
 Unrepresentable derived epochs (for example `window_max_s=10**400`) enter
-`HOLD_UNSAFE` with `adopt=False`: installed-plan failures use the reason prefix
+`HOLD_PLAN_MALFORMED` with `adopt=False`: installed-plan failures use the reason prefix
 `installed_agent_fence:`, while discovery uses `night_plan_malformed`.
 The detail names `t0_epoch_s/window_max_s`; `decide()` returns a decision
 instead of allowing the arithmetic exception to escape. These are watchdog

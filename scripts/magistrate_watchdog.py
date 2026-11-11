@@ -127,6 +127,12 @@ STOP_TERM_GRACE_S = 60
 CLOCK_SKEW_LIMIT_S = 60
 GENERIC_BACKOFF_S = (120, 300, 900, 1800, 3600)
 USAGE_BACKOFF_S = (900, 1800, 3600, 7200, 7200)
+# W-01 (measurement-system audit 2026-11-10): operational escalation,
+# never permission to launch over an unreadable/possibly armed plan.
+UNSAFE_HOLD_DWELL_S = 15 * 60
+UNSAFE_STATES = frozenset({"HOLD_UNSAFE", "HOLD_PLAN_UNREADABLE", "HOLD_PLAN_MALFORMED",
+                          "HOLD_PLIST_UNREADABLE", "HOLD_CONFLICT", "HOLD_LOCK",
+                          "HOLD_PROCESS_TABLE", "HOLD_DESK_FENCE", "STRANDED"})
 
 # Keep this launch shape in one place.  The magistrate can change one tuple
 # after the owed permission-prompt bench without touching supervisor logic.
@@ -816,6 +822,7 @@ def _installed_agent_plans(
         plist = directory / f"{label}.plist"
         if plist not in entries:
             continue
+        source = "plist"
         try:
             document = plistlib.loads(storage.read_bytes(plist))
             argv = document["ProgramArguments"]
@@ -826,7 +833,10 @@ def _installed_agent_plans(
             plan_path = Path(argv[argv.index("--plan") + 1])
             if not plan_path.is_absolute():
                 raise ValueError("installed --plan must be absolute")
-            plan = NightPlan.from_mapping(json.loads(storage.read_text(plan_path)))
+            source = "plan_unreadable"
+            raw = json.loads(storage.read_text(plan_path))
+            source = "plan"
+            plan = NightPlan.from_mapping(raw)
             if plan.authored_epoch_s > now.timestamp():
                 raise ValueError("installed plan authored_epoch_s is in the future")
             deadman_epoch(plan)
@@ -842,7 +852,7 @@ def _installed_agent_plans(
                 raise ValueError(f"unreadable installed agent {plist}: {exc}") from exc
             # Keep readable siblings for their absolute drain deadlines, while
             # the snapshot error still holds launches and drains the resident.
-            errors.append(f"installed_agent_fence: unreadable installed agent {plist}: {exc}")
+            errors.append(f"installed_agent_fence: unreadable installed agent {plist}: {source}: {exc}")
     return plans
 
 
@@ -2025,7 +2035,7 @@ def _launch_fence(storage: Storage, deps: Dependencies, state: Mapping[str, Any]
     return None
 
 
-def decide(
+def _decide(
     storage: Storage,
     deps: Dependencies,
     state: dict[str, Any],
@@ -2237,6 +2247,81 @@ def decide(
     if lock is not None:
         return Decision("HOLD_UNSAFE", "magistrate.lock could not be cleared")
     return _launch_fence(storage, deps, state) or Decision("LAUNCHING", "all launch predicates clear", launch=True)
+
+
+def _unsafe_state(reason):
+    if "night_plan_unreadable" in reason:
+        return "HOLD_PLAN_UNREADABLE"
+    if "night_plan_malformed" in reason:
+        return "HOLD_PLAN_MALFORMED"
+    if "installed_agent_fence:" in reason:
+        if ": plan_unreadable:" in reason:
+            return "HOLD_PLAN_UNREADABLE"
+        return "HOLD_PLAN_MALFORMED" if ": plan:" in reason else "HOLD_PLIST_UNREADABLE"
+    if reason.startswith("plan_conflict:"):
+        return "HOLD_CONFLICT"
+    if "process table unavailable" in reason:
+        return "HOLD_PROCESS_TABLE"
+    if "lock" in reason or "resumed_twin" in reason:
+        return "HOLD_LOCK"
+    if reason.startswith("desk_fence:"):
+        return "HOLD_DESK_FENCE"
+    return "HOLD_UNSAFE"
+
+
+def _queue_safety_notice(storage, state, now, *, notice_id, kind, reason):
+    """Use the existing notice_pending / notice.ack path immediately."""
+    seen = state.setdefault("safety_notice_ids", [])
+    if notice_id in seen:
+        return
+    pending = state.setdefault("notice_pending", [])
+    if not any(isinstance(item, dict) and item.get("id") == notice_id for item in pending):
+        pending.append({"id": notice_id, "kind": kind, "reason": reason, "epoch_s": now.timestamp()})
+    seen.append(notice_id)
+    storage.append_jsonl(storage.root / "events.jsonl", {
+        "schema": EVENT_SCHEMA, "kind": "safety_notice", "notice_id": notice_id,
+        "notice_kind": kind, "reason": reason, "epoch_s": now.timestamp(),
+    })
+
+
+def _surface_unsafe_decision(storage, deps, state, decision, now):
+    if decision.state not in UNSAFE_STATES:
+        if decision.state not in {"CLOCK_UNCERTAIN", "NETWORK_UNCERTAIN"}:
+            state.pop("unsafe_hold", None)
+        return decision
+    category = _unsafe_state(decision.reason)
+    hold = state.get("unsafe_hold")
+    if not isinstance(hold, dict):
+        hold = {"since_epoch_s": now.timestamp(), "since_monotonic": deps.monotonic()}
+        state["unsafe_hold"] = hold
+    # Changing malformed bytes or switching unsafe categories does not restart
+    # the same continuous unsafe episode's dwell allowance.
+    elapsed = max(0.0, now.timestamp() - hold["since_epoch_s"],
+                  deps.monotonic() - hold["since_monotonic"])
+    hold.update(category=category, reason=decision.reason, elapsed_s=elapsed,
+                dwell_limit_s=UNSAFE_HOLD_DWELL_S)
+    digest = hashlib.sha256(decision.reason.encode("utf-8")).hexdigest()
+    activation = str(state.get("activation_id") or "pre-activation")
+    notice_id = f"unsafe-{hold['since_epoch_s']}-{category}-{digest}"
+    kind = category.lower()
+    if decision.reason.startswith("corrupt_lock_"):
+        notice_id = f"corrupt-lock-{activation}-{digest}"
+        kind = decision.reason.split(":", 1)[0]
+    elif category == "HOLD_CONFLICT":
+        kind = "plan_conflict"
+    _queue_safety_notice(storage, state, now, notice_id=notice_id, kind=kind, reason=decision.reason)
+    if elapsed >= UNSAFE_HOLD_DWELL_S:
+        _queue_safety_notice(storage, state, now,
+                             notice_id=f"stranded-{hold['since_epoch_s']}", kind="stranded",
+                             reason=f"unsafe hold exceeded {UNSAFE_HOLD_DWELL_S}s: {category}: {decision.reason}")
+        return Decision("STRANDED", f"{category}: dwell limit exceeded; {decision.reason}",
+                        launch=False, adopt=decision.adopt)
+    return dataclasses.replace(decision, state=category, launch=False)
+
+
+def decide(storage, deps, state, *, plan_snapshot=None):
+    decision = _decide(storage, deps, state, plan_snapshot=plan_snapshot)
+    return _surface_unsafe_decision(storage, deps, state, decision, deps.wall_now().astimezone())
 
 
 def resolve_session_binary(path: Path) -> Path:
@@ -2705,11 +2790,13 @@ class ResidentSupervisor:
             )
         resident_hold = self.state.get("resident_hold_drain")
         if isinstance(resident_hold, Mapping):
+            decision = _surface_unsafe_decision(self.storage, self.deps, self.state,
+                Decision("HOLD_UNSAFE", str(resident_hold.get("reason", "durable unsafe-plan hold"))), now)
             return self._enforce_drain(
                 now,
                 monotonic,
                 reason=str(resident_hold.get("reason", "durable unsafe-plan hold")),
-                state_name="HOLD_UNSAFE",
+                state_name=decision.state,
                 plan=plan,
                 notice=(
                     str(resident_hold["notice"])
@@ -2731,13 +2818,15 @@ class ResidentSupervisor:
                 "stage": None,
                 "started": False,
             }
+            decision = _surface_unsafe_decision(self.storage, self.deps, self.state,
+                                                Decision("HOLD_UNSAFE", reason), now)
             return self._enforce_drain(
                 now,
                 monotonic,
                 reason=reason,
-                state_name="HOLD_UNSAFE",
+                state_name=decision.state,
                 plan=plan,
-                notice=notice,
+                notice=None,  # the immediate safety notice was already queued
                 record_resident_start=True,
             )
 
@@ -3078,8 +3167,6 @@ def tick(storage: Storage, deps: Dependencies, *, dry_run: bool = False) -> Deci
     notice = None
     if decision.state in {"CLOCK_UNCERTAIN", "NETWORK_UNCERTAIN", "HOLD_CENSUS"}:
         notice = decision.state.lower()
-    elif decision.reason.startswith("plan_conflict:"):
-        notice = "plan_conflict"
     elif decision.reason.startswith("corrupt_lock_"):
         notice = decision.reason.split(":", 1)[0]
         # Keep event dedupe independent of notice acknowledgements, and reset
@@ -3112,7 +3199,7 @@ def tick(storage: Storage, deps: Dependencies, *, dry_run: bool = False) -> Deci
     storage.atomic_json(storage.root / "state.json", state)
     if dry_run:
         return decision
-    if decision.state == "HOLD_UNSAFE":
+    if decision.state in UNSAFE_STATES:
         supervisor = adopt_recorded_session_for_drain(
             storage,
             deps,
@@ -3130,6 +3217,7 @@ def tick(storage: Storage, deps: Dependencies, *, dry_run: bool = False) -> Deci
         fence = _launch_fence(storage, deps, state)
         if fence is not None:
             now = deps.wall_now().astimezone()
+            fence = _surface_unsafe_decision(storage, deps, state, fence, now)
             transition(storage, state, fence.state, fence.reason, now)
             storage.atomic_json(storage.root / "state.json", state)
             return fence

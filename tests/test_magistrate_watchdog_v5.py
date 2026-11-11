@@ -93,7 +93,7 @@ class InstalledV5Tests(watchdog_tests.WatchdogTestCase):
                 self.assertEqual((), snapshot.plans)
                 self.assertEqual(2, len(snapshot.errors))
                 self.assertTrue(all("installed_agent_fence" in error for error in snapshot.errors))
-                self.assertEqual("HOLD_UNSAFE", wd.decide(
+                self.assertEqual("HOLD_PLAN_MALFORMED", wd.decide(
                     self.harness.storage, self.harness.deps, wd.initial_state()).state)
 
     def test_installed_v5_uses_discovery_completion_and_deadman_tail(self):
