@@ -177,18 +177,37 @@ def frequency_word_preflight(state, *, reader=None, runner=None):
         if query.get('exit_code') != 0 or query.get('stdout', '').strip().casefold() != 'network time: off':
             raise ValueError('network time OFF read-back failed')
         record['network_time'] = {'observed': 'off', 'verified': True}
+        # RL-26: the receipt binds C source; sudo runs this installed binary.
+        # Keep both identities on every arm, including a no-op. The kit check
+        # already validated the receipt; use its binding, not a prepare cache.
+        from joulewise.align.apple import v4_registration
+        source_path = 'scripts/zero_ntp_frequency.c'
+        source_root = Path(state.get('source_measurement_root') or state.get('measurement_root') or ROOT)
+        helper = Path(ZERO_FREQUENCY_ARGV[-1])
+        identity = record['zero_helper'] = {'path': str(helper), 'sha256': None,
+                                          'source': {'path': source_path, 'sha256': None}}
+        try:
+            receipt = pilot.h.read(source_root / v4_registration.REGISTRATION / 'registration_receipt.json')
+            bound = receipt['artifacts'][source_path]
+            identity['source']['sha256'] = bound
+            if not v4_registration.is_digest(bound) or _sha256((source_root / source_path).read_bytes()) != bound:
+                raise ValueError('helper source differs from its registration binding')
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            record['cause'] = 'clock.frequency_helper_source_unbound'
+            raise ValueError(f'helper source binding unavailable: {exc}') from exc
+        try:
+            identity['sha256'] = _sha256(helper.read_bytes())
+        except OSError as exc:
+            identity['error'] = f'{type(exc).__name__}: {exc}'
+            if not passes:
+                record['cause'] = 'clock.frequency_helper_unreadable'
+                raise ValueError('needed installed frequency helper is missing or unreadable') from exc
         if passes:
             # A passing nonzero word also needs no correction: this preflight
             # uses the existing budget, never an extra word==0 threshold.
             read('after')
             record['action'] = 'no_op'
         else:
-            helper = Path(ZERO_FREQUENCY_ARGV[-1])
-            try:
-                record['zero_helper'] = {'path': str(helper), 'sha256': _sha256(helper.read_bytes())}
-            except OSError as exc:
-                record['zero_helper'] = {'path': str(helper), 'sha256': None,
-                                         'error': f'{type(exc).__name__}: {exc}'}
             zero = command(ZERO_FREQUENCY_ARGV)
             # Always retain the new word, including after helper denial/error.
             gate = read('after')
@@ -210,6 +229,37 @@ def frequency_word_preflight(state, *, reader=None, runner=None):
                 read('after')
             except (OSError, ValueError, KeyError, TypeError, OverflowError) as after_error:
                 record['after_error'] = f'{type(after_error).__name__}: {after_error}'
+    return record
+
+
+def frequency_word_pre_t0(state, *, reader=None):
+    """Last read-only arm probe, after checks and before the quiet-dwell stamp.
+
+    RL-26 requires the actual last pre-t0 word, separate from prepare and the
+    correcting preflight. No new frequency threshold is introduced here.
+    """
+    from joulewise import kernel_clock
+    from joulewise.hazards import clock
+    record = {'ok': False, 'cause': 'clock.frequency_pre_t0_unavailable', 'reason': None,
+              'probe': None, 't0_epoch_s': None,
+              'read_started_epoch_s': None, 'read_finished_epoch_s': None}
+    try:
+        plan = pilot.h.read(state['plan_path'])
+        if pilot.h.locator(state['plan_path'])['sha256'] != state['plan_sha256']:
+            raise ValueError('prepared plan bytes changed')
+        t0 = record['t0_epoch_s'] = plan.get('t0_epoch_s')
+        if not pilot.h.finite(t0) or t0 <= time.time():
+            raise ValueError('plan t0 has passed or is unavailable; prepare a fresh session')
+        record['cause'] = 'clock.frequency_pre_t0_unreadable'
+        record['read_started_epoch_s'] = time.time()
+        record['probe'] = dict(kernel_clock.validate_probe((reader or clock.read_frequency)()))
+        record['read_finished_epoch_s'] = time.time()
+        record['cause'] = 'clock.frequency_pre_t0_unavailable'
+        if record['read_finished_epoch_s'] >= t0:
+            raise ValueError('plan t0 passed during the final frequency read')
+        record.update(ok=True, cause=None)
+    except (OSError, ValueError, KeyError, TypeError, OverflowError) as exc:
+        record['reason'] = f'{type(exc).__name__}: {exc}'
     return record
 
 
@@ -957,7 +1007,8 @@ def _take_receipts():
 
 @_install_timing
 def install(session_root, *, runner=None, volume_runner=None, now=None, w1_disk_config=None,
-            disk_gate=None, frequency_reader=None, frequency_runner=None, frequency_preflight=None, **kwargs):
+            disk_gate=None, frequency_reader=None, frequency_runner=None, frequency_preflight=None,
+            frequency_pre_t0=None, **kwargs):
     session = Path(session_root)
     state = pilot.h.read(session / 'session.json')
     measurement_root = state['measurement_root']
@@ -1020,7 +1071,9 @@ def install(session_root, *, runner=None, volume_runner=None, now=None, w1_disk_
                                       volume_runner=volume_runner, now=now, w1_disk_config=w1_disk_config,
                                       disk_gate=disk_gate, lock=lock,
                                       owner=owner if any(owner.values()) else None,
-                                      frequency_preflight_record=frequency, **kwargs)
+                                      frequency_preflight_record=frequency,
+                                      frequency_pre_t0_check=lambda: (frequency_pre_t0 or frequency_word_pre_t0)(
+                                          state, reader=frequency_reader), **kwargs)
             if entering and not (isinstance(result, dict) and result.get('exit_code') == 0):
                 # Round-5 cold pass MEDIUM-1 (R6-7): the shared installer
                 # returned without installing (launchd already holds a night
@@ -1079,7 +1132,7 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
                      obc_off_attested_by=None, battery_runner=None, battery_log=None,
                      window_battery_journal=None, next_arm_triage=None, commit_check=None, record_check=None,
                      packet_builder=None, meter_probe=None, dwell_start=None,
-                     frequency_preflight_record=None, **kwargs):
+                     frequency_preflight_record=None, frequency_pre_t0_check=None, **kwargs):
     # RUN_STATE 226 R15: every arm, W1 included, binds the frozen series. W1 binds an empty history after
     # R1; a C/T window the next frozen window. The packet bound is the arm's OWN rebuild (a supplied
     # packet is only a pointer), whose history is derived from the hash-chained, authenticated records.
@@ -1143,6 +1196,11 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
                 record['w1_disk_gate'] = receipt
             except (OSError, ValueError) as exc:
                 refuse(record, f'w1_disk_gate: {exc}')
+        record['clock_frequency_pre_t0'] = None
+        if record['admitted'] and frequency_pre_t0_check is not None:
+            final_frequency = record['clock_frequency_pre_t0'] = frequency_pre_t0_check()
+            if not final_frequency['ok']:
+                refuse(record, f"{final_frequency['cause']}: {final_frequency['reason']}")
         # The dwell stamp is the one value that depends on the dwell: it is held in memory and written
         # alone, to the dwell record, after the stamp (``quiet_dwell`` here only names that file).
         record['timing_receipts'] = _take_receipts()      # pre-stamp boundary markers (MEDIUM-2)

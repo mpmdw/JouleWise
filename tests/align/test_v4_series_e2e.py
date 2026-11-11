@@ -106,6 +106,8 @@ class SeriesCadenceEndToEnd(unittest.TestCase):
         # reliability tests exercise it with preserved synthetic timex bytes.
         stack.enter_context(patch.object(session, 'frequency_word_preflight',
                                         return_value={'ok': True, 'synthetic': True}))
+        stack.enter_context(patch.object(session, 'frequency_word_pre_t0',
+                                        return_value={'ok': True, 'synthetic': True}))
         stack.enter_context(patch.object(kit, 'generate', side_effect=lambda root, **kw: self.w1_checks.append(root)))
         stack.enter_context(patch.object(pilot.h, 'prepare', side_effect=self.shared_prepare))
         self.installed = []

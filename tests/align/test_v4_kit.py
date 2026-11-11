@@ -40,7 +40,8 @@ def topup():
     # These legacy witnesses isolate battery/power/triage. Round 3 exercises
     # the real frequency preflight separately with synthetic kernel probes.
     return dict(battery_log=path, next_arm_triage=w1_bound_packet(),
-                frequency_preflight=lambda *a, **kw: {'ok': True, 'synthetic': True}, **arm_seams())
+                frequency_preflight=lambda *a, **kw: {'ok': True, 'synthetic': True},
+                frequency_pre_t0=lambda *a, **kw: {'ok': True, 'synthetic': True}, **arm_seams())
 
 
 SERIES_MANIFEST = Path('configs/campaigns/align_v4/series/series_manifest.json')
