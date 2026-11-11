@@ -1754,6 +1754,134 @@ Block 5's result. Running seats in parallel is fine as long as those two things 
 
 ---
 
+# Decision request 17: BYTES, held-out timing read before the commitment; seat 11 (2026-11-11 00:28 PST)
+
+**Read.** On `bytes/2026-11-11-known-bytes-landing` @ `5bbc07c65`: `BLINDCHECK.md` in full, the seat report, the
+landing header, admission record and history of the rule file, the seat's diff to the registration (decimals
+masked), and registration §11. On that head I ran `tests.test_bytes_known_bytes_rule` and
+`tests.test_bytes_stage1` (27 tests, pass) and confirmed `joulewise/bytes_analysis.py` still hashes to
+`18582818…`; the branch changes no code or config. **I did not open `M2.md`, the M1 outputs or brief, the M2
+script, or any `night-results` branch.** `BLINDCHECK.md` prints no held-out value.
+
+## RL-44. The exposure does not cost BYTES its confirmatory status. It is a logged deviation and a printed disclosure
+
+**The facts, as the seat established them.** For one held-out model, the dense Llama-3.3-70B, in its pass-1
+session: on 27 October a thermal diagnosis read when the OS thermal level rose relative to request ends (M1);
+on 28 October a structural check required by the pass-2 thermal ruling read each science member's decode
+duration and committed it to the project record, where it has been public since (M2). No energy or power field
+was read. No commitment exists yet and no guarded unblinding has run.
+
+### (a) Confirmatory status: intact, for stages 1 and 2 and for the Llama-70B pack
+
+1. **The committed lines cannot depend on it.** They are computed from the three fit-set models only, by an
+   estimator whose digest dates from 24 October, from a manifest frozen on 22 October. Both precede the reads
+   and neither has changed. Stage 2 evaluates the commitment as committed, with the same pinned module.
+2. **What was exposed is weak.** The registration hides held-out durations because, for a mixture-of-experts
+   model, duration is a proxy for the active-or-resident answer. Llama-70B is dense: that question does not turn
+   on it. And each model's approximate decode time was measured, without power, in the design pilot before
+   registration.
+3. **Nothing measured was seen.** The outcome is energy. None was read.
+
+It is still a departure from the registration. §11 item 2 exists so that a held-out module's duration is not
+read before the commitment. It covered analysis exports. It did not cover an operations agent reading raw
+session records to diagnose a hazard, and that is how these reads happened. One more thing has to be said
+plainly: §21 item 3, the pass-2 thermal window, applies to fit-set members too, and it was motivated by
+structure seen on this held-out session. It was registered before any pass-2 session and blind to every
+energy, so it stands; the paper says where it came from.
+
+**Llama-70B stays in the registered families.** Taking a model out because of this would change the registered
+family sizes after the fact. It is marked instead.
+
+**What is disclosed, and where.**
+
+- *Registration lineage, before the commitment commit.* One dated deviation row, in the form that file uses
+  for dated changes:
+
+  > "BY-BLIND-1 (entered 2026-11-11, before the stage-1 commitment; blind to every BYTES energy). §11 item 2
+  > kept clock times out of analysis exports so that a held-out module's duration could not be read before the
+  > commitment. It did not cover reads of raw session records for hazard diagnosis. Two such reads were made on
+  > the pass-1 session of one held-out model, Llama-3.3-70B (`r1-bytes-s5-p1`): on 2026-10-27, thermal timing
+  > relative to request ends; on 2026-10-28, each science member's decode duration, which was committed to the
+  > project record. No energy or power field was read. §21 item 3 was motivated by the first read. The
+  > committed predictions cannot depend on either read: they are computed from the fit set by the estimator
+  > pinned on 2026-10-24, from the manifest frozen on 2026-10-22. Reporting: Llama-3.3-70B stays in the
+  > registered families and is marked in every table; the H1 summary is also stated over the other six held-out
+  > models, with the registered family sizes unchanged. Record:
+  > `docs/process_traces/2026-11-11-bytes-blindcheck/BLINDCHECK.md`."
+
+  The "also stated over the other six" line is a reading of per-model words that the registered analysis
+  already prints. It adds no arithmetic and needs no code.
+- *Paper 1 §6.3.* The `P1-AUTO-BLINDCHECK` text, from the seat's draft, with two additions: that the timing
+  closure covered analysis exports and these were reads of raw session records; and that the check covers the
+  committed record only and cannot show that held-out timing was never read by other means. The fill seat for
+  Part 2 writes it; I check it.
+- *Paper 1 §8.* One sentence in the limitations.
+- *Tables.* A mark on every Llama-70B row.
+
+### (b) The commitment can still be made by 19 November, and stage 1 runs in the first MBP desk gap
+
+Sooner is better: every day before the commitment is another day in which held-out timing can be read. Stage 1
+uses no held-out record. Before the commitment commit:
+
+1. this branch is merged into the stage-1 run line, with BY-BLIND-1 and the line in (c);
+2. **one question the seat could not answer is answered.** The `night-results/r{1,2}-bytes-*` branches are
+   public operational records of every BYTES session, mixture-of-experts sessions included. A structure-only
+   probe lists their files and JSON key names, no values, and says whether any carries a per-member or
+   per-stage clock or duration. The answer is appended to `BLINDCHECK.md`. If the answer is yes, the paper's
+   sentence says that such records were in the public repository and what is known about who read them. It
+   does not stop stage 1;
+3. the census is re-run from a fresh fetch and any new hit goes in the commitment commit's message, which
+   cites `BLINDCHECK.md` by path and commit;
+4. until the commitment, no seat opens `M2.md`, the M1 brief or the `m1/` and `m2-scripts/` files at their old
+   commits. Briefs say so.
+
+RL-7 (e)'s dates are unchanged.
+
+### (c) The admission record: accepted, with one line added
+
+The record is honest about what it lacks: no line says "admitted" before the test ran, and the rule was bound
+by the lead's act of disposing both cold passes, re-executing, and arming the test from `53bcceeac`. That act is
+the admission. RL-33 item 5 is not: it spoke of the outcome's admission on 31 October, not the rule's. The
+admission record gains one dated line:
+
+> "2026-11-11. Research lead, RL-44: the lead's act recorded above is accepted as this rule's admission. This
+> acceptance is made after the outcome was known. It changes nothing in Part A."
+
+For the paper, noted now: the known-bytes rule was revised on the night of the test, after a desk replay
+showed the admitted rule refusing four of four real scans, and before the outcome. The test is non-claim. Where
+the paper quotes its result, it says both.
+
+### (d) Ed is told now; nothing waits on him
+
+This is a ruling on a paper-bound matter and it is mine. Ed can overrule it, since the scope of Part 2 is his:
+he could ask for Llama-70B to be reported outside the family, or for Part 2 to be labelled differently. Stage 1
+goes ahead meanwhile, because it reads no held-out record and waiting only lengthens the exposure.
+
+For Ed, in plain words: "Before BYTES's predictions were locked, an operations agent diagnosing a thermal
+problem read and published the decode times of one held-out model, Llama-70B. No energy was read. The locked
+predictions cannot be affected, because the code and inputs that produce them were frozen before the read.
+The research lead's ruling: BYTES stays confirmatory, Llama-70B stays in and is flagged, the result is also
+stated without it, and the paper says what happened. Stage 1 proceeds. Say so if you want it handled
+differently."
+
+### Seat 11: ADMIT, with the additions above
+
+I take the review myself. The landing is clerical and correct: Part A is byte-identical to the text the test
+ran under, with its digest tested; Part B holds the two corrections as dated post-outcome text; the slot fill
+matches the released slot record; the estimator is untouched. The blinding record is careful, says what it
+could not establish, and discloses the seat's own exposure. Required before merge: BY-BLIND-1, the line in (c),
+and the probe result in (b) item 2 when it exists. The seat's context is not used for the Part 2 tier call.
+
+**Reason.** Blinding protects two things: the choices that could still be bent, and the reader's ability to
+believe they were not. The first is safe here because no choice was left open when the read happened. The
+second is served by saying exactly what was read, by whom, and why it cannot matter, and by letting the reader
+see the result without the affected model.
+
+**Blind status.** Blind to every BYTES energy and to every held-out value, timing included. I read the record
+of the exposure, not the exposed values.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
