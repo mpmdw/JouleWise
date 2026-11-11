@@ -327,6 +327,7 @@ def run_option_c(root, workers=1, *, stem="option-c", session_id=None):
     receipt = {"exit_code": child_receipt["exit_code"], "time_wrapper_exit": result.returncode,
                "verifier_sha256": verifier_sha256, "verifier_commit": verifier_commit,
                "process_measurement": child_receipt, "sessions": len(archives), "workers": workers,
+               "archives": [str(archive) for archive in archives], "closed": session_id is None,
                "program_sha256": sha(REPO / "scripts/independent_recompute_b6.py"),
                "inputs_sha256": sha(document), "session_id": session_id}
     if numbers.exists():
@@ -369,11 +370,16 @@ def write_observations(root, denied_root):
                        "r12-anchor": "r2-beta", "r12-mixed": "r1-beta",
                        "r12-compressed": "r1-beta", "r12-gamma-cross": "r1-gamma"}.items():
         value = session_facts(root, sid)
+        receipt_name = "option-c-skips-receipt.json" if label == "r12-skips" else "option-c-receipt.json"
         receipt = skipped_receipt if label == "r12-skips" else block_receipt
+        if value["archive"] not in receipt["archives"]:
+            receipt_name = "option-c-" + sid + "-receipt.json"
+            receipt = json.loads((root / receipt_name).read_bytes())
+        if value["archive"] not in receipt["archives"]:
+            raise ValueError("shape archive not checked by its program receipt")
         value.update(production_exit=receipt["exit_code"],
                      comparator_agrees=bool(receipt.get("option_c", {}).get("comparator", {}).get("pass")),
-                     program_receipt_sha256=sha(root / ("option-c-skips-receipt.json" if label == "r12-skips"
-                                                       else "option-c-receipt.json")))
+                     program_receipt_sha256=sha(root / receipt_name))
         if label == "r12-gamma-cross":
             gamma = next(r for r in block["sessions"].values() if r["pack"] == "GAMMA" and r["round"] == 1)
             value["pairing"] = gamma["pairing"]
@@ -381,6 +387,8 @@ def write_observations(root, denied_root):
                                                 for p in gamma["pairing"].values())
         observed[label] = value
     value = session_facts(denied_root, "r1-alpha")
+    if value["archive"] not in denied_receipt["archives"]:
+        raise ValueError("denied-action archive not checked by its program receipt")
     value.update(production_exit=denied_receipt["exit_code"],
                  comparator_agrees=bool(denied_receipt.get("option_c", {}).get("comparator", {}).get("pass")))
     value["off_action_returncode"] = next((action.get("returncode") for action in value["off_actions"]), None)
