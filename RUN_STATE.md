@@ -1068,6 +1068,23 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 (3) After `chain.exited`: runbook §4 on `20e9edbc4` with `S=/Users/edr/night-align/r1-20261111T014106Z`. Read `r1_result.json` status first. Then network time ON, the Automatic restore, KM003C, stray monitors, uninstall, record, mail Ed. **Before the NEXT arm after that, zero the frequency word again** (network time OFF, then the zero script, then measure the rate).
 (4) The watchdog-v5 fix (PR #707) is still open; install it only after the chain exits.
 
+253. **Laptop lead (interactive session 41120c85, Opus 5.5), 2026-11-10 19:15 PST: item 251's R1 re-arm REFUSED at 19:05 PST at its first model step. This is not a clock failure. The MBP has been restored by the lead. Diagnose the cause before re-arming.**
+- **Evidence:**
+  - `night-results/align-r1-20261111T0208Z` (pushed at 19:06) has `chain_exit_code 3` while `result.json` says `verdict: GO`. That is Fable audit finding A-01, the GO mask, and it is why the lead's ref watcher, not a verdict, raised the alarm.
+  - `$S/night/align-r1/r1_result.json` reads `status: refused`, with error `runtime.step-30b: exit 3: ... step member is not one complete turn: ['turns:0', 'episode.g0_unreleased:0', 'thermal.start_gate_timeout']`.
+  - Phases completed: `pre_calibration_bracket` and `idle_soak` (`soak_reference.json` exists). `step_30b` refused because the G0 thermal start gate timed out and turn 0 never released.
+- **Restore by the lead at about 19:12** (SSH from the Air; the chain had exited, so the span was no longer live):
+  - `arm_align_r1.py uninstall --custody-root /Users/edr/night-align/r1-20261111T014106Z` returned rc 0.
+  - Night agents are gone, and no stray monitors are running.
+  - Powermode is 0. `host-power` holds only `night.lock`.
+  - **Network time was deliberately left OFF,** so the kernel frequency word stays 0 for the re-arm (item 251's lesson).
+  - Custody is kept as is.
+- **Next activation (replaces item 251's pointer):**
+  (1) Diagnose why G0 timed out at step_30b: the thermal state against the soak reference, ambient, any load, and the G0 budget. Read only structural and thermal-gate records; R1 calibration values stay as-is.
+  (2) If the cause is operational (residual heat or load), re-arm R1 under R13 / item 225 with the same `$M`, zeroing the frequency word first, and mail Ed.
+  (3) If re-arming would need a change to the G0 budget or gate, or a retry rule for step_30b, that is a design change. Route it to the Fable 5.2 research lead (Ed, 11-10: Fable 5.2 leads research design and has the final say on paper-bound work), and do not arm until it rules.
+  (4) Fable 5.2 becomes the magistrate model when the watchdog branch `ops/2026-11-10-watchdog-unknown-keys` is installed after R1 (Ed, 11-10). It is not installed yet.
+
 252. **Ed's decision (interactive session 41120c85, 2026-11-10 ~18:15 PST; renumbered from a colliding 251): the v4 claim contract is OPTION B. Recorded blind: no C or T data exists, and W1 is neither registered nor armed.**
 - **Ed, verbatim:** "b is the correct path forward". This answers the lead's email of 2026-11-10 (Gmail `1a1c8574944bc8ff`). The source is the Fable 5.2 next-block-designs audit, `audit/2026-11-10-fable:docs/research-audits/2026-11-10-fable/next-block-designs.md`, findings V4-01 to V4-12.
 - **What option B means (to be written into `pilot_protocol_v4.md` before the W1 receipt is signed):**
