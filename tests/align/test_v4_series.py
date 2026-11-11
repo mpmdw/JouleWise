@@ -511,6 +511,8 @@ class FakeWorld:
                                             return_value={'ok': True, 'synthetic': True}))
             stack.enter_context(patch.object(session, 'runtime_stack_preflight',
                 return_value={'ok': True, 'reasons': [], 'synthetic': True}))
+            stack.enter_context(patch.object(session, 'held_window_check',
+                return_value={'ok': True, 'reasons': [], 'synthetic': True}))
             stack.enter_context(patch.object(h, 'read', side_effect=physical_inventory))
             # The chain replay stages t0 in the past to avoid an eight-minute
             # wait. The pre-arm clock is earlier; the real preflight still reads

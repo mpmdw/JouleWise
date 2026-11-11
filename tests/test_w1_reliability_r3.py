@@ -201,7 +201,7 @@ class FrequencyPreflightTests(unittest.TestCase):
         self.assertEqual(record['next_arm_preflight'], 'clock.frequency_word_nonzero')
 
     def test_prepare_persists_success_or_named_refusal_before_any_install(self):
-        self.state.update(preparation_status='STAGED')
+        self.state.update(preparation_status='STAGED', measurement_root=str(self.root))
         for available in (True, False):
             host = Host(available=available)
             target = self.root / str(available)
