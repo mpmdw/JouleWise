@@ -19,6 +19,9 @@ spec.loader.exec_module(reader_module)
 ext_spec = importlib.util.spec_from_file_location('rl52_reader', SCRIPT.with_name('hand_check_rl52.py'))
 extension = importlib.util.module_from_spec(ext_spec)
 ext_spec.loader.exec_module(extension)
+r2_spec = importlib.util.spec_from_file_location('rl52_round2_reader', SCRIPT.with_name('hand_check_rl52_round2.py'))
+round2 = importlib.util.module_from_spec(r2_spec)
+r2_spec.loader.exec_module(round2)
 
 
 class AccessBoundaryTests(unittest.TestCase):
@@ -271,6 +274,119 @@ class LedgerExtensionTests(unittest.TestCase):
         self.assertEqual(extension.percentile([1,5,9,13],.25),4)
         self.assertEqual(extension.percentile([1,5,9,13],.75),10)
         self.assertEqual(extension.percentile([7],.75),7)
+
+
+class LedgerRound2Tests(unittest.TestCase):
+    def test_only_exact_pinned_aliases_are_authorized(self):
+        reader = round2.ReleasedReader()
+        self.assertEqual(set(reader.sources), {'RC','FILL','DISC','EXC','PROJ-A','PROJ-B'})
+        with patch.object(Path,'lstat',side_effect=AssertionError('filesystem touched')):
+            for alias in ('REC','VER','STEP','night','unlisted'):
+                with self.subTest(alias=alias), self.assertRaisesRegex(ValueError,'not an authorized pinned'):
+                    reader.read(alias)
+        self.assertTrue(all(len(pin)==64 for _,_,pin in reader.sources.values()))
+
+    def test_full_projection_pin_drift_is_rejected(self):
+        with SCRIPT.with_name('phase2_sources.tsv').open() as stream:
+            manifest = list(csv.DictReader(stream,delimiter='\t'))
+        next(x for x in manifest if x['alias']=='PROJ-A')['sha256_after'] = '0'*64
+        buffer = io.StringIO()
+        writer = csv.DictWriter(buffer,manifest[0].keys(),delimiter='\t')
+        writer.writeheader(); writer.writerows(manifest)
+        with patch.object(Path,'open',return_value=io.StringIO(buffer.getvalue())):
+            with self.assertRaisesRegex(ValueError,'pin configuration changed'):
+                round2.ReleasedReader()
+
+    def test_hash_failure_is_not_parsed_and_is_rehashed(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root/'restricted').mkdir()
+            p = root/'restricted/test.json'
+            p.write_bytes(b'not JSON')
+            reader = round2.ReleasedReader()
+            reader.sources = {'DISC':(root,'restricted/test.json','0'*64)}
+            with patch.object(round2.h,'ROOT_A',root):
+                with patch.object(round2.json,'loads',side_effect=AssertionError('parsed unverified bytes')):
+                    with self.assertRaisesRegex(ValueError,'hash mismatch before parsing'):
+                        reader.read('DISC')
+                result = reader.finish()['DISC']
+            self.assertEqual(result['sha256_before'],result['sha256_after'])
+            self.assertNotEqual(result['sha256_before'],result['expected_sha256'])
+
+    def test_pinned_reader_detects_post_parse_mutation(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            p=root/'test.json'; payload=b'{"count":1}'; p.write_bytes(payload)
+            reader=round2.ReleasedReader()
+            reader.sources={'RC':(root,p.name,hashlib.sha256(payload).hexdigest())}
+            with patch.object(round2.h,'ROOT_A',root):
+                self.assertEqual(reader.read('RC'),{'count':1})
+                p.write_bytes(b'{"count":2}')
+                with self.assertRaisesRegex(ValueError,'custody changed'):
+                    reader.finish()
+
+    def test_every_committed_row_is_an_immutable_prefix(self):
+        prefix=round2.frozen_bytes()
+        self.assertEqual(len(list(csv.DictReader(io.StringIO(prefix.decode()),delimiter='\t'))),801)
+        self.assertTrue(SCRIPT.with_name('rederivation.tsv').read_bytes().startswith(prefix))
+        fields=['key','value']; rows=[{'key':'new','value':'1'}]
+        result=round2.append_only(b'prefix\n',b'prefix\n',rows,fields)
+        self.assertEqual(result,b'prefix\nnew\t1\n')
+        self.assertEqual(round2.append_only(result,b'prefix\n',rows,fields),result)
+        for current in (b'changed\n',b'prefix\nold\t1\n'):
+            with self.subTest(current=current), self.assertRaisesRegex(ValueError,'refuse'):
+                round2.append_only(current,b'prefix\n',rows,fields)
+
+    def test_neg8_uses_unequal_endpoint_sizes_and_corpus_variance(self):
+        energies={f'c{i}':x for i,x in enumerate((-4,-2,0,2,4))}
+        refs={'ref-start-1':1,'ref-start-2':2,'ref-start-3':3,
+              'ref-end-1':5,'ref-end-2':7,'ref-midpoint':-10}
+        result=round2.neg8_arithmetic(energies|refs,list(energies),list(refs))
+        self.assertEqual(result['bound_envelope_j'],5)
+        self.assertAlmostEqual(result['bound_prediction_j'],2.776*math.sqrt(10)*math.sqrt(5/6))
+        self.assertEqual(result['screen_statistic_j'],4)
+        self.assertEqual(result['trajectory_excursion_max_j'],16)
+        self.assertEqual(result['drift_allowance_j'],16)
+        self.assertEqual(result['decision'],'passed')
+
+    def test_neg8_midpoint_changes_allowance_but_not_endpoint_screen(self):
+        energies={f'c{i}':2 for i in range(12)}
+        refs={'ref-start-1':2,'ref-start-2':2,'ref-end-1':2,'ref-end-2':2}
+        plain=round2.neg8_arithmetic(energies|refs,list(energies),list(refs))
+        refs['ref-midpoint']=9
+        excursion=round2.neg8_arithmetic(energies|refs,list(energies),list(refs))
+        self.assertEqual(plain['decision'],excursion['decision'])
+        self.assertEqual(plain['drift_allowance_j'],0)
+        self.assertEqual(excursion['drift_allowance_j'],7)
+        refs['ref-end-1']=refs['ref-end-2']=3
+        self.assertEqual(round2.neg8_arithmetic(energies|refs,list(energies),list(refs))['decision'],'failed')
+        del refs['ref-end-2']
+        with self.assertRaisesRegex(ValueError,'reference roster'):
+            round2.neg8_arithmetic(energies|refs,list(energies),list(refs))
+
+    def test_temperature_readability_and_strict_thresholds(self):
+        self.assertEqual(round2.temperature_arithmetic([None])['temperature_unmeasured'],True)
+        self.assertFalse(round2.temperature_arithmetic([3000,3300])['producer_flag'])
+        self.assertTrue(round2.temperature_arithmetic([3000,None,3301])['producer_flag'])
+        self.assertTrue(round2.temperature_arithmetic([3000,3400,3450,3450])['plateau'])
+        self.assertFalse(round2.temperature_arithmetic([3000,3400,3451])['plateau'])
+
+    def test_rho_uses_battery_and_excludes_impossible_negative_energies_from_spread(self):
+        def member(rail,meter,battery):
+            return {'model':'m','phases':{'request':{'rail_delta_J':rail,'meter':{'delta_J':meter},'battery':{'delta_J':battery}}}}
+        members={'a':member(2,3,1),'b':member(3,4,0),'bad':member(-1,-2,0)}
+        result=round2.rho_arithmetic(members,'m')
+        self.assertEqual(result['median'],.5)
+        self.assertEqual(result['q75'],.625)
+        self.assertEqual(result['spread'],.4)
+
+    def test_single_source_label_does_not_mask_disagreement(self):
+        fields=next(csv.reader(io.StringIO(round2.frozen_bytes().decode()),delimiter='\t'))
+        ledger=round2.Ledger(fields,{'DISC':(None,None,'a'*64)})
+        ledger.add('synthetic',1.0,2.0,'deliberate counterexample',kind='single-source')
+        self.assertEqual(ledger.rows[0]['match'],'MISMATCH')
+        self.assertEqual(ledger.rows[0]['difference'],'1.0')
+        self.assertEqual(ledger.rows[0]['paper1'],'print-labelled')
 
 
 if __name__ == '__main__':
