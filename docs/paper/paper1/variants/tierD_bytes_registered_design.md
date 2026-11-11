@@ -1,8 +1,8 @@
 # Tier D: BYTES as a registered design with its instrument-check evidence
 
 <!-- Use when the primary-block release lands but the BYTES analysis cannot finish (stage 1 not committed by about
-15 November). Decided by completion, not by any result. Replaces ../paper1.md abstract Part 2 sentence, §6.5,
-§6.6 and the conclusion's BYTES branch. §6.1 to §6.4 (question, design, analysis, extension) stay as written: they
+15 November). Decided by completion, not by any result. Replaces ../paper1.md abstract Part 2 sentence, §7.5,
+§3.3 and the conclusion's BYTES branch. §7.1 to §7.4 (question, design, analysis, extension) stay as written: they
 are the registered design. -->
 
 ## Abstract, Part 2 sentence (replaces)
@@ -12,9 +12,9 @@ bytes a model reads per token, its resident size or its decode time, using mixtu
 bytes read from bytes held; we report its design, its collection and the checks of its instruments, and its
 results will follow.
 
-## §6.5 (replaces the section)
+## §7.5 (replaces the section)
 
-### 6.5 Status of the test
+### 7.5 Status of the test
 
 **[BRANCH D.1 — the fit set was collected; the analysis did not finish]** BYTES collection closed at its registered
 end with {{FILL: P1-BYD-STRUCT | per sub-pack and pass: sessions attempted and counting, cause families, kept units per model; structure only}}.
@@ -43,12 +43,12 @@ at least 0.9475, above the registered floor of 0.93.
 
 **When results follow.** {{FILL: P1-BYD-WHEN | the planned dates of the stage-1 commitment and stage-2 release, conditional on completion, never on results}}
 
-## §6.6 (replaces)
+## §3.3 (replaces)
 
 The known-bytes stream test, which decides how the rails-versus-rest split of memory energy is read, was
 {{FILL: P1-BY-KB-STATE | "run, outcome recorded and reported with the results" or "not yet run"}}.
 
-## §9, conclusion (replaces the BYTES branch)
+## §11, conclusion (replaces the BYTES branch)
 
 For BYTES we report a registered design whose rival predictions will be committed before its held-out models are
 unblinded, so that its answer, whichever it is, will say what drives decode energy per token on this laptop.
