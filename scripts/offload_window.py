@@ -31,6 +31,8 @@ as well (today it is the only active exclusion).
 Exit codes: 0 ok (run: verified on Air; see held_reason for release holds), 1 unexpected error,
 2 refused, 3 integrity mismatch (fail closed), 4 deadline (resumable),
 5 transport or Air store unavailable (resumable), 6 local I/O error.
+Resumed runs recheck the Air with stat and verify even with a local receipt, adding one or two
+calls and returning transport exit 5 earlier if the Air is unreachable.
 """
 from __future__ import annotations
 
