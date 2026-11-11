@@ -460,11 +460,191 @@ checks, the U3 roster at N = 24 and the packet-builder changes are on the v4 lin
 
 ---
 
+# Decision request 2: claim contract B as applied (2026-11-10 19:48 PST)
+
+## RL-22. Verdict on `align/2026-11-10-claim-contract-opus` @ `79e85ccd9`: ADMIT-WITH-FIXES
+
+**What I did.** Read the apply report, the full diff from `cf501f75f`, and did the code cold review of items
+17 and 19 to 21 myself (`v4_u3.policy_checks`, the two predicates and `thermal()` in
+`scripts/align_v4_next_arm_packet.py`, and their tests). Ran 14 targeted modules with python3.13, one at a
+time: 187 tests, all pass (`test_v4_claim_b_u3` 4, `test_v4_seedcheck_claim_b` 8, `test_protocol_v4_doc` 6,
+`test_v4_claim_b_packet` 13, `test_v4_next_arm_packet` 45, `..._opus_witnesses` 5, `test_v4_executed_closure`
+4, `test_measurement_view_identity` 3, `test_v4_w1_blockers` 17, `test_v4_test_reserves` 2,
+`test_v4_replacement_windows` 20, `test_v4_cadence` 30, `test_v4_receipt_tiers` 8, `test_v4_registration`
+22). Re-simulated the joint equivalence power with my own code: .682, .598, .384 and 0, matching the receipt.
+
+**Ruling.** The contract text, manifest (`70009b6a…`), both seed checks, the U3 roster at N = 24 and the
+packet-builder changes implement RL-12 to RL-21. Four fixes are required before the branch merges onto the W1
+line; they are small and need only a delta check from me or a Fable reviewer.
+
+1. **Zero-capture attempts in the hold count.** `thermal()` resets `consecutive` on any C or T attempt that is
+   not a U1-U3 FAIL bar, including a zero-capture refusal. FAIL, zero-capture refusal, FAIL would not hold.
+   A zero-capture attempt must be skipped: it neither increments nor resets. Add the failing-first test, and
+   the words "(zero-capture attempts are skipped)" to the protocol's series-freeze paragraph.
+2. **A test that depends on a commit object.** `test_item_1_only_the_three_authority_citations_changed` runs
+   `git show cf501f75f:…`. It will error once that commit is unreachable (a squash merge, a pruned branch, a
+   shallow clone). Pin instead the sha256 of the canonical JSON of the old manifest's member rows and
+   `sabotage_ordinals`, computed once from `cf501f75f` and recorded with that provenance, and compare the
+   current manifest's same projection. Keep the object comparison only when the object exists.
+3. **B5 text.** "the other fifteen fresh members are benign" is wrong. It is that pair's other seven; a window
+   has fourteen benign and two sabotage-instructed fresh members.
+4. **DEVIATIONS.** The `R25-U3-N` row was rewritten in place. Restore its original text and mark it
+   superseded by `RL16-U3-N24`. In `B-ordinals`, "a new paired seed check is owed before signing" is stale:
+   name the two MATCH receipts.
+
+Two optional notes, not conditions: `policy_checks` reads the manifest from the code checkout, not from the
+registration root `validate_u3` is given, which is acceptable while the manifest is frozen and should be said
+in a comment; and the `counts` subcase of the roster test is refused by an older check, not the new one.
+
+**Correction to RL-14.** I wrote that the joint rule costs about seven points of planning power (.79 to .72,
+with a known SE). With the window SE estimated it is .68 at 22 strata, .60 at 20 and .38 at 16. RL-14 stands:
+the window is the design's unit for an equivalence claim. No text may call S well powered for equivalence.
+
+**Reason.** The four fixes are correctness of a registered rule (1), durability of a witness (2) and truth of
+registered text (3, 4). Nothing else in the diff departs from the rulings.
+
+**Blind status.** Blind: no v4 data exists. Synthetic tests only.
+
+---
+
+# Decision request 3: the R1 G0 refusal, and Ed's question on model size (2026-11-10 19:48 PST)
+
+## RL-23. R1 step-30b G0, the seat ruling on main, and when model size is decided
+
+**Authority note.** `RUN_STATE.md` item 255 (magistrate) says "The Fable 5.2 research lead has ruled" and
+points to `docs/process_traces/2026-11-10-r1-g0/10-fable52-ruling.md`. That file was not written in this role.
+It is the output of a Fable 5.2 seat the magistrate convened. It is a seat proposal until it is entered here.
+This entry is that disposition. Under the lead's instruction for this request I read only structure, R7-2 and
+the R1 contract; I did not open the five files of that directory. I did read item 255's summary, which states
+two thermal findings; I could not check them.
+
+**What I established from structure** (at `20e9edbc4`): inside a member the controller loads the model and
+runs the warmup before `run_workload`, whose first act is the G0 wait (`joulewise/align/apple/workload.py`
+lines 3-5 and 426-434). So in step-30b the load and warmup precede G0. step-30b arms the 600 s default
+(`r1_runtime.py:81`, `align_r1_rehearsal.py:112-116`), and any incompleteness refuses the night
+(`r1_runtime.py:1681`). Nothing downstream reads step-30b except the 30B battery drain rate, which may be
+null, and the record-only thermometry block. The kit refuses W1 for any entry in `inconclusive_segments`
+(`align_v4_kit.py:194`).
+
+**Ruling.**
+
+1. **Cap.** step-30b arms the R7-2 timeout (`g0_timeout_s`, 1,200 s). This extends R7-2's scope, whose text
+   kept 600 s for step-30b; it follows R7-2's stated reason, since this G0 also follows a load.
+2. **Non-refusing.** A step-30b whose only incompleteness is an unreleased G0 is INCONCLUSIVE, exit 0, and the
+   night continues. No retry. It is recorded in `r1_slots.g0_waits`, in a new `record_only_inconclusive`
+   entry and as `thermometry.30B_record_only.status: "inconclusive"`. It is **not** entered in
+   `inconclusive_segments`, so the kit's R6-2 refusal does not apply. Any other incompleteness still refuses.
+3. **The seat ruling's five points.**
+   - (3) 1,200 s for every model member, (4) the A-B-A legs and d-4bit arm their deadman after G0, and
+     (5) recomputed bounds: adopted.
+   - (1) The gate reference becomes the pre-warmup 60 s median of step-30b: adopted in principle. The
+     structural ground is that protocol WP14(b) already defines W1's window reference as the last 60 s of idle
+     before a member's warmup, so R1 gating against a sensors-only soak rehearses a different reference from
+     the one W1 uses. Conditions: it is captured once, from step-30b directly after the soak, and never
+     re-captured (R5-1's bar on a self-captured warm reference stands for every later member); and R1 prints
+     each later member's own pre-warmup 60 s median beside it.
+   - (2) δ_slow from 1.0 to 1.5 °C: **held**. It is a thermal-policy value that reaches W1 through slot S6, it
+     was set with thermal data in hand, and the Sol finder dissented. It is permitted in form (one registered
+     0.5 °C step for a timeout-driven failure). I decide it at the review of the built branch, after reading
+     the diagnosis and the dissent. The build keeps it a slot, so either value can be armed.
+   - NR-1, which reference the D members gate against, is not deferred past R1 without an answer to one
+     question: what stops step-d failing the same way, if the D model's resident idle sits above the 30B-based
+     reference plus δ? The built branch must answer it before the re-arm.
+4. **Route.** A cited rebind: one reviewed fix line from `20e9edbc4` (the lane in flight,
+   `lane/2026-11-10-r1-g0-rop`, serves). Failing-first tests, an executing review by the other model family,
+   then my review. It then replaces R13's "arm exactly `20e9edbc4`". No new arm-route design round is needed;
+   each arm writes a fresh plan as before. Nothing else is bundled into it.
+5. **Window.** With step-30b bounded like step-d (5,763.9952 s, up 600 s), the retry floor goes from 96,427 to
+   97,027 s and the one-crossing `window_max_s` from 105,427 to 106,027 s. The batch encounter (11,164 s) is
+   unchanged. Changes to the legs and d-4bit move it further; the arm derives the floor from
+   `night_worst_case_s` and a test asserts the constant equals it.
+6. **RL-20.** No conflict: this is R1-stage, and W1's G0 cap stays the R1-derived slot. Three notes for any
+   G0 change. First, RL-20 removes the ladder after C1, so R1 and W1 must show that G0 releases at the
+   settings that will be frozen; W1 to C1 is the last step. Second, U1 allows at most one G0 timeout per
+   model-window, so a gate that often times out becomes repeated bars and the RL-20 hold. Third, the packet
+   builder compares `thermal_policy` for equality between consecutive C and T plans, so nothing that varies by
+   window (a reference temperature, a derived cap) may live in that field.
+
+**Model size and turn budget: decided after R1, by the rule already written.** Ruling R10
+(`RUN_STATE.md` item 203, declared blind on 2026-11-07) maps R1's outputs to the outcome, reading timing,
+token-count and gate-status fields only:
+
+- keep the 27B at 8 bits if the duty bar passes and the budget-sized G0 cap of R10-2(a) fits;
+- otherwise the 4-bit 27B, after its own R1 night (R10-2(b)), ruled with Ed;
+- otherwise the options of R10-2(c), which is where a member-cap change (a capped B_D), a truncated final
+  turn or screen-only live.
+
+A different, smaller model is not a rung of R10. It is a model change that goes to Ed with a new R0 and R1.
+R10 stands unamended. Throttle state is not added as a covariate to a registered analysis: U1 already
+excludes turns at a non-zero OS thermal level; a print is allowed.
+
+Two corrections to the answer drafted for Ed. The 1-in-12 side-task success is pilot 4, a 30B run; the 27B's
+rate has not been measured, and R1 does not measure it. And option B's confirmatory claim, K, needs no
+sabotage capability at all, so model size bears on S and on external validity, not on K.
+
+**Reason.** A record-only step must not be able to refuse a night of up to 29 hours, and a cap known to be
+shorter than the settle time truncates the wait R1 exists to measure. The reference and δ questions carry the
+rest of the cure and rest on thermal facts I was asked not to read, so I adopt what structure supports and
+hold what it does not.
+
+**Blind status.** Blind to all v4 outcomes; none exists. Structure-only by instruction, except that I read
+the two thermal findings summarised in `RUN_STATE.md` item 255 after forming items 1 and 2. Item 3's hold
+exists because I have not read the diagnosis.
+
+---
+
+# Decision request 4: the Paper 1 work plan (2026-11-10 19:48 PST)
+
+## RL-24. Seats, in launch order
+
+Ed approved E1 to E6 as recommended (`RUN_STATE.md` item 255, lead): Paper 1 is the mid-December capstone
+submission with a one-page outlook; Ed writes the introduction and conclusion; the due date is his to state.
+The working title is the one in `paper-audit.md` §8.1.
+
+Every seat returns to me, or to a Fable reviewer where marked, before merge. "Opus re-derives" means an Opus
+seat checks each changed factual sentence or number against the cited record, not against the draft.
+
+| # | Seat and scope | Builder | Base | Acceptance | Due | Review |
+|---|---|---|---|---|---|---|
+| 1 | **Land Paper 1** (RL-1). `docs/paper/paper1/**` onto `main` unchanged; tag `a1a5029fb` as `paper1/blind-draft-2026-10-27`; correct `CANONICAL.md` Paper rows; mark the superseded lines in `PAPER-PLAN-v2.md` and `TALK-OUTLINE-v2.md` | Opus | `origin/main` | `git diff a1a5029fb HEAD -- docs/paper/paper1` empty; tag on origin; `build_fill_index.py` reproduces `fill_index.md` | 11 Nov | Fable reviewer |
+| 2 | **RESULTS.md to main** (RL-3, part 1) | Opus | `analysis/2026-11-08-b5-results` | File on `main`, byte-identical | 11 Nov | none |
+| 3 | **BYTES probe fix and commitment check** (RL-7 a). The no-key probe must fail on an unrelated error; the commit gate checks the commit exists, the blob hashes to `predictions.sha256`, it is reachable from `origin`, and records the push time | Sol | `lane/2026-11-07-bytes-stage1-run` | Failing-first tests for each of those five cases; estimator digest `18582818…` unchanged; `tests.test_bytes_stage1` passes | 14 Nov | Opus cold review, then me |
+| 4 | **Block 5 re-derivation reader** (RL-3, part 2). Every number in `RESULTS.md` §1, §1.1, §1.2, §2, §4.4, §4.5 and §5 re-read from custody by key path with its own script; a named second source for each uncovered leaf; the ten licence constraints checked against §6 | Sol (not a repair seat) | `main` after seat 2 | A table of value, key, match; zero unexplained mismatches; each uncovered leaf sourced or marked not printable | 14 Nov | me |
+| 5 | **Block 6 §17 entries, draft** (RL-6 b). Verbatim from the 2026-11-07 audit's recommended options and DLE-2, each labelled; its decisions 7 (second half), 8 and 9 set out as options | Opus | `main` | Every entry quotes its source with commit and line; no option chosen where the audit chose none | 12 Nov | **me**: I rule 7, 8 and 9 by 13 Nov; one Sol executing refuter by 14 Nov |
+| 6 | **Corrections of fact** (RL-5 and items P1 to P12 of the release-to-paper audit). No fills | Sol | `main` after seat 1 | A checklist mapping each item to a diff hunk and its source; no `RESULTS.md` number enters; fill index regenerated | 14 Nov | Opus re-derives, then me |
+| 7 | **Block 6 analysis path** (RL-6). Option (c) of the audit: the lean Block 6 recompute with the member pool and `.zst` reading; the twins, a small checker for counting, pairing and §10-§11, and the reducer cross-check as the second side; exclusions re-derived under the Block 6 catalog. The seat is briefed not to open `RESULTS.md` | Sol | `lane/2026-10-27-recompute-b6` rebased on `main` | Blind dry run on full-size synthetic Block 6 archives exits 0; comparator agrees; a compressed-plist test | code 21 Nov | Opus cold review, then me for the S-14 pin |
+| 8 | **Deviation and registry entries** (RL-2, RL-3 as DLE-6, RL-4 x and xi, RL-6 e) | Opus | `main` | Text matches the rulings word for word where quoted | 12 Nov | me |
+| 9 | **Automation section rewrite** (RL-5 items 3 and 4), from the record through November | Opus | seat 6's branch | Every number carries a source id; the three false claims are gone | 19 Nov | Sol cross-review, then me |
+| 10 | **Outline restructure and working title** (RL-8), after seat 6 merges. Moves and cuts only | Sol | `main` after seat 6 | An old-to-new section map; moved text unchanged except listed cuts; the method section at about half its length with derivations in an appendix | 17 Nov | Opus, then me |
+| 11 | **Known-bytes rule landing and the blinding check** (RL-7 b, g) | Opus | BYTES lineage | Rule and admission on the lineage; slot fill in registration §1; the check recorded with its evidence | 15 Nov | Fable reviewer |
+| 12 | **Block 5 fill** (RL-2, RL-4), after seats 4, 6 and 10 | Opus | `main` | Every filled value equals seat 4's table; branches 5.4.B and 5.5.1 twice; no `RETIRED_FALLBACK` id filled without the addendum | 19 Nov | me |
+| 13 | **Outlook page** (RL-9) and **scaffolds for Ed's introduction and conclusion** (bullets and citations only) | Sol | `main` after seat 10 | Pilot numbers each carry their ledger id and the two-trajectory qualifier | 21 Nov | Opus re-derives, then me |
+| 14 | **Bibliography audit** of references 22 to 27 | Sol | `main` | Each opened at its primary source | 21 Nov | Fable reviewer |
+
+Not seats, but on the path:
+
+- **MBP desk steps** (magistrate, in gaps, never over an armed span): BYTES stage 1 once seat 3 is admitted,
+  with the commitment recorded by **19 November**; the Block 6 custody copy to the Air by 15 November; BYTES
+  held-out agreement and stage 2 by **3 December**.
+- **Ed:** introduction by 24 November; conclusion by 9 December, after the freeze; the capstone due date.
+- **Me:** the draft read at 22 November (evidence freeze for the talk) and 28 November; the tier calls at the
+  **5 December** scope freeze, recorded before any Block 6 or BYTES number is read; one cold read after it.
+
+**Reason.** The order puts the two date-bound items first (the BYTES fix, because 19 November selects Tier D;
+the Block 6 entries, because every day after the unseal weakens them) and keeps text seats from colliding:
+corrections, then restructure, then fill.
+
+**Blind status.** Blind to Block 6 and BYTES. Block-5-aware.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
 |---|---|
-| Final review of the claim-contract branch after a Sol seat applies the agreement report's §7 change list, before anything merges or W1 registers | The applied branch |
+| Delta check of the four RL-22 fixes to the claim-contract branch | The fix commit |
+| Review of the built R1 G0 branch before the re-arm, including the held δ_slow value and the NR-1 question (RL-23) | The branch, and leave to read `docs/process_traces/2026-11-10-r1-g0/` |
+| Block 6 audit decisions 7, 8 and 9 (RL-24 seat 5) | The draft, 12 Nov |
 | A ruling on continuing or restarting if two consecutive, or three, U1-U3 FAIL bars occur in the series (RL-20) | The event |
 | Review the drafted Block 6 §17 entries (RL-6 (b)), including the audit's decisions 7, 8 and 9, which have no pre-unseal recommendation | The lead's draft |
 | Any custody change that moves BYTES keys to the Air | A proposal from the lead, if Ed wants Paper 1 off the MBP entirely |
