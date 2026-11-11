@@ -11,7 +11,10 @@ What it prints, and nothing else:
   registered block-6 flag catalog;
 - counts (non-negative integers);
 - each above-bar difference as a multiple of its own bar (|a - t| / bar, two significant
-  figures, never signed);
+  figures, never signed), only for fields whose registered bar is 1% of the cell's own (h + B)
+  or w (``RELATIVE_BAR_KEYS``). A field with an absolute bar (1 ms, 0.0005 J, ...) gets a
+  ``NOMULT`` line instead: its multiple times the public bar would be the difference in seconds
+  or joules;
 - yes / no / not_evaluable answers to the questions in ``QUESTIONS``.
 
 It never prints an energy, power, duration or bound value, the sign or direction of any
@@ -20,7 +23,9 @@ printed. It reads only: ``agreement-stage1.json``, ``agreement-blinded.json`` an
 ``out/a-fit/fit_pass_estimates.json`` under the run root; the ``.runs.csv`` and
 ``.session.json`` of the fit sessions under the export root; and the registered flag catalog
 and bytes manifest in the repository. It refuses any path through a withheld store, a key
-directory, custody, a held-out output or a stage-2 output. Standard library only.
+directory, custody, a held-out output or a stage-2 output, and any path one of whose parts
+contains ``heldout``, ``held-out``, ``withheld``, ``keys``, ``custody`` or ``stage2``. Any failure,
+including an interrupt, prints the exception class only. Standard library only.
 """
 from __future__ import annotations
 
@@ -49,6 +54,12 @@ DECODE_COLUMN = "phase_decode_j"
 KEY_RE = re.compile(r"^[A-Za-z_]+(?::[A-Za-z_]+)?$")
 REFUSED_PARTS = frozenset({"withheld", "released-keys", "no-keys", "custody", "night-custody", "a-held",
                            "post", "release-heldout", "keys"})
+REFUSED_SUBSTRINGS = ("heldout", "held-out", "held_out", "withheld", "keys", "custody", "stage2", "stage-2")
+# Registered bar 0.01 x (h + B) of the cell (or 0.01 x w): a multiple is a ratio, never a value.
+RELATIVE_BAR_KEYS = frozenset({"mean_j", "h_j", "B_j", "lower_j", "upper_j", "attribution_floor_j",
+                               "rails_attribution_floor_j", "meter_attribution_floor_j",
+                               "meter_phase_edge_mean_j", "B_kind:anchor", "B_kind:interp", "B_kind:drift",
+                               "B_kind:meter_edge", "w"})
 REFUSED_NAMES = frozenset({"t-2.json", "heldout_pass_estimates.json", "pack.json", "release.json"})
 
 # Question texts are constants; they carry no digits so that every numeral in the output is a
@@ -94,7 +105,9 @@ def canon(name) -> str:
 def guard(path: Path) -> Path:
     path = Path(path)
     parts = set(path.resolve().parts) | set(path.parts)
-    if parts & REFUSED_PARTS or path.name in REFUSED_NAMES or path.name.endswith(".withheld.csv"):
+    lowered = {part.lower() for part in parts}
+    if (lowered & REFUSED_PARTS or any(s in part for part in lowered for s in REFUSED_SUBSTRINGS)
+            or path.name in REFUSED_NAMES or path.name.endswith(".withheld.csv")):
         raise ProbeRefused("refused: path outside the probe's permitted inputs")
     return path
 
@@ -170,7 +183,7 @@ class Out:
         return Token(f"{key}={self.count(value)}")
 
     def emit(self, tag, *tokens):
-        if tag not in ("TOTAL", "ABOVE", "MULT", "EXACT", "A", "FLAG", "FLAG_UNCATALOGUED", "FLAGQ"):
+        if tag not in ("TOTAL", "ABOVE", "MULT", "NOMULT", "EXACT", "A", "FLAG", "FLAG_UNCATALOGUED", "FLAGQ"):
             raise ProbeRefused("refused: line tag outside the vocabulary")
         if not all(isinstance(token, Token) for token in tokens):
             raise ProbeRefused("refused: untyped output token")
@@ -311,6 +324,9 @@ def probe(run_root: Path, export_root: Path, repo: Path) -> str:
             continue
         if row.get("bar") == "exact":
             out.emit("EXACT", group, key)
+            continue
+        if key not in RELATIVE_BAR_KEYS:
+            out.emit("NOMULT", group, key)
             continue
         nums = numbers(row)
         if nums is None or nums[2] <= 0:
@@ -466,13 +482,14 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     try:
         text = probe(args.run_root, args.export, args.repo)
+        sys.stdout.write(text)
+        sys.stdout.flush()
     except ProbeRefused as exc:
         print(str(exc), file=sys.stderr)
         return 2
-    except Exception as exc:  # noqa: BLE001 - the class only: a message or traceback could quote a value
+    except BaseException as exc:  # noqa: BLE001 - the class only: a message or traceback could quote a value
         print(f"probe failed: {type(exc).__name__}", file=sys.stderr)
         return 1
-    sys.stdout.write(text)
     return 0
 
 

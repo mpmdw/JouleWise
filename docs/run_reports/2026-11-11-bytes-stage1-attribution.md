@@ -122,7 +122,7 @@ operative bound distinct from the mint bound. As things stand they test the term
 - `B_estimator_is_export`: does the estimator's anchor term equal that same average?
 - `B_operative_one`: is every operative record `rereduced`, with one bound equal to the sidecar's
   `operative_bound_s`?
-- `MULT` lines give each difference as a multiple of its bar.
+- `MULT` lines give each difference as a multiple of its bar, only where the bar is 1% of the cell's (h + B) or of w; a field with an absolute bar (1 ms, 0.0005 J, ...) gets a `NOMULT` line, since its multiple times the public bar would be the difference in seconds or joules.
 
 **What the output settles.** The attribution stands as written if all of these hold:
 - `B_twin_is_export` is yes in every rails cell;

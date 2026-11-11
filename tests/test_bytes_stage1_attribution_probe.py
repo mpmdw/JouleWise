@@ -7,6 +7,7 @@ import contextlib
 import csv
 import io
 import json
+import random
 import re
 import statistics
 import tempfile
@@ -34,6 +35,7 @@ LINE_RE = re.compile("|".join((
     r"TOTAL above_bar=\d+ compared_fit=\d+",
     r"ABOVE (fit|fit-commit) (rails|dc_input|rest|commit) [A-Za-z_]+(:[A-Za-z_]+)? \d+",
     r"MULT [a-z0-9_./-]+ [A-Za-z_]+(:[A-Za-z_]+)? [0-9.e+]+",
+    r"NOMULT [a-z0-9_./-]+ [A-Za-z_]+(:[A-Za-z_]+)?",
     r"EXACT [a-z0-9_./-]+ [A-Za-z_]+(:[A-Za-z_]+)?",
     r"A [A-Za-z_]+ yes=\d+ no=\d+ not_evaluable=\d+",
     r"FLAG (rails|dc_input|rest) (estimator_only|twin_only) [a-z0-9_.]+ cells=\d+( effect=[A-Z_]+)?",
@@ -219,11 +221,132 @@ class ProbeOutputTests(unittest.TestCase):
         self.assertNotIn("14b", text)
 
 
+class SentinelFuzzTests(unittest.TestCase):
+    """Random stage-1 records whose every number is a sentinel built from the digits 1 to 9 only:
+    a printed count or a two-significant-figure multiple can never hold three non-zero digits in a
+    row, so any such run in the output, or any sentinel's leading digits, is a leak."""
+
+    SEEDS = range(40)
+
+    @staticmethod
+    def sentinel(rng):
+        digits = "".join(rng.choice("123456789") for _ in range(9))
+        return float(f"{digits[0]}.{digits[1:]}e{rng.randint(-4, 4)}")
+
+    @staticmethod
+    def lead(value):
+        return f"{abs(value):.8e}".replace(".", "")[:4]
+
+    def campaign(self, base, rng, swap=False):
+        state = rng.getstate()
+        model, pass_ = CANON, "pass1"
+        keys = sorted(probe.RELATIVE_BAR_KEYS | {"duration_s", "drift_scale", "T_ref_s", "energy_j", "power"})
+        rows, sentinels = [], []
+        cells = [(b, v) for b in probe.BOUNDARIES for v in probe.VARIANTS]
+        for boundary, variant in rng.sample(cells, 3):   # few enough rows that every count is < 100
+            if True:
+                g = f"cell/{model}/{pass_}/{boundary}/{variant}"
+                for key in keys:
+                    a, t, bar = (self.sentinel(rng) for _ in range(3))
+                    if rng.random() < 0.3:
+                        bar = abs(a - t) * 2          # some rows within bar
+                    if swap:
+                        a, t = t, a
+                    sentinels += [a, t, bar, abs(a - t), abs(a - t) / bar]
+                    rows.append(row("fit", g, key, a, t, bar))
+                rows.append(row("fit", g, "kept_runs", ["run-a", "run-b"], ["run-a", "run-b"], "exact"))
+                rows.append(row("fit", g, "flags", ["power.pstar_unsized", "x.v" + str(int(self.sentinel(rng)))],
+                                ["battery.assist"], "exact"))
+        # Rows that must be counted, never named: held-out model, odd key, other stage.
+        for group, key, stage in (("cell/qwen3-14b-4bit/pass1/rails/gross", "B_j", "fit"),
+                                  (f"cell/{model}/pass1/rails/gross", "value_4321", "fit"),
+                                  (f"cell/{model}/pass1/rails/gross", "B_j", "heldout")):
+            a, t = self.sentinel(rng), self.sentinel(rng)
+            sentinels += [a, t, abs(a - t)]
+            rows.append(row(stage, group, key, a, t, abs(a - t) / 7.0))
+        a, t, bar = (self.sentinel(rng) for _ in range(3))
+        sentinels += [a, t, abs(a - t) / bar]
+        rows.append(row("fit-commit", f"commit/fit_point/rails/{model}", "w", a, t, bar))
+        run = base / "run"
+        (run / "out/a-fit").mkdir(parents=True)
+        (run / "agreement-stage1.json").write_text(json.dumps(rows))
+        operative = self.sentinel(rng)
+        sentinels.append(operative)
+        (run / "out/a-fit/fit_pass_estimates.json").write_text(json.dumps([
+            {"model": MODEL, "role": "fit", "pass_id": 1, "session_id": SID, "boundary": "rails",
+             "basis": "gross primary", "selection": "primary", "status": "computed", "flags": [],
+             "operative": [{"operative_bound_s": operative, "status": "rereduced"}]}]))
+        export = base / "export/bytes-s1-p1"
+        export.mkdir(parents=True)
+        columns = ["run_id", "model_name", "pass_id", "role", "strata", "flag_codes", "exclusion_codes",
+                   "phase_decode_j", "bound_E_clock_anchor_shift_bound_j"]
+        with (export / f"{SID}.runs.csv").open("w", newline="") as stream:
+            writer = csv.DictWriter(stream, fieldnames=columns)
+            writer.writeheader()
+            for i, rid in enumerate(("run-a", "run-b", "run-c")):
+                d, an = self.sentinel(rng), self.sentinel(rng)
+                sentinels += [d, an]
+                writer.writerow({"run_id": rid, "model_name": MODEL, "pass_id": 1, "role": "science",
+                                 "strata": "repeat" if i == 0 else "quad", "flag_codes": "", "exclusion_codes": "",
+                                 "phase_decode_j": repr(d), "bound_E_clock_anchor_shift_bound_j": repr(an)})
+        (export / f"{SID}.session.json").write_text(json.dumps({"session_id": SID,
+                                                                 "operative_bound_s": operative, "flag_counts": {}}))
+        rng.setstate(state)
+        return sentinels
+
+    def run_probe(self, base):
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            code = probe.main(["--run-root", str(base / "run"), "--export", str(base / "export"), "--repo", str(ROOT)])
+        return code, stdout.getvalue(), stderr.getvalue()
+
+    def test_no_sentinel_sign_or_absolute_bar_multiple_reaches_the_output(self):
+        for seed in self.SEEDS:
+            with self.subTest(seed=seed), tempfile.TemporaryDirectory() as tmp:
+                base = Path(tmp)
+                sentinels = self.campaign(base / "a", random.Random(seed))
+                code, text, err = self.run_probe(base / "a")
+                self.assertEqual((code, err), (0, ""))
+                for line in text.splitlines():
+                    self.assertTrue(LINE_RE.fullmatch(line), line)
+                self.assertIsNone(re.search(r"[1-9]{3}", text))
+                for value in sentinels:
+                    if "0" not in self.lead(value):   # derived ratios may round to 0.5000...
+                        self.assertNotIn(self.lead(value), text)
+                self.assertIsNone(re.search(r"(?<![A-Za-z0-9])-\d", text))
+                self.assertFalse(set(text) & set("<>"))
+                for key in ("duration_s", "drift_scale", "T_ref_s", "energy_j", "power"):
+                    self.assertNotRegex(text, rf"MULT \S+ {key} ")
+                self.assertNotIn("14b", text)
+                self.assertNotIn("value_", text)
+                self.assertNotIn("heldout", text)
+                # Swapping every a and t changes no line but the flag sides.
+                self.campaign(base / "b", random.Random(seed), swap=True)
+                _, swapped, _ = self.run_probe(base / "b")
+                pick = lambda t: [l for l in t.splitlines() if l.startswith(("ABOVE", "MULT", "NOMULT", "EXACT"))]
+                self.assertEqual(pick(text), pick(swapped))
+
+    def test_interrupt_prints_the_class_only(self):
+        original = probe.probe
+        def boom(*args):
+            raise KeyboardInterrupt("4321.987654")
+        probe.probe = boom
+        try:
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr), contextlib.redirect_stdout(io.StringIO()):
+                code = probe.main(["--run-root", "/x", "--export", "/y"])
+        finally:
+            probe.probe = original
+        self.assertEqual((code, stderr.getvalue().strip()), (1, "probe failed: KeyboardInterrupt"))
+
+
 class ProbeRefusalTests(unittest.TestCase):
     def test_refuses_withheld_key_custody_and_heldout_paths(self):
         for path in ("/x/withheld/bytes-s3-p1/s.runs.csv", "/x/run/released-keys/pack.json",
                      "/x/night-custody/a.json", "/x/run/out/a-held/h1.json", "/x/run/out/t-2.json",
-                     "/x/export/bytes-s1-p1/s.withheld.csv", "/x/post/a-blinded-post"):
+                     "/x/export/bytes-s1-p1/s.withheld.csv", "/x/post/a-blinded-post",
+                     "/x/run/out/a-heldout/h.json", "/x/Held-Out/a.json", "/x/bytes-stage2/run/a.json",
+                     "/x/s1-keys/a.json", "/x/export-withheld-store/s.runs.csv", "/x/run/custody-memo.json"):
             with self.assertRaises(probe.ProbeRefused):
                 probe.guard(Path(path))
 
