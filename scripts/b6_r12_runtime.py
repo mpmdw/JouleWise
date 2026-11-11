@@ -609,12 +609,11 @@ def bootstrap(argv=None):
     os.devnull = str(root / "null-sink")
     (root / "null-sink").touch(exist_ok=True)
     audit_guard(root, pin)
-    if os.environ.get("R12_TRACE_STACKS") == "1":
-        import faulthandler
-        import signal
-        trace = (root / f"debug-stack-{os.getpid()}.txt").open("w")
-        faulthandler.register(signal.SIGUSR1, file=trace, all_threads=True)
-        faulthandler.dump_traceback_later(15, repeat=True, file=trace)
+    # Never arm a native diagnostic watchdog in an instrument-source child.
+    # The former optional trace file could close before its watchdog was
+    # cancelled, adding an unrelated native thread/signal-handler lifetime.
+    # Read chain-owned progress records instead. The legacy environment flag
+    # has no effect; native diagnostics are not a fixture input or evidence.
     if args.kind == "guard-probe":
         denied = []
         # The wrappers reject these lexical requests before native access.

@@ -94,6 +94,7 @@ def prepare(root):
                 "generator_files_sha256": {name: hashlib.sha256(Path(__file__).with_name(name).read_bytes()).hexdigest()
                     for name in ("b6_r12_session_fixture.py", "b6_r12_runtime.py", "b6_r12_orchestrate.py", "b6_r12_verify.py", "b6_r12_chain_fixture.py")},
                 "clock_mode": "shared integer ns; explicit sleeps advance; no wall-time scale factor",
+                "native_diagnostics": "disabled; no faulthandler watchdog or diagnostic signal registration, including with the legacy R12_TRACE_STACKS flag",
                 "volume": "bootstrap prerequisite", "seams": {
                     "time.time/time_ns/monotonic/monotonic_ns/clock_gettime_ns/sleep": "SharedClock",
                     "time.CLOCK_UPTIME_RAW input": "same no-sleep ns frontier as CLOCK_MONOTONIC_RAW; original sleep-offset reader and flags run",

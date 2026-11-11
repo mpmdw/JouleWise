@@ -48,6 +48,25 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(len(json.loads(result.stdout)), 6)
         self.assertFalse((self.root.parent / "R12-outside-write").exists())
 
+    def test_bootstrap_never_arms_native_diagnostic_watchdog(self):
+        """Predict: even the legacy trace flag cannot arm a native traceback watchdog/handler or leave a diagnostic file; the source program exits 0. This excludes an agent diagnostic, not a chain judgment."""
+        script = f'''
+import faulthandler, sys
+from unittest.mock import patch
+sys.path.insert(0, {str(REPO / "scripts")!r})
+from b6_r12_runtime import bootstrap
+sys.path.insert(0, sys.argv[1])
+def native_probe(*args, **kwargs):
+    raise AssertionError("native diagnostic watchdog reached")
+with patch.object(faulthandler, "register", native_probe), patch.object(faulthandler, "dump_traceback_later", native_probe):
+    raise SystemExit(bootstrap(["--root", sys.argv[1], "code", "pass"]))
+'''
+        result = subprocess.run([sys.executable, "-B", "-c", script, str(self.root)],
+                                capture_output=True, text=True,
+                                env={**os.environ, "R12_TRACE_STACKS": "1"}, timeout=20)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(list(self.root.glob("debug-stack-*.txt")), [])
+
     def test_real_timer_uses_injected_clock_without_native_alarm(self):
         """Predict: a 60 s ITIMER_REAL expires after 120 injected seconds, without calling the native timer."""
         bootstrap = self.root / "bootstrap.py"
