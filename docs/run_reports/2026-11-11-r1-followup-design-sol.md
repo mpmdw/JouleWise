@@ -626,7 +626,7 @@ R1 band, all-model R1 cap, or R1 deadman rearm: those live in `r1_runtime.py`.
 | authenticated unobserved consumed reference raises `WindowReferenceRefused` instead of returning None | Shared custody/admission fence, retain. |
 | unobserved G0 limit becomes min(300,armed cap), instead of unconditional 300 | Shared low-cap correctness; equal for this R1's 1200 s cap. |
 
-Full diff, direction **da3187e6e → W1 b4a6c217f**, follows so no hunk is hidden:
+Full diff, direction **da3187e6e → W1 b4a6c217f**, follows so no hunk is hidden. Blank context-line prefixes are omitted for Markdown whitespace hygiene:
 
 ```diff
 diff --git a/joulewise/align/apple/thermal_gates.py b/joulewise/align/apple/thermal_gates.py
@@ -650,8 +650,8 @@ index 4878ebad2..b46769d70 100644
 +# names it (g0_cap_receipt), and the kit binds that digest to the receipt bytes.
 +R10_G0_CAP_AUTHORITY = 'LEAD-RULINGS-2 R10-2(a)'
 +G0_UNOBSERVED_LIMIT_S = 300
- 
- 
+
+
  class WindowReferenceRefused(RuntimeError):
 @@ -95,14 +101,51 @@ def sample_rows(rows):
  def validate_gate_policy(value):
@@ -721,7 +721,7 @@ index 4878ebad2..b46769d70 100644
                 'source_journal_sha256': journal_digest}
 @@ -457,6 +502,17 @@ class ThermalSession:
                          'source_journal_sha256': None}
- 
+
      def wait(self, kind, *, turn=0, token_count=None, deadman=None, defer_resume=False):
 +        # G1/H already have native entry/exit receipts, including H's later
 +        # dispatch endpoint. Do not duplicate their per-turn boundaries. G0
@@ -735,7 +735,7 @@ index 4878ebad2..b46769d70 100644
 +
 +    def _wait(self, kind, *, turn=0, token_count=None, deadman=None, defer_resume=False):
          """G0 proceeds on timeout; unobserved gates wait then proceed with X4.
- 
+
          G1/H stop only on an actual timeout or the member deadman.
 @@ -534,7 +590,10 @@ class ThermalSession:
                          reason = 'deadman'
@@ -828,7 +828,7 @@ head outside this sandbox.
 - Default text renderer compared with the original `78e6b19ce` renderer on the same journal-derived result with follow-up output disabled — **byte-identical**. This is a renderer preservation check, not a claim that the extended JSON schema is unchanged.
 - Temperature-only classifier input probe — both null, both missing-phase reasons; **original full-inventory diagnosis remains unresolved**, as detailed in Section 7.
 - Desk-only invocation of `night_worst_case_s()` on W1 and source at `da3187e6e` — arithmetic reproduced in Section 8. Separate Decimal arithmetic confirmed the proposed complete-recipe sums, retry floors and minute-rounded windows. These do not verify native overhead bounds.
-- `git diff --check` / staged whitespace check — **PASS**. Final review was by this seat; no independent cold review is claimed.
+- `git diff --check` / staged whitespace check — **PASS after cleanup**. The report staging check caught four blank diff-context lines with trailing spaces; those display-only prefixes were removed in the final documentation cleanup commit. Final review was by this seat; no independent cold review is claimed.
 - Local code commit: **`eacb8c55c`**, `Extend R1 thermal replay with RL-64 consume cases and release margins`. The subsequent documentation commit contains this plan. Both stay on `design/2026-11-11-r1-followup-sol`; no push or measurement action.
 
 
