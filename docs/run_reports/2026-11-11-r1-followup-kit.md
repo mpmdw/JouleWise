@@ -558,3 +558,156 @@ The 30B predecessor sidecar, W1 Tf08, coverage scope, condition-13 contract
 scope and hard twenty-minute-total interpretation remain for the research lead.
 No synthetic result here establishes native sampler coverage, SMC clock-domain
 agreement, real sensor admissibility, installed-stack/weight identity or arm readiness.
+
+
+## Round 4 — RL-84 installed (2026-11-11)
+
+This section supersedes the round-3 parked questions for P-1/P-3/P-4/P-5.
+Implementation is committed at `bc27a808e`; verification remains incomplete
+for the process-control reason below. No arm, native smoke, hardware validation or signing is claimed.
+
+### Changes and authority
+
+- Read RL-84 verbatim from
+  `origin/audit/2026-11-10-fable:docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md`.
+  The named branch already existed at the requested `f0c825779` and was continued.
+  Mission M0 found no active stop card; the explicit brief selects this work.
+  Coordination-state files were not changed or registered.
+- Merged `origin/ops/2026-11-11-w1-tf08-base` (`0d2031cb8`) first, in
+  `8c07cf7f8`. The DEVIATIONS conflict retains the incoming ten-path
+  R1-PHASE-TABLE row exactly and preserves all existing R1 rows. The incoming
+  HELD-WINDOWS row also remains byte-identical.
+- **P-1:** the ordinary predecessor has no sidecar and no prompt rewrite.
+  Removing `launch_lineage_required` is its only derivation, recorded as
+  `template_derivation` beside `template_sha256`. The ordinary-template refusal
+  remains. Its synthetic witness compares the complete config at the member
+  boundary and verifies no thermal journal. RL-84's exact WP14(a)-R1-SLOW
+  wording is installed; the R1-RECORD-KEYS row and runtime contract agree.
+- **P-3:** sampler sweep coverage is independent of key success. In each of
+  pre-warmup idle, quiet, load and recovery, >=99% sweeps and no two missed
+  consecutively are required. Each key independently needs >=99% cells,
+  <1% read errors and no consecutive empty pair. Failing keys are excluded
+  from both roles and the fallback, and `rejected_keys` lists key, R0 class,
+  phase and reason. Tf08 failure or absence fails smoke. The unchanged
+  registered classifier/chooser supplies the role rules; its complete result
+  is preserved. Smoke writes its diagnostics before refusing bad bars or a
+  missing admissible pair. R0 class labels were transcribed solely from the
+  audit's "Follow-up to RL-74" (2026-11-11 06:00 PST), not from R0 data.
+- **P-4:** `R1_EXECUTED_SOURCES` and its literal-set test now have exactly
+  ten paths, adding the launcher, runtime contract and classifier. The
+  per-file mutation comparison covers all ten.
+- **P-5:** Part B's twenty minutes is an estimate. Round 3's computed
+  post-G0 budget is retained (currently 2,600 s); G0's 1,200 s cap is unchanged.
+  Its executed-byte delta review remains required before native smoke.
+- The RL-72 `workload.py` DEVIATIONS row was already present as
+  R1-FOLLOWUP-TIMEOUT and is retained; no duplicate row was added.
+- **`thermal.py` is unchanged from `f0c825779`.** The separate
+  `w1-tf08-record` seat can continue taking those bytes. W1's P-2 policy edit
+  belongs to that seat; no W1-signing pass is claimed here.
+
+Changed files beyond the merge: `configs/align/v4/r1_runtime.json`,
+`joulewise/align/apple/r1_runtime.py`, `joulewise/align/apple/v4_registration.py`,
+`scripts/align_r1_followup_kit.py`, `scripts/align_v4_dynamic_trace.py`,
+`scripts/test_timings.json`, `tests/align/test_r1_followup.py`,
+`tests/align/test_r1_round2.py`, `tests/align/test_r1_round3.py`,
+`tests/align/test_r1_round4.py`, `tests/align/test_v4_registration.py`,
+`docs/align/r1_runtime_contract.md`, `docs/align/v4/DEVIATIONS.md`, and this report.
+The full trace profile includes the new round-4 module; no CI test was removed.
+Timing-map changes are one inserted measured scheduling hint, no removals.
+
+### Verification and limitations
+
+All tests use Python 3.13, `-B`, unittest and the installed host-command guard,
+with one test process at a time. The full suite, native MLX and model downloads
+were not used. Historical committed B5 summaries were visible during RUN_STATE
+intake; blindness to those summaries is not claimed. No underlying study data,
+real restricted/custody path or referenced external model path was opened.
+No network or real sudo/pmset setter/launchctl change/caffeinate was used.
+The blinded analysis job was neither signalled nor modified.
+
+Each module entry below means `python3.13 -B -m unittest <entry>`:
+
+| Entry | Result |
+|---|---|
+| `tests.align.test_r1_round4` | 8 OK, 17.619 s, final code |
+| `tests.align.test_r1_round2` | 14 OK, 9.329 s |
+| `tests.align.test_r1_round3` | 8 OK, 45.352 s |
+| `tests.align.test_v4_registration.R1ExecutedSourceTests` | 2 OK, 1.424 s; literal ten-path set and every-file mutation |
+| `tests.align.test_r1_followup` | Initial full run: 12 tests, 1 failure, 71.822 s. The short two-cell sampler fixture started between ticks, so its unobserved leading cell dominated the coverage fraction. Fixed by anchoring all four phase grids to the sampler's actual first sweep; no holes are filled. Final rerun pending. |
+
+Development runs before those passes: round 2 had two fixture failures (14 tests,
+8.519 s), then passed after comparing the config before the synthetic backend's
+model substitution and mutating coverage eligibility rather than an obsolete
+pick field. Round 4 had one fallback-fixture failure (7 tests, 17.045 s), then
+7 OK in 19.736 s; the final eighth witness additionally exercises smoke refusal
+with persisted diagnostics. No development failure is counted as a pass.
+
+`python3.13 -B -m compileall -q joulewise tests` passed. Direct generator
+reproduction compared all 30 generated kit files byte-for-byte: no drift.
+This is distinct from W1 readiness, which still needs the pending registration
+inputs. `git diff --check` passed. Direct checks pin both protected modules to
+`b4a6c217f`:
+
+- `thermal_gates.py`: `c72937bd8bf7b5553c1ffd70e76018ffbf25f32578533c8749aa88419837918d`
+- `smc_enumeration.py`: `0132579cc33f8a997cdfd5f3dd84466352cdeeeebf9ca7de8dc1ec7990cea0a9`
+
+Full-profile trace attempt: output target
+`/private/tmp/r1-round4-full-trace-csz4f4g2/full.json`, log `run.log` beside it.
+The attempt began before the implementation commit. I interrupted its wrapper
+before using it as final-head evidence, but the detached tracer continued.
+`lsof` identified its sole log holder as PID 68087. Sandbox refused both group
+and individual SIGINT; no bypass was attempted. Manual interruption was
+requested. No other test process was started while it remained active. No
+partial or unreviewed trace was moved into the repository.
+
+### Blocking handoff and exact remaining checks
+
+The interrupt-wrapper handling was my mistake: its KeyboardInterrupt ended
+before forwarding the signal to the detached child, losing the timeout watcher.
+The sandbox then refused the direct signal. At the final observation PID 68087
+still held the scratch log, no scenario had reported completion, and no
+`full.json` existed. This is an incomplete diagnostic attempt, not final-head
+trace evidence. Its source code bytes were the implementation bytes, but it
+began before `bc27a808e` was committed; no final-head/full-profile pass is claimed.
+The completed unittest-reported run times total 190.846 s (including development failures).
+The detached trace adds ongoing time; a final bounded total cannot be asserted
+until it is stopped. No more tests were started while it remained active.
+
+**Immediate external step:** interrupt only this synthetic tracer from Terminal:
+`kill -INT 68087`, then confirm the scratch log has no active holder. It is
+unrelated to the blinded analysis job. No request to touch that job was made.
+After the tracer exits, the exact unfinished work is:
+
+1. `python3.13 -B -m unittest tests.align.test_r1_followup` — rerun after the
+   two-cell fixture correction; current final-head full-module result is unverified.
+2. `python3.13 -B -m unittest tests.align.test_v4_executed_closure` — not run
+   in round 4; the round-3 pass does not establish this head.
+3. `python3.13 -B -m unittest tests.align.test_v4_dynamic_closure` — not run
+   in round 4; the committed trace is still the inherited baseline.
+4. `python3.13 -B -m unittest tests.align.test_w1_prequal` — not started
+   in round 4; round 3's interrupted result remains incomplete.
+5. `python3.13 -B -m unittest tests.align.test_v4_next_arm_packet` — not
+   completed in round 4; the unfinished trace has not reported its arm scenario.
+6. Fresh final-head full-profile trace to a new scratch destination:
+   `python3.13 -B scripts/align_v4_dynamic_trace.py --out <new-scratch>/full.json`.
+   Run it directly with working process control, without the detached-child
+   wrapper used here. Require `profile: full`, every scenario successful,
+   `not_bound: []`, `not_strict: []`; move only that successful trace into
+   `docs/align/v4/dynamic_closure_trace.json`, checking digest equality. Then
+   rerun both closure modules against it.
+
+No new final-head broad/module/trace success is implied by the focused passes.
+After these software checks, the lead still owns the executed-byte delta review
+before native smoke, native A/B smoke, sensor ruling, measurement-interpreter
+weight/runtime-stack checks, final-commit prepare packet and signing gates.
+Native Metal check, outside this sandbox only:
+`JW_ALIGN_MLX_NATIVE_TESTS=1 python3.13 -B -m unittest tests.align.test_thermal_mlx`.
+There are no newly invented research-policy choices; the remaining uncertainty
+is software verification and live/native evidence. RL-84's P-2 W1 policy edit
+remains with its separate seat.
+
+Local commits: `8c07cf7f8` (requested W1-base merge), `bc27a808e` (RL-84 code,
+config, docs and tests). This section and final verification handoff are in the
+subsequent report commit. Nothing was pushed. The four forbidden coordination
+paths, `thermal.py`, classifier and thermal-gate module have no diff against
+the required baselines.
