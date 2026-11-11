@@ -243,7 +243,7 @@ and rest is reported as not measured, and every rails and rest statement carries
 
 ### 3.4 Whole-machine cross-check
 
-**Whole-machine cross-check.** {{FILL: P1-B5-METER | per pack and model: median, range and interquartile range of the rails' share ρ; member windows outside the hard plausibility band, each listed with its meter flags; within-model spread; the central band from the first clean session and the count of later member windows inside it; or "no clean session, no central band"}} The boundary of this
+{{FILL: P1-B5-METER | per pack and model: median, range and interquartile range of the rails' share ρ; member windows outside the hard plausibility band, each listed with its meter flags; within-model spread; the central band from the first clean session and the count of later member windows inside it; or "no clean session, no central band"}} The boundary of this
 cross-check is the DC input at the laptop's USB-C port plus the battery term; the adapter's AC-to-DC loss is not
 included. It is never a claim number and removed nothing.
 
@@ -324,7 +324,7 @@ The pulse calibration measures how the sampler places the edges of long, square 
 different sequence of work at the prefill-to-decode transition. Applying the pulse-derived bound to inference
 edges is an assumption that this study did not test (Section 9).
 
-### 4.3 Reported phase energy and its interval (derivation in Appendix D.3)
+### 4.3 Reported phase energy and its interval (example in Appendix D.3)
 
 A **reported cell** is one energy per model and phase, from that model's runs of one workload in one session:
 10 **absolute repeats** (single runs) and 10 **null quads**. A **quad** is four consecutive runs in the order A,
@@ -332,6 +332,20 @@ B, B, A; in a null quad A and B are the same model and workload, so any differen
 from the instrument and the machine. A **unit** is what the statistics treat as one independent draw: one repeat
 or one whole quad. The repeats and the quads are the two **strata**. Removing any run of a quad removes the whole
 quad, so its drift cancellation is never broken. A cell needs at least five kept units in each stratum.
+
+For a cell with n_r kept repeats (energies r) and n_b kept quads (quad means q):
+
+1. **Mean.** m = 0.2 × mean(r) + 0.8 × mean(q). The weights are fixed by design, because 10 of the 50 runs are
+   repeats and 40 are quad members; with all units kept this equals the plain mean of the 50 runs.
+2. **Variance.** V = 0.04 × s_r² / n_r + 0.64 × s_q² / n_b, with sample standard deviations (divisor n − 1).
+3. **Half-width.** h = t(0.975, min(n_r, n_b) − 1) × √V, using the smaller stratum's degrees of freedom.
+4. **Recorded bounds.** B is the sum of three stratified averages (0.2 × repeat mean + 0.8 × quad-member mean) of
+   per-run bounds: the first-kind timing bound (Section 4.2); an interpolation bound, which is identically zero
+   for these interval-support records; and half the session's drift allowance (Section 4.7).
+5. **Interval.** [m − h − B, m + h + B], not clamped at zero.
+6. **Per-token value.** For decode, m divided by the 512 runtime-observed output tokens ("decode-phase energy per
+   output token; 512 output tokens, 511 of them generated in the decode phase"); for prefill, m divided by the
+   2,048 prompt tokens.
 
 The interval covers run-to-run and quad-to-quad variation inside one session over the kept units, plus the
 recorded bounds. It does not cover variation between sessions or days, nor any bias from which units were
@@ -349,10 +363,32 @@ over the kept runs is already inside the interval; X itself is not added. The bo
 energy moves when power is taken as constant within each sampler record; it is not a bound on the physical
 energy of the phase."*
 
-### 4.5 The detection floor (derivation in Appendix D.4)
+### 4.5 The detection floor (example in Appendix D.4)
 
 The **detection floor** of a model and phase is the largest difference the registered estimator allows between
 runs that do the same thing; hence the smallest real difference the instrument can resolve. It has two forms.
+
+- **Absolute form**, from the kept repeats v₁ … v_n: deviations are vᵢ − mean(v); the prediction term is
+  t × s × √(1 + 1/n), with s the sample standard deviation of the deviations and t the two-sided 95% Student-t
+  value at n − 1 degrees of freedom.
+- **Comparative form**, from the kept null-quad differences d = (B₁ + B₂ − A₁ − A₂)/2: deviations are the d
+  themselves, not re-centred; the prediction term is |mean(d)| + t × s × √(1 + 1/n).
+
+In both, the **point floor** is max(largest |deviation|, prediction): the first term keeps the largest
+displacement already observed, the second is, under an independent-normal model, a two-sided 95% prediction
+amount for one further value. It is not a deterministic bound on future errors.
+
+**Corner widening.** Each value may lie anywhere within ± its timing half-width wᵢ. For the absolute form, wᵢ is
+the largest distance of the run's phase energy from its unshifted value over the timing movements of Section
+4.2. For the comparative form, each phase edge is treated as shared by the quad's four runs and moved by one
+common amount within ±b, and each run's remaining local clock uncertainty is added. The **corner-widened floor**
+is the largest point floor over every corner of the box of values (2ⁿ corners, enumerated exactly; the program
+refuses above 16 units rather than approximate). The point floor is a convex function of the values, so its
+maximum over the box lies at a corner. The **operative floor** is max(point floor, corner-widened floor).
+
+**Small-sample guard.** For fewer than ten kept units the operative floor is multiplied by
+g(n) = √(9/(n − 1)) (for example 1.0607 at n = 9 and 1.5 at n = 5); the factor is undefined below five, which is
+why each stratum needs five kept units.
 
 A **model contrast** (Section 4.8) is judged against a **floor gate**. Each form first adds the floor session's
 whole gross drift allowance to its guarded operative floor, giving `drift_widened_guarded_floor_j`.
@@ -365,7 +401,7 @@ allowance (Section 4.7). The blind ruling of 12 October corrected the analysis p
 without changing the code (Section 5.5).
 <!-- FACT H05: RUN_STATE item 33(b); l9-rulings/RULING.md:117-136 (J5); detection_floor.py:1534-1536,1818-1838. -->
 
-### 4.6 The dominance ratio (replay and branch rules in Appendix D.5)
+### 4.6 The dominance ratio (example in Appendix D.5)
 
 For each model, phase and floor form we print
 
@@ -374,6 +410,19 @@ For each model, phase and floor form we print
 R ≥ 2 (equality passes) means that letting each value move within its timing box at least doubles the floor:
 timing attribution, not run-to-run repeatability, is what limits the measurement. A threshold merely above 1
 would let any positive timing width decide the answer, so the registered threshold is a doubling.
+
+For the comparative form we also print R_cm, a sensitivity replay in which a block-level energy allowance
+derived from shared edge movements is applied with *one* sign across all quads, and each quad's own local
+uncertainty with its own sign, over every sign combination. R_cm retains one shared sign for scalar energy
+allowances; it does not replay one physical time shift in every quad, and passing it licenses no claim of
+robustness to a common physical timing error.
+
+Two models, two phases and two forms give eight R values and four R_cm values. They share runs and are
+correlated; "independent" in the registered name of R refers to the independent-corner box, not to statistical
+independence. **Branch A** holds when every one of the twelve is at least 2, and licenses the sentence that timing
+attribution dominates the detection floor. Otherwise **branch B** reports each
+ratio that failed. A zero denominator refuses; no infinity is ever printed. Every ratio is printed with its
+numerator, denominator and n, and labelled "point diagnostic; no interval".
 
 The attribution floor of Section 4.4, the detection-floor class `attribution_limited` under D-078, and the
 dominance branch are separate quantities. A floor-class label alone does not select the dominance branch.
@@ -395,7 +444,7 @@ mean, the midpoint energy and the end mean. Each run carries ½A into its cell's
 two sides, carries it once. A lost midpoint reference leaves the allowance on the start and end references only,
 which cannot see an excursion that reverted before the end; this is disclosed with a fixed sentence.
 
-### 4.8 Model contrasts, outcome words and the claims ladder (descriptive checks in Appendix D.7)
+### 4.8 Model contrasts, outcome words and the claims ladder (descriptive estimates in Appendix D.7)
 
 A **contrast** compares two models on the same workload in **contrast quads** ordered 1.7B, 8B, 8B, 1.7B. Each
 kept quad k gives d_k = (B₁ + B₂)/2 − (A₁ + A₂)/2, with B the 8B side. Over n kept quads (at least five of ten):
@@ -411,6 +460,10 @@ kept quad k gives d_k = (B₁ + B₂)/2 − (A₁ + A₂)/2, with B the 8B side.
 4. **Test**: t = d̄ / se, two-sided. The two primary contrasts (decode and prefill) form one family corrected by
    Holm's method at α = 0.05 [26]; a contrast that cannot be estimated keeps the family size at two.
 5. **Floor gate** (Section 4.5).
+
+A **leave-one-quad-out** check recomputes the contrast without each kept quad in turn. If dropping some quad
+changes the sign, the floor status, the Holm decision or the outcome, the contrast is *verdict-influential*. If it
+moves d̄ by more than a quarter of the floor gate, that is reported.
 
 The outcome is one of four registered words, decided in this order of precedence:
 
@@ -1534,73 +1587,24 @@ and an end-edge record averaging 10 W, moving the start 46 ms early and the end 
 2.36 J. When a displaced edge crosses into a neighbouring record this closed form is only an approximation; the
 registered quantity is the exact maximum.
 
-### D.3 Reported-cell estimator and interval example
-
-For a cell with n_r kept repeats (energies r) and n_b kept quads (quad means q):
-
-1. **Mean.** m = 0.2 × mean(r) + 0.8 × mean(q). The weights are fixed by design, because 10 of the 50 runs are
-   repeats and 40 are quad members; with all units kept this equals the plain mean of the 50 runs.
-2. **Variance.** V = 0.04 × s_r² / n_r + 0.64 × s_q² / n_b, with sample standard deviations (divisor n − 1).
-3. **Half-width.** h = t(0.975, min(n_r, n_b) − 1) × √V, using the smaller stratum's degrees of freedom.
-4. **Recorded bounds.** B is the sum of three stratified averages (0.2 × repeat mean + 0.8 × quad-member mean) of
-   per-run bounds: the first-kind timing bound (Section 4.2); an interpolation bound, which is identically zero
-   for these interval-support records; and half the session's drift allowance (Section 4.7).
-5. **Interval.** [m − h − B, m + h + B], not clamped at zero.
-6. **Per-token value.** For decode, m divided by the 512 runtime-observed output tokens ("decode-phase energy per
-   output token; 512 output tokens, 511 of them generated in the decode phase"); for prefill, m divided by the
-   2,048 prompt tokens.
+### D.3 Reported-cell interval example
 
 *Synthetic example (all units kept):* repeats with mean 10.0 J and s_r = 0.2 J, quad means with mean 10.2 J and
 s_q = 0.18257 J give m = 10.16 J, √V = 0.047889 J, h = 2.262157 × 0.047889 = 0.10833 J; with B = 0.060 J the
 interval is [9.9917, 10.3283] J.
 
-### D.4 Detection-floor estimator, corner widening and small-sample guard
-
-- **Absolute form**, from the kept repeats v₁ … v_n: deviations are vᵢ − mean(v); the prediction term is
-  t × s × √(1 + 1/n), with s the sample standard deviation of the deviations and t the two-sided 95% Student-t
-  value at n − 1 degrees of freedom.
-- **Comparative form**, from the kept null-quad differences d = (B₁ + B₂ − A₁ − A₂)/2: deviations are the d
-  themselves, not re-centred; the prediction term is |mean(d)| + t × s × √(1 + 1/n).
-
-In both, the **point floor** is max(largest |deviation|, prediction): the first term keeps the largest
-displacement already observed, the second is, under an independent-normal model, a two-sided 95% prediction
-amount for one further value. It is not a deterministic bound on future errors.
-
-**Corner widening.** Each value may lie anywhere within ± its timing half-width wᵢ. For the absolute form, wᵢ is
-the largest distance of the run's phase energy from its unshifted value over the timing movements of Section
-4.2. For the comparative form, each phase edge is treated as shared by the quad's four runs and moved by one
-common amount within ±b, and each run's remaining local clock uncertainty is added. The **corner-widened floor**
-is the largest point floor over every corner of the box of values (2ⁿ corners, enumerated exactly; the program
-refuses above 16 units rather than approximate). The point floor is a convex function of the values, so its
-maximum over the box lies at a corner. The **operative floor** is max(point floor, corner-widened floor).
-
-**Small-sample guard.** For fewer than ten kept units the operative floor is multiplied by
-g(n) = √(9/(n − 1)) (for example 1.0607 at n = 9 and 1.5 at n = 5); the factor is undefined below five, which is
-why each stratum needs five kept units.
+### D.4 Detection-floor example
 
 *Synthetic example:* ten repeats with s = 0.2 J and largest deviation 0.4 J give a prediction of
 2.262 × 0.2 × √1.1 = 0.4745 J, the point floor; with wᵢ = 0.05 J on every run the operative floor is 0.5730 J.
 Ten null-quad differences with mean 0.04 J and s = 0.0966 J give a point floor of 0.2692 J; with a shared-edge
 width of 0.30 J on every quad the operative floor is 1.0349 J.
 
-### D.5 Dominance example, shared-sign replay and branch rules
+### D.5 Dominance example
 
 In the
 synthetic examples above, the absolute R is 0.5730 / 0.4745 = 1.21 (fails) and the comparative R is
 1.0349 / 0.2692 = 3.84 (passes).
-
-For the comparative form we also print R_cm, a sensitivity replay in which a block-level energy allowance
-derived from shared edge movements is applied with *one* sign across all quads, and each quad's own local
-uncertainty with its own sign, over every sign combination. R_cm retains one shared sign for scalar energy
-allowances; it does not replay one physical time shift in every quad, and passing it licenses no claim of
-robustness to a common physical timing error.
-
-Two models, two phases and two forms give eight R values and four R_cm values. They share runs and are
-correlated; "independent" in the registered name of R refers to the independent-corner box, not to statistical
-independence. **Branch A** holds when every one of the twelve is at least 2, and licenses the sentence that timing
-attribution dominates the detection floor. Otherwise **branch B** reports each
-ratio that failed. A zero denominator refuses; no infinity is ever printed. Every ratio is printed with its
-numerator, denominator and n, and labelled "point diagnostic; no interval".
 
 ### D.6 Drift bound and scaled sensitivity line
 
@@ -1623,11 +1627,7 @@ give a factor of max(1, 8.108, 2.25) = 8.108 and a scaled term of 3.97 J. The li
 In Part 2 the same scale is part of the registered estimator (Section 7.3), because no drift-transfer test passed
 before BYTES collection.
 
-### D.7 Contrast descriptive checks
-
-A **leave-one-quad-out** check recomputes the contrast without each kept quad in turn. If dropping some quad
-changes the sign, the floor status, the Holm decision or the outcome, the contrast is *verdict-influential*. If it
-moves d̄ by more than a quarter of the floor gate, that is reported.
+### D.7 Contrast descriptive estimates
 
 Beside each contrast two **registered descriptive estimates** are printed and decide nothing: the 8B-to-1.7B
 ratio of phase energies, exp(mean of ln(B-side mean / A-side mean)) with its t interval and without the recorded
