@@ -22,6 +22,7 @@ import time
 from contextlib import redirect_stderr as contextlib_redirect_stderr
 from types import SimpleNamespace
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location("offload_window", ROOT / "scripts/offload_window.py")
@@ -305,6 +306,175 @@ class DeletionDecisionCharacterization(unittest.TestCase):
         self.assertEqual(not (f.record / "empty.txt").exists(), may_delete)
         if not may_delete:
             f.assert_nothing_deleted()
+
+
+class Q10Recovery(Fixture):
+    def test_verify_repairs_receipt_queue_crash_without_rewriting_receipt(self):
+        off = self.offload()
+        manifest = off.pack(self.record, self.manifest, self.manifest_sha,
+                            codec=ow.choose_codec("gzip", 3, 1), part_bytes=1 << 20, terminal=TERMINAL)
+        off.push(manifest)
+        queue = self.store / "queue/w1-test.json"
+        write = ow.write_atomic
+
+        def crash_at_queue(path, raw):
+            if path == queue:
+                raise OSError("synthetic crash after Air receipt")
+            return write(path, raw)
+
+        with mock.patch.object(ow, "write_atomic", side_effect=crash_at_queue):
+            with self.assertRaisesRegex(OSError, "synthetic crash"):
+                ow.Gate(self.binding, probe=self.probe).verify("w1-test")
+        receipt = self.store / "windows/w1-test" / ow.AIR_RECEIPT
+        before = receipt.read_bytes(), receipt.stat().st_mtime_ns
+        gate = ow.Gate(self.binding, probe=self.probe)
+        self.assertEqual(gate.verify("w1-test"), json.loads(before[0]))
+        self.assertTrue(queue.exists(), "verified receipt must recreate its missing queue entry")
+        self.assertEqual(ow.read_json(queue), {"window_id": "w1-test",
+                                              "offload_manifest_sha256": ow.sha_bytes(ow.canonical(manifest))})
+        self.assertEqual((receipt.read_bytes(), receipt.stat().st_mtime_ns), before)
+        queue_before = queue.read_bytes(), queue.stat().st_mtime_ns
+        with mock.patch.object(ow, "write_atomic", wraps=write) as writes:
+            gate.verify("w1-test")
+        writes.assert_not_called()
+        self.assertEqual((queue.read_bytes(), queue.stat().st_mtime_ns), queue_before)
+        self.assert_nothing_deleted()
+
+    def test_verify_keeps_existing_queue_and_does_not_requeue_completed_second(self):
+        self.assertEqual(self.run_offload(codec="gzip"), 0)
+        queue = self.store / "queue/w1-test.json"
+        gate = ow.Gate(self.binding, probe=self.probe)
+        before = queue.read_bytes(), queue.stat().st_mtime_ns
+        with mock.patch.object(ow, "write_atomic", wraps=ow.write_atomic) as writes:
+            gate.verify("w1-test")
+        writes.assert_not_called()
+        self.assertEqual((queue.read_bytes(), queue.stat().st_mtime_ns), before)
+        self.confirm_second_copy()
+        queue.unlink()
+        with mock.patch.object(ow, "write_atomic", wraps=ow.write_atomic) as writes:
+            gate.verify("w1-test")
+        writes.assert_not_called()
+        self.assertFalse(queue.exists())
+
+    def test_run_repairs_queue_with_both_local_and_air_receipts(self):
+        self.assertEqual(self.run_offload(codec="gzip"), 0)
+        queue = self.store / "queue/w1-test.json"
+        queue.unlink()
+        self.transport.calls.clear()
+        self.assertEqual(self.run_offload(codec="gzip"), 0)
+        self.assertTrue(queue.exists(), "a resumed run must reach the Air verify repair")
+        self.assertIn("verify w1-test", self.transport.calls)
+        self.assertFalse(any(c.startswith("put ") for c in self.transport.calls))
+        self.assert_nothing_deleted()
+
+    def rebuild_air(self):
+        shutil.rmtree(self.store)  # synthetic fixture store only
+        self.binding.unlink()
+        ow.init_store(self.store, self.binding, probe=self.probe, mount_point=self.vol, min_free_gib=0)
+        (self.store / "second").mkdir()
+
+    def test_stale_local_receipt_repushes_to_rebuilt_air_without_repacking(self):
+        self.assertEqual(self.run_offload(codec="gzip"), 0)
+        off = self.offload()
+        receipt_path = off.dir / "receipt-air.json"
+        old_receipt = receipt_path.read_bytes()
+        objects = [off.dir / ow.MANIFEST_NAME, off.dir / ow.RECORD_MANIFEST_NAME,
+                   *sorted(off.parts_dir.glob("part-*"))]
+        before = {p: (p.read_bytes(), p.stat().st_mtime_ns) for p in objects}
+        self.rebuild_air()
+        self.transport.calls.clear()
+        self.assertEqual(self.run_offload(codec="gzip"), 0)
+        self.assertTrue(any(c.startswith("put ") for c in self.transport.calls),
+                        "stale local receipt must not skip upload to a rebuilt Air")
+        self.assertIn("verify w1-test", self.transport.calls)
+        self.assertNotEqual(receipt_path.read_bytes(), old_receipt)
+        self.assertEqual(receipt_path.read_bytes(), (self.store / "windows/w1-test" / ow.AIR_RECEIPT).read_bytes())
+        self.assertEqual({p: (p.read_bytes(), p.stat().st_mtime_ns) for p in objects}, before)
+        for rel, raw in self.files.items():
+            self.assertEqual((self.store / "windows/w1-test/raw" / rel).read_bytes(), raw)
+        self.assert_nothing_deleted()
+        sent = self.transport.sent
+        self.assertEqual(self.run_offload(codec="gzip"), 0)
+        self.assertEqual(self.transport.sent, sent)
+        self.assertEqual(self.confirm_second_copy(), ["w1-test"])
+        self.assertEqual(self.offload().release()["rule"], "two_verified_copies")
+
+    def test_stale_receipt_recovery_resumes_after_interrupted_push(self):
+        self.assertEqual(self.run_offload(codec="gzip"), 0)
+        self.rebuild_air()
+
+        def interrupt(command):
+            if command.startswith("put "):
+                raise OSError("synthetic interrupted re-push")
+
+        self.transport.before = interrupt
+        self.assertEqual(self.run_offload(codec="gzip"), ow.TransportError.code)
+        self.assert_nothing_deleted()
+        self.transport.before = None
+        self.assertEqual(self.run_offload(codec="gzip"), 0)
+        self.assertTrue((self.store / "windows/w1-test" / ow.AIR_RECEIPT).exists())
+
+    def test_air_unavailable_does_not_skip_work_or_discard_local_receipt(self):
+        self.assertEqual(self.run_offload(codec="gzip"), 0)
+        receipt_path = self.offload().dir / "receipt-air.json"
+        before = receipt_path.read_bytes()
+        self.probe.mounted_ok = False
+        self.assertEqual(self.run_offload(codec="gzip"), ow.TransportError.code)
+        self.assertEqual(receipt_path.read_bytes(), before)
+        self.assert_nothing_deleted()
+
+    def test_unexpected_exception_records_actual_process_rc(self):
+        script = '''
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+from tests.test_offload_window import ow
+args = SimpleNamespace(state_root=Path(sys.argv[1]), window_id="w1-test", deadline_epoch=None, budget_s=600)
+def crash(off, span, state_root, deadline):
+    off.ensure_dirs()
+    raise RuntimeError("synthetic unexpected exception")
+ow._supervised(args, "offload", crash, runner=None, state_probe=lambda: {},
+               now=lambda: 100.0, mono=lambda: 100.0, lease=None, alarm=False)
+'''
+        result = subprocess.run([sys.executable, "-B", "-c", script, str(self.state)],
+                                cwd=ROOT, capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("RuntimeError: synthetic unexpected exception", result.stderr)
+        self.assertEqual(self.span()["rc"], result.returncode)
+        self.assertEqual(ow.read_json(self.state / ow.ACTIVITY_SPAN)["rc"], result.returncode)
+        journal = [json.loads(line) for line in (self.offload().dir / "offload-journal.jsonl").read_text().splitlines()]
+        self.assertEqual(journal[-1]["rc"], result.returncode)
+
+    def check_held(self, expected):
+        out = io.StringIO()
+        with _redirect(out):
+            rc = ow.run_offload(self.args(codec="gzip"), runner=self.transport,
+                                state_probe=lambda: self.probe_state, now=self.clock, mono=self.clock)
+        self.assertEqual(rc, 0)  # runbooks: exit 0 means verified on Air, even while release waits
+        self.assertEqual(self.span()["held_reason"], expected)
+        self.assertEqual(json.loads(out.getvalue())["held_reason"], expected)
+        self.assertEqual(ow.read_json(self.state / ow.ACTIVITY_SPAN)["held_reason"], expected)
+        self.assert_nothing_deleted()
+
+    def test_second_copy_hold_is_explicit_in_record_and_stdout(self):
+        self.check_held("second_copy_not_confirmed")
+
+    def test_missing_air_hold_is_explicit_in_record_and_stdout(self):
+        def lose_air_before_release(command):
+            if command.startswith("receipts "):
+                (self.store / "windows/w1-test" / ow.AIR_RECEIPT).unlink()
+        self.transport.before = lose_air_before_release
+        self.check_held("no_air_receipt")
+
+    def test_standalone_release_hold_keeps_refusal_exit_code(self):
+        self.assertEqual(self.run_offload(codec="gzip"), 0)
+        out = io.StringIO()
+        with _redirect(out):
+            rc = ow.run_release(self.args(), runner=self.transport, state_probe=lambda: self.probe_state,
+                                now=self.clock, mono=self.clock)
+        self.assertEqual(rc, ow.Refusal.code)
+        self.assertEqual(json.loads(out.getvalue())["held_reason"], "second_copy_not_confirmed")
+        self.assert_nothing_deleted()
 
 
 class HappyPath(Fixture):
