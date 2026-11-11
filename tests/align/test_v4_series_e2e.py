@@ -28,6 +28,7 @@ from joulewise.align.apple import v4_cadence as cad, v4_registration
 from scripts import align_pilot_session as pilot, align_v4_kit as kit, align_v4_series as s
 from scripts import align_v4_session as session, bytes_h_session as h
 from tests.align.test_v4_cadence import arm_seams, write_battery_log
+from tests.align.v4_registration_fixtures import session_plan
 from tests.align.test_v4_kit import FakeArmHost, ready_inputs
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -144,6 +145,9 @@ class SeriesCadenceEndToEnd(unittest.TestCase):
                             'pack_root': str(pack)},
                  'pack_id': pack_id, 't0_epoch_s': time.time() + 600}
         (target / 'staging').mkdir(exist_ok=True)
+        # The plan writer is skipped here; stage the synthetic plan its t0 names, which the batch's
+        # post-install watchdog acceptance reads (RL-53 W-1).
+        session_plan(target, state, now=state['t0_epoch_s'] - 3600)
         h.write(target / 'session.json', state)
         return state
 

@@ -20,6 +20,20 @@ def session_plan(root, state=None, *, now=None):
     return state
 
 
+def span_aware_watchdog(*, phase, plan=None, now=None, **_):
+    """Synthetic watchdog answering as the installed one does: inside the plan span it fences.
+
+    The batch admits an arm inside the span (t0 - 180 s) only on a fence (RL-56); witnesses that
+    arm one second before t0 need a watchdog that has fenced, not the plain accepting stand-in.
+    """
+    import time as _time
+    t0 = (plan or {}).get('t0_epoch_s')
+    inside = phase == 'post_install' and t0 is not None and (now or _time.time)() >= t0 - 180
+    return {'ok': True, 'state': 'FENCED' if inside else ('ACTIVE' if phase == 'post_install' else 'LAUNCHING'),
+            'reason': 'synthetic watchdog', 'argv': ['synthetic-watchdog', '--dry-run'],
+            'elapsed_s': 0.0, 'plan_read_proven': False}
+
+
 def held_window_acceptance(measurement_root, packet, *, ruling_path=None):
     """Explicit stand-in for witnesses whose packet/Git evidence is synthetic."""
     return {'ok': True, 'reasons': [], 'synthetic': True}
