@@ -1,0 +1,31 @@
+path	verdict	binding	source_ref
+joulewise/arm_readiness_evidence.py	KEEP	live ALIGN registration ARTIFACTS: exact committed path/bytes required	9abe6095f98da581e149bfd1fc2bc2d0a582b2a3:joulewise/align/apple/v4_registration.py
+joulewise/arm_readiness_evidence_t0.py	KEEP	live ALIGN registration ARTIFACTS: exact committed path/bytes required	9abe6095f98da581e149bfd1fc2bc2d0a582b2a3:joulewise/align/apple/v4_registration.py
+joulewise/arm_retry.py	KEEP	live ALIGN registration ARTIFACTS: exact committed path/bytes required	9abe6095f98da581e149bfd1fc2bc2d0a582b2a3:joulewise/align/apple/v4_registration.py
+joulewise/dwell.py	KEEP	live ALIGN registration ARTIFACTS: exact committed path/bytes required	9abe6095f98da581e149bfd1fc2bc2d0a582b2a3:joulewise/align/apple/v4_registration.py
+joulewise/network_time_off.py	KEEP	live ALIGN registration ARTIFACTS: exact committed path/bytes required	9abe6095f98da581e149bfd1fc2bc2d0a582b2a3:joulewise/align/apple/v4_registration.py
+joulewise/scheduler_gates.py	KEEP	coupled CA-42 retirement held until ALIGN registration/closure migration	9abe6095f98da581e149bfd1fc2bc2d0a582b2a3:joulewise/align/apple/v4_registration.py
+joulewise/t0_rehearsal.py	KEEP	live ALIGN registration ARTIFACTS: exact committed path/bytes required	9abe6095f98da581e149bfd1fc2bc2d0a582b2a3:joulewise/align/apple/v4_registration.py
+joulewise/v5_qualification.py	KEEP	live ALIGN registration ARTIFACTS: exact committed path/bytes required	9abe6095f98da581e149bfd1fc2bc2d0a582b2a3:joulewise/align/apple/v4_registration.py
+scripts/assemble_v5_battery_boundaries.py	KEEP	coupled CA-42 retirement held until ALIGN registration/closure migration	9abe6095f98da581e149bfd1fc2bc2d0a582b2a3:joulewise/align/apple/v4_registration.py
+scripts/author_arm_evidence_t0.py	KEEP	live ALIGN registration ARTIFACTS: exact committed path/bytes required	9abe6095f98da581e149bfd1fc2bc2d0a582b2a3:joulewise/align/apple/v4_registration.py
+scripts/author_arm_readiness_evidence.py	KEEP	live ALIGN registration ARTIFACTS: exact committed path/bytes required	9abe6095f98da581e149bfd1fc2bc2d0a582b2a3:joulewise/align/apple/v4_registration.py
+scripts/capture_t0_step.py	KEEP	live ALIGN registration ARTIFACTS: exact committed path/bytes required	9abe6095f98da581e149bfd1fc2bc2d0a582b2a3:joulewise/align/apple/v4_registration.py
+scripts/check_v5_arm_abort.py	KEEP	live ALIGN registration ARTIFACTS: exact committed path/bytes required	9abe6095f98da581e149bfd1fc2bc2d0a582b2a3:joulewise/align/apple/v4_registration.py
+scripts/ed_session/capture_t0_anchor_positive_control.py	KEEP	live ALIGN registration ARTIFACTS: exact committed path/bytes required	9abe6095f98da581e149bfd1fc2bc2d0a582b2a3:joulewise/align/apple/v4_registration.py
+scripts/generate_arm_readiness.py	KEEP	coupled CA-42 retirement held until ALIGN registration/closure migration	9abe6095f98da581e149bfd1fc2bc2d0a582b2a3:joulewise/align/apple/v4_registration.py
+scripts/harvest_v5_g2b_window.py	KEEP	live ALIGN registration ARTIFACTS: exact committed path/bytes required	9abe6095f98da581e149bfd1fc2bc2d0a582b2a3:joulewise/align/apple/v4_registration.py
+scripts/harvest_v5_qualification.py	KEEP	live ALIGN registration ARTIFACTS: exact committed path/bytes required	9abe6095f98da581e149bfd1fc2bc2d0a582b2a3:joulewise/align/apple/v4_registration.py
+scripts/launch_window.py	KEEP	live ALIGN registration ARTIFACTS: exact committed path/bytes required	9abe6095f98da581e149bfd1fc2bc2d0a582b2a3:joulewise/align/apple/v4_registration.py
+scripts/produce_t0_rehearsal_bundle.py	KEEP	live ALIGN registration ARTIFACTS: exact committed path/bytes required	9abe6095f98da581e149bfd1fc2bc2d0a582b2a3:joulewise/align/apple/v4_registration.py
+scripts/rehearse_t0_unattended.py	KEEP	live ALIGN registration ARTIFACTS: exact committed path/bytes required	9abe6095f98da581e149bfd1fc2bc2d0a582b2a3:joulewise/align/apple/v4_registration.py
+scripts/restore_v5_null_reservation.py	KEEP	live ALIGN registration ARTIFACTS: exact committed path/bytes required	9abe6095f98da581e149bfd1fc2bc2d0a582b2a3:joulewise/align/apple/v4_registration.py
+scripts/v5_s1_desk_closeout.py	KEEP	live ALIGN registration ARTIFACTS: exact committed path/bytes required	9abe6095f98da581e149bfd1fc2bc2d0a582b2a3:joulewise/align/apple/v4_registration.py
+scripts/write_v5_qualification_plan.py	KEEP	live ALIGN registration ARTIFACTS: exact committed path/bytes required	9abe6095f98da581e149bfd1fc2bc2d0a582b2a3:joulewise/align/apple/v4_registration.py
+tests/test_arm_readiness_integration.py	KEEP	coupled CA-42 retirement held until ALIGN registration/closure migration	9abe6095f98da581e149bfd1fc2bc2d0a582b2a3:joulewise/align/apple/v4_registration.py
+tests/test_t0_anchor_positive_control.py	KEEP	coupled CA-42 retirement held until ALIGN registration/closure migration	9abe6095f98da581e149bfd1fc2bc2d0a582b2a3:joulewise/align/apple/v4_registration.py
+tests/test_v5_pack_rehearsal.py	KEEP	coupled CA-42 retirement held until ALIGN registration/closure migration	9abe6095f98da581e149bfd1fc2bc2d0a582b2a3:joulewise/align/apple/v4_registration.py
+tests/test_v5_s1_desk_closeout.py	KEEP	coupled CA-42 retirement held until ALIGN registration/closure migration	9abe6095f98da581e149bfd1fc2bc2d0a582b2a3:joulewise/align/apple/v4_registration.py
+joulewise/arm_readiness.py	KEEP	frozen B5 callers and retained pack generators; complete coupled retirement held	current checkout
+joulewise/night_gate.py	KEEP	current NightPlan, HAZARD_PACK, diagnostics and quiet/evidence callers	current checkout
+scripts/harvest_g2a_window.py	KEEP	qualification reader helper and synthetic archive factory	current checkout

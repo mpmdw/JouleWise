@@ -36,7 +36,7 @@ The magistrate on the MacBook Pro owns running, re-running and arming windows
 | R1 rehearsal driver | `scripts/align_r1_rehearsal.py` + `joulewise/align/apple/r1_runtime.py` on the R1 integration line `lane/2026-11-06-v4-r1-integrated`. Not on `main`, and not yet on the measurement lane, which has only the earlier WP17 driver without `r1_runtime.py` | The WP17 driver on the measurement lane |
 | v4 kit and sessions | `scripts/align_v4_kit.py`, `scripts/align_v4_session.py` on the R1 integration line (`lane/2026-11-06-v4-r1-integrated`); the WP17 versions are also on the measurement lane. Not on `main` | — |
 | Window records | Record branches `records/<date>-align-*` and `docs/align/r0/<date>/` (cited from `RUN_STATE.md`) | — |
-| Block-5 window harvest (collection finished) | `scripts/harvest_b5_window.py` + `joulewise/b5/**` | `scripts/harvest_g2a_window.py` (kept only because `joulewise/v5_qualification.py` imports it); the CA-42 arm/T-0 route (`scripts/launch_window.py`, `scripts/capture_t0_step.py`, retiring in PR #668) |
+| Block-5 window harvest (collection finished) | `scripts/harvest_b5_window.py` + `joulewise/b5/**` | `scripts/harvest_g2a_window.py` (kept because `joulewise/v5_qualification.py` imports it); CA-42 arm/T-0 retirement (#668) is held by the live ALIGN v4 artifact/registration inventory; see `docs/run_reports/2026-11-10-file-prune-g3.md` |
 
 ## ALIGN v4 window line (W1, C1-C14, T1-T3): agreements and records
 
@@ -97,6 +97,7 @@ Held, not canonical yet: the condition-waits lane (`align/2026-11-08-condition-w
 | Scientific pin inventory and future tag validation | `docs/ops/PIN-INVENTORY.md`, `docs/ops/TAG-PINNING.md` | Frozen B5 source and original digests remain authoritative for their registered checkout |
 | Retrieve retired files | `docs/ARCHIVE.md`; per-file decisions in `docs/ops/FILE-PRUNE-G1.tsv` | `archive/process-traces-before-release-prune-2026-11-08` (`901d7580d`); earlier archive promise remains unchanged |
 | Historical campaign retirement | `docs/ops/FILE-PRUNE-G2.tsv`; `configs/campaigns/p2_015_floors/README.md` explains retained live inputs | All nine D117 Qwen2.5 generations stay for the historical receipt/predecessor reader chain and registrations |
+| CA-42 retirement gate | `docs/run_reports/2026-11-10-file-prune-g3.md`; all KEEP decisions in `docs/ops/FILE-PRUNE-G3.tsv` | The ALIGN owner must migrate the registered executed closure before the coupled #668 retirement; old-name shims alone do not satisfy it |
 
 ## Retired
 
