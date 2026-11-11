@@ -23,7 +23,10 @@ class RegistrationTests(unittest.TestCase):
              patch.object(kit, 'read_r1_slots', return_value={}), \
              patch.object(kit, 'read_ruling_1f_receipt', return_value=None), \
              patch.object(kit, 'require_ready'), patch.object(kit, 'require_sizing'), \
+             patch.object(kit, 'check_w1_record_keys'), \
              patch.object(kit, 'validate_wp18_fixtures'):
+            # check_w1_record_keys (RL-84 P-2) is witnessed in tests.align.test_w1_tf08_record; this test
+            # isolates the registration requirement, like the other gates patched above.
             plan = Path(tmp)/kit.KIT/'collection_plan.json'
             plan.parent.mkdir(parents=True)
             plan.write_text(json.dumps({'runtime_requirements': {'km003c': kit.km003c.REQUIREMENT}}))
