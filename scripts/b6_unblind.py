@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import re
 import sys
 from pathlib import Path
 
@@ -15,6 +14,7 @@ sys.path.insert(0, str(ROOT))
 
 from joulewise.b6 import blinding
 from joulewise.b6.export_runs import atomic_write
+from scripts import bytes_commitment as bc
 
 
 def main(argv=None) -> int:
@@ -26,10 +26,11 @@ def main(argv=None) -> int:
     parser.add_argument("--blinding-group")
     parser.add_argument("--stage1-commit", help="permits loading the grouped withheld rows")
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--predictions", type=Path)
+    bc.add_arguments(parser)
     args = parser.parse_args(argv)
     try:
-        if args.stage1_commit and not re.fullmatch(r"[0-9a-fA-F]{40}(?:[0-9a-fA-F]{24})?", args.stage1_commit):
-            raise ValueError("stage-1 commit must be a Git commit hash")
+        verification = bc.admit(args, "heldout_rows", repo=ROOT) if args.stage1_commit is not None else None
         key_dir = args.key_dir
         if key_dir is None:
             if not args.blinding_group:
@@ -62,12 +63,14 @@ def main(argv=None) -> int:
 
         atomic_write(args.out, write_csv)
         result = {"export": str(args.out), "rows": len(rows), "unblinded": True}
+        if verification:
+            result["stage1_verification"] = verification
         if flags:
             result["flags"] = flags
         print(json.dumps(result, sort_keys=True))
         return 0
     except Exception as exc:
-        detail = str(exc) if isinstance(exc, ValueError) and str(exc).startswith("blinding key ") else type(exc).__name__
+        detail = str(exc) if isinstance(exc, ValueError) and str(exc).startswith(("blinding key ", "BYTES commitment")) else type(exc).__name__
         print("block-six unblind program fault: " + detail, file=sys.stderr)
         return 1
 

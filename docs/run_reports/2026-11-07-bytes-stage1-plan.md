@@ -211,7 +211,8 @@ echo rc=$? >> $S1/run.log; tail -2 $S1/run.log
 
 It runs, in order: blinded analysis and twin; the comparer (stops with **rc 3** on any field
 above §12's bar, **rc 2** if either side refused); stage 1 with no keys on both sides (both must
-refuse, else **rc 4**); the stage-1 release (`b6_release_subset.release`, stage `fit`, keys
+produce the intended missing-key refusals with equal exit 1 and the expected diagnostics;
+otherwise **rc 4/9**, with no release); the stage-1 release (`b6_release_subset.release`, stage `fit`, keys
 `neg8_reference` and the three fit configurations, into `$S1/run/released-keys`; it refuses a
 held-out key by construction); stage 1 on both sides; the comparer again.
 
@@ -220,11 +221,17 @@ held-out key by construction); stage 1 on both sides; the comparer again.
 | 0 | `READY_TO_COMMIT` | §3.9 |
 | 1 | refused before starting (census, manifest, estimator digest, existing output) | fix the named input; new `--out` |
 | 2 / 3 | blinded stage refused / blinded disagreement | stop; send the lead `stage1-summary.json` (field names and counts only). No key was released. |
-| 4 | stage 1 ran without keys | stop; report. No key was released. |
+| 4 / 9 | stage 1 ran without keys / no-key probe execution or diagnostic fault | stop; report. No key was released. |
+| 8 / 10 | blinded / fit comparison products or substantive comparisons missing | stop; no commitment; rc 8 releases no key |
 | 5 / 6 | stage-1 analysis refused / hash file mismatch | stop; report stderr of `out/a-fit.stderr` |
 | 7 | predictions written, but the twin refused or disagreed at stage 1 | **do not commit**; report the field names in `stage1-summary.json` `stage1_agreement.above_bar_fields` |
 
 ### 3.9 Commit the commitment (the 12 Nov checkpoint)
+
+RL-7a update: reconcile any earlier unblinding metadata and initialize/track the
+canonical journal **before** this commit, following
+[the preflight sequence](../design/bytes_commitment.md). Do not erase an existing
+journal. The date in this historical heading is superseded by RL-7(e).
 
 ```zsh
 cd "$W"
@@ -240,7 +247,7 @@ git push -u origin records/2026-11-bytes-stage1
 git rev-parse HEAD     # THE STAGE-1 COMMIT (40 hex)
 ```
 
-- Commit exactly these files. **Never** commit a key file (only `release.json`, which holds key
+- Commit exactly these files plus the canonical `unblinding.jsonl`. **Never** commit a key file (only `release.json`, which holds key
   file digests, not factors), an export CSV, a withheld store, `fit_pass_estimates.json`,
   `a-blinded/` or the agreement row files. They stay in `$S1`, which is retained.
 - Record in your RUN_STATE item: the stage-1 commit hash, the `predictions.sha256` value, the
@@ -249,6 +256,17 @@ git rev-parse HEAD     # THE STAGE-1 COMMIT (40 hex)
   branch into `main` (the lead merges it).
 - Then uninstall nothing (nothing was installed) and leave `$W` in place until the held-out
   agreement has run from the same checkout.
+
+### RL-7a preflight update (2026-11-10)
+
+Before the original commitment, initialize and track the canonical unblinding
+journal. After the lead's authorized push, record the push-time attestation with
+`scripts/bytes_commitment.py record-push`, then run its read-only `check` command.
+[Exact inputs, limitations and commands](../design/bytes_commitment.md) govern this
+preflight. The stage-2 analysis and twin commands below additionally require the
+real `--stage1-commit HASH`; all four heldout entry points now check the same Git
+and metadata evidence before admitting rows/keys. Existing date text in this
+historical plan is superseded by research lead RL-7(e), not re-ruled here.
 
 ## 4. After the commitment (by 15 Nov; same checkout `$W`, same `$S1`)
 

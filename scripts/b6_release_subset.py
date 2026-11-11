@@ -12,15 +12,24 @@ import re
 import shutil
 import sys
 import tempfile
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from joulewise.b6 import blinding
+from scripts import bytes_commitment as bc
 
 
-def release(pack_records_root, group, registrations_root, project_root, keys, stage, out, stage1_commit=None):
-    if stage == "heldout" and not re.fullmatch(r"[0-9a-fA-F]{40}(?:[0-9a-fA-F]{24})?", stage1_commit or ""):
+def release(pack_records_root, group, registrations_root, project_root, keys, stage, out, stage1_commit=None,
+            *, predictions=None, commitment_repo=None, stage1_receipt=None):
+    if group != "bytes" and stage == "heldout" and not re.fullmatch(r"[0-9a-fA-F]{40}(?:[0-9a-fA-F]{24})?", stage1_commit or ""):
         raise ValueError("stage 2 requires the stage-1 commit hash")
+    verification = None
+    if group == "bytes" and stage == "heldout":
+        verification = bc.admit(SimpleNamespace(stage1_commit=stage1_commit, predictions=predictions,
+                                commitment_repo=commitment_repo, stage1_receipt=stage1_receipt),
+                                "heldout_keys", repo=ROOT)
+
     keys = sorted(set(keys))
     allowed = blinding.registered_keys(registrations_root, group, project_root)
     directory = blinding.key_directory(pack_records_root, group, {"blinding_group": group})
@@ -54,6 +63,8 @@ def release(pack_records_root, group, registrations_root, project_root, keys, st
                   "stage": stage, "keys": keys, "stage1_commit": stage1_commit,
                   "released_utc": datetime.now(timezone.utc).isoformat(),
                   "sha256": {name: hashlib.sha256(payload).hexdigest() for name, payload in sorted(payloads.items())}}
+        if verification:
+            record["stage1_verification"] = verification
         (temporary / "release.json").write_text(json.dumps(record, sort_keys=True, indent=2) + "\n")
         os.rename(temporary, out)
     finally:
@@ -72,10 +83,13 @@ def main(argv=None):
     parser.add_argument("--stage", required=True, choices=("fit", "heldout"))
     parser.add_argument("--stage1-commit")
     parser.add_argument("--out", required=True, type=Path)
+    parser.add_argument("--predictions", type=Path)
+    bc.add_arguments(parser)
     args = parser.parse_args(argv)
     try:
         record = release(args.pack_records_root, args.blinding_group, args.registrations_root,
-                         args.project_root, args.keys, args.stage, args.out, args.stage1_commit)
+                         args.project_root, args.keys, args.stage, args.out, args.stage1_commit,
+                         predictions=args.predictions, commitment_repo=args.commitment_repo, stage1_receipt=args.stage1_receipt)
         print(json.dumps({"release": str(args.out), "stage": record["stage"], "keys": record["keys"]}, sort_keys=True))
         return 0
     except (OSError, ValueError, KeyError, TypeError) as exc:

@@ -2085,8 +2085,8 @@ with patch.object(export_runs, "export", side_effect=grouped):
                         args += ["--key-dir", root / keys]
                     if predictions:
                         args += ["--predictions", root / predictions]
-                    if commit:
-                        args += ["--stage1-commit", commit]
+                    if commit or stage == "heldout":
+                        args += options
                     return self.command(*args, expected=expected)
 
                 def release(stage, keys, out, commit=None, expected=0):
@@ -2094,7 +2094,7 @@ with patch.object(export_runs, "export", side_effect=grouped):
                         "--blinding-group", "bytes", "--registrations-root", root / "registrations", "--project-root", root,
                         "--stage", stage, "--out", root / out, "--keys", *sorted(keys)]
                     if commit:
-                        args += ["--stage1-commit", commit]
+                        args += options
                     return self.command(*args, expected=expected)
 
                 analyze("blinded", "blind-fit")
@@ -2111,11 +2111,9 @@ with patch.object(export_runs, "export", side_effect=grouped):
                     self.assertEqual((root / "stage1" / name).read_bytes(), (root / "legacy-fit" / name).read_bytes())
                 commitment = (root / "stage1/predictions.json").read_bytes()
                 release("heldout", all_keys, "uncommitted-keys", expected=1)
-                init_git_fixture(root / "stage1", "-q")
-                self.command("git", "add", ".", cwd=root / "stage1")
-                self.command("git", "-c", "user.name=BYTES Synthetic", "-c", "user.email=synthetic@example.invalid",
-                             "commit", "-qm", "Freeze synthetic stage-1 predictions", cwd=root / "stage1")
-                commit = self.command("git", "rev-parse", "HEAD", cwd=root / "stage1").strip()
+                from tests.bytes_commitment_support import fixture_options
+                options = fixture_options(root, root / "stage1/predictions.json")
+                commit = options[-1]
                 # Before releasing held-out factors, run the blinded held-out
                 # agreement ingress. It reads no raw archives or meter values.
                 analyze("blinded", "blind-postcommit", commit=commit)
@@ -2237,8 +2235,8 @@ manifest = f.archive_campaign(root, non_claim=False, release="none", subpack_ses
                     args += ["--key-dir", root / keys]
                 if predictions:
                     args += ["--predictions", root / predictions]
-                if commit:
-                    args += ["--stage1-commit", commit]
+                if commit or stage == "heldout":
+                    args += options
                 stdout = self.command(*args)
                 summarize(out, out, stdout)
 
@@ -2247,7 +2245,7 @@ manifest = f.archive_campaign(root, non_claim=False, release="none", subpack_ses
                         "--blinding-group", "bytes", "--registrations-root", root / "registrations", "--project-root", root,
                         "--stage", stage, "--out", root / out, "--keys", *sorted(keys)]
                 if commit:
-                    args += ["--stage1-commit", commit]
+                    args += options
                 summarize(out, stdout=self.command(*args))
 
             analyze("blinded", "blinded-before-commit")
@@ -2260,11 +2258,9 @@ manifest = f.archive_campaign(root, non_claim=False, release="none", subpack_ses
             analyze("fit", "fit", keys="fit-keys")
             predictions = root / "fit/predictions.json"
             frozen_bytes = predictions.read_bytes()
-            init_git_fixture(root / "fit", "-q")
-            self.command("git", "add", ".", cwd=root / "fit")
-            self.command("git", "-c", "user.name=BYTES Synthetic", "-c", "user.email=synthetic@example.invalid",
-                         "commit", "-qm", "Commit synthetic Q1 predictions", cwd=root / "fit")
-            commit = self.command("git", "rev-parse", "HEAD", cwd=root / "fit").strip()
+            from tests.bytes_commitment_support import fixture_options
+            options = fixture_options(root, root / "fit/predictions.json")
+            commit = options[-1]
             summarize("stage1-git-commit", stdout=commit)
             analyze("blinded", "blinded-post-commit", commit=commit)
             release("heldout", all_keys, "heldout-keys", commit)
@@ -2312,7 +2308,7 @@ manifest = f.archive_campaign(root, non_claim=False, release="none", subpack_ses
                     self.assertEqual(row["description_only"], not primary)
             path = paths["bytes-s2-p1" if case == "optional" else "bytes-s2-p2"]
             stdout = self.command(sys.executable, "-B", ROOT / "scripts/b6_unblind.py", "--export", path,
-                "--key-dir", root / "heldout-keys", "--stage1-commit", commit, "--out", root / "unblinded.csv")
+                "--key-dir", root / "heldout-keys", *options, "--out", root / "unblinded.csv")
             unblind = json.loads(stdout)
             self.assertEqual(unblind.get("flags", []), [] if case == "optional" else ["bytes.withheld_missing"])
             self.assertEqual(unblind["rows"], 113 if case == "optional" else 63)
@@ -2323,7 +2319,7 @@ manifest = f.archive_campaign(root, non_claim=False, release="none", subpack_ses
 
 class Q2CommitmentCLIChainTests(unittest.TestCase):
     def test_changed_module_evaluates_original_commitment_and_labels_rebuild(self):
-        """B6 Q2 judge: fixed code evaluates C1 as data; C2 is the alternative."""
+        """An evaluator changed after the registered commitment still evaluates its original lines."""
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             manifest = archive_campaign(root, non_claim=False, release="all")
@@ -2336,7 +2332,8 @@ class Q2CommitmentCLIChainTests(unittest.TestCase):
                     tree = root / case
                     shutil.copytree(ROOT / "joulewise", tree / "joulewise")
                     (tree / "scripts").mkdir()
-                    shutil.copyfile(ROOT / "scripts/bytes_analyze.py", tree / "scripts/bytes_analyze.py")
+                    for script in ("bytes_analyze.py", "bytes_commitment.py"):
+                        shutil.copyfile(ROOT / "scripts" / script, tree / "scripts" / script)
                     # This isolated code checkout must carry the authenticated
                     # registered predictor input, just as the real checkout does.
                     (tree / "configs/bytes").mkdir(parents=True)
@@ -2358,20 +2355,21 @@ class Q2CommitmentCLIChainTests(unittest.TestCase):
                             "--export", root / "export", "--manifest", root / "manifest.json",
                             "--stage", stage, "--out", root / label]
                         if predictions is not None:
-                            command += ["--predictions", predictions]
+                            from tests.bytes_commitment_support import fixture_options
+                            command += fixture_options(root, predictions)
                         result = subprocess.run(list(map(str, command)), cwd=checkout,
                             capture_output=True, text=True, check=False,
                             env={**os.environ, "JW_B5_SYNTHETIC_ONLY": "1"})
                         self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
                         return root / label
 
-                    first = run(tree, "fit", case + "-C1")
+                    first = run(ROOT, "fit", case + "-C1")
                     committed_bytes = (first / "predictions.json").read_bytes()
                     committed = json.loads(committed_bytes)
-                    second = run(ROOT, "fit", case + "-C2")
+                    second = run(tree, "fit", case + "-rebuilt")
                     rebuilt = ba.read_json(second / "predictions.json")
-                    registered = run(ROOT, "heldout", case + "-registered", first / "predictions.json")
-                    alternative = run(ROOT, "heldout", case + "-alternative", second / "predictions.json")
+                    registered = run(tree, "heldout", case + "-registered", first / "predictions.json")
+                    alternative = run(ROOT, "heldout", case + "-clean-evaluator", first / "predictions.json")
                     record = ba.read_json(registered / "analysis_record.json")
                     expected_fields = [] if case == "comment" else ["rival_lines"]
                     expected_flags = ["bytes.module_changed_after_commitment"]
@@ -2406,8 +2404,17 @@ class Q2CommitmentCLIChainTests(unittest.TestCase):
                                 # Identical committed coefficients and point inputs,
                                 # with identical multiply/add: exact data identity.
                                 self.assertEqual(check["predicted"], intercept + slope * point[hypothesis])
+                        clean_primary = [r for r in ba.read_json(alternative / "h1.json") if r["pass_id"] == "mean"]
+                        self.assertEqual(rows, clean_primary)
+                        # Per-pass description lines are rebuilt by the changed evaluator;
+                        # the frozen mean predictions above remain exactly the originals.
                         self.assertNotEqual((registered / "h1.json").read_bytes(),
                                             (alternative / "h1.json").read_bytes())
+                        # A changed evaluator must still evaluate the original registered lines.
+                        # A new stage-1 commitment with an unregistered estimator is refused.
+                        rejected = root / (case + "-unregistered-commit")
+                        run(ROOT, "heldout", rejected.name, second / "predictions.json", expected=1)
+                        self.assertFalse(rejected.exists())
                     print("BYTES_Q2_CHAIN=" + json.dumps({"case": case, "flags": record["flags"],
                         "fields_not_rebuilt": record["fields_not_rebuilt"],
                         "module_digests": record["bytes_analysis_sha256"],
@@ -3046,8 +3053,8 @@ class ReviewInputTests(unittest.TestCase):
             for stage in ('blinded', 'heldout'):
                 with self.subTest(stage=stage):
                     out = root / ('copied-analysis-' + stage)
-                    extra = (['--stage1-commit', 'a' * 40] if stage == 'blinded' else
-                             ['--predictions', str(root / 'single/predictions.json')])
+                    from tests.bytes_commitment_support import fixture_options
+                    extra = fixture_options(root, root / 'single/predictions.json')
                     command = [sys.executable, '-B', 'scripts/bytes_analyze.py', '--manifest', str(manifest_path),
                                '--export', *map(str, supplied), '--stage', stage, *extra, '--out', str(out)]
                     result = subprocess.run(command, cwd=ROOT, text=True, capture_output=True)

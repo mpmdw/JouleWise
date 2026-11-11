@@ -63,6 +63,9 @@ def run_twin(world: Path, stage: str, *, archives=True, key_dir=True, extra=()) 
     out = world / f"twin-{stage}.json"
     argv = [*extra, "--export-dir", str(world / "exports"), "--manifest", str(world / "bytes_manifest.json"),
             "--stage", stage, "--out", str(out)]
+    if stage == "2" or "--stage1-commit" in argv:
+        from tests.bytes_commitment_support import fixture_options
+        argv += fixture_options(world)
     if archives:
         for archive in sorted((world / "archives").iterdir()):
             argv += ["--archive", str(archive)]
@@ -1428,7 +1431,7 @@ class PassIdentityTests(QuantityTestCase):
 
         def normalise(value):
             if isinstance(value, dict):
-                return {normalise(k): normalise(v) for k, v in value.items() if k != "inputs"}
+                return {normalise(k): normalise(v) for k, v in value.items() if k not in {"inputs", "stage1_verification"}}
             if isinstance(value, list):
                 return [normalise(v) for v in value]
             if isinstance(value, str):
@@ -1690,6 +1693,8 @@ class WithheldStoreTests(QuantityTestCase):
         out = world / "twin-post.json"
         argv = ["--export-dir", str(world / "exports"), "--manifest", str(world / "bytes_manifest.json"), "--stage", "blinded",
                 "--stage1-commit", "0" * 40, "--out", str(out)]
+        from tests.bytes_commitment_support import fixture_options
+        argv += fixture_options(world)
         import contextlib
         import io
         with contextlib.redirect_stdout(io.StringIO()):

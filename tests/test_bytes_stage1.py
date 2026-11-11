@@ -329,5 +329,110 @@ class RunTests(unittest.TestCase):
         self.assertIn(s1.REGISTERED_ESTIMATOR_SHA256, text)
 
 
+class ReleaseGateTests(unittest.TestCase):
+    """Execution faults must never authorize the first fit-key release."""
+
+    def simulate(self, *, exits=None, faults=None, products=True, substantive=True, fit_products=True, actual_comparer=False):
+        from tests.test_bytes_agreement import Recorder, compare_campaign
+        import subprocess
+        exits, faults = exits or {}, faults or {}
+        temp = tempfile.TemporaryDirectory(prefix="bytes-release-gate-")
+        self.addCleanup(temp.cleanup)
+        root = Path(temp.name)
+        manifest = json.loads((ROOT / "configs/bytes/bytes_manifest.json").read_text())
+        manifest["sessions"] = [{"session_id": p, "pack_id": p, "pass_id": int(p[-1]),
+                                 "archive": str(root / p)} for p in s1.PACKS]
+        path = root / "manifest.json"
+        path.write_text(json.dumps(manifest))
+        released = []
+        fit_key = next(m["config_key"] for m in manifest["models"] if m["role"] == "fit")
+
+        def child(command, **kwargs):
+            out = Path(command[command.index("--out") + 1])
+            tag = out.name.removesuffix(".json")
+            stdout, stderr = "", ""
+            if tag == "a-fit-nokeys":
+                stderr = "BYTES analysis refused: configuration still blinded: " + fit_key + "\n"
+            elif tag == "t-1-nokeys":
+                stdout = "refused: blinding key missing or unreadable: " + str(root / "run/no-keys/pack.json") + "\n"
+            elif products:
+                if tag.startswith("a-"):
+                    out.mkdir(parents=True)
+                    names = (["blinded_pass_estimates", "model_estimates", "h1", "h2", "moe", "unavailable", "analysis_record"]
+                             if tag == "a-blinded" else ["fit_pass_estimates", "predictions"])
+                    for name in names:
+                        if name == "fit_pass_estimates" and not fit_products:
+                            continue
+                        (out / (name + ".json")).write_text("[]\n")
+                    if tag == "a-fit":
+                        (out / "predictions.sha256").write_text(s1.sha256_file(out / "predictions.json") + "\n")
+                else:
+                    out.parent.mkdir(parents=True, exist_ok=True)
+                    out.write_text("{}\n")
+            stdout, stderr = faults.get(tag, (stdout, stderr))
+            return subprocess.CompletedProcess(command, exits.get(tag, 1 if tag.endswith("nokeys") else 0), stdout, stderr)
+
+        def comparer(_root):
+            record = Recorder()
+            if substantive:
+                for stage in ("blinded", "fit"):
+                    for group in ("cell/synthetic", "neg8/synthetic"):
+                        record.exact(stage, group, "synthetic", 1, 1)
+                record.exact("fit-commit", "commit/synthetic", "synthetic", 1, 1)
+            return record
+
+        def release(_root, keys, out):
+            released.extend(keys)
+            return {"stage": "fit", "keys": keys}
+
+        with mock.patch.object(s1.subprocess, "run", side_effect=child), \
+                mock.patch.object(s1, "_git_state", return_value=("synthetic", False)), \
+                mock.patch("tests.test_bytes_agreement.compare_campaign", side_effect=compare_campaign if actual_comparer else comparer):
+            result = s1.run_stage1(path, [root / "export"], root, root / "run", release_fn=release)
+        return result, released
+
+    def test_no_key_faults_stop_before_release(self):
+        for exits, faults in [
+            ({"t-1-nokeys": 2}, {}),
+            ({"a-fit-nokeys": 2, "t-1-nokeys": 2}, {}),
+            ({"a-fit-nokeys": -9}, {}),
+            ({"a-fit-nokeys": 0}, {}),
+            ({}, {"a-fit-nokeys": ("", "BYTES analysis refused: unrelated failure\n")}),
+            ({}, {"t-1-nokeys": ("refused: unrelated failure\n", "")}),
+            ({}, {"a-fit-nokeys": ("", "")}),
+            ({}, {"t-1-nokeys": ("", "Traceback: synthetic\n")}),
+        ]:
+            with self.subTest(exits=exits, faults=faults):
+                (code, summary), released = self.simulate(exits=exits, faults=faults)
+                self.assertEqual(released, [], summary)
+                self.assertNotEqual(code, 0)
+
+    def test_missing_blinded_products_stop_before_release(self):
+        (code, summary), released = self.simulate(products=False)
+        self.assertEqual(released, [], summary)
+        self.assertNotEqual(code, 0)
+
+    def test_actual_comparer_cannot_admit_missing_blinded_products(self):
+        (code, summary), released = self.simulate(products=False, actual_comparer=True)
+        self.assertEqual(released, [], summary)
+        self.assertNotEqual(code, 0)
+
+    def test_exit_only_agreement_stops_before_release(self):
+        (code, summary), released = self.simulate(substantive=False)
+        self.assertEqual(released, [], summary)
+        self.assertNotEqual(code, 0)
+
+    def test_missing_fit_products_cannot_be_ready_to_commit(self):
+        (code, summary), released = self.simulate(fit_products=False)
+        self.assertTrue(released)
+        self.assertNotEqual(summary["verdict"], "READY_TO_COMMIT")
+        self.assertNotEqual(code, 0)
+
+    def test_intended_missing_key_refusals_allow_fit_release(self):
+        (code, summary), released = self.simulate()
+        self.assertTrue(released)
+        self.assertEqual((code, summary["verdict"]), (0, "READY_TO_COMMIT"))
+
+
 if __name__ == "__main__":
     unittest.main()

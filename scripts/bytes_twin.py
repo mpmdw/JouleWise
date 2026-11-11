@@ -2277,6 +2277,9 @@ def main(argv=None):
     parser.add_argument("--stage1-commit", help="the recorded stage-1 commit; at --stage blinded it admits the "
                         "withheld held-out rows (lead ruling 2026-10-20 item 3: the post-commit blinded agreement)")
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--predictions", type=Path, help="committed stage-1 predictions (default: receipt locator)")
+    parser.add_argument("--commitment-repo", type=Path)
+    parser.add_argument("--stage1-receipt", type=Path)
     args = parser.parse_args(argv)
     exports = list(args.export)
     if args.export_dir:
@@ -2296,8 +2299,24 @@ def main(argv=None):
     try:
         if not exports:
             raise ValueError("no export given")
-        if args.stage1_commit is not None and not re.fullmatch(r"[0-9a-fA-F]{40}(?:[0-9a-fA-F]{24})?", args.stage1_commit):
-            raise ValueError("--stage1-commit must be a git commit hash")
+        verification = None
+        if read_withheld:
+            # Keep this independent estimator stdlib-only. The external driver
+            # guard reads provenance and journals admission before we open rows.
+            guard = [sys.executable, str(Path(__file__).with_name("bytes_commitment.py")), "admit",
+                     "--event", "heldout_rows" if args.stage == "blinded" else "heldout_analysis",
+                     "--stage1-commit", args.stage1_commit or ""]
+            for flag, value in (("--predictions", args.predictions), ("--commitment-repo", args.commitment_repo),
+                                ("--stage1-receipt", args.stage1_receipt)):
+                if value is not None:
+                    guard += [flag, str(value)]
+            if args.key_dir:
+                guard += ["--unblinding-record", str(args.key_dir / "release.json")]
+            checked = subprocess.run(guard, capture_output=True, text=True, check=False)
+            if checked.returncode:
+                raise ValueError("BYTES commitment guard refused: " + checked.stdout.strip())
+            verification = json.loads(checked.stdout)
+
         manifest = read_manifest(args.manifest)
         rows, sidecars, withheld = [], {}, {}
         for path in exports:
@@ -2331,6 +2350,8 @@ def main(argv=None):
     result["inputs"] = {"exports": [str(p) for p in exports], "manifest": str(args.manifest),
                         "archives": [str(p) for p in args.archive], "key_dir": str(args.key_dir) if args.key_dir else None,
                         "stage1_commit": args.stage1_commit, "withheld_rows_read": read_withheld}
+    if verification:
+        result["stage1_verification"] = verification
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(result, sort_keys=True, indent=1, allow_nan=False) + "\n", encoding="utf-8")
     print(json.dumps({"out": str(args.out), "stage": args.stage, "models": sorted(result["cells"]),

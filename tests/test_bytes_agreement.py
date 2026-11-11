@@ -1500,16 +1500,15 @@ def run_both(root, manifest):
     run("a-fit", analysis + ["--stage", "fit", "--key-dir", str(released), "--out", str(o / "a-fit")])
     run("t-1", twin + ["--stage", "1", "--key-dir", str(released), "--out", str(o / "t-1.json")])
     predictions = o / "a-fit/predictions.json"
+    from tests.bytes_commitment_support import fixture_options
+    options = fixture_options(root, predictions)
+    commit = options[-1]
+    analysis += options
+    twin += options
     if any(ba.read_json(p).get("blinding", {}).get("withheld") for p in (root / "export").rglob("*.session.json")):
         # Lead ruling 2026-10-20 item 3: after the stage-1 commit and before any held-out key is
         # released, both implementations run on the blinded held-out rows (rails only).  The commit
         # is the desk's git commit of the stage-1 output; its hash admits the withheld store.
-        init_git_fixture(o / "a-fit", "-q")
-        subprocess.run(["git", "add", "."], cwd=o / "a-fit", check=True, capture_output=True)
-        subprocess.run(["git", "-c", "user.name=BYTES Synthetic", "-c", "user.email=synthetic@example.invalid",
-                        "commit", "-qm", "Freeze synthetic stage-1 predictions"], cwd=o / "a-fit", check=True, capture_output=True)
-        commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=o / "a-fit", check=True, capture_output=True,
-                                text=True).stdout.strip()
         (o / "stage1-commit").write_text(commit + "\n")
         run("a-blinded-post", analysis + ["--stage", "blinded", "--stage1-commit", commit, "--out", str(o / "a-blinded-post")])
         run("t-blinded-post", twin + ["--stage", "blinded", "--stage1-commit", commit, "--out", str(o / "t-blinded-post.json")])

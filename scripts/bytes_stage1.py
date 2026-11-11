@@ -248,6 +248,33 @@ def _counts(recorder):
     return {**recorder.counts(), "above_bar_fields": above}
 
 
+def _agreement_complete(out, recorder, stage):
+    """An exit comparison alone is not a completed estimator comparison (#701 F5)."""
+    products = (["a-blinded/" + name + ".json" for name in
+                 ("blinded_pass_estimates", "model_estimates", "h1", "h2", "moe", "unavailable", "analysis_record")]
+                + ["t-blinded.json"] if stage == "blinded" else
+                ["a-fit/fit_pass_estimates.json", "a-fit/predictions.json", "a-fit/predictions.sha256", "t-1.json"])
+    groups = {prefix: any(row["stage"] == stage and row["group"].startswith(prefix)
+                          for row in recorder.rows) for prefix in ("cell/", "neg8/")}
+    if stage == "fit":
+        groups["commit/"] = any(row["stage"] == "fit-commit" and row["group"].startswith("commit/")
+                                for row in recorder.rows)
+    return {"missing_products": [name for name in products if not (out / name).is_file()],
+            "missing_comparisons": [name for name, present in groups.items() if not present]}
+
+
+def _expected_no_key_refusals(out, exits, empty, manifest):
+    """Require the actual, intended missing-key diagnostics, on their documented streams."""
+    keys = {blinding.REFERENCE_KEY, *(m["config_key"] for m in manifest["models"] if m["role"] == "fit")}
+    analysis_errors = {"BYTES analysis refused: configuration still blinded: " + key for key in keys}
+    return (exits["a-fit-nokeys"] == exits["t-1-nokeys"] == 1
+            and (out / "a-fit-nokeys.stderr").read_text().strip() in analysis_errors
+            and not (out / "a-fit-nokeys.stdout").read_text().strip()
+            and (out / "t-1-nokeys.stdout").read_text().strip()
+                == "refused: blinding key missing or unreadable: " + str(empty / "pack.json")
+            and not (out / "t-1-nokeys.stderr").read_text().strip())
+
+
 def run_stage1(manifest_path, export_dirs, pack_records_root, out_root, *, python=sys.executable,
                release_fn=_release_fit, require_registered_estimator=True, wrap=lambda command: command,
                census_sessions=None, census_warnings=(), check_registered_models=True):
@@ -313,10 +340,15 @@ def run_stage1(manifest_path, export_dirs, pack_records_root, out_root, *, pytho
             return finish(2, "STOPPED_BLINDED_REFUSED")
         if recorder.above():
             return finish(3, "STOPPED_BLINDED_DISAGREEMENT")
+        summary["blinded_completeness"] = _agreement_complete(o, recorder, "blinded")
+        if any(summary["blinded_completeness"].values()):
+            return finish(8, "STOPPED_BLINDED_INCOMPLETE")
         run("a-fit-nokeys", analysis + ["--stage", "fit", "--key-dir", str(empty), "--out", str(o / "a-fit-nokeys")])
         run("t-1-nokeys", twin + ["--stage", "1", "--key-dir", str(empty), "--out", str(o / "t-1-nokeys.json")])
         if summary["exits"]["a-fit-nokeys"] == 0 or summary["exits"]["t-1-nokeys"] == 0:
             return finish(4, "STOPPED_STAGE1_RAN_WITHOUT_KEYS")
+        if not _expected_no_key_refusals(o, summary["exits"], empty, manifest):
+            return finish(9, "STOPPED_NO_KEY_PROBE_FAULT")
         keys = sorted({blinding.REFERENCE_KEY, *(m["config_key"] for m in manifest["models"] if m["role"] == "fit")})
         record = release_fn(pack_records_root, keys, released)
         summary["release"] = {"keys": keys, "record": {k: record.get(k) for k in ("stage", "keys", "sha256", "released_utc")}}
@@ -325,6 +357,9 @@ def run_stage1(manifest_path, export_dirs, pack_records_root, out_root, *, pytho
         recorder = compare_campaign(out_root)
         summary["stage1_agreement"] = _counts(recorder)
         (out_root / "agreement-stage1.json").write_text(json.dumps(recorder.rows, sort_keys=True, indent=1, default=str) + "\n")
+        summary["stage1_completeness"] = _agreement_complete(o, recorder, "fit")
+        if any(summary["stage1_completeness"].values()):
+            return finish(10, "STOPPED_STAGE1_INCOMPLETE")
         predictions = o / "a-fit/predictions.json"
         if summary["exits"]["a-fit"] or not predictions.is_file():
             return finish(5, "STOPPED_STAGE1_REFUSED")

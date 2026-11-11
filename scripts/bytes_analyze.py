@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 from pathlib import Path
 import sys
 
@@ -13,6 +12,9 @@ if __package__ in (None, ""):
 
 from joulewise import bytes_analysis as ba
 from joulewise.desk_restore import StorageStop
+from scripts import bytes_commitment as bc
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def _write(out, name, payload):
@@ -57,14 +59,17 @@ def main(argv=None):
     parser.add_argument("--stage1-commit", help="recorded stage-1 commit; permits blinded held-out agreement")
     parser.add_argument("--predictions", type=Path, help="fit-stage predictions.json, with predictions.sha256 beside it")
     parser.add_argument("--out", required=True, type=Path)
+    bc.add_arguments(parser)
     args = parser.parse_args(argv)
     try:
         manifest = ba.validate_manifest(ba.read_json(args.manifest))
         source = args.export or args.records
         if args.stage == "heldout" and args.predictions is None:
             raise ba.AnalysisError("heldout requires --predictions and its SHA-256 sidecar")
-        if args.stage1_commit and not re.fullmatch(r"[0-9a-fA-F]{40}(?:[0-9a-fA-F]{24})?", args.stage1_commit):
-            raise ba.AnalysisError("stage-1 commit must be a Git commit hash")
+        verification = None
+        if args.stage1_commit is not None or args.stage == "heldout":
+            verification = bc.admit(args, "heldout_rows" if args.stage == "blinded" else "heldout_analysis",
+                                    repo=ROOT, unblinding_records=([args.key_dir / "release.json"] if args.key_dir else []))
         if args.stage == "blinded":
             if args.export is None:
                 raise ba.AnalysisError("blinded stage requires --export")
@@ -81,7 +86,8 @@ def main(argv=None):
             for name, rows in result.items():
                 _write(args.out, name, rows)
             _write(args.out, "analysis_record", {"stage": "blinded", "boundaries": ["rails"],
-                "manifest_sha256": ba.digest(manifest), "non_claim": True})
+                "manifest_sha256": ba.digest(manifest), "non_claim": True,
+                **({"stage1_verification": verification} if verification else {})})
             return 0
         if args.stage == "all" and manifest.get("synthetic") is not True:
             raise ba.AnalysisError("all is synthetic-only; real inputs require separately committed fit predictions")
@@ -127,6 +133,7 @@ def main(argv=None):
             _write(args.out, name, rows)
         _write(args.out, "analysis_record", {"stage": args.stage, "predictions_sha256": sha,
                 **commitment,
+                **({"stage1_verification": verification} if verification else {}),
                 "manifest_sha256": ba.digest(manifest), "H1_checks": frozen["H1_checks"],
                 "H2_intervals": [{k: row[k] for k in ("selection", "basis", "boundary", "n", "k")}
                                  for row in result["h2"] if not row["description_only"]],

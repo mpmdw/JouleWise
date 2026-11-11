@@ -1073,8 +1073,10 @@ class ExportTests(unittest.TestCase):
         with precommit.open() as stream:
             self.assertEqual({r["run_id"] for r in csv.DictReader(stream)}, {"ref", "corpus"})
         released = self.root / "released.csv"
+        from tests.bytes_commitment_support import fixture_options
+        args += fixture_options(self.root)
         with contextlib.redirect_stdout(io.StringIO()):
-            self.assertEqual(b6_unblind.main(args + ["--stage1-commit", "a" * 40, "--out", str(released)]), 0)
+            self.assertEqual(b6_unblind.main(args + ["--out", str(released)]), 0)
         with released.open() as stream:
             rows = list(csv.DictReader(stream))
         # Registered plan: two references, four quads, two gamma rows, one failed.
@@ -1088,8 +1090,7 @@ class ExportTests(unittest.TestCase):
         info = json.loads(result.sidecar_path.read_text())["blinding"]["withheld"]
         (result.csv_path.parent / info["path"]).unlink()
         with contextlib.redirect_stdout(io.StringIO()) as stdout:
-            self.assertEqual(b6_unblind.main(args + ["--stage1-commit", "a" * 40,
-                                                    "--out", str(self.root / "missing.csv")]), 0)
+            self.assertEqual(b6_unblind.main(args + ["--out", str(self.root / "missing.csv")]), 0)
         self.assertEqual(json.loads(stdout.getvalue())["flags"], ["bytes.withheld_missing"])
 
     def test_rows_energies_tokens_durations_and_failed_run(self):

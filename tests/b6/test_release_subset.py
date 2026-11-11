@@ -38,6 +38,9 @@ class ReleaseSubsetTests(unittest.TestCase):
                 "--stage", stage, "--out", str(self.root / out), "--keys", *keys]
         if commit:
             args += ["--stage1-commit", commit]
+            if commit != "not-a-hash":
+                from tests.bytes_commitment_support import fixture_options
+                args += fixture_options(self.root)
         stdout, stderr = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
             code = b6_release_subset.main(args)
@@ -71,8 +74,8 @@ class ReleaseSubsetTests(unittest.TestCase):
                 (fit, "fit", None, "blinding key missing"),
                 ("outside", "fit", None, "outside the group's registrations"),
                 (heldout, "fit", None, "held-out key"),
-                (heldout, "heldout", None, "stage-1 commit hash"),
-                (heldout, "heldout", "not-a-hash", "stage-1 commit hash")):
+                (heldout, "heldout", None, "commit object id"),
+                (heldout, "heldout", "not-a-hash", "commit object id")):
             code, stdout, error = self.release([key], stage, commit=commit)
             self.assertEqual(code, 1)
             self.assertEqual(stdout, "")
@@ -80,10 +83,11 @@ class ReleaseSubsetTests(unittest.TestCase):
             self.assertIn(message, error)
             self.assertFalse((self.root / "released").exists())
 
-    def test_stage2_releases_only_explicit_keys_after_hash_without_drawing(self):
+    def test_stage2_releases_only_explicit_keys_after_verified_commit_without_drawing(self):
         key = blinding.configuration_key(self.configs[-1])
-        # This unit test checks the hash's exact syntax, not a science quantity.
-        commit = "a" * 40
+        from tests.bytes_commitment_support import fixture_options
+        options = fixture_options(self.root)
+        commit = options[-1]
         code, _, error = self.release([key], "heldout", commit=commit)
         self.assertEqual((code, error), (0, ""))
         self.assertEqual({p.name for p in (self.root / "released").iterdir()},
