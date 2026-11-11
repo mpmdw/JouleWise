@@ -1,4 +1,4 @@
-"""Shared witness for the RUN_STATE 251 option-B manifest regeneration (claim contract B5/B6).
+"""Shared witness for the RUN_STATE 252 option-B manifest regeneration (claim contract B5/B6).
 
 Option B moves the sabotage-instructed member of each pair to a seeded ordinal and appends the test reserves
 T4-T5, so earlier seed-checked windows are no longer byte-identical. What must survive is everything the
@@ -9,7 +9,7 @@ The only permitted change inside a window is which fresh ordinal of each pair is
 
 SEED_FIELDS = ('ordinal', 'pair', 'model_id', 'seed_index', 'episode_seed', 'turn_seed_0')
 # The manifest bytes regenerated under option B (seeded sabotage ordinals, test reserves T4-T5).
-OPTION_B_MANIFEST_SHA256 = 'b5fedb49ee04e0b5388ea43a76b6fbf07cb94b896145476386271e702fb41c64'
+OPTION_B_MANIFEST_SHA256 = '70009b6a594835643ef0bb2ff324ed700447cbe7a6237975ebdb209ec2c78dd6'
 
 
 def assert_seed_preserved(case, old, new):

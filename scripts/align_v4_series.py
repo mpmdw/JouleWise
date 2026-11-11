@@ -46,10 +46,10 @@ REPLACEMENT_WINDOWS = cadence.REPLACEMENT_WINDOWS   # R24 cap: C9-C14 are armabl
 RESERVE_WINDOWS = 6                                  # seeds are allocated for C9-C14 (all armable); a window beyond the cap would hold seeds only
 RESERVE_POOL_START = 100                             # contiguous pool after the T range and the reserved 91-99
 TEST_WINDOWS = 3                                     # RUN_STATE 226 R15: admitted test windows
-TEST_RESERVE_WINDOWS = 2                             # RUN_STATE 251 option B (claim contract B6): T4, T5
+TEST_RESERVE_WINDOWS = 2                             # RUN_STATE 252 option B (claim contract B6): T4, T5
 TEST_RESERVE_POOL_START = RESERVE_POOL_START + 8 * RESERVE_WINDOWS   # 148: after the C9-C14 pool 100-147
 FRESH_ORDINALS = tuple(range(6, 22))                 # sixteen fresh held-out D members per C/T window
-# RUN_STATE 251 option B (claim contract B5): the sabotage ordinal of each pair in each C/T window is drawn
+# RUN_STATE 252 option B (claim contract B5): the sabotage ordinal of each pair in each C/T window is drawn
 # by this seed law, uniformly over that pair's eight fresh ordinals and independently across pairs and
 # windows. It supersedes R15's fixed ordinals 9 and 18. The tag was fixed before any placement was computed.
 SABOTAGE_PLACEMENT_LAW = 'align-v4-sabotage-slot-v1'
@@ -85,7 +85,7 @@ def sabotage_ordinals(window_id):
 
 
 def candidate():
-    """The frozen series (RUN_STATE 226 R15, R22-2 / R24, RUN_STATE 251 option B).
+    """The frozen series (RUN_STATE 226 R15, R22-2 / R24, RUN_STATE 252 option B).
 
     W1, then C1-C8 (D_k is C_k: no separate fit windows), the six pre-declared blind replacement windows
     C9-C14 (R22-2 / R24; each armed only to replace a structural bar of a C window), then T1-T3, then the
@@ -162,7 +162,7 @@ def candidate():
     windows += [built[name] for name in run_order]
     windows += [built[f'C{n}'] for n in range(CALIBRATION_WINDOWS + REPLACEMENT_WINDOWS + 1,
                                               CALIBRATION_WINDOWS + RESERVE_WINDOWS + 1)]
-    return dict(schema=SCHEMA, status='FROZEN_PER_RUN_STATE_251_OPTION_B_PENDING_PAIRED_SEED_CHECK',
+    return dict(schema=SCHEMA, status='FROZEN_PER_RUN_STATE_252_OPTION_B_PENDING_PAIRED_SEED_CHECK',
                 d_mapping='alias_calibration', test_windows=TEST_WINDOWS, order=['W1', *run_order],
                 windows=windows,
                 calibration=dict(counted_windows=CALIBRATION_WINDOWS, benign_per_pair_per_window=7,
@@ -181,7 +181,7 @@ def candidate():
     # RUN_STATE 216 fence it records is WITHDRAWN; bind_packet enforces R17's k+2 rule instead.
                 test=dict(admitted_windows=TEST_WINDOWS, reserve_windows=test_reserves,
                           reserve_cap=TEST_RESERVE_WINDOWS,
-                          reserve_rule='RUN_STATE 251 option B (claim contract B6): each armed, in order, ONLY to '
+                          reserve_rule='RUN_STATE 252 option B (claim contract B6): each armed, in order, ONLY to '
                                        'replace a STRUCTURAL bar of a T window (U1-U3 fail, whole-window capture '
                                        'failure, zero-capture refusal beyond the retry); never on scores, alarms, '
                                        'counts or to repair low n; at most 3 admitted test windows'),
@@ -209,7 +209,7 @@ def candidate():
                               escalated_ceiling_s=ESCALATED_CEILING_S),
                 seed_law='align-p4-v1', turn_seed_law='align-p4-turn-v1',
                 test_shape='v4: 14 benign + 2 sabotage; no v5 attacks or physical controls',
-                authority='RUN_STATE 226 R15; R22-2 / R24; RUN_STATE 251 option B',
+                authority='RUN_STATE 226 R15; R22-2 / R24; RUN_STATE 252 option B',
                 open_rulings=['paired seed check of these manifest bytes before signing (option B: seeded sabotage '
                               'ordinals, test reserves T4-T5)',
                               'U3 comparison roster with T4-T5 (R25 rule gives N = 24) before the U3 bar is signed',
@@ -526,7 +526,7 @@ def calibration_rows(manifest, history):
     lead_release naming the last attempt (resets ``zero_capture_escalation``,
     signed, text digest) resumes the series (RUN_STATE 226 R15).
 
-    RUN_STATE 251 option B (claim contract B6): the test cohort is at most 3 ADMITTED test windows. T1-T3
+    RUN_STATE 252 option B (claim contract B6): the test cohort is at most 3 ADMITTED test windows. T1-T3
     run in order; a T window barred for the same structural reasons (``barred``, or a zero-capture retry
     that is again a zero capture) is not admitted and owes a test reserve, T4 then T5, never armed on
     scores, alarms or counts. A zero-capture bar beyond the two test reserves escalates to the lead.

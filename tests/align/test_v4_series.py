@@ -84,7 +84,7 @@ class ManifestTests(unittest.TestCase):
         cls.files = s.build_files(ROOT, cls.manifest, 'C1')
 
     def test_candidate_is_reproducible_and_roles_seeds_are_disjoint(self):
-        # RUN_STATE 226 R15: D_k = C_k, distinct seeds in kit order, 3 tests. RUN_STATE 251 option B: one
+        # RUN_STATE 226 R15: D_k = C_k, distinct seeds in kit order, 3 tests. RUN_STATE 252 option B: one
         # sabotage-instructed member per pair at the seeded ordinal (R15's fixed 9/18 superseded) and the
         # test reserves T4-T5 (seeds 148-163) after the C9-C14 pool.
         self.assertEqual((ROOT / s.MANIFEST).read_bytes(), s.raw_json(s.candidate()))

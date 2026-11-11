@@ -1,9 +1,9 @@
 # Frozen v4 D/C/T series (merged build, RUN_STATE 226 R15)
 
 `series_manifest.json` is the frozen series ruled in RUN_STATE 226 R15: Sol's
-code base with Opus's allocation, with the R22-2 / R24 reserves and the RUN_STATE 251
+code base with Opus's allocation, with the R22-2 / R24 reserves and the RUN_STATE 252
 option-B changes (protocol "Claim contract", B5 and B6): seeded sabotage ordinals and the
-test reserves T4-T5. These bytes (sha256 `b5fedb49…`) need a new paired seed check before
+test reserves T4-T5. These bytes (sha256 `70009b6a594835643ef0bb2ff324ed700447cbe7a6237975ebdb209ec2c78dd6`) need a new paired seed check before
 the lead signs `series/admission.json`; the Opus half is
 `docs/align/v4/seedcheck-claim-b-opus/` (MATCH).
 

@@ -113,7 +113,7 @@ class Delta5Witnesses(unittest.TestCase):
         # R22-2 changed the manifest bytes by design (reserve windows appended at seeds 100-131): every R15
         # seed-checked window (W1, C1-C8, T1-T3) must be preserved exactly; the paired seed check of the new
         # bytes follows. The committed file is still exactly the generator's output.
-        # RUN_STATE 251 option B (adapted by name): the seeded sabotage placement moves which fresh ordinal of
+        # RUN_STATE 252 option B (adapted by name): the seeded sabotage placement moves which fresh ordinal of
         # each pair is sabotage-instructed, so the checked windows keep every seed field, not every byte.
         from tests.align.v4_option_b import assert_seed_preserved
         result = subprocess.run(['git', 'show', '79777d261:' + series.MANIFEST.as_posix()],

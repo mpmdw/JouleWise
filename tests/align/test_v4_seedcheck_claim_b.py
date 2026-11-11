@@ -1,4 +1,4 @@
-"""Option-B seed check (RUN_STATE 251; claim contract B5/B6): the committed manifest against the text.
+"""Option-B seed check (RUN_STATE 252; claim contract B5/B6): the committed manifest against the text.
 
 The checker (docs/align/v4/seedcheck-claim-b-opus/derive_and_check.py) imports nothing from JouleWise or
 scripts; it re-derives all 436 members from the registered text. These tests run it on the committed bytes,
@@ -10,6 +10,7 @@ import hashlib
 import importlib.util
 import json
 from pathlib import Path
+import subprocess
 import unittest
 
 from scripts import align_v4_series as series
@@ -32,6 +33,24 @@ class SeedCheckTests(unittest.TestCase):
         cls.check = _checker()
         cls.raw = (ROOT / series.MANIFEST).read_bytes()
         cls.manifest = json.loads(cls.raw)
+
+    def test_item_1_only_the_three_authority_citations_changed(self):
+        old_raw = subprocess.check_output(
+            ['git', 'show', 'cf501f75f:configs/campaigns/align_v4/series/series_manifest.json'], cwd=ROOT)
+        self.assertEqual(hashlib.sha256(old_raw).hexdigest(),
+                         'b5fedb49ee04e0b5388ea43a76b6fbf07cb94b896145476386271e702fb41c64')
+        old = json.loads(old_raw)
+        self.assertEqual(len(old['windows']), len(self.manifest['windows']))
+        for before, after in zip(old['windows'], self.manifest['windows'], strict=True):
+            self.assertEqual(before['members'], after['members'], before['id'])
+            self.assertEqual(before.get('sabotage_ordinals'), after.get('sabotage_ordinals'), before['id'])
+        expected = deepcopy(old)
+        expected['status'] = old['status'].replace('RUN_STATE_251', 'RUN_STATE_252')
+        expected['authority'] = old['authority'].replace('RUN_STATE 251', 'RUN_STATE 252')
+        expected['test']['reserve_rule'] = old['test']['reserve_rule'].replace('RUN_STATE 251', 'RUN_STATE 252')
+        self.assertEqual(self.manifest, expected)
+        self.assertEqual(self.raw, old_raw.replace(b'RUN_STATE 251', b'RUN_STATE 252')
+                         .replace(b'RUN_STATE_251', b'RUN_STATE_252'))
 
     def test_committed_manifest_matches_the_text_for_every_member(self):
         self.assertEqual(hashlib.sha256(self.raw).hexdigest(), OPTION_B_MANIFEST_SHA256)

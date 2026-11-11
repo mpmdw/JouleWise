@@ -1,4 +1,4 @@
-"""Option B test reserves at the arm (RUN_STATE 251; claim contract B6). Synthetic Git records only.
+"""Option B test reserves at the arm (RUN_STATE 252; claim contract B6). Synthetic Git records only.
 
 The packet builder derives a STRUCTURAL bar for a committed T window from its own record (the shared R22-2
 predicate), so the series ledger owes T4 after a barred T1 and never arms a reserve otherwise.

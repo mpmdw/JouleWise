@@ -571,7 +571,7 @@ One W1 session cannot estimate between-window variability. Adaptive adversary,
 API frontier monitor (local secondary) and positive-control windows are
 v5 add-ons to v4's frozen model/settings/thermal policy, not v4 changes (the test
 windows are v4's T1-T3 under R15, with reserves T4-T5; the physical positive control is
-out of v4's scope under option B: [Claim contract](#claim-contract-option-b-run_state-251)).
+out of v4's scope under option B: [Claim contract](#claim-contract-option-b-run_state-252)).
 
 **R11/R13 series-plan hold (RUN_STATE 212).** Seven benign/pair/window give
 42 after six intact windows; losing a whole window leaves 35<39, before
@@ -1063,11 +1063,11 @@ as owed, claim contract B6). The outcome is
   between-window prior. Check B3's tau = 0.5 s_r conversion once W1 or C1 yields the first benign residual
   SD; until then the 0.5 s_r margin stays an open statistics item (above), not an adopted rule.
 
-## Claim contract (option B, RUN_STATE 251)
+## Claim contract (option B, RUN_STATE 252)
 
 **Authority and blindness.** Ed chose option B of the Fable 5.2 next-block-designs audit
 (`audit/2026-11-10-fable:docs/research-audits/2026-11-10-fable/next-block-designs.md`, V4-01 to V4-12) on
-2026-11-10 (RUN_STATE 251: "b is the correct path forward"). This section was written blind: no C or T data
+2026-11-10 (RUN_STATE 252: "b is the correct path forward"). This section was written blind: no C or T data
 exists, W1 is neither registered nor armed, and no v4 score, residual or energy was read. v4 is unregistered, so
 this is registration text, not a deviation; the rulings it supersedes are listed in B9 and recorded in
 [DEVIATIONS.md](v4/DEVIATIONS.md). It changes no threshold rule, U-gate constant, gate, idle, scaffold, model,
@@ -1454,7 +1454,7 @@ in `docs/align/council-2026-11-06-v4-review/OC-TABLE.md` on
 | # | v4 | Blocks | What this document still lacks (section) |
 |---:|:---:|---|---|
 | 1 | | R1 | **Code (round 4):** (a)-(e) in the R1 driver, (f) as restated by L1 in the kit and on the R1 record, (g) in the roster above. Still lacks: D wall-time budget text: R1 prints deadman use by phase and predicted turns; a third gated **bank/benign** D run in R1; extended post-D cooldown; the pre-declared duty bar (no X7, ≥ 3 admitted turns, G0 + G1 + H ≤ 40 % of T_dead) and the named fallback order (S6 joint tuning with δ_slow ≤ 2.0 °C, idle 450 s after D, 4-bit, screen-only); the kit assertion I_D + 1.13544·T_dead + tail + 60 s ≤ 1,800; and **W1 ordinals 17 and 18 swapped** (roster table, balance text and fit rule's "drop ordinal 17", which becomes the last ordinal). (Sizing; W1 roster; R1) `C:16–40` |
-| 2 | v4 | paper; before W1 registration | Registered sub-turn H\* estimand (Sol's grid promoted from print-only), benign-carrier detection curve (H50/H90 with window-cluster bootstrap), preserve_thinking estimand statement plus a print-only full-omission variant, WP8 F1 resolved before D1, residual-vs-hold-count print; the D positive-control cell as a paper gate. **Claim contract (RUN_STATE 251):** option C declined, so v4 has no positive-control cell; the curves are worded as calibrated sensitivity (B4). (Known-H tamper) `C:42–56` |
+| 2 | v4 | paper; before W1 registration | Registered sub-turn H\* estimand (Sol's grid promoted from print-only), benign-carrier detection curve (H50/H90 with window-cluster bootstrap), preserve_thinking estimand statement plus a print-only full-omission variant, WP8 F1 resolved before D1, residual-vs-hold-count print; the D positive-control cell as a paper gate. **Claim contract (RUN_STATE 252):** option C declined, so v4 has no positive-control cell; the curves are worded as calibrated sensitivity (B4). (Known-H tamper) `C:42–56` |
 | 3 | v4 | D-series | **Claim contract B1/B6:** numeric test-cohort rule and test reserves T4-T5. Registration grade restates the old 21/3 target: each pair needs ≥39 eligible benign calibration members plus a separate held-out test cohort. Exact fit/calibration/test rosters, every stop condition and the cap need prospective series-plan authority. D7/D8 and ≥6 sabotage are proposals, not installed authority. At cap: insufficient calibration/unresolved; no outcome-driven top-up. The lead must rule the margin before W1 (RUN_STATE 212 R11-2). (Residual analysis; Ed's standing ruling) |
 | 4 | v4 | W1; D-series | **INSTALLED; evidence pending where named.** Battery arm/top-up/OBC attestation and B bar installed in W1 registration installation §4; native top-up/drain/charge-hold evidence PENDING. |
 | 5 | v4 | W1 | **INSTALLED; evidence pending where named.** R11/R03 removes the unruled k=3 bar. U3 derivation/predictive/OC block is PENDING; v4 cannot pass on a historical constant. |

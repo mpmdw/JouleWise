@@ -2,7 +2,7 @@
 
 2026-11-10. This is a specification, not code. It lists what the primary engine (`engine-r23m` line, Sol
 family) and the independent recompute (`align/2026-11-08-v4-recompute-opus`, Opus family) must each add so that
-the protocol's "Claim contract (option B, RUN_STATE 251)" section (B0-B9) can be computed in round 2. Each family
+the protocol's "Claim contract (option B, RUN_STATE 252)" section (B0-B9) can be computed in round 2. Each family
 builds every item from the protocol text; neither reads the other's code. "Both" means both families, compared
 by the release comparator. Blind: synthetic fixtures only; no v4 data exists.
 
@@ -19,7 +19,7 @@ by the release comparator. Blind: synthetic fixtures only; no v4 data exists.
    admitted, mirroring the C-reserve check "reserve requires an owed structural replacement". A barred T
    window contributes no test member and is never credited as no-alarm (RUN_STATE 236).
 3. **Manifest pin.** `R24_SERIES_MANIFEST_SHA256` becomes the option-B bytes,
-   `b5fedb49ee04e0b5388ea43a76b6fbf07cb94b896145476386271e702fb41c64` (after the paired seed check). The
+   `70009b6a594835643ef0bb2ff324ed700447cbe7a6237975ebdb209ec2c78dd6` (after the paired seed check). The
    in-memory `LEGACY_R15_MANIFEST_ORDER` seam is unchanged and never reaches release.
 4. **Series completion predicate.** `series_complete` = `calibration_complete`, every window record final, and
    either 3 admitted T windows or both test reserves consumed. Both families compute it from the ledger alone.
