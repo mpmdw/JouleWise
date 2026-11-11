@@ -19,6 +19,7 @@ from unittest.mock import patch
 
 from tests.align import synthetic_custody  # noqa: I001 (integration hygiene: synthetic custody by default)
 from joulewise.adapters import powermetrics as pm
+from joulewise.b5 import harvest as h
 from joulewise.align.apple import harvest_offload as off, light_triage as lt, thermal_desk as td
 from scripts import align_v4_harvest_off as runner
 from tests.align.test_v4_next_arm_packet import Scenario, evaluate
@@ -138,7 +139,7 @@ class CustodyWitnesses(ReviewBase):
                     boot_session_uuid=lambda: 'SYNTHETIC', workers=workers, io_workers=2,
                     harvest_checkout=lambda **_: checkout)
 
-            with patch.object(pm, 'document_memo', nullcontext):
+            with patch.object(h, 'document_memo', nullcontext):
                 mbp = h.harvest(h.resolve_inputs(window.plan_path), window.archive,
                                 seams=seams(1), prepare_desk=True)
             before = {p.relative_to(window.archive).as_posix(): p.read_bytes()
@@ -278,22 +279,22 @@ class EligibilityWitnesses(ReviewBase):
 class MemoAndSizingWitnesses(ReviewBase):
     def test_memo_content_changes_nested_members_and_refusals_are_isolated(self):
         a, b = plistlib.dumps({'x': [1]}), plistlib.dumps({'x': [2]})
-        with patch.object(pm, '_parse_powermetrics_documents', wraps=pm._parse_powermetrics_documents) as parse:
-            with pm.document_memo():
+        with patch.object(pm, '_powermetrics_documents', wraps=pm._powermetrics_documents) as parse:
+            with h.document_memo():
                 first, _ = pm._powermetrics_documents(a)
                 first[0]['x'][0] = 99
                 self.assertEqual(pm._powermetrics_documents(a)[0][0]['x'], [1])
                 self.assertEqual(pm._powermetrics_documents(b)[0][0]['x'], [2])
-                with pm.document_memo():
+                with h.document_memo():
                     self.assertEqual(pm._powermetrics_documents(a)[0][0]['x'], [1])
                 self.assertEqual(parse.call_count, 3)
                 for _ in range(2):
                     with self.assertRaises(ValueError):
                         pm._powermetrics_documents(b'broken first frame')
                 self.assertEqual(parse.call_count, 5)
-                self.assertEqual(len(pm._DOCUMENT_MEMO.get()), 2)
-            self.assertIsNone(pm._DOCUMENT_MEMO.get())
-            with pm.document_memo():
+                self.assertEqual(len(h._DOCUMENT_MEMO.get()), 2)
+            self.assertIsNone(h._DOCUMENT_MEMO.get())
+            with h.document_memo():
                 pm._powermetrics_documents(a)
             self.assertEqual(parse.call_count, 6)
 
