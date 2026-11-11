@@ -1289,5 +1289,103 @@
         "paper": "docs/align/reviews/2026-11-08-merge-c84-sol-review.md"
       }
     ]
+  },
+  {
+    "commit": "19a862dc8b0d92dc790f5b33635b9a7af114328c",
+    "number_bearing_paths": [
+      "joulewise/b5/driver.py"
+    ],
+    "change": "fix(w1): gate DC-in and restore host state on terminal paths",
+    "executing_reviews": [
+      {
+        "reviewer": "Fable 5.2 cold executing review (non-author), ADMIT-WITH-FIXES",
+        "covered": "Only joulewise/b5/driver.py at 19a862dc8b0d92dc790f5b33635b9a7af114328c, Git blob e83ff06b8d2b7c32e0347a95e6e80d6dd19dab81, identical to review tree 297629a0dc4a66797363d1dac23956f55536a061; original report docs/run_reports/2026-11-10-w1-reliability-fable-review.md, relevant review first added at cc946a5cde243cc2e1ae4d8cc930091c922e0284: original cold review, section 1; paper sha256 64768e3d646a64364fe76d94a7e3e1941824da3b3b5d8b92d09775c7c4dddec4",
+        "paper": "docs/align/reviews/2026-11-11-w1-executing-review-citations.md"
+      }
+    ]
+  },
+  {
+    "commit": "2127e00bd8904a61e9b048d94af241f48c420e42",
+    "number_bearing_paths": [
+      "joulewise/b5/harvest.py"
+    ],
+    "change": "Scope the powermetrics parse memo inside harvest (RL-58)",
+    "executing_reviews": [
+      {
+        "reviewer": "Fable 5.2 executing pre-signing review (non-author of the Sol restore/memo), ADMIT",
+        "covered": "Only joulewise/b5/harvest.py at 2127e00bd8904a61e9b048d94af241f48c420e42, Git blob 0a733962780f0ce9b8ec002a0190ce7b11e8142e, identical to review tree 82c14c9eaa647089dce78ad9a45716ce45ce18c6; original report docs/run_reports/2026-11-11-w1-presign-fable-review.md, relevant review first added at 82c14c9eaa647089dce78ad9a45716ce45ce18c6: estimator restore and integrated-head confirmations; the report does not print a head SHA, but its code parent f41ee4e7c and report commit have this exact blob; paper sha256 64768e3d646a64364fe76d94a7e3e1941824da3b3b5d8b92d09775c7c4dddec4",
+        "paper": "docs/align/reviews/2026-11-11-w1-executing-review-citations.md"
+      }
+    ]
+  },
+  {
+    "commit": "454d78142c7682c0cf39354d4140fb17aa34621c",
+    "number_bearing_paths": [
+      "joulewise/b5/driver.py"
+    ],
+    "change": "fix: apply W1 cold-review reliability corrections F-01 through F-13",
+    "executing_reviews": [
+      {
+        "reviewer": "Fable 5.2 cold executing delta review (non-author), ADMIT",
+        "covered": "Only joulewise/b5/driver.py at 454d78142c7682c0cf39354d4140fb17aa34621c, Git blob da35ddc9372927d2f3ae4567f6cb132ece7c9add, identical to review tree ec0465fd1fd8227f9587d877d8762e6a9f2bd052; original report docs/run_reports/2026-11-10-w1-reliability-fable-review.md, relevant review first added at c6d25d9636c0c4e7a9b19d86ad9c7f0d3c1c0573: delta review, D1; paper sha256 64768e3d646a64364fe76d94a7e3e1941824da3b3b5d8b92d09775c7c4dddec4",
+        "paper": "docs/align/reviews/2026-11-11-w1-executing-review-citations.md"
+      }
+    ]
+  },
+  {
+    "commit": "5dc2d4b48be12a96629424acb86d995aa303b368",
+    "number_bearing_paths": [
+      "joulewise/b5/driver.py"
+    ],
+    "change": "fix(align): continue collection through meter outages (RL-37)",
+    "executing_reviews": [
+      {
+        "reviewer": "Fable 5.2 executing RL-37 delta review (non-author), ADMIT",
+        "covered": "Only joulewise/b5/driver.py at 5dc2d4b48be12a96629424acb86d995aa303b368, Git blob dbf8a5f0efc717f47478726abf753fd33c9efb98, identical to review tree 248fd161eec67f81acf790337603a0607e738f49; original report docs/run_reports/2026-11-10-w1-reliability-fable-review.md, relevant review first added at b192d57129dcba238ca81adaf0f37277693945a4: RL-37 delta review, M2; paper sha256 64768e3d646a64364fe76d94a7e3e1941824da3b3b5d8b92d09775c7c4dddec4",
+        "paper": "docs/align/reviews/2026-11-11-w1-executing-review-citations.md"
+      }
+    ]
+  },
+  {
+    "commit": "b4a6c217f0285a20aff33a8407160dd77af2a8a6",
+    "number_bearing_paths": [
+      "joulewise/b5/driver.py"
+    ],
+    "change": "align v4 W1: Fable M-2 (driver docstring: meter outage flags, does not stop) and M-3 (METER-T0-PROBE names both pre-chain refusals)",
+    "executing_reviews": [
+      {
+        "reviewer": "Opus 5.5 cold executing pre-signing second read; non-author of c64049b66/f41ee4e7c per the paper, ADMIT for the integration commits",
+        "covered": "Only joulewise/b5/driver.py at b4a6c217f0285a20aff33a8407160dd77af2a8a6, Git blob ff4fd76a6011b5790143f270d3d58fcd0e75750b, identical to review tree 82c14c9eaa647089dce78ad9a45716ce45ce18c6; original report docs/run_reports/2026-11-11-w1-presign-opus-review.md, relevant review first added at 4d2792f10306b3b197eb77e84e86d808feb868eb: DRIVER-P9-W1 full-diff read and Checks row 6 executions; citation limited to the unchanged driver, signing gates remain; paper sha256 64768e3d646a64364fe76d94a7e3e1941824da3b3b5d8b92d09775c7c4dddec4",
+        "paper": "docs/align/reviews/2026-11-11-w1-executing-review-citations.md"
+      }
+    ]
+  },
+  {
+    "commit": "c6d25d9636c0c4e7a9b19d86ad9c7f0d3c1c0573",
+    "number_bearing_paths": [
+      "joulewise/b5/driver.py"
+    ],
+    "change": "fix: close W1 reliability delta findings D-02 through D-06",
+    "executing_reviews": [
+      {
+        "reviewer": "Fable 5.2 cold executing round-5 review (non-author), ADMIT-WITH-FIXES",
+        "covered": "Only joulewise/b5/driver.py at c6d25d9636c0c4e7a9b19d86ad9c7f0d3c1c0573, Git blob 4e3cd6075ccdf5bfb75fa95e582829584be3bdd8, identical to review tree fe6912519ccc71715112fd9f98b10f1bfac38e1a; original report docs/run_reports/2026-11-10-w1-reliability-fable-review.md, relevant review first added at 734fc4433e2270c82e0a7d290aa10593deddb2d0: round-5 check, R1; R5-1 remains before registration; paper sha256 64768e3d646a64364fe76d94a7e3e1941824da3b3b5d8b92d09775c7c4dddec4",
+        "paper": "docs/align/reviews/2026-11-11-w1-executing-review-citations.md"
+      }
+    ]
+  },
+  {
+    "commit": "ebe3d56a7ab298bd43ce5a3ae5de903ad6324e23",
+    "number_bearing_paths": [
+      "joulewise/adapters/powermetrics.py"
+    ],
+    "change": "Restore accepted powermetrics estimator bytes (RL-58)",
+    "executing_reviews": [
+      {
+        "reviewer": "Fable 5.2 executing pre-signing review (non-author of the Sol restore/memo), ADMIT",
+        "covered": "Only joulewise/adapters/powermetrics.py at ebe3d56a7ab298bd43ce5a3ae5de903ad6324e23, Git blob 8fa6db3c444f6d27939728fc477c5e763a6306d3, identical to review tree 82c14c9eaa647089dce78ad9a45716ce45ce18c6; original report docs/run_reports/2026-11-11-w1-presign-fable-review.md, relevant review first added at 82c14c9eaa647089dce78ad9a45716ce45ce18c6: estimator restore and integrated-head confirmations; the report does not print a head SHA, but its code parent f41ee4e7c and report commit have this exact blob; paper sha256 64768e3d646a64364fe76d94a7e3e1941824da3b3b5d8b92d09775c7c4dddec4",
+        "paper": "docs/align/reviews/2026-11-11-w1-executing-review-citations.md"
+      }
+    ]
   }
 ]
