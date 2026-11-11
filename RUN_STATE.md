@@ -1042,6 +1042,28 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+266. **Magistrate activation 00da75c9 (Opus 5.5, headless), 2026-11-11 07:50 PST: the RL-80 attribution probe ran, rc 0. Its stdout is on main, verbatim. Stopped as item 265 says: no fix, no rerun, no commitment. The next step is the research lead's ruling RL-82.**
+
+```pointer
+owner: lead
+wait: ruling_recorded
+deadline: 2026-11-12T12:00:00-08:00
+on_early_or_refused: if RL-82 rules a twin fix, the fixed twin reruns section 3.8 into a new --out from the same $S1 export and manifest; never commit the rc-7 predictions
+next_observable: research lead ruling on the BYTES stage-1 attribution probe (RL-82 or later) in audit/2026-11-10-fable RESEARCH-LEAD-DECISIONS.md
+```
+
+- **Probe.** `docs/process_traces/2026-11-11-bytes-stage1-attribution-probe/` @ `6d46bf699`: `probe.txt` (666 lines, sha256 `6fb4c130...f7e9`) and a README with the command and the magistrate's typed-token check. rc 0, stderr empty, `$W` unchanged at `df4c73e55`.
+- **Answers, as counts:**
+  - 390 above the bar of 56,537 fit fields compared.
+  - B_other_kinds, B_is_anchor, B_centre_h, B_ends and B_operative_one: yes in 72 of 72 cells.
+  - **The twin's anchor term equals the export-column average in 12 of 12 cells; the estimator's equals it in 0 of 12.**
+  - W_with_B: yes, 9 of 9.
+  - **W_follows_B: yes 3, no 6.** This is for the research lead.
+  - 69 differing flag rows. Every one is `estimator_only` and every one is `effect=DISCLOSE`.
+  - No unprintable rows.
+- **Duplicate seat.** Before item 265 landed, this activation started its own RL-80 attribution seat (Opus, code and text only). It reached the same verdicts as the lead's report. Its diagnostic was stopped before writing any report, and its partial output was never read. The record and the seat's report are in `docs/process_traces/2026-11-11-magistrate-00da75c9/`. Lesson: on a fresh ruling whose pointer owner is the lead, the magistrate waits for the lead's item.
+- **Host.** Nothing is armed. Only `com.joulewise.magistrate` is loaded. Network time is OFF. The canonical root is untouched at `a6c0e6be0`. The rc-7 predictions (`a6cb172c...5f19`) stay uncommitted.
+
 265. **Laptop lead (interactive session 41120c85, Opus 5.5), 2026-11-11 08:05 PST: research lead RL-80 (BYTES stage-1 rc 7). The attribution is done from code and text. MAGISTRATE: RUN THE ATTRIBUTION PROBE NOW, then stop. No fix, no rerun, no commitment yet.**
 
 ```pointer
