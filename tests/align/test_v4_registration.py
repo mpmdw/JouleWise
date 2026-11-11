@@ -1,4 +1,5 @@
 """Registration blockers: synthetic records only; no native probes or weights."""
+from tests.align.test_v4_arm_watchdog_check import acceptance as _watchdog_acceptance
 from copy import deepcopy
 import hashlib
 import json
@@ -178,14 +179,15 @@ class RegistrationTests(unittest.TestCase):
              patch('joulewise.align.apple.powermode.admit_ac_powermode', return_value={'admitted': True}), \
              patch('joulewise.align.apple.external_volume.census', return_value={}), \
              patch('joulewise.align.apple.external_volume.arm_check', return_value={'verdict': 'PASS', 'reasons': []}), \
-             patch('joulewise.battery_float.observe', return_value=(good, b'synthetic raw')) as observe:
+             patch('joulewise.battery_float.observe', return_value=(good, b'synthetic raw')) as observe, \
+             patch.object(session, 'held_window_check', return_value={'ok': True, 'reasons': [], 'synthetic': True}):
             run = lambda argv: subprocess.CompletedProcess(argv, 0, 'synthetic pmset', '')
             log = write_battery_log(Path(tmp) / 'battery.jsonl', 5000., completion_age=100)        # (a) completed charge
             floated = write_battery_log(Path(tmp) / 'float.jsonl', 5000., completion_age=2400)     # (b) continuous float
             stale = write_battery_log(Path(tmp) / 'stale.jsonl', 5000., completion_age=2400, end_age=900)
             arm = lambda **kw: session.arm_checks('.', {}, obc_off_attested_by=kw.pop('obc', 'synthetic'), runner=run,
                                                   now=lambda: 5000., **arm_seams(), **kw)
-            self.assertFalse(session.arm_checks('.', {}, runner=run, meter_probe=lambda root: {'live': False})['admitted'])
+            self.assertFalse(session.arm_checks('.', {}, watchdog_check=_watchdog_acceptance, runner=run, meter_probe=lambda root: {'live': False})['admitted'])
             self.assertFalse(arm(obc='', battery_log=log, next_arm_triage=packet)['admitted'])     # no attestation
             self.assertFalse(arm(next_arm_triage=packet)['admitted'])                              # no battery evidence
             record = arm(battery_log=log, next_arm_triage=packet)
@@ -236,7 +238,8 @@ class RegistrationTests(unittest.TestCase):
              patch('joulewise.align.apple.powermode.admit_ac_powermode', return_value={'admitted': True}), \
              patch('joulewise.align.apple.external_volume.census', return_value={}), \
              patch('joulewise.align.apple.external_volume.arm_check', return_value={'verdict': 'PASS', 'reasons': []}), \
-             patch('joulewise.battery_float.observe', return_value=(good, b'raw')):
+             patch('joulewise.battery_float.observe', return_value=(good, b'raw')), \
+             patch.object(session, 'held_window_check', return_value={'ok': True, 'reasons': [], 'synthetic': True}):
             run = lambda argv: subprocess.CompletedProcess(argv, 0, 'pmset', '')
             rows = lambda start, end, charge_until=None: [
                 {'schema': 'joulewise.battery_float.v1', 'probe_error': False, 'wall_time_s': float(t),

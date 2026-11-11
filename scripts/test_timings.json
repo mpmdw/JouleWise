@@ -77,6 +77,7 @@
     "tests.align.test_moe_calibration": 1451.183,
     "tests.b6.test_cold_pass_fixes": 1800.0,
     "tests.b6.test_loop_round_desk": 160.727,
+    "tests.align.test_v4_arm_watchdog_check": 0.311,
     "tests.flags.test_flags_catalog": 0.005,
     "tests.flags.test_flags_collect": 28.678,
     "tests.flags.test_flags_exclusions": 0.007,

@@ -4,6 +4,8 @@ The arm rebuilds the packet from the identities the supplied one names (a packet
 never trusted data), judges its own build, and refuses a supplied packet that differs. No
 measurements, probes, models or network.
 """
+from tests.align.test_v4_arm_watchdog_check import acceptance as _watchdog_acceptance
+from tests.align.v4_registration_fixtures import session_plan
 import contextlib
 import copy
 import hashlib
@@ -66,7 +68,7 @@ class Scenario:
                 'km003c': {'members': {i: {'status': 'available', 'flags': []} for i in ids}}}},
             'desk': {'plan_id': plan_id, 'pilot_status': 'instrument_ok',
                      'checks': {'synthetic_check': True, 'v4_B_bar': b_bar}, 'harvest_status': 'ok'},
-            'exclusions': {'members_excluded': []}}
+            'exclusions': {'members_excluded': [], 'reasons': [], 'claim_usable': True}}
         if window not in ('W1', 'R1'):
             # The desk's committed provisional counts: a permissive upper bound by default (7 per pair).
             self.sources['pilot']['extra_checks']['series_desk_row'] = {
@@ -694,7 +696,7 @@ class ArmRebuildTests(Base):
              patch('joulewise.battery_float.observe', return_value=(good, b'raw')):
             log = write_battery_log(Path(tempfile.mkdtemp(dir=s.root.parent)) / 'battery.jsonl', now)
             return session.arm_checks(s.root, {}, next_arm_triage=path, now=lambda: now, battery_log=log,
-                                      runner=lambda argv: subprocess.CompletedProcess(argv, 0, 'pmset', ''),
+                                      watchdog_check=_watchdog_acceptance, runner=lambda argv: subprocess.CompletedProcess(argv, 0, 'pmset', ''),
                                       obc_off_attested_by='synthetic',
                                       meter_probe=kwargs.pop('meter_probe', lambda root: {'live': True, 'samples': 40}),
                                       **kwargs)
@@ -867,7 +869,8 @@ class ArmOrderWitness(Base):
             return time.monotonic_ns()
         good = dict(passed=True, probe_error=False, external_connected=True, is_charging=False,
                     current_capacity_pct=100, instant_amperage_ma=0, update_age_s=1)
-        arm_state = {'v4_series': {'window_id': 'C1'}, 'source_measurement_root': str(s.root)}
+        arm_state = session_plan(target, {'v4_series': {'window_id': 'C1'}, 'source_measurement_root': str(s.root)},
+                                 now=NOW)
         with patch.dict(os.environ, {'JOULEWISE_HOST_STATE_DIR': str(target.parent / 'host')}), \
              patch('joulewise.align.apple.powermode.admit_ac_powermode',
                    side_effect=seam('powermode', {'admitted': True, 'observed': 0})), \
@@ -882,7 +885,7 @@ class ArmOrderWitness(Base):
             state['on'] = True
             try:
                 session._arm_and_install(target, arm_state, s.root, s.next_plan, None,
-                    runner=lambda argv: subprocess.CompletedProcess(argv, 0, '', ''), volume_runner=None,
+                    watchdog_check=_watchdog_acceptance, runner=lambda argv: subprocess.CompletedProcess(argv, 0, '', ''), volume_runner=None,
                     now=lambda: NOW, w1_disk_config=None, disk_gate=None, battery_log=log,
                     obc_off_attested_by='synthetic', next_arm_triage=packet,
                     meter_probe=seam('meter_probe', {'live': True, 'samples': 40}), dwell_start=stamp)

@@ -1,4 +1,6 @@
 """Synthetic boundary receipts; never discover or read measurement records."""
+from tests.align.test_v4_arm_watchdog_check import acceptance as _watchdog_acceptance
+from tests.align.v4_registration_fixtures import session_plan
 from contextlib import redirect_stderr, redirect_stdout
 from contextvars import ContextVar
 from copy import deepcopy
@@ -370,6 +372,7 @@ class ProducerTests(unittest.TestCase):
         for refused in (False, True):
             with self.subTest(refused=refused), tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
+                state = session_plan(root, {'measurement_root': str(root)}, now=100)
                 rows, clock = [], FakeClock()
                 # The production series-binding gate stays intact: the arm record carries a synthetic REBUILT
                 # packet, and only the binding itself (covered by test_v4_series_e2e) is a scoped seam here.
@@ -392,8 +395,8 @@ class ProducerTests(unittest.TestCase):
                      patch.object(session, 'w1_disk_check', side_effect=gate), \
                      patch.object(session.kit, 'arm_powermode_check'), \
                      patch.object(session.pilot, 'install', return_value={'exit_code': 0}):
-                    call = lambda: session._arm_and_install(root, {}, root, {}, None,
-                        runner=None, volume_runner=None, now=lambda: 100, w1_disk_config=None, disk_gate=None)
+                    call = lambda: session._arm_and_install(root, state, root, {}, None,
+                        watchdog_check=_watchdog_acceptance, runner=None, volume_runner=None, now=lambda: 100, w1_disk_config=None, disk_gate=None)
                     if refused:
                         with self.assertRaisesRegex(ValueError, 'synthetic disk refusal'):
                             call()
@@ -413,6 +416,7 @@ class ProducerTests(unittest.TestCase):
         for refused in (False, True):
             with self.subTest(refused=refused), tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
+                state = session_plan(root, {'measurement_root': str(root)}, now=100)
                 record = dict(admitted=True, reasons=[], ac_powermode=dict(observed=0),
                               next_arm_triage=dict(rebuilt_packet={'synthetic': 'rebuilt packet'}))
                 def arm_checks(*args, pre_dwell=None, **kwargs):
@@ -426,7 +430,7 @@ class ProducerTests(unittest.TestCase):
                     return {'exit_code': 0}
                 @session._install_timing
                 def operation():
-                    return session._arm_and_install(root, {}, root, {}, None, runner=None, volume_runner=None,
+                    return session._arm_and_install(root, state, root, {}, None, watchdog_check=_watchdog_acceptance, runner=None, volume_runner=None,
                         now=lambda: 100, w1_disk_config=None, disk_gate=None)
                 out, err = io.StringIO(), io.StringIO()
                 with redirect_stdout(out), redirect_stderr(err), \

@@ -115,7 +115,8 @@ class TriageEvidenceWitnesses(unittest.TestCase):
              patch('joulewise.align.apple.powermode.host_state_dir', return_value=tmp), \
              patch('joulewise.align.apple.external_volume.census', return_value={}), \
              patch('joulewise.align.apple.external_volume.arm_check', return_value={'verdict': 'PASS'}), \
-             patch('joulewise.battery_float.observe', return_value=(good, b'synthetic raw')):
+             patch('joulewise.battery_float.observe', return_value=(good, b'synthetic raw')), \
+             patch.object(session, 'held_window_check', return_value={'ok': True, 'reasons': [], 'synthetic': True}):
             runner = lambda argv: subprocess.CompletedProcess(argv, 0, 'synthetic pmset', '')
             log = write_battery_log(Path(tmp) / 'battery.jsonl', 5000.)
             records = [session.arm_checks(tmp, {}, runner=runner, now=lambda: 5000.,
