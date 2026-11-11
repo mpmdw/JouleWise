@@ -535,6 +535,7 @@
     "tests.test_epoch_equivalence_check": 8.874,
     "tests.test_evidence_arm_sequence": 3.504,
     "tests.test_evidence_night": 225.656,
+    "tests.test_exit_contract": 0.338,
     "tests.test_experiment": 16.683,
     "tests.test_family_marker": 1.621,
     "tests.test_finalize_analysis_manifest": 36.667,
