@@ -828,5 +828,24 @@ class CliTests(unittest.TestCase):
             self.assertEqual(self.invoke(["--once", "--include-plan", "synthetic", "--notify-cmd", "/synthetic"])[0], 2)
 
 
+class InvariantAlarmLevelTests(unittest.TestCase):
+    """Lead's review addition: a violated invariant alarms even on a measured result."""
+
+    def test_invariant_on_a_measured_result_is_an_alarm_and_exits_20(self):
+        summary = w.Summary(outcome="MEASURED_OK", state="Delivered",
+                            invariants=("COURIER_SENT_WITHOUT_DELIVERY",), verdict="GO",
+                            chain_exit_code=0, fault=False, result_exists=True)
+        events = w.result_events(REF, A, summary)
+        by_code = {event.code: event.level for event in events}
+        self.assertEqual(by_code["INVARIANT_VIOLATED:COURIER_SENT_WITHOUT_DELIVERY"], "ALARM")
+        self.assertNotIn("RESULT_NOT_MEASURED", by_code)
+        self.assertEqual(w.event_exit(events), w.EXIT_CODES["alarm"])
+
+    def test_measured_result_without_invariants_is_quiet(self):
+        summary = w.Summary(outcome="MEASURED_OK", state="Delivered", verdict="GO",
+                            chain_exit_code=0, fault=False, result_exists=True)
+        self.assertEqual(w.event_exit(w.result_events(REF, A, summary)), w.EXIT_CODES["quiet"])
+
+
 if __name__ == "__main__":
     unittest.main()

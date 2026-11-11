@@ -49,3 +49,27 @@ did not work around it. The orchestrator has been told.
 
 After round 2: one `--once` poll with `--include-plan` naming one finished rehearsal whose structural outcome is
 already known to the lead, and a comparison of the printed line with it.
+
+## Round 2 delta review (2026-11-11 05:02 PST)
+
+Reviewed `3fcfda031` (Sol's round 2 on the same branch), plus one test of my own.
+
+**Verdict: ADMIT**, with one native check owed before anyone relies on it (below).
+
+| Finding | Disposition |
+|---|---|
+| AW-1 | Fixed. The published prefix `docs/process_traces/night-results/<plan_id>/` is tried first, with its own allowlist of the files the two writer generations publish (neither publishes `night_plan.json` or the R1 payload and slots files). A drift test reads the destination expression from `scripts/run_night.py` at `HEAD` by AST and fails if the prefix moves. |
+| AW-2 | Fixed. `--since-epoch` is gone. On a first run every existing ref is an unread baseline; only refs named with `--include-plan`, the armed plan, and refs that appear or move later are read. The first-run test asserts the exact set of refs the fake Git was asked for. |
+| AW-3 | Fixed. The origin URL is checked before the first poll; a scheme that is not allowed exits 2 with `ORIGIN_PROTOCOL_NOT_ALLOWED`. |
+| AW-4 | Fixed. `REF_READ_FAILING` is raised with a count once a ref has failed `failure_limit` polls in a row at the same sha. |
+| AW-5 | Not in this PR, as planned. |
+
+Checks on the Air: `tests.test_night_results_watch`, 52 tests, OK (50 from Sol, 2 from me). Seven mutants: six
+killed (the published prefix changed; first-run baseline ignored; the not-measured alarm removed; the early
+result alarm removed; the armed-without-result alarm removed; the silence alarm removed). One survived: the
+invariant events demoted from ALARM to INFO. I added `InvariantAlarmLevelTests` (a measured result with a
+violated invariant is an alarm and exits 20; without one it is quiet), which kills it.
+
+**Native check owed, by the orchestrator:** one `--once --include-plan <finished rehearsal>` poll on the Air
+with a scratch state file, compared with that rehearsal's known structural outcome. Until it passes, the
+scratch watcher stays the watcher of record.
