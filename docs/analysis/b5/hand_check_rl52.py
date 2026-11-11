@@ -5,6 +5,7 @@ No analysis/recompute imports, raw-stream integration, path chasing or network.
 Only RC is opened: the prompt's separate real-restricted-directory prohibition
 needs a ruling before the dry-m disclosure/projection files can be accessed.
 The phase-2 module supplies only its stdlib reader and arithmetic helpers.
+Use --repo-only to check frozen round-1 bytes without opening custody.
 """
 from __future__ import annotations
 
@@ -23,6 +24,7 @@ import subprocess
 HERE = Path(__file__).absolute().parent
 REPO = HERE.parents[2]
 BASE = '0b8763f0a8291bfa5d47fdc18aa64ef3aa33ec1b'
+ROUND1 = 'b9ea4cd111be1c6faae4f4a990ed1b1121e711da'
 RC_HASH = 'c06ee7c8cbf85a68dcebc24a73e0372fd6f8d825fc3acf30ec352304dd93cacc'
 spec = importlib.util.spec_from_file_location('rl52_phase2_helpers', HERE/'hand_check_phase2.py')
 h = importlib.util.module_from_spec(spec)
@@ -50,6 +52,28 @@ class ReleasedReader(h.CustodyReader):
 def base_bytes():
     return subprocess.run(['git', 'show', f'{BASE}:docs/analysis/b5/rederivation.tsv'],
                           cwd=REPO, check=True, capture_output=True).stdout
+
+
+def round1_bytes():
+    return subprocess.run(['git', 'show', f'{ROUND1}:docs/analysis/b5/rederivation.tsv'],
+                          cwd=REPO, check=True, capture_output=True).stdout
+
+
+def check_round1_bytes(current):
+    """Check physical rows 1-802; later appends are outside round 1's scope."""
+    frozen = round1_bytes()
+    if not frozen.startswith(base_bytes()):
+        raise ValueError('frozen round-1 original 538 rows changed; refuse')
+    if b''.join(current.splitlines(keepends=True)[:802]) != frozen:
+        raise ValueError('round-1 rows 540-802 or original prefix differ; refuse')
+    return frozen
+
+
+def repository_check():
+    check_round1_bytes((HERE/'rederivation.tsv').read_bytes())
+    print(json.dumps({'mode':'repository-only; no custody arithmetic rerun',
+                      'scope':'physical rows 540-802 plus original 538-row prefix',
+                      'round1_byte_identical':True, 'opened_custody':[]}, sort_keys=True))
 
 
 def display(value, digits=5):
@@ -347,7 +371,13 @@ def append_rows(rc, fields):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--write', action='store_true')
+    parser.add_argument('--repo-only', action='store_true', help='check frozen round-1 bytes; never open custody')
     args = parser.parse_args()
+    if args.repo_only:
+        if args.write:
+            parser.error('--repo-only cannot be combined with --write')
+        repository_check()
+        return
     original = base_bytes()
     current = (HERE/'rederivation.tsv').read_bytes()
     if not current.startswith(original):
@@ -368,7 +398,7 @@ def main():
         if current not in (original, result):
             raise ValueError('different extension already present; refuse overwrite')
         (HERE/'rederivation.tsv').write_bytes(result)
-    elif current != result:
+    elif b''.join(current.splitlines(keepends=True)[:802]) != result:
         raise ValueError('extension differs; use --write only for initial append')
     print(json.dumps({'new_rows':len(rows), 'counts':dict(Counter(r['match'] for r in rows)),
                       'original_prefix_byte_identical':True, 'results_sha256':hashlib.sha256((HERE/'RESULTS.md').read_bytes()).hexdigest()}, sort_keys=True))

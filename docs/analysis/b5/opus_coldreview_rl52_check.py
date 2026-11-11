@@ -20,6 +20,8 @@ Words: exact / within-rounding / MISMATCH. A row with no independent
 computation is reported as source-only.
 
 Usage: python3 -I -B docs/analysis/b5/opus_coldreview_rl52_check.py [--seed N] [--sample K]
+Add --repo-only to check the frozen reviewed ledger and residual precision
+without opening custody or rerunning source/recompute checks.
 """
 import argparse
 import csv
@@ -29,6 +31,7 @@ import json
 import math
 import random
 import re
+import subprocess
 import sys
 from collections import Counter
 from pathlib import Path
@@ -50,6 +53,7 @@ FILES = {
                'db6d525129f90ef24bb46f83ab5e66283424970c743f35d322c8961f9b683e2e'),
 }
 LEDGER = Path(__file__).resolve().parent / 'rederivation.tsv'
+REVIEWED_COMMIT = 'a1f916e9b2ef645e2768ff916a7ffafcacedccb4'
 
 
 def sha(path):
@@ -661,11 +665,31 @@ def residual_sig_ok(s):
     return len(digits) <= 2
 
 
+def repository_check():
+    """Verify the reviewed bytes; this does not replay the custody review."""
+    raw = LEDGER.read_bytes()
+    frozen = subprocess.run(['git', 'show', f'{REVIEWED_COMMIT}:docs/analysis/b5/rederivation.tsv'],
+                            cwd=LEDGER.parents[3], check=True, capture_output=True).stdout
+    if raw != frozen:
+        raise ValueError('ledger differs from frozen Opus-reviewed bytes')
+    rows = list(csv.DictReader(raw.decode('utf-8').splitlines(), delimiter='\t'))
+    bad_residuals = [n for n, row in enumerate(rows, 2) if n >= 540 and not residual_sig_ok(row['difference'])]
+    if bad_residuals:
+        raise ValueError(f'extension residuals exceed two significant figures: {bad_residuals}')
+    print(json.dumps({'mode':'repository-only; no custody source/recompute checks rerun',
+                      'scope':'full 1419-row reviewed ledger; extension residual precision',
+                      'reviewed_bytes_identical':True, 'opened_custody':[]}, sort_keys=True))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--seed', type=int, default=20261111)
     ap.add_argument('--sample', type=int, default=40)
+    ap.add_argument('--repo-only', action='store_true', help='check frozen reviewed bytes; never open custody')
     a = ap.parse_args()
+    if a.repo_only:
+        repository_check()
+        return
     before = {k: sha(ROOT + v[0]) for k, v in FILES.items()}
     assert all(before[k] == FILES[k][1] for k in FILES), 'pin drift before'
     src = {k: load(k) for k in FILES}

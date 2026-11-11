@@ -1,5 +1,12 @@
 # Block 5 independent reader: RL-41/RL-42 print authority
 
+**2026-11-11 RL-52 round 3:** the Opus cold review is
+[ADMIT-WITH-FIXES](../../run_reports/2026-11-11-p1-b5-ledger-ext-opus-coldreview.md).
+F1–F4 are addressed in prose and checker code; **no ledger row changed**.
+The new print-authority commit is recorded in the round-3 section below.
+The second fill must apply the row-pairing instruction for rows 647–651 and
+1064–1065. F5's additional session scope remains the lead's decision.
+
 **2026-11-11 RL-52 round 2:** the lead clarified access to exact hash-pinned
 descendants, and 618 further rows complete this reader's extension. The ledger
 now has **1,419 rows**. Every previously committed row remains byte-identical:
@@ -736,7 +743,7 @@ the pinned record.
 
 The four cross-session words are computed from `abs(G-F) <= hypot(h_G,h_F)` and
 checked against DISC's boolean and sentence. This gives three **agree**, one
-**differ**; the latter is 8B prefill. The original unchanged physical rows 169–172
+**differ**; the latter is 8B decode. The original unchanged physical rows 169–172
 are replayed as part of this check. No agree/differ word is a recorded judgment.
 
 B's first kind is the stratified mean of clock bounds, the second is zero
@@ -753,6 +760,13 @@ remains independently hand-checked and **uncompared**. A fill must state the
 registered refusal beside that numeric line; it must not imply a registered
 numeric comparison. The refusal/status rows source metadata exactly; this
 reader does not reproduce the pipeline's provenance failure.
+
+**Second-fill instruction (Opus F4):** physical rows **647–651** retain their
+historical bare `print` placement and pending-source note. Print those rows
+only paired with the registered refusal in rows **1064–1065**, labelled
+**"recompute only; not compared"**. The row-level placement alone does not
+license an unqualified numeric load line. This instruction is for the second
+fill; the paper and every ledger row remain unchanged in round 3.
 
 Arm probe readings/verdicts, assist flags, harvest stage flags and attempt
 verdict/cause leaves remain attributed `recorded-judgment` inputs. Stage rises,
@@ -777,3 +791,30 @@ The sole MISMATCH is unchanged physical row **249**, the ruled RL-39
 "four different causes" wording erratum. No outside-source row remains for
 this assignment. This is the Sol reader's completed extension, not the Opus
 cold review or the lead's final acceptance/print licence.
+
+### Round 3 (Opus F1–F4; repo-only)
+
+The XWIN **differ** cell is **8B decode**; round-2 prose above and the run
+report are corrected. Physical rows 647–651 remain immutable and are
+**recompute-only** in the second fill: pair them with refusal rows 1064–1065
+and label **"recompute only; not compared"** as instructed above.
+
+The full 1,419-row ledger remains SHA-256
+`5546bfd273fee3fc1f5277fed6d8ea8492f6ee02465541e10ba00a4363026008`.
+`docs/paper/paper1/fill_check_b5.py` pins that complete table and separately
+requires the header plus original 538 rows to equal the bytes at
+`0b8763f0a8291bfa5d47fdc18aa64ef3aa33ec1b` (SHA-256 `0462f814…b84343`).
+Tests reject independent perturbations of every ledger printed-value cell
+and every row value cited by the existing first fill.
+
+All five Python checkers in this directory support `--repo-only`. Round 1
+checks physical rows 540–802 and the original prefix; its custody replay is
+also scoped to that range. Round 2 checks the entire frozen ledger. The Opus
+RL-52 checker independently compares the reviewed bytes and extension
+residual precision. These modes check repository bytes and serialization;
+they do **not** rerun custody arithmetic or source comparisons. Custody modes
+require separate authority and were not run in round 3.
+
+The round-3 [run report](../../run_reports/2026-11-11-p1-b5-ledger-ext.md#round-3--opus-cold-review-f1f4-repo-only)
+records the commit, verification and the base branch's pre-first-fill paper
+limitation. The paper was not edited.

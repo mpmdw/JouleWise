@@ -281,7 +281,7 @@ producer's numerical code is imported or used for arithmetic.
   run; no such fields are invented.
 - **Cross-session words:** the registered `abs(G-F) <= hypot(h_G,h_F)` rule
   reproduces DISC's four booleans and sentences: three agree, one differ (8B
-  prefill). Original physical rows 169–172 are checked in the round-1 replay.
+  decode). Original physical rows 169–172 are checked in the round-1 replay.
   These are computed words, never recorded judgments.
 - **NEG-8:** both families are hand-checked from member values, including the
   idle-subtracted rail request deltas in RC's whole-machine member records.
@@ -381,3 +381,94 @@ event log, and adjudicates. Then the second fill can cite the accepted new
 authority. No new research ruling is requested by this reader; the recorded
 limits and registered refusal above must remain visible to the reviewer/fill.
 Local commits only; no push, PR, merge or publication was attempted.
+
+## Round 3 — Opus cold review F1–F4 (repo-only)
+
+2026-11-11 · branch `analysis/2026-11-11-b5-ledger-ext`, starting clean at
+the requested base `a1f916e9b2ef645e2768ff916a7ffafcacedccb4`.
+Read the Opus cold review first. This round grants **no custody access**;
+the prior round's access exceptions are historical and were not exercised.
+The explicit brief overrides the normal coordination-file close-out: no
+kernel registration or edit to `RUN_STATE.md`, `TASK_QUEUE.md`,
+`docs/process/state_kernel.json` or `tests/test_gen_state.py` was made.
+
+### Findings addressed
+
+| Finding | Change |
+|---|---|
+| F1 | Corrected both round-2 prose references from 8B prefill to **8B decode** for the sole XWIN differ cell. No numeric or row change. |
+| F2 | Brought `fill_check_b5.py` from the cached local `origin/main` blob (absent at the task base), pinned the full 1,419-row hash, and separately compared the header/original 538 rows byte-for-byte against `0b8763f0a`. Moved ledger loading into `main()` so imports do not read the ledger or Git tables. |
+| F3 | Scoped the round-1 replay comparison to physical rows 540–802. Added repo-only modes to round 1, round 2 and the RL-52 Opus checker; the two earlier checkers already had them. All five repo-only commands exit 0. |
+| F4 | Recorded the second-fill obligation in `REDERIVATION.md`: bare-print rows 647–651 must be paired with refusal rows 1064–1065 and labelled **"recompute only; not compared"**. Ledger rows and paper remain unchanged. |
+
+The ledger is unchanged from the Opus-reviewed base and round-2 table commit
+`87a698c0f90aec5c037ed38ced586855be1bdbfa`: SHA-256
+`5546bfd273fee3fc1f5277fed6d8ea8492f6ee02465541e10ba00a4363026008`.
+The original prefix remains SHA-256
+`0462f8144388e758ec1461452828309c4968ac39d2f986ef4a15175d07b84343`.
+The round-1 801-row prefix is also unchanged. The sole historical MISMATCH
+is still row 249 (RL-39); this round introduces none.
+
+### Verification
+
+All commands are sequential and repository-only. No full suite or analysis
+pipeline was run. The named unittest module took seconds, below the
+20-minute total test-time limit; no MLX/native-hardware test is needed for
+these stdlib-only changes.
+
+| Command/check | Result |
+|---|---|
+| `python3.13 -B -m unittest tests.b5_analysis.test_hand_check_phase2` | Baseline: 37 passed (0.636 s). Final: 48 passed (5.926 s). Eleven added tests in the existing module; no new test module or timing-file edit. |
+| `python3.13 -I -B docs/analysis/b5/hand_check_phase2.py --repo-only` | Exit 0; original 538 rows and hand table match. |
+| `python3.13 -I -B docs/analysis/b5/hand_check_rl52.py --repo-only` | Exit 0; round-1 rows/prefix match. Synthetic native-replay serialization test accepts the later append without opening custody. |
+| `python3.13 -I -B docs/analysis/b5/hand_check_rl52_round2.py --repo-only` | Exit 0; full ledger and both prefixes match frozen Git authorities. |
+| `python3.13 -I -B docs/analysis/b5/opus_coldreview_check.py --repo-only` | Exit 0; historical original-row review/hand table checks pass. |
+| `python3.13 -I -B docs/analysis/b5/opus_coldreview_rl52_check.py --repo-only` | Exit 0; reviewed full ledger bytes and extension residual precision match. No source/recompute review rerun. |
+| `fill_check_b5.py` against the admitted first fill at `e5fd296715f21c7c3792e4f9743b7494b07813ec` (test patches only its paper input) | Exit 0; all 28 sites, 111 cited rows, 69 filled ids, branch checks and full/prefix authority gates pass against the unchanged extended working-tree ledger. |
+| `python3.13 -I -B docs/paper/paper1/fill_check_b5.py` | Exit 1; 123 inherited pre-first-fill paper failures, zero authority/prefix failures. See the pending ruling below; this failure is not presented as a passing working-tree fill gate. |
+| Perturbation proof | Every one of 1,419 ledger `printed_value` cells perturbed independently: rejected by the full hash gate. All 111 cited row values perturbed independently in the pinned first-fill paper fixture: rejected by rendered-site checks. A changed original prefix is rejected even when the full hash pin is overridden in the test to match that mutation. Production files never mutated. |
+| Protected-byte audit / in-memory `compile()` | Ten protected files byte-identical to the requested base; original and round-1 prefixes match their Git authorities. All five changed Python files compile without writing bytecode. |
+| `git diff --check` | Passed. |
+
+### Base-branch paper limitation / pending ruling
+
+The requested base predates the first fill. `fill_check_b5.py` did not exist
+here, and this branch's `paper1.md` is still the pre-first-fill text. Before
+repinning, a normal checker invocation exited 1 with **124** failures: one
+stale ledger hash and 123 pre-existing paper/placeholder/branch failures.
+The new ledger pin and prefix checks pass; the first-fill fixture test also
+passes the complete checker. This does not imply the working-tree paper has
+been filled. No paper bytes were changed to make the check pass.
+
+**Pending input:** whether to add a `--paper-ref` option and run against the
+pinned existing first fill (recommended, preserving this paper), or bring
+the existing first fill from cached `origin/main` into this branch. The
+question was sent while independent fixes and tests continued. No network,
+merge or paper edit is authorized by an unanswered question.
+
+### Protected boundaries and handoff
+
+Changed files: `docs/analysis/b5/REDERIVATION.md`,
+`docs/analysis/b5/hand_check_rl52.py`,
+`docs/analysis/b5/hand_check_rl52_round2.py`,
+`docs/analysis/b5/opus_coldreview_rl52_check.py`,
+`docs/paper/paper1/fill_check_b5.py`,
+`tests/b5_analysis/test_hand_check_phase2.py`, and this report.
+
+No ledger, RESULTS, source manifest, hand table, paper, coordination-state,
+timing-file or measured-evidence byte changed. No outside-workspace user
+path, real restricted/custody/archive path, sealed output or model weight
+was opened or inventoried. Git used only local objects (including the
+permitted shared object store). No network, model download, hardware
+measurement, process census/control, full suite, push or publication.
+The long-running blinded job was not inspected or touched.
+
+F5 is outside this round: session battery counts/GAMMA scope remain the
+lead's call. The lead still owns final second-fill acceptance and any
+scope ruling. Repo-only equality verifies preservation of the reviewed
+bytes, not fresh live/custody validation.
+
+**Next exact step:** resolve the paper-input question above; then run the
+fill checker using that explicitly selected paper input. The second fill
+must preserve F4's refusal/recompute-only pairing. No further custody or
+research ruling is needed for the implemented F1–F4 fixes themselves.

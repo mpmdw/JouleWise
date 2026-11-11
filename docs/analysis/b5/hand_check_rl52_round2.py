@@ -4,6 +4,7 @@
 Requires the round-2 authority for exact hash-pinned descendants of the two
 RL-38 roots. No analysis/recompute imports, directory inventories, reference
 path following, raw-stream integration, custody writes or network.
+Use --repo-only to check the frozen full ledger without opening custody.
 """
 from __future__ import annotations
 
@@ -22,6 +23,7 @@ import subprocess
 HERE = Path(__file__).absolute().parent
 REPO = HERE.parents[2]
 ROUND1 = 'b9ea4cd111be1c6faae4f4a990ed1b1121e711da'
+ROUND2 = '87a698c0f90aec5c037ed38ced586855be1bdbfa'
 spec = importlib.util.spec_from_file_location('rl52_round1_helpers', HERE/'hand_check_rl52.py')
 e = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(e)
@@ -551,10 +553,28 @@ def append_only(current, prefix, rows, fields):
     return result
 
 
+def repository_check():
+    current = (HERE/'rederivation.tsv').read_bytes()
+    e.check_round1_bytes(current)
+    frozen = subprocess.run(['git', 'show', f'{ROUND2}:docs/analysis/b5/rederivation.tsv'],
+                            cwd=REPO, check=True, capture_output=True).stdout
+    if current != frozen:
+        raise ValueError('round-2 ledger differs from frozen 1419-row authority; refuse')
+    print(json.dumps({'mode':'repository-only; no custody arithmetic rerun',
+                      'scope':'full 1419-row ledger including both unchanged prefixes',
+                      'full_ledger_byte_identical':True, 'opened_custody':[]}, sort_keys=True))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--write',action='store_true')
+    parser.add_argument('--repo-only',action='store_true',help='check frozen full ledger; never open custody')
     args = parser.parse_args()
+    if args.repo_only:
+        if args.write:
+            parser.error('--repo-only cannot be combined with --write')
+        repository_check()
+        return
     prefix = frozen_bytes()
     target = HERE/'rederivation.tsv'
     current = target.read_bytes()

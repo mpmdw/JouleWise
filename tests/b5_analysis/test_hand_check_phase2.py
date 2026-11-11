@@ -7,6 +7,7 @@ from decimal import localcontext
 import io
 import math
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -175,6 +176,138 @@ class PrintAuthorityTests(unittest.TestCase):
         rows[0]['match'] = 'MISMATCH'
         with self.assertRaisesRegex(ValueError, 'STOP: RL-42 counts differ'):
             reader_module.apply_print_rulings(rows)
+
+
+class Round3RepositoryGateTests(unittest.TestCase):
+    @staticmethod
+    def load_script(name):
+        path = SCRIPT.with_name(name) if name != 'fill_check_b5.py' else SCRIPT.parents[2]/'paper/paper1'/name
+        spec = importlib.util.spec_from_file_location('round3_' + path.stem, path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def test_round1_repository_mode_never_constructs_custody_reader(self):
+        with patch.object(extension.ReleasedReader, '__init__', side_effect=AssertionError('custody reader constructed')):
+            with patch('sys.argv', [str(extension.__file__), '--repo-only']), redirect_stdout(io.StringIO()) as output:
+                extension.main()
+        self.assertIn('"round1_byte_identical": true', output.getvalue())
+
+    def test_round2_repository_mode_never_constructs_custody_reader(self):
+        with patch.object(round2.ReleasedReader, '__init__', side_effect=AssertionError('custody reader constructed')):
+            with patch('sys.argv', [str(round2.__file__), '--repo-only']), redirect_stdout(io.StringIO()) as output:
+                round2.main()
+        self.assertIn('"full_ledger_byte_identical": true', output.getvalue())
+
+    def test_opus_extension_repository_mode_never_reads_custody(self):
+        opus = self.load_script('opus_coldreview_rl52_check.py')
+        with patch.object(opus, 'sha', side_effect=AssertionError('custody hash called')):
+            with patch.object(opus, 'load', side_effect=AssertionError('custody load called')):
+                with patch.object(opus, 'compute', side_effect=AssertionError('custody compute called')):
+                    with patch('sys.argv', [str(opus.__file__), '--repo-only']), redirect_stdout(io.StringIO()) as output:
+                        opus.main()
+        self.assertIn('"reviewed_bytes_identical": true', output.getvalue())
+
+    def test_round1_native_replay_accepts_later_rows_without_changing_its_scope(self):
+        # Replay serialization using frozen repo rows as stand-ins for custody
+        # arithmetic. This tests the F3 comparison, not real recomputation.
+        rows = list(csv.DictReader(io.StringIO(extension.round1_bytes().decode()), delimiter='\t'))[538:]
+        with patch.object(extension, 'ReleasedReader') as reader:
+            reader.return_value.read.return_value = {}
+            reader.return_value.finish.return_value = {}
+            with patch.object(extension, 'append_rows', return_value=rows):
+                with patch('sys.argv', [str(extension.__file__)]), redirect_stdout(io.StringIO()):
+                    extension.main()
+
+    def test_round1_rejects_changed_original_or_round1_rows(self):
+        raw = SCRIPT.with_name('rederivation.tsv').read_bytes()
+        for index in (1, 539, 801):
+            lines = raw.splitlines(keepends=True)
+            cells = lines[index].split(b'\t')
+            cells[0] += b'X'
+            lines[index] = b'\t'.join(cells)
+            with self.subTest(physical_row=index+1), self.assertRaisesRegex(ValueError, 'differ'):
+                extension.check_round1_bytes(b''.join(lines))
+        self.assertEqual(extension.check_round1_bytes(raw + b'later append\n'), extension.round1_bytes())
+
+    def test_full_ledger_repository_modes_reject_changed_round2_row(self):
+        raw = SCRIPT.with_name('rederivation.tsv').read_bytes()
+        changed = raw + b'unreviewed append\n'
+        opus = self.load_script('opus_coldreview_rl52_check.py')
+        for module in (round2, opus):
+            with self.subTest(checker=module.__name__), patch.object(Path, 'read_bytes', return_value=changed):
+                with self.assertRaisesRegex(ValueError, 'differ'):
+                    module.repository_check()
+
+    def test_repo_only_write_combination_is_rejected_before_custody(self):
+        for module in (extension, round2):
+            with self.subTest(checker=module.__name__):
+                with patch.object(module.ReleasedReader, '__init__', side_effect=AssertionError('custody reader constructed')):
+                    with patch('sys.argv', [str(module.__file__), '--repo-only', '--write']), redirect_stdout(io.StringIO()):
+                        with patch('sys.stderr', io.StringIO()), self.assertRaises(SystemExit) as stopped:
+                            module.main()
+                        self.assertEqual(stopped.exception.code, 2)
+
+    def test_fill_gate_checks_full_ledger_and_original_prefix(self):
+        fill = self.load_script('fill_check_b5.py')
+        rows = fill.load_ledger()
+        self.assertEqual(len(rows), 1419)
+        self.assertEqual(fill.FAILURES, [])
+        raw = fill.LEDGER.read_bytes()
+        original = extension.base_bytes()
+        # Bypass the full hash pin to prove the original byte check is a
+        # separate gate, not an incidental consequence of the whole-file hash.
+        changed = raw.replace(b'\n', b' \n', 1)
+        with patch.object(fill, 'AUTHORITY_SHA256', hashlib.sha256(changed).hexdigest()):
+            fill.check_ledger_bytes(changed, original)
+        self.assertTrue(any('original 538 rows' in f for f in fill.FAILURES))
+
+    def test_fill_gate_rejects_perturbation_of_every_printed_value(self):
+        fill = self.load_script('fill_check_b5.py')
+        raw = fill.LEDGER.read_bytes()
+        original = extension.base_bytes()
+        lines = raw.splitlines(keepends=True)
+        column = lines[0].decode().rstrip('\n').split('\t').index('printed_value')
+        for number in range(1, len(lines)):
+            cells = lines[number].split(b'\t')
+            cells[column] += b'X'
+            changed = b''.join(lines[:number]) + b'\t'.join(cells) + b''.join(lines[number+1:])
+            fill.FAILURES.clear()
+            fill.check_ledger_bytes(changed, original)
+            with self.subTest(physical_row=number+1):
+                self.assertTrue(any('extended print authority' in f for f in fill.FAILURES))
+
+    @staticmethod
+    def first_fill_text():
+        # The task base predates the first fill. Read its admitted, immutable
+        # Git text as a fixture; never replace the working-tree paper.
+        return subprocess.run(['git', 'show',
+                               'e5fd296715f21c7c3792e4f9743b7494b07813ec:docs/paper/paper1/paper1.md'],
+                              cwd=SCRIPT.parents[3], check=True, capture_output=True, text=True).stdout
+
+    def test_fill_gate_passes_existing_first_fill_with_extended_ledger(self):
+        fill = self.load_script('fill_check_b5.py')
+        with patch.object(fill, 'PAPER') as paper, redirect_stdout(io.StringIO()) as output:
+            paper.read_text.return_value = self.first_fill_text()
+            self.assertEqual(fill.main(), 0)
+        self.assertIn('PASS: every filled Block 5 value', output.getvalue())
+
+    def test_fill_gate_rejects_each_cited_paper_value_perturbation(self):
+        fill = self.load_script('fill_check_b5.py')
+        fill.L = fill.load_ledger()
+        paper = fill.norm(self.first_fill_text())
+        cited = {int(m.group(1)) for _, _, template, _, _ in fill.SITES for m in fill.PH.finditer(template)}
+        for number in sorted(cited):
+            template = next(t for _, _, t, _, _ in fill.SITES
+                            if any(int(m.group(1)) == number for m in fill.PH.finditer(t)))
+            rendered = fill.PH.sub(lambda m: fill.render_value(int(m.group(1)), m.group(2)), template)
+            changed = fill.PH.sub(lambda m: fill.render_value(int(m.group(1)), m.group(2)) +
+                                 ('X' if int(m.group(1)) == number else ''), template)
+            self.assertIn(fill.norm(rendered), paper)
+            fill.FAILURES.clear()
+            fill.check_sites(paper.replace(fill.norm(rendered), fill.norm(changed), 1))
+            with self.subTest(physical_row=number):
+                self.assertTrue(any('ledger-rendered text' in f for f in fill.FAILURES))
 
 
 class LedgerExtensionTests(unittest.TestCase):
