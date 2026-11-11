@@ -72,14 +72,15 @@ and synthetic TMPDIR as documented in g1:
 - `python3 -B scripts/repin.py --write registry`: completed; `--check`: PASS, all 16 families current. No protected number was repinned from changed bytes.
 - Final source-reference audits for g1/g2/g4: zero live or unqualified
   narrative hits. Exact final deletion set equals the three inventories
-  (410 paths); all blob-preservation checks passed.
-- Final diff: 410 deletions, 43 additions, 16 edited original paths; protected
+  (409 paths after the F5 synthesis restoration); all blob-preservation checks passed.
+- Prune diff after F5: 409 deletions, 43 additions, 16 edited original paths; protected
   coordination/deferred source and both retained generators have no diff.
   Frozen `run_campaign.py`, `whole_window.py` and B5 analysis source also
   compare byte-identically. Zero surviving resolved protected registry
   bindings were lost (compared by holder/family/target, ignoring moved line
   coordinates). `dcaf2ca2c` is an ancestor.
-- `git diff --check`: PASS. The inspected tracked-file count is 4,761.
+- `git diff --check`: PASS. The tracked-file count after F5 is 4,762, before
+  adding the cold-review and fixes reports.
 
 Independent source/metadata review by `prune_readers_review` confirmed the
 sole spike/test deletion, both generator KEEP decisions, absence of v4
@@ -96,15 +97,16 @@ registry regeneration/checks totaled under ten minutes.
 
 | Group | Commit / status | Deleted files |
 |---|---|---:|
-| g1 traces/reports | `98bc99fd4` plus its ops-plan merge parent | 112 |
+| g1 traces/reports | `98bc99fd4` plus its ops-plan merge parent; F5 synthesis restoration | 111 |
 | g2 campaigns | `a7bacd7b1` | 297 |
 | g3 CA-42 | `30098da9d`, KEEP / owning ALIGN migration required | 0 |
 | g4 spikes | this merge commit | 1 |
 
-The prepared four-branch stack removes **410** original files. It adds 33
+The prepared four-branch stack, with F5 applied, removes **409** original files. It adds 33
 plan/tool/evidence files via the explicitly requested ops-branch merge and ten
 inventory/report/helper/pointer files. Expected tracked main count if this
-safe stack lands: **4,761**, from **5,128** (net −367). This count includes g3's
+safe stack lands: **4,762**, from **5,128** (net −366), before adding the
+cold-review and fixes reports. This count includes g3's
 KEEP disposition; it is not a claim that the CA-42 retirement is complete.
 A future approved g3 migration needs its own revised count and verification.
 

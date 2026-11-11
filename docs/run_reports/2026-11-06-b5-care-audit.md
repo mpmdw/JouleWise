@@ -3,7 +3,7 @@
 2026-11-06. Branch `lane/2026-11-06-b5-care-audit`, from `b5/analysis-r2` (`929fc65c9`). Reading-only audit. No
 real data, restricted custody or night archive was opened. One tiny timing probe ran on a committed synthetic
 fixture at `nice -n 19 taskpolicy -b` (section 2.3). Timing evidence comes from `lane/2026-11-06-b5-under-90` at
-`505fd40a7` (report `docs/run_reports/2026-11-06-b5-under-90.md`, called **U90** below, and its evidence folder).
+`505fd40a7` (report `docs/run_reports/2026-11-06-b5-under-90.md`, called **U90** below, and evidence tree `archive/process-traces-before-release-prune-2026-11-08:docs/run_reports/2026-11-06-b5-under-90`).
 
 **Who rules.** The coordinator relayed that Ed has handed rulings on the preregistered rules to the block-5 lead.
 So "who must rule" below is **lead (deviation log)** for anything that touches the preregistration, sealed record or
@@ -54,7 +54,7 @@ Column (a) uses these short names:
 
 Column (c) costs are per block per run (one dry run), real-data basis r2 dry-j (U90 §5: 7 workers, nice 5, machine
 shared with dry-i). **M** means measured; **E** means an estimate, made by applying a synthetic profile share (U90 §3,
-`part5-head-stacks/detail.txt`, `cprofile-on-steps0-3b/report.txt`) to the real step wall.
+`archive/process-traces-before-release-prune-2026-11-08:docs/run_reports/2026-11-06-b5-under-90/part5-head-stacks/detail.txt`, `archive/process-traces-before-release-prune-2026-11-08:docs/run_reports/2026-11-06-b5-under-90/cprofile-on-steps0-3b/report.txt`) to the real step wall.
 
 Column (d) says what to do and whether any reported number would change. **"No number"** means that registered
 numbers, decisions and refusal positions stay equal (D-188 standard, DL:12244), unless the cell says otherwise.
@@ -171,7 +171,7 @@ Kernel CPU, method:
   | 10-process member pool, 4 P + 6 E cores (about 160 MB/s aggregate) | **about 4-6 min parse, about 5-8 min end to end** with JSON and I/O |
   | Same run on synthetic full size, for scale | 9 s measured |
 - **Consistency check against r2.** Real r2 step 1 averages about 24 worker-s per bundle under load
-  (901 s × 7 / 262). Synthetic is 2.3 s per bundle (`part5-head-stacks/detail.txt`). That ratio fits real traces
+  (901 s × 7 / 262). Synthetic is 2.3 s per bundle (`archive/process-traces-before-release-prune-2026-11-08:docs/run_reports/2026-11-06-b5-under-90/part5-head-stacks/detail.txt`). That ratio fits real traces
   about 20× the fixture's size, parsed several times per bundle in r2.
 
 ### 2.4 Block 5: independent replication of r2

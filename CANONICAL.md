@@ -93,7 +93,7 @@ Held, not canonical yet: the condition-waits lane (`align/2026-11-08-condition-w
 
 | Job | Canonical | Disposition |
 |---|---|---|
-| Mixed and sentinel suite manifests | `scripts/gen_jw_mixed.py` over `joulewise/gensuite.py` | KEEP: current producer; tokenizer-manifest helpers have live test consumers |
+| Mixed and sentinel suite manifests | `scripts/gen_jw_mixed.py` over `joulewise/gensuite/` | KEEP: current producer; tokenizer-manifest helpers have live test consumers |
 | Authenticated scored-v6 import | `scripts/gen_gsm8k_scored.py` over `joulewise/benchmark_import.py` | KEEP: canonical producer; scored-lane retirement is deferred |
 
 ## Repository operations
@@ -110,7 +110,7 @@ Held, not canonical yet: the condition-waits lane (`align/2026-11-08-condition-w
 
 | Retired material | Current replacement / verdict | Retaining ref |
 |---|---|---|
-| Superseded profiling logs, synthetic E2E reports and legacy portfolio synthesis listed in `docs/ops/FILE-PRUNE-G1.tsv` | Current tools above; reader and authority records remain in the checkout | `archive/process-traces-before-release-prune-2026-11-08:<path>` |
+| Superseded profiling logs and synthetic E2E reports listed as DELETE in `docs/ops/FILE-PRUNE-G1.tsv` | Current tools above; reader and authority records remain in the checkout | `archive/process-traces-before-release-prune-2026-11-08:<path>` |
 | Historical P2-015 generated campaign, generator/spec/backup and six generator-only assertions | Current v5 packs; calibration plan, its digest sidecar and the live NEG8 test config remain. Historical manifest assertions use archived blobs | `archive/process-traces-before-release-prune-2026-11-08:configs/campaigns/p2_015_floors/` |
 | `scripts/axi_sb_static_batch_spike.py` | Already retired: isolated AXI experiment, no current entry point (#654) | `archive/pre-prune-2026-11-06:scripts/axi_sb_static_batch_spike.py` |
 | `scripts/axi_sc_spec_decode_spike.py` | Already retired: isolated AXI experiment, no current entry point (#654) | `archive/pre-prune-2026-11-06:scripts/axi_sc_spec_decode_spike.py` |
