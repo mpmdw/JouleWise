@@ -41,6 +41,7 @@ class RefusalSummaryTests(r2.DriverCase):
             self.assertEqual(h.run(), h.driver.EXIT_GO)
         self.assert_null_summary(h)
         h.driver.run_courier.assert_called_once()
+        self.assertEqual(json.loads((h.night / 'courier.json').read_text())['attempted'], 1)
 
     def test_broken_summary_cannot_remove_fallback_terminal_record_or_delivery_attempt(self):
         h = self.refused_night()
