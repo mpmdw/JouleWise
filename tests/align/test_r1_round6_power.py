@@ -203,6 +203,7 @@ class V4SessionHighPowerTests(HostStateCase):
         host = FakeArmHost(mode=0, marker=self.marker)
         from tests.align.test_v4_kit import topup
         with patch.object(kit, 'require_w1_ready'), patch.object(kit, 'generate'), \
+                patch.object(session, 'held_window_check', return_value={'ok': True, 'reasons': [], 'synthetic': True}), \
                 patch.object(pilot, 'install', side_effect=installer):
             session.install(root, runner=host, volume_runner=host, obc_off_attested_by='synthetic', **topup(),
                             w1_disk_config=W1DiskGateTests.config(self, self.tmp),
