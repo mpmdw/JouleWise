@@ -71,6 +71,8 @@ def finish(root, denied):
         "serial_pool_byte_proof": proofs, "serial_receipt_sha256": sha(root / "option-c-receipt.json"),
         "pool_receipt_sha256": sha(root / "option-c-pool-receipt.json"),
         "denied_receipt_sha256": sha(denied / "option-c-denied-receipt.json"),
+        "shape_observations_sha256": sha(root / "observations.json"),
+        "full_volume_observations_sha256": sha(root / "full-volume-observations.json"),
         "shapes": sorted(observed), "timing": serial["process_measurement"],
         "time_wrapper_exit": serial["time_wrapper_exit"],
         "denied_timing": denied_receipt["process_measurement"]}

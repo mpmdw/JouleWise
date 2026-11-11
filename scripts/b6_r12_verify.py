@@ -312,8 +312,22 @@ def volume_facts(root, session_id):
                 for kind, times in by_kind.items()}}
     config_path = archive / "sources/night-custody/hazards/monitor/config.json"
     config = json.loads(reader.read(config_path))
+    declaration = root / "fixture-manifests" / (session_id + ".json")
+    compression_log = Path(str(archive) + ".desk/compression.jsonl")
+    native_generation = None
+    if declaration.is_file() and compression_log.is_file():
+        start_ns = declaration.stat().st_mtime_ns
+        end_ns = compression_log.stat().st_mtime_ns
+        if end_ns < start_ns:
+            raise ValueError("native generation timestamps are reversed")
+        native_generation = {"method": "native filesystem mtimes: pre-run declaration through final desk compression log",
+            "start_mtime_ns": start_ns, "end_mtime_ns": end_ns, "wall_s": (end_ns - start_ns) / 1e9,
+            "declaration_sha256": sha(declaration), "compression_log_sha256": sha(compression_log),
+            "primary_stream_duration_s": sum(item["duration_s"] for item in plist),
+            "includes_validation_and_compression": True, "injected_clock": False}
     return {"session_id": session_id, "primary_plists": plist, "meter": meter, "monitor": monitor,
             "registered_monitor_cadence": config["cadence"],
+            "native_generation": native_generation,
             "archive_pin_sha256": hashlib.sha256(json.dumps(reader.record, sort_keys=True).encode()).hexdigest()}
 
 
