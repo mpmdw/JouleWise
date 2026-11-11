@@ -1062,10 +1062,14 @@ class Refusals(Fixture):
 
     def test_duplicate_run_is_idempotent(self):
         self.assertEqual(self.run_offload(), 0)
+        paths = [self.store / "windows/w1-test" / ow.AIR_RECEIPT, self.store / "queue/w1-test.json"]
+        before = {p: (p.read_bytes(), p.stat().st_mtime_ns) for p in paths}
         calls = len(self.transport.calls)
         self.assertEqual(self.run_offload(), 0)
         later = self.transport.calls[calls:]
-        self.assertFalse(any(c.startswith(("put", "verify")) for c in later))
+        self.assertFalse(any(c.startswith("put ") for c in later))
+        self.assertIn("verify w1-test", later)  # idempotent gate also repairs a missing queue entry
+        self.assertEqual({p: (p.read_bytes(), p.stat().st_mtime_ns) for p in paths}, before)
 
     def test_duplicate_window_id_with_different_content(self):
         self.assertEqual(self.run_offload(), 0)

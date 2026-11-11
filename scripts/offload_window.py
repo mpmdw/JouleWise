@@ -28,7 +28,8 @@ Interlock: the magistrate's cool-down lease and shared loop lock (`--lease`, `--
 `--loop-lock`) are used when the magistrate passes them; the LaunchAgent/ps probe always runs
 as well (today it is the only active exclusion).
 
-Exit codes: 0 ok, 2 refused, 3 integrity mismatch (fail closed), 4 deadline (resumable),
+Exit codes: 0 ok (run: verified on Air; see held_reason for release holds), 1 unexpected error,
+2 refused, 3 integrity mismatch (fail closed), 4 deadline (resumable),
 5 transport or Air store unavailable (resumable), 6 local I/O error.
 """
 from __future__ import annotations
@@ -1786,8 +1787,13 @@ def _supervised(args, kind, action, *, runner, state_probe, now, mono, lease, al
             rc, outcome = action(off, span, state_root, deadline)
     except Refusal as exc:
         rc, outcome = exc.code, {"outcome": type(exc).__name__, "reason": str(exc)}
+        if str(exc) in ("no_air_receipt", "second_copy_not_confirmed"):
+            outcome["held_reason"] = str(exc)
     except OSError as exc:  # e.g. ENOSPC; resumable, but never silent
         rc, outcome = 6, {"outcome": "io_error", "reason": f"{type(exc).__name__}:{exc}"}
+    except Exception as exc:
+        rc, outcome = 1, {"outcome": "unexpected_error", "reason": f"{type(exc).__name__}:{exc}"}
+        raise
     finally:
         span.update(ended_epoch_s=now(), ended_monotonic_ns=time.monotonic_ns(), rc=rc, **outcome,
                     ended_before_deadline=now() <= deadline)
@@ -1795,8 +1801,10 @@ def _supervised(args, kind, action, *, runner, state_probe, now, mono, lease, al
             (off.dir / "timing").mkdir(exist_ok=True)
             write_atomic(off.dir / "timing" / f"{kind}-span.json", canonical(span))
             off.journal({"event": f"{kind}_end", "rc": rc, **outcome})
-        write_atomic(state_root / ACTIVITY_SPAN, canonical({**activity, "ended_epoch_s": span["ended_epoch_s"],
-                                                             "rc": rc}))
+        activity_end = {**activity, "ended_epoch_s": span["ended_epoch_s"], "rc": rc}
+        if outcome.get("held_reason"):
+            activity_end["held_reason"] = outcome["held_reason"]
+        write_atomic(state_root / ACTIVITY_SPAN, canonical(activity_end))
         if lease is not None:
             lease.close()
         lock.__exit__(None, None, None)
@@ -1820,10 +1828,15 @@ def _run_stages(args, off, state_root, span, runner, now, mono, deadline, state_
     harvest_pack = getattr(args, "harvest_pack", None)
     done = {"packed": manifest_path.exists() or harvest_pack is not None,
             "verified": (off.dir / "receipt-air.json").exists()}
+    stale_air_receipt = False
     compressed = None
     if manifest_path.exists():
         sealed_manifest = read_json(manifest_path)
         raw_bytes, compressed = sealed_manifest["raw_bytes"], sealed_manifest["compressed_bytes"]
+        if done["verified"]:
+            status = off.call(f"stat {off.window_id}")
+            done["verified"] = status.get("receipt_manifest_sha256") == sha_bytes(manifest_path.read_bytes())
+            stale_air_receipt = status.get("receipt_manifest_sha256", False) is None
     else:
         raw_bytes = _raw_size(args)
         if harvest_pack is not None:
@@ -1849,8 +1862,13 @@ def _run_stages(args, off, state_root, span, runner, now, mono, deadline, state_
             codec=choose_codec(args.codec, args.level, args.threads), part_bytes=args.part_mib << 20,
             duplicate_roots=args.duplicate_root, hash_on_mbp=args.hash_on_mbp, terminal=args.terminal))))
     if not done["verified"]:
+        if stale_air_receipt:
+            # Only the Air's explicit absence invalidates this local retry marker.
+            # Clear it before push so an interrupted recovery can resume via write_once.
+            (off.dir / "receipt-air.json").unlink()
         span["stages"].append(_stage("push", now, lambda: off.push(manifest)))
-        span["stages"].append(_stage("verify", now, lambda: off.verify(manifest)))
+    # Even an existing Air receipt may need its second-copy queue entry repaired.
+    span["stages"].append(_stage("verify", now, lambda: off.verify(manifest)))
     held = None
     try:  # the second copy usually lands later; the next run's release_older picks it up
         span["stages"].append(_stage("release", now, lambda: off.release()))
@@ -1861,7 +1879,7 @@ def _run_stages(args, off, state_root, span, runner, now, mono, deadline, state_
     outcome = {"outcome": "verified_on_air", "raw_bytes": manifest["raw_bytes"],
                "compressed_bytes": manifest["compressed_bytes"], "record_format": manifest["record_format"],
                "pack_format": manifest.get("pack_format", "offload_window.v2"),
-               "terminal": manifest["terminal"], "release_held": held, "older": older,
+               "terminal": manifest["terminal"], "release_held": held, "held_reason": held, "older": older,
                "disk_pressure": _pressure(args, state_root)}
     _update_rates(state_root, rates, manifest, span, older_bytes)
     return outcome
@@ -2207,6 +2225,10 @@ class Gate:
             if receipt_path.exists():
                 receipt = read_json(receipt_path)
                 require(receipt["offload_manifest_sha256"] == msha, "window_id_conflict_on_air", Mismatch)
+                queue = self.root / "queue" / (window_id + ".json")
+                if (not os.path.lexists(self.root / "second" / window_id / SECOND_RECEIPT)
+                        and not os.path.lexists(queue)):
+                    write_atomic(queue, canonical({"window_id": window_id, "offload_manifest_sha256": msha}))
                 return receipt
             manifest = json.loads(manifest_raw)
             require(manifest.get("schema") == SCHEMA_MANIFEST and manifest.get("window_id") == window_id,
