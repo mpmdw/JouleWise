@@ -283,7 +283,7 @@ class ComputerUse:
             for line in sections[0].splitlines():
                 fields = line.split()
                 if (len(fields) != 3 or (fields[0] != "-" and not fields[0].isdigit()) or
-                        (fields[1] != "-" and not re.fullmatch(r"-?\d+", fields[1]))):
+                        (fields[1] != "-" and not re.fullmatch(r"-?\d+|\([a-z]+\)", fields[1]))):
                     raise ToolError(f"Cannot verify armed-night state: malformed launchctl row in {domain}")
                 if fields[2].startswith("com.joulewise.night"):
                     raise ArmedError(f"Armed-night refusal: loaded launchd label {fields[2]} in {domain}")

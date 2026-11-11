@@ -178,6 +178,29 @@ class ComputerUseTests(unittest.TestCase):
             self.executor.launch_output = output
             self.assertError(self.computer.call("wait", {"seconds": 0}), "malformed launchctl")
 
+    def test_real_launchctl_print_rows_with_paren_status_parse(self):
+        # Native smoke 2026-11-11 on macOS: `launchctl print gui/<uid>` prints rows such as
+        # "70095   (pe) \tcom.apple.syncdefaultsd"; a parser that rejects "(pe)" fails closed always.
+        domain = f"gui/{cu.os.getuid()}"
+        real = (f"{domain} = {{\n\ttype = login\n\tservices = {{\n"
+                "\t\t   70095   (pe) \tcom.apple.syncdefaultsd\n"
+                "\t\t     686      - \tcom.apple.assistantd\n"
+                "\t\t       0      0 \tcom.apple.DataDetectorsLocalSources\n"
+                "\t}\n}\n")
+        original = self.executor.run
+        current = {"gui": real}
+        def run(argv, *args, **kwargs):
+            if argv[:3] == ["/bin/launchctl", "print", domain]:
+                return current["gui"]
+            return original(argv, *args, **kwargs)
+        self.executor.run = run
+        ok = self.computer.call("wait", {"seconds": 0})
+        self.assertFalse(ok["isError"], ok)
+        current["gui"] = real.replace("com.apple.assistantd", "com.joulewise.night.test")
+        self.assertError(self.computer.call("wait", {"seconds": 0}), "Armed-night refusal")
+        current["gui"] = real.replace("(pe)", "(pe x)")
+        self.assertError(self.computer.call("wait", {"seconds": 0}), "malformed launchctl")
+
     def test_permissions_preflight_armed_never_compiles_or_probes_even_with_warm_cache(self):
         self.executor.labels = ["com.joulewise.night.test"]
         self.marker("1001")
