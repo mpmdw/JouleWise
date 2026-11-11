@@ -540,6 +540,10 @@ This section registers the six pass-2 packs, `bytes-s1-p2` to `bytes-s6-p2`. It 
 
 **7. Before the first pass-2 session.** In order: CI's whole suite on this tree; this section's cold gate (Fable 5.1 judge and Opus 5.5 refuter, blind and executing, both `SEAL: ADMIT-WITH-CORRECTIONS` on `de35f6403`; reports on JouleWise-data `claude/by-p2-reggate-fable` and `claude/by-p2-reggate-opus`; corrections applied in the next commit); the commit of this registration before the first pass-2 t0; and each pass-2 pack's first session smoked by fingerprint (block-6 design §13.1), as in §19. The known-bytes stream test of §19 is unchanged: after pass-1 collection and before stage-1 unblinding.
 
+## 22. Deviations
+
+Dated departures from this registration are logged, one row each and never edited, in [`bytes_deviation_log.md`](bytes_deviation_log.md). The first row is BY-BLIND-1, entered 2026-11-11 before the stage-1 commitment (research lead ruling RL-44).
+
 ## Appendix A. Excluding codes of block 6's flag catalog
 
 From `configs/b6/flag_catalog_b6.json` (SHA-256 `01767fe4e75ed961798f4e6b68cf055a5b3946a474129e93d2b5e7c239a1dd0c`; #573 adds the disclose-only `records.claim_usable_counting_disagreement`; it was `b5bce6c64bbc1d079ecf6fed02bf4c214b76a8f7d279d44eea5984e4a389a42b` at the integration head `d924e7acf`, before the three disclose-only BYTES codes; the global excluding codes are unchanged). Each BYTES pack copies the catalog effects into `flag_effects` and applies the cell-level override below. The global catalog has 269 codes: 41 member exclusions, 19 window exclusions and 209 disclosures; BYTES has 41 member exclusions, 18 session exclusions and 210 disclosures, including `bytes.meter_decode_unavailable`, `bytes.meter_gap`, `bytes.reference_request_unavailable`, `catalog.digest_mismatch` and `clock.step_unmeasured`. Each BYTES pack additionally maps `cell.below_minimum` to DISCLOSE under §6; closed block-6 replication packs keep its EXCLUDE_WINDOW effect. The registered digest is pinned in each BYTES pack and a running mismatch is disclosed by acceptance.

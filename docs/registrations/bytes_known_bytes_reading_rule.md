@@ -56,7 +56,9 @@ These are the records, in order (times PDT):
   SHA-256 `5729d8c7dad4400b533d9939f885037e100fa6fd27e75d812bbe31035c970312`.
 - **2026-11-10 21:01.** Research lead, RL-33 item 5: "The known-bytes outcome was recorded and admitted on
   2026-10-31, before stage 1, and that dated record satisfies the registration's order. Landing the
-  matched-geometry rule and copying the slot fill into registration §1 is clerical".
+  matched-geometry rule and copying the slot fill into registration §1 is clerical". (RL-44 (c) notes that this
+  item spoke of the outcome's admission, not the rule's.)
+- 2026-11-11. Research lead, RL-44: the lead's act recorded above is accepted as this rule's admission. This acceptance is made after the outcome was known. It changes nothing in Part A.
 
 **What the record does not contain.** No line says that this revision was "admitted" before the test ran. Part A's
 status line was never updated. The act that bound the rule is the lead's: the lead disposed both cold passes,

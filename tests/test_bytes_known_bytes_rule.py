@@ -50,6 +50,16 @@ class KnownBytesRuleLanding(unittest.TestCase):
         text = BLINDCHECK.read_text(encoding='utf-8')
         self.assertIn('P1-AUTO-BLINDCHECK', text)
         self.assertIn('RL-7 (g)', text)
+        self.assertIn('## night-results structure probe', text)
+
+    def test_deviation_row_is_logged_and_linked(self):
+        log = (ROOT / 'docs/registrations/bytes_deviation_log.md').read_text(encoding='utf-8')
+        self.assertEqual(log.count('| BY-BLIND-1 | 2026-11-11 |'), 1)
+        self.assertIn('the H1 summary is also stated over the other six held-out models, with the registered '
+                      'family sizes unchanged', log)
+        self.assertIn('(bytes_deviation_log.md)', REGISTRATION.read_text(encoding='utf-8'))
+        self.assertIn('2026-11-11. Research lead, RL-44: the lead\'s act recorded above is accepted as this '
+                      'rule\'s admission.', RULE.read_text(encoding='utf-8'))
 
 
 if __name__ == '__main__':

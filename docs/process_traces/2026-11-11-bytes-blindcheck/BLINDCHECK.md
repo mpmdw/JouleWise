@@ -116,18 +116,53 @@ limited to the scans named below. This seat read no energy.
 
 ## Draft text for `P1-AUTO-BLINDCHECK`
 
-> One held-out model's per-request timing was read before the stage-1 commitment. On 2026-10-28, a structural
-> check required by the pass-2 thermal ruling read GPU and CPU frequency and residency during decode for each of
-> the 50 science members of Llama-3.3-70B's pass-1 session, together with each member's decode duration, which
-> was committed to the project record. It read no energy or power field. A day earlier, a thermal diagnosis on the
-> same session read when the OS thermal level rose relative to each request's end, and that reading motivated the
-> pass-2 thermal window. Neither read can change the committed predictions. They are computed from the three
-> fit-set models only, by an estimator whose digest was fixed on 2026-10-24, before the first BYTES session, from
-> a manifest frozen on 2026-10-22. Held-out decode time enters the time hypothesis only as that model's own
-> measured value at stage 2. Each model's approximate decode time was also known before registration, from the
-> design pilot.
+**Ruling.** Research lead RL-44 (2026-11-11, on `audit/2026-11-10-fable`): ADMIT. BYTES keeps its confirmatory
+status. The exposure is logged as deviation BY-BLIND-1 (`docs/registrations/bytes_deviation_log.md`).
+Llama-3.3-70B stays in the registered families and is marked in every table, and the H1 summary is also stated
+over the other six held-out models. This draft carries RL-44's two additions: the timing closure covered analysis
+exports while these were reads of raw session records, and the check covers only the committed record.
 
-(Draft only. The fill belongs to the Paper 1 fill seat and the research lead.)
+> One held-out model's per-request timing was read and published before the stage-1 commitment. The
+> registration's timing closure kept clock times out of analysis exports. These were not exports: an operations
+> agent diagnosing a thermal hazard read the raw session records, which the closure did not cover.
+> - On 2026-10-28, a structural check required by the pass-2 thermal ruling read each of the 50 science members
+>   of Llama-3.3-70B's pass-1 session. It read GPU and CPU frequency and residency during decode, and each
+>   member's decode duration, which it committed to the project record. It read no energy or power field.
+> - A day earlier, a thermal diagnosis on the same session read when the OS thermal level rose relative to each
+>   request's end. That reading motivated the pass-2 thermal window.
+>
+> Separately, the public operational record of every BYTES session carried one timestamp per session stage. From
+> these, the wall time of a held-out stage can be derived coarsely, but no per-member or per-request duration.
+> Whether anyone derived it is not known.
+>
+> Each model's approximate decode time was measured without power in the design pilot and registered before
+> collection. A stage's wall time, which includes loads, waits and cool-downs, tells a reader less than the
+> registration already did.
+>
+> None of this can change the committed predictions. They are computed from the three fit-set models only, by an
+> estimator whose digest was fixed on 2026-10-24, before the first BYTES session, from a manifest frozen on
+> 2026-10-22. Held-out decode time enters the time hypothesis only as that model's own measured value at stage 2.
+> Our check covers the committed project record only. It cannot show that held-out timing was never read by other
+> means.
+
+*Draft limitations sentence for Paper 1 §8.*
+
+> BYTES's blinding was breached once, on timing and not on energy: before the predictions were committed, the
+> decode times of one held-out dense model, Llama-3.3-70B, were read from raw session records and published in the
+> project record, and the public operational records carried per-stage timestamps of every session. The committed
+> predictions could not depend on either. That model is marked in every table, and the
+> held-out summary is also stated without it. Our check of whether held-out timing was read covers only the
+> committed record.
+
+(Draft only. The fill belongs to the Paper 1 fill seat, and the research lead checks it. The order follows RL-45: the
+per-request read of one model, then the per-stage stamps of every session, then the pilot registration.)
+
+## night-results structure probe
+
+RL-44 (b) item 2. The probe was run by the lead and is appended verbatim. This seat did not run it and did not open
+these branches.
+
+> Structure-only probe (lead, 2026-11-11 ~00:40 PST), 14 branches `origin/night-results/r{1,2}-bytes-*` after a fresh fetch, files under docs/process_traces/night-results/<session>/ only, key paths only, no values read. Every branch carries the same operational files: arm_collectors.json, arm_decision.json, censuses.jsonl, chain.exit-census.json, chain.exited/started, courier.*, executed_inventory.json, hazard_result.json, lineage.json, meter_supervision.jsonl, monitor_supervision.jsonl, network_time_off.action.json, result.json, stage_yield.jsonl (plus refusal.json on r1-bytes-s6-p1). **Per-stage clock: YES.** stage_yield.jsonl holds one record per stage (7 per session) with keys {stage_id, role, ordinal, planned, present, succeeded, min_valid, status, rc, counted_at, at.{wall_s, monotonic_ns, monotonic_raw_ns}}. The `at` stamp per stage means differences between consecutive stages give coarse per-stage wall time, including stages that ran held-out models. **Per-member or per-request duration: NO.** No file carries a member-, request- or run-level clock or duration. The other time-like keys are arm, census, courier, supervision and stop-request timestamps (hazard_result.json *.stop.requested.*, lineage/supervision requested.*), plus the executed_inventory taken.* stamp. Consequence for the paper sentence (RL-44 (b)2): the public session records allow per-stage, not per-member, timing of held-out stages.
 
 ## What this seat could not establish
 
@@ -141,7 +176,8 @@ limited to the scans named below. This seat read no energy.
 - **The `night-results/r{1,2}-bytes-*` record branches.** They are committed operational records, including
   `stage_yield.jsonl` for every session. The binding rule for this seat forbids `night-*` paths, so their names
   were listed and their contents were not opened. Whether they carry per-module or per-member timestamps is not
-  established.
+  established. *Answered since by the lead's probe, in the section "night-results structure probe" above: per-stage
+  clocks yes, per-member or per-request durations no.*
 - **Off-repo outputs.** The outputs of the desk harvests and BY-THERM-LINES on the MBP.
 - **The gap between this check and the commitment.** The commitment seat should close it by re-running the
   census from a fresh fetch:
@@ -152,7 +188,10 @@ limited to the scans named below. This seat read no energy.
   python3 -I docs/process_traces/2026-11-11-bytes-blindcheck/tools/duration_scan.py <commit:path for each hit>
   ```
 
-  It should then record any new hit in the commitment commit's message.
+  It should then record any new hit in the commitment commit's message. Until the commitment, no seat opens
+  `M2.md`, the M1 brief (`brief-thermal70-r2.md`), or the `m1/` and `m2-scripts/` files at their old commits
+  (RL-44 (b) item 4). No seat derives stage durations from the `night-results/r{1,2}-bytes-*` branches either
+  (RL-45).
 
 ## This seat's own exposure (disclosed)
 
