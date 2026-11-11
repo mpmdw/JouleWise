@@ -16,6 +16,8 @@ ruling 7 record follows the driver's A-B-A and series settings).
 """
 from __future__ import annotations
 
+from contextlib import nullcontext
+from types import SimpleNamespace
 from copy import deepcopy
 import json
 import math
@@ -196,9 +198,33 @@ class SyntheticBackend:
                                    status_factory=lambda telemetry, clock: self.world.status,
                                    powermode_reader=self.current_powermode)
         self.world.family, self.world.run_id, self.world.turn = family, config_map["run_id"], 0
-        bundle, summary = run_benchmark(BenchmarkConfig.from_mapping(config_map), Path(runs_root), self.clock,
-                                        registry=registry)
-        return Path(bundle), summary
+        from joulewise.align.apple import thermal
+        from joulewise.align.apple.smc_reader import Reader
+        from joulewise.align.apple.thermal_gates import _EpisodeClocks
+        from joulewise.hazards.base import Context
+        from unittest.mock import patch
+        native_sidecar = thermal.Sidecar
+        sidecars = []
+        def sidecar_factory(outputs, policy):
+            obj = native_sidecar(outputs, policy, reader=Reader(self.world.transport()),
+                ctx=Context(clocks=_EpisodeClocks(SimpleNamespace(clock=self.clock))))
+            obj.sample = obj.tick
+            original = obj.start
+            def start():
+                original(background=False)
+                obj.tick()
+            obj.start = start
+            self.world.register(obj)
+            sidecars.append(obj)
+            return obj
+        try:
+            with patch.object(thermal, "Sidecar", side_effect=sidecar_factory) if "sensors" not in (spec.get("thermal") or {}) and spec.get("thermal") else nullcontext():
+                bundle, summary = run_benchmark(BenchmarkConfig.from_mapping(config_map), Path(runs_root), self.clock,
+                                                registry=registry)
+            return Path(bundle), summary
+        finally:
+            for obj in sidecars:
+                self.world.unregister(obj)
 
     def current_powermode(self):
         path = self.options.get("powermode_file")
@@ -242,7 +268,9 @@ def synthetic_config(root, *, templates=None, **synthetic):
         out_templates[key] = str(target)
     out_templates.update(templates or {})
     config = dict(production, backend="synthetic", templates=out_templates,
-                  sensors={"s_fast": syn.FAST, "s_slow": syn.SLOW, "fan_keys": [syn.FAN], "r0_sha256": "a" * 64},
+                  sensors={"s_fast": syn.FAST, "s_slow": syn.SLOW, "fan_keys": [syn.FAN],
+                           "record_keys": ["Tf08"], "r0_sha256": "a" * 64},
+                  r0_classified_keys=[syn.FAST, syn.SLOW],
                   step={**production["step"], "prefill_chars": 4000},
                   battery_poll_s=30, synthetic={"battery": {"drain_pct_per_h": 9.0}, **synthetic})
     path = root / "r1_runtime_synthetic.json"

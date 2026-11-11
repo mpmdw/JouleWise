@@ -483,6 +483,7 @@ R1_EXECUTED_SOURCES = (
     "scripts/align_r1_rehearsal.py", "joulewise/align/apple/r1_runtime.py",
     "joulewise/align/apple/thermal_gates.py", "configs/align/v4/r1_runtime.json",
     "joulewise/align/apple/r1_phase_table.py", "joulewise/align/apple/workload.py",
+    "joulewise/align/apple/thermal.py",
 )
 
 

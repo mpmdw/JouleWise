@@ -48,7 +48,7 @@ SCENARIOS = (
     ('wp22_synthetic_w1_chain', {'JW_WP22_FULL': '1'}, ['tests.align.test_v4_w1_synthetic']),
     # Follow-up paths plus a real runtime child/TERM/custody path. The full
     # night remains in default CI; trace generation need not repeat it.
-    ('r1_synthetic_arm', {}, ['tests.align.test_r1_followup',
+    ('r1_synthetic_arm', {}, ['tests.align.test_r1_followup', 'tests.align.test_r1_round2',
                             'tests.align.test_r1_rehearsal.PhaseTableIdentityTests',
                             'tests.align.test_r1_runtime_e2e.DriverRuntimeTests.test_term_reaches_the_runtime_which_closes_its_custody_before_exit']),
     ('r1_to_w1_chain', {}, ['tests.align.test_r1_turn_counts_export', 'tests.align.test_r1_to_w1_chain',
@@ -75,7 +75,7 @@ BOUNDED_SCENARIOS = (
     ('dct_series_window', {}, ['tests.align.test_v4_series.ManifestTests']),
     ('wp22_synthetic_w1_chain', {}, ['tests.align.test_v4_w1_synthetic.KitBridgeTests',
                                     'tests.align.test_v4_w1_synthetic.MinimalDryRunTests']),
-    ('r1_synthetic_arm', {}, ['tests.align.test_r1_followup.DriverTests',
+    ('r1_synthetic_arm', {}, ['tests.align.test_r1_followup.DriverTests', 'tests.align.test_r1_round2',
         'tests.align.test_r1_runtime_e2e.DriverRuntimeTests.test_term_reaches_the_runtime_which_closes_its_custody_before_exit']),
     ('r1_to_w1_chain', {}, ['tests.align.test_r1_to_w1_chain']),
     ('arm_install_session', {}, ['tests.align.test_v4_next_arm_packet.ArmOrderWitness']),
@@ -232,6 +232,10 @@ def run_scenarios(scenarios=SCENARIOS, trace_dir=None):
                         os.environ[key] = value
             report[scenario] = {'tests_run': result.testsRun, 'ok': result.wasSuccessful(),
                                 'new_paths': len(set(recorder.paths()) - before)}
+            print(json.dumps({'scenario': scenario, **report[scenario]}), flush=True)
+            if not result.wasSuccessful():
+                for test, failure in result.failures + result.errors:
+                    print(str(test) + '\n' + failure, file=sys.stderr, flush=True)
     finally:
         if previous is None:
             os.environ.pop('PYTHONPATH', None)

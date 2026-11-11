@@ -1,6 +1,6 @@
 # R1 follow-up rehearsal kit — 2026-11-11
 
-Status: **synthetic build; native smoke, cold review, sensor ruling and armcheck integration still owed.** No night was armed. Base `82c14c9ea` (`origin/ops/2026-11-11-w1-presign`); branch `ops/2026-11-11-r1-followup-kit`. Commit: the kit commit containing this report (hash in the final handoff / local Git log).
+Status (round 2): **synthetic implementation; native smoke, cold review, sensor ruling and a successful full-profile trace/broader final-head checks still owed.** Round-1 details below are historical; the round-2 section supersedes them. No night was armed. Base `82c14c9ea` (`origin/ops/2026-11-11-w1-presign`); branch `ops/2026-11-11-r1-followup-kit`. Commit: the kit commit containing this report (hash in the final handoff / local Git log).
 
 ## Authority and boundaries
 
@@ -77,3 +77,225 @@ Final command results are recorded below after execution. All commands are targe
 - `python3.13 -B -m compileall -q joulewise tests`, targeted script `py_compile`, `git diff --check`, thermal-gate equality with base, and receipt artifact-name equality: passed. Timing manifest diff is exactly two inserted module lines.
 
 Open questions/uncertainty: no native performance or thermal claim is made; smoke table stability with borderline reads is for the research lead, not a new builder threshold. The prepare output is an arm-input packet, not an installed NightPlan. Full-profile closure regeneration and final-head broader CI remain owed. To regenerate the full profile later, use the same trace script **without** `--bounded`, write to a fresh scratch path, inspect every scenario, then move into place and repeat both closure modules. Do not overwrite a trace in place with the generator. No commit was pushed. The final desk-only unknown-anchor/disabled-fast-band display adjustment, and smoke desk authentication/config/close-cap checks, were inspected and compiled, not re-run through the whole synthetic night. Native smoke still must exercise them, including the new-sensor/incomplete-D proposal path.
+
+## Round 2 — RL-78 (2026-11-11)
+
+This section supersedes round 1's sensor-choice, record-only-key, S6-band and
+prepare-integration descriptions. The user explicitly assigned this work on the
+existing R1 branch; no coordination-state files or kernel tasks were edited.
+No agents were delegated. Native cold review remains independent work.
+
+Read the eight requested rulings verbatim, including RL-78, and the adopted
+plan/replay implementation. Intake again initially retrieved the audit log too
+broadly; its output included unrelated Block-5-aware policy/summary text before
+the read was narrowed to the requested rulings. No measurement artifact, store,
+real restricted directory or external account path was opened. I do not claim
+blindness to the committed summaries. No network, model download, MBP operation,
+B5 analysis, full test discovery or real model identity probe was run.
+
+### Implementation and files
+
+- `r1_runtime.py` implements the unchanged classifier's smoke pair, with only
+  RL-78's fixed fallback when the registered slow class is empty: maximum
+  registered return time <=300 s, slow noise/rise tests, R0-classified and
+  unclamped, excluding the fast key and D-record aliases, without a lower tau
+  bound. The second role is labelled **near-die settling check**. The night
+  checks the fixed pair's admissibility; it retains the full registered ranking
+  as a disclosure and never selects a different winner. Its summary, driver
+  slots and kit admission use the confirmation. An inadmissible pair holds the
+  result for the research lead; the desk refuses it.
+- `thermal.py` adds optional `record_keys` to the existing sidecar, preserving
+  the absent-field policy and journal bytes. The collector samples a duplicate
+  role key only once. `r1_runtime.json` carries `record_keys: ["Tf08"]`, the
+  registered 1.0 C floor and the six R0-classified keys documented in RL-75.
+  The gate pair remains a smoke/ruling arm parameter; the shipped R0 pair is
+  only a default, not a native selection. If the full native R0/D records name
+  additional candidates, the lead must supply the authenticated complete R0
+  key list in this bound parameter before preparing the night.
+- Every R1 model member carries the recording policy. The ordinary 30B
+  predecessor derives a sidecar-only config from the unchanged bound template,
+  preserving its ordinary workload and schedule and adding no gate or collector
+  process. This is the consequence of RL-78's later every-member instruction.
+  The bound template itself is unchanged. The synthetic backend supplies its
+  fake clock/transport for this existing sidecar-only path.
+- `v4_registration.py` adds `thermal.py` to condition 13. The registration
+  mutation test iterates the complete list, including this addition.
+  `thermal_gates.py` remains byte-identical to `82c14c9ea`.
+- `align_r1_followup_kit.py` fixes the smoke choice once, checks coverage and the
+  linked research-lead ruling at prepare, refuses any different policy or
+  inherited 1.5 C floor, and prints numeric class-edge margins as disclosures.
+  The sampler bar, not class-edge headroom, binds. The cap stays 1,200 s.
+- `align_r1_thermal_replay.py` prints Tf08's start excess over the last-60-s
+  step-D window reference and per-condition comparisons within this window.
+  A start is the G0 exit sample, or measured-run entry for the ungated ordinary
+  predecessor, labelled in the output. It reads temperatures, phase stamps and
+  the config's condition; it does not open episode results, transcripts or
+  rails for this disclosure. Missing/insufficient observations remain null.
+- `DEVIATIONS.md` includes the exact RL-78 WP14(a)-R1-SLOW text, retains the
+  RL-72 workload-callback row and adds the sidecar record_keys row. The runtime
+  contract is updated to the same rules.
+
+### Prepare checks and branch integration
+
+The requested functions share `align_v4_session.py` with substantial arm,
+watchdog, privilege and hold changes. A whole-file checkout would import more
+than the functions need. I therefore merged the specified armcheck revision
+`bcc051881` as permitted, cleanly, in local merge commit `71e970c13`.
+The origin tracking refs had advanced beyond the hashes in the brief; the
+specified hashes are used to avoid silently widening the requested revisions.
+
+R1 prepare calls the public `weight_digest_preflight` and
+`runtime_stack_preflight` APIs before source validation or any dwell. It records
+both results as `weight_digests` and `runtime_stack` in the prepare/arm-input
+record; either failure writes a refused record and raises their joined reasons.
+The prepare record remains an input to the lead's ordinary arm procedure; this
+command does not install or arm a NightPlan.
+
+R1's renamed members are explicitly projected to the unchanged registered
+inventory rows for the 27B D model, 30B model and NEG-8 1.5B reference. The public
+weight function still constructs units with `pilot.h.align_unit_id`; the
+projection keeps the registered roots, folded digests and file maps, and the
+record names each mapping. It also rejects a template root that differs from
+its registered root. The registration inventory is not edited. Production uses
+the measurement interpreter (default `<root>/.venv/bin/python`) for the stack
+check; tests inject metadata and identity functions and never follow the
+absolute model-root strings.
+
+### Verification (round 2)
+
+Results, full-profile trace disposition and final-head module coverage are
+recorded below after the serial run. Tests added here use fake host boundaries;
+none executes sudo, systemsetup, pmset, launchctl lifecycle commands or
+caffeinate for real. No native MLX/Metal result is claimed.
+
+The first broader rehearsal run exposed two stale fixtures: a soak-redo
+assertion needed `unsettled_soak_once=True`, and the synthetic hardware-label
+record-shape fixture needed a mocked source-identity check while sources are
+edited. Production source validation remains intact and has separate mutation
+tests. That initial 76-test run failed (1 failure, 1 error; 19.674 s); it is not
+a pass.
+
+Focused round-2 checks so far (Python 3.13, `-B -m unittest`, serialized):
+
+- `tests.align.test_r1_round2`: 13 tests, OK, 9.575 s. Real registered classifier
+  outputs feed smoke/fallback and confirmation tests; rejects aliases, noise,
+  rise, return-time, clamp and unclassified candidates. Confirms the smoke pair
+  despite a different nightly winner. Tests linked ruling/coverage/default
+  band, non-binding margins, old/new absent-field journal byte equality,
+  journalled Tf08 with instrumented no-gate-access assertions at G0/G1/H,
+  policy validation, ordinary sidecar-only predecessor/template identity,
+  Tf08 within-window disclosures and desk refusal, W1 kit admission of the
+  confirmed pair, public preflight calls over exactly three synthetic identity
+  results, stack drift, joined refusals and both recorded check results.
+- `tests.align.test_r1_followup`: 12 tests, OK, 43.615 s. Carries forward the
+  deadline/admission-unit/redo bars, per-slot timeout restrictions, A-B-A bars,
+  loaded-main-thread process sampling in all four phases, and complete member
+  bundle equality against the pre-callback workload adapter.
+- `tests.align.test_r1_inventory`: 14 tests, OK, 5.990 s. Registered classifier
+  arithmetic, full inventory/phase handling, aliases, hashing and cleanup.
+- Earlier small iterations of the new module passed 10 tests (1.987 s), then
+  12 (2.737 s and a later logged 12-test iteration). They are development checks;
+  the complete final results below own the handoff.
+
+### Native checks still owed after round 2
+
+No kit command below was run on the measurement Mac. The next native work is a
+clean, lead-controlled, agent-free smoke on the final committed bytes; this
+sandbox has no usable Metal/MLX device or CPU fallback.
+
+1. Run smoke Part A with the accepted soak and ordinary host/DC-in custody, in
+   <=1,800 s. Verify the ordinary predecessor, native pre-warmup R_D capture,
+   W1 `load_window_reference` authentication, release inside 1,200 s, re-arm,
+   absence of timeout-run, host mode readback/restore and complete cleanup.
+2. Run smoke Part B on a native D step with the full inventory. Check >=99%
+   one-second cells per phase, <1% read errors and no two adjacent empty cells
+   on **pre-warmup idle, quiet, load and recovery**. Review the unchanged
+   registered classification, candidate releases at 1.0/1.5 C, deciding
+   conditions, reference sensitivities and numeric class-edge margins. The
+   margins decide nothing. Select once by RL-78, including its fallback if
+   necessary; no manual key substitution.
+3. The research lead reviews that exact table before the arm. Commit one sensor
+   parameter set, the authenticated R0-classified key list, Tf08 recording,
+   1.0 C floor (with 3 x soak idle SD still applied), and 1,200 s cap. A smoke
+   selection on the shipped R0 pair is not assumed to pass. Repeat affected
+   native smoke after a cold review changes executed bytes.
+4. Run the real weight and installed-stack preflights with the measurement
+   interpreter. Confirm exactly the three registered roots and both results in
+   the arm-input record, before the ordinary dwell/arm procedure. Synthetic
+   identity results in this report are not native pin validation.
+5. Native array/stream qualification owed:
+   `JW_ALIGN_MLX_NATIVE_TESTS=1 python3.13 -B -m unittest tests.align.test_thermal_mlx`.
+   It uses tiny arrays, no downloaded weights. The pinned real mlx-lm model
+   generator, actual SMC cadence, process scheduling, KM003C and host privilege
+   behavior must also pass the ordinary native smoke; none is established here.
+6. On the night, the fixed picked keys must remain admissible on step-D. Any
+   failure is a lead hold, not a new selection. The desk prints the Tf08 start
+   disclosures and within-window comparisons. Signing checks all seven
+   condition-13 sources against the full night commit, including `thermal.py`.
+
+### Trace disposition and remaining verification debt
+
+The full profile was attempted without `--bounded`, serially, with an 850 s
+subprocess limit. It timed out at **850.101 s**, exit 124. Its first scenario
+(`dct_series_window`: 56 tests) completed with `ok: false`; the run then reached
+the full clean/injected W1 synthetic windows but did not finish the profile.
+No full-profile trace was emitted or committed. The failures are **not yet
+attributed**; they must not be called inherited or blamed on this patch without
+reproducing them. The preserved diagnostic log is
+`/private/tmp/r1-round2-full-jzog_5co/run.log`. The trace runner now prints
+individual unittest failure/error details for future diagnosis instead of
+silently discarding them.
+
+The fresh bounded run took **349.490 s** and initially passed six scenarios,
+with one failure in `ArmOrderWitness`: the armcheck merge now requires
+`state.plan_path`, which its synthetic fixture omitted. The fixture now writes
+its synthetic plan and supplies that path; watchdog, host commands and installer
+remain fake. Only that failed scenario was repeated under the same tracer,
+passing in **24.342 s**. Production/source/config bytes were held unchanged;
+the retry records their SHA-256s and the original failed trace digest. The final
+artifact is the union of these actual traces, explicitly
+`profile: bounded_representative`, **45 successful tests in seven scenarios**,
+181 executed paths, zero unbound and zero non-strict. Its arm scenario preserves
+`previous_attempt_ok: false` and the retry marker. No failed test was relabelled
+without executing its repaired fixture.
+
+Both original scratch traces/logs were retained; the repaired aggregate was
+written with exclusive creation to a new scratch path, then moved into the
+canonical path with SHA-256 equality checked. This is a successful bounded
+closure trace, **not a successful full-profile run**. All 14 new round-2 tests
+are in that run. A separate `tests.align.test_v4_series.ManifestTests` command
+passed 8 tests in 11.141 s, narrowing but not resolving the first full-profile
+failure.
+
+One brief accidental overlap occurred when the final focused module was still
+finishing as the Manifest class started. Both were synthetic and were awaited
+before subsequent tests; the trace attempts and remaining checks were serial.
+The long full attempt plus the slower-than-round-1 bounded profile exhausted
+the approximate 20-minute allowance. Required closure checks take precedence
+below; the broader modules listed at the end are left for the Air. This is a
+verification/budget limitation, not a claim that the full profile passed.
+
+Smoke Part B now writes `smoke_part_b.json` as the exact table passed to
+`prepare --smoke-table`; the ruling binds that file's SHA-256. Its R0 key list
+and recorded pair must match prepare's re-derivation, so the arm cannot silently
+re-select from a different R0 set. The kit CLI `--help` was also executed to
+check script-mode imports.
+
+### Bound files changed in round 2
+
+`configs/align/v4/r1_runtime.json`; `docs/align/v4/DEVIATIONS.md`;
+`docs/align/v4/dynamic_closure_trace.json`;
+`joulewise/align/apple/r1_runtime.py`; `joulewise/align/apple/thermal.py`;
+`joulewise/align/apple/v4_registration.py`;
+`scripts/align_r1_followup_kit.py`; `scripts/align_r1_rehearsal.py`;
+`scripts/align_r1_thermal_replay.py`; `scripts/align_v4_dynamic_trace.py`;
+`scripts/align_v4_kit.py`; and `scripts/align_v4_session.py` (the specified
+armcheck merge). The ordinary bound 30B template, registered classifier,
+thermal-gate module, model inventory and identity pins are unchanged.
+
+Other files: `docs/align/r1_runtime_contract.md`, this report,
+`scripts/test_timings.json` (insertions only), the synthetic R1/W1 backends,
+`test_r1_followup.py`, `test_r1_round2.py`, `test_r1_rehearsal.py`, and the
+arm-order fixture in `test_v4_next_arm_packet.py`. The armcheck merge's broader
+file inventory is visible in merge commit `71e970c13` and its own reports.
+Coordination-state files remain untouched.

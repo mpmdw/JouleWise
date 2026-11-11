@@ -82,16 +82,10 @@ class PolicyTests(unittest.TestCase):
         legs["B"]["operating_reference"]["slow_c"] = 40.51
         self.assertFalse(r1.aba_start_bars(legs)["pass"])
 
-    def test_new_fast_family_slow_pick_and_missing_checks_hold_prepare(self):
-        config = {"sensors": {"s_fast": "TV0h", "s_slow": "TV0m"}, "slow_band_floor_c": 1.0}
-        ruling = {"sensors": config["sensors"], "outcome": 2, "research_lead_ruling": "synthetic",
-                  "smoke_part_b_sha256": "a" * 64, "stable_with_borderline_reads": True}
-        with self.assertRaisesRegex(ValueError, "RL-75"):
-            kit.validate_sensor_ruling(config, ruling, "a" * 64)
-        ruling.update(outcome=3, authorizes_night=True)
-        kit.validate_sensor_ruling(config, ruling, "a" * 64)
-        with self.assertRaisesRegex(ValueError, "RL-62"):
-            kit.prepare_checks(r1.ROOT, config)
+    def test_gate_band_default_is_registered_and_cap_stays_1200(self):
+        config, _ = rt.load_config(r1.ROOT / r1.DEFAULT_RUNTIME_CONFIG)
+        self.assertEqual(config["slow_band_floor_c"], 1.0)
+        self.assertEqual(config["g0_timeout_s"], 1200)
 
     def test_gate_module_is_exactly_w1_base(self):
         path = "joulewise/align/apple/thermal_gates.py"
@@ -109,10 +103,10 @@ class PrepareTests(unittest.TestCase):
             ruling = {"research_lead_ruling": "SYNTHETIC ONLY", "outcome": 1, "sensors": config["sensors"],
                       "smoke_part_b_sha256": hashlib.sha256(table.read_bytes()).hexdigest()}
             calls = []
-            with patch.object(reg, "verify_r1_executed_sources", side_effect=lambda *a: calls.append("identity")):
+            with patch.object(reg, "verify_r1_executed_sources", side_effect=lambda *a: calls.append("identity")), patch.object(kit, "validate_sensor_ruling"):
                 packet = kit.prepare(root / "prepare.json", ruling=ruling, smoke_table=table,
-                    weight_digest_check=lambda *a: calls.append("weights"),
-                    runtime_stack_check=lambda *a: calls.append("stack"))
+                    weight_digest_check=lambda *a, **kw: (calls.append("weights") or {"ok": True, "reasons": []}),
+                    runtime_stack_check=lambda *a, **kw: (calls.append("stack") or {"ok": True, "reasons": []}))
             self.assertEqual(calls, ["weights", "stack", "identity"])
             self.assertEqual(packet["window_max_s"], r1.night_worst_case_s()["window_max_s"])
             self.assertEqual(packet["window_max_s"], 126480)

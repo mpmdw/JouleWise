@@ -257,8 +257,12 @@ def check_r1_evidence(inputs, r1_slots, *, synthetic=False, receipt=None):
                              '(LEAD-RULINGS-2 R7-13)')
         if sensors.get('s_fast') not in (classified.get('die_candidates') or ()):
             raise ValueError(f'R1.thermal_policy s_fast {sensors.get("s_fast")!r} is not in the R1 die list')
-        if sensors.get('s_slow') not in (classified.get('heatsink_candidates') or ()):
-            raise ValueError(f'R1.thermal_policy s_slow {sensors.get("s_slow")!r} is not in the R1 heatsink list')
+        confirmation = classified.get('night_confirmation') or {}
+        fixed_pair = (confirmation.get('ok') is True and confirmation.get('authority') == 'RL-78'
+                      and all(confirmation.get(r) == sensors.get(r) for r in ('s_fast', 's_slow')))
+        if sensors.get('s_slow') not in (classified.get('heatsink_candidates') or ()) and not fixed_pair:
+            raise ValueError(f'R1.thermal_policy s_slow {sensors.get("s_slow")!r} is not in the R1 heatsink list '
+                             'or an admissible RL-78 fixed smoke pair')
         if any(sensors.get(role) != classified.get(role) for role in ('s_fast', 's_slow')):
             raise ValueError('R1.thermal_policy sensors must equal the R1 thermometry.D picks')
     if classified.get('sensor_pick_changed') is not False:

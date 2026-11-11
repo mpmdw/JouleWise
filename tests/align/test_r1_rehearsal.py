@@ -507,7 +507,7 @@ class R1Tests(unittest.TestCase):
 
     def test_quiet_segment_redone_on_sustained_cpu_load(self):
         with tempfile.TemporaryDirectory() as td:
-            world = FakeWorld(busy_once={"step-d"})
+            world = FakeWorld(busy_once={"step-d"}, unsettled_soak_once=True)
             with patch.object(r1, "_run", world):
                 self.assertEqual(r1.run(self.args(td)), 0)
             result = json.loads((Path(td) / "run/r1_result.json").read_text())
@@ -1185,8 +1185,10 @@ class R1Tests(unittest.TestCase):
         Both are lead-owned backfills (``backfill-x-g``, ``backfill-turn-counts``).
         """
         # 28,000 decode tokens in 7 admitted turns: <= 4,096 per turn, as a real run.
-        with patch.object(r1, "_run", FakeWorld(step_d_rate=40.0, gated_decode_tokens=28000,
-                                                gated_admitted_turns=7)):
+        # This fixture exercises evidence shape, using a synthetic command
+        # boundary even on the hardware-source label; identity has its own tests.
+        with patch("joulewise.align.apple.v4_registration.verify_r1_executed_sources"), patch.object(
+                r1, "_run", FakeWorld(step_d_rate=40.0, gated_decode_tokens=28000, gated_admitted_turns=7)):
             assert r1.run(R1Tests.args(None, td, synthetic=synthetic)) == 0
         raw = (Path(td) / "run/r1_result.json").read_bytes()
         slots = json.loads((Path(td) / "registration/r1_slots.json").read_text())

@@ -624,6 +624,10 @@ def night_desk(run_dir):
     """RL-72 D8: each own pre-warmup median beside R_op/R_D; every release margin."""
     root = Path(run_dir)
     result = json.loads((root / "r1_result.json").read_text())
+    confirmation = ((result.get("thermometry") or {}).get("D") or {}).get("night_confirmation")
+    if confirmation is not None and not confirmation.get("ok"):
+        raise Refused("RL-78: picked sensors inadmissible on night D; research lead ruling required: "
+                      + "; ".join(confirmation.get("reasons", [])))
     members = []
     for phase in result["phases"]:
         fields = phase.get("result", {})
@@ -635,7 +639,7 @@ def night_desk(run_dir):
             members.append({"member": phase["name"], "own_pre_warmup": {
                 "captured": False, "reason": "ordinary anchor has no thermal policy/journal"}, "releases": []})
             continue
-        journal = read_journal(path)
+        journal = read_journal(path, extra_fields=("Tf08",))
         session = Session(journal["rows"], journal["s_fast"], journal["s_slow"])
         own = session.capture_reference(warmup_anchor(bundle, session))
         gates = []
@@ -656,13 +660,45 @@ def night_desk(run_dir):
                                             ref["fast_c"] + fast_band - release["fast_c"]),
                           "slow_margin_c": ref["slow_c"] + slow_band - release["slow_c"],
                           "slope_c_per_min": gate.get("slope_c_per_min")})
-        members.append({"member": phase["name"], "own_pre_warmup": own, "releases": gates})
+        anchor = warmup_anchor(bundle, session)
+        tf_ref = session.good_window(anchor, ("Tf08",), session.visible(anchor))
+        tf_coverage = session.coverage(anchor, ("Tf08",), session.visible(anchor))
+        tf_reference = (median(r["sensors"]["Tf08"] for r in tf_ref)
+                        if tf_ref and tf_coverage is not None and tf_coverage >= .9 else None)
+        # Temperature-only start disclosure: the G0 exit sample, or the
+        # measured-run entry for the ungated ordinary predecessor. Never open
+        # the episode result/transcript/rail files for this disclosure.
+        events = [json.loads(line) for line in (bundle / "events.jsonl").read_text().splitlines()]
+        measured = next((e for e in events if e.get("event_type") == "stage_started"
+                         and e.get("phase") == "measured_run"), None)
+        start_ns = (journal["g0"][0].get("exit_sample_ns") if journal["g0"] else
+                    session.mono_from_epoch(measured["timestamp_s"]) if measured else None)
+        config = json.loads((bundle / "config.json").read_text())
+        condition = json.loads(config["workload_profile"]["prompt_text"]).get("condition")
+        at_start = [r for r in journal["rows"] if start_ns is not None and 0 <= start_ns-r["monotonic_ns"] <= 2*NS
+                    and "Tf08" not in r["errors"] and valid_value("Tf08", r["sensors"].get("Tf08"))]
+        members.append({"member": phase["name"], "condition": condition, "Tf08_start_definition": "G0 exit sample; ungated measured-run entry",
+                        "own_pre_warmup": own, "releases": gates,
+                        "Tf08_pre_warmup_c": tf_reference,
+                        "Tf08_start_c": at_start[-1]["sensors"]["Tf08"] if at_start else None})
     captures = {row["member"]: row["own_pre_warmup"] for row in members}
     r_op = captures.get("step_30b")
     r_d = captures.get("step_D_prefill_10k_decode_4096")
+    tf_window = next((row.get("Tf08_pre_warmup_c") for row in members
+                      if row["member"] == "step_D_prefill_10k_decode_4096"), None)
+    by_condition = {}
     for row in members:
-        row.update(R_op=r_op, R_D=r_d)
-    return {"members": members, "R_op": r_op, "R_D": r_d}
+        start = row.get("Tf08_start_c")
+        excess = start-tf_window if start is not None and tf_window is not None else None
+        row.update(R_op=r_op, R_D=r_d, Tf08_window_reference_c=tf_window, Tf08_start_excess_c=excess)
+        if excess is not None:
+            by_condition.setdefault(row.get("condition") or "unspecified", []).append(excess)
+    medians = {c: median(v) for c, v in sorted(by_condition.items())}
+    comparisons = [{"condition_a": a, "condition_b": b, "median_excess_a_minus_b_c": medians[a]-medians[b]}
+                   for i, a in enumerate(medians) for b in list(medians)[i+1:]]
+    return {"members": members, "R_op": r_op, "R_D": r_d,
+            "Tf08_disclosure": {"window_reference_c": tf_window, "start_excess_by_condition_c": by_condition,
+                                "condition_comparisons": comparisons, "effect": "disclosure_only"}}
 
 
 def candidate_replays(inventory_rows, status_rows, keys, fast_key, anchor_ns, g0_start_ns, g0_end_ns,

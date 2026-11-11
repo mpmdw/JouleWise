@@ -186,13 +186,29 @@ policy and config authentication. No changes are made to `thermal_gates.py`.
 
 The night produces candidate slots with an `inadmissible_slots` table. All
 flagged segments enter `inconclusive_segments`; the kit refuses those candidates
-until the lead rules. The adopted Tf08 S6=1.5 receipt survives an inconclusive
-proposal. RL-74/75 require a separate research-lead ruling on smoke Part B's
-unchanged classifier table before the arm. The runtime config holds one sensor
-policy for the whole night. For a newly authorized slow key the floor is 1.0 C
-and the old sensor's tuning receipt does not transfer. A policy cannot carry an
-extra record-only temperature key: `thermal.validate_policy` permits only the
-two role keys, fan keys and R0 digest. No gate-module change is made for that.
+until the lead rules. RL-78 supersedes the inherited S6 receipt: every arm
+uses max(1.0 C, 3 x soak idle SD), cap 1,200 s. Smoke Part B makes the single
+selection using the unchanged classifier. If its slow class is empty, the
+longest registered return time <=300 s supplies the near-die settling check,
+among R0-classified, unclamped keys passing the registered slow noise/rise
+tests, excluding the fast key and its D-record aliases, with no lower tau bound.
+The night confirms those fixed keys' admissibility and never re-ranks. Failure
+holds the desk/slots for the research lead. The full classifier and numeric
+class-edge margins remain disclosures; the sampler bar binds. The arm still
+requires the smoke table and research lead's ruling.
+
+`thermal.py` accepts optional `record_keys`; the absent-field journal is
+byte-identical. Tf08 is read by the existing sidecar in every member, including
+the ordinary predecessor (derived sidecar-only config, unchanged template and
+episode/schedule, no gates). No gate reads record-only keys. The desk prints
+Tf08 at member start minus its last-60-s step-D window reference, and compares
+conditions within this window as a disclosure. Missing observations stay null.
+`thermal.py` joins the condition-13 identity list; `thermal_gates.py` is unchanged.
+
+Prepare uses the public RL-62/RL-73 functions from `align_v4_session.py` before
+any dwell. R1 member IDs project explicitly to the registered D/30B/NEG-8 roots;
+the registration inventory is unchanged. Both results are recorded as
+`weight_digests` and `runtime_stack`, including refusals with joined reasons.
 
 Universal bars: chain exit 0 and complete custody; accepted attempt; AC present
 and battery not discharging (`r1.battery_feed_invalid`); no agent overlap

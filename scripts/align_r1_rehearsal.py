@@ -781,7 +781,7 @@ def thermometry_record(name, result):
         raise Refusal(f"{name}: thermometry.classification_sha256 must be a sha256 hex digest")
     keep = ("status", "s_fast", "s_slow", "r0_sensors", "sensor_pick_changed", "flags", "reasons",
             "die_candidates", "heatsink_candidates", "classification_sha256", "classification_file",
-            "s7_for_r1_picks", "alias_groups", "alias_rule")
+            "s7_for_r1_picks", "alias_groups", "alias_rule", "night_confirmation", "registered_picks")
     record = {key: block.get(key) for key in keep}
     if isinstance(record.get("s7_for_r1_picks"), dict):
         # LEAD-RULINGS-2 R6-4: the changed-pick S7's reference R comes from the
@@ -1810,9 +1810,9 @@ def run(args):
             s6 = registered_s6()["s6_tuning"]
             slots = {"S6": registered_s6()["slots"]["S6"]}
             arm_config = json.loads(runtime_config_path(args.runtime).read_text())
-            if not args.synthetic and arm_config["sensors"]["s_slow"] != "Tf08":
+            if not args.synthetic:
                 slots = {"S6": arm_config.get("slow_band_floor_c", 1.0)}
-                s6 = {"status": "new_sensor_default", "authority": "RL-74/75 sensor ruling",
+                s6 = {"status": "new_sensor_default", "authority": "RL-78 default band",
                       "S6_c": slots["S6"], "receipt_transferred": False}
             deadman = []
             duty = {"declared": DUTY_BAR, "pass": False, "verdict": "inconclusive", "inconclusive_runs": [],

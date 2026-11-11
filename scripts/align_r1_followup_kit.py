@@ -19,57 +19,121 @@ from types import SimpleNamespace
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+from scripts import align_v4_session as v4_session
 from scripts import align_r1_rehearsal as r1
 from scripts import align_r1_thermal_replay as replay
 from joulewise.align.apple import r1_runtime as rt, v4_registration as reg
 from joulewise.align.apple.thermal import Coverage
 
-R0_FAST = {"TV0h", "TV1h", "TV0m", "TV0s", "TV1s"}  # RL-75
+# R1 changes run IDs; project each explicit member to the registered root,
+# retaining the registration's exact digests and file maps (never re-register).
+MEMBER_ROOTS = {
+    "step-30b": ("model_30b", "qwen3-30b-a3b-align-pilot-v3-episodes-a-e01"),
+    "high-power-aba-a1": ("d_spam", "qwen3.8-27b-align-v4-episodes-a-e05"),
+    "high-power-aba-b": ("d_spam", "qwen3.8-27b-align-v4-episodes-a-e05"),
+    "high-power-aba-a2": ("d_spam", "qwen3.8-27b-align-v4-episodes-a-e05"),
+    "capture-predecessor-30b": ("model_30b", "qwen3-30b-a3b-align-pilot-v3-episodes-a-e01"),
+    "step-d": ("d_spam", "qwen3.8-27b-align-v4-episodes-a-e05"),
+    "d-planning-turn-r-plus-4c": ("d_spam", "qwen3.8-27b-align-v4-episodes-a-e05"),
+    "d-planning-turn-r-plus-2c": ("d_spam", "qwen3.8-27b-align-v4-episodes-a-e05"),
+    "d-planning-turn-r-plus-0c": ("d_spam", "qwen3.8-27b-align-v4-episodes-a-e05"),
+    "d-bank-benign-s1": ("d_bank", "qwen3.8-27b-align-v4-episodes-a-e08"),
+    "d-spam-benign-s1-a": ("d_spam", "qwen3.8-27b-align-v4-episodes-a-e05"),
+    "d-spam-benign-s1-b": ("d_spam", "qwen3.8-27b-align-v4-episodes-a-e05"),
+    "x-g": ("x_g", "qwen3-30b-a3b-align-v4-episodes-a-e06"),
+    "neg8-reference": (None, "neg8_reference"),
+}
 
 
-def prepare_checks(root, config, *, weight_digest_check=None, runtime_stack_check=None):
-    """Integration sites for ops/2026-11-11-w1-armcheck, RL-62 and RL-73.
+def prepare_checks(root, config, *, weight_digest_check=None, runtime_stack_check=None,
+                   identity_fn=None, runtime_runner=None, reader=None):
+    """Both public armcheck APIs run before source checks or any dwell.
 
-    No placeholder success: the lead wires both actual refuse-only checks
-    here before a native prepare. Neither check is implemented in this lane.
+    reader/identity_fn/runtime_runner are synthetic-test seams. Production
+    uses the real checks; this function does not launch any host setter.
     """
-    if weight_digest_check is None or runtime_stack_check is None:
-        raise ValueError("prepare awaits RL-62 weight_digest_check and RL-73 runtime_stack_check integration")
-    return {"weights": weight_digest_check(root, config), "runtime_stack": runtime_stack_check(root, config)}
+    root = Path(root)
+    registration = root / reg.REGISTRATION
+    read = reader or (lambda p: json.loads(Path(p).read_bytes()))
+    inventory_path = registration / "model_artifact_inventory.json"
+    mapping = {}
+    try:
+        inventory = read(inventory_path)
+        projected = dict(inventory["artifacts"])
+        members, mapping = [], {}
+        for name, (template_key, registered_unit) in MEMBER_ROOTS.items():
+            row = projected.get(registered_unit)
+            if not isinstance(row, dict):
+                raise ValueError(f"weight_digest_preflight: no_inventory_row: {registered_unit}")
+            if template_key is not None:
+                template_path = Path(config["templates"][template_key])
+                template = read(template_path if template_path.is_absolute() else root / template_path)
+                if template["model"]["source"] != row["root"]:
+                    raise ValueError(f"weight_digest_preflight: no_inventory_row: {name}: template root differs")
+            if template_key is None:
+                member = {"model_id": "neg8", "run_id": "reference"}
+            else:
+                member = {"model_id": "qwen3.8-27b" if template_key in ("d_spam", "d_bank") else "qwen3-30b-a3b",
+                          "run_id": template["run_id"] if name == "capture-predecessor-30b" else "align-v4-r1-" + name}
+            unit = v4_session.pilot.h.align_unit_id(**member)
+            projected[unit] = row
+            members.append(member)
+            mapping[unit] = registered_unit
+        def projected_reader(path):
+            return {**inventory, "artifacts": projected} if Path(path) == inventory_path else read(path)
+        weights = (weight_digest_check or v4_session.weight_digest_preflight)(
+            registration, members, identity_fn=identity_fn, reader=projected_reader)
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        reason = str(exc)
+        if not reason.startswith("weight_digest_preflight:"):
+            reason = f"weight_digest_preflight: unavailable: {type(exc).__name__}: {exc}"
+        weights = {"ok": False, "reasons": [reason], "roots": {}}
+    stack = (runtime_stack_check or v4_session.runtime_stack_preflight)(
+        config.get("measurement_python", str(root / ".venv/bin/python")), registration / "identity_pins.json",
+        runner=runtime_runner, reader=read)
+    checks = {"weight_digests": weights, "runtime_stack": stack, "registered_member_roots": mapping}
+    return checks
 
 
-def validate_sensor_ruling(config, ruling, smoke_sha256):
+def validate_sensor_ruling(config, ruling, smoke_sha256, table):
     if (not ruling.get("research_lead_ruling") or ruling.get("smoke_part_b_sha256") != smoke_sha256
-            or ruling.get("sensors") != config["sensors"]):
+            or ruling.get("sensors") != config["sensors"] or ruling.get("authorizes_night") is not True):
         raise ValueError("arm requires the research lead's ruling on this smoke D table and this policy")
-    outcome = ruling.get("outcome")
-    slow = config["sensors"]["s_slow"]
-    if outcome == 1:
-        if (config["sensors"]["s_fast"], slow) != ("TV0h", "Tf08"):
-            raise ValueError("RL-74 outcome 1 requires R0 picks")
-    elif outcome == 2:
-        if slow in R0_FAST or not slow or not ruling.get("stable_with_borderline_reads"):
-            raise ValueError("RL-75 narrows outcome 2; R0-fast or unstable/null slow pick needs outcome 3 ruling")
-        if config.get("slow_band_floor_c") != 1.0:
-            raise ValueError("new slow key starts max(1 C, 3 soak SD); Tf08 S6 receipt does not transfer")
-    elif outcome == 3:
-        if ruling.get("authorizes_night") is not True:
-            raise ValueError("outcome 3 holds the night for the research lead")
-    else:
-        raise ValueError("unknown RL-74 sensor outcome")
-    return ruling
+    if not table.get("coverage", {}).get("pass"):
+        raise ValueError("smoke Part B sampler bar failed")
+    if table.get("r0_classified_keys") != config["r0_classified_keys"]:
+        raise ValueError("RL-78: smoke R0 key set changed; selection is made once")
+    classification = table["classification_table"]["classification"]
+    selected = rt.select_smoke_sensors(classification, config["r0_classified_keys"])
+    if not selected["ok"] or any(selected[r] != config["sensors"][r]
+                                 or selected[r] != table.get("selection", {}).get(r) for r in ("s_fast", "s_slow")):
+        raise ValueError("RL-78: policy must use the fixed smoke Part B selection: " + "; ".join(selected["reasons"]))
+    if config.get("slow_band_floor_c") != 1.0:
+        raise ValueError("RL-78: default max(1 C, 3 soak idle SD); no S6 receipt transfer")
+    if "Tf08" not in config["sensors"].get("record_keys", []):
+        raise ValueError("RL-78: Tf08 must be journalled in every member")
+    return selected
 
 
 def prepare(output, *, root=ROOT, config_path=None, ruling=None, smoke_table=None,
-            weight_digest_check=None, runtime_stack_check=None):
+            weight_digest_check=None, runtime_stack_check=None, identity_fn=None, runtime_runner=None, reader=None):
     root = Path(root)
     path = Path(config_path or root / r1.DEFAULT_RUNTIME_CONFIG)
     config, _ = rt.load_config(path)
     checks = prepare_checks(root, config, weight_digest_check=weight_digest_check,
-                            runtime_stack_check=runtime_stack_check)
+                            runtime_stack_check=runtime_stack_check, identity_fn=identity_fn,
+                            runtime_runner=runtime_runner, reader=reader)
+    failures = [reason for key in ("weight_digests", "runtime_stack") if not checks[key]["ok"]
+                for reason in (checks[key]["reasons"] or [key + ": preflight refused"])]
+    if failures:
+        # Keep both refuse-only results reviewable even when prepare refuses.
+        with Path(output).open("x") as handle:
+            handle.write(json.dumps({"status": "REFUSED", **checks}, indent=2, sort_keys=True) + "\n")
+        raise ValueError("; ".join(failures))
     if ruling is None or smoke_table is None:
         raise ValueError("arm waits for smoke Part B and RL-74/75 sensor ruling")
-    validate_sensor_ruling(config, ruling, hashlib.sha256(Path(smoke_table).read_bytes()).hexdigest())
+    validate_sensor_ruling(config, ruling, hashlib.sha256(Path(smoke_table).read_bytes()).hexdigest(),
+                           json.loads(Path(smoke_table).read_bytes()))
     commit = r1.executed_commit(root)
     reg.verify_r1_executed_sources(root, {"executed_commit": commit})
     gate = "joulewise/align/apple/thermal_gates.py"
@@ -81,7 +145,7 @@ def prepare(output, *, root=ROOT, config_path=None, ruling=None, smoke_table=Non
         raise ValueError("follow-up sizing differs from RL-72 E2")
     packet = {"schema": "joulewise.align.r1_followup_prepare.v1", "status": "FOR_LEAD_ARM",
               "executed_commit": commit, "sensors": config["sensors"], "sensor_ruling": ruling,
-              "prepare_checks": checks, "chain_script": "scripts/night_chains/align_r1_rehearsal.zsh",
+              **checks, "chain_script": "scripts/night_chains/align_r1_rehearsal.zsh",
               **bounds, "bound_files": {p: rt.sha256_file(root / p) for p in reg.R1_EXECUTED_SOURCES}}
     with Path(output).open("x") as handle:
         handle.write(json.dumps(packet, indent=2, sort_keys=True) + "\n")
@@ -108,6 +172,21 @@ def phase_coverage(rows, keys, phases):
                                     and error_fraction < .01 and cell["max_consecutive_empty_cells"] < 2)}
         report[name] = per_key
     return {"phases": report, "pass": all(v["pass"] for p in report.values() for v in p.values())}
+
+
+def class_edge_margins(classification):
+    """Signed headroom, disclosure only; selection never reads this table."""
+    result = []
+    for row in classification["ranking"]:
+        def margin(value, edge, lower=False):
+            return None if value is None else value-edge if lower else edge-value
+        result.append({"key": row["key"], "rise_above_3_c": margin(row.get("observed_rise"), 3., True),
+            "return_time_below_300_s": margin(row.get("t_band_s"), 300.),
+            "tau_below_fast_edge_s": margin(row.get("tau_s"), 60.),
+            "tau_above_slow_edge_s": margin(row.get("tau_s"), 60., True),
+            "noise_below_fast_c": margin(row.get("noise"), 1/3),
+            "noise_below_slow_c": margin(row.get("noise"), .15)})
+    return result
 
 
 def smoke_table(segment_dir):
@@ -137,7 +216,11 @@ def smoke_table(segment_dir):
     return {"schema": "joulewise.align.r1_smoke_b.v1", "classification_table": saved,
             "coverage": coverage, "candidate_replays": candidates,
             "status": "FOR_RESEARCH_LEAD_RULING" if coverage["pass"] else "COVERAGE_FAILED",
-            "note": "No automatic sensor adoption. RL-74/75/76; unchanged registered classifier."}
+            "selection": rt.select_smoke_sensors(saved["classification"],
+                json.loads((ROOT / r1.DEFAULT_RUNTIME_CONFIG).read_bytes())["r0_classified_keys"]),
+            "r0_classified_keys": json.loads((ROOT / r1.DEFAULT_RUNTIME_CONFIG).read_bytes())["r0_classified_keys"],
+            "class_edge_margins": class_edge_margins(saved["classification"]),
+            "note": "RL-78: numeric margins decide nothing; sampler bar binds. Registered classifier unchanged."}
 
 
 def smoke(output, part, runtime, *, soak_reference, invoke=r1._invoke):
@@ -181,6 +264,7 @@ def smoke(output, part, runtime, *, soak_reference, invoke=r1._invoke):
               "verified_reference": reference, "reference_custody": verified}
     if part == "B":
         result["part_b"] = smoke_table(segment)
+        (output / "smoke_part_b.json").write_text(json.dumps(result["part_b"], indent=2, sort_keys=True) + "\n")
     (output / "smoke.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
     return result
 

@@ -426,6 +426,49 @@ def resolve(path):
     return path if path.is_absolute() else ROOT / path
 
 
+def sensor_admissibility(classification, picks, r0_keys):
+    """RL-78: confirm the fixed smoke pair, without consulting its new rank."""
+    rows = {r["key"]: r for r in classification["ranking"]}
+    reasons = []
+    fast, slow = picks.get("s_fast"), picks.get("s_slow")
+    aliases = classification.get("alias_groups", [])
+    if fast == slow or any(fast in g and slow in g for g in aliases):
+        reasons.append("picked keys are aliases")
+    for role, key in picks.items():
+        row = rows.get(key, {})
+        noise_max = 1/3 if role == "s_fast" else .15
+        if (key not in r0_keys or row.get("unit") != "degC" or row.get("above_junction")
+                or row.get("clamped") or row.get("heat_ordering_excluded")
+                or not row.get("resolving")
+                or not _finite(row.get("noise")) or row["noise"] > noise_max
+                or not _finite(row.get("t_band_s")) or not 0 <= row["t_band_s"] <= 300
+                or not _finite(row.get("tau_s")) or not 0 <= row["tau_s"] <= 300):
+            reasons.append(f"{role}: {key} is not admissible on D (rise/noise/return-time/R0/quality)")
+    if classification.get("reason"):
+        reasons.append(classification["reason"])
+    return {"ok": not reasons, "reasons": reasons, **picks,
+            "second_key_label": "near-die settling check", "authority": "RL-78"}
+
+
+def select_smoke_sensors(classification, r0_keys):
+    """Registered picks, with only RL-78's empty-slow-class fallback.
+
+    rank() remains unchanged. Class-edge margins and alternative classifiers
+    are disclosures and are never read here. Lexical ties match select_keys.
+    """
+    fast, slow = classification.get("s_fast"), classification.get("s_slow")
+    fallback = slow is None and not classification.get("heatsink_candidates")
+    if fallback:
+        candidates = []
+        for row in classification["ranking"]:
+            pair = {"s_fast": fast, "s_slow": row["key"]}
+            if sensor_admissibility(classification, pair, r0_keys)["ok"]:
+                candidates.append(row)
+        slow = min(candidates, key=lambda r: (-r["t_band_s"], r["key"]))["key"] if candidates else None
+    result = sensor_admissibility(classification, {"s_fast": fast, "s_slow": slow}, r0_keys)
+    return {**result, "fallback": fallback, "selected_at": "smoke_part_b"}
+
+
 class HashDeadline(Exception):
     """A watchdog digest ran past its deadline (checked per 1 MiB block)."""
 
@@ -1513,7 +1556,9 @@ class Segment:
     def bands(self):
         if self.soak is None:
             return {"delta_fast_c": BAND_FLOOR_C, "delta_slow_c": registered_s6()["slots"]["S6"]}
-        floor = self.config.get("slow_band_floor_c", registered_s6()["slots"]["S6"])
+        floor = self.config.get("slow_band_floor_c", BAND_FLOOR_C)
+        if floor != BAND_FLOOR_C:
+            raise Refused("RL-78: arm at max(1 C, 3 soak idle SD); S6 receipt does not transfer")
         return bands_c(self.soak, self.sensors, slow_floor=floor)
 
     def step_d_result(self):
@@ -1877,29 +1922,15 @@ class Segment:
         template, spec = self.template("model_30b")
         if spec.get("thermal") is not None:
             raise Refused("capture predecessor must be the ordinary unmodified 30B template")
-        if self.backend.name == "production":
-            # The ordinary member uses the existing CLI launch-lineage verifier
-            # and the already-bound source file, with no edits to its config.
-            source = resolve(self.config["templates"]["model_30b"])
-            runs = self.out / "runs"
-            runs.mkdir()
-            result = subprocess.run([sys.executable, "-B", "-m", "joulewise", "run", str(source),
-                                     "--runs-dir", str(runs)], capture_output=True, text=True, timeout=1800,
-                                    pass_fds=(() if getattr(self, "host_lock_fd", None) is None else
-                                              (self.host_lock_fd,)))
-            bundle = runs / template["run_id"]
-            if result.returncode:
-                raise RuntimeFailure(f"ordinary 30B member exited {result.returncode}: {result.stderr[-500:]}")
-            from joulewise.align.apple.workload import read_episode_bundle
-            summary = json.loads((bundle / "summary_metrics.json").read_text())
-            member = SimpleNamespace(bundle=bundle, ep=read_episode_bundle(bundle), status=summary["status"])
-        else:
-            # Synthetic models have no production launch receipt; workload and
-            # schedule stay those of the template, only custody tags are removed.
-            template = deepcopy(template)
-            template["run_metadata"]["tags"] = [tag for tag in template["run_metadata"]["tags"]
-                                                 if tag != "launch_lineage_required"]
-            member = self.run_member(template, hook=None)
+        # RL-78 records Tf08 in every member. Keep the bound template and
+        # ordinary episode/schedule, adding the existing sidecar-only policy
+        # to this derived R1 config. It introduces no gates or extra process.
+        template = deepcopy(template)
+        template["run_metadata"]["tags"] = [t for t in template["run_metadata"]["tags"]
+                                               if t != "launch_lineage_required"]
+        spec["thermal"] = self.sensors
+        template["workload_profile"]["prompt_text"] = canonical(spec)
+        member = self.run_member(template, hook=None)
         if member.status != "succeeded" or not member.ep.turns:
             raise RuntimeFailure("capture predecessor did not complete")
         return {"bundle": str(member.bundle.relative_to(self.out)),
@@ -1966,10 +1997,16 @@ class Segment:
         result = classify_step(self.inventory.inventory, self.inventory.rows, prefill_ns=turn.start_ns,
                                last_decode_ns=turn.end_ns, quiet_s=STEP_QUIET_S, recovery_s=RECOVERY_CAP_S,
                                r0_sensors=self.sensors)
+        confirmation = None
+        if not record_only and not getattr(self, "smoke_part", None):
+            picks = {r: self.sensors[r] for r in ("s_fast", "s_slow")}
+            confirmation = sensor_admissibility(result, picks,
+                self.config.get("r0_classified_keys", list(picks.values())))
         path = self.out / "inventory" / "r1_classification.json"
         # classification_sha256 = sha256 of canonical(classification without that field).
         path.write_text(json.dumps({"classification": result, "label": label, "for_record_only": record_only,
-                                    "inventory": self.inventory.inventory}, indent=2, sort_keys=True) + "\n")
+                                    "inventory": self.inventory.inventory,
+                                    "night_confirmation": confirmation}, indent=2, sort_keys=True) + "\n")
         reasons = [result["reason"]] if result.get("reason") else (
             [] if result["status"] == "pass" else ["null pick: " + ", ".join(
                 role for role in ("s_fast", "s_slow") if result[role] is None)])
@@ -1977,11 +2014,19 @@ class Segment:
                 "heatsink_candidates", "record_only", "phases", "journal_rows", "alias_groups", "alias_rule",
                 "classification_sha256")
         extra = {}
-        if not record_only and result["sensor_pick_changed"] and result["s_fast"] and result["s_slow"]:
+        if confirmation is None and not record_only and result["sensor_pick_changed"] and result["s_fast"] and result["s_slow"]:
             extra["s7_for_r1_picks"] = s7_for_picks(
                 self.inventory.rows, {"s_fast": result["s_fast"], "s_slow": result["s_slow"]},
                 prefill_ns=turn.start_ns, quiet_s=STEP_QUIET_S)
-        return {**{key: result.get(key) for key in keep}, **extra, "reasons": reasons,
+        summary = {key: result.get(key) for key in keep}
+        if confirmation is not None:
+            summary.update(status="pass" if confirmation["ok"] else "fail",
+                           **{r: confirmation[r] for r in ("s_fast", "s_slow")},
+                           registered_picks={r: result[r] for r in ("s_fast", "s_slow")},
+                           night_confirmation=confirmation, sensor_pick_changed=False,
+                           flags=[] if confirmation["ok"] else ["r1.sensor_inadmissible"])
+            reasons = confirmation["reasons"]
+        return {**summary, **extra, "reasons": reasons,
                 "classification_file": path.relative_to(self.out).as_posix(),
                 "keys_inventoried": len(self.inventory.keys), "for_record_only": record_only}
 
@@ -2010,8 +2055,8 @@ class Segment:
             recovery_censored=censored, bands=bands,
             s5_bands=bands_c(self.soak, sensors, slow_floor=BAND_FLOOR_C), t_decline_s=fields["t_decline_s"],
             t_decline_status=fields["t_decline_status"], d_class=self.config.get("d_class", "heavy"))
-        if self.backend.name == "production" and sensors["s_slow"] != "Tf08":
-            detail["S6_tuning"] = {"status": "new_sensor_default", "authority": "RL-74/75 sensor ruling",
+        if self.backend.name == "production":
+            detail["S6_tuning"] = {"status": "new_sensor_default", "authority": "RL-78 default band",
                                    "S6_now": bands["delta_slow_c"], "receipt_transferred": False}
         detail["quiet_before_prefill_s"] = STEP_QUIET_S
         detail["recovery_observed_s"] = RECOVERY_CAP_S
