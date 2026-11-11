@@ -1998,6 +1998,101 @@ of them.
 
 ---
 
+# Decision request 19: Paper 1 seat 10, the outline restructure and title (2026-11-11 00:51 PST)
+
+**Read.** On `docs/2026-11-11-paper1-outline` (round 1, `f7b1b27fc`, with the Opus review at `966e0615d`): the
+Opus review in full; the new heading list; §1.2; §4.3 to §4.8 and Appendix D.3 to D.7 as they now stand. On that
+tree `tests.test_paper_build` passes and the fill index reproduces (`234 213 217 173`). I did not re-run the
+paragraph-identity check; the Opus seat scripted it independently of the builder. I have not seen the round-2
+head.
+
+## RL-47. Seat 10 is admitted on its round 2; four definitions come back into §4 in a follow-up; A-1 to A-5 ruled
+
+### Verdict
+
+**ADMIT, on round 2 applying F-1, F-2 and F-3.** The order is the one RL-8 asked for, the title is the approved
+working title and names only what is released, the subtitle is gone, and the text was moved, not rewritten. It
+merges when the Opus seat's identity script passes on the round-2 head and the three fixes are in. It comes back
+to me only if that script finds a difference that the map does not list.
+
+For F-2, take the second option: the numbered list goes back into §4.8 under its lead-in. The next point says
+why.
+
+### F-4, a follow-up PR: the method section must define what the results use
+
+The Opus review asked whether the two floor forms should return to §4.5. They should, and the same problem
+appears in three other places. As it stands the main text says "It has two forms" and never says what they are.
+It prints h and B in the results without defining them, decides the dominance branch by a rule that is only in
+the appendix, and uses "metrology interval", "decision interval" and "verdict-influential" before any of them
+is defined. A reader cannot follow Section 6 from Section 4.
+
+This is my acceptance criterion to correct, not the seat's error. RL-24 asked for "about half its length with
+derivations in an appendix", and I had not separated definitions from derivations. **The criterion is now: the
+method section keeps every definition the results use; examples, rationale and descriptive additions go to the
+appendix; the length is whatever that gives.** By my count that is about three quarters of the old length.
+Shortening by rewriting is a later prose task, for my 22 November read.
+
+One follow-up seat (Sol, moves only, same map and same identity script; Opus runs the script). It moves back,
+verbatim:
+
+1. **to §4.3**, after its first paragraph: D.3's lead-in line and its numbered list (mean, variance, half-width,
+   recorded bounds, interval, per-token value). D.3 keeps the synthetic example.
+2. **to §4.5**, after "It has two forms.": the two bullets, the paragraph beginning "In both, the **point
+   floor**", the **Corner widening** paragraph and the **Small-sample guard** paragraph. D.4 keeps the synthetic
+   example.
+3. **to §4.6**, after the R ≥ 2 paragraph: the R_cm paragraph and the paragraph beginning "Two models, two
+   phases and two forms", which holds the branch rule. D.5 keeps its example sentence.
+4. **to §4.8**, after the list that F-2 restores: the leave-one-quad-out paragraph. D.7 keeps the descriptive
+   estimates.
+
+The subsection headings' parentheses and the D headings are reworded to match what stays where. Appendix
+numbers do not change, so no cross-reference changes. One listed cut is allowed: the run-in label that repeats
+the §3.4 heading (A-3). The follow-up touches §4, §3.4's first line and Appendix D only. It runs after seat 10
+merges, beside seat 9's rebase, and must land before seat 12's fill reaches me. If the identity script passes
+and only these units moved, it merges without returning to me.
+
+### The advisories
+
+**A-1: yes, §1.2 gains the restructure, and the rule behind it is stated once.** A reader of §1.2 must be able
+to tell what was written blind from what was not. The two sentences beginning "After the primary release, on
+10 November 2026" are replaced by:
+
+> "Everything changed after the primary release was changed by seats that could know the primary block's
+> result. On 10 November 2026, statements of fact about the method and several branch glosses were corrected
+> (`CORRECTIONS-2026-11-10.md`). On 11 November 2026, the sections were reordered with their text unchanged and
+> the contingent subtitle was removed (`OUTLINE-MAP-2026-11-11.md`), and Section 8 was rewritten from the
+> project record."
+
+Seat 9's rebase carries this edit, since it is the commit that makes the last clause true; the fence has done
+its work once seat 10 has merged. **Standing rule:** every later seat that changes the manuscript adds its own
+clause to this list in the same commit (the fill, the outlook, Ed's introduction and conclusion). The
+introduction is Ed's to write; the scaffold seat tells him this paragraph has to survive in substance.
+
+**The §8 heading.** F-1 restores the old title so that seat 10 stays out of §8. Seat 9's rebase then sets it to
+the outline's title, "Research automation: controls, and where they failed", which describes what seat 9
+wrote. In the same rebase seat 9 renumbers its own cross-references by the Opus review's table; in RL-46's F-1
+wording, "Section 4.6" becomes "Section 5.6" and "Section 7.3" becomes "Section 8.3".
+
+**A-2: no action now.** The abstract's mentions of the replication and BYTES are settled at the 5 December
+freeze, as RL-8 says.
+
+**A-3.** The repeated run-in label goes in the follow-up. The forward references to "pass 1" and "stage 1" in
+§3.3 and the stray line breaks in D.2 and D.5 go on my list for the 22 November read.
+
+**A-4: accepted.** §10 stays an empty heading until seat 13.
+
+**A-5.** `DRAFT_NOTES.md` is a dated record and is not edited. It gets one header line: "Item 1 is superseded by
+research lead RL-8: no subtitle prints." The lead adds it.
+
+**Reason.** The restructure did what was asked and the review of it was thorough. The one thing it could not
+do under a moves-only rule was notice that half the method's vocabulary had left the main text, and that was
+the fault of the target I set.
+
+**Blind status.** Not blind to Block 5: the subtitle cut follows the released branch, as RL-8 recorded. Blind to
+Block 6, BYTES and v4.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
