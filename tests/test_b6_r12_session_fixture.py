@@ -68,6 +68,26 @@ print('coherent_no_sleep')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.strip(), "coherent_no_sleep")
 
+    def test_smc_source_types_pass_original_current_parser(self):
+        """Predict: original SMC battery parser accepts integer 0 mA and a positive integer 12000 mV, with no source errors."""
+        code = '''from pathlib import Path
+from runtime import install_sources, SharedClock
+from joulewise.hazards import smc, battery
+import sys
+root = Path(sys.argv[1])
+clock = SharedClock(root/'clock.bin')
+install_sources(root, clock)
+sample = smc.Reader().read()
+assert sample['errors'] == {}
+assert battery.smc_current(sample) == (0, None), sample
+assert type(sample['values']['B0AV']) is int and sample['values']['B0AV'] == 12000
+print('typed_smc')
+'''
+        result = subprocess.run(command(self.root, "code", code, self.root), capture_output=True,
+                                text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "typed_smc")
+
     def test_subprocess_deadline_uses_child_logical_clock(self):
         """Predict: a child that advances 5 logical seconds then waits for stdin exceeds a 1 s parent deadline before 1 wall second."""
         prepare_interpreters(self.root)

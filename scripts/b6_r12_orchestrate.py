@@ -21,6 +21,24 @@ def seed_calibration(root, clock, sources, source):
     ledger = source / plan.DEFAULT_LEDGER_RELATIVE
     if ledger.exists() and ledger.stat().st_size:
         return
+    prior_path = root / "prior-seed-input.json"
+    if prior_path.exists():
+        # A prior, chain-written ledger is an external input, just as in a
+        # production restart. The pinned copier writes both destination
+        # files and authenticates the unchanged source/destination bytes.
+        prior = json.loads(prior_path.read_text())
+        for name, expected in prior["files"].items():
+            if hashlib.sha256(Path(name).read_bytes()).hexdigest() != expected:
+                raise ValueError("prior synthetic prerequisite input changed: " + name)
+        copied = smoke.copy_ledger(Path(prior["root"]) / "input-repo", source, root)
+        sources.subprocess_run(["git", "-C", str(source), "add", plan.HEAD_PIN_RELATIVE], check=True)
+        sources.subprocess_run(["git", "-C", str(source), "-c", "commit.gpgsign=false", "commit", "-qm",
+                               "Import prior chain-written synthetic prerequisite pin"], check=True)
+        clock.sleep(max(0, prior["clock_ns"] / 1e9 - clock.monotonic()))
+        (root / "seed-receipt.json").write_text(json.dumps({"driver_rc": None,
+            "prior_chain_input": prior, "copied_input_paths": list(copied)}, indent=2) + "\n")
+        print("prior_chain_prerequisite_imported", flush=True)
+        return
     ledger.parent.mkdir(parents=True, exist_ok=True)
     ledger.touch()
     identities = {}

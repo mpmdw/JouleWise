@@ -949,8 +949,8 @@ def install_sources(root, clock):
             pass
     class SmcSource:
         def read(self, *args):
-            from joulewise.hazards import smc
-            return {"values": {key: 0.0 for key in smc.KEYS}, "errors": {}}
+            return {"values": {"B0AC": 0, "B0AV": 12000, "PDTR": 10.0,
+                               "PSTR": 10.0, "PPBR": 0.0}, "errors": {}}
         def close(self):
             pass
     from joulewise.hazards import smc

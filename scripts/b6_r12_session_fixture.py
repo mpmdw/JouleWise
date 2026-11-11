@@ -116,7 +116,7 @@ def declare_sources(root):
         "joulewise.hazards.monitor.Monitor.__init__.__kwdefaults__": "Context, zero frequency, 4 TiB available disk and idle host CPU counters",
         "joulewise.hazards.thermal.NotifyReader": "OS thermal level 0 external reader",
         "joulewise.hazards.battery.RegistryReader": "fresh AC-connected, not-charging battery; 0 mA, 12000 mV",
-        "joulewise.hazards.smc.Reader": "external SMC reader: declared keys 0; no native SMC call",
+        "joulewise.hazards.smc.Reader": "B0AC integer 0 mA; B0AV integer 12000 mV; PDTR/PSTR floats 10 W, PPBR float 0 W; no native SMC call",
         "joulewise.external.km003c_usb.load_libusb": "library object returns protocol bytes; unchanged UsbDevice/Meter/writer; 20 V, 10 W baseline + engine activity, 50 Hz",
         "subprocess.Popen._execute_child": "dispatch unchanged pinned children; sampler raw plists at 10 Hz; first-source-tick startup barrier; undeclared commands return 126 and are logged",
         "mlx.core / mlx_lm": "tiny engine library source, batch 1; matmul pulse source 50 W; request first/decode 10/6 W; token/model timings in source policy; original runtime, events and reducers run; weights never loaded",
@@ -270,6 +270,8 @@ def main(argv=None):
     parser.add_argument("--loop-probe", choices=("alpha", "beta", "gamma"))
     parser.add_argument("--nine-session-set", action="store_true")
     parser.add_argument("--seed-probe", action="store_true")
+    parser.add_argument("--prior-chain-root", type=Path,
+                        help="explicit prior synthetic root supplying a chain-written ledger input")
     parser.add_argument("--synthetic-models", action="store_true")
     parser.add_argument("--volume", choices=("prerequisite", "reduced", "full"), default="prerequisite")
     parser.add_argument("--denied-off", action="store_true")
@@ -277,6 +279,27 @@ def main(argv=None):
                         help="deny OFF only in the ordinary session; keep prerequisite/smoke actions normal")
     args = parser.parse_args(argv)
     root = prepare(args.out)
+    if args.prior_chain_root:
+        import struct
+        prior = args.prior_chain_root.absolute()
+        if (prior.is_relative_to("/Users/edr") or "restricted" in prior.parts
+                or prior != prior.resolve() or not prior.is_relative_to(Path(tempfile.gettempdir()).resolve())):
+            raise ValueError("prior source must be a resolved synthetic TMPDIR root")
+        common = json.loads((prior / "manifest.json").read_text())
+        seed = json.loads((prior / "seed-receipt.json").read_text())
+        if common.get("synthetic_only") is not True or common.get("pin") != PIN or seed.get("driver_rc") not in (0, 6):
+            raise ValueError("completed real-chain synthetic prerequisite required")
+        files = [prior / "manifest.json", prior / "seed-receipt.json",
+                 prior / "input-repo/runs/calibration_observation_ledger.jsonl",
+                 prior / "input-repo/configs/calibration/calibration_ledger_head.json"]
+        declaration = {"root": str(prior), "files": {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in files},
+                       "clock_ns": struct.unpack("!Q", (prior / "clock.bin").read_bytes())[0],
+                       "writer": "pinned joulewise.b6.smoke.copy_ledger; prior captures stay immutable at original synthetic locators"}
+        (root / "prior-seed-input.json").write_text(json.dumps(declaration, indent=2) + "\n")
+        manifest_path = root / "manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        manifest["prior_chain_seed_input"] = declaration
+        manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
     (root / "source-policy.json").write_text(json.dumps({"volume": args.volume, "denied_off": args.denied_off or args.deny_normal_session,
         "denied_normal": args.deny_normal_session,
         "primary_stream_duration_s": 335 if args.volume == "full" else 65,
