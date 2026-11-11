@@ -18,7 +18,7 @@ Last updated: 2026-11-10 (Paper rows: Paper 1 landed under `docs/paper/paper1/`,
 | Job | Canonical | Replaced |
 |---|---|---|
 | What is happening now, and what to do next | [`RUN_STATE.md`](RUN_STATE.md) (newest numbered item first; items from 150 on are current) | Dated `RESUME-*` files and session checkpoints under `docs/legacy/process_traces/` and `docs/process_traces/` (archived) |
-| Machine-readable head pointer and Next activation rule | [`docs/process/CURRENT.json`](docs/process/CURRENT.json), generated from RUN_STATE's highest numbered item carrying a `pointer` block; [`docs/process/POINTER_RULE.md`](docs/process/POINTER_RULE.md) | Hand-maintained pointer JSON (`WINDOW_STATUS.md` remains publisher-owned status, not the intake pointer) |
+| Machine-readable head pointer and Next activation rule | [`docs/process/CURRENT.json`](docs/process/CURRENT.json), generated from RUN_STATE's highest numbered item carrying a `pointer` block; [`docs/process/POINTER_RULE.md`](docs/process/POINTER_RULE.md) | Hand-maintained pointer JSON; `WINDOW_STATUS.md` and its publisher `scripts/window_status.sh` (superseded on `main`; retrieval in [docs/ARCHIVE.md](docs/ARCHIVE.md)) |
 | Work queue | [`TASK_QUEUE.md`](TASK_QUEUE.md); its marker-fenced region is generated from `docs/process/state_kernel.json` by `scripts/gen_state.py` (`--check` in CI) | Hand-kept queue lists in session traces |
 | Decisions and rulings | [`docs/decision_log.md`](docs/decision_log.md) (D-numbers), [`docs/council_log.md`](docs/council_log.md); research-design and paper-bound rulings (RL-numbers, the binding record per `RUN_STATE.md` item 257): `audit/2026-11-10-fable:docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md` | — |
 
