@@ -252,3 +252,4 @@ carries `barred` into `calibration_windows` and `series_history`. A barred windo
 replacement windows (R24), C9 through C14 in order, which the series arms only after C8 and only while fewer than 8
 windows are counted. `calibration_decision` reports `barred_windows` and `replacements_used`.
 
+**courier_delivery source (F-09; research lead RL-35):** the run path writes `night/courier.delivery.json`, and the next-arm release check reads it. A dead-man-delivered night whose `courier.json` still says `sent: false` is released on that delivery receipt. Exercised by native check 8.

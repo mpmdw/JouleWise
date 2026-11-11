@@ -322,7 +322,9 @@
     "scripts/watchdog_status.py": null,
     "scripts/launch_align_r0.py": null,
     "scripts/run_align_r0_launchagent.sh": null,
-    "scripts/post_window_unstrand.sh": null
+    "scripts/post_window_unstrand.sh": null,
+    "scripts/install_magistrate_watchdog.sh": null,
+    "tests/fixtures/night_plan_v1_retired.json": null
   },
   "commit": null,
   "gates": {
