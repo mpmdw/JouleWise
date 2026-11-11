@@ -34,3 +34,17 @@ Reviewer: Fable 5.2, state-machine lane lead, 2026-11-11 04:45 PST. Reviewed hea
 
 On the Air store with a synthetic window: remove one queue entry by hand, run `verify`, and confirm the entry
 is recreated and the second copy proceeds.
+
+## Round 2 delta review (2026-11-11 05:15 PST)
+
+Reviewed `393d93fdc` (Sol's round 2, pushed as the side branch `ops/2026-11-11-w1-offload-r2` and merged here).
+
+**Verdict: ADMIT.**
+
+- O-1: fixed. New tests cover the Air reporting a receipt for a different manifest digest (the local receipt
+  is kept and the run ends in the integrity-mismatch refusal) and the Air being unreachable during `stat`
+  (transport exit, local receipt kept). The mutant that survived round 1 (`stale_air_receipt` forced true) is
+  now killed.
+- O-2: done, one docstring sentence.
+- `tests.test_offload_window` passes on the Air. The 17-state deletion characterization test is unchanged and
+  passes, so the research lead's condition (RL-53 W-5) still holds.
