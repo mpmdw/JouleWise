@@ -1,5 +1,13 @@
 # Capstone paper plan v2: a near-complete draft by 30 November
 
+> **Status note, 2026-11-10 (research lead RL-1; Ed's decision E1, `RUN_STATE.md` item 256).** The mid-December
+> capstone submission is **Paper 1**, `docs/paper/paper1/paper1.md` (see `CANONICAL.md`), with at most a one-page
+> outlook on agent auditing (RL-9). This file remains the plan of the capstone tripwire manuscript and is kept as
+> history. Its milestones and roles do not govern Paper 1; Paper 1's work plan is RL-24 in
+> `docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md` (branch `audit/2026-11-10-fable`). Lines
+> superseded since this plan was written are marked in place with **[Superseded 2026-11-10: ...]**; the original
+> text is left as it was.
+
 **Title (Ed's):** *Sabotage Leaves an Energy Signature: A Pilot Study of Physical Auditing for AI Agents*
 
 **Claim the paper can carry on unblinded evidence.** On one Apple-silicon laptop, an energy residual against logged work detected every tested known log omission in a non-adaptive pilot. The tested omissions were 539 and 1,193 reasoning tokens, on two sabotage trajectories re-checked across sessions. A known-bytes test shows that host software rails miss about 76% of a controlled memory-traffic contrast, which motivates an external DC meter. The paper sets out a three-layer oversight frame (monitors see content, the meter sees quantity, probes see internals), states the squeeze as a hypothesis, and gives the registered v4 and v5 plan.
@@ -9,7 +17,7 @@
 - a false-alarm rate;
 - an H50/H90 or a minimum detectable H;
 - that the squeeze holds;
-- any v4, v5, Block-5 or BYTES held-out result.
+- any v4, v5, Block-5 or BYTES held-out result. **[Superseded 2026-11-10 for Block 5 only: `RUN_STATE.md` item 232 puts Block 5 in the mid-December paper as the instrument-validation section (RL-1). Released Block 5 numbers print only after RL-3's gate. v4, v5 and BYTES held-out stand.]**
 
 The title asks more than the evidence shows. So the abstract's first result sentence must carry the scope: known log omissions, a non-adaptive agent, two trajectories.
 
@@ -24,7 +32,7 @@ The title asks more than the evidence shows. So the abstract's first result sent
 | Drafter | **Sol 6.1 xhigh**, local `codex exec`, one job per section | Drafts from the evidence ledger and the cited records only, with a source key on every number. Builds figures from the transcription tables. | Read sealed, restricted or `night-*` paths; run analysis or capture scripts; invent citations |
 | Reviewer | **Opus 5.5** (the lead, or an Opus review seat the lead briefs) | Cross-family review of every Sol section. Re-derives each number from the cited record, not from the draft. Runs an overclaim pass. | Rewrite Ed's voice sections |
 | Cross-check for Opus-drafted text | **Sol 6.1 xhigh** | Reviews the appendix the lead drafts (research operations) | — |
-| Final look | **Fable 5.1**, once, at the 21 Nov checkpoint only | A cold read of the whole draft for overclaim and inconsistency | Line edits |
+| Final look | **Fable 5.1**, once, at the 21 Nov checkpoint only **[Superseded 2026-11-10: `RUN_STATE.md` item 252, Fable 5.2 has the final say on paper-bound work]** | A cold read of the whole draft for overclaim and inconsistency | Line edits |
 | Author's voice | **Ed** | Writes the introduction and conclusion; approves the title, abstract and contribution list; gives the unseal OK if one ever arises | — |
 | Owner | **Lead** | Freezes the ledger, assigns jobs, merges sections, keeps the gate table below, rules on admitted inserts | Read or relay outcomes |
 
@@ -50,7 +58,7 @@ Status key:
 | 7 | Related work (1 page) | The LIT map in PAPER-OUTLINE; "no prior token-level agent-log energy audit found in our search" (search-bounded); citation fixes from PRs #698 and #703 (Kyung added; Kimpson is a MATS page; MonitoringBench and Token Inflation wording) | **Now**, with primary-source checks | Sol | Opus opens each cited primary source |
 | 8 | Discussion: the squeeze (1 page plus F9) | Hypothesis, not theorem (AGREEMENT-FINAL V01); shared blind spots (cover work, filler, matched energy, fixed-compute latent reasoning; weight-only bound ≤ 3×10⁻⁵ as an estimate from PR #702) | **Now** | Sol | Opus |
 | 9 | Threats to validity (1 page) | The v1 threats table plus: the pilot's scored channel is host software; the replay advantage is projected, not measured; v4's registered residual stays GPU energy (R11-3) | **Now** | Sol | Opus |
-| 10 | Registered continuation: v4 and v5 (1 page plus F10-F11) | v4 as registered: Qwen3.8-27B 8-bit; Q4 (3 D windows); Q6 (m ≥ 39 per pair plus a test cohort); R10 fallback; KM003C secondary DC-in; sealed transcripts. v5: D07 joint rule, D09 endpoint, D12 time-plus-monitor comparator, frontier monitor, scoped red team; design under competition | **Now** for the design. **Gated** for gate *status* (fill at the freeze) and the v5 design choice (cite only once the lead rules) | Sol | Opus |
+| 10 | Registered continuation: v4 and v5 (1 page plus F10-F11) | **[Superseded 2026-11-10 for the v4 design: `RUN_STATE.md` item 252, claim contract option B (tripwire K confirmatory, S with an equivalence margin, success recording); the contract is being rebuilt]** v4 as registered: Qwen3.8-27B 8-bit; Q4 (3 D windows); Q6 (m ≥ 39 per pair plus a test cohort); R10 fallback; KM003C secondary DC-in; sealed transcripts. v5: D07 joint rule, D09 endpoint, D12 time-plus-monitor comparator, frontier monitor, scoped red team; design under competition | **Now** for the design. **Gated** for gate *status* (fill at the freeze) and the v5 design choice (cite only once the lead rules) | Sol | Opus |
 | 11 | Conclusion (0.5 page) | What is observed and what is untested; the next question | **Voice** | **Ed** | Lead (accuracy only) |
 | App. A | Research operations and AI-use statement (1-1.5 pages) | How the study was run: lead, magistrate, workers; the guardrails (prereg plus deviation log, structure-only blinding, independent recompute and comparator, gate ledger, cross-family review); what humans decided. Half-A ledger H1-H15. Required for honesty and by most venues' AI-use policies | **Now** | **Lead** (knows the record) | Sol, cross-family |
 | App. B | Source register, evidence ledger, exclusion ledger, deviation history, figure transcription tables | From PAPER-OUTLINE plus DEVIATION-LOG pointers | **Now** | Sol | Opus |
@@ -65,7 +73,7 @@ Rough length: 9-10 pages plus appendices, a workshop-style length that fits the 
 | v4 results (§6.5, T4) | Registered release passes (recompute agrees) **and** Ed's unseal OK, by about **10 Dec** | Variant B: "v4 outcomes unavailable at this manuscript's evidence cut" | Use readiness numbers, partial windows or synthetic power curves in place of results |
 | v4 gate status in §10 and talk slide B9 | Not sealed: read it from `RUN_STATE.md` at the freeze (22 Nov), and again at the paper cut | Write "pending" | Report any alarm, residual or energy value from R1, W1 or D |
 | v5 design in §10 | The lead's ruling on the design competition (`origin/align/2026-11-08-v5design-*`) | Describe only the R11 choices (D07, D09, D12) and say the design is under competition | Name a roster, sample size or decision rule before the ruling |
-| Block 5 | Excluded from this paper. It is Paper 1 material, and sealed | — | Mention any Block-5 outcome. The **process** facts in App. A (runtimes, defect counts, exit classes) are allowed |
+| Block 5 | Excluded from this paper. It is Paper 1 material, and sealed **[Superseded 2026-11-10: Block 5 was unsealed on 2026-11-08 (item 231) and is in the mid-December paper as its instrument-validation section (item 232; RL-1). Its numbers print only after RL-3's gate]** | — | Mention any Block-5 outcome. The **process** facts in App. A (runtimes, defect counts, exit classes) are allowed |
 
 **Not gated (write now):** §§2, 4-9 and App. A-B, plus §3 for KB and E3. These sections make up about 80% of the paper and all of the variant-B result.
 
@@ -115,5 +123,5 @@ Rough length: 9-10 pages plus appendices, a workshop-style length that fits the 
 - The two-trajectory qualifier appears in the abstract, §6.3 and the conclusion.
 - No sentence implies a false-alarm rate, intent detection, real hidden-compute detection, an adaptive result or the squeeze holding.
 - "DC input", not "wall energy". The pilot channel is labelled `powermetrics` GPU energy wherever results appear.
-- No Block-5, BYTES held-out, v4 or v5 outcome anywhere. The `[FREEZE]` cells hold status only.
+- No Block-5, BYTES held-out, v4 or v5 outcome anywhere. The `[FREEZE]` cells hold status only. **[Superseded 2026-11-10 for Block 5 only: items 231 and 232; released Block 5 numbers may appear after RL-3's gate (RL-1, RL-10).]**
 - App. A states plainly that AI agents wrote most of the code, analyses and drafts, and names what humans decided.
