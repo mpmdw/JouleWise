@@ -1221,30 +1221,39 @@ def _record_bound(root, packet):
 
 
 # RL-65 item 2, narrowed to harvest-produced signals by RL-71.
-# RL-73's member runtime mismatch remains a lead follow-up: the committed
-# exclusions code alone cannot distinguish it from the arm identity mismatch.
+# RL-79 withdraws RL-73's additional member runtime mismatch hold.
 HELD_WINDOW_REASONS = frozenset({'records.source_changed_during_harvest',
                                 'roster.no_science_bundles', 'precheck.certain_exclusion'})
 
 
 def held_window_check(measurement_root, packet, *, ruling_path=None):
-    """Read only the rebuilt packet's authenticated previous final sources.
-
-    The packet currently rejects held_window_release ledger rows. The CLI
-    fallback uses the identical row shape/signature; its text source is a
-    committed blob at the rebuilt packet's series_commit, never a custody path.
-    """
+    """RL-79: check every earlier final window using only authenticated Git sources."""
     from scripts import align_v4_next_arm_packet as builder
-    record = {'ok': False, 'window': None, 'held_reasons': [], 'reasons': [], 'ruling': None}
+    record = {'ok': False, 'window': None, 'held_reasons': [], 'reasons': [], 'ruling': None,
+              'windows': [], 'deferred': [], 'rulings': []}
     try:
         evidence = builder.GitEvidence(measurement_root)
-        previous = builder.WindowRecord(evidence, packet['record_commit'], packet['record_path'])
-        builder.require(previous.sha256 == packet['record_sha256'], 'previous record digest mismatch')
+        descriptors = packet['window_chain']
+        builder.require(isinstance(descriptors, list) and descriptors, 'window chain missing')
+        chain = []
+        for descriptor in descriptors:
+            window = builder.WindowRecord(evidence, descriptor['commit'], descriptor['path'])
+            builder.require(window.sha256 == descriptor['sha256'], 'window chain record digest mismatch')
+            builder.require(window.window == descriptor['window'], 'window chain window mismatch')
+            chain.append(window)
+        previous = chain[-1]
+        builder.require(all(getattr(previous, key) == packet['record_' + key]
+                            for key in ('commit', 'path', 'sha256')), 'previous record identity mismatch')
         builder.require(previous.window == packet['previous_window'], 'previous window mismatch')
+        builder.require(chain[0].previous_link is None, 'window chain incomplete')
+        # Same chronological binding as build_packet (align_v4_next_arm_packet.py:924-954).
+        for older, newer in zip(chain, chain[1:]):
+            builder.require(newer.previous_link == {'commit': older.commit, 'path': older.path,
+                                                    'sha256': older.sha256}, 'window chain link mismatch')
+            older.bind_final(newer)
         record['window'] = previous.window
         if not previous.has_final_sources():
-            # Same late-final source binding as the packet's last_desk_state:
-            # the authenticated ledger can name a successor carrying previous_final.
+            # Preserve the packet's last_desk_state late-final binding for the last record.
             ledger = builder.decode(evidence.read(packet['series_commit'], builder.SERIES_PATH,
                                                   packet['series_sha256']))
             last = ledger.get('last_passed_record') or {}
@@ -1255,48 +1264,94 @@ def held_window_check(measurement_root, packet, *, ruling_path=None):
                                     'last desk-passed final_record malformed')
                     successor = builder.WindowRecord(evidence, final_ref['commit'], final_ref['path'])
                     builder.require(successor.sha256 == final_ref['sha256'], 'final record digest mismatch')
+                    builder.require(successor.previous_link == {'commit': previous.commit, 'path': previous.path,
+                                                                'sha256': previous.sha256},
+                                    'final record is not the immediate successor')
                     previous.bind_final(successor)
                     builder.require(previous.final_from is not None, 'final record carries no previous_final')
-        final_error = previous.final_evidence()
-        record['final'] = final_error is None
-        if final_error is not None:
-            record.update(ok=True, status='previous window not final: hold check deferred to its finality',
-                          finality_reason=final_error)
-            return record
-        if not previous.has_final_sources():
-            # A zero-capture record can be final without a harvest (R17).
-            record.update(ok=True, status='no final harvest: no capture')
-            return record
-        exclusions = previous.source('exclusions')
-        reasons = exclusions['reasons']
-        builder.require(isinstance(reasons, list) and all(isinstance(r, str) for r in reasons),
-                        'final exclusions reasons malformed')
-        record.update(claim_usable=exclusions['claim_usable'], final_reasons=reasons,
-                      held_reasons=sorted(HELD_WINDOW_REASONS.intersection(reasons)))
-        if not record['held_reasons']:
-            record.update(ok=True, status='no held reasons')
-            return record
-        if ruling_path is not None:
-            ruling = pilot.h.read(ruling_path)
+        for window in chain:
+            final_error = window.final_evidence()
+            row = {'window': window.window, 'final': final_error is None, 'held_reasons': [],
+                   'released_by': None}
+            record['windows'].append(row)
+            # R1/W1 are omitted from series history by build_packet at :1010-1012;
+            # development contributes no calibration at :956-959 either.
+            if window.window in ('R1', 'W1') or window.record['role'] == 'development':
+                row['status'] = 'skipped'
+            elif final_error is not None:
+                row.update(status='deferred', finality_reason=final_error)
+                record['deferred'].append(window.window)
+            elif not window.has_final_sources():
+                row['status'] = 'no final harvest: no capture'
+            else:
+                exclusions = window.source('exclusions')
+                reasons = exclusions['reasons']
+                builder.require(isinstance(reasons, list) and all(isinstance(r, str) for r in reasons),
+                                'final exclusions reasons malformed')
+                row.update(claim_usable=exclusions['claim_usable'], final_reasons=reasons,
+                           held_reasons=sorted(HELD_WINDOW_REASONS.intersection(reasons)),
+                           status='held' if HELD_WINDOW_REASONS.intersection(reasons) else 'no held reasons')
+            if window is previous:
+                record.update({k: v for k, v in row.items() if k != 'window'})
+                if row['status'] == 'deferred':
+                    record['status'] = 'previous window not final: hold check deferred to its finality'
+        paths = [] if ruling_path is None else (list(ruling_path) if isinstance(ruling_path, (list, tuple))
+                                                else [ruling_path])
+        repo = Path(measurement_root).absolute()
+        for path in paths:
+            supplied = Path(path)
+            relative = supplied.relative_to(repo) if supplied.is_absolute() else supplied
+            name = relative.as_posix()
+            commit = evidence.commit(packet['series_commit'])
+            # If absent at the series commit, authenticate its latest surviving ancestor blob.
+            try:
+                raw = evidence.read(commit, name)
+            except ValueError:
+                builder.require(not evidence.git('ls-tree', '-z', commit, '--', name),
+                                'held ruling is not a committed regular file: ' + name)
+                revisions = evidence.git('log', '--format=%H', commit, '--', name).decode().splitlines()
+                for revision in revisions:
+                    commit = evidence.commit(revision)
+                    try:
+                        raw = evidence.read(commit, name)
+                        break
+                    except ValueError:
+                        continue
+                else:
+                    raise ValueError('held ruling is not a committed file: ' + name)
+            builder.require(not any((repo.joinpath(*relative.parts[:i])).is_symlink()
+                                    for i in range(1, len(relative.parts) + 1)),
+                            'held ruling working path must not contain symlinks')
+            builder.require((repo / relative).is_file(), 'held ruling working path must be a regular file')
+            builder.require((repo / relative).read_bytes() == raw, 'held ruling working file differs from committed blob')
+            ruling = builder.decode(raw)
             fields = {'ruling_id', 'after_window', 'text', 'lead_signature', 'resets'}
             builder.require(isinstance(ruling, dict) and set(ruling) == fields, 'held ruling row malformed')
             builder.require(ruling['resets'] == 'held_window_release'
-                            and ruling['after_window'] == previous.window
+                            and isinstance(ruling['after_window'], str)
                             and isinstance(ruling['ruling_id'], str) and ruling['ruling_id'].strip()
                             and kit.valid_lead_signature(ruling['lead_signature']),
                             'held ruling identity/signature/window invalid')
-            text = evidence.source(packet['series_commit'], ruling['text'], json_value=False)
+            text = evidence.source(commit, ruling['text'], json_value=False)
             builder.require(bool(text.strip()), 'held ruling text empty')
-            record.update(ok=True, status='held reasons answered by signed ruling',
-                          ruling={**ruling, 'source': 'arm_cli', 'text_sha256': builder.digest(text)})
-        else:
-            record['reasons'].append(f"held_window: {previous.window}: "
-                                     + ', '.join(record['held_reasons']) + ': no signed ruling')
+            text.decode('utf-8')  # Validate the complete source even when its recorded text is capped.
+            release = {**ruling, 'source': 'arm_cli', 'path': name, 'sha256': builder.digest(raw),
+                       'commit': commit, 'text_sha256': builder.digest(text),
+                       'text_content': text[:16 * 1024].decode('utf-8', errors='ignore'),
+                       'truncated': len(text) > 16 * 1024}
+            record['rulings'].append(release)
+            for row in record['windows']:
+                if row['window'] == ruling['after_window'] and row['held_reasons']:
+                    row.update(released_by=ruling['ruling_id'], status='held reasons answered by signed ruling')
+                    if row['window'] == previous.window:
+                        record.update(ruling=release, status=row['status'])
     except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
-        if record['held_reasons']:
-            record['reasons'].append(f"held_window: {record['window']}: "
-                                     + ', '.join(record['held_reasons']) + ': no signed ruling')
         record['reasons'].append(f'held_window: unreadable: {type(exc).__name__}: {exc}')
+    for row in record['windows']:
+        if row['held_reasons'] and row['released_by'] is None:
+            record['reasons'].append(f"held_window: {row['window']}: "
+                                     + ', '.join(row['held_reasons']) + ': no signed ruling')
+    record['ok'] = not record['reasons']
     return record
 
 
@@ -1982,9 +2037,9 @@ def main(argv=None):
                                        ('--runtime-stack-attested', dict(type=Path,
                           help='RL-73 JSON: attested_by, optional attested_at_epoch_s, registered and observed '
                                'runtime_versions (python and packages)')),
-                                       ('--held-window-ruling', dict(type=Path,
-                          help='signed held_window_release row; text is a {path, sha256} source at the '
-                               'rebuilt packet series_commit')),
+                                       ('--held-window-ruling', dict(type=Path, action='append',
+                          help='committed signed held_window_release row; repeat for each held window; '
+                               'text is a {path, sha256} source at the ruling commit')),
                                        ('--next-arm-triage', dict(type=Path, required=True,
                           help='R12 B2 next-arm triage packet (JSON) built off the MBP from the committed record'))))
 

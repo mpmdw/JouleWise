@@ -466,20 +466,27 @@ def check_runtime_stack_preflight(ctx):
                   matching=matching, refused=refused, refusal=refusal)
 
 
-@check('held-window', 'RL-65/RL-71: authenticated previous final harvest hold refuses at the arm')
+@check('held-window', 'RL-79: an earlier final harvest hold refuses even when the previous window is provisional')
 def check_held_window(ctx):
     from scripts import align_v4_session as session_mod
     root = ctx.work / 'held-window-records'
     root.mkdir()
     now = time.time()
-    scenario = _fresh(_scenario_class()(root, 'W1'), now).finish()
+    development = _fresh(_scenario_class()(root, 'W1'), now).finish()
+    scenario = _fresh(_scenario_class()(root, 'C1', previous=development), now).finish()
     control = _arm_on_records(ctx, root, scenario.build(now=now), now=now)
-    scenario.sources['exclusions'].update(reasons=['precheck.certain_exclusion'], claim_usable=False)
+    scenario.provisional = True
+    scenario.sources['exclusions'].update(reasons=['records.source_changed_during_harvest'], claim_usable=False)
     scenario.finish()
-    arm = _arm_on_records(ctx, root, scenario.build(now=now), now=now)
+    successor = _fresh(_scenario_class()(root, 'C2', previous=scenario, provisional=True,
+                                       previous_final=True), now)
+    successor.next_plan['window'] = 'C3'
+    successor.finish()
+    arm = _arm_on_records(ctx, root, successor.build(now=now), now=now)
     matching = control['admitted'] and control['held_window_check']['ok']
     refused = (not arm['admitted'] and
-               'held_window: W1: precheck.certain_exclusion: no signed ruling' in arm['reasons'])
+               'held_window: C1: records.source_changed_during_harvest: no signed ruling' in arm['reasons']
+               and arm['held_window_check']['deferred'] == ['C2'])
     return result(PASS if matching and refused else FAIL, 'clean final harvest and held final harvest',
                   matching=matching, refused=refused, reasons=arm['reasons'])
 
