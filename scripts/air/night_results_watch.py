@@ -278,7 +278,9 @@ class Summary:
     def fields(self):
         return (f"outcome={self.outcome} state={self.state} "
                 f"invariants={','.join(self.invariants) or '-'} verdict={self.verdict or 'UNKNOWN'} "
-                f"chain_exit_code={self.chain_exit_code} fault={self.fault} "
+                f"chain_exit_code={'absent' if self.chain_exit_code is None else self.chain_exit_code} "
+                # A record generation without the field prints "absent", never "False".
+                f"fault={'absent' if self.fault is None else str(self.fault).lower()} "
                 f"fault_reason_count={self.fault_reason_count}")
 
 

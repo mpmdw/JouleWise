@@ -841,6 +841,13 @@ class InvariantAlarmLevelTests(unittest.TestCase):
         self.assertNotIn("RESULT_NOT_MEASURED", by_code)
         self.assertEqual(w.event_exit(events), w.EXIT_CODES["alarm"])
 
+    def test_absent_fields_print_as_absent_not_false(self):
+        base = dict(outcome="MEASURED_OK", state="Delivered", verdict="GO", result_exists=True)
+        self.assertIn("chain_exit_code=0 fault=absent ", w.Summary(chain_exit_code=0, **base).fields())
+        self.assertIn("chain_exit_code=0 fault=false ", w.Summary(chain_exit_code=0, fault=False, **base).fields())
+        self.assertIn("chain_exit_code=3 fault=true ", w.Summary(chain_exit_code=3, fault=True, **base).fields())
+        self.assertIn("chain_exit_code=absent fault=absent ", w.Summary(**base).fields())
+
     def test_measured_result_without_invariants_is_quiet(self):
         summary = w.Summary(outcome="MEASURED_OK", state="Delivered", verdict="GO",
                             chain_exit_code=0, fault=False, result_exists=True)

@@ -73,3 +73,13 @@ violated invariant is an alarm and exits 20; without one it is quiet), which kil
 **Native check owed, by the orchestrator:** one `--once --include-plan <finished rehearsal>` poll on the Air
 with a scratch state file, compared with that rehearsal's known structural outcome. Until it passes, the
 scratch watcher stays the watcher of record.
+
+## Native check (2026-11-11, by the orchestrator) and one change from it
+
+The orchestrator ran `--once --include-plan align-r1-20261111T0453Z` at `88d23bb45` with a fresh state file. The
+line matched the rehearsal's known structure: `outcome=MEASURED_OK state=Delivered verdict=GO chain_exit_code=0`,
+with the invariant alarm `COURIER_SENT_WITHOUT_DELIVERY`, which is correct for a file-only courier (audit Q11).
+
+It printed `fault=None`. That rehearsal ran on a record generation whose `result.json` has no `fault` field.
+The line now prints `fault=absent` for a missing field and `fault=false` or `fault=true` for a recorded one, and
+`chain_exit_code=absent` likewise (my change, with a test).
