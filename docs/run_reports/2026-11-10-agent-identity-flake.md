@@ -4,6 +4,9 @@ Branch: `fix/2026-11-10-agent-identity-flake`.
 Baseline: `origin/main` at `6b91f64284a79c30bb370e3fdccf8c205a24f9a6`.
 Test fix: `bbb01c8c3` (`test: stabilize agent census wiring fixtures`).
 This report is the companion documentation commit.
+It records first-round verification. The [Fable review](2026-11-10-agent-identity-flake-fable-review.md)
+and [round-2 report](2026-11-10-agent-identity-flake-r2.md) supply the subsequent
+diagnostic correction and live-fixture repair.
 
 ## Diagnosis and uncertainty
 
@@ -19,7 +22,7 @@ cannot verify its argv. Thus, a window that exits or becomes unreadable between
 readiness and filtering remains in stdout, producing exactly the reported extra
 window row. The tests incorrectly require that row to disappear regardless of
 whether the kernel can still verify it. Waiting for argv once in `_live` does
-not guarantee a later read of a finite-lived `sleep 60` child.
+not establish that the child has initialized successfully or will stay alive.
 
 The hazard test adds another lifecycle problem: it deliberately orphans a
 grandchild, registers only `os.kill` for cleanup, and cannot `wait()` for it.
@@ -31,8 +34,29 @@ The spontaneous CI event was **not reproduced** here: the unchanged module
 passed 50 serial runs and five rounds of three concurrent copies. An additional
 100 repetitions of `AgentIdentityTests` recorded 1,400 inspections of tracked,
 still-running children with no missing, empty, or changed argv. These results
-do not establish which OS event caused the original verification failure, and
-do not prove that a child actually reached its 60-second lifetime in CI.
+do not establish which OS event caused the original verification failure.
+
+**Correction after Fable's CI-log review:** expiry of the 60-second lifetime
+is ruled out by the CI timings: the whole failing module took 0.040 s, and the
+hazard test in job 130308306392 took about 3 ms. All five sampled failures were
+on `ubuntu-26.04` (runs 42954521391, 42956849799, 42954417422, 42953253289,
+42945046694). These observations are from the linked review; this offline
+seat did not fetch CI logs independently.
+
+The leading hypothesis is that `/bin/sleep` on that image is a multicall
+coreutils binary dispatching on argv[0]. A symlink named `run_campaign`,
+`claude` or `codex` would then select an unknown utility and exit immediately.
+An exited/zombie child can have empty `/proc/<pid>/cmdline`, leaving its census
+row unverifiable and therefore retained. This fits the millisecond timing and
+the image-specific evidence, but **remains unverified on an ubuntu-26.04
+runner**. One-line check there (using a fresh temporary directory):
+
+```sh
+readlink -f /bin/sleep; d=$(mktemp -d); ln -s /bin/sleep "$d/run_campaign"; "$d/run_campaign" 60; echo "exit $?"
+```
+
+The observed failures in this review sample are Linux-only; successful Darwin
+stress runs cannot confirm or refute that runner-specific hypothesis.
 
 A controlled replay does establish the failing mechanism. Against the unchanged
 tests, a temporary in-process harness retained each `_live` child and killed and
@@ -54,7 +78,9 @@ bug was found; its conservative handling of unverifiable rows is intentional.
 
 ## Fix
 
-Only `tests/test_agent_identity.py` changes executable content.
+Only `tests/test_agent_identity.py` changes executable content. The following
+describes the first-round fix; round 2 also replaces the remaining sleep
+fixtures with ready-signaled, parent-controlled interpreter waiters.
 
 - Added `_census_process_table`, which calls the **real shared filter** using
   its existing `inspector` parameter and a closed table of `ProcessInfo` fixtures.
@@ -74,9 +100,11 @@ production decisions. `joulewise/` and `scripts/` are unchanged.
 
 ## Verification
 
-Environment: Darwin, Python 3.13.18. Every ordinary module run discovers 13 tests:
+First-round environment: Darwin, Python 3.13.18. Every ordinary module run discovers 13 tests:
 12 pass and the existing ancestor test skips because sandboxed `/usr/bin/pgrep`
-returns exit 3, `Cannot get process list`.
+returns exit 3, `Cannot get process list`. These are this sandbox seat's counts.
+Fable separately reports 13/13 passing natively on Darwin for 11 consecutive
+runs, with the ancestor test active.
 
 | Check | Result |
 |---|---|
@@ -126,9 +154,10 @@ binding task instructions; only this module was tested, well below the test
 time budget. Coordination files and kernel registration were left untouched,
 as requested. The changed paths are this report and `tests/test_agent_identity.py`.
 
-No blocking question remains. The unresolved forensic detail is the exact
-native event in the original CI failure. Python 3.11 and Linux were not exercised
+No blocking question remains. The multicall-coreutils hypothesis still needs
+the ubuntu-26.04 check above. Python 3.11 and Linux were not exercised
 in this local seat. Before claiming native ancestor coverage, the lead should run
 `python3.13 -B -m unittest -v tests.test_agent_identity.AncestorCensusLiveTests`
 outside the sandbox where `pgrep` can read the process list. No MLX tests apply.
-Commits are local only; nothing was pushed.
+Branch publication happened after this first-round seat; see the review and
+round-2 report for the current handoff.
