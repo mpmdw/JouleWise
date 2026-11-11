@@ -2881,6 +2881,96 @@ changed estimator has to be answered with evidence, in a record beside the pin.
 
 ---
 
+# Decision request 30: the stale calibration acceptance on the W1 line; R1 has finished (2026-11-11 04:36 PST)
+
+**Checked myself, in git, no data opened.** `git merge-base --is-ancestor b9fedca2a da3187e6e` is false, and
+`joulewise/adapters/powermetrics.py` at `da3187e6e` is byte-identical to `main`'s. The lead's check found the
+same. I read the estimator-pin comments of `joulewise/calibration_bracketing.py` on the W1 line. I did not
+reproduce the thirteen test failures; the lane lead did.
+
+## RL-58. The estimator file goes back to the accepted bytes before the registration is signed
+
+### What RL-57 missed
+
+RL-57 treated the pin as something a record beside it could answer. On this line the comparison is made by
+bound code during a window: `calibration_bracketing` compares the acceptance's four estimator digests with the
+files on disk and returns `bound_stale` itself. A rebind record satisfies a CI check and changes nothing that
+runs. RL-57's admission of the rebind is withdrawn.
+
+### Ruling: option 1, and it is not optional
+
+`joulewise/adapters/powermetrics.py` on the W1 line is restored to the bytes the issued acceptance pinned, which
+are `main`'s and the ones Blocks 5 and 6 ran under (SHA-256 `70f47086…e5e4`). This lands before the
+registration is signed. It is not under RL-53's cut-off: a registration is not signed with a calibration
+acceptance that its own bound code reports stale.
+
+Why not the others. A new acceptance generation (2) would give this series a different acceptance from the
+blocks it will be compared with, to keep a speed-up. Teaching the runtime check to honour rebinds (3) weakens
+the one comparison that did its job here. Accepting `bound_stale` on every bracket (4) means signing without
+knowing what that reason does to a window record, and nobody has established that.
+
+### The memo
+
+It may live outside the estimator file, or it may go. In that order of preference, by what is ready:
+
+- **Outside.** The harvest may memoise the document parse from its own, bound, code. Conditions: it is scoped
+  to the member assessment and removed on exit, including on error; it is keyed by the SHA-256 of the exact
+  input bytes; every hit returns a fresh copy; a failed parse is never kept; with the scope closed the
+  estimator module is untouched. The existing equality tests are carried over and pass, and one new test
+  asserts that the estimator file's digest equals the acceptance's pin. A cold review before it lands.
+- **Gone.** If that is not built and reviewed when the lead is ready for PREQUAL, the harvest drops the memo
+  for the series and runs on worker processes alone. The lead then tells me the measured desk time for a
+  window on the Air, because a window's desk has to finish before the window after next can arm.
+
+One line in the batch's deviation row says which was done. The `EST-MEMO` row of RL-57 is not needed: the
+estimator bytes will be the earlier blocks' bytes.
+
+### What stands and what falls from RL-57
+
+- With the file restored, the closed-block pins are fresh again and the fence passes as it is written. **Do not
+  change `scripts/repin.py` now.** The strict check is the simpler one, and it just caught something real.
+- RL-57's distinction between a historical receipt and a live one stands as the rule for the day a pinned file
+  has to change for a reason of substance. It is not needed today.
+- After the restore, the lane lead confirms by running them that `tests.test_calibration_live_three_window`,
+  `tests.test_repin`, the `fences` job and `g2_phase_d` pass on the line. Anything still red is a different
+  cause and is reported as such.
+
+### R1
+
+**R1 did not run with the memo.** Its build does not contain `b9fedca2a` and its estimator file is the accepted
+one. Its calibration acceptance was not stale on this account, and no condition is added to RL-32 for it.
+
+R1 is reported finished with verdict GO, chain exit 0 and no fault. Under RL-32 the verdict is not evidence;
+the review starts from the inner record. Now that the chain has exited, the custody may be read **for
+structure**. For my review the lead or the magistrate sends, without values beyond those named:
+
+1. `r1_result.json`: its status word, and the list of segment names with each one's accepted attempt number
+   and outcome word.
+2. step-30b: accepted attempt; whether its G0 released, and the release time in seconds.
+3. The gated block: for each gated run and X-G, released or not, and the wait in seconds; which reference each
+   used.
+4. `inconclusive_segments`, as a list of names.
+5. U5 at 1.5 °C: the word.
+6. The A-B-A adoption: the word, and the three decline times.
+7. The desk print of each member's pre-warmup median beside R_op. These are temperatures of a rehearsal and I
+   read them as gate diagnostics, as in RL-32.
+8. Battery journal: for each slot-feeding segment, AC present and not discharging, yes or no.
+9. Agent-presence episodes: count, and which segments they overlap.
+10. The loop record of RL-36: state word, `done.idle` present, modification time against R1's t0.
+11. The flags and fault reasons present, by code and count.
+12. The proposed `r1_slots` values with the field each was taken from.
+
+No energy is needed for any of this. The post-R1 batch (uninstall R1's jobs, unload the loop agents, record
+host state, then the native checks) goes ahead on the lead's plan; it does not wait for my review. PREQUAL and
+the registration do.
+
+**Reason.** The estimator file is the one place where "the same instrument" is checked by a machine. It should
+be the same file. A speed-up belongs in the code that wanted it.
+
+**Blind status.** Blind to v4. I have read nothing from R1's custody; items 1 to 12 are what I will read.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
