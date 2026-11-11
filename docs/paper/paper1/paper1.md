@@ -410,7 +410,7 @@ kept quad k gives d_k = (B₁ + B₂)/2 − (A₁ + A₂)/2, with B the 8B side.
    by D and the attribution floor, never by the statistical interval.
 4. **Test**: t = d̄ / se, two-sided. The two primary contrasts (decode and prefill) form one family corrected by
    Holm's method at α = 0.05 [26]; a contrast that cannot be estimated keeps the family size at two.
-5. **Floor gate** (Section 3.6).
+5. **Floor gate** (Section 4.5).
 
 The outcome is one of four registered words, decided in this order of precedence:
 

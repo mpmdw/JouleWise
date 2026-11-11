@@ -86,9 +86,8 @@ with a blank line after the list. Both units are byte-identical to `origin/main`
 the leave-one-quad-out and registered descriptive-estimates paragraphs (P092–P093); the later seat
 owns leave-one-quad-out. The §4.8 heading parenthetical changes from “estimation details in Appendix D.7”
 to “descriptive checks in Appendix D.7”; D.7's heading changes from “Contrast estimator and descriptive checks”
-to “Contrast descriptive checks” to match its remaining content. For exact source-byte preservation,
-P089 item 5 retains `Section 3.6` from `origin/main`; the section-move table maps that floor section to
-§4.5. This historical pointer is a handoff for the lead; it is not renumbered in this verbatim restoration.
+to “Contrast descriptive checks” to match its remaining content. P089 item 5's cross-reference `Section 3.6` is renumbered to `Section 4.5` by the section-move table
+(lead orchestrator edit after round 3), like every other body cross-reference outside §8.
 
 **F-3:** Tier E's keep list now includes §3.1–§3.2 and its replace list includes §3.4,
 the moved `P1-B5-METER` paragraph. The variants README row matches both lists.
