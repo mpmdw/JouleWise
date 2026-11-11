@@ -141,3 +141,63 @@ returns `-32000`. Both are acceptable to Claude Code.
   needs that marker expired first.
 - Live `permissions_status` returned `accessibility=false`,
   `screen_recording=false` with no prompt, matching the orchestrator's smoke.
+
+## Delta review — `e2bd8d6b9` (round 2 `ce1713f10` plus the `(pe)` parser fix)
+
+### Verdict: ADMIT
+
+Both must-fix findings are closed and no new fail-open path was found on
+realistic input. One follow-up (D1) should land before the magistrate relies
+on the click hit-test. Native screenshot and input remain unverified, because
+the Air's marker is armed and nothing was driven.
+
+| Check | Result |
+| --- | --- |
+| Tests: `test_computer_use_mcp` + `test_computer_use_mcp_mutations` | PASS, 57 tests |
+| Real `launchctl print gui/501` and `print system` through `check_armed` | Parse cleanly: 1 services section each, 411 / 408 rows, status tokens seen: numbers, `-`, `(pe)`, `(jt)` |
+| F1 launchd domain | CLOSED. `gui/<uid>` and `system` are queried explicitly; the night installer bootstraps into `gui/<uid>` (`joulewise/night_agent_install.py:255`). Unreadable, empty, truncated or malformed output refuses |
+| F2 compile while armed | CLOSED. `permissions_status` checks armed state before touching the helper; armed returns "unknown (armed; not compiled)", an unverifiable state returns an error, neither compiles |
+| F3 allowlist strength | PARTLY CLOSED. Terminal removed, switcher/launcher combos blocked in Python and Swift, clicks hit-tested in Python and again in Swift before each mouse-down. See D1 |
+| F4 bundle ids | CLOSED. Allowlist entries must look like bundle ids; frontmost needs a bundle id and PID; `open -b` |
+| F6 catch-all | CLOSED. Any exception returns `isError` and attempts an `after` record |
+| F7 dry-run values | CLOSED, in the safe direction: only unset, empty or `0` is live |
+| F9 focus recovery | CLOSED. `open_app` needs only an allowlisted target |
+
+**Parser probe (question 2).** I injected 17 odd rows into the real
+`gui/501` services section. The widened status regex cannot hide a label:
+a row either parses, and its third field is then prefix-checked, or it
+refuses. Rows with `(pe)`, extra whitespace, a non-breaking space, a trailing
+carriage return or a Unicode line separator all came out ARMED. Rows with a
+bad status token, four fields or a glued label came out CLOSED. A duplicated
+`services = {` block came out CLOSED. Three rows came out OPEN, none of them
+output launchctl produces:
+- a quoted label, `"com.joulewise.night"`;
+- an upper-case label;
+- a bare `}` line inside the services block, which ends the section early
+  and hides the rows after it (D2).
+
+### New findings
+
+**D1 (should fix before magistrate use) — `drag` bypasses the click hit-test.**
+Only `click` is ownership-checked. A `drag` whose start and end points are
+nearly the same posts mouse-down, drag and mouse-up at an arbitrary point, so
+it acts as a click on the Dock, the menu bar or another app's window. The
+README says drag and scroll are not hit-tested, but this undoes the F3 click
+fix in one call. Apply `checkClickTarget` to both drag endpoints, and
+preferably to the scroll position.
+
+**D2 (hardening) — services section end is the first line starting with `}`.**
+Anchor the closing brace to the indentation of the `services = {` line, or
+refuse any row containing a brace.
+
+**D3 (note) — `respect_remote_armed: false` and `armed_marker_paths` are
+config-level ways to drop the marker gate.** On the Air that is the intended
+opt-out. On the MBP the same file is the local armed marker, so the README
+line that this "never disables local checks" holds only for the launchd
+labels. Keep the default on the MBP.
+
+**Residuals, unchanged:** F5 check-to-post race; F8 `swiftc` from `PATH`;
+F10 no inter-chunk delay in `type_text`. Finder stays on the allowlist and
+can launch anything, and system shortcuts beyond the blocked set (Mission
+Control keys, `ctrl+F3` Dock focus) are still accepted. The README now says
+the allowlist is not a sandbox.
