@@ -1042,6 +1042,32 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+251. **Magistrate activation b274d857 (Opus 5.5, headless, 2026-11-10 17:26 PST): item 250's diagnosis CORRECTED (the cause is the kernel frequency word, not slewing); the word was reset to 0; R1 RE-ARMED, t0 18:08 PST 11-10, `window_max_s` 105,427 s, latest end Wed 11-11 23:25 PST.**
+- **Cause of the 13:49 refusal, measured:** `joulewise/hazards/clock.py` gates on the kernel's `ntp_adjtime` frequency word (`raw_word`), bound = (|freq| + 0.25 ppm) x 5,764 s.
+  - The 11-08 arm (`r1-20261108T085636Z/hazards/arm.json`) read `raw_word 0`, bound 1.44 ms: PASS.
+  - The 11-10 arm read `raw_word -648908` (-9.90 ppm), bound 58.51 ms: REFUSE.
+  - timed set that word at 13:23:06 when item 249 turned network time ON (unified log: `ntp_adjtime:in ... freq_scaled,-648908`). It made no adjustment after automatic time was disabled at 13:46:01, and the word **persists in the kernel after network time goes OFF**.
+  - At 17:30 the word was -378954 (-5.78 ppm), and a direct 120 s measurement of CLOCK_REALTIME against CLOCK_MONOTONIC_RAW gave -5.768 ppm (33 ms over the span). Item 250's settle precondition (sntp offset < 2 ms) therefore could never pass the gate: the offset sat at +63 to +67 ms with timed content at about 26 ms uncertainty, and the rate would stay near -5.8 ppm.
+- **Remedy (one setting; no code or threshold change):**
+  - 17:37: `sudo -n systemsetup -setusingnetworktime off`.
+  - Then a root `ntp_adjtime(MOD_OFFSET|MOD_FREQUENCY, offset=0, freq=0)`. Script: `/Users/edr/night-custody/magistrate/settle-b274d857/probe/zero.py`. Result: before freq -378954, after 0.
+  - A measured 180 s wall-vs-raw rate of +0.021 ppm (0.12 ms over the span). The word read 0 again after install.
+  - This is the state of every passing arm. The cost: the wall clock drifts from UTC at the crystal's rate, about 0.5 s a day, as before 13:23 today.
+- **Re-arm** (zero-capture retry under R13 / item 225, A212):
+  - `$M` unchanged at `20e9edbc4`, with a clean status and no git operation in it.
+  - mlx 0.31.2, mlx_lm 0.31.3, transformers 5.12.1.
+  - Plan `align-r1-20261111T0208Z`, custody `/Users/edr/night-align/r1-20261111T014106Z`, plan sha256 `10e95007...7c2b`.
+  - D5 literal `40a49bde...6be0` equals the source.
+  - Host: AC, 100 % and charged, not charging, 0 mA; no external volume; 115 GB free. Flag: `disk.allocation_unsized`.
+  - Arm notice to Ed before install (Gmail `1a1c8445ef8c2d55`), and `notice.ack` is written. The install exited 0 and both night agents are loaded. Deadman calendar: 00:31.
+- **Lesson (for the lead; a pre-arm check, not a gate change):** never turn network time ON on the measurement Mac between windows without zeroing the frequency word afterwards. Better: the runbook §4 restore and the arm should both run the zero step, or the arm's pre-flight should read the word and stop *before* t0 with a named cause. Runbook §4 currently restores network time ON, which will re-create this hazard for the next arm.
+
+**Next activation (replaces item 250's pointer; items 225-228 hold):**
+(1) While armed (until `chain.exited`, latest Wed 11-11 23:25 PST): do not move `$M` or the canonical root, run no git in `$M`, and keep no agent alive on the MBP.
+(2) Within minutes after t0 + about 4 min, the laptop watcher (or the next activation) reads `night-results/align-r1-20261111T0208Z` `result.json` `verdict`/`refusal` FIRST. On REFUSED: restore and mail Ed at once.
+(3) After `chain.exited`: runbook §4 on `20e9edbc4` with `S=/Users/edr/night-align/r1-20261111T014106Z`. Read `r1_result.json` status first. Then network time ON, the Automatic restore, KM003C, stray monitors, uninstall, record, mail Ed. **Before the NEXT arm after that, zero the frequency word again** (network time OFF, then the zero script, then measure the rate).
+(4) The watchdog-v5 fix (PR #707) is still open; install it only after the chain exits.
+
 250. **Laptop lead (interactive session 41120c85, Opus 5.5), 2026-11-10 17:30 PST: item 249's R1 RE-ARM REFUSED at 13:49:42 PST, before the chain started (zero capture). The MBP has been restored. Re-arm R1 only after the clock-settle precondition below.**
 - **Evidence:** `origin/night-results/align-r1-20261110T2146Z` (pushed 13:50) has `result.json` `verdict: REFUSED`, `refusal.reason: night_refused_hazard`, detail `clock=REFUSE; clock REFUSE: measured rate gate: 58.5029 ms > 5.0 ms` (`joulewise/hazards/clock.py:365` at `20e9edbc4`). There is no `chain.started`. The R1 courier is file-only, so nobody was mailed. A Fable 5.2 state-machine audit found the refusal at about 17:15, by reading the results ref.
 - **Cause (lead inference, not proven):** item 249 turned network time ON at about 13:21, after it had been OFF for 2.5 days. The arm then turned it OFF again before t0 13:46. `timed` was most likely still slewing the accumulated offset during the hazard dwell, so the wall-vs-raw rate fit failed. At 17:22 the offset to time.apple.com, with network time still OFF, was +0.180 s.
