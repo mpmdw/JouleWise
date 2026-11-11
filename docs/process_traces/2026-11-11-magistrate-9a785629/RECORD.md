@@ -48,3 +48,35 @@ says "Do not move the canonical checkout or reinstall the watchdog".
   `models` equals `configs/bytes/bytes_manifest.json`; `test7_passed` false everywhere.
 - §3.8 started 05:43 PST, detached in its own session (pid 93947; script
   `/Users/edr/night-custody/magistrate/bytes-stage1-9a78/run.zsh`), log `$S1/run.log`.
+- §3.8 finished 06:28 PST: **rc 7, verdict `PREDICTIONS_WRITTEN_STAGE1_DISAGREEMENT`.**
+  Exits: a-blinded 0, t-blinded 0, a-fit-nokeys 1, t-1-nokeys 1 (the intended no-key
+  refusals), a-fit 0, t-1 0. `predictions_sha256` (written, **not committed**)
+  `a6cb172c58462b76609be5ec532f1a9bcfbe474ea64d7e004e948b3ffaeb5f19`. Producing commit
+  `df4c73e55`, tree clean. Fit release (stage `fit`, by design): the three
+  `Qwen3-{1.7B,4B,8B}-4bit|bytes_synthetic_2048_decode_512|512` keys and
+  `neg8_reference`. No held-out key, row or store was opened.
+  - Blinded agreement: compared 2,531, equal 2,421, under bar 110, **above bar 0**;
+    diagnostics 24 compared, 20 different.
+  - Stage-1 agreement: compared 59,068, equal 53,699, under bar 4,979, **above bar 390**;
+    diagnostics 19,088 compared, 2,120 different. Completeness: nothing missing.
+  - The 390 names (field names only; no value read), `$S1/above-bar-names-digest.txt`:
+    384 at stage `fit`, 6 at `fit-commit`. All three models, 130 each; both passes.
+    rails and rest cells (all four views gross, flagged_inclusive, idle_subtracted,
+    idle_flagged_inclusive): `flags`, `B_j`, `lower_j`, `upper_j`,
+    `attribution_floor_j`, `rails_attribution_floor_j`, `B_kind:anchor`, 24 each per
+    boundary (rails also 24 more `attribution_floor_j`). dc_input cells: `flags` only
+    (24). Fit-commit: `w` for rails and rest, each model. **No central estimate is
+    above the bar.**
+  - Reading (hypothesis for the lead, from code only): the difference sits on the
+    clock-anchor term, the one term rails and rest carry and DC input does not. At
+    `fit`, `joulewise/bytes_analysis.py` (~l.1004) re-reduces each run from the archive
+    and takes `energy_anchor_shift_envelopes["/phase_energy_j/decode"].max_abs_delta_j`;
+    at `blinded` (~l.1146) it takes the export column
+    `bound_E_clock_anchor_shift_bound_j`. `scripts/bytes_twin.py` `_member` (~l.1324)
+    takes the export column at every stage. Registration §7 (l.222) defines the term as
+    the rails anchor-shift bound "re-derived under the session's operative timing
+    bound". The `flags` difference on every cell, dc_input included, is a second,
+    separate item. Neither is confirmed against values.
+  - **Stopped per the plan's rc 7 row and item 263's `on_early_or_refused`: no
+    commitment, no records branch, no further key release.** `$W` and `$S1` are kept
+    as they are.

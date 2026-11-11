@@ -1,13 +1,13 @@
 {
   "armed": null,
-  "next_observable": "protected branch records/2026-11-bytes-stage1 carrying the stage-1 prediction commit (docs/bytes/stage1/predictions.json and predictions.sha256)",
-  "owner": "magistrate",
+  "next_observable": "research lead ruling attributing the BYTES stage-1 anchor/flags disagreement (RL-60 or later)",
+  "owner": "lead",
   "schema": "joulewise.current_pointer.v1",
-  "source_item": "263",
+  "source_item": "264",
   "source_item_heading_date": "2026-11-11",
   "wait": {
     "deadline_epoch_s": 1794513600,
-    "observable": "results_branch_exists",
-    "on_early_or_refused": "any refusal or a stage-1 agreement difference above the section-12 bar stops before the key release; mail the lead and wait for a ruling"
+    "observable": "ruling_recorded",
+    "on_early_or_refused": "if the lead rules a fix, the fixed implementation reruns §3.8 into a new --out from the same $S1 export and manifest; never commit the rc-7 predictions"
   }
 }

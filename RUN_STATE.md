@@ -1042,6 +1042,40 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+264. **Magistrate activation 9a785629 (Opus 5.5, headless), 2026-11-11 06:35 PST: BYTES stage 1 ran and STOPPED at rc 7 (`PREDICTIONS_WRITTEN_STAGE1_DISAGREEMENT`). Nothing is committed. The lead must attribute 390 above-bar stage-1 fields before any commitment.**
+
+```pointer
+owner: lead
+wait: ruling_recorded
+deadline: 2026-11-12T12:00:00-08:00
+on_early_or_refused: if the lead rules a fix, the fixed implementation reruns §3.8 into a new --out from the same $S1 export and manifest; never commit the rc-7 predictions
+next_observable: research lead ruling attributing the BYTES stage-1 anchor/flags disagreement (RL-60 or later)
+```
+
+- **Full record:** `docs/process_traces/2026-11-11-magistrate-9a785629/RECORD.md`; field-name digest beside it.
+- **Steps 3.1-3.7 all passed.**
+  - `$W=/Users/edr/code/jw-wt/bytes-stage1` @ `df4c73e55`, estimator digest = pin; self-test 23 OK.
+  - `$S1=/Users/edr/night-archive/bytes-stage1-20261111`. The export was 12/12 rc 0, with no withheld store changed (28 before, 28 after).
+  - Census `OK` with no warnings. Lines as expected: only s5-p2 (23) and s5-p1 (10) change, all Llama-70B.
+  - Manifest sha256 `3cd3956e…1725`.
+  - Id note: sessions export as `<dir id>-calibration`, and the manifest needs that id.
+- **§3.8, 05:43-06:28 PST.**
+  - Blinded agreement: **0 above the bar** (2,531 compared).
+  - Stage 1: **390 above the bar** (59,068 compared). They are in every fit cell, for all three models and both passes.
+    - rails and rest cells: `flags`, `B_j`, `lower_j`, `upper_j`, `attribution_floor_j`, `rails_attribution_floor_j`, `B_kind:anchor`.
+    - dc_input cells: `flags` only.
+    - Fit-commit: `w`.
+    - No central estimate differs.
+  - The predictions were written (sha256 `a6cb172c…5f19`) and are **not committed**.
+  - Fit keys were released by design. No held-out key, row or store was opened.
+- **Hypothesis from code only (not checked against values):** the two sides take the clock-anchor bound from different sources.
+  - At `fit`, the estimator takes it from its own archive re-reduction (`bytes_analysis.py` ~l.1004, the decode `energy_anchor_shift_envelopes`).
+  - The twin takes the export column `bound_E_clock_anchor_shift_bound_j` (`bytes_twin.py` `_member`).
+  - Registration §7 l.222 says this term is "re-derived under the session's operative timing bound".
+  - The `flags` difference on every cell is a second, separate item.
+- **Lead:** attribute it and rule. The 12 Nov checkpoint (commitment) is at risk; 15 Nov is the Tier-D date. `$W` and `$S1` are kept, and §3.8 can rerun into a new `--out` in about 45 min.
+- **Host:** nothing armed. Only `com.joulewise.magistrate` is loaded. Network time stays OFF. The canonical root is untouched at `a6c0e6be0` (item 263: do not move it).
+
 263. **Laptop lead (interactive session 41120c85, Opus 5.5), 2026-11-11 05:00 PST: research lead RL-59. R1 yields NO slots, because its D members were gated on the wrong reference. A follow-up rehearsal night is owed. The MBP is free now: MAGISTRATE, RUN BYTES STAGE 1 AND ITS COMMITMENT.**
 
 ```pointer
