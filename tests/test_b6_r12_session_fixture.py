@@ -48,6 +48,26 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(len(json.loads(result.stdout)), 6)
         self.assertFalse((self.root.parent / "R12-outside-write").exists())
 
+    @unittest.skipUnless(hasattr(time, "CLOCK_UPTIME_RAW"), "macOS uptime source")
+    def test_original_sleep_reader_uses_coherent_uptime_input(self):
+        """Predict: original sleep reader observes zero sleep and no flags across a 75 s injected wait."""
+        code = '''from joulewise.b6 import sleep_guard
+import time
+first = sleep_guard.safe_sleep_reading()
+time.sleep(75)
+last = sleep_guard.safe_sleep_reading()
+assert 'error' not in first, first
+assert 'error' not in last, last
+assert sleep_guard.slept_ns(first, last) == 0
+assert last['uptime_raw_ns'] - first['uptime_raw_ns'] == 75_000_000_000
+assert sleep_guard.run_sleep_flags(first, last) == []
+print('coherent_no_sleep')
+'''
+        result = subprocess.run(command(self.root, "code", code), capture_output=True,
+                                text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "coherent_no_sleep")
+
     def test_subprocess_deadline_uses_child_logical_clock(self):
         """Predict: a child that advances 5 logical seconds then waits for stdin exceeds a 1 s parent deadline before 1 wall second."""
         prepare_interpreters(self.root)

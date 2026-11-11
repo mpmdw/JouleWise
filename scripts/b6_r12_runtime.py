@@ -264,7 +264,8 @@ class SharedClock:
     def clock_gettime_ns(self, which):
         if which == time.CLOCK_REALTIME:
             return self.realtime_ns()
-        if which in (time.CLOCK_MONOTONIC, time.CLOCK_MONOTONIC_RAW):
+        if which in (time.CLOCK_MONOTONIC, time.CLOCK_MONOTONIC_RAW,
+                     getattr(time, "CLOCK_UPTIME_RAW", time.CLOCK_MONOTONIC_RAW)):
             return self.monotonic_ns()
         raise ValueError("undeclared synthetic clock")
 

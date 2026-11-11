@@ -96,6 +96,7 @@ def prepare(root):
                 "clock_mode": "shared integer ns; explicit sleeps advance; no wall-time scale factor",
                 "volume": "bootstrap prerequisite", "seams": {
                     "time.time/time_ns/monotonic/monotonic_ns/clock_gettime_ns/sleep": "SharedClock",
+                    "time.CLOCK_UPTIME_RAW input": "same no-sleep ns frontier as CLOCK_MONOTONIC_RAW; original sleep-offset reader and flags run",
                     "datetime.datetime.now/utcnow": "SharedClock wall time",
                     "subprocess._time / threading._time": "same shared monotonic clock, including stdlib aliases",
                     "SharedClock notification transport": "only registered receivers poll stop inputs, nominal 10 ms real poll interval (OS scheduling may delay it); shared ns always reread under lock, never cached",
