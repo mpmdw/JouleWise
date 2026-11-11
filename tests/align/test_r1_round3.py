@@ -1,4 +1,4 @@
-"""Cold-review round 3: deterministic, synthetic witnesses; no native commands."""
+"""Cold-review round 3: deterministic, synthetic witnesses; no host setters."""
 from copy import deepcopy
 import hashlib
 import json
@@ -103,14 +103,16 @@ class RuntimeWiringTests(unittest.TestCase):
                 saved = json.loads((out / 'inventory/r1_classification.json').read_text())
                 self.assertEqual({role: saved['night_confirmation'][role] for role in picks}, picks)
                 self.assertEqual(saved['night_confirmation']['ok'], admissible)
+                record = r1.thermometry_record('step-d', {'thermometry': summary})
+                self.assertEqual(record['night_confirmation'], summary['night_confirmation'])
                 if not admissible:
-                    self.assertIn('r1.sensor_inadmissible', summary['flags'])
+                    self.assertIn('r1.sensor_inadmissible', record['flags'])
                     with self.assertRaisesRegex(ValueError, 'thermometry bar did not pass'):
                         v4.check_r1_evidence({'R1': {'I_D': 1}}, {
                             'schema': v4.R1_SLOTS_SCHEMA, 'source': v4.R1_HARDWARE_SOURCE,
                             'inconclusive_segments': {}, 'slots': {'I_D': 1},
                             'high_power': {'verdict': 'not_adopted'}, 'ac_powermode': 0, 'slots_ac_powermode': 0,
-                            'thermometry': {'bar': 'fail', 'D': summary}})
+                            'thermometry': {'bar': record['status'], 'D': record}})
 
     def test_gated_d_and_xg_reference_hooks_do_not_dispatch_timed_out_turns(self):
         with tempfile.TemporaryDirectory() as tmp:

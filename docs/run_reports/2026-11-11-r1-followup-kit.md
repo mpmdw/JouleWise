@@ -1,6 +1,6 @@
 # R1 follow-up rehearsal kit — 2026-11-11
 
-Status (round 2): **synthetic implementation; native smoke, cold review, sensor ruling and a successful full-profile trace/broader final-head checks still owed.** Round-1 details below are historical; the round-2 section supersedes them. No night was armed. Base `82c14c9ea` (`origin/ops/2026-11-11-w1-presign`); branch `ops/2026-11-11-r1-followup-kit`. Commit: the kit commit containing this report (hash in the final handoff / local Git log).
+Status (round 3): **code fixes and focused synthetic verification complete; PREQUAL completion, next-arm completion and a fresh full-profile trace remain owed under the test budget. Native smoke and delta review remain required.** Round-1/2 details below are historical; the round-3 section supersedes them. No night was armed. Branch `ops/2026-11-11-r1-followup-kit`; local commits are listed in the round-3 handoff.
 
 ## Authority and boundaries
 
@@ -399,3 +399,162 @@ Changed test modules needing a complete final-head pass:
 - `tests.test_w1_reliability_r2`
 - `tests.test_w1_reliability_r3`
 - `tests.test_w1_reliability_r7`
+
+## Round 3 — Opus cold-review fixes (2026-11-11)
+
+This section supersedes the round-2 implementation/status where it differs.
+All work is synthetic and non-claim. Native smoke and a delta review of the
+executed-byte changes remain required. No night was armed.
+
+Intake: cold review read first; RL-72, RL-74, RL-76, RL-78 and RL-79 read verbatim
+from the specified audit ref. The current branch was already the named branch
+at `51b6aeb14`; it was continued there. Mission M0 found no active stop card.
+The explicit assignment overrides queue selection. No coordination state,
+real custody, restricted directory, model weights or measurement data was opened.
+No network, full suite, native MLX, model download or hardware smoke was used.
+Historical committed summaries appeared in the initial RUN_STATE intake; no
+blindness to those summaries is claimed. Absolute custody paths remained text.
+
+### Finding map
+
+| Finding | Fix and witness |
+|---|---|
+| F-1 | The old `82c14c9ea` workload adapter and current adapter run the same deterministic tiny member, both released and G0-timeout without a callback. Only the RSS source is fixed: `memory_snapshots[*].process_rss_bytes`, as serialized into `metadata.json` and `events.jsonl`. RSS reflects the shared interpreter's allocator/OS process state. The real RSS reader's availability/error diagnostics are retained. Both adapters use the same injected simulation clocks, including the existing battery-clock seam; timestamp bytes remain compared. No other field, timestamp, telemetry, error, file or byte is excluded or normalized. The same byte comparator rejects a one-byte mutant in every bundle file for both paths. |
+| F-2 | Negative cases isolate 98% occupied cells, exactly 1% read errors, and two consecutive empty cells while the other bars pass. Each case is repeated in pre-warmup idle, quiet, load and recovery. Another witness pins exactly those four phases in `smoke_table`. Per-key versus sweep scope is unchanged and parked. |
+| F-3 | `Segment.thermometry` is exercised with the night's ranking differing from the configured smoke pair, checking the summary and saved confirmation. An inadmissible configured key produces `r1.sensor_inadmissible` and desk refusal. Every gated D kind and X-G runs through the real reference hook and synthetic member adapter on a timeout: no turn and no `r1.g0_timeout_run`. |
+| F-4 | Part B's post-G0 engineering watchdog is derived from quiet + re-armed turn bound + recovery + 120 s classification/close margin (currently 300 + 1,580 + 600 + 120 = 2,600 s). The smoke receipt records these components. A 1,000 s D turn fits; the test checks actual timer installation for three turn bounds. G0 remains 1,200 s. Whether the twenty-minute Part B wording is a hard total bound remains parked, and this watchdog change does not settle it. |
+| F-5 | The condition-13 test pins the literal seven paths: R1 driver, `r1_runtime.py`, `r1_runtime.json`, `r1_phase_table.py`, `workload.py`, `thermal.py`, and `thermal_gates.py`. Neither the contract module nor launcher was added. |
+| F-6 | Non-synthetic driver startup requires `--prepare-packet` before taking the host lock or running host/runtime commands. It checks schema/status `FOR_LEAD_ARM`, the current executed commit, source hashes, and exact boolean `ok: true` for both `weight_digests` and `runtime_stack`. Named `r1.prepare_packet.*` refusals cover missing, unreadable, stale and not-ok evidence. The arm record carries path, SHA-256, executed commit and both results. The chain requires `ALIGN_R1_PREPARE_PACKET`. Tests cover refusals and positive arm-record propagation; synthetic mode remains fixture-only. |
+| F-7 | Merge `origin/ops/2026-11-11-w1-presign` at `5df1afbf8` in `b0a39479d`, including RL-53 batch, RL-79 walk-every-final-window holds, `f9d48635c` fixture fixes and host guard. The test conflict uses the newer `session_plan` helper; incoming trace was a temporary baseline for regeneration. The kit continues to call public `weight_digest_preflight` and `runtime_stack_preflight`. |
+| F-8 | The R1-PHASE-TABLE deviation row now names `thermal.py` with the other six condition-13 sources. |
+| F-9 | A synthetic unit forces `k_step_d`'s production branch and asserts the complete `new_sensor_default` S6 record, including `receipt_transferred: false`, even when a historical tuning receipt was supplied. |
+| F-10 | No change: conservative fallback scope remains as reviewed. |
+| F-11 | Regenerated the committed v4 kit using its generator. Only `plan_tree.json`'s generator digest and `identity_pins.json`'s dependent tree hash changed. Regenerating the night-plan template produced identical bytes. The fresh full-profile trace remains owed under the test budget; no partial trace was moved into place. Kit byte reproduction is distinct from W1 readiness: pending registration inputs still refuse readiness. |
+| F-12 | Stale RL-72 inconclusive-message expectation corrected, citing behavior commit `a85ee8ec6`. |
+| F-13 | Stale step-30b inconclusive expectation corrected and `capture-predecessor-30b` added to the contract doc, both citing `a85ee8ec6`. |
+
+### Mutation evidence
+
+In-memory mutants only, using `inspect.getsource`, compilation against the module's
+live globals and `unittest.mock.patch`; no gate or classifier file was edited.
+Controls are the passing round-3 and registration tests. Each mutant is counted
+only for an assertion failure from its relevant witness, with zero harness errors.
+
+| Mutant | Witness | Assertion failures |
+|---|---|---:|
+| M4a: coverage .99 -> .50 | `CoverageBarTests.test_each_bar_independently_refuses_in_every_phase` | 4 (one per phase) |
+| M4b: remove consecutive-empty bar | same | 4 |
+| M4c: remove read-error bar | same | 4 |
+| M4d: drop pre-warmup from smoke table | `test_smoke_table_emits_exactly_all_four_rl76_phases` | 1 |
+| M1b: confirm night's picks | `test_night_confirms_and_reports_smoke_pair_and_refuses_inadmissible_pair` | 1 |
+| M1c: summary names night's picks | same | 1 |
+| M3b: install timeout hook for every kind | `test_gated_d_and_xg_reference_hooks_do_not_dispatch_timed_out_turns` | 1 |
+| M6: drop workload from condition 13 | `R1ExecutedSourceTests.test_condition13_names_exactly_the_seven_ruled_sources` | 1 |
+| F-4: reinstall 1,200 s post-G0 cap | `test_post_g0_watchdog_fits_realistic_d_turn_and_is_installed` | 1 |
+
+All nine were killed. F-1's per-file one-byte mutants run inside
+`DefaultBundleTests` for both released and timeout-without-hook members.
+The scratch harness command was `PYTHONPATH=. python3.13 -B /private/tmp/r1-round3-mutants.py`;
+final output is `/private/tmp/r1-round3-mutants-final.log`.
+An initial harness copied module globals and therefore bypassed the test's
+classification patch: that error was not counted as a kill. The harness was
+corrected to preserve live globals and all nine were rerun successfully.
+
+### Verification and boundaries
+
+All commands below used Python 3.13, `-B`, unittest and the installed host-command
+guard. Modules ran serially. The full suite was prohibited and was not run.
+Total test execution was about nineteen minutes, including development attempts
+and interrupted runs; the requested extension of the approximate twenty-minute
+budget had no answer when this report was finalized.
+
+Each module row means `python3.13 -B -m unittest <module>`:
+
+| Module | Result |
+|---|---|
+| `tests.align.test_r1_round3` | 8 OK, 26.732 s |
+| `tests.align.test_r1_followup` | 12 OK, 35.887 s |
+| `tests.align.test_v4_registration` | 24 OK, 64.069 s |
+| `tests.align.test_r1_runtime_contract` | 11 OK, 0.007 s |
+| `tests.align.test_r1_rehearsal` | 76 OK, 11.968 s |
+| `tests.align.test_v4_kit` | 116 OK, 39.184 s; includes committed-kit byte reproduction and F-12 |
+| `tests.align.test_v4_executed_closure` | 6 OK, 17.084 s |
+| `tests.align.test_v4_dynamic_closure` | 10 OK, 49.752 s; inherited trace plus its live minimal dry-run check |
+| `tests.align.test_r1_round2` | 14 OK, 6.025 s; includes both public prepare-preflight API integrations |
+
+Additional focused witnesses passed before the full modules: the two kit
+reproduction/inconclusive tests (2 OK) and the three production-packet/chain
+integration tests (3 OK). `python3.13 -B -m compileall -q joulewise tests`
+and `git diff --check` passed. Direct generator reproduction compared all
+30 generated files byte-for-byte with the committed kit: no drift. This is not
+a W1-readiness pass; the pending registration inputs still refuse readiness.
+The night-plan template regeneration made no byte change.
+
+**Unfinished verification, not a pass:**
+
+- `tests.align.test_w1_prequal`: interrupted after about 836 s, eight tests
+  completed without failure, in `CadenceTests.test_an_arm_that_keeps_no_rebuild_or_trusts_the_supplied_packet_fails`
+  while the packet tamper matrix was running. Exit 130. The test-budget limit
+  prevented completing this module.
+- `tests.align.test_v4_next_arm_packet`: not started in round 3; still owed.
+- A new full-profile `align_v4_dynamic_trace.py` run: not started within the
+  remaining budget; still owed. The committed trace is the presign merge's
+  inherited baseline. No partial trace was moved into place. The closure-module
+  passes above do not substitute for this new full-profile evidence.
+
+A broader rehearsal run was also interrupted for budget prioritization before
+its later successful full-module rerun. Early development runs exposed incomplete
+synthetic packet/chain fixtures, missing fake member fields, and an accidentally
+imported TestCase class; these were fixed. All final focused/full-module results
+above pass. `nice -n 10` was refused by the sandbox; tests proceeded without a
+priority change. No host setter or native MLX was run. The stopped process was
+the dedicated unittest session; the blinded job was not signalled or changed.
+
+F-1 through F-9 and F-12/F-13 have code/test fixes. F-11's committed-kit drift is
+fixed, but its required fresh full-profile trace and the owed long modules remain
+open. All five research-lead questions remain parked. No delta-review or native
+smoke pass is claimed.
+
+### Commits, changed files and next step
+
+Merge: `b0a39479d`. Runtime/test/kit fixes: `fa677895f`. This report and final witness refinements are in the subsequent local commit.
+The trace retained from the merge is an inherited baseline, not new round-3 evidence. No push was performed.
+
+Round-3 files (excluding the presign merge's incoming files):
+
+- Runtime/startup: `joulewise/align/apple/r1_runtime.py`,
+  `scripts/align_r1_rehearsal.py`, `scripts/night_chains/align_r1_rehearsal.zsh`.
+- Tests: `tests/align/test_r1_followup.py`, `tests/align/test_r1_round3.py`,
+  `tests/align/test_r1_rehearsal.py`, `tests/align/test_r1_runtime_contract.py`,
+  `tests/align/test_v4_kit.py`, `tests/align/test_v4_registration.py`.
+- Trace profile and scheduling: `scripts/align_v4_dynamic_trace.py`, `scripts/test_timings.json`.
+- Generated kit: `configs/campaigns/align_v4/plan_tree.json`,
+  `configs/campaigns/align_v4/registration/identity_pins.json`.
+- Docs: `docs/align/r1_runtime_contract.md`, `docs/align/v4/DEVIATIONS.md`, this report.
+
+The trace profile includes the new round-3 module. Timing-map diff against the
+intake head is three inserted lines and zero removals (two arrived in the merge).
+The gate and classifier are byte-identical to `b4a6c217f`; the four forbidden
+coordination paths have no diff against intake.
+
+Lead's exact next commands, with an expanded test budget/off-MBP runner:
+
+```sh
+python3.13 -B -m unittest tests.align.test_w1_prequal
+python3.13 -B -m unittest tests.align.test_v4_next_arm_packet
+R1_TRACE_WORK=$(mktemp -d)
+python3.13 -B scripts/align_v4_dynamic_trace.py --out "$R1_TRACE_WORK/full.json"
+```
+
+Complete PREQUAL and next-arm verification off-MBP,
+regenerate the full-profile trace to scratch, verify all scenarios and strict closure,
+move only a passing trace into place, and rerun both closure modules. Then delta-review
+the executed-byte fixes on the final committed head and run native smoke A/B and the measurement-interpreter
+weight/installed-stack preflights in a clean, agent-free session. Generate
+the FOR_LEAD_ARM packet on that final commit and carry its path via
+`ALIGN_R1_PREPARE_PACKET` into the registered arm. Native Metal check:
+`JW_ALIGN_MLX_NATIVE_TESTS=1 python3.13 -B -m unittest tests.align.test_thermal_mlx`.
+The 30B predecessor sidecar, W1 Tf08, coverage scope, condition-13 contract
+scope and hard twenty-minute-total interpretation remain for the research lead.
+No synthetic result here establishes native sampler coverage, SMC clock-domain
+agreement, real sensor admissibility, installed-stack/weight identity or arm readiness.

@@ -233,6 +233,12 @@ class DefaultBundleTests(unittest.TestCase):
         self.addCleanup(lambda: sys.modules.pop(old.__name__, None))
         exec(compile(subprocess.check_output(["git", "show", "82c14c9ea:joulewise/align/apple/workload.py"],
                                             cwd=r1.ROOT), old.__name__, "exec"), old.__dict__)
+        from joulewise.adapters import mlx_runtime
+        rss_reader = mlx_runtime._process_rss_bytes
+        def stable_rss(errors):
+            # Retain the real reader's availability/error diagnostics.
+            rss_reader(errors)
+            return 4242
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             path = syn.synthetic_config(root / "cfg")
@@ -257,7 +263,7 @@ class DefaultBundleTests(unittest.TestCase):
                             session.reference = {"fast_c": 0., "slow_c": 0., "source_member": "synthetic"}
                         with patch.object(workload, "EpisodeRuntimeAdapter", adapter), patch.object(
                                 controller._Execution, "_battery_stamp", lambda execution: execution._clock.stamp()), patch(
-                                "joulewise.adapters.mlx_runtime._process_rss_bytes", return_value=4242):
+                                "joulewise.adapters.mlx_runtime._process_rss_bytes", side_effect=stable_rss):
                             bundle, summary = backend.run_member(member, root / "runs", hook=hook if timed_out else None)
                         self.assertEqual(summary.status.value, "succeeded")
                         ep = workload.read_episode_bundle(bundle)
