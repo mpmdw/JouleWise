@@ -36,3 +36,27 @@ path, and its own test module fails outside the builder's sandbox. Round 2 goes 
   cannot bless a nonzero code.
 - `derive_window_state` is pure, and plist facts are tri-state: an unobserved plist never reads as uninstalled.
 - Reports carry fixed codes and counts only. Fault strings and record text are not copied.
+
+## Round 2 delta review (2026-11-11 04:25 PST)
+
+Reviewed `9a2390b6b` (Sol's round 2 on the same branch).
+
+**Verdict: ADMIT.**
+
+| Finding | Disposition |
+|---|---|
+| F-1 | Fixed. The root's ancestors are resolved once; a symlink as the root itself, or anywhere below it, is still refused, and the root's identity is re-checked after opening. On the Air: 43 tests OK with the default temp directory (`/var/folders/...`) and with `/tmp`. The module also re-runs itself under three temp settings. |
+| F-2 | Fixed. `invalid`, `absent` and `unreadable` are known not-complete payload statuses: `CHAIN_FAILED`. |
+| F-3 | Fixed. `RECORDED_OUTCOME_DISAGREES` compares the record's own `chain_outcome` with the derived outcome. |
+| F-4 | Fixed. A complete payload with no slots file is `CHAIN_FAILED`, `PAYLOAD_SLOTS_MISSING`. |
+| F-5 | Fixed. `NO_NIGHT_RECORD_AFTER_T0` (strictly after t0 + 900 s) and `CHAIN_OPEN_PAST_COMPLETION`. |
+| F-6 | Fixed. Both earlier survivors are now killed. |
+| F-7 | Fixed. The contract words are `complete, refused, failed, stopped, usage, hold, aborted`. |
+
+Ten mutants on the changed code, ten killed: the two earlier survivors; the recorded-outcome comparison
+removed; the missing-slots rule removed; the 900 s allowance removed; the open-chain boundary made inclusive;
+the root-is-a-directory check removed; `unreadable` dropped from the known statuses; unknown contract words
+treated as complete; the nonzero-exit rule removed. Sol reports its own pass of 160 mutants with no survivor.
+
+Not covered: Python 3.11 locally (CI runs it). Plist facts are always supplied by the caller; the module never
+contacts a host.
