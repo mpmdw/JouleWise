@@ -18,7 +18,7 @@ collected under its own registration and remains blinded; its results will follo
    replication in further sessions, designed and registered before any primary result was seen, collected to its
    close, and still blinded at submission. Its agreement word was defined before any data.
 
-## §4.4, closing paragraph (adds)
+## §5.4, closing paragraph (adds)
 
 At submission the replication block had closed with {{FILL: P1-B6-COUNT-STRUCT | per pack: counting sessions of the 3 targeted, attempts, non-counting causes; structure only}}, and its release
 conditions (primary release done, blind dry run complete, independent recomputation agreeing) were not yet all met
@@ -26,9 +26,9 @@ conditions (primary release done, blind dry run complete, independent recomputat
 because every replication rule was fixed before the primary block was released, reporting the primary results now
 does not alter what the replication can show.
 
-## §5.7 (replaces the section)
+## §6.8 (replaces the section)
 
-### 5.7 Replication: collected, released later
+### 6.8 Replication: collected, released later
 
 The replication block ran to its registered close. Its released structure is: {{FILL: P1-B6-STRUCT | per pack: sessions attempted, sessions counting, cause families of non-counting attempts, kept-unit counts per stratum, drift-screen verdict words, and floor pairings; no energy, duration, floor, ratio or outcome word}}.
 
@@ -38,14 +38,14 @@ replication word "replicated" requiring the same outcome word and sign of d̄ in
 between-session summary; the flagged-inclusive line; and the scaled drift, single-step, whole-machine,
 contention-rule and waited-run lines) will be released in an addendum to this paper, with the independent
 recomputation's agreement table, as soon as its registered release conditions hold. The addendum will print
-every quantity of Sections 5.2 to 5.5 side by side with the primary values and will change no number printed here.
+every quantity of Sections 6.2 to 6.5 side by side with the primary values and will change no number printed here.
 
-## §8, Limitations (adds)
+## §9, Limitations (adds)
 
 At submission the primary results rest on one session per pack. Their intervals describe variation within one
 session; whether the values hold on other days is the question the blinded replication answers.
 
-## §9, Conclusion (replaces the replication clause of the contrasts branch)
+## §11, Conclusion (replaces the replication clause of the contrasts branch)
 
 ... The replication, collected and registered before these results were seen, will report in an addendum whether
 each contrast's outcome word and sign hold in every further session.
