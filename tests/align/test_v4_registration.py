@@ -10,7 +10,7 @@ import unittest
 from unittest.mock import patch
 
 from scripts import align_v4_kit as kit
-from joulewise.align.apple import thermal_desk, v4_estimands
+from joulewise.align.apple import thermal_desk, v4_estimands, v4_registration as reg
 from tests.align.test_thermal_desk import member, contrast
 
 
@@ -432,6 +432,36 @@ class RegistrationTests(unittest.TestCase):
             self.assertTrue(result['v4_D_cohort'])
             records[1]['configuration']['max_turns'] = 11
             self.assertFalse(check()['v4_D_cohort'])
+
+
+class R1ExecutedSourceTests(unittest.TestCase):
+    def test_condition13_changes_each_file_commit_and_missing_phase_module(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            def git(*args):
+                return subprocess.check_output(["git", *args], cwd=root, text=True).strip()
+            from tests.git_fixture import init_git_fixture
+            init_git_fixture(root, "-q")
+            for path in reg.R1_EXECUTED_SOURCES:
+                target = root / path
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(path + "\n")
+            git("add", ".")
+            git("-c", "user.name=Synthetic", "-c", "user.email=synthetic@example.invalid", "commit", "-qm", "fixture")
+            commit = git("rev-parse", "HEAD")
+            reg.verify_r1_executed_sources(root, {"executed_commit": commit})
+            for path in reg.R1_EXECUTED_SOURCES:
+                target = root / path
+                raw = target.read_bytes()
+                target.write_bytes(raw + b"x")
+                with self.subTest(path=path), self.assertRaisesRegex(ValueError, "differs"):
+                    reg.verify_r1_executed_sources(root, {"executed_commit": commit})
+                target.write_bytes(raw)
+            with self.assertRaises(ValueError):
+                reg.verify_r1_executed_sources(root, {"executed_commit": "0" * 40})
+            (root / "joulewise/align/apple/r1_phase_table.py").unlink()
+            with self.assertRaisesRegex(ValueError, "missing"):
+                reg.verify_r1_executed_sources(root, {"executed_commit": commit})
 
 
 if __name__ == '__main__':

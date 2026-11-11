@@ -164,3 +164,64 @@ Field derivations and their stated approximations:
 - Designed start states (planning kinds): a proportional MLX heater (`ProcessHeater`, a child process) preheats to R + offset and holds S_slow there during the production G0, whose reference is R + offset on S_slow (S_fast is not banded); it stops before the episode starts. `g0_release_c` is the G0 interval's measured release.
 - `released`: the G0 outcome. `t_decline_s`: the step's t_decline, null when no decline occurred.
 - `calibration-pre`/`-post` record the read-only host snapshot at the brackets; the meter calibration itself belongs to the R1 night plan's scaffold. `harvest` writes `DIR/harvest_manifest.json` (SHA-256 of every file under the R1 output) and aggregates the charge-resume events.
+
+## Follow-up night (RL-59/61/64/72/74/75/76, 2026-11-11)
+
+This section supersedes the R5/R6 soak-reference and G0-retry descriptions above
+for the follow-up kit. The bound 30B template is unchanged. The order is the pure
+phase module's table: soak, cold step-30B (R_op diagnostic), A1/B/A2 (own native
+captures), ordinary 30B predecessor plus step-D (one admission unit), cooldown
+then planning +4/+2/+0 relative to step-D R_D, bank/spam-a/spam-b and X-G. Each
+planning precool belongs to its planning admission unit. Two load redos total
+repeat whole units. No wait can split the capture pair. No G0-only retry occurs.
+The two batch-encounter envelope is enforced; a third encounter refuses.
+
+Only the step kinds dispatch after an observed timeout, retaining W1's timeout
+flag and null episode reference and adding `r1.g0_timeout_run`. Unobserved state,
+deadman and collector/status faults retain their stop semantics. Gated D and
+X-G have the W1 stop, and their successors record whether D work preceded them.
+A captured R_D survives a timeout. An unobserved capture never permits recapture
+by a consumer. Consumers use W1 `load_window_reference`, including its journal,
+policy and config authentication. No changes are made to `thermal_gates.py`.
+
+The night produces candidate slots with an `inadmissible_slots` table. All
+flagged segments enter `inconclusive_segments`; the kit refuses those candidates
+until the lead rules. The adopted Tf08 S6=1.5 receipt survives an inconclusive
+proposal. RL-74/75 require a separate research-lead ruling on smoke Part B's
+unchanged classifier table before the arm. The runtime config holds one sensor
+policy for the whole night. For a newly authorized slow key the floor is 1.0 C
+and the old sensor's tuning receipt does not transfer. A policy cannot carry an
+extra record-only temperature key: `thermal.validate_policy` permits only the
+two role keys, fan keys and R0 digest. No gate-module change is made for that.
+
+Universal bars: chain exit 0 and complete custody; accepted attempt; AC present
+and battery not discharging (`r1.battery_feed_invalid`); no agent overlap
+(`r1.agent_feed_overlap`); passing external-volume census; correct mode readback.
+
+| Slot / record | Segment and additional flag/bar |
+|---|---|
+| S1-S4, S7, S8/N_chunk, S9/t_decline, B_D, I_D, T_dead, class, e_D | step-D timeout-run or incomplete turn; tau/recovery censored or t_decline unobserved (bounds remain labelled) |
+| S5, S5_fast | accepted settled soak and coverage |
+| S6 / tuning inputs | gated G0 timeout or hold suppression; missing receipt |
+| ac_powermode | any unreleased/timed-out leg, inconclusive arithmetic, cross-band or B-capture bracket failure |
+| planning_temperature, U5 | planning timeout-run/preheat-cap/two-sided release failure; replay-pair G0 timeout gives no sigma_pair |
+| duty_bar, deadman_budget, l1, max_r1_tail_s, budget_fit_inputs, projected_mde | candidate step-D budgets or gated timeout; lead's fallback order |
+| x_g, g0_cap_w1 | gated or X-G timeout, counted at cap: `r1.g0_cap_saturated` |
+| thermometry.D / bar | step-D timeout-run; classifier reason, null or aliased pick |
+
+The computed phase subtotal is 58,711.9616 s. Largest admission unit is
+7,563.9952 s. Two load redos and two encounters of unit plus 5,400 s blackout,
+rounded up, give 99,768 s; add 9,000 s overhead (brackets 1,800 each, close 900,
+harvest 4,500). The existing plan writer yields `window_max_s=126480` from
+`programmed_span_s=108768`. Runtime subprocess wall caps bound brackets and
+harvest; close is checked and recorded. These are bounds, not a wall prediction.
+
+Native commands are in `scripts/align_r1_followup_kit.py`: smoke A stops after
+capture/G0 within 1,800 s; smoke B continues the D step for at most another
+1,200 s and prints inventory coverage, unchanged classification, and every
+candidate at bands 1.0/1.5 C with deciding condition and reference +/-0.03 C
+sensitivity. Run under the ordinary clean-host/DC-in custody procedure; the
+script is not authority to run while an agent is active. The `desk` subcommand
+prints each member's own pre-warmup median beside R_op and R_D and every release
+margin, using the replay functions. `prepare_checks` is the fail-closed plug-in
+site for the separate RL-62/RL-73 armcheck batch; this lane implements neither.

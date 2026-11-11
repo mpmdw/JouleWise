@@ -200,19 +200,13 @@ def check_r1_evidence(inputs, r1_slots, *, synthetic=False, receipt=None):
     inconclusive = r1_slots.get('inconclusive_segments')
     if not isinstance(inconclusive, dict):
         raise ValueError('R1 r1_slots must record inconclusive_segments (LEAD-RULINGS-2 R6-2)')
-    if STEP_D_SEGMENT in inconclusive:
-        # LEAD-RULINGS-2 R6-2: recorded by the driver, refused here (fail closed at the kit).
-        raise ValueError(f'R1 step-d was INCONCLUSIVE ({inconclusive[STEP_D_SEGMENT]}): no slots, no thermometry '
-                         'bar and no gated runs; W1 cannot be sized from this R1 record; '
-                         'the remedy is an R1 re-run, which is the magistrate\'s call, '
-                         'with no per-occurrence lead ruling (LEAD-RULINGS-2 R7-3)')
-    if {k: v for k, v in inconclusive.items() if k != 'X_G_contrast'}:
-        # A designed start state that was never reached leaves beta_T (U5)
-        # without a point; before R6-2 it refused the night, so it still
-        # refuses W1 here (Sol critique of round 6).
-        raise ValueError('R1 calibration segment(s) INCONCLUSIVE (R6-2): ' + ', '.join(sorted(inconclusive))
-                         + '; the remedy is an R1 re-run, which is the magistrate\'s call, '
-                         'with no per-occurrence lead ruling (LEAD-RULINGS-2 R7-3)')
+    if inconclusive:
+        raise ValueError('R1 segment(s) INCONCLUSIVE (RL-72): ' + ', '.join(sorted(inconclusive))
+                         + '; candidate slots are inadmissible without the research lead ruling')
+    barred = r1_slots.get('inadmissible_slots', {})
+    if any(barred.values()):
+        raise ValueError('R1 slot flags require a research lead ruling: ' + ', '.join(
+            sorted(k for k, flags in barred.items() if flags)))
     slots = r1_slots.get('slots')
     if not isinstance(slots, dict) or not finite(slots.get('I_D')):
         raise ValueError('R1 r1_slots must carry the step-d slots with a finite I_D')

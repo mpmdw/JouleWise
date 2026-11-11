@@ -22,7 +22,7 @@ COOLDOWN_AFTER_D_MAX_S = 1500          # ruling 1(c)
 # reproduce W1's D-after-D G0. Every gated D run, and X-G, follows a D turn
 # with exactly W1's inter-member schedule: the member's own configured idle
 # (sampling.idle_seconds of the W1 kit config it runs), and nothing else; no
-# cool-to-band. They still consume the soak R (R5-1). A G0 timeout makes that
+# cool-to-band. They consume step-D R_D (RL-59). A G0 timeout makes that
 # run INCONCLUSIVE (recorded), never a night refusal. They therefore run after
 # the designed start states: the R + 0 C planning turn (a D turn) precedes the
 # first (D_bank, R7-1), and X-G follows D_spam b (W1's D -> X transition).
@@ -42,25 +42,10 @@ STEP_D_NAME = "step_D_prefill_10k_decode_4096"
 
 
 def phase_plan(include_4bit=False, precool_cap_s=COOLDOWN_AFTER_D_MAX_S):
-    """R1 phase table: (name, runtime kind, duration_s, class).
+    """RL-59/RL-72 follow-up. Capture pair and planning precools are admission units.
 
-    A1 R1 item 4 is a *replay pair* of D spam/benign seed 1 (U3, the R1 replay
-    pair for U5/E_ref, and the W1 cross-session reference).  Council ruling
-    1(b) adds a third gated, held D run on bank/benign (long prefill); ruling
-    1(c) extends the post-D cooldown until S_slow is within delta of the soak
-    or 1,500 s.  Ruling 6 (U5) adds D's planning-turn step from three designed
-    G0 release states; they sit inside the calibration brackets because their
-    energies feed beta_T.
-
-    Order (LEAD-RULINGS-2): the ruling 16 A-B-A legs run right after the 30B
-    step (R6-6: its 600 s recovery observation is the idle; no separate
-    cooldown), so step-d and every later D measurement run under the adopted
-    series mode (R5-5). Step-d and each designed start state are preceded by
-    a bounded precool to the G0 band of R (R6-2; the ruling 1(c) post-D
-    cooldown is the first state's), the states run warmest first (R5-2), and
-    the gated D runs and X-G follow the last state back to back, each after a
-    D turn with only W1's inter-member schedule (R6-1). ``precool_cap_s`` is
-    the runtime config's ``calibration_precool_cap_s``.
+    ``include_4bit`` remains an API argument for old callers; the follow-up
+    cuts that fallback. It requires a separate qualification and ruling.
     """
     phases = [
         ("pre_calibration_bracket", "calibration-pre", None, "light"),
@@ -70,7 +55,7 @@ def phase_plan(include_4bit=False, precool_cap_s=COOLDOWN_AFTER_D_MAX_S):
     phases += [(f"high_power_{label}", f"high-power-aba-{label.lower()}", None, "heavy")
                for label, _ in HIGH_POWER_LEGS]
     phases += [
-        (STEP_D_NAME + PRECOOL_SUFFIX, "idle-until-soak", precool_cap_s, "light"),
+        ("capture_predecessor_30b", "capture-predecessor-30b", None, "heavy"),
         (STEP_D_NAME, "step-d", None, "heavy"),
         ("cooldown_after_D", "idle-until-soak", COOLDOWN_AFTER_D_MAX_S, "light"),
     ]
@@ -80,8 +65,6 @@ def phase_plan(include_4bit=False, precool_cap_s=COOLDOWN_AFTER_D_MAX_S):
             phases.append((name + PRECOOL_SUFFIX, "idle-until-soak", precool_cap_s, "light"))
         phases.append((name, f"d-planning-turn-r-plus-{int(offset)}c", None, "heavy"))
     phases += [(name, kind, None, "heavy") for name, kind in GATED_D_RUNS]
-    phases.append(("X_G_contrast", "x-g", None, "heavy"))
-    if include_4bit:
-        phases.append(("D_4bit_optional", "d-4bit", None, "heavy"))
-    phases.append(("post_calibration_bracket", "calibration-post", None, "light"))
+    phases += [("X_G_contrast", "x-g", None, "heavy"),
+               ("post_calibration_bracket", "calibration-post", None, "light")]
     return phases

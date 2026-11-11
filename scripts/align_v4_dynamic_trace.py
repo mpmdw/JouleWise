@@ -46,7 +46,11 @@ SCENARIOS = (
     ('dct_series_window', {}, ['tests.align.test_v4_series', 'tests.align.test_v4_series_e2e',
                                'tests.align.test_v4_series_r20', 'tests.align.test_v4_replacement_windows']),
     ('wp22_synthetic_w1_chain', {'JW_WP22_FULL': '1'}, ['tests.align.test_v4_w1_synthetic']),
-    ('r1_synthetic_arm', {}, ['tests.align.test_r1_rehearsal', 'tests.align.test_r1_runtime_e2e']),
+    # Follow-up paths plus a real runtime child/TERM/custody path. The full
+    # night remains in default CI; trace generation need not repeat it.
+    ('r1_synthetic_arm', {}, ['tests.align.test_r1_followup',
+                            'tests.align.test_r1_rehearsal.PhaseTableIdentityTests',
+                            'tests.align.test_r1_runtime_e2e.DriverRuntimeTests.test_term_reaches_the_runtime_which_closes_its_custody_before_exit']),
     ('r1_to_w1_chain', {}, ['tests.align.test_r1_turn_counts_export', 'tests.align.test_r1_to_w1_chain',
                             'tests.align.test_w1_kit_r10']),
     ('desk_dc_session', {}, ['tests.align.test_km003c.MemberTests', 'tests.align.test_km003c.DeskTests',
@@ -61,6 +65,22 @@ SCENARIOS = (
     ('reliability_probe_and_courier', {'JW_B5_SYNTHETIC_ONLY': '1'}, [
         'tests.test_w1_reliability_r4.MeterTests.test_real_probe_child_is_observed_with_forced_absent_library',
         'tests.test_w1_reliability_r4.DeliveryTests.test_actual_program_courier_parses_prompt_and_pushes_to_local_remote']),
+)
+
+
+# Representative entry paths for a build with an explicit test-time budget.
+# This is labelled in the output and does not replace the full default profile
+# or remove any test from CI. Full-night behavior is verified separately.
+BOUNDED_SCENARIOS = (
+    ('dct_series_window', {}, ['tests.align.test_v4_series.ManifestTests']),
+    ('wp22_synthetic_w1_chain', {}, ['tests.align.test_v4_w1_synthetic.KitBridgeTests',
+                                    'tests.align.test_v4_w1_synthetic.MinimalDryRunTests']),
+    ('r1_synthetic_arm', {}, ['tests.align.test_r1_followup.DriverTests',
+        'tests.align.test_r1_runtime_e2e.DriverRuntimeTests.test_term_reaches_the_runtime_which_closes_its_custody_before_exit']),
+    ('r1_to_w1_chain', {}, ['tests.align.test_r1_to_w1_chain']),
+    ('arm_install_session', {}, ['tests.align.test_v4_next_arm_packet.ArmOrderWitness']),
+    ('night_driver_hazard_pack', {}, ['tests.align.test_km003c.NightChainTests']),
+    ('timing_receipts_delta', {}, ['tests.align.test_timing_receipts_opus_witnesses']),
 )
 
 
@@ -227,12 +247,14 @@ def run_scenarios(scenarios=SCENARIOS, trace_dir=None):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument('--out', type=Path, required=True)
+    parser.add_argument('--bounded', action='store_true', help='labelled representative entry paths; full profile remains the default')
     args = parser.parse_args(argv)
     sys.path.insert(0, str(ROOT))
-    report, recorder, children = run_scenarios()
+    report, recorder, children = run_scenarios(BOUNDED_SCENARIOS if args.bounded else SCENARIOS)
     from joulewise.align.apple import v4_registration as registration
     executed = sorted(set(recorder.paths()) | set(children))
-    trace = {'schema': SCHEMA, 'scenarios': report, 'executed': executed,
+    trace = {'schema': SCHEMA, 'profile': 'bounded_representative' if args.bounded else 'full',
+             'scenarios': report, 'executed': executed,
              'by_event': recorder.to_json(), 'child_process_paths': children,
              'not_bound': [p for p in executed if p not in registration.ARTIFACTS],
              'not_strict': [p for p in executed if p in registration.ARTIFACTS and not registration.is_strict(p)]}

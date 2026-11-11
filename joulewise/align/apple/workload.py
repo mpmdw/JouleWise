@@ -185,7 +185,7 @@ class EpisodeSpec:
 class EpisodeRuntimeAdapter:
     """RuntimeAdapter wrapping the registry-selected MLX or mock implementation."""
 
-    def __init__(self, runtime: Any, clock: Clock, *, thermal_factory=None) -> None:
+    def __init__(self, runtime: Any, clock: Clock, *, thermal_factory=None, g0_timeout_hook=None) -> None:
         self.name = runtime.name if runtime is not None else WORKLOAD_KIND
         self.runtime = runtime
         self.clock = clock
@@ -198,6 +198,7 @@ class EpisodeRuntimeAdapter:
         self.thermal = None
         self.thermal_sidecar = None
         self.thermal_factory = thermal_factory
+        self.g0_timeout_hook = g0_timeout_hook
         self.thermal_status_reader = None
         # Council ruling 7: every real bundle records the observed AC powermode.
         # A bound reader (WP15 seam, or a test) is used; a real SystemClock run
@@ -431,7 +432,7 @@ class EpisodeRuntimeAdapter:
         if self.thermal is not None:
             from joulewise.align.apple.thermal_gates import ThermalFault
             try:
-                self.thermal.wait('G0', deadman=gate_deadman)
+                g0_row = self.thermal.wait('G0', deadman=gate_deadman)
             except ThermalFault as exc:
                 # A dead collector or missing status source fails the member
                 # at G0 entry instead of burning the gate cap (WP8 F2/F5).
@@ -443,6 +444,12 @@ class EpisodeRuntimeAdapter:
         # MEDIUM-2). End the member now instead of spending its T_dead.
         g0_unreleased = (self.thermal is not None and self.thermal.episode_reference is None
                          and any(r['kind'] == 'G0' for r in self.thermal.intervals))
+        if g0_unreleased:
+            # RL-72 E3: the default is inert. R1 installs its bounded callback
+            # through ThermalRegistry.thermal_factory; no reference is invented.
+            hook = self.g0_timeout_hook or getattr(self.thermal, 'g0_timeout_hook', None)
+            if g0_row.get('outcome') == 'timeout' and hook is not None:
+                g0_unreleased = not bool(hook(self.thermal, g0_row))
         start = self.clock.stamp()
         episode_id = context.run_id if context is not None else config.run_id or "align_episode"
         domain = f"joulewise.monotonic:{episode_id}"
