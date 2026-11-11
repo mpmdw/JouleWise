@@ -7,6 +7,7 @@ counting-isolation tests are explicit; the exact generated spelling has its
 own witness. Host observations and the final installer alone are replaced.
 """
 from tests.align.test_v4_arm_watchdog_check import acceptance as _watchdog_acceptance
+from tests.align.v4_registration_fixtures import session_plan
 from copy import deepcopy
 import json
 import os
@@ -89,7 +90,8 @@ class Delta5Witnesses(unittest.TestCase):
         good = dict(passed=True, probe_error=False, external_connected=True, is_charging=False,
                     current_capacity_pct=100, instant_amperage_ma=0, update_age_s=1)
         host = lambda argv: subprocess.CompletedProcess(argv, 0, 'synthetic host', '')
-        state = {'source_measurement_root': str(s.root), 'v4_series': {'window_id': window}}
+        state = session_plan(scratch, {'source_measurement_root': str(s.root),
+                                      'v4_series': {'window_id': window}}, now=NOW)
         with patch.dict(os.environ, {'JOULEWISE_HOST_STATE_DIR': str(scratch / 'host')}), \
              patch('joulewise.align.apple.powermode.admit_ac_powermode',
                    return_value={'admitted': True, 'observed': 0}), \

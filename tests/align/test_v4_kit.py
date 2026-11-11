@@ -20,6 +20,7 @@ from joulewise.schemas import BenchmarkConfig
 from joulewise.b6 import registration
 from scripts import align_pilot_session as pilot, align_v4_kit as kit, align_v4_session as session
 from scripts import validate_align_v4_w1_plan as validator
+from tests.align.v4_registration_fixtures import held_window_acceptance, session_plan
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -1178,6 +1179,9 @@ class SessionParameterTests(unittest.TestCase):
         env = patch.dict(os.environ, {powermode.HOST_STATE_ENV: str(Path(host.name) / 'host-power')})
         env.start()
         self.addCleanup(env.stop)
+        held = patch.object(session, 'held_window_check', side_effect=held_window_acceptance)
+        held.start()
+        self.addCleanup(held.stop)
 
     def test_v3_defaults_and_v4_prepare_parameters(self):
         with patch.object(pilot.h, 'prepare', return_value='prepared') as prepare:
@@ -1233,7 +1237,8 @@ class SessionParameterTests(unittest.TestCase):
         seed_series(measurement)
         (measurement / kit.KIT / 'collection_plan.json').write_text(json.dumps(plan))
         (measurement / kit.R1_SLOTS).write_text(json.dumps({'ac_powermode': mode_expected}))
-        pilot.h.write(session_root / 'session.json', {'measurement_root': str(measurement)})
+        pilot.h.write(session_root / 'session.json', session_plan(session_root,
+                                                               {'measurement_root': str(measurement)}))
         return measurement, session_root
 
     def test_v4_install_reads_measurement_r1_slots_and_refuses_powermode_mismatch(self):
@@ -1614,6 +1619,9 @@ class W1HighPowerTests(unittest.TestCase):
         env = patch.dict(os.environ, {powermode.HOST_STATE_ENV: str(Path(host.name) / 'host-power')})
         env.start()
         self.addCleanup(env.stop)
+        held = patch.object(session, 'held_window_check', side_effect=held_window_acceptance)
+        held.start()
+        self.addCleanup(held.stop)
 
     def install(self, tmp, ac_powermode, *, gate_status='pass', start_mode=0):
         from joulewise.align.apple import powermode
@@ -1624,9 +1632,9 @@ class W1HighPowerTests(unittest.TestCase):
             {'runtime_requirements': {'ac_powermode': ac_powermode}}))
         session_root = Path(tmp) / 's'
         (session_root / 'staging').mkdir(parents=True, exist_ok=True)
-        (session_root / 'session.json').write_text(json.dumps(
+        (session_root / 'session.json').write_text(json.dumps(session_plan(session_root,
             {'measurement_root': str(measurement), 'inputs': {'custody_root': str(Path(tmp) / 'custody')},
-             'plan_path': str(Path(tmp) / 'custody/night_plan.json')}))
+             'plan_path': str(Path(tmp) / 'custody/night_plan.json')})))
         self.marker = Path(powermode.host_marker_path())
         self.host = FakeArmHost(mode=start_mode, marker=self.marker)
         config = W1DiskGateTests.config(self, tmp)
@@ -1779,8 +1787,11 @@ class W1DiskGateTests(unittest.TestCase):
         (measurement / kit.KIT / 'collection_plan.json').write_text(json.dumps(plan))
         session_root = Path(tmp) / 's'
         (session_root / 'staging').mkdir(parents=True, exist_ok=True)
-        (session_root / 'session.json').write_text(json.dumps({'measurement_root': str(measurement)}))
-        with patch.object(kit, 'generate'), patch.object(pilot, 'install') as install:
+        (session_root / 'session.json').write_text(json.dumps(session_plan(session_root,
+                                                               {'measurement_root': str(measurement)})))
+        with patch.object(kit, 'generate'), \
+                patch.object(session, 'held_window_check', side_effect=held_window_acceptance), \
+                patch.object(pilot, 'install') as install:
             try:
                 host = FakeArmHost(mode=0)
                 session.install(session_root, runner=host, volume_runner=host, obc_off_attested_by='synthetic', **topup(), **kwargs)
