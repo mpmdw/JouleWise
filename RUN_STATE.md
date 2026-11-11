@@ -1068,6 +1068,27 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 (3) After `chain.exited`: runbook §4 on `20e9edbc4` with `S=/Users/edr/night-align/r1-20261111T014106Z`. Read `r1_result.json` status first. Then network time ON, the Automatic restore, KM003C, stray monitors, uninstall, record, mail Ed. **Before the NEXT arm after that, zero the frequency word again** (network time OFF, then the zero script, then measure the rate).
 (4) The watchdog-v5 fix (PR #707) is still open; install it only after the chain exits.
 
+255. **Magistrate activation 5515349e (Opus 5.5, headless), 2026-11-10 19:55 PST: items 253 and 254 are answered. The cause of the 19:05 refusal is structural. The Fable 5.2 research lead has ruled, and the R1 fix is building. Ed was mailed (Gmail `1a1c89b64f3e3348`).**
+- **Structural answer (item 254):** yes, the load comes before G0. Order inside `step-30b` (`$R/events.jsonl`): prepare (model load) 18:46:54, then idle_baseline 18:47-18:53, then warmup 18:53:40-18:54:08 (one 5 s run), then G0 18:54:10. The warmup heated Tf08 to 58 C, and G0 timed out at its 600 s cap.
+- **Two causes, measured** (`docs/process_traces/2026-11-10-r1-g0/00-diagnosis.md` and the ruling's section 2):
+  - (A) **Reference at the wrong operating point.** The R1 reference is the mean of the sensors-only soak, with no model process and no capture running: Tf08 25.489 C. The member's own settled idle, with the model resident and capture running, is 26.549 C, which is +1.06 C. The limit, 26.489 C, sat *below* the member's own idle, so waiting could never release.
+  - (B) **The warmup tail.** 600 s after the warmup, Tf08 was still +1.9 C above the member's own idle.
+- **Ruling** (Fable 5.2, blind, executing; `10-fable52-ruling.md`). Sol 6.1 xhigh ran blind as the finder (`11-sol-findings.md`), and the lead's disposition is in `20-lead-disposition.md`. All three are in `docs/process_traces/2026-11-10-r1-g0/` on main. The ruling:
+  - (1) R_op = the WP14(b) pre-warmup 60 s median of step-30b. It is the reference for step-30b's own G0 and for every later R1 gate.
+  - (2) δ_slow = 1.5 C as slot S6, with a tuning receipt. This is the registered 0.5 C ladder step; S5 stays at 1.0 C.
+  - (3) The G0 cap is 1,200 s for every model member: step-30b, the A-B-A legs and d-4bit.
+  - (4) The A-B-A legs and d-4bit arm their deadman after G0.
+  - (5) Bounds and `window_max_s` are recomputed.
+  - Predicted step-30b release: 708-911 s.
+  - Sol dissented on δ (keep 1.0 C). The disposition records why the ruling stands.
+  - NR-1 (which reference the gated D runs and X-G use) is deferred to the v4 design council. R1 can run first.
+- **Build:** Sol 6.1 xhigh is building on `lane/2026-11-10-r1-g0-rop`, from `20e9edbc4`. Brief: `30-build-brief.md`. Report: `31-build-report.md`.
+
+**Next action (replaces items 253 and 254's pointers):**
+(1) When the build report lands: the lead's executing review, then blind cold passes (Fable and Opus, executing; replay the 11-10 thermal record through the real `ThermalSession.wait`), then a draft PR for CI.
+(2) Then re-pin `$M` at the new head, with a fresh custody root. Before arming: network time OFF and the zero script (item 251). Then write the plan, send the arm notice and install.
+(3) The laptop lead does not need to route item 254's question again. The ruling exists.
+
 254. **Laptop lead (interactive session 41120c85, Opus 5.5), 2026-11-10 19:42 PST: a code fact for item 253's diagnosis. step_30b's G0 cap may be structurally too short. Do NOT re-arm R1 unchanged until this is settled.**
 - **Source:** the Fable 5.2 delta review of the W1 reliability branches. It covers code structure only and read no thermal or custody data.
   - `step-30b` keeps a **600 s** G0 cap (`scripts/align_r1_rehearsal.py:112-116` at `20e9edbc4`).
