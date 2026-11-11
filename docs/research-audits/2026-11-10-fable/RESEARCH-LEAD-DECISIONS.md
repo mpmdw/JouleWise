@@ -2678,6 +2678,62 @@ execution has not yet said so, and this is the part of the series that cannot be
 
 ---
 
+# Decision request 27: the ledger extension's cold review, finding F5 (2026-11-11 03:43 PST)
+
+**Read.** Finding F5 and the scope notes of `docs/run_reports/2026-11-11-p1-b5-ledger-ext-opus-coldreview.md` on
+`analysis/2026-11-11-b5-ledger-ext` @ `a1f916e9b`, and analysis plan §8.1 and §9. I rely on the lead's summary of
+the review's counts and have not re-counted the extended ledger; I will when its print authority is fixed.
+
+## RL-55. Extend once more, and scope it by a rule so that it is the last time
+
+### F5: extend
+
+Plan §9's last row registers "Disclosures of §8" for print, and §8.1 states them for every attempt of every
+pack. GAMMA is the session the two contrasts come from; its attempt line, its hazards and its NEG-8 line are the
+disclosures a reader most needs. RL-52's list said "ALPHA and BETA" because that was the gap the fill seat
+named. The rule behind the list was RL-2, and RL-2 covers these. Leaving them pending would be leaving
+registered rows unprinted.
+
+**Round 4**, under RL-38's conditions, the same two roots, hash-pinned files only. It adds rows for the
+window-level battery-count lines of all three packs, and for GAMMA's NEG-8 word and bound terms, stage
+temperature lines, arm lines and attempt line.
+
+**Scope by rule.** To stop the fill finding a third gap, the round ends with a coverage table: every Block 5
+placeholder still pending in `paper1.md`, each element its description asks for, and the ledger row that
+supplies it. An element with no row is either added or marked with its reason (not a leaf of a registered
+output; needs Block 6; a name from a committed file). The Opus reviewer checks that table against the
+manuscript. The second fill starts from it.
+
+Words as before. A disclosure-record leaf is a registered output, so it may be a row; member-level readings
+stay in custody (RL-38 condition 4).
+
+### Two notes for the second fill, from the review's findings
+
+**R_cm for 1.7B prefill prints at five decimals, 1.99975.** The ledger now holds it twice, 1.9997 from
+`RESULTS.md` and 1.99975 from the extension. At four decimals the longer figure rounds to 1.9998 and the paper
+would disagree with the results file in the last place, on the one ratio that sits within 3 × 10⁻⁴ of its
+threshold. A reader should see how close it is. The other ratios keep four decimals. The general rule, added
+to RL-52's table: where the ledger has two rows for one quantity, the fill takes the row with more digits, and
+a last-place difference from `RESULTS.md` is listed among `REDERIVATION.md`'s clarifications.
+
+**The cross-session check's "differs" for the 8B decode cell is stated in the results text.** It goes where the
+consistency checks are reported, with its registered sentence and the four deltas, not only in a table cell.
+It is one of the things "one session" means in practice, and it is what the replication is for. RL-4 (iv) still
+holds: the two separately collected cells are not differenced into a claim.
+
+### After round 4
+
+The lead records the new print-authority commit. It comes to me only on a `MISMATCH`, a
+`source-outside-unseal` row, or a coverage-table element that cannot be supplied. Then the second fill proceeds
+as RL-52 set out, with F4's pairing of the refusal rows.
+
+**Reason.** The paper's disclosures are registered per pack, and the pack that carries the claims cannot be
+the one whose disclosures are missing.
+
+**Blind status.** Not blind to Block 5. No custody path opened by me.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
