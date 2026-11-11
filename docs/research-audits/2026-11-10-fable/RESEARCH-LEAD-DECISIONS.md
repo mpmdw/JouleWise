@@ -1606,6 +1606,114 @@ records, would be care in the wrong place.
 
 ---
 
+# Decision request 16: the Opus cold review and the RL-3 closure (2026-11-10 23:54 PST)
+
+**Read.** `docs/run_reports/2026-11-10-p1-seat4-opus-coldreview.md` on
+`analysis/2026-11-10-b5-rederivation` @ `9159dbf05`, in full. I checked the unit of the 84 count in
+`docs/analysis/b5/reviews/sol-review-704.md` (lines 115-123) and the coverage audit's rows for the bracket
+sensitivity and the stored flags. I opened no custody path and did not run the reviewer's script.
+
+## RL-42. Four row rulings, the residuals, and the closure of RL-3's gate
+
+### Row 522: `exact`. RL-41 (a) is corrected
+
+84 is right. It counts normalized leaf paths, with list indices collapsed, which is the comparator's unit;
+Sol review 704 says so in terms. The same three groups hold 118 scalar leaves. DLE-5's formula gives 84 with
+C = 6 and R = 2 over both contrasts together.
+
+**My error in RL-41.** I applied the formula per contrast, got 44 + 74 = 118, and said the formula agreed with
+118 and that 84 was unreconciled. The formula counts paths, not leaves per contrast. The "118 − 84 = 34" remark
+was a coincidence and is withdrawn.
+
+What changes from RL-41 (a):
+
+- Row 522 is `exact`, with the note "84 normalized leaf paths; 118 scalar leaves".
+- No erratum line. One **clarification** line goes in `REDERIVATION.md`, under the errata, with that note.
+- No note under DLE-5 in the deviation log. DLE-5 was right.
+- Paper 1 still prints no count. If one is ever printed, it carries its unit.
+
+### Rows 388-391 and 395: checked. All eight scaled-allowance rows still do not print
+
+The reviewer's bound argument is sound: where the largest possible duration ratio is below the energy ratio,
+the factor is the energy term, and the energy term is hand-checked. Those five rows take the word the check
+gives (`exact` or `within-rounding`), with the note "hand check: Opus cold review, bound argument". Rows 392-394
+are `single-source`: for prefill the bound does not decide the factor.
+
+RL-41 used `not-printed` as a ledger word. That mixed two things. **The ledger gets a separate column,
+`paper1`, with `print`, `print-labelled` or `not-printed`.** The check word says what was verified; the column
+says what the paper does. All eight rows 388-395 are `not-printed`: half a sensitivity line cannot be printed,
+and it is not a registered analysis.
+
+### Row 528 and rows 242-244, 490-492: one standard, and both pass
+
+A count, or a rule applied, over stored flags is arithmetic over recorded judgments. Its word is the check
+word, with the note "over stored flags". So row 528 is `exact (over stored flags)`, like the contention counts.
+`recorded-judgment` is kept for a leaf that is itself the stored judgment, copied, with nothing in scope to
+compute it from. The paper's obligation is the same for both: the sentence attributes the flags to the
+collection record (§4.7 already does).
+
+### Row 529: `exact`
+
+The bracket sensitivity is recomputed and compared: 189 comparator rows agree, including the
+equal-to-primary word (coverage audit row 66). RL-3 item 3 does not apply to it. Note: "compared by the release
+comparator; the acceptance record's alignment bounds are inputs".
+
+### Rows 530, 531, 533, 534: `exact`
+
+RL-41's condition is met. The reviewer's own arithmetic shows every numeric condition of the registered
+outcome rule: the estimate exceeds the floor gate, both intervals exclude zero, Holm rejects, and
+leave-one-out keeps sign and floor. The comparator also agrees on the outcome word. Note: "prerequisites of the
+not-estimable codes are recorded judgments". Rows 532 and 535, the L2 ceiling, stay `recorded-judgment` with
+rows 525 and 526.
+
+### The residuals: round them, on every row
+
+Yes, and not only on the eight rows. A printed value plus a difference at fifteen digits gives back the
+unrounded value. That holds for the eight extreme-value rows and equally for the per-quad differences.
+**Every `difference` in the committed tables is recorded to two significant figures**, and the script emits
+it that way.
+
+The cause is my wording: RL-38 condition 4 asked for "its difference from the printed value" and set no
+precision. The full-precision values are already in the pushed history of a public repository. They are
+released Block 5 values, a handful of them, and no sealed block is touched. History is not rewritten. The
+lead tells Ed in one line, since publishing member-level values is his call.
+
+### The ledger after these rulings
+
+Expected counts, for the Sol seat to reproduce: `exact` and `within-rounding` 517 together (261 and 256 if
+the five scaled rows are all within rounding), `recorded-judgment` 6 (rows 341, 342, 525, 526, 532, 535),
+`single-source` 14 (rows 236-241, 348-350, 362, 367, 392-394), `MISMATCH` 1 (row 249, the ruled erratum).
+Total 538. `not-printed` in the `paper1` column: rows 388-395.
+
+### RL-3's gate is closed for Block 5
+
+- Item 1: `RESULTS.md` is on `main`.
+- Item 2, the re-derivation: done by a Sol reader in two phases and confirmed by an Opus cold review that
+  wrote its own arithmetic from the registered text. 157 of 157 hand checks confirmed, none refuted. Twelve
+  custody files, hashed before and after by both seats, all inside the two unsealed paths. The lead's
+  event-log audit found no access outside them.
+- Item 3: every uncovered or single-program value is either hand-checked, marked `recorded-judgment`, marked
+  `single-source`, or not printed.
+
+**What the closure licenses.** A Block 5 number may enter Paper 1 when the fill seat cites its ledger row, the
+row's word is `exact` or `within-rounding`, every row it is computed from passes too, and the `paper1` column
+does not say `not-printed`. `recorded-judgment` and `single-source` rows print only with their attribution or
+label (RL-41). The print authority is `docs/analysis/b5/rederivation.tsv` at the commit where the Sol seat
+applies RL-41 and RL-42; the lead records that commit in the gate ledger. If the applied counts differ from
+those above, it comes back to me.
+
+**What it does not license.** The paper's sentences are still checked against the ten licence constraints
+after the fill (RL-3 item 2, second half). The site-build hold of RL-27 stays until then. Slides stay under
+RL-10.
+
+**Reason.** Two readers from two families, working from the released custody with their own arithmetic, agree
+with every printed number they could compute, and the values they could not compute are now named as what
+they are.
+
+**Blind status.** Not blind to Block 5. Blind to Block 6 and BYTES. No custody path opened.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
