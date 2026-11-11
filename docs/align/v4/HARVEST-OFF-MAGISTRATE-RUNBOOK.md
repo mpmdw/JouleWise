@@ -182,7 +182,15 @@ When the Air's full desk for k has finished (§5), record **k+1** gets `previous
 - The files are `$S/PILOT.json`, `$S/desk.json` and `$S/archive/derived/exclusions.json` from the Air desk on window k, byte for byte.
 - If k's desk passed, the series ledger's `last_passed_record` becomes `{commit, path, sha256}` of record k plus `"final_record": {commit, path, sha256}` of record k+1.
 - The same evidence rule as §3 applies: `previous_final` naming a running, faulted or other-plan desk does not make k final.
-- If k's desk is not finished by record k+1, commit k+1 without `previous_final`. The arm of k+1's successor then refuses (§6) until a later record carries it.
+- **Only record k+1 can carry k's final sources.** The builder pairs each record with its immediate successor; a `previous_final` for k in any later record is refused (`previous_final must name this record ...`). Committing more records never makes k final.
+- If k's desk is not finished when record k+1 is due, there are two accepted orders. Both are exercised in `tests/align/test_v4_finality_paths.py`.
+  - **Hold record k+1** until k's desk is final, then commit it once with `previous_final`. Nothing between the end of window k+1 and the arm of k+2 needs record k+1 earlier; window k+1's own triage, final receipt and packing read session files. This is the simpler order: prefer it.
+  - **Re-issue record k+1** if it was already committed without `previous_final`, while it is still the chain tail (no record k+2 exists):
+    1. Write record k+1 again at the same path, adding `previous_final` and changing nothing else.
+    2. Compare the old and new decoded records. The only differing key must be `previous_final`. Say so in the commit message, for example `Re-issue K1: compared decoded records; only previous_final changed`.
+    3. Commit the series ledger again with `previous_record` (and `last_passed_record`, if it named k+1) pointing at the new record commit. Until then the builder refuses `series previous record binding mismatch`.
+    4. Rebuild the packet. A packet built before the re-issue is stale and is refused.
+- Until one of the two is done, the arm of k+2 refuses (§6).
 - **R17's bound:** window k must be final before the arm of k+2. This holds for **every** window in the chain, test windows included. They still contribute zero calibration.
 
 ## 5. Air, during window k+1: restore → harvest → desk → final → reduce
@@ -234,10 +242,11 @@ $RUN reduce --session-root "$S" --out "$OUT/reduced" --workers 2              # 
 | `desk` | `postpone the desk: no harvest worker fits` | Free memory first, or wait. The desk was not launched. |
 | `desk` | `sweep run failed` / `nonpositive or missing peak` | The sweep receipt is not a measurement. Re-run the sweep, or drop `--sweep`. |
 | `final` | `needs a completed harvest` / `desk and PILOT.json of this session` | The desk did not finish its harvest, or the files are another session's. |
-| packet / arm | `R17: final eligibility of K must be recorded before the arm of the window after next` | k is still provisional at the arm of k+2, or its final sources record no completed, plan-bound harvest. For a test window, `member_eligibility` fails. Commit `previous_final` (§4). |
+| packet / arm | `R17: final eligibility of K must be recorded before the arm of the window after next` | k is still provisional at the arm of k+2, or its final sources record no completed, plan-bound harvest. For a test window, `member_eligibility` fails. Put `previous_final` in record k+1: hold that record or re-issue it (§4). No later record can carry it. |
 | packet / arm | `must bind the finalized tree manifest` / `not a canonical` | Record k lacks `finalized_manifest` (§3), or the file is not the canonical bytes from 1b. |
 | packet / arm | `member_eligibility` failed with no final sources | The full desk is due (after W1 or a code/config change). Wait for §5 and commit the final sources in record k. |
-| packet / arm | `previous_final must name this record ...` | `record_sha256` or the source set is wrong. |
+| packet / arm | `previous_final must name this record ...` | `record_sha256` or the source set is wrong, or the block sits in a record that is not k's immediate successor. |
+| packet / arm | `series previous record binding mismatch` | Record k+1 was re-issued and the series ledger still names its old commit. Re-commit the ledger (§4). |
 | packet / arm | `a finally excluded member of K is in the pool` | Correct `pool_members` in the series ledger. |
 | packet / arm | `light triage source missing or for another window` | `light_triage.json` names another attempt id. Use `--window-id "$K"` exactly. |
 | packet / arm | `committed desk provisional counts (series_desk_row) missing` | The light triage or PILOT lacks the series desk row. Re-run triage on the series session. |
