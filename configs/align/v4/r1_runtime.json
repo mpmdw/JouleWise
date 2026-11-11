@@ -17,5 +17,7 @@
   "calibration_precool_cap_s": 1500,
   "g0_timeout_s": 1200,
   "slow_band_floor_c": 1.0,
-  "r0_classified_keys": ["TV0h", "TV1h", "TV0m", "TV0s", "TV1s", "Tf08"]
+  "r0_classified_keys": ["TV0h", "TV1h", "TV0m", "TV0s", "TV1s", "Tf08"],
+  "r0_classes": {"TV0h": "die", "TV1h": "die", "TV0m": "die", "TV0s": "die", "TV1s": "die", "Tf08": "heatsink"},
+  "r0_classes_authority": "Research-lead audit decision RL-74 follow-up, 2026-11-11 06:00 PST; class labels only"
 }

@@ -26,7 +26,7 @@ class CoverageBarTests(unittest.TestCase):
                  "finished": {"monotonic_ns": start + i * rt.NS},
                  "values": {"sensors": {"TV0h": 40.}, "errors": {}}}
                 for start, _ in spans.values() for i in range(1000)]
-        self.assertTrue(kit.phase_coverage(rows, ['TV0h'], spans)['pass'])
+        self.assertTrue(kit.phase_coverage(rows, ['TV0h'], spans, required_keys=['TV0h'])['pass'])
         for phase, (start, end) in spans.items():
             for case in ('coverage_98_pct', 'read_errors_1_pct', 'consecutive_empty'):
                 bad = deepcopy(rows)
@@ -38,7 +38,7 @@ class CoverageBarTests(unittest.TestCase):
                     for row in bad:
                         if row['started']['monotonic_ns'] in {start + (50 + 80 * i) * rt.NS for i in range(10)}:
                             row['values']['errors']['TV0h'] = 'synthetic read failure'
-                report = kit.phase_coverage(bad, ['TV0h'], spans)
+                report = kit.phase_coverage(bad, ['TV0h'], spans, required_keys=['TV0h'])
                 cell = report['phases'][phase]['TV0h']
                 with self.subTest(phase=phase, case=case):
                     # All other bars pass: a failure cannot be incidental.

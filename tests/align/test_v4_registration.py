@@ -438,14 +438,16 @@ class RegistrationTests(unittest.TestCase):
 
 
 class R1ExecutedSourceTests(unittest.TestCase):
-    def test_condition13_names_exactly_the_seven_ruled_sources(self):
+    def test_condition13_names_exactly_the_ten_ruled_sources(self):
         self.assertEqual(set(reg.R1_EXECUTED_SOURCES), {
             "scripts/align_r1_rehearsal.py", "joulewise/align/apple/r1_runtime.py",
             "configs/align/v4/r1_runtime.json", "joulewise/align/apple/r1_phase_table.py",
             "joulewise/align/apple/workload.py", "joulewise/align/apple/thermal.py",
             "joulewise/align/apple/thermal_gates.py",
+            "scripts/align_r1_runtime.py", "joulewise/align/apple/r1_runtime_contract.py",
+            "joulewise/align/apple/smc_enumeration.py",
         })
-        self.assertEqual(len(reg.R1_EXECUTED_SOURCES), 7)
+        self.assertEqual(len(reg.R1_EXECUTED_SOURCES), 10)
 
     def test_condition13_changes_each_file_commit_and_missing_phase_module(self):
         with tempfile.TemporaryDirectory() as tmp:

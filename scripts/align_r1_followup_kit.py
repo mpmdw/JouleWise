@@ -23,7 +23,7 @@ from scripts import align_v4_session as v4_session
 from scripts import align_r1_rehearsal as r1
 from scripts import align_r1_thermal_replay as replay
 from joulewise.align.apple import r1_runtime as rt, v4_registration as reg
-from joulewise.align.apple.thermal import Coverage
+from joulewise.align.apple.thermal import Coverage, valid_value
 
 # R1 changes run IDs; project each explicit member to the registered root,
 # retaining the registration's exact digests and file maps (never re-register).
@@ -104,14 +104,14 @@ def validate_sensor_ruling(config, ruling, smoke_sha256, table):
     if table.get("r0_classified_keys") != config["r0_classified_keys"]:
         raise ValueError("RL-78: smoke R0 key set changed; selection is made once")
     classification = table["classification_table"]["classification"]
-    selected = rt.select_smoke_sensors(classification, config["r0_classified_keys"])
+    selected = smoke_selection(classification, table["coverage"], config["r0_classified_keys"])
     if not selected["ok"] or any(selected[r] != config["sensors"][r]
                                  or selected[r] != table.get("selection", {}).get(r) for r in ("s_fast", "s_slow")):
         raise ValueError("RL-78: policy must use the fixed smoke Part B selection: " + "; ".join(selected["reasons"]))
     if config.get("slow_band_floor_c") != 1.0:
         raise ValueError("RL-78: default max(1 C, 3 soak idle SD); no S6 receipt transfer")
     if "Tf08" not in config["sensors"].get("record_keys", []):
-        raise ValueError("RL-78: Tf08 must be journalled in every member")
+        raise ValueError("RL-84: Tf08 must be journalled in every member that runs the thermal sidecar")
     return selected
 
 
@@ -152,26 +152,66 @@ def prepare(output, *, root=ROOT, config_path=None, ruling=None, smoke_table=Non
     return packet
 
 
-def phase_coverage(rows, keys, phases):
-    """Registered half-period cell accounting, additionally for pre-warmup idle."""
-    report = {}
+def phase_coverage(rows, keys, phases, *, required_keys=("Tf08",)):
+    """RL-84: sweep stalls fail smoke; a key's failures reject only that key.
+
+    Tf08 is mandatory for the disclosure. Key accounting follows rank()'s
+    half-period grid, bracket validity and phase-local read-error denominator.
+    A sweep is counted independently of whether any of its key reads succeed.
+    """
+    report, sampler = {}, {}
     for name, (start, end) in phases.items():
+        selected = [r for r in rows if start <= r["started"]["monotonic_ns"] < end]
+        sweeps = Coverage(start, ["sweep"], tolerance_ns=rt.NS // 2)
+        for row in selected:
+            a, b = row["started"]["monotonic_ns"], row["finished"]["monotonic_ns"]
+            if a <= b < end and b-a <= rt.NS:
+                sweeps.observe(a, b, {"sensors": {"sweep": 1}, "errors": {}})
+        sweep = sweeps.report(end)["all_keys"]
+        sampler[name] = {**sweep, "pass": (sweep["sample_fraction"] is not None
+                         and sweep["sample_fraction"] >= .99 and sweep["max_consecutive_empty_cells"] < 2)}
         per_key = {}
         for key in keys:
             counter = Coverage(start, [key], tolerance_ns=rt.NS // 2)
-            selected = [r for r in rows if start - rt.NS <= r["started"]["monotonic_ns"] <= end + rt.NS]
             failures = 0
             for row in selected:
                 values = row["values"]
-                failures += key in values.get("errors", {}) or values.get("sensors", {}).get(key) is None
-                counter.observe(row["started"]["monotonic_ns"], row["finished"]["monotonic_ns"], values)
+                a, b = row["started"]["monotonic_ns"], row["finished"]["monotonic_ns"]
+                bracket_valid = a <= b < end and b-a <= rt.NS
+                failures += (not bracket_valid or key in values.get("errors", {})
+                             or not valid_value(key, values.get("sensors", {}).get(key)))
+                if bracket_valid:
+                    counter.observe(a, b, values)
             cell = counter.report(end)["all_keys"]
             error_fraction = failures / len(selected) if selected else 1.0
+            reasons = []
+            if cell["sample_fraction"] is None or cell["sample_fraction"] < .99:
+                reasons.append("under 99% of one-second cells")
+            if error_fraction >= .01:
+                reasons.append(">=1% read errors")
+            if cell["max_consecutive_empty_cells"] >= 2:
+                reasons.append("two consecutive empty one-second cells")
             per_key[key] = {**cell, "read_error_fraction": error_fraction,
-                           "pass": (cell["sample_fraction"] is not None and cell["sample_fraction"] >= .99
-                                    and error_fraction < .01 and cell["max_consecutive_empty_cells"] < 2)}
+                           "pass": not reasons, "reasons": reasons}
         report[name] = per_key
-    return {"phases": report, "pass": all(v["pass"] for p in report.values() for v in p.values())}
+    return {"phases": report, "sampler": sampler, "required_keys": list(required_keys),
+            "pass": bool(report) and all(s["pass"] for s in sampler.values()) and all(
+                p.get(key, {}).get("pass", False) for p in report.values() for key in required_keys)}
+
+
+def smoke_selection(classification, coverage, r0_keys):
+    """Run the registered chooser on keys passing every phase, then RL-78's fallback.
+
+    Keep the full classifier result unchanged in the table. Pre-warmup is an
+    additional smoke phase; its failures also exclude a key from either role.
+    """
+    from joulewise.align.apple.smc_enumeration import select_keys
+    phases = coverage["phases"]
+    ranking = [row for row in classification["ranking"] if row["key"] in r0_keys and phases
+               and all(p.get(row["key"], {}).get("pass", False) for p in phases.values())]
+    filtered = {**classification, "ranking": ranking, **select_keys(ranking),
+                "heatsink_candidates": [r["key"] for r in ranking if r["class"] == "heatsink"]}
+    return rt.select_smoke_sensors(filtered, r0_keys)
 
 
 def class_edge_margins(classification):
@@ -209,18 +249,23 @@ def smoke_table(segment_dir):
     spans = {"pre_warmup_idle": (idle_start, anchor),
              **{name: tuple(span) for name, span in bounds.items()}}
     keys = [k["key"] for k in saved["inventory"]["keys"] if k.get("unit") == "degC"]
+    config = json.loads((ROOT / r1.DEFAULT_RUNTIME_CONFIG).read_bytes())
     coverage = phase_coverage(rows, keys, spans)
+    rejected = [{"key": key, "r0_class": config["r0_classes"].get(key, "unclassified"),
+                 "phase": phase, "reason": reason}
+                for phase, per_key in coverage["phases"].items() for key, cell in per_key.items()
+                for reason in cell["reasons"]]
+    selection = smoke_selection(saved["classification"], coverage, config["r0_classified_keys"])
     g0 = journal["g0"][0]
     candidates = replay.candidate_replays(rows, journal["rows"], keys, journal["s_fast"], anchor,
                                           g0["start_ns"], g0["end_ns"])
     return {"schema": "joulewise.align.r1_smoke_b.v1", "classification_table": saved,
-            "coverage": coverage, "candidate_replays": candidates,
-            "status": "FOR_RESEARCH_LEAD_RULING" if coverage["pass"] else "COVERAGE_FAILED",
-            "selection": rt.select_smoke_sensors(saved["classification"],
-                json.loads((ROOT / r1.DEFAULT_RUNTIME_CONFIG).read_bytes())["r0_classified_keys"]),
-            "r0_classified_keys": json.loads((ROOT / r1.DEFAULT_RUNTIME_CONFIG).read_bytes())["r0_classified_keys"],
+            "coverage": coverage, "rejected_keys": rejected, "candidate_replays": candidates,
+            "status": ("COVERAGE_FAILED" if not coverage["pass"] else
+                       "FOR_RESEARCH_LEAD_RULING" if selection["ok"] else "SELECTION_FAILED"),
+            "selection": selection, "r0_classified_keys": config["r0_classified_keys"],
             "class_edge_margins": class_edge_margins(saved["classification"]),
-            "note": "RL-78: numeric margins decide nothing; sampler bar binds. Registered classifier unchanged."}
+            "note": "RL-78/84: margins are disclosures; sweep/Tf08 failures fail smoke; other keys fail individually. Classifier unchanged."}
 
 
 def smoke(output, part, runtime, *, soak_reference, invoke=r1._invoke):
@@ -266,6 +311,10 @@ def smoke(output, part, runtime, *, soak_reference, invoke=r1._invoke):
         result["part_b"] = smoke_table(segment)
         (output / "smoke_part_b.json").write_text(json.dumps(result["part_b"], indent=2, sort_keys=True) + "\n")
     (output / "smoke.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
+    if part == "B" and not result["part_b"]["coverage"]["pass"]:
+        raise ValueError("smoke Part B sampler/Tf08 coverage failed; diagnostics saved in smoke_part_b.json")
+    if part == "B" and not result["part_b"]["selection"]["ok"]:
+        raise ValueError("smoke Part B has no admissible sensor pair; diagnostics saved in smoke_part_b.json")
     return result
 
 

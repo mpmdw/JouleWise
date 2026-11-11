@@ -41,13 +41,16 @@ class ProcessSamplerTests(unittest.TestCase):
                 # interpreter cannot run. One core's short load only, no MLX.
                 libc = ctypes.PyDLL(None)
                 libc.usleep.argtypes = [ctypes.c_uint]
-                for phase in ("pre_warmup_idle", "quiet", "load", "recovery"):
-                    start = time.monotonic_ns()
+                # Anchor this two-cell fixture to the sampler's observed first
+                # sweep. An arbitrary host start between ticks would make an
+                # unobserved leading cell dominate such a short phase.
+                origin = journal.rows[0]['started']['monotonic_ns']
+                for i, phase in enumerate(("pre_warmup_idle", "quiet", "load", "recovery")):
                     libc.usleep(2_100_000)
-                    phases[phase] = (start, time.monotonic_ns())
+                    phases[phase] = (origin + i*2*rt.NS, origin + (i+1)*2*rt.NS)
             finally:
                 journal.close()
-            report = kit.phase_coverage(journal.rows, ["TV0h"], phases)
+            report = kit.phase_coverage(journal.rows, ["TV0h"], phases, required_keys=["TV0h"])
             self.assertTrue(report["pass"], report)
             self.assertFalse(journal.process.is_alive())
             for phase in report["phases"].values():

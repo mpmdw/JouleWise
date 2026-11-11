@@ -29,8 +29,9 @@ Its runtime fields remain defined by `KIND_FIELDS`.
 Smoke Part B's post-G0 engineering watchdog is the sum of the registered quiet,
 the re-armed turn deadman, recovery, and a 120 s classification/close margin
 (300 + 1,580 + 600 + 120 = 2,600 s with the current config). G0 keeps its
-1,200 s cap. This fixes the watchdog's phase coverage; whether Part B's twenty
-minutes is a hard total bound remains parked for the research lead.
+1,200 s cap. RL-84 P-5 confirms that Part B's twenty minutes is an estimate,
+not a total bound. This executed-byte engineering change requires delta
+review before smoke.
 
 ## Arguments
 
@@ -216,12 +217,26 @@ class-edge margins remain disclosures; the sampler bar binds. The arm still
 requires the smoke table and research lead's ruling.
 
 `thermal.py` accepts optional `record_keys`; the absent-field journal is
-byte-identical. Tf08 is read by the existing sidecar in every member, including
-the ordinary predecessor (derived sidecar-only config, unchanged template and
-episode/schedule, no gates). No gate reads record-only keys. The desk prints
+byte-identical. RL-84 P-1 records Tf08 in every member that runs the thermal
+sidecar. The ordinary ungated 30B predecessor runs no sidecar, as W1 does. Its
+only derivation is removal of `launch_lineage_required`, recorded beside the
+template digest; its prompt bytes, episode and schedule are unchanged. No gate
+reads record-only keys. The desk prints
 Tf08 at member start minus its last-60-s step-D window reference, and compares
 conditions within this window as a disclosure. Missing observations stay null.
-`thermal.py` joins the condition-13 identity list; `thermal_gates.py` is unchanged.
+RL-84 P-3 checks sampler sweeps separately from individual keys in all four
+smoke phases: >=99% sweeps and never two missed in a row. Each key needs >=99%
+cells, <1% read errors and no two consecutive empty cells. A failed key is
+excluded from both picks and the fallback, with its R0 class, phase and reason
+listed. Tf08 failure fails smoke. The full classifier result remains unchanged.
+R0 class labels in the runtime config come from the audit decision
+"Follow-up to RL-74" (2026-11-11 06:00 PST), without reading its source data.
+
+RL-84 P-4 makes condition 13 ten paths: the R1 driver, runtime launcher, runtime,
+runtime contract, sensor classifier, thermal-gate module, runtime configuration,
+phase module, `workload.py` and `thermal.py`. The registration test pins the
+literal set. The final night must run those signing bytes; `thermal_gates.py`
+and the classifier remain unchanged.
 
 Prepare uses the public RL-62/RL-73 functions from `align_v4_session.py` before
 any dwell. R1 member IDs project explicitly to the registered D/30B/NEG-8 roots;

@@ -1938,19 +1938,17 @@ class Segment:
         template, spec = self.template("model_30b")
         if spec.get("thermal") is not None:
             raise Refused("capture predecessor must be the ordinary unmodified 30B template")
-        # RL-78 records Tf08 in every member. Keep the bound template and
-        # ordinary episode/schedule, adding the existing sidecar-only policy
-        # to this derived R1 config. It introduces no gates or extra process.
+        # RL-84 P-1: W1's ordinary ungated 30B member has no sidecar.
+        # Removing the R1-inapplicable lineage tag is the only derivation.
         template = deepcopy(template)
         template["run_metadata"]["tags"] = [t for t in template["run_metadata"]["tags"]
                                                if t != "launch_lineage_required"]
-        spec["thermal"] = self.sensors
-        template["workload_profile"]["prompt_text"] = canonical(spec)
         member = self.run_member(template, hook=None)
         if member.status != "succeeded" or not member.ep.turns:
             raise RuntimeFailure("capture predecessor did not complete")
         return {"bundle": str(member.bundle.relative_to(self.out)),
                 "template_sha256": sha256_file(resolve(self.config["templates"]["model_30b"])),
+                "template_derivation": {"removed_run_metadata_tags": ["launch_lineage_required"]},
                 "ac_powermode": member.ep.hardware.get("ac_powermode"), "admitted_turns": len(member.ep.turns)}
 
     def k_step_30b(self):

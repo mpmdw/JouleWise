@@ -480,7 +480,9 @@ def _committed_bytes(root, commit, paths):
 
 
 R1_EXECUTED_SOURCES = (
-    "scripts/align_r1_rehearsal.py", "joulewise/align/apple/r1_runtime.py",
+    "scripts/align_r1_rehearsal.py", "scripts/align_r1_runtime.py",
+    "joulewise/align/apple/r1_runtime.py", "joulewise/align/apple/r1_runtime_contract.py",
+    "joulewise/align/apple/smc_enumeration.py",
     "joulewise/align/apple/thermal_gates.py", "configs/align/v4/r1_runtime.json",
     "joulewise/align/apple/r1_phase_table.py", "joulewise/align/apple/workload.py",
     "joulewise/align/apple/thermal.py",
@@ -488,7 +490,7 @@ R1_EXECUTED_SOURCES = (
 
 
 def verify_r1_executed_sources(root, slots):
-    """RL-61 condition 13 / RL-72 E7. Compare to the night's full commit."""
+    """RL-61/72/78/84 condition 13. Compare to the night's full commit."""
     commit = slots.get("executed_commit")
     if not isinstance(commit, str) or not re.fullmatch(r"[0-9a-f]{40}", commit):
         raise ValueError("R1 slots require executed_commit (condition 13)")

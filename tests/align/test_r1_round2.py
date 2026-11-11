@@ -72,13 +72,14 @@ class SelectionTests(unittest.TestCase):
         picks = {r: c[r] for r in ('s_fast', 's_slow')}
         config = {'sensors': {**picks, 'record_keys': ['Tf08']}, 'slow_band_floor_c': 1.,
                   'r0_classified_keys': [r['key'] for r in c['ranking']]}
-        table = {'classification_table': {'classification': c}, 'coverage': {'pass': True}}
+        table = {'classification_table': {'classification': c}, 'coverage': {
+            'pass': True, 'phases': {'quiet': {key: {'pass': True} for key in config['r0_classified_keys']}}}}
         table.update(r0_classified_keys=config['r0_classified_keys'], selection=rt.select_smoke_sensors(c, config['r0_classified_keys']))
         ruling = {'research_lead_ruling': 'SYNTHETIC', 'authorizes_night': True,
                   'sensors': config['sensors'], 'smoke_part_b_sha256': 'a'*64}
         self.assertTrue(kit.validate_sensor_ruling(config, ruling, 'a'*64, table)['ok'])
         for mutate in (lambda x: x['coverage'].update({'pass': False}),
-                       lambda x: x['classification_table']['classification'].update(s_fast='Tbad')):
+                       lambda x: x['coverage']['phases']['quiet'][picks['s_fast']].update({'pass': False})):
             bad = deepcopy(table); mutate(bad)
             with self.assertRaises(ValueError): kit.validate_sensor_ruling(config, ruling, 'a'*64, bad)
         config['slow_band_floor_c'] = 1.5
@@ -139,7 +140,7 @@ class RecordingTests(unittest.TestCase):
             gate = obj.wait(kind)
             self.assertEqual(gate['outcome'], 'released', gate)
 
-    def test_ordinary_predecessor_records_tf08_without_a_gate_or_template_edit(self):
+    def test_ordinary_predecessor_has_no_sidecar_and_only_strips_lineage_tag(self):
         from tests.align import r1_synthetic as syn
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -151,10 +152,18 @@ class RecordingTests(unittest.TestCase):
             segment = rt.Segment(kind="capture-predecessor-30b", out=out, duration_s=None, soak=None,
                                  config=config, config_sha256=sha, backend=backend)
             try:
-                fields = segment.k_capture_predecessor_30b()
-                rows = [json.loads(line) for line in (out/fields["bundle"]/"outputs/align_thermal.jsonl").read_text().splitlines()]
-                self.assertTrue(any(r["kind"] == "reading" and "Tf08" in r["values"]["sensors"] for r in rows))
-                self.assertFalse(any(r["kind"] in ("align_thermal_gate", "align_thermal_hold") for r in rows))
+                with patch.object(segment, 'run_member', wraps=segment.run_member) as run:
+                    fields = segment.k_capture_predecessor_30b()
+                bundle = out / fields['bundle']
+                self.assertFalse((bundle / 'outputs/align_thermal.jsonl').exists())
+                expected = json.loads(original)
+                expected['run_metadata']['tags'] = [t for t in expected['run_metadata']['tags']
+                                                     if t != 'launch_lineage_required']
+                self.assertEqual(run.call_args.args[0], expected)
+                self.assertEqual(run.call_args.kwargs, {'hook': None})
+                self.assertEqual(fields['template_sha256'], hashlib.sha256(original).hexdigest())
+                self.assertEqual(fields['template_derivation'],
+                                 {'removed_run_metadata_tags': ['launch_lineage_required']})
                 self.assertEqual(original, Path(config["templates"]["model_30b"]).read_bytes())
             finally:
                 backend.close()
