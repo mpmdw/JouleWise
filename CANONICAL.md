@@ -11,7 +11,7 @@ because nobody could see which tool was current. The 2026-11-06 prune
 ([run report](docs/run_reports/2026-11-06-repo-prune.md)) removed about 8,100 stale files so
 that cannot happen again.
 
-Last updated: 2026-11-10 (file-prune stack; CA-42 retirement held at the live ALIGN registration gate). The v4 line section remains as recorded on 2026-11-08; current lane state is in `RUN_STATE.md`.
+Last updated: 2026-11-10 (Paper rows: Paper 1 landed under `docs/paper/paper1/`, RL-1; earlier the same day, file-prune stack; CA-42 retirement held at the live ALIGN registration gate). The v4 line section remains as recorded on 2026-11-08; current lane state is in `RUN_STATE.md`.
 
 ## Project state
 
@@ -19,7 +19,7 @@ Last updated: 2026-11-10 (file-prune stack; CA-42 retirement held at the live AL
 |---|---|---|
 | What is happening now, and what to do next | [`RUN_STATE.md`](RUN_STATE.md) (newest numbered item first; items from 150 on are current) | Dated `RESUME-*` files and session checkpoints under `docs/legacy/process_traces/` and `docs/process_traces/` (archived) |
 | Work queue | [`TASK_QUEUE.md`](TASK_QUEUE.md); its marker-fenced region is generated from `docs/process/state_kernel.json` by `scripts/gen_state.py` (`--check` in CI) | Hand-kept queue lists in session traces |
-| Decisions and rulings | [`docs/decision_log.md`](docs/decision_log.md) (D-numbers), [`docs/council_log.md`](docs/council_log.md) | — |
+| Decisions and rulings | [`docs/decision_log.md`](docs/decision_log.md) (D-numbers), [`docs/council_log.md`](docs/council_log.md); research-design and paper-bound rulings (RL-numbers, the binding record per `RUN_STATE.md` item 257): `audit/2026-11-10-fable:docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md` | — |
 
 ## Measurement windows (ALIGN v4: R0, R1, W1, D1-D3)
 
@@ -126,9 +126,12 @@ producers above. All eight verdicts are recorded in `docs/ops/FILE-PRUNE-G4.tsv`
 
 | Job | Canonical | Replaced |
 |---|---|---|
-| Paper text | `docs/paper/draft-v1.md` (current full draft) with `docs/paper/draft-v2-skeleton.md` (next revision) | — |
+| Paper 1 text (the mid-December capstone submission: E1, `RUN_STATE.md` item 256) | `docs/paper/paper1/paper1.md` with `docs/paper/paper1/fill_index.md` and `docs/paper/paper1/variants/` (research lead RL-1). Blind draft tagged `paper1/blind-draft-2026-10-27` (`a1a5029fb`); every later edit is a commit on top of that tag | `docs/paper/draft-v1.md` and `docs/paper/draft-v2-skeleton.md`: the frozen September methods drafts (`draft-v2-skeleton.md` is the D-174 methods fallback of 2026-09-05). Kept unchanged as the source of Paper 1's §3, Appendix B and Tier E; not to be edited as the paper |
+| Paper 1 FILL index | `docs/paper/paper1/build_fill_index.py` (run from the repo root) regenerates `docs/paper/paper1/fill_index.md` | — |
+| Block 5 released results (internal) | `docs/analysis/b5/RESULTS.md`. No number from it enters Paper 1, a slide, the site or a public page until research lead RL-3's gate passes; internal documents may quote it, naming it | — |
+| Capstone tripwire manuscript plan (not Paper 1) | `docs/capstone/PAPER-PLAN-v2.md` and `docs/capstone/PAPER-OUTLINE.md`. Their exclusion of Block 5 is superseded (`RUN_STATE.md` items 231, 232 and 256). Superseded lines are marked in place in `PAPER-PLAN-v2.md`; `PAPER-OUTLINE.md` (lines 29, 75 and 164) is not yet marked | — |
 | Results fill | `docs/paper/results-fill-registry.md` | — |
-| Build | `docs/paper/build/build_paper.py` | — |
+| Build | `docs/paper/build/build_paper.py` (renders `draft-v1.md` by default; not yet Paper 1's build) | — |
 | Reader's artifact guide | `docs/paper/artifact-guide.md` | — |
 
 ## Kept but undecided (do not build on these without asking)
