@@ -7,6 +7,7 @@ wall-time scale factor. Native launches are checked before they reach exec.
 from __future__ import annotations
 
 import argparse
+import atexit
 import base64
 import builtins
 from contextlib import contextmanager
@@ -88,6 +89,88 @@ def fixture_filecopy(root, argv):
             if cursor.is_symlink():
                 return False
     return True
+
+
+class GitBlobInputRunner:
+    """Actual Git, amortized process startup for immutable unmeasured reads.
+
+    No blob, ref, digest decision or command result is cached. Each request
+    is sent to Git. Mutable commands and anomalous replies use the original
+    individual invocation. Private fixture repositories declare no replace
+    refs; the input transport is not a general Git execution replacement.
+    """
+
+    def __init__(self, root):
+        self.root = root
+        self.processes = {}
+        self.lock = threading.RLock()
+        atexit.register(self.close)
+
+    def close(self):
+        with self.lock:
+            for process in self.processes.values():
+                for stream in (process.stdin, process.stdout):
+                    try:
+                        stream.close()
+                    except (OSError, ValueError):
+                        pass
+                process.wait()  # Git exits on its own input EOF; no host signal.
+            self.processes.clear()
+
+    def __call__(self, argv, *args, **kwargs):
+        if isinstance(argv, (str, bytes)):
+            return REAL_RUN(argv, *args, **kwargs)
+        words = tuple(map(str, argv))
+        captured = kwargs.get("capture_output") or kwargs.get("stdout") == subprocess.PIPE
+        eligible = (not args and len(words) == 6 and words[0] in ("git", "/usr/bin/git")
+            and words[1] == "-C" and words[3:5] == ("cat-file", "blob")
+            and len(words[5]) == 40 and all(c in "0123456789abcdef" for c in words[5])
+            and captured and not kwargs.get("shell") and not kwargs.get("executable")
+            and kwargs.get("input") is None and kwargs.get("stderr") in (None, subprocess.PIPE, subprocess.DEVNULL)
+            and Path(words[2]).is_absolute() and ".." not in Path(words[2]).parts
+            and Path(words[2]).is_relative_to(self.root))
+        if not eligible:
+            return REAL_RUN(argv, *args, **kwargs)
+        env = kwargs.get("env")
+        environment = os.environ if env is None else env
+        # Only Git configuration affects this source's semantics. Other
+        # per-command bookkeeping variables do not create another transport.
+        context = tuple(sorted((k, v) for k, v in environment.items()
+                               if k.startswith("GIT_") or k in ("PATH", "XDG_CONFIG_HOME")))
+        key = (words[0], words[2], context)
+        data = None
+        with self.lock:
+            process = self.processes.get(key)
+            if process is None or process.poll() is not None:
+                process = REAL_POPEN([words[0], "-C", words[2], "cat-file", "--batch"],
+                    stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                    env=env, start_new_session=True)
+                self.processes[key] = process
+            try:
+                process.stdin.write(words[5].encode() + b"\n")
+                process.stdin.flush()
+                header = process.stdout.readline(256).split()
+                if len(header) == 3 and header[:2] == [words[5].encode(), b"blob"]:
+                    size = int(header[2])
+                    candidate = process.stdout.read(size)
+                    newline = process.stdout.read(1)
+                    domain = b"blob " + str(size).encode() + b"\0" + candidate
+                    if len(candidate) == size and newline == b"\n" and hashlib.sha1(domain).hexdigest() == words[5]:
+                        data = candidate
+            except (OSError, ValueError):
+                pass
+            if data is not None:
+                with (self.root / f"git-blob-input-queries-{os.getpid()}.jsonl").open("a") as stream:
+                    stream.write(json.dumps({"argv": list(words), "actual_git_pid": process.pid,
+                        "sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data),
+                        "result_cached": False}) + "\n")
+        if data is None:
+            return REAL_RUN(argv, *args, **kwargs)
+        text_mode = kwargs.get("text") or kwargs.get("universal_newlines") or kwargs.get("encoding") or kwargs.get("errors")
+        if text_mode:
+            data = data.decode(kwargs.get("encoding") or "utf-8", kwargs.get("errors") or "strict")
+        stderr = ("" if text_mode else b"") if (kwargs.get("capture_output") or kwargs.get("stderr") == subprocess.PIPE) else None
+        return subprocess.CompletedProcess(argv, 0, data, stderr)
 
 
 class SharedClock:
@@ -347,6 +430,8 @@ def audit_guard(root, pin):
             git = exe in ("git", "/usr/bin/git") and Path(git_root).is_relative_to(root)
             if git and any(value in argv for value in ("push", "fetch", "pull", "ls-remote")):
                 raise PermissionError("R12 network Git command denied")
+            if git and any(value == "replace" or str(value).startswith("refs/replace/") for value in argv):
+                raise PermissionError("R12 private input repositories declare no replace refs")
             if git and "clone" in argv:
                 from urllib.parse import urlparse, unquote
                 operands = [str(value) for value in argv if str(value).startswith("file://")]
@@ -375,6 +460,8 @@ def bootstrap(argv=None):
     (root / "tmp").mkdir(exist_ok=True)
     tempfile.tempdir = str(root / "tmp")
     os.environ["JOULEWISE_CUSTODY_PARENT"] = str(root / "host-state")
+    os.environ.update(GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_NOSYSTEM="1", GIT_ATTR_NOSYSTEM="1",
+                      XDG_CONFIG_HOME=str(root / "host-state/xdg"))
     os.environ.pop("JOULEWISE_ADDITIONAL_CUSTODY_PARENTS", None)
     os.environ["PYTHONNOUSERSITE"] = "1"
     # The pinned verdict writer exposes this execution-concurrency input.
@@ -613,6 +700,7 @@ def install_sources(root, clock):
     from joulewise.b6 import sleep_guard
     from joulewise import kernel_clock
     import dataclasses
+    git_input_run = GitBlobInputRunner(root)
     install_engine(root, clock)
     # The sampler executable's identity is an external byte input too. Hash
     # the declared synthetic identity bytes through the unchanged hash code.
@@ -690,7 +778,7 @@ def install_sources(root, clock):
                     0, b"Network Time is already off.\n", b"")
                 return self.completed(argv, result, "declared_action_denied" if result[0] else "declared_action_success")
             if argv and argv[0] in ("git", "/usr/bin/git"):
-                result = REAL_RUN(argv, capture_output=True, timeout=timeout_s, check=False)
+                result = git_input_run(argv, capture_output=True, timeout=timeout_s, check=False)
                 from joulewise.hazards.base import Completed
                 return Completed(argv, result.returncode, result.stdout, result.stderr)
             if argv and argv[0] == str(source_root(root) / "scripts/install_night_agent.sh"):
@@ -743,7 +831,7 @@ def install_sources(root, clock):
             # Git only reads fixture code/config objects. It is neither a
             # simulated host action nor a read of the original checkout.
             if argv and argv[0] in ("git", "/usr/bin/git"):
-                return REAL_RUN(argv, **kwargs)
+                return git_input_run(argv, **kwargs)
             from joulewise.hazards import instrument
             if len(argv) >= 4 and argv[:4] == (sys.executable, "-B", "-c", instrument.CHILD_BOOTSTRAP):
                 return super().subprocess_run(argv, **kwargs)
@@ -934,6 +1022,7 @@ def install_sources(root, clock):
             clock.foregrounds[process.pid] = process
         return result
     subprocess.Popen._execute_child = execute_child
+    subprocess.run = git_input_run
     return sources
 
 

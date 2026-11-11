@@ -324,6 +324,53 @@ print('ready')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.strip(), "ready")
 
+    def test_actual_git_blob_transport_preserves_bytes_and_fresh_refs(self):
+        """Predict: actual Git batch input matches native bytes/errors and the pinned pack digest; a new commit is read fresh and replace refs are denied."""
+        code = '''import hashlib,json,subprocess,sys
+from pathlib import Path
+from runtime import REAL_RUN
+from joulewise.arm_readiness import committed_pack_tree_sha256
+root=Path(sys.argv[1]);repo=root/'git-input-unit';pack=repo/'configs/campaigns/tiny'
+pack.mkdir(parents=True);path=pack/'config.json';path.write_bytes(b'{"unit":1}\\n')
+prefix=['git','-C',str(repo)]
+def run(args,**kw):
+    return subprocess.run(prefix+args,capture_output=True,check=True,**kw)
+run(['init','-q']);run(['config','user.name','R12 unit']);run(['config','user.email','r12@invalid'])
+run(['config','commit.gpgsign','false']);run(['add','.']);run(['commit','-qm','unit input one'])
+oid=run(['rev-parse','HEAD:configs/campaigns/tiny/config.json'],text=True).stdout.strip()
+argv=prefix+['cat-file','blob',oid]
+native=REAL_RUN(argv,capture_output=True,check=False);batched=subprocess.run(argv,capture_output=True,check=False)
+assert (native.returncode,native.stdout,native.stderr)==(batched.returncode,batched.stdout,batched.stderr)
+optimized=subprocess.run;subprocess.run=REAL_RUN
+expected=committed_pack_tree_sha256(pack)
+subprocess.run=optimized
+assert committed_pack_tree_sha256(pack)==expected
+future=b'{"unit":2}\\n';future_oid=hashlib.sha1(b'blob '+str(len(future)).encode()+b'\\0'+future).hexdigest()
+missing=prefix+['cat-file','blob',future_oid]
+a=REAL_RUN(missing,capture_output=True);b=subprocess.run(missing,capture_output=True)
+assert (a.returncode,a.stdout,a.stderr)==(b.returncode,b.stdout,b.stderr)
+path.write_bytes(future);run(['add','.']);run(['commit','-qm','unit input two'])
+new_oid=run(['rev-parse','HEAD:configs/campaigns/tiny/config.json'],text=True).stdout.strip()
+assert new_oid==future_oid and new_oid!=oid
+assert run(['cat-file','blob',new_oid]).stdout==future
+assert committed_pack_tree_sha256(pack)!=expected
+try:
+    run(['replace',oid,new_oid])
+except PermissionError:
+    pass
+else:
+    raise AssertionError('replace refs were not denied')
+print('native_bytes_and_fresh_refs')
+'''
+        result = subprocess.run(command(self.root, "code", code, self.root), capture_output=True,
+                                text=True, timeout=60)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "native_bytes_and_fresh_refs")
+        receipts = [json.loads(line) for path in self.root.glob("git-blob-input-queries-*.jsonl")
+                    for line in path.read_text().splitlines()]
+        self.assertGreater(len(receipts), 2)
+        self.assertTrue(all(row["result_cached"] is False for row in receipts))
+
     @unittest.skipUnless(Path("/bin/zsh").is_file(), "rendered chain requires zsh")
     def test_shell_and_python_use_same_clock(self):
         """Predict: unedited zsh date/sleep commands and pinned child see the same 75 s advance."""

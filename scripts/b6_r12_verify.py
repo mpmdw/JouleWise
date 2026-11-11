@@ -20,6 +20,7 @@ import tempfile
 os.environ.update(GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_NOSYSTEM="1", GIT_ATTR_NOSYSTEM="1",
                   PYTHONNOUSERSITE="1", PYTHONDONTWRITEBYTECODE="1",
                   PATH="/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin")
+os.environ["XDG_CONFIG_HOME"] = str(Path(tempfile.gettempdir()).resolve() / "r12-xdg-empty")
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
@@ -149,6 +150,7 @@ def finalize_manifest(root):
     manifest["loaded_pinned_source_sha256"] = ran
     manifest["generated_program_sha256"] = generated
     manifest["source_call_receipts"] = {path.name: sha(path) for path in sorted(root.glob("source-calls-*.jsonl"))}
+    manifest["git_blob_input_receipts"] = {path.name: sha(path) for path in sorted(root.glob("git-blob-input-queries-*.jsonl"))}
     manifest["volume"] = "mixed; see predeclared per-session source policies"
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
 

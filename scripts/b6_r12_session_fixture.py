@@ -14,6 +14,7 @@ import tempfile
 os.environ.update(GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_NOSYSTEM="1", GIT_ATTR_NOSYSTEM="1",
                   PYTHONNOUSERSITE="1", PYTHONDONTWRITEBYTECODE="1",
                   PATH="/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin")
+os.environ["XDG_CONFIG_HOME"] = str(Path(tempfile.gettempdir()).resolve() / "r12-xdg-empty")
 
 from b6_r12_chain_fixture import PIN, REPO
 from b6_r12_runtime import SharedClock
@@ -135,6 +136,10 @@ def declare_sources(root):
         "os.killpg(pgid, 0)": "declared external group census: live owned Popen is present, otherwise ESRCH (not EPERM); original harvest readiness and teardown judge it",
         "zsh file utilities": "unchanged rendered program uses cat/mkdir/jq on its fixture-bound paths; date/sleep source functions and bootstrap interpreter isolate time and host commands",
         "Git, /bin/cp -c -pR and zstd": "actual fixture-scoped code/input Git, non-symlink fixture-only APFS copy writer and desk codec; no network Git; no simulated copying or compression"})
+    value["seams"]["subprocess.run / ChainSources.subprocess_run Git blob input"] = (
+        "only captured git -C <fixture-repo> cat-file blob <full SHA-1>; actual Git --batch transport reads each request; "
+        "no blob/ref/result/decision cache; mutable commands and anomalous/type/hash responses use the original invocation; "
+        "private input repositories have no replace refs, and attempts to create them are denied")
     value["actions"] = {"default": "deny rc 126, stdout empty, stderr RL-49 default deny; execute nothing",
         "network_time_off": "normal success rc 0; extra denied fixture uses 126",
         "display_sleep": "success rc 0, empty stdout/stderr, execute nothing",
@@ -142,7 +147,9 @@ def declare_sources(root):
         "caffeinate": "declared live handle; pmset assertions source confirms it; execute nothing",
         "results": "complete argv/rc/stdout/stderr/executed=false receipts in source-calls-*.jsonl"}
     value["redirections"] = {"host-state": str(root / "host-state"), "temp": str(root / "tmp"),
-                              "devnull": str(root / "null-sink"), "escaping_writes": "denied"}
+                              "devnull": str(root / "null-sink"), "escaping_writes": "denied",
+                              "XDG_CONFIG_HOME": str(root / "host-state/xdg"),
+                              "Git global/system configuration": "/dev/null; system disabled; no per-user defaults followed"}
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
 
 
