@@ -83,8 +83,9 @@ ALLOWLIST = {
 # 19a862dc8 wraps run_night and moves its unchanged Probes replacement to
 # _run_night. ba3a2ea5e (RL-56) adds a watchdog JSON field named "parse";
 # these exact dictionary reads cannot reference a battery verdict primitive.
-NON_PRIMITIVE_STRING_CALLS = {
+NON_PRIMITIVE_STRING_EXPRESSIONS = {
     ("scripts/align_v4_session.py", "watchdog_acceptance", "snapshot.get('parse')"),
+    ("scripts/align_v4_session.py", "watchdog_acceptance", "snapshot['parse']"),
 }
 # Raw-boundary semantics: these calls replay one authenticated ioreg observation
 # at its recorded wall time. They do not consume or synthesize a window verdict.
@@ -251,7 +252,7 @@ class _Checker(ast.NodeVisitor):
     def visit_Call(self, node: ast.Call) -> None:
         callee = node.func
         site = (self.relative, ".".join(self.qualname), ast.unparse(node))
-        if site in NON_PRIMITIVE_STRING_CALLS:
+        if site in NON_PRIMITIVE_STRING_EXPRESSIONS:
             self.non_primitive_strings.update(id(arg) for arg in node.args if isinstance(arg, ast.Constant))
         if site in RAW_BOUNDARY_PARSE_CALLS:
             self.raw_parse_references.add(id(callee))
@@ -287,6 +288,12 @@ class _Checker(ast.NodeVisitor):
             self._flag(node, self.bound[node.id])
         elif self.in_module and node.id in GUARDED:
             self._flag(node, node.id)
+
+    def visit_Subscript(self, node: ast.Subscript) -> None:
+        site = (self.relative, ".".join(self.qualname), ast.unparse(node))
+        if site in NON_PRIMITIVE_STRING_EXPRESSIONS and isinstance(node.slice, ast.Constant):
+            self.non_primitive_strings.add(id(node.slice))
+        self.generic_visit(node)
 
     def visit_Constant(self, node: ast.Constant) -> None:
         if (self.strings_bind and node.value in GUARDED and id(node) not in self.docstrings
@@ -327,7 +334,7 @@ class ConsumerGuardTests(unittest.TestCase):
     def test_watchdog_parse_field_exception_does_not_allow_a_primitive(self) -> None:
         source = ("from joulewise import battery_float\n"
                   "def watchdog_acceptance():\n"
-                  "    return snapshot.get('parse')\n")
+                  "    return snapshot.get('parse'), snapshot['parse']\n")
         self.assertEqual(violations("scripts/align_v4_session.py", source), [])
         changed = source.replace("snapshot.get('parse')", "getattr(battery_float, 'parse')")
         self.assertTrue(violations("scripts/align_v4_session.py", changed))

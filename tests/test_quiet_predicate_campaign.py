@@ -3426,7 +3426,7 @@ class WriteSiteInventoryTests(unittest.TestCase):
     EXPECTED = Counter({
         # 7146444ed's admitted W1 smoke kit writes its synthetic session.
         ('joulewise/align/w1_smoke.py', 'prepare_smoke',
-         'write_text', 'session.json'): 1,
+         'write_json', 'session.json'): 1,
         ('joulewise/quiet_predicate_campaign.py', 'record_attestation',
          'write_text', 'session.json'): 1,
         ('joulewise/quiet_predicate_campaign.py', 'record_attestation',
