@@ -2802,6 +2802,85 @@ R1.
 
 ---
 
+# Decision request 29: closed-block receipts that pin the old estimator digest on the W1 line (2026-11-11 04:29 PST)
+
+**Read.** The whole difference in `joulewise/adapters/powermetrics.py` between `main` and
+`align/2026-11-08-v4-r11` @ `b4a6c217f`: 40 added lines, no removed line. I checked where the new scope is
+used (`joulewise/b5/harvest.py:2253`, the per-member harvest, and nowhere else), that
+`scripts/repin.py` is not named in the v4 bound artifacts, that the estimator file is (line 80), and that
+`docs/align/v4/DEVIATIONS.md` has no row about it. I did not run the failing checks; the lane lead reproduced
+them.
+
+## RL-57. Option (b), with one distinction it must make, and a row the line was missing
+
+### What changed in the estimator file
+
+Commit `b9fedca2a` added an opt-in memo of the plist document parse. Inside a `document_memo()` scope, identical
+input bytes are parsed once and each caller gets its own unpickled copy; outside the scope nothing differs. The
+parse function was renamed and wrapped; no arithmetic line changed. The scope is opened only by the off-MBP
+harvest. So the file's digest moved and its results did not, by construction, with equality tests on the line.
+
+### The ruling: (b)
+
+A receipt of a closed block records which code produced or accepted it. Its pin is checked against the bytes
+at that block's own commit, not against the working tree of a later line. The receipts are not edited: (a) is
+out. A red fence on a line about to be registered cannot catch the next real mismatch: (c) is out.
+
+**The distinction the check must make.** "Closed block" is not enough. What matters is whether anything that
+will run under the v4 registration reads the receipt.
+
+1. **Historical:** a closed block's receipt that no bound v4 path reads. Its pin is verified against the file
+   at the block's commit. It is verified, not skipped: a pin that does not match that commit's bytes still
+   fails.
+2. **Live:** any receipt or acceptance artifact that a bound v4 path does read. Its staleness is real. It is
+   satisfied by a **rebind record** beside it, never by editing it: the old digest, the new digest, the commit,
+   the statement that the difference is the parse memo and nothing else, and the equality tests that show it.
+   For this one change I admit that rebind now, on the diff I read, provided those tests pass on the line. Any
+   other rebind comes to me.
+
+The lane lead lists the fourteen receipts, the test's pin and the `g2_phase_d` artifact, and says for each which
+of the two it is, from a search of the v4 closure for readers. That list goes in the PR.
+
+**`g2_phase_d` is not presumed.** Its cause is established by reproduction. If it is this digest, it is sorted
+by the list above. If it is anything else, it comes to me.
+
+**The check stays a check.** Two tests with the change: altering the estimator file on the line fails every
+live pin that has no rebind; altering a historical receipt's pin fails against its commit.
+
+`scripts/repin.py` is unbound by my reading, so this is tooling. It belongs on `main` as well, or the same
+failure appears the day the line's estimator file reaches `main`.
+
+### A row the line should have had
+
+The v4 receipt binds the new estimator bytes, and nothing on the line says they differ from the bytes Block 5,
+Block 6 and BYTES ran under. One row goes in `DEVIATIONS.md` with the pre-registration batch, under RL-53's
+terms and cut-off:
+
+> "EST-MEMO. `joulewise/adapters/powermetrics.py` on this line differs from the bytes the earlier blocks ran
+> under by an opt-in memo of the plist document parse (`b9fedca2a`), opened only by the off-MBP harvest. No
+> arithmetic changed; equality is tested. Receipts of closed blocks keep their original pins and are checked
+> against their own commits."
+
+If the batch misses the cut-off, the fact is recorded here and goes into the v4 methods text.
+
+### The lane's other debts, where they could touch a measurement
+
+- **`test_smoke_delta3_sol1`, 440 against 488.** The lane lead's rule is the right one: explain 488 from an
+  admitted commit, then update. If the explanation is the claim-contract commits admitted in RL-28, it needs
+  nothing from me. If it is anything else, it comes to me before the test is touched.
+- **`test_calibration_live_three_window`.** If its classification turns out to concern how a calibration is
+  computed or accepted on this line, it comes to me. If it is a harness or environment fault, it does not.
+
+I agree with not merging onto a red line.
+
+**Reason.** A pin says "this record was made by these bytes". For a finished block that is a fact about the
+past and is checked against the past. For an input the next window will consume it is a condition, and a
+changed estimator has to be answered with evidence, in a record beside the pin.
+
+**Blind status.** Blind: no v4 outcome exists. Code and receipts' pin fields only.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
