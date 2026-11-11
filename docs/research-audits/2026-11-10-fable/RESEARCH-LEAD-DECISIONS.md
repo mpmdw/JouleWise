@@ -1230,6 +1230,52 @@ audit items split cleanly by what they can damage: W1's data, or only W1's sched
 
 ---
 
+# Follow-up to request 11: the leftover Block 6 loop agents on the MBP (2026-11-10 21:56 PST)
+
+## RL-36. The loop and wake agents are unloaded before any further arm; RL-35 as applied is accepted
+
+**RL-35 as applied.** I read the bound-file commit `d865d76a3` (four files, seven lines). The two bindings, the
+rows `RL35-DATA-BIND` and `W06-HOSTLINK`, and the F-09 line are as ruled. Accepted.
+
+**Paper 1 check: closed.** Block 6 closed on 2026-10-21 and the last BYTES collection ended on 2026-10-30, both
+before the host-link setup. Paper 1's host description needs no change.
+
+**The leftover agents. What they are**, from the W1 line's code, not from the host:
+
+- `com.joulewise.b6loop` is not dormant. Its template has `StartInterval 300` and `RunAtLoad`, so it runs
+  `scripts/b6_loop_guard.zsh` every five minutes. "Status 0, not running" is what it looks like between runs.
+  When the loop root holds `done.idle` and `state.json` says `DONE`, the guard reads two files and exits in
+  zsh. Otherwise it starts `b6_loop.py tick`, which can install a night job under the label
+  `com.joulewise.night`, the label W1 uses, and can bootstrap a wake job that launches `claude -p`.
+- The two `com.joulewise.b6wake.*` jobs are one-shot. They ran once when loaded and stay listed; they are
+  bootstrapped from the loop's own directory, so they do not return after a logout. They are inert.
+
+**Ruling.**
+
+1. **Yes: the W1 arm requires them unloaded.** The arm record carries the output of
+   `launchctl list | grep com.joulewise`, and the arm goes ahead only if every label in it is one the W1 runbook
+   names (the watchdog, the night job and its dead-man). Any other project label is unloaded first. This is
+   procedure and a recorded listing; no bound file changes.
+2. **When.** Not now: R1 is armed and nothing touches the MBP. After R1's custody closes, in the same batch as
+   uninstalling R1's plists and **before the canonical checkout moves**, because the loop job runs code from
+   that checkout. The same holds before a gated-block R1 night, if one is owed.
+3. **How.** First record the loop's `state.json` state word and modification time and whether `done.idle`
+   exists. Then `launchctl bootout` the three labels. Nothing under the loop root is moved or deleted: it is
+   Block 6 and BYTES custody.
+4. **For R1's slots, condition 12 under RL-32.** The record from step 3 shows `DONE`, `done.idle` present, and a
+   `state.json` modification time before R1's t0. That shows every fire during R1 took the zsh exit and nothing
+   else ran. If it does not show that, it comes to me with the slots.
+
+**Reason.** A zsh process that reads two files every five minutes costs nothing measurable and falls on both
+conditions alike, so R1 is not harmed if the loop stayed `DONE`. The hazard is the other branch: one moved or
+missing marker file, from an offload or a disk prune, and a finished loop starts acting inside a v4 window on
+the night label W1 owns. The loop's own runbook says to boot it out when it is done, and Block 6's own
+precondition was that no other project job is installed. W1 gets the same rule.
+
+**Blind status.** Blind. I read code and a job template; no host output beyond the listing the lead quoted.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
