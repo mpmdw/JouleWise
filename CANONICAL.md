@@ -96,12 +96,14 @@ Held, not canonical yet: the condition-waits lane (`align/2026-11-08-condition-w
 | Prune scope and dependency gates | `docs/ops/PRUNE-PLAN.md`; execution receipts and rollback log in `docs/ops/PRUNE-EXECUTION.md` and `docs/ops/PRUNE-ROLLBACK.tsv` | Branch retirement is already recorded; file retirement is a separate operation |
 | Scientific pin inventory and future tag validation | `docs/ops/PIN-INVENTORY.md`, `docs/ops/TAG-PINNING.md` | Frozen B5 source and original digests remain authoritative for their registered checkout |
 | Retrieve retired files | `docs/ARCHIVE.md`; per-file decisions in `docs/ops/FILE-PRUNE-G1.tsv` | `archive/process-traces-before-release-prune-2026-11-08` (`901d7580d`); earlier archive promise remains unchanged |
+| Historical campaign retirement | `docs/ops/FILE-PRUNE-G2.tsv`; `configs/campaigns/p2_015_floors/README.md` explains retained live inputs | All nine D117 Qwen2.5 generations stay for the historical receipt/predecessor reader chain and registrations |
 
 ## Retired
 
 | Retired material | Current replacement / verdict | Retaining ref |
 |---|---|---|
 | Superseded profiling logs, synthetic E2E reports and legacy portfolio synthesis listed in `docs/ops/FILE-PRUNE-G1.tsv` | Current tools above; reader and authority records remain in the checkout | `archive/process-traces-before-release-prune-2026-11-08:<path>` |
+| Historical P2-015 generated campaign, generator/spec/backup and six generator-only assertions | Current v5 packs; calibration plan, its digest sidecar and the live NEG8 test config remain. Historical manifest assertions use archived blobs | `archive/process-traces-before-release-prune-2026-11-08:configs/campaigns/p2_015_floors/` |
 
 ## Paper
 

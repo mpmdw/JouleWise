@@ -613,7 +613,7 @@
     "tests.test_mlx_runtime_detokenizer": 0.019,
     "tests.test_mock_adapters": 0.125,
     "tests.test_model_panel": 0.006,
-    "tests.test_modularity": 0.448,
+    "tests.test_modularity": 0.104,
     "tests.test_neg8_corpus_cap": 88.474,
     "tests.test_neg8_survivors": 156.38,
     "tests.test_network_time_off": 0.272,

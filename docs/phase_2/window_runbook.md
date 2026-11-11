@@ -175,12 +175,13 @@ WINDOW_PLAN_ROOT/
 └── window-chain.zsh
 ```
 
-Each stage-list line is one repository-relative config directory, for
-example:
+Each stage-list line is one current repository-relative config directory.
+The historical examples below are archived; retrieve their configs at the
+indicated tag to reproduce them:
 
 ```text
-configs/campaigns/p2_015_floors/04_phase_prefill_abba
-configs/campaigns/p2_015_floors/03_request_abba
+archive/process-traces-before-release-prune-2026-11-08:configs/campaigns/p2_015_floors/04_phase_prefill_abba
+archive/process-traces-before-release-prune-2026-11-08:configs/campaigns/p2_015_floors/03_request_abba
 ```
 
 Do not put the reference directories in those lists; the chain adds the
