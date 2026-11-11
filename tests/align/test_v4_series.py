@@ -28,6 +28,7 @@ from joulewise.b5 import plan
 from joulewise.b6 import registration
 from tests.test_b5_driver import Harness, fake_monitor_argv
 from tests.align.test_v4_cadence import arm_seams
+from tests.align.v4_registration_fixtures import span_aware_watchdog
 from tests.align.test_v4_kit import ROOT, FakeArmHost
 
 
@@ -538,7 +539,7 @@ class FakeWorld:
                 now=lambda: state['t0_epoch_s'] - 1, next_arm_triage=packet,
                 obc_off_attested_by='SYNTHETIC operator', battery_log=self.battery_log(state),
                 frequency_reader=lambda: frequency_probe(0),
-                **arm_seams())
+                **{**arm_seams(), 'watchdog_check': span_aware_watchdog})
             test.assertEqual(installed['exit_code'], 0)
             test.assertEqual(len(self.installer_calls), 1)
             harness.plan_path = Path(state['plan_path'])

@@ -5,6 +5,7 @@ never trusted data), judges its own build, and refuses a supplied packet that di
 measurements, probes, models or network.
 """
 from tests.align.test_v4_arm_watchdog_check import acceptance as _watchdog_acceptance
+from tests.align.v4_registration_fixtures import session_plan
 import contextlib
 import copy
 import hashlib
@@ -868,12 +869,8 @@ class ArmOrderWitness(Base):
             return time.monotonic_ns()
         good = dict(passed=True, probe_error=False, external_connected=True, is_charging=False,
                     current_capacity_pct=100, instant_amperage_ma=0, update_age_s=1)
-        # The armcheck integration authenticates the installed plan path.
-        # This remains a synthetic file and the watchdog/installer stay fake.
-        plan_path = target / 'synthetic-plan.json'
-        plan_path.write_text(json.dumps(s.next_plan))
-        arm_state = {'v4_series': {'window_id': 'C1'}, 'source_measurement_root': str(s.root),
-                     'plan_path': str(plan_path)}
+        arm_state = session_plan(target, {'v4_series': {'window_id': 'C1'}, 'source_measurement_root': str(s.root)},
+                                 now=NOW)
         with patch.dict(os.environ, {'JOULEWISE_HOST_STATE_DIR': str(target.parent / 'host')}), \
              patch('joulewise.align.apple.powermode.admit_ac_powermode',
                    side_effect=seam('powermode', {'admitted': True, 'observed': 0})), \

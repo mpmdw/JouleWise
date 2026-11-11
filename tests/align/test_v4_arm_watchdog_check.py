@@ -318,12 +318,12 @@ class HeldWindowTests(unittest.TestCase):
         self.root = Path(tmp.name)
         self.builder = builder
         (self.root / 'repo').mkdir()
-        self.scenario = Scenario(self.root / 'repo', 'W1')
+        prior = Scenario(self.root / 'repo', 'W1').finish()
+        self.scenario = Scenario(self.root / 'repo', 'C1', previous=prior)
 
     def packet(self):
         self.scenario.finish()
-        return self.builder.build_packet(self.scenario.root, **self.scenario.identities(), now_epoch_s=111,
-                                         current_artifact_set_sha256='a' * 64)
+        return self.scenario.build()
 
     def test_each_held_reason_refuses_and_nonheld_reason_does_not(self):
         for reason in ('records.source_changed_during_harvest', 'roster.no_science_bundles',
@@ -333,31 +333,220 @@ class HeldWindowTests(unittest.TestCase):
                 row = session.held_window_check(self.scenario.root, self.packet())
                 self.assertEqual(row['ok'], reason == 'cell.below_minimum', row)
                 if not row['ok']:
-                    self.assertEqual(row['reasons'], [f'held_window: W1: {reason}: no signed ruling'])
+                    self.assertEqual(row['reasons'], [f'held_window: C1: {reason}: no signed ruling'])
+
+    def ruling(self, window='C1', *, text=b'RL synthetic release after investigation', **changes):
+        source = self.scenario.write(f'rulings/{window}.txt', text)
+        ruling = {'ruling_id': f'RL-synthetic-{window}', 'after_window': window,
+                  'resets': 'held_window_release', 'text': source,
+                  'lead_signature': 'lead: synthetic 2026-11-11', **changes}
+        descriptor = self.scenario.write(f'rulings/{window}.json', ruling)
+        return self.scenario.root / descriptor['path'], descriptor, ruling
+
+    def commit_rulings(self, packet):
+        return dict(packet, series_commit=self.scenario.commit())
+
+    def delayed_chain(self):
+        from tests.align.test_v4_next_arm_packet import Scenario
+        self.scenario.provisional = True
+        self.scenario.sources['exclusions'].update(
+            reasons=['records.source_changed_during_harvest'], claim_usable=False)
+        self.scenario.finish()
+        self.scenario = Scenario(self.scenario.root, 'C2', previous=self.scenario,
+                                 provisional=True, previous_final=True)
+        self.scenario.next_plan['window'] = 'C3'
+        return self.packet()
+
+    def test_k_final_with_held_reason_and_k_plus_1_not_final_refuses_the_arm_of_k_plus_2(self):
+        packet = self.delayed_chain()
+        self.assertEqual(packet['next_window_id'], 'C3')
+        row = session.held_window_check(self.scenario.root, packet)
+        self.assertFalse(row['ok'], row)
+        self.assertEqual(row['reasons'], [
+            'held_window: C1: records.source_changed_during_harvest: no signed ruling'])
+        windows = {r['window']: r for r in row['windows']}
+        self.assertTrue(windows['C1']['final'])
+        self.assertEqual(windows['C1']['held_reasons'], ['records.source_changed_during_harvest'])
+        self.assertIsNone(windows['C1']['released_by'])
+        self.assertFalse(windows['C2']['final'])
+        self.assertEqual(windows['C2']['status'], 'deferred')
+        self.assertEqual(row['deferred'], ['C2'])
+
+    def test_delayed_held_window_needs_a_ruling_for_that_window(self):
+        packet = self.delayed_chain()
+        wrong, _, _ = self.ruling('C2')
+        packet = self.commit_rulings(packet)
+        row = session.held_window_check(self.scenario.root, packet, ruling_path=[wrong])
+        self.assertFalse(row['ok'], row)
+        self.assertIn('held_window: C1: records.source_changed_during_harvest: no signed ruling', row['reasons'])
+        right, descriptor, ruling = self.ruling()
+        packet = self.commit_rulings(packet)
+        row = session.held_window_check(self.scenario.root, packet, ruling_path=[right])
+        self.assertTrue(row['ok'], row)
+        release = row['rulings'][0]
+        self.assertEqual(release['path'], descriptor['path'])
+        self.assertEqual(release['sha256'], descriptor['sha256'])
+        self.assertEqual(release['text'], ruling['text'])
+        self.assertEqual(release['text_sha256'], ruling['text']['sha256'])
+        self.assertEqual(release['text_content'], 'RL synthetic release after investigation')
+        self.assertFalse(release['truncated'])
+        self.assertEqual(next(r for r in row['windows'] if r['window'] == 'C1')['released_by'], ruling['ruling_id'])
+
+    def test_two_held_windows_require_two_committed_rulings(self):
+        from tests.align.test_v4_next_arm_packet import Scenario
+        self.scenario.sources['exclusions'].update(reasons=['precheck.certain_exclusion'], claim_usable=False)
+        prior = self.scenario.finish()
+        self.scenario = Scenario(self.scenario.root, 'C2', previous=prior)
+        self.scenario.sources['exclusions'].update(reasons=['roster.no_science_bundles'], claim_usable=False)
+        packet = self.packet()
+        first, _, _ = self.ruling()
+        second, _, _ = self.ruling('C2')
+        packet = self.commit_rulings(packet)
+        row = session.held_window_check(self.scenario.root, packet)
+        self.assertEqual(row['reasons'], ['held_window: C1: precheck.certain_exclusion: no signed ruling',
+                                         'held_window: C2: roster.no_science_bundles: no signed ruling'])
+        row = session.held_window_check(self.scenario.root, packet, ruling_path=[first])
+        self.assertEqual(row['reasons'], ['held_window: C2: roster.no_science_bundles: no signed ruling'])
+        row = session.held_window_check(self.scenario.root, packet, ruling_path=[first, second])
+        self.assertTrue(row['ok'], row)
+        self.assertEqual(len(row['rulings']), 2)
+
+    def test_uncommitted_modified_and_outside_repository_rulings_refuse(self):
+        self.scenario.sources['exclusions'].update(reasons=['precheck.certain_exclusion'], claim_usable=False)
+        packet = self.packet()
+        path, _, _ = self.ruling()
+        self.assertFalse(session.held_window_check(self.scenario.root, packet, ruling_path=path)['ok'])
+        packet = self.commit_rulings(packet)
+        self.assertTrue(session.held_window_check(self.scenario.root, packet, ruling_path=path)['ok'])
+        raw = path.read_bytes()
+        path.write_bytes(raw + b'\n')
+        self.assertFalse(session.held_window_check(self.scenario.root, packet, ruling_path=path)['ok'])
+        outside = self.root / 'outside.json'
+        outside.write_bytes(raw)
+        self.assertFalse(session.held_window_check(self.scenario.root, packet, ruling_path=outside)['ok'])
+
+    def test_recorded_ruling_text_is_capped_with_full_digest(self):
+        self.scenario.sources['exclusions'].update(reasons=['precheck.certain_exclusion'], claim_usable=False)
+        packet = self.packet()
+        raw = ('é' * 9000).encode()
+        path, _, ruling = self.ruling(text=raw)
+        packet = self.commit_rulings(packet)
+        row = session.held_window_check(self.scenario.root, packet, ruling_path=path)
+        self.assertTrue(row['ok'], row)
+        release = row['rulings'][0]
+        self.assertTrue(release['truncated'])
+        self.assertEqual(len(release['text_content'].encode()), 16 * 1024)
+        self.assertEqual(release['text_sha256'], ruling['text']['sha256'])
+
+    def test_ruling_from_series_ancestor_is_authenticated_and_carried(self):
+        self.scenario.sources['exclusions'].update(reasons=['precheck.certain_exclusion'], claim_usable=False)
+        packet = self.packet()
+        path, descriptor, _ = self.ruling()
+        ancestor = self.scenario.commit()
+        raw = path.read_bytes()
+        path.unlink()
+        packet = self.commit_rulings(packet)
+        path.write_bytes(raw)
+        row = session.held_window_check(self.scenario.root, packet, ruling_path=path)
+        self.assertTrue(row['ok'], row)
+        self.assertEqual(row['rulings'][0]['commit'], ancestor)
+        self.assertEqual(row['rulings'][0]['sha256'], descriptor['sha256'])
+
+    def test_w1_final_hold_refuses_c1_arm_until_committed_ruling(self):
+        from joulewise.align import w1_prequal as wp
+        now = session.time.time()
+        self.scenario = self.scenario.previous
+        self.scenario.quiet['observed_at_epoch_s'] = now - 1
+        self.scenario.sources['exclusions'].update(reasons=['roster.no_science_bundles'], claim_usable=False)
+        packet = self.scenario.finish().build(now=now)
+        self.assertEqual(packet['next_window_id'], 'C1')
+        host = wp.FakeHost(now=now)
+        battery = wp.battery_log(self.root / 'battery.jsonl', now)
+
+        def arm(packet, ruling=None):
+            return session.arm_checks(self.scenario.root, {'runtime_requirements': {'ac_powermode': 0}},
+                runner=host, volume_runner=host, obc_off_attested_by='synthetic', battery_log=battery,
+                now=lambda: now, next_arm_triage=packet, meter_probe=wp.LIVE_METER,
+                watchdog_check=host.watchdog_check, held_window_ruling=ruling)
+
+        row = arm(packet)
+        self.assertFalse(row['admitted'], row)
+        self.assertEqual(row['reasons'], ['held_window: W1: roster.no_science_bundles: no signed ruling'])
+        self.assertEqual(row['held_window_check']['status'], 'held')
+        path, _, ruling = self.ruling('W1')
+        packet = self.scenario.build(now=now, series_commit=self.scenario.commit())
+        row = arm(packet, path)
+        self.assertTrue(row['admitted'], row)
+        self.assertEqual(row['held_window_check']['windows'][0]['released_by'], ruling['ruling_id'])
+
+    def test_w1_not_final_defers_without_refusing(self):
+        from tests.align.test_v4_next_arm_packet import Scenario
+        prior = Scenario(self.scenario.root, 'R1').finish()
+        self.scenario = Scenario(self.scenario.root, 'W1', previous=prior, provisional=True)
+        self.scenario.sources['exclusions'].update(reasons=['roster.no_science_bundles'], claim_usable=False)
+        row = session.held_window_check(self.scenario.root, self.packet())
+        self.assertTrue(row['ok'], row)
+        self.assertEqual(row['deferred'], ['W1'])
+        self.assertFalse(row['final'])
+        self.assertEqual(row['windows'][-1]['status'], 'deferred')
+
+    def test_w1_final_without_capture_needs_no_harvest(self):
+        from tests.align.test_v4_next_arm_packet import Scenario
+        prior = Scenario(self.scenario.root, 'R1').finish()
+        self.scenario = Scenario(self.scenario.root, 'W1', previous=prior, captured=False, provisional=True)
+        row = session.held_window_check(self.scenario.root, self.packet())
+        self.assertTrue(row['ok'], row)
+        self.assertTrue(row['final'])
+        self.assertEqual(row['status'], 'no final harvest: no capture')
+
+    def test_other_development_record_checks_final_exclusions(self):
+        self.scenario.record['role'] = 'development'
+        self.scenario.sources['exclusions'].update(reasons=['precheck.certain_exclusion'], claim_usable=False)
+        row = session.held_window_check(self.scenario.root, self.packet())
+        self.assertFalse(row['ok'], row)
+        self.assertEqual(row['reasons'], ['held_window: C1: precheck.certain_exclusion: no signed ruling'])
+
+    def test_r1_is_skipped_and_each_chain_digest_is_verified(self):
+        from tests.align.test_v4_next_arm_packet import Scenario
+        root = self.scenario.root
+        prior = Scenario(root, 'R1')
+        prior.sources['exclusions'].update(reasons=['precheck.certain_exclusion'], claim_usable=False)
+        prior.finish()
+        development = Scenario(root, 'W1', previous=prior)
+        development.finish()
+        self.scenario = Scenario(root, 'C1', previous=development)
+        packet = self.packet()
+        row = session.held_window_check(root, packet)
+        self.assertTrue(row['ok'], row)
+        self.assertEqual([r['status'] for r in row['windows'][:2]], ['skipped', 'no held reasons'])
+        packet['window_chain'][0]['sha256'] = 'f' * 64
+        self.assertFalse(session.held_window_check(root, packet)['ok'])
 
     def test_valid_signed_ruling_answers_hold_and_is_recorded_invalid_refuses(self):
         self.scenario.sources['exclusions'].update(reasons=['precheck.certain_exclusion'], claim_usable=False)
         text = self.scenario.write('rulings/held.txt', b'RL synthetic release after investigation')
-        packet = self.packet()
-        ruling = {'ruling_id': 'RL-synthetic', 'after_window': 'W1', 'resets': 'held_window_release',
+        ruling = {'ruling_id': 'RL-synthetic', 'after_window': 'C1', 'resets': 'held_window_release',
                   'text': text, 'lead_signature': 'lead: synthetic 2026-11-11'}
-        path = self.root / 'ruling.json'
+        path = self.scenario.root / 'ruling.json'
+        packet = self.packet()
         for signature, ok in (('unsigned', False), (ruling['lead_signature'], True)):
             path.write_text(json.dumps(dict(ruling, lead_signature=signature)))
+            packet = self.commit_rulings(packet)
             row = session.held_window_check(self.scenario.root, packet, ruling_path=path)
             self.assertEqual(row['ok'], ok, row)
             if ok:
                 self.assertEqual(row['ruling']['lead_signature'], signature)
                 self.assertEqual(row['ruling']['text_sha256'], text['sha256'])
-        for mutation in ({'after_window': 'C1'}, {'resets': 'other'},
+        for mutation in ({'after_window': 'C2'}, {'resets': 'other'},
                          {'text': {'path': text['path'], 'sha256': 'f' * 64}}):
             path.write_text(json.dumps(dict(ruling, **mutation)))
+            packet = self.commit_rulings(packet)
             self.assertFalse(session.held_window_check(self.scenario.root, packet, ruling_path=path)['ok'])
 
     def test_previous_not_final_defers(self):
         from tests.align.test_v4_next_arm_packet import Scenario
-        prior = Scenario(self.scenario.root, 'R1').finish()
-        self.scenario = Scenario(self.scenario.root, 'W1', previous=prior)
+        prior = self.scenario.previous
+        self.scenario = Scenario(self.scenario.root, 'C1', previous=prior)
         self.scenario.provisional = True
         row = session.held_window_check(self.scenario.root, self.packet())
         self.assertTrue(row['ok'], row)
@@ -365,10 +554,10 @@ class HeldWindowTests(unittest.TestCase):
 
     def test_previous_final_sources_can_ride_in_authenticated_successor(self):
         from tests.align.test_v4_next_arm_packet import Scenario
-        prior = Scenario(self.scenario.root, 'R1').finish()
-        previous = Scenario(self.scenario.root, 'W1', previous=prior, provisional=True).finish()
+        prior = self.scenario.previous
+        previous = Scenario(self.scenario.root, 'C1', previous=prior, provisional=True).finish()
         previous.final_sources['exclusions'].update(reasons=['precheck.certain_exclusion'], claim_usable=False)
-        successor = Scenario(self.scenario.root, 'C1', previous=previous, previous_final=True).finish()
+        successor = Scenario(self.scenario.root, 'C2', previous=previous, previous_final=True).finish()
         ledger = dict(successor.series, previous_record=previous.link,
                       last_passed_record={**previous.link, 'final_record': successor.link})
         successor.write(self.builder.SERIES_PATH, ledger)
@@ -1155,9 +1344,10 @@ class ArmIntegrationTests(unittest.TestCase):
         with patch.object(session, 'install', return_value={}) as install:
             session.main(['install', '--session-root', str(self.session), '--w1-disk-config', 'synthetic',
                 '--obc-off-attested-by', 'synthetic', '--battery-log', 'synthetic', '--next-arm-triage', 'synthetic',
-                '--runtime-stack-attested', 'stack.json', '--held-window-ruling', 'ruling.json'])
+                '--runtime-stack-attested', 'stack.json', '--held-window-ruling', 'ruling.json',
+                '--held-window-ruling', 'second.json'])
         self.assertEqual(install.call_args.kwargs['runtime_stack_attested'], Path('stack.json'))
-        self.assertEqual(install.call_args.kwargs['held_window_ruling'], Path('ruling.json'))
+        self.assertEqual(install.call_args.kwargs['held_window_ruling'], [Path('ruling.json'), Path('second.json')])
 
     def test_legacy_prepare_records_not_recorded_without_refusal_or_hashing(self):
         with patch('joulewise.provenance.model_artifact_identity', side_effect=AssertionError('arm rehashed')):
