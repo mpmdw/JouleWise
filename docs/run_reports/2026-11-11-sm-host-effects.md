@@ -143,3 +143,98 @@ The next step is the lead's cold review and integration decision. Any future
 live check must be lead-controlled and respect the quiet-machine gate. Writers,
 ledger adoption, restoration actions and a complete native host census remain
 outside this seat. No new coordination task was registered.
+
+
+## Round 2
+
+Applied the Fable review's HE-1, HE-2 and HE-3 fixes. The review file is
+unchanged. Work stays on `feat/2026-11-11-sm-host-effects`, as the round-2
+brief requests. Intake, the inactive stop card, audit section 8, lane PLAN,
+and both generations of the arm-stack source were read locally. No network,
+host probe, real data, model weights or measurement job was used.
+
+### Changes and decisions
+
+- HE-1: a known owner uses its full half-open span. Before start, a label
+  with an observed absent result is explained by `AWAITING_PLAN_SPAN`.
+  During the span it is explained by `ACTIVE_PLAN_SPAN`. At or after end,
+  a present result retains `NIGHT_LABEL_TERMINAL_WITHOUT_ACTIVE_SPAN` debt.
+  An observed absent result now creates
+  `NIGHT_LABEL_AFTER_SPAN_WITHOUT_RESULT` debt. A result before start is
+  unknown with `RESULT_BEFORE_PLAN_SPAN`.
+- Network time off and a held night lock use the same waiting/active/ended
+  timing when their owner has a known span. An unrelated active plan cannot
+  excuse an ended owner's effect. The two audit host invariants retain their
+  literal definitions. In particular, the network-time invariant can flag
+  OFF before a span even when the owed-effects row explains the waiting state.
+- Unknown result presence, missing clock or census, ambiguous inactive spans
+  for one owner, unobserved live settings and unknown outcomes retain unknown
+  rows. The label invariant shares the timing classifier. An observed absent
+  result alone no longer makes a loaded label pass when its timing is unknown.
+- HE-2: mode 1 is explicitly tested as set and owed without a lock. The
+  nonzero-mode implementation was already correct. The test rejects the
+  review's mode-2-only mutant.
+- HE-3: `HostFacts.plan_spans` now names the complete known-plan census.
+  Its docstring explicitly includes past, current and future start/end times.
+  The CLI accepts `--plan-span` and `--no-plan-spans`; `--active-plan` and
+  `--no-active-spans` remain aliases. Their fixed-clock JSON output is byte
+  identical. The Python field uses the new name.
+- The ignored-file test now uses `sealed-like/measurement-secret`.
+
+Changed files are `joulewise/host_effects.py`, `tests/test_host_effects.py`
+and this report. No writer, coordination state, review, fixture data, tool-map
+row or timing-map line changed. No new module or tool was added.
+
+### Failing-first evidence and checks
+
+All test modules ran sequentially, with the default TMPDIR. Total test time
+was well below 20 minutes. No full suite was run, per the load restriction.
+
+| Command | Result |
+|---|---|
+| `python3.13 -B -m unittest tests.test_host_effects` | Baseline: PASS, 30 tests, 0.424 s. After the timing change: 33 tests, six stale label-invariant expectations failed; those expectations now retain unknown timing. Subsequent PASS runs: 33 tests in 0.324 s; 37 in 0.238 s; 39 in 0.509 s. |
+| `python3.13 -B -m unittest tests.test_host_effects.ClassifierTests.test_owned_label_timeline_and_boundaries tests.test_host_effects.ClassifierTests.test_owned_network_and_lock_timeline_and_boundaries tests.test_host_effects.ClassifierTests.test_mode_one_is_set_and_owed_without_lock` | Before the fix: 3 tests, 14 expected HE-1 subtest failures, 0.004 s. Mode 1 already passed against correct code. |
+| `python3.13 -B -` in-memory HE-2 probe | The new mode-1 assertion fails against `mode == 2`. An initial whole-module reload broke enum identity and was discarded as a harness error. Compiling only the target function corrected the harness; the mutant then failed the assertion without a test error. |
+| `python3.13 -B -m unittest tests.test_host_effects.ClassifierTests.test_purity_frozen_snapshots_and_no_io` | Before the field rename: expected TypeError for `plan_spans`, 1 test, 0.001 s. An earlier invocation before the test rename passed, 1 test, 0.001 s. |
+| `python3.13 -B /private/tmp/jw-host-effects-round2-mutations.py` | Initial pass: 278 mutants, 260 killed, 36.205 s. Surviving ownership and reason-code changes prompted stronger assertions. Second pass: 278 mutants, 277 killed, 34.605 s; one equivalent boundary survivor. Final pass: 279 mutants, 278 killed, 35.637 s; the same equivalent survivor. The exact HE-2 value mutant was killed. |
+| `python3.13 -m compileall -q joulewise/host_effects.py tests/test_host_effects.py` | PASS. Limited to the touched Python files; no script was changed. |
+| `python3.13 -B -m unittest tests.test_fixture_orphan_census` | PASS, 14 tests, 2 skipped, 0.346 s. |
+| `python3.13 -B -m unittest tests.test_gen_state` | PASS, 44 tests, 10.885 s. |
+| `git diff --check` | PASS before the report; repeated at the final diff gate. |
+
+### Mutation coverage and survivor
+
+The local harness compiles only classifier functions in memory. It never
+writes mutant source into the repository. It mutates every `if` and conditional
+expression to true, false and its inverse, inverts comparisons and boolean
+operators, changes span boundaries, and removes loop/comprehension iterations.
+The two host invariants, the label invariant, all of `owed_effects` including
+its nested row classifier, and all span/label explanation helpers are included.
+All 56 conditional sites took both outcomes in the instrumented baseline.
+
+The final pass killed every mutant in `owed_effects` (150), the network-time
+invariant (12), the AC invariant (12), the label invariant (12), `_active` (20),
+`_span_explanation` (12) and `_label_explanation` (40). It killed 20 of 21 in
+`_plan_phase`. Of 278 kills, 275 had assertion failures; three failed only
+with test errors when guards were removed. This is a bounded local mutation
+pass, not independent cold verification or all possible value mutations.
+The final pass includes the exact HE-2 mode-2-only value mutant.
+
+| Survivor | Why equivalent |
+|---|---|
+| Mutant 180: `_plan_phase`, `facts.now < spans[0][0]` becomes `<=` | This fallback runs only after the matching span was found inactive. Equality at start has already returned `active`, so equality is unreachable here. Both choices return the same before/after phase for every valid fact reaching this line. The start and end boundary tests still reject changes to `_active` itself. |
+
+The temporary harness and JSON manifest are at
+`/private/tmp/jw-host-effects-round2-mutations.py` and the matching `.json`.
+They contain code and synthetic-test mutation metadata only. They are not
+committed fixture data.
+
+### Limits and handoff
+
+Python 3.13 was executed. Python 3.11 was not executed. The code remains
+standard library only with compatible syntax and APIs.
+No native hardware or MLX validation is claimed or needed for these pure
+synthetic fixes. A live host census remains a lead-controlled future check.
+No open contract question was found. The lead's next step is cold review of
+this round-2 commit, then its integration decision. The local commit message is
+`Fix host-effect span timing and close Fable review gaps`. Nothing was pushed.

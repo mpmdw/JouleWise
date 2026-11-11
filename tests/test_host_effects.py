@@ -21,7 +21,7 @@ from joulewise import host_effects as h
 
 def clean(**changes):
     facts = h.HostFacts(network_time_on=True, ac_powermode=0, markers=(),
-                        night_lock_held=False, active_plan_spans=(), now=100,
+                        night_lock_held=False, plan_spans=(), now=100,
                         labels=tuple(h.LabelFact(label, False, False) for label in h.NIGHT_LABELS),
                         desk_fence_observed=True, spotlight_stopped=False, keep_awake_agent=False)
     return replace(facts, **changes)
@@ -41,15 +41,15 @@ class ClassifierTests(unittest.TestCase):
         span = (('p', 90, 110),)
         for effect, set_fields, explanation, debt, unknown in (
             (h.Effect.NETWORK_TIME_OFF, {'network_time_on': False},
-             {'active_plan_spans': span}, {}, {'network_time_on': None}),
+             {'plan_spans': span}, {}, {'network_time_on': None}),
             (h.Effect.AC_HIGH_POWER, {'ac_powermode': 2},
              {'night_lock_held': True}, {}, {'ac_powermode': None}),
             (h.Effect.HIGH_POWER_MARKERS, {'markers': (h.MarkerFact('high-power.marker', True, 'p', h.R1_TAG),)},
              {'night_lock_held': True}, {}, {'markers': None}),
             (h.Effect.NIGHT_PLISTS, {'labels': tuple(h.LabelFact(l, True, True, 'p', True) for l in h.NIGHT_LABELS)},
-             {'active_plan_spans': span}, {}, {'labels': tuple(h.LabelFact(l) for l in h.NIGHT_LABELS)}),
+             {'plan_spans': span}, {}, {'labels': tuple(h.LabelFact(l) for l in h.NIGHT_LABELS)}),
             (h.Effect.NIGHT_LOCK, {'night_lock_held': True, 'night_lock_owner_plan_id': 'p'},
-             {'active_plan_spans': span}, {}, {'night_lock_held': None}),
+             {'plan_spans': span}, {}, {'night_lock_held': None}),
             (h.Effect.SPOTLIGHT_STOPPED, {'spotlight_stopped': True},
              {'desk_fence': h.DeskFence('r0', 123, 110, True)}, {}, {'spotlight_stopped': None}),
             (h.Effect.KEEP_AWAKE_AGENT, {'keep_awake_agent': True},
@@ -78,7 +78,7 @@ class ClassifierTests(unittest.TestCase):
                 with self.subTest(on=on, spans=spans):
                     expected = 'pass' if on is True or spans == (('p', 90, 110),) else (
                         'violated' if on is False and spans == () else 'unknown')
-                    check = h.invariant_network_time_on_without_active_span(clean(network_time_on=on, active_plan_spans=spans))
+                    check = h.invariant_network_time_on_without_active_span(clean(network_time_on=on, plan_spans=spans))
                     self.assertEqual(check.status, expected)
                     if expected == 'violated':
                         self.assertEqual(check.reason, 'NETWORK_TIME_OFF_WITHOUT_ACTIVE_SPAN')
@@ -94,9 +94,139 @@ class ClassifierTests(unittest.TestCase):
                     if expected == 'violated':
                         self.assertEqual(check.reason, 'AC_NONZERO_WITHOUT_NIGHT_LOCK')
 
+    def test_mode_one_is_set_and_owed_without_lock(self):
+        row = effect_rows(clean(ac_powermode=1), h.Effect.AC_HIGH_POWER)[0]
+        self.assertEqual(row, h.Owed(h.Effect.AC_HIGH_POWER, 'ac_powermode', True,
+                                   None, None, True, 'AC_NONZERO_WITHOUT_NIGHT_LOCK'))
+
+    def test_power_owner_requires_observed_present_marker(self):
+        for exists in (False, None):
+            with self.subTest(exists=exists):
+                facts = clean(ac_powermode=1, markers=(h.MarkerFact('old', exists, 'old'),
+                                                      h.MarkerFact('present', True, 'p'),
+                                                      h.MarkerFact('anonymous', True)))
+                self.assertEqual(effect_rows(facts, h.Effect.AC_HIGH_POWER)[0].owner_plan_id, 'p')
+                facts = replace(facts, markers=(h.MarkerFact('old', exists, 'old'),))
+                self.assertIsNone(effect_rows(facts, h.Effect.AC_HIGH_POWER)[0].owner_plan_id)
+
+    def test_power_and_keep_awake_explanation_codes(self):
+        for observed, reason in ((True, 'NIGHT_LOCK_HELD'), (False, 'AC_NONZERO_WITHOUT_NIGHT_LOCK'),
+                                 (None, 'EXPLANATION_UNOBSERVED')):
+            with self.subTest(lock=observed):
+                row = effect_rows(clean(ac_powermode=1, night_lock_held=observed), h.Effect.AC_HIGH_POWER)[0]
+                self.assertEqual(row.reason, reason)
+                self.assertEqual(row.explained_by, reason if observed is True else None)
+        for authorized, reason in ((True, 'STANDING_KEEP_AWAKE_AUTHORIZATION'),
+                                   (False, 'KEEP_AWAKE_AUTHORIZATION_WITHDRAWN'),
+                                   (None, 'EXPLANATION_UNOBSERVED')):
+            with self.subTest(authorized=authorized):
+                row = effect_rows(clean(keep_awake_agent=True, keep_awake_expected=authorized),
+                                  h.Effect.KEEP_AWAKE_AGENT)[0]
+                self.assertEqual(row.reason, reason)
+                self.assertEqual(row.explained_by, reason if authorized is True else None)
+
+    def test_owned_label_timeline_and_boundaries(self):
+        for label_name in h.NIGHT_LABELS:
+            for now, phase in ((89, 'before'), (90, 'active'), (109.999, 'active'),
+                               (110, 'after'), (111, 'after'), (None, None)):
+                for result in (True, False, None):
+                    with self.subTest(label=label_name, now=now, result=result):
+                        labels = tuple(h.LabelFact(l, True, True, 'p', result) for l in h.NIGHT_LABELS)
+                        facts = clean(labels=labels, plan_spans=(('p', 90, 110),), now=now)
+                        row = next(r for r in effect_rows(facts, h.Effect.NIGHT_PLISTS)
+                                   if r.subject == label_name)
+                        expected, reason = None, 'LABEL_SPANS_OR_RESULT_UNKNOWN'
+                        if phase == 'active':
+                            expected, reason = False, 'ACTIVE_PLAN_SPAN'
+                        elif phase == 'before' and result is True:
+                            reason = 'RESULT_BEFORE_PLAN_SPAN'
+                        elif phase == 'before' and result is False:
+                            expected, reason = False, 'AWAITING_PLAN_SPAN'
+                        elif phase == 'after' and result is not None:
+                            expected = True
+                            reason = ('NIGHT_LABEL_TERMINAL_WITHOUT_ACTIVE_SPAN' if result else
+                                      'NIGHT_LABEL_AFTER_SPAN_WITHOUT_RESULT')
+                        self.assertIs(row.owed, expected)
+                        self.assertEqual(row.reason, reason)
+                        self.assertEqual(row.explained_by, reason if expected is False else None)
+                        check = h.invariant_terminal_night_label_uninstalled(
+                            facts, next(l for l in labels if l.label == label_name))
+                        self.assertEqual(check.status, 'unknown' if expected is None else
+                                         'violated' if expected else 'pass')
+                        self.assertEqual(check.reason, reason if expected is not False else 'SATISFIED')
+
+    def test_owned_network_and_lock_timeline_and_boundaries(self):
+        for effect, fields, ended_reason in (
+            (h.Effect.NETWORK_TIME_OFF, {'network_time_on': False, 'network_time_owner_plan_id': 'p'},
+             'NETWORK_TIME_OFF_WITHOUT_ACTIVE_SPAN'),
+            (h.Effect.NIGHT_LOCK, {'night_lock_held': True, 'night_lock_owner_plan_id': 'p'},
+             'NIGHT_LOCK_WITHOUT_ACTIVE_SPAN'),
+        ):
+            for now, expected, reason in ((89, False, 'AWAITING_PLAN_SPAN'),
+                                          (90, False, 'ACTIVE_PLAN_SPAN'),
+                                          (109.999, False, 'ACTIVE_PLAN_SPAN'),
+                                          (110, True, ended_reason), (111, True, ended_reason),
+                                          (None, None, 'EXPLANATION_UNOBSERVED')):
+                with self.subTest(effect=effect, now=now):
+                    # Another active plan cannot hide the owner's waiting/ended state.
+                    facts = clean(**fields, plan_spans=(('p', 90, 110), ('q', 1, 200)), now=now)
+                    row = effect_rows(facts, effect)[0]
+                    self.assertIs(row.owed, expected)
+                    self.assertEqual(row.reason, reason)
+                    self.assertEqual(row.explained_by, reason if expected is False else None)
+
+    def test_plan_census_missing_owner_and_ambiguous_inactive_spans(self):
+        for spans, owner, now, phase in (
+            (None, 'p', 100, None), ((), 'p', None, 'inactive'),
+            ((('q', 90, 110),), 'p', 100, 'inactive'),
+            ((('p', 90, 110),), 'p', None, None),
+            ((('p', 1, 2), ('p', 200, 210)), 'p', 100, None),
+            ((('p', 90, 110), ('p', 200, 210)), 'p', 100, 'active'),
+            ((('p', 200, 210),), None, 100, 'inactive'),
+        ):
+            with self.subTest(spans=spans, owner=owner, now=now):
+                facts = clean(plan_spans=spans, now=now, network_time_on=False,
+                              network_time_owner_plan_id=owner, night_lock_held=True,
+                              night_lock_owner_plan_id=owner,
+                              labels=tuple(h.LabelFact(l, True, True, owner, False) for l in h.NIGHT_LABELS))
+                for effect in (h.Effect.NETWORK_TIME_OFF, h.Effect.NIGHT_LOCK):
+                    row = effect_rows(facts, effect)[0]
+                    self.assertIs(row.owed, None if phase is None else phase == 'inactive')
+                label_rows = effect_rows(facts, h.Effect.NIGHT_PLISTS)
+                self.assertTrue(all(r.owed is (False if phase == 'active' else None) for r in label_rows))
+
+    def test_label_result_fallback_and_unknown_outcomes_at_each_phase(self):
+        for now in (89, 100, 110):
+            for recorded in (True, False, None):
+                for global_result in (True, False, None):
+                    with self.subTest(now=now, recorded=recorded, global_result=global_result):
+                        facts = clean(plan_spans=(('p', 90, 110),), now=now,
+                                      result_present=global_result,
+                                      labels=tuple(h.LabelFact(l, True, True, 'p', recorded) for l in h.NIGHT_LABELS))
+                        effective = recorded if recorded is not None else global_result
+                        expected = False if now == 100 else (None if effective is None else
+                                   True if now == 110 else False if effective is False else None)
+                        self.assertTrue(all(r.owed is expected for r in effect_rows(facts, h.Effect.NIGHT_PLISTS)))
+                        for outcome in ('UNKNOWN', 'future'):
+                            rows = effect_rows(facts, h.Effect.NIGHT_PLISTS, outcome)
+                            self.assertTrue(any(r.reason == 'OUTCOME_UNRECOGNIZED' for r in rows))
+                            self.assertTrue(all(r.owed is (False if now == 100 else None)
+                                                for r in rows if r.subject != 'outcome'))
+                        rows = effect_rows(facts, h.Effect.NIGHT_PLISTS, 'ABORTED')
+                        self.assertTrue(all(r.owed is (False if now == 100 else True if now == 110 else None)
+                                            for r in rows))
+                        if now == 89:
+                            self.assertEqual({r.reason for r in rows}, {'RESULT_BEFORE_PLAN_SPAN'})
+
+    def test_network_invariant_remains_literal_before_owner_span(self):
+        facts = clean(network_time_on=False, network_time_owner_plan_id='p',
+                      plan_spans=(('p', 101, 110),))
+        self.assertEqual(h.invariant_network_time_on_without_active_span(facts).status, 'violated')
+        self.assertEqual(effect_rows(facts, h.Effect.NETWORK_TIME_OFF)[0].reason, 'AWAITING_PLAN_SPAN')
+
     def test_span_boundaries_census_and_owner(self):
         for now, expected in ((89, True), (90, False), (109.999, False), (110, True), (None, None)):
-            rows = effect_rows(clean(network_time_on=False, active_plan_spans=[['p', 90, 110]], now=now), h.Effect.NETWORK_TIME_OFF)
+            rows = effect_rows(clean(network_time_on=False, plan_spans=[['p', 90, 110]], now=now), h.Effect.NETWORK_TIME_OFF)
             self.assertIs(rows[0].owed, expected)
         for effect, fields in (
             (h.Effect.NETWORK_TIME_OFF, {'network_time_on': False}),
@@ -104,11 +234,11 @@ class ClassifierTests(unittest.TestCase):
             (h.Effect.HIGH_POWER_MARKERS, {'markers': (h.MarkerFact('m', True, 'p'),)}),
         ):
             with self.subTest(effect=effect):
-                self.assertIsNone(effect_rows(clean(active_plan_spans=None, **fields), effect)[0].owed)
+                self.assertIsNone(effect_rows(clean(plan_spans=None, **fields), effect)[0].owed)
         # A lock cannot excuse network time with no active span. A span cannot
         # excuse a nonzero mode without the lock.
         self.assertTrue(effect_rows(clean(network_time_on=False, night_lock_held=True), h.Effect.NETWORK_TIME_OFF)[0].owed)
-        self.assertTrue(effect_rows(clean(ac_powermode=2, active_plan_spans=(('p', 90, 110),)), h.Effect.AC_HIGH_POWER)[0].owed)
+        self.assertTrue(effect_rows(clean(ac_powermode=2, plan_spans=(('p', 90, 110),)), h.Effect.AC_HIGH_POWER)[0].owed)
         self.assertIsNone(effect_rows(clean(ac_powermode=2, night_lock_held=None), h.Effect.AC_HIGH_POWER)[0].owed)
 
     def test_marker_explanation_and_owner_mismatch(self):
@@ -120,7 +250,7 @@ class ClassifierTests(unittest.TestCase):
             ('old', (), None, None, 'EXPLANATION_UNOBSERVED'),
         ):
             with self.subTest(owner=owner, lock=lock, span=span):
-                facts = clean(markers=(h.MarkerFact('m', True, owner),), active_plan_spans=span, night_lock_held=lock)
+                facts = clean(markers=(h.MarkerFact('m', True, owner),), plan_spans=span, night_lock_held=lock)
                 row = effect_rows(facts, h.Effect.HIGH_POWER_MARKERS)[0]
                 self.assertIs(row.owed, expected)
                 self.assertEqual(row.reason, reason)
@@ -142,14 +272,14 @@ class ClassifierTests(unittest.TestCase):
                         self.assertEqual(label.label + ':loaded' in unknown_fields, set_ and loaded is None)
                         self.assertEqual(label.label + ':on_disk' in unknown_fields, set_ and disk is None)
                         check = h.invariant_terminal_night_label_uninstalled(facts, label)
-                        self.assertEqual(check.status, 'pass' if loaded is False or result is False else
+                        self.assertEqual(check.status, 'pass' if loaded is False else
                                          'violated' if loaded is True and result is True else 'unknown')
         label = h.LabelFact(h.NIGHT_LABELS[0], True, True, 'old')
         facts = clean(labels=(label, h.LabelFact(h.NIGHT_LABELS[1], False, False)), result_present=True,
-                      active_plan_spans=(('p', 90, 110),))
+                      plan_spans=(('p', 90, 110),))
         self.assertTrue(effect_rows(facts, h.Effect.NIGHT_PLISTS)[0].owed)
         self.assertEqual(h.invariant_terminal_night_label_uninstalled(facts, label).status, 'violated')
-        facts = replace(facts, active_plan_spans=None)
+        facts = replace(facts, plan_spans=None)
         self.assertEqual(h.invariant_terminal_night_label_uninstalled(facts, label).status, 'unknown')
 
     def test_optional_outcomes_fail_closed_and_state_report(self):
@@ -169,7 +299,7 @@ class ClassifierTests(unittest.TestCase):
                 self.assertTrue(any(r.reason == 'OUTCOME_UNRECOGNIZED' for r in rows))
                 self.assertTrue(any(r.owed is None for r in h.owed_effects(clean(), unknown)))
         # A live span explains the labels, while an unknown outcome remains visible.
-        facts = replace(facts, active_plan_spans=(('p', 90, 110),))
+        facts = replace(facts, plan_spans=(('p', 90, 110),))
         self.assertEqual(h.invariant_terminal_night_label_uninstalled(facts, facts.labels[0]).status, 'pass')
 
     def test_fence_liveness_deadline_and_keep_awake_policy(self):
@@ -178,7 +308,12 @@ class ClassifierTests(unittest.TestCase):
                                                (None, 101, 100, None), (True, 101, None, None)):
             with self.subTest(alive=alive, deadline=deadline, now=now):
                 facts = clean(spotlight_stopped=True, desk_fence=h.DeskFence('r0', 123, deadline, alive), now=now)
-                self.assertIs(effect_rows(facts, h.Effect.SPOTLIGHT_STOPPED)[0].owed, expected)
+                row = effect_rows(facts, h.Effect.SPOTLIGHT_STOPPED)[0]
+                self.assertIs(row.owed, expected)
+                reason = ('LIVE_DESK_FENCE' if expected is False else 'SPOTLIGHT_WITHOUT_LIVE_DESK_FENCE'
+                          if expected is True else 'EXPLANATION_UNOBSERVED')
+                self.assertEqual(row.reason, reason)
+                self.assertEqual(row.explained_by, reason if expected is False else None)
         self.assertIsNone(effect_rows(clean(spotlight_stopped=True, desk_fence_observed=False), h.Effect.SPOTLIGHT_STOPPED)[0].owed)
         self.assertIsNone(effect_rows(clean(keep_awake_agent=True, keep_awake_expected=None), h.Effect.KEEP_AWAKE_AGENT)[0].owed)
 
@@ -201,9 +336,9 @@ class ClassifierTests(unittest.TestCase):
 
     def test_purity_frozen_snapshots_and_no_io(self):
         spans = [['p', 90, 110]]
-        facts = clean(network_time_on=False, active_plan_spans=spans)
+        facts = clean(network_time_on=False, plan_spans=spans)
         spans[0][0] = 'changed'
-        self.assertEqual(facts.active_plan_spans, (('p', 90, 110),))
+        self.assertEqual(facts.plan_spans, (('p', 90, 110),))
         with self.assertRaises(FrozenInstanceError):
             facts.now = 101
         with mock.patch.object(builtins, 'open', side_effect=AssertionError('IO')), \
@@ -227,7 +362,7 @@ class ClassifierTests(unittest.TestCase):
     def test_invalid_facts_rejected(self):
         for kwargs in ({'network_time_on': 1}, {'ac_powermode': True}, {'ac_powermode': -1},
                        {'now': float('nan')}, {'markers': [True]}, {'labels': []},
-                       {'active_plan_spans': [('p', 2, 1)]}, {'active_plan_spans': [(None, 1, 2)]},
+                       {'plan_spans': [('p', 2, 1)]}, {'plan_spans': [(None, 1, 2)]},
                        {'network_time_owner_plan_id': ''}, {'desk_fence_observed': None}, {'desk_fence': {}}):
             with self.subTest(kwargs=kwargs), self.assertRaises((TypeError, ValueError)):
                 h.HostFacts(**kwargs)
@@ -256,7 +391,7 @@ class ReaderTests(unittest.TestCase):
         self.assertEqual([m.exists for m in facts.markers], [False, False])
         self.assertIsNone(facts.night_lock_held)
         self.assertIsNone(facts.network_time_on)
-        self.assertIsNone(facts.active_plan_spans)
+        self.assertIsNone(facts.plan_spans)
         self.assertTrue(facts.desk_fence_observed)
         self.assertFalse(facts.observation_issues)
         self.assertTrue(any(r.owed is None for r in h.owed_effects(facts)))
@@ -405,7 +540,7 @@ class ReaderTests(unittest.TestCase):
 
     def test_only_allowed_files_read_and_no_files_changed(self):
         self.write('night/result.json', 'presence only')
-        self.write('restricted/measurement-secret', 'synthetic ignored')
+        self.write('sealed-like/measurement-secret', 'synthetic ignored')
         before = {str(p.relative_to(self.root)): p.read_bytes() for p in self.root.rglob('*') if p.is_file()}
         original = os.open
         opened = []
@@ -415,7 +550,7 @@ class ReaderTests(unittest.TestCase):
             return original(path, *args, **kwargs)
         with mock.patch.object(os, 'open', side_effect=record):
             h.observe_host_state_dir(self.root)
-        self.assertFalse(any('restricted' in p for p in opened))
+        self.assertFalse(any('sealed-like' in p for p in opened))
         self.assertEqual(before, {str(p.relative_to(self.root)): p.read_bytes() for p in self.root.rglob('*') if p.is_file()})
 
 
@@ -467,6 +602,13 @@ class CliTests(unittest.TestCase):
             self.assertEqual(code, 3)
             row = next(r for r in json.loads(out)['effects'] if r['effect'] == 'NETWORK_TIME_OFF')
             self.assertEqual(row['status'], 'explained')
+
+    def test_plan_span_flags_keep_legacy_aliases_byte_identical(self):
+        with tempfile.TemporaryDirectory() as root, mock.patch.object(h.time, 'time', return_value=100):
+            for new, legacy in ((('--no-plan-spans',), ('--no-active-spans',)),
+                                (('--plan-span', 'p', '90', '110'), ('--active-plan', 'p', '90', '110'))):
+                self.assertEqual(self.run_cli('--state-dir', root, '--json', *new),
+                                 self.run_cli('--state-dir', root, '--json', *legacy))
 
     def test_usage_invalid_flags_conflicts_and_symlink(self):
         with tempfile.TemporaryDirectory() as root:

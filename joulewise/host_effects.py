@@ -117,13 +117,17 @@ class DeskFence:
 
 @dataclass(frozen=True)
 class HostFacts:
+    """Caller observations; plan_spans lists every known plan, start and end.
+
+    Include past, current and future plans. None is an unobserved census;
+    () is an explicitly empty census. Times are epoch seconds.
+    """
     network_time_on: bool | None = None
     ac_powermode: int | None = None
     markers: tuple[MarkerFact, ...] | None = None
     night_lock_held: bool | None = None
     labels: tuple[LabelFact, ...] = tuple(LabelFact(label) for label in NIGHT_LABELS)
-    # None is an unobserved census; () explicitly says no plan span is active.
-    active_plan_spans: tuple[tuple[str, float, float], ...] | None = None
+    plan_spans: tuple[tuple[str, float, float], ...] | None = None
     desk_fence: DeskFence | None = None
     desk_fence_observed: bool = False
     spotlight_stopped: bool | None = None
@@ -159,13 +163,13 @@ class HostFacts:
         if (not all(isinstance(p, LabelFact) for p in self.labels)
                 or {p.label for p in self.labels} != set(NIGHT_LABELS) or len(self.labels) != 2):
             raise ValueError("supply each night label exactly once")
-        if self.active_plan_spans is not None:
-            spans = tuple(tuple(s) for s in self.active_plan_spans)
+        if self.plan_spans is not None:
+            spans = tuple(tuple(s) for s in self.plan_spans)
             for plan, start, end in spans:
                 _id(plan)
                 if plan is None or not _number(start) or not _number(end) or start >= end:
                     raise ValueError("invalid plan span")
-            object.__setattr__(self, "active_plan_spans", spans)
+            object.__setattr__(self, "plan_spans", spans)
         object.__setattr__(self, "observation_issues", tuple(self.observation_issues))
 
 
@@ -192,14 +196,58 @@ class Check:
 
 
 def _active(facts, owner=None):
-    if facts.active_plan_spans is None:
+    if facts.plan_spans is None:
         return None
-    if not facts.active_plan_spans:
+    if not facts.plan_spans:
         return False
     if facts.now is None:
         return None
     return any(start <= facts.now < end and (owner is None or plan == owner)
-               for plan, start, end in facts.active_plan_spans)
+               for plan, start, end in facts.plan_spans)
+
+
+def _plan_phase(facts, owner):
+    """Use a known owner's full span; otherwise retain active-census semantics."""
+    active = _active(facts, owner)
+    if active is None:
+        return None
+    if active:
+        return "active"
+    spans = [(start, end) for plan, start, end in facts.plan_spans if plan == owner]
+    if len(spans) == 1:
+        return "before" if facts.now < spans[0][0] else "after"
+    # Multiple inactive spans for one owner cannot identify which one owns
+    # this effect. An unrelated plan must not supply a waiting explanation.
+    return None if spans else "inactive"
+
+
+def _span_explanation(facts, owner, orphan_reason):
+    phase = _plan_phase(facts, owner)
+    if phase == "before":
+        return True, "AWAITING_PLAN_SPAN"
+    if phase == "active":
+        return True, "ACTIVE_PLAN_SPAN"
+    if phase is None:
+        return None, None
+    return False, orphan_reason
+
+
+def _label_explanation(facts, label, word):
+    phase = _plan_phase(facts, label.owner_plan_id)
+    result = label.result_present if label.result_present is not None else facts.result_present
+    if word is not None:
+        result = True if word in OUTCOME_WORDS else None
+    if phase == "active":
+        return True, "ACTIVE_PLAN_SPAN"
+    if phase == "before" and result is True:
+        return None, "RESULT_BEFORE_PLAN_SPAN"
+    if phase == "before" and result is False:
+        return True, "AWAITING_PLAN_SPAN"
+    if phase in ("after", "inactive") and result is True:
+        return False, "NIGHT_LABEL_TERMINAL_WITHOUT_ACTIVE_SPAN"
+    if phase == "after" and result is False:
+        return False, "NIGHT_LABEL_AFTER_SPAN_WITHOUT_RESULT"
+    return None, "LABEL_SPANS_OR_RESULT_UNKNOWN"
 
 
 def invariant_network_time_on_without_active_span(facts: HostFacts) -> Check:
@@ -233,18 +281,14 @@ def _outcome_word(outcome):
 
 
 def invariant_terminal_night_label_uninstalled(facts: HostFacts, label: LabelFact, outcome=None) -> Check:
-    """A loaded label with a result and no active span is owed an uninstall."""
-    active = _active(facts, label.owner_plan_id)
-    word = _outcome_word(outcome)
-    result = label.result_present if label.result_present is not None else facts.result_present
-    if word is not None:
-        result = True if word in OUTCOME_WORDS else None
+    """A loaded label past its known span is owed even without a result."""
+    explained, reason = _label_explanation(facts, label, _outcome_word(outcome))
     name = "terminal_night_label_uninstalled:" + label.label
-    if label.loaded is False or active is True or result is False:
+    if label.loaded is False or explained is True:
         return Check(name, "pass", "SATISFIED")
-    if label.loaded is None or active is None or result is None:
-        return Check(name, "unknown", "LABEL_SPANS_OR_RESULT_UNKNOWN")
-    return Check(name, "violated", "NIGHT_LABEL_TERMINAL_WITHOUT_ACTIVE_SPAN")
+    if label.loaded is None or explained is None:
+        return Check(name, "unknown", reason)
+    return Check(name, "violated", reason)
 
 
 def owed_effects(facts: HostFacts, outcome=None) -> list[Owed]:
@@ -271,10 +315,10 @@ def owed_effects(facts: HostFacts, outcome=None) -> list[Owed]:
         rows.append(Owed(effect, subject, state, owner,
                          code if state and explained else None, debt, code))
 
-    active = _active(facts)
+    explained, reason = _span_explanation(facts, facts.network_time_owner_plan_id,
+                                          "NETWORK_TIME_OFF_WITHOUT_ACTIVE_SPAN")
     row(Effect.NETWORK_TIME_OFF, "network_time", None if facts.network_time_on is None else not facts.network_time_on,
-        facts.network_time_owner_plan_id, active,
-        "ACTIVE_PLAN_SPAN" if active else "NETWORK_TIME_OFF_WITHOUT_ACTIVE_SPAN" if active is False else None)
+        facts.network_time_owner_plan_id, explained, reason)
     mode = facts.ac_powermode
     power_owners = {m.owner_plan_id for m in facts.markers or ()
                     if m.exists is True and m.owner_plan_id is not None}
@@ -303,23 +347,16 @@ def owed_effects(facts: HostFacts, outcome=None) -> list[Owed]:
     for label in facts.labels:
         state = True if label.loaded is True or label.on_disk is True else (
             False if label.loaded is False and label.on_disk is False else None)
-        own_span = _active(facts, label.owner_plan_id)
-        result = label.result_present if label.result_present is not None else facts.result_present
-        if word is not None:
-            # An unrecognized outcome cannot waive missing result evidence.
-            result = True if word in OUTCOME_WORDS else None
-        explained = True if own_span is True else False if own_span is False and result is True else None
-        row(Effect.NIGHT_PLISTS, label.label, state, label.owner_plan_id, explained,
-            "ACTIVE_PLAN_SPAN" if explained else "NIGHT_LABEL_TERMINAL_WITHOUT_ACTIVE_SPAN"
-            if explained is False else "LABEL_SPANS_OR_RESULT_UNKNOWN")
+        explained, reason = _label_explanation(facts, label, word)
+        row(Effect.NIGHT_PLISTS, label.label, state, label.owner_plan_id, explained, reason)
         # A known disk presence must not hide unobserved launchd state.
         if state is True and label.loaded is None:
             row(Effect.NIGHT_PLISTS, label.label + ":loaded", None)
         if state is True and label.on_disk is None:
             row(Effect.NIGHT_PLISTS, label.label + ":on_disk", None)
-    lock_active = _active(facts, facts.night_lock_owner_plan_id)
-    row(Effect.NIGHT_LOCK, "night.lock", facts.night_lock_held, facts.night_lock_owner_plan_id, lock_active,
-        "ACTIVE_PLAN_SPAN" if lock_active else "NIGHT_LOCK_WITHOUT_ACTIVE_SPAN" if lock_active is False else None)
+    explained, reason = _span_explanation(facts, facts.night_lock_owner_plan_id,
+                                          "NIGHT_LOCK_WITHOUT_ACTIVE_SPAN")
+    row(Effect.NIGHT_LOCK, "night.lock", facts.night_lock_held, facts.night_lock_owner_plan_id, explained, reason)
     fence = facts.desk_fence
     fence_active = None
     if fence is not None:
@@ -533,8 +570,9 @@ def main(argv=None):
                         help="repeat for a COMPLETE loaded-label census; use --no-loaded-labels for empty")
     parser.add_argument("--no-loaded-labels", action="store_true")
     parser.add_argument("--night-lock", choices=("held", "free", "unknown"), default="unknown")
-    parser.add_argument("--no-active-spans", action="store_true")
-    parser.add_argument("--active-plan", nargs=3, action="append", default=[], metavar=("PLAN", "START", "END"))
+    parser.add_argument("--no-plan-spans", "--no-active-spans", dest="no_active_spans", action="store_true")
+    parser.add_argument("--plan-span", "--active-plan", dest="active_plan", nargs=3, action="append", default=[],
+                        metavar=("PLAN", "START", "END"), help="repeat for every known plan, past, current or future")
     parser.add_argument("--spotlight", choices=("stopped", "running", "unknown"), default="unknown")
     parser.add_argument("--keep-awake", choices=("loaded", "unloaded", "unknown"), default="unknown")
     parser.add_argument("--keep-awake-expected", choices=("yes", "no", "unknown"), default="yes")
@@ -555,7 +593,7 @@ def main(argv=None):
             () if args.no_active_spans else None)
         facts = replace(facts, network_time_on={"on": True, "off": False}.get(args.network_time),
                         ac_powermode=args.ac_powermode, night_lock_held={"held": True, "free": False}.get(args.night_lock),
-                        active_plan_spans=spans, now=time.time(),
+                        plan_spans=spans, now=time.time(),
                         labels=tuple(replace(p, loaded=p.label in loaded) if loaded is not None else p for p in facts.labels),
                         spotlight_stopped={"stopped": True, "running": False}.get(args.spotlight),
                         keep_awake_agent=KEEP_AWAKE_LABEL in loaded if loaded is not None else
