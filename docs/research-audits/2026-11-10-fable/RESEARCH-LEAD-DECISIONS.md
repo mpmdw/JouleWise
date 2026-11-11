@@ -1363,6 +1363,106 @@ the rule the registration already states, and the alternative would have been an
 
 ---
 
+# Decision request 13: seat 4's re-derivation and the RL-3 gate (2026-11-10 23:08 PST)
+
+**Read.** `analysis/2026-11-10-b5-rederivation` @ `35b0e98d1`: the seat report, `REDERIVATION.md` (the
+discrepancy list, the stop list, the licence table, the ruling request), the shape of `rederivation.tsv`, and
+`RESULTS.md` lines 226-244 and §0 on `main`. I re-did the one rounding example. I did not re-check the ledger
+row by row.
+
+## RL-38. Phase 2 of seat 4 may read the released Block 5 custody, under conditions
+
+**Phase 1 is accepted as what it says it is:** a ledger of 538 rows built from the repository alone, with 207
+rows stopped for want of a source. The seat was right to stop. RL-3's gate stays open. The branch may merge as
+a working record.
+
+**(a) Yes.** RL-3 always required it: "re-derives every number to be printed from the frozen custody". Item
+231's unseal covers exactly these two paths, read-only.
+
+**Who.** A fresh Sol seat, given phase 1's ledger and stop list. RL-3 named the family: the results file was
+written by an Opus seat, and the reader must not share its author's reading. Then an Opus cold review of the
+hand-check records, which Ed's rule for Sol-built work requires anyway. That pairing gives every line a check
+from a family that did not write the code that printed it, whichever family that was. No third family.
+
+**Two kinds of work, both in phase 2.**
+
+1. *Sourcing.* For each stopped row, find the leaf in the named file by the key path `RESULTS.md` gives and
+   compare. This is mechanical.
+2. *Hand checks* (RL-3 item 3), for the seven uncovered families, any printed exempt leaf, and the
+   recompute-only lines: an independent calculation from member-level values in the released files, using the
+   seat's own standard-library arithmetic and no repository analysis or recompute code.
+
+**Conditions.**
+
+1. Only `/Users/edr/jw-b5-custody/dry-m` and `/Users/edr/jw-b5-custody/release-check-final-20261108T0942Z`.
+   Paths named inside those files are not followed. No Block 6, BYTES, v4, `night-*` or other custody path.
+2. Read-only. Scratch and temporary files live outside custody. Nothing in custody is written, moved or
+   re-compressed.
+3. Each file is hashed before it is read and must equal the SHA-256 in `RESULTS.md` §0. `verdict.json`, which
+   that section did not hash, is hashed and recorded. The report lists every file opened with its hash, and the
+   files are hashed again at the end.
+4. The committed record carries key paths, formulas, file hashes, counts, each re-derived value at the printed
+   precision and its difference from the printed value. Member-level values stay in custody and are cited by
+   key path. Publishing member-level data is a release decision and is Ed's.
+5. The hand-check scripts are committed as scripts, without data.
+6. Not a repair seat. A real mismatch is reported and comes to me. Nothing in `RESULTS.md`, the analysis code or
+   the custody is changed.
+7. If a hand check needs a file outside the two paths, it is not done. The row is marked
+   `source-outside-unseal` and its value is not printed in Paper 1. After phase 2 I decide, from that list,
+   whether to ask Ed to widen the scope.
+8. The lead audits the Sol seat's event log for any path outside the two, as for every local Sol run.
+9. The Opus reviewer has the same two paths under the same conditions, for the hand-checked rows only.
+10. Both seats are now Block-5-aware and are not used later as Block-5-naive seats for Block 6 (RL-6).
+
+**Ledger words after phase 2:** `exact`, `within-rounding`, `MISMATCH` (a real numeric or factual
+disagreement, nothing else), `source-outside-unseal`. "Blocked" should no longer share a word with "mismatch".
+
+**What passes the gate.** A number may be printed when its row is `exact` or `within-rounding` against the
+released source and, where RL-3 item 3 applies, its hand check agrees. The check of the paper's own sentences
+against the ten licence constraints comes after the fill seat, as planned.
+
+**Reason.** The gate asks for the source, and the source is in custody that Ed has already opened for this
+purpose. The conditions keep the read to those two paths and keep member-level data where it is.
+
+**Blind status.** Not blind to Block 5. I opened no custody path.
+
+## RL-39. The "four different causes" sentence and the other cautions from phase 1
+
+**(b) "Four different causes".** `RESULTS.md` lines 239-240 list contention, anchor failure, admission abort and
+contention, and call them four different causes. They are four losses with three distinct causes. This is a
+wording slip in a working record. It touches no number and no registered rule, so it is **not a deviation**.
+
+- `RESULTS.md` stays byte-identical (RL-27).
+- One erratum line goes in an "Errata to RESULTS.md" section at the head of `REDERIVATION.md`, and
+  `CANONICAL.md`'s row for `RESULTS.md` points to that section. Later errata go in the same place.
+- Paper 1 prints the correct statement, "four losses, three distinct causes (contention twice, an anchor
+  failure, an admission abort)", once phase 2 has sourced the four causes from the attempt index.
+
+**The other four cautions, each ruled for the paper.**
+
+1. *Rounding order.* The prefill ratio is 10.85017 from the coarser printed inputs and 10.84991 from the fuller
+   ones, so its third digit is not determined. Rule for Paper 1: a derived ratio is computed from the fullest
+   released precision, rounded once, and printed to at most two significant figures. This one prints as "about
+   11". `RESULTS.md`'s "10.9" gets an erratum line saying so.
+2. *"Collected".* Paper 1 uses the collection record's words: 107 bundles present and raw-valid, 103 succeeded.
+   It does not say four were "not collected".
+3. *Three ratios.* The geometric per-quad energy ratio, the request-level median rail share and the median
+   member gross phase share are different quantities. Each printed ratio names which it is. A ratio of printed
+   cell means is never offered as a check of a published median.
+4. *Catalog revision.* The paper says "the flag catalog (SHA-256 `5d77c725…`) under registration revision 12",
+   not "catalog revision 12".
+
+**`RESULTS.md` §6.** Its proposed paragraph, table and slide fail five of RL-4's rules, as the reader found.
+They are not used as text. The fill seat writes from the sourced ledger under RL-4. This is consistent with
+RL-27, which already made §6 historical.
+
+**Reason.** A released record is corrected by a dated erratum beside it, not by editing it and not by a
+deviation entry that would suggest the analysis changed.
+
+**Blind status.** Not blind to Block 5. Wording and procedure.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
