@@ -29,6 +29,7 @@ an existing raising helper.  The reviewer rule in every brief
 """
 from __future__ import annotations
 
+import ast
 import copy
 import hashlib
 import json
@@ -215,6 +216,39 @@ class RefusalAllowlistTests(unittest.TestCase):
 
     def test_the_scan_covers_every_module_the_hazard_path_imports(self):
         self.assertEqual(scope_problems(self.document), [])
+
+    def test_v4_desk_borrows_only_the_site_free_meter_probe(self):
+        """RL-86: the unscanned desk program lends only this site-free body."""
+        target = "scripts.align_v4_session"
+        imports = []
+        for file in self.document["scan"]["modules"]:
+            if not file.endswith(".py"):
+                continue
+            tree = ast.parse((ROOT / file).read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    imports.extend((file, "<module>") for alias in node.names
+                                   if alias.name == target or alias.name.startswith(target + "."))
+                elif isinstance(node, ast.ImportFrom):
+                    module = node.module or ""
+                    if node.level:
+                        parts = file.replace("/", ".").removesuffix(".py").removesuffix(".__init__").split(".")
+                        keep = len(parts) - node.level + int(file.endswith("__init__.py"))
+                        module = ".".join(parts[:keep] + ([module] if module else []))
+                    if module == target:
+                        imports.extend((file, alias.name) for alias in node.names)
+                    elif module.startswith(target + ".") or (
+                            module == "scripts" and any(alias.name == "align_v4_session" for alias in node.names)):
+                        imports.append((file, "<module>"))
+        self.assertEqual({name for _, name in imports}, {"_probe_meter_live"}, imports)
+
+        file = "scripts/align_v4_session.py"
+        tree = ast.parse((ROOT / file).read_text(encoding="utf-8"))
+        probes = [node for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                  and node.name == "_probe_meter_live"]
+        self.assertEqual(len(probes), 1)
+        body = ast.unparse(ast.Module(body=probes[0].body, type_ignores=[]))
+        self.assertEqual(census.scan_source(file, body), [], "RL-86: borrowed probe gained a census site")
 
     def test_every_window_exclusion_names_what_it_protects(self):
         self.assertEqual(window_exclusion_problems(self.document, current_catalogs()), [])
