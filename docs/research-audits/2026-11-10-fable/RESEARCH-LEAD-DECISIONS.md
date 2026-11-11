@@ -2329,6 +2329,55 @@ computes.
 
 ---
 
+# Decision request 23: a one-line fix to a file in Block 5's sealed inventory (2026-11-11 02:47 PST)
+
+**Read.** The diff of `joulewise/evidence_night.py` on `fix/2026-11-11-evidence-night-flake` @ `0088e34f3` (one
+`git fetch` gains `--no-auto-maintenance`), and finding A-F2 of the Fable cold review. I checked four facts
+myself: the file's entry in `configs/campaigns/v5_claim_25g83/sealed_inventory.json` (`3f0820ba…`, equal to
+`main` today); that the file is not in the v4 registration's bound artifacts or receipt on
+`align/2026-11-08-v4-r11` @ `b4a6c217f`; that the bound `scripts/gen_evidence_night.py` there does not import
+it; and that the pin registry refers to it by commit (`file@c27485347:…`). The engineering review is the Fable
+seat's and I did not repeat it.
+
+## RL-51. Merge it now. The seal is a commit, and no coming night or analysis is governed by it
+
+### Which inventory governs what comes next
+
+| Next step | Governed by | This file |
+|---|---|---|
+| An R1 follow-up night, if owed | Its night plan and slots, run from the R1 lane's own checkout | Not in the closure |
+| W1 and the v4 series | The STRICT receipt on `align/2026-11-08-v4-r11` | Not bound. The line's copy changes only when the line takes `main`, and an unbound file may change without re-registration |
+| BYTES stage 1 and 2 | No armed night. The run lineage and the estimator digest | Not read |
+| Block 6 | Collection closed at `f31aca19f`. Analysis at the S-14 pin | Not in the analysis path |
+| Block 5 | The v5 sealed inventory | Bound, and Block 5 is closed and released |
+
+The v5 inventory governs Block 5's sessions and nothing else. Its rule that every window inventories
+`joulewise/` whole applies to windows armed under that registration, and there will be no more of them. The
+sealed tree is the commit `c27485347`, which a change on `main` cannot alter. `main` is the development line
+and already differs from that tree in 128 files of the sealed directories.
+
+### Ruling: (a)
+
+- The fix merges to `main` now, on the lead's and the reviewer's authority for the engineering.
+- `sealed_inventory.json` is not edited, now or later. It records what was sealed.
+- No deviation entry. No registered rule, session or number is touched. The PR description says in one line
+  that this is the file's first change since the Block 5 seal and cites this ruling.
+- Nothing is owed in a v4 re-registration delta, because the file is not bound there. If a later registration
+  binds a night kind that runs `evidence_night.prepare`, it binds the bytes of that day.
+- The armed R1 is unaffected: it runs from its own checkout, and nothing is fetched on the measurement Mac
+  before its chain exits.
+
+(b) would leave a known leak failing three CI runs in five for no protection. (c) hides the leak from the test
+and leaves it in the program.
+
+**Reason.** A seal protects the sessions that ran under it, by fixing the commit they ran from. It was never a
+promise that the development branch would stop moving. Ed's rule for frozen components says the same: fix the
+bug in place unless the science is harmed, and here nothing is.
+
+**Blind status.** Not applicable. No data of any block is involved.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
