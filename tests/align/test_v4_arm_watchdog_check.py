@@ -13,6 +13,7 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
+from xml.sax.saxutils import escape
 
 from joulewise.align.apple import powermode
 from scripts import align_v4_session as session
@@ -232,8 +233,147 @@ class WatchdogTests(unittest.TestCase):
             self.assertFalse(self.check()['ok'])
         self.run.assert_not_called()
 
+    def test_stored_dry_run_streams_are_capped_in_utf8_bytes_without_hiding_decision(self):
+        self.run.return_value = subprocess.CompletedProcess([], 0,
+            '\N{SNOWMAN}' * 8192 + '\ndecision=LAUNCHING reason=x\n', '\N{SNOWMAN}' * 8192)
+        row = self.check('post_install')
+        self.assertTrue(row['ok'], row)
+        for stream in ('stdout', 'stderr'):
+            self.assertLessEqual(len(row[stream].encode()), 8192)
+            self.assertTrue(row[stream + '_truncated'])
+        self.run.return_value = subprocess.CompletedProcess([], 0, 'decision=LAUNCHING reason=x\n', '')
+        row = self.check('post_install')
+        self.assertFalse(row['stdout_truncated'])
+        self.assertFalse(row['stderr_truncated'])
+
 
 class RemoteProbeTests(watchdog_fixtures.WatchdogTestCase):
+    def parser_run(self, argv, **kwargs):
+        # Only the fixed file-reader program runs for real. Host/remote dry-run
+        # probes remain behind the injected runner, as required by RL-53.
+        if '-c' in argv:
+            return subprocess.run(argv, **kwargs)
+        return subprocess.CompletedProcess(argv, 0, 'decision=LAUNCHING reason=synthetic\n', '')
+
+    def installed_plist(self, home, watchdog_root):
+        # Match install_magistrate_watchdog.sh:225-246, including XML escaping
+        # and replacement of the env/python pair by the selected interpreter.
+        text = (session.ROOT / 'configs/launchd/com.joulewise.magistrate.plist.template').read_text()
+        for key, value in {'REPO': str(session.ROOT), 'PATH': os.environ['PATH'],
+                'SESSION_BIN': str(self.temp / 'unused-session'), 'CUSTODY_ROOT': str(watchdog_root),
+                'STATUS_HOST': 'synthetic'}.items():
+            text = text.replace('@@' + key + '@@', escape(value))
+        text = text.replace('    <string>/usr/bin/env</string>\n    <string>python3</string>',
+                            f'    <string>{escape(sys.executable)}</string>')
+        self.assertNotIn('@@', text)
+        path = home / 'Library/LaunchAgents/com.joulewise.magistrate.plist'
+        path.parent.mkdir(parents=True, exist_ok=True)
+        document = plistlib.loads(text.encode())
+        document['EnvironmentVariables']['HOME'] = str(home)
+        path.write_bytes(plistlib.dumps(document))
+        return path
+
+    def test_real_installed_parser_accepts_both_layouts_and_post_install_needs_discovery(self):
+        from joulewise.night_agent_install import LABELS, Prepared
+        wd = watchdog_fixtures.wd
+        for scanned in (True, False):
+            with self.subTest(discovered_by_scan=scanned):
+                base = self.temp / str(scanned)
+                home = base / 'home'
+                watchdog_root = base / 'night-custody/watchdog'
+                custody = (base / 'night-custody/arm' if scanned else
+                           base / 'night-align/session/custody')
+                plan = self.make_plan(name=str(custody), t0=session.time.time() + 3600)
+                plan_path = custody / 'night_plan.json'
+                raw = json.loads(plan_path.read_text())
+                plist = self.installed_plist(home, watchdog_root)
+                check = lambda phase: session.watchdog_acceptance(phase=phase, runner=self.parser_run,
+                    plist_path=plist, plan=raw)
+                pre = check('pre_install')
+                self.assertTrue(pre['ok'], pre)
+                self.assertEqual(pre['plan_identity'], {'source': 'installed_parser_on_plan_file',
+                    'found': True, 'discovered_by_scan': scanned,
+                    'span_start_epoch_s': plan.t0_epoch_s - wd.PLAN_LEAD_S,
+                    'expected': plan.t0_epoch_s - session.WATCHDOG_PLAN_LEAD_S, 'ok': True})
+                self.assertEqual(json.loads(subprocess.run([sys.executable, '-B', '-c',
+                    session.WATCHDOG_PLAN_FILE_PROGRAM, str(Path(wd.__file__).resolve()),
+                    str(watchdog_root), str(plan_path)], cwd=session.ROOT,
+                    env=dict(os.environ, HOME=str(home), PYTHONDONTWRITEBYTECODE='1'),
+                    capture_output=True, text=True, check=True, timeout=30).stdout)['parse'], 'ok')
+                if not scanned:
+                    post = check('post_install')
+                    self.assertFalse(post['ok'], post)
+                    self.assertIn('arm plan missing', post['reason'])
+                    calls = []
+                    def run(argv, **kwargs):
+                        calls.append(argv)
+                        if '--uninstall' in argv:
+                            return subprocess.CompletedProcess(argv, 0, '', '')
+                        if argv[:2] == ['launchctl', 'print']:
+                            label = argv[-1].rsplit('/', 1)[-1]
+                            return subprocess.CompletedProcess(argv, 113, '',
+                                f'Could not find service "{label}" in domain for user gui: {os.getuid()}')
+                        return self.parser_run(argv, **kwargs)
+                    dwell = {'quiet_dwell': {}}
+                    with self.assertRaisesRegex(ValueError, 'arm plan missing.*install undone'):
+                        session._watchdog_post_install({'plan_path': str(plan_path),
+                            'measurement_root': str(session.ROOT)}, dwell, runner=run, plist_path=plist)
+                    self.assertTrue(any('--uninstall' in call for call in calls))
+                    self.assertEqual(dwell['quiet_dwell']['watchdog_post_install']['install_undo']['remaining_labels'], [])
+                # Render the real production night template through its helper;
+                # no installer invocation or launchctl is needed to publish temp plists.
+                prepared = Prepared(plan, plan_path, session.ROOT, sys.executable,
+                    (session.ROOT / 'configs/launchd/com.joulewise.night.plist.template').read_text(),
+                    str(self.temp / 'unused-courier'), os.environ['PATH'],
+                    {'night_calendar': {'Month': 11, 'Day': 11, 'Hour': 23, 'Minute': 0},
+                     'deadman_calendar': {'Month': 11, 'Day': 12, 'Hour': 1, 'Minute': 0}}, None)
+                for label, payload in prepared.render(LABELS):
+                    (plist.parent / f'{label}.plist').write_bytes(payload)
+                post = check('post_install')
+                self.assertTrue(post['ok'], post)
+                self.assertEqual(post['plan_identity']['source'], 'installed_load_plans')
+                self.assertTrue(post['plan_read_proven'])
+
+    def test_version_skewed_installed_parser_refuses_pre_install_without_fake_runner(self):
+        home = self.temp / 'skew-home'
+        plist = self.installed_plist(home, self.temp / 'night-custody/watchdog')
+        module = self.temp / 'installed/magistrate_watchdog.py'
+        module.parent.mkdir()
+        module.write_text('''import json, time
+from pathlib import Path
+from types import SimpleNamespace
+PLAN_LEAD_S = 180
+class PlanError(ValueError): pass
+class Storage:
+    def __init__(self, root, dry_run=False):
+        self.root, self.dry_run, self.would_write = root, dry_run, []
+    def read_text(self, path): return path.read_text()
+    def glob_plans(self): return []
+class NightPlan:
+    @classmethod
+    def from_mapping(cls, raw):
+        if 'ac_powermode' in raw: raise PlanError('SECRET unknown key ac_powermode')
+        return SimpleNamespace(**raw)
+def is_retired_v1_plan(raw): return False
+def deadman_epoch(plan): return plan.t0_epoch_s + 600
+def load_plans(storage, **kwargs): return SimpleNamespace(plans=(), errors=())
+if __name__ == '__main__': print('decision=LAUNCHING reason=synthetic')
+''')
+        doc = plistlib.loads(plist.read_bytes())
+        doc['ProgramArguments'] = [sys.executable, '-B', str(module)]
+        plist.write_bytes(plistlib.dumps(doc))
+        custody = self.temp / 'night-align/session/custody'
+        custody.mkdir(parents=True)
+        plan = {'plan_id': 'skew-arm', 't0_epoch_s': session.time.time() + 3600,
+                'authored_epoch_s': session.time.time() - 60, 'custody_root': str(custody), 'ac_powermode': 2}
+        (custody / 'night_plan.json').write_text(json.dumps(plan))
+        row = session.watchdog_acceptance(phase='pre_install', plist_path=plist, plan=plan)
+        self.assertFalse(row['ok'], row)
+        self.assertEqual(session._watchdog_refusal('pre_install', row),
+            'watchdog_acceptance: pre_install: plan_identity: malformed')
+        self.assertNotIn('SECRET', json.dumps(row))
+        self.assertNotIn('ac_powermode', json.dumps(row))
+
     def test_constant_discovery_program_runs_against_real_module_without_host_access(self):
         plan = self.make_plan()
         home = self.temp / 'isolated-home'
@@ -321,6 +461,21 @@ class RemoteProbeTests(watchdog_fixtures.WatchdogTestCase):
 
 
 class PrivilegeTests(unittest.TestCase):
+    def test_stored_sudo_listing_streams_are_capped_with_individual_flags(self):
+        def run(argv):
+            return subprocess.CompletedProcess(argv, 0,
+                '\N{SNOWMAN}' * 8192 if '-l' in argv else 'Network Time: On\n', 'x' * 8193)
+        row = session.host_privilege_preflight(runner=run)
+        self.assertTrue(row['ok'], row)
+        for rule in row['rules'].values():
+            for stream in ('stdout', 'stderr'):
+                self.assertLessEqual(len(rule[stream].encode()), 8192)
+                self.assertTrue(rule[stream + '_truncated'])
+        row, _ = self.run_preflight()
+        for rule in row['rules'].values():
+            self.assertFalse(rule['stdout_truncated'])
+            self.assertFalse(rule['stderr_truncated'])
+
     def run_preflight(self, *, missing=None, network='Network Time: On\n', query_exit=0):
         calls = []
 

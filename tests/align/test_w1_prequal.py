@@ -58,6 +58,28 @@ class _Ctx(unittest.TestCase):
 
 
 class ArmCliTests(_Ctx):
+    def test_synthetic_watchdog_models_nested_session_plan_outside_scan(self):
+        import time
+        from scripts import bytes_h_session as h
+        now = time.time()
+        base, session, disk = wp.arm_fixture(self.ctx, 'nested-layout', now=now)
+        state = h.read(session / 'session.json')
+        self.assertEqual(Path(state['plan_path']), session / 'custody/night_plan.json')
+        host = wp.FakeHost(now=now)
+        out = wp.run_install(self.ctx, session, disk, wp.valid_packet(self.ctx, base, now), host=host, now=now)
+        self.assertEqual(out['rc'], 0, out['stderr'])
+        pre = out['arm']['watchdog_acceptance']['plan_identity']
+        self.assertEqual(pre['source'], 'installed_parser_on_plan_file')
+        self.assertFalse(pre['discovered_by_scan'])
+        self.assertTrue(pre['ok'])
+        dwell = h.read(sorted((session / 'staging').glob('v4-arm-*.dwell.json'))[-1])
+        post = dwell['quiet_dwell']['watchdog_post_install']['plan_identity']
+        self.assertEqual(post['source'], 'installed_load_plans')
+        self.assertTrue(post['found'])
+        missing = wp.FakeHost(now=now).watchdog_check(phase='post_install', plan=h.read(state['plan_path']))
+        self.assertFalse(missing['ok'])
+        self.assertIn('arm plan missing', missing['reason'])
+
     def test_named_watchdog_hold_check_is_registered_and_proves_rollback(self):
         self.assertIn('watchdog-hold-rollback', wp.CHECKS)
         row = self.probe('watchdog-hold-rollback')
