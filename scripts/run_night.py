@@ -20,6 +20,7 @@ import math
 import queue
 import resource
 import socket
+import tempfile
 from contextlib import ExitStack, contextmanager
 from contextvars import copy_context
 from dataclasses import asdict, replace
@@ -1493,6 +1494,8 @@ def _artifact_list(custody_root: Path, night_dir: Path) -> list[dict[str, Any]]:
         night_dir / "courier.attempts.jsonl",
         night_dir / "courier.heartbeat",
         night_dir / "courier.sent",
+        night_dir / "courier.delivery.json",
+        night_dir / "courier.filed",
         night_dir / "evidence_busy_cores.jsonl",
         night_dir / "evidence_processes.jsonl",
         night_dir / "evidence_envelopes.jsonl",
@@ -1539,6 +1542,10 @@ def _durable_record(custody_root: Path, night_dir: Path, plan: NightPlan) -> str
     keeps the hash it saw, so the omission must reach the prompt and the log.
     """
 
+    # A-02: terminal ALIGN records, including pre-chain refusals, must leave
+    # immediately. No repository-sized clone before the first push.
+    if str(plan.plan_id).startswith("align-"):
+        return _publish_terminal_result(custody_root, night_dir, plan.plan_id)
     omitted: list[str] = []
     try:
         origin = t0_rehearsal.observed_run(
@@ -1617,6 +1624,94 @@ def _durable_record(custody_root: Path, night_dir: Path, plan: NightPlan) -> str
     if omitted:
         return "durable record omitted unreadable artefacts: " + ", ".join(omitted)
     return None
+
+
+def _publish_terminal_result(custody_root, night_dir, plan_id):
+    """Push a structure-only snapshot with one shared 50 s budget.
+
+    A-02, measurement-system audit 2026-11-10 §3.1 / Q11 (cited rebind).
+    Fetch only the results ref, never main, model files or raw chain logs.
+    A delivery receipt is written only after git acknowledges the push.
+    """
+    if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", plan_id) is None:
+        return "results delivery failed: invalid plan id"
+    deadline = time.monotonic() + 50.0
+    branch = "refs/heads/night-results/" + plan_id
+
+    def run(args, **kwargs):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("terminal results delivery exceeded 50 seconds")
+        return t0_rehearsal.observed_run(args, capture_output=True, text=True,
+                                       timeout=remaining, **kwargs)
+
+    try:
+        result_path = night_dir / "result.json"
+        result_digest = _sha256_path(result_path)
+        origin = run(["git", "-C", str(REPO_ROOT), "remote", "get-url", "origin"], check=True).stdout.strip()
+        with tempfile.TemporaryDirectory(prefix="results-publish-", dir=custody_root) as tmp:
+            repository = Path(tmp) / "repo.git"
+            run(["git", "init", "--bare", "-q", str(repository)], check=True)
+            git = ["git", "--git-dir=" + str(repository), "-c", "user.name=JouleWise courier",
+                   "-c", "user.email=joulewise-courier@example.invalid"]
+            remote = run([*git, "ls-remote", "--exit-code", origin, branch])
+            parents = []
+            if remote.returncode == 0:
+                run([*git, "fetch", "--depth=1", origin, branch], check=True)
+                parent = run([*git, "rev-parse", "FETCH_HEAD"], check=True).stdout.strip()
+                parents = ["-p", parent]
+            elif remote.returncode != 2:
+                raise RuntimeError("results ref lookup failed")
+            prefix = "docs/process_traces/night-results/" + plan_id + "/"
+            # The default bare index starts empty: each commit is an exact
+            # snapshot, while its parent retains previous delivery evidence.
+            for artifact in _artifact_list(custody_root, night_dir):
+                relative = Path(artifact["path"])
+                if relative.name in {"chain.stdout.log", "chain.stderr.log"}:
+                    continue
+                if "error" in artifact:
+                    raise OSError("unreadable reporting artifact: " + str(relative))
+                source = custody_root / relative
+                name = (source.relative_to(night_dir).as_posix()
+                        if source.is_relative_to(night_dir / "evidence") else source.name)
+                blob = run([*git, "hash-object", "-w", str(source)], check=True).stdout.strip()
+                run([*git, "update-index", "--add", "--cacheinfo", "100644", blob, prefix + name], check=True)
+            tree = run([*git, "write-tree"], check=True).stdout.strip()
+            commit = run([*git, "commit-tree", tree, *parents],
+                         input="record terminal night " + plan_id + "\n", check=True).stdout.strip()
+            run([*git, "push", origin, commit + ":" + branch], check=True)
+        receipt = {"transport": "git-push", "plan_id": plan_id, "ref": branch,
+                   "commit": commit, "result_sha256": result_digest, "delivered_epoch_s": time.time()}
+        pending = night_dir / (".courier-delivery-" + uuid.uuid4().hex)
+        pending.write_bytes(_json_bytes(receipt))
+        os.replace(pending, night_dir / "courier.delivery.json")
+        _append_log(custody_root, "terminal results delivered ref=" + branch + " commit=" + commit)
+        return None
+    except Exception as error:
+        return "results delivery failed: " + type(error).__name__
+
+
+def _program_courier_delivery(custody_root, plan_id):
+    """The non-agent courier acknowledges transport, never a local file drop."""
+    custody_root = Path(custody_root)
+    night = custody_root / "night"
+    (night / "courier.heartbeat").write_text(f"{os.getpid()} {time.time()}\n")
+    delivered = False
+    try:
+        receipt = json.loads((night / "courier.delivery.json").read_text())
+        delivered = (receipt.get("transport") == "git-push" and receipt.get("plan_id") == plan_id
+                     and receipt.get("ref") == "refs/heads/night-results/" + plan_id
+                     and receipt.get("result_sha256") == _sha256_path(night / "result.json")
+                     and re.fullmatch(r"[0-9a-f]{40,64}", receipt.get("commit", "")) is not None)
+    except (OSError, ValueError, TypeError, AttributeError):
+        pass
+    if not delivered:
+        error = _publish_terminal_result(custody_root, night, plan_id)
+        if error:
+            (night / "courier.filed").write_text(error + "\n")
+            return 1
+    (night / "courier.sent").touch()
+    return 0
 
 
 class _FallbackPlan(night_gate.HazardNightPlan):

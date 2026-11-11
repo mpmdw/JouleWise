@@ -1,12 +1,16 @@
 """Synthetic witnesses for the 2026-11-10 measurement-system audit fixes."""
 import json
 import os
+import subprocess
 import tempfile
+import time
 import types
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from tests.test_b5_driver import Harness, FakeArm, load_driver
+from tests.git_fixture import init_git_fixture
 
 
 class OutcomeTests(unittest.TestCase):
@@ -69,6 +73,92 @@ class OutcomeTests(unittest.TestCase):
         self.assertEqual('COMPLETE', h.result()['chain_outcome'])
         self.assertFalse(h.result()['fault'])
         self.assertIsNone(h.result()['measurement_outcome'])
+
+
+class TerminalDeliveryTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory(prefix='w1-delivery-')
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.repo, self.remote = self.root / 'source', self.root / 'remote.git'
+        self.repo.mkdir()
+        init_git_fixture(self.repo, '-q')
+        self.git('init', '--bare', '-q', str(self.remote))
+        self.git('-C', str(self.repo), 'remote', 'add', 'origin', str(self.remote))
+        self.custody = self.root / 'custody'
+        self.night = self.custody / 'night'
+        self.night.mkdir(parents=True)
+        self.result = b'{"verdict":"REFUSED","chain_outcome":"REFUSED_PRE_CHAIN","fault":true}\n'
+        (self.night / 'result.json').write_bytes(self.result)
+        (self.night / 'refusal.json').write_text('{"reason":"synthetic_clock_refusal"}')
+        (self.night / 'chain.stdout.log').write_text('DO NOT EXPORT RAW LOGS')
+        self.rt = load_driver()
+        patcher = mock.patch.object(self.rt, 'REPO_ROOT', self.repo)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.plan_id = 'align-w1-synthetic'
+        self.ref = 'refs/heads/night-results/' + self.plan_id
+
+    def git(self, *args):
+        return subprocess.check_output(['git', *args], stderr=subprocess.PIPE)
+
+    def test_prechain_refusal_delivers_within_minute_and_only_then_acknowledges(self):
+        started = time.monotonic()
+        self.assertEqual(0, self.rt._program_courier_delivery(self.custody, self.plan_id))
+        self.assertLess(time.monotonic() - started, 60)
+        prefix = 'docs/process_traces/night-results/' + self.plan_id + '/'
+        raw = self.git('--git-dir=' + str(self.remote), 'show', self.ref + ':' + prefix + 'result.json')
+        self.assertEqual(self.result, raw)
+        names = self.git('--git-dir=' + str(self.remote), 'ls-tree', '-r', '--name-only', self.ref).decode()
+        self.assertIn('refusal.json', names)
+        self.assertNotIn('chain.stdout.log', names)
+        self.assertFalse((self.night / 'chain.started').exists())
+        self.assertTrue((self.night / 'courier.sent').exists())
+        receipt = json.loads((self.night / 'courier.delivery.json').read_text())
+        self.assertEqual('git-push', receipt['transport'])
+        self.assertEqual(self.ref, receipt['ref'])
+        self.assertEqual(self.git('--git-dir=' + str(self.remote), 'rev-parse', self.ref).decode().strip(), receipt['commit'])
+
+    def test_repeat_snapshot_fast_forwards_and_preserves_byte_identical_result(self):
+        self.assertIsNone(self.rt._publish_terminal_result(self.custody, self.night, self.plan_id))
+        before = self.git('--git-dir=' + str(self.remote), 'rev-parse', self.ref).decode().strip()
+        (self.night / 'courier.sent').touch()
+        self.assertIsNone(self.rt._publish_terminal_result(self.custody, self.night, self.plan_id))
+        parent = self.git('--git-dir=' + str(self.remote), 'rev-parse', self.ref + '^').decode().strip()
+        self.assertEqual(before, parent)
+        self.assertEqual(self.result, (self.night / 'result.json').read_bytes())
+
+    def test_failed_push_is_filed_and_never_sent(self):
+        real = self.rt.t0_rehearsal.observed_run
+        budgets = []
+        def fail_push(args, **kwargs):
+            budgets.append(kwargs['timeout'])
+            if 'push' in args:
+                raise subprocess.TimeoutExpired(args, kwargs['timeout'])
+            return real(args, **kwargs)
+        with mock.patch.object(self.rt.t0_rehearsal, 'observed_run', side_effect=fail_push):
+            self.assertEqual(1, self.rt._program_courier_delivery(self.custody, self.plan_id))
+        self.assertTrue((self.night / 'courier.filed').exists())
+        self.assertFalse((self.night / 'courier.sent').exists())
+        self.assertFalse((self.night / 'courier.delivery.json').exists())
+        self.assertTrue(all(0 < budget <= 50 for budget in budgets))
+        self.assertEqual(budgets, sorted(budgets, reverse=True))
+
+    def test_align_finish_reporting_routes_prechain_refusal_to_fast_publisher(self):
+        plan = types.SimpleNamespace(plan_id=self.plan_id)
+        with mock.patch.object(self.rt, '_publish_terminal_result', return_value=None) as publish:
+            self.rt._finish_reporting(self.custody, self.night, plan, self.rt.EXIT_REFUSED, None,
+                                      allow_courier=False)
+        self.assertGreaterEqual(publish.call_count, 1)
+        self.assertEqual(self.plan_id, publish.call_args.args[2])
+
+    def test_changed_result_cannot_reuse_old_delivery_receipt(self):
+        self.assertIsNone(self.rt._publish_terminal_result(self.custody, self.night, self.plan_id))
+        (self.night / 'result.json').write_text('{"verdict":"REFUSED","revision":2}')
+        with mock.patch.object(self.rt, '_publish_terminal_result', return_value='delivery failed') as publish:
+            self.assertEqual(1, self.rt._program_courier_delivery(self.custody, self.plan_id))
+        publish.assert_called_once()
+        self.assertFalse((self.night / 'courier.sent').exists())
 
 
 if __name__ == '__main__':
