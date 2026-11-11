@@ -138,3 +138,189 @@ Next: cold-review this local commit, then validate HTTPS/authentication and a
 synthetic notification on the Air. Supply the current plan timing. Stop the old
 scratch instance only after the current night's chain has exited. Install
 nothing on the measurement Mac.
+
+## Round 2
+
+Applied review findings AW-1 through AW-4. AW-5 remains out of scope.
+The review file was not edited. These notes supersede round 1's layout and
+first-run selection descriptions above.
+
+Code commit: `849d5cc00a1cb68ef3bacce1667f6cd454ccb703`
+(`fix(air-watch): address review findings AW-1 through AW-4`). Stayed on the
+assigned branch, `feat/2026-11-11-sm-air-watch`, as the seat instructions require.
+No push was made. Commit hooks were disabled for these local commits to avoid
+unbounded or external hook actions; the explicit checks below ran separately.
+
+### Intake and writer evidence
+
+Mission M0 found no active stop card or global gate. The worktree was clean at
+`1fedcbf9f`. Read the review, prior report, audit section 8, lane plan, speed
+toolbox, M0, orchestration, authority map and targeted D-050. This is an
+explicitly assigned AGENT tooling repair, with no measurement or speed claim.
+Coordination files and the kernel remain untouched under the user's override.
+No delegation or consult was used.
+
+Read writer code with `git show`, without checkout, on both requested refs:
+`origin/main` at `a6c0e6be0d1c83d47f6454fb650bae670a3013f5` and
+`origin/align/2026-11-08-v4-r11` at `b4a6c217f0285a20aff33a8407160dd77af2a8a6`.
+Also compared the driver and watchdog code on both refs. W1's
+`_chain_outcome` adds `chain_exit_nonzero:<rc>`; the watcher retains only its
+presence in the fault count, never the reason text.
+
+Both generations publish under
+`docs/process_traces/night-results/<plan_id>/`. Main's `_durable_record`
+builds that destination with Path division. W1's ALIGN
+`_publish_terminal_result` builds the same prefix by string concatenation.
+W1's non-ALIGN route retains the Path expression.
+
+The following is the exact candidate file inventory from `_artifact_list`,
+not a claim that every file exists on every window. Missing and unreadable
+files are omitted. Both generations flatten these basenames at the prefix:
+
+```text
+night.log
+receipt.json
+network_time_off.json
+start_conditions_manifest.json
+start_conditions.json
+clean_dwell.json
+clean_dwell.output.txt
+go_receipt.json
+go-census.json
+result.json
+launch.pending
+launch.resolved
+chain.started
+chain.exited
+chain.unkilled
+chain.deadline
+censuses.jsonl
+quiet_samples.jsonl
+chain.stdout.log
+chain.stderr.log
+courier.json
+courier.attempts.jsonl
+courier.heartbeat
+courier.sent
+evidence_busy_cores.jsonl
+evidence_processes.jsonl
+evidence_envelopes.jsonl
+evidence_cleanup.json
+evidence_outcome.json
+```
+
+Both also include the matching refusal files: `refusal.json`,
+`refusal-[0-9]*.json`, `calibration-refusal.json`,
+`calibration-refusal.json.*.json`, and `rerun.refusal*.json`.
+`*/arm_readiness.t0.inputs/network_time_off.json` contributes the flattened
+basename `network_time_off.json`. Files discovered recursively under
+`night/evidence/` retain their `evidence/...` paths.
+
+Both generations' `HAZARD_ARTIFACTS` tuple contributes exactly:
+
+```text
+hazard_result.json
+arm_decision.json
+network_time_off.action.json
+arm_collectors.json
+executed_inventory.json
+lineage.json
+monitor_supervision.jsonl
+meter_supervision.jsonl
+chain.exit-census.json
+g10.json
+g10.driver.json
+stage_yield.jsonl
+```
+
+W1 additionally inventories `deadman_host_restoration-*.json`,
+`courier.delivery.json`, and `courier.filed`. Its terminal publisher can add
+`delivery_omissions.json` when artifacts are unreadable. Main does not inventory
+these four additions. Both legacy publishers admit `chain.stdout.log` and
+`chain.stderr.log` only for an authenticated CAMPAIGN_TRANSACTION; W1's ALIGN
+terminal publisher always excludes them. The watcher never reads those logs.
+
+Neither generation inventories `night_plan.json`, R1 payload/slots files,
+`courier.lock`, or `launch_abandoned.json`. Both inventory `chain.started`.
+Only W1 inventories `courier.delivery.json`; its new delivery receipt is written
+after the push, so the first published snapshot may not contain it. This is
+writer-code evidence only. No real record or results ref was read to check it.
+
+### Changes and decisions
+
+- AW-1: select the published prefix before the three existing fallback layouts.
+  Even an incomplete published snapshot cannot borrow a fallback result. Its
+  allowlist is the supported structural subset of the inventory above. Plans,
+  payloads and unrelated files under that prefix are never shown. Published
+  timing comes only from CURRENT and CLI. Existing legacy plan support remains
+  confined to fallback layouts. The drift test reads `HEAD:scripts/run_night.py`
+  with Git and interprets its destination AST to build the synthetic tree. It
+  neither imports the writer nor retypes the destination.
+- AW-2: remove the epoch-selection argument, API field, end-time filter and
+  tests. `--include-plan` is repeatable and uses `plan_id` validation. The armed
+  plan is always selected. All other first-run refs are recorded unread.
+  A wait alone cannot fetch an unnamed baseline. Fake Git records every fetch,
+  tree listing and show, including failures. The first-run test asserts the
+  complete ordered call trace and the exact refs and SHAs touched.
+- AW-3: read and validate origin before the first poll. HTTPS, file URLs and
+  local paths pass. SSH, scp syntax, other schemes and malformed URLs exit 2
+  with `ORIGIN_PROTOCOL_NOT_ALLOWED`. No URL or subprocess diagnostic is printed.
+- AW-4: persist consecutive read-failure counts by ref and SHA. At
+  `failure_limit`, emit `REF_READ_FAILING` once more with the count. Existing
+  event identities suppress repetitions for that ref/SHA. Success, a changed
+  SHA and deletion reset the counter. Round-1 state loads with empty counters.
+
+Changed files: `scripts/air/night_results_watch.py`, `scripts/air/README.md`,
+`tests/test_night_results_watch.py`, and this report. No new module or tool was
+added, so the existing CANONICAL row and test-timing entry remain unchanged.
+The new tests use only synthetic temporary fixtures. Published-record tests
+inspect temporary files and captured CLI output for leaked arbitrary text.
+
+### Verification
+
+Tests ran serially. Total test time was under two minutes, including the
+failing-first and mutation runs. No full suite ran.
+
+- `python3.13 -B -m unittest tests.test_night_results_watch`: baseline,
+  37 tests, 3.048 s, PASS.
+- Same command after adding regression tests, before implementation:
+  49 tests, 4.508 s, expected FAIL (20 failures, 18 errors across subtests).
+  It exposed all four missing fixes and the removed API's test replacements.
+- Same command after implementation: 49 tests, 6.779 s, PASS.
+- Same command after expanding published projection coverage: 50 tests,
+  5.533 s, PASS.
+- `python3.13 -B -m unittest tests.test_night_results_watch.ResultsTests.test_published_layout_follows_head_writer_and_wins_over_fallbacks`:
+  one test, 1.115 s, expected FAIL before the incomplete-prefix priority fix.
+- Final `python3.13 -B -m unittest tests.test_night_results_watch`:
+  50 tests, 7.610 s, PASS.
+- `python3.13 -B -m unittest tests.test_fixture_orphan_census tests.test_gen_state`:
+  58 tests, 32.432 s, PASS, with two sandbox `ps` skips. Ran under a 180 s
+  subprocess timeout; no timeout was reached.
+- `python3.13 -m compileall -q joulewise tests scripts`: PASS.
+- `python3.13 -B -` with an in-memory mutation harness: 17/17 targeted mutants
+  killed, 2.598 s. Mutations covered prefix drift, prefix priority, allowlist
+  and plan isolation, first-run gating, explicit and armed selection,
+  identifier validation, origin preflight and protocol guard, early/late
+  escalation, counter persistence, and SHA/success/deletion resets. The last
+  mutant changed only the writer source supplied to the AST test, proving a
+  writer destination change fails that test without editing the writer.
+- `git diff --check`: PASS. No epoch-selection references remain in the tool,
+  README or tests. The review and prohibited coordination files are unchanged.
+
+### Limits, uncertainty and next step
+
+No network, SSH, MBP contact, model weights, real measurement data or real
+results/records refs were used. The long analysis job was not touched.
+Git transport integration used only a synthetic local bare repository.
+The publication inventory was derived from code, not live records.
+Python 3.11 was not run; the code uses standard-library 3.11-compatible APIs.
+No MLX changes or native Metal tests apply to this repair.
+
+Live HTTPS authentication, launchd and notification delivery remain untested.
+The two census smokes still need an unsandboxed lead check away from measurements.
+AW-5 remains open for its owning seat. No additional authority question arose.
+
+Next exact step: the lead reviews this local branch, then runs one Air
+`--once --include-plan <known-finished-rehearsal>` poll with a scratch state
+and compares the structural line with the already-known rehearsal outcome.
+Do not stop the old scratch watcher until the current chain has exited.
