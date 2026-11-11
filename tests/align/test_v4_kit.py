@@ -529,6 +529,8 @@ class FakeArmHost:
                    f'      "UpdateTime" = {int(time.time())}\n'
                    '    }\n').encode()
             return subprocess.CompletedProcess(argv, 0, raw, b'')
+        if argv == ('/usr/bin/sudo', '-n', '/usr/sbin/systemsetup', '-getusingnetworktime'):
+            return subprocess.CompletedProcess(argv, 0, 'Network Time: Off\n', '')
         if argv == ('pmset', '-g', 'batt'):
             return subprocess.CompletedProcess(argv, 0, 'synthetic: 100%; AC; not charging', '')
         if argv == ('launchctl', 'print', f'gui/{os.getuid()}/com.joulewise.night'):

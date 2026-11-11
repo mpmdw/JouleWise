@@ -1,16 +1,19 @@
 """Gate-prune P3 lane P3-DRV: the HAZARD_PACK driver's round-3 behaviour.
 
 Covered: the KM003C wall meter wired per ``~/night-archive/wallmeter-probe/WIRING.md``
-(a named supervisor, no restart after a clean "absent" exit, a SIGTERM stop
+(a named supervisor, a configurable clean-exit policy, a SIGTERM stop
 proven gone, its stream listed in the custody record, the dead-man reaping an
 orphaned meter, and DISCLOSE flags for its supervision failures); the R3-5
 hold, which stops the hazard monitor and the meter no sooner than 5 s after the
 chain exits; and CHAIN_STOPPED for the pre-calibration stops (exits 11 and 12),
 including a stop exit whose journal line is missing.
 
+The W1 reliability ruling additionally requires a first valid meter batch
+before the chain and retries absent readers during USB re-enumeration.
+
 Each end-to-end test drives the real driver through the shared harness of
 ``tests/test_b5_driver.py``; the meter program is a stand-in with the real
-script's stream header, trailer and signal handling.
+script's stream header, sample batches, trailer and signal handling.
 """
 
 from __future__ import annotations
@@ -47,15 +50,21 @@ for number in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
     signal.signal(number, on_signal)
 with open(out, "x") as handle:
     status = "absent" if mode == "absent" else "streaming"
-    handle.write(json.dumps({"k": "h", "schema": "joulewise.km003c_stream.v1", "status": status}) + "\n")
+    raw = lambda: time.clock_gettime_ns(time.CLOCK_MONOTONIC_RAW)
+    handle.write(json.dumps({"k": "h", "schema": "joulewise.km003c_stream.v1", "status": status,
+                             "start_raw_ns": raw(), "start_mono_ns": time.monotonic_ns()}) + "\n")
     handle.flush()
     if mode == "absent":
         handle.write(json.dumps({"k": "t", "stop_reason": "absent"}) + "\n")
         raise SystemExit(0)
     if mode == "crash":
+        handle.write(json.dumps({"k": "b", "n": 1, "p": "00" * 20, "rx": raw()}) + "\n")
+        handle.flush()
         time.sleep(0.3)
         raise SystemExit(3)
     while stop["reason"] is None:
+        handle.write(json.dumps({"k": "b", "n": 1, "p": "00" * 20, "rx": raw()}) + "\n")
+        handle.flush()
         time.sleep(0.05)
     handle.write(json.dumps({"k": "t", "stop_reason": stop["reason"]}) + "\n")
 raise SystemExit(0)
@@ -233,6 +242,8 @@ class MeterWindowTests(unittest.TestCase):
         harness = Harness(self, g10=False)
         harness.replace_chain("#!/bin/zsh -f\n" + chain)
         harness.meter_argv = fake_meter_argv(mode)
+        # Native process-group census is a separate lead gate in this sandbox.
+        patch(self, harness.driver, "_group_census", lambda *_a, **_k: (True, ["synthetic absence"]))
         return harness
 
     def test_the_meter_streams_through_the_window_and_is_stopped_by_sigterm(self):
@@ -257,14 +268,15 @@ class MeterWindowTests(unittest.TestCase):
                                           journal(harness.night / b5_driver.MONITOR_JOURNAL)
                                           if line["event"] == "start"))
 
-    def test_an_absent_meter_is_started_once_and_never_restarted(self):
+    def test_an_absent_meter_refuses_before_chain_after_readiness_budget(self):
         harness = self.harness("absent", "/bin/sleep 3\nexit 0\n")
-        self.assertEqual(harness.driver.EXIT_GO, harness.run())
+        patch(self, b5_driver, "MONITOR_READY_TIMEOUT_S", .5)
+        self.assertEqual(harness.driver.EXIT_REFUSED, harness.run())
         meter = harness.hazard()["meter"]
-        self.assertEqual((1, 0), (meter["starts"], meter["restarts"]))
-        self.assertEqual((0, True), (meter["final_exit"]["returncode"], meter["final_exit"]["final"]))
-        self.assertEqual(["absent"], [row["status"] for row in meter["streams"]])
-        self.assertEqual(["hazards/meter/stream-001.jsonl"], [row["path"] for row in meter["streams"]])
+        self.assertGreaterEqual(meter["starts"], 1)
+        self.assertTrue(all(row["status"] == "absent" for row in meter["streams"]))
+        self.assertFalse((harness.night / "chain.started").exists())
+        self.assertIn("meter_not_sampling", harness.result()["fault_reasons"])
         self.assertEqual([], flags(harness, "meter.supervision_fault"))
 
     def test_a_crashed_meter_is_restarted_into_a_new_stream(self):
@@ -276,17 +288,19 @@ class MeterWindowTests(unittest.TestCase):
                          [row["path"] for row in meter["streams"]])
         self.assertTrue(all(item["returncode"] == 3 for item in meter["exits"]))
 
-    def test_a_meter_that_cannot_start_is_a_disclose_flag_and_the_window_runs(self):
+    def test_a_meter_that_cannot_start_is_disclosed_and_refuses_before_chain(self):
         harness = self.harness()
         harness.meter_argv = lambda request: [str(harness.root / "no-such-meter")]
-        self.assertEqual(harness.driver.EXIT_GO, harness.run())
-        self.assertEqual("GO", harness.result()["verdict"])
+        patch(self, b5_driver, "MONITOR_READY_TIMEOUT_S", .5)
+        self.assertEqual(harness.driver.EXIT_REFUSED, harness.run())
+        self.assertEqual("REFUSED", harness.result()["verdict"])
         found = flags(harness, "meter.supervision_fault")
         self.assertEqual("start_failed", found[0]["observed"]["event"])
         self.assertEqual(("DIAGNOSTIC", "PHYSICS"), (found[0]["family"], found[0]["klass"]))
         self.assertEqual(1, len([item for item in found if item["observed"]["event"] == "start_failed"]))
         report = harness.driver.run_courier.call_args.kwargs["report"]["facts"]
-        self.assertFalse(report["fault"])
+        self.assertTrue(report["fault"])
+        self.assertIn("meter_not_sampling", report["fault_reasons"])
         self.assertIn("meter.supervision_fault", harness.hazard()["flags_emitted"])
 
     def test_a_crash_looping_meter_is_flagged_once_not_a_fault(self):

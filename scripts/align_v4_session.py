@@ -114,9 +114,9 @@ FREQUENCY_CAUSE = 'clock.frequency_word_nonzero'
 def frequency_word_preflight(state, *, reader=None, runner=None):
     """Project a fresh kernel word through this arm's unchanged clock budget.
 
-    Caller holds HostLock. A failed projection may change host clock state
-    only after the launchd census proves no night installed, network time is
-    OFF, and its authenticated query reads OFF. All failures retain evidence
+    Caller holds HostLock. The launchd census must prove no night installed
+    before changing host state. Every passing arm authenticates network time
+    OFF; a failing projection also requires OFF before zeroing the word. All failures retain evidence
     and refuse before the shared installer. This is preparation, not a
     replacement for the hazard's measured-rate/dwell gates or OFF receipt.
     """
@@ -153,20 +153,37 @@ def frequency_word_preflight(state, *, reader=None, runner=None):
         t0 = night_plan.get('t0_epoch_s')
         if not pilot.h.finite(t0) or t0 <= time.time():
             raise ValueError('plan t0 has passed or is unavailable; prepare a fresh session')
-        limits = night_plan['thresholds']['clock']
-        if read('before')['passes']:
+        try:
+            hazard = night_plan['hazard_window']
+            limits = dict(hazard['thresholds']['clock'], t_stream_max_s=hazard['T_stream_max_s'])
+        except (KeyError, TypeError) as exc:
+            record['cause'] = 'clock.frequency_plan_invalid'
+            raise ValueError(f'plan clock budget unavailable: {exc}') from exc
+        passes = read('before')['passes']
+        _require_night_job_absent(runner)
+        query_argv = ('/usr/bin/sudo', '-n', '/usr/sbin/systemsetup', '-getusingnetworktime')
+        query = command(query_argv) if passes else None
+        if (query is None or (query.get('exit_code') == 0
+                              and query.get('stdout', '').strip().casefold() == 'network time: on')):
+            off = command(network_time_off.OFF_ARGV)
+            if off.get('exit_code') != 0 or not network_time_off.off_stdout_admitted(off.get('stdout')):
+                raise ValueError('network time OFF setter unavailable or unverified')
+            query = command(query_argv)
+        if query.get('exit_code') != 0 or query.get('stdout', '').strip().casefold() != 'network time: off':
+            raise ValueError('network time OFF read-back failed')
+        record['network_time'] = {'observed': 'off', 'verified': True}
+        if passes:
             # A passing nonzero word also needs no correction: this preflight
             # uses the existing budget, never an extra word==0 threshold.
             read('after')
             record['action'] = 'no_op'
         else:
-            _require_night_job_absent(runner)
-            off = command(network_time_off.OFF_ARGV)
-            if off.get('exit_code') != 0 or not network_time_off.off_stdout_admitted(off.get('stdout')):
-                raise ValueError('network time OFF setter unavailable or unverified')
-            query = command(('/usr/bin/sudo', '-n', '/usr/sbin/systemsetup', '-getusingnetworktime'))
-            if query.get('exit_code') != 0 or query.get('stdout', '').strip().casefold() != 'network time: off':
-                raise ValueError('network time OFF read-back failed')
+            helper = Path(ZERO_FREQUENCY_ARGV[-1])
+            try:
+                record['zero_helper'] = {'path': str(helper), 'sha256': _sha256(helper.read_bytes())}
+            except OSError as exc:
+                record['zero_helper'] = {'path': str(helper), 'sha256': None,
+                                         'error': f'{type(exc).__name__}: {exc}'}
             zero = command(ZERO_FREQUENCY_ARGV)
             # Always retain the new word, including after helper denial/error.
             gate = read('after')
@@ -557,7 +574,7 @@ def _commit_exists(root, commit):
         return False
 
 
-def _probe_meter_live(root, *, runner=subprocess.run, seconds=3):
+def _probe_meter_live(root, *, runner=None, seconds=3):
     """Verify the KM003C reader live at arm time (never lead-entered): run the monitor briefly.
 
     Live means: a stream with status streaming, samples, a clock fit, a closing line and a
@@ -565,9 +582,10 @@ def _probe_meter_live(root, *, runner=subprocess.run, seconds=3):
     """
     import tempfile
     from joulewise.external import km003c_parse as kp
+    from joulewise import t0_rehearsal
     with tempfile.TemporaryDirectory(prefix='v4-meter-probe-') as tmp:
         out = Path(tmp) / 'probe.jsonl'
-        done = runner([sys.executable, '-B', str(Path(root) / 'scripts/km003c_monitor.py'), '--out', str(out),
+        done = (runner or t0_rehearsal.observed_run)([sys.executable, '-B', str(Path(root) / 'scripts/km003c_monitor.py'), '--out', str(out),
                        '--duration', str(seconds)], cwd=root, capture_output=True, timeout=seconds+60, check=False)
         if getattr(done, 'returncode', 1) != 0 or not out.is_file():
             return {'live': False, 'reason': f'monitor probe exit {getattr(done, "returncode", None)}'}

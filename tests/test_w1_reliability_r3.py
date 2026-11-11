@@ -61,7 +61,7 @@ class FrequencyPreflightTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
         self.path = self.root / 'night_plan.json'
-        self.path.write_text(json.dumps({'thresholds': {'clock': LIMITS}, 't0_epoch_s': time.time() + 3600}))
+        self.path.write_text(json.dumps({'hazard_window': {'thresholds': {'clock': LIMITS}, 'T_stream_max_s': LIMITS['t_stream_max_s']}, 't0_epoch_s': time.time() + 3600}))
         self.state = {'plan_path': str(self.path), 'plan_sha256': session.pilot.h.locator(self.path)['sha256']}
         env = mock.patch.dict(os.environ, {powermode.HOST_STATE_ENV: str(self.root / 'host')})
         env.start()
@@ -93,18 +93,20 @@ class FrequencyPreflightTests(unittest.TestCase):
         self.assertIn('password is required', record['commands'][-1]['stderr'])
         self.assertIn('unavailable', record['reason'])
 
-    def test_zero_word_is_a_no_op_without_privilege_or_host_commands(self):
+    def test_zero_word_checks_network_time_without_zeroing(self):
         host = Host(0)
         record = self.check(host)
         self.assertTrue(record['ok'])
         self.assertEqual(record['action'], 'no_op')
-        self.assertEqual(host.calls, [])
+        self.assertEqual(host.calls[-1], QUERY)
+        self.assertNotIn(session.ZERO_FREQUENCY_ARGV, host.calls)
         self.assertEqual(record['before']['raw_word'], record['after']['raw_word'])
 
     def test_a_passing_nonzero_word_does_not_introduce_a_new_zero_threshold(self):
         host = Host(1)
         self.assertTrue(self.check(host)['ok'])
-        self.assertEqual(host.calls, [])
+        self.assertEqual(host.calls[-1], QUERY)
+        self.assertNotIn(session.ZERO_FREQUENCY_ARGV, host.calls)
 
     def test_helper_success_requires_actual_zero_readback(self):
         record = self.check(Host(zeroes=False))

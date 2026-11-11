@@ -45,6 +45,11 @@ class Host:
                 self.ntp = 'on'
         elif argv == self.h.driver.NETWORK_TIME_QUERY_ARGV:
             out = 'Network Time: ' + ('Off' if self.bad_ntp_read else self.ntp.title()) + '\n'
+        elif argv[:2] == ('launchctl', 'print'):
+            code = 113
+            out = ''
+            from joulewise.night_gate import ProbeResult
+            return ProbeResult(argv, code, out, f'Could not find service "com.joulewise.night" in domain for user gui: {os.getuid()}', time.monotonic_ns())
         else:
             return self.h.census.run(argv)
         from joulewise.night_gate import ProbeResult
@@ -63,7 +68,14 @@ class DriverCase(unittest.TestCase):
         round1.OutcomeTests.chain_exit(self, h, 0)
         return h, host
 
+    def owed(self, h):
+        h.night.mkdir(parents=True, exist_ok=True)
+        (h.night / 'network_time_off.action.json').write_text(json.dumps({
+            'argv': list(hazard.NETWORK_TIME_OFF_ARGV), 'returncode': 0, 'timed_out': False,
+            'stdout': 'setUsingNetworkTime: Off\n'}))
+
     def marker(self, h, *, w1=False):
+        self.owed(h)
         path = Path(powermode.host_marker_path())
         powermode.write_host_marker(path, tag=powermode.W1_MARKER_TAG if w1 else powermode.R1_MARKER_TEXT,
                                     owner={'custody_root': h.custody, 'plan_path': h.plan_path})
@@ -117,7 +129,8 @@ class MeterLivenessTests(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.root, self.now = Path(tmp.name), 1000.0
-        self.live = hazard.MeterLiveness(self.root, clock=lambda: self.now)
+        self.live = hazard.MeterLiveness(self.root, clock=lambda: self.now,
+                                         raw_clock=lambda: int(self.now * 1e9) - 989_000_000_000)
         self.path = self.root / 'stream-001.jsonl'
 
     def write(self, rows, *, path=None):
@@ -174,7 +187,8 @@ class MeterLivenessTests(unittest.TestCase):
         for kind in ('unreadable', 'absent', 'truncated'):
             with self.subTest(kind=kind):
                 self.now = 1000.0
-                live = hazard.MeterLiveness(self.root, clock=lambda: self.now)
+                live = hazard.MeterLiveness(self.root, clock=lambda: self.now,
+                                         raw_clock=lambda: int(self.now * 1e9) - 989_000_000_000)
                 self.path.write_text('')
                 self.write([{'k': 'h', 'status': 'absent'}] if kind == 'absent'
                            else [self.header(), self.batch()])
@@ -299,7 +313,7 @@ class TerminalRestoreTests(DriverCase):
                     self.assertEqual(h.driver.dead_man(h.plan_path), 0)
                 self.assertEqual((host.mode, host.ntp), (0, 'on'))
                 self.assertFalse(marker.exists())
-                self.assertTrue(h.result()['dead_man_host_restoration']['ok'])
+                self.assertTrue(json.loads(next(h.night.glob('deadman_host_restoration-*.json')).read_bytes())['ok'])
                 self.assertTrue(h.driver.run_courier.called)
 
     def test_deadman_refuses_live_chain_and_records_why_without_claiming_its_result_slot(self):
@@ -320,6 +334,7 @@ class TerminalRestoreTests(DriverCase):
     def test_sigkill_leaves_obligation_and_deadman_takes_the_released_real_flock(self):
         h, host = self.make()
         marker = Path(powermode.host_marker_path())
+        self.owed(h)
         code = '''
 import sys, time
 from joulewise.align.apple import powermode
@@ -342,7 +357,7 @@ time.sleep(30)
             with mock.patch.object(h.driver, '_completion_epoch_s', return_value=0), \
                     mock.patch.object(hazard, 'reap_orphan_monitor', return_value=None):
                 self.assertEqual(h.driver.dead_man(h.plan_path), 0)
-            self.assertTrue(h.result()['dead_man_host_restoration']['ok'])
+            self.assertTrue(json.loads(next(h.night.glob('deadman_host_restoration-*.json')).read_bytes())['ok'])
             self.assertFalse(marker.exists())
             self.assertEqual((host.mode, host.ntp), (0, 'on'))
         finally:

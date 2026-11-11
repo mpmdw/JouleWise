@@ -426,6 +426,28 @@ class PacketTests(Base):
             with self.subTest(raw=raw), self.assertRaises(ValueError):
                 builder.decode(raw)
 
+    def test_deadman_delivery_receipt_releases_a_failed_run_path_courier(self):
+        for mutation in ('none', 'digest', 'plan', 'ref', 'commit', 'missing'):
+            with self.subTest(mutation=mutation):
+                s = self.scenario()
+                s.sources['courier']['sent'] = False
+                raw = (json.dumps(s.sources['result'], sort_keys=True) + '\n').encode()
+                receipt = {'transport': 'git-push', 'plan_id': s.sources['plan']['plan_id'],
+                           'ref': 'refs/heads/night-results/' + s.sources['plan']['plan_id'],
+                           'commit': 'a' * 40, 'result_sha256': builder.digest(raw)}
+                if mutation == 'digest':
+                    receipt['result_sha256'] = '0' * 64
+                elif mutation == 'plan':
+                    receipt['plan_id'] = 'other-plan'
+                elif mutation == 'ref':
+                    receipt['ref'] = 'refs/heads/main'
+                elif mutation == 'commit':
+                    receipt['commit'] = 'bad'
+                if mutation != 'missing':
+                    s.sources['courier_delivery'] = receipt
+                status = s.finish().build()['checks']['terminal_completion']['status']
+                self.assertEqual(status, 'pass' if mutation == 'none' else 'fail')
+
     def test_missing_source_and_symlink_refuse(self):
         s = self.scenario()
         s.omit_sources.add('courier')
