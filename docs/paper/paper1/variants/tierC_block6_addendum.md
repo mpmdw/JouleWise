@@ -5,9 +5,11 @@ Replaces the named parts of ../paper1.md. The replication data stay blinded; not
 
 ## Abstract (replaces the replication clause)
 
-... and an independent recomputation of every headline number from the raw records. A replication in
+... and an independent recomputation of the core arithmetic from raw power records with recorded
+collection-time judgments as inputs. A replication in
 {{FILL: P1-B6-COUNT-STRUCT | counting replication sessions per pack, from released structure only}} further sessions on later days was
 collected under its own registration and remains blinded; its results will follow in an addendum.
+<!-- FACT H25: R2P P3; RL-5; LEAN-COVERAGE-AUDIT.md §§2-4. -->
 
 ## §1.3, contribution 2 (replaces)
 

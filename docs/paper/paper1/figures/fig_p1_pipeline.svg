@@ -14,7 +14,7 @@ text{font-family:Helvetica,Arial,sans-serif;fill:#1a1a1a}
 <rect width="900" height="400" fill="#ffffff"/>
 <text x="20" y="26" class="t" text-anchor="start">The research pipeline: who may touch what</text>
 <rect x="20" y="50" width="280" height="300" class="blue" rx="6"/>
-<text x="30" y="70" class="s" text-anchor="start">CLOUD (agents)</text>
+<text x="30" y="70" class="s" text-anchor="start">DEVELOPMENT (cloud + local)</text>
 <rect x="35" y="84" width="250" height="38" class="box" rx="4"/>
 <text x="45" y="107" class="xs" text-anchor="start">registrations, judged and refuted</text>
 <rect x="35" y="134" width="250" height="38" class="box" rx="4"/>
@@ -26,29 +26,29 @@ text{font-family:Helvetica,Arial,sans-serif;fill:#1a1a1a}
 <rect x="35" y="284" width="250" height="38" class="box" rx="4"/>
 <text x="45" y="307" class="xs" text-anchor="start">paper text with placeholders</text>
 <rect x="330" y="50" width="260" height="300" class="orange" rx="6"/>
-<text x="340" y="70" class="s" text-anchor="start">MEASUREMENT LAPTOP (no agents)</text>
+<text x="340" y="70" class="s" text-anchor="start">MEASUREMENT LAPTOP</text>
 <rect x="345" y="84" width="230" height="38" class="box" rx="4"/>
-<text x="355" y="107" class="xs" text-anchor="start">agent census + hazard arm</text>
+<text x="355" y="107" class="xs" text-anchor="start">headless lead between sessions</text>
 <rect x="345" y="134" width="230" height="38" class="box" rx="4"/>
-<text x="355" y="157" class="xs" text-anchor="start">session (about 6 h)</text>
+<text x="355" y="157" class="xs" text-anchor="start">agent census + hazard arm</text>
 <rect x="345" y="184" width="230" height="38" class="box" rx="4"/>
-<text x="355" y="207" class="xs" text-anchor="start">harvest: flags, exclusions</text>
+<text x="355" y="207" class="xs" text-anchor="start">collection: no agent alive</text>
 <rect x="345" y="234" width="230" height="38" class="box" rx="4"/>
-<text x="355" y="257" class="xs" text-anchor="start">structure only leaves</text>
+<text x="355" y="257" class="xs" text-anchor="start">harvest: flags, exclusions</text>
 <rect x="345" y="284" width="230" height="38" class="box" rx="4"/>
 <text x="355" y="307" class="xs" text-anchor="start">hash-verified packaging</text>
 <rect x="620" y="50" width="260" height="300" class="green" rx="6"/>
-<text x="630" y="70" class="s" text-anchor="start">ANALYSIS HOST (restricted)</text>
+<text x="630" y="70" class="s" text-anchor="start">ANALYSIS HOST (custody rules)</text>
 <rect x="635" y="84" width="230" height="38" class="box" rx="4"/>
-<text x="645" y="107" class="xs" text-anchor="start">blind dry run: structure only</text>
+<text x="645" y="107" class="xs" text-anchor="start">agents: blind dry run, outputs sealed</text>
 <rect x="635" y="134" width="230" height="38" class="box" rx="4"/>
-<text x="645" y="157" class="xs" text-anchor="start">release event (digests tied)</text>
+<text x="645" y="157" class="xs" text-anchor="start">release event: verify dry-run bytes</text>
 <rect x="635" y="184" width="230" height="38" class="box" rx="4"/>
-<text x="645" y="207" class="xs" text-anchor="start">registered analysis</text>
+<text x="645" y="207" class="xs" text-anchor="start">independent recompute + compare</text>
 <rect x="635" y="234" width="230" height="38" class="box" rx="4"/>
-<text x="645" y="257" class="xs" text-anchor="start">independent recompute + compare</text>
+<text x="645" y="257" class="xs" text-anchor="start">separate checks of uncovered items</text>
 <rect x="635" y="284" width="230" height="38" class="box" rx="4"/>
-<text x="645" y="307" class="xs" text-anchor="start">fill placeholders, print</text>
+<text x="645" y="307" class="xs" text-anchor="start">fill after print gate</text>
 <path d="M285 103 L345 103" class="arrow"/>
 <text x="315" y="96" class="xs" text-anchor="middle">sealed</text>
 <path d="M575 303 L635 103" class="arrow"/>
