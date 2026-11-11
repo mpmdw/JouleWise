@@ -3270,6 +3270,42 @@ registration. Both should be things the receipt can show.
 
 ---
 
+# Follow-up to RL-62: which sub-check fired on R1 (2026-11-11 05:11 PST)
+
+## RL-63. The deviation row says "not checked", not "mismatch"
+
+**The read**, by the lead, four fields only: `model.identity_mismatch` fired on check `model_artifact`, unit
+null, reason "model source is not configured"; `pack.identity_mismatch` on check `pack_committed`.
+
+It is not the unpinned case, and it does not change RL-62's conclusion: the code still cannot reach
+`members_excluded`. It changes what the row must say. The flag's name says a difference was found. What
+happened is that the arm collector, built for Block 5's pins, has no model source configured for a v4 pack and
+so **made no model-artifact check at all**. A reader who sees "identity mismatch" in a window's flags is owed
+that sentence.
+
+The row for the three codes reads, in substance:
+
+> "At a v4 arm the shared collector raises three identity codes by construction. `code.executed_differs_from_sealed`:
+> it compares the tree with Block 5's sealed inventory. `pack.identity_mismatch` (check `pack_committed`): the
+> session's pack is a generated, untracked view. `model.identity_mismatch` (check `model_artifact`, "model
+> source is not configured"): the collector has no model source for a v4 pack and performs no model-artifact
+> check; the code records that absence, not a detected difference. None of the three reaches a member's
+> exclusion. For v4, code and pack identity rest on the kit-regeneration check and the STRICT receipt, checked
+> at arm; model identity rests on the registered inventory, the weight-digest check at prepare (RL-62) and the
+> runtime's tokenizer and template refusals."
+
+One consequence for RL-62. Since the arm's own model check does nothing in v4, the weight-digest check at
+prepare is the only comparison of the weights with the registration. RL-62 already requires it for every
+window, by code or by hand. That stands; I do not move its mechanisation out from under the cut-off, because
+the by-hand form is the same comparison.
+
+**The one-time hash now:** go ahead as you describe. It reads model shards only. It may run beside BYTES
+stage 1's desk work, which is analysis and not measurement. It does not run inside any armed span or dwell.
+
+**Blind status.** Blind: no v4 outcome exists.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
