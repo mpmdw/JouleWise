@@ -2612,6 +2612,72 @@ stops, is a different kind of change and waits.
 
 ---
 
+# Follow-ups to RL-53 from the state-machine lane (2026-11-11 03:38 PST)
+
+**Read.** Section 8 of the lane's plan at `34fddfd1c`.
+
+## RL-54. The post-install watchdog check stays, inside the dwell; the finality tests are approved
+
+### W-1 timing: keep the post-install check, immediately after the installer returns
+
+RL-53 said the check runs "before the quiet and display dwell starts, never during it". I wrote that without
+knowing that on this line the dwell stamp is taken before the installer runs. The condition is corrected:
+
+- The **pre-install** check runs before the meter probe and before the dwell stamp.
+- The **post-install** check runs immediately after the installer returns, as part of the install. It has a
+  hard time limit, and a timeout is a refusal with the install undone. Its start and end are stamped on the
+  dwell clock and recorded beside the installer's own stamps.
+- One function, one call site, read-only. Inside a span it makes no network call.
+
+Why this is acceptable inside the dwell. The installer already runs there, with its own `launchctl` calls. And
+the installed watchdog ticks every 300 s through the dwell and through the whole window; this is one more tick
+of the same program, about a second long, minutes before t0. It adds nothing of a new kind to what the dwell
+already contains.
+
+Why it is worth keeping. The pre-install check catches a plan the watchdog cannot parse. Only the post-install
+check shows that the watchdog sees the installed job and fences it. Without a fence, a supervisory agent can
+start during the window, and that costs data.
+
+The batch's deviation row says the post-install check runs inside the dwell and why.
+
+### W-5: noted
+
+`scripts/offload_window.py` is unbound. It is the orchestrator's, under RL-53's one condition.
+
+### W-7, the late exclusion: noted, pending execution
+
+By the lane lead's reading, replay recovers: counts are recomputed from the record chain on every packet
+build, and the one pool refusal looks only at the previous window's members. Two things were not traced:
+whether any analysis-side reader takes pool membership from stored lists and not from replay, and whether an
+anchor member can appear in the pool list. The tests seat covers the first by execution. The second is asked
+of the lane lead as a reading task.
+
+### W-7, the re-issue of record k+1: the tests-only seat is approved
+
+A desk that finishes after record k+1 is committed is not a rare case. It is what happens whenever the desk
+for window k outlasts window k+1. So this path must work before the series runs.
+
+- `w1-finality-tests` may run on the W1 line. It adds tests and touches no bound file.
+- It exercises three orders: the desk for k finishes before record k+1 is committed; it finishes after, and
+  record k+1 is re-issued while still the chain tail; and record k+1 is held back until the desk for k is
+  final.
+- **If a re-issued tail record is refused**, the first remedy is the third order as procedure: record k+1 is
+  committed only once window k's final sources exist. Window k+2 cannot arm before k is final in any case, so
+  that costs nothing, and it needs no code. The registration does not wait on a code change unless that order
+  fails too. If it does, it comes to me at once.
+- **If a re-issue works**, the runbook states it with one condition: the re-issued record differs from the
+  original only in its `previous_final` block, and whoever commits it says so in the commit message after
+  comparing the two.
+- The result comes to me before the registration is signed. The runbook is corrected from the result.
+
+**Reason.** A condition I set contradicted the code's order of events; the fix is to say which check goes where
+and why the second one is harmless where it has to run. On finality, reading says the series recovers and
+execution has not yet said so, and this is the part of the series that cannot be repaired once it is signed.
+
+**Blind status.** Blind: no v4 outcome exists.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
