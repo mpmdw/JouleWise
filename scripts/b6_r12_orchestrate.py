@@ -35,7 +35,8 @@ def seed_calibration(root, clock, sources, source):
         "R12-seed", identities, custody_root=parent / "custody", runs_parent=parent / "runs",
         claim_backup=parent / "backup-claim", bound_backup=parent / "backup-bound", run=sources.subprocess_run)
     tree = json.loads((source / "configs/campaigns/d117_floor_qwen3-1p7b_v5/plan_tree.json").read_text())
-    first = next(row for row in tree["stage_graph"] if row["kind"] == "campaign_collection")
+    first = next(row for row in tree["stage_graph"] if row["kind"] == "campaign_collection"
+                 and "bound" not in row["stage_id"])
     head = sources.subprocess_run(["git", "-C", str(source), "rev-parse", "HEAD"], capture_output=True,
                                    text=True, check=True).stdout.strip()
     seed = smoke.prepare("d117_floor_qwen3-1p7b_v5", head, source, root / "prerequisite",
@@ -61,7 +62,25 @@ def seed_calibration(root, clock, sources, source):
         "smoke": seed.to_json(), "copied_input_paths": list(copied)}, indent=2) + "\n")
 
 
-def loop_fixture(root, clock, pack="alpha"):
+def session_policy(pack, round_number, base):
+    """Predeclared external source schedule, independent of all verdicts."""
+    value = dict(base)
+    value.update(scenario=f"r{round_number}-{pack}", denied_off=False,
+                 gpu_busy_primary_ordinals=[], gpu_busy_after_primary=10**9,
+                 native_timestamp_offsets_s={})
+    full = (pack, round_number) in {("alpha", 3), ("beta", 1), ("gamma", 1)}
+    value.update(volume="full" if full else "reduced", primary_stream_duration_s=335 if full else 65,
+                 token_first_s=1.0 if full else .5, token_next_s=.05 if full else .001)
+    if (pack, round_number) == ("alpha", 1):
+        value["gpu_busy_after_primary"] = 18
+    if (pack, round_number) == ("alpha", 2):
+        value["gpu_busy_primary_ordinals"] = [1]
+    if (pack, round_number) == ("beta", 2):
+        value["native_timestamp_offsets_s"] = {"27": 5.0}
+    return value
+
+
+def loop_fixture(root, clock, pack="alpha", limit="1"):
     from runtime import install_sources, source_root
     from joulewise.b6.loop import Loop
     from joulewise.b6 import precheck
@@ -77,14 +96,17 @@ def loop_fixture(root, clock, pack="alpha"):
     sources = install_sources(root, clock)
     def run(argv, **kwargs):
         return sources.subprocess_run(argv, **{"capture_output": True, "text": True, **kwargs})
+    base_policy = json.loads((root / "source-policy.json").read_text())
+    declarations = [session_policy(p, r, base_policy) for r in (1, 2, 3) for p in ("alpha", "beta", "gamma")]
+    (root / "fixture-plan.json").write_text(json.dumps(declarations, indent=2) + "\n")
     seed_calibration(root, clock, sources, source)
     loop_root = root / "loop"
     config = json.loads((source / "configs/b6/loop.json").read_text())
-    config.update(loop_root=str(loop_root), base_order=[pack], wake_argv=[])
+    config.update(loop_root=str(loop_root), base_order=[pack] if pack != "all" else ["alpha", "beta", "gamma"], wake_argv=[])
     rejected = []
     regs = {reg.pack_id: reg for reg in open_packs(source, run=run,
                                                 rejected=lambda path, reasons: rejected.append([path, reasons]))
-            if reg.pack_id == pack}
+            if pack == "all" or reg.pack_id == pack}
     if not regs:
         raise ValueError("no open synthetic registration: " + repr(rejected))
     seams = precheck.Seams(frequency_reader=sources.frequency_reader,
@@ -99,13 +121,13 @@ def loop_fixture(root, clock, pack="alpha"):
     loop = Loop(source, loop_root, config=config, regs=regs, lanes=lanes,
                 clock=clock.time, run=run)
     scheduled = set()
-    for tick in range(80):
+    for tick in range(300):
         loop.tick()
         state = loop.read_state()
         print("loop", tick, state["state"], flush=True)
         if state["state"] in {"HOLD_LOOP", "DONE"}:
             return 0 if state["state"] == "DONE" else 2
-        if state.get("attempts"):
+        if len(state.get("attempts", [])) >= int(limit):
             return 0
         session = state.get("session") or {}
         prefix = "smoke_" if state["state"] == "SMOKE_RUN" else ""
@@ -115,6 +137,22 @@ def loop_fixture(root, clock, pack="alpha"):
             plan_path = Path(prepared["plan_path"])
             plan = json.loads(plan_path.read_text())
             scheduled.add(str(plan_path))
+            policy = dict(base_policy)
+            if prefix:
+                policy.update(scenario="smoke-" + session["id"], denied_off=False,
+                              primary_stream_duration_s=65, volume="reduced")
+            else:
+                policy = session_policy(session["packs"][0], session["round"], base_policy) if pack == "all" else policy
+                policy["scenario"] = session["id"]
+            (root / "source-policy.json").write_text(json.dumps(policy, indent=2) + "\n")
+            manifests = root / "fixture-manifests"
+            manifests.mkdir(exist_ok=True)
+            common = json.loads((root / "manifest.json").read_text())
+            (manifests / (session["id"] + ("-smoke" if prefix else "") + ".json")).write_text(
+                json.dumps({**common, "source_policy": policy, "plan_path": str(plan_path),
+                            "prediction": "option (c) exit 0 with comparator agreement; registered collection flags retained",
+                            "kind": "smoke prerequisite" if prefix else "R12 session",
+                            "shared_manifest": str(root / "manifest.json")}, indent=2) + "\n")
             clock.sleep(max(0, plan["t0_epoch_s"] - clock.time()))
             code = run_night(plan_path)
             print("scheduled_driver", code, str(plan_path), flush=True)

@@ -244,6 +244,7 @@ class SharedClock:
 def audit_guard(root, pin):
     """Deny forbidden reads, escaping writes, network and undeclared execs."""
     root, pin = Path(root), Path(pin)
+    opened_code = set()
 
     def path_check(value, write=False):
         if not isinstance(value, (str, bytes, os.PathLike)):
@@ -276,9 +277,15 @@ def audit_guard(root, pin):
     def audit(event, args):
         if event == "open":
             path_check(args[0], bool(args[2] & (os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND)))
+            if isinstance(args[0], (str, bytes, os.PathLike)):
+                path = Path(os.path.abspath(os.fsdecode(args[0])))
+                if path.is_relative_to(root) and path.suffix in {".py", ".sh", ".zsh"} and str(path) not in opened_code:
+                    opened_code.add(str(path))
+                    with (root / f"source-reads-{os.getpid()}.jsonl").open("a") as stream:
+                        stream.write(json.dumps({"path": str(path)}) + "\n")
         elif event in {"os.listdir", "os.scandir"}:
             path_check(args[0])
-        elif event in {"os.mkdir", "os.remove", "os.rmdir", "os.chmod", "os.truncate"}:
+        elif event in {"os.mkdir", "os.remove", "os.rmdir", "os.chmod", "os.truncate", "os.utime", "os.chown"}:
             path_check(args[0], True)
         elif event == "os.rename":
             path_check(args[0], True)
@@ -424,6 +431,11 @@ def bootstrap(argv=None):
         from b6_r12_orchestrate import loop_fixture
         return loop_fixture(root, clock, *args.rest)
     install_sources(root, clock)
+    if args.kind == "script" and args.rest and Path(args.rest[0]).name == "validate_powermetrics_fiducial.py":
+        # A declared clock phase at calibration-program entry. Preserve
+        # exact integer ns instead of accumulating binary-float sleep tails.
+        target = ((clock.ns + 999_999_999) // 1_000_000_000) * 1_000_000_000 + 132
+        clock.sleep((target - clock.ns) / 1e9)
     if args.kind == "j1-schema-probe":
         from joulewise import controller
         producer = runpy.run_path(str(pin / "scripts/b5_window_calibration_verdict.py"), run_name="r12_j1_probe")
@@ -579,6 +591,10 @@ def install_sources(root, clock):
                 ("/usr/sbin/sysctl", "-n", "kern.osversion"): (0, b"25G83\n", b""),
                 ("/usr/sbin/sysctl", "-n", "hw.model"): (0, b"Mac15,9\n", b""),
                 ("/sbin/mount",): (0, b"/dev/disk-fixture on / (apfs, local)\n", b""),
+                ("/usr/bin/pmset", "displaysleepnow"): (0, b"", b""),
+                ("pmset", "displaysleepnow"): (0, b"", b""),
+                ("/usr/sbin/ioreg", "-p", "IOUSB", "-l", "-w0"): (0,
+                    b'+-o KM003C\n "idVendor" = 24521\n "idProduct" = 99\n "USB Serial Number" = "R12-NO-HARDWARE"\n "bcdDevice" = 512\n', b""),
             })
             readings = {
                 ("pmset", "-g", "batt"): "Now drawing from 'AC Power'\n -InternalBattery-0 100%; charged; 0:00 remaining\n",
@@ -612,6 +628,7 @@ def install_sources(root, clock):
 
         def completed(self, argv, result, kind):
             value = super().completed(argv, result, kind)
+            self.calls[-1]["source_monotonic_ns"] = clock.ns
             with (root / f"source-calls-{os.getpid()}.jsonl").open("a") as out:
                 out.write(json.dumps(self.calls[-1], sort_keys=True) + "\n")
             return value
@@ -848,7 +865,6 @@ def make_synthetic_inputs(root):
         if isinstance(value, dict):
             result = {replacements.get(key, key): transform(item) for key, item in value.items()}
             if policy.get("volume") == "reduced" and all(key in result for key in ("model", "sampling", "hardware_target")):
-                result["sampling"]["idle_seconds"] = 3.0
                 result["sampling"]["warmup_seconds"] = 0.0
             if result.get("schema_version") == "joulewise.b6_pack_registration.v1":
                 result["stopping"]["end_t0_before"] = "2030-01-01T00:00:00+00:00"
@@ -870,6 +886,17 @@ def make_synthetic_inputs(root):
             return value
         return value
 
+    # Suite configs bind a canonical semantic digest, unlike the raw-file
+    # digests in the surrounding input graph. Recompute it with the pinned
+    # canonicalizer when identity-bearing prompt metadata changes.
+    from joulewise.suite import canonical_effective_manifest, migrate_suite_manifest, suite_manifest_sha256
+    for relative, raw in originals.items():
+        if relative.endswith(".json"):
+            value = json.loads(raw)
+            if isinstance(value, dict) and str(value.get("schema_version", "")).startswith("suite_manifest.v"):
+                changed = transform(value)
+                for canonical in (canonical_effective_manifest, migrate_suite_manifest):
+                    replacements[suite_manifest_sha256(canonical(value))] = suite_manifest_sha256(canonical(changed))
     payloads = {}
     for relative, raw in originals.items():
         if not relative.endswith(".json"):
@@ -954,6 +981,7 @@ def install_engine(root, clock):
         def __init__(self, source):
             self.name_or_path = source
         def encode(self, text, **kwargs):
+            clock.sleep(.001)  # external engine's tokenization latency
             path = root / "inputs/token-map.json"
             if path.exists():
                 mapping = json.loads(path.read_text())
@@ -961,6 +989,7 @@ def install_engine(root, clock):
                     return mapping[text]
             return [1] * max(1, len(text.split()))
         def decode(self, ids, **kwargs):
+            clock.sleep(.001)  # external engine's detokenization latency
             return "x " * len(ids)
     Tokenizer.__module__, Tokenizer.__qualname__ = "r12_engine", "Tokenizer"
     lm.load = lambda source, **kwargs: (SimpleNamespace(), Tokenizer(source), {"eos_token_id": 0})
@@ -1044,13 +1073,14 @@ def install_usb_source(root, clock):
                             for line in source:
                                 self.intervals.append(json.loads(line))
                             self.offset = source.tell()
+                    self.intervals = [row for row in self.intervals if row["end_ns"] > clock.ns - 180_000_000]
                     payload = bytearray()
                     for index in range(10):
                         point = clock.ns - (9 - index) * 20_000_000
                         power = 10 + sum(row["power_mw"] / 1000 for row in self.intervals
                                          if row["start_ns"] <= point < row["end_ns"])
                         payload.extend(struct.pack("<HHiiHHHH", ((point - self.origin) // 1_000_000) % 65536,
-                                                   0, 10_000_000, round(power * 100_000), 0, 0, 0, 0))
+                                                   0, 20_000_000, round(power * 50_000), 0, 0, 0, 0))
                     self.queue.append(bytes([0x41, tid, 0, 0]) + struct.pack("<I", 2 | (10 << 16)) + payload)
                 else:
                     self.queue.append(bytes([0x05, tid, 0, 0]))
@@ -1073,6 +1103,20 @@ def sampler_source(root, clock, argv):
     # sudo's -n is not the sampler's finite-count option.
     options = argv[argv.index("/usr/bin/powermetrics") + 1:]
     count = int(options[options.index("-n") + 1]) if "-n" in options else None
+    policy = json.loads((root / "source-policy.json").read_text())
+    ordinal = 0
+    if count is None and "instrument_validation" not in output.parts:
+        counter = root / ("source-counter-" + policy.get("scenario", "prerequisite") + ".txt")
+        with counter.open("a+") as stream:
+            fcntl.flock(stream, fcntl.LOCK_EX)
+            stream.seek(0)
+            ordinal = int(stream.read() or "0") + 1
+            stream.seek(0)
+            stream.truncate()
+            stream.write(str(ordinal))
+    busy = ordinal in policy.get("gpu_busy_primary_ordinals", []) or (
+        ordinal > policy.get("gpu_busy_after_primary", float("inf")))
+    native_offset = policy.get("native_timestamp_offsets_s", {}).get(str(ordinal), 0)
     start = clock.monotonic_ns()
     if count is None:
         (root / f"primary-{os.getppid()}.json").write_text(json.dumps({"start_ns": start, "output": str(output)}) + "\n")
@@ -1103,20 +1147,24 @@ def sampler_source(root, clock, argv):
                     offset = source.tell()
             gpu_mw = sum(row["power_mw"] * max(0, min(endpoint, row["end_ns"]) - max(endpoint - interval, row["start_ns"]))
                          / interval for row in intervals if row["end_ns"] > endpoint - interval and row["start_ns"] < endpoint)
-            wall = (WALL_NS + endpoint - MONO_NS) / 1e9
+            intervals = [row for row in intervals if row["end_ns"] > endpoint]
+            wall = (WALL_NS + endpoint - MONO_NS) / 1e9 + native_offset
             document = {"timestamp": datetime.datetime.fromtimestamp(wall, datetime.UTC), "is_delta": True,
                         "elapsed_ns": interval, "thermal_pressure": "Nominal", "hw_model": "Mac15,9",
                         "kern_osversion": "25G83", "processor": {"cpu_power": 500., "gpu_power": gpu_mw, "ane_power": 0.,
+                        "combined_power": 500. + gpu_mw,
                         "cpu_energy": 500 * interval / 1e9, "gpu_energy": gpu_mw * interval / 1e9, "ane_energy": 0.,
                         "clusters": [{"name": "E-Cluster", "idle_ratio": .99, "down_ratio": 0., "online_ratio": 1.,
                                       "cpus": [{"cpu": i, "idle_ratio": .99, "down_ratio": 0., "freq_hz": 1020000000.}
                                                for i in range(16)]}]}, "gpu": {"idle_ratio": .999, "freq_hz": 0.}}
+            if busy:
+                document["gpu"] = {"idle_ratio": 0., "freq_hz": 1500.}
             if "instrument_validation" in output.parts:
                 # Calibration's requested source contains rails/thermal and
                 # native times; CPU admission is not sampled in that capture.
                 document["processor"].pop("clusters")
                 document.pop("gpu")
-            elif (root / "source-policy.json").exists() and json.loads((root / "source-policy.json").read_text()).get("volume") == "reduced":
+            elif policy.get("volume") == "reduced":
                 document["processor"]["clusters"][0]["cpus"] = document["processor"]["clusters"][0]["cpus"][:1]
             if index:
                 out.write(b"\0")

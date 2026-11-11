@@ -84,6 +84,8 @@ def prepare(root):
                 "generator_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO, text=True).strip(),
                 "generator_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                 "runtime_sha256": hashlib.sha256(runtime.read_bytes()).hexdigest(),
+                "orchestrator_sha256": hashlib.sha256((root / "b6_r12_orchestrate.py").read_bytes()).hexdigest(),
+                "arm_sources_sha256": hashlib.sha256((root / "arm_sources.py").read_bytes()).hexdigest(),
                 "clock_mode": "shared integer ns; explicit sleeps advance; no wall-time scale factor",
                 "volume": "bootstrap prerequisite", "seams": {
                     "time.time/time_ns/monotonic/monotonic_ns/clock_gettime_ns/sleep": "SharedClock",
@@ -91,6 +93,44 @@ def prepare(root):
                     "zsh external /bin/date and /bin/sleep inputs": "SharedClock bootstrap CLI"}}
     (root / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
     return root
+
+
+def declare_sources(root):
+    """Record source substitutions and policies before chain execution."""
+    path = root / "manifest.json"
+    value = json.loads(path.read_text())
+    value["seams"].update({
+        "joulewise.hazards.arm.run.__defaults__[0]": "real Seams object: synthetic Context.run/clocks, frequency_reader, disk stat/statvfs, host_cpu; no arm/run/judge replacement",
+        "joulewise.b5.driver.Seams.__init__.__defaults__": "Popen source dispatcher; disk_free = 1 TiB",
+        "joulewise.b6.sleep_guard.KeepAwake.__init__.__defaults__": "declared caffeinate and pmset command results; no host action",
+        "joulewise.hazards.monitor.Monitor.__init__.__kwdefaults__": "Context, zero frequency, 4 TiB available disk and idle host CPU counters",
+        "joulewise.hazards.thermal.NotifyReader": "OS thermal level 0 external reader",
+        "joulewise.hazards.battery.RegistryReader": "fresh AC-connected, not-charging battery; 0 mA, 12000 mV",
+        "joulewise.hazards.smc.Reader": "external SMC reader: declared keys 0; no native SMC call",
+        "joulewise.external.km003c_usb.load_libusb": "library object returns protocol bytes; unchanged UsbDevice/Meter/writer; 20 V, 10 W baseline + engine activity, 50 Hz",
+        "subprocess.Popen._execute_child": "dispatch unchanged pinned children; sampler raw plists at 10 Hz; first-source-tick startup barrier; undeclared commands return 126 and are logged",
+        "mlx.core / mlx_lm": "tiny engine library source, batch 1; token/model timings in source policy; original runtime, events and reducers run; weights never loaded",
+        "Tokenizer.encode/decode": "original input token IDs and 1 ms source latency",
+        "joulewise.adapters.powermetrics.PowermetricsTelemetryAdapter.__init__.__kwdefaults__.drain_sleep": "minimum 200 ms external scheduler quantum; original right-edge drain judgment",
+        "calibration CLI clock entry phase": "next whole monotonic second + 132 ns; original pulse protocol/detection/refit",
+        "builtins.open/io.open/os.stat/os.lstat on /usr/bin/powermetrics": "declared synthetic executable identity bytes, hashed by original code",
+        "sys._base_executable for venv": "fixture interpreter bootstrap script; original stdlib venv and pinned smoke wrapper writers run",
+        "tempfile.tempdir / os.devnull": str(root / "tmp") + " / " + str(root / "null-sink"),
+        "JOULEWISE_CUSTODY_PARENT": str(root / "host-state"),
+        "joulewise.b6.driver_lane.DriverLane.group_alive": "declared absent after the directly scheduled driver returned",
+        "joulewise.b6.precheck.Seams.orphan_collect": "declared empty external process observation",
+        "Loop.clock / DriverLane.clock": "shared injected wall clock; original transitions, status and attempt writers",
+        "scheduler": "call actual run_night at plan t0; installer/uninstaller command results 0; no launchd job",
+        "Git and zstd": "actual fixture-scoped code/input Git tools and actual desk codec; no network Git; no simulated compression"})
+    value["actions"] = {"default": "deny rc 126, stdout empty, stderr RL-49 default deny; execute nothing",
+        "network_time_off": "normal success rc 0; extra denied fixture uses 126",
+        "display_sleep": "success rc 0, empty stdout/stderr, execute nothing",
+        "installer_and_uninstaller": "success rc 0, declared diagnostic stdout, execute nothing",
+        "caffeinate": "declared live handle; pmset assertions source confirms it; execute nothing",
+        "results": "complete argv/rc/stdout/stderr/executed=false receipts in source-calls-*.jsonl"}
+    value["redirections"] = {"host-state": str(root / "host-state"), "temp": str(root / "tmp"),
+                              "devnull": str(root / "null-sink"), "escaping_writes": "denied"}
+    path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
 
 
 def export_chain_inputs(root):
@@ -205,24 +245,30 @@ def main(argv=None):
     parser.add_argument("--plan-probe", choices=("alpha", "beta", "gamma"))
     parser.add_argument("--driver-probe", choices=("alpha", "beta", "gamma"))
     parser.add_argument("--loop-probe", choices=("alpha", "beta", "gamma"))
+    parser.add_argument("--nine-session-set", action="store_true")
     parser.add_argument("--synthetic-models", action="store_true")
     parser.add_argument("--volume", choices=("prerequisite", "reduced", "full"), default="prerequisite")
     parser.add_argument("--denied-off", action="store_true")
     args = parser.parse_args(argv)
     root = prepare(args.out)
     (root / "source-policy.json").write_text(json.dumps({"volume": args.volume, "denied_off": args.denied_off,
-        "primary_stream_duration_s": 335 if args.volume == "full" else None,
+        "primary_stream_duration_s": 335 if args.volume == "full" else 65,
         "token_first_s": .5 if args.volume == "reduced" else 1.0,
         "token_next_s": .001 if args.volume == "reduced" else .05}, indent=2) + "\n")
     if args.bootstrap_probe:
         return subprocess.run(command(root, "probe", 60), cwd=root, check=False).returncode
-    if args.plan_probe or args.driver_probe or args.loop_probe:
+    if args.plan_probe or args.driver_probe or args.loop_probe or args.nine_session_set:
         export_chain_inputs(root)
         if args.synthetic_models:
             subprocess.run(command(root, "make-inputs"), cwd=root, check=True)
             materialize_inputs(root)
             prepare_interpreters(root)
         init_source_repo(root)
+        declare_sources(root)
+        if args.nine_session_set:
+            with (root / "generator.stdout").open("wb") as out, (root / "generator.stderr").open("wb") as err:
+                return subprocess.run(command(root, "loop-probe", "all", "9"), cwd=root,
+                                      stdout=out, stderr=err, check=False).returncode
         if args.loop_probe:
             return subprocess.run(command(root, "loop-probe", args.loop_probe), cwd=root, check=False).returncode
         return subprocess.run(command(root, "plan", args.plan_probe or args.driver_probe,
