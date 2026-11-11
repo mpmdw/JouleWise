@@ -173,6 +173,117 @@ class GitBlobInputRunner:
         return subprocess.CompletedProcess(argv, 0, data, stderr)
 
 
+class SignalInputs:
+    """OS timer/signal inputs; no native alarm or process-group signal runs.
+
+    Callable handlers are still the pinned code's handlers. Default TERM is
+    simulated by this interpreter exiting; the owned Popen observes the
+    usual negative signal status through a token-bound delivery receipt.
+    """
+
+    def __init__(self, clock):
+        import signal
+        self.clock, self.signal = clock, signal
+        self.timers = {}
+        self.lock = threading.RLock()
+        self.control_delivered = False
+        self.token = os.environ.get("R12_PROCESS_TOKEN", "top")
+        signal.setitimer = self.setitimer
+        signal.getitimer = self.getitimer
+        signal.alarm = self.alarm
+        original_exitstatus = subprocess.Popen._handle_exitstatus
+        root = clock.path.parent
+
+        def exitstatus(process, *args, **kwargs):
+            original_exitstatus(process, *args, **kwargs)
+            token = getattr(process, "_r12_signal_token", None)
+            if token and process.returncode and process.returncode > 128:
+                proof = root / f"default-signal-{process.pid}-{token}.json"
+                if proof.is_file():
+                    value = json.loads(proof.read_text())
+                    number = value.get("signum")
+                    if (value.get("schema") == "r12.default_signal_delivery.v1"
+                            and value.get("pid") == process.pid and value.get("token") == token
+                            and type(number) is int and 0 < number < 128
+                            and process.returncode == 128 + number):
+                        process.returncode = -number
+        subprocess.Popen._handle_exitstatus = exitstatus
+        threading.Thread(target=self.run, name="r12-os-inputs", daemon=True).start()
+
+    def getitimer(self, which):
+        if which != self.signal.ITIMER_REAL:
+            raise ValueError("undeclared synthetic timer")
+        now = self.clock.frontier()
+        with self.lock:
+            value = self.timers.get(which)
+            return (max(0, value[0] - now) / 1e9, value[1] / 1e9) if value else (0.0, 0.0)
+
+    def setitimer(self, which, seconds, interval=0.0):
+        import math
+        if which != self.signal.ITIMER_REAL or not all(math.isfinite(x) and x >= 0 for x in (seconds, interval)):
+            raise ValueError("undeclared synthetic timer")
+        old = self.getitimer(which)
+        now = self.clock.frontier()
+        with self.lock:
+            if seconds:
+                self.timers[which] = (now + round(seconds * 1e9), round(interval * 1e9))
+            else:
+                self.timers.pop(which, None)
+        return old
+
+    def alarm(self, seconds):
+        import math
+        if type(seconds) is not int:
+            raise TypeError("an integer is required")
+        return math.ceil(self.setitimer(self.signal.ITIMER_REAL, seconds)[0])
+
+    def deliver(self, number):
+        handler = self.signal.getsignal(number)
+        if handler == self.signal.SIG_IGN:
+            return
+        if callable(handler):
+            import _thread
+            _thread.interrupt_main(number)  # Python pending-handler input, not os.kill.
+            return
+        proof = self.clock.path.parent / f"default-signal-{os.getpid()}-{self.token}.json"
+        proof.write_text(json.dumps({"schema": "r12.default_signal_delivery.v1", "pid": os.getpid(),
+            "token": self.token, "signum": number, "native_signal_executed": False}) + "\n")
+        os._exit(128 + number)  # only this bootstrapped fixture interpreter exits.
+
+    def run(self):
+        while True:
+            if not self.control_delivered:
+                path = self.clock.signal_input
+                stopped = self.clock.stop_input.exists()
+                if stopped or path.exists():
+                    number = self.signal.SIGTERM if stopped else json.loads(path.read_text())["signum"]
+                    if number != self.signal.SIGTERM:
+                        raise ValueError("undeclared incoming fixture signal")
+                    self.control_delivered = True
+                    if self.clock.stop_callbacks:
+                        # Existing meter/monitor/sampler delivery invokes the
+                        # original registered handler and preserves trailers.
+                        self.clock.frontier()
+                    else:
+                        self.deliver(int(number))
+            with self.lock:
+                active = bool(self.timers)
+            if active:
+                now = self.clock.frontier()
+                due = []
+                with self.lock:
+                    for which, (deadline, interval) in tuple(self.timers.items()):
+                        if now >= deadline:
+                            if interval:
+                                self.timers[which] = (deadline + ((now - deadline) // interval + 1) * interval, interval)
+                            else:
+                                self.timers.pop(which)
+                            due.append(self.signal.SIGALRM)
+                for number in due:
+                    self.deliver(int(number))
+            REAL_SLEEP(.01)
+
+
 class SharedClock:
     """Integer nanosecond clock; a file lock serializes child advances.
 
@@ -359,6 +470,7 @@ class SharedClock:
                 return cls.fromtimestamp(clock.time(), datetime.UTC).replace(tzinfo=None)
 
         datetime.datetime = FixtureDatetime
+        self.signal_inputs = SignalInputs(self)
 
 
 def audit_guard(root, pin):
@@ -916,8 +1028,11 @@ def install_sources(root, clock):
         # meter/monitor writer, not this caller, writes the shutdown records.
         directory = root / "signal-inputs"
         directory.mkdir(exist_ok=True)
-        (directory / f"{pid}-{process._r12_signal_token}.json").write_text(json.dumps({"signum": int(number),
+        token = process._r12_signal_token
+        temporary = directory / f".{pid}-{token}-{os.getpid()}-{threading.get_ident()}.tmp"
+        temporary.write_text(json.dumps({"signum": int(number),
             "declared_result": 0, "executed": False}) + "\n")
+        temporary.replace(directory / f"{pid}-{token}.json")
         sources.completed(argv, (0, b"", b""), "declared_action_success")
     os.kill = lambda pid, number: signal_result(pid, number)
     os.killpg = lambda pid, number: signal_result(pid, number, group=True)

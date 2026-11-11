@@ -48,6 +48,73 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(len(json.loads(result.stdout)), 6)
         self.assertFalse((self.root.parent / "R12-outside-write").exists())
 
+    def test_real_timer_uses_injected_clock_without_native_alarm(self):
+        """Predict: a 60 s ITIMER_REAL expires after 120 injected seconds, without calling the native timer."""
+        bootstrap = self.root / "bootstrap.py"
+        bootstrap.write_text("import signal\n"
+            "def forbidden_native_timer(*args):\n"
+            "    raise AssertionError('native ITIMER_REAL reached')\n"
+            "signal.setitimer = forbidden_native_timer\n" + bootstrap.read_text())
+        code = '''import signal, time
+from runtime import REAL_MONOTONIC, REAL_SLEEP
+fired = []
+signal.signal(signal.SIGALRM, lambda *args: fired.append(time.monotonic()))
+try:
+    assert signal.setitimer(signal.ITIMER_REAL, 60) == (0.0, 0.0)
+    time.sleep(120)
+    deadline = REAL_MONOTONIC() + 1
+    while not fired and REAL_MONOTONIC() < deadline:
+        REAL_SLEEP(.005)
+    assert fired == [1120.0], fired
+    assert signal.getitimer(signal.ITIMER_REAL) == (0.0, 0.0)
+finally:
+    signal.setitimer(signal.ITIMER_REAL, 0)
+print('logical_alarm')
+'''
+        result = subprocess.run(command(self.root, "code", code), capture_output=True,
+                                text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "logical_alarm")
+
+    def test_default_term_reaches_child_without_clock_reads(self):
+        """Predict: declared TERM terminates an owned stdin-blocked child with returncode -15, without native signals or child clock reads."""
+        bootstrap = self.root / "bootstrap.py"
+        bootstrap.write_text("import os\n"
+            "original_kill = os.kill\n"
+            "def no_native_signal(pid, signum):\n"
+            "    if signum: raise AssertionError('native signal reached')\n"
+            "    return original_kill(pid, 0)\n"
+            "os.kill = os.killpg = no_native_signal\n" + bootstrap.read_text())
+        prepare_interpreters(self.root)
+        code = '''import subprocess, sys, os, signal
+from pathlib import Path
+from runtime import REAL_MONOTONIC, REAL_SLEEP
+root = Path(sys.argv[1])
+p = subprocess.Popen([str(root/'pin/.venv/bin/python'), '-B', '-c',
+    "import sys;print('ready',flush=True);sys.stdin.buffer.read(1)"],
+    stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+assert p.stdout.readline().strip() == b'ready'
+os.killpg(p.pid, signal.SIGTERM)
+deadline = REAL_MONOTONIC() + 1
+while p.poll() is None and REAL_MONOTONIC() < deadline:
+    REAL_SLEEP(.005)
+observed = p.poll()
+if observed is None:
+    p.stdin.close()
+    deadline = REAL_MONOTONIC() + 5
+    while p.poll() is None and REAL_MONOTONIC() < deadline:
+        REAL_SLEEP(.005)
+    assert p.poll() == 0, p.poll()
+else:
+    p.stdin.close()
+assert observed == -signal.SIGTERM, observed
+print('default_term')
+'''
+        result = subprocess.run(command(self.root, "code", code, self.root), capture_output=True,
+                                text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "default_term")
+
     @unittest.skipUnless(hasattr(time, "CLOCK_UPTIME_RAW"), "macOS uptime source")
     def test_original_sleep_reader_uses_coherent_uptime_input(self):
         """Predict: original sleep reader observes zero sleep and no flags across a 75 s injected wait."""

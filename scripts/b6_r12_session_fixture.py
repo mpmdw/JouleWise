@@ -99,6 +99,8 @@ def prepare(root):
                     "time.CLOCK_UPTIME_RAW input": "same no-sleep ns frontier as CLOCK_MONOTONIC_RAW; original sleep-offset reader and flags run",
                     "datetime.datetime.now/utcnow": "SharedClock wall time",
                     "subprocess._time / threading._time": "same shared monotonic clock, including stdlib aliases",
+                    "signal.setitimer/getitimer/alarm": "ITIMER_REAL follows shared ns; Python pending-handler delivery, no native alarm; nominal 10 ms input-receiver poll",
+                    "subprocess.Popen._handle_exitstatus": "actual exit status except token-authenticated default signal delivery: this fixture interpreter exits 128+signum, owned Popen receives normal -signum; no native kill",
                     "SharedClock notification transport": "only registered receivers poll stop inputs, nominal 10 ms real poll interval (OS scheduling may delay it); shared ns always reread under lock, never cached",
                     "zsh external /bin/date and /bin/sleep inputs": "SharedClock bootstrap CLI"}}
     (root / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
@@ -134,7 +136,7 @@ def declare_sources(root):
         "Loop.clock / DriverLane.clock": "shared injected wall clock; original transitions, status and attempt writers",
         "scheduler": "call actual run_night at plan t0; installer/uninstaller command results 0; no launchd job",
         "JOULEWISE_WHOLE_WINDOW_WORKERS": "1; pinned environment concurrency input; unchanged strict validator in its isolated verdict process, no spawned interpreter outside bootstrap",
-        "os.kill/os.killpg and joulewise.b5.harvest.Seams.killpg": "only owned live child SIGTERM has declared success; no native signal executes; per-PID external signal input reaches the original registered meter/monitor handler; other actions denied and logged",
+        "os.kill/os.killpg and joulewise.b5.harvest.Seams.killpg": "only owned live child SIGTERM has declared success; no native signal executes; atomically published token-bound input reaches original registered meter/monitor handlers, or a bootstrapped interpreter's default TERM disposition even without clock reads; other actions denied and logged",
         "os.killpg(pgid, 0)": "declared external group census: live owned Popen is present, otherwise ESRCH (not EPERM); original harvest readiness and teardown judge it",
         "zsh file utilities": "unchanged rendered program uses cat/mkdir/jq on its fixture-bound paths; date/sleep source functions and bootstrap interpreter isolate time and host commands",
         "Git, /bin/cp -c -pR and zstd": "actual fixture-scoped code/input Git, non-symlink fixture-only APFS copy writer and desk codec; no network Git; no simulated copying or compression"})
