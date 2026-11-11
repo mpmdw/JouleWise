@@ -1,9 +1,9 @@
 # Tier E (last resort): the method and diagnostic paper with the automation pipeline
 
 <!-- Use only when the primary-block release itself slips past about 20 November. Decided by date, not by any
-result. This version reports no new energy result. It keeps §2 (related work), §4 (method), §5 (design), §7.1 to
+result. This version reports no new energy result. It keeps §2 (related work), §3.1 to §3.2, §4 (method), §5 (design), §7.1 to
 §7.4 (BYTES design), §8 (automation) and §9 (limitations) of ../paper1.md, and replaces the title, abstract,
-§1.3, §6, §7.5 and §11. The historical diagnostics come from the merged methods draft
+§1.3, §3.4, §6, §7.5 and §11. The historical diagnostics come from the merged methods draft
 (docs/paper/draft-v2-skeleton.md) and are bound by their existing registry rows. -->
 
 # Dividing a Laptop's Inference Energy Between Phases: A Pre-registered Method, Its Historical Diagnostics, and the Automated Pipeline That Runs It

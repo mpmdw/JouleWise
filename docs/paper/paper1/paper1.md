@@ -398,7 +398,7 @@ which cannot see an excursion that reverted before the end; this is disclosed wi
 ### 4.8 Model contrasts, outcome words and the claims ladder (estimation details in Appendix D.7)
 
 A **contrast** compares two models on the same workload in **contrast quads** ordered 1.7B, 8B, 8B, 1.7B. Each
-kept quad k gives d_k = (B₁ + B₂)/2 − (A₁ + A₂)/2, with B the 8B side. Over n kept quads (at least five of ten):
+kept quad k gives d_k = (B₁ + B₂)/2 − (A₁ + A₂)/2, with B the 8B side.
 
 The outcome is one of four registered words, decided in this order of precedence:
 
@@ -1169,7 +1169,7 @@ models with two passes as a labelled sensitivity line ({{FILL: P1-BY-H2-TWOPASS 
 
 **Agreement of the two implementations.** {{FILL: P1-BY-TWIN | per stage: counts of printed fields compared and of differences under and above the bar; attribution and ruling of any difference above the bar}}
 
-## 8. Research automation: controls, and where they failed
+## 8. Research automation: an agent-driven pipeline and its controls
 
 ### 8.1 How the work was done
 
@@ -1198,8 +1198,8 @@ registration_block5.md:4853. -->
 *Figure 5. Schematic of the permitted activities. Agents develop and review code in cloud and local sessions,
 run on the measurement laptop between sessions, and run blind processing on the analysis laptop under custody
 rules. No agent process may remain alive during collection. Primary-block L9 outputs are produced in the blind
-dry run and verified at release (Section 5.6); printing additionally requires the independent comparison and
-separate checks of uncovered quantities (Section 5.7).*
+dry run and verified at release (Section 4.6); printing additionally requires the independent comparison and
+separate checks of uncovered quantities (Section 4.7).*
 
 ### 8.2 Integrity controls
 
@@ -1211,11 +1211,11 @@ these failure modes; each is mechanical, recorded, or both.
    for the primary block every code and configuration file a session reads was listed with its SHA-256 digest in
    a sealed inventory, before the sessions they govern. The arm checks OS build and machine model; harvest
    excludes a session for an executed-code difference and faults on changed seal documents. Changes after registration go only through a dated erratum, a registered
-   deviation or a disclosed repair (Section 5.5).
+   deviation or a disclosed repair (Section 4.5).
 2. **Blinding enforced by custody.** Energies and every derived quantity were written to restricted paths listed
    in a custody map; everything released during collection was structure only, and analysis code was written and
-   repaired by sessions that had read no restricted value (Section 5.6). BYTES added hidden multiplicative offsets
-   and requires held-out rows to stay withheld until its predictions are committed (Section 7.3).
+   repaired by sessions that had read no restricted value (Section 4.6). BYTES added hidden multiplicative offsets
+   and requires held-out rows to stay withheld until its predictions are committed (Section 6.3).
 3. **Physics refuses; everything else is recorded.** Only a directly measured physical hazard can stop collection
    or remove data, and the presence of an AI agent process on the measurement laptop is one of those hazards: the
    arm refuses and a running session pauses while one is alive. Every other condition is a flag with one
@@ -1225,13 +1225,13 @@ these failure modes; each is mechanical, recorded, or both.
    code on production-shaped inputs rather than only read it, together with a regression test and a demonstration
    that the test fails without the change.
 5. **Independent recomputation and a twin.** Separate code recomputes the primary block's core arithmetic with
-   recorded collection-time judgments as inputs; uncovered quantities require separate checks (Section 5.7).
-   BYTES requires agreement with its independent twin (Section 7.3), against a tolerance fixed in advance.
+   recorded collection-time judgments as inputs; uncovered quantities require separate checks (Section 4.7).
+   BYTES requires agreement with its independent twin (Section 6.3), against a tolerance fixed in advance.
 6. **Fail-closed refusals with reasons.** A missing fingerprint, a malformed record or an undefined estimator
    input produces a named refusal, never a default value; a refused cell is printed as unavailable with its reason,
    never as zero.
 7. **Pre-written outcome text.** The registrations fix specified sentences, and the claims ladder caps claim
-   strength (Section 4.8). The draft's additional branch prose was written before release, at commit `a1a5029fb`
+   strength (Section 3.10). The draft's additional branch prose was written before release, at commit `a1a5029fb`
    (tag `paper1/blind-draft-2026-10-27`), after primary collection, with results as placeholders. Corrections made after release are stated in Section 1.2.
 <!-- FACT H18: R2P P3/P5/P6; RL-1/RL-5; sources as H03/H09/H12. -->
 
@@ -1265,13 +1265,13 @@ number, with what each taught.
   rule's result printed beside the registered value.
 - **An instrument assumption can be silently false.** An early clock mapping assumed that the wall clock and the
   monotonic clock advance at the same rate; that assumption could move every fitted edge in the same direction. It
-  was replaced by the rate-aware mapping of Section 4.2, and the energies of captures reduced under the old mapping
+  was replaced by the rate-aware mapping of Section 3.3, and the energies of captures reduced under the old mapping
   were voided for claim use.
 - **A leaked test process changes the machine.** An orphaned monitoring process left running by a test raised the
   quiet machine's measured background processor load. Each session now ends with a census of orphaned processes.
 - **Process overhead was the critical path.** Collection rarely limited progress; serial review and gating did.
   The project's gate policy was rewritten during the study, before any result was seen, to fit the depth of review
-  to whether a change can alter a number (Section 8.2, item 4).
+  to whether a change can alter a number (Section 7.2, item 4).
 
 {{FILL: P1-AUTO-BLINDCHECK | result of the check whether any held-out BYTES model's per-request duration or other timing was read before the stage-1 commitment (a process audit ran harvest readers on a held-out model's session); either "no held-out duration was read" with its evidence, or a disclosure of what was read, when, and that it could not change the committed lines}}
 
@@ -1612,6 +1612,8 @@ In Part 2 the same scale is part of the registered estimator (Section 7.3), beca
 before BYTES collection.
 
 ### D.7 Contrast estimator and descriptive checks
+
+Over n kept quads (at least five of ten):
 
 1. d̄ = mean(d_k); se = s_d / √n.
 2. **Metrology interval**: d̄ ± t* × se, with t* the 0.975 Student-t value at n − 1 degrees of freedom rounded to
