@@ -58,6 +58,19 @@ class _Ctx(unittest.TestCase):
 
 
 class ArmCliTests(_Ctx):
+    def test_named_watchdog_hold_check_is_registered_and_proves_rollback(self):
+        self.assertIn('watchdog-hold-rollback', wp.CHECKS)
+        row = self.probe('watchdog-hold-rollback')
+        self.assertEqual(row['status'], wp.PASS, row)
+        cases = {case['phase']: case for case in row['evidence']['cases']}
+        self.assertTrue(cases['pre_install']['refused'])
+        self.assertFalse(cases['pre_install']['installer_called'])
+        for key in ('refused', 'uninstalled_this_plan', 'both_labels_verified_absent', 'automatic_restored'):
+            self.assertTrue(cases['post_install'][key], key)
+        report = wp.run_all(self.ctx, spawn=lambda name: dict(row) if name == row['check'] else
+            {'check': name, 'status': wp.PASS, 'detail': '', 'evidence': {}})
+        self.assertIn('| watchdog-hold-rollback | PASS | w1 | yes |', wp.table(report))
+
     def test_synthetic_watchdog_holding_refuses_with_w1_reason(self):
         import time
         now = time.time()

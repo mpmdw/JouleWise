@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import plistlib
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
@@ -38,32 +39,104 @@ class WatchdogTests(unittest.TestCase):
                 'MAGISTRATE_WATCHDOG_CUSTODY_ROOT': str(self.root / 'watchdog'),
                 'MAGISTRATE_WATCHDOG_STATUS_HOST': 'synthetic'}}
         self.write_plist()
+        self.plan = {'plan_id': 'synthetic-arm', 't0_epoch_s': session.time.time() + 3600}
+        self.discovery = {'plans': [dict(self.plan, span_start_epoch_s=self.plan['t0_epoch_s'] - 180)],
+                          'errors_count': 0, 'installed_source': 'not_distinguishable'}
         self.run = Mock(return_value=subprocess.CompletedProcess([], 0,
             'decision=LAUNCHING reason=all launch predicates clear\nWOULD_SPAWN none\n', ''))
+        self.run.side_effect = lambda argv, **kw: (subprocess.CompletedProcess(argv, 0,
+            json.dumps(self.discovery) + '\n', '') if '-c' in argv else self.run.return_value)
 
     def write_plist(self):
         self.plist.write_bytes(plistlib.dumps(self.document))
 
     def check(self, phase='pre_install'):
-        return session.watchdog_acceptance(phase=phase, runner=self.run, plist_path=self.plist)
+        return session.watchdog_acceptance(phase=phase, runner=self.run, plist_path=self.plist, plan=self.plan)
+
+    def test_span_boundary_requires_a_fence_in_both_phases(self):
+        fences = {'FENCED', 'STANDDOWN_REQUEST', 'STANDDOWN_TERM', 'STANDDOWN_KILL'}
+        for phase in ('pre_install', 'post_install'):
+            for offset in (-181, -180, -179):
+                for state in session.WATCHDOG_STATES:
+                    with self.subTest(phase=phase, offset=offset, state=state):
+                        self.run.return_value = subprocess.CompletedProcess([], 0, f'decision={state} reason=x\n', '')
+                        row = session.watchdog_acceptance(phase=phase, runner=self.run, plist_path=self.plist,
+                            plan=self.plan, now=lambda: self.plan['t0_epoch_s'] + offset)
+                        admitted = session.WATCHDOG_ADMITTED if offset == -181 else fences
+                        self.assertEqual(row['ok'], state in admitted)
+
+    def test_discovery_uses_installed_interpreter_environment_and_identity(self):
+        row = self.check('post_install')
+        self.assertTrue(row['ok'], row)
+        self.assertEqual(row['plan_identity'], {'found': True,
+            'span_start_epoch_s': self.plan['t0_epoch_s'] - 180,
+            'expected': self.plan['t0_epoch_s'] - 180, 'ok': True})
+        first, second = self.run.call_args_list
+        self.assertEqual(second.args[0], self.document['ProgramArguments'][:2] + [
+            '-c', session.WATCHDOG_DISCOVERY_PROGRAM, self.document['ProgramArguments'][2],
+            str(self.root / 'watchdog')])
+        self.assertEqual(first.kwargs['env'], second.kwargs['env'])
+        self.assertEqual(first.kwargs['cwd'], second.kwargs['cwd'])
+        self.assertLessEqual(second.kwargs['timeout'], first.kwargs['timeout'])
+        self.assertEqual(row['installed_source'], 'not_distinguishable')
+
+    def test_discovery_faults_refuse_in_both_phases(self):
+        valid = json.dumps(self.discovery) + '\n'
+        for phase in ('pre_install', 'post_install'):
+            for fault in ('missing', 'wrong_span', 'malformed', 'timeout', 'nonzero', 'errors', 'duplicate'):
+                with self.subTest(phase=phase, fault=fault):
+                    payload = json.loads(valid)
+                    if fault == 'missing':
+                        payload['plans'] = []
+                    if fault == 'wrong_span':
+                        payload['plans'][0]['span_start_epoch_s'] += 1
+                    if fault == 'errors':
+                        payload['errors_count'] = 1
+                    if fault == 'duplicate':
+                        payload['plans'] *= 2
+                    def run(argv, **kw):
+                        if '-c' not in argv:
+                            return self.run.return_value
+                        if fault == 'timeout':
+                            raise subprocess.TimeoutExpired(argv, kw['timeout'])
+                        return subprocess.CompletedProcess(argv, int(fault == 'nonzero'),
+                            'not json\n' if fault == 'malformed' else json.dumps(payload) + '\n', '')
+                    row = session.watchdog_acceptance(phase=phase, runner=run, plist_path=self.plist, plan=self.plan)
+                    self.assertFalse(row['ok'], row)
+                    self.assertFalse(row['plan_identity']['ok'])
+                    self.assertIn(f'watchdog_acceptance: {phase}: plan_identity:', session._watchdog_refusal(phase, row))
+
+    def test_dry_run_and_discovery_share_one_deadline(self):
+        clock = [100_000_000_000]
+        timeouts = []
+        def run(argv, **kw):
+            timeouts.append(kw['timeout'])
+            clock[0] += (11 if '-c' in argv else 20) * 1_000_000_000
+            return subprocess.CompletedProcess(argv, 0, json.dumps(self.discovery) if '-c' in argv
+                else 'decision=LAUNCHING reason=x\n', '')
+        with patch.object(session.time, 'monotonic_ns', side_effect=lambda: clock[0]):
+            row = session.watchdog_acceptance(phase='post_install', runner=run, plist_path=self.plist, plan=self.plan)
+        self.assertEqual(timeouts, [30, 10])
+        self.assertFalse(row['ok'], row)
+        self.assertIn('timeout', row['reason'].lower())
 
     def test_uses_only_installed_program_with_dry_run_and_bounded_environment(self):
         record = self.check()
         self.assertTrue(record['ok'], record)
-        argv = self.run.call_args.args[0]
+        argv = self.run.call_args_list[0].args[0]
         self.assertEqual(argv, self.document['ProgramArguments'] + ['--dry-run', '--custody-root',
             self.document['EnvironmentVariables']['MAGISTRATE_WATCHDOG_CUSTODY_ROOT']])
-        options = self.run.call_args.kwargs
+        options = self.run.call_args_list[0].kwargs
         self.assertEqual(options['cwd'], self.document['WorkingDirectory'])
         self.assertEqual(options['env']['PATH'], '/synthetic/bin')
         self.assertGreater(options['timeout'], 0)
-        self.assertEqual(options['timeout'], session.WATCHDOG_TIMEOUT_S)
+        self.assertLessEqual(options['timeout'], session.WATCHDOG_TIMEOUT_S)
         self.assertEqual(session.WATCHDOG_TIMEOUT_S, 3 * watchdog_fixtures.wd.SUPERVISOR_POLL_S)
         self.assertEqual(session.WATCHDOG_PLAN_LEAD_S, watchdog_fixtures.wd.PLAN_LEAD_S)
         self.assertEqual(record['argv'], argv)
         self.assertEqual(record['state'], 'LAUNCHING')
         self.assertGreaterEqual(record['elapsed_s'], 0)
-        self.assertFalse(record['plan_read_proven'])
+        self.assertTrue(record['plan_read_proven'])
 
     def test_missing_unreadable_or_invalid_plist_refuses_without_running(self):
         for raw in (None, b'broken', plistlib.dumps({}), plistlib.dumps(dict(self.document, Program='/bin/sh')),
@@ -143,7 +216,7 @@ class WatchdogTests(unittest.TestCase):
         self.document['ProgramArguments'] += ['--custody-root', str(self.root / 'explicit')]
         self.write_plist()
         self.assertTrue(self.check()['ok'])
-        argv = self.run.call_args.args[0]
+        argv = self.run.call_args_list[0].args[0]
         self.assertEqual(argv.count('--dry-run'), 1)
         self.assertEqual(argv.count('--custody-root'), 1)
         self.assertEqual(argv[-1], str(self.root / 'explicit'))
@@ -153,7 +226,7 @@ class WatchdogTests(unittest.TestCase):
             '/synthetic/installed/scripts/magistrate_watchdog.py']
         self.write_plist()
         self.assertTrue(self.check()['ok'])
-        self.assertEqual(self.run.call_args.args[0][:3], self.document['ProgramArguments'])
+        self.assertEqual(self.run.call_args_list[0].args[0][:3], self.document['ProgramArguments'])
         self.run.reset_mock()
         with patch.object(session.plistlib, 'loads', side_effect=RuntimeError('bad XML date')):
             self.assertFalse(self.check()['ok'])
@@ -161,6 +234,22 @@ class WatchdogTests(unittest.TestCase):
 
 
 class RemoteProbeTests(watchdog_fixtures.WatchdogTestCase):
+    def test_constant_discovery_program_runs_against_real_module_without_host_access(self):
+        plan = self.make_plan()
+        home = self.temp / 'isolated-home'
+        (home / 'Library/LaunchAgents').mkdir(parents=True)
+        before = sorted(str(p.relative_to(self.temp)) for p in self.temp.rglob('*'))
+        out = subprocess.run([sys.executable, '-B', '-c', session.WATCHDOG_DISCOVERY_PROGRAM,
+            str(Path(watchdog_fixtures.wd.__file__).resolve()), str(self.harness.storage.root)],
+            cwd=session.ROOT, env=dict(os.environ, HOME=str(home), PYTHONDONTWRITEBYTECODE='1'),
+            check=False, capture_output=True, text=True, timeout=30)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertEqual(len(out.stdout.splitlines()), 1)
+        self.assertEqual(json.loads(out.stdout), {'plans': [{'plan_id': plan.plan_id,
+            't0_epoch_s': plan.t0_epoch_s, 'span_start_epoch_s': plan.t0_epoch_s - watchdog_fixtures.wd.PLAN_LEAD_S}],
+            'errors_count': 0, 'installed_source': 'not_distinguishable'})
+        self.assertEqual(before, sorted(str(p.relative_to(self.temp)) for p in self.temp.rglob('*')))
+
     def test_helper_argv_and_environment_cannot_enable_in_span_probe(self):
         wd = watchdog_fixtures.wd
         plan = self.make_plan()
@@ -179,6 +268,10 @@ class RemoteProbeTests(watchdog_fixtures.WatchdogTestCase):
         self.harness.deps.git_probe = wd.remote_stop_probe
 
         def runner(argv, **kwargs):
+            if '-c' in argv:
+                return subprocess.CompletedProcess(argv, 0, json.dumps({'plans': [{'plan_id': plan.plan_id,
+                    't0_epoch_s': plan.t0_epoch_s, 'span_start_epoch_s': plan.t0_epoch_s - wd.PLAN_LEAD_S}],
+                    'errors_count': 0, 'installed_source': 'not_distinguishable'}), '')
             self.assertEqual(argv[2:], ['--dry-run', '--custody-root', str(self.harness.storage.root)])
             out = io.StringIO()
             with patch.dict(os.environ, kwargs['env'], clear=True), contextlib.redirect_stdout(out):
@@ -203,7 +296,9 @@ class RemoteProbeTests(watchdog_fixtures.WatchdogTestCase):
                     state = wd.initial_state()
                     self.assertFalse(wd._remote_probe_allowed(storage, self.harness.deps, state))
                     self.assertEqual(wd._probe_remote_stop(storage, self.harness.deps, state).state, 'NOT_PROBED')
-                    record = session.watchdog_acceptance(phase='post_install', runner=runner, plist_path=plist)
+                    record = session.watchdog_acceptance(phase='post_install', runner=runner, plist_path=plist,
+                        plan={'plan_id': plan.plan_id, 't0_epoch_s': plan.t0_epoch_s},
+                        now=lambda: self.harness.clock.wall.timestamp())
                     self.assertTrue(record['ok'], record)
                     self.assertEqual(record['state'], 'FENCED')
                     network.assert_not_called()
@@ -213,7 +308,9 @@ class RemoteProbeTests(watchdog_fixtures.WatchdogTestCase):
             self.harness.clock.wall = dt.datetime.fromtimestamp(plan.t0_epoch_s - wd.PLAN_LEAD_S - 1,
                                                                 tz=self.local_tz)
             self.assertTrue(wd._remote_probe_allowed(storage, self.harness.deps, wd.initial_state()))
-            record = session.watchdog_acceptance(phase='post_install', runner=runner, plist_path=plist)
+            record = session.watchdog_acceptance(phase='post_install', runner=runner, plist_path=plist,
+                plan={'plan_id': plan.plan_id, 't0_epoch_s': plan.t0_epoch_s},
+                now=lambda: self.harness.clock.wall.timestamp())
             self.assertTrue(record['ok'], record)
             self.assertEqual(record['state'], 'STOPPED')
             self.assertEqual(network.call_count, 2)
@@ -350,7 +447,7 @@ class ArmIntegrationTests(unittest.TestCase):
         self.state = {'measurement_root': str(self.root), 'plan_path': str(self.root / 'night_plan.json'),
                       'inputs': {'custody_root': str(self.root / 'custody')}}
         self.t0 = session.time.time() + 3600
-        Path(self.state['plan_path']).write_text(json.dumps({'t0_epoch_s': self.t0}))
+        Path(self.state['plan_path']).write_text(json.dumps({'plan_id': 'synthetic-arm', 't0_epoch_s': self.t0}))
         self.plan = {'runtime_requirements': {'ac_powermode': 0}}
         session.pilot.h.write(self.session / 'session.json', self.state)
         self.run = Mock(side_effect=self.command)
@@ -392,13 +489,13 @@ class ArmIntegrationTests(unittest.TestCase):
         record['quiet_dwell'] = {'start_ns': session.time.monotonic_ns()}
         return record
 
-    def install(self, *, high=False):
+    def install(self, *, high=False, now=None):
         if high:
             self.plan['runtime_requirements']['ac_powermode'] = 2
         path = self.root / session.kit.KIT / 'collection_plan.json'
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(self.plan))
-        return session.install(self.session, runner=self.run, watchdog_check=self.check,
+        return session.install(self.session, runner=self.run, watchdog_check=self.check, now=now,
             frequency_preflight=lambda *a, **k: {'ok': True},
             frequency_pre_t0=lambda *a, **k: {'ok': True})
 
@@ -430,6 +527,33 @@ class ArmIntegrationTests(unittest.TestCase):
         self.assertEqual(self.dwell()['watchdog_post_install']['evidence_class'], 'fence_observed')
         self.assert_stamps()
 
+    def test_nonfence_at_span_start_undoes_and_restores(self):
+        with self.assertRaisesRegex(ValueError, 'watchdog_acceptance: post_install: ACTIVE:.*install undone'):
+            self.install(high=True, now=lambda: self.t0 - 180)
+        self.restore.assert_called_once()
+        self.assert_stamps()
+
+    def test_failed_discovery_undoes_and_restores_with_identity_reason(self):
+        plist = self.root / 'magistrate.plist'
+        plist.write_bytes(plistlib.dumps({'Label': 'com.joulewise.magistrate',
+            'ProgramArguments': ['/synthetic/python3', '/synthetic/magistrate_watchdog.py'],
+            'WorkingDirectory': str(self.root),
+            'EnvironmentVariables': {'MAGISTRATE_WATCHDOG_CUSTODY_ROOT': str(self.root / 'watchdog')}}))
+        self.check.side_effect = lambda **kw: session.watchdog_acceptance(**dict(kw, plist_path=plist))
+        def command(argv, **kw):
+            if '--dry-run' in argv:
+                return subprocess.CompletedProcess(argv, 0, 'decision=ACTIVE reason=x\n', '')
+            if '-c' in argv:
+                return subprocess.CompletedProcess(argv, 0, json.dumps({'plans': [], 'errors_count': 0,
+                    'installed_source': 'not_distinguishable'}), '')
+            return self.command(argv, **kw)
+        self.run.side_effect = command
+        with self.assertRaisesRegex(ValueError, 'watchdog_acceptance: post_install: plan_identity:.*install undone'):
+            self.install(high=True)
+        self.restore.assert_called_once()
+        self.assertEqual(self.dwell()['watchdog_post_install']['install_undo']['remaining_labels'], [])
+        self.assert_stamps()
+
     def test_timeout_is_bounded_refusal_with_undo_and_both_stamps(self):
         plist = self.root / 'magistrate.plist'
         plist.write_bytes(plistlib.dumps({'Label': 'com.joulewise.magistrate',
@@ -442,7 +566,7 @@ class ArmIntegrationTests(unittest.TestCase):
 
         def command(argv, **kwargs):
             if '--dry-run' in argv:
-                self.assertEqual(kwargs['timeout'], session.WATCHDOG_TIMEOUT_S)
+                self.assertLessEqual(kwargs['timeout'], session.WATCHDOG_TIMEOUT_S)
                 raise subprocess.TimeoutExpired(argv, kwargs['timeout'])
             return self.command(argv, **kwargs)
 

@@ -130,20 +130,23 @@ class FakeHost:
     """
 
     def __init__(self, mode=0, *, extra_mount=False, night_job_loaded=False, soc=100, charging=False, now=None,
-                 watchdog_state='LAUNCHING'):
+                 watchdog_state='LAUNCHING', watchdog_post_state=None):
         self.now = now
         self.mode, self.extra_mount, self.night_job_loaded = mode, extra_mount, night_job_loaded
         self.soc, self.charging = soc, charging
         self.calls, self.installer_calls = [], []
         self.watchdog_state = watchdog_state
+        self.watchdog_post_state = watchdog_post_state
+        self.installed_labels = set()
 
     def watchdog_check(self, *, phase, **_):
         """Explicit W-1 stand-in through the production arm's injected seam."""
         from scripts import align_v4_session as session_mod
-        return {'ok': self.watchdog_state in session_mod.WATCHDOG_ADMITTED,
-                'state': self.watchdog_state, 'reason': 'PREQUAL synthetic watchdog',
+        state = self.watchdog_post_state if phase == 'post_install' and self.watchdog_post_state else self.watchdog_state
+        return {'ok': state in session_mod.WATCHDOG_ADMITTED,
+                'state': state, 'reason': 'PREQUAL synthetic watchdog',
                 'argv': ['synthetic-watchdog', '--dry-run'], 'plan_read_proven': False,
-                'elapsed_s': 0.0, 'stopped': self.watchdog_state == 'STOPPED'}
+                'elapsed_s': 0.0, 'stopped': state == 'STOPPED'}
 
     def frequency_check(self, *_, **__):
         """The minimal fake night plan has no native clock budget or reader."""
@@ -166,8 +169,10 @@ class FakeHost:
         if argv == ('pmset', '-g', 'batt'):
             return done(0, 'synthetic: 100%; AC; not charging')
         if argv[:2] == ('launchctl', 'print'):
-            absent = f'Could not find service "com.joulewise.night" in domain for user gui: {os.getuid()}'
-            return done(0, 'loaded', '') if self.night_job_loaded else done(113, '', absent + '\n')
+            label = argv[-1].rsplit('/', 1)[-1]
+            absent = f'Could not find service "{label}" in domain for user gui: {os.getuid()}'
+            loaded = self.night_job_loaded or label in self.installed_labels
+            return done(0, 'loaded', '') if loaded else done(113, '', absent + '\n')
         if argv == ('/usr/bin/pmset', '-g', 'custom'):
             return done(0, f'Battery Power:\n powermode 0\nAC Power:\n lowpowermode 0\n powermode {self.mode}\n')
         if argv[:5] == ('sudo', '-n', '/usr/bin/pmset', '-c', 'powermode'):
@@ -186,7 +191,12 @@ class FakeHost:
                                            'WritableVolume': not image}).decode())
         if argv and argv[0].endswith('install_night_agent.sh'):
             self.installer_calls.append(argv)
-            return done(0, 'synthetic installer: nothing installed\n')
+            from joulewise.night_agent_install import LABELS
+            if '--uninstall' in argv:
+                self.installed_labels.difference_update(LABELS)
+            else:
+                self.installed_labels.update(LABELS)
+            return done(0, 'synthetic installer\n')
         raise AssertionError(f'FakeHost: unexpected command {argv}')
 
 
@@ -248,7 +258,7 @@ def _fresh(scenario, now):
     return scenario
 
 
-def arm_fixture(ctx, name, *, now, t0_offset_s=3600):
+def arm_fixture(ctx, name, *, now, t0_offset_s=3600, ac_powermode=0):
     """A session the production install CLI accepts: an R1 -> W1 record series, plan, R0 disk config."""
     from scripts import align_v4_kit as kit, bytes_h_session as h
     base = ctx.work / name
@@ -260,9 +270,9 @@ def arm_fixture(ctx, name, *, now, t0_offset_s=3600):
     # The kit files the arm reads are committed with the records, so the desk-passed artifact set holds.
     (measurement / kit.KIT / 'registration').mkdir(parents=True, exist_ok=True)
     plan = json.loads((ctx.repo / kit.KIT / 'collection_plan.json').read_bytes())
-    plan.setdefault('runtime_requirements', {})['ac_powermode'] = 0
+    plan.setdefault('runtime_requirements', {})['ac_powermode'] = ac_powermode
     (measurement / kit.KIT / 'collection_plan.json').write_text(json.dumps(plan))
-    (measurement / kit.R1_SLOTS).write_text(json.dumps({'ac_powermode': 0}))
+    (measurement / kit.R1_SLOTS).write_text(json.dumps({'ac_powermode': ac_powermode}))
     series = ctx.repo / kit.KIT / 'series'
     if series.is_dir():                 # RUN_STATE 226 R15: every arm binds the frozen series
         shutil.copytree(series, measurement / kit.KIT / 'series')
@@ -351,6 +361,52 @@ def run_install(ctx, session, disk, packet, *, host, args_override=None, drop=()
 
 # ---------------------------------------------------------------------------
 # Checks
+
+
+@check('watchdog-hold-rollback', 'RL-56: pre-install hold refuses before install; post-install hold '
+       'uninstalls this plan, verifies both labels absent and restores Automatic')
+def check_watchdog_hold_rollback(ctx):
+    from joulewise.night_agent_install import LABELS
+    from scripts import bytes_h_session as h
+    os.environ.setdefault('JOULEWISE_HOST_STATE_DIR', str(ctx.work / 'host-state'))
+    Path(os.environ['JOULEWISE_HOST_STATE_DIR']).mkdir(parents=True, exist_ok=True)
+    now = time.time()
+    base, session, disk = arm_fixture(ctx, 'watchdog-hold', now=now, ac_powermode=2)
+    packet = valid_packet(ctx, base, now)
+    plan_path = h.read(session / 'session.json')['plan_path']
+    rows, failures = [], []
+    for phase in ('pre_install', 'post_install'):
+        host = FakeHost(now=now, watchdog_state='HOLD_PLAN_MALFORMED' if phase == 'pre_install' else 'LAUNCHING',
+                        watchdog_post_state='HOLD_PLAN_MALFORMED')
+        out = run_install(ctx, session, disk, packet, host=host, now=now)
+        refusal = f'watchdog_acceptance: {phase}: HOLD_PLAN_MALFORMED:'
+        row = {'phase': phase, 'refused': out['rc'] != 0 and refusal in out['stderr'],
+               'installer_called': bool(host.installer_calls)}
+        if phase == 'pre_install':
+            ok = row['refused'] and not row['installer_called']
+        else:
+            dwell = h.read(sorted((session / 'staging').glob('v4-arm-*.dwell.json'))[-1])
+            undo = dwell['quiet_dwell']['watchdog_post_install'].get('install_undo', {})
+            installs = host.installer_calls
+            uninstalls = [call for call in installs if '--uninstall' in call]
+            after_undo = host.calls[host.calls.index(uninstalls[0]) + 1:] if uninstalls else []
+            restored = [h.read(p) for p in (session / 'staging').glob('v4-arm-restore-*.json')]
+            row.update(uninstalled_this_plan=len(installs) == 2 and len(uninstalls) == 1
+                       and all('--plan' in call and call[call.index('--plan') + 1] == plan_path for call in installs),
+                       both_labels_verified_absent=bool(undo) and not undo.get('errors')
+                       and not undo.get('remaining_labels') and not host.installed_labels
+                       and all(any(call[:2] == ('launchctl', 'print') and call[-1].endswith('/' + label)
+                                   for call in after_undo) for label in LABELS),
+                       automatic_restored=host.mode == 0 and bool(restored) and all(r.get('ok') for r in restored)
+                       and ('sudo', '-n', '/usr/bin/pmset', '-c', 'powermode', '2') in host.calls
+                       and ('sudo', '-n', '/usr/bin/pmset', '-c', 'powermode', '0') in host.calls)
+            ok = row['refused'] and all(row[k] for k in
+                ('uninstalled_this_plan', 'both_labels_verified_absent', 'automatic_restored'))
+        rows.append(row)
+        if not ok:
+            failures.append(f'{phase}: {row}; {tail(out["stderr"])}')
+    return result(FAIL if failures else PASS, '; '.join(failures) if failures else
+                  'both holds refused; installed jobs removed and Automatic restored', cases=rows)
 
 
 @check('arm-cli', 'production arm CLI with every required arg: triage packet, top-up evidence, OBC '

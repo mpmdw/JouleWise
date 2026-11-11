@@ -194,18 +194,34 @@ WATCHDOG_STATES = frozenset({
     'HOLD_MODEL_CHECK', 'HOLD_MODEL_REJECTED'})
 WATCHDOG_ADMITTED = frozenset({'FENCED', 'ACTIVE', 'LAUNCHING', 'IDLE', 'BACKOFF', 'BACKOFF_USAGE', 'STOPPED',
                               'STANDDOWN_REQUEST', 'STANDDOWN_TERM', 'STANDDOWN_KILL'})
+# Installed-module API: Storage:311-344, PlanSnapshot:654-657,
+# load_plans:757-818 and _installed_agent_plans:820-873 only read files.
+# plan_span_active:1328 uses t0 - PLAN_LEAD_S (:104); standdown_phase:1444-1451
+# uses REQUEST/TERM/KILL leads, not the span boundary. No main()/tick() here.
+WATCHDOG_DISCOVERY_PROGRAM = '''import importlib.util, json, sys
+from pathlib import Path
+spec = importlib.util.spec_from_file_location("_arm_watchdog_discovery", sys.argv[1])
+watchdog = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = watchdog
+spec.loader.exec_module(watchdog)
+storage = watchdog.Storage(Path(sys.argv[2]), dry_run=True)
+snapshot = watchdog.load_plans(storage)
+assert storage.dry_run and not storage.would_write, "plan discovery attempted a write"
+print(json.dumps({"plans": [{"plan_id": p.plan_id, "t0_epoch_s": p.t0_epoch_s,
+    "span_start_epoch_s": p.t0_epoch_s - watchdog.PLAN_LEAD_S} for p in snapshot.plans],
+    "errors_count": len(snapshot.errors), "installed_source": "not_distinguishable"}))
+'''
 
 
-def watchdog_acceptance(*, phase, runner=None, plist_path=None):
+def watchdog_acceptance(*, phase, runner=None, plist_path=None, plan=None, now=None, deadline_ns=None):
     """W-1: run only the installed watchdog's read-only command, fail closed.
 
-    Successful dry-run output names no parsed plan (watchdog main); absence of
-    reader/fence errors is the strongest available evidence, not proof of read.
-    Before t0-180 the installed plan has no fence yet; ordinary idle/launch/
-    backoff states admit too (lane ruling B). STOPPED admits because the stop
-    switch prevents relaunch after the span (_decide:2392-2393); record it.
+    RL-56: discover this plan with the installed module after the dry run.
+    Before its span, ordinary idle/launch/backoff states admit too; at/after
+    its span boundary only FENCED/STANDDOWN admit. Both runs share one deadline.
     """
     started = time.monotonic_ns()
+    deadline_ns = started + WATCHDOG_TIMEOUT_S * 1_000_000_000 if deadline_ns is None else deadline_ns
     record = {'ok': False, 'argv': None, 'state': 'UNAVAILABLE', 'reason': None,
               'plan_read_proven': False, 'stopped': False}
     try:
@@ -236,10 +252,16 @@ def watchdog_acceptance(*, phase, runner=None, plist_path=None):
         custody = tail[1] if tail else environment.get('MAGISTRATE_WATCHDOG_CUSTODY_ROOT')
         if not isinstance(custody, str) or not Path(custody).is_absolute():
             raise ValueError('installed watchdog custody root unavailable')
+        discovery_argv = argv[:script] + ['-c', WATCHDOG_DISCOVERY_PROGRAM, argv[script], custody]
         argv = argv[:script + 1] + ['--dry-run', '--custody-root', custody]
         record.update(argv=argv, cwd=cwd, custody_root=custody)
-        result = (runner or subprocess.run)(argv, cwd=cwd, env=dict(os.environ, **environment),
-            check=False, capture_output=True, text=True, timeout=WATCHDOG_TIMEOUT_S)
+        environment = dict(os.environ, **environment)
+        environment['PYTHONDONTWRITEBYTECODE'] = '1'  # module import is read-only too
+        remaining = (deadline_ns - time.monotonic_ns()) / 1e9
+        if remaining <= 0:
+            raise TimeoutError('watchdog acceptance timeout')
+        result = (runner or subprocess.run)(argv, cwd=cwd, env=environment,
+            check=False, capture_output=True, text=True, timeout=remaining)
         record.update(exit_code=result.returncode, stdout=result.stdout or '', stderr=result.stderr or '')
         if result.returncode != 0:
             raise ValueError(f'installed watchdog exited {result.returncode}')
@@ -250,13 +272,68 @@ def watchdog_acceptance(*, phase, runner=None, plist_path=None):
         record.update(state=match[1], reason=match[2], stopped=match[1] == 'STOPPED')
         record['ok'] = (record['state'] in WATCHDOG_ADMITTED and not any(text in record['reason'] for text in
             ('night_plan_unreadable', 'night_plan_malformed', 'installed_agent_fence')))
+        if not record['ok']:
+            return record
+        identity = record['plan_identity'] = {'found': False, 'span_start_epoch_s': None, 'expected': None, 'ok': False}
+        record['ok'] = False
+        try:
+            if (not isinstance(plan, dict) or not isinstance(plan.get('plan_id'), str) or not plan['plan_id']
+                    or not pilot.h.finite(plan.get('t0_epoch_s'))):
+                raise ValueError('arm plan identity unavailable')
+            identity['expected'] = plan['t0_epoch_s'] - WATCHDOG_PLAN_LEAD_S
+            remaining = (deadline_ns - time.monotonic_ns()) / 1e9
+            if remaining <= 0:
+                raise TimeoutError('watchdog acceptance timeout before discovery')
+            discovery = record['discovery'] = {'argv': discovery_argv}
+            found = (runner or subprocess.run)(discovery_argv, cwd=cwd, env=environment,
+                check=False, capture_output=True, text=True, timeout=remaining)
+            discovery['exit_code'] = found.returncode
+            if found.returncode != 0:
+                raise ValueError(f'installed discovery exited {found.returncode}')
+            if time.monotonic_ns() > deadline_ns:
+                raise TimeoutError('watchdog acceptance timeout after discovery')
+            lines = (found.stdout or '').splitlines()
+            snapshot = json.loads(lines[0]) if len(lines) == 1 else None
+            if (not isinstance(snapshot, dict) or not isinstance(snapshot.get('plans'), list)
+                    or type(snapshot.get('errors_count')) is not int or snapshot['errors_count'] < 0
+                    or snapshot.get('installed_source') not in ('installed', 'scanned', 'not_distinguishable')):
+                raise ValueError('malformed discovery snapshot')
+            discovery.update(errors_count=snapshot['errors_count'])
+            record['installed_source'] = snapshot['installed_source']
+            if snapshot['errors_count']:
+                raise ValueError('discovery reported plan errors')
+            for item in snapshot['plans']:
+                if (not isinstance(item, dict) or set(item) != {'plan_id', 't0_epoch_s', 'span_start_epoch_s'}
+                        or not isinstance(item['plan_id'], str) or not item['plan_id']
+                        or not all(pilot.h.finite(item[k]) for k in ('t0_epoch_s', 'span_start_epoch_s'))):
+                    raise ValueError('malformed discovered plan')
+            matches = [item for item in snapshot['plans'] if item['plan_id'] == plan['plan_id']]
+            identity['found'] = bool(matches)
+            if len(matches) != 1:
+                raise ValueError('arm plan missing or ambiguous')
+            identity['span_start_epoch_s'] = matches[0]['span_start_epoch_s']
+            if matches[0]['span_start_epoch_s'] != identity['expected'] or matches[0]['t0_epoch_s'] != plan['t0_epoch_s']:
+                raise ValueError('arm plan span start mismatch')
+            if phase == 'post_install' and snapshot['installed_source'] == 'scanned':
+                raise ValueError('arm plan not discovered through installed plist')
+            identity['ok'] = record['plan_read_proven'] = True
+            record['ok'] = True
+        except Exception as exc:
+            record['reason'] = f'plan_identity: {type(exc).__name__}: {exc}'
+        if record['ok'] and (now or time.time)() >= identity['expected']:
+            if record['state'] != 'FENCED' and not record['state'].startswith('STANDDOWN_'):
+                record.update(ok=False, reason='inside plan span without a fence')
     except Exception as exc:  # malformed plist/encoding or any failed read/run is a refusal
+        record['ok'] = False
         record['reason'] = f'{type(exc).__name__}: {exc}'
-    record['elapsed_s'] = (time.monotonic_ns() - started) / 1e9
+    finally:
+        record['elapsed_s'] = (time.monotonic_ns() - started) / 1e9
     return record
 
 
 def _watchdog_refusal(phase, record):
+    if record['reason'].startswith('plan_identity:'):
+        return f"watchdog_acceptance: {phase}: {record['reason']}"
     return f"watchdog_acceptance: {phase}: {record['state']}: {record['reason']}"
 
 
@@ -843,7 +920,7 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
                obc_off_attested_by=None, battery_runner=None, battery_log=None, window_battery_journal=None,
                now=None, next_arm_triage=None, commit_check=None, record_check=None,
                packet_builder=None, meter_probe=None, dwell_start=None, series_bind=None, pre_dwell=None,
-               watchdog_plist=None, watchdog_check=None):
+               watchdog_plist=None, watchdog_check=None, watchdog_plan=None):
     """W1/D arm evidence: ruling 7 AC powermode and ruling 20 volumes.
 
     R17 review F7: every Git check (record commit, record binding) and the frozen-series binding
@@ -940,7 +1017,7 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
                         'record_bound': bool((record_check or _record_bound)(measurement_root, built))}
         series_binding = list(series_bind(built)) if series_bind is not None else None
     watchdog = (watchdog_check or watchdog_acceptance)(phase='pre_install', runner=runner,
-                                                       plist_path=watchdog_plist)
+                                                       plist_path=watchdog_plist, plan=watchdog_plan, now=now)
     if not watchdog['ok']:
         reasons.append(_watchdog_refusal('pre_install', watchdog))
     # The 3 s monitor launch is USB and process activity: it runs BEFORE the quiet/display dwell
@@ -1296,17 +1373,25 @@ def _watchdog_post_install(state, dwell, *, runner=None, plist_path=None, check=
     quiet['watchdog_post_install_start_ns'] = time.monotonic_ns()
     result = {'ok': False, 'state': 'UNAVAILABLE', 'reason': None, 'plan_read_proven': False}
     try:
-        result = (check or watchdog_acceptance)(phase='post_install', runner=runner, plist_path=plist_path)
+        plan = pilot.h.read(state['plan_path'])
+        deadline = quiet['watchdog_post_install_start_ns'] + WATCHDOG_TIMEOUT_S * 1_000_000_000
+        result = (check or watchdog_acceptance)(phase='post_install', runner=runner, plist_path=plist_path,
+                                               plan=plan, now=now, deadline_ns=deadline)
         result['stopped'] = result['state'] == 'STOPPED'
         if result['ok']:
+            if time.monotonic_ns() > deadline:
+                raise TimeoutError('watchdog acceptance timeout')
+            t0 = plan.get('t0_epoch_s')
+            if not pilot.h.finite(t0):
+                raise ValueError('installed plan t0_epoch_s unavailable')
+            remaining = t0 - WATCHDOG_PLAN_LEAD_S - (now or time.time)()
             if result['state'] == 'FENCED' or result['state'].startswith('STANDDOWN_'):
                 result['evidence_class'] = 'fence_observed'
+            elif remaining <= 0:
+                result.update(ok=False, reason='inside plan span without a fence')
             else:
-                t0 = pilot.h.read(state['plan_path']).get('t0_epoch_s')
-                if not pilot.h.finite(t0):
-                    raise ValueError('installed plan t0_epoch_s unavailable')
                 result.update(evidence_class='installed_plan_parsed_no_fence_yet',
-                              seconds_until_span_begins=max(0.0, t0 - WATCHDOG_PLAN_LEAD_S - (now or time.time)()))
+                              seconds_until_span_begins=remaining)
     except BaseException as exc:  # a signal after install must undo the jobs too
         result.update(ok=False, state='UNAVAILABLE', reason=f'{type(exc).__name__}: {exc}')
     finally:
@@ -1433,7 +1518,8 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
                         next_arm_triage=next_arm_triage, commit_check=commit_check,
                         record_check=record_check, packet_builder=packet_builder, meter_probe=meter_probe,
                         dwell_start=dwell_start, series_bind=series_bind, pre_dwell=pre_dwell,
-                        watchdog_plist=watchdog_plist, watchdog_check=watchdog_check)
+                        watchdog_plist=watchdog_plist, watchdog_check=watchdog_check,
+                        watchdog_plan=pilot.h.read(state['plan_path']))
     # After the stamp: the single in-memory dwell value, written once, then the handoff (or refusal).
     dwell = {'schema': ARM_DWELL_SCHEMA, 'arm_record': str(path), 'admitted': record['admitted'],
              'quiet_dwell': record['quiet_dwell'], 'timing_receipts': _take_receipts()}
