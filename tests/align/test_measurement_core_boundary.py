@@ -14,6 +14,20 @@ from tests.align.test_pilot3_cache import CacheAPI, chat, fake_endpoint
 
 
 class MeasurementCoreBoundaryTests(unittest.TestCase):
+    def test_every_estimator_file_matches_issued_acceptance(self):
+        from joulewise.calibration_bracketing import (
+            ESTIMATOR_CODE_PATHS, load_calibration_acceptance_bound,
+        )
+
+        acceptance = load_calibration_acceptance_bound()
+        self.assertIsNotNone(acceptance)
+        pins = acceptance['prospective_rederivation']['estimator_code_sha256']
+        root = Path(__file__).resolve().parents[2]
+        self.assertEqual(set(pins), set(ESTIMATOR_CODE_PATHS))
+        for name in ESTIMATOR_CODE_PATHS:
+            with self.subTest(name=name):
+                self.assertEqual(hashlib.sha256((root / name).read_bytes()).hexdigest(), pins[name])
+
     def test_pilot9_measurement_core_is_unchanged(self):
         # SHA-256 of each complete file at pilot-9 c9a0a3943. No Git or
         # access to measurement data is needed to enforce this in shallow CI.
