@@ -3149,6 +3149,59 @@ the printed result. Three of these five questions were that test failing on the 
 
 ---
 
+# Decision request 33: a W1 PREQUAL check fails on an import of the R1 driver (2026-11-11 05:06 PST)
+
+**Read.** On the W1 line at `b4a6c217f`: `scripts/run_night.py:2255-2262`, where `_r1_refusal_summary` imports
+`phase_plan` from `scripts/align_r1_rehearsal.py` to get the list of R1 phase names; the function itself, a
+table of names with no wait in it; and the wait the check looks for, defined and called elsewhere in the same
+file. I compared the R1 files on the W1 line with those at `da3187e6e`, the build that ran R1 (result below).
+I did not run PREQUAL.
+
+## RL-61. Option (a): move the phase table out, and bind the R1 files that actually ran
+
+### The ruling
+
+**(a).** `phase_plan` and the constants it needs move, unchanged, into a small module that imports neither the
+rehearsal driver nor anything that waits. The night runner and the rehearsal driver both import it from there.
+The check stays exactly as written and then says something true: nothing a W1 night can load contains that
+wait.
+
+(b) narrows a check that was written after a real loss, to make it pass. (c) signs a registration whose own
+prequalification reports FAIL.
+
+### Terms
+
+- **A pure move.** The function's text is unchanged. A test holds the table it returned before the move, for
+  both values of `include_4bit`, and compares.
+- **The new module is bound, strict.** That is an addition to the closure and falls under RL-29's standing
+  ratification. One line in `DEVIATIONS.md`.
+- **It is not under RL-53's cut-off.** PREQUAL runs on the bytes that are registered, and it must pass. Like
+  RL-58's restore, this precedes signing whatever happens to the rest of the batch.
+- The trace is regenerated and both closure modules pass. A cold review, as for the other bound edits.
+
+### One thing this exposed, and a condition on the slots
+
+The W1 line binds `scripts/align_r1_rehearsal.py` and the R1 runtime as strict artifacts. They are bound
+because the registration consumes R1's slots. But the night that produces the slots runs from the R1 lane,
+and the two copies can differ. The receipt would then bind R1 code that did not produce the slots it sits
+beside.
+
+**Condition 13 on R1's slots (RL-32):** at signing, the R1 driver, the R1 runtime, the thermal-gate module,
+the R1 runtime configuration and the new phase-table module on the W1 line are byte-identical to the files at
+the commit that ran the night whose slots are entered, and the slots file names that commit. A test in the
+registration module compares them.
+
+So the move is made where the follow-up night is being built, with RL-59's changes, and the W1 line takes
+those files. If the lead does the move on the W1 line first to get PREQUAL green for other work, that is
+fine; what is checked at signing is identity with the files that ran.
+
+**Reason.** A static check that fails for a reason nobody can dismiss by inspection should be satisfied by
+making its claim true. And a receipt that lists the rehearsal's code should list the code that rehearsed.
+
+**Blind status.** Blind: no v4 outcome exists.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
