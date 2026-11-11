@@ -3561,6 +3561,38 @@ the conclusion may say what was not shown, and no more.
 
 ---
 
+# Decision request 38: the measurement driver changed between pilot 9 and W1 (2026-11-11 05:27 PST)
+
+**Checked.** `git diff 3c9c47a4e b4a6c217f -- joulewise/b5/driver.py`: 189 lines added, 10 removed. By the hunk
+headers the changes sit in the night body's supervision loop (13 hunks), the liveness class, the seams and the
+module's header text. I did not read every hunk.
+
+## RL-67. A row, yes, and it says what did not change
+
+The re-pin with its citations is right for the test. It is not enough for a reader, because the test is not a
+bound file and the pin's purpose was to make someone say what changed in the file that runs the measurement.
+
+One row goes in `DEVIATIONS.md` with the pre-signing set:
+
+- the six commits, and the rulings that admitted them (the reliability rounds under RL-35; the meter-outage
+  change under RL-37);
+- **what they change:** admission before the chain (the meter probe), supervision during it (meter liveness,
+  flagged and not stopping), fault reasons in the result, and restores on the terminal paths;
+- **what they do not change:** how an admitted member is captured, sampled and recorded. A window's member
+  records at W1 are produced as pilot 9's were.
+
+That last sentence has to be earned. Whoever writes the row reads the whole diff and lists the changed
+functions under those two headings. If any hunk touches the capture path of an admitted member, the row does
+not go in and it comes to me. The pilots matter here because v4 reuses their anchor stages; a difference in
+capture between pilot 9 and W1 would be a difference inside the series' own reference.
+
+**Reason.** "Changed by admitted commits" tells a reader that someone approved it. It does not tell them
+whether W1's data are the same kind of data as the pilots'. That is the question the pin was guarding.
+
+**Blind status.** Blind: no v4 outcome exists.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
