@@ -13,6 +13,16 @@ custody or night path was opened. Every executed fixture is synthetic and
 local to the permitted temporary directory. No network, model download,
 measurement, MBP operation or full test suite was used.
 
+**Access-scope exception requiring lead adjudication.** The final automated
+integrity check opened `RUN_STATE.md`, `TASK_QUEUE.md` and
+`docs/process/state_kernel.json` as bytes and compared them with their base
+commit blobs. It printed only that the comparisons passed; none of their
+contents was printed, parsed or supplied to the model. Nevertheless, those
+reads exceeded this fix seat's explicit read allowlist. This run must not be
+described as strictly read-set compliant. The exception does not establish
+that any additional outcome was seen, and this seat does not adjudicate its
+RL-80 blinding consequence. No further reads of these files were performed.
+
 The estimator is untouched: `joulewise/bytes_analysis.py` remains SHA-256
 `18582818c7e03bad148b54dce8b8d60a62e2ffc5597e701ae3ab0418dffc0a71`.
 Flags and all real study data are untouched. Coordination files and kernel
@@ -142,6 +152,15 @@ no unmeasured whole-module scheduling weight was added. Estimator and
 protected coordination-file diffs are empty.
 
 ## Remaining lead gates
+
+**NEEDS_RULING — read-set compliance.** Question: how should the nondisplayed
+coordination-file byte comparison affect this seat's RL-80 qualification?
+Options: accept it with a recorded exception and cold review, or require
+clean-seat validation before relying on the fix. Recommendation: treat this
+commit as an implementation artifact requiring clean-seat cold review and a
+lead ruling. Blocked work: claiming strict fix-seat read-set compliance or
+admitting the fix on that basis. The implementation and local commits remain
+available for review.
 
 **NEEDS_RULING — verification budget.** Question: may the remaining targeted
 verification exceed the roughly 20-minute total limit? Options considered:
