@@ -323,8 +323,7 @@ class HeldWindowTests(unittest.TestCase):
 
     def packet(self):
         self.scenario.finish()
-        return self.builder.build_packet(self.scenario.root, **self.scenario.identities(), now_epoch_s=111,
-                                         current_artifact_set_sha256='a' * 64)
+        return self.scenario.build()
 
     def test_each_held_reason_refuses_and_nonheld_reason_does_not(self):
         for reason in ('records.source_changed_during_harvest', 'roster.no_science_bundles',
@@ -439,6 +438,20 @@ class HeldWindowTests(unittest.TestCase):
         self.assertEqual(len(release['text_content'].encode()), 16 * 1024)
         self.assertEqual(release['text_sha256'], ruling['text']['sha256'])
 
+    def test_ruling_from_series_ancestor_is_authenticated_and_carried(self):
+        self.scenario.sources['exclusions'].update(reasons=['precheck.certain_exclusion'], claim_usable=False)
+        packet = self.packet()
+        path, descriptor, _ = self.ruling()
+        ancestor = self.scenario.commit()
+        raw = path.read_bytes()
+        path.unlink()
+        packet = self.commit_rulings(packet)
+        path.write_bytes(raw)
+        row = session.held_window_check(self.scenario.root, packet, ruling_path=path)
+        self.assertTrue(row['ok'], row)
+        self.assertEqual(row['rulings'][0]['commit'], ancestor)
+        self.assertEqual(row['rulings'][0]['sha256'], descriptor['sha256'])
+
     def test_r1_and_development_are_skipped_and_each_chain_digest_is_verified(self):
         from tests.align.test_v4_next_arm_packet import Scenario
         root = self.scenario.root
@@ -462,9 +475,10 @@ class HeldWindowTests(unittest.TestCase):
         ruling = {'ruling_id': 'RL-synthetic', 'after_window': 'C1', 'resets': 'held_window_release',
                   'text': text, 'lead_signature': 'lead: synthetic 2026-11-11'}
         path = self.scenario.root / 'ruling.json'
+        packet = self.packet()
         for signature, ok in (('unsigned', False), (ruling['lead_signature'], True)):
             path.write_text(json.dumps(dict(ruling, lead_signature=signature)))
-            packet = self.packet()
+            packet = self.commit_rulings(packet)
             row = session.held_window_check(self.scenario.root, packet, ruling_path=path)
             self.assertEqual(row['ok'], ok, row)
             if ok:
@@ -473,7 +487,7 @@ class HeldWindowTests(unittest.TestCase):
         for mutation in ({'after_window': 'C2'}, {'resets': 'other'},
                          {'text': {'path': text['path'], 'sha256': 'f' * 64}}):
             path.write_text(json.dumps(dict(ruling, **mutation)))
-            packet = self.packet()
+            packet = self.commit_rulings(packet)
             self.assertFalse(session.held_window_check(self.scenario.root, packet, ruling_path=path)['ok'])
 
     def test_previous_not_final_defers(self):
