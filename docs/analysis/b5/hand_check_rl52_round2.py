@@ -4,7 +4,8 @@
 Requires the round-2 authority for exact hash-pinned descendants of the two
 RL-38 roots. No analysis/recompute imports, directory inventories, reference
 path following, raw-stream integration, custody writes or network.
-Use --repo-only to check the frozen full ledger without opening custody.
+Use --repo-only to check the frozen round-2 prefix without opening custody.
+Later append-only rounds remain outside this historical replay's scope.
 """
 from __future__ import annotations
 
@@ -53,11 +54,14 @@ class ReleasedReader:
             raise ValueError('not an authorized pinned round-2 source')
         root, relative, pin = self.sources[alias]
         p = h.CustodyReader.checked_path(root, relative)
-        raw = p.read_bytes()
-        digest = hashlib.sha256(raw).hexdigest()
+        with p.open('rb') as stream:
+            digest = hashlib.file_digest(stream, 'sha256').hexdigest()
         self.opened[alias] = dict(path=str(p), expected_sha256=pin, sha256_before=digest)
         if digest != pin:
-            raise ValueError(f'{alias}: hash mismatch before parsing')
+            raise ValueError(f'{alias}: hash mismatch before reading/parsing')
+        raw = p.read_bytes()
+        if hashlib.sha256(raw).hexdigest() != pin:
+            raise ValueError(f'{alias}: changed after pre-read hash')
         return json.loads(raw)
 
     def finish(self):
@@ -558,17 +562,17 @@ def repository_check():
     e.check_round1_bytes(current)
     frozen = subprocess.run(['git', 'show', f'{ROUND2}:docs/analysis/b5/rederivation.tsv'],
                             cwd=REPO, check=True, capture_output=True).stdout
-    if current != frozen:
+    if b''.join(current.splitlines(keepends=True)[:1420]) != frozen:
         raise ValueError('round-2 ledger differs from frozen 1419-row authority; refuse')
     print(json.dumps({'mode':'repository-only; no custody arithmetic rerun',
-                      'scope':'full 1419-row ledger including both unchanged prefixes',
+                      'scope':'physical rows 1-1420; later appends outside round-2 scope',
                       'full_ledger_byte_identical':True, 'opened_custody':[]}, sort_keys=True))
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--write',action='store_true')
-    parser.add_argument('--repo-only',action='store_true',help='check frozen full ledger; never open custody')
+    parser.add_argument('--repo-only',action='store_true',help='check frozen round-2 prefix; never open custody')
     args = parser.parse_args()
     if args.repo_only:
         if args.write:
@@ -587,10 +591,11 @@ def main():
         rows = append_rows(data, fields, reader.sources)
     finally:
         print(json.dumps({'opened_custody':reader.finish()},sort_keys=True))
-    result = append_only(current,prefix,rows,fields)
+    scoped = b''.join(current.splitlines(keepends=True)[:1420])
+    result = append_only(scoped,prefix,rows,fields)
     if args.write:
-        target.write_bytes(result)
-    elif result != current:
+        target.write_bytes(result+b''.join(current.splitlines(keepends=True)[1420:]))
+    elif result != scoped:
         raise ValueError('new rows not appended; use --write')
     complete = list(csv.DictReader(io.StringIO(result.decode()),delimiter='\t'))
     print(json.dumps({'round2_new_rows':len(rows), 'round2_counts':dict(Counter(x['match'] for x in rows)),

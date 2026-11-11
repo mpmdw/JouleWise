@@ -232,7 +232,9 @@ class Round3RepositoryGateTests(unittest.TestCase):
 
     def test_full_ledger_repository_modes_reject_changed_round2_row(self):
         raw = SCRIPT.with_name('rederivation.tsv').read_bytes()
-        changed = raw + b'unreviewed append\n'
+        lines = raw.splitlines(keepends=True)
+        lines[900] = lines[900].replace(b'\t', b'X\t', 1)
+        changed = b''.join(lines)
         opus = self.load_script('opus_coldreview_rl52_check.py')
         for module in (round2, opus):
             with self.subTest(checker=module.__name__), patch.object(Path, 'read_bytes', return_value=changed):
@@ -251,7 +253,7 @@ class Round3RepositoryGateTests(unittest.TestCase):
     def test_fill_gate_checks_full_ledger_and_original_prefix(self):
         fill = self.load_script('fill_check_b5.py')
         rows = fill.load_ledger()
-        self.assertEqual(len(rows), 1419)
+        self.assertEqual(len(rows), 1844)
         self.assertEqual(fill.FAILURES, [])
         raw = fill.LEDGER.read_bytes()
         original = extension.base_bytes()
@@ -440,7 +442,7 @@ class LedgerRound2Tests(unittest.TestCase):
             reader.sources = {'DISC':(root,'restricted/test.json','0'*64)}
             with patch.object(round2.h,'ROOT_A',root):
                 with patch.object(round2.json,'loads',side_effect=AssertionError('parsed unverified bytes')):
-                    with self.assertRaisesRegex(ValueError,'hash mismatch before parsing'):
+                    with self.assertRaisesRegex(ValueError,'hash mismatch before reading/parsing'):
                         reader.read('DISC')
                 result = reader.finish()['DISC']
             self.assertEqual(result['sha256_before'],result['sha256_after'])
@@ -520,6 +522,98 @@ class LedgerRound2Tests(unittest.TestCase):
         self.assertEqual(ledger.rows[0]['match'],'MISMATCH')
         self.assertEqual(ledger.rows[0]['difference'],'1.0')
         self.assertEqual(ledger.rows[0]['paper1'],'print-labelled')
+
+
+class Round4CoverageAndReplayTests(unittest.TestCase):
+    @staticmethod
+    def module(name):
+        return Round3RepositoryGateTests.load_script(name)
+
+    def test_round4_refuses_wrong_hash_before_loading_file(self):
+        r4 = self.module('hand_check_rl55_round4.py')
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root/'fake.json').write_bytes(b'{}')
+            reader = r4.ReleasedReader()
+            reader.sources = {'RC': (root, 'fake.json', '0'*64)}
+            with patch.object(r4.r2.h, 'ROOT_A', root):
+                with patch.object(Path, 'read_bytes', side_effect=AssertionError('loaded before prehash matched')):
+                    with self.assertRaisesRegex(ValueError, 'hash mismatch'):
+                        reader.read('RC')
+
+    def test_round4_append_preserves_existing_partial_append(self):
+        r4 = self.module('hand_check_rl55_round4.py')
+        rows = [{'value':'a'}, {'value':'b'}]
+        self.assertEqual(r4.serialize(b'prefix\na\n', b'prefix\n', rows, ['value']), b'prefix\na\nb\n')
+        for current in (b'changed\n', b'prefix\nchanged\n', b'prefix\na\nb\nextra\n'):
+            with self.subTest(current=current), self.assertRaisesRegex(ValueError, 'differs'):
+                r4.serialize(current, b'prefix\n', rows, ['value'])
+
+    def test_round2_native_replay_accepts_round4_append(self):
+        frozen = subprocess.run(['git','show',round2.ROUND2+':docs/analysis/b5/rederivation.tsv'],
+                                cwd=SCRIPT.parents[3],check=True,capture_output=True).stdout
+        rows = list(csv.DictReader(io.StringIO(frozen.decode()),delimiter='\t'))[801:]
+        with patch.object(round2, 'ReleasedReader') as reader:
+            reader.return_value.read.return_value = {}
+            reader.return_value.finish.return_value = {}
+            with patch.object(round2, 'append_rows', return_value=rows):
+                with patch('sys.argv',[str(round2.__file__)]), redirect_stdout(io.StringIO()):
+                    round2.main()
+
+    def test_round4_repository_mode_never_constructs_custody_reader(self):
+        r4 = self.module('hand_check_rl55_round4.py')
+        with patch.object(r4, 'ReleasedReader', side_effect=AssertionError('custody opened')):
+            with patch('sys.argv',[str(r4.__file__),'--repo-only']), redirect_stdout(io.StringIO()):
+                r4.main()
+
+    def test_coverage_has_all_pending_ids_and_exact_machine_bytes(self):
+        coverage = self.module('fill_coverage_b5.py')
+        fill = self.module('fill_check_b5.py')
+        rows = coverage.build(coverage.paper_text(), fill.load_ledger())
+        self.assertTrue(set(fill.PENDING) <= {r['placeholder'] for r in rows})
+        self.assertEqual(len({r['placeholder'] for r in rows}),65)
+        # Compare digests so a failure cannot dump the study's coverage table.
+        self.assertEqual(hashlib.sha256(coverage.encoded(rows)).digest(),
+                         hashlib.sha256(SCRIPT.with_name('fill_coverage.tsv').read_bytes()).digest())
+
+    def test_coverage_refuses_an_uninventoried_block5_placeholder(self):
+        coverage = self.module('fill_coverage_b5.py')
+        fill = self.module('fill_check_b5.py')
+        paper = coverage.paper_text()+'\n{{FILL: P1-B5-NEW-GAP | required registered leaf}}'
+        with self.assertRaisesRegex(ValueError,'unaccounted Block 5'):
+            coverage.build(paper,fill.load_ledger())
+
+    def test_coverage_keeps_contrast_members_in_their_phase(self):
+        coverage = self.module('fill_coverage_b5.py')
+        fill = self.module('fill_check_b5.py')
+        rows = coverage.build(coverage.paper_text(),fill.load_ledger())
+        for phase, expected in [('decode',set(range(198,202))),('prefill',set(range(202,209)))]:
+            actual = {int(n) for r in rows if r['placeholder']=='P1-B5-RM-ctr-'+phase
+                      for n in r['ledger_rows'].split(',') if n and 198<=int(n)<=208}
+            self.assertEqual(actual,expected)
+
+    def test_coverage_cites_all_window_battery_codes_and_gamma_temperatures(self):
+        fill = self.module('fill_check_b5.py'); ledger = fill.load_ledger()
+        for pack in ('alpha','beta','gamma'):
+            keys = [r['key/leaf'] for r in ledger.values() if r['key/leaf'].startswith(
+                f'DISC.window_lines.{pack}[label=battery_counts].counts.')]
+            self.assertEqual(len(keys),6)
+        self.assertEqual(sum(r['key/leaf'].startswith('DISC.window_lines.gamma[') and
+                             r['key/leaf'].endswith('.rise_k') for r in ledger.values()),10)
+
+    def test_fill_paper_ref_is_explicit_and_uses_local_git_only(self):
+        fill = self.module('fill_check_b5.py')
+        with patch.object(fill, 'PAPER') as paper, redirect_stdout(io.StringIO()) as output:
+            paper.read_text.side_effect=AssertionError('working-tree paper read with explicit ref')
+            self.assertEqual(fill.main(['--paper-ref','e5fd296715f21c7c3792e4f9743b7494b07813ec']),0)
+        self.assertIn('Paper input: local Git commit',output.getvalue())
+
+    def test_fill_repo_only_never_reads_paper(self):
+        fill = self.module('fill_check_b5.py')
+        with patch.object(fill, 'PAPER') as paper, redirect_stdout(io.StringIO()) as output:
+            paper.read_text.side_effect=AssertionError('paper read in repo-only mode')
+            self.assertEqual(fill.main(['--repo-only']),0)
+        self.assertIn('paper not checked',output.getvalue())
 
 
 if __name__ == '__main__':

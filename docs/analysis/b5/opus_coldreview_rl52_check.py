@@ -667,7 +667,7 @@ def residual_sig_ok(s):
 
 def repository_check():
     """Verify the reviewed bytes; this does not replay the custody review."""
-    raw = LEDGER.read_bytes()
+    raw = b''.join(LEDGER.read_bytes().splitlines(keepends=True)[:1420])
     frozen = subprocess.run(['git', 'show', f'{REVIEWED_COMMIT}:docs/analysis/b5/rederivation.tsv'],
                             cwd=LEDGER.parents[3], check=True, capture_output=True).stdout
     if raw != frozen:
@@ -677,7 +677,7 @@ def repository_check():
     if bad_residuals:
         raise ValueError(f'extension residuals exceed two significant figures: {bad_residuals}')
     print(json.dumps({'mode':'repository-only; no custody source/recompute checks rerun',
-                      'scope':'full 1419-row reviewed ledger; extension residual precision',
+                      'scope':'physical rows 1-1420; later appends outside this historical review',
                       'reviewed_bytes_identical':True, 'opened_custody':[]}, sort_keys=True))
 
 
@@ -701,7 +701,7 @@ def main():
         for kind in ('spare', 'lost'):
             V[f'n8.{w}.n_{kind}'] = 0 if kind == 'spare' else len(V[f'n8.{w}.lost'])
 
-    rows = list(csv.reader(LEDGER.read_text(encoding='utf-8').splitlines(), delimiter='\t', quoting=csv.QUOTE_NONE))
+    rows = list(csv.reader(LEDGER.read_text(encoding='utf-8').splitlines()[:1420], delimiter='\t', quoting=csv.QUOTE_NONE))
     hdr = rows[0]; col = {h: i for i, h in enumerate(hdr)}
     words = Counter(); src_words = Counter(); seat = Counter(); out = []; bad_resid = []
     hand_rows = {}

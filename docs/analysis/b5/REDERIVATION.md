@@ -1,11 +1,16 @@
 # Block 5 independent reader: RL-41/RL-42 print authority
 
-**2026-11-11 RL-52 round 3:** the Opus cold review is
+**2026-11-11 RL-55 round 4:** 425 append-only rows complete the session
+disclosures and required coverage map; see the round-4 section below. The
+original 1,419 rows and RESULTS are unchanged. Opus review/lead acceptance
+remain owed.
+
+**2026-11-11 RL-52 round 3 (historical):** the Opus cold review is
 [ADMIT-WITH-FIXES](../../run_reports/2026-11-11-p1-b5-ledger-ext-opus-coldreview.md).
 F1–F4 are addressed in prose and checker code; **no ledger row changed**.
 The new print-authority commit is recorded in the round-3 section below.
 The second fill must apply the row-pairing instruction for rows 647–651 and
-1064–1065. F5's additional session scope remains the lead's decision.
+1064–1065. F5's session scope was subsequently authorized by RL-55 and is covered below.
 
 **2026-11-11 RL-52 round 2:** the lead clarified access to exact hash-pinned
 descendants, and 618 further rows complete this reader's extension. The ledger
@@ -38,6 +43,12 @@ and the [round-2 report and table commit](../../run_reports/2026-11-11-p1-b5-led
 List indices collapse to `*` in the comparator's path unit. DLE-5 was right;
 no deviation-log note is added. Paper 1 prints no count; any future count must
 carry its unit.
+
+**Clarification, RL-55 (not an erratum):** 1.7B prefill R_cm appears at
+`1.9997` in RESULTS (row 277) and `1.99975` in the fuller extension (row 570).
+The second fill takes the row with more digits and prints this one at five
+decimals, **1.99975**; it is below 2 either way. Other R/R_cm keep four decimals.
+This is a last-place precision difference, not a new mismatch.
 
 ## Current ledger disposition and printing rule
 
@@ -824,3 +835,174 @@ require separate authority and were not run in round 3.
 The round-3 [run report](../../run_reports/2026-11-11-p1-b5-ledger-ext.md#round-3--opus-cold-review-f1f4-repo-only)
 records the commit, verification and the base branch's pre-first-fill paper
 limitation. The paper was not edited.
+
+## Round 4 — RL-55 disclosure extension and fill coverage
+
+Round 4 appends **425 rows**, physical TSV lines **1421–1845**, for **1,844
+rows** in total. The header and all **1,419** existing rows remain byte-identical
+to round-3 authority `60f66800fabe02c574dab41b2a61f38623c47a0c`. RESULTS is
+unchanged. The new print-authority SHA is recorded after the table commit in
+the run report and in this section's authority note. Lead acceptance and the
+prescribed Opus cold review remain separate gates.
+
+| New physical rows | Content |
+|---|---|
+| 1421–1504 | ALPHA/BETA window battery counts, unread-arm counts, lost-reference identity/slot, stage names and removed-unit position metadata |
+| 1505–1535 | GAMMA window battery counts, unread-arm count, nine arm probe lines, physics counts and lost-reference names/slots |
+| 1536–1605 | Ten GAMMA stage names, rises, plateau/diagnostic/harvest flags; no reading arrays |
+| 1606–1642 | GAMMA gross and idle-subtracted NEG-8 bound terms, screens, allowances, references, lost/spare/midpoint and corpus/drop/cap counts/reasons |
+| 1643–1650 | GAMMA attempt count, causes/multiplicity, attempt, verdict and succeeded/planned counts |
+| 1651–1793 | All 24 comparator families: pass/fail/compared counts, applicable absolute/relative bars, numeric largest differences and agreement words |
+| 1794–1809 | Sixteen removed reported-unit names as printable values |
+| 1810–1845 | Nine removed contrast-quad names, strata, stages and positions as printable values |
+
+The three pinned files and their before/after hashes are recorded in
+[round4_sources.tsv](round4_sources.tsv) and the round-4 run report. Only RC,
+DISC and CMP are opened. The new [hand checker](hand_check_rl55_round4.py)
+uses independent stdlib arithmetic from the round-2 checker. GAMMA NEG-8
+uses the realised endpoint counts and both energy families, with the same
+registered bound, screen and allowance rules as ALPHA/BETA. Temperature
+rises and flags are calculated without serializing thermistor readings.
+A `none` rise means fewer than two readable readings; it does not itself mean
+that the stage had no temperature reading.
+
+Window battery counts are sums of disclosed per-code flag-count records,
+cross-checked against RC's by-code counts. These are arithmetic over stored
+flags, not a new detection of assist. All three packs have zero
+`<module>.arm_unmeasured` flags. Empty arm measurement maps alone do not imply
+an unread hazard. Arm readings/verdicts and stage harvest flags retain
+`recorded-judgment` with attribution. GAMMA succeeded/planned counts are
+independently recounted from pinned member rosters. Comparator counts,
+numeric differences and words are recalculated from its issued comparisons;
+no analysis pipeline or comparator implementation is run. `window_edge_s`
+has zero comparisons and the word **not-compared**. It has no observed maximum;
+categorical families likewise have no numerical maximum.
+
+| Ledger word | Round 4 | Whole ledger |
+|---|---:|---:|
+| exact | 370 | 1101 |
+| within-rounding | 25 | 580 |
+| recorded-judgment | 30 | 128 |
+| single-source | 0 | 34 |
+| MISMATCH | 0 | 1 |
+| source-outside-unseal | 0 | 0 |
+| Total | 425 | 1844 |
+
+The sole MISMATCH remains physical row **249**, RL-39's ruled wording erratum.
+All new residuals have at most two significant figures. No new mismatch or
+source-outside-unseal row was found. Shared trace-sweep widths, raw selection
+eligibility and collection-time judgments retain the earlier limitations.
+The full ledger SHA-256 is
+`2f15d0810ae6123c42871e7101e880440e4c46ad350f707058d3fd5e7a988469`.
+
+### Required coverage table (RL-55)
+
+[fill_coverage.tsv](fill_coverage.tsv) is the complete **element-by-element**
+map: **1,581 elements**, **65 placeholders**, comprising all **57** still-pending
+Block 5 ids plus the primary-block parts of **8** mixed placeholders. It
+pins the exact `origin/main` paper snapshot
+`84ad2c5beea5f823723e6f6f83ccf8caabf9e476`, including each FILL's full description
+and source line. No Block 6, BYTES or v4 output was read. Mixed placeholders
+are inventoried for completeness; this does not authorize their second fill.
+
+Every mapped leaf has a physical ledger row. Every other element has one
+of RL-55's three allowed reasons, with its committed file where applicable:
+**1,539** element/row entries, **22** names from committed files, **11** needing
+Block 6, **9** not leaves of the registered Block 5 outputs. The last group
+contains the unissued refusal of an unselected branch, the explicitly
+dropped B-share and cross-block/publication/probe
+items outside this ledger, not a missing registered Block 5 result. There is
+**no unsupplied registered Block 5 output element** in the 57 pending ids.
+The abstract/conclusion retain their replication/freeze/author gates.
+
+The table below is a per-placeholder index. The machine file supplies the
+individual element, exact row, attribution/conditional sentence and exception;
+it is not enough to cite the union of a composite's rows without those rules.
+In particular: BETA decode load rows 647–651 must be paired with 1064–1065 and
+labelled **“recompute only; not compared”**. The three agree words and the
+8B decode **differ** sentence are registered computed results. The latter's
+full sentence belongs in results prose (RL-55). No central band or later
+inside-band count is issued when there is no clean window; no missing-reference,
+spare, unread-hazard or below-minimum sentence is invented when its count is zero.
+
+| Pending id | Elements requested (verbatim FILL description) | Physical ledger rows; other disposition |
+|---|---|---|
+| `P1-ABS-PART1` | one or two sentences summarising Part 1, assembled from the issued outcome fields only: the four reported cells' L1 statement with intervals (CP-X05-*), the dominance branch (CP-X02-abstract / CP-X03-abstract), the decode and prefill contrast outcome words and, only where the claim gate returns L2, the registered direction (CP-X08-*-abstract), and the replication word per contrast (P1-B6-REPWORD-decode, P1-B6-REPWORD-prefill) | 133–168, 530–535, 863–864; needs Block 6 |
+| `P1-ID-OS` | operating-system build(s) of the primary-block sessions and of each replication session, from the identity pins and per-session records | a name from a committed file; needs Block 6 |
+| `P1-M-RECORD-WIDTH` | median record width and its range in the pre-collection probe sessions, from the registration's instrument description | not a leaf of a registered output |
+| `P1-B5-METER` | per pack and model: median, range and interquartile range of the rails' share ρ; member windows outside the hard plausibility band, each listed with its meter flags; within-model spread; the central band from the first clean session and the count of later member windows inside it; or "no clean session, no central band" | 528, 722–784 |
+| `P1-M-ACCEPT` | the registered acceptance constants for each block: pre-capture screen, bracket screen and drift limit, from the acceptance files named in the registrations | a name from a committed file; needs Block 6; not a leaf of a registered output |
+| `CP-X01-identity` | model identities and revisions, runtime and library versions, tokenizer and chat-template digests, from the identity pins and prompt pin | a name from a committed file |
+| `CP-X01-length` | the selection record that fixed the 2,048-token length, with its digest | a name from a committed file |
+| `P1-LEDGER` | per-attempt verdicts (counting or not, with cause family) for every primary, replication and BYTES attempt, from the harvest verdicts and attempt histories | 885–949, 1643–1650; needs Block 6; not a leaf of a registered output |
+| `P1-DEV-LIST` | dated list of every erratum, deviation, interpretation and disclosed repair with applicability and blind status: primary-block SEAL_RECORD.md (two seals, three prospective errata), L9 rulings and addenda including the 2026-10-12 J5 floor-drift correction, docs/analysis/b5/DEVIATION-LOG.md DLE-0 through DLE-10, docs/decision_log.md D-188 through D-190, replication §17 and BYTES addenda | a name from a committed file; needs Block 6; not a leaf of a registered output |
+| `P1-RELEASE` | dates of the primary-block release event, the replication-block release and the BYTES stage-1 commitment and stage-2 release, with the digests each record ties, from the seal-record "Release event" section and the release records | a name from a committed file; needs Block 6; not a leaf of a registered output |
+| `P1-RECOMPUTE` | per block and compared family: applicable bar, number compared, observed largest difference and agreement word; name uncovered quantities and their separate reader checks; Block 5 uses recompute_bars.json fixed blind under DLE-0, Block 6 uses §12.3; checked by one executing reader before printing | 523, 1651–1793; a name from a committed file; needs Block 6 |
+| `P1-B5-ATTEMPTS` | attempt history of each primary-block pack: number of attempts, each with its verdict and cause family, and "collected X of Y planned runs"; the three superseded first-seal attempts listed separately as inputs to no number; from the harvest records and analysis-plan disclosure producer | 885–949, 1643–1650; a name from a committed file |
+| `P1-B5-ANALYSED` | identifiers and dates of the analysed attempt of each pack | a name from a committed file |
+| `P1-B5-RM-1p7B-decode` | removed units | 955–958, 1440–1445, 1794–1795 |
+| `P1-B5-RM-1p7B-prefill` | removed units | 985–990, 1446–1454, 1796–1798 |
+| `P1-B5-RM-8B-decode` | removed units | 1027–1038, 1472–1489, 1799–1804 |
+| `P1-B5-RM-8B-prefill` | removed units | 1071–1080, 1490–1504, 1805–1809 |
+| `P1-B5-RM-ctr-decode` | removed quads | 198–201, 1112–1119, 1130–1137, 1810–1825 |
+| `P1-B5-RM-ctr-prefill` | removed quads | 202–208, 1120–1129, 1138–1151, 1826–1845 |
+| `P1-B5-HAZARDS` | per session: hazard measurements at arm (naming any hazard whose probe returned no reading), counts of each physics-in-span code, battery-assist counts, and the battery-temperature rise per stage, from the disclosure producer | 242–244, 1163–1242, 1291–1370, 1421–1427, 1430–1439, 1455–1471, 1505–1531, 1536–1605 |
+| `P1-B5-INTERVAL-PARTS` | per cell: h, B and its three kind averages, and the run attaining the attribution floor with the smallest first-kind bound over kept runs | 136–137, 145–146, 154–155, 163–164, 950–954, 980–984, 1022–1026, 1066–1070 |
+| `P1-B5-B-SHARE` | per cell, B ÷ (h + B), derived from the same record | not a leaf of a registered output |
+| `P1-B5-BATT-LINE` | per cell: mean and interval over units with no assisted run, with n_r, n_b and the count of assisted runs per stratum; "below the registered minimum of 5 units" where applicable | 959–973, 991–1005, 1039–1053, 1081–1095 |
+| `P1-B5-LOAD-LINE` | per cell where any unit was removed by a thermal-pressure or outside-process code: the same estimator with those units restored, with n_r and n_b; or "no such removal" | 647–651, 979, 1011–1021, 1059–1065, 1101–1111 |
+| `F_1p7B_decode_cmp_J` | comparative operative floor | 550 |
+| `P1-B5-FN-1p7B-decode` | n of each form | 543, 548 |
+| `F_1p7B_prefill_p2048_cmp_J` | comparative | 566 |
+| `P1-B5-FN-1p7B-prefill` | n | 559, 564 |
+| `F_8B_decode_cmp_J` | comparative | 582 |
+| `P1-B5-FN-8B-decode` | n | 575, 580 |
+| `F_8B_prefill_p2048_cmp_J` | comparative | 598 |
+| `P1-B5-FN-8B-prefill` | n | 591, 596 |
+| `R_1p7B_decode_abs` | ratio | 540 |
+| `R_1p7B_decode_cmp` | ratio | 545 |
+| `TERM_A_1p7B_decode_abs_J` | point | 542 |
+| `TERM_A_1p7B_decode_cmp_J` | point | 547 |
+| `TERM_B_1p7B_decode_abs_J` | corner | 541 |
+| `TERM_B_1p7B_decode_cmp_J` | corner | 546 |
+| `R_1p7B_prefill_p2048_abs` | ratio | 556 |
+| `R_1p7B_prefill_p2048_cmp` | ratio | 561 |
+| `TERM_A_1p7B_prefill_p2048_abs_J` | point | 558 |
+| `TERM_A_1p7B_prefill_p2048_cmp_J` | point | 563 |
+| `TERM_B_1p7B_prefill_p2048_abs_J` | corner | 557 |
+| `TERM_B_1p7B_prefill_p2048_cmp_J` | corner | 562 |
+| `R_8B_decode_abs` | ratio | 572 |
+| `R_8B_decode_cmp` | ratio | 577 |
+| `TERM_A_8B_decode_abs_J` | point | 574 |
+| `TERM_A_8B_decode_cmp_J` | point | 579 |
+| `TERM_B_8B_decode_abs_J` | corner | 573 |
+| `TERM_B_8B_decode_cmp_J` | corner | 578 |
+| `R_8B_prefill_p2048_abs` | ratio | 588 |
+| `R_8B_prefill_p2048_cmp` | ratio | 593 |
+| `TERM_A_8B_prefill_p2048_abs_J` | point | 590 |
+| `TERM_A_8B_prefill_p2048_cmp_J` | point | 595 |
+| `TERM_B_8B_prefill_p2048_abs_J` | corner | 589 |
+| `TERM_B_8B_prefill_p2048_cmp_J` | corner | 594 |
+| `P1-B5-DOM-FAILED` | list of each ratio below 2, with model, phase, form, value, numerator and denominator | 540–606, 803–864 |
+| `P1-B5-DOM-REFUSED` | component and refusal code | 803–862; not a leaf of a registered output |
+| `P1-B5-XWIN` | per model and phase: "agree within their within-session intervals (difference Δ J)" or "differ by Δ J, more than their within-session intervals cover; the reported intervals understate between-session variation, which includes different interleaving and thermal history" | 974–978, 1006–1010, 1054–1058, 1096–1100 |
+| `P1-B5-NEG8` | per session: drift-screen verdict on both energy families, the corpus size the deciding bound rested on and the corpus runs left out by reason, realised reference counts against the planned (3, 1, 3), each lost reference, each spare used, any lost midpoint with its fixed sentence, and the allowance; the bound's two terms printed with the other energies | 1255–1287, 1383–1420, 1428–1429, 1532–1535, 1606–1642 |
+| `P1-B5-MONITOR` | per session: monitor and meter-reader CPU time, and the number of monitor probes that fell inside target phases | 348–350, 1160–1162, 1288–1290 |
+| `P1-RECOMPUTE-SUMMARY` | one paragraph per block: compared families and counts, largest differences against that block's applicable bars (Block 5 recompute_bars.json fixed blind under DLE-0; Block 6 §12.3), uncovered quantities and separate reader checks; any disclosed repair with its date and effect | 523, 1651–1793; a name from a committed file; needs Block 6 |
+| `CP-X02-conclusion` | under branch A: "On this stack, timing attribution, not repeatability, limits phase-energy measurement: allowing each value to move within its registered timing uncertainty at least doubled every detection floor." Under branch B: "Timing attribution at least doubled the detection floor for some components and not others (the failing components named), so neither timing nor repeatability alone limits these measurements." | 570, 843–864 |
+| `CP-X08-decode-a-conclusion` | one sentence per contrast in the registered wording for its outcome and claim level (Section 6.5 branch), with the replication word (Section 6.8) | 530–535; needs Block 6 |
+| `P1-AVAIL` | public release: repository revision, archive locator and SHA-256 manifest of registrations, sealed inventories, flag catalogs, analysis and recomputation code, harvest records, released energies and figure sources; primary-block custody locator, dry-run record digest, released bundle SHA256SUMS and release-event binding; which raw captures are and are not released; locators must be supplied by the authorized release record, never inferred | a name from a committed file; needs Block 6; not a leaf of a registered output |
+
+The [coverage checker](fill_coverage_b5.py) reproduces the explicit element map
+from repository files, rejects missing/new Block 5 placeholders and
+nonprintable row references, and requires byte-identical machine output.
+Historical checkers are scoped to their frozen physical row prefixes, so
+later appends do not invalidate their replay. This preserves what each older
+review checked; it does not confer that review on the new rows.
+
+`fill_check_b5.py` pins the final full ledger hash and independently preserves
+the header plus original 538 rows from `0b8763f0a`. `--paper-ref` explicitly
+checks the admitted first fill in a local Git snapshot on this pre-first-fill
+branch. `--repo-only` checks the ledger/branch arithmetic without checking a
+paper. The default still validates the working-tree paper strictly; it is
+not presented as passing before that paper is filled.

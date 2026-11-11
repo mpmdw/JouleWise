@@ -7,7 +7,7 @@ Ledger rows are physical TSV line numbers (header = row 1), as that document def
 For each filled site this script renders the expected text from the ledger rows it cites and requires
 that text in paper1.md (whitespace-normalised) exactly as often as stated. It also checks that:
 
-- the full ledger matches the final 1,419-row authority hash, and its original 538 rows
+- the full ledger matches the final RL-55 authority hash, and its original 538 rows
   (plus header) are byte-identical to the RL-43 authority at 0b8763f0a;
 - every cited row passes the RL-42 gate (check word exact, within-rounding, recorded-judgment or
   single-source; `paper1` column not `not-printed`), and every `print-labelled` row is printed with its label;
@@ -17,10 +17,14 @@ that text in paper1.md (whitespace-normalised) exactly as often as stated. It al
   table and once from the registered rule text, and both derivations agree with the selection.
 
 Run from the repository root: python3 -I docs/paper/paper1/fill_check_b5.py
+On a pre-first-fill branch use --paper-ref with the admitted first-fill commit;
+the default remains a strict working-tree paper check. --repo-only checks the
+full/prefix authority and numeric branch prerequisites without reading a paper.
 Exit status 0 when every check passes, 1 otherwise. Standard library only.
 """
 from __future__ import annotations
 
+import argparse
 import csv
 import hashlib
 import pathlib
@@ -34,7 +38,7 @@ LEDGER = ROOT / 'docs/analysis/b5/rederivation.tsv'
 PLAN = ROOT / 'configs/campaigns/v5_claim_25g83/analysis_plan_block5.md'
 ORIGINAL_AUTHORITY_COMMIT = '0b8763f0a8291bfa5d47fdc18aa64ef3aa33ec1b'
 ORIGINAL_AUTHORITY_SHA256 = '0462f8144388e758ec1461452828309c4968ac39d2f986ef4a15175d07b84343'
-AUTHORITY_SHA256 = '5546bfd273fee3fc1f5277fed6d8ea8492f6ee02465541e10ba00a4363026008'
+AUTHORITY_SHA256 = '2f15d0810ae6123c42871e7101e880440e4c46ad350f707058d3fd5e7a988469'
 PASSING = {'exact', 'within-rounding', 'recorded-judgment', 'single-source'}
 PRINTABLE = {'print', 'print-labelled'}
 
@@ -450,13 +454,26 @@ def check_branches() -> None:
         fail('branch 5.1.a: row 509 no longer says one analysed attempt per pack')
 
 
-def main() -> int:
+def main(argv=()) -> int:
     global L
+    parser = argparse.ArgumentParser(description=__doc__)
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument('--paper-ref', help='local Git commit/ref containing the admitted first fill; no network')
+    modes.add_argument('--repo-only', action='store_true', help='check ledger authority and branch arithmetic only')
+    args = parser.parse_args(argv)
     FAILURES.clear()
     L = load_ledger()
-    paper = PAPER.read_text()
-    check_sites(paper)
-    check_placeholders(paper)
+    if not args.repo_only:
+        if args.paper_ref:
+            commit = subprocess.run(['git', 'rev-parse', '--verify', '--end-of-options', args.paper_ref+'^{commit}'],
+                                    cwd=ROOT, check=True, capture_output=True, text=True).stdout.strip()
+            paper = subprocess.run(['git', 'show', commit+':docs/paper/paper1/paper1.md'],
+                                   cwd=ROOT, check=True, capture_output=True, text=True).stdout
+            print('Paper input: local Git commit '+commit)
+        else:
+            paper = PAPER.read_text()
+        check_sites(paper)
+        check_placeholders(paper)
     check_floor_roles()
     check_branches()
     rows = sorted({int(m.group(1)) for _, _, t, _, _ in SITES for m in PH.finditer(t)})
@@ -467,9 +484,10 @@ def main() -> int:
         for f in FAILURES:
             print('  - ' + f)
         return 1
-    print('PASS: every filled Block 5 value equals its row of the extended ledger; SHA-256 ' + AUTHORITY_SHA256)
+    print(('PASS: repository ledger/branch checks only; paper not checked; SHA-256 ' if args.repo_only else
+           'PASS: every filled Block 5 value equals its row of the extended ledger; SHA-256 ') + AUTHORITY_SHA256)
     return 0
 
 
 if __name__ == '__main__':
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))

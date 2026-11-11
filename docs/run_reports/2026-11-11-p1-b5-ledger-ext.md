@@ -1,12 +1,13 @@
-# Paper 1 Block 5 ledger extension — rounds 1 and 2
+# Paper 1 Block 5 ledger extension — rounds 1 through 4
 
 2026-11-11 · Sol seat `p1-b5-ledger-ext` · no network or delegation.
 
-**Current handoff:** [Round 2](#round-2--pinned-descendants-authorized) completes
-this reader's extension: 618 further rows, 1,419 total, with all previously
-committed rows unchanged. The new table commit is
-`87a698c0f90aec5c037ed38ced586855be1bdbfa`. Opus cold review and lead
-adjudication remain owed. The round-1 access hold below is retained as history.
+**Current handoff:** [Round 4](#round-4--rl-55-required-disclosures-and-coverage)
+adds 425 rows (1,844 total), supplies the required coverage map, preserves every
+existing row and RESULTS byte, and passes the documented replay/check commands.
+The NEW PRINT AUTHORITY SHA is recorded below after the implementation commit.
+Opus cold review and lead acceptance/event-log audit remain owed. Earlier rounds
+and their holds are historical.
 
 ## Round 1 — historical partial pass
 
@@ -486,3 +487,213 @@ bytes, not fresh live/custody validation.
 fill checker using that explicitly selected paper input. The second fill
 must preserve F4's refusal/recompute-only pairing. No further custody or
 research ruling is needed for the implemented F1–F4 fixes themselves.
+
+## Round 4 — RL-55 required disclosures and coverage
+
+2026-11-11 · Sol seat `p1-b5-ledger-ext` · clean start at
+`caf83e708` on the existing requested branch
+`analysis/2026-11-11-b5-ledger-ext`, continuing round 3. No network, subagent,
+consult, push, merge or publication. The explicit coordination-file prohibition
+supersedes the normal M0 close-out; no kernel task was registered.
+
+### Authority and result
+
+Read **RL-3, RL-38, RL-39, RL-41, RL-42, RL-52 and RL-55 verbatim** from local
+`origin/audit/2026-11-10-fable` at
+`f0d9b067612f639cad730593c2dafdd043b33d0a`, the seat-12 report at its requested
+ref, this report's prior rounds and the Opus cold review (especially F5).
+Applied M0 proportionately: repository instructions, stop/lane/workspace and
+queue/Do-Not-Do-Yet pointers (no active stop card), playbook, orchestration,
+source-of-truth map and targeted D-050/D-064 authority. This is the explicit
+[AGENT] assignment; quiet-machine data collection remains forbidden. The
+registered analysis plan's §§4–9 own the arithmetic/output definitions.
+
+**Appended 425 rows**, physical TSV lines **1421–1845**, for **1,844 rows**.
+The header and all prior 1,419 rows are byte-identical to round-3 authority
+`60f66800fabe02c574dab41b2a61f38623c47a0c`; the 538-row original and 801-row
+round-1 prefixes also equal their own frozen commits. No existing row changed.
+The final ledger SHA-256 is
+`2f15d0810ae6123c42871e7101e880440e4c46ad350f707058d3fd5e7a988469`.
+
+**NEW PRINT AUTHORITY SHA:** recorded in the post-commit authority note below.
+As in round 3, the implementation/table commit is the authority; a separate
+documentation-only commit records its SHA, since a commit cannot name itself.
+This records this reader's result, not Opus admission or the lead's final gate.
+
+### Every custody file opened and its hash
+
+Exactly **three distinct files** were opened in this round. This includes
+structural inspections and all development/final replays. Each was hashed
+against RESULTS §0 before interpretation; the production reader now also
+completes a separate stream hash **before loading bytes**, verifies the loaded
+bytes again, and re-hashes in `finally`. Preliminary inspections separately
+pre-hashed before using the older reader. Every observed before/after hash
+matches the pin. All three are re-hashed once more at the end of this round.
+[round4_sources.tsv](../analysis/b5/round4_sources.tsv) is the machine record.
+
+| Alias | Exact opened path | Expected = every before = every after SHA-256 |
+|---|---|---|
+| CMP | `/Users/edr/jw-b5-custody/release-check-final-20261108T0942Z/comparison.json` | `b12b7e1b32b27159be894221dcde7e334784061314fe91a39166faa36f72f4c9` |
+| DISC | `/Users/edr/jw-b5-custody/dry-m/dry-run/restricted/disclosures/77be1a3ed3a851206a0762334cbdeaab5b40e83e3d9fcdbcf404da5e4d871f6a.json` | `77be1a3ed3a851206a0762334cbdeaab5b40e83e3d9fcdbcf404da5e4d871f6a` |
+| RC | `/Users/edr/jw-b5-custody/release-check-final-20261108T0942Z/recompute.json` | `c06ee7c8cbf85a68dcebc24a73e0372fd6f8d825fc3acf30ec352304dd93cacc` |
+
+All are within RL-38's two read-only roots. No directory listing, other
+custody child, archive, night path, or path named inside JSON was followed.
+No custody write occurred. Scratch lived in `/private/tmp`. Git alone used
+the permitted shared object store; no other path under `/Users/edr` was read,
+listed, opened or searched. No raw trace, model weight or measurement capture
+was opened. Member energies used in arithmetic stayed in memory and custody;
+no member energy, temperature/current reading, timing value or series was
+written to the repository. Registered arm measurements, stage aggregates,
+unit names/positions, source hashes, counts, formulas and rounded results are
+the authorized output fields.
+
+### New rows and independent checks
+
+| Physical rows | Added content / check |
+|---|---|
+| 1421–1504 | ALPHA/BETA battery-count lines, unread-arm counts, reference names/slots, stage names and removed-unit positions |
+| 1505–1535 | GAMMA's six window battery counts, unread-arm count, arm measurements/verdicts, physics counts and reference names/slots |
+| 1536–1605 | All ten GAMMA stage lines: rise, plateau, diagnostic flags, harvest flags and disagreement flags, with stage names |
+| 1606–1642 | Both GAMMA NEG-8 energy families: two bound terms, bound, statistic, excursion, allowance, screen words; realised/planned references, lost/spare/midpoint/corpus/drop/cap records |
+| 1643–1650 | GAMMA attempt count, cause set/multiplicity, attempt, verdict, succeeded/planned counts |
+| 1651–1793 | Per-family comparator counts, bars, numerical largest differences and agreement words (coverage required by the recomputation placeholders) |
+| 1794–1845 | Sixteen removed reported-unit names and nine contrast-quad names/strata/stages/positions as actual row values |
+
+The new data-free stdlib checker extends round 2's independent arithmetic,
+without importing analysis, recompute or comparator implementations. It
+recomputes GAMMA's two-family NEG-8 envelope/Student terms, realised endpoint
+screens and midpoint-aware allowance, stage diagnostics, member/corpus/reference
+counts and reasons. Window battery counts sum the disclosed per-code flag-count
+records and cross-check RC's by-code records; they are arithmetic over recorded
+flags, not a fresh battery/current detection. Arm readings/verdicts and harvest
+stage flags are `recorded-judgment`, attributed. Empty measurement maps alone
+do not mean UNMEASURED; all three stored arm-unmeasured counts are zero.
+A missing stage rise means fewer than two readable readings, distinct from
+having no readings at all.
+
+Comparator family counts and numeric maxima are independently calculated over
+issued comparisons. Numeric words compare the independently calculated
+absolute difference with the issued per-row bar; categorical words compare
+the issued operands directly. The fixed bar constants are sourced exactly.
+The empty `window_edge_s` family is explicitly `not-compared` with no observed
+maximum, and categorical families have no numerical maximum. No member-level
+comparison value or maximum-attaining member key is serialized.
+
+### Required coverage and elements that remain unavailable
+
+[fill_coverage.tsv](../analysis/b5/fill_coverage.tsv) contains **1,581 individual
+coverage elements** for **65 placeholders**: all **57** pending Block 5 ids
+from seat 12, plus the Block 5 parts of **8** mixed placeholders. It pins the
+`origin/main` manuscript snapshot
+`84ad2c5beea5f823723e6f6f83ccf8caabf9e476`, copies each FILL description and line,
+and supplies physical row numbers or one of RL-55's exact reasons. A full
+per-placeholder index is in
+[REDERIVATION.md](../analysis/b5/REDERIVATION.md#required-coverage-table-rl-55).
+The data-free coverage checker verifies the inventory and exact machine bytes,
+rejecting new/missing Block 5 ids and nonprinting row references.
+
+- **1,539 element/row entries** are supplied by printable ledger rows.
+- **22** are names/identities from named committed files, including each
+  analysed attempt/date, both models' tokenizer/chat pins and selection record.
+- **11** need Block 6: replication words, session identities, acceptance,
+  histories, release, recomputation and availability pieces remain pending.
+- **9** are not registered Block 5 output leaves: the unissued refusal/code of
+  unselected branch 5.4.R; the B-share dropped by RL-52; precollection record-width
+  description; BYTES portions of mixed acceptance/history/deviation/release/
+  availability slots; and authorized publication locators/release scope.
+  These are explicitly outside this ledger, never guessed from custody paths.
+
+**No registered Block 5 output element of the 57 pending ids remains
+unsupplied.** The mixed placeholders and abstract/conclusion retain their
+other-block/freeze/author gates. No Block 6, BYTES or v4 result was read.
+The table does not assert that those composite placeholders are ready to fill.
+
+RL-55's precision clarification is recorded: 1.7B prefill R_cm prints from the
+fuller row **570**, **1.99975**, rather than coarser rows 277/848; it remains
+below 2. The second fill also prints the full 8B decode cross-session **differ**
+sentence in results prose. F4 remains binding: bare-print numeric rows
+**647–651** pair with refusal rows **1064–1065**, labelled **“recompute only;
+not compared”**. No paper was filled or changed by this round.
+
+### Counts, every MISMATCH and source-outside-unseal
+
+| Word | Round 4 | Full ledger |
+|---|---:|---:|
+| exact | 370 | 1101 |
+| within-rounding | 25 | 580 |
+| recorded-judgment | 30 | 128 |
+| single-source | 0 | 34 |
+| MISMATCH | 0 | 1 |
+| source-outside-unseal | 0 | 0 |
+| Total | 425 | 1844 |
+
+**Every MISMATCH:** only the unchanged physical row **249**, RL-39's ruled
+four-losses/three-causes wording erratum. No new numeric or factual mismatch.
+**Source-outside-unseal list: empty.** No assigned registered Block 5 output
+row needs a file beyond the three pinned sources; excluded mixed/sealed and
+publication elements above are not presented as checked rows. All new
+residuals are at most two significant figures. No source/RESULTS/analysis or
+custody repair was made.
+
+### Verification and prior paper-input question
+
+All test runs were sequential, using unittest, with cumulative test time well
+under one minute (and the brief's ~20-minute limit). No full suite, pytest,
+analysis pipeline, model load/download, live/MLX operation or process census/
+control was run; the long-running blinded job was not inspected or touched.
+No native MLX test is needed for these stdlib-only changes.
+
+| Command/check | Result |
+|---|---|
+| `python3.13 -B -m unittest tests.b5_analysis.test_hand_check_phase2` | Baseline 48 passed (7.965 s); final full module 58 passed (11.461 s). One intermediate run failed only because a pre-existing test expected the old hash-error wording; updated for the stricter pre-read hash gate. |
+| `python3.13 -B -m unittest tests.b5_analysis.test_hand_check_phase2.Round4CoverageAndReplayTests` | 10 passed (2.008 s) after final coverage/TSV formatting edits. No new test module; no timing-file edit. |
+| `python3.13 -I -B docs/analysis/b5/hand_check_rl55_round4.py` | Exit 0; all 425 new rows replay byte-identically; three before/after hashes match. |
+| `python3.13 -I -B docs/analysis/b5/hand_check_phase2.py --repo-only` | Exit 0; original 538 rows/hand table. |
+| `python3.13 -I -B docs/analysis/b5/hand_check_rl52.py --repo-only` | Exit 0; original/round-1 prefixes. |
+| `python3.13 -I -B docs/analysis/b5/hand_check_rl52_round2.py --repo-only` | Exit 0; frozen physical rows 1–1420. Native serializer's acceptance/preservation of the round-4 suffix is separately tested without custody. |
+| `python3.13 -I -B docs/analysis/b5/opus_coldreview_check.py --repo-only` | Exit 0; original reviewed rows only. |
+| `python3.13 -I -B docs/analysis/b5/opus_coldreview_rl52_check.py --repo-only` | Exit 0; frozen physical rows 1–1420/residuals only. No new Opus review implied. |
+| `python3.13 -I -B docs/analysis/b5/hand_check_rl55_round4.py --repo-only` | Exit 0; full final hash, recorded source pins, RESULTS and all prior rows. |
+| `python3.13 -I -B docs/analysis/b5/fill_coverage_b5.py` | Exit 0; 65 placeholders, 1,581 elements, exact machine file. |
+| `python3.13 -I -B docs/paper/paper1/fill_check_b5.py --repo-only` | Exit 0; full hash, independent 1–538 prefix and branch arithmetic. Explicitly no paper validation in this mode. |
+| `python3.13 -I -B docs/paper/paper1/fill_check_b5.py --paper-ref 84ad2c5beea5f823723e6f6f83ccf8caabf9e476` | Exit 0; admitted first-fill snapshot: 28 sites, 69 ids, 111 cited rows; authority/prefix and both branch derivations pass. |
+| Independent repo audit / in-memory `compile()` | Three frozen prefixes equal; all 425 new keys unique, no reading-array/member-value key, residual precision valid; ten protected files unchanged; six changed/new Python files compile without bytecode. |
+| `git diff --check` | Passed. |
+
+The explicit `--paper-ref` input makes the prior round's passing fixture
+invocation directly reproducible while preserving the strict default. It
+reads only local Git objects and prints the selected commit. The default
+working-tree paper still predates the first fill; no claim is made that it
+passes the paper gate. `--repo-only` is labelled to avoid confusing a ledger
+check with a paper check. These input choices do not merge or replace paper
+bytes or assert acceptance of a second fill.
+
+### Changed files, limits and next exact step
+
+Changed files: `docs/analysis/b5/REDERIVATION.md`, `rederivation.tsv`,
+`hand_check_rl52_round2.py`, `opus_coldreview_rl52_check.py`, new
+`hand_check_rl55_round4.py`, `fill_coverage_b5.py`, `fill_coverage.tsv` and
+`round4_sources.tsv`; `docs/paper/paper1/fill_check_b5.py`;
+`tests/b5_analysis/test_hand_check_phase2.py`; and this report.
+
+Ten protected files remain byte-identical to starting HEAD: `RUN_STATE.md`,
+`TASK_QUEUE.md`, `docs/process/state_kernel.json`, `tests/test_gen_state.py`,
+`scripts/test_timings.json`, RESULTS, `phase2_sources.tsv`,
+`hand_checks_phase2.tsv`, `paper1.md` and `PROJECT_STATUS.md`.
+RESULTS remains SHA-256
+`fb5f81e8741532d79b059b2ca7c44b1c479f0f983c28527ab6e2511d7dfb6f55`.
+
+Uncertainty is unchanged where the earlier rulings explicitly accept it:
+collection judgments/flags are inputs, not a replay of raw eligibility;
+monitor cost and earlier non-null attempt counts keep their single-source
+labels; the BETA decode pipeline-refusal predicate is not independently
+reproduced; no raw retry log, trace sweep or live hardware is revalidated.
+The coverage interpretation, especially mixed/nonleaf/conditional elements,
+remains for the prescribed Opus manuscript check. No new ruling is requested
+for a row mismatch, outside source or missing registered Block 5 element.
+
+**Next exact step:** lead assigns the Opus cold review of the 425 new rows and
+coverage table against the pinned manuscript, audits this seat's event log,
+and records acceptance of the new print-authority commit. Then the second fill
+uses the map, RL-55's precision/XWIN instructions and F4's refusal pairing.
