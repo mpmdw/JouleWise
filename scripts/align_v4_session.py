@@ -160,7 +160,12 @@ def frequency_word_preflight(state, *, reader=None, runner=None):
             record['cause'] = 'clock.frequency_plan_invalid'
             raise ValueError(f'plan clock budget unavailable: {exc}') from exc
         passes = read('before')['passes']
-        _require_night_job_absent(runner)
+        try:
+            _require_night_job_absent(runner)
+        except ValueError as exc:
+            record['cause'] = ('prepare.night_job_loaded' if 'already holds the night job' in str(exc)
+                               else 'prepare.night_job_state_unavailable')
+            raise
         query_argv = ('/usr/bin/sudo', '-n', '/usr/sbin/systemsetup', '-getusingnetworktime')
         query = command(query_argv) if passes else None
         if (query is None or (query.get('exit_code') == 0

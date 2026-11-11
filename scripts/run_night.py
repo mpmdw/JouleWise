@@ -2243,6 +2243,37 @@ def run_courier(
         optional("courier lock removal", lambda: (night_dir / "courier.lock").unlink(missing_ok=True))
 
 
+_CHAIN_REFUSAL_CODES = frozenset({
+    "thermal.start_gate_timeout", "thermal.gate_timeout", "thermal.hold_timeout",
+    "thermal.state_unobserved", "thermal.collector_failed", "thermal.custody_invalid",
+    "thermal.status_source_missing", "episode.deadman", "episode.decode_budget",
+    "episode.g0_unreleased", "episode.time_guard", "episode.context_limit",
+    "powermode.host_lock_unavailable", "powermode.host_lock_held", "powermode.restore_failed",
+})
+
+
+def _r1_refusal_summary(raw):
+    """D-05: publish vocabulary only, never error text, paths or numeric values."""
+    from scripts.align_r1_rehearsal import phase_plan
+    phases = phase_plan(include_4bit=True)
+    names = {name for name, *_ in phases}
+    error = raw.get("error") if isinstance(raw.get("error"), str) else ""
+    phase = raw.get("refused_phase")
+    if not isinstance(phase, str) or phase not in names:
+        phase = next((name for name in sorted(names, key=lambda name: (-len(name), name)) if re.search(
+            r"(?<![\w.-])" + re.escape(name) + r"(?![\w.-])", error)), None)
+    if phase is None:
+        kinds = re.findall(r"(?<![\w.])runtime\.([\w-]+)(?=:|\.invalid_json:)", error)
+        matches = {name for name, kind, *_ in phases if kind in kinds}
+        if len(matches) == 1:
+            phase = matches.pop()
+    tokens = set(re.findall(r"(?<![\w.])[a-z_]+(?:\.[a-z_]+)+(?![\w.])", error))
+    structured = raw.get("refusal_codes")
+    if isinstance(structured, list):
+        tokens.update(code for code in structured if isinstance(code, str))
+    return {"chain_refused_phase": phase, "chain_refusal_codes": sorted(tokens & _CHAIN_REFUSAL_CODES)}
+
+
 def _chain_outcome(plan, night_dir, verdict, chain_exit_code, aborted_reason=None):
     """Reporting only: keep the registered arm verdict and exit policy intact.
 
@@ -2256,12 +2287,15 @@ def _chain_outcome(plan, night_dir, verdict, chain_exit_code, aborted_reason=Non
              or "align_r1_rehearsal" in str(getattr(plan, "chain_path", ""))
              or payload.exists())
     status = None
+    refusal = {"chain_refused_phase": None, "chain_refusal_codes": []}
     if is_r1 and started:
         try:
             raw = json.loads(payload.read_text(encoding="utf-8"))
             status = raw.get("status") if isinstance(raw, dict) else None
             if status not in ("complete", "refused", "aborted", "running"):
                 status = "invalid"
+            if status in ("refused", "aborted"):
+                refusal = _r1_refusal_summary(raw)
         except FileNotFoundError:
             status = "absent"
         except (OSError, ValueError):
@@ -2284,7 +2318,7 @@ def _chain_outcome(plan, night_dir, verdict, chain_exit_code, aborted_reason=Non
         outcome = "COMPLETE"
     else:
         outcome = "UNKNOWN"
-    return {"chain_outcome": outcome, "measurement_outcome": status,
+    return {"chain_outcome": outcome, "measurement_outcome": status, **refusal,
             "fault": bool(reasons), "fault_reasons": reasons}
 
 
@@ -4442,6 +4476,25 @@ NETWORK_TIME_ON_ARGV = ("/usr/bin/sudo", "-n", "/usr/sbin/systemsetup", "-setusi
 NETWORK_TIME_QUERY_ARGV = ("/usr/bin/sudo", "-n", "/usr/sbin/systemsetup", "-getusingnetworktime")
 
 
+def _leave_network_time(probes: Probes, *, skipped: bool) -> dict[str, Any]:
+    """D-02: preserve the preparation preflight's OFF state, with a read-back."""
+    record = {"action": "unchanged", "restoration_owed": False, "verified": False,
+              "observed": None, "reason": ("rerun or abandoned launch; preserve next arm's OFF state"
+                  if skipped else "night did not turn network time OFF; next arm requires OFF")}
+    try:
+        result = probes.run(NETWORK_TIME_QUERY_ARGV)
+        record["read"] = {"argv": list(NETWORK_TIME_QUERY_ARGV), "exit_code": result.exit_code,
+                          "stdout": result.stdout, "stderr": result.stderr}
+        observed = result.stdout.strip().casefold()
+        if result.exit_code == 0 and observed in ("network time: off", "network time: on"):
+            record.update(observed=observed.rsplit(": ", 1)[1], verified=True)
+            if record["observed"] == "off":
+                record["action"] = "left_off"
+    except Exception as error:  # noqa: BLE001 - a failed query is explicit, never a setter
+        record["error"] = f"{type(error).__name__}: {error}"
+    return record
+
+
 def _restore_network_time(probes: Probes) -> dict[str, Any]:
     """Lead ruling 2026-11-10 A-05: set ON and authenticate the read-back.
 
@@ -4532,9 +4585,10 @@ def _close_ac_powermode(plan: NightPlan, probes: Probes, admission: Mapping[str,
         record["network_time"] = (_restore_network_time(probes)
             if (not admission.get("skip_network_time_restore")
                 and (_night_turned_network_time_off(plan) or admission.get("deadman_no_night_installed")))
-            else {"ok": True, "action": "not_owed"})
+            else _leave_network_time(probes, skipped=bool(admission.get("skip_network_time_restore"))))
         record["powermode_ok"] = record["ok"]
-        record["ok"] = record["powermode_ok"] and record["network_time"]["ok"]
+        record["ok"] = record["powermode_ok"] and (record["network_time"].get("ok") is True
+                                                   or record["network_time"].get("verified") is True)
     except BaseException as error:  # noqa: BLE001 - never mask the night's outcome
         record.update(ok=False, error=f"{type(error).__name__}: {error}")
     finally:
@@ -4549,8 +4603,8 @@ def _close_ac_powermode(plan: NightPlan, probes: Probes, admission: Mapping[str,
                 label += ": marker belongs to another session"
             elif record.get("action") in ("restored", "restore_failed"):
                 label += ": restore Automatic"
-                label += ("; network time not owed" if record["network_time"].get("action") == "not_owed"
-                          else " and network time ON")
+                label += (" and network time ON" if record["network_time"].get("requested") == "on"
+                          else "; network time " + record["network_time"]["action"])
             _append_log(Path(plan.custody_root), label + ": " + json.dumps(record, sort_keys=True))
         except Exception:  # noqa: BLE001
             pass
@@ -5397,7 +5451,18 @@ def _deadman_host_restore(stage: dict[str, Any], plan_path: Path) -> dict[str, A
         stage["closing"]()
     plan = stage.get("plan") or _fallback_plan(plan_path)
     night = Path(plan.custody_root) / "night"
-    if stage.get("stand_down") or (night / LAUNCH_ABANDONED_MARKER).exists():
+    if (night / LAUNCH_ABANDONED_MARKER).exists():
+        # D-03/J4: restore power without creating any night record that could
+        # re-fence this abandoned span. The close writes only the custody log.
+        safe = (not (night / "launch.pending").exists()
+                and (not (night / "chain.started").exists() or (night / "chain.exited").exists()))
+        record = (_close_ac_powermode(plan, make_probes(), {
+            "plan_path": plan_path, "skip_network_time_restore": True}) if safe else
+            {"ok": False, "deferred": "abandoned launch has an unproven chain"})
+        stage["restoration"] = record
+        _resume_terminal_signals(stage.get("closing"))
+        return record
+    if stage.get("stand_down"):
         record = {"ok": False, "deferred": stage.get("deferred", "launch abandoned")}
         stage["restoration"] = record
         return record

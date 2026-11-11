@@ -59,15 +59,21 @@ class HostCloseTests(r2.DriverCase):
         paths = {x['path'] for x in h.driver._artifact_list(h.custody, h.night)}
         self.assertTrue(any(p.startswith('night/deadman_host_restoration-') for p in paths))
 
-    def test_launch_abandoned_deadman_preserves_directory_and_host(self):
+    def test_launch_abandoned_deadman_restores_power_and_preserves_directory(self):
         h, host = self.make()
         h.night.mkdir(exist_ok=True)
         (h.night / h.driver.LAUNCH_ABANDONED_MARKER).write_text('{}')
+        self.marker(h, w1=True)
+        host.mode = 2
         before = set(h.night.iterdir())
         with mock.patch.object(h.driver, '_completion_epoch_s', return_value=0):
             self.assertEqual(h.driver.dead_man(h.plan_path), 0)
         self.assertEqual(set(h.night.iterdir()), before)
-        self.assertEqual(host.calls, [])
+        self.assertEqual(host.mode, 0)
+        self.assertFalse(Path(powermode.host_marker_path()).exists())
+        self.assertEqual(host.ntp, 'off')
+        self.assertNotIn(h.driver.NETWORK_TIME_ON_ARGV, host.calls)
+        self.assertIn('restore Automatic', (h.custody / 'night.log').read_text())
         h.driver.run_courier.assert_not_called()
 
     def test_hazard_unproven_chain_defers_both_settings_through_real_result_close(self):
@@ -104,7 +110,12 @@ class HostCloseTests(r2.DriverCase):
     def test_pre_off_refusal_does_not_enable_network_time(self):
         h, host = self.make(arm=r2.FakeArm(verdicts={'clock': 'REFUSE'}))
         self.assertEqual(h.run(), h.driver.EXIT_REFUSED)
-        self.assertEqual(h.result()['host_restoration']['network_time']['action'], 'not_owed')
+        record = h.result()['host_restoration']['network_time']
+        self.assertEqual(record['action'], 'left_off')
+        self.assertEqual(record['observed'], 'off')
+        self.assertTrue(record['verified'])
+        self.assertIn('next arm', record['reason'])
+        self.assertNotIn('ok', record)
         self.assertNotIn(h.driver.NETWORK_TIME_ON_ARGV, host.calls)
 
     def test_exit_zero_off_permission_denial_does_not_create_an_on_obligation(self):
@@ -115,7 +126,7 @@ class HostCloseTests(r2.DriverCase):
         action['stdout'] = 'You need administrator access\n'
         path.write_text(json.dumps(action))
         record = h.driver._close_ac_powermode(h.plan, h.driver.make_probes(), {})
-        self.assertEqual(record['network_time']['action'], 'not_owed')
+        self.assertEqual(record['network_time']['action'], 'left_off')
         self.assertNotIn(h.driver.NETWORK_TIME_ON_ARGV, host.calls)
 
     def test_rerun_with_old_off_action_does_not_enable_network_time(self):

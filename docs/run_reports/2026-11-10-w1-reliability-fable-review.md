@@ -210,3 +210,157 @@ No MBP contact and no native run: push authentication under launchd, sudo rules,
 behaviour after ON, and the CLI's acceptance of the model flag are unverified. I did not read custody, night or
 restricted paths. I did not run the full suite or the long series modules beyond the single W1 probe. I read the
 watchdog diff and the functions it touches, not the whole 3,300-line file.
+
+---
+
+# Delta review (Fable 5.2), 2026-11-10 19:37 PST
+
+Scope: the fixes Sol applied to the findings above. Same binding rules. This section is uncommitted.
+
+| Branch | Head | Final verdict |
+|---|---|---|
+| `ops/2026-11-10-w1-reliability` | `ec0465fd1` (merges `bb1ec59fc`; fixes in `454d78142`) | **ADMIT.** All 14 findings are closed in code. Six small follow-ups (D-01 to D-06), none blocking; D-01 needs the lead's ratification before registration. Native checks and STRICT re-registration still gate the arm. |
+| `ops/2026-11-10-watchdog-unknown-keys` | `343c424e8` (merges `b75feb66f`) | **ADMIT-WITH-FIXES.** W-B and W-C are closed. W-A is built, but it pushes to the remote during an armed span (W-F) and makes magistrate launch depend on the push (W-H). Fix or rule on W-F before this watchdog runs under any armed window, including an R1 re-arm. W-01/W-02 stay open until the native checks pass, as Sol says. |
+
+## D1. What I ran
+
+Branch 1, one module at a time, all passing:
+
+| Module | Result |
+|---|---|
+| `tests.test_w1_reliability` | 11 |
+| `tests.test_w1_reliability_r2` | 18 |
+| `tests.test_w1_reliability_r3` | 14 |
+| `tests.test_w1_reliability_r4` (new) | 42 |
+| `tests.align.test_v4_executed_closure` | 4 |
+| `tests.align.test_v4_dynamic_closure` (new to my run) | 10 |
+| `tests.align.test_w1_smoke` | 28 |
+| `tests.align.test_v4_series.ProductionPathTests` | 1 (42 s) |
+| `tests.align.test_v4_next_arm_packet` | 46 (135 s) |
+| `tests.align.test_km003c.NightChainTests` | 2 |
+| `tests.test_b5_driver_p3.MeterWindowTests` | 7 |
+| `tests.external.test_km003c_monitor` | 12, 1 live-device test skipped |
+| five `tests.test_run_night` dead-man tests plus `CourierReapingTests` | 9 |
+
+Branch 2 (temporary worktree, removed): `tests.test_watchdog_reliability` 31, `tests.test_magistrate_watchdog_v5` 4,
+`tests.test_magistrate_watchdog` 155, all passing. Total test time about 5 minutes.
+
+Probes (scratchpad only, synthetic hosts):
+
+1. **F-01 on a plan from the real writer, preflight not patched.** `tests/align/test_v4_series.py` no longer
+   replaces `frequency_word_preflight`; `prepare` in the W1 replay returned `ok: true, action: no_op` with network
+   time verified OFF. I then called the real preflight on that same plan four ways:
+
+   | Host condition | Result | Commands issued |
+   |---|---|---|
+   | word 0, network time OFF | `no_op` | launchd census, query |
+   | word 0, network time ON | `no_op` | census, query, OFF, query |
+   | word -648908 (item 251), helper works | `zeroed`; bound before 18.27 ms at the plan's 1,800 s span | census, OFF, query, helper |
+   | word -648908, helper unavailable | refused, `clock.frequency_word_nonzero` | same, helper fails |
+
+2. **F-04:** hazard night with unproven chain termination now leaves mode 2, network time OFF and the marker, and
+   records the deferral. No restore command is issued.
+3. **F-02:** two dead-man fires after a completed, delivered night: `result.json` sha unchanged, `courier.sent`
+   kept, no courier re-run, no new record.
+4. **W-F (new):** installed plan in an active span with an open chain, 25 ticks (about 2 h). Decision `FENCED`
+   throughout, remote stop probe `NOT_PROBED` throughout, and 3 status pushes.
+
+## D2. Branch 1: each finding
+
+| ID | Closed? | Note |
+|---|---|---|
+| F-01 | Yes | Reads `hazard_window.thresholds.clock` with the span from `hazard_window.T_stream_max_s`. A missing budget has its own cause, `clock.frequency_plan_invalid`. Probe 1. |
+| F-01t | Yes | The real-writer replay runs the real preflight with injected reader and runner. The kit and cadence unit fixtures still stub it; they write no real plan. |
+| F-02 | Yes | No rewrite of `result.json`, no unlink of `courier.sent`. A restored, delivered night is a no-op. Recovery records are create-once and published. Probe 3 and the three-fire test. |
+| F-03 | Yes | Stand-down writes the custody log only. Both original assertions are restored. See D-03 for a side effect. |
+| F-04 | Yes | `_set_chain_termination_unproven` is called on the hazard path and on an interrupt. Probe 2. |
+| F-05 | Yes | A passing word also needs an authenticated OFF. See D-04. |
+| F-06 | Yes (code) | Monitor exits 1 after 5 consecutive USB errors; the supervisor restarts it, including after an "absent" exit, with its existing backoff; the chain waits up to 20 s for a first valid batch. Real re-enumeration is native check 7. |
+| F-07 | Yes | Unreadable secondary artifacts are omitted and named in `delivery_omissions.json`, the receipt and the log. |
+| F-08 | Yes | The fallback result is published at once. |
+| F-09 | Consumer side yes | The release check accepts a `courier_delivery` receipt bound to the result digest. No exporter on this line writes that source; whoever builds the window record must add it. |
+| F-10 | Yes | Helper digest recorded; C source bound. See D-01. |
+| F-11 | Yes | ON only when this night turned it OFF, or the dead-man proves no night job. Signals resume before the courier. See D-02. |
+| F-12 | Yes | Stderr tail kept, `courier.filed` removed on success, early return on a failed courier process. |
+| F-13 | Yes | Only the last complete batch is decoded; sleep handled with paired clocks; probe child goes through the observed boundary; trace regenerated. See D-06. |
+
+## D3. Branch 1: remaining findings
+
+| ID | Sev | Path:line | Finding | Fix |
+|---|---|---|---|---|
+| D-01 | LOW (process) | `joulewise/align/apple/v4_registration.py:24`; `configs/campaigns/align_v4/registration/registration_receipt.json` | Registration code and the receipt template were edited to bind the C helper. I recommended it, but the standing restriction was "no registration code", and no ruling for it is quoted in the r4 report. The change only adds a binding. | Lead ratifies it in the deviation log before re-registration. |
+| D-02 | MED-LOW | `scripts/run_night.py:4469-4535` | F-05 and F-11 interact. The install preflight now turns network time OFF, but the close restores ON only if the night itself turned it OFF. A refusal before the hazard arm (agent census at t0, powermode admission, host lock, a night that never fires) leaves it OFF and records `network_time: not_owed`, `ok: true`. The dead-man does not restore either, because the night job is still loaded. This reopens part of A-05 for early refusals. It does not hurt the next arm (item 253's restore left it OFF on purpose). | Lead rules: either restore ON on this plan's own non-rerun terminal path whenever network time reads OFF, or keep it OFF and record `left_off` with the observed state instead of `not_owed`. |
+| D-03 | MED-LOW | `scripts/run_night.py:5400, 5473-5476` | For a launch-abandoned night the dead-man now does nothing, including no power restore. At base it restored a W1 marker this plan owned. A W1 mode-2 install that never launched stays in High Power until a late night fire or the next session start. The new test pins `host.calls == []`. | Do the restore and log to custody only, as `_close_night_host` does (`:4581`); keep `night/` untouched. |
+| D-04 | LOW | `scripts/align_v4_session.py:163` | `_require_night_job_absent` now runs on every preflight, so `prepare` refuses whenever any night job is loaded, with cause `clock.frequency_word_nonzero` and a launchd reason. `prepare` must now follow the previous window's uninstall. | Give it its own cause and state the ordering in the runbook. |
+| D-05 | LOW (enhancement) | `scripts/run_night.py` `_chain_outcome` | The 19:05 R1 refusal would now read `fault: true`, `measurement_outcome: refused`, but the class (`step_30b`, `thermal.start_gate_timeout`) still needs a shell on the MBP: `r1_result.json` is not published. | Copy the refused phase name and the refusal code tokens (an allow-listed vocabulary, no values) into `result.json`. |
+| D-06 | LOW | `joulewise/b5/driver.py` `MeterLiveness._read_stream` | Only the last batch per check is considered, and an empty poll (`n == 0`) as the last line gives no refresh for that check. At 50 samples/s and 200 ms polls empties are rare, so this is not a practical risk at the current rate. | Use the last non-empty batch; its own `rx` already dates it. |
+
+Also note for native check 7: the monitor restarts after five errors, which is one to three seconds. Count restarts
+over a clean hour; the expected number is zero.
+
+## D4. Branch 2: each finding
+
+| ID | Closed? | Note |
+|---|---|---|
+| W-A | Built, not closed | `scripts/watchdog_status.py` pushes `status.json` and a transition batch to `refs/heads/watchdog-status/<host>`, with a durable outbox, a 25 s budget, prompts disabled and an Air poller with a cursor and latched alarms. Structure only; no reasons, paths or outcomes leave the host. Not closed because of W-F and W-H, and because no Air scheduler or notifier exists yet. |
+| W-B | Yes | Anchored prefixes; `desk_fence:` is tested first. |
+| W-C | Yes | Growth of the supervisor's own `attempt-N.stream.jsonl` (same inode) is the primary signal; the model heartbeat is second. |
+| W-D | Yes, with W-G | A CLI model rejection becomes `HOLD_MODEL_REJECTED`, latched and exported. |
+| W-E | Open (by design) | Not ported. Sol's dry merge onto the W1 line shows one conflict in `transition()`. The new module `scripts/watchdog_status.py` must be added to `ARTIFACTS` at the port. |
+
+## D5. Branch 2: remaining findings
+
+| ID | Sev | Path:line | Finding | Fix |
+|---|---|---|---|---|
+| W-F | HIGH (needs ruling) | `scripts/magistrate_watchdog.py:3340`; `scripts/watchdog_status.py:204`; `docs/process/MAGISTRATE_WATCHDOG.md:93` | Every tick flushes the exporter, and the flush has no plan-span test. During an armed, measuring span the watchdog now pushes to GitHub on each transition and hourly: about ten git processes and three network connections each time. The base watchdog deliberately skips its remote probe in a span (`_remote_probe_allowed`). The doc says the traffic "also runs while fenced", so this was a choice, but it adds network and CPU activity on the measurement host inside windows and nobody ruled on it. Probe 4. My W-A wording ("slow keepalive") did not exclude spans; it should have. | Gate `flush` with `_remote_probe_allowed`. Before the span, push one status carrying the span's end epoch, and have the Air poller hold its staleness alarm until that epoch plus 75 minutes. The night's own terminal push covers the window. |
+| W-H | MED (needs ruling) | `scripts/magistrate_watchdog.py:2423, 3098`; `scripts/watchdog_status.py:187` | A missing, failed or hour-old status delivery blocks a new magistrate with `HOLD_STATUS_EXPORT`. Push credentials under launchd become a single point of failure for the unattended system, and the block also removes the magistrate's own mail channel exactly when the export channel is down. Without a running Air poller this is a new quiet no-magistrate state. | Prefer: launch anyway and put a `status_export_failed` notice in the prompt so the two channels fail independently. If the block stays, do not install before the Air poller and its notifier are proven. |
+| W-G | LOW | `scripts/magistrate_watchdog.py:2433, 2674` | The rejection check runs at every session end, not only at startup, and matches "model" plus words such as "not available". A transient capacity error can latch a hold that only an operator clears; before, it backed off. | Latch only when the session ended within a short startup window with no assistant output; otherwise back off. |
+| W-I | LOW | `scripts/watchdog_status.py:143` | The ref name defaults to `socket.gethostname()`, which on macOS changes with the network. A changed name moves the ref and the Air poller, fixed on one name, alarms. | Set `MAGISTRATE_WATCHDOG_STATUS_HOST` in the watchdog plist and make the install check require it. |
+
+Fail-safe direction on branch 2 is unchanged: every new hold has `launch=False`, plan and desk fences are re-read
+immediately before spawn, and no unknown key is tolerated.
+
+## D6. Regressions
+
+None in the modules I ran. Behaviour changes to know about: D-02, D-03 and D-04 on branch 1; W-F and W-H on
+branch 2. The first review's native checks 1 to 11 still apply, with these additions:
+
+- Check 2: also prove a status push from the launchd context, then the Air poller exit code and notifier, before
+  relying on the watchdog; set the status host name.
+- Check 7: count meter restarts in a clean hour.
+- Check 8: after a network-down close and a dead-man delivery, build the window record with the
+  `courier_delivery` source and run the next-arm check (F-09).
+- Check 9: include a launch-abandoned mode-2 case (D-03) and a pre-arm refusal (D-02).
+
+STRICT-bound paths added by round 4: `joulewise/align/apple/v4_registration.py`,
+`scripts/align_v4_dynamic_trace.py`, `scripts/align_v4_next_arm_packet.py`, `scripts/km003c_monitor.py`,
+`docs/align/v4/dynamic_closure_trace.json`, and the newly bound `scripts/zero_ntp_frequency.c`.
+
+## D7. The 19:05 R1 refusal (RUN_STATE 253)
+
+- **Neither branch touches G0 or the start gate.** A search of both diffs for G0 and start-gate terms finds
+  nothing. `joulewise/align/apple/r1_runtime.py` and `scripts/align_r1_rehearsal.py` are not in either diff.
+- **Item 253 is A-01 observed live:** `verdict: GO` with `chain_exit_code 3`. R1 runs on `20e9edbc4`, which does
+  not have the fix, so a re-arm there will show the same mask. Keep the Air ref watcher keyed on
+  `chain_exit_code`, or backport `5bb152acc` (a bound-file change on the armed lane, so a lead decision).
+- **Surfacing the class:** see D-05. With branch 1 the result would say `refused` and fault, but not
+  `thermal.start_gate_timeout`.
+- **Code facts for the diagnosis** (structure only; I read no thermal or custody data):
+  - `step-30b` keeps a 600 s G0 cap (`scripts/align_r1_rehearsal.py:112-116`). Ruling R7-2 raised the cap to the
+    config's 1,200 s for step-d, X-G, the gated D runs and the planning kinds, with the stated reason that after a
+    full load no key reaches G0's slope bar until 840 to 1,040 s after load end
+    (`joulewise/align/apple/r1_runtime.py:75-81`).
+  - `step-30b` is the only G0-gated segment where a G0 timeout refuses the night. Step-d and the designed start
+    states retry once and then record INCONCLUSIVE (`_calibration_segment`); A-B-A legs record INCONCLUSIVE;
+    `k_step` raises for anything else (`r1_runtime.py:1681`).
+  - Its output is labelled record-only (`30B_record_only`, `align_r1_rehearsal.py:1820`).
+  - Not established: whether the 30B member's model load precedes its G0. If it does, 600 s may be structurally
+    short and an unchanged re-arm could refuse the same way. That is worth checking before re-arming as
+    "operational". Any change to the cap or a retry rule is a design change under item 253 (3), not part of
+    these branches.
+
+## D8. Limits
+
+Same as section 9. In addition: the Air poller, the launchd push and the CLI's real rejection text are untested
+natively; I did not re-read the whole watchdog file, only the r2 diff, the new status module and the functions
+they touch.

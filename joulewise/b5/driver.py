@@ -1325,8 +1325,8 @@ class MeterLiveness(MonitorLiveness):
         self.offsets[name] = offset + len(data)
         lines = (self.partial.get(name, b"") + data).split(b"\n")
         self.partial[name] = lines.pop()
-        # Locate headers and the final complete batch without decoding every
-        # sample payload in the polling backlog. An invalid last batch is not
+        # Locate headers and the final complete non-empty batch without decoding
+        # every sample payload. An invalid last non-empty batch is not
         # replaced by an earlier (potentially stale) one.
         last_batch = None
         for raw in lines:
@@ -1334,7 +1334,11 @@ class MeterLiveness(MonitorLiveness):
             if kind is None:
                 continue
             if kind[1] == b'b':
-                last_batch = raw
+                # Empty polls carry no samples; the preceding batch's own rx
+                # still determines freshness. Malformed batches remain fail-closed.
+                count = re.search(rb'"n"\s*:\s*(0)(?=\s*[,}])', raw)
+                if count is None:
+                    last_batch = raw
                 continue
             if kind[1] != b'h':
                 continue
