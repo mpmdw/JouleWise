@@ -1,9 +1,13 @@
 {
   "armed": null,
-  "next_observable": null,
-  "owner": null,
+  "next_observable": "research lead ruling on the R1 structural review (RL-59 or later) in audit/2026-11-10-fable RESEARCH-LEAD-DECISIONS.md",
+  "owner": "lead",
   "schema": "joulewise.current_pointer.v1",
-  "source_item": null,
-  "source_item_heading_date": null,
-  "wait": null
+  "source_item": "262",
+  "source_item_heading_date": "2026-11-11",
+  "wait": {
+    "deadline_epoch_s": 1794448800,
+    "observable": "ruling_recorded",
+    "on_early_or_refused": "if the research lead finds an R1 slot condition failed, a gated follow-up night is designed by the research lead before any W1 step"
+  }
 }
