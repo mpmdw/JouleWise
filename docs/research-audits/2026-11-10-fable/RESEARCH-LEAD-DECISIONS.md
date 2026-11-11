@@ -850,12 +850,116 @@ record.
 
 ---
 
+# Decision request 8: the §17 refuter's findings, decision 7b, and PR #710 (2026-11-10 20:54 PST)
+
+## RL-30. Block 6 §17 after the refuter: five dispositions, 7b ruled, PR #710 admitted
+
+Read: `docs/run_reports/2026-11-10-b6-s17-refuter.md` on `docs/2026-11-10-paper1-b6-dev` @ `b84f780c4`, and the
+registration's header, §12.4 and §14. All five findings are accepted. Every ruling here is "decided after Block 5
+outcomes were known"; blind to Block 6.
+
+**Release digest, confirmed as far as git can.** `scripts/independent_recompute_b5.py` has SHA-256
+`d49103e884ccae47242b8efb91ea1f5764e4505a4ad5e54558cc42a399a2e4e0` at `02ef89f5c`, the commit the release
+check ran from (`RUN_STATE.md` item 229), at `ab1e0098d` and on `main`. Item 229 and `RESULTS.md` record the
+release recompute as `d49103e8…`. The Block 5 re-derivation reader (RL-24 seat 4) confirms the full digest from
+the release check's own record.
+
+**S17-01 (authority): fix. This corrects my own wording in RL-25 flag 2.** §12.4 does not "allow entries until
+the release". The registration's header says a change after its commit is a dated §17 entry with its reason,
+and §12.4 says what such a change may touch: never registered arithmetic; a §8 rule found wrong, with the
+original result beside it. R0's deadline clause becomes:
+
+> "The audit's deadline, before the Block 5 unseal, was not met. These entries are made after it. Each is a
+> dated §17 entry with its reason, as this registration's header requires for any change after its commit. None
+> changes registered arithmetic (§12.4). Each names its kind: a slot fill this registration owes; a
+> clarification that changes no number; a tooling or coverage entry; or a deviation from the registered release
+> procedure of §12.3 and §13. Decided after Block 5 outcomes were known."
+
+Each entry gains a **Kind** line:
+
+- slot fill: R2 (S-13's missing parameter), R4 (S-14), R8 (S-15), R10 (S-9, S-11, S-8);
+- clarification, no number changes: R5, R6, R7, and R9's items 8b, 8d and the §10 and §11.2 edge cases;
+- interpretation of a labelled line, with the alternative printed beside: R9's item 8a; nothing added: 8c;
+- tooling or coverage: R3, R11, R12;
+- **deviation from the registered release procedure**: R1 with §17-DLE2. They change which program prints the
+  numbers and how agreement is shown (§12.3 items 3 and 4, §13). They change no estimator. What shows that the
+  printing program computes the registered arithmetic is DLE-2's agreement gate: exit 0 on the Block 5 dry-run
+  custody with every family agreeing, and again on the first counting Block 6 session.
+
+**S17-02 (R8 lists no differences and no digest): fix.** R8 names the digest above and lists the differences
+the refuter found. They are ruled as follows. "Unchanged" in RL-25's 7b condition means the arithmetic call
+chain: `machine_member`, `sampled_gross`, `phase_machine_mean` with `diagnostic_estimate` and
+`reported_estimate`, and the edge-shift corner logic inside `add_machine`. Labels and disclosures around that
+chain follow the Block 6 registration:
+
+- the flag is the registered one (§9.5 item 5: a phase whose request shows the battery assisting the adapter),
+  taken from the harvest's `battery.assist` member flag; the pinned program's battery-activity count prints as
+  it does;
+- no without-assisted per-phase value is added: §9.5 item 2 applies to the estimates of the Block 5 plan, and
+  item 5 asks only for the flag;
+- the boundary sentence printed is the registration's.
+
+**S17-03 (R3 against R8): fix.** R3 states the exception: the request-level whole-machine line is computed and
+compared; the per-phase line is single-implementation under R8. Calling one function from both sides is not a
+second producer.
+
+**S17-04 (DLE-2 item 2): fix.** The precedence note says that for exclusions, item 2's "not re-derived" is
+superseded by C3 and R6. The DLE-2 quotation stays as it is.
+
+**S17-05 (the reflowed quotation): fix.** That block is described as extracted and reflowed.
+
+**Decision 7b.** The condition can hold and does not yet. So:
+
+- The Block 6 analysis-path seat (RL-24 seat 7) wires the pinned functions in. Every arithmetic step of the
+  per-phase line, the edge-shift corners included, executes from the script at the pinned digest. The seat
+  supplies decompressed, hash-checked meter streams and the session's bounds from outside; it may place those
+  streams in a temporary directory so the pinned code's own reader runs. It does not copy or rewrite the
+  arithmetic.
+- Acceptance: a test that the loaded script's SHA-256 is the pinned digest, and a test that on one synthetic
+  session the Block 6 per-phase output equals the Block 5 program's own output on the same input.
+- This is settled at the S-14 pin, before any Block 6 number is read. If it is not shown by then, 7b-ii
+  applies without a further ruling: §10 prints "block 5: not computed" for this quantity, and Block 5's
+  released values print only in their own table.
+
+**PR #710, gate-ledger rows 4 and 5: ADMIT** once the five dispositions and the 7b text are applied. It is a
+draft; nothing is entered in the registration by it. The later PR that enters the entries comes to me.
+
+**Reason.** The refuter is right on each point, and on the first it caught an overstatement of mine. An entry
+log that says which kind of thing each entry is can be checked; one that claims a blanket permission cannot.
+
+**Blind status.** Blind to Block 6. Not blind to Block 5.
+
+## RL-31. R1 was re-armed before the RL-23 review
+
+**What happened** (from `RUN_STATE.md` item 256, magistrate, and the code at `da3187e6e`). R1 was re-armed at
+20:53 PST on `lane/2026-11-10-r1-g0-rop` @ `da3187e6e`. Item 257 had made my review "the final gate before
+re-pinning `$M` and re-arming". The armed build has the 1,200 s cap for every model member, the R_op
+reference and δ_slow at 1.5 °C. It does not have RL-23 item 2: step-30b still refuses the night on a G0
+timeout (`k_step_30b` passes no `g0_inconclusive`). NR-1 is recorded as deferred.
+
+**Ruling.**
+
+1. R1 runs to its end. It is not aborted: it is a non-claim rehearsal, and its waits are informative at
+   either δ.
+2. The hold moves from the arm to the registration. R1's slots do not enter the W1 STRICT re-registration
+   until I have reviewed the armed branch and the `2026-11-10-r1-g0` traces. δ_slow and NR-1 are decided there.
+   If I rule δ_slow back to 1.0 °C, the gated waits and U5 measured at 1.5 °C do not transfer and R1 is owed
+   again; that cost is now accepted by whoever armed.
+3. If this night refuses at step-30b on a G0 timeout, RL-23 item 2 goes in before any further arm.
+
+**Reason.** A night in progress should not be thrown away to restore an order of steps. What must not happen is
+that a value I held enters a registration because it was the one armed.
+
+**Blind status.** Blind to v4 outcomes. I read the item and the armed code's structure, no R1 result.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
 |---|---|
-| Review of the built R1 G0 branch before the re-arm, including the held δ_slow value and the NR-1 question (RL-23) | The branch, and leave to read `docs/process_traces/2026-11-10-r1-g0/` |
-| Second look at the Block 6 §17 draft after the Sol refuter, and at the structural answer to RL-25's 7b condition | The refuter's report, 14 Nov |
+| Review of the armed R1 G0 branch `da3187e6e` and its traces: δ_slow and NR-1, before R1's slots enter the W1 re-registration (RL-23, RL-31) | Ready to start; leave to read the traces was given in item 257 |
+| The PR that enters the §17 entries in the Block 6 registration, with seat 7's demonstration of the 7b condition | Seat 7's code and the S-14 pin |
 | A ruling on continuing or restarting if two consecutive, or three, U1-U3 FAIL bars occur in the series (RL-20) | The event |
 | Review the drafted Block 6 §17 entries (RL-6 (b)), including the audit's decisions 7, 8 and 9, which have no pre-unseal recommendation | The lead's draft |
 | Any custody change that moves BYTES keys to the Air | A proposal from the lead, if Ed wants Paper 1 off the MBP entirely |
