@@ -395,10 +395,22 @@ mean, the midpoint energy and the end mean. Each run carries ½A into its cell's
 two sides, carries it once. A lost midpoint reference leaves the allowance on the start and end references only,
 which cannot see an excursion that reverted before the end; this is disclosed with a fixed sentence.
 
-### 4.8 Model contrasts, outcome words and the claims ladder (estimation details in Appendix D.7)
+### 4.8 Model contrasts, outcome words and the claims ladder (descriptive checks in Appendix D.7)
 
 A **contrast** compares two models on the same workload in **contrast quads** ordered 1.7B, 8B, 8B, 1.7B. Each
-kept quad k gives d_k = (B₁ + B₂)/2 − (A₁ + A₂)/2, with B the 8B side.
+kept quad k gives d_k = (B₁ + B₂)/2 − (A₁ + A₂)/2, with B the 8B side. Over n kept quads (at least five of ten):
+
+1. d̄ = mean(d_k); se = s_d / √n.
+2. **Metrology interval**: d̄ ± t* × se, with t* the 0.975 Student-t value at n − 1 degrees of freedom rounded to
+   three places. No extra error term is added for phase energies, because each run's random error is already in
+   s_d.
+3. **Deterministic bound D**: for each recorded bound kind, a quad's bound is the A-side mean of its two runs'
+   bounds plus the B-side mean; D sums, over kinds, the mean over kept quads. The **decision interval** is the
+   metrology interval widened by D on both sides. Errors common to every run (a timing bias, a drift) are carried
+   by D and the attribution floor, never by the statistical interval.
+4. **Test**: t = d̄ / se, two-sided. The two primary contrasts (decode and prefill) form one family corrected by
+   Holm's method at α = 0.05 [26]; a contrast that cannot be estimated keeps the family size at two.
+5. **Floor gate** (Section 3.6).
 
 The outcome is one of four registered words, decided in this order of precedence:
 
@@ -1611,21 +1623,7 @@ give a factor of max(1, 8.108, 2.25) = 8.108 and a scaled term of 3.97 J. The li
 In Part 2 the same scale is part of the registered estimator (Section 7.3), because no drift-transfer test passed
 before BYTES collection.
 
-### D.7 Contrast estimator and descriptive checks
-
-Over n kept quads (at least five of ten):
-
-1. d̄ = mean(d_k); se = s_d / √n.
-2. **Metrology interval**: d̄ ± t* × se, with t* the 0.975 Student-t value at n − 1 degrees of freedom rounded to
-   three places. No extra error term is added for phase energies, because each run's random error is already in
-   s_d.
-3. **Deterministic bound D**: for each recorded bound kind, a quad's bound is the A-side mean of its two runs'
-   bounds plus the B-side mean; D sums, over kinds, the mean over kept quads. The **decision interval** is the
-   metrology interval widened by D on both sides. Errors common to every run (a timing bias, a drift) are carried
-   by D and the attribution floor, never by the statistical interval.
-4. **Test**: t = d̄ / se, two-sided. The two primary contrasts (decode and prefill) form one family corrected by
-   Holm's method at α = 0.05 [26]; a contrast that cannot be estimated keeps the family size at two.
-5. **Floor gate** (Section 4.5).
+### D.7 Contrast descriptive checks
 
 A **leave-one-quad-out** check recomputes the contrast without each kept quad in turn. If dropping some quad
 changes the sign, the floor status, the Holm decision or the outcome, the contrast is *verdict-influential*. If it
