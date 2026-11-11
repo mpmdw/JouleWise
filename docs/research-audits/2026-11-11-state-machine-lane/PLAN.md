@@ -1,6 +1,6 @@
 # State-machine lane: inventory and plan
 
-Fable 5.2, lane lead. Written 2026-11-11 03:30 PST on the Air. Implements section 8 of
+Fable 5.2, lane lead. Written 2026-11-11 03:20 PST on the Air. Implements section 8 of
 `origin/audit/2026-11-10-fable:docs/research-audits/2026-11-10-fable/implicit-state-machines.md`.
 
 Refs read: `main` @ `41c7a1444`; the W1 line `align/2026-11-08-v4-r11` @ `b4a6c217f`;
@@ -197,5 +197,60 @@ All remote (SSH after custody closes, no night label loaded). No physical step.
 
 ## 7. Log
 
-- 03:30 PST: plan written; wave 1 launching.
-- 03:45 PST: orchestrator answered section 5; section 4 went to the research lead as request 25 (RL-53). Section 5.1 added.
+Times are from `date` on the Air, PST.
+
+- 03:20: plan written. 03:22: wave 1 launched (`sm-window-state`, `sm-exit-contract`, `sm-current-pointer`).
+- 03:26: orchestrator answered section 5; section 4 went to the research lead. Section 5.1 added.
+- 03:27: orchestrator approved 5.1 with option (a), the generator in a new `scripts/gen_current.py`, and one
+  added field `source_item`. The duplicate archive branch was later deleted by Ed; that item is closed.
+- 03:28: **RL-53 ruled** (audit branch `99f1cc46c`). W-0: one batch (W-1, W-2, W-3) may land on the W1 line
+  before the STRICT re-registration, with a cut-off at the post-R1 PREQUAL. W-4 and W-6: not during the series.
+  W-5: plain engineering if unbound. W-7: no release; runbook fix and a read-only investigation. W-8: the
+  unseal record is approved.
+- 03:31: `sm-exit-contract` finished. Cold review ADMIT (10 of 10 mutants killed). PR #722.
+- 03:31: `w1-armcheck` launched (W-1 and W-2), base the W1 line, branch `ops/2026-11-11-w1-armcheck`.
+- 03:33: `w1-unstrand` launched (W-3), branch `ops/2026-11-11-w1-unstrand`. `sm-current-pointer` round 1
+  finished; its round 2 (generated pointer) waits for a seat slot, as does `w1-finality-tests`.
+
+## 8. Findings owed to the research lead under RL-53
+
+**W-5, confirmed.** `scripts/offload_window.py` is not in `ARTIFACTS` (324 paths) and not in the receipt at
+`b4a6c217f`. It appears once in the dynamic trace, in `by_event.opened`, as one of 201 unbound files that a
+directory sweep of `scripts/` opens; the trace's `not_bound` list is empty. It is plain engineering, under the
+condition that source removal and its verification are untouched.
+
+**W-1, one conflict in the ruling's terms, for a ruling.** On this line the quiet-dwell stamp is taken before
+the installer runs (`scripts/align_v4_session.py:1225-1246`: stamp, `dwell.json`, then `pilot.install`). So a
+check "after the install" cannot also be "before the dwell, never during it". The seat is briefed to run the
+pre-install check before the meter probe and the stamp, and the post-install check immediately after the
+installer returns, with its end time recorded on the dwell clock beside `installer_end_ns`, in one function
+with one call site so it can be removed cleanly. The dry run forks `ps`/`pgrep` probes and, outside a span,
+one bounded `git ls-remote`. *Recommendation:* keep the post-install check; it adds about a second next to the
+installer's own `launchctl` calls, several minutes before t0, and it is the only check of the installed plist
+path. The alternative is pre-install only.
+
+**W-7 (2), late exclusion: replay recovers. No deadlock found. Read from code, not yet executed.**
+`scripts/align_v4_next_arm_packet.py` on the W1 line:
+
+- Counts are never stored. Each packet build walks the record chain and recomputes every calibration row
+  (`:957-971`). A final record reads the full desk's `pilot` and `exclusions` through its successor's
+  `previous_final` (`source`, `:237-242`; `pilot_view`, `:292-298`), so a member excluded late lowers that
+  window's `eligible_benign` on the next build. The history carries the desk's provisional count as a ceiling
+  the final count "may lower, never raise" (`:1014-1017`).
+- The one refusal that names this case, "a finally excluded member of K is in the pool" (`:964-966`), compares
+  against the series ledger's current `pool_members`. That list must be a subset of the previous window's D
+  roster (`:847`), and member ids carry the window's pack id (`align_v4_series.py:343`), so at the arm of k+2
+  it names k+1's members and cannot contain a member of k. If a ledger is written wrongly, the repair is a
+  corrected `pool_members` in a new series commit (the runbook's table already says so).
+- Not traced: whether any analysis-side reader takes pool membership from old `pool_members` lists and not from
+  replay. Anchor members keep their kit run id across windows; I did not check whether one can appear in
+  `pool_members`.
+
+**W-7 (1), the runbook, and a second question it raises.** `bind_final` pairs each record only with its
+immediate successor (`:942-943`), so runbook section 4's "until a later record carries it" is wrong. The only
+record that can carry k's final sources is k+1. If k+1 was first committed without them, the repair must be a
+second commit of record k+1 while it is still the chain tail. No existing test exercises that re-issue. If a
+check refuses a re-issued tail record, a desk that finishes after record k+1 is committed is a real deadlock.
+The tests-only seat `w1-finality-tests` will establish this and the late-exclusion path by execution, on the W1
+line, touching no bound file. The runbook is corrected once that result is in, so that it states the working
+repair and not a guess.
