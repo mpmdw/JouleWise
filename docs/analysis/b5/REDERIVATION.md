@@ -6,7 +6,7 @@ the five BYTES coverage reasons name their sealed, outside-Block-5 scope;
 and `origin/main` is merged. Both fill checkers pass on the working-tree
 paper. The 1,844 earlier rows and RESULTS remain byte-identical. See the
 [round-5 report](../../run_reports/2026-11-11-p1-b5-ledger-ext.md#round-5--opus-delta-fixes-d1d3).
-The new print-authority commit is recorded there after the implementation commit.
+**NEW PRINT AUTHORITY SHA:** `766f8d4bb6d73ea545c19a4ffbc1bbc9847adf5b`.
 Lead acceptance/event-log audit remain owed.
 
 **2026-11-11 RL-55 round 4 (historical):** 425 append-only rows complete the session
@@ -1021,6 +1021,10 @@ without checking a paper. Both fill checkers now pass in their default modes
 against the merged working-tree paper.
 
 ## Round 5 — five-decimal R_cm and delta fixes
+
+**NEW PRINT AUTHORITY SHA:** `766f8d4bb6d73ea545c19a4ffbc1bbc9847adf5b`
+is the final round-5 fixes/table commit. This documentation-only follow-up
+records its SHA; its ledger, coverage table and all checker/test bytes are identical.
 
 [hand_check_rl55_round5.py](hand_check_rl55_round5.py) opens only the pinned
 RC file. Its independent stdlib arithmetic reconstructs eight kept prefill

@@ -5,8 +5,8 @@
 **Current handoff:** [Round 5](#round-5--opus-delta-fixes-d1d3) addresses all three
 delta findings. Row 1846 prints 1.99975; the five BYTES reason labels are corrected;
 main's first fill is merged and both default fill checks pass. All earlier ledger
-rows and RESULTS remain byte-identical. The NEW PRINT AUTHORITY SHA is recorded
-in round 5 after the implementation commit. Lead acceptance/event-log audit remain
+rows and RESULTS remain byte-identical. The NEW PRINT AUTHORITY SHA is
+`766f8d4bb6d73ea545c19a4ffbc1bbc9847adf5b`. Lead acceptance/event-log audit remain
 owed. Earlier rounds and their holds are historical.
 
 ## Round 1 — historical partial pass
@@ -740,9 +740,10 @@ coordination-state selection/registration and writes were expressly excluded.
   and both fill checkers pass without `--paper-ref`. The coverage TSV was
   regenerated, so every entry's paper-commit column changes to this snapshot.
 
-**NEW PRINT AUTHORITY SHA:** recorded after the final fixes/table commit in
-the authority-recording note below. As in rounds 3 and 4, a documentation-only
-follow-up records that immutable SHA without changing the ledger or checker.
+**NEW PRINT AUTHORITY SHA:** `766f8d4bb6d73ea545c19a4ffbc1bbc9847adf5b`.
+This is the final round-5 fixes/table commit. As in rounds 3 and 4, a
+documentation-only follow-up records that immutable SHA without changing the
+ledger, coverage, script or test bytes.
 
 The full ledger SHA-256 is
 `41b7e577a7be494245ed42ba38190da9de860430a75f5dc6d0987a15de79060f`.
@@ -835,3 +836,10 @@ sentence review. The site-build hold remains.
 **Next exact step:** lead reviews D1–D3 and the new print-authority commit,
 audits this seat's event log and records acceptance. Then the second fill
 uses row 1846 and the updated coverage map under RL-52/RL-55.
+
+### Round-5 authority recorded
+
+Commit `766f8d4bb6d73ea545c19a4ffbc1bbc9847adf5b` contains all nine
+seat-authored files listed above. This documentation-only follow-up changes
+this report and REDERIVATION only. The final RC re-hash still equals its pin.
+The worktree is committed locally; nothing was pushed.
