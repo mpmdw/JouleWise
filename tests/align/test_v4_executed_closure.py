@@ -100,6 +100,43 @@ def executed_closure(entries=ENTRY_POINTS):
 
 
 class ExecutedClosureBindingTests(unittest.TestCase):
+    def test_r1_phase_table_is_named_and_strict(self):
+        path = 'joulewise/align/apple/r1_phase_table.py'
+        self.assertIn(path, registration._NAMED_ARTIFACTS)
+        self.assertTrue(registration.is_strict(path))
+
+    def test_v4_desk_harvest_resolves_to_the_bound_flag_catalog(self):
+        """RL-62: the catalog that decides ``members_excluded`` in a v4 window is bound, strict.
+
+        The v4 registration directory holds no ``acceptance.json``, so
+        ``scripts/harvest_b6_session.py`` falls through to the Block 6 default
+        (``(reg or registration.DEFAULTS)["catalog"]``). That fall-through stays;
+        this test pins where it lands and the bytes it lands on.
+        """
+        import hashlib
+        from joulewise.b6 import registration as b6_registration
+        root = Path(__file__).resolve().parents[2]
+        v4_registration_dir = root / registration.REGISTRATION
+        self.assertFalse((v4_registration_dir / 'acceptance.json').exists())
+        with self.assertRaises((OSError, ValueError)):
+            b6_registration.load(v4_registration_dir)
+        # The harvest's own resolution expression, read from its source.
+        source = (root / 'scripts/harvest_b6_session.py').read_text(encoding='utf-8')
+        self.assertIn('"catalog_path": ROOT / (reg or registration.DEFAULTS)["catalog"]', source)
+        resolved = b6_registration.DEFAULTS['catalog']
+        self.assertEqual(resolved, 'configs/b6/flag_catalog_b6.json')
+        self.assertIn(resolved, registration._NAMED_ARTIFACTS)
+        self.assertTrue(registration.is_strict(resolved))
+        observed = hashlib.sha256((root / resolved).read_bytes()).hexdigest()
+        # The digest the research lead read the excluding codes against (RL-62, RL-65). A changed
+        # catalog must come back through the research lead before the registration is signed.
+        self.assertEqual(observed, '01767fe4e75ed961798f4e6b68cf055a5b3946a474129e93d2b5e7c239a1dd0c')
+        receipt = json.loads((v4_registration_dir / 'registration_receipt.json').read_text(encoding='utf-8'))
+        self.assertIn(resolved, receipt['artifacts'])
+        bound = receipt['artifacts'][resolved]
+        if bound is not None:   # signed: the receipt's digest is the bound digest
+            self.assertEqual(observed, bound if isinstance(bound, str) else bound.get('sha256'))
+
     def test_every_executed_module_and_script_is_in_the_receipt_artifact_set(self):
         closure = executed_closure()
         for required in ('joulewise/align/apple/prompt_cache.py', 'joulewise/align/apple/sampler.py',

@@ -23,8 +23,12 @@ _NAMED_ARTIFACTS = (
     'scripts/align_v4_kit.py', 'scripts/align_v4_session.py',
     'scripts/zero_ntp_frequency.c',
     'scripts/watchdog_status.py', 'scripts/launch_align_r0.py',
+    'joulewise/align/apple/r1_phase_table.py',
     'scripts/run_align_r0_launchagent.sh', 'scripts/post_window_unstrand.sh',
     'scripts/install_magistrate_watchdog.sh', 'tests/fixtures/night_plan_v1_retired.json',
+    # RL-62: the flag catalog the v4 desk harvest resolves to (scripts/harvest_b6_session.py falls through to
+    # joulewise.b6.registration.DEFAULTS['catalog']); it decides members_excluded, so it is bound, strict.
+    'configs/b6/flag_catalog_b6.json',
     'scripts/align_v4_thermal_desk.py', 'scripts/align_pilot_session.py',
     'scripts/align_v4_u3_bar.py', 'scripts/align_v4_u3_export.py', 'scripts/align_v4_wp19.py', 'scripts/align_v4_offloads.py',
     'joulewise/align/apple/v4_u3.py', 'joulewise/align/apple/v4_battery.py',
