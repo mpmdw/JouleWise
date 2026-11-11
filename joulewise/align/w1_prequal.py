@@ -158,8 +158,23 @@ class FakeHost:
                 'elapsed_s': 0.0, 'stopped': state == 'STOPPED'}
 
     def frequency_check(self, *_, **__):
-        """The minimal fake night plan has no native clock budget or reader."""
+        """Synthetic native frequency evidence for probes isolating other arm gates."""
         return {'ok': True, 'synthetic': True, 'reason': 'PREQUAL synthetic frequency'}
+
+    def frequency_plan_check(self, state, **_):
+        """Run production plan validation, stopping at the synthetic native-reader seam."""
+        from scripts import align_v4_session as session_mod
+
+        class SyntheticRead(Exception):
+            pass
+
+        def reader():
+            raise SyntheticRead
+
+        try:
+            return session_mod.frequency_word_preflight(state, reader=reader, runner=self)
+        except SyntheticRead:
+            return self.frequency_check()
 
     @staticmethod
     def weight_identity(root):
@@ -276,6 +291,7 @@ def _fresh(scenario, now):
 
 def arm_fixture(ctx, name, *, now, t0_offset_s=3600, ac_powermode=0):
     """A session the production install CLI accepts: an R1 -> W1 record series, plan, R0 disk config."""
+    from joulewise.b6 import plan_inputs
     from scripts import align_v4_kit as kit, bytes_h_session as h
     base = ctx.work / name
     measurement, session = base / 'measurement', base / 'night-align/session'
@@ -306,7 +322,15 @@ def arm_fixture(ctx, name, *, now, t0_offset_s=3600, ac_powermode=0):
     session.mkdir(parents=True)
     custody.mkdir(parents=True)
     night_plan = custody / 'night_plan.json'
-    night_plan.write_text(json.dumps({'t0_epoch_s': now + t0_offset_s, 'plan_id': 'w1-prequal-synthetic'}))
+    w1, _, _ = synthetic_w1_plan(ctx)
+    # Same registered threshold assembler and max(member_s) stream law as
+    # bytes_h_session.prepare / align_v4_kit.w1_sizing; planning inputs only.
+    stream_max = max(member['member_s'] for member in w1['align_v4']['members'])
+    thresholds = plan_inputs.thresholds(ctx.repo, ctx.repo / kit.KIT / 'registration')
+    thresholds['clock']['t_stream_max_s'] = stream_max  # writer's sized-key replacement
+    night_plan.write_text(json.dumps({
+        't0_epoch_s': now + t0_offset_s, 'plan_id': 'w1-prequal-synthetic',
+        'hazard_window': {'thresholds': thresholds, 'T_stream_max_s': stream_max}}))
     state = {
         'measurement_root': str(measurement), 'plan_path': str(night_plan),
         'preparation_status': 'STAGED',
@@ -352,7 +376,7 @@ def DEAD_METER(root):
 
 
 def run_install(ctx, session, disk, packet, *, host, args_override=None, drop=(), now=None, kind='completed',
-                meter_probe=None):
+                meter_probe=None, frequency_preflight=None):
     """Drive the production CLI (align_v4_session.main) with host seams only."""
     import functools
     from scripts import align_v4_kit as kit, align_v4_session as session_mod, bytes_h_session as h
@@ -377,7 +401,8 @@ def run_install(ctx, session, disk, packet, *, host, args_override=None, drop=()
     with mock.patch.object(session_mod, 'install', functools.partial(
             real_install, runner=host, volume_runner=host, disk_gate=gate, now=lambda: now,
             meter_probe=meter_probe or LIVE_METER, watchdog_check=host.watchdog_check,
-            frequency_preflight=host.frequency_check, frequency_pre_t0=host.frequency_check)), \
+            frequency_preflight=frequency_preflight or host.frequency_check,
+            frequency_pre_t0=host.frequency_check)), \
             mock.patch.object(h, 'install', functools.partial(real_h_install, run=host, now=lambda: now)), \
             mock.patch.object(kit, 'generate', lambda *a, **k: None), \
             contextlib.redirect_stderr(stderr), contextlib.redirect_stdout(io.StringIO()):
@@ -575,6 +600,8 @@ def check_arm_cli(ctx):
         # name, packet mutation (None: no packet file), host kwargs, cli overrides, dropped flags,
         # battery log kind, expected (admitted?, refusal substring)
         ('control', lambda v: None, {}, {}, (), 'completed', (True, None)),
+        ('plan-hazard-window-missing', lambda v: None, {}, {}, (), 'completed',
+         (False, "clock.frequency_plan_invalid: ValueError: plan clock budget unavailable: 'hazard_window'")),
         ('triage-missing', None, {}, {}, (), 'completed', (False, 'next-arm triage packet missing or wrong schema')),
         # Packet faults: the arm's rebuild refuses a supplied packet that differs (or cannot be rebuilt).
         ('triage-edited', edited, {}, {}, (), 'completed', (False, ('does not match', 'triage capture_faults failed'))),
@@ -597,8 +624,17 @@ def check_arm_cli(ctx):
     for name, mutate, host_kwargs, overrides, drop, kind, (admit, needle) in cases:
         base, session, disk = arm_fixture(ctx, 'arm-' + name, now=now)
         host = FakeHost(now=now, **host_kwargs)
+        if name == 'plan-hazard-window-missing':
+            from scripts import bytes_h_session as h
+            state = h.read(session / 'session.json')
+            plan = h.read(state['plan_path'])
+            plan.pop('hazard_window', None)
+            h.write(state['plan_path'], plan)
+            state['plan_sha256'] = h.locator(state['plan_path'])['sha256']
+            h.write(session / 'session.json', state)
         out = run_install(ctx, session, disk, None if mutate is None else packet(base, mutate), host=host,
                           args_override=overrides, drop=drop, now=now, kind=kind,
+                          frequency_preflight=host.frequency_plan_check,
                           meter_probe=DEAD_METER if name == 'meter-not-live' else LIVE_METER)
         arm = out['arm'] or {}
         row = {'case': name, 'rc': out['rc'], 'admitted': arm.get('admitted'),
@@ -612,6 +648,8 @@ def check_arm_cli(ctx):
             needles = needle if isinstance(needle, tuple) else (needle,)
             ok = (out['rc'] != 0 and arm.get('admitted') is False and not out['installer_calls']
                   and any(n in text for n in needles))
+            if name == 'plan-hazard-window-missing':
+                ok = ok and arm.get('reasons') == [needle]
         if not ok:
             failures.append(f'{name}: expected {"admit" if admit else "refusal " + repr(needle)}; got {row} '
                             f'{tail(out["stderr"], 300)}')
