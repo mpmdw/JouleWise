@@ -250,6 +250,29 @@ print(json.dumps(rows[-1]))
         self.assertFalse(actions[0]["executed"])
         self.assertEqual(actions[0]["returncode"], 0)
 
+    def test_declared_signal_closes_both_original_monitor_threads(self):
+        """Predict: declared owned-child TERM stops both original monitor loops, writes session_end and exits 0 without native signaling."""
+        export_chain_inputs(self.root)
+        (self.root / "source-policy.json").write_text('{"volume":"reduced"}\n')
+        code = '''import json,os,signal,subprocess,sys,time
+from pathlib import Path
+from joulewise.hazards.monitor import build_config
+root=Path(sys.argv[1]); custody=root/'monitor-custody'
+config=build_config(custody_dir=custody,tree_roots=[os.getpid()],disk_targets=[])
+path=root/'monitor-input.json';path.write_text(json.dumps(config))
+p=subprocess.Popen([sys.executable,'-B',str(root/'pin/scripts/hazard_monitor.py'),'--config',str(path)])
+time.sleep(2)
+os.killpg(p.pid,signal.SIGTERM)
+assert p.wait(timeout=3) == 0
+rows=[json.loads(line) for line in (custody/'hazards/monitor/monitor.jsonl').read_text().splitlines()]
+assert rows[-1]['kind'] == 'session_end'
+print(rows[-1]['values']['reason'])
+'''
+        result = subprocess.run(command(self.root, "code", code, self.root), capture_output=True,
+                                text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "signal 15")
+
     @unittest.skipUnless(Path("/bin/zsh").is_file(), "rendered chain requires zsh")
     def test_shell_and_python_use_same_clock(self):
         """Predict: unedited zsh date/sleep commands and pinned child see the same 75 s advance."""
